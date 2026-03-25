@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Search, Settings, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,9 +23,9 @@ export function TopBar() {
 
       {/* Right Actions */}
       <div className="flex items-center gap-3">
-        <button className="rounded-lg p-2 text-gray-500 hover:bg-gray-100">
+        <Link href="/settings" className="rounded-lg p-2 text-gray-500 hover:bg-gray-100">
           <Settings className="h-5 w-5" />
-        </button>
+        </Link>
         <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white gap-1.5">
           <Plus className="h-4 w-4" />
           新建项目
