@@ -3,7 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 model Workspace {
@@ -34,7 +35,7 @@ model Project {
 model Task {
   id          String     @id @default(cuid())
   title       String
-  description String?    @db.Text
+  description String?
   status      TaskStatus @default(TODO)
   priority    Priority   @default(MEDIUM)
   order       Int        @default(0)
@@ -70,10 +71,10 @@ model TaskExecution {
 model TaskMessage {
   id          String      @id @default(cuid())
   role        MessageRole
-  content     String      @db.Text
+  content     String
   taskId      String
   executionId String?
-  metadata    Json?
+  metadata    String?
   createdAt   DateTime    @default(now())
 
   task      Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -84,10 +85,10 @@ model TaskMessage {
 }
 
 model Repository {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   name      String
   path      String
-  branch    String  @default("main")
+  branch    String   @default("main")
   projectId String
   createdAt DateTime @default(now())
 
@@ -97,14 +98,14 @@ model Repository {
 }
 
 model AgentConfig {
-  id          String  @id @default(cuid())
-  agent       String
-  configName  String
-  appendPrompt String? @db.Text
-  settings    Json?
-  isDefault   Boolean @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  agent        String
+  configName   String
+  appendPrompt String?
+  settings     String?
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([agent, configName])
 }

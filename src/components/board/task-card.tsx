@@ -44,7 +44,7 @@ export function TaskCard({ task, onClick, onEdit, onDelete }: TaskCardProps) {
       style={style}
       {...attributes}
       {...listeners}
-      className="group cursor-grab rounded-lg border bg-white p-3 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing"
+      className="group cursor-grab rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-all hover:border-violet-200 hover:shadow-md active:cursor-grabbing"
       onClick={onClick}
       data-testid="task-card"
     >

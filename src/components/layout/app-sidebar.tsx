@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Settings, Archive, Plus, Pencil, Trash2, Check, X } from "lucide-react";
+import { Settings, Archive, Plus, Pencil, Trash2, Check, X, MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -177,34 +177,45 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
           }
 
           return (
-            <DropdownMenu key={ws.id}>
-              <DropdownMenuTrigger
-                render={
-                  <button
-                    onClick={() => router.push(`/workspaces/${ws.id}`)}
-                    className={`w-full rounded-lg px-3 py-2.5 text-left transition-colors ${
-                      isActive ? "bg-white/15" : "hover:bg-white/10"
-                    }`}
-                  />
-                }
+            <div
+              key={ws.id}
+              className={`group relative flex items-center rounded-lg transition-colors ${
+                isActive ? "bg-white/15" : "hover:bg-white/10"
+              }`}
+            >
+              <button
+                onClick={() => router.push(`/workspaces/${ws.id}`)}
+                className="flex-1 px-3 py-2.5 text-left"
               >
                 <div className="text-sm font-medium">{ws.name}</div>
                 <div className="text-xs text-white/50">{formatTime(ws.updatedAt)}</div>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="right">
-                <DropdownMenuItem onClick={() => { setEditingId(ws.id); setEditName(ws.name); }}>
-                  <Pencil className="mr-2 h-3.5 w-3.5" />
-                  重命名
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="text-red-600"
-                  onClick={() => handleDelete(ws.id, ws.name)}
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <button
+                      className="mr-1 rounded p-1 opacity-0 hover:bg-white/10 group-hover:opacity-100"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  }
                 >
-                  <Trash2 className="mr-2 h-3.5 w-3.5" />
-                  删除
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="right">
+                  <DropdownMenuItem onClick={() => { setEditingId(ws.id); setEditName(ws.name); }}>
+                    <Pencil className="mr-2 h-3.5 w-3.5" />
+                    重命名
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-red-600"
+                    onClick={() => handleDelete(ws.id, ws.name)}
+                  >
+                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                    删除
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           );
         })}
       </div>

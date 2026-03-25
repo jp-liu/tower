@@ -31,19 +31,19 @@ export function BoardColumn({
 
   return (
     <div
-      className={`flex w-64 flex-shrink-0 flex-col rounded-lg ${
-        isOver ? "bg-blue-50/50" : "bg-transparent"
+      className={`flex w-0 min-w-[200px] flex-1 flex-col border-r border-gray-200 last:border-r-0 ${
+        isOver ? "bg-blue-50/30" : ""
       }`}
     >
       {/* Column Header */}
-      <div className="flex items-center justify-between px-2 py-2">
+      <div className="flex items-center justify-between px-3 py-2">
         <div className="flex items-center gap-2">
-          <div className={`h-2.5 w-2.5 rounded-full ${color}`} />
-          <span className="text-sm font-medium">{label}</span>
+          <div className={`h-2 w-2 rounded-full ${color}`} />
+          <span className="text-sm font-medium text-gray-700">{label}</span>
         </div>
         <button
           onClick={onAddTask}
-          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          className="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
           aria-label="add"
         >
           <Plus className="h-4 w-4" />
@@ -53,7 +53,7 @@ export function BoardColumn({
       {/* Task List */}
       <div
         ref={setNodeRef}
-        className="flex min-h-[200px] flex-1 flex-col gap-2 px-1"
+        className="flex flex-1 flex-col gap-2 px-2 pb-4"
       >
         <SortableContext
           items={tasks.map((t) => t.id)}
