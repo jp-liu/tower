@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { Settings, Archive } from "lucide-react";
 
 const TABS = [
@@ -13,16 +14,19 @@ const TABS = [
 interface WorkspaceItem {
   id: string;
   name: string;
-  updatedAt: string;
+  updatedAt: Date;
 }
 
-const mockWorkspaces: WorkspaceItem[] = [
-  { id: "1", name: "测试", updatedAt: "1h ago" },
-];
+interface AppSidebarProps {
+  workspaces: WorkspaceItem[];
+}
 
-export function AppSidebar() {
+export function AppSidebar({ workspaces }: AppSidebarProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [activeTab, setActiveTab] = useState("all");
-  const [selectedWorkspace, setSelectedWorkspace] = useState<string | null>("1");
+
+  const activeWorkspaceId = pathname.split("/workspaces/")[1]?.split("/")[0];
 
   return (
     <aside className="flex h-screen w-52 flex-col bg-gradient-to-b from-violet-600 to-purple-700 text-white">
@@ -40,7 +44,10 @@ export function AppSidebar() {
       {/* Workspace Header */}
       <div className="flex items-center justify-between px-4 py-2">
         <span className="text-sm font-medium">工作空间</span>
-        <button className="rounded p-1 hover:bg-white/10">
+        <button
+          className="rounded p-1 hover:bg-white/10"
+          onClick={() => router.push("/settings")}
+        >
           <Settings className="h-4 w-4" />
         </button>
       </div>
@@ -64,20 +71,23 @@ export function AppSidebar() {
 
       {/* Workspace List */}
       <div className="mt-2 flex-1 overflow-auto px-2">
-        {mockWorkspaces.map((ws) => (
-          <button
-            key={ws.id}
-            onClick={() => setSelectedWorkspace(ws.id)}
-            className={`w-full rounded-lg px-3 py-2.5 text-left transition-colors ${
-              selectedWorkspace === ws.id
-                ? "bg-white/15"
-                : "hover:bg-white/10"
-            }`}
-          >
-            <div className="text-sm font-medium">{ws.name}</div>
-            <div className="text-xs text-white/50">{ws.updatedAt}</div>
-          </button>
-        ))}
+        {workspaces.map((ws) => {
+          const isActive = activeWorkspaceId === ws.id;
+          return (
+            <button
+              key={ws.id}
+              onClick={() => router.push(`/workspaces/${ws.id}`)}
+              className={`w-full rounded-lg px-3 py-2.5 text-left transition-colors ${
+                isActive ? "bg-white/15" : "hover:bg-white/10"
+              }`}
+            >
+              <div className="text-sm font-medium">{ws.name}</div>
+              <div className="text-xs text-white/50">
+                {formatTime(ws.updatedAt)}
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       {/* Footer */}
@@ -88,4 +98,14 @@ export function AppSidebar() {
       </div>
     </aside>
   );
+}
+
+function formatTime(date: Date): string {
+  const now = Date.now();
+  const diff = now - new Date(date).getTime();
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
