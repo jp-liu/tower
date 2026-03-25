@@ -62,3 +62,17 @@ export async function createProject(data: {
   revalidatePath("/workspaces");
   return project;
 }
+
+export async function updateProject(id: string, data: { name?: string; description?: string }) {
+  const project = await db.project.update({
+    where: { id },
+    data,
+  });
+  revalidatePath("/workspaces");
+  return project;
+}
+
+export async function deleteProject(id: string) {
+  await db.project.delete({ where: { id } });
+  revalidatePath("/workspaces");
+}

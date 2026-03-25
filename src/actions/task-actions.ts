@@ -56,3 +56,22 @@ export async function getProjectTasks(projectId: string) {
     orderBy: [{ order: "asc" }, { createdAt: "desc" }],
   });
 }
+
+export async function searchTasks(query: string) {
+  if (!query.trim()) return [];
+  return db.task.findMany({
+    where: {
+      OR: [
+        { title: { contains: query } },
+        { description: { contains: query } },
+      ],
+    },
+    include: {
+      project: {
+        include: { workspace: true },
+      },
+    },
+    take: 20,
+    orderBy: { updatedAt: "desc" },
+  });
+}

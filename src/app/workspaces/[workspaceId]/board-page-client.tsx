@@ -8,8 +8,15 @@ import { KanbanBoard } from "@/components/board/kanban-board";
 import { CreateTaskDialog } from "@/components/board/create-task-dialog";
 import { RepoSidebar } from "@/components/repository/repo-sidebar";
 import { TaskDetailPanel } from "@/components/task/task-detail-panel";
-import { createTask, updateTaskStatus, deleteTask } from "@/actions/task-actions";
+import { createTask, updateTaskStatus, updateTask, deleteTask } from "@/actions/task-actions";
 import { sendTaskMessage } from "@/actions/agent-actions";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Task, TaskStatus, Priority } from "@prisma/client";
 
 type FilterType = "ALL" | "IN_PROGRESS" | "IN_REVIEW";
@@ -18,6 +25,7 @@ interface BoardPageClientProps {
   workspaceId: string;
   projectId: string;
   projectName: string;
+  projects: Array<{ id: string; name: string }>;
   initialTasks: Task[];
   totalTasks: number;
   runningTasks: number;
@@ -27,6 +35,7 @@ export function BoardPageClient({
   workspaceId,
   projectId,
   projectName,
+  projects,
   initialTasks,
   totalTasks,
   runningTasks,
@@ -37,6 +46,7 @@ export function BoardPageClient({
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createDefaultStatus, setCreateDefaultStatus] = useState<TaskStatus>("TODO");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   const refreshData = useCallback(() => {
     startTransition(() => {
@@ -67,6 +77,12 @@ export function BoardPageClient({
     [projectId, refreshData]
   );
 
+  const handleUpdateTask = useCallback(async (taskId: string, data: { title: string; description: string; priority: Priority }) => {
+    await updateTask(taskId, data);
+    setEditingTask(null);
+    refreshData();
+  }, [refreshData]);
+
   const handleDeleteTask = useCallback(async (taskId: string) => {
     await deleteTask(taskId);
     if (selectedTask?.id === taskId) {
@@ -77,6 +93,7 @@ export function BoardPageClient({
 
   const handleAddTaskToColumn = useCallback((status: TaskStatus) => {
     setCreateDefaultStatus(status);
+    setEditingTask(null);
     setShowCreateDialog(true);
   }, []);
 
@@ -86,7 +103,7 @@ export function BoardPageClient({
   }, []);
 
   const handleEditTask = useCallback((task: Task) => {
-    setCreateDefaultStatus(task.status);
+    setEditingTask(task);
     setShowCreateDialog(true);
   }, []);
 
@@ -104,9 +121,26 @@ export function BoardPageClient({
             <div className="flex items-center gap-2 text-xs text-gray-400">
               <span>📋 任务看板</span>
             </div>
-            <h1 className="text-base font-semibold text-gray-800">
-              任务看板 — {projectName}
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-base font-semibold text-gray-800">
+                任务看板 — {projectName}
+              </h1>
+              {/* Project Selector */}
+              {projects.length > 1 && (
+                <Select value={projectId} onValueChange={(v) => {
+                  if (v) router.push(`/workspaces/${workspaceId}?projectId=${v}`);
+                }}>
+                  <SelectTrigger className="h-8 w-40 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
           </div>
         </div>
 
@@ -122,7 +156,10 @@ export function BoardPageClient({
         <BoardFilters
           activeFilter={filter}
           onFilterChange={handleFilterChange}
-          onCreateTask={() => setShowCreateDialog(true)}
+          onCreateTask={() => {
+            setEditingTask(null);
+            setShowCreateDialog(true);
+          }}
         />
 
         {/* Kanban Board */}
@@ -137,12 +174,17 @@ export function BoardPageClient({
           />
         </div>
 
-        {/* Create Task Dialog */}
+        {/* Create/Edit Task Dialog */}
         <CreateTaskDialog
           open={showCreateDialog}
-          onOpenChange={setShowCreateDialog}
+          onOpenChange={(open) => {
+            setShowCreateDialog(open);
+            if (!open) setEditingTask(null);
+          }}
           onSubmit={handleCreateTask}
+          onUpdate={handleUpdateTask}
           defaultStatus={createDefaultStatus}
+          editTask={editingTask}
         />
       </div>
 

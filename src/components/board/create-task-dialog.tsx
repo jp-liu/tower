@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Priority, TaskStatus } from "@prisma/client";
+import type { Task, Priority, TaskStatus } from "@prisma/client";
 
 interface CreateTaskDialogProps {
   open: boolean;
@@ -30,22 +30,58 @@ interface CreateTaskDialogProps {
     priority: Priority;
     status: TaskStatus;
   }) => void;
+  onUpdate?: (taskId: string, data: {
+    title: string;
+    description: string;
+    priority: Priority;
+  }) => void;
   defaultStatus?: TaskStatus;
+  editTask?: Task | null;
 }
 
 export function CreateTaskDialog({
   open,
   onOpenChange,
   onSubmit,
+  onUpdate,
   defaultStatus = "TODO",
+  editTask,
 }: CreateTaskDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("MEDIUM");
 
+  const isEditing = !!editTask;
+
+  // Pre-fill when editing
+  useEffect(() => {
+    if (editTask) {
+      setTitle(editTask.title);
+      setDescription(editTask.description ?? "");
+      setPriority(editTask.priority);
+    } else {
+      setTitle("");
+      setDescription("");
+      setPriority("MEDIUM");
+    }
+  }, [editTask]);
+
+  // Reset when dialog closes
+  useEffect(() => {
+    if (!open && !editTask) {
+      setTitle("");
+      setDescription("");
+      setPriority("MEDIUM");
+    }
+  }, [open, editTask]);
+
   const handleSubmit = () => {
     if (!title.trim()) return;
-    onSubmit({ title, description, priority, status: defaultStatus });
+    if (isEditing && onUpdate) {
+      onUpdate(editTask.id, { title, description, priority });
+    } else {
+      onSubmit({ title, description, priority, status: defaultStatus });
+    }
     setTitle("");
     setDescription("");
     setPriority("MEDIUM");
@@ -56,7 +92,7 @@ export function CreateTaskDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>新建任务</DialogTitle>
+          <DialogTitle>{isEditing ? "编辑任务" : "新建任务"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">
@@ -67,6 +103,7 @@ export function CreateTaskDialog({
               placeholder="输入任务标题"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             />
           </div>
           <div className="space-y-2">
@@ -81,7 +118,7 @@ export function CreateTaskDialog({
           </div>
           <div className="space-y-2">
             <Label>优先级</Label>
-            <Select value={priority} onValueChange={(v) => setPriority(v as Priority)}>
+            <Select value={priority} onValueChange={(v) => v && setPriority(v as Priority)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -102,7 +139,7 @@ export function CreateTaskDialog({
             onClick={handleSubmit}
             className="bg-violet-600 hover:bg-violet-700"
           >
-            创建
+            {isEditing ? "保存" : "创建"}
           </Button>
         </DialogFooter>
       </DialogContent>
