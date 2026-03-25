@@ -51,9 +51,10 @@ export default function SettingsPage() {
             settings: c.settings as Record<string, unknown> | null,
           }))
         );
+        router.refresh();
       }
     },
-    [configs]
+    [configs, router]
   );
 
   const handleUpdateConfig = useCallback(
@@ -65,14 +66,23 @@ export default function SettingsPage() {
         appendPrompt: data.appendPrompt,
         settings: data.settings as Prisma.InputJsonValue | undefined,
       });
+      const updated = await getAgentConfigs();
+      setConfigs(
+        updated.map((c) => ({
+          ...c,
+          settings: c.settings as Record<string, unknown> | null,
+        }))
+      );
+      router.refresh();
     },
-    []
+    [router]
   );
 
   const handleDeleteConfig = useCallback(async (id: string) => {
     await deleteAgentConfig(id);
     setConfigs((prev) => prev.filter((c) => c.id !== id));
-  }, []);
+    router.refresh();
+  }, [router]);
 
   const handleClose = useCallback(() => {
     router.back();

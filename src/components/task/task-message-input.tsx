@@ -4,6 +4,12 @@ import { useState, useCallback } from "react";
 import { Paperclip, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface TaskMessageInputProps {
   onSend: (message: string) => void;
@@ -12,6 +18,12 @@ interface TaskMessageInputProps {
   agentName?: string;
 }
 
+const MODES = [
+  { id: "default", label: "Default" },
+  { id: "plan", label: "Plan" },
+  { id: "code", label: "Code" },
+];
+
 export function TaskMessageInput({
   onSend,
   isLoading = false,
@@ -19,6 +31,13 @@ export function TaskMessageInput({
   agentName = "Claude Code",
 }: TaskMessageInputProps) {
   const [message, setMessage] = useState("");
+  const [mode, setMode] = useState("default");
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2000);
+  };
 
   const handleSend = useCallback(() => {
     if (!message.trim() || isLoading) return;
@@ -36,8 +55,17 @@ export function TaskMessageInput({
     [handleSend]
   );
 
+  const currentMode = MODES.find((m) => m.id === mode) ?? MODES[0];
+
   return (
-    <div className="border-t bg-white">
+    <div className="relative border-t bg-white">
+      {/* Toast */}
+      {toast && (
+        <div className="absolute -top-10 left-4 right-4 z-10 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-1.5 text-xs text-yellow-700 shadow-sm">
+          {toast}
+        </div>
+      )}
+
       {/* File changes + agent indicator */}
       <div className="flex items-center justify-between border-b px-4 py-1.5">
         <div className="flex items-center gap-2 text-xs text-gray-500">
@@ -68,13 +96,34 @@ export function TaskMessageInput({
 
         <div className="mt-2 flex items-center justify-between">
           <div className="flex items-center gap-1">
-            <Button variant="outline" size="sm" className="h-7 text-xs">
-              Default
-            </Button>
-            <button className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button className="inline-flex items-center justify-center whitespace-nowrap rounded-md border border-input bg-background px-3 text-xs font-medium shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground h-7" />
+                }
+              >
+                {currentMode.label}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {MODES.map((m) => (
+                  <DropdownMenuItem key={m.id} onClick={() => setMode(m.id)}>
+                    {m.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <button
+              onClick={() => showToast("附件功能开发中")}
+              className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              title="添加附件"
+            >
               <Paperclip className="h-4 w-4" />
             </button>
-            <button className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+            <button
+              onClick={() => showToast("工具功能开发中")}
+              className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              title="工具"
+            >
               <Wrench className="h-4 w-4" />
             </button>
           </div>
