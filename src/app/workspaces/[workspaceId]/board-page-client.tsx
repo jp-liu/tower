@@ -8,6 +8,7 @@ import { CreateTaskDialog } from "@/components/board/create-task-dialog";
 import { RepoSidebar } from "@/components/repository/repo-sidebar";
 import { TaskDetailPanel } from "@/components/task/task-detail-panel";
 import { createTask, updateTaskStatus, deleteTask } from "@/actions/task-actions";
+import { sendTaskMessage } from "@/actions/agent-actions";
 import type { Task, TaskStatus, Priority } from "@prisma/client";
 
 type FilterType = "ALL" | "IN_PROGRESS" | "IN_REVIEW";
@@ -33,6 +34,7 @@ export function BoardPageClient({
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createDefaultStatus, setCreateDefaultStatus] = useState<TaskStatus>("TODO");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   const handleFilterChange = useCallback((newFilter: FilterType) => {
     setFilter(newFilter);
@@ -65,7 +67,12 @@ export function BoardPageClient({
   }, []);
 
   const handleSendMessage = useCallback(async (taskId: string, message: string) => {
-    console.log("Send message to task:", taskId, message);
+    await sendTaskMessage(taskId, message);
+  }, []);
+
+  const handleEditTask = useCallback((task: Task) => {
+    setEditingTask(task);
+    setShowCreateDialog(true);
   }, []);
 
   const filteredTasks =
@@ -109,6 +116,7 @@ export function BoardPageClient({
             initialTasks={filteredTasks}
             onTaskMove={handleTaskMove}
             onTaskClick={(task) => setSelectedTask(task)}
+            onEditTask={handleEditTask}
             onAddTask={handleAddTaskToColumn}
             onDeleteTask={handleDeleteTask}
           />

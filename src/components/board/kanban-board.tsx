@@ -22,6 +22,7 @@ interface KanbanBoardProps {
   initialTasks: Task[];
   onTaskMove?: (taskId: string, newStatus: TaskStatus) => void;
   onTaskClick?: (task: Task) => void;
+  onEditTask?: (task: Task) => void;
   onAddTask?: (status: TaskStatus) => void;
   onDeleteTask?: (taskId: string) => void;
 }
@@ -30,6 +31,7 @@ export function KanbanBoard({
   initialTasks,
   onTaskMove,
   onTaskClick,
+  onEditTask,
   onAddTask,
   onDeleteTask,
 }: KanbanBoardProps) {
@@ -115,6 +117,7 @@ export function KanbanBoard({
             color={column.color}
             tasks={displayTasks.filter((t) => t.status === column.id)}
             onTaskClick={onTaskClick}
+            onEditTask={onEditTask}
             onAddTask={() => onAddTask?.(column.id)}
             onDeleteTask={onDeleteTask}
           />

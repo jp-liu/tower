@@ -12,6 +12,7 @@ interface BoardColumnProps {
   color: string;
   tasks: Task[];
   onTaskClick?: (task: Task) => void;
+  onEditTask?: (task: Task) => void;
   onAddTask?: () => void;
   onDeleteTask?: (taskId: string) => void;
 }
@@ -22,6 +23,7 @@ export function BoardColumn({
   color,
   tasks,
   onTaskClick,
+  onEditTask,
   onAddTask,
   onDeleteTask,
 }: BoardColumnProps) {
@@ -62,6 +64,7 @@ export function BoardColumn({
               key={task.id}
               task={task}
               onClick={() => onTaskClick?.(task)}
+              onEdit={onEditTask}
               onDelete={onDeleteTask}
             />
           ))}

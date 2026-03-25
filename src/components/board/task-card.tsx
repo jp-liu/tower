@@ -16,10 +16,11 @@ import type { Task } from "@prisma/client";
 interface TaskCardProps {
   task: Task;
   onClick?: () => void;
+  onEdit?: (task: Task) => void;
   onDelete?: (taskId: string) => void;
 }
 
-export function TaskCard({ task, onClick, onDelete }: TaskCardProps) {
+export function TaskCard({ task, onClick, onEdit, onDelete }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -61,7 +62,7 @@ export function TaskCard({ task, onClick, onDelete }: TaskCardProps) {
             <MoreHorizontal className="h-4 w-4 text-gray-400" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onEdit?.(task)}>
               <Pencil className="mr-2 h-3.5 w-3.5" />
               编辑
             </DropdownMenuItem>
