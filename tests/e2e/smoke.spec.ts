@@ -85,7 +85,7 @@ test.describe.serial("AI Manager 可用性测试", () => {
     }
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible({ timeout: 3000 });
-    await dialog.locator("input").fill("E2E测试项目");
+    await dialog.locator("input").first().fill("E2E测试项目");
     const createBtns = dialog.locator("button");
     for (let i = 0; i < await createBtns.count(); i++) {
       const text = await createBtns.nth(i).textContent();
