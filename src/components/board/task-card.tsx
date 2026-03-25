@@ -50,13 +50,15 @@ export function TaskCard({ task, onClick, onDelete }: TaskCardProps) {
       <div className="flex items-start justify-between">
         <h4 className="text-sm font-medium">{task.title}</h4>
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              className="rounded p-0.5 opacity-0 transition-opacity hover:bg-gray-100 group-hover:opacity-100"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <MoreHorizontal className="h-4 w-4 text-gray-400" />
-            </button>
+          <DropdownMenuTrigger
+            render={
+              <button
+                className="rounded p-0.5 opacity-0 transition-opacity hover:bg-gray-100 group-hover:opacity-100"
+                onClick={(e) => e.stopPropagation()}
+              />
+            }
+          >
+            <MoreHorizontal className="h-4 w-4 text-gray-400" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem>
