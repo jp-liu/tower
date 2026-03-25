@@ -41,8 +41,6 @@ export function ProjectTabs({ projects, activeProjectId, onSelect }: ProjectTabs
     el.scrollBy({ left: direction === "left" ? -150 : 150, behavior: "smooth" });
   };
 
-  if (projects.length <= 1) return null;
-
   return (
     <div className="relative flex items-center">
       {showLeftArrow && (

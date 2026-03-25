@@ -75,7 +75,7 @@ export async function createProject(data: {
   return project;
 }
 
-export async function updateProject(id: string, data: { name?: string; description?: string }) {
+export async function updateProject(id: string, data: { name?: string; alias?: string; description?: string }) {
   const project = await db.project.update({
     where: { id },
     data,

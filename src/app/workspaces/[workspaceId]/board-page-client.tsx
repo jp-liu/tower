@@ -130,28 +130,14 @@ export function BoardPageClient({
   return (
     <div className="flex h-full">
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Page Header */}
-        <div className="flex items-center justify-between px-6 pt-4 pb-1">
-          <div>
-            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              <span>任务看板</span>
-            </div>
-            <h1 className="text-base font-semibold tracking-tight text-foreground">
-              {projectName}
-            </h1>
-          </div>
+        {/* Project Tabs — always show, single project also shown */}
+        <div className="px-6 pt-3 pb-1">
+          <ProjectTabs
+            projects={projects}
+            activeProjectId={projectId}
+            onSelect={(id) => router.push(`/workspaces/${workspaceId}?projectId=${id}`, { scroll: false })}
+          />
         </div>
-
-        {/* Project Tabs */}
-        {projects.length > 1 && (
-          <div className="px-6 pt-2">
-            <ProjectTabs
-              projects={projects}
-              activeProjectId={projectId}
-              onSelect={(id) => router.push(`/workspaces/${workspaceId}?projectId=${id}`)}
-            />
-          </div>
-        )}
 
         {/* Stats */}
         <BoardStats
