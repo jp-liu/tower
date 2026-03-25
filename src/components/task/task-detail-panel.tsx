@@ -21,7 +21,6 @@ export function TaskDetailPanel({
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Load messages from server on mount and when task changes
   useEffect(() => {
     let cancelled = false;
     getTaskMessages(task.id).then((serverMessages) => {
@@ -40,7 +39,6 @@ export function TaskDetailPanel({
 
   const handleSend = useCallback(
     async (content: string) => {
-      // Optimistic: add user message immediately
       const userMsg: Message = {
         id: `msg-${Date.now()}`,
         role: "user",
@@ -86,7 +84,7 @@ export function TaskDetailPanel({
 
   return (
     <div
-      className="flex h-full w-[520px] flex-shrink-0 flex-col border-l bg-white"
+      className="flex h-full w-[520px] flex-shrink-0 flex-col border-l border-border bg-[oklch(0.11_0.008_260)]"
       data-testid="task-detail-panel"
     >
       <TaskMetadata

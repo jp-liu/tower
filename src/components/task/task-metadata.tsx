@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatRelativeTime } from "@/lib/utils";
 
@@ -20,38 +20,39 @@ export function TaskMetadata({
   onBack,
 }: TaskMetadataProps) {
   return (
-    <div className="border-b px-4 py-3">
+    <div className="border-b border-border px-4 py-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-purple-600 font-medium">&#10024; 任务对话</span>
+          <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+          <span className="text-xs font-semibold text-amber-300">任务对话</span>
         </div>
         <button
           onClick={onBack}
-          className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+          className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-3.5 w-3.5" />
           返回任务列表
         </button>
       </div>
 
-      <h2 className="mt-2 text-xl font-bold">{title}</h2>
+      <h2 className="mt-2.5 text-lg font-bold tracking-tight text-foreground">{title}</h2>
 
       {description && (
-        <p className="mt-1 text-sm text-gray-500 line-clamp-2">{description}</p>
+        <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{description}</p>
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {branch && (
-          <Badge variant="secondary" className="bg-gray-100 text-gray-600 text-xs">
+          <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px] font-mono border border-border">
             {branch}
           </Badge>
         )}
         {hasConversation && (
-          <Badge variant="secondary" className="bg-blue-50 text-blue-600 text-xs">
+          <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-400 text-[10px] border border-emerald-500/20">
             已有会话
           </Badge>
         )}
-        <span className="text-xs text-gray-400">
+        <span className="text-[11px] text-muted-foreground/60">
           更新于 {formatRelativeTime(updatedAt)}
         </span>
       </div>
