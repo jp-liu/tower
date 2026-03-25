@@ -14,8 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { SearchDialog } from "./search-dialog";
-
-const TOP_I18N = JSON.parse('{"newProject":"新建项目","projectName":"项目名称","projectAlias":"项目别名","projectDesc":"项目描述","normalProject":"普通项目","gitProject":"Git 项目","gitUrl":"Git 仓库地址","cancel":"取消","create":"创建","namePlaceholder":"输入项目名称","aliasPlaceholder":"可选，如：前端重构","descPlaceholder":"可选，项目简介","gitPlaceholder":"https://github.com/...","searchPlaceholder":"搜索任务、项目、仓库..."}');
+import { useI18n } from "@/lib/i18n";
 
 interface CreateProjectData {
   name: string;
@@ -30,6 +29,7 @@ interface TopBarProps {
 }
 
 export function TopBar({ onCreateProject }: TopBarProps) {
+  const { t } = useI18n();
   const [showSearch, setShowSearch] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
   const [projectName, setProjectName] = useState("");
@@ -83,7 +83,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
           className="flex h-8 w-96 items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 text-sm text-muted-foreground transition-colors hover:bg-muted"
         >
           <Search className="h-3.5 w-3.5" />
-          <span className="flex-1 text-left">{TOP_I18N.searchPlaceholder}</span>
+          <span className="flex-1 text-left">{t("topbar.searchPlaceholder")}</span>
           <kbd className="flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-mono">
             <Command className="h-2.5 w-2.5" />K
           </kbd>
@@ -103,7 +103,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
             onClick={() => setShowNewProject(true)}
           >
             <Plus className="h-3.5 w-3.5" />
-            {TOP_I18N.newProject}
+            {t("topbar.newProject")}
           </Button>
           <div className="ml-1 flex items-center gap-2">
             <Avatar className="h-7 w-7 ring-1 ring-border">
@@ -122,14 +122,14 @@ export function TopBar({ onCreateProject }: TopBarProps) {
       <Dialog open={showNewProject} onOpenChange={(open) => { setShowNewProject(open); if (!open) resetForm(); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{TOP_I18N.newProject}</DialogTitle>
+            <DialogTitle>{t("topbar.newProject")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             {/* Name */}
             <div>
-              <label className="text-xs font-medium text-muted-foreground">{TOP_I18N.projectName}</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("project.name")}</label>
               <Input
-                placeholder={TOP_I18N.namePlaceholder}
+                placeholder={t("project.namePlaceholder")}
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
                 className="mt-1.5"
@@ -138,9 +138,9 @@ export function TopBar({ onCreateProject }: TopBarProps) {
 
             {/* Alias */}
             <div>
-              <label className="text-xs font-medium text-muted-foreground">{TOP_I18N.projectAlias}</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("project.alias")}</label>
               <Input
-                placeholder={TOP_I18N.aliasPlaceholder}
+                placeholder={t("project.aliasPlaceholder")}
                 value={projectAlias}
                 onChange={(e) => setProjectAlias(e.target.value)}
                 className="mt-1.5"
@@ -149,9 +149,9 @@ export function TopBar({ onCreateProject }: TopBarProps) {
 
             {/* Description */}
             <div>
-              <label className="text-xs font-medium text-muted-foreground">{TOP_I18N.projectDesc}</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("project.description")}</label>
               <textarea
-                placeholder={TOP_I18N.descPlaceholder}
+                placeholder={t("project.descPlaceholder")}
                 value={projectDesc}
                 onChange={(e) => setProjectDesc(e.target.value)}
                 rows={3}
@@ -161,9 +161,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
 
             {/* Type toggle */}
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                {TOP_I18N.projectName.replace(TOP_I18N.projectName, "")}
-              </label>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block" />
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -174,7 +172,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
                       : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
                   }`}
                 >
-                  {TOP_I18N.normalProject}
+                  {t("project.normalType")}
                 </button>
                 <button
                   type="button"
@@ -185,7 +183,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
                       : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
                   }`}
                 >
-                  {TOP_I18N.gitProject}
+                  {t("project.gitType")}
                 </button>
               </div>
             </div>
@@ -193,9 +191,9 @@ export function TopBar({ onCreateProject }: TopBarProps) {
             {/* Git URL (conditional) */}
             {projectType === "GIT" && (
               <div>
-                <label className="text-xs font-medium text-muted-foreground">{TOP_I18N.gitUrl}</label>
+                <label className="text-xs font-medium text-muted-foreground">{t("project.gitUrl")}</label>
                 <Input
-                  placeholder={TOP_I18N.gitPlaceholder}
+                  placeholder={t("project.gitPlaceholder")}
                   value={gitUrl}
                   onChange={(e) => setGitUrl(e.target.value)}
                   className="mt-1.5"
@@ -205,14 +203,14 @@ export function TopBar({ onCreateProject }: TopBarProps) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowNewProject(false); resetForm(); }}>
-              {TOP_I18N.cancel}
+              {t("common.cancel")}
             </Button>
             <Button
               onClick={handleCreateProject}
               disabled={!projectName.trim()}
               className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
             >
-              {TOP_I18N.create}
+              {t("common.create")}
             </Button>
           </DialogFooter>
         </DialogContent>

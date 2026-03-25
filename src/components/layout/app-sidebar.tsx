@@ -21,15 +21,18 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createWorkspace, updateWorkspace, deleteWorkspace } from "@/actions/workspace-actions";
 import { getLabelsForWorkspace, createLabel, deleteLabel } from "@/actions/label-actions";
+import { useI18n } from "@/lib/i18n";
 
-// Keep strings in a JSON-like structure to prevent linter unicode escaping
-const I18N = JSON.parse('{"icons":["📋","🚀","🎯","💡","🔧","📦","🎨","📊","🔬","🌟","📝","🏗️"],"workspace":"工作空间","newWs":"新建工作空间","collapseLabel":"折叠侧边栏","expandLabel":"展开侧边栏","rename":"重命名","delete":"删除","archive":"归档","newWsTitle":"新建工作空间","editWsTitle":"编辑工作空间","nameLabel":"名称","iconLabel":"图标","namePlaceholder":"输入工作空间名称","cancel":"取消","create":"创建","save":"保存","deleteConfirmPrefix":"确认删除工作空间「","deleteConfirmSuffix":"」？所有项目和任务将被删除。","manageLabels":"管理标签","addLabel":"添加标签","labelName":"标签名称","labelColor":"颜色","colorPlaceholder":"#3b82f6"}');
-
-const WORKSPACE_ICONS: string[] = I18N.icons;
+const WORKSPACE_ICONS: string[] = ["\u{1F4CB}","\u{1F680}","\u{1F3AF}","\u{1F4A1}","\u{1F527}","\u{1F4E6}","\u{1F3A8}","\u{1F4CA}","\u{1F52C}","\u{1F31F}","\u{1F4DD}","\u{1F3D7}\uFE0F"];
 
 interface WorkspaceItem {
   id: string;
@@ -45,6 +48,7 @@ interface AppSidebarProps {
 export function AppSidebar({ workspaces }: AppSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const { t, locale, setLocale } = useI18n();
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("sidebar-collapsed") === "true";
@@ -96,11 +100,11 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
   }, []);
 
   const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!confirm(I18N.deleteConfirmPrefix + name + I18N.deleteConfirmSuffix)) return;
+    if (!confirm(t("sidebar.deleteConfirm", { name }))) return;
     await deleteWorkspace(id);
     router.refresh();
     if (activeWorkspaceId === id) router.push("/workspaces");
-  }, [activeWorkspaceId, router]);
+  }, [activeWorkspaceId, router, t]);
 
   const openLabelManager = useCallback((wsId: string) => {
     setLabelManagerWsId(wsId);
@@ -116,59 +120,95 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
   if (collapsed) {
     return (
       <aside className="flex h-screen w-14 flex-col items-center border-r border-border bg-sidebar py-3">
-        <button
-          onClick={toggleCollapsed}
-          className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/15 ring-1 ring-amber-500/25 transition-transform hover:scale-105"
-          title={I18N.expandLabel}
-        >
-          <Layers className="h-4 w-4 text-amber-400" />
-        </button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                onClick={toggleCollapsed}
+                className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/15 ring-1 ring-amber-500/25 transition-transform hover:scale-105"
+              />
+            }
+          >
+            <Layers className="h-4 w-4 text-amber-400" />
+          </TooltipTrigger>
+          <TooltipContent side="right" sideOffset={8}>{t("sidebar.expand")}</TooltipContent>
+        </Tooltip>
 
         <div className="flex flex-1 flex-col items-center gap-1 overflow-auto px-0.5 pt-1">
           {workspaces.map((ws) => {
             const isActive = activeWorkspaceId === ws.id;
             const icon = getIcon(ws);
             return (
-              <button
-                key={ws.id}
-                onClick={() => router.push(`/workspaces/${ws.id}`)}
-                title={ws.name}
-                className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm transition-all ${
-                  isActive
-                    ? "bg-accent ring-1 ring-amber-500/20 text-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                }`}
-              >
-                {WORKSPACE_ICONS.includes(icon) ? icon : <span className="text-xs font-semibold">{icon}</span>}
-              </button>
+              <Tooltip key={ws.id}>
+                <TooltipTrigger
+                  render={
+                    <button
+                      onClick={() => router.push(`/workspaces/${ws.id}`)}
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm transition-all ${
+                        isActive
+                          ? "bg-accent ring-1 ring-amber-500/20 text-foreground"
+                          : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                      }`}
+                    />
+                  }
+                >
+                  {WORKSPACE_ICONS.includes(icon) ? icon : <span className="text-xs font-semibold">{icon}</span>}
+                </TooltipTrigger>
+                <TooltipContent side="right" sideOffset={8}>{ws.name}</TooltipContent>
+              </Tooltip>
             );
           })}
-          <button
-            onClick={() => setShowCreateDialog(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            title={I18N.newWs}
-          >
-            <Plus className="h-4 w-4" />
-          </button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  onClick={() => setShowCreateDialog(true)}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                />
+              }
+            >
+              <Plus className="h-4 w-4" />
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={8}>{t("sidebar.newWorkspace")}</TooltipContent>
+          </Tooltip>
         </div>
 
-        <button
-          onClick={() => router.push("/settings")}
-          className="mt-2 rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <Settings className="h-4 w-4" />
-        </button>
+        <div className="mt-2 flex flex-col items-center gap-1">
+          <button
+            onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
+            className="rounded-md px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-accent text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {locale === "zh" ? "EN" : "\u4E2D"}
+          </button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  onClick={() => router.push("/settings")}
+                  className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                />
+              }
+            >
+              <Settings className="h-4 w-4" />
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={8}>{t("sidebar.settings")}</TooltipContent>
+          </Tooltip>
+        </div>
 
         <WorkspaceDialog
           open={showCreateDialog}
           onOpenChange={setShowCreateDialog}
-          title={I18N.newWsTitle}
+          title={t("workspace.create")}
           name={dialogName}
           onNameChange={setDialogName}
           icon={dialogIcon}
           onIconChange={setDialogIcon}
           onSubmit={handleCreate}
-          submitLabel={I18N.create}
+          submitLabel={t("common.create")}
+          nameLabel={t("workspace.name")}
+          iconLabel={t("workspace.icon")}
+          namePlaceholder={t("workspace.namePlaceholder")}
+          cancelLabel={t("common.cancel")}
         />
       </aside>
     );
@@ -189,7 +229,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
         <button
           onClick={toggleCollapsed}
           className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          title={I18N.collapseLabel}
+          title={t("sidebar.collapse")}
         >
           <ChevronsLeft className="h-4 w-4" />
         </button>
@@ -197,12 +237,12 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
 
       {/* Workspace Header */}
       <div className="relative z-10 flex items-center justify-between px-4 py-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{I18N.workspace}</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t("sidebar.workspace")}</span>
         <div className="flex items-center gap-0.5">
           <button
             className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             onClick={() => { setDialogName(""); setDialogIcon(WORKSPACE_ICONS[0]); setShowCreateDialog(true); }}
-            title={I18N.newWs}
+            title={t("sidebar.newWorkspace")}
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
@@ -256,15 +296,15 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
                 <DropdownMenuContent align="start" side="right">
                   <DropdownMenuItem onClick={() => openEditDialog(ws)}>
                     <Pencil className="mr-2 h-3.5 w-3.5" />
-                    {I18N.rename}
+                    {t("sidebar.rename")}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => openLabelManager(ws.id)}>
                     <Tag className="mr-2 h-3.5 w-3.5" />
-                    {I18N.manageLabels}
+                    {t("sidebar.manageLabels")}
                   </DropdownMenuItem>
                   <DropdownMenuItem className="text-rose-400" onClick={() => handleDelete(ws.id, ws.name)}>
                     <Trash2 className="mr-2 h-3.5 w-3.5" />
-                    {I18N.delete}
+                    {t("sidebar.delete")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -276,34 +316,48 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
       {/* Footer */}
       <div className="relative z-10 flex items-center gap-2 border-t border-border px-4 py-3 text-[11px] text-muted-foreground">
         <Archive className="h-3.5 w-3.5" />
-        <span>{I18N.archive}</span>
+        <span>{t("sidebar.archive")}</span>
         <span className="ml-auto font-mono">0</span>
+        <button
+          onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
+          className="rounded-md px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-accent text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {locale === "zh" ? "EN" : "\u4E2D"}
+        </button>
       </div>
 
       {/* Create Dialog */}
       <WorkspaceDialog
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
-        title={I18N.newWsTitle}
+        title={t("workspace.create")}
         name={dialogName}
         onNameChange={setDialogName}
         icon={dialogIcon}
         onIconChange={setDialogIcon}
         onSubmit={handleCreate}
-        submitLabel={I18N.create}
+        submitLabel={t("common.create")}
+        nameLabel={t("workspace.name")}
+        iconLabel={t("workspace.icon")}
+        namePlaceholder={t("workspace.namePlaceholder")}
+        cancelLabel={t("common.cancel")}
       />
 
       {/* Edit Dialog */}
       <WorkspaceDialog
         open={showEditDialog}
         onOpenChange={(open) => { setShowEditDialog(open); if (!open) setEditingWsId(null); }}
-        title={I18N.editWsTitle}
+        title={t("workspace.edit")}
         name={dialogName}
         onNameChange={setDialogName}
         icon={dialogIcon}
         onIconChange={setDialogIcon}
         onSubmit={handleEdit}
-        submitLabel={I18N.save}
+        submitLabel={t("common.save")}
+        nameLabel={t("workspace.name")}
+        iconLabel={t("workspace.icon")}
+        namePlaceholder={t("workspace.namePlaceholder")}
+        cancelLabel={t("common.cancel")}
       />
 
       {/* Label Manager Dialog */}
@@ -321,6 +375,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
 // Reusable workspace create/edit dialog
 function WorkspaceDialog({
   open, onOpenChange, title, name, onNameChange, icon, onIconChange, onSubmit, submitLabel,
+  nameLabel, iconLabel, namePlaceholder, cancelLabel,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -331,6 +386,10 @@ function WorkspaceDialog({
   onIconChange: (icon: string) => void;
   onSubmit: () => void;
   submitLabel: string;
+  nameLabel: string;
+  iconLabel: string;
+  namePlaceholder: string;
+  cancelLabel: string;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -340,9 +399,9 @@ function WorkspaceDialog({
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div>
-            <label className="text-xs font-medium text-muted-foreground">{I18N.nameLabel}</label>
+            <label className="text-xs font-medium text-muted-foreground">{nameLabel}</label>
             <Input
-              placeholder={I18N.namePlaceholder}
+              placeholder={namePlaceholder}
               value={name}
               onChange={(e) => onNameChange(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && onSubmit()}
@@ -350,7 +409,7 @@ function WorkspaceDialog({
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground">{I18N.iconLabel}</label>
+            <label className="text-xs font-medium text-muted-foreground">{iconLabel}</label>
             <div className="mt-1.5 grid grid-cols-6 gap-1.5">
               {WORKSPACE_ICONS.map((emoji) => (
                 <button
@@ -369,7 +428,7 @@ function WorkspaceDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>{I18N.cancel}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{cancelLabel}</Button>
           <Button
             onClick={onSubmit}
             disabled={!name.trim()}
@@ -402,6 +461,7 @@ function LabelManagerDialog({
   onOpenChange: (open: boolean) => void;
   workspaceId: string;
 }) {
+  const { t } = useI18n();
   const [labels, setLabels] = useState<LabelItem[]>([]);
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(LABEL_COLORS[0]);
@@ -429,7 +489,7 @@ function LabelManagerDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>{I18N.manageLabels}</DialogTitle>
+          <DialogTitle>{t("label.manage")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 py-2">
           {/* Existing labels */}
@@ -442,14 +502,14 @@ function LabelManagerDialog({
               <span className="flex-1 text-sm text-foreground">{label.name}</span>
               {label.isBuiltin ? (
                 <span className="text-[10px] text-muted-foreground">
-                  {JSON.parse('{"builtin":"\u5185\u7f6e"}').builtin}
+                  {t("label.builtin")}
                 </span>
               ) : (
                 <button
                   onClick={() => handleDelete(label.id)}
                   className="text-xs text-rose-400 hover:text-rose-300"
                 >
-                  {JSON.parse('{"del":"\u5220\u9664"}').del}
+                  {t("common.delete")}
                 </button>
               )}
             </div>
@@ -458,7 +518,7 @@ function LabelManagerDialog({
           <div className="border-t border-border pt-3">
             <div className="flex items-center gap-2">
               <Input
-                placeholder={I18N.labelName}
+                placeholder={t("label.name")}
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleAdd()}
@@ -469,7 +529,7 @@ function LabelManagerDialog({
                 disabled={!newName.trim()}
                 className="rounded-md bg-amber-500/15 px-3 py-1.5 text-xs font-medium text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25 disabled:opacity-30"
               >
-                {I18N.addLabel}
+                {t("label.add")}
               </button>
             </div>
             {/* Color presets */}

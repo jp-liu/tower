@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Info, User, Bot } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 export interface Message {
   id: string;
@@ -15,6 +16,7 @@ interface TaskConversationProps {
 }
 
 export function TaskConversation({ messages }: TaskConversationProps) {
+  const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -30,8 +32,8 @@ export function TaskConversation({ messages }: TaskConversationProps) {
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 ring-1 ring-amber-500/20">
             <Bot className="h-7 w-7 text-amber-400/60" />
           </div>
-          <p className="text-sm text-muted-foreground">开始对话，让 AI 代理执行任务</p>
-          <p className="mt-1 text-[11px] text-muted-foreground">输入指令后按 Enter 发送</p>
+          <p className="text-sm text-muted-foreground">{t("taskDetail.emptyState")}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">{t("taskDetail.emptyHint")}</p>
         </div>
       </div>
     );

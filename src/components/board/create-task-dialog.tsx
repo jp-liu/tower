@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { useI18n } from "@/lib/i18n";
 import type { Task, Priority, TaskStatus } from "@prisma/client";
 
 interface LabelOption {
@@ -43,8 +44,6 @@ interface CreateTaskDialogProps {
   labels: LabelOption[];
 }
 
-const TASK_I18N = JSON.parse('{"label":"\u6807\u7b7e","noLabels":"\u6682\u65e0\u6807\u7b7e"}');
-
 export function CreateTaskDialog({
   open,
   onOpenChange,
@@ -59,6 +58,7 @@ export function CreateTaskDialog({
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("MEDIUM");
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
+  const { t } = useI18n();
 
   const isEditing = !!editTask;
 
@@ -105,25 +105,25 @@ export function CreateTaskDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{isEditing ? "编辑任务" : "新建任务"}</DialogTitle>
+          <DialogTitle>{isEditing ? t("task.edit") : t("task.create")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="title">任务标题</Label>
+            <Label htmlFor="title">{t("task.title")}</Label>
             <Input
               id="title"
               data-testid="task-title"
-              placeholder="输入任务标题"
+              placeholder={t("task.titlePlaceholder")}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="description">描述</Label>
+            <Label htmlFor="description">{t("task.description")}</Label>
             <Textarea
               id="description"
-              placeholder="输入任务描述 (支持 Markdown)"
+              placeholder={t("task.descPlaceholder")}
               rows={4}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -131,14 +131,14 @@ export function CreateTaskDialog({
           </div>
           {/* Priority - Button Group instead of Select */}
           <div className="space-y-2">
-            <Label>优先级</Label>
+            <Label>{t("task.priority")}</Label>
             <div className="flex gap-1.5">
               {(["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const).map((p) => {
                 const config = {
-                  LOW: { label: "低", style: "text-slate-300 border-slate-500/30 bg-slate-500/10" },
-                  MEDIUM: { label: "中", style: "text-amber-300 border-amber-500/30 bg-amber-500/10" },
-                  HIGH: { label: "高", style: "text-orange-300 border-orange-500/30 bg-orange-500/10" },
-                  CRITICAL: { label: "紧急", style: "text-rose-300 border-rose-500/30 bg-rose-500/10" },
+                  LOW: { label: t("task.priorityLow"), style: "text-slate-300 border-slate-500/30 bg-slate-500/10" },
+                  MEDIUM: { label: t("task.priorityMedium"), style: "text-amber-300 border-amber-500/30 bg-amber-500/10" },
+                  HIGH: { label: t("task.priorityHigh"), style: "text-orange-300 border-orange-500/30 bg-orange-500/10" },
+                  CRITICAL: { label: t("task.priorityCritical"), style: "text-rose-300 border-rose-500/30 bg-rose-500/10" },
                 }[p];
                 return (
                   <button
@@ -160,7 +160,7 @@ export function CreateTaskDialog({
           {/* Labels */}
           {labels.length > 0 && (
             <div className="space-y-2">
-              <Label>{TASK_I18N.label}</Label>
+              <Label>{t("task.labels")}</Label>
               <div className="flex flex-wrap gap-1.5">
                 {labels.map((label) => {
                   const isSelected = selectedLabelIds.includes(label.id);
@@ -195,13 +195,13 @@ export function CreateTaskDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            取消
+            {t("common.cancel")}
           </Button>
           <Button
             onClick={handleSubmit}
             className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
           >
-            {isEditing ? "保存" : "创建"}
+            {isEditing ? t("common.save") : t("common.create")}
           </Button>
         </DialogFooter>
       </DialogContent>

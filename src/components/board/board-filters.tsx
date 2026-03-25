@@ -2,6 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/lib/i18n";
 
 type FilterType = "ALL" | "IN_PROGRESS" | "IN_REVIEW";
 
@@ -11,10 +12,10 @@ interface BoardFiltersProps {
   onCreateTask: () => void;
 }
 
-const FILTERS: { id: FilterType; label: string }[] = [
-  { id: "ALL", label: "全部" },
-  { id: "IN_PROGRESS", label: "执行中" },
-  { id: "IN_REVIEW", label: "待评审" },
+const FILTER_KEYS: { id: FilterType; key: "board.allFilter" | "board.inProgressFilter" | "board.inReviewFilter" }[] = [
+  { id: "ALL", key: "board.allFilter" },
+  { id: "IN_PROGRESS", key: "board.inProgressFilter" },
+  { id: "IN_REVIEW", key: "board.inReviewFilter" },
 ];
 
 export function BoardFilters({
@@ -22,9 +23,10 @@ export function BoardFilters({
   onFilterChange,
   onCreateTask,
 }: BoardFiltersProps) {
+  const { t } = useI18n();
   return (
     <div className="flex items-center gap-2 px-6 py-2">
-      {FILTERS.map((filter) => (
+      {FILTER_KEYS.map((filter) => (
         <button
           key={filter.id}
           onClick={() => onFilterChange(filter.id)}
@@ -34,7 +36,7 @@ export function BoardFilters({
               : "text-muted-foreground hover:bg-accent hover:text-foreground"
           }`}
         >
-          {filter.label}
+          {t(filter.key)}
         </button>
       ))}
       <Button
@@ -44,7 +46,7 @@ export function BoardFilters({
         onClick={onCreateTask}
       >
         <Plus className="h-3.5 w-3.5" />
-        新建任务
+        {t("board.newTask")}
       </Button>
     </div>
   );

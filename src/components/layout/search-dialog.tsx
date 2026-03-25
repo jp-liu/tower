@@ -5,13 +5,12 @@ import { useRouter } from "next/navigation";
 import { Search, FileText, FolderKanban, GitBranch, X } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { globalSearch, type SearchResult, type SearchCategory } from "@/actions/search-actions";
+import { useI18n } from "@/lib/i18n";
 
-const SEARCH_I18N = JSON.parse('{"placeholder":"搜索任务、项目、仓库...","task":"任务","project":"项目","repository":"仓库","noResults":"没有找到结果","typeToSearch":"输入关键词开始搜索"}');
-
-const CATEGORIES: { id: SearchCategory; label: string; icon: typeof FileText }[] = [
-  { id: "task", label: SEARCH_I18N.task, icon: FileText },
-  { id: "project", label: SEARCH_I18N.project, icon: FolderKanban },
-  { id: "repository", label: SEARCH_I18N.repository, icon: GitBranch },
+const CATEGORY_DEFS: { id: SearchCategory; key: "search.task" | "search.project" | "search.repository"; icon: typeof FileText }[] = [
+  { id: "task", key: "search.task", icon: FileText },
+  { id: "project", key: "search.project", icon: FolderKanban },
+  { id: "repository", key: "search.repository", icon: GitBranch },
 ];
 
 interface SearchDialogProps {
@@ -20,6 +19,7 @@ interface SearchDialogProps {
 }
 
 export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
+  const { t } = useI18n();
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<SearchCategory>("task");
@@ -56,7 +56,7 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
   }, [router, onOpenChange]);
 
   const getCategoryIcon = (type: SearchCategory) => {
-    const cat = CATEGORIES.find((c) => c.id === type);
+    const cat = CATEGORY_DEFS.find((c) => c.id === type);
     return cat?.icon ?? FileText;
   };
 
@@ -70,7 +70,7 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={SEARCH_I18N.placeholder}
+            placeholder={t("search.placeholder")}
             className="flex-1 bg-transparent px-3 py-3.5 text-sm text-foreground placeholder-muted-foreground outline-none"
           />
           {query && (
@@ -82,7 +82,7 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
 
         {/* Category tabs */}
         <div className="flex items-center gap-1 border-b border-border px-4 py-2">
-          {CATEGORIES.map((cat) => {
+          {CATEGORY_DEFS.map((cat) => {
             const Icon = cat.icon;
             return (
               <button
@@ -95,7 +95,7 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
                 }`}
               >
                 <Icon className="h-3 w-3" />
-                {cat.label}
+                {t(cat.key)}
               </button>
             );
           })}
@@ -105,13 +105,13 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
         <div className="max-h-80 overflow-auto">
           {!query.trim() && (
             <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-              {SEARCH_I18N.typeToSearch}
+              {t("search.typeToSearch")}
             </div>
           )}
 
           {query.trim() && results.length === 0 && !isSearching && (
             <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-              {SEARCH_I18N.noResults}
+              {t("search.noResults")}
             </div>
           )}
 

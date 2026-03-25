@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useI18n } from "@/lib/i18n";
 
 interface TaskMessageInputProps {
   onSend: (message: string) => void;
@@ -29,6 +30,7 @@ export function TaskMessageInput({
   fileChanges = { added: 0, removed: 0 },
   agentName = "Claude Code",
 }: TaskMessageInputProps) {
+  const { t } = useI18n();
   const [message, setMessage] = useState("");
   const [mode, setMode] = useState("default");
   const [toast, setToast] = useState<string | null>(null);
@@ -68,7 +70,7 @@ export function TaskMessageInput({
       {/* File changes + agent indicator */}
       <div className="flex items-center justify-between border-b border-border/50 px-4 py-1.5">
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span>{fileChanges.added + fileChanges.removed} 个文件已更改</span>
+          <span>{fileChanges.added + fileChanges.removed} {t("taskDetail.filesChanged")}</span>
           <span className="font-mono text-emerald-400">+{fileChanges.added}</span>
           <span className="font-mono text-rose-400">-{fileChanges.removed}</span>
         </div>
@@ -81,7 +83,7 @@ export function TaskMessageInput({
       {/* Input area */}
       <div className="p-3">
         <textarea
-          placeholder="输入指令..."
+          placeholder={t("taskDetail.inputPlaceholder")}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -130,7 +132,7 @@ export function TaskMessageInput({
             className="h-7 gap-1.5 bg-amber-500/15 px-3 text-xs text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25 disabled:opacity-30"
           >
             <Send className="h-3 w-3" />
-            {isLoading ? "处理中..." : "发送"}
+            {isLoading ? t("taskDetail.sending") : t("taskDetail.send")}
           </Button>
         </div>
       </div>

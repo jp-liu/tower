@@ -15,8 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { updateProject } from "@/actions/workspace-actions";
 import { useRouter } from "next/navigation";
-
-const S = JSON.parse('{"projectInfo":"项目信息","alias":"别名","description":"描述","type":"类型","normalType":"普通项目","gitType":"Git 项目","gitUrl":"仓库地址","repo":"仓库","addRepo":"添加仓库","noRepo":"暂无已关联仓库","addRepoHint":"点击下方添加仓库","recent":"最近","other":"其他","browseRepo":"浏览磁盘上的仓库","createRepo":"在磁盘上创建新仓库","browseWip":"浏览磁盘仓库功能开发中","createWip":"创建仓库功能开发中","linkWip":"关联仓库功能开发中","edit":"编辑项目","name":"项目名称","aliasLabel":"别名","descLabel":"描述","save":"保存","cancel":"取消","namePlaceholder":"输入项目名称","aliasPlaceholder":"可选别名","descPlaceholder":"项目描述"}');
+import { useI18n } from "@/lib/i18n";
 
 interface ProjectSidebarProps {
   project: {
@@ -38,6 +37,7 @@ const recentRepos = [
 ];
 
 export function RepoSidebar({ project }: ProjectSidebarProps) {
+  const { t } = useI18n();
   const router = useRouter();
   const [repoExpanded, setRepoExpanded] = useState(true);
   const [addRepoExpanded, setAddRepoExpanded] = useState(true);
@@ -88,7 +88,7 @@ export function RepoSidebar({ project }: ProjectSidebarProps) {
               setShowEditDialog(true);
             }}
             className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            title={S.edit}
+            title={t("sidebar.right.edit")}
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
@@ -103,9 +103,9 @@ export function RepoSidebar({ project }: ProjectSidebarProps) {
               : "bg-muted text-muted-foreground ring-1 ring-border"
           }`}>
             {isGit ? (
-              <><GitBranch className="h-3 w-3" />{S.gitType}</>
+              <><GitBranch className="h-3 w-3" />{t("sidebar.right.gitType")}</>
             ) : (
-              <><FileText className="h-3 w-3" />{S.normalType}</>
+              <><FileText className="h-3 w-3" />{t("sidebar.right.normalType")}</>
             )}
           </span>
         </div>
@@ -126,7 +126,7 @@ export function RepoSidebar({ project }: ProjectSidebarProps) {
               onClick={() => setRepoExpanded(!repoExpanded)}
               className="flex w-full cursor-pointer items-center justify-between rounded-md px-2 py-2 transition-colors hover:bg-accent"
             >
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{S.repo}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t("sidebar.right.repo")}</span>
               {repoExpanded ? (
                 <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
               ) : (
@@ -137,9 +137,9 @@ export function RepoSidebar({ project }: ProjectSidebarProps) {
               <div className="mt-3 rounded-lg border border-border bg-muted/50 p-3">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <GitBranch className="h-3.5 w-3.5" />
-                  <p className="text-xs">{S.noRepo}</p>
+                  <p className="text-xs">{t("sidebar.right.noRepo")}</p>
                 </div>
-                <p className="mt-1 text-[11px] text-muted-foreground">{S.addRepoHint}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{t("sidebar.right.addRepoHint")}</p>
               </div>
             )}
           </div>
@@ -150,7 +150,7 @@ export function RepoSidebar({ project }: ProjectSidebarProps) {
               onClick={() => setAddRepoExpanded(!addRepoExpanded)}
               className="flex w-full cursor-pointer items-center justify-between rounded-md px-2 py-2 transition-colors hover:bg-accent"
             >
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{S.addRepo}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t("sidebar.right.addRepo")}</span>
               {addRepoExpanded ? (
                 <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
               ) : (
@@ -160,12 +160,12 @@ export function RepoSidebar({ project }: ProjectSidebarProps) {
             {addRepoExpanded && (
               <>
                 <div className="mt-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">{S.recent}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">{t("sidebar.right.recent")}</p>
                   <div className="space-y-0.5">
                     {recentRepos.map((repo) => (
                       <button
                         key={repo.name}
-                        onClick={() => showToast(S.linkWip)}
+                        onClick={() => showToast(t("sidebar.right.linkWip"))}
                         className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-secondary-foreground transition-colors hover:bg-accent"
                       >
                         <Package className="h-3.5 w-3.5 text-muted-foreground" />
@@ -175,20 +175,20 @@ export function RepoSidebar({ project }: ProjectSidebarProps) {
                   </div>
                 </div>
                 <div className="mt-4 space-y-0.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">{S.other}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">{t("sidebar.right.other")}</p>
                   <button
-                    onClick={() => showToast(S.browseWip)}
+                    onClick={() => showToast(t("sidebar.right.browseWip"))}
                     className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                   >
                     <Search className="h-3.5 w-3.5" />
-                    {S.browseRepo}
+                    {t("sidebar.right.browseRepo")}
                   </button>
                   <button
-                    onClick={() => showToast(S.createWip)}
+                    onClick={() => showToast(t("sidebar.right.createWip"))}
                     className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                   >
                     <FolderPlus className="h-3.5 w-3.5" />
-                    {S.createRepo}
+                    {t("sidebar.right.createRepo")}
                   </button>
                 </div>
               </>
@@ -201,46 +201,46 @@ export function RepoSidebar({ project }: ProjectSidebarProps) {
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>{S.edit}</DialogTitle>
+            <DialogTitle>{t("sidebar.right.edit")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div>
-              <label className="text-xs font-medium text-muted-foreground">{S.name}</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("sidebar.right.name")}</label>
               <Input
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
-                placeholder={S.namePlaceholder}
+                placeholder={t("sidebar.right.namePlaceholder")}
                 className="mt-1.5"
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">{S.aliasLabel}</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("sidebar.right.aliasLabel")}</label>
               <Input
                 value={editAlias}
                 onChange={(e) => setEditAlias(e.target.value)}
-                placeholder={S.aliasPlaceholder}
+                placeholder={t("sidebar.right.aliasPlaceholder")}
                 className="mt-1.5"
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">{S.descLabel}</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("sidebar.right.descLabel")}</label>
               <textarea
                 value={editDesc}
                 onChange={(e) => setEditDesc(e.target.value)}
-                placeholder={S.descPlaceholder}
+                placeholder={t("sidebar.right.descPlaceholder")}
                 rows={3}
                 className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 resize-none"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditDialog(false)}>{S.cancel}</Button>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>{t("sidebar.right.cancel")}</Button>
             <Button
               onClick={handleSaveProject}
               disabled={!editName.trim()}
               className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
             >
-              {S.save}
+              {t("sidebar.right.save")}
             </Button>
           </DialogFooter>
         </DialogContent>

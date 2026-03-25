@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LayoutClient } from "@/components/layout/layout-client";
+import { I18nProvider } from "@/lib/i18n";
 import { db } from "@/lib/db";
 import "./globals.css";
 
@@ -41,9 +42,11 @@ export default async function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <TooltipProvider>
-          <LayoutClient workspaces={workspaces}>
-            {children}
-          </LayoutClient>
+          <I18nProvider>
+            <LayoutClient workspaces={workspaces}>
+              {children}
+            </LayoutClient>
+          </I18nProvider>
         </TooltipProvider>
       </body>
     </html>
