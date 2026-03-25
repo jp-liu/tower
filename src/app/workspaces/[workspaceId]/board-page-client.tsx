@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { BoardStats } from "@/components/board/board-stats";
 import { BoardFilters } from "@/components/board/board-filters";
 import { KanbanBoard } from "@/components/board/kanban-board";
@@ -30,11 +31,18 @@ export function BoardPageClient({
   totalTasks,
   runningTasks,
 }: BoardPageClientProps) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const [filter, setFilter] = useState<FilterType>("ALL");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createDefaultStatus, setCreateDefaultStatus] = useState<TaskStatus>("TODO");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
+
+  const refreshData = useCallback(() => {
+    startTransition(() => {
+      router.refresh();
+    });
+  }, [router]);
 
   const handleFilterChange = useCallback((newFilter: FilterType) => {
     setFilter(newFilter);
@@ -42,7 +50,8 @@ export function BoardPageClient({
 
   const handleTaskMove = useCallback(async (taskId: string, newStatus: TaskStatus) => {
     await updateTaskStatus(taskId, newStatus);
-  }, []);
+    refreshData();
+  }, [refreshData]);
 
   const handleCreateTask = useCallback(
     async (data: { title: string; description: string; priority: Priority; status: TaskStatus }) => {
@@ -53,13 +62,18 @@ export function BoardPageClient({
         priority: data.priority,
         status: data.status,
       });
+      refreshData();
     },
-    [projectId]
+    [projectId, refreshData]
   );
 
   const handleDeleteTask = useCallback(async (taskId: string) => {
     await deleteTask(taskId);
-  }, []);
+    if (selectedTask?.id === taskId) {
+      setSelectedTask(null);
+    }
+    refreshData();
+  }, [refreshData, selectedTask]);
 
   const handleAddTaskToColumn = useCallback((status: TaskStatus) => {
     setCreateDefaultStatus(status);
@@ -67,11 +81,12 @@ export function BoardPageClient({
   }, []);
 
   const handleSendMessage = useCallback(async (taskId: string, message: string) => {
-    await sendTaskMessage(taskId, message);
+    const result = await sendTaskMessage(taskId, message);
+    return result;
   }, []);
 
   const handleEditTask = useCallback((task: Task) => {
-    setEditingTask(task);
+    setCreateDefaultStatus(task.status);
     setShowCreateDialog(true);
   }, []);
 
@@ -84,12 +99,12 @@ export function BoardPageClient({
     <div className="flex h-full">
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Page Header */}
-        <div className="flex items-center justify-between px-6 pt-4">
+        <div className="flex items-center justify-between px-6 pt-4 pb-1">
           <div>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <span>任务看板</span>
+            <div className="flex items-center gap-2 text-xs text-gray-400">
+              <span>📋 任务看板</span>
             </div>
-            <h1 className="text-lg font-semibold">
+            <h1 className="text-base font-semibold text-gray-800">
               任务看板 — {projectName}
             </h1>
           </div>
@@ -111,7 +126,7 @@ export function BoardPageClient({
         />
 
         {/* Kanban Board */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto py-4">
           <KanbanBoard
             initialTasks={filteredTasks}
             onTaskMove={handleTaskMove}

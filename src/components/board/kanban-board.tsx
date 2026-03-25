@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -10,11 +10,9 @@ import {
   useSensors,
   type DragStartEvent,
   type DragEndEvent,
-  type DragOverEvent,
 } from "@dnd-kit/core";
 import { BoardColumn } from "./board-column";
 import { TaskCard } from "./task-card";
-import { useBoardStore } from "@/stores/board-store";
 import { BOARD_COLUMNS } from "@/lib/constants";
 import type { Task, TaskStatus } from "@prisma/client";
 
@@ -35,13 +33,14 @@ export function KanbanBoard({
   onAddTask,
   onDeleteTask,
 }: KanbanBoardProps) {
-  const { tasks, setTasks, moveTask, getTasksByStatus } = useBoardStore();
+  // Local tasks state for optimistic drag updates
+  const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 
-  // Initialize tasks from props
-  if (tasks.length === 0 && initialTasks.length > 0) {
+  // Sync with server data when props change
+  useEffect(() => {
     setTasks(initialTasks);
-  }
+  }, [initialTasks]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -57,23 +56,6 @@ export function KanbanBoard({
     [tasks]
   );
 
-  const handleDragOver = useCallback(
-    (event: DragOverEvent) => {
-      const { active, over } = event;
-      if (!over) return;
-
-      const activeId = active.id as string;
-      const overId = over.id as string;
-
-      // Check if we're dragging over a column
-      const isOverColumn = BOARD_COLUMNS.some((col) => col.id === overId);
-      if (isOverColumn) {
-        moveTask(activeId, overId as TaskStatus);
-      }
-    },
-    [moveTask]
-  );
-
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
@@ -86,36 +68,45 @@ export function KanbanBoard({
 
       // Determine target column
       const isOverColumn = BOARD_COLUMNS.some((col) => col.id === overId);
-      const targetStatus = isOverColumn
-        ? (overId as TaskStatus)
-        : tasks.find((t) => t.id === overId)?.status;
+      let targetStatus: TaskStatus | undefined;
+
+      if (isOverColumn) {
+        targetStatus = overId as TaskStatus;
+      } else {
+        // Dropped on another task — use that task's column
+        const overTask = tasks.find((t) => t.id === overId);
+        targetStatus = overTask?.status;
+      }
 
       if (targetStatus) {
-        moveTask(activeId, targetStatus);
+        // Optimistic update
+        setTasks((prev) =>
+          prev.map((t) =>
+            t.id === activeId ? { ...t, status: targetStatus! } : t
+          )
+        );
+        // Persist to server
         onTaskMove?.(activeId, targetStatus);
       }
     },
-    [tasks, moveTask, onTaskMove]
+    [tasks, onTaskMove]
   );
-
-  const displayTasks = tasks.length > 0 ? tasks : initialTasks;
 
   return (
     <DndContext
       sensors={sensors}
       collisionDetection={closestCorners}
       onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-4 overflow-x-auto px-6 pb-6">
+      <div className="mx-6 flex overflow-x-auto rounded-lg border border-gray-200 bg-white">
         {BOARD_COLUMNS.map((column) => (
           <BoardColumn
             key={column.id}
             id={column.id}
             label={column.label}
             color={column.color}
-            tasks={displayTasks.filter((t) => t.status === column.id)}
+            tasks={tasks.filter((t) => t.status === column.id)}
             onTaskClick={onTaskClick}
             onEditTask={onEditTask}
             onAddTask={() => onAddTask?.(column.id)}

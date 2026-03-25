@@ -4,72 +4,91 @@ import { useState, useCallback, useEffect } from "react";
 import { TaskMetadata } from "./task-metadata";
 import { TaskConversation, type Message } from "./task-conversation";
 import { TaskMessageInput } from "./task-message-input";
+import { getTaskMessages } from "@/actions/agent-actions";
 import type { Task } from "@prisma/client";
 
 interface TaskDetailPanelProps {
   task: Task;
   onClose: () => void;
-  onSendMessage: (taskId: string, message: string) => Promise<void>;
-  initialMessages?: Message[];
+  onSendMessage: (taskId: string, message: string) => Promise<unknown>;
 }
 
 export function TaskDetailPanel({
   task,
   onClose,
   onSendMessage,
-  initialMessages = [],
 }: TaskDetailPanelProps) {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [fileChanges] = useState({ added: 0, removed: 0 });
 
+  // Load messages from server on mount and when task changes
   useEffect(() => {
-    setMessages(initialMessages);
-  }, [initialMessages]);
+    let cancelled = false;
+    getTaskMessages(task.id).then((serverMessages) => {
+      if (cancelled) return;
+      setMessages(
+        serverMessages.map((m) => ({
+          id: m.id,
+          role: m.role.toLowerCase() as "user" | "assistant" | "system",
+          content: m.content,
+          createdAt: new Date(m.createdAt),
+        }))
+      );
+    });
+    return () => { cancelled = true; };
+  }, [task.id]);
 
   const handleSend = useCallback(
     async (content: string) => {
-      const userMessage: Message = {
+      // Optimistic: add user message immediately
+      const userMsg: Message = {
         id: `msg-${Date.now()}`,
         role: "user",
         content,
         createdAt: new Date(),
       };
-      setMessages((prev) => [...prev, userMessage]);
+      setMessages((prev) => [...prev, userMsg]);
       setIsLoading(true);
 
       try {
-        await onSendMessage(task.id, content);
+        const result = await onSendMessage(task.id, content) as {
+          userMessage: { id: string };
+          assistantMessage: { id: string; content: string; createdAt: Date };
+        } | undefined;
 
-        // Mock assistant response for now
-        const assistantMessage: Message = {
-          id: `msg-${Date.now()}-resp`,
-          role: "assistant",
-          content: `收到你的消息。正在处理任务「${task.title}」...\n\n我会分析代码并给出建议。`,
-          createdAt: new Date(),
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
+        if (result?.assistantMessage) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: result.assistantMessage.id,
+              role: "assistant" as const,
+              content: result.assistantMessage.content,
+              createdAt: new Date(result.assistantMessage.createdAt),
+            },
+          ]);
+        }
       } catch {
-        const errorMessage: Message = {
-          id: `msg-${Date.now()}-err`,
-          role: "system",
-          content: "发送失败，请重试",
-          createdAt: new Date(),
-        };
-        setMessages((prev) => [...prev, errorMessage]);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `err-${Date.now()}`,
+            role: "system" as const,
+            content: "发送失败，请重试",
+            createdAt: new Date(),
+          },
+        ]);
       } finally {
         setIsLoading(false);
       }
     },
-    [task.id, task.title, onSendMessage]
+    [task.id, onSendMessage]
   );
 
   return (
     <div
-      className="flex h-full w-[520px] flex-shrink-0 flex-col border-l bg-white animate-in slide-in-from-right duration-200"
+      className="flex h-full w-[520px] flex-shrink-0 flex-col border-l bg-white"
       data-testid="task-detail-panel"
     >
-      {/* Metadata */}
       <TaskMetadata
         title={task.title}
         description="聚焦当前任务的执行对话。分支状态和连续 follow-up 输入。"
@@ -78,15 +97,10 @@ export function TaskDetailPanel({
         updatedAt={task.updatedAt}
         onBack={onClose}
       />
-
-      {/* Conversation */}
       <TaskConversation messages={messages} />
-
-      {/* Input */}
       <TaskMessageInput
         onSend={handleSend}
         isLoading={isLoading}
-        fileChanges={fileChanges}
       />
     </div>
   );
