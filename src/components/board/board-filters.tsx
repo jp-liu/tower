@@ -12,9 +12,9 @@ interface BoardFiltersProps {
 }
 
 const FILTERS: { id: FilterType; label: string }[] = [
-  { id: "ALL", label: "\u5168\u90E8" },
-  { id: "IN_PROGRESS", label: "\u6267\u884C\u4E2D" },
-  { id: "IN_REVIEW", label: "\u5F85\u8BC4\u5BA1" },
+  { id: "ALL", label: "全部" },
+  { id: "IN_PROGRESS", label: "执行中" },
+  { id: "IN_REVIEW", label: "待评审" },
 ];
 
 export function BoardFilters({
@@ -28,10 +28,10 @@ export function BoardFilters({
         <button
           key={filter.id}
           onClick={() => onFilterChange(filter.id)}
-          className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
             activeFilter === filter.id
-              ? "border-violet-200 bg-violet-50 text-violet-700 font-medium"
-              : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+              ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20"
+              : "text-muted-foreground hover:bg-accent hover:text-foreground"
           }`}
         >
           {filter.label}
@@ -40,10 +40,10 @@ export function BoardFilters({
       <Button
         size="sm"
         variant="outline"
-        className="ml-auto gap-1.5"
+        className="ml-auto h-7 gap-1.5 border-border text-xs text-muted-foreground hover:border-amber-500/30 hover:text-amber-300"
         onClick={onCreateTask}
       >
-        <Plus className="h-4 w-4" />
+        <Plus className="h-3.5 w-3.5" />
         新建任务
       </Button>
     </div>

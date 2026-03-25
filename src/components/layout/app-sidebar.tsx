@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Settings, Archive, Plus, Pencil, Trash2, Check, X, MoreHorizontal } from "lucide-react";
+import { Settings, Archive, Plus, Pencil, Trash2, Check, X, MoreHorizontal, Layers } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -75,48 +75,48 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
   }, [activeWorkspaceId, router]);
 
   return (
-    <aside className="flex h-screen w-52 flex-col bg-gradient-to-b from-violet-600 to-purple-700 text-white">
+    <aside className="noise relative flex h-screen w-56 flex-col border-r border-border bg-[oklch(0.11_0.008_260)]">
       {/* Logo */}
-      <div className="flex items-center gap-2 px-4 py-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-sm font-bold">
-          AI
+      <div className="relative z-10 flex items-center gap-3 px-5 py-5">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/15 ring-1 ring-amber-500/25">
+          <Layers className="h-4.5 w-4.5 text-amber-400" />
         </div>
         <div>
-          <div className="text-sm font-semibold">AI Manager</div>
-          <div className="text-xs text-white/60">项目管理平台</div>
+          <div className="text-sm font-semibold tracking-tight text-foreground">AI Manager</div>
+          <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Studio</div>
         </div>
       </div>
 
       {/* Workspace Header */}
-      <div className="flex items-center justify-between px-4 py-2">
-        <span className="text-sm font-medium">工作空间</span>
-        <div className="flex items-center gap-1">
+      <div className="relative z-10 flex items-center justify-between px-5 py-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">工作空间</span>
+        <div className="flex items-center gap-0.5">
           <button
-            className="rounded p-1 hover:bg-white/10"
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             onClick={() => setIsCreating(true)}
             title="新建工作空间"
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-3.5 w-3.5" />
           </button>
           <button
-            className="rounded p-1 hover:bg-white/10"
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             onClick={() => router.push("/settings")}
           >
-            <Settings className="h-4 w-4" />
+            <Settings className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
 
       {/* Tab Filters */}
-      <div className="flex gap-1 px-3 py-1">
+      <div className="relative z-10 flex gap-1 px-4 py-1.5">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
+            className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-all ${
               activeTab === tab.id
-                ? "bg-white text-purple-700 font-medium"
-                : "text-white/80 hover:bg-white/10"
+                ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground"
             }`}
           >
             {tab.label}
@@ -126,7 +126,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
 
       {/* Create Workspace Input */}
       {isCreating && (
-        <div className="mx-2 mt-2 flex items-center gap-1 rounded-lg bg-white/10 px-2 py-1.5">
+        <div className="relative z-10 mx-3 mt-2 flex items-center gap-1 rounded-lg bg-accent px-3 py-2 ring-1 ring-amber-500/20">
           <input
             ref={inputRef}
             value={newName}
@@ -136,26 +136,26 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
               if (e.key === "Escape") { setIsCreating(false); setNewName(""); }
             }}
             placeholder="工作空间名称"
-            className="flex-1 bg-transparent text-sm placeholder-white/40 outline-none"
+            className="flex-1 bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none"
           />
-          <button onClick={handleCreate} className="rounded p-0.5 hover:bg-white/10">
+          <button onClick={handleCreate} className="rounded p-0.5 text-amber-400 hover:text-amber-300">
             <Check className="h-3.5 w-3.5" />
           </button>
-          <button onClick={() => { setIsCreating(false); setNewName(""); }} className="rounded p-0.5 hover:bg-white/10">
+          <button onClick={() => { setIsCreating(false); setNewName(""); }} className="rounded p-0.5 text-muted-foreground hover:text-foreground">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
       )}
 
       {/* Workspace List */}
-      <div className="mt-2 flex-1 overflow-auto px-2">
+      <div className="relative z-10 mt-2 flex-1 overflow-auto px-3">
         {workspaces.map((ws) => {
           const isActive = activeWorkspaceId === ws.id;
           const isEditing = editingId === ws.id;
 
           if (isEditing) {
             return (
-              <div key={ws.id} className="flex items-center gap-1 rounded-lg bg-white/15 px-3 py-2">
+              <div key={ws.id} className="flex items-center gap-1 rounded-lg bg-accent px-3 py-2 ring-1 ring-border">
                 <input
                   ref={editRef}
                   value={editName}
@@ -164,12 +164,12 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
                     if (e.key === "Enter") handleRename(ws.id);
                     if (e.key === "Escape") setEditingId(null);
                   }}
-                  className="flex-1 bg-transparent text-sm outline-none"
+                  className="flex-1 bg-transparent text-sm text-foreground outline-none"
                 />
-                <button onClick={() => handleRename(ws.id)} className="rounded p-0.5 hover:bg-white/10">
+                <button onClick={() => handleRename(ws.id)} className="rounded p-0.5 text-amber-400 hover:text-amber-300">
                   <Check className="h-3.5 w-3.5" />
                 </button>
-                <button onClick={() => setEditingId(null)} className="rounded p-0.5 hover:bg-white/10">
+                <button onClick={() => setEditingId(null)} className="rounded p-0.5 text-muted-foreground hover:text-foreground">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -179,22 +179,26 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
           return (
             <div
               key={ws.id}
-              className={`group relative flex items-center rounded-lg transition-colors ${
-                isActive ? "bg-white/15" : "hover:bg-white/10"
+              className={`group relative flex items-center rounded-lg transition-all ${
+                isActive
+                  ? "bg-accent ring-1 ring-amber-500/15"
+                  : "hover:bg-accent/60"
               }`}
             >
               <button
                 onClick={() => router.push(`/workspaces/${ws.id}`)}
                 className="flex-1 px-3 py-2.5 text-left"
               >
-                <div className="text-sm font-medium">{ws.name}</div>
-                <div className="text-xs text-white/50">{formatTime(ws.updatedAt)}</div>
+                <div className={`text-sm font-medium ${isActive ? "text-foreground" : "text-secondary-foreground"}`}>
+                  {ws.name}
+                </div>
+                <div className="text-[11px] text-muted-foreground">{formatTime(ws.updatedAt)}</div>
               </button>
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
                     <button
-                      className="mr-1 rounded p-1 opacity-0 hover:bg-white/10 group-hover:opacity-100"
+                      className="mr-2 rounded-md p-1 text-muted-foreground opacity-0 transition-all hover:bg-background hover:text-foreground group-hover:opacity-100"
                       onClick={(e) => e.stopPropagation()}
                     />
                   }
@@ -207,7 +211,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
                     重命名
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    className="text-red-600"
+                    className="text-rose-400"
                     onClick={() => handleDelete(ws.id, ws.name)}
                   >
                     <Trash2 className="mr-2 h-3.5 w-3.5" />
@@ -221,10 +225,10 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center gap-2 border-t border-white/10 px-4 py-3 text-xs text-white/60">
+      <div className="relative z-10 flex items-center gap-2 border-t border-border px-5 py-3 text-[11px] text-muted-foreground">
         <Archive className="h-3.5 w-3.5" />
-        <span>查看归档</span>
-        <span className="ml-auto">0</span>
+        <span>归档</span>
+        <span className="ml-auto font-mono">0</span>
       </div>
     </aside>
   );

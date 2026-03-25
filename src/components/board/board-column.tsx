@@ -31,29 +31,32 @@ export function BoardColumn({
 
   return (
     <div
-      className={`flex w-0 min-w-[200px] flex-1 flex-col border-r border-gray-200 last:border-r-0 ${
-        isOver ? "bg-blue-50/30" : ""
+      className={`flex w-0 min-w-[220px] flex-1 flex-col border-r border-border/50 last:border-r-0 transition-colors ${
+        isOver ? "bg-amber-500/5" : ""
       }`}
     >
       {/* Column Header */}
-      <div className="flex items-center justify-between px-3 py-2">
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/30">
         <div className="flex items-center gap-2">
           <div className={`h-2 w-2 rounded-full ${color}`} />
-          <span className="text-sm font-medium text-gray-700">{label}</span>
+          <span className="text-xs font-semibold tracking-wide text-secondary-foreground">{label}</span>
+          <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-mono font-medium text-muted-foreground">
+            {tasks.length}
+          </span>
         </div>
         <button
           onClick={onAddTask}
-          className="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           aria-label="add"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-3.5 w-3.5" />
         </button>
       </div>
 
       {/* Task List */}
       <div
         ref={setNodeRef}
-        className="flex flex-1 flex-col gap-2 px-2 pb-4"
+        className="flex flex-1 flex-col gap-2 p-2"
       >
         <SortableContext
           items={tasks.map((t) => t.id)}

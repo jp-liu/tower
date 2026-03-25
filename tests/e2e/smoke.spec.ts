@@ -202,7 +202,7 @@ test.describe.serial("AI Manager 可用性测试", () => {
     const filterBtn = page.getByRole("button", { name: "执行中", exact: true });
     if (!await filterBtn.isVisible({ timeout: 3000 }).catch(() => false)) { test.skip(); return; }
     await filterBtn.click();
-    await expect(filterBtn).toHaveClass(/violet/);
+    await expect(filterBtn).toHaveClass(/amber/);
 
     // 重置
     await page.getByRole("button", { name: "全部", exact: true }).first().click();

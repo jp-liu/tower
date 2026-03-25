@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search, Settings, Plus } from "lucide-react";
+import { Search, Settings, Plus, Command } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Dialog,
@@ -14,6 +13,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { searchTasks } from "@/actions/task-actions";
 
 interface SearchResult {
@@ -41,32 +41,17 @@ export function TopBar({ onCreateProject }: TopBarProps) {
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  // Debounced search
   useEffect(() => {
-    if (searchTimerRef.current) {
-      clearTimeout(searchTimerRef.current);
-    }
-
-    if (!searchQuery.trim()) {
-      setSearchResults([]);
-      setShowResults(false);
-      return;
-    }
-
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (!searchQuery.trim()) { setSearchResults([]); setShowResults(false); return; }
     searchTimerRef.current = setTimeout(async () => {
       const results = await searchTasks(searchQuery);
       setSearchResults(results as SearchResult[]);
       setShowResults(true);
     }, 300);
-
-    return () => {
-      if (searchTimerRef.current) {
-        clearTimeout(searchTimerRef.current);
-      }
-    };
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
   }, [searchQuery]);
 
-  // Click outside to close results
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
@@ -87,22 +72,30 @@ export function TopBar({ onCreateProject }: TopBarProps) {
 
   return (
     <>
-      <header className="flex h-14 items-center justify-between border-b bg-white px-6">
-        <div className="w-48" />
+      <header className="flex h-12 items-center justify-between border-b border-border bg-background/80 px-5 backdrop-blur-sm">
+        <div className="w-40" />
 
-        <div ref={searchContainerRef} className="relative w-80">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search tasks..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={() => {
-              if (searchResults.length > 0) setShowResults(true);
-            }}
-            className="pl-9 h-9 bg-gray-50 border-gray-200"
-          />
+        {/* Search */}
+        <div ref={searchContainerRef} className="relative w-96">
+          <div className="relative flex items-center">
+            <Search className="absolute left-3 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              placeholder="Search tasks..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => { if (searchResults.length > 0) setShowResults(true); }}
+              className="h-8 w-full rounded-lg border border-border bg-muted/50 pl-9 pr-12 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-amber-500/40 focus:bg-muted focus:ring-1 focus:ring-amber-500/20"
+            />
+            <kbd className="absolute right-3 flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+              <Command className="h-2.5 w-2.5" />K
+            </kbd>
+          </div>
+
           {showResults && searchResults.length > 0 && (
-            <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-lg border bg-white shadow-lg max-h-80 overflow-auto">
+            <div className="absolute left-0 right-0 top-full mt-2 z-50 rounded-xl border border-border bg-card shadow-2xl shadow-black/20 max-h-80 overflow-auto">
+              <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                搜索结果
+              </div>
               {searchResults.map((task) => (
                 <button
                   key={task.id}
@@ -111,11 +104,11 @@ export function TopBar({ onCreateProject }: TopBarProps) {
                     setSearchQuery("");
                     setShowResults(false);
                   }}
-                  className="flex w-full flex-col px-4 py-2.5 text-left hover:bg-gray-50 border-b last:border-b-0"
+                  className="flex w-full flex-col px-3 py-2.5 text-left transition-colors hover:bg-accent border-t border-border/50 first:border-t-0"
                 >
-                  <span className="text-sm font-medium text-gray-900">{task.title}</span>
-                  <span className="text-xs text-gray-500">
-                    {task.project.workspace.name} / {task.project.name}
+                  <span className="text-sm font-medium text-foreground">{task.title}</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {task.project.workspace.name} → {task.project.name}
                   </span>
                 </button>
               ))}
@@ -123,25 +116,28 @@ export function TopBar({ onCreateProject }: TopBarProps) {
           )}
         </div>
 
-        <div className="flex items-center gap-3">
-          <Link href="/settings" className="rounded-lg p-2 text-gray-500 hover:bg-gray-100">
-            <Settings className="h-5 w-5" />
+        {/* Right Actions */}
+        <div className="flex items-center gap-2">
+          <Link
+            href="/settings"
+            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <Settings className="h-4 w-4" />
           </Link>
           <Button
             size="sm"
-            className="bg-violet-600 hover:bg-violet-700 text-white gap-1.5"
+            className="h-8 gap-1.5 bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25 hover:text-amber-200"
             onClick={() => setShowNewProject(true)}
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-3.5 w-3.5" />
             新建项目
           </Button>
-          <div className="flex items-center gap-2">
-            <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-green-500 text-white text-xs">
+          <div className="ml-1 flex items-center gap-2">
+            <Avatar className="h-7 w-7 ring-1 ring-border">
+              <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold">
                 JP
               </AvatarFallback>
             </Avatar>
-            <span className="text-sm text-gray-700">jpliu6</span>
           </div>
         </div>
       </header>
@@ -165,7 +161,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
             </Button>
             <Button
               onClick={handleCreateProject}
-              className="bg-violet-600 hover:bg-violet-700"
+              className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
             >
               创建
             </Button>

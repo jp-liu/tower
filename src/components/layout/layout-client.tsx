@@ -34,7 +34,7 @@ export function LayoutClient({ workspaces, children }: LayoutClientProps) {
       <AppSidebar workspaces={workspaces} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <TopBar onCreateProject={handleCreateProject} />
-        <main className="flex-1 overflow-auto bg-gray-50">
+        <main className="flex-1 overflow-auto bg-background">
           {children}
         </main>
       </div>

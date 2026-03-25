@@ -99,7 +99,7 @@ export function KanbanBoard({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="mx-6 flex overflow-x-auto rounded-lg border border-gray-200 bg-white">
+      <div className="mx-6 flex overflow-x-auto rounded-xl border border-border bg-card/50">
         {BOARD_COLUMNS.map((column) => (
           <BoardColumn
             key={column.id}

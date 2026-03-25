@@ -118,12 +118,12 @@ export function BoardPageClient({
         {/* Page Header */}
         <div className="flex items-center justify-between px-6 pt-4 pb-1">
           <div>
-            <div className="flex items-center gap-2 text-xs text-gray-400">
-              <span>📋 任务看板</span>
+            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              <span>任务看板</span>
             </div>
             <div className="flex items-center gap-3">
-              <h1 className="text-base font-semibold text-gray-800">
-                任务看板 — {projectName}
+              <h1 className="text-base font-semibold tracking-tight text-foreground">
+                {projectName}
               </h1>
               {/* Project Selector */}
               {projects.length > 1 && (
