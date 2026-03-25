@@ -27,6 +27,7 @@ export default async function RootLayout({
 }>) {
   const workspaces = await db.workspace.findMany({
     orderBy: { updatedAt: "desc" },
+    select: { id: true, name: true, description: true, updatedAt: true },
   });
 
   return (

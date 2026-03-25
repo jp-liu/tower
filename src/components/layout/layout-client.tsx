@@ -6,7 +6,7 @@ import { TopBar } from "./top-bar";
 import { createProject, createWorkspace } from "@/actions/workspace-actions";
 
 interface LayoutClientProps {
-  workspaces: Array<{ id: string; name: string; updatedAt: Date }>;
+  workspaces: Array<{ id: string; name: string; description: string | null; updatedAt: Date }>;
   children: React.ReactNode;
 }
 
