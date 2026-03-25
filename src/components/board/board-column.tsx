@@ -31,7 +31,7 @@ export function BoardColumn({
 
   return (
     <div
-      className={`flex w-0 min-w-[220px] flex-1 flex-col border-r border-border/50 last:border-r-0 transition-colors ${
+      className={`flex w-0 min-w-[220px] flex-1 flex-col min-h-0 border-r border-border/50 last:border-r-0 transition-colors ${
         isOver ? "bg-amber-500/5" : ""
       }`}
     >
@@ -56,7 +56,7 @@ export function BoardColumn({
       {/* Task List */}
       <div
         ref={setNodeRef}
-        className="flex flex-1 flex-col gap-2 p-2"
+        className="flex flex-1 flex-col gap-2 overflow-y-auto p-2 min-h-0"
       >
         <SortableContext
           items={tasks.map((t) => t.id)}

@@ -12,13 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { Task, Priority, TaskStatus } from "@prisma/client";
 
 interface CreateTaskDialogProps {
@@ -116,19 +109,33 @@ export function CreateTaskDialog({
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
+          {/* Priority - Button Group instead of Select */}
           <div className="space-y-2">
             <Label>优先级</Label>
-            <Select value={priority} onValueChange={(v) => v && setPriority(v as Priority)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="LOW">低优先级</SelectItem>
-                <SelectItem value="MEDIUM">中优先级</SelectItem>
-                <SelectItem value="HIGH">高优先级</SelectItem>
-                <SelectItem value="CRITICAL">紧急</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex gap-1.5">
+              {(["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const).map((p) => {
+                const config = {
+                  LOW: { label: "低", style: "text-slate-300 border-slate-500/30 bg-slate-500/10" },
+                  MEDIUM: { label: "中", style: "text-amber-300 border-amber-500/30 bg-amber-500/10" },
+                  HIGH: { label: "高", style: "text-orange-300 border-orange-500/30 bg-orange-500/10" },
+                  CRITICAL: { label: "紧急", style: "text-rose-300 border-rose-500/30 bg-rose-500/10" },
+                }[p];
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPriority(p)}
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
+                      priority === p
+                        ? `${config.style} ring-1 ring-current/20`
+                        : "border-border text-muted-foreground hover:bg-accent"
+                    }`}
+                  >
+                    {config.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
         <DialogFooter>

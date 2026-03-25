@@ -35,12 +35,12 @@ export function RepoSidebar({ projectName = "Test" }: RepoSidebarProps) {
       )}
 
       {/* Project Selector */}
-      <div className="border-b border-border p-4">
-        <div className="flex items-center justify-between">
+      <div className="border-b border-border bg-muted/30 p-4">
+        <div className="flex w-full cursor-pointer items-center justify-between rounded-md px-2 py-2 transition-colors hover:bg-accent">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">项目</span>
           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
         </div>
-        <div className="mt-1.5">
+        <div className="mt-1.5 pl-2">
           <span className="text-sm font-medium text-foreground">{projectName}</span>
         </div>
       </div>
@@ -49,7 +49,7 @@ export function RepoSidebar({ projectName = "Test" }: RepoSidebarProps) {
       <div className="border-b border-border p-4">
         <button
           onClick={() => setRepoExpanded(!repoExpanded)}
-          className="flex w-full items-center justify-between"
+          className="flex w-full cursor-pointer items-center justify-between rounded-md px-2 py-2 transition-colors hover:bg-accent"
         >
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">仓库</span>
           {repoExpanded ? (
@@ -73,7 +73,7 @@ export function RepoSidebar({ projectName = "Test" }: RepoSidebarProps) {
       <div className="p-4">
         <button
           onClick={() => setAddRepoExpanded(!addRepoExpanded)}
-          className="flex w-full items-center justify-between"
+          className="flex w-full cursor-pointer items-center justify-between rounded-md px-2 py-2 transition-colors hover:bg-accent"
         >
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">添加仓库</span>
           {addRepoExpanded ? (

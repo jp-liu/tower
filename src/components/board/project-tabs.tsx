@@ -1,0 +1,87 @@
+"use client";
+
+import { useRef, useState, useEffect } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
+interface ProjectTabsProps {
+  projects: Array<{ id: string; name: string }>;
+  activeProjectId: string;
+  onSelect: (projectId: string) => void;
+}
+
+export function ProjectTabs({ projects, activeProjectId, onSelect }: ProjectTabsProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(false);
+
+  const checkOverflow = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setShowLeftArrow(el.scrollLeft > 0);
+    setShowRightArrow(el.scrollLeft < el.scrollWidth - el.clientWidth - 1);
+  };
+
+  useEffect(() => {
+    checkOverflow();
+    const el = scrollRef.current;
+    if (el) {
+      el.addEventListener("scroll", checkOverflow);
+      const observer = new ResizeObserver(checkOverflow);
+      observer.observe(el);
+      return () => {
+        el.removeEventListener("scroll", checkOverflow);
+        observer.disconnect();
+      };
+    }
+  }, [projects]);
+
+  const scroll = (direction: "left" | "right") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: direction === "left" ? -150 : 150, behavior: "smooth" });
+  };
+
+  if (projects.length <= 1) return null;
+
+  return (
+    <div className="relative flex items-center">
+      {showLeftArrow && (
+        <button
+          onClick={() => scroll("left")}
+          className="absolute left-0 z-10 flex h-7 w-7 items-center justify-center rounded-md bg-background/90 text-muted-foreground shadow-sm ring-1 ring-border backdrop-blur-sm transition-colors hover:text-foreground"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </button>
+      )}
+
+      <div
+        ref={scrollRef}
+        className="flex items-center gap-1 overflow-x-auto scrollbar-none px-1"
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+      >
+        {projects.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => onSelect(p.id)}
+            className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+              activeProjectId === p.id
+                ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            }`}
+          >
+            {p.name}
+          </button>
+        ))}
+      </div>
+
+      {showRightArrow && (
+        <button
+          onClick={() => scroll("right")}
+          className="absolute right-0 z-10 flex h-7 w-7 items-center justify-center rounded-md bg-background/90 text-muted-foreground shadow-sm ring-1 ring-border backdrop-blur-sm transition-colors hover:text-foreground"
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}

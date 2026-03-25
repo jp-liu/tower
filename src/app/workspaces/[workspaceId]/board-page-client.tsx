@@ -10,13 +10,7 @@ import { RepoSidebar } from "@/components/repository/repo-sidebar";
 import { TaskDetailPanel } from "@/components/task/task-detail-panel";
 import { createTask, updateTaskStatus, updateTask, deleteTask } from "@/actions/task-actions";
 import { sendTaskMessage } from "@/actions/agent-actions";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { ProjectTabs } from "@/components/board/project-tabs";
 import type { Task, TaskStatus, Priority } from "@prisma/client";
 
 type FilterType = "ALL" | "IN_PROGRESS" | "IN_REVIEW";
@@ -121,28 +115,22 @@ export function BoardPageClient({
             <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
               <span>任务看板</span>
             </div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-base font-semibold tracking-tight text-foreground">
-                {projectName}
-              </h1>
-              {/* Project Selector */}
-              {projects.length > 1 && (
-                <Select value={projectId} onValueChange={(v) => {
-                  if (v) router.push(`/workspaces/${workspaceId}?projectId=${v}`);
-                }}>
-                  <SelectTrigger className="h-8 w-40 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
+            <h1 className="text-base font-semibold tracking-tight text-foreground">
+              {projectName}
+            </h1>
           </div>
         </div>
+
+        {/* Project Tabs */}
+        {projects.length > 1 && (
+          <div className="px-6 pt-2">
+            <ProjectTabs
+              projects={projects}
+              activeProjectId={projectId}
+              onSelect={(id) => router.push(`/workspaces/${workspaceId}?projectId=${id}`)}
+            />
+          </div>
+        )}
 
         {/* Stats */}
         <BoardStats
@@ -163,7 +151,7 @@ export function BoardPageClient({
         />
 
         {/* Kanban Board */}
-        <div className="flex-1 overflow-auto py-4">
+        <div className="flex-1 overflow-hidden py-4 min-h-0">
           <KanbanBoard
             initialTasks={filteredTasks}
             onTaskMove={handleTaskMove}
