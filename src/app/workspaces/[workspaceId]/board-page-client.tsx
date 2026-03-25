@@ -6,6 +6,7 @@ import { BoardFilters } from "@/components/board/board-filters";
 import { KanbanBoard } from "@/components/board/kanban-board";
 import { CreateTaskDialog } from "@/components/board/create-task-dialog";
 import { RepoSidebar } from "@/components/repository/repo-sidebar";
+import { TaskDetailPanel } from "@/components/task/task-detail-panel";
 import { createTask, updateTaskStatus, deleteTask } from "@/actions/task-actions";
 import type { Task, TaskStatus, Priority } from "@prisma/client";
 
@@ -31,6 +32,7 @@ export function BoardPageClient({
   const [filter, setFilter] = useState<FilterType>("ALL");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createDefaultStatus, setCreateDefaultStatus] = useState<TaskStatus>("TODO");
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   const handleFilterChange = useCallback((newFilter: FilterType) => {
     setFilter(newFilter);
@@ -60,6 +62,10 @@ export function BoardPageClient({
   const handleAddTaskToColumn = useCallback((status: TaskStatus) => {
     setCreateDefaultStatus(status);
     setShowCreateDialog(true);
+  }, []);
+
+  const handleSendMessage = useCallback(async (taskId: string, message: string) => {
+    console.log("Send message to task:", taskId, message);
   }, []);
 
   const filteredTasks =
@@ -102,10 +108,7 @@ export function BoardPageClient({
           <KanbanBoard
             initialTasks={filteredTasks}
             onTaskMove={handleTaskMove}
-            onTaskClick={(task) => {
-              // TODO: Open task detail panel
-              console.log("Task clicked:", task.id);
-            }}
+            onTaskClick={(task) => setSelectedTask(task)}
             onAddTask={handleAddTaskToColumn}
             onDeleteTask={handleDeleteTask}
           />
@@ -120,8 +123,16 @@ export function BoardPageClient({
         />
       </div>
 
-      {/* Right Sidebar */}
-      <RepoSidebar projectName={projectName} />
+      {/* Right: Task Detail Panel or Repo Sidebar */}
+      {selectedTask ? (
+        <TaskDetailPanel
+          task={selectedTask}
+          onClose={() => setSelectedTask(null)}
+          onSendMessage={handleSendMessage}
+        />
+      ) : (
+        <RepoSidebar projectName={projectName} />
+      )}
     </div>
   );
 }
