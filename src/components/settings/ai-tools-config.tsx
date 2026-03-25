@@ -181,7 +181,7 @@ export function AIToolsConfig({
                     isDefault: true,
                   })
                 }
-                className="bg-violet-600 hover:bg-violet-700"
+                className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
               >
                 保存
               </Button>
