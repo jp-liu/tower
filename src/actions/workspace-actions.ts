@@ -39,6 +39,20 @@ export async function createWorkspace(data: { name: string; description?: string
   return workspace;
 }
 
+export async function updateWorkspace(id: string, data: { name?: string; description?: string }) {
+  const workspace = await db.workspace.update({
+    where: { id },
+    data,
+  });
+  revalidatePath("/workspaces");
+  return workspace;
+}
+
+export async function deleteWorkspace(id: string) {
+  await db.workspace.delete({ where: { id } });
+  revalidatePath("/workspaces");
+}
+
 export async function createProject(data: {
   name: string;
   description?: string;
