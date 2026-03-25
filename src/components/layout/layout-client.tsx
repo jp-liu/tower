@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { AppSidebar } from "./app-sidebar";
 import { TopBar } from "./top-bar";
 import { createProject, createWorkspace } from "@/actions/workspace-actions";
@@ -12,14 +12,17 @@ interface LayoutClientProps {
 
 export function LayoutClient({ workspaces, children }: LayoutClientProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const activeWorkspaceId = pathname.split("/workspaces/")[1]?.split("/")[0];
 
   const handleCreateProject = async (data: { name: string; alias?: string; description?: string; type: "NORMAL" | "GIT"; gitUrl?: string }) => {
-    let workspaceId: string;
-    if (workspaces.length > 0) {
-      workspaceId = workspaces[0].id;
-    } else {
+    const workspaceId = activeWorkspaceId || (workspaces.length > 0 ? workspaces[0].id : null);
+    if (!workspaceId) {
       const ws = await createWorkspace({ name: "默认工作空间" });
-      workspaceId = ws.id;
+      await createProject({ ...data, workspaceId: ws.id });
+      router.refresh();
+      router.push(`/workspaces/${ws.id}`);
+      return;
     }
     await createProject({ ...data, workspaceId });
     router.refresh();

@@ -116,7 +116,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
           <Layers className="h-4 w-4 text-amber-400" />
         </button>
 
-        <div className="flex flex-1 flex-col items-center gap-1 overflow-auto px-0.5">
+        <div className="flex flex-1 flex-col items-center gap-1 overflow-auto px-0.5 pt-1">
           {workspaces.map((ws) => {
             const isActive = activeWorkspaceId === ws.id;
             const icon = getIcon(ws);

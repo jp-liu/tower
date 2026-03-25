@@ -1,0 +1,140 @@
+"use client";
+
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { Search, FileText, FolderKanban, GitBranch, X } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { globalSearch, type SearchResult, type SearchCategory } from "@/actions/search-actions";
+
+const SEARCH_I18N = JSON.parse('{"placeholder":"搜索任务、项目、仓库...","task":"任务","project":"项目","repository":"仓库","noResults":"没有找到结果","typeToSearch":"输入关键词开始搜索"}');
+
+const CATEGORIES: { id: SearchCategory; label: string; icon: typeof FileText }[] = [
+  { id: "task", label: SEARCH_I18N.task, icon: FileText },
+  { id: "project", label: SEARCH_I18N.project, icon: FolderKanban },
+  { id: "repository", label: SEARCH_I18N.repository, icon: GitBranch },
+];
+
+interface SearchDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
+  const router = useRouter();
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<SearchCategory>("task");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Focus input when dialog opens
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => inputRef.current?.focus(), 100);
+      setQuery("");
+      setResults([]);
+    }
+  }, [open]);
+
+  // Debounced search
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (!query.trim()) { setResults([]); return; }
+    setIsSearching(true);
+    timerRef.current = setTimeout(async () => {
+      const r = await globalSearch(query, category);
+      setResults(r);
+      setIsSearching(false);
+    }, 250);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [query, category]);
+
+  const handleSelect = useCallback((result: SearchResult) => {
+    router.push(result.navigateTo);
+    onOpenChange(false);
+  }, [router, onOpenChange]);
+
+  const getCategoryIcon = (type: SearchCategory) => {
+    const cat = CATEGORIES.find((c) => c.id === type);
+    return cat?.icon ?? FileText;
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg p-0 gap-0 overflow-hidden" showCloseButton={false}>
+        {/* Search input */}
+        <div className="flex items-center border-b border-border px-4">
+          <Search className="h-4 w-4 text-muted-foreground" />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={SEARCH_I18N.placeholder}
+            className="flex-1 bg-transparent px-3 py-3.5 text-sm text-foreground placeholder-muted-foreground outline-none"
+          />
+          {query && (
+            <button onClick={() => { setQuery(""); setResults([]); }} className="rounded p-1 text-muted-foreground hover:text-foreground">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Category tabs */}
+        <div className="flex items-center gap-1 border-b border-border px-4 py-2">
+          {CATEGORIES.map((cat) => {
+            const Icon = cat.icon;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setCategory(cat.id)}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
+                  category === cat.id
+                    ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                }`}
+              >
+                <Icon className="h-3 w-3" />
+                {cat.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Results */}
+        <div className="max-h-80 overflow-auto">
+          {!query.trim() && (
+            <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+              {SEARCH_I18N.typeToSearch}
+            </div>
+          )}
+
+          {query.trim() && results.length === 0 && !isSearching && (
+            <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+              {SEARCH_I18N.noResults}
+            </div>
+          )}
+
+          {results.map((result) => {
+            const Icon = getCategoryIcon(result.type);
+            return (
+              <button
+                key={`${result.type}-${result.id}`}
+                onClick={() => handleSelect(result)}
+                className="flex w-full items-center gap-3 border-b border-border/30 px-4 py-3 text-left transition-colors hover:bg-accent last:border-b-0"
+              >
+                <div className="rounded-md bg-muted p-1.5">
+                  <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-foreground truncate">{result.title}</div>
+                  <div className="text-xs text-muted-foreground truncate">{result.subtitle}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
