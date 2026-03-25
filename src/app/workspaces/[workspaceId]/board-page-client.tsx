@@ -15,6 +15,13 @@ import type { Task, TaskStatus, Priority } from "@prisma/client";
 
 type FilterType = "ALL" | "IN_PROGRESS" | "IN_REVIEW";
 
+interface LabelOption {
+  id: string;
+  name: string;
+  color: string;
+  isBuiltin: boolean;
+}
+
 interface ProjectInfo {
   id: string;
   name: string;
@@ -33,6 +40,7 @@ interface BoardPageClientProps {
   initialTasks: Task[];
   totalTasks: number;
   runningTasks: number;
+  labels: LabelOption[];
 }
 
 export function BoardPageClient({
@@ -44,6 +52,7 @@ export function BoardPageClient({
   initialTasks,
   totalTasks,
   runningTasks,
+  labels,
 }: BoardPageClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -69,21 +78,22 @@ export function BoardPageClient({
   }, [refreshData]);
 
   const handleCreateTask = useCallback(
-    async (data: { title: string; description: string; priority: Priority; status: TaskStatus }) => {
+    async (data: { title: string; description: string; priority: Priority; status: TaskStatus; labelIds: string[] }) => {
       await createTask({
         title: data.title,
         description: data.description,
         projectId,
         priority: data.priority,
         status: data.status,
+        labelIds: data.labelIds,
       });
       refreshData();
     },
     [projectId, refreshData]
   );
 
-  const handleUpdateTask = useCallback(async (taskId: string, data: { title: string; description: string; priority: Priority }) => {
-    await updateTask(taskId, data);
+  const handleUpdateTask = useCallback(async (taskId: string, data: { title: string; description: string; priority: Priority; labelIds: string[] }) => {
+    await updateTask(taskId, { ...data, labelIds: data.labelIds });
     setEditingTask(null);
     refreshData();
   }, [refreshData]);
@@ -184,6 +194,12 @@ export function BoardPageClient({
           onUpdate={handleUpdateTask}
           defaultStatus={createDefaultStatus}
           editTask={editingTask}
+          editTaskLabelIds={
+            editingTask && (editingTask as any).labels
+              ? (editingTask as any).labels.map((tl: any) => tl.labelId)
+              : []
+          }
+          labels={labels}
         />
       </div>
 

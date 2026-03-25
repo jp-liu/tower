@@ -6,7 +6,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   Settings, Archive, Plus, Pencil, Trash2,
-  MoreHorizontal, Layers, ChevronsLeft,
+  MoreHorizontal, Layers, ChevronsLeft, Tag,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -24,9 +24,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createWorkspace, updateWorkspace, deleteWorkspace } from "@/actions/workspace-actions";
+import { getLabelsForWorkspace, createLabel, deleteLabel } from "@/actions/label-actions";
 
 // Keep strings in a JSON-like structure to prevent linter unicode escaping
-const I18N = JSON.parse('{"icons":["📋","🚀","🎯","💡","🔧","📦","🎨","📊","🔬","🌟","📝","🏗️"],"workspace":"工作空间","newWs":"新建工作空间","collapseLabel":"折叠侧边栏","expandLabel":"展开侧边栏","rename":"重命名","delete":"删除","archive":"归档","newWsTitle":"新建工作空间","editWsTitle":"编辑工作空间","nameLabel":"名称","iconLabel":"图标","namePlaceholder":"输入工作空间名称","cancel":"取消","create":"创建","save":"保存","deleteConfirmPrefix":"确认删除工作空间「","deleteConfirmSuffix":"」？所有项目和任务将被删除。"}');
+const I18N = JSON.parse('{"icons":["📋","🚀","🎯","💡","🔧","📦","🎨","📊","🔬","🌟","📝","🏗️"],"workspace":"工作空间","newWs":"新建工作空间","collapseLabel":"折叠侧边栏","expandLabel":"展开侧边栏","rename":"重命名","delete":"删除","archive":"归档","newWsTitle":"新建工作空间","editWsTitle":"编辑工作空间","nameLabel":"名称","iconLabel":"图标","namePlaceholder":"输入工作空间名称","cancel":"取消","create":"创建","save":"保存","deleteConfirmPrefix":"确认删除工作空间「","deleteConfirmSuffix":"」？所有项目和任务将被删除。","manageLabels":"管理标签","addLabel":"添加标签","labelName":"标签名称","labelColor":"颜色","colorPlaceholder":"#3b82f6"}');
 
 const WORKSPACE_ICONS: string[] = I18N.icons;
 
@@ -52,6 +53,8 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
   });
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showLabelManager, setShowLabelManager] = useState(false);
+  const [labelManagerWsId, setLabelManagerWsId] = useState<string | null>(null);
   const [dialogName, setDialogName] = useState("");
   const [dialogIcon, setDialogIcon] = useState(WORKSPACE_ICONS[0]);
   const [editingWsId, setEditingWsId] = useState<string | null>(null);
@@ -98,6 +101,11 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
     router.refresh();
     if (activeWorkspaceId === id) router.push("/workspaces");
   }, [activeWorkspaceId, router]);
+
+  const openLabelManager = useCallback((wsId: string) => {
+    setLabelManagerWsId(wsId);
+    setShowLabelManager(true);
+  }, []);
 
   const getIcon = (ws: WorkspaceItem) => {
     if (ws.description && WORKSPACE_ICONS.includes(ws.description)) return ws.description;
@@ -250,6 +258,10 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
                     <Pencil className="mr-2 h-3.5 w-3.5" />
                     {I18N.rename}
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => openLabelManager(ws.id)}>
+                    <Tag className="mr-2 h-3.5 w-3.5" />
+                    {I18N.manageLabels}
+                  </DropdownMenuItem>
                   <DropdownMenuItem className="text-rose-400" onClick={() => handleDelete(ws.id, ws.name)}>
                     <Trash2 className="mr-2 h-3.5 w-3.5" />
                     {I18N.delete}
@@ -293,6 +305,15 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
         onSubmit={handleEdit}
         submitLabel={I18N.save}
       />
+
+      {/* Label Manager Dialog */}
+      {labelManagerWsId && (
+        <LabelManagerDialog
+          open={showLabelManager}
+          onOpenChange={(open) => { setShowLabelManager(open); if (!open) setLabelManagerWsId(null); }}
+          workspaceId={labelManagerWsId}
+        />
+      )}
     </aside>
   );
 }
@@ -357,6 +378,113 @@ function WorkspaceDialog({
             {submitLabel}
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Label color presets
+const LABEL_COLORS = ["#3b82f6", "#ef4444", "#f59e0b", "#10b981", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316"];
+
+interface LabelItem {
+  id: string;
+  name: string;
+  color: string;
+  isBuiltin: boolean;
+}
+
+function LabelManagerDialog({
+  open,
+  onOpenChange,
+  workspaceId,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  workspaceId: string;
+}) {
+  const [labels, setLabels] = useState<LabelItem[]>([]);
+  const [newName, setNewName] = useState("");
+  const [newColor, setNewColor] = useState(LABEL_COLORS[0]);
+
+  useEffect(() => {
+    if (open) {
+      getLabelsForWorkspace(workspaceId).then(setLabels);
+    }
+  }, [open, workspaceId]);
+
+  const handleAdd = async () => {
+    if (!newName.trim()) return;
+    await createLabel({ name: newName.trim(), color: newColor, workspaceId });
+    const updated = await getLabelsForWorkspace(workspaceId);
+    setLabels(updated);
+    setNewName("");
+  };
+
+  const handleDelete = async (id: string) => {
+    await deleteLabel(id);
+    setLabels((prev) => prev.filter((l) => l.id !== id));
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{I18N.manageLabels}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          {/* Existing labels */}
+          {labels.map((label) => (
+            <div key={label.id} className="flex items-center gap-2">
+              <span
+                className="h-3 w-3 rounded-full"
+                style={{ backgroundColor: label.color }}
+              />
+              <span className="flex-1 text-sm text-foreground">{label.name}</span>
+              {label.isBuiltin ? (
+                <span className="text-[10px] text-muted-foreground">
+                  {JSON.parse('{"builtin":"\u5185\u7f6e"}').builtin}
+                </span>
+              ) : (
+                <button
+                  onClick={() => handleDelete(label.id)}
+                  className="text-xs text-rose-400 hover:text-rose-300"
+                >
+                  {JSON.parse('{"del":"\u5220\u9664"}').del}
+                </button>
+              )}
+            </div>
+          ))}
+          {/* Add new */}
+          <div className="border-t border-border pt-3">
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder={I18N.labelName}
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+                className="flex-1 h-8"
+              />
+              <button
+                onClick={handleAdd}
+                disabled={!newName.trim()}
+                className="rounded-md bg-amber-500/15 px-3 py-1.5 text-xs font-medium text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25 disabled:opacity-30"
+              >
+                {I18N.addLabel}
+              </button>
+            </div>
+            {/* Color presets */}
+            <div className="mt-2 flex gap-1.5">
+              {LABEL_COLORS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setNewColor(c)}
+                  className={`h-5 w-5 rounded-full transition-all ${newColor === c ? "ring-2 ring-offset-2 ring-offset-background ring-foreground/30 scale-110" : ""}`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -14,6 +14,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import type { Task, Priority, TaskStatus } from "@prisma/client";
 
+interface LabelOption {
+  id: string;
+  name: string;
+  color: string;
+  isBuiltin: boolean;
+}
+
 interface CreateTaskDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -22,15 +29,21 @@ interface CreateTaskDialogProps {
     description: string;
     priority: Priority;
     status: TaskStatus;
+    labelIds: string[];
   }) => void;
   onUpdate?: (taskId: string, data: {
     title: string;
     description: string;
     priority: Priority;
+    labelIds: string[];
   }) => void;
   defaultStatus?: TaskStatus;
   editTask?: Task | null;
+  editTaskLabelIds?: string[];
+  labels: LabelOption[];
 }
+
+const TASK_I18N = JSON.parse('{"label":"\u6807\u7b7e","noLabels":"\u6682\u65e0\u6807\u7b7e"}');
 
 export function CreateTaskDialog({
   open,
@@ -39,10 +52,13 @@ export function CreateTaskDialog({
   onUpdate,
   defaultStatus = "TODO",
   editTask,
+  editTaskLabelIds,
+  labels,
 }: CreateTaskDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("MEDIUM");
+  const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
 
   const isEditing = !!editTask;
 
@@ -52,12 +68,14 @@ export function CreateTaskDialog({
       setTitle(editTask.title);
       setDescription(editTask.description ?? "");
       setPriority(editTask.priority);
+      setSelectedLabelIds(editTaskLabelIds ?? []);
     } else {
       setTitle("");
       setDescription("");
       setPriority("MEDIUM");
+      setSelectedLabelIds([]);
     }
-  }, [editTask]);
+  }, [editTask, editTaskLabelIds]);
 
   // Reset when dialog closes
   useEffect(() => {
@@ -65,19 +83,21 @@ export function CreateTaskDialog({
       setTitle("");
       setDescription("");
       setPriority("MEDIUM");
+      setSelectedLabelIds([]);
     }
   }, [open, editTask]);
 
   const handleSubmit = () => {
     if (!title.trim()) return;
     if (isEditing && onUpdate) {
-      onUpdate(editTask.id, { title, description, priority });
+      onUpdate(editTask.id, { title, description, priority, labelIds: selectedLabelIds });
     } else {
-      onSubmit({ title, description, priority, status: defaultStatus });
+      onSubmit({ title, description, priority, status: defaultStatus, labelIds: selectedLabelIds });
     }
     setTitle("");
     setDescription("");
     setPriority("MEDIUM");
+    setSelectedLabelIds([]);
     onOpenChange(false);
   };
 
@@ -137,6 +157,41 @@ export function CreateTaskDialog({
               })}
             </div>
           </div>
+          {/* Labels */}
+          {labels.length > 0 && (
+            <div className="space-y-2">
+              <Label>{TASK_I18N.label}</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {labels.map((label) => {
+                  const isSelected = selectedLabelIds.includes(label.id);
+                  return (
+                    <button
+                      key={label.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedLabelIds((prev) =>
+                          isSelected ? prev.filter((id) => id !== label.id) : [...prev, label.id]
+                        );
+                      }}
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium transition-all ${
+                        isSelected
+                          ? "ring-1 ring-current/30"
+                          : "opacity-50 hover:opacity-80"
+                      }`}
+                      style={{
+                        backgroundColor: label.color + "20",
+                        color: label.color,
+                        borderColor: isSelected ? label.color + "40" : "transparent",
+                        borderWidth: "1px",
+                      }}
+                    >
+                      {label.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

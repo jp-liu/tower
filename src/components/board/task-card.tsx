@@ -88,6 +88,23 @@ export function TaskCard({ task, onClick, onEdit, onDelete }: TaskCardProps) {
           {priorityConfig.label}
         </Badge>
       </div>
+
+      {(task as any).labels && (task as any).labels.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {(task as any).labels.map((tl: any) => (
+            <span
+              key={tl.label.id}
+              className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+              style={{
+                backgroundColor: tl.label.color + "20",
+                color: tl.label.color,
+              }}
+            >
+              {tl.label.name}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

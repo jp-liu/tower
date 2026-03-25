@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { setTaskLabels } from "@/actions/label-actions";
 import type { TaskStatus, Priority } from "@prisma/client";
 
 export async function createTask(data: {
@@ -10,6 +11,7 @@ export async function createTask(data: {
   projectId: string;
   priority?: Priority;
   status?: TaskStatus;
+  labelIds?: string[];
 }) {
   const task = await db.task.create({
     data: {
@@ -20,6 +22,12 @@ export async function createTask(data: {
       status: data.status ?? "TODO",
     },
   });
+  // Set labels
+  if (data.labelIds && data.labelIds.length > 0) {
+    await db.taskLabel.createMany({
+      data: data.labelIds.map((labelId) => ({ taskId: task.id, labelId })),
+    });
+  }
   revalidatePath("/workspaces");
   return task;
 }
@@ -35,12 +43,17 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
 
 export async function updateTask(
   taskId: string,
-  data: { title?: string; description?: string; priority?: Priority }
+  data: { title?: string; description?: string; priority?: Priority; labelIds?: string[] }
 ) {
+  const { labelIds, ...updateData } = data;
   const task = await db.task.update({
     where: { id: taskId },
-    data,
+    data: updateData,
   });
+  // Update labels if provided
+  if (labelIds !== undefined) {
+    await setTaskLabels(taskId, labelIds);
+  }
   revalidatePath("/workspaces");
   return task;
 }

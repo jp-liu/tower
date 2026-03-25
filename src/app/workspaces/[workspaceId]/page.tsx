@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
+import { getLabelsForWorkspace } from "@/actions/label-actions";
 import { BoardPageClient } from "./board-page-client";
 
 interface Props {
@@ -16,7 +17,14 @@ export default async function WorkspaceBoardPage({ params, searchParams }: Props
     include: {
       projects: {
         include: {
-          tasks: { orderBy: [{ order: "asc" }, { createdAt: "desc" }] },
+          tasks: {
+            orderBy: [{ order: "asc" }, { createdAt: "desc" }],
+            include: {
+              labels: {
+                include: { label: true },
+              },
+            },
+          },
           repositories: true,
         },
       },
@@ -24,6 +32,8 @@ export default async function WorkspaceBoardPage({ params, searchParams }: Props
   });
 
   if (!workspace) notFound();
+
+  const labels = await getLabelsForWorkspace(workspaceId);
 
   if (workspace.projects.length === 0) {
     return (
@@ -57,6 +67,7 @@ export default async function WorkspaceBoardPage({ params, searchParams }: Props
       initialTasks={tasks}
       totalTasks={tasks.length}
       runningTasks={runningTasks}
+      labels={labels.map((l) => ({ id: l.id, name: l.name, color: l.color, isBuiltin: l.isBuiltin }))}
     />
   );
 }
