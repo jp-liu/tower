@@ -52,7 +52,7 @@ export function TaskMetadata({
             已有会话
           </Badge>
         )}
-        <span className="text-[11px] text-muted-foreground/60">
+        <span className="text-[11px] text-muted-foreground">
           更新于 {formatRelativeTime(updatedAt)}
         </span>
       </div>

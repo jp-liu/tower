@@ -75,7 +75,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
   }, [activeWorkspaceId, router]);
 
   return (
-    <aside className="noise relative flex h-screen w-56 flex-col border-r border-border bg-[oklch(0.11_0.008_260)]">
+    <aside className="noise relative flex h-screen w-56 flex-col border-r border-border bg-sidebar">
       {/* Logo */}
       <div className="relative z-10 flex items-center gap-3 px-5 py-5">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/15 ring-1 ring-amber-500/25">

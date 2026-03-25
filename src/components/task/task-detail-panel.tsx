@@ -84,7 +84,7 @@ export function TaskDetailPanel({
 
   return (
     <div
-      className="flex h-full w-[520px] flex-shrink-0 flex-col border-l border-border bg-[oklch(0.11_0.008_260)]"
+      className="flex h-full w-[520px] flex-shrink-0 flex-col border-l border-border bg-sidebar"
       data-testid="task-detail-panel"
     >
       <TaskMetadata

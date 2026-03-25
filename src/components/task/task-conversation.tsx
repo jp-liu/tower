@@ -31,7 +31,7 @@ export function TaskConversation({ messages }: TaskConversationProps) {
             <Bot className="h-7 w-7 text-amber-400/60" />
           </div>
           <p className="text-sm text-muted-foreground">开始对话，让 AI 代理执行任务</p>
-          <p className="mt-1 text-[11px] text-muted-foreground/50">输入指令后按 Enter 发送</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">输入指令后按 Enter 发送</p>
         </div>
       </div>
     );

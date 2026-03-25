@@ -26,7 +26,7 @@ export function RepoSidebar({ projectName = "Test" }: RepoSidebarProps) {
   };
 
   return (
-    <aside className="relative w-72 flex-shrink-0 border-l border-border bg-[oklch(0.11_0.008_260)]">
+    <aside className="relative w-72 flex-shrink-0 border-l border-border bg-sidebar">
       {/* Toast */}
       {toast && (
         <div className="absolute left-3 right-3 top-3 z-10 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 shadow-lg">
@@ -64,7 +64,7 @@ export function RepoSidebar({ projectName = "Test" }: RepoSidebarProps) {
               <GitBranch className="h-3.5 w-3.5" />
               <p className="text-xs">暂无已关联仓库</p>
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground/60">点击下方添加仓库</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">点击下方添加仓库</p>
           </div>
         )}
       </div>
@@ -86,7 +86,7 @@ export function RepoSidebar({ projectName = "Test" }: RepoSidebarProps) {
         {addRepoExpanded && (
           <>
             <div className="mt-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-2">最近</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">最近</p>
               <div className="space-y-0.5">
                 {recentRepos.map((repo) => (
                   <button
@@ -102,7 +102,7 @@ export function RepoSidebar({ projectName = "Test" }: RepoSidebarProps) {
             </div>
 
             <div className="mt-4 space-y-0.5">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-2">其他</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">其他</p>
               <button
                 onClick={() => showToast("浏览磁盘仓库功能开发中")}
                 className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"

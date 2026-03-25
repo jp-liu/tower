@@ -86,7 +86,7 @@ export function TaskMessageInput({
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
           rows={2}
-          className="w-full resize-none bg-transparent text-sm text-foreground placeholder-muted-foreground/50 outline-none"
+          className="w-full resize-none bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none"
           disabled={isLoading}
         />
 
