@@ -13,7 +13,7 @@ interface LayoutClientProps {
 export function LayoutClient({ workspaces, children }: LayoutClientProps) {
   const router = useRouter();
 
-  const handleCreateProject = async (name: string) => {
+  const handleCreateProject = async (data: { name: string; alias?: string; description?: string; type: "NORMAL" | "GIT"; gitUrl?: string }) => {
     let workspaceId: string;
     if (workspaces.length > 0) {
       workspaceId = workspaces[0].id;
@@ -21,10 +21,7 @@ export function LayoutClient({ workspaces, children }: LayoutClientProps) {
       const ws = await createWorkspace({ name: "默认工作空间" });
       workspaceId = ws.id;
     }
-    await createProject({
-      name,
-      workspaceId,
-    });
+    await createProject({ ...data, workspaceId });
     router.refresh();
     router.push(`/workspaces/${workspaceId}`);
   };

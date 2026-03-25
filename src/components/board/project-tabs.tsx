@@ -4,7 +4,7 @@ import { useRef, useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface ProjectTabsProps {
-  projects: Array<{ id: string; name: string }>;
+  projects: Array<{ id: string; name: string; alias: string | null }>;
   activeProjectId: string;
   onSelect: (projectId: string) => void;
 }
@@ -48,38 +48,46 @@ export function ProjectTabs({ projects, activeProjectId, onSelect }: ProjectTabs
       {showLeftArrow && (
         <button
           onClick={() => scroll("left")}
-          className="absolute left-0 z-10 flex h-7 w-7 items-center justify-center rounded-md bg-background/90 text-muted-foreground shadow-sm ring-1 ring-border backdrop-blur-sm transition-colors hover:text-foreground"
+          className="absolute left-0 z-10 flex h-8 w-8 items-center justify-center rounded-md bg-background/90 text-muted-foreground shadow-sm ring-1 ring-border backdrop-blur-sm transition-colors hover:text-foreground"
         >
-          <ChevronLeft className="h-3.5 w-3.5" />
+          <ChevronLeft className="h-4 w-4" />
         </button>
       )}
 
       <div
         ref={scrollRef}
-        className="flex items-center gap-1 overflow-x-auto scrollbar-none px-1"
+        className="flex items-center gap-1.5 overflow-x-auto scrollbar-none px-1"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        {projects.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => onSelect(p.id)}
-            className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-              activeProjectId === p.id
-                ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20"
-                : "text-muted-foreground hover:bg-accent hover:text-foreground"
-            }`}
-          >
-            {p.name}
-          </button>
-        ))}
+        {projects.map((p) => {
+          const isActive = activeProjectId === p.id;
+          return (
+            <button
+              key={p.id}
+              onClick={() => onSelect(p.id)}
+              className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                isActive
+                  ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20 border-b-2 border-amber-400"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              }`}
+            >
+              <span>{p.name}</span>
+              {p.alias && (
+                <span className="ml-1.5 text-xs text-muted-foreground font-normal">
+                  {p.alias}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {showRightArrow && (
         <button
           onClick={() => scroll("right")}
-          className="absolute right-0 z-10 flex h-7 w-7 items-center justify-center rounded-md bg-background/90 text-muted-foreground shadow-sm ring-1 ring-border backdrop-blur-sm transition-colors hover:text-foreground"
+          className="absolute right-0 z-10 flex h-8 w-8 items-center justify-center rounded-md bg-background/90 text-muted-foreground shadow-sm ring-1 ring-border backdrop-blur-sm transition-colors hover:text-foreground"
         >
-          <ChevronRight className="h-3.5 w-3.5" />
+          <ChevronRight className="h-4 w-4" />
         </button>
       )}
     </div>

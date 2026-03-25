@@ -55,10 +55,22 @@ export async function deleteWorkspace(id: string) {
 
 export async function createProject(data: {
   name: string;
+  alias?: string;
   description?: string;
+  type?: "NORMAL" | "GIT";
+  gitUrl?: string;
   workspaceId: string;
 }) {
-  const project = await db.project.create({ data });
+  const project = await db.project.create({
+    data: {
+      name: data.name,
+      alias: data.alias,
+      description: data.description,
+      type: data.type ?? "NORMAL",
+      gitUrl: data.gitUrl,
+      workspaceId: data.workspaceId,
+    },
+  });
   revalidatePath("/workspaces");
   return project;
 }

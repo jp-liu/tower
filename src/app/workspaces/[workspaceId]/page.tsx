@@ -45,7 +45,15 @@ export default async function WorkspaceBoardPage({ params, searchParams }: Props
       workspaceId={workspaceId}
       projectId={project.id}
       projectName={project.name}
-      projects={workspace.projects.map((p) => ({ id: p.id, name: p.name }))}
+      project={{
+        id: project.id,
+        name: project.name,
+        alias: project.alias,
+        description: project.description,
+        type: project.type,
+        gitUrl: project.gitUrl,
+      }}
+      projects={workspace.projects.map((p) => ({ id: p.id, name: p.name, alias: p.alias }))}
       initialTasks={tasks}
       totalTasks={tasks.length}
       runningTasks={runningTasks}

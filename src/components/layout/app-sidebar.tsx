@@ -26,9 +26,8 @@ import { Input } from "@/components/ui/input";
 import { createWorkspace, updateWorkspace, deleteWorkspace } from "@/actions/workspace-actions";
 
 // Keep strings in a JSON-like structure to prevent linter unicode escaping
-const I18N = JSON.parse('{"tabs":[{"id":"all","label":"全部"},{"id":"requirement","label":"需求"},{"id":"bug","label":"缺陷"},{"id":"task","label":"任务"}],"icons":["📋","🚀","🎯","💡","🔧","📦","🎨","📊","🔬","🌟","📝","🏗️"],"workspace":"工作空间","newWs":"新建工作空间","collapseLabel":"折叠侧边栏","expandLabel":"展开侧边栏","rename":"重命名","delete":"删除","archive":"归档","newWsTitle":"新建工作空间","editWsTitle":"编辑工作空间","nameLabel":"名称","iconLabel":"图标","namePlaceholder":"输入工作空间名称","cancel":"取消","create":"创建","save":"保存","deleteConfirmPrefix":"确认删除工作空间「","deleteConfirmSuffix":"」？所有项目和任务将被删除。"}');
+const I18N = JSON.parse('{"icons":["📋","🚀","🎯","💡","🔧","📦","🎨","📊","🔬","🌟","📝","🏗️"],"workspace":"工作空间","newWs":"新建工作空间","collapseLabel":"折叠侧边栏","expandLabel":"展开侧边栏","rename":"重命名","delete":"删除","archive":"归档","newWsTitle":"新建工作空间","editWsTitle":"编辑工作空间","nameLabel":"名称","iconLabel":"图标","namePlaceholder":"输入工作空间名称","cancel":"取消","create":"创建","save":"保存","deleteConfirmPrefix":"确认删除工作空间「","deleteConfirmSuffix":"」？所有项目和任务将被删除。"}');
 
-const TABS: {id: string; label: string}[] = I18N.tabs;
 const WORKSPACE_ICONS: string[] = I18N.icons;
 
 interface WorkspaceItem {
@@ -45,7 +44,6 @@ interface AppSidebarProps {
 export function AppSidebar({ workspaces }: AppSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const [activeTab, setActiveTab] = useState("all");
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("sidebar-collapsed") === "true";
@@ -118,7 +116,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
           <Layers className="h-4 w-4 text-amber-400" />
         </button>
 
-        <div className="flex flex-1 flex-col items-center gap-1.5 overflow-auto">
+        <div className="flex flex-1 flex-col items-center gap-1 overflow-auto px-0.5">
           {workspaces.map((ws) => {
             const isActive = activeWorkspaceId === ws.id;
             const icon = getIcon(ws);
@@ -127,7 +125,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
                 key={ws.id}
                 onClick={() => router.push(`/workspaces/${ws.id}`)}
                 title={ws.name}
-                className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm transition-all ${
+                className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm transition-all ${
                   isActive
                     ? "bg-accent ring-1 ring-amber-500/20 text-foreground"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -207,23 +205,6 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
             <Settings className="h-3.5 w-3.5" />
           </button>
         </div>
-      </div>
-
-      {/* Tab Filters */}
-      <div className="relative z-10 flex gap-1 px-3 py-1.5">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-all ${
-              activeTab === tab.id
-                ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20"
-                : "text-muted-foreground hover:bg-accent hover:text-foreground"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
       </div>
 
       {/* Workspace List */}

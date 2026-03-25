@@ -15,11 +15,21 @@ import type { Task, TaskStatus, Priority } from "@prisma/client";
 
 type FilterType = "ALL" | "IN_PROGRESS" | "IN_REVIEW";
 
+interface ProjectInfo {
+  id: string;
+  name: string;
+  alias: string | null;
+  description: string | null;
+  type: string;
+  gitUrl: string | null;
+}
+
 interface BoardPageClientProps {
   workspaceId: string;
   projectId: string;
   projectName: string;
-  projects: Array<{ id: string; name: string }>;
+  project: ProjectInfo;
+  projects: Array<{ id: string; name: string; alias: string | null }>;
   initialTasks: Task[];
   totalTasks: number;
   runningTasks: number;
@@ -29,6 +39,7 @@ export function BoardPageClient({
   workspaceId,
   projectId,
   projectName,
+  project,
   projects,
   initialTasks,
   totalTasks,
@@ -184,7 +195,7 @@ export function BoardPageClient({
           onSendMessage={handleSendMessage}
         />
       ) : (
-        <RepoSidebar projectName={projectName} />
+        <RepoSidebar project={project} />
       )}
     </div>
   );

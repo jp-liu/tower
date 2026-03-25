@@ -15,21 +15,49 @@ model Workspace {
   updatedAt   DateTime @updatedAt
 
   projects Project[]
+  labels   Label[]
 }
 
 model Project {
-  id          String   @id @default(cuid())
+  id          String      @id @default(cuid())
   name        String
+  alias       String?
   description String?
+  type        ProjectType @default(NORMAL)
+  gitUrl      String?
   workspaceId String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   tasks        Task[]
   repositories Repository[]
 
   @@index([workspaceId])
+}
+
+model Label {
+  id          String  @id @default(cuid())
+  name        String
+  color       String  @default("#94a3b8")
+  workspaceId String?
+  isBuiltin   Boolean @default(false)
+  createdAt   DateTime @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tasks     TaskLabel[]
+
+  @@index([workspaceId])
+}
+
+model TaskLabel {
+  taskId  String
+  labelId String
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
 }
 
 model Task {
@@ -43,9 +71,10 @@ model Task {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  project      Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  executions   TaskExecution[]
-  messages     TaskMessage[]
+  project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  executions TaskExecution[]
+  messages   TaskMessage[]
+  labels     TaskLabel[]
 
   @@index([projectId])
   @@index([status])
@@ -108,6 +137,11 @@ model AgentConfig {
   updatedAt    DateTime @updatedAt
 
   @@unique([agent, configName])
+}
+
+enum ProjectType {
+  NORMAL
+  GIT
 }
 
 enum TaskStatus {

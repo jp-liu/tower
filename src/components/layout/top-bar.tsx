@@ -16,6 +16,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { searchTasks } from "@/actions/task-actions";
 
+const TOP_I18N = JSON.parse('{"newProject":"新建项目","projectName":"项目名称","projectAlias":"项目别名","projectDesc":"项目描述","normalProject":"普通项目","gitProject":"Git 项目","gitUrl":"Git 仓库地址","cancel":"取消","create":"创建","namePlaceholder":"输入项目名称","aliasPlaceholder":"可选，如：前端重构","descPlaceholder":"可选，项目简介","gitPlaceholder":"https://github.com/...","searchResults":"搜索结果"}');
+
 interface SearchResult {
   id: string;
   title: string;
@@ -27,8 +29,16 @@ interface SearchResult {
   };
 }
 
+interface CreateProjectData {
+  name: string;
+  alias?: string;
+  description?: string;
+  type: "NORMAL" | "GIT";
+  gitUrl?: string;
+}
+
 interface TopBarProps {
-  onCreateProject?: (name: string) => void;
+  onCreateProject?: (data: CreateProjectData) => void;
 }
 
 export function TopBar({ onCreateProject }: TopBarProps) {
@@ -38,6 +48,10 @@ export function TopBar({ onCreateProject }: TopBarProps) {
   const [showResults, setShowResults] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
   const [projectName, setProjectName] = useState("");
+  const [projectAlias, setProjectAlias] = useState("");
+  const [projectDesc, setProjectDesc] = useState("");
+  const [projectType, setProjectType] = useState<"NORMAL" | "GIT">("NORMAL");
+  const [gitUrl, setGitUrl] = useState("");
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
@@ -62,10 +76,24 @@ export function TopBar({ onCreateProject }: TopBarProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const resetForm = () => {
+    setProjectName("");
+    setProjectAlias("");
+    setProjectDesc("");
+    setProjectType("NORMAL");
+    setGitUrl("");
+  };
+
   const handleCreateProject = () => {
     if (projectName.trim()) {
-      onCreateProject?.(projectName.trim());
-      setProjectName("");
+      onCreateProject?.({
+        name: projectName.trim(),
+        alias: projectAlias.trim() || undefined,
+        description: projectDesc.trim() || undefined,
+        type: projectType,
+        gitUrl: projectType === "GIT" && gitUrl.trim() ? gitUrl.trim() : undefined,
+      });
+      resetForm();
       setShowNewProject(false);
     }
   };
@@ -94,7 +122,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
           {showResults && searchResults.length > 0 && (
             <div className="absolute left-0 right-0 top-full mt-2 z-50 rounded-xl border border-border bg-card shadow-2xl shadow-black/20 max-h-80 overflow-auto">
               <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                搜索结果
+                {TOP_I18N.searchResults}
               </div>
               {searchResults.map((task) => (
                 <button
@@ -130,7 +158,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
             onClick={() => setShowNewProject(true)}
           >
             <Plus className="h-3.5 w-3.5" />
-            新建项目
+            {TOP_I18N.newProject}
           </Button>
           <div className="ml-1 flex items-center gap-2">
             <Avatar className="h-7 w-7 ring-1 ring-border">
@@ -142,28 +170,100 @@ export function TopBar({ onCreateProject }: TopBarProps) {
         </div>
       </header>
 
-      <Dialog open={showNewProject} onOpenChange={setShowNewProject}>
+      <Dialog open={showNewProject} onOpenChange={(open) => { setShowNewProject(open); if (!open) resetForm(); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>新建项目</DialogTitle>
+            <DialogTitle>{TOP_I18N.newProject}</DialogTitle>
           </DialogHeader>
-          <div className="py-4">
-            <Input
-              placeholder="输入项目名称"
-              value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleCreateProject()}
-            />
+          <div className="space-y-4 py-2">
+            {/* Name */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">{TOP_I18N.projectName}</label>
+              <Input
+                placeholder={TOP_I18N.namePlaceholder}
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                className="mt-1.5"
+              />
+            </div>
+
+            {/* Alias */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">{TOP_I18N.projectAlias}</label>
+              <Input
+                placeholder={TOP_I18N.aliasPlaceholder}
+                value={projectAlias}
+                onChange={(e) => setProjectAlias(e.target.value)}
+                className="mt-1.5"
+              />
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">{TOP_I18N.projectDesc}</label>
+              <textarea
+                placeholder={TOP_I18N.descPlaceholder}
+                value={projectDesc}
+                onChange={(e) => setProjectDesc(e.target.value)}
+                rows={3}
+                className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 resize-none"
+              />
+            </div>
+
+            {/* Type toggle */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                {TOP_I18N.projectName.replace(TOP_I18N.projectName, "")}
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setProjectType("NORMAL")}
+                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
+                    projectType === "NORMAL"
+                      ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20"
+                      : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
+                  }`}
+                >
+                  {TOP_I18N.normalProject}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProjectType("GIT")}
+                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
+                    projectType === "GIT"
+                      ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20"
+                      : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
+                  }`}
+                >
+                  {TOP_I18N.gitProject}
+                </button>
+              </div>
+            </div>
+
+            {/* Git URL (conditional) */}
+            {projectType === "GIT" && (
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">{TOP_I18N.gitUrl}</label>
+                <Input
+                  placeholder={TOP_I18N.gitPlaceholder}
+                  value={gitUrl}
+                  onChange={(e) => setGitUrl(e.target.value)}
+                  className="mt-1.5"
+                />
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNewProject(false)}>
-              取消
+            <Button variant="outline" onClick={() => { setShowNewProject(false); resetForm(); }}>
+              {TOP_I18N.cancel}
             </Button>
             <Button
               onClick={handleCreateProject}
+              disabled={!projectName.trim()}
               className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
             >
-              创建
+              {TOP_I18N.create}
             </Button>
           </DialogFooter>
         </DialogContent>

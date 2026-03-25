@@ -3,25 +3,33 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
+  await prisma.taskLabel.deleteMany();
   await prisma.taskMessage.deleteMany();
   await prisma.taskExecution.deleteMany();
   await prisma.task.deleteMany();
+  await prisma.label.deleteMany();
   await prisma.repository.deleteMany();
   await prisma.project.deleteMany();
   await prisma.workspace.deleteMany();
   await prisma.agentConfig.deleteMany();
 
+  // Built-in labels (no workspace = global)
+  await prisma.label.create({ data: { name: "需求", color: "#3b82f6", isBuiltin: true } });
+  await prisma.label.create({ data: { name: "缺陷", color: "#ef4444", isBuiltin: true } });
+
   const workspace = await prisma.workspace.create({
     data: {
       name: "测试",
-      description: "测试工作空间",
+      description: "📋",
     },
   });
 
   const project = await prisma.project.create({
     data: {
       name: "Test",
-      description: "测试项目",
+      alias: "测试项目",
+      description: "这是一个测试项目，用于验证平台功能",
+      type: "NORMAL",
       workspaceId: workspace.id,
     },
   });
