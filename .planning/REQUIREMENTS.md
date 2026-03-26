@@ -50,26 +50,26 @@ Requirements for Settings milestone. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GNRL-01 | Pending | Pending |
-| GNRL-02 | Pending | Pending |
-| GNRL-03 | Pending | Pending |
-| GNRL-04 | Pending | Pending |
-| GNRL-05 | Pending | Pending |
-| CLIV-01 | Pending | Pending |
-| CLIV-02 | Pending | Pending |
-| CLIV-03 | Pending | Pending |
-| CLIV-04 | Pending | Pending |
-| PMPT-01 | Pending | Pending |
-| PMPT-02 | Pending | Pending |
-| PMPT-03 | Pending | Pending |
-| PMPT-04 | Pending | Pending |
-| PMPT-05 | Pending | Pending |
+| GNRL-01 | Phase 1 | Pending |
+| GNRL-02 | Phase 1 | Pending |
+| GNRL-03 | Phase 1 | Pending |
+| GNRL-04 | Phase 1 | Pending |
+| GNRL-05 | Phase 1 | Pending |
+| CLIV-01 | Phase 2 | Pending |
+| CLIV-02 | Phase 2 | Pending |
+| CLIV-03 | Phase 2 | Pending |
+| CLIV-04 | Phase 2 | Pending |
+| PMPT-01 | Phase 3 | Pending |
+| PMPT-02 | Phase 3 | Pending |
+| PMPT-03 | Phase 3 | Pending |
+| PMPT-04 | Phase 3 | Pending |
+| PMPT-05 | Phase 3 | Pending |
 
 **Coverage:**
 - v0.1 requirements: 14 total
-- Mapped to phases: 0
-- Unmapped: 14
+- Mapped to phases: 14
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-26*
-*Last updated: 2026-03-26 after initial definition*
+*Last updated: 2026-03-26 after roadmap creation*
