@@ -43,7 +43,10 @@ Plans:
   2. Test results show individual pass/fail status for each check (command found, API key, hello probe) with actionable messages
   3. Test results display the detected CLI version when the command is found
   4. Clicking "Test Connection" a second time while a test is running has no effect (button is disabled)
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 02-01-PLAN.md — Version check backend + i18n keys + test scaffold
+- [ ] 02-02-PLAN.md — CLIAdapterTester component + settings wiring + visual checkpoint
 **UI hint**: yes
 
 ### Phase 3: Agent Prompt Management
@@ -67,5 +70,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Theme + General Settings | 2/2 | Complete   | 2026-03-26 |
-| 2. CLI Adapter Verification | 0/? | Not started | - |
+| 2. CLI Adapter Verification | 0/2 | Planned | - |
 | 3. Agent Prompt Management | 0/? | Not started | - |
