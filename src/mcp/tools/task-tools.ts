@@ -86,21 +86,23 @@ export const taskTools = {
     }) => {
       const { labelIds, taskId, ...updateData } = args;
 
-      const task = await db.task.update({
-        where: { id: taskId },
-        data: updateData as { title?: string; description?: string; priority?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" },
-      });
+      return db.$transaction(async (tx) => {
+        const task = await tx.task.update({
+          where: { id: taskId },
+          data: updateData as { title?: string; description?: string; priority?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" },
+        });
 
-      if (labelIds !== undefined) {
-        await db.taskLabel.deleteMany({ where: { taskId } });
-        if (labelIds.length > 0) {
-          await db.taskLabel.createMany({
-            data: labelIds.map((labelId) => ({ taskId, labelId })),
-          });
+        if (labelIds !== undefined) {
+          await tx.taskLabel.deleteMany({ where: { taskId } });
+          if (labelIds.length > 0) {
+            await tx.taskLabel.createMany({
+              data: labelIds.map((labelId) => ({ taskId, labelId })),
+            });
+          }
         }
-      }
 
-      return task;
+        return task;
+      });
     },
   },
 

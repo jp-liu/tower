@@ -1,31 +1,39 @@
-import type { ChildProcess } from "child_process";
+import { runningProcesses } from "./process-utils";
 
 const MAX_CONCURRENT = 3;
-const runningProcesses = new Map<string, ChildProcess>();
 
-export function registerProcess(executionId: string, proc: ChildProcess): void {
-  runningProcesses.set(executionId, proc);
-  proc.on("exit", () => runningProcesses.delete(executionId));
+export function registerProcess(executionId: string, runId: string): void {
+  // runChildProcess in process-utils stores processes by runId
+  // We map executionId → runId so killProcess can find the right process
+  executionToRunId.set(executionId, runId);
 }
+
+const executionToRunId = new Map<string, string>();
 
 export function killProcess(executionId: string): boolean {
-  const proc = runningProcesses.get(executionId);
-  if (proc && !proc.killed) {
-    proc.kill("SIGTERM");
-    runningProcesses.delete(executionId);
+  const runId = executionToRunId.get(executionId);
+  if (!runId) return false;
+
+  const entry = runningProcesses.get(runId);
+  if (entry && !entry.child.killed) {
+    entry.child.kill("SIGTERM");
+    runningProcesses.delete(runId);
+    executionToRunId.delete(executionId);
     return true;
   }
+  executionToRunId.delete(executionId);
   return false;
-}
-
-export function getRunningCount(): number {
-  return runningProcesses.size;
 }
 
 export function canStartExecution(): boolean {
   return runningProcesses.size < MAX_CONCURRENT;
 }
 
+export function getRunningCount(): number {
+  return runningProcesses.size;
+}
+
 export function isRunning(executionId: string): boolean {
-  return runningProcesses.has(executionId);
+  const runId = executionToRunId.get(executionId);
+  return runId ? runningProcesses.has(runId) : false;
 }

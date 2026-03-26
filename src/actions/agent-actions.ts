@@ -45,10 +45,10 @@ export async function startTaskExecution(
   return execution;
 }
 
-export async function stopTaskExecution(executionId: string) {
+export async function stopTaskExecution(executionId: string, status: "COMPLETED" | "FAILED" = "FAILED") {
   const execution = await db.taskExecution.update({
     where: { id: executionId },
-    data: { status: "COMPLETED", endedAt: new Date() },
+    data: { status, endedAt: new Date() },
   });
   revalidatePath("/workspaces");
   return execution;

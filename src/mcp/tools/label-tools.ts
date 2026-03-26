@@ -56,12 +56,14 @@ export const labelTools = {
       labelIds: z.array(z.string()),
     }),
     handler: async (args: { taskId: string; labelIds: string[] }) => {
-      await db.taskLabel.deleteMany({ where: { taskId: args.taskId } });
-      if (args.labelIds.length > 0) {
-        await db.taskLabel.createMany({
-          data: args.labelIds.map((labelId) => ({ taskId: args.taskId, labelId })),
-        });
-      }
+      await db.$transaction(async (tx) => {
+        await tx.taskLabel.deleteMany({ where: { taskId: args.taskId } });
+        if (args.labelIds.length > 0) {
+          await tx.taskLabel.createMany({
+            data: args.labelIds.map((labelId) => ({ taskId: args.taskId, labelId })),
+          });
+        }
+      });
       return { taskId: args.taskId, labelIds: args.labelIds };
     },
   },

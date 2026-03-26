@@ -1,8 +1,9 @@
 import { NextRequest } from "next/server";
+import { z } from "zod";
 import { db } from "@/lib/db";
 import { getAdapter } from "@/lib/adapters/registry";
-import { canStartExecution, killProcess } from "@/lib/adapters/process-manager";
-import { writeFile, unlink, mkdtemp } from "fs/promises";
+import { canStartExecution, killProcess, registerProcess } from "@/lib/adapters/process-manager";
+import { writeFile, rm, mkdtemp } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -14,16 +15,19 @@ export async function POST(
 
   try {
     const body = await request.json();
-    const prompt = body.prompt as string;
-    const agent = body.agent as string | undefined;
-    const model = body.model as string | undefined;
-
-    if (!prompt) {
-      return new Response(JSON.stringify({ error: "Prompt is required" }), {
+    const bodySchema = z.object({
+      prompt: z.string().min(1),
+      agent: z.string().optional(),
+      model: z.string().optional(),
+    });
+    const parsed = bodySchema.safeParse(body);
+    if (!parsed.success) {
+      return new Response(JSON.stringify({ error: "Invalid request body", details: parsed.error.flatten() }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
+    const { prompt, agent, model } = parsed.data;
 
     // Read task + project from DB
     const task = await db.task.findUnique({
@@ -115,6 +119,9 @@ export async function POST(
       },
     });
 
+    // Register process mapping for kill support
+    registerProcess(execution.id, execution.id);
+
     // Create SSE ReadableStream
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
@@ -189,9 +196,9 @@ export async function POST(
                 : "Agent execution failed",
           });
         } finally {
-          // Clean up temp file
-          if (instructionsFile) {
-            await unlink(instructionsFile).catch(() => {});
+          // Clean up temp directory and file
+          if (tempDir) {
+            await rm(tempDir, { recursive: true, force: true }).catch(() => {});
           }
           controller.close();
         }
