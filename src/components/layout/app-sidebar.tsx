@@ -4,6 +4,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
 import {
   Settings, Archive, Plus, Pencil, Trash2,
   MoreHorizontal, Layers, ChevronsLeft, Tag,
@@ -308,11 +309,20 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
       </div>
 
       {/* Footer */}
-      <div className="relative z-10 flex items-center gap-2 border-t border-border px-4 py-3 text-[11px] text-muted-foreground">
-        <Archive className="h-3.5 w-3.5" />
-        <span>{t("sidebar.archive")}</span>
-        <span className="ml-auto font-mono">0</span>
-      </div>
+      {activeWorkspaceId ? (
+        <Link
+          href={`/workspaces/${activeWorkspaceId}/archive`}
+          className="relative z-10 flex items-center gap-2 border-t border-border px-4 py-3 text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+        >
+          <Archive className="h-3.5 w-3.5" />
+          <span>{t("sidebar.archive")}</span>
+        </Link>
+      ) : (
+        <div className="relative z-10 flex items-center gap-2 border-t border-border px-4 py-3 text-[11px] text-muted-foreground">
+          <Archive className="h-3.5 w-3.5" />
+          <span>{t("sidebar.archive")}</span>
+        </div>
+      )}
 
       {/* Create Dialog */}
       <WorkspaceDialog

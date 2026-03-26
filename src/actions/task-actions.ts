@@ -88,3 +88,37 @@ export async function searchTasks(query: string) {
     orderBy: { updatedAt: "desc" },
   });
 }
+
+export async function getArchivedTasks(projectId: string) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return db.task.findMany({
+    where: {
+      projectId,
+      status: { in: ["DONE", "CANCELLED"] },
+      updatedAt: { lt: today },
+    },
+    include: {
+      labels: { include: { label: true } },
+      executions: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+}
+
+export async function getArchivedTaskCount(projectId: string) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return db.task.count({
+    where: {
+      projectId,
+      status: { in: ["DONE", "CANCELLED"] },
+      updatedAt: { lt: today },
+    },
+  });
+}

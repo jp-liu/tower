@@ -34,6 +34,13 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     return tasks.filter((t) => t.status === filter);
   },
   getTasksByStatus: (status) => {
-    return get().getFilteredTasks().filter((t) => t.status === status);
+    const filtered = get().getFilteredTasks().filter((t) => t.status === status);
+    // For DONE and CANCELLED, only show tasks updated today
+    if (status === "DONE" || status === "CANCELLED") {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return filtered.filter((t) => new Date(t.updatedAt) >= today);
+    }
+    return filtered;
   },
 }));

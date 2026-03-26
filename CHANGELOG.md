@@ -1,5 +1,18 @@
 # [0.1.0](/compare/v1.0.0...v0.1.0) (2026-03-26)
 
+
+### Bug Fixes
+
+* address code review CRITICAL and HIGH issues 0cd6ac9
+* address remaining code review issues (H-4, M-2/4/6/7) a8fcb92
+
+
+### Features
+
+* add adapter execution engine with Claude Code support 0d1e66e
+* add MCP Server with 18 CRUD tools, AGENTS.md, and SKILL.md 93dd85e
+# [0.1.0](/compare/v1.0.0...v0.1.0) (2026-03-26)
+
 # [1.0.0](/compare/9e77b515af277ff8d2b82bba73b491b7e79cdaa2...v1.0.0) (2026-03-26)
 
 

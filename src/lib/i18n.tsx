@@ -174,6 +174,17 @@ const translations = {
     "git.branchDescPlaceholder": "可选，描述这个分支的用途",
     "git.createSuccess": "分支创建成功",
     "git.createFailed": "创建分支失败",
+    // Archive
+    "archive.title": "归档任务",
+    "archive.backToBoard": "返回看板",
+    "archive.noTasks": "暂无归档任务",
+    "archive.noTasksDesc": "已完成或已取消超过今日的任务将出现在此处",
+    "archive.completedAt": "完成于",
+    "archive.cancelledAt": "取消于",
+    "archive.createdAt": "创建于",
+    "archive.lastExecution": "最近执行",
+    "archive.status.done": "已完成",
+    "archive.status.cancelled": "已取消",
   },
   en: {
     "sidebar.workspace": "Workspaces",
@@ -326,6 +337,17 @@ const translations = {
     "git.branchDescPlaceholder": "Optional, describe this branch",
     "git.createSuccess": "Branch created successfully",
     "git.createFailed": "Failed to create branch",
+    // Archive
+    "archive.title": "Archived Tasks",
+    "archive.backToBoard": "Back to Board",
+    "archive.noTasks": "No archived tasks",
+    "archive.noTasksDesc": "Completed or cancelled tasks older than today will appear here",
+    "archive.completedAt": "Completed",
+    "archive.cancelledAt": "Cancelled",
+    "archive.createdAt": "Created",
+    "archive.lastExecution": "Last execution",
+    "archive.status.done": "Done",
+    "archive.status.cancelled": "Cancelled",
   },
 } as const;
 
