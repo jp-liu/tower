@@ -6,11 +6,9 @@ import { useI18n } from "@/lib/i18n";
 interface BoardStatsProps {
   totalTasks: number;
   runningTasks: number;
-  tip: string;
-  tipDescription?: string;
 }
 
-export function BoardStats({ totalTasks, runningTasks, tip, tipDescription }: BoardStatsProps) {
+export function BoardStats({ totalTasks, runningTasks }: BoardStatsProps) {
   const { t } = useI18n();
   return (
     <div className="grid grid-cols-3 gap-3 px-6 py-4">
@@ -45,7 +43,7 @@ export function BoardStats({ totalTasks, runningTasks, tip, tipDescription }: Bo
           </div>
           <div>
             <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{t("board.tip")}</p>
-            <p className="text-xs font-medium text-foreground/80">{tip}</p>
+            <p className="text-xs font-medium text-foreground/80">{t("board.tipText")}</p>
           </div>
         </div>
       </div>

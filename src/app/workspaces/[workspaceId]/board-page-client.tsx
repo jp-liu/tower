@@ -144,8 +144,6 @@ export function BoardPageClient({
         <BoardStats
           totalTasks={totalTasks}
           runningTasks={runningTasks}
-          tip="复用现有拖拽、详情和任务创建链路"
-          tipDescription="先把工作台入口对齐原型，再逐步补 Settings、Skills、Plugins。"
         />
 
         {/* Filters */}
@@ -198,7 +196,7 @@ export function BoardPageClient({
           onSendMessage={handleSendMessage}
         />
       ) : (
-        <RepoSidebar project={project} />
+        <RepoSidebar project={project} workspaceId={workspaceId} />
       )}
     </div>
   );

@@ -15,7 +15,7 @@ export function LayoutClient({ workspaces, children }: LayoutClientProps) {
   const pathname = usePathname();
   const activeWorkspaceId = pathname.split("/workspaces/")[1]?.split("/")[0];
 
-  const handleCreateProject = async (data: { name: string; alias?: string; description?: string; type: "NORMAL" | "GIT"; gitUrl?: string }) => {
+  const handleCreateProject = async (data: { name: string; alias?: string; description?: string; gitUrl?: string; localPath?: string }) => {
     const workspaceId = activeWorkspaceId || (workspaces.length > 0 ? workspaces[0].id : null);
     if (!workspaceId) {
       const ws = await createWorkspace({ name: "默认工作空间" });

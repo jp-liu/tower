@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { updateProject } from "@/actions/workspace-actions";
+import { updateProject, createProject, getRecentLocalProjects } from "@/actions/workspace-actions";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
@@ -28,6 +28,7 @@ interface ProjectSidebarProps {
     gitUrl: string | null;
     localPath: string | null;
   };
+  workspaceId: string;
 }
 
 interface GitInfo {
@@ -38,11 +39,11 @@ interface GitInfo {
   statusSummary?: { modified: number; staged: number; untracked: number };
 }
 
-export function RepoSidebar({ project }: ProjectSidebarProps) {
+export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
   const { t } = useI18n();
   const router = useRouter();
   const [gitExpanded, setGitExpanded] = useState(true);
-  const [browseExpanded, setBrowseExpanded] = useState(false);
+  const [browseExpanded, setBrowseExpanded] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showFolderBrowser, setShowFolderBrowser] = useState(false);
@@ -50,6 +51,21 @@ export function RepoSidebar({ project }: ProjectSidebarProps) {
   const [editAlias, setEditAlias] = useState(project.alias ?? "");
   const [editDesc, setEditDesc] = useState(project.description ?? "");
   const [editLocalPath, setEditLocalPath] = useState(project.localPath ?? "");
+
+  // Recent local projects
+  const [recentProjects, setRecentProjects] = useState<Array<{ id: string; name: string; alias: string | null; localPath: string | null; workspaceId: string; type: string }>>([]);
+
+  useEffect(() => {
+    getRecentLocalProjects(100).then(setRecentProjects);
+  }, []);
+
+  // Browse → Create flow
+  const [showBrowseCreate, setShowBrowseCreate] = useState(false);
+  const [browsePath, setBrowsePath] = useState("");
+  const [browseCreateName, setBrowseCreateName] = useState("");
+  const [browseCreateAlias, setBrowseCreateAlias] = useState("");
+  const [browseCreateDesc, setBrowseCreateDesc] = useState("");
+  const [browseCreateLoading, setBrowseCreateLoading] = useState(false);
 
   // Git state
   const [gitInfo, setGitInfo] = useState<GitInfo | null>(null);
@@ -121,6 +137,44 @@ export function RepoSidebar({ project }: ProjectSidebarProps) {
       }
     } catch {
       showToast(t("git.switchFailed"));
+    }
+  };
+
+  const navigateToProject = (wsId: string, projId: string) => {
+    router.push(`/workspaces/${wsId}?projectId=${projId}`, { scroll: false });
+    router.refresh();
+  };
+
+  const handleBrowseSelect = (selectedPath: string) => {
+    const existing = recentProjects.find((rp) => rp.localPath === selectedPath);
+    if (existing) {
+      navigateToProject(existing.workspaceId, existing.id);
+      return;
+    }
+    // Not found → open create dialog
+    const folderName = selectedPath.split("/").filter(Boolean).pop() ?? "";
+    setBrowsePath(selectedPath);
+    setBrowseCreateName(folderName);
+    setBrowseCreateAlias("");
+    setBrowseCreateDesc("");
+    setShowBrowseCreate(true);
+  };
+
+  const handleBrowseCreate = async () => {
+    if (!browseCreateName.trim()) return;
+    setBrowseCreateLoading(true);
+    try {
+      const newProject = await createProject({
+        name: browseCreateName.trim(),
+        alias: browseCreateAlias.trim() || undefined,
+        description: browseCreateDesc.trim() || undefined,
+        localPath: browsePath,
+        workspaceId,
+      });
+      setShowBrowseCreate(false);
+      navigateToProject(workspaceId, newProject.id);
+    } finally {
+      setBrowseCreateLoading(false);
     }
   };
 
@@ -314,16 +368,46 @@ export function RepoSidebar({ project }: ProjectSidebarProps) {
           {browseExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
         </button>
         {browseExpanded && (
-          <div className="mt-3 space-y-2">
+          <div className="mt-3 space-y-3">
             <Button
               variant="outline"
               size="sm"
               className="w-full h-8 gap-1.5 text-xs"
               onClick={() => setShowFolderBrowser(true)}
             >
-              <Search className="h-3.5 w-3.5" />
+              <FolderOpen className="h-3.5 w-3.5" />
               {t("sidebar.right.browseRepo")}
             </Button>
+
+            {/* Recent local projects */}
+            {recentProjects.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 px-1">{t("sidebar.right.recent")}</p>
+                <div className="space-y-0.5">
+                  {recentProjects.map((rp) => (
+                    <button
+                      key={rp.id}
+                      onClick={() => navigateToProject(rp.workspaceId, rp.id)}
+                      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent ${
+                        rp.id === project.id ? "bg-amber-500/10 text-amber-300" : ""
+                      }`}
+                    >
+                      {rp.type === "GIT" ? (
+                        <GitBranch className="h-3 w-3 shrink-0 text-emerald-400" />
+                      ) : (
+                        <FolderOpen className="h-3 w-3 shrink-0 text-amber-400/70" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium text-foreground">{rp.name}</p>
+                        {rp.localPath && (
+                          <p className="truncate text-[10px] font-mono text-muted-foreground">{rp.localPath}</p>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -388,10 +472,67 @@ export function RepoSidebar({ project }: ProjectSidebarProps) {
           if (showEditDialog) {
             setEditLocalPath(path);
           } else {
-            showToast(`Selected: ${path}`);
+            handleBrowseSelect(path);
           }
         }}
       />
+
+      {/* Browse → Create Project Dialog */}
+      <Dialog open={showBrowseCreate} onOpenChange={setShowBrowseCreate}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("topbar.newProject")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            {/* Locked path */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">{t("project.localPath")}</label>
+              <div className="mt-1.5 rounded-md border border-border bg-muted/50 px-3 py-2 font-mono text-xs text-muted-foreground">
+                {browsePath}
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">{t("project.name")}</label>
+              <Input
+                value={browseCreateName}
+                onChange={(e) => setBrowseCreateName(e.target.value)}
+                placeholder={t("project.namePlaceholder")}
+                className="mt-1.5"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">{t("project.alias")}</label>
+              <Input
+                value={browseCreateAlias}
+                onChange={(e) => setBrowseCreateAlias(e.target.value)}
+                placeholder={t("project.aliasPlaceholder")}
+                className="mt-1.5"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">{t("project.description")}</label>
+              <textarea
+                value={browseCreateDesc}
+                onChange={(e) => setBrowseCreateDesc(e.target.value)}
+                placeholder={t("project.descPlaceholder")}
+                rows={2}
+                className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBrowseCreate(false)}>{t("common.cancel")}</Button>
+            <Button
+              onClick={handleBrowseCreate}
+              disabled={!browseCreateName.trim() || browseCreateLoading}
+              className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
+            >
+              {browseCreateLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+              {t("common.create")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Create Branch Dialog */}
       {gitInfo?.isGit && (

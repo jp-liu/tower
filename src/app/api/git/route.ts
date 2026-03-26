@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { execSync } from "child_process";
 import fs from "fs";
 import path from "path";
+import os from "os";
 
 // GET: get git info for a path (branches, current branch, status)
 export async function GET(request: NextRequest) {
@@ -77,16 +78,57 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: perform git actions (init, checkout)
+// Expand ~ to home directory
+function expandHome(p: string): string {
+  if (p.startsWith("~/") || p === "~") {
+    return path.join(os.homedir(), p.slice(1));
+  }
+  return p;
+}
+
+// POST: perform git actions (init, checkout, clone)
 export async function POST(request: NextRequest) {
   const body = await request.json();
   const { action, path: dirPath, branch } = body;
+
+  if (action === "clone") {
+    const { url, path: clonePath } = body;
+    if (!url || !clonePath) {
+      return NextResponse.json({ error: "url and path required" }, { status: 400 });
+    }
+    const resolved = path.resolve(expandHome(clonePath));
+
+    // If target already exists and has content, don't overwrite
+    if (fs.existsSync(resolved) && fs.readdirSync(resolved).length > 0) {
+      // Check if it's already a git repo
+      if (fs.existsSync(path.join(resolved, ".git"))) {
+        return NextResponse.json({ success: true, message: "already_cloned", path: resolved });
+      }
+      return NextResponse.json({ error: "Directory already exists and is not empty" }, { status: 400 });
+    }
+
+    try {
+      // Create parent directories
+      fs.mkdirSync(path.dirname(resolved), { recursive: true });
+      execSync(`git clone ${JSON.stringify(url)} ${JSON.stringify(resolved)}`, {
+        encoding: "utf-8",
+        timeout: 120000, // 2 min for large repos
+      });
+      return NextResponse.json({ success: true, message: "cloned", path: resolved });
+    } catch (e: any) {
+      // Clean up empty dir on failure
+      if (fs.existsSync(resolved) && fs.readdirSync(resolved).length === 0) {
+        fs.rmdirSync(resolved);
+      }
+      return NextResponse.json({ error: e.message || "Clone failed" }, { status: 500 });
+    }
+  }
 
   if (!dirPath) {
     return NextResponse.json({ error: "path required" }, { status: 400 });
   }
 
-  const resolved = path.resolve(dirPath);
+  const resolved = path.resolve(expandHome(dirPath));
   const opts = { cwd: resolved, encoding: "utf-8" as const, timeout: 10000 };
 
   try {

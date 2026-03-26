@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Search, Settings, Plus, Command, Globe, Sun, Moon } from "lucide-react";
+import { Search, Settings, Plus, Command, Globe, Sun, Moon, GitBranch, Loader2, Check, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -16,12 +16,12 @@ import { Input } from "@/components/ui/input";
 import { SearchDialog } from "./search-dialog";
 import { FolderBrowserDialog } from "./folder-browser-dialog";
 import { useI18n } from "@/lib/i18n";
+import { gitUrlToLocalPath, toCloneUrl } from "@/lib/git-url";
 
 interface CreateProjectData {
   name: string;
   alias?: string;
   description?: string;
-  type: "NORMAL" | "GIT";
   gitUrl?: string;
   localPath?: string;
 }
@@ -37,10 +37,12 @@ export function TopBar({ onCreateProject }: TopBarProps) {
   const [projectName, setProjectName] = useState("");
   const [projectAlias, setProjectAlias] = useState("");
   const [projectDesc, setProjectDesc] = useState("");
-  const [projectType, setProjectType] = useState<"NORMAL" | "GIT">("NORMAL");
   const [gitUrl, setGitUrl] = useState("");
   const [localPath, setLocalPath] = useState("");
+  const [localPathManual, setLocalPathManual] = useState(false);
   const [showFolderBrowser, setShowFolderBrowser] = useState(false);
+  const [cloneStatus, setCloneStatus] = useState<"idle" | "cloning" | "success" | "error">("idle");
+  const [cloneError, setCloneError] = useState("");
 
   // Cmd+K / Ctrl+K keyboard shortcut
   useEffect(() => {
@@ -58,9 +60,49 @@ export function TopBar({ onCreateProject }: TopBarProps) {
     setProjectName("");
     setProjectAlias("");
     setProjectDesc("");
-    setProjectType("NORMAL");
     setGitUrl("");
     setLocalPath("");
+    setLocalPathManual(false);
+    setCloneStatus("idle");
+    setCloneError("");
+  };
+
+  const handleGitUrlChange = (value: string) => {
+    setGitUrl(value);
+    setCloneStatus("idle");
+    setCloneError("");
+    if (!localPathManual) {
+      setLocalPath(gitUrlToLocalPath(value));
+    }
+  };
+
+  const handleClone = async () => {
+    if (!gitUrl.trim() || !localPath.trim()) return;
+    setCloneStatus("cloning");
+    setCloneError("");
+    try {
+      const cloneUrl = toCloneUrl(gitUrl.trim());
+      const res = await fetch("/api/git", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clone", url: cloneUrl, path: localPath.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCloneStatus("error");
+        setCloneError(data.error || "Clone failed");
+        return;
+      }
+      setCloneStatus("success");
+    } catch {
+      setCloneStatus("error");
+      setCloneError("Network error");
+    }
+  };
+
+  const handleLocalPathChange = (value: string) => {
+    setLocalPath(value);
+    setLocalPathManual(true);
   };
 
   const handleCreateProject = async () => {
@@ -69,8 +111,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
         name: projectName.trim(),
         alias: projectAlias.trim() || undefined,
         description: projectDesc.trim() || undefined,
-        type: projectType,
-        gitUrl: projectType === "GIT" && gitUrl.trim() ? gitUrl.trim() : undefined,
+        gitUrl: gitUrl.trim() || undefined,
         localPath: localPath.trim() || undefined,
       });
       resetForm();
@@ -139,7 +180,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
 
       {/* Create Project Dialog */}
       <Dialog open={showNewProject} onOpenChange={(open) => { setShowNewProject(open); if (!open) resetForm(); }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent style={{ maxWidth: '32rem' }}>
           <DialogHeader>
             <DialogTitle>{t("topbar.newProject")}</DialogTitle>
           </DialogHeader>
@@ -178,47 +219,17 @@ export function TopBar({ onCreateProject }: TopBarProps) {
               />
             </div>
 
-            {/* Type toggle */}
+            {/* Git URL */}
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block" />
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setProjectType("NORMAL")}
-                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
-                    projectType === "NORMAL"
-                      ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20"
-                      : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
-                  }`}
-                >
-                  {t("project.normalType")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setProjectType("GIT")}
-                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
-                    projectType === "GIT"
-                      ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20"
-                      : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
-                  }`}
-                >
-                  {t("project.gitType")}
-                </button>
-              </div>
+              <label className="text-xs font-medium text-muted-foreground">{t("project.gitUrl")}</label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{t("project.gitUrlHint")}</p>
+              <Input
+                placeholder={t("project.gitPlaceholder")}
+                value={gitUrl}
+                onChange={(e) => handleGitUrlChange(e.target.value)}
+                className="mt-1.5 font-mono text-xs"
+              />
             </div>
-
-            {/* Git URL (conditional) */}
-            {projectType === "GIT" && (
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">{t("project.gitUrl")}</label>
-                <Input
-                  placeholder={t("project.gitPlaceholder")}
-                  value={gitUrl}
-                  onChange={(e) => setGitUrl(e.target.value)}
-                  className="mt-1.5"
-                />
-              </div>
-            )}
 
             {/* Local Path */}
             <div>
@@ -228,7 +239,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
                 <Input
                   placeholder={t("project.localPathPlaceholder")}
                   value={localPath}
-                  onChange={(e) => setLocalPath(e.target.value)}
+                  onChange={(e) => handleLocalPathChange(e.target.value)}
                   className="flex-1 font-mono text-xs"
                 />
                 <Button
@@ -241,6 +252,37 @@ export function TopBar({ onCreateProject }: TopBarProps) {
                   {t("folder.browse")}
                 </Button>
               </div>
+
+              {/* Clone button */}
+              {gitUrl.trim() && localPath.trim() && (
+                <div className="mt-2 flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={cloneStatus === "cloning" || cloneStatus === "success"}
+                    onClick={handleClone}
+                    className="h-7 gap-1.5 text-xs bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25 hover:bg-emerald-500/25 disabled:opacity-50"
+                  >
+                    {cloneStatus === "cloning" ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : cloneStatus === "success" ? (
+                      <Check className="h-3 w-3" />
+                    ) : (
+                      <GitBranch className="h-3 w-3" />
+                    )}
+                    {cloneStatus === "cloning" ? t("git.cloning") : cloneStatus === "success" ? t("git.cloned") : t("git.clone")}
+                  </Button>
+                  {cloneStatus === "error" && (
+                    <span className="flex items-center gap-1 text-[11px] text-rose-400">
+                      <AlertCircle className="h-3 w-3" />
+                      {cloneError}
+                    </span>
+                  )}
+                  {cloneStatus === "success" && (
+                    <span className="text-[11px] text-emerald-400">{t("git.cloneSuccess")}</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -262,8 +304,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
       <FolderBrowserDialog
         open={showFolderBrowser}
         onOpenChange={setShowFolderBrowser}
-        onSelect={(path) => setLocalPath(path)}
-        gitOnly={projectType === "GIT"}
+        onSelect={(path) => { setLocalPath(path); setLocalPathManual(true); }}
       />
     </>
   );

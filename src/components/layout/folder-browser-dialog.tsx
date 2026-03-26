@@ -108,15 +108,15 @@ export function FolderBrowserDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg p-0 gap-0 overflow-hidden">
-        <DialogHeader className="px-5 pt-5 pb-3">
-          <DialogTitle>{gitOnly ? t("folder.selectGitRepo") : t("folder.selectFolder")}</DialogTitle>
-          <p className="text-xs text-muted-foreground mt-1">{t("folder.hint")}</p>
-        </DialogHeader>
+      <DialogContent className="p-0 gap-0" style={{ maxWidth: '36rem', overflow: 'hidden' }}>
+        <div className="flex flex-col max-h-[60vh] overflow-hidden">
+          <div className="px-5 pt-5 pb-3 shrink-0">
+            <DialogTitle>{gitOnly ? t("folder.selectGitRepo") : t("folder.selectFolder")}</DialogTitle>
+            <p className="text-xs text-muted-foreground mt-1">{t("folder.hint")}</p>
+          </div>
 
-        <div className="border-t border-border">
           {/* Manual path input */}
-          <div className="px-4 pt-3 pb-2">
+          <div className="border-t border-border px-4 pt-3 pb-2 shrink-0">
             <label className="text-xs font-medium text-muted-foreground">{t("folder.manualInput")}</label>
             <div className="mt-1.5 flex gap-2">
               <Input
@@ -125,13 +125,14 @@ export function FolderBrowserDialog({
                 onChange={(e) => setManualPath(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleGoTo()}
                 placeholder="/path/to/your/project"
-                className="flex-1"
+                title={manualPath}
+                className="flex-1 min-w-0"
               />
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleGoTo}
-                className="h-8 px-3"
+                className="h-8 px-3 shrink-0"
               >
                 {t("folder.goTo")}
               </Button>
@@ -139,7 +140,7 @@ export function FolderBrowserDialog({
           </div>
 
           {/* Filter */}
-          <div className="px-4 py-2">
+          <div className="px-4 py-2 shrink-0">
             <label className="text-xs font-medium text-muted-foreground">{t("folder.searchDir")}</label>
             <div className="relative mt-1.5">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -153,36 +154,28 @@ export function FolderBrowserDialog({
           </div>
 
           {/* Navigation bar */}
-          <div className="flex items-center gap-1.5 border-y border-border px-4 py-2">
+          <div className="flex items-center gap-1.5 border-y border-border px-4 py-2 shrink-0 min-w-0">
             <button
               onClick={() => data?.homePath && browse(data.homePath)}
-              className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="shrink-0 rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               title="Home"
             >
               <Home className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={() => data?.parentPath && browse(data.parentPath)}
-              className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="shrink-0 rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               title="Parent"
             >
               <ChevronUp className="h-3.5 w-3.5" />
             </button>
-            <div className="flex-1 truncate text-sm text-foreground font-mono">
+            <div className="min-w-0 flex-1 truncate text-sm text-foreground font-mono" title={data?.currentPath ?? ""}>
               {data?.currentPath ?? "..."}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSelectCurrent}
-              className="h-7 text-xs"
-            >
-              {t("folder.selectCurrent")}
-            </Button>
           </div>
 
           {/* Folder list */}
-          <div className="max-h-72 overflow-auto">
+          <div className="min-h-0 flex-1 overflow-auto">
             {loading && (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                 Loading...
@@ -219,17 +212,18 @@ export function FolderBrowserDialog({
               </button>
             ))}
           </div>
-        </div>
 
-        <DialogFooter className="px-5 py-3">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
-          <Button
-            onClick={handleSelectCurrent}
-            className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
-          >
-            {t("folder.selectPath")}
-          </Button>
-        </DialogFooter>
+          {/* Footer */}
+          <div className="flex justify-end gap-2 px-5 py-3 shrink-0 border-t border-border">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
+            <Button
+              onClick={handleSelectCurrent}
+              className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
+            >
+              {t("folder.selectPath")}
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -57,7 +57,6 @@ export async function createProject(data: {
   name: string;
   alias?: string;
   description?: string;
-  type?: "NORMAL" | "GIT";
   gitUrl?: string;
   localPath?: string;
   workspaceId: string;
@@ -67,7 +66,7 @@ export async function createProject(data: {
       name: data.name,
       alias: data.alias,
       description: data.description,
-      type: data.type ?? "NORMAL",
+      type: data.gitUrl ? "GIT" : "NORMAL",
       gitUrl: data.gitUrl,
       localPath: data.localPath,
       workspaceId: data.workspaceId,
@@ -89,4 +88,20 @@ export async function updateProject(id: string, data: { name?: string; alias?: s
 export async function deleteProject(id: string) {
   await db.project.delete({ where: { id } });
   revalidatePath("/workspaces");
+}
+
+export async function getProjectByLocalPath(localPath: string) {
+  return db.project.findFirst({
+    where: { localPath },
+    include: { workspace: true },
+  });
+}
+
+export async function getRecentLocalProjects(limit = 10) {
+  return db.project.findMany({
+    where: { localPath: { not: null } },
+    select: { id: true, name: true, alias: true, localPath: true, workspaceId: true, type: true, updatedAt: true },
+    orderBy: { updatedAt: "desc" },
+    take: limit,
+  });
 }
