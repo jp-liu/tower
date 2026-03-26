@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Search, Settings, Plus, Command } from "lucide-react";
+import { Search, Settings, Plus, Command, Globe, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -29,7 +29,7 @@ interface TopBarProps {
 }
 
 export function TopBar({ onCreateProject }: TopBarProps) {
-  const { t } = useI18n();
+  const { t, locale, setLocale } = useI18n();
   const [showSearch, setShowSearch] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
   const [projectName, setProjectName] = useState("");
@@ -90,7 +90,20 @@ export function TopBar({ onCreateProject }: TopBarProps) {
         </button>
 
         {/* Right Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          {/* Language Toggle */}
+          <button
+            onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
+            className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            title={t("settings.language")}
+          >
+            <Globe className="h-3.5 w-3.5" />
+            <span className="text-[11px] font-semibold">{locale === "zh" ? "EN" : "中"}</span>
+          </button>
+
+          {/* Divider */}
+          <div className="h-4 w-px bg-border" />
+
           <Link
             href="/settings"
             className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -105,7 +118,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
             <Plus className="h-3.5 w-3.5" />
             {t("topbar.newProject")}
           </Button>
-          <div className="ml-1 flex items-center gap-2">
+          <div className="ml-0.5">
             <Avatar className="h-7 w-7 ring-1 ring-border">
               <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold">
                 JP

@@ -174,12 +174,6 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
         </div>
 
         <div className="mt-2 flex flex-col items-center gap-1">
-          <button
-            onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
-            className="rounded-md px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-accent text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {locale === "zh" ? "EN" : "\u4E2D"}
-          </button>
           <Tooltip>
             <TooltipTrigger
               render={
@@ -318,12 +312,6 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
         <Archive className="h-3.5 w-3.5" />
         <span>{t("sidebar.archive")}</span>
         <span className="ml-auto font-mono">0</span>
-        <button
-          onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
-          className="rounded-md px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-accent text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {locale === "zh" ? "EN" : "\u4E2D"}
-        </button>
       </div>
 
       {/* Create Dialog */}
