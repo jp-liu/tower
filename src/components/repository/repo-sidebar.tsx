@@ -237,7 +237,7 @@ export function RepoSidebar({ project }: ProjectSidebarProps) {
                 </Button>
               </div>
             ) : gitInfo?.isGit ? (
-              /* Git repo — show branches */
+              /* Git repo — show current branch + dropdown selectors */
               <div className="space-y-3">
                 {/* Current branch */}
                 <div className="rounded-lg border border-border bg-muted/50 p-3">
@@ -263,49 +263,25 @@ export function RepoSidebar({ project }: ProjectSidebarProps) {
                   </div>
                 )}
 
-                {/* Local branches */}
+                {/* Local branch selector */}
                 {gitInfo.branches && gitInfo.branches.length > 0 && (
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">{t("git.localBranches")}</p>
-                    <div className="space-y-0.5">
-                      {gitInfo.branches.map((b) => (
-                        <button
-                          key={b}
-                          onClick={() => b !== gitInfo.currentBranch && handleSwitchBranch(b)}
-                          className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
-                            b === gitInfo.currentBranch
-                              ? "bg-emerald-500/10 text-emerald-400"
-                              : "text-secondary-foreground hover:bg-accent"
-                          }`}
-                        >
-                          <GitBranch className="h-3 w-3 shrink-0" />
-                          <span className="truncate font-mono text-xs">{b}</span>
-                          {b === gitInfo.currentBranch && <Check className="h-3 w-3 ml-auto shrink-0" />}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <BranchDropdown
+                    label={t("git.localBranches")}
+                    branches={gitInfo.branches}
+                    currentBranch={gitInfo.currentBranch ?? ""}
+                    onSwitch={handleSwitchBranch}
+                  />
                 )}
 
-                {/* Remote branches */}
-                {gitInfo.remoteBranches && gitInfo.remoteBranches.length > 0 && (
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">{t("git.remoteBranches")}</p>
-                    <div className="space-y-0.5">
-                      {gitInfo.remoteBranches
-                        .filter((b) => !gitInfo.branches?.includes(b))
-                        .map((b) => (
-                          <button
-                            key={b}
-                            onClick={() => handleSwitchBranch(b)}
-                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                          >
-                            <GitBranch className="h-3 w-3 shrink-0" />
-                            <span className="truncate font-mono text-xs">{b}</span>
-                          </button>
-                        ))}
-                    </div>
-                  </div>
+                {/* Remote branch selector */}
+                {gitInfo.remoteBranches && gitInfo.remoteBranches.filter((b) => !gitInfo.branches?.includes(b)).length > 0 && (
+                  <BranchDropdown
+                    label={t("git.remoteBranches")}
+                    branches={gitInfo.remoteBranches.filter((b) => !gitInfo.branches?.includes(b))}
+                    currentBranch={gitInfo.currentBranch ?? ""}
+                    onSwitch={handleSwitchBranch}
+                    isRemote
+                  />
                 )}
               </div>
             ) : null}
@@ -402,5 +378,94 @@ export function RepoSidebar({ project }: ProjectSidebarProps) {
         }}
       />
     </aside>
+  );
+}
+
+// ── Branch Dropdown with search filter ──
+function BranchDropdown({
+  label,
+  branches,
+  currentBranch,
+  onSwitch,
+  isRemote = false,
+}: {
+  label: string;
+  branches: string[];
+  currentBranch: string;
+  onSwitch: (branch: string) => void;
+  isRemote?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+
+  const filtered = branches.filter((b) =>
+    b.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  const selected = isRemote ? null : currentBranch;
+
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">{label}</p>
+      <div className="relative">
+        <button
+          onClick={() => { setOpen(!open); setFilter(""); }}
+          className="flex w-full items-center justify-between rounded-lg border border-border bg-muted/50 px-3 py-2 text-left transition-colors hover:bg-accent"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <GitBranch className={`h-3 w-3 shrink-0 ${isRemote ? "text-sky-400" : "text-emerald-400"}`} />
+            <span className="truncate font-mono text-xs text-foreground">
+              {isRemote ? `${branches.length} branches` : (selected || "—")}
+            </span>
+          </div>
+          <ChevronDown className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+
+        {open && (
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-lg border border-border bg-popover shadow-xl">
+            {/* Search */}
+            <div className="border-b border-border p-1.5">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                <input
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder="Filter..."
+                  autoFocus
+                  className="h-7 w-full rounded-md bg-muted/50 pl-7 pr-2 text-xs text-foreground placeholder-muted-foreground outline-none focus:ring-1 focus:ring-amber-500/20"
+                />
+              </div>
+            </div>
+            {/* Branch list */}
+            <div className="max-h-48 overflow-auto py-1">
+              {filtered.length === 0 && (
+                <p className="px-3 py-2 text-xs text-muted-foreground">No branches found</p>
+              )}
+              {filtered.map((b) => {
+                const isActive = b === currentBranch;
+                return (
+                  <button
+                    key={b}
+                    onClick={() => {
+                      if (!isActive) onSwitch(b);
+                      setOpen(false);
+                    }}
+                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors ${
+                      isActive
+                        ? "bg-emerald-500/10 text-emerald-400"
+                        : "text-secondary-foreground hover:bg-accent"
+                    }`}
+                  >
+                    <GitBranch className="h-3 w-3 shrink-0" />
+                    <span className="truncate font-mono text-xs">{b}</span>
+                    {isActive && <Check className="h-3 w-3 ml-auto shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
