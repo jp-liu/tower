@@ -27,6 +27,9 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - Settings page with AI Tools configuration
 - Repository management and git operations (branch, clone, status)
 - Filesystem browsing for project path selection
+- Dark/Light/System theme switching with next-themes — validated in Phase 1
+- Settings page restructured navigation (General/AI Tools/Prompts) — validated in Phase 1
+- General settings panel with theme and language toggles — validated in Phase 1
 
 ### Active
 
@@ -92,4 +95,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-26 after milestone v0.1 started*
+*Last updated: 2026-03-26 after Phase 1 completion*
