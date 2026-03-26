@@ -22,7 +22,35 @@ export async function testEnvironment(cwd: string): Promise<TestResult> {
     return { ok: false, checks };
   }
 
-  // Check 2: verify ANTHROPIC_API_KEY (optional — claude may use browser auth)
+  // Check 2: get CLI version (best-effort per D-06)
+  try {
+    const versionProbe = await runChildProcess(
+      `claude-version-${Date.now()}`,
+      "claude",
+      ["--version"],
+      {
+        cwd,
+        env: {},
+        timeoutSec: 5,
+        graceSec: 2,
+        onLog: async () => {},
+      },
+    );
+    const versionStr = (versionProbe.stdout.trim() || versionProbe.stderr.trim()) || "";
+    checks.push({
+      name: "claude_version",
+      passed: true,
+      message: versionStr ? `Version: ${versionStr}` : "Version: unknown",
+    });
+  } catch {
+    checks.push({
+      name: "claude_version",
+      passed: true,
+      message: "Version: unknown",
+    });
+  }
+
+  // Check 3: verify ANTHROPIC_API_KEY (optional — claude may use browser auth)
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const hasApiKey = typeof apiKey === "string" && apiKey.trim().length > 0;
   checks.push({
@@ -33,7 +61,7 @@ export async function testEnvironment(cwd: string): Promise<TestResult> {
       : "ANTHROPIC_API_KEY is not set (claude may use browser/subscription auth)",
   });
 
-  // Check 3: run hello probe
+  // Check 4: run hello probe
   const probeId = `claude-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   try {
     const probe = await runChildProcess(
