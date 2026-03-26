@@ -28,7 +28,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User's theme choice persists after closing and reopening the browser
   4. When system mode is selected, the UI follows the OS dark/light preference automatically
   5. User can toggle the UI language between Chinese and English from the General panel
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 01-01-PLAN.md — CSS fix + theme infrastructure (next-themes, ThemeProvider, light/dark CSS vars, i18n keys)
+- [ ] 01-02-PLAN.md — Settings nav restructure + General settings panel (theme toggle, language toggle)
 **UI hint**: yes
 
 ### Phase 2: CLI Adapter Verification
@@ -63,6 +66,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Theme + General Settings | 0/? | Not started | - |
+| 1. Theme + General Settings | 0/2 | Planned | - |
 | 2. CLI Adapter Verification | 0/? | Not started | - |
 | 3. Agent Prompt Management | 0/? | Not started | - |
