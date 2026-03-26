@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { SettingsNav } from "@/components/settings/settings-nav";
 import { AIToolsConfig } from "@/components/settings/ai-tools-config";
+import { CLIAdapterTester } from "@/components/settings/cli-adapter-tester";
 import { GeneralConfig } from "@/components/settings/general-config";
 import type { Prisma } from "@prisma/client";
 import {
@@ -110,12 +111,18 @@ export default function SettingsPage() {
           {activeSection === "general" && <GeneralConfig />}
 
           {activeSection === "ai-tools" && (
-            <AIToolsConfig
-              configs={configs}
-              onSave={handleSave}
-              onUpdateConfig={handleUpdateConfig}
-              onDeleteConfig={handleDeleteConfig}
-            />
+            <div className="space-y-8">
+              <AIToolsConfig
+                configs={configs}
+                onSave={handleSave}
+                onUpdateConfig={handleUpdateConfig}
+                onDeleteConfig={handleDeleteConfig}
+              />
+              <CLIAdapterTester
+                adapterType="claude_local"
+                adapterLabel="Claude Code"
+              />
+            </div>
           )}
 
           {activeSection === "prompts" && (

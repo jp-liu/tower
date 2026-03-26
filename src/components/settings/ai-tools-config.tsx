@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Check, Shield, Settings2, Trash2 } from "lucide-react";
+import { Shield, Settings2, Trash2 } from "lucide-react";
 
 interface AgentConfig {
   id: string;
@@ -155,17 +155,6 @@ export function AIToolsConfig({
                     ))}
                 </SelectContent>
               </Select>
-            </div>
-
-            {/* Detection banner */}
-            <div className="rounded-lg bg-green-50 border border-green-200 p-3">
-              <div className="flex items-center gap-2 text-green-700">
-                <Check className="h-4 w-4" />
-                <span className="text-sm font-medium">检测到最近使用</span>
-              </div>
-              <p className="mt-1 text-xs text-green-600">
-                找到此代理的最近身份验证凭据
-              </p>
             </div>
 
             <p className="text-sm text-gray-500">
