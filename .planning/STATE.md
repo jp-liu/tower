@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
-status: planning
-stopped_at: Phase 1 context gathered
-last_updated: "2026-03-26T08:35:46.736Z"
-last_activity: 2026-03-26 — Roadmap created for v0.1 Settings milestone
+status: executing
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-03-26T08:54:50.025Z"
+last_activity: 2026-03-26
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration.
-**Current focus:** Phase 1 — Theme + General Settings
+**Current focus:** Phase 01 — theme-general-settings
 
 ## Current Position
 
-Phase: 1 of 3 (Theme + General Settings)
-Plan: 0 of ? in current phase
-Status: Ready to plan
-Last activity: 2026-03-26 — Roadmap created for v0.1 Settings milestone
+Phase: 01 (theme-general-settings) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-03-26
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -47,6 +47,7 @@ Progress: [░░░░░░░░░░] 0%
 | - | - | - | - |
 
 *Updated after each plan completion*
+| Phase 01 P01 | 3 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -56,6 +57,9 @@ Progress: [░░░░░░░░░░] 0%
 - [Pre-Phase 1]: Use `next-themes ^0.4.6` (not manual useEffect) to avoid FOUC in App Router
 - [Pre-Phase 2]: CLI test must be user-initiated only — never triggered on page mount (45s blocking)
 - [Pre-Phase 3]: `isDefault` enforcement requires `db.$transaction()` to clear other defaults first
+- [Phase 01]: Fixed @custom-variant dark to use :where(.dark, .dark *) — matches both html.dark element and all descendants
+- [Phase 01]: Light theme :root uses inverted oklch lightness (1.0 - dark_value); dark theme moved to .dark block unchanged
+- [Phase 01]: ThemeProvider placed outermost in layout with attribute=class, defaultTheme=system, enableSystem for GNRL-03
 
 ### Pending Todos
 
@@ -68,6 +72,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T08:35:46.733Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-theme-general-settings/01-CONTEXT.md
+Last session: 2026-03-26T08:54:50.022Z
+Stopped at: Completed 01-01-PLAN.md
+Resume file: None
