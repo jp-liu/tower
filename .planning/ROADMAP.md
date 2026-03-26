@@ -12,7 +12,7 @@ This milestone refactors the settings page to deliver three capabilities on top 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Theme + General Settings** - Fix dark mode CSS, install next-themes, add General settings panel with theme and language toggles
+- [x] **Phase 1: Theme + General Settings** - Fix dark mode CSS, install next-themes, add General settings panel with theme and language toggles (completed 2026-03-26)
 - [ ] **Phase 2: CLI Adapter Verification** - Add live connection test button to AI Tools settings with per-check pass/fail results
 - [ ] **Phase 3: Agent Prompt Management** - Full CRUD UI for AgentPrompt with default enforcement in settings
 
@@ -28,10 +28,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User's theme choice persists after closing and reopening the browser
   4. When system mode is selected, the UI follows the OS dark/light preference automatically
   5. User can toggle the UI language between Chinese and English from the General panel
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [x] 01-01-PLAN.md — CSS fix + theme infrastructure (next-themes, ThemeProvider, light/dark CSS vars, i18n keys)
-- [ ] 01-02-PLAN.md — Settings nav restructure + General settings panel (theme toggle, language toggle)
+- [x] 01-02-PLAN.md — Settings nav restructure + General settings panel (theme toggle, language toggle)
 **UI hint**: yes
 
 ### Phase 2: CLI Adapter Verification
@@ -66,6 +66,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Theme + General Settings | 1/2 | In Progress|  |
+| 1. Theme + General Settings | 2/2 | Complete   | 2026-03-26 |
 | 2. CLI Adapter Verification | 0/? | Not started | - |
 | 3. Agent Prompt Management | 0/? | Not started | - |

@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
-status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-03-26T08:54:50.025Z"
+status: verifying
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-03-26T08:59:46.753Z"
 last_activity: 2026-03-26
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 
 Phase: 01 (theme-general-settings) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-03-26
 
 Progress: [░░░░░░░░░░] 0%
@@ -48,6 +48,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 01 P01 | 3 | 2 tasks | 4 files |
+| Phase 01 P02 | 8 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -60,6 +61,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 01]: Fixed @custom-variant dark to use :where(.dark, .dark *) — matches both html.dark element and all descendants
 - [Phase 01]: Light theme :root uses inverted oklch lightness (1.0 - dark_value); dark theme moved to .dark block unchanged
 - [Phase 01]: ThemeProvider placed outermost in layout with attribute=class, defaultTheme=system, enableSystem for GNRL-03
+- [Phase Phase 01 P02]: Mounted guard on theme segmented control only — locale comes from React state (no hydration issue)
+- [Phase Phase 01 P02]: Segmented control uses bg-muted track / bg-background active tab — works in both light and dark modes
 
 ### Pending Todos
 
@@ -72,6 +75,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T08:54:50.022Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-03-26T08:59:46.750Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None

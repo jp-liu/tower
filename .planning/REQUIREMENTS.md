@@ -9,11 +9,11 @@ Requirements for Settings milestone. Each maps to roadmap phases.
 
 ### General Settings
 
-- [ ] **GNRL-01**: User can switch between dark, light, and system theme modes
+- [x] **GNRL-01**: User can switch between dark, light, and system theme modes
 - [x] **GNRL-02**: User's theme preference persists across browser sessions
 - [x] **GNRL-03**: System theme mode automatically follows OS dark/light preference
-- [ ] **GNRL-04**: User can switch UI language between Chinese and English
-- [ ] **GNRL-05**: Settings page has restructured left navigation with General, AI Tools, and Prompts sections
+- [x] **GNRL-04**: User can switch UI language between Chinese and English
+- [x] **GNRL-05**: Settings page has restructured left navigation with General, AI Tools, and Prompts sections
 
 ### CLI Verification
 
@@ -50,11 +50,11 @@ Requirements for Settings milestone. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GNRL-01 | Phase 1 | Pending |
+| GNRL-01 | Phase 1 | Complete |
 | GNRL-02 | Phase 1 | Complete |
 | GNRL-03 | Phase 1 | Complete |
-| GNRL-04 | Phase 1 | Pending |
-| GNRL-05 | Phase 1 | Pending |
+| GNRL-04 | Phase 1 | Complete |
+| GNRL-05 | Phase 1 | Complete |
 | CLIV-01 | Phase 2 | Pending |
 | CLIV-02 | Phase 2 | Pending |
 | CLIV-03 | Phase 2 | Pending |
