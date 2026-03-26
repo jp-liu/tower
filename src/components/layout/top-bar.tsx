@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { SearchDialog } from "./search-dialog";
+import { FolderBrowserDialog } from "./folder-browser-dialog";
 import { useI18n } from "@/lib/i18n";
 
 interface CreateProjectData {
@@ -22,6 +23,7 @@ interface CreateProjectData {
   description?: string;
   type: "NORMAL" | "GIT";
   gitUrl?: string;
+  localPath?: string;
 }
 
 interface TopBarProps {
@@ -37,6 +39,8 @@ export function TopBar({ onCreateProject }: TopBarProps) {
   const [projectDesc, setProjectDesc] = useState("");
   const [projectType, setProjectType] = useState<"NORMAL" | "GIT">("NORMAL");
   const [gitUrl, setGitUrl] = useState("");
+  const [localPath, setLocalPath] = useState("");
+  const [showFolderBrowser, setShowFolderBrowser] = useState(false);
 
   // Cmd+K / Ctrl+K keyboard shortcut
   useEffect(() => {
@@ -56,6 +60,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
     setProjectDesc("");
     setProjectType("NORMAL");
     setGitUrl("");
+    setLocalPath("");
   };
 
   const handleCreateProject = async () => {
@@ -66,6 +71,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
         description: projectDesc.trim() || undefined,
         type: projectType,
         gitUrl: projectType === "GIT" && gitUrl.trim() ? gitUrl.trim() : undefined,
+        localPath: localPath.trim() || undefined,
       });
       resetForm();
       setShowNewProject(false);
@@ -213,6 +219,29 @@ export function TopBar({ onCreateProject }: TopBarProps) {
                 />
               </div>
             )}
+
+            {/* Local Path */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">{t("project.localPath")}</label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{t("project.localPathHint")}</p>
+              <div className="mt-1.5 flex gap-2">
+                <Input
+                  placeholder={t("project.localPathPlaceholder")}
+                  value={localPath}
+                  onChange={(e) => setLocalPath(e.target.value)}
+                  className="flex-1 font-mono text-xs"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowFolderBrowser(true)}
+                  className="h-8 shrink-0"
+                >
+                  {t("folder.browse")}
+                </Button>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowNewProject(false); resetForm(); }}>
@@ -228,6 +257,14 @@ export function TopBar({ onCreateProject }: TopBarProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Folder Browser Dialog */}
+      <FolderBrowserDialog
+        open={showFolderBrowser}
+        onOpenChange={setShowFolderBrowser}
+        onSelect={(path) => setLocalPath(path)}
+        gitOnly={projectType === "GIT"}
+      />
     </>
   );
 }

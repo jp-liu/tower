@@ -59,6 +59,7 @@ export async function createProject(data: {
   description?: string;
   type?: "NORMAL" | "GIT";
   gitUrl?: string;
+  localPath?: string;
   workspaceId: string;
 }) {
   const project = await db.project.create({
@@ -68,6 +69,7 @@ export async function createProject(data: {
       description: data.description,
       type: data.type ?? "NORMAL",
       gitUrl: data.gitUrl,
+      localPath: data.localPath,
       workspaceId: data.workspaceId,
     },
   });
@@ -75,7 +77,7 @@ export async function createProject(data: {
   return project;
 }
 
-export async function updateProject(id: string, data: { name?: string; alias?: string; description?: string }) {
+export async function updateProject(id: string, data: { name?: string; alias?: string; description?: string; localPath?: string }) {
   const project = await db.project.update({
     where: { id },
     data,
