@@ -16,6 +16,7 @@ model Workspace {
 
   projects Project[]
   labels   Label[]
+  prompts  AgentPrompt[]
 }
 
 model Project {
@@ -68,6 +69,7 @@ model Task {
   status      TaskStatus @default(TODO)
   priority    Priority   @default(MEDIUM)
   order       Int        @default(0)
+  promptId    String?
   projectId   String
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
@@ -88,6 +90,7 @@ model TaskExecution {
   config    String?         @default("DEFAULT")
   status    ExecutionStatus @default(PENDING)
   branch    String?
+  sessionId String?
   startedAt DateTime?
   endedAt   DateTime?
   createdAt DateTime        @default(now())
@@ -138,6 +141,21 @@ model AgentConfig {
   updatedAt    DateTime @updatedAt
 
   @@unique([agent, configName])
+}
+
+model AgentPrompt {
+  id          String     @id @default(cuid())
+  name        String
+  description String?
+  content     String
+  isDefault   Boolean    @default(false)
+  workspaceId String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
 }
 
 enum ProjectType {

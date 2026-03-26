@@ -12,18 +12,8 @@ export async function sendTaskMessage(taskId: string, content: string) {
     },
   });
 
-  // For now, create a mock assistant response
-  // TODO: In the future, this will trigger the AI agent via the AgentRunner
-  const assistantMessage = await db.taskMessage.create({
-    data: {
-      role: "ASSISTANT",
-      content: `收到消息: "${content}"\n\n正在分析任务... (AI 代理集成开发中)`,
-      taskId,
-    },
-  });
-
   revalidatePath("/workspaces");
-  return { userMessage, assistantMessage };
+  return { userMessage };
 }
 
 export async function getTaskMessages(taskId: string) {
