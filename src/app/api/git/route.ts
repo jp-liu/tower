@@ -120,6 +120,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, branch });
     }
 
+    if (action === "create-branch") {
+      const { branch, baseBranch } = body;
+      if (!branch) {
+        return NextResponse.json({ error: "branch name required" }, { status: 400 });
+      }
+      // Sanitize branch name
+      const safeBranch = branch.replace(/[^a-zA-Z0-9_\-\/\.]/g, "-");
+      const base = baseBranch || "HEAD";
+      try {
+        execSync(`git checkout -b ${safeBranch} ${base}`, opts);
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message || "Failed to create branch" }, { status: 400 });
+      }
+      return NextResponse.json({ success: true, branch: safeBranch });
+    }
+
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
