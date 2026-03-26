@@ -29,6 +29,7 @@ interface ProjectInfo {
   description: string | null;
   type: string;
   gitUrl: string | null;
+  localPath: string | null;
 }
 
 interface BoardPageClientProps {
