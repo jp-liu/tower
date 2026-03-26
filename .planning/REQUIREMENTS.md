@@ -17,10 +17,10 @@ Requirements for Settings milestone. Each maps to roadmap phases.
 
 ### CLI Verification
 
-- [ ] **CLIV-01**: User can trigger a live connection test for each registered AI adapter
-- [ ] **CLIV-02**: Test results show per-check pass/fail status with actionable messages
-- [ ] **CLIV-03**: Test results show CLI version information when available
-- [ ] **CLIV-04**: Test button is debounced to prevent concurrent 45-second test probes
+- [x] **CLIV-01**: User can trigger a live connection test for each registered AI adapter
+- [x] **CLIV-02**: Test results show per-check pass/fail status with actionable messages
+- [x] **CLIV-03**: Test results show CLI version information when available
+- [x] **CLIV-04**: Test button is debounced to prevent concurrent 45-second test probes
 
 ### Agent Prompts
 
@@ -55,10 +55,10 @@ Requirements for Settings milestone. Each maps to roadmap phases.
 | GNRL-03 | Phase 1 | Complete |
 | GNRL-04 | Phase 1 | Complete |
 | GNRL-05 | Phase 1 | Complete |
-| CLIV-01 | Phase 2 | Pending |
-| CLIV-02 | Phase 2 | Pending |
-| CLIV-03 | Phase 2 | Pending |
-| CLIV-04 | Phase 2 | Pending |
+| CLIV-01 | Phase 2 | Complete |
+| CLIV-02 | Phase 2 | Complete |
+| CLIV-03 | Phase 2 | Complete |
+| CLIV-04 | Phase 2 | Complete |
 | PMPT-01 | Phase 3 | Pending |
 | PMPT-02 | Phase 3 | Pending |
 | PMPT-03 | Phase 3 | Pending |
