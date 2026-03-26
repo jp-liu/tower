@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LayoutClient } from "@/components/layout/layout-client";
 import { I18nProvider } from "@/lib/i18n";
+import { ThemeProvider } from "@/components/providers/theme-provider";
 import { db } from "@/lib/db";
 import "./globals.css";
 
@@ -32,7 +33,7 @@ export default async function RootLayout({
   });
 
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -41,13 +42,15 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <TooltipProvider>
-          <I18nProvider>
-            <LayoutClient workspaces={workspaces}>
-              {children}
-            </LayoutClient>
-          </I18nProvider>
-        </TooltipProvider>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <TooltipProvider>
+            <I18nProvider>
+              <LayoutClient workspaces={workspaces}>
+                {children}
+              </LayoutClient>
+            </I18nProvider>
+          </TooltipProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
