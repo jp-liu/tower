@@ -59,7 +59,10 @@ Plans:
   3. User can edit an existing prompt's name, description, or content and the update is reflected in the list
   4. User can delete a prompt and it is removed from the list (with a confirmation step)
   5. User can mark a prompt as default and only one prompt shows the default indicator at a time
-**Plans**: TBD
+**Plans**: 2/2 plans created
+Plans:
+- [ ] 03-01-PLAN.md — setDefaultPrompt server action + i18n keys + test scaffold
+- [ ] 03-02-PLAN.md — PromptsConfig component with CRUD UI + settings wiring + visual checkpoint
 **UI hint**: yes
 
 ## Progress
@@ -71,4 +74,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Theme + General Settings | 2/2 | Complete   | 2026-03-26 |
 | 2. CLI Adapter Verification | 2/2 | Complete   | 2026-03-26 |
-| 3. Agent Prompt Management | 0/? | Not started | - |
+| 3. Agent Prompt Management | 0/2 | Not started | - |
