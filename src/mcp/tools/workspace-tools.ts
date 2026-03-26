@@ -15,10 +15,9 @@ export const workspaceTools = {
         orderBy: { updatedAt: "desc" },
       });
 
-      return workspaces.map((workspace) => ({
-        ...workspace,
-        projectCount: workspace.projects.length,
-        projects: undefined,
+      return workspaces.map(({ projects, ...rest }) => ({
+        ...rest,
+        projectCount: projects.length,
       }));
     },
   },

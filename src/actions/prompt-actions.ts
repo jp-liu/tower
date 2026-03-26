@@ -16,6 +16,8 @@ export async function getPromptById(id: string) {
   return db.agentPrompt.findUnique({ where: { id } });
 }
 
+const MAX_PROMPT_CONTENT_LENGTH = 100_000;
+
 export async function createPrompt(data: {
   name: string;
   description?: string;
@@ -23,6 +25,9 @@ export async function createPrompt(data: {
   isDefault?: boolean;
   workspaceId?: string;
 }) {
+  if (data.content.length > MAX_PROMPT_CONTENT_LENGTH) {
+    throw new Error(`Prompt content exceeds maximum length of ${MAX_PROMPT_CONTENT_LENGTH} characters`);
+  }
   const prompt = await db.agentPrompt.create({ data });
   revalidatePath("/workspaces");
   revalidatePath("/settings");
@@ -33,6 +38,9 @@ export async function updatePrompt(
   id: string,
   data: { name?: string; description?: string; content?: string; isDefault?: boolean }
 ) {
+  if (data.content && data.content.length > MAX_PROMPT_CONTENT_LENGTH) {
+    throw new Error(`Prompt content exceeds maximum length of ${MAX_PROMPT_CONTENT_LENGTH} characters`);
+  }
   const prompt = await db.agentPrompt.update({ where: { id }, data });
   revalidatePath("/workspaces");
   revalidatePath("/settings");

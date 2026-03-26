@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { db } from "@/lib/db";
 import { canStartExecution } from "@/lib/adapters/process-manager";
+import { listAdapters } from "@/lib/adapters/registry";
+
+const bodySchema = z.object({
+  agent: z.string().optional(),
+  config: z.string().optional(),
+});
 
 export async function POST(
   request: NextRequest,
@@ -9,7 +16,11 @@ export async function POST(
   const { taskId } = await params;
 
   try {
-    const body = await request.json();
+    const parsed = bodySchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
+    const { agent, config } = parsed.data;
 
     const task = await db.task.findUnique({
       where: { id: taskId },
@@ -48,8 +59,8 @@ export async function POST(
     const execution = await db.taskExecution.create({
       data: {
         taskId,
-        agent: body.agent ?? "CLAUDE_CODE",
-        config: body.config ?? "DEFAULT",
+        agent: agent ?? "CLAUDE_CODE",
+        config: config ?? "DEFAULT",
         status: "RUNNING",
         startedAt: new Date(),
       },

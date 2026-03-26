@@ -17,12 +17,10 @@ export const projectTools = {
         orderBy: { updatedAt: "desc" },
       });
 
-      return projects.map((project) => ({
-        ...project,
-        taskCount: project.tasks.length,
-        repositoryCount: project.repositories.length,
-        tasks: undefined,
-        repositories: undefined,
+      return projects.map(({ tasks, repositories, ...rest }) => ({
+        ...rest,
+        taskCount: tasks.length,
+        repositoryCount: repositories.length,
       }));
     },
   },

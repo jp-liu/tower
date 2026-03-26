@@ -25,7 +25,7 @@ export const labelTools = {
     schema: z.object({
       workspaceId: z.string(),
       name: z.string(),
-      color: z.string(),
+      color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Color must be a hex color code like #ff0000"),
     }),
     handler: async (args: { workspaceId: string; name: string; color: string }) => {
       return db.label.create({
