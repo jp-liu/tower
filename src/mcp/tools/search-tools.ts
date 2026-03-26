@@ -1,0 +1,91 @@
+import { z } from "zod";
+import { db } from "../db";
+
+export const searchTools = {
+  search: {
+    description: "Search for tasks, projects, or repositories by a query string.",
+    schema: z.object({
+      query: z.string(),
+      category: z.enum(["task", "project", "repository"]).default("task").optional(),
+    }),
+    handler: async (args: { query: string; category?: "task" | "project" | "repository" }) => {
+      const category = args.category ?? "task";
+
+      if (!args.query.trim()) return [];
+      const q = args.query.trim();
+
+      if (category === "task") {
+        const tasks = await db.task.findMany({
+          where: {
+            OR: [
+              { title: { contains: q } },
+              { description: { contains: q } },
+            ],
+          },
+          include: {
+            project: {
+              include: { workspace: true },
+            },
+          },
+          take: 20,
+          orderBy: { updatedAt: "desc" },
+        });
+        return tasks.map((t) => ({
+          id: t.id,
+          type: "task" as const,
+          title: t.title,
+          subtitle: `${t.project.workspace.name} / ${t.project.name}`,
+          navigateTo: `/workspaces/${t.project.workspaceId}?projectId=${t.projectId}`,
+        }));
+      }
+
+      if (category === "project") {
+        const projects = await db.project.findMany({
+          where: {
+            OR: [
+              { name: { contains: q } },
+              { alias: { contains: q } },
+              { description: { contains: q } },
+            ],
+          },
+          include: { workspace: true },
+          take: 20,
+          orderBy: { updatedAt: "desc" },
+        });
+        return projects.map((p) => ({
+          id: p.id,
+          type: "project" as const,
+          title: p.alias ? `${p.name} (${p.alias})` : p.name,
+          subtitle: p.workspace.name,
+          navigateTo: `/workspaces/${p.workspaceId}?projectId=${p.id}`,
+        }));
+      }
+
+      if (category === "repository") {
+        const repos = await db.repository.findMany({
+          where: {
+            OR: [
+              { name: { contains: q } },
+              { path: { contains: q } },
+            ],
+          },
+          include: {
+            project: {
+              include: { workspace: true },
+            },
+          },
+          take: 20,
+        });
+        return repos.map((r) => ({
+          id: r.id,
+          type: "repository" as const,
+          title: r.name,
+          subtitle: `${r.project.workspace.name} / ${r.project.name} · ${r.branch}`,
+          navigateTo: `/workspaces/${r.project.workspaceId}?projectId=${r.projectId}`,
+        }));
+      }
+
+      return [];
+    },
+  },
+};
