@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { SettingsNav } from "@/components/settings/settings-nav";
 import { AIToolsConfig } from "@/components/settings/ai-tools-config";
+import { GeneralConfig } from "@/components/settings/general-config";
 import type { Prisma } from "@prisma/client";
 import {
   getAgentConfigs,
@@ -23,7 +24,7 @@ interface AgentConfig {
 
 export default function SettingsPage() {
   const router = useRouter();
-  const [activeSection, setActiveSection] = useState("ai-tools");
+  const [activeSection, setActiveSection] = useState("general");
   const [configs, setConfigs] = useState<AgentConfig[]>([]);
 
   useEffect(() => {
@@ -89,7 +90,7 @@ export default function SettingsPage() {
   }, [router]);
 
   return (
-    <div className="flex h-full bg-gray-50">
+    <div className="flex h-full bg-background">
       <SettingsNav
         activeSection={activeSection}
         onSectionChange={setActiveSection}
@@ -99,13 +100,15 @@ export default function SettingsPage() {
         {/* ESC close button */}
         <button
           onClick={handleClose}
-          className="absolute right-4 top-4 flex items-center gap-1.5 rounded-md border bg-white px-3 py-1.5 text-sm text-gray-600 shadow-sm hover:bg-gray-50"
+          className="absolute right-4 top-4 flex items-center gap-1.5 rounded-md border bg-card px-3 py-1.5 text-sm text-muted-foreground shadow-sm hover:bg-muted"
         >
           <X className="h-3.5 w-3.5" />
           ESC
         </button>
 
         <div className="mx-auto max-w-3xl">
+          {activeSection === "general" && <GeneralConfig />}
+
           {activeSection === "ai-tools" && (
             <AIToolsConfig
               configs={configs}
@@ -115,15 +118,9 @@ export default function SettingsPage() {
             />
           )}
 
-          {activeSection === "skills" && (
-            <div className="flex h-64 items-center justify-center text-gray-400">
-              <p>Skills 配置 -- 开发中</p>
-            </div>
-          )}
-
-          {activeSection === "plugins" && (
-            <div className="flex h-64 items-center justify-center text-gray-400">
-              <p>Plugins 配置 -- 开发中</p>
+          {activeSection === "prompts" && (
+            <div className="flex h-64 items-center justify-center text-muted-foreground">
+              <p>Prompts -- Coming in Phase 3</p>
             </div>
           )}
         </div>
