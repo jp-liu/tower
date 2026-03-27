@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: 项目知识库 & 智能 MCP
-status: executing
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-03-27T10:23:34.866Z"
+status: verifying
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-03-27T10:30:26.641Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 7
-  completed_plans: 6
+  completed_plans: 7
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-27)
 
 Phase: 07 (notes-assets-web-ui) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-03-27
 
 Progress: [░░░░░░░░░░] 0%
@@ -53,6 +53,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 05-mcp-knowledge-tools P02 | 240 | 2 tasks | 4 files |
 | Phase 06-file-serving-image-rendering P01 | 187 | 2 tasks | 5 files |
 | Phase 07-notes-assets-web-ui P01 | 22 | 3 tasks | 11 files |
+| Phase 07-notes-assets-web-ui P02 | 15 | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 06-file-serving-image-rendering]: localPathToApiUrl co-located in file-serve.ts; raw Response used for binary file serving
 - [Phase 07-notes-assets-web-ui]: Used textarea+ReactMarkdown fallback instead of @uiw/react-md-editor — React 19 compat concern validated; fallback is SSR-safe and reliable
 - [Phase 07-notes-assets-web-ui]: Notes page uses inline form (not dialog) for create/edit — allows full-height Markdown editor
+- [Phase 07-notes-assets-web-ui]: Fixed pre-existing bug: revalidatePath('/workspace') → revalidatePath('/workspaces') in createAsset and deleteAsset
+- [Phase 07-notes-assets-web-ui]: AssetItemType interface exported from asset-item.tsx and reused in asset-list.tsx — same pattern as NoteItem
 
 ### Pending Todos
 
@@ -87,6 +90,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-27T10:23:34.863Z
-Stopped at: Completed 07-01-PLAN.md
+Last session: 2026-03-27T10:30:26.637Z
+Stopped at: Completed 07-02-PLAN.md
 Resume file: None

@@ -83,7 +83,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 07-01-PLAN.md — i18n strings, sidebar navigation, Notes page with Markdown editor and category filter
-- [ ] 07-02-PLAN.md — Assets page with file list, image preview, upload, and download
+- [x] 07-02-PLAN.md — Assets page with file list, image preview, upload, and download
 
 ## Progress
 
