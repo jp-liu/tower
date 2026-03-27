@@ -23,7 +23,8 @@ const testDb = new PrismaClient({
 
 let testWorkspaceId: string;
 let testProjectId: string;
-let manageAssetsHandler: (args: Record<string, unknown>) => Promise<unknown>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let manageAssetsHandler: (args: any) => Promise<unknown>;
 
 beforeAll(async () => {
   await testDb.$connect();

@@ -12,7 +12,8 @@ let testWorkspaceId: string;
 let testProjectId: string;
 
 // Dynamically import handler after module exists
-let manageNotesHandler: (args: Record<string, unknown>) => Promise<unknown>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let manageNotesHandler: (args: any) => Promise<unknown>;
 
 beforeAll(async () => {
   await testDb.$connect();
