@@ -9,7 +9,6 @@ import { CreateTaskDialog } from "@/components/board/create-task-dialog";
 import { RepoSidebar } from "@/components/repository/repo-sidebar";
 import { TaskDetailPanel } from "@/components/task/task-detail-panel";
 import { createTask, updateTaskStatus, updateTask, deleteTask } from "@/actions/task-actions";
-import { sendTaskMessage } from "@/actions/agent-actions";
 import { ProjectTabs } from "@/components/board/project-tabs";
 import type { Task, TaskStatus, Priority } from "@prisma/client";
 
@@ -113,11 +112,6 @@ export function BoardPageClient({
     setShowCreateDialog(true);
   }, []);
 
-  const handleSendMessage = useCallback(async (taskId: string, message: string) => {
-    const result = await sendTaskMessage(taskId, message);
-    return result;
-  }, []);
-
   const handleEditTask = useCallback((task: Task) => {
     setEditingTask(task);
     setShowCreateDialog(true);
@@ -193,7 +187,6 @@ export function BoardPageClient({
         <TaskDetailPanel
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
-          onSendMessage={handleSendMessage}
         />
       ) : (
         <RepoSidebar project={project} workspaceId={workspaceId} />

@@ -1,17 +1,16 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { TaskMetadata } from "./task-metadata";
 import { TaskConversation, type Message } from "./task-conversation";
 import { TaskMessageInput } from "./task-message-input";
-import { getTaskMessages } from "@/actions/agent-actions";
+import { getTaskMessages, sendTaskMessage } from "@/actions/agent-actions";
 import { getPrompts } from "@/actions/prompt-actions";
 import type { Task } from "@prisma/client";
 
 interface TaskDetailPanelProps {
   task: Task;
   onClose: () => void;
-  onSendMessage: (taskId: string, message: string) => Promise<unknown>;
 }
 
 interface PromptOption {
@@ -24,13 +23,14 @@ interface PromptOption {
 export function TaskDetailPanel({
   task,
   onClose,
-  onSendMessage,
 }: TaskDetailPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [prompts, setPrompts] = useState<PromptOption[]>([]);
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
+  // Load existing messages
   useEffect(() => {
     let cancelled = false;
     getTaskMessages(task.id).then((serverMessages) => {
@@ -47,6 +47,7 @@ export function TaskDetailPanel({
     return () => { cancelled = true; };
   }, [task.id]);
 
+  // Load prompts
   useEffect(() => {
     let cancelled = false;
     getPrompts().then((data) => {
@@ -66,8 +67,14 @@ export function TaskDetailPanel({
     return () => { cancelled = true; };
   }, []);
 
+  // Cleanup abort on unmount
+  useEffect(() => {
+    return () => { abortRef.current?.abort(); };
+  }, []);
+
   const handleSend = useCallback(
     async (content: string) => {
+      // Show user message immediately
       const userMsg: Message = {
         id: `msg-${Date.now()}`,
         role: "user",
@@ -78,37 +85,101 @@ export function TaskDetailPanel({
       setIsLoading(true);
 
       try {
-        const result = await onSendMessage(task.id, content) as {
-          userMessage: { id: string };
-          assistantMessage: { id: string; content: string; createdAt: Date };
-        } | undefined;
+        // Save user message to DB
+        await sendTaskMessage(task.id, content);
 
-        if (result?.assistantMessage) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: result.assistantMessage.id,
-              role: "assistant" as const,
-              content: result.assistantMessage.content,
-              createdAt: new Date(result.assistantMessage.createdAt),
-            },
-          ]);
+        // Create a streaming assistant message placeholder
+        const assistantMsgId = `assistant-${Date.now()}`;
+        const assistantMsg: Message = {
+          id: assistantMsgId,
+          role: "assistant",
+          content: "",
+          createdAt: new Date(),
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+
+        // Call the SSE stream endpoint
+        const abortController = new AbortController();
+        abortRef.current = abortController;
+
+        const res = await fetch(`/api/tasks/${task.id}/stream`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: content }),
+          signal: abortController.signal,
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({ error: "Execution failed" }));
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMsgId
+                ? { ...m, role: "system" as const, content: errData.error || "执行失败" }
+                : m
+            )
+          );
+          return;
         }
-      } catch {
+
+        // Read SSE stream
+        const reader = res.body?.getReader();
+        if (!reader) return;
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const event = JSON.parse(line.slice(6));
+              if (event.type === "log") {
+                // Append streaming content to the assistant message
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantMsgId
+                      ? { ...m, content: m.content + event.content }
+                      : m
+                  )
+                );
+              } else if (event.type === "error") {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantMsgId
+                      ? { ...m, content: m.content || event.content }
+                      : m
+                  )
+                );
+              }
+            } catch {
+              // Skip malformed JSON lines
+            }
+          }
+        }
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
         setMessages((prev) => [
           ...prev,
           {
             id: `err-${Date.now()}`,
             role: "system" as const,
-            content: "发送失败，请重试",
+            content: "执行失败，请重试",
             createdAt: new Date(),
           },
         ]);
       } finally {
         setIsLoading(false);
+        abortRef.current = null;
       }
     },
-    [task.id, onSendMessage]
+    [task.id]
   );
 
   return (
