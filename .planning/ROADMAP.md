@@ -80,8 +80,10 @@ Plans:
   2. User can edit a note in a Markdown editor and the rendered output shows formatted text
   3. User can open an assets page for a project and see a list of uploaded asset files
   4. All new UI strings appear correctly in both Chinese and English
-**Plans**: TBD
-**UI hint**: yes
+**Plans**: 2 plans
+Plans:
+- [ ] 07-01-PLAN.md — i18n strings, sidebar navigation, Notes page with Markdown editor and category filter
+- [ ] 07-02-PLAN.md — Assets page with file list, image preview, upload, and download
 
 ## Progress
 
@@ -96,4 +98,4 @@ Phases execute in numeric order: 4 → 5 → 6 → 7
 | 4. Data Layer Foundation | v0.2 | 2/2 | Complete   | 2026-03-27 |
 | 5. MCP Knowledge Tools | v0.2 | 2/2 | Complete   | 2026-03-27 |
 | 6. File Serving & Image Rendering | v0.2 | 0/1 | Not started | - |
-| 7. Notes & Assets Web UI | v0.2 | 0/? | Not started | - |
+| 7. Notes & Assets Web UI | v0.2 | 0/2 | Not started | - |
