@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Theme + General Settings** - Fix dark mode CSS, install next-themes, add General settings panel with theme and language toggles (completed 2026-03-26)
 - [x] **Phase 2: CLI Adapter Verification** - Add live connection test button to AI Tools settings with per-check pass/fail results (completed 2026-03-26)
-- [ ] **Phase 3: Agent Prompt Management** - Full CRUD UI for AgentPrompt with default enforcement in settings
+- [x] **Phase 3: Agent Prompt Management** - Full CRUD UI for AgentPrompt with default enforcement in settings (completed 2026-03-27)
 
 ## Phase Details
 
@@ -61,8 +61,8 @@ Plans:
   5. User can mark a prompt as default and only one prompt shows the default indicator at a time
 **Plans**: 2/2 plans created
 Plans:
-- [ ] 03-01-PLAN.md — setDefaultPrompt server action + i18n keys + test scaffold
-- [ ] 03-02-PLAN.md — PromptsConfig component with CRUD UI + settings wiring + visual checkpoint
+- [x] 03-01-PLAN.md — setDefaultPrompt server action + i18n keys + test scaffold
+- [x] 03-02-PLAN.md — PromptsConfig component with CRUD UI + settings wiring + visual checkpoint
 **UI hint**: yes
 
 ## Progress
@@ -74,4 +74,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Theme + General Settings | 2/2 | Complete   | 2026-03-26 |
 | 2. CLI Adapter Verification | 2/2 | Complete   | 2026-03-26 |
-| 3. Agent Prompt Management | 0/2 | Planned    |  |
+| 3. Agent Prompt Management | 2/2 | Complete   | 2026-03-27 |
