@@ -31,6 +31,14 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - Task execution via Claude CLI with real-time SSE streaming
 - Markdown rendering for assistant responses
 
+**Phase 4 complete** (2026-03-27) — Data Layer Foundation
+- ProjectNote + ProjectAsset Prisma models with cascade delete
+- FTS5 full-text search (trigram tokenizer, Chinese/English)
+- Note CRUD server actions with Zod validation + FTS sync
+- Asset CRUD server actions with directory management
+- File-utils for data/assets/ and data/cache/ directories
+- busy_timeout pragma on both PrismaClient instances
+
 ## Requirements
 
 ### Validated
@@ -89,9 +97,10 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 | next-themes for theme switching | Avoids FOUC, handles system preference | ✓ Good |
 | stream-json + SSE for execution | Real-time CLI output with clean parsing | ✓ Good |
 | --dangerously-skip-permissions via env var | Enables autonomous execution while keeping security configurable | ✓ Good |
-| Notes in SQLite over local .md files | MCP can CRUD directly, supports search, ties to project lifecycle | — Pending |
-| data/ directory for assets & cache | Centralized file storage managed by ai-manager, not scattered across project paths | — Pending |
+| Notes in SQLite over local .md files | MCP can CRUD directly, supports search, ties to project lifecycle | ✓ Good — Phase 4 |
+| data/ directory for assets & cache | Centralized file storage managed by ai-manager, not scattered across project paths | ✓ Good — Phase 4 |
 | File transfer via mv (not base64/upload) | Local-only tool, file system is natural transfer channel | — Pending |
+| FTS5 with trigram tokenizer + LIKE fallback | Trigram handles Chinese/English 3+ char queries, LIKE covers short queries | ✓ Good — Phase 4 |
 
 ## Evolution
 
@@ -111,4 +120,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-27 after v0.2 milestone started*
+*Last updated: 2026-03-27 after Phase 4 (Data Layer Foundation) completed*
