@@ -5,6 +5,7 @@ import { Info, User, Bot } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { localPathToApiUrl } from "@/lib/file-serve";
 
 export interface Message {
   id: string;
@@ -90,7 +91,23 @@ function MessageBubble({ message }: { message: Message }) {
           prose-blockquote:border-border prose-blockquote:text-muted-foreground
           prose-table:text-sm prose-th:text-left
         ">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              img({ src, alt, ...props }) {
+                const resolvedSrc = src ? localPathToApiUrl(src) : "";
+                return (
+                  <img
+                    src={resolvedSrc}
+                    alt={alt ?? ""}
+                    className="max-w-full rounded-md my-2"
+                    loading="lazy"
+                    {...props}
+                  />
+                );
+              },
+            }}
+          >
             {message.content}
           </ReactMarkdown>
         </div>
