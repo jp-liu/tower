@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { SettingsNav } from "@/components/settings/settings-nav";
 import { AIToolsConfig } from "@/components/settings/ai-tools-config";
-import { CLIAdapterTester } from "@/components/settings/cli-adapter-tester";
 import { GeneralConfig } from "@/components/settings/general-config";
 import { PromptsConfig } from "@/components/settings/prompts-config";
 
@@ -37,15 +36,7 @@ export default function SettingsPage() {
         <div className="mx-auto max-w-3xl">
           {activeSection === "general" && <GeneralConfig />}
 
-          {activeSection === "ai-tools" && (
-            <div className="space-y-8">
-              <AIToolsConfig />
-              <CLIAdapterTester
-                adapterType="claude_local"
-                adapterLabel="Claude Code"
-              />
-            </div>
-          )}
+          {activeSection === "ai-tools" && <AIToolsConfig />}
 
           {activeSection === "prompts" && <PromptsConfig />}
         </div>
