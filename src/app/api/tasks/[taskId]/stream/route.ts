@@ -199,6 +199,49 @@ export async function POST(
         };
 
         let assistantContent = "";
+        let lineBuf = "";
+
+        // Parse stream-json lines and extract only meaningful content
+        function processStreamChunk(rawChunk: string) {
+          lineBuf += rawChunk;
+          const lines = lineBuf.split("\n");
+          lineBuf = lines.pop() ?? "";
+
+          for (const rawLine of lines) {
+            const line = rawLine.trim();
+            if (!line) continue;
+            let event: Record<string, unknown>;
+            try {
+              event = JSON.parse(line);
+            } catch {
+              continue;
+            }
+
+            const eventType = typeof event.type === "string" ? event.type : "";
+
+            // Extract assistant text content
+            if (eventType === "assistant") {
+              const message = event.message as Record<string, unknown> | undefined;
+              const content = Array.isArray(message?.content) ? message.content : [];
+              for (const block of content) {
+                if (typeof block === "object" && block !== null && !Array.isArray(block)) {
+                  const b = block as Record<string, unknown>;
+                  if (b.type === "text" && typeof b.text === "string" && b.text) {
+                    sendEvent({ type: "log", content: b.text });
+                  }
+                }
+              }
+            }
+
+            // Extract final result text
+            if (eventType === "result") {
+              const resultText = typeof event.result === "string" ? event.result : "";
+              if (resultText) {
+                sendEvent({ type: "result", content: resultText });
+              }
+            }
+          }
+        }
 
         try {
           const adapter = getAdapter(agent ?? "claude_local");
@@ -212,9 +255,11 @@ export async function POST(
             model,
             sessionId: resumeSessionId,
             instructionsFile,
-            onLog: async (stream, chunk) => {
+            onLog: async (logStream, chunk) => {
               assistantContent += chunk;
-              sendEvent({ type: "log", stream, content: chunk });
+              if (logStream === "stdout") {
+                processStreamChunk(chunk);
+              }
             },
           });
 
