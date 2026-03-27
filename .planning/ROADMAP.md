@@ -69,7 +69,7 @@ Plans:
   3. An image path stored in a task message renders as an inline image in the task conversation view
 **Plans**: 1 plan
 Plans:
-- [ ] 06-01-PLAN.md — File serving route with path traversal guard, image rendering in task conversation
+- [x] 06-01-PLAN.md — File serving route with path traversal guard, image rendering in task conversation
 
 ### Phase 7: Notes & Assets Web UI
 **Goal**: Users can manage project notes and browse project assets through the web interface

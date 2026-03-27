@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: 项目知识库 & 智能 MCP
 status: verifying
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-03-27T08:37:12.407Z"
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-03-27T09:43:53.037Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
+  completed_phases: 3
+  total_plans: 5
+  completed_plans: 5
   percent: 0
 ---
 
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-27)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration.
-**Current focus:** Phase 05 — mcp-knowledge-tools
+**Current focus:** Phase 06 — file-serving-image-rendering
 
 ## Current Position
 
-Phase: 6
-Plan: Not started
+Phase: 06 (file-serving-image-rendering) — EXECUTING
+Plan: 1 of 1
 Status: Phase complete — ready for verification
 Last activity: 2026-03-27
 
@@ -51,6 +51,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04-data-layer-foundation P02 | 3 | 2 tasks | 6 files |
 | Phase 05-mcp-knowledge-tools P01 | 101 | 1 tasks | 2 files |
 | Phase 05-mcp-knowledge-tools P02 | 240 | 2 tasks | 4 files |
+| Phase 06-file-serving-image-rendering P01 | 187 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 05-mcp-knowledge-tools]: JS-side scoring used instead of DB-level filtering — SQLite lacks mode:insensitive support
 - [Phase 05-mcp-knowledge-tools]: manage_notes and manage_assets use action-dispatch pattern to keep total tool count manageable
 - [Phase 05-mcp-knowledge-tools]: EXDEV fallback uses copy+unlink for cross-device file moves in manage_assets
+- [Phase 06-file-serving-image-rendering]: Used path.resolve + startsWith(DATA_ROOT + path.sep) guard for traversal prevention in file-serve.ts
+- [Phase 06-file-serving-image-rendering]: localPathToApiUrl co-located in file-serve.ts; raw Response used for binary file serving
 
 ### Pending Todos
 
@@ -81,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-27T08:33:16.453Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-03-27T09:43:53.033Z
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None
