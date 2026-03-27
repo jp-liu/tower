@@ -5,12 +5,20 @@ import { TaskMetadata } from "./task-metadata";
 import { TaskConversation, type Message } from "./task-conversation";
 import { TaskMessageInput } from "./task-message-input";
 import { getTaskMessages } from "@/actions/agent-actions";
+import { getPrompts } from "@/actions/prompt-actions";
 import type { Task } from "@prisma/client";
 
 interface TaskDetailPanelProps {
   task: Task;
   onClose: () => void;
   onSendMessage: (taskId: string, message: string) => Promise<unknown>;
+}
+
+interface PromptOption {
+  id: string;
+  name: string;
+  content: string;
+  isDefault: boolean;
 }
 
 export function TaskDetailPanel({
@@ -20,6 +28,8 @@ export function TaskDetailPanel({
 }: TaskDetailPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [prompts, setPrompts] = useState<PromptOption[]>([]);
+  const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,6 +46,25 @@ export function TaskDetailPanel({
     });
     return () => { cancelled = true; };
   }, [task.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getPrompts().then((data) => {
+      if (cancelled) return;
+      const mapped: PromptOption[] = data.map((p) => ({
+        id: p.id,
+        name: p.name,
+        content: p.content,
+        isDefault: p.isDefault,
+      }));
+      setPrompts(mapped);
+      const defaultPrompt = mapped.find((p) => p.isDefault);
+      if (defaultPrompt) {
+        setSelectedPromptId(defaultPrompt.id);
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSend = useCallback(
     async (content: string) => {
@@ -99,6 +128,9 @@ export function TaskDetailPanel({
       <TaskMessageInput
         onSend={handleSend}
         isLoading={isLoading}
+        prompts={prompts}
+        selectedPromptId={selectedPromptId}
+        onPromptChange={setSelectedPromptId}
       />
     </div>
   );
