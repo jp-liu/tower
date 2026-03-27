@@ -18,13 +18,13 @@ Requirements for v0.2 — 项目知识库 & 智能 MCP. Each maps to roadmap pha
 - [x] **NOTE-01**: 用户可为项目创建、查看、编辑、删除 Markdown 笔记
 - [x] **NOTE-02**: 笔记支持预设分类（账号/环境/需求/备忘）和自定义分类
 - [x] **NOTE-03**: 用户可通过 FTS5 全文搜索笔记内容（支持中英文）
-- [ ] **NOTE-04**: MCP 提供 `manage_notes` action-dispatch 工具操作笔记
+- [x] **NOTE-04**: MCP 提供 `manage_notes` action-dispatch 工具操作笔记
 
 ### 资源管理
 
 - [x] **ASST-01**: 用户可上传文件作为项目级持久化资源（存储在 `data/assets/{projectId}/`）
 - [x] **ASST-02**: 任务级临时文件存储在 `data/cache/{taskId}/`，支持手动清理
-- [ ] **ASST-03**: MCP 提供资源上传工具，通过 mv 将外部文件移入管理目录
+- [x] **ASST-03**: MCP 提供资源上传工具，通过 mv 将外部文件移入管理目录
 - [ ] **ASST-04**: Next.js API Route 安全地提供文件访问（防路径穿越）
 
 ### Web 界面
@@ -69,10 +69,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NOTE-01 | Phase 4 | Complete |
 | NOTE-02 | Phase 4 | Complete |
 | NOTE-03 | Phase 4 | Complete |
-| NOTE-04 | Phase 5 | Pending |
+| NOTE-04 | Phase 5 | Complete |
 | ASST-01 | Phase 4 | Complete |
 | ASST-02 | Phase 4 | Complete |
-| ASST-03 | Phase 5 | Pending |
+| ASST-03 | Phase 5 | Complete |
 | ASST-04 | Phase 6 | Pending |
 | UI-01 | Phase 7 | Pending |
 | UI-02 | Phase 7 | Pending |

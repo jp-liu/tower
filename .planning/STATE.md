@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: 项目知识库 & 智能 MCP
-status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-03-27T08:27:12.314Z"
+status: verifying
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-03-27T08:33:16.456Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-27)
 
 Phase: 05 (mcp-knowledge-tools) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-03-27
 
 Progress: [░░░░░░░░░░] 0%
@@ -50,6 +50,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04-data-layer-foundation P01 | 10 | 2 tasks | 9 files |
 | Phase 04-data-layer-foundation P02 | 3 | 2 tasks | 6 files |
 | Phase 05-mcp-knowledge-tools P01 | 101 | 1 tasks | 2 files |
+| Phase 05-mcp-knowledge-tools P02 | 240 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 04-data-layer-foundation]: FTS5 sync uses delete-then-insert pattern since FTS5 does not support UPDATE — avoids duplicate rows on note updates
 - [Phase 05-mcp-knowledge-tools]: scoreProject exported as named export for direct unit testing without DB calls
 - [Phase 05-mcp-knowledge-tools]: JS-side scoring used instead of DB-level filtering — SQLite lacks mode:insensitive support
+- [Phase 05-mcp-knowledge-tools]: manage_notes and manage_assets use action-dispatch pattern to keep total tool count manageable
+- [Phase 05-mcp-knowledge-tools]: EXDEV fallback uses copy+unlink for cross-device file moves in manage_assets
 
 ### Pending Todos
 
@@ -78,6 +81,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-27T08:27:12.309Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-03-27T08:33:16.453Z
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None
