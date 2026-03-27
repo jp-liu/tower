@@ -53,6 +53,13 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - localPathToApiUrl transforms data/assets/ paths to API URLs
 - 21 tests passing (14 file-serving + 7 path-transform)
 
+**Phase 7 complete** (2026-03-27) — Notes & Assets Web UI
+- Notes page at /workspaces/[workspaceId]/notes with category filter and Markdown editor
+- Assets page at /workspaces/[workspaceId]/assets with upload, preview, delete
+- 46 i18n keys (zh/en) for notes and assets
+- Sidebar navigation links for Notes and Assets
+- 24 component unit tests passing
+
 ## Requirements
 
 ### Validated
@@ -134,4 +141,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-27 after Phase 6 (File Serving & Image Rendering) completed*
+*Last updated: 2026-03-27 after Phase 7 (Notes & Assets Web UI) completed — v0.2 milestone complete*
