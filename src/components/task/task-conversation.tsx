@@ -94,15 +94,14 @@ function MessageBubble({ message }: { message: Message }) {
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
-              img({ src, alt, ...props }) {
-                const resolvedSrc = src ? localPathToApiUrl(src) : "";
+              img({ src, alt }) {
+                const resolvedSrc = typeof src === "string" ? localPathToApiUrl(src) : "";
                 return (
                   <img
                     src={resolvedSrc}
                     alt={alt ?? ""}
                     className="max-w-full rounded-md my-2"
                     loading="lazy"
-                    {...props}
                   />
                 );
               },

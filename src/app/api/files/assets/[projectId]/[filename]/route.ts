@@ -27,7 +27,7 @@ export async function GET(
   const ext = path.extname(filename).toLowerCase();
   const contentType = MIME_MAP[ext] ?? "application/octet-stream";
 
-  return new Response(bytes, {
+  return new Response(new Uint8Array(bytes), {
     status: 200,
     headers: { "Content-Type": contentType },
   });
