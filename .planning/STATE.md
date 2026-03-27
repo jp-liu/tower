@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.1
-milestone_name: milestone
-status: executing
-stopped_at: Completed 03-02-PLAN.md — awaiting human-verify checkpoint
-last_updated: "2026-03-27T05:06:00.319Z"
+milestone: v0.2
+milestone_name: 项目知识库 & 智能 MCP
+status: defining-requirements
+stopped_at: null
+last_updated: "2026-03-27T13:00:00.000Z"
 last_activity: 2026-03-27
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
   percent: 0
 ---
 
@@ -18,17 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-26)
+See: .planning/PROJECT.md (updated 2026-03-27)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration.
-**Current focus:** Phase 02 — cli-adapter-verification
+**Current focus:** Defining requirements for v0.2 — 项目知识库 & 智能 MCP
 
 ## Current Position
 
-Phase: 3
-Plan: Not started
-Status: Executing Phase 02
-Last activity: 2026-03-27
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-27 — Milestone v0.2 started
 
 Progress: [░░░░░░░░░░] 0%
 

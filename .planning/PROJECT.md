@@ -8,6 +8,18 @@ An AI task management platform with a Kanban board UI for managing workspaces, p
 
 Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration.
 
+## Current Milestone: v0.2 项目知识库 & 智能 MCP
+
+**Goal:** 让 AI 助手通过 MCP 智能识别项目、管理项目知识库（笔记/资源/账号），成为个人多项目信息中枢
+
+**Target features:**
+- 智能项目识别（名称、别名、描述模糊匹配）
+- 项目笔记系统（Markdown 笔记存 SQLite，预设分类 + 自定义分类，全文搜索）
+- 项目资源管理（`data/assets/{projectId}/` 持久化 + `data/cache/{taskId}/` 手动清理）
+- MCP 知识库工具集（笔记 CRUD、资源上传 mv、搜索增强）
+- 任务消息支持图片附件（MCP 传入路径，mv 到 cache）
+- Web 界面：笔记管理、资源查看
+
 ## Current State
 
 **Shipped:** v0.1 Settings (2026-03-27)
@@ -40,7 +52,7 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 ### Active
 
-(Defined in next milestone)
+(Defined in REQUIREMENTS.md for v0.2)
 
 ### Out of Scope
 
@@ -77,6 +89,26 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 | next-themes for theme switching | Avoids FOUC, handles system preference | ✓ Good |
 | stream-json + SSE for execution | Real-time CLI output with clean parsing | ✓ Good |
 | --dangerously-skip-permissions via env var | Enables autonomous execution while keeping security configurable | ✓ Good |
+| Notes in SQLite over local .md files | MCP can CRUD directly, supports search, ties to project lifecycle | — Pending |
+| data/ directory for assets & cache | Centralized file storage managed by ai-manager, not scattered across project paths | — Pending |
+| File transfer via mv (not base64/upload) | Local-only tool, file system is natural transfer channel | — Pending |
+
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd:transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
 
 ---
-*Last updated: 2026-03-27 after v0.1 milestone*
+*Last updated: 2026-03-27 after v0.2 milestone started*
