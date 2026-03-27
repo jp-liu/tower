@@ -52,3 +52,24 @@ export async function deletePrompt(id: string) {
   revalidatePath("/workspaces");
   revalidatePath("/settings");
 }
+
+export async function setDefaultPrompt(promptId: string, workspaceId?: string) {
+  return db.$transaction(async (tx) => {
+    // Clear all existing defaults in scope
+    const whereClause = workspaceId
+      ? { workspaceId, isDefault: true }
+      : { isDefault: true };
+    await tx.agentPrompt.updateMany({
+      where: whereClause,
+      data: { isDefault: false },
+    });
+    // Set new default
+    const prompt = await tx.agentPrompt.update({
+      where: { id: promptId },
+      data: { isDefault: true },
+    });
+    revalidatePath("/workspaces");
+    revalidatePath("/settings");
+    return prompt;
+  });
+}
