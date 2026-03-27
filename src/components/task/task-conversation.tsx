@@ -3,6 +3,8 @@
 import { useEffect, useRef } from "react";
 import { Info, User, Bot } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export interface Message {
   id: string;
@@ -71,14 +73,27 @@ function MessageBubble({ message }: { message: Message }) {
     );
   }
 
-  // assistant
+  // assistant — render markdown
   return (
     <div className="flex items-start gap-3">
       <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-amber-500/15 ring-1 ring-amber-500/25">
         <Bot className="h-3.5 w-3.5 text-amber-400" />
       </div>
       <div className="flex-1 min-w-0 rounded-lg border border-border bg-card p-3">
-        <p className="text-sm text-foreground/90 whitespace-pre-wrap break-words">{message.content}</p>
+        <div className="prose prose-sm dark:prose-invert max-w-none break-words
+          prose-p:my-1 prose-p:leading-relaxed
+          prose-headings:my-2 prose-headings:font-semibold
+          prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5
+          prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:before:content-none prose-code:after:content-none
+          prose-pre:my-2 prose-pre:rounded-lg prose-pre:bg-muted prose-pre:p-3
+          prose-a:text-blue-500 prose-a:no-underline hover:prose-a:underline
+          prose-blockquote:border-border prose-blockquote:text-muted-foreground
+          prose-table:text-sm prose-th:text-left
+        ">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {message.content}
+          </ReactMarkdown>
+        </div>
       </div>
     </div>
   );
