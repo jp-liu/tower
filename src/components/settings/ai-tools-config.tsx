@@ -28,7 +28,8 @@ export function AIToolsConfig() {
     }
   }, []);
 
-  const handleAdapterChange = (value: string) => {
+  const handleAdapterChange = (value: string | null) => {
+    if (!value) return;
     setDefaultAdapter(value);
     localStorage.setItem(DEFAULT_CLI_ADAPTER_KEY, value);
   };
