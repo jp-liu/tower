@@ -1,168 +1,323 @@
 # Pitfalls Research
 
-**Domain:** Settings functionality for Next.js 16 AI task manager (theme switching, CLI testing, prompt management)
-**Researched:** 2026-03-26
-**Confidence:** HIGH (core pitfalls verified against official docs and multiple community sources)
+**Domain:** Knowledge base, notes, file management, and expanded MCP tools added to existing Next.js 16 + SQLite + Prisma system
+**Researched:** 2026-03-27
+**Confidence:** HIGH (pitfalls derived from codebase inspection, Prisma issue tracker, official SQLite docs, MCP spec, and multiple community sources)
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Theme Flash on First Load (FOUC)
+### Pitfall 1: FTS5 Shadow Tables Break Prisma db push
 
 **What goes wrong:**
-The page renders in the default (dark) theme server-side, then after hydration JavaScript reads `localStorage` and switches to the stored theme. Users see a visible flash of the wrong theme before the correct one applies. This is especially visible when users choose "light" mode.
+SQLite FTS5 virtual tables automatically create internal "shadow tables" (e.g., `notes_fts_data`, `notes_fts_idx`, `notes_fts_content`, `notes_fts_docsize`, `notes_fts_config`). Prisma's `db push` sees these shadow tables as schema drift — tables it didn't create and doesn't know about. The result is either a prompt to reset the database (destroying all data) or a migration failure that leaves the schema half-applied.
 
 **Why it happens:**
-The server has no access to `localStorage`. It always renders using the CSS `:root` defaults. The client then reads the stored preference and applies it — but only after hydration, which is too late to avoid the flash. The current codebase uses the same `localStorage` pattern for i18n (`src/lib/i18n.tsx` line 367), establishing a precedent for this anti-pattern.
+Prisma tracks schema state by comparing its model definitions against the actual database. FTS5 shadow tables are SQLite internals with no Prisma model equivalents. As of Prisma 6.x, this is a confirmed open issue ([#8106](https://github.com/prisma/prisma/issues/8106)). The FTS5 virtual table itself is skipped, but its shadow tables are not, causing drift detection to fire.
 
 **How to avoid:**
-Use `next-themes` library which injects an inline `<script>` in `<head>` that runs synchronously before React hydrates — it reads `localStorage` and sets the `class` or `data-theme` attribute on `<html>` before any paint occurs. This is the only reliable way to avoid FOUC with class-based dark mode in Next.js.
-
-Critical integration requirement: the existing `globals.css` already defines `@custom-variant dark (&:is(.dark *))` — this matches the `next-themes` default `class` attribute strategy. The `ThemeProvider` must be configured with `attribute="class"` to match this.
-
-Also add `suppressHydrationWarning` to `<html>` in `src/app/layout.tsx` because `next-themes` modifies the `class` attribute after SSR, which would otherwise produce a React hydration warning.
-
-**Warning signs:**
-- Visible white or light flash before page settles on dark theme
-- React console warning: "Hydration failed because the initial UI does not match what was rendered on the server"
-- `dark:` Tailwind utilities not applying on first load
-
-**Phase to address:**
-Phase 1 (General Settings / Theme Switching). Must be solved in the same commit as the `ThemeProvider` is added.
-
----
-
-### Pitfall 2: Theme and i18n State Duplication (Two Competing Persistence Systems)
-
-**What goes wrong:**
-The existing i18n system (`src/lib/i18n.tsx`) uses `localStorage` via React Context with `useState`. If theme is also added to a Zustand store with `persist` middleware (or another React Context), there will be two separate client-side persistence systems that can conflict — especially on first mount where both try to hydrate simultaneously. Worse, if a Zustand persisted store is introduced, it causes a known hydration mismatch error because Zustand's `persist` middleware reads `localStorage` during render (before mount), conflicting with SSR.
-
-**Why it happens:**
-Zustand's `persist` middleware with `localStorage` is not SSR-safe. On the server, Zustand initializes with default state. On the client, after hydration, it loads from `localStorage`. React detects the mismatch and throws. This is a well-documented issue (pmndrs/zustand discussion #1382, #1377).
-
-**How to avoid:**
-Use `next-themes` for theme persistence exclusively — do not add theme state to Zustand or React Context. `next-themes` handles `localStorage` without causing hydration errors through its inline script injection. The `useTheme()` hook must only be called in client components, and theme-dependent UI must check `mounted` state before rendering to avoid mismatches.
+Do NOT create FTS5 indexes via `prisma db push` schema changes. Instead:
+1. Create the FTS5 virtual table using a raw SQL seed/migration script run once at startup
+2. Use `db.$executeRaw` in a setup function called during database initialization
+3. The `initDb()` function in `src/mcp/db.ts` already sets `PRAGMA journal_mode=WAL` — add FTS5 setup there
+4. For the Next.js side, run FTS5 setup in a startup module (not per-request)
 
 ```typescript
-// CORRECT: Delay theme UI until mounted
-const [mounted, setMounted] = useState(false);
-useEffect(() => setMounted(true), []);
-if (!mounted) return null; // or return a skeleton
+// Add to initDb() or a dedicated setupFts() call
+await db.$executeRaw`
+  CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts
+  USING fts5(title, content, content='Note', content_rowid='id')
+`;
+// Keep FTS in sync with triggers on INSERT/UPDATE/DELETE
+await db.$executeRaw`
+  CREATE TRIGGER IF NOT EXISTS notes_fts_insert
+  AFTER INSERT ON "Note" BEGIN
+    INSERT INTO notes_fts(rowid, title, content) VALUES (new.id, new.title, new.content);
+  END
+`;
 ```
 
 **Warning signs:**
-- "Hydration failed" errors after adding a Zustand persist store
-- Theme toggle shows wrong value on initial render
-- Settings page shows "dark" when system/light is selected
+- `prisma db push` shows "The following changes will be made to the database" with unexpected table drops
+- `prisma db push` prompts "We need to reset the database" — STOP immediately
+- After a `db push`, notes become unsearchable (FTS table was dropped)
 
 **Phase to address:**
-Phase 1 (General Settings). Establish the single source of truth for theme persistence before building UI.
+Phase 1 (Note CRUD + Schema). Set up FTS5 outside Prisma schema before building any search feature.
 
 ---
 
-### Pitfall 3: Tailwind v4 `@custom-variant` Mismatch with next-themes Output
+### Pitfall 2: Two Separate PrismaClient Instances Writing to the Same SQLite File
 
 **What goes wrong:**
-The existing `globals.css` defines `@custom-variant dark (&:is(.dark *))`. If `next-themes` is configured with `attribute="data-theme"` instead of `attribute="class"`, the dark variant will never activate — all `dark:` utilities will be silently ignored. No errors are thrown. The theme appears to "work" (toggle fires, localStorage updates) but dark styles never apply.
+The Next.js app (`src/lib/db.ts`) and the MCP server (`src/mcp/db.ts`) are separate processes that each instantiate a `PrismaClient` pointing at the same `prisma/dev.db` file. When both are active simultaneously — which is the normal operating mode — concurrent writes can trigger `SQLITE_BUSY` / "database is locked" errors. This is especially likely when MCP tools perform note/asset writes at the same time as the web UI saves notes.
 
 **Why it happens:**
-Tailwind v4 removed `darkMode: "class"` from `tailwind.config.js` (which no longer exists). Dark mode is now defined entirely by the `@custom-variant` selector in CSS. The selector `(&:is(.dark *))` matches elements inside a `.dark` class on a parent — it does NOT match `[data-theme="dark"]`. The two are mutually exclusive.
+SQLite WAL mode allows one writer at a time. When two processes try to write simultaneously, the second one blocks and eventually times out if the first holds the lock too long. The MCP process already sets `PRAGMA journal_mode=WAL` (in `initDb()`), but the Next.js process does not. Without WAL mode on both sides, even short concurrent writes contend on a journal lock. Additionally, there is no `busy_timeout` set on either connection, so lock contention fails immediately instead of retrying.
 
 **How to avoid:**
-Ensure the `@custom-variant` selector in `globals.css` exactly matches `next-themes`' output. The existing codebase uses `(&:is(.dark *))`, so `next-themes` must be configured with `attribute="class"` (the default). Do NOT change the `@custom-variant` selector unless you change both simultaneously.
-
-Current `globals.css` line 5: `@custom-variant dark (&:is(.dark *));` — this is correct for class-based dark mode. Keep it.
+1. Ensure both `src/lib/db.ts` and `src/mcp/db.ts` set `PRAGMA journal_mode=WAL` and `PRAGMA busy_timeout=5000` on connection open
+2. Add to `src/lib/db.ts` startup:
+```typescript
+// After creating PrismaClient
+await db.$executeRawUnsafe('PRAGMA journal_mode=WAL');
+await db.$executeRawUnsafe('PRAGMA busy_timeout=5000');
+```
+3. Keep write transactions short — avoid holding open transactions while waiting for user input
+4. For file move operations (mv), complete the database record update in a single fast transaction; don't interleave filesystem I/O inside a transaction
 
 **Warning signs:**
-- `dark:` Tailwind utilities compile but never apply at runtime
-- DevTools shows the `.dark` class is NOT being set on `<html>`
-- OR DevTools shows `.dark` class is set but styles don't activate
+- Intermittent 500 errors from server actions when MCP is active
+- `PrismaClientKnownRequestError` with code `P1001` or SQLite error code `SQLITE_BUSY`
+- Note saves fail only when Claude Code agent is actively running tasks
 
 **Phase to address:**
-Phase 1 (General Settings). Verify with a simple `dark:bg-white` test immediately after setup.
+Phase 1 (Schema + Database Setup). Add WAL/timeout pragmas to both DB clients before any concurrent write path is built.
 
 ---
 
-### Pitfall 4: CLI Test Blocking the Next.js Event Loop
+### Pitfall 3: fs.rename() Fails Across Filesystem Boundaries (EXDEV Error)
 
 **What goes wrong:**
-`testEnvironment()` in `src/lib/adapters/claude-local/test.ts` spawns a child process with a 45-second timeout. When this is called from an API route (`/api/adapters/test`), it ties up a Node.js thread for up to 45 seconds. If the Settings page triggers this test on mount or repeatedly, it can block other requests and make the entire app unresponsive.
+The v0.2 design uses `mv` (file rename/move) to transfer files from a source path (e.g., `/tmp/...` or the AI agent's working directory) into `data/assets/{projectId}/` or `data/cache/{taskId}/`. On macOS with Docker volumes, or when `/tmp` and the project directory are on different filesystems or APFS volumes, `fs.rename()` throws `EXDEV: cross-device link not permitted`. The app crashes or returns an error; the file is not moved and no cleanup occurs.
 
 **Why it happens:**
-The existing `runChildProcess` in `src/lib/adapters/process-utils.ts` is async (uses `spawn`, not `execSync`), so it is non-blocking at the Node.js level. However, the API route handler awaits it synchronously — if the client sends multiple requests (e.g., user clicks "Test" multiple times), multiple 45-second Claude probe processes pile up. The `MAX_CONCURRENT = 3` limit in `process-manager.ts` only applies to task executions, not to test probes.
+`fs.rename()` calls the OS `rename(2)` syscall, which only works within the same filesystem. It cannot atomically move across device/filesystem boundaries. This is a Node.js fundamental constraint, not a bug. AI agents often write output to `/tmp` or their working directory, which may be on a different volume than `data/`.
 
 **How to avoid:**
-- Add a loading/disabled state to the "Test CLI" button immediately on click — prevent repeat requests while a test is in-progress.
-- Add server-side deduplication: reject a second `/api/adapters/test` request if one is already running for the same adapter type (in-memory flag is sufficient since this is a single-user app).
-- Display a clear timeout indicator (e.g., "Testing... up to 45s").
-- Consider reducing the probe timeout from 45 seconds to something shorter (10-15s) since this is a connectivity test, not a production run.
-
-**Warning signs:**
-- UI "hangs" with no response for >10 seconds after clicking "Test"
-- Multiple simultaneous Claude processes visible in Activity Monitor
-- API route response never resolves (client-side fetch times out first)
-
-**Phase to address:**
-Phase 2 (AI Tools / CLI Environment Testing). Must add UI debouncing and server-side guard before shipping this feature.
-
----
-
-### Pitfall 5: Schema Migration Breaks Existing Data (AgentPrompt.promptId Relationship)
-
-**What goes wrong:**
-The `Task` model already has a `promptId String?` field (schema line 72) but no `@relation` directive linking it to `AgentPrompt`. If `promptId` is wired up as a proper foreign key via `prisma db push`, SQLite may drop and recreate the column, silently losing all existing task data that has `promptId` values — or it may fail if existing data violates the new constraint.
-
-**Why it happens:**
-The project uses `prisma db push` instead of `prisma migrate`. As documented by Prisma, `db push` will prompt for a reset (or silently fail) when schema changes cause conflicts with existing data. Column renames, adding non-nullable fields, and adding foreign key constraints on existing nullable columns are all destructive operations that `db push` handles poorly. There is no migration history to roll back to.
-
-**How to avoid:**
-Before wiring `promptId` as a `@relation`, verify the current state: run `prisma db push --preview-feature` in dry-run first. Since `promptId` is already `String?` (nullable), adding a `@relation` should be safe as long as existing `promptId` values match real `AgentPrompt.id` values. Add a data cleanup step: set `promptId = null` on any tasks that reference non-existent prompts before running the migration.
-
-Do NOT add `required` (non-nullable) fields to `Task` without providing default values.
-
-**Warning signs:**
-- `prisma db push` prompts "This will reset the database" — STOP and investigate before proceeding
-- Error: "Foreign key constraint failed" after push
-- Tasks disappear from the Kanban board after a schema push
-
-**Phase to address:**
-Phase 3 (Agent Prompt Management, specifically when connecting promptId to Task creation). Run a schema check at the start of this phase.
-
----
-
-### Pitfall 6: Prompt CRUD Missing "isDefault" Consistency Enforcement
-
-**What goes wrong:**
-`AgentPrompt` has an `isDefault Boolean` field. If multiple prompts have `isDefault: true`, the system has no defined behavior for which prompt gets applied to a new task. The existing `updatePrompt` server action does not enforce single-default invariant — it lets any number of prompts be set as default simultaneously. This creates silent corruption that only manifests at task execution time.
-
-**Why it happens:**
-The existing `AgentConfig` model has the same pattern (`isDefault Boolean`) and the current settings page already handles it at the UI layer (`handleSave` in `settings/page.tsx`). But there is no database-level constraint, and the server action doesn't enforce uniqueness. The `AgentPrompt` model will inherit this same gap.
-
-**How to avoid:**
-When setting a prompt as default, wrap the operation in a transaction that first clears all other `isDefault: true` records in the same workspace scope, then sets the target record. Use `db.$transaction()` — the same pattern the MCP tools use for label replacement.
+Never use `fs.rename()` directly for user-initiated file moves. Use a helper that:
+1. Attempts `fs.rename()` first (fast path, same-filesystem)
+2. On `EXDEV` error, falls back to `fs.copyFile()` followed by `fs.unlink()` (copy-then-delete)
 
 ```typescript
-// CORRECT
-await db.$transaction([
-  db.agentPrompt.updateMany({
-    where: { workspaceId, isDefault: true },
-    data: { isDefault: false },
-  }),
-  db.agentPrompt.update({
-    where: { id },
-    data: { isDefault: true },
-  }),
-]);
+import { rename, copyFile, unlink } from 'fs/promises';
+
+async function moveFile(src: string, dest: string): Promise<void> {
+  try {
+    await rename(src, dest);
+  } catch (err: any) {
+    if (err.code === 'EXDEV') {
+      await copyFile(src, dest);
+      await unlink(src);
+    } else {
+      throw err;
+    }
+  }
+}
+```
+
+This pattern is identical to how `npm`, `pnpm`, and other tools handle cross-device moves.
+
+**Warning signs:**
+- `Error: EXDEV: cross-device link not permitted, rename` in server logs
+- File moves work in local development but fail in certain environments (Docker, network mounts)
+- Attachment links in messages are broken even though the file exists at the source
+
+**Phase to address:**
+Phase 3 (File Management / Asset Storage). Implement the `moveFile` utility before the first MCP tool that performs file moves.
+
+---
+
+### Pitfall 4: Unvalidated File Paths Allow Directory Traversal
+
+**What goes wrong:**
+MCP tools and server actions that accept a `sourcePath` parameter for `mv` operations can be exploited to read or overwrite arbitrary files if the path is not validated. Even in a localhost-only single-user tool, a misbehaving or compromised AI agent could pass a path like `../../prisma/dev.db` or `../../.env` as the source, causing the move operation to expose or destroy sensitive files.
+
+**Why it happens:**
+`mv` operations require accepting an external file path as input. Without validation, any path is accepted. The MCP server already runs as a separate process with full filesystem access. An AI agent's tool call is untrusted input — it could produce any path string.
+
+**How to avoid:**
+For destination paths: always construct them from trusted components (projectId + filename), never from raw user/agent input.
+
+For source paths (the file being moved in): validate that the path is under an allowed source root. Since the use case is "AI agent writes a file to its working directory, then hands path to ai-manager," the source should be restricted to known project `localPath` values or explicitly whitelisted directories.
+
+```typescript
+import path from 'path';
+
+function validateSourcePath(src: string, allowedRoot: string): string {
+  const resolved = path.resolve(src);
+  const root = path.resolve(allowedRoot);
+  if (!resolved.startsWith(root + path.sep) && resolved !== root) {
+    throw new Error(`Source path outside allowed root: ${src}`);
+  }
+  return resolved;
+}
+```
+
+Additionally, sanitize filenames before writing to `data/assets/` — reject names containing `..`, `/`, or null bytes.
+
+**Warning signs:**
+- MCP tool accepts arbitrary path strings with no validation
+- `data/` directory contains files named with `..` segments
+- `fs.stat()` on a "source" path resolves to a sensitive file (DB, .env, private key)
+
+**Phase to address:**
+Phase 3 (File Management). Implement path validation utility before the first file-accepting MCP tool.
+
+---
+
+### Pitfall 5: MCP Tool Proliferation Degrades AI Agent Performance
+
+**What goes wrong:**
+The existing MCP server exposes 18 tools. v0.2 adds approximately 8-10 more (note CRUD, asset management, enhanced search, fuzzy project resolution). At ~28 tools, each tool definition consuming 400-500 tokens means the tool list alone consumes 11,000-14,000 tokens of context before any conversation begins. Tool calling accuracy declines measurably at this scale. Some MCP clients (e.g., Cursor) have a hard limit of 40 tools total across all servers.
+
+**Why it happens:**
+Every MCP tool is serialized into the system context for every request. Unlike a REST API where endpoints don't consume context, MCP tools pay a per-tool context cost at all times. This is an architectural constraint of the protocol, not a bug. Adding 10 narrow-purpose tools (e.g., `note_create`, `note_update`, `note_delete`, `note_list`, `note_search`, `asset_upload`, `asset_list`, `asset_delete`) multiplies the context tax.
+
+**How to avoid:**
+Design tools with broader signatures that combine related operations, rather than one tool per CRUD verb:
+- `manage_note(action: 'create'|'update'|'delete'|'list'|'search', ...)` — one tool, five operations
+- `manage_asset(action: 'upload'|'list'|'delete', ...)` — one tool, three operations
+
+Also consolidate the fuzzy project lookup into the existing `search` tool via a new `category: 'project_fuzzy'` option rather than a new standalone tool.
+
+Write maximally concise tool descriptions — every word in a description is a token. Aim for 1-2 sentence descriptions, not paragraphs.
+
+**Warning signs:**
+- Agent stops calling certain tools (context window crowding pushes later tools out)
+- Token counter shows >10,000 tokens consumed before first message
+- Agent reports "I don't have a tool for X" when the tool exists (name/description crowded out)
+
+**Phase to address:**
+Phase 2 (MCP Knowledge Base Tools). Design tool surface before implementation; do not add CRUD-per-verb tools.
+
+---
+
+### Pitfall 6: Fuzzy Project Matching Returns Wrong Project (Silent Mismatch)
+
+**What goes wrong:**
+The `identify_project` MCP tool is designed to let AI agents find a project by name/alias/description without knowing the exact ID. If the fuzzy match returns a wrong project (e.g., "ai-helper" matches "ai-manager" with 80% similarity), all subsequent note/task operations silently corrupt the wrong project's data. There is no warning — the tool returns a project, the agent proceeds confidently.
+
+**Why it happens:**
+Simple `LIKE`-based substring matching has no score threshold — it returns the best match regardless of quality. Fuzzy matching at low thresholds (60-70%) produces false positives when project names share common words ("ai-", "manager", "project"). The MCP caller (AI agent) treats any non-null return as authoritative.
+
+**How to avoid:**
+1. Return a `confidence` score alongside the match result
+2. Return `null` when the best match score is below a defined threshold (recommend: 0.85 for name/alias, 0.70 for description)
+3. When multiple projects score within 10% of each other, return all candidates instead of the top one — let the agent decide
+4. Always return `id`, `name`, `alias`, and `localPath` so the agent can confirm the match makes sense
+
+For implementation: use normalized Levenshtein distance or trigram similarity on `name` + `alias` fields. For `description` fuzzy search, use SQLite FTS5 BM25 ranking.
+
+```typescript
+// Return format for fuzzy project lookup
+type FuzzyProjectMatch = {
+  project: Project;
+  confidence: number;         // 0.0 - 1.0
+  matchedField: 'name' | 'alias' | 'description';
+  alternatives?: Project[];   // when multiple candidates close in score
+};
 ```
 
 **Warning signs:**
-- Multiple prompts show "default" badge simultaneously in the UI
-- Different task executions pick up different prompts with no clear rule
-- `getPrompts()` returns multiple records with `isDefault: true`
+- Notes appear under the wrong project with no error
+- Agent says "I found project X" but the returned ID belongs to a different project
+- Multiple short-named projects (e.g., "app", "api", "web") get confused with each other
 
 **Phase to address:**
-Phase 3 (Agent Prompt Management). Enforce at the server action level before building the CRUD UI.
+Phase 2 (Smart Project Identification). Build scoring and threshold into the fuzzy lookup before any write operations depend on it.
+
+---
+
+### Pitfall 7: Notes Schema Migration Breaks Existing Data Without Backup
+
+**What goes wrong:**
+Adding a `Note` model to `schema.prisma` and running `prisma db push` is generally safe (adding a new table). However, if the `Note` model also adds constraints or triggers (for FTS5 sync), and a previous partial push left the DB in an inconsistent state, `prisma db push` will prompt to reset the database. Since this project uses `db push` (not `prisma migrate`), there is no migration history and no rollback path.
+
+**Why it happens:**
+The project already uses `db push` as documented in the existing PITFALLS.md (Pitfall 5 of v0.1 research). The SQLite WAL files (`dev.db-shm`, `dev.db-wal`) are uncommitted — if a push fails midway, the WAL may hold partial writes. Additionally, adding a `Note` model with a `categoryId` foreign key after a `NoteCategory` model will fail if `NoteCategory` doesn't exist yet (ordering matters in `db push`).
+
+**How to avoid:**
+1. Before any schema change, copy `prisma/dev.db` to `prisma/dev.db.backup`
+2. Add `Note` and `NoteCategory` models to `schema.prisma` in a single push (not sequentially)
+3. Run `prisma db push --accept-data-loss` only after confirming the backup exists
+4. Do NOT add FTS5 triggers via schema — do it via raw SQL after push
+5. Add `@@index` on Note's `projectId`, `categoryId`, and `createdAt` in the same push to avoid a second migration
+
+**Warning signs:**
+- `prisma db push` output includes "The following tables need to be dropped and recreated"
+- WAL checkpoint is pending (`.db-wal` file is non-zero size before the push)
+- Push completes but `prisma studio` shows empty tables that had data
+
+**Phase to address:**
+Phase 1 (Note Schema). Run backup before push; add all Note-related models in one atomic push.
+
+---
+
+### Pitfall 8: File Serving API Route Leaks Files Outside data/ Boundary
+
+**What goes wrong:**
+The planned `GET /api/files/[...path]` route that serves assets from `data/assets/{projectId}/` can be tricked into serving files outside the `data/` directory if the path segments are not normalized. A request like `/api/files/../../prisma/dev.db` resolves via `path.join(process.cwd(), 'data', '../../prisma/dev.db')` to the database file.
+
+**Why it happens:**
+`path.join()` resolves `..` segments. When route params are joined with a base directory without a containment check, `..` traversal escapes the intended root. Next.js does not automatically strip `..` from App Router catch-all route params.
+
+**How to avoid:**
+Always use `path.resolve()` and verify the resolved path starts with the allowed base:
+
+```typescript
+import path from 'path';
+import { readFile } from 'fs/promises';
+
+const DATA_ROOT = path.resolve(process.cwd(), 'data');
+
+export async function GET(req: Request, { params }: { params: { path: string[] } }) {
+  const joined = params.path.join('/');
+  const resolved = path.resolve(DATA_ROOT, joined);
+
+  // Containment check — must be inside DATA_ROOT
+  if (!resolved.startsWith(DATA_ROOT + path.sep)) {
+    return new Response('Forbidden', { status: 403 });
+  }
+
+  const buffer = await readFile(resolved);
+  // ... serve with appropriate Content-Type
+}
+```
+
+**Warning signs:**
+- File serve route accepts path params without `path.resolve()` + startsWith check
+- Test with `GET /api/files/../../.env` — any non-403 response is a vulnerability
+- Route uses `path.join()` but no containment check
+
+**Phase to address:**
+Phase 3 (File Management / Asset Serving). Implement containment check in the very first version of the file serve route.
+
+---
+
+### Pitfall 9: react-markdown rawHtml Enabled Without Sanitization
+
+**What goes wrong:**
+The existing codebase uses `react-markdown` (v10.1.0) for rendering assistant messages. When extending to notes (user-authored Markdown), there is a temptation to enable `rehypeRaw` for rich formatting (tables, embedded images, etc.). If `rehypeRaw` is enabled without `rehype-sanitize`, users can embed `<script>` tags, `<iframe>` elements with malicious src, or CSS injection via `style` attributes in their notes. Even in a single-user local tool, this creates risk if notes are shared or synced.
+
+**Why it happens:**
+`react-markdown` is safe by default (strips raw HTML). But developers add `rehypeRaw` for legitimate reasons (tables in `.md` files, image sizing) and forget to pair it with `rehype-sanitize`. The risk is invisible during development because the developer's own content is safe.
+
+**How to avoid:**
+If raw HTML rendering is required, always pair `rehypeRaw` with `rehype-sanitize` using a restrictive schema:
+
+```typescript
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
+
+<ReactMarkdown
+  rehypePlugins={[rehypeRaw, rehypeSanitize]}
+  // defaultSchema blocks <script>, <iframe>, on* handlers, style injection
+>
+  {noteContent}
+</ReactMarkdown>
+```
+
+Do NOT enable `rehypeRaw` without `rehypeSanitize`. If only tables and fenced code blocks are needed, do not enable raw HTML at all — `remarkGfm` handles tables without raw HTML.
+
+**Warning signs:**
+- Notes renderer uses `rehype-raw` without `rehype-sanitize` in the plugin list
+- `<script>alert(1)</script>` in a note renders as an alert, not as text
+- Notes can include `<img src="x" onerror="...">` and the onerror fires
+
+**Phase to address:**
+Phase 4 (Notes Web UI). Verify sanitization is in place before the note editor ships.
 
 ---
 
@@ -170,13 +325,13 @@ Phase 3 (Agent Prompt Management). Enforce at the server action level before bui
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Store theme in `localStorage` via React Context (like i18n does) | Avoids new dependency | FOUC on every page load; duplicates persistence logic | Never — use next-themes instead |
-| Use Zustand `persist` for theme state | Familiar pattern already in codebase | Known SSR hydration mismatch in Next.js App Router | Never for SSR-rendered preferences |
-| Skip `mounted` check in theme toggle UI | Simpler code | Hydration warning in console; potential flicker | Never in SSR context |
-| Trigger CLI test on Settings page mount automatically | Instant feedback | Blocks requests; makes load time 45+ seconds | Never — user-initiated only |
-| `prisma db push` for new schema fields | Fast iteration | Cannot rollback; data loss on destructive changes | Acceptable in development only; document risk |
-| Inline all prompt text in task creation form | No extra network call | Long prompts make form unusable; no reuse | Never for prompts >200 chars |
-| Skip `isDefault` transaction wrapping | Simpler code | Multiple "default" prompts cause silent misuse | Never |
+| Use `LIKE '%term%'` for note search instead of FTS5 | No FTS5 setup complexity | Slow at 1,000+ notes; no relevance ranking; can't search across title+content efficiently | Acceptable as a short-term fallback if FTS5 setup is deferred — but plan migration path |
+| Store file paths as absolute paths in DB | Avoids path computation at serve time | Breaks if project directory moves or is shared; absolute paths are machine-specific | Never — always store relative to `data/` root |
+| Create one MCP tool per CRUD operation (note_create, note_update, note_delete, note_list) | Clear naming | Consumes 4x the context tokens for one feature area | Never for localhost MCP tool with >20 existing tools |
+| Skip `busy_timeout` PRAGMA on Next.js DB client | No code change | Intermittent "database is locked" when MCP and web UI write simultaneously | Never in a system with two concurrent DB connections |
+| Use `fs.rename()` directly without EXDEV fallback | One-line move | Fails silently on cross-device moves; no error recovery | Never — the copy+delete fallback is 5 lines |
+| Skip path containment check on file serve route | Faster initial implementation | Directory traversal vulnerability; exposes .env and SQLite DB | Never |
+| Store notes as `.md` files instead of in SQLite | No schema migration needed | MCP cannot search/CRUD efficiently; no FTS; breaks the "db as source of truth" design decision already made | Never — PROJECT.md already decided: notes in SQLite |
 
 ---
 
@@ -184,13 +339,14 @@ Phase 3 (Agent Prompt Management). Enforce at the server action level before bui
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| `next-themes` + Tailwind v4 | Use `attribute="data-theme"` without updating `@custom-variant` | Match: use `attribute="class"` (default) with existing `@custom-variant dark (&:is(.dark *))` |
-| `next-themes` + Next.js 16 App Router | Wrap `ThemeProvider` in a Server Component | `ThemeProvider` must be in a `"use client"` wrapper component inserted into the root layout |
-| `next-themes` + `<html>` tag | Forget `suppressHydrationWarning` on `<html>` | Add `suppressHydrationWarning` to `<html>` in `src/app/layout.tsx` — next-themes modifies it |
-| CLI test API route | No timeout feedback in UI | Show elapsed time and cancel option for tests that take >5 seconds |
-| `AgentPrompt` + Task creation | Pass full prompt content in form payload | Store only `promptId` in task; fetch content in stream route (already done in `stream/route.ts`) |
-| `AgentPrompt` + i18n | No translation keys for prompt names/descriptions | Prompt names are user-defined data — do NOT put them in the translation table |
-| Prompt editor (textarea) | Use `contenteditable` div for formatting | Use `<textarea>` — prompts are plain text, not rich HTML; `contenteditable` adds XSS risk |
+| Prisma + FTS5 | Add FTS5 virtual table to schema.prisma | Create FTS5 table and triggers via raw SQL in setup script; never in Prisma schema |
+| Prisma + FTS5 | Run `db push` after creating FTS5 table manually | FTS5 shadow tables cause Prisma to detect drift; run `db push` BEFORE creating FTS5 tables, then create FTS5 |
+| MCP + Next.js (same SQLite file) | Default PrismaClient with no WAL/timeout config | Set `PRAGMA journal_mode=WAL` and `PRAGMA busy_timeout=5000` on both `src/lib/db.ts` and `src/mcp/db.ts` at startup |
+| FTS5 + Prisma `$queryRaw` | Use `db.note.findMany()` for full-text search | Use `db.$queryRaw\`SELECT rowid, * FROM notes_fts WHERE notes_fts MATCH ${query}\`` for FTS queries |
+| react-markdown + notes editor | Enable `rehypeRaw` for table rendering | Use `remarkGfm` for GFM tables — no raw HTML required; only add `rehypeRaw` + `rehypeSanitize` if HTML passthrough is truly needed |
+| File move (MCP tool) | Use `fs.rename()` directly | Wrap in try/catch with EXDEV fallback to `copyFile` + `unlink` |
+| File serve route | `path.join(base, userParam)` without check | `path.resolve(base, userParam)` + `startsWith(base + sep)` guard |
+| Fuzzy project lookup | Return first result above any similarity | Return result only above 0.85 threshold; return `confidence` score; return multiple candidates when close |
 
 ---
 
@@ -198,10 +354,11 @@ Phase 3 (Agent Prompt Management). Enforce at the server action level before bui
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| CLI test called on Settings page mount | Settings page takes 45+ seconds to load | Only call `testEnvironment()` on explicit user action (button click) | Every page visit |
-| Loading ALL prompts for every workspace on task create | Task creation modal is slow when many prompts exist | Limit prompt list to 50 with a search; the current data model supports `workspaceId` scoping | At ~100+ prompts per workspace |
-| Theme toggle re-renders entire layout | Noticeable UI lag on toggle | Ensure `ThemeProvider` wraps the layout at root level; avoid re-creating contexts on theme change | Immediately, with large component trees |
-| `testEnvironment()` spawns a real Claude process on every click | System CPU/memory spikes | Add a cooldown: disable button for 30 seconds after a test run | After 2-3 rapid clicks |
+| Loading all notes for a project without pagination | Note list slow when project has many notes | Add `take: 50` default limit + cursor-based pagination to note list query | At ~200+ notes per project |
+| FTS5 content table not kept in sync | Search returns stale results after update/delete | Create INSERT/UPDATE/DELETE triggers on `Note` table that update `notes_fts` virtual table | First time a note is edited or deleted |
+| Serving large files (images, PDFs) via Next.js route handler without streaming | Memory spike on large file requests | Use `fs.createReadStream()` piped to a `ReadableStream` response; set appropriate `Content-Length` and `Cache-Control` headers | For files >5MB |
+| Note search doing `MATCH '*term*'` (FTS5 prefix on both sides) | Search is slow; FTS5 ignores leading wildcard | FTS5 supports trailing wildcards (`term*`) but not leading. Use `term*` for prefix search; use `LIKE` for substring if truly needed | Immediately — leading wildcards disable the FTS index |
+| Fuzzy match scanning all projects on every MCP call | Acceptable at <100 projects; noticeable at 500+ | Add `@@index([name, alias])` to Project model; normalize candidate strings at write time | At ~500+ projects |
 
 ---
 
@@ -209,10 +366,11 @@ Phase 3 (Agent Prompt Management). Enforce at the server action level before bui
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Rendering prompt `content` as HTML | XSS — prompts are user-controlled text that could contain `<script>` tags if rendered with `dangerouslySetInnerHTML` | Always render prompt content as plain text in `<pre>` or `<textarea>` — never as HTML |
-| Passing prompt content via URL params | Prompt content is visible in browser history and server logs | Prompts are stored in DB by ID; only pass `promptId` in URLs/forms |
-| No length validation on prompt content | Extremely long prompts exhaust Claude context window and slow execution | `prompt-actions.ts` already enforces `MAX_PROMPT_CONTENT_LENGTH = 100_000` — enforce same limit in UI before submit |
-| Exposing `testEnvironment()` to any caller | In a multi-user scenario, anyone can run arbitrary process spawns | Already gated to registered `localPath` values in `/api/adapters/test/route.ts` — preserve this check |
+| File serve route without path containment check | Directory traversal — agent or user can read arbitrary files including .env, dev.db | Always `path.resolve()` + `startsWith(DATA_ROOT + sep)` check before serving |
+| Accepting arbitrary sourcePath for mv operations | Agent can trick the system into moving sensitive files (keys, DB) into asset storage | Validate sourcePath is under a project's `localPath` or an explicitly allowed staging directory |
+| Storing image/file metadata with raw user-supplied filenames | Malicious filename (`../../.env`) used in path construction | Sanitize filenames: strip all path separators, `..` segments, and null bytes; use a UUID-based storage name with original name stored separately in DB |
+| Rendering note content with `dangerouslySetInnerHTML` | XSS via user-authored notes | Always render via `react-markdown` with sanitization; never raw HTML injection |
+| MCP tool accepting note content without size limit | AI agent can insert 50MB note crashing the DB | Enforce `MAX_NOTE_CONTENT_LENGTH` (suggest 500,000 chars) in Zod schema validation on both MCP tool and server action |
 
 ---
 
@@ -220,44 +378,42 @@ Phase 3 (Agent Prompt Management). Enforce at the server action level before bui
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| No "system" option in theme picker | Users with OS-level dark mode can't use it; must manually re-configure if they change OS settings | Provide three options: Light, Dark, System (uses `prefers-color-scheme`) |
-| Showing raw theme value ("dark") in toggle instead of resolved theme | When system theme is active, button says "dark" not "system" | Distinguish `theme` (stored preference) from `resolvedTheme` (actual applied) — use `resolvedTheme` for display |
-| Theme change takes effect only after save | Users expect instant feedback | Apply theme change immediately on selection (optimistic update) — persist on change, not on separate save button |
-| CLI test shows binary pass/fail | No actionable info when it fails | Show per-check results (command found, API key, hello probe) — already structured this way in `TestResult.checks` |
-| Prompt editor loses unsaved changes on navigation | Frustrating data loss | Add `beforeunload` guard or autosave draft to `sessionStorage` when prompt content is modified |
-| No confirmation before deleting a prompt used by tasks | Tasks silently lose their associated prompt | Before `deletePrompt`, query `Task.count({ where: { promptId: id } })` and show warning if > 0 |
+| Note editor without autosave or unsaved-changes warning | User loses edits on navigation or accidental tab close | Add debounced autosave (2s after last keystroke) or `beforeunload` guard; show "Unsaved changes" indicator |
+| Asset list showing raw UUIDs or internal storage paths | User cannot identify which file is which | Store original filename in DB alongside internal storage path; display original name in UI |
+| Cache files (`data/cache/`) never cleaned up | Disk fills up over time with task execution artifacts | Add a "Clear cache" button in UI or a cache size indicator; document that cache is safe to delete |
+| No empty state for notes/assets panels | Users don't know what to do when a project has no notes | Add empty state with call-to-action ("Add your first note") |
+| Fuzzy project lookup returns a match without showing the user the matched project | User doesn't know which project was resolved | MCP tools that resolve a project should return the full project name and alias in their response so the AI agent can confirm out loud |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Theme switching:** Verify no flash on hard refresh in light mode — test with `localStorage.setItem("theme", "light")` then reload
-- [ ] **Theme switching:** Verify "System" option responds when OS theme changes (open DevTools > Rendering > Emulate CSS media feature `prefers-color-scheme`)
-- [ ] **Theme switching:** Verify `suppressHydrationWarning` on `<html>` — check React DevTools console for hydration warnings
-- [ ] **CLI testing:** Verify "Test" button is disabled during the test (no double-submit)
-- [ ] **CLI testing:** Verify the UI shows per-check results, not just overall pass/fail
-- [ ] **CLI testing:** Verify that a 45-second timeout surfaces an error message, not a silent spinner forever
-- [ ] **Prompt CRUD:** Verify deleting a prompt used by tasks shows a warning (or tasks handle null promptId gracefully)
-- [ ] **Prompt CRUD:** Verify only one prompt per workspace can be `isDefault: true` — test by setting two as default via direct action calls
-- [ ] **Prompt CRUD:** Verify `promptId` on Task is still `null` safe — existing tasks without prompts must continue to execute
-- [ ] **Task creation prompt selector:** Verify selecting "no prompt" (null) still works after prompt selection UI is added
-- [ ] **i18n coverage:** All new Settings UI strings have both `zh` and `en` translations in `src/lib/i18n.tsx`
-- [ ] **Schema migration:** Run `prisma db push` and confirm no "reset database" prompt appears
+- [ ] **FTS5 setup:** Run `prisma db push` after FTS5 tables are created — verify it does NOT prompt for database reset
+- [ ] **FTS5 sync:** Edit a note, then search for the new content — verify search returns the updated note
+- [ ] **FTS5 sync:** Delete a note, then search for its content — verify search no longer returns it
+- [ ] **Cross-device mv:** Test file move with source on `/tmp` and destination in `data/` — verify no EXDEV error
+- [ ] **Path traversal:** Test `GET /api/files/../../.env` — verify 403 response, not file content
+- [ ] **Concurrent writes:** Run MCP write tool and web UI save simultaneously — verify no "database is locked" errors
+- [ ] **Fuzzy match threshold:** Search for a non-existent project name — verify `null` is returned, not a low-confidence wrong match
+- [ ] **Fuzzy match ambiguity:** Add two projects with similar names — verify both are returned as candidates instead of silently picking one
+- [ ] **Note XSS:** Put `<script>alert(1)</script>` in a note — verify it renders as text, not as executable script
+- [ ] **MCP tool count:** Count total tools after v0.2 — verify total stays under 30, and each tool description is ≤ 3 sentences
+- [ ] **File size limit:** Upload a 50MB file via MCP asset tool — verify it is rejected with a clear error, not a silent timeout
+- [ ] **i18n coverage:** All new UI strings in notes and assets panels have both `zh` and `en` translations
 
 ---
 
 ## Recovery Strategies
 
-When pitfalls occur despite prevention, how to recover.
-
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Theme flash shipped to users | LOW | Add `next-themes` inline script injection — one-commit fix; no data migration needed |
-| Zustand hydration mismatch | LOW | Remove theme from Zustand store; delegate to `next-themes` |
-| Tailwind dark: utilities not working | LOW | Verify `@custom-variant` selector matches `next-themes` attribute output; check class on `<html>` in DevTools |
-| Multiple default prompts in DB | MEDIUM | Run a one-time cleanup: `UPDATE AgentPrompt SET isDefault = false WHERE id NOT IN (SELECT id FROM AgentPrompt WHERE isDefault = true ORDER BY createdAt LIMIT 1)` per workspace |
-| Schema push caused data loss | HIGH | Restore from `prisma/dev.db` backup (the `.db-shm` / `.db-wal` files in gitignore suggest WAL mode — use SQLite backup before any push) |
-| CLI test hangs entire settings page | LOW | Add `AbortController` to the fetch call with 60-second client timeout; add server-side check to reject concurrent requests |
+| FTS5 shadow tables broke db push, data lost | HIGH | Restore from `prisma/dev.db.backup`; recreate FTS5 table and triggers via raw SQL; do NOT re-run db push after FTS5 tables exist |
+| "database is locked" errors in production | LOW | Add `PRAGMA busy_timeout=5000` to both DB clients; restart both processes; errors should clear immediately |
+| Wrong project matched by fuzzy lookup, notes written to wrong project | MEDIUM | Identify affected notes by `createdAt` timestamp; move them via raw SQL update to correct `projectId`; tighten confidence threshold |
+| EXDEV error on file move left orphaned source file | LOW | Re-run the mv operation manually; implement the copyFile+unlink fallback going forward |
+| File serve route exploited for path traversal | MEDIUM | Add containment check immediately (single-line fix); audit `data/` directory for files that should not be there; rotate any credentials that were readable |
+| react-markdown XSS via missing sanitization | LOW | Add `rehype-sanitize` to the plugin list (one-line fix); no data migration needed |
+| MCP tool list too large, agent performance degraded | MEDIUM | Consolidate tools (combine CRUD verbs into single action-dispatch tool); update tool descriptions to be shorter; restart MCP server |
 
 ---
 
@@ -265,31 +421,35 @@ When pitfalls occur despite prevention, how to recover.
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| Theme FOUC | Phase 1: General Settings | Hard refresh in light mode — no flash |
-| Theme/i18n state duplication | Phase 1: General Settings | No Zustand store for theme; `next-themes` is single source |
-| Tailwind v4 `@custom-variant` mismatch | Phase 1: General Settings | `dark:` utilities apply when `.dark` class on `<html>` |
-| CLI test event loop blocking | Phase 2: AI Tools CLI Testing | Button disabled during test; no concurrent requests |
-| Schema migration data loss | Phase 3: Prompt Management (start) | `db push` completes without "reset" prompt |
-| Prompt `isDefault` consistency | Phase 3: Prompt Management | Only one prompt per workspace has `isDefault: true` |
-| Task creation null `promptId` regression | Phase 4: Task-Prompt Integration | Existing tasks without prompts execute normally |
+| FTS5 shadow tables break db push | Phase 1: Note schema | Run db push after FTS5 setup — no reset prompt |
+| Concurrent write "database is locked" | Phase 1: Note schema (DB setup) | Simulate concurrent MCP + web write — no lock errors |
+| Notes schema migration data loss | Phase 1: Note schema | Backup exists before push; push completes without reset |
+| Fuzzy match false positives | Phase 2: Smart project identification | Ambiguous names return multiple candidates; threshold rejects weak matches |
+| MCP tool proliferation | Phase 2: MCP knowledge base tools | Tool count ≤ 30; no CRUD-per-verb pattern |
+| EXDEV cross-device mv error | Phase 3: File management | File move works with `/tmp` source |
+| Path traversal in file serve | Phase 3: File management | `/api/files/../../.env` returns 403 |
+| Unvalidated source path in mv | Phase 3: File management | MCP mv tool rejects paths outside project localPath |
+| react-markdown XSS | Phase 4: Notes web UI | `<script>` in note renders as escaped text |
+| Autosave / unsaved changes loss | Phase 4: Notes web UI | Navigation away from dirty note shows warning |
 
 ---
 
 ## Sources
 
-- [next-themes GitHub — zero-flash implementation details](https://github.com/pacocoursey/next-themes)
-- [Tailwind CSS v4 Dark Mode — official docs](https://tailwindcss.com/docs/dark-mode)
-- [Next.js + Tailwind v4 dark mode class not applying](https://www.sujalvanjare.com/blog/fix-dark-class-not-applying-tailwind-css-v4)
-- [Theme colors with Tailwind v4 and next-themes](https://medium.com/@kevstrosky/theme-colors-with-tailwind-css-v4-0-and-next-themes-dark-light-custom-mode-36dca1e20419)
-- [Next.js + Zustand localStorage hydration mismatch (pmndrs/zustand #1382)](https://github.com/pmndrs/zustand/discussions/1382)
-- [Fixing Zustand persist hydration errors](https://medium.com/@judemiracle/fixing-react-hydration-errors-when-using-zustand-persist-with-usesyncexternalstore-b6d7a40f2623)
-- [Prisma db push vs migrate — official docs](https://www.prisma.io/docs/orm/prisma-migrate/workflows/prototyping-your-schema)
-- [Node.js Don't Block the Event Loop](https://nodejs.org/en/learn/asynchronous-work/dont-block-the-event-loop)
-- [suppressHydrationWarning and theme providers — Next.js hydration error docs](https://nextjs.org/docs/messages/react-hydration-error)
-- [React rich text editor XSS prevention — Syncfusion](https://www.syncfusion.com/blogs/post/react-rich-text-editor-xss-prevention)
-- Codebase analysis: `src/lib/adapters/claude-local/test.ts`, `src/lib/i18n.tsx`, `src/app/settings/page.tsx`, `prisma/schema.prisma`, `src/app/globals.css`
-- `.planning/codebase/CONCERNS.md` — existing tech debt and fragile areas
+- [Prisma issue #8106 — FTS5 shadow tables ignored by migrate but detected as drift](https://github.com/prisma/prisma/issues/8106)
+- [Prisma issue #9414 — FTS support for SQLite](https://github.com/prisma/prisma/issues/9414)
+- [SQLite FTS5 extension official docs](https://www.sqlite.org/fts5.html)
+- [SQLite WAL mode official docs](https://www.sqlite.org/wal.html)
+- [Node.js issue #19077 — fs.rename() cross-device EXDEV](https://github.com/nodejs/node/issues/19077)
+- [MCP tool bloat and context window degradation — demiliani.com](https://demiliani.com/2025/09/04/model-context-protocol-and-the-too-many-tools-problem/)
+- [MCP context window problem — junia.ai](https://www.junia.ai/blog/mcp-context-window-problem)
+- [react-markdown XSS pitfall — Medium](https://medium.com/@brian3814/pitfall-of-potential-xss-in-markdown-editors-1d9e0d2df93a)
+- [react-markdown security guide — Strapi](https://strapi.io/blog/react-markdown-complete-guide-security-styling)
+- [Next.js path traversal CVE-2020-5284 — Snyk](https://security.snyk.io/vuln/SNYK-JS-NEXT-561584)
+- [SQLite concurrent writes and "database is locked" errors](https://tenthousandmeters.com/blog/sqlite-concurrent-writes-and-database-is-locked-errors/)
+- [MCP versioning and breaking changes — Nordic APIs](https://nordicapis.com/the-weak-point-in-mcp-nobodys-talking-about-api-versioning/)
+- Codebase analysis: `src/lib/db.ts`, `src/mcp/db.ts`, `prisma/schema.prisma`, `src/mcp/tools/search-tools.ts`, `.planning/PROJECT.md`
 
 ---
-*Pitfalls research for: Settings features in Next.js 16 + Tailwind v4 AI task manager*
-*Researched: 2026-03-26*
+*Pitfalls research for: Knowledge base + notes + file management + expanded MCP tools in Next.js 16 + SQLite + Prisma*
+*Researched: 2026-03-27*

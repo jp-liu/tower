@@ -1,164 +1,177 @@
 # Project Research Summary
 
-**Project:** ai-manager Settings Milestone
-**Domain:** Settings page refactor — theme switching, CLI verification, agent prompt management
-**Researched:** 2026-03-26
+**Project:** ai-manager v0.2 — Project Knowledge Base & Enhanced MCP
+**Domain:** Local AI task management platform — additive knowledge base and intelligent MCP layer
+**Researched:** 2026-03-27
 **Confidence:** HIGH
 
 ## Executive Summary
 
-This is a focused settings page milestone on a well-established Next.js 16 + Tailwind v4 + Prisma 6 stack. The work is additive — the underlying models (`AgentPrompt`, `Task.promptId`), server actions (`prompt-actions.ts`), and adapter test infrastructure (`testEnvironment()`) already exist. The milestone's job is to surface this backend capability through new and updated UI components. The recommended approach is a four-phase build: (1) theme infrastructure, (2) general settings panel, (3) CLI adapter verification, and (4) prompt CRUD + task integration. Only one new dependency is needed: `next-themes ^0.4.6`.
+ai-manager v0.2 extends an existing Next.js 16 + SQLite + Prisma + MCP stack with a project-scoped knowledge base (notes, assets) and smarter AI agent tooling. The core addition is a `ProjectNote` model with SQLite FTS5 full-text search, a `ProjectAsset` model with local filesystem storage, and expanded MCP tools that let AI agents identify projects by name/alias (not just by ID) and CRUD notes and assets without opening the web UI. The design is deliberately local-first and single-user — no cloud sync, no external services, no binary upload over HTTP. Every new feature fits within the constraints already established in v0.1.
 
-The single highest-priority risk is the Tailwind v4 `@custom-variant` selector incompatibility with `next-themes`. The existing `globals.css` uses `(&:is(.dark *))`, which does not match the `<html>` element itself — meaning dark mode will appear completely broken after `next-themes` is installed until the selector is changed to `(&:where(.dark, .dark *))`. This must be fixed as part of Phase 1 before any other work begins. The second risk is the CLI test probe taking up to 45 seconds — it must be user-initiated only (button click), never triggered on page mount.
+The recommended approach is to build in four ordered phases: data layer (schema + shared utilities) then MCP tools (server-side, no UI dependency) then file management then web UI. This ordering is mandated by technical dependencies: MCP tools can be built and tested independently of the UI, while both depend on the data layer being in place. The single biggest technical challenge is SQLite FTS5 integration — Prisma cannot manage FTS5 virtual tables in its schema, so the index must be created via raw SQL and maintained via triggers at the SQLite engine level, completely outside Prisma's migration system.
 
-The research is grounded entirely in codebase analysis of the actual source files, not training-data assumptions. All confidence ratings are HIGH. The only open design question is whether the light theme CSS variable set needs to be defined — the current codebase has only one CSS theme (Midnight Studio dark). Without a light theme design, the theme toggle will switch to an unstyled state. This needs product decision before Phase 1 ships.
+The primary risks are: (1) FTS5 shadow tables causing Prisma `db push` to prompt a destructive database reset — prevent by creating FTS5 tables after schema push, never before; (2) concurrent write lock contention between the Next.js process and the MCP stdio process sharing the same SQLite file — prevent by setting `PRAGMA busy_timeout=5000` on both PrismaClient instances; (3) MCP tool proliferation consuming excessive context tokens — prevent by designing action-dispatch tools (`manage_note`, `manage_asset`) rather than one tool per CRUD verb. All three risks are preventable with upfront discipline.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The stack is locked. The project runs on Next.js 16.2.1 App Router, React 19.2.4, Tailwind v4 (postcss), Zustand 5.0.12, and Prisma 6. No additions are required except `next-themes ^0.4.6` for SSR-safe theme switching.
-
-The existing i18n system (`src/lib/i18n.tsx` — flat React Context + localStorage) is sufficient and does not need replacement. All prompt CRUD server actions exist in `src/actions/prompt-actions.ts`. The CLI adapter test is implemented in `src/lib/adapters/claude-local/test.ts`. The `Task.promptId` field already exists in the Prisma schema — no schema migration is required for prompt-task linkage; only the server action and UI need updating.
+The existing stack (Next.js 16, React 19, Prisma 6, SQLite, Zustand, Tailwind, MCP SDK) requires only three new npm packages. `fuse.js` (^7.1.0) handles fuzzy project matching in the MCP layer — zero deps, built-in TypeScript types, field-weighted scoring. `@uiw/react-md-editor` (^4.0.11) provides the Markdown editing experience for the notes web UI — must be dynamically imported with `ssr: false` to avoid Next.js App Router SSR errors. `mime-types` (^2.1.35) maps file extensions to Content-Type headers in the file-serving route handler — use this over `mime@4` which is ESM-only and conflicts with Next.js's mixed CJS/ESM environment. Everything else — FTS5 queries, file system operations, file serving — uses existing Node.js built-ins, Prisma raw queries, and the established Route Handler pattern.
 
 **Core technologies:**
-- `next-themes ^0.4.6`: SSR-safe dark mode — the only way to avoid FOUC in Next.js App Router; handles `localStorage`, `prefers-color-scheme`, and `<html>` class injection atomically
-- Existing `prompt-actions.ts`: full CRUD for `AgentPrompt` — no new backend work needed
-- Existing `/api/adapters/test` route: bridge to `testEnvironment()` — must be used via `fetch()` from the client, not via Server Action, due to 45-second blocking potential
-- Existing `I18nProvider` (React Context): extend with new translation keys only — no library change
+- `fuse.js` ^7.1.0: fuzzy project matching in MCP process — zero deps, field-weighted scoring, built-in TS types
+- `@uiw/react-md-editor` ^4.0.11: markdown editor for notes UI — lightweight (~4.6 kB gzipped), requires `dynamic({ ssr: false })` import
+- `mime-types` ^2.1.35: Content-Type header resolution in file serving route — CJS-compatible (use instead of `mime@4`)
+- SQLite FTS5 via `prisma.$queryRaw`: full-text note search — no additional library; requires raw SQL setup outside Prisma schema
+- `fs.promises` (Node.js built-in): file move/copy operations — EXDEV cross-device fallback required
 
-**Critical version requirement:** `next-themes ^0.4.6` requires `suppressHydrationWarning` on `<html>` in `layout.tsx`. It also requires updating the `@custom-variant dark` selector in `globals.css` from `(&:is(.dark *))` to `(&:where(.dark, .dark *))`.
+**Install command:** `pnpm add fuse.js @uiw/react-md-editor mime-types`
 
 ### Expected Features
 
-**Must have (table stakes):**
-- Language toggle (zh/en) in a new General settings section — existing `setLocale()` only needs a UI control
-- Theme toggle (light/dark/system) with `localStorage` persistence and no FOUC
-- CLI connection test button with per-check result display (`claude_command_resolvable`, `anthropic_api_key`, `claude_hello_probe`)
-- Agent Prompt CRUD: list, create (name + description + content + isDefault), edit, delete with confirmation
-- Prompt selector in `CreateTaskDialog` with auto-selection of the default prompt
-- i18n coverage for all new strings in both `zh` and `en` maps
+The milestone goal is a "personal multi-project information hub accessible via MCP." Smart project identification is the keystone feature — without it, AI agents must know exact projectIDs, which defeats the purpose of intelligent tooling. All other MCP knowledge tools depend on it. Notes and assets are parallel subsystems with no mutual dependency and can be developed concurrently.
 
-**Should have (differentiators):**
-- Per-check CLI test results with actionable messages (not just pass/fail summary)
-- Default prompt auto-selection at task creation time using `AgentPrompt.isDefault`
-- `isDefault` enforced as a single-per-workspace invariant via Prisma transaction
-- Warning before deleting a prompt used by existing tasks
+**Must have (table stakes):**
+- Note CRUD (create/read/update/delete) scoped to project — foundation of the knowledge base
+- Markdown rendering for note content — developers expect this; existing `react-markdown` stack already supports it
+- Category taxonomy (preset: 账号/环境/需求/备忘 + custom) — users mentally organize notes by purpose
+- Full-text search across notes (FTS5 BM25) — notes are useless without retrieval
+- Project asset storage (`data/assets/{projectId}/`) + metadata in DB — file association with projects
+- Notes web UI at `/projects/[projectId]/notes` — mandatory for a web app
+
+**Should have (competitive differentiators):**
+- Smart project identification MCP tool — AI agents can reference projects by name/alias, not just by ID
+- MCP note tools (`list_notes`, `get_note`, `create_note`, `update_note`, `delete_note`, `search_notes`) — makes knowledge base accessible to agents without opening web UI
+- MCP asset tools (`list_assets`, `move_to_assets`, `get_asset_path`) — closes the loop from "generated file" to "stored asset"
+- Task cache directory (`data/cache/{taskId}/`) + image attachment rendering in message thread — agents can store and reference intermediate outputs
+- Cross-note search with snippet highlighting — FTS5 `snippet()` function returns context around matches
 
 **Defer (v2+):**
-- Workspace-scoped vs. global prompt scoping in the UI (`workspaceId` filtering)
-- Prompt selector in the edit task dialog (create path must be validated first)
-- Additional adapter support (MINIMAX has no adapter yet)
-- Prompt export/import for sharing between installations
+- Note versioning / history — overkill for single-user local tool; SQLite file backup is sufficient
+- Semantic / embedding-based search — FTS5 BM25 is sufficient at expected scale (<10k notes)
+- Hierarchical note folders — category tags + search achieves equivalent discoverability without tree complexity
+- Assets web UI (download panel) — MCP access is the primary use case; web UI is secondary for v0.2
 
 ### Architecture Approach
 
-The three new features slot cleanly into the existing layered architecture: presentation components in `src/components/settings/` call server actions in `src/actions/` which call Prisma, with one new API route (`/api/adapters/[type]/test/route.ts`) bridging the client to the adapter layer. Theme state lives entirely client-side in `localStorage` via a new `ThemeProvider`, mirroring the existing `I18nProvider` pattern. No new architectural patterns are introduced; the milestone extends existing patterns.
+The v0.2 architecture adds two parallel subsystems (notes, assets) that both depend on a shared data layer foundation, then surface through both the MCP server process and the Next.js web UI. Two shared pure-Node.js modules (`src/lib/file-utils.ts` and `src/lib/fts.ts`) bridge the process boundary — they must never import Next.js-specific modules (`next/cache`, `next/headers`) so they remain importable from the MCP stdio process. The file system storage uses a `data/` directory at project root, separated into `assets/{projectId}/` (persistent) and `cache/{taskId}/` (ephemeral), both gitignored. SQLite WAL mode is already configured on the MCP client and must be added to the Next.js client to prevent lock contention during concurrent operations.
 
 **Major components:**
+1. `src/lib/file-utils.ts` — path resolution, EXDEV-safe `fs.rename`/`copyFile` move, `mkdir` — shared between Next.js and MCP processes (no Next.js imports)
+2. `src/lib/fts.ts` — FTS5 search and index queries via `$queryRaw` — accepts PrismaClient as parameter; works with both DB instances
+3. `src/actions/note-actions.ts` + `src/actions/asset-actions.ts` — server actions for web UI; wrap Prisma + lib utilities
+4. `src/mcp/tools/note-tools.ts` + `src/mcp/tools/asset-tools.ts` — MCP tools; use `src/mcp/db.ts` directly (never import server actions)
+5. Notes UI components (`note-list.tsx`, `note-editor.tsx`, `note-detail.tsx`) — Client Components; category filter, markdown editor with dynamic import, read-only viewer
+6. `findProjectByIdentifier` helper in `src/mcp/tools/project-tools.ts` — fuzzy project lookup with confidence scoring, used by all knowledge MCP tools
 
-1. `src/lib/theme.ts` (NEW) — `ThemeProvider` React Context + `useTheme` hook; reads/writes `localStorage["theme"]`; applies `dark` class to `document.documentElement`
-2. `src/components/settings/general-config.tsx` (NEW) — language + theme preference UI; calls `useI18n().setLocale()` and `useTheme().setTheme()`
-3. `src/components/settings/prompts-config.tsx` (NEW) — full CRUD UI for `AgentPrompt`; calls existing `prompt-actions.ts` server actions directly
-4. `src/app/api/adapters/[type]/test/route.ts` (NEW) — GET handler; calls `getAdapter(type).testEnvironment(cwd)`; returns `TestResult` JSON
-5. `src/components/settings/ai-tools-config.tsx` (MODIFY) — replaces static hardcoded banner with a "Test Connection" button + per-check result list
-6. `src/components/settings/settings-nav.tsx` (MODIFY) — adds "General" and "Prompts" nav items
-7. `src/components/board/create-task-dialog.tsx` (MODIFY) — adds prompt selector; pre-selects `isDefault` prompt; passes `promptId` through `onSubmit`
-8. `src/actions/task-actions.ts` (MODIFY) — extends `createTask` to accept and persist `promptId?: string`
+**Key architectural constraint:** MCP tools MUST NOT import from `src/actions/`. Server actions use Next.js-specific modules that crash in the MCP stdio process. Share only `src/lib/file-utils.ts` and `src/lib/fts.ts`.
 
 ### Critical Pitfalls
 
-1. **Tailwind v4 `@custom-variant` mismatch with next-themes** — the existing `(&:is(.dark *))` selector does not match the `<html>` element itself, so dark mode never activates after `next-themes` sets `class="dark"` on `<html>`. Fix: change line 5 in `globals.css` to `@custom-variant dark (&:where(.dark, .dark *))`. Must be the very first change in Phase 1. Verify by adding `dark:bg-white` to a test element and confirming it applies.
+1. **FTS5 shadow tables break `prisma db push`** — Run `db push` for normal models first; create FTS5 virtual table and triggers afterward via `$executeRaw` in a startup setup function with `IF NOT EXISTS` guards. Never create FTS5 objects before `db push` or Prisma detects drift and may prompt a destructive database reset.
 
-2. **Theme FOUC (Flash of Unstyled Content)** — rendering server-side without theme, then applying it after hydration, causes a visible flash. Prevention: use `next-themes` (not a manual `useEffect` + localStorage approach) — it injects an inline `<script>` in `<head>` that applies the class before any paint. Also add `suppressHydrationWarning` to `<html>`.
+2. **SQLite "database is locked" from concurrent Next.js + MCP writes** — Both `src/lib/db.ts` and `src/mcp/db.ts` must set `PRAGMA journal_mode=WAL` and `PRAGMA busy_timeout=5000` on connection open. Currently only the MCP client sets these pragmas. Fix in Phase 1 before any concurrent write paths are built.
 
-3. **CLI test blocking on page mount** — `testEnvironment()` spawns a child process with a 45-second timeout. Triggering it automatically on settings page load will make the page unusable. Prevention: on-demand button only; disable button during test; add server-side deduplication guard to reject concurrent test requests for the same adapter.
+3. **MCP tool proliferation degrades AI agent performance** — 18 existing tools + ~10 new tools = ~11,000-14,000 context tokens consumed before any conversation begins. Design action-dispatch tools: `manage_note(action: 'create'|'update'|...)` and `manage_asset(action: 'upload'|'list'|...)` rather than one tool per CRUD verb. Target total tool count at or below 30.
 
-4. **`isDefault` consistency violation** — multiple prompts can be set as default simultaneously because no DB constraint enforces uniqueness. Prevention: wrap the "set as default" operation in a `db.$transaction()` that first clears all other `isDefault: true` records for the same workspace, then sets the target record.
+4. **`fs.rename()` fails across filesystem boundaries (EXDEV error)** — AI agents write output to `/tmp` which may be on a different filesystem than `data/`. Always wrap `fs.rename()` in try/catch with `copyFile + unlink` fallback on `EXDEV`. Implement this pattern in `file-utils.ts` before any file-move operation is exposed via MCP.
 
-5. **Schema migration data loss** — `prisma db push` on destructive changes prompts a database reset. Prevention: before wiring `Task.promptId` as a `@relation`, verify no existing task data has orphaned `promptId` values; run cleanup (`SET promptId = null`) before pushing. Never run `db push` when it says "This will reset the database" without understanding the data impact.
+5. **Path traversal in file serve route and MCP source-path parameters** — The `GET /api/files/[...path]` route must use `path.resolve()` + `startsWith(DATA_ROOT + sep)` containment check. MCP tools accepting `sourcePath` must validate the path is under the project's `localPath`. One line of code prevents the entire class of vulnerability.
+
+6. **Fuzzy project match returns wrong project silently** — Simple `LIKE`-based matching with no threshold returns the best match regardless of quality. Return `null` below 0.85 confidence on name/alias; return multiple candidates when scores are close instead of silently picking one. Always include `confidence` score and matched project name in MCP tool response so the agent can confirm aloud.
 
 ## Implications for Roadmap
 
 Based on research, suggested phase structure:
 
-### Phase 1: Theme Infrastructure + General Settings
-**Rationale:** Theme support is a pure infrastructure change with no feature dependencies. It must come first because every subsequent phase will use `dark:` Tailwind utilities. The `@custom-variant` fix is a prerequisite for any theming work to function. General Settings (language + theme toggles) is the natural first deliverable that validates the infrastructure works.
-**Delivers:** Working dark/light/system theme toggle with no FOUC; language toggle surfaced in settings UI; new "General" nav section
-**Addresses:** Language toggle, theme toggle, persist appearance preferences (all P1 table stakes)
-**Avoids:** Theme FOUC (Pitfall 1), `@custom-variant` mismatch (Pitfall 3), Zustand hydration mismatch (Pitfall 2)
-**Files:** `globals.css` (modify), `src/lib/theme.ts` (new), `src/app/layout.tsx` (modify), `src/components/settings/general-config.tsx` (new), `src/components/settings/settings-nav.tsx` (modify), `src/app/settings/page.tsx` (modify), `src/lib/i18n.tsx` (add keys)
+### Phase 1: Data Layer Foundation
+**Rationale:** All other phases depend on the schema and shared utilities. FTS5 setup must happen before MCP tools or UI are built, and WAL/timeout configuration must happen before any concurrent write path exists. This phase has no UI dependency and is fully verifiable in isolation.
+**Delivers:** `ProjectNote` and `ProjectAsset` Prisma models with relations and indexes; FTS5 virtual table + triggers via raw SQL setup function; `src/lib/file-utils.ts` (EXDEV-safe move, path resolution, mkdir); `src/lib/fts.ts` (FTS5 query helpers); WAL + `busy_timeout` configured on both PrismaClient instances; `data/` directory structure and `.gitignore` configuration.
+**Addresses:** Note CRUD data foundation, asset storage foundation, full-text search infrastructure
+**Avoids:** FTS5 shadow table data loss (Pitfall 1), SQLite lock contention (Pitfall 2), schema migration data loss (Pitfall 7)
+**Research flag:** Standard patterns — no additional research needed. Prisma raw SQL, FTS5 trigger setup, and WAL pragma patterns are fully documented in STACK.md and PITFALLS.md.
 
-### Phase 2: CLI Adapter Verification
-**Rationale:** Independent of prompt management. The adapter test infrastructure (`testEnvironment()`, the API route handler) exists; this phase only adds the UI. Isolated scope means it can be reviewed and tested without touching the prompt subsystem.
-**Delivers:** "Test Connection" button in AI Tools settings section; per-check result display (command found, API key, hello probe); loading/error states; button disabled during test
-**Addresses:** CLI tool status display (P1 table stakes), live CLI verification with per-check breakdown (differentiator)
-**Avoids:** CLI event loop blocking (Pitfall 4) — must disable button during test and add server-side deduplication
-**Files:** `src/app/api/adapters/[type]/test/route.ts` (new), `src/components/settings/ai-tools-config.tsx` (modify), `src/lib/i18n.tsx` (add keys)
+### Phase 2: MCP Knowledge Base Tools
+**Rationale:** MCP tools have no UI dependency and can be built and tested immediately after the data layer. Smart project identification must be implemented first within this phase because all note and asset MCP tools depend on it for project resolution. Designing the tool surface (action-dispatch pattern) before coding prevents context window bloat.
+**Delivers:** `find_project` MCP tool with confidence scoring and multi-candidate disambiguation; `manage_note` action-dispatch tool (list/get/create/update/delete/search); `manage_asset` action-dispatch tool (list/add/delete); all tools registered in `src/mcp/server.ts`.
+**Uses:** `fuse.js` for fuzzy matching, `src/lib/fts.ts` for search, `src/lib/file-utils.ts` for asset moves
+**Implements:** Smart project identification with 0.85 confidence threshold; action-dispatch tool pattern keeping total MCP tool count at or below 30
+**Avoids:** MCP tool proliferation (Pitfall 5), fuzzy match false positives (Pitfall 6)
+**Research flag:** Standard patterns. Tool design decisions are documented; implement per ARCHITECTURE.md build order steps 8-12.
 
-### Phase 3: Agent Prompt Management (Settings CRUD)
-**Rationale:** Prompt CRUD must exist before prompt selection in task creation — users need prompts before they can select them. This phase is self-contained in the settings page. All server actions exist; this is pure UI work.
-**Delivers:** Full CRUD UI for `AgentPrompt`; new "Prompts" nav section; `isDefault` single-per-workspace enforcement via transaction
-**Addresses:** Prompt list view, create/edit form, delete with confirmation (all P1 table stakes)
-**Avoids:** `isDefault` consistency violation (Pitfall 6); prompt delete without task-usage warning (UX pitfall)
-**Files:** `src/components/settings/prompts-config.tsx` (new), `src/components/settings/settings-nav.tsx` (modify), `src/app/settings/page.tsx` (modify), `src/lib/i18n.tsx` (add keys)
+### Phase 3: File Management & Asset Serving
+**Rationale:** File operations and the asset-serving Route Handler form a cohesive, security-critical subsystem. Path traversal prevention and EXDEV-safe move logic are independently testable. Isolating this phase ensures security checks are not omitted under feature delivery pressure.
+**Delivers:** `GET /api/files/[...path]` route handler with `path.resolve()` + containment check; source path validation in file-accepting MCP tools; task cache directory support (`data/cache/{taskId}/`); task message image attachment rendering in web UI message thread.
+**Avoids:** Path traversal vulnerability (Pitfalls 4 and 8), EXDEV cross-device move error (Pitfall 3), unvalidated source paths (security table)
+**Research flag:** Standard patterns. Node.js `fs.promises` API and Next.js Route Handler streaming are confirmed. Security checks are single-line implementations documented in PITFALLS.md.
 
-### Phase 4: Prompt Selection in Task Creation
-**Rationale:** Depends on Phase 3 (prompts must exist). Cross-cutting change that touches the board page, task dialog, and task server action. Isolated to last phase to keep earlier phases testable without this dependency.
-**Delivers:** Prompt selector in `CreateTaskDialog`; auto-selection of default prompt; `promptId` persisted to `Task` record; existing tasks without prompts continue to work (null-safe)
-**Addresses:** Prompt selection during task creation, default prompt auto-selection (both P1)
-**Avoids:** Schema migration data loss (Pitfall 5) — verify `Task.promptId` FK wiring is safe before `prisma db push`; null promptId regression (tasks created before this phase must still execute)
-**Files:** `src/actions/task-actions.ts` (modify), `src/components/board/create-task-dialog.tsx` (modify), `src/app/workspaces/[workspaceId]/page.tsx` (modify)
+### Phase 4: Notes Web UI
+**Rationale:** UI depends on server actions from Phase 1 and is the last piece. The Markdown editor has a specific Next.js SSR gotcha (`ssr: false` dynamic import) and XSS sanitization requirements that must be handled correctly. Placing UI last keeps earlier phases testable without browser dependency.
+**Delivers:** Notes route under the project detail view; note list with category filter tabs; `note-editor.tsx` with `@uiw/react-md-editor` (dynamic import, `ssr: false`); `note-detail.tsx` with `@tailwindcss/typography` prose rendering; debounced autosave or unsaved-changes navigation guard; i18n coverage for all new strings in both zh and en.
+**Uses:** `@uiw/react-md-editor` with `dynamic({ ssr: false })`, `react-markdown` + `remarkGfm` for read-only rendering (no `rehypeRaw` unless paired with `rehypeSanitize`)
+**Avoids:** `react-markdown` XSS via missing sanitization (Pitfall 9), note editor unsaved-changes loss (UX pitfalls table)
+**Research flag:** `@uiw/react-md-editor` React 19 compatibility is MEDIUM confidence (backward compat inferred, not explicitly tested). Test `dynamic({ ssr: false })` as the first implementation step. If hydration errors appear, fall back to plain `<textarea>` + side-by-side `react-markdown` preview with no bundle cost.
 
 ### Phase Ordering Rationale
 
-- **Infrastructure before UI:** Theme infrastructure (Phase 1) must precede everything because dark mode CSS utilities are used throughout. The `@custom-variant` bug would silently break all `dark:` styles if left unfixed.
-- **Independent features before dependent features:** CLI verification (Phase 2) is fully independent — it can be built and shipped without any prompt work. Prompt selection in task creation (Phase 4) strictly depends on Prompt CRUD (Phase 3).
-- **Backend-ready features first:** Phases 2, 3, and 4 all have their server-side infrastructure already in place. They are primarily UI work, which keeps implementation risk low and velocity high.
-- **Pitfall sequencing:** Each phase is aligned to a pitfall cluster so that the relevant risks are identified and mitigated at the right time — not discovered in a later phase where they are harder to fix.
+- **Data layer first** because both MCP tools and the web UI have hard dependencies on Prisma models, FTS5 index, and shared utilities. Building either without this foundation produces incomplete features.
+- **MCP tools before web UI** because MCP tools have no UI dependency and provide immediate testable value. AI agents can use the knowledge base as soon as Phase 2 is done, even without any web UI.
+- **File management as its own phase** because the security-critical path validation and cross-device move handling form a cohesive, independently testable unit. Mixing it into Phase 2 or 4 risks security checks being cut under feature pressure.
+- **Web UI last** because it is the most dependent layer (needs all server actions) and has the only MEDIUM confidence item (React 19 + md-editor compatibility).
 
 ### Research Flags
 
-Phases with standard patterns (no additional research needed):
-- **Phase 1:** `next-themes` + Tailwind v4 integration is well-documented in multiple community guides; the exact CSS fix is verified against codebase analysis
-- **Phase 2:** API Route + fetch pattern for async operations is the established Next.js pattern; adapter test infrastructure already exists
-- **Phase 3:** Server Action CRUD + `revalidatePath` is the standard pattern in this codebase; all actions exist
-- **Phase 4:** Props threading + Server Action signature update follows the established pattern used for labels today
+Phases needing specific caution during implementation:
+- **Phase 1:** FTS5 setup order is non-negotiable — run `db push` first, FTS5 raw SQL second. Back up `prisma/dev.db` before any schema push.
+- **Phase 2:** Fuzzy match confidence thresholds (0.85 for name/alias, 0.70 for description) should be tuned against real project name data before Phase 2 is marked done.
+- **Phase 4:** `@uiw/react-md-editor` React 19 compatibility is MEDIUM confidence. Have the fallback plan (plain textarea + react-markdown) ready before starting the component.
 
-No phases require deeper research during planning. All patterns have HIGH-confidence sources.
+Phases with standard patterns (no additional research needed):
+- **Phase 1:** Prisma schema additions, FTS5 triggers, WAL pragma — all confirmed patterns with official sources.
+- **Phase 3:** Node.js file operations, path containment check, Route Handler streaming — standard Node.js/Next.js patterns.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Verified against actual `package.json`, `globals.css`, `prisma/schema.prisma` — no assumptions |
-| Features | HIGH | Derived from codebase analysis of existing actions, models, and component gaps |
-| Architecture | HIGH | Direct source file inspection; all integration points verified in code, not inferred |
-| Pitfalls | HIGH | Core pitfalls (FOUC, `@custom-variant`, hydration) confirmed by official docs and multiple community sources; schema pitfall confirmed against Prisma docs |
+| Stack | HIGH | All additions verified via official docs and npm; only `@uiw/react-md-editor` React 19 compat is MEDIUM (backward compat inferred, not explicitly confirmed) |
+| Features | HIGH | Derived from codebase analysis + competitor analysis (Notion/Obsidian/Linear); MVP scope is clearly bounded and validated against PROJECT.md constraints |
+| Architecture | HIGH | Derived from direct codebase inspection of all relevant source files; component boundaries and process separation are confirmed facts, not assumptions |
+| Pitfalls | HIGH | 9 critical pitfalls with prevention code; sourced from Prisma issue tracker, SQLite official docs, Node.js issue tracker, and community benchmarks |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Light theme CSS variables:** The codebase has only one CSS theme (Midnight Studio dark). A light theme requires a separate CSS variable block under `.light` or `html:not(.dark)`. Without this, the theme toggle will show an unstyled white state. Product/design decision needed before Phase 1 ships. If light theme design is not ready, the toggle could default to dark-only with a "system" fallback that maps to dark.
-- **`@custom-variant` fix vs. existing dark components:** Changing `(&:is(.dark *))` to `(&:where(.dark, .dark *))` affects all existing `dark:` utilities. Should be verified with a visual regression check on the Kanban board after the change to ensure no existing dark styles break.
-- **MCP tool `create_task` update:** If prompt selection should be available via MCP, the `create_task` MCP tool in `src/mcp/tools/task-tools.ts` also needs a `promptId` parameter. This is out of scope for the current milestone but should be flagged for Phase 4.
+- **`@uiw/react-md-editor` React 19 runtime compatibility:** No explicit React 19 test case found. During Phase 4, test `dynamic({ ssr: false })` first; fall back to plain textarea + `react-markdown` preview if hydration errors occur.
+- **Fuzzy match threshold tuning:** The 0.85 name/alias threshold is a recommendation derived from general fuzzy matching literature. Validate against real project name data during Phase 2 implementation and adjust if short project names ("app", "api", "web") produce false positives.
+- **MCP tool count budget:** With action-dispatch design, v0.2 adds 3 tools (find_project + manage_note + manage_asset) to the existing 18, for a total of 21. Confirm the action-dispatch approach is maintained throughout Phase 2 implementation to stay within the 30-tool budget.
+- **Light theme for Notes UI:** If a light theme is introduced in parallel work, verify `@uiw/react-md-editor` and `@tailwindcss/typography` prose styles are compatible with the light color scheme.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Codebase analysis: `src/app/globals.css`, `src/lib/i18n.tsx`, `src/actions/prompt-actions.ts`, `src/actions/task-actions.ts`, `src/lib/adapters/types.ts`, `src/lib/adapters/claude-local/test.ts`, `prisma/schema.prisma`, `src/app/settings/page.tsx`, `src/components/settings/`, `src/components/board/create-task-dialog.tsx`, `src/app/layout.tsx`
-- [next-themes GitHub](https://github.com/pacocoursey/next-themes) — App Router support, `attribute="class"` pattern, FOUC prevention via inline script
-- [Dark Mode Next.js 15 + Tailwind v4 guide](https://www.sujalvanjare.com/blog/dark-mode-nextjs15-tailwind-v4) — confirms `@custom-variant dark (&:where(.dark, .dark *))`, `suppressHydrationWarning`, `next-themes@0.4.6`
-- [Solving class-based dark mode Tailwind 4](https://iifx.dev/en/articles/456423217/solved-enabling-class-based-dark-mode-with-next-15-next-themes-and-tailwind-4) — confirms `@custom-variant` fix
-- [Tailwind CSS v4 Dark Mode official docs](https://tailwindcss.com/docs/dark-mode) — `@custom-variant` directive specification
-- [Prisma db push vs migrate docs](https://www.prisma.io/docs/orm/prisma-migrate/workflows/prototyping-your-schema) — destructive change behavior
+- Codebase inspection (`prisma/schema.prisma`, `src/mcp/server.ts`, `src/lib/db.ts`, `src/mcp/db.ts`, `src/actions/search-actions.ts`, `src/mcp/tools/search-tools.ts`, `.planning/PROJECT.md`) — architecture facts and existing patterns
+- [SQLite FTS5 extension official docs](https://www.sqlite.org/fts5.html) — trigger patterns, content table approach, BM25 ranking, `snippet()` function
+- [Prisma raw database access docs](https://www.prisma.io/docs/orm/prisma-client/queries/raw-database-access) — `$queryRaw`, `$executeRaw`, `$executeRawUnsafe` confirmed for Prisma 6
+- [Fuse.js official site](https://www.fusejs.io/) — version 7.1.0, field-weighted scoring, threshold semantics, zero deps
+- [mime-types npm](https://www.npmjs.com/package/mime-types) — v2.1.35, CJS compatibility confirmed
+- [SQLite WAL mode official docs](https://www.sqlite.org/wal.html) — WAL + busy_timeout configuration
 
 ### Secondary (MEDIUM confidence)
-- [Next.js + Zustand localStorage hydration mismatch (pmndrs/zustand #1382)](https://github.com/pmndrs/zustand/discussions/1382) — Zustand `persist` SSR incompatibility
-- [Node.js Don't Block the Event Loop](https://nodejs.org/en/learn/asynchronous-work/dont-block-the-event-loop) — async child process guidance
-- [React rich text editor XSS prevention](https://www.syncfusion.com/blogs/post/react-rich-text-editor-xss-prevention) — prompt content rendering safety
+- [Prisma issue #8106](https://github.com/prisma/prisma/issues/8106) — FTS5 shadow table drift detection; raw SQL workaround confirmed
+- [uiwjs/react-md-editor npm](https://www.npmjs.com/package/@uiw/react-md-editor) — v4.0.11; SSR workaround confirmed via GitHub issues
+- [Next.js Route Handler file streaming](https://www.ericburel.tech/blog/nextjs-stream-files) — ReadableStream pattern confirmed
+- [MCP tool context bloat — demiliani.com](https://demiliani.com/2025/09/04/model-context-protocol-and-the-too-many-tools-problem/) — tool count performance impact at scale
+- [SQLite concurrent writes and lock errors](https://tenthousandmeters.com/blog/sqlite-concurrent-writes-and-database-is-locked-errors/) — WAL + busy_timeout approach validated
+- [react-markdown XSS pitfall — Medium](https://medium.com/@brian3814/pitfall-of-potential-xss-in-markdown-editors-1d9e0d2df93a) — rehypeRaw + sanitize requirement
+
+### Tertiary (LOW confidence)
+- [Next.js path traversal CVE-2020-5284 — Snyk](https://security.snyk.io/vuln/SNYK-JS-NEXT-561584) — path traversal pattern; prevention approach is standard
+- [Redis Fuzzy Matching Guide](https://redis.io/blog/what-is-fuzzy-matching/) — confidence threshold recommendations extrapolated to local use case
+- [Node.js issue #19077 — fs.rename() cross-device EXDEV](https://github.com/nodejs/node/issues/19077) — EXDEV error behavior confirmed
 
 ---
-*Research completed: 2026-03-26*
+*Research completed: 2026-03-27*
 *Ready for roadmap: yes*

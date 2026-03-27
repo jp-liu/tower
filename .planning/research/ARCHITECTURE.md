@@ -1,487 +1,576 @@
 # Architecture Research
 
-**Domain:** Settings features in existing Next.js 16 AI task manager
-**Researched:** 2026-03-26
-**Confidence:** HIGH (derived entirely from direct codebase analysis — no training assumptions)
+**Domain:** AI task management platform — knowledge base extension (v0.2)
+**Researched:** 2026-03-27
+**Confidence:** HIGH (derived from direct codebase inspection)
+
+## Existing Architecture Baseline
+
+Before describing changes, the current system structure is documented from direct source inspection.
+
+### Current System Overview
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                     Browser (React 19)                           │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐   │
+│  │  Board Page  │  │ Settings Page│  │  Task Detail Panel   │   │
+│  │ (Kanban UI)  │  │ (AI Tools)   │  │  (messages+execute)  │   │
+│  └──────┬───────┘  └──────┬───────┘  └──────────┬───────────┘   │
+│  Zustand: board-store, task-execution-store                      │
+└──────────────────────────────────────────────────────────────────┘
+                  Server Actions / fetch
+┌──────────────────────────────────────────────────────────────────┐
+│                  Next.js 16 App Router (Node.js)                 │
+│                                                                  │
+│  src/actions/           src/app/api/                            │
+│  workspace-actions      /tasks/[id]/stream    (SSE)             │
+│  task-actions           /tasks/[id]/execute   (start)           │
+│  label-actions          /adapters/test        (env check)       │
+│  search-actions         /browse-fs            (file browser)    │
+│  agent-actions          /git                  (git info)        │
+│  prompt-actions                                                  │
+│                                                                  │
+│  src/lib/adapters/claude-local/   (executes Claude CLI)         │
+│  src/lib/db.ts                    (Prisma singleton)            │
+└──────────────────────────────────────────────────────────────────┘
+                          │ Prisma ORM
+┌──────────────────────────────────────────────────────────────────┐
+│                    prisma/dev.db (SQLite)                        │
+│  Workspace, Project, Task, Label, TaskLabel, TaskExecution,     │
+│  TaskMessage, Repository, AgentConfig, AgentPrompt              │
+└──────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────┐
+│              MCP Server (separate stdio process)                 │
+│              src/mcp/index.ts → server.ts → tools/              │
+│  18 tools: workspace, project, task, label, search              │
+│  Own PrismaClient (WAL mode) → same dev.db                      │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Key Architectural Facts (Confirmed from Source)
+
+- **Two PrismaClient instances**: Next.js uses a singleton in `src/lib/db.ts`; MCP uses its own in `src/mcp/db.ts` with `PRAGMA journal_mode=WAL`. Both connect to the same `prisma/dev.db`.
+- **Server Actions as mutation layer**: All data writes go through `src/actions/`. No REST endpoints for CRUD — API Routes are streaming/utility only.
+- **MCP tools use db directly**: MCP tools call `src/mcp/db.ts` directly (not server actions) because they run in a separate process and cannot import Next.js-specific modules.
+- **No file storage system yet**: The `data/` directory does not exist. All current state is in SQLite.
+- **Adapter pattern is isolated**: `src/lib/adapters/` is a pure Node.js module with no Next.js coupling — importable from both the Next.js process and the MCP process.
 
 ---
 
-## Existing Architecture at a Glance
+## v0.2 Integration Architecture
+
+### What Changes vs What Is New
+
+**MODIFIED (existing files touched):**
+
+| File | Change |
+|------|--------|
+| `prisma/schema.prisma` | Add `ProjectNote` and `ProjectAsset` models with relations |
+| `src/mcp/server.ts` | Register new tool modules: note-tools, asset-tools |
+| `src/mcp/tools/search-tools.ts` | Extend with smart project identification (`find_project`) |
+| `src/mcp/tools/project-tools.ts` | Add `findProjectByIdentifier` fuzzy lookup helper |
+| `src/actions/search-actions.ts` | Extend `globalSearch` with notes FTS category |
+| `src/app/workspaces/[workspaceId]/page.tsx` | Add Notes and Assets tabs to project detail view |
+
+**NEW (net-new files):**
+
+| File | Purpose |
+|------|---------|
+| `prisma/migrations/[ts]_add_knowledge_base/` | Prisma migration + raw FTS5 SQL |
+| `src/lib/file-utils.ts` | Pure filesystem helpers: path resolution, mv, mkdir |
+| `src/lib/fts.ts` | SQLite FTS5 query helpers using `$queryRaw` |
+| `src/actions/note-actions.ts` | Server actions for ProjectNote CRUD + FTS maintenance |
+| `src/actions/asset-actions.ts` | Server actions for ProjectAsset (file mv + metadata record) |
+| `src/mcp/tools/note-tools.ts` | MCP note CRUD and search tools |
+| `src/mcp/tools/asset-tools.ts` | MCP asset upload (mv) and listing tools |
+| `src/components/notes/note-list.tsx` | Note list UI with category filter |
+| `src/components/notes/note-editor.tsx` | Markdown note editor (create/edit) |
+| `src/components/notes/note-detail.tsx` | Read-only markdown note viewer |
+| `src/components/assets/asset-list.tsx` | Asset list with file type icons and metadata |
+| `src/components/assets/asset-upload.tsx` | Move-to-assets form (path input, not binary upload) |
+
+---
+
+### System Overview After v0.2
 
 ```
-src/app/layout.tsx  (Server Component)
-  └── I18nProvider  (Client Context — locale in localStorage)
-      └── LayoutClient
-          └── pages/settings/page.tsx  (Client Component — currently "use client")
-              ├── SettingsNav           (left nav, section switcher)
-              └── AIToolsConfig         (active section = "ai-tools")
-                  skills / plugins      (placeholder divs)
+┌──────────────────────────────────────────────────────────────────┐
+│                     Browser (React 19)                           │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌───────────┐  │
+│  │Kanban Board│  │  Notes Tab │  │ Assets Tab │  │ Settings  │  │
+│  └─────┬──────┘  └─────┬──────┘  └─────┬──────┘  └─────┬─────┘  │
+│  Zustand board-store    │               │               │        │
+└─────────────────────────┼───────────────┼───────────────┼────────┘
+              Server Actions              │               │
+┌─────────────────────────────────────────────────────────────────┐
+│                  Next.js 16 App Router                          │
+│                                                                 │
+│  src/actions/                                                   │
+│  workspace  task  label  agent  prompt  search (mod)           │
+│  note (NEW)       asset (NEW)                                   │
+│       │                  │                                      │
+│  src/lib/fts.ts (NEW)    src/lib/file-utils.ts (NEW)           │
+│  FTS5 via $queryRaw      mv / path resolution                   │
+│       │                  │                                      │
+│  Prisma ORM (src/lib/db.ts)                                     │
+└─────────────────────────┬───────────────────────────────────────┘
+                          │
+          ┌───────────────┴───────────────┐
+          │                               │
+┌─────────▼──────────────┐  ┌────────────▼─────────────────────┐
+│    prisma/dev.db        │  │       data/ directory            │
+│  + ProjectNote model    │  │  data/assets/{projectId}/        │
+│  + ProjectAsset model   │  │  data/cache/{taskId}/            │
+│  + note_fts virtual tbl │  │  (filesystem, not SQLite)        │
+└─────────────────────────┘  └──────────────────────────────────┘
 
-src/actions/
-  agent-config-actions.ts   (AgentConfig CRUD)
-  prompt-actions.ts         (AgentPrompt CRUD — already exists)
-  task-actions.ts           (createTask, updateTask — no promptId today)
-
-src/lib/adapters/
-  types.ts          (AdapterModule interface: execute + testEnvironment)
-  registry.ts       (Map<string, AdapterModule>)
-  claude-local/     (only adapter today)
-
-src/lib/
-  i18n.tsx          (React Context, localStorage["locale"], flat key-value dict)
-
-prisma/schema.prisma
-  AgentPrompt       (id, name, description, content, isDefault, workspaceId)
-  Task.promptId     (String? — field exists in schema, NOT in createTask action yet)
-  AgentConfig       (id, agent, configName, appendPrompt, settings, isDefault)
+┌─────────────────────────────────────────────────────────────────┐
+│              MCP Server (separate stdio process)                │
+│  src/mcp/tools/                                                 │
+│  workspace  project (mod)  task  label                         │
+│  search (mod)  note (NEW)  asset (NEW)                         │
+│       │              │                                          │
+│  src/mcp/db.ts       src/lib/file-utils.ts (shared)            │
+│  (own PrismaClient)  (pure Node.js, no Next.js deps)           │
+│       │                                                         │
+│  same dev.db via WAL                                           │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Standard Architecture for New Features
+## New Prisma Models
 
-### System Overview
+### ProjectNote
 
-The three new Settings features slot into the existing architecture at different layers:
+```prisma
+model ProjectNote {
+  id        String   @id @default(cuid())
+  title     String
+  content   String   // Markdown text stored as-is
+  category  String   @default("general")
+  projectId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-```
-┌────────────────────────────────────────────────────────────────────┐
-│  PRESENTATION LAYER  src/components/settings/                      │
-│                                                                    │
-│  [SettingsNav]  [GeneralConfig]  [AIToolsConfig*]  [PromptsConfig] │
-│      (mod)          (NEW)            (mod)              (NEW)      │
-└──────────────────────────────┬─────────────────────────────────────┘
-                               │ Server Actions / direct import
-┌──────────────────────────────▼─────────────────────────────────────┐
-│  SERVER ACTIONS  src/actions/                                      │
-│                                                                    │
-│  prompt-actions.ts  (exists — CRUD ready)                          │
-│  agent-config-actions.ts  (exists — no testEnvironment call)       │
-│  task-actions.ts  (mod — add promptId to createTask)               │
-└──────────────────────────────┬─────────────────────────────────────┘
-                               │
-┌──────────────────────────────▼─────────────────────────────────────┐
-│  API ROUTES  src/app/api/                                          │
-│                                                                    │
-│  /api/adapters/[type]/test  (NEW — calls testEnvironment)          │
-└──────────────────────────────┬─────────────────────────────────────┘
-                               │
-┌──────────────────────────────▼─────────────────────────────────────┐
-│  ADAPTER LAYER  src/lib/adapters/                                  │
-│                                                                    │
-│  types.ts (unchanged)  registry.ts (unchanged)                     │
-│  claude-local/ (testEnvironment already implemented)               │
-└──────────────────────────────┬─────────────────────────────────────┘
-                               │
-┌──────────────────────────────▼─────────────────────────────────────┐
-│  CROSS-CUTTING  src/lib/                                           │
-│                                                                    │
-│  i18n.tsx — add theme/appearance keys (mod)                        │
-│  theme.ts  — NEW: localStorage bridge + CSS var applicator         │
-└────────────────────────────────────────────────────────────────────┘
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([category])
+}
 ```
 
----
+**FTS5 virtual table** (raw SQL appended to Prisma migration, not schema-managed):
 
-## Feature-by-Feature Integration Analysis
+```sql
+-- Appended to migration .sql file after Prisma-generated DDL
+CREATE VIRTUAL TABLE note_fts USING fts5(
+  title,
+  content,
+  content='ProjectNote',
+  content_rowid='rowid'
+);
 
-### Feature 1: Theme Switching (General Settings)
+-- Triggers to keep note_fts in sync
+CREATE TRIGGER note_fts_insert AFTER INSERT ON ProjectNote BEGIN
+  INSERT INTO note_fts(rowid, title, content) VALUES (new.rowid, new.title, new.content);
+END;
 
-**Integration point:** `src/lib/i18n.tsx` + `src/app/layout.tsx` + new `src/lib/theme.ts`
+CREATE TRIGGER note_fts_update AFTER UPDATE ON ProjectNote BEGIN
+  INSERT INTO note_fts(note_fts, rowid, title, content) VALUES('delete', old.rowid, old.title, old.content);
+  INSERT INTO note_fts(rowid, title, content) VALUES (new.rowid, new.title, new.content);
+END;
 
-**What exists:**
-- `I18nProvider` in `src/lib/i18n.tsx` already persists locale to `localStorage["locale"]` and exposes `setLocale` via React Context.
-- `src/app/layout.tsx` hardcodes `<html lang="zh-CN">` — no theme class today.
-- No `ThemeProvider` or dark mode CSS variables exist.
-
-**What needs to be built:**
-
-1. **`src/lib/theme.ts`** (NEW) — a thin client-side module that:
-   - Reads/writes `localStorage["theme"]` (`"light"` | `"dark"` | `"system"`)
-   - Applies a CSS class (`dark`) to `document.documentElement`
-   - Exports a `ThemeProvider` React Context component
-
-2. **`src/app/layout.tsx`** (MODIFY) — wrap children in `ThemeProvider` alongside `I18nProvider`. Add a `suppressHydrationWarning` on `<html>` to avoid hydration mismatch (standard pattern for theme-on-body/html).
-
-3. **`src/components/settings/general-config.tsx`** (NEW) — the "General" settings panel. Displays:
-   - Language switcher (calls existing `setLocale` from `useI18n()`)
-   - Theme switcher (calls new `setTheme` from `useTheme()`)
-
-4. **`src/components/settings/settings-nav.tsx`** (MODIFY) — add a "general" nav item at the top of `NAV_ITEMS`.
-
-5. **`src/app/settings/page.tsx`** (MODIFY) — add `activeSection === "general"` branch rendering `<GeneralConfig />`.
-
-**Data flow:**
-```
-User clicks theme toggle
-  → GeneralConfig calls setTheme("dark")
-  → ThemeProvider writes localStorage["theme"] = "dark"
-  → ThemeProvider adds class "dark" to document.documentElement
-  → Tailwind dark: variants activate (requires darkMode: "class" in tailwind.config)
-  → Page re-renders with dark styles (no server round-trip needed)
+CREATE TRIGGER note_fts_delete AFTER DELETE ON ProjectNote BEGIN
+  INSERT INTO note_fts(note_fts, rowid, title, content) VALUES('delete', old.rowid, old.title, old.content);
+END;
 ```
 
-**Schema changes:** None. Theme preference is client-only (localStorage), consistent with how locale is handled today.
+**Why FTS5 via raw SQL, not Prisma:** Prisma does not support virtual tables. FTS5 is a SQLite detail — isolate it in `src/lib/fts.ts` so Prisma models stay clean.
 
-**i18n additions:** Add keys under `settings.*` prefix: `settings.general`, `settings.theme`, `settings.themeLight`, `settings.themeDark`, `settings.themeSystem`.
+### ProjectAsset
 
----
+```prisma
+model ProjectAsset {
+  id           String   @id @default(cuid())
+  name         String   // stored filename
+  originalName String   // filename before mv
+  mimeType     String?
+  size         Int      // bytes
+  path         String   // relative: "assets/{projectId}/{name}" or "cache/{taskId}/{name}"
+  projectId    String
+  taskId       String?  // null for persistent assets
+  isCache      Boolean  @default(false)
+  createdAt    DateTime @default(now())
 
-### Feature 2: CLI Adapter Testing (AI Tools — testEnvironment)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-**Integration point:** `src/lib/adapters/types.ts` → new API Route → `AIToolsConfig` component
-
-**What exists:**
-- `AdapterModule.testEnvironment(cwd: string): Promise<TestResult>` is defined in `types.ts` and implemented in the `claude-local` adapter.
-- `AIToolsConfig` currently shows a static hardcoded green "检测到最近使用" banner — not a real check.
-- The adapter registry (`registry.ts`) is server-side only (Node.js `child_process`). It cannot be imported by a Client Component.
-
-**What needs to be built:**
-
-1. **`src/app/api/adapters/[type]/test/route.ts`** (NEW) — a `GET` or `POST` Route Handler that:
-   - Accepts `type` path param (e.g., `"CLAUDE_CODE"`)
-   - Accepts optional `cwd` body/query param (defaults to `process.cwd()`)
-   - Calls `getAdapter(type).testEnvironment(cwd)`
-   - Returns `TestResult` JSON
-
-2. **`src/components/settings/ai-tools-config.tsx`** (MODIFY) — replace the static banner with:
-   - A "Test Connection" button per adapter
-   - Calls `fetch("/api/adapters/CLAUDE_CODE/test")` on click
-   - Shows a loading state, then renders `TestResult.checks` (name + passed + message per check)
-   - Status badge: green for all-pass, red for any-fail
-
-**Data flow:**
-```
-User clicks "Test Connection"
-  → AIToolsConfig fetches /api/adapters/CLAUDE_CODE/test
-  → Route Handler calls getAdapter("CLAUDE_CODE").testEnvironment(cwd)
-  → claude-local adapter runs shell checks (e.g., `claude --version`)
-  → Returns { ok: boolean, checks: TestCheck[] }
-  → Component renders check list inline
+  @@index([projectId])
+  @@index([taskId])
+  @@index([isCache])
+}
 ```
 
-**Why API Route (not Server Action):** `testEnvironment` spawns child processes and may take seconds — server actions are designed for fast mutations. An API route allows proper loading state management on the client. Also, the adapter imports (`child_process`) are Node.js-only and cannot run in the browser.
+**Path convention:**
+- Permanent asset: `data/assets/{projectId}/{filename}` — `isCache: false`
+- Task cache file: `data/cache/{taskId}/{filename}` — `isCache: true`, `taskId` set
 
-**Schema changes:** None.
-
-**i18n additions:** `settings.testConnection`, `settings.testPassed`, `settings.testFailed`, `settings.testing`.
-
----
-
-### Feature 3: Agent Prompt Management (Prompts Section)
-
-**Integration point:** `src/actions/prompt-actions.ts` → new `PromptsConfig` component → `CreateTaskDialog`
-
-**What exists:**
-- `AgentPrompt` model in Prisma schema is complete.
-- `src/actions/prompt-actions.ts` implements full CRUD: `getPrompts`, `getPromptById`, `createPrompt`, `updatePrompt`, `deletePrompt`.
-- `Task.promptId` field exists in schema but `createTask` in `task-actions.ts` does not accept or persist it yet.
-- `CreateTaskDialog` has no prompt selector UI.
-
-**What needs to be built:**
-
-1. **`src/components/settings/prompts-config.tsx`** (NEW) — the "Prompts" settings panel:
-   - Lists all `AgentPrompt` records (calls `getPrompts()`)
-   - Create new prompt: name, description, content (textarea), isDefault toggle
-   - Edit existing prompt: inline or modal editor
-   - Delete prompt (with confirmation)
-   - Mark/unmark as default
-   - Uses `createPrompt`, `updatePrompt`, `deletePrompt` server actions directly
-
-2. **`src/components/settings/settings-nav.tsx`** (MODIFY) — add a "prompts" nav item.
-
-3. **`src/app/settings/page.tsx`** (MODIFY) — add `activeSection === "prompts"` branch rendering `<PromptsConfig />`. Prompts are global (no `workspaceId` filter needed in the settings context).
-
-4. **`src/actions/task-actions.ts`** (MODIFY) — extend `createTask` to accept optional `promptId?: string` and persist it to the `Task` record.
-
-5. **`src/components/board/create-task-dialog.tsx`** (MODIFY) — add a prompt selector:
-   - New prop: `prompts: { id: string; name: string; isDefault: boolean }[]`
-   - New state: `selectedPromptId: string | null` (pre-fills with default prompt's id)
-   - Renders a `<Select>` or button group for prompt selection (optional — clear/"none" option available)
-   - Passes `promptId` to `onSubmit`
-
-6. **`src/app/workspaces/[workspaceId]/page.tsx` or the board page client** (MODIFY) — fetch prompts and pass to `CreateTaskDialog`. The board page already receives workspace data; add a `getPrompts(workspaceId)` call.
-
-**Data flow (prompt selection at task creation):**
-```
-Board page (Server Component) fetches prompts via getPrompts(workspaceId)
-  → passes prompts[] to BoardPageClient
-  → BoardPageClient passes prompts[] to CreateTaskDialog
-  → User selects a prompt (or keeps default)
-  → onSubmit includes promptId
-  → createTask server action persists promptId to Task record
-```
-
-**Data flow (prompt management in Settings):**
-```
-User opens /settings → clicks "Prompts" nav item
-  → PromptsConfig calls getPrompts() (server action, no workspaceId filter)
-  → User creates/edits/deletes prompts
-  → Server actions call revalidatePath("/settings") and revalidatePath("/workspaces")
-  → Next time board page loads, fresh prompts are available
-```
-
-**Schema changes:** None needed (schema already has `AgentPrompt` and `Task.promptId`).
-
-**i18n additions:** `settings.prompts`, `settings.promptName`, `settings.promptContent`, `settings.promptDescription`, `settings.promptDefault`, `settings.promptCreate`, `settings.promptEdit`, `settings.promptDelete`, `task.prompt`, `task.promptNone`.
+The `path` field stores a path relative to the project root (e.g., `assets/clxxx/report.pdf`). `src/lib/file-utils.ts` resolves absolute paths using `process.cwd()`.
 
 ---
 
 ## Component Responsibilities
 
-| Component | Status | Responsibility |
-|-----------|--------|----------------|
-| `settings-nav.tsx` | MODIFY | Add "general" and "prompts" nav items |
-| `settings/page.tsx` | MODIFY | Route to GeneralConfig and PromptsConfig sections |
-| `general-config.tsx` | NEW | Language + theme preference UI |
-| `ai-tools-config.tsx` | MODIFY | Replace static banner with live testEnvironment call |
-| `prompts-config.tsx` | NEW | Full CRUD UI for AgentPrompt records |
-| `create-task-dialog.tsx` | MODIFY | Add prompt selector field |
-| `src/lib/theme.ts` | NEW | ThemeProvider, useTheme hook, localStorage bridge |
-| `src/app/layout.tsx` | MODIFY | Wrap in ThemeProvider, add suppressHydrationWarning |
-| `/api/adapters/[type]/test/route.ts` | NEW | Bridge client → server adapter testEnvironment |
-| `task-actions.ts` | MODIFY | Accept promptId in createTask |
-| `tailwind.config.*` | MODIFY | Set darkMode: "class" |
+| Component | Responsibility | Notes |
+|-----------|----------------|-------|
+| `src/lib/file-utils.ts` | Path resolution, `fs.rename` (mv), `fs.mkdir`, asset path helpers | No Prisma, no Next.js imports — importable from both processes |
+| `src/lib/fts.ts` | FTS5 `note_fts` search and index maintenance via `$queryRaw` | Takes a PrismaClient param; works with both db instances |
+| `src/actions/note-actions.ts` | Server actions: getProjectNotes, createNote, updateNote, deleteNote, searchNotes | Calls Prisma + fts.ts |
+| `src/actions/asset-actions.ts` | Server actions: getProjectAssets, addAsset (mv+record), deleteAsset (rm+record) | Calls Prisma + file-utils.ts |
+| `src/mcp/tools/note-tools.ts` | MCP tools: note_list, note_create, note_update, note_delete, note_search | Uses mcp/db.ts + fts.ts |
+| `src/mcp/tools/asset-tools.ts` | MCP tools: asset_list, asset_add, asset_delete | Uses mcp/db.ts + file-utils.ts |
+| `src/mcp/tools/project-tools.ts` | Adds `findProjectByIdentifier` helper for smart project lookup | Internal helper, not a new MCP tool |
+| `src/mcp/tools/search-tools.ts` | Extended: add `find_project` tool using `findProjectByIdentifier` | Fuzzy match on name/alias/description |
+| `src/components/notes/note-list.tsx` | Note list with category filter tabs; calls note-actions | Client Component |
+| `src/components/notes/note-editor.tsx` | Textarea + markdown preview side-by-side; create/edit | Client Component |
+| `src/components/notes/note-detail.tsx` | Read-only markdown rendering using @tailwindcss/typography | Client Component |
+| `src/components/assets/asset-list.tsx` | File list with name, size, type, date; delete action | Client Component |
+| `src/components/assets/asset-upload.tsx` | Path input form that calls asset-actions.addAsset | Client Component |
 
 ---
 
-## Recommended File Structure Changes
+## Recommended Project Structure Changes
 
 ```
-src/
-├── app/
-│   ├── api/
-│   │   └── adapters/
-│   │       └── [type]/
-│   │           └── test/
-│   │               └── route.ts        # NEW — adapter test endpoint
-│   ├── settings/
-│   │   └── page.tsx                    # MODIFY — add general + prompts sections
-│   └── layout.tsx                      # MODIFY — add ThemeProvider
-├── components/
-│   └── settings/
-│       ├── settings-nav.tsx            # MODIFY — add general + prompts items
-│       ├── ai-tools-config.tsx         # MODIFY — live test connection
-│       ├── general-config.tsx          # NEW — theme + language
-│       └── prompts-config.tsx          # NEW — prompt CRUD
-├── actions/
-│   └── task-actions.ts                 # MODIFY — add promptId to createTask
-└── lib/
-    └── theme.ts                        # NEW — ThemeProvider + useTheme
+ai-manager/
+├── data/                                    # NEW — gitignored runtime storage
+│   ├── assets/
+│   │   └── {projectId}/                     # permanent project assets
+│   └── cache/
+│       └── {taskId}/                        # ephemeral task files
+├── prisma/
+│   ├── schema.prisma                        # MODIFIED — ProjectNote, ProjectAsset
+│   └── migrations/
+│       └── [ts]_add_knowledge_base/
+│           └── migration.sql               # NEW — Prisma DDL + FTS5 raw SQL
+└── src/
+    ├── actions/
+    │   ├── note-actions.ts                  # NEW
+    │   ├── asset-actions.ts                 # NEW
+    │   └── search-actions.ts               # MODIFIED — notes category
+    ├── lib/
+    │   ├── file-utils.ts                    # NEW — filesystem ops
+    │   ├── fts.ts                           # NEW — FTS5 query helpers
+    │   └── db.ts                            # unchanged
+    ├── mcp/
+    │   ├── server.ts                        # MODIFIED — register new tools
+    │   └── tools/
+    │       ├── note-tools.ts                # NEW
+    │       ├── asset-tools.ts               # NEW
+    │       ├── project-tools.ts             # MODIFIED — findProjectByIdentifier
+    │       └── search-tools.ts             # MODIFIED — find_project tool
+    ├── components/
+    │   ├── notes/
+    │   │   ├── note-list.tsx               # NEW
+    │   │   ├── note-editor.tsx             # NEW
+    │   │   └── note-detail.tsx             # NEW
+    │   └── assets/
+    │       ├── asset-list.tsx              # NEW
+    │       └── asset-upload.tsx            # NEW
+    └── app/
+        └── workspaces/
+            └── [workspaceId]/
+                └── page.tsx                # MODIFIED — Notes/Assets tabs
 ```
 
 ---
 
 ## Architectural Patterns
 
-### Pattern 1: localStorage-Persisted Client Context (Theme)
+### Pattern 1: File Transfer via `fs.rename` (mv)
 
-**What:** React Context holds a preference value that is initialized from `localStorage` on mount and synced back on change. No server involvement.
+**What:** Assets enter the system by being renamed from an external path into `data/assets/{projectId}/`. No binary upload, no base64 — the local filesystem is the transfer channel.
 
-**When to use:** UI preferences that do not affect server-rendered content (theme class on `<html>`, locale switching). Consistent with how `I18nProvider` handles locale today.
+**When to use:** Any time an AI agent (via MCP) or the web UI needs to associate an existing local file with a project or task.
 
-**Trade-offs:** Simple and zero-latency. Causes a flash-of-unstyled-content on first load if not paired with an inline script that applies the class before React hydrates. For this app (localhost dev tool), the flash is acceptable — avoid the complexity of script injection.
+**Trade-offs:** Zero encoding overhead. Atomic on same filesystem. Only works for local files — acceptable given localhost-only constraint.
 
-**Example:**
 ```typescript
-// src/lib/theme.ts
-"use client";
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() =>
-    typeof window !== "undefined"
-      ? (localStorage.getItem("theme") as Theme) ?? "system"
-      : "system"
-  );
-  useEffect(() => {
-    const root = document.documentElement;
-    if (theme === "dark") root.classList.add("dark");
-    else root.classList.remove("dark");
-    localStorage.setItem("theme", theme);
-  }, [theme]);
-  return <ThemeContext.Provider value={{ theme, setTheme: setThemeState }}>{children}</ThemeContext.Provider>;
+// src/lib/file-utils.ts
+import fs from "fs/promises";
+import path from "path";
+
+export function resolveAssetPath(projectId: string, filename: string): string {
+  return path.join(process.cwd(), "data", "assets", projectId, filename);
+}
+
+export async function moveToAssets(
+  sourcePath: string,
+  projectId: string,
+  filename: string
+): Promise<{ relativePath: string; size: number }> {
+  const dest = resolveAssetPath(projectId, filename);
+  await fs.mkdir(path.dirname(dest), { recursive: true });
+  await fs.rename(sourcePath, dest);
+  const stat = await fs.stat(dest);
+  return { relativePath: `assets/${projectId}/${filename}`, size: stat.size };
 }
 ```
 
-### Pattern 2: API Route for Async Server-Side Operations
+### Pattern 2: FTS5 via Isolated Raw SQL Module
 
-**What:** Client Component triggers a `fetch()` to a Next.js Route Handler when the operation is long-running, has complex return data, or requires loading state management.
+**What:** SQLite FTS5 virtual tables are created in raw SQL migrations (not Prisma schema). A thin `src/lib/fts.ts` module owns all FTS queries using `db.$queryRaw`. Server actions and MCP tools call `fts.ts` for full-text search; they use Prisma for everything else.
 
-**When to use:** `testEnvironment()` — spawns a child process, may take 1-3s, returns structured check results. Server Actions are designed for fast mutations; using one here would block the UI without a clean loading state.
+**When to use:** Full-text search on `ProjectNote.title` and `ProjectNote.content`. The FTS virtual table is kept in sync via SQLite triggers defined in the migration.
 
-**Trade-offs:** Slightly more boilerplate than a Server Action. Enables proper loading/error states and `AbortController` cancellation. Consistent with how SSE streaming uses Route Handlers today.
+**Trade-offs:** Raw SQL is a maintenance surface. Isolated in one file, so the blast radius is small. Triggers fire at the SQLite level regardless of which PrismaClient issued the write — consistent behavior across both processes.
 
-**Example:**
 ```typescript
-// src/app/api/adapters/[type]/test/route.ts
-export async function GET(req: Request, { params }: { params: { type: string } }) {
-  try {
-    const adapter = getAdapter(params.type);
-    const result = await adapter.testEnvironment(process.cwd());
-    return Response.json(result);
-  } catch (e) {
-    return Response.json({ ok: false, checks: [], error: String(e) }, { status: 500 });
+// src/lib/fts.ts
+import type { PrismaClient } from "@prisma/client";
+
+type FtsRow = { rowid: number; rank: number };
+
+export async function searchNotes(
+  db: PrismaClient,
+  query: string,
+  projectId?: string
+): Promise<string[]> {
+  const rows = await db.$queryRaw<FtsRow[]>`
+    SELECT rowid, rank FROM note_fts WHERE note_fts MATCH ${query} ORDER BY rank LIMIT 20
+  `;
+  return rows.map((r) => String(r.rowid));
+}
+```
+
+### Pattern 3: Smart Project Identification in MCP
+
+**What:** MCP tools receive a project identifier as free text (name, alias, or description fragment). A shared `findProjectByIdentifier` helper in `project-tools.ts` runs a multi-field `contains` query. If exactly one match is found it is returned; zero matches throws a clear error; multiple matches throws with the list of candidates.
+
+**When to use:** Any MCP tool that operates on a project without the caller knowing its ID. Allows AI agents to reference projects naturally ("my auth-service project").
+
+**Trade-offs:** Simple `contains` is sufficient for single-user local data (typically <100 projects). No vector search or edit-distance needed. Error messages are descriptive enough for an AI agent to self-correct.
+
+```typescript
+// src/mcp/tools/project-tools.ts (added helper)
+import type { PrismaClient, Project } from "@prisma/client";
+
+export async function findProjectByIdentifier(
+  db: PrismaClient,
+  identifier: string
+): Promise<Project> {
+  const results = await db.project.findMany({
+    where: {
+      OR: [
+        { name: { contains: identifier } },
+        { alias: { contains: identifier } },
+        { description: { contains: identifier } },
+      ],
+    },
+    take: 5,
+    orderBy: { updatedAt: "desc" },
+  });
+  if (results.length === 0) {
+    throw new Error(`No project found matching "${identifier}". Use list_projects to see available projects.`);
   }
+  if (results.length > 1) {
+    const names = results.map((p) => p.alias ?? p.name).join(", ");
+    throw new Error(`"${identifier}" is ambiguous — matches: ${names}. Be more specific.`);
+  }
+  return results[0];
 }
 ```
-
-### Pattern 3: Server Action CRUD with revalidatePath
-
-**What:** Server Actions call Prisma, then call `revalidatePath()` to invalidate Next.js cache. Client Components call the action directly via import.
-
-**When to use:** All prompt management operations. `prompt-actions.ts` already follows this pattern exactly. New UI components (`PromptsConfig`) call these actions directly — no additional abstraction needed.
-
-**Trade-offs:** Zero boilerplate vs REST API. The broad `revalidatePath("/workspaces")` + `revalidatePath("/settings")` strategy already in `prompt-actions.ts` covers all consumers. No change needed.
 
 ---
 
 ## Data Flow
 
-### Theme Switching
+### Note Creation (MCP)
 
 ```
-User clicks theme toggle in GeneralConfig
-  → useTheme().setTheme("dark")
-  → ThemeProvider useEffect: document.documentElement.classList.add("dark")
-  → ThemeProvider: localStorage["theme"] = "dark"
-  → Tailwind dark: variants activate via CSS class
-  → No server round-trip
+AI agent calls: note_create(projectIdentifier, title, content, category)
+    ↓
+note-tools.ts
+    findProjectByIdentifier(db, projectIdentifier)  → Project
+    db.projectNote.create({ title, content, category, projectId })
+    fts.ts: db.$queryRaw INSERT INTO note_fts (fires trigger anyway, but explicit for safety)
+    ↓
+dev.db: ProjectNote row + note_fts row updated via trigger
 ```
 
-### CLI Adapter Test
+### Asset Upload (MCP)
 
 ```
-User clicks "Test Connection" in AIToolsConfig
-  → fetch("/api/adapters/CLAUDE_CODE/test") [with loading state]
-  → Route Handler: getAdapter("CLAUDE_CODE").testEnvironment(cwd)
-  → claude-local adapter: spawns "claude --version", checks PATH, etc.
-  → Returns TestResult { ok, checks[] }
-  → AIToolsConfig renders check list with pass/fail icons
+AI agent calls: asset_add(projectIdentifier, sourcePath, filename?)
+    ↓
+asset-tools.ts
+    findProjectByIdentifier(db, projectIdentifier)  → Project
+    file-utils.moveToAssets(sourcePath, projectId, filename)
+        → fs.mkdir data/assets/{projectId}/ (recursive, idempotent)
+        → fs.rename(sourcePath, dest)          ← atomic on same filesystem
+    db.projectAsset.create({ name, originalName, path, size, projectId })
+    ↓
+dev.db: ProjectAsset row  +  data/assets/{projectId}/{filename}
 ```
 
-### Prompt Management (Settings)
+### Full-Text Note Search
 
 ```
-PromptsConfig mounts
-  → calls getPrompts() server action (no workspaceId filter)
-  → renders list of AgentPrompt records
-User creates prompt → createPrompt({name, content, ...})
-  → Prisma insert
-  → revalidatePath("/settings"), revalidatePath("/workspaces")
-  → PromptsConfig re-fetches (router.refresh() or re-call server action)
+User or agent searches: "OAuth credentials"
+    ↓
+note-actions.ts (or note-tools.ts in MCP)
+    fts.ts: db.$queryRaw`SELECT rowid, rank FROM note_fts WHERE note_fts MATCH ?`
+        → returns sorted rowids
+    db.projectNote.findMany({ where: { id: { in: matchedIds } } })
+    ↓
+Ranked note results with title, category, projectId
 ```
 
-### Prompt Selection at Task Creation
+### Web UI Notes Tab Flow
 
 ```
-Board Server Component: getPrompts(workspaceId) → passes prompts to client
-  → BoardPageClient → CreateTaskDialog receives prompts prop
-  → pre-selects prompt where isDefault = true
-User submits task → onSubmit({ ..., promptId })
-  → createTask({ ..., promptId }) server action
-  → Prisma: Task.promptId = promptId
+User opens project → clicks "Notes" tab
+    ↓
+note-list.tsx (Client Component)
+    calls note-actions.getProjectNotes(projectId)
+    renders list grouped by category
+User clicks note → note-detail.tsx (markdown rendered via @tailwindcss/typography)
+User clicks edit → note-editor.tsx (textarea + live preview)
+    onSave → note-actions.updateNote(id, { title, content, category })
+    → revalidatePath triggers re-fetch
 ```
 
 ---
 
 ## Integration Points
 
-### New vs. Modified (summary)
+### Shared Modules Between Processes
 
-| File | New/Modified | Why |
-|------|-------------|-----|
-| `src/lib/theme.ts` | NEW | ThemeProvider context does not exist |
-| `src/app/layout.tsx` | MODIFY | Add ThemeProvider, suppressHydrationWarning |
-| `tailwind.config.*` | MODIFY | Enable `darkMode: "class"` |
-| `src/components/settings/general-config.tsx` | NEW | New settings panel |
-| `src/components/settings/prompts-config.tsx` | NEW | New settings panel |
-| `src/components/settings/settings-nav.tsx` | MODIFY | Add general + prompts items |
-| `src/app/settings/page.tsx` | MODIFY | Route to new panels |
-| `src/components/settings/ai-tools-config.tsx` | MODIFY | Live test connection |
-| `src/app/api/adapters/[type]/test/route.ts` | NEW | testEnvironment bridge |
-| `src/actions/task-actions.ts` | MODIFY | Accept promptId in createTask |
-| `src/components/board/create-task-dialog.tsx` | MODIFY | Add prompt selector |
-| `src/app/workspaces/[workspaceId]/page.tsx` | MODIFY | Fetch prompts, pass to board |
-| `src/lib/i18n.tsx` | MODIFY | Add new translation keys |
+`src/lib/file-utils.ts` and `src/lib/fts.ts` are the only modules intentionally shared between the Next.js process and the MCP stdio process. Both must remain free of Next.js-specific imports (no `next/cache`, no `next/headers`, no server action directives).
+
+**Rule:** If a module is needed in `src/mcp/`, it must not import from `src/actions/`, `src/app/`, or any Next.js built-in module.
+
+### SQLite Concurrency
+
+The MCP server already enables WAL mode (`PRAGMA journal_mode=WAL`) on connect. WAL allows concurrent readers and one writer. For single-user local use this is sufficient — no additional locking or coordination is needed between the two PrismaClient instances.
+
+FTS5 triggers fire at the SQLite engine level, so they execute regardless of which process writes to `ProjectNote`. Both processes see consistent full-text search results.
 
 ### Internal Boundaries
 
 | Boundary | Communication | Notes |
 |----------|---------------|-------|
-| GeneralConfig ↔ ThemeProvider | React Context (useTheme hook) | Same pattern as I18nProvider |
-| GeneralConfig ↔ I18nProvider | React Context (useI18n hook, setLocale) | Already works, just surface in new component |
-| AIToolsConfig ↔ Adapter Layer | HTTP fetch to API Route | Cannot import adapter directly in client |
-| PromptsConfig ↔ prompt-actions.ts | Server Action direct import | Standard pattern, already exists |
-| CreateTaskDialog ↔ Prompts | Props (prompts array passed from parent) | Consistent with how labels are passed today |
-| Settings ↔ Board (prompt data) | revalidatePath + router.refresh | Standard cache invalidation pattern |
+| Next.js server actions ↔ file-utils | Direct import (same process) | No Next.js in file-utils |
+| MCP tools ↔ file-utils | Direct import (separate process, same host) | Same `process.cwd()` path |
+| Next.js server actions ↔ fts.ts | Direct import, pass `src/lib/db.ts` singleton | fts.ts is db-agnostic |
+| MCP tools ↔ fts.ts | Direct import, pass `src/mcp/db.ts` client | Same interface |
+| Next.js ↔ MCP | Independent; share dev.db via SQLite WAL | No direct IPC |
+| Prisma ↔ FTS5 triggers | SQLite engine level; automatic | No application code needed |
 
 ---
 
-## Suggested Build Order
+## Build Order (Dependency-Ordered)
 
-Dependencies drive this order — each step unblocks the next.
+Build in this sequence — each step satisfies all dependencies before the next step begins.
 
-**Step 1: Tailwind + ThemeProvider infrastructure** (no dependencies)
-- `tailwind.config.*`: add `darkMode: "class"`
-- `src/lib/theme.ts`: ThemeProvider + useTheme hook
-- `src/app/layout.tsx`: wrap in ThemeProvider
+### Step 1: Data Layer Foundation (no UI or action dependencies)
 
-**Step 2: General Settings panel** (depends on Step 1)
-- `src/lib/i18n.tsx`: add general/theme translation keys
-- `src/components/settings/general-config.tsx`: theme + language switcher
-- `src/components/settings/settings-nav.tsx`: add "general" item
-- `src/app/settings/page.tsx`: add general section branch
+1. **`prisma/schema.prisma`** — Add `ProjectNote` and `ProjectAsset` models, relations, indexes. Update `Project` model to add `notes` and `assets` relation fields.
+2. **Migration** — Run `pnpm prisma migrate dev --name add_knowledge_base`. Edit the generated `migration.sql` to append FTS5 virtual table DDL and triggers.
+3. **`src/lib/file-utils.ts`** — Pure filesystem helpers (no Prisma, no Next.js). Implement `resolveAssetPath`, `resolveCachePath`, `moveToAssets`, `moveToCache`, `deleteAssetFile`, `ensureDataDirs`.
+4. **`src/lib/fts.ts`** — FTS5 search and insert helpers using `$queryRaw`. Accept `PrismaClient` as parameter (db-agnostic).
 
-**Step 3: CLI Adapter Test** (depends on existing adapter layer — no new deps)
-- `src/app/api/adapters/[type]/test/route.ts`: new Route Handler
-- `src/components/settings/ai-tools-config.tsx`: replace static banner with live test
+### Step 2: Server Actions (depends on Step 1)
 
-**Step 4: Prompt Management in Settings** (depends on existing prompt-actions.ts)
-- `src/lib/i18n.tsx`: add prompt translation keys
-- `src/components/settings/prompts-config.tsx`: CRUD UI
-- `src/components/settings/settings-nav.tsx`: add "prompts" item
-- `src/app/settings/page.tsx`: add prompts section branch
+5. **`src/actions/note-actions.ts`** — `getProjectNotes`, `getNoteById`, `createNote`, `updateNote`, `deleteNote`, `searchNotes` (calls fts.ts).
+6. **`src/actions/asset-actions.ts`** — `getProjectAssets`, `addAsset` (mv + record), `deleteAsset` (rm + record), `getCacheFiles`.
+7. **`src/actions/search-actions.ts`** — Extend `globalSearch` to include notes via fts.ts when `category === "note"`.
 
-**Step 5: Prompt selector in task creation** (depends on Step 4 — prompts must exist before users can select them)
-- `src/actions/task-actions.ts`: add promptId to createTask
-- `src/components/board/create-task-dialog.tsx`: add prompt selector
-- `src/app/workspaces/[workspaceId]/page.tsx`: fetch prompts, thread down to dialog
+### Step 3: MCP Tools (depends on Step 1; parallel to Step 2)
+
+8. **`src/mcp/tools/project-tools.ts`** — Add `findProjectByIdentifier` helper (MODIFIED).
+9. **`src/mcp/tools/note-tools.ts`** — `note_list`, `note_create`, `note_update`, `note_delete`, `note_search`.
+10. **`src/mcp/tools/asset-tools.ts`** — `asset_list`, `asset_add`, `asset_delete`.
+11. **`src/mcp/tools/search-tools.ts`** — Add `find_project` tool using `findProjectByIdentifier` (MODIFIED).
+12. **`src/mcp/server.ts`** — Import and spread `noteTools` and `assetTools` into `allTools` (MODIFIED).
+
+### Step 4: Web UI Components (depends on Step 2)
+
+13. **`src/components/notes/note-list.tsx`** — List notes with category filter; delete button.
+14. **`src/components/notes/note-editor.tsx`** — Create/edit form: title input, category select, markdown textarea, live preview pane.
+15. **`src/components/notes/note-detail.tsx`** — Read-only view with markdown prose rendering.
+16. **`src/components/assets/asset-list.tsx`** — Asset table: name, size, type, date, delete action.
+17. **`src/components/assets/asset-upload.tsx`** — Path input + submit to `addAsset` server action.
+
+### Step 5: Page Integration (depends on Steps 3 and 4)
+
+18. **`src/app/workspaces/[workspaceId]/page.tsx`** — Add Notes and Assets tabs to the project detail view. Tabs are client-side toggled; data is fetched per-tab via server actions (MODIFIED).
 
 ---
 
-## Anti-Patterns to Avoid
+## Anti-Patterns
 
-### Anti-Pattern 1: Calling testEnvironment from a Server Action
+### Anti-Pattern 1: Binary File Upload via HTTP
 
-**What people do:** Create a `"use server"` action that calls `getAdapter(type).testEnvironment()` directly.
+**What people do:** Build a multipart `<input type="file">` form with a Next.js API Route that writes bytes to disk.
 
-**Why it's wrong:** Server Actions are intended for fast data mutations. `testEnvironment` is a potentially slow operation (spawns CLI processes). More critically, there is no way to show a loading spinner while a Server Action is pending without `useFormStatus` + form submission — awkward for a "Test" button. The existing SSE streaming pattern already demonstrates the correct approach: use an API Route for long-running operations.
+**Why it's wrong:** Unnecessary for a local tool. Adds encoding/decoding overhead. The user and AI agent already have filesystem access — the source file is on the same machine.
 
-**Do this instead:** A `GET /api/adapters/[type]/test` Route Handler that the client fetches with a `useState` loading flag.
+**Do this instead:** Accept a source filesystem path. Call `file-utils.moveToAssets(sourcePath, projectId, filename)` which uses `fs.rename`. Atomic on the same filesystem and requires zero encoding.
 
-### Anti-Pattern 2: Server-Side Theme Resolution
+### Anti-Pattern 2: Managing FTS5 in Prisma Schema
 
-**What people do:** Store theme preference in the database or session, read it in the Server Component, and pass it as a prop to layout.
+**What people do:** Try to model `note_fts` as a Prisma model, or bring in an external search service (MeiliSearch, Algolia).
 
-**Why it's wrong:** This creates a server round-trip on every page load just for a CSS class. The existing locale system uses localStorage for the same reason — preferences that only affect the client UI belong in localStorage.
+**Why it's wrong:** Prisma does not support SQLite virtual tables. An external search service is massive overkill for single-user local search over <10k notes.
 
-**Do this instead:** Client-only ThemeProvider with localStorage persistence, exactly mirroring `I18nProvider`.
+**Do this instead:** Create the FTS5 virtual table and triggers in a raw SQL migration file. Wrap all FTS queries in `src/lib/fts.ts`. Keep Prisma models clean and let SQLite handle indexing natively.
 
-### Anti-Pattern 3: Fetching Prompts Inside the Settings Page Client Component via useEffect
+### Anti-Pattern 3: Duplicating Path Logic Across Modules
 
-**What people do:** In a `"use client"` settings page, call `getPrompts()` inside a `useEffect` on mount.
+**What people do:** Hardcode `data/assets/` path strings in server actions, MCP tools, and components independently.
 
-**Why it's wrong:** This is how the current settings page fetches `AgentConfigs` (`useEffect(() => { getAgentConfigs().then(...) })`) — it works but creates a loading flash and is harder to reason about. Server Actions called from `useEffect` also bypass Suspense.
+**Why it's wrong:** Any path convention change requires finding and updating multiple files. Path bugs (missing `mkdir`, wrong separator on Windows) appear in multiple locations.
 
-**Do this instead:** For `PromptsConfig`, prefer calling the server action in the component body using React's `use()` hook (React 19, available here) or by converting the settings page to a hybrid: keep the outer layout as a Server Component that fetches prompts, and pass them as initial props to the client `PromptsConfig`. However, since the current page is already `"use client"` and uses the `useEffect` pattern throughout, follow the existing convention to minimize churn — just be aware of the flash.
+**Do this instead:** All filesystem path resolution flows through `src/lib/file-utils.ts`. Server actions, MCP tools, and any future code import from this single module.
+
+### Anti-Pattern 4: Importing Server Actions from the MCP Process
+
+**What people do:** Import `src/actions/note-actions.ts` from `src/mcp/tools/note-tools.ts` to avoid duplicating logic.
+
+**Why it's wrong:** Server actions import Next.js-specific modules (`next/cache`, `next/headers`, possibly `server-only`). Importing them into the MCP stdio process will cause import errors or unpredictable behavior.
+
+**Do this instead:** MCP tools use `src/mcp/db.ts` directly — the same pattern already used by all 18 existing MCP tools. Share only pure Node.js modules: `src/lib/file-utils.ts` and `src/lib/fts.ts`.
+
+---
+
+## Scaling Considerations
+
+This is a localhost single-user tool. These are practical operational limits, not design targets.
+
+| Scale | Architecture Adjustments |
+|-------|--------------------------|
+| <1k notes, <1k assets | Current architecture with no changes needed |
+| 1k-10k notes | Add pagination to note-list; FTS5 handles this well natively |
+| >10k assets | Add asset cleanup tooling; consider partitioning `data/assets/` by month |
+
+The first practical bottleneck will be the note editor rendering very large markdown documents, not the database or filesystem layer.
 
 ---
 
 ## Sources
 
-- Direct codebase analysis: `src/app/settings/page.tsx`, `src/components/settings/`, `src/lib/i18n.tsx`, `src/lib/adapters/types.ts`, `src/lib/adapters/registry.ts`, `src/actions/prompt-actions.ts`, `src/actions/task-actions.ts`, `src/components/board/create-task-dialog.tsx`, `prisma/schema.prisma`, `src/app/layout.tsx`
-- All findings are HIGH confidence — derived from reading actual source files, not training data.
+- Direct codebase inspection (HIGH confidence):
+  - `prisma/schema.prisma`
+  - `src/mcp/server.ts`, `src/mcp/db.ts`, `src/mcp/tools/search-tools.ts`
+  - `src/lib/db.ts`, `src/lib/adapters/registry.ts`
+  - `src/actions/search-actions.ts`
+  - `.planning/PROJECT.md`
+- SQLite FTS5 documentation: https://www.sqlite.org/fts5.html
+- Prisma raw database access: https://www.prisma.io/docs/orm/prisma-client/queries/raw-database-access
 
 ---
-
-*Architecture research for: Settings features in ai-manager Next.js 16 app*
-*Researched: 2026-03-26*
+*Architecture research for: ai-manager v0.2 knowledge base and enhanced MCP*
+*Researched: 2026-03-27*
