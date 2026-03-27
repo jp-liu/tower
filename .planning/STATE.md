@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: 项目知识库 & 智能 MCP
-status: defining-requirements
+status: ready-to-plan
 stopped_at: null
-last_updated: "2026-03-27T13:00:00.000Z"
+last_updated: "2026-03-27T14:00:00.000Z"
 last_activity: 2026-03-27
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-27)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration.
-**Current focus:** Defining requirements for v0.2 — 项目知识库 & 智能 MCP
+**Current focus:** Phase 4 — Data Layer Foundation
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-27 — Milestone v0.2 started
+Phase: 4 of 7 (Data Layer Foundation)
+Plan: — (not yet planned)
+Status: Ready to plan
+Last activity: 2026-03-27 — Roadmap created for v0.2 (Phases 4-7)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -36,7 +36,7 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 0
+- Total plans completed: 0 (v0.2)
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -47,46 +47,28 @@ Progress: [░░░░░░░░░░] 0%
 | - | - | - | - |
 
 *Updated after each plan completion*
-| Phase 01 P01 | 3 | 2 tasks | 4 files |
-| Phase 01 P02 | 8 | 2 tasks | 3 files |
-| Phase 03 P01 | 3 minutes | 3 tasks | 3 files |
-| Phase 03 P02 | 8min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
 ### Decisions
 
-- [Pre-Phase 1]: Fix `@custom-variant dark (&:is(.dark *))` → `(&:where(.dark, .dark *))` in globals.css FIRST — prerequisite for all theme work
-- [Pre-Phase 1]: Use `next-themes ^0.4.6` (not manual useEffect) to avoid FOUC in App Router
-- [Pre-Phase 2]: CLI test must be user-initiated only — never triggered on page mount (45s blocking)
-- [Pre-Phase 3]: `isDefault` enforcement requires `db.$transaction()` to clear other defaults first
-- [Phase 01]: Fixed @custom-variant dark to use :where(.dark, .dark *) — matches both html.dark element and all descendants
-- [Phase 01]: Light theme :root uses inverted oklch lightness (1.0 - dark_value); dark theme moved to .dark block unchanged
-- [Phase 01]: ThemeProvider placed outermost in layout with attribute=class, defaultTheme=system, enableSystem for GNRL-03
-- [Phase Phase 01 P02]: Mounted guard on theme segmented control only — locale comes from React state (no hydration issue)
-- [Phase Phase 01 P02]: Segmented control uses bg-muted track / bg-background active tab — works in both light and dark modes
-- [Phase 03]: revalidatePath called inside db.$transaction return block to ensure only called on commit success
-- [Phase 03]: setDefaultPrompt accepts optional workspaceId — when provided, only clears defaults in same workspace
-- [Phase Phase 03]: PromptsConfig is self-contained: fetches its own data via useEffect on mount, no prompts prop from parent
-- [Phase Phase 03]: Test scaffold updated from props-based to getPrompts mock to match component internal data fetch pattern
+- [Pre-v0.2]: FTS5 virtual tables must be created via raw SQL AFTER prisma db push — never before, or Prisma detects schema drift
+- [Pre-v0.2]: Both PrismaClient instances (Next.js + MCP) need PRAGMA busy_timeout=5000 to prevent "database is locked" errors
+- [Pre-v0.2]: MCP tools use action-dispatch pattern (manage_notes, manage_assets) to keep total tool count at or below 30
+- [Pre-v0.2]: file-utils.ts and fts.ts must never import Next.js modules — they are shared between Next.js and MCP stdio processes
+- [Pre-v0.2]: @uiw/react-md-editor requires dynamic import with ssr:false — test this first in Phase 7; fall back to textarea + react-markdown if hydration errors
 
 ### Pending Todos
 
 None yet.
 
-### Quick Tasks Completed
-
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 260327-fah | Simplify AI Tools settings + add prompt selector to task panel | 2026-03-27 | 6036f21 | [260327-fah](./quick/260327-fah-simplify-ai-tools-settings-add-prompt-se/) |
-
 ### Blockers/Concerns
 
-- **Light theme CSS variables**: Codebase has only one theme (Midnight Studio dark). Light theme needs a separate CSS variable block or toggle will show unstyled white. Product decision needed before Phase 1 ships.
-- **Visual regression**: After `@custom-variant` fix, verify existing Kanban dark styles still render correctly.
+- **@uiw/react-md-editor React 19 compat**: MEDIUM confidence. Have fallback plan (plain textarea + react-markdown) ready before Phase 7.
+- **Fuzzy match threshold**: 0.85 name/alias threshold needs validation against real short project names during Phase 5.
 
 ## Session Continuity
 
-Last session: 2026-03-27T01:10:45.005Z
-Stopped at: Completed 03-02-PLAN.md — awaiting human-verify checkpoint
+Last session: 2026-03-27
+Stopped at: Roadmap written — ready to plan Phase 4
 Resume file: None

@@ -63,26 +63,26 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PROJ-01 | TBD | Pending |
-| PROJ-02 | TBD | Pending |
-| PROJ-03 | TBD | Pending |
-| NOTE-01 | TBD | Pending |
-| NOTE-02 | TBD | Pending |
-| NOTE-03 | TBD | Pending |
-| NOTE-04 | TBD | Pending |
-| ASST-01 | TBD | Pending |
-| ASST-02 | TBD | Pending |
-| ASST-03 | TBD | Pending |
-| ASST-04 | TBD | Pending |
-| UI-01 | TBD | Pending |
-| UI-02 | TBD | Pending |
-| UI-03 | TBD | Pending |
+| PROJ-01 | Phase 5 | Pending |
+| PROJ-02 | Phase 5 | Pending |
+| PROJ-03 | Phase 5 | Pending |
+| NOTE-01 | Phase 4 | Pending |
+| NOTE-02 | Phase 4 | Pending |
+| NOTE-03 | Phase 4 | Pending |
+| NOTE-04 | Phase 5 | Pending |
+| ASST-01 | Phase 4 | Pending |
+| ASST-02 | Phase 4 | Pending |
+| ASST-03 | Phase 5 | Pending |
+| ASST-04 | Phase 6 | Pending |
+| UI-01 | Phase 7 | Pending |
+| UI-02 | Phase 7 | Pending |
+| UI-03 | Phase 6 | Pending |
 
 **Coverage:**
 - v0.2 requirements: 14 total
-- Mapped to phases: 0
-- Unmapped: 14 ⚠️
+- Mapped to phases: 14
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-27*
-*Last updated: 2026-03-27 after initial definition*
+*Last updated: 2026-03-27 after roadmap creation*
