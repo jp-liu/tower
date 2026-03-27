@@ -7,7 +7,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   Settings, Archive, Plus, Pencil, Trash2,
-  MoreHorizontal, Layers, ChevronsLeft, Tag,
+  MoreHorizontal, Layers, ChevronsLeft, Tag, FileText, FolderOpen,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -310,13 +310,29 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
 
       {/* Footer */}
       {activeWorkspaceId ? (
-        <Link
-          href={`/workspaces/${activeWorkspaceId}/archive`}
-          className="relative z-10 flex items-center gap-2 border-t border-border px-4 py-3 text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
-        >
-          <Archive className="h-3.5 w-3.5" />
-          <span>{t("sidebar.archive")}</span>
-        </Link>
+        <>
+          <Link
+            href={`/workspaces/${activeWorkspaceId}/notes`}
+            className="relative z-10 flex items-center gap-2 border-t border-border px-4 py-3 text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            <span>{t("sidebar.notes")}</span>
+          </Link>
+          <Link
+            href={`/workspaces/${activeWorkspaceId}/assets`}
+            className="relative z-10 flex items-center gap-2 px-4 py-3 text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+          >
+            <FolderOpen className="h-3.5 w-3.5" />
+            <span>{t("sidebar.assets")}</span>
+          </Link>
+          <Link
+            href={`/workspaces/${activeWorkspaceId}/archive`}
+            className="relative z-10 flex items-center gap-2 px-4 py-3 text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+          >
+            <Archive className="h-3.5 w-3.5" />
+            <span>{t("sidebar.archive")}</span>
+          </Link>
+        </>
       ) : (
         <div className="relative z-10 flex items-center gap-2 border-t border-border px-4 py-3 text-[11px] text-muted-foreground">
           <Archive className="h-3.5 w-3.5" />
