@@ -46,6 +46,13 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - All 3 tools registered in server.ts (total: 21 MCP tools, ceiling: 30)
 - 39 MCP tests passing
 
+**Phase 6 complete** (2026-03-27) — File Serving & Image Rendering
+- Secure file serving route at /api/files/assets/[projectId]/[filename]
+- Path traversal prevention (resolve + startsWith guard)
+- ReactMarkdown img override for inline image display in task conversations
+- localPathToApiUrl transforms data/assets/ paths to API URLs
+- 21 tests passing (14 file-serving + 7 path-transform)
+
 ## Requirements
 
 ### Validated
@@ -127,4 +134,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-27 after Phase 5 (MCP Knowledge Tools) completed*
+*Last updated: 2026-03-27 after Phase 6 (File Serving & Image Rendering) completed*
