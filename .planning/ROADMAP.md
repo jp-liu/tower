@@ -22,7 +22,7 @@ See: [milestones/v0.1-ROADMAP.md](./milestones/v0.1-ROADMAP.md) for full details
 
 **Milestone Goal:** AI agents can identify projects by name, manage a per-project knowledge base (notes, assets), and users have a web UI for notes and assets.
 
-- [ ] **Phase 4: Data Layer Foundation** — Schema, FTS5 setup, shared utilities, WAL pragma
+- [x] **Phase 4: Data Layer Foundation** — Schema, FTS5 setup, shared utilities, WAL pragma (completed 2026-03-27)
 - [ ] **Phase 5: MCP Knowledge Tools** — identify_project, manage_notes, manage_assets MCP tools
 - [ ] **Phase 6: File Serving & Image Rendering** — Secure file serve route, task message image attachments
 - [ ] **Phase 7: Notes & Assets Web UI** — Notes page with Markdown editor, assets page
@@ -42,7 +42,7 @@ See: [milestones/v0.1-ROADMAP.md](./milestones/v0.1-ROADMAP.md) for full details
 **Plans**: 2 plans
 Plans:
 - [x] 04-01-PLAN.md — Schema extension, DB pragmas, FTS5 init, file-utils, constants
-- [ ] 04-02-PLAN.md — FTS5 search helper, note/asset server actions with tests
+- [x] 04-02-PLAN.md — FTS5 search helper, note/asset server actions with tests
 
 ### Phase 5: MCP Knowledge Tools
 **Goal**: AI agents can find projects by name/alias, and create/read/update/delete notes and assets through MCP tools without knowing project IDs
@@ -89,7 +89,7 @@ Phases execute in numeric order: 4 → 5 → 6 → 7
 | 1. Theme + General Settings | v0.1 | 2/2 | Complete | 2026-03-26 |
 | 2. CLI Adapter Verification | v0.1 | 2/2 | Complete | 2026-03-26 |
 | 3. Agent Prompt Management | v0.1 | 2/2 | Complete | 2026-03-27 |
-| 4. Data Layer Foundation | v0.2 | 1/2 | In Progress|  |
+| 4. Data Layer Foundation | v0.2 | 2/2 | Complete   | 2026-03-27 |
 | 5. MCP Knowledge Tools | v0.2 | 0/? | Not started | - |
 | 6. File Serving & Image Rendering | v0.2 | 0/? | Not started | - |
 | 7. Notes & Assets Web UI | v0.2 | 0/? | Not started | - |

@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: 项目知识库 & 智能 MCP
-status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-27T07:39:12.477Z"
+status: verifying
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-03-27T07:44:51.979Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-27)
 
 Phase: 04 (data-layer-foundation) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-03-27
 
 Progress: [░░░░░░░░░░] 0%
@@ -48,6 +48,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 04-data-layer-foundation P01 | 10 | 2 tasks | 9 files |
+| Phase 04-data-layer-foundation P02 | 3 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -60,6 +61,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Pre-v0.2]: @uiw/react-md-editor requires dynamic import with ssr:false — test this first in Phase 7; fall back to textarea + react-markdown if hydration errors
 - [Phase 04-data-layer-foundation]: FTS5 virtual table created via raw SQL in prisma/init-fts.ts run after db:push — never in Prisma schema to avoid drift detection
 - [Phase 04-data-layer-foundation]: Both PrismaClient instances (Next.js + MCP) now have PRAGMA busy_timeout=5000 to prevent database locked errors
+- [Phase 04-data-layer-foundation]: fts.ts uses dependency injection (PrismaClient parameter) so it works in both Next.js and MCP stdio without Next.js imports
+- [Phase 04-data-layer-foundation]: FTS5 sync uses delete-then-insert pattern since FTS5 does not support UPDATE — avoids duplicate rows on note updates
 
 ### Pending Todos
 
@@ -72,6 +75,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-27T07:39:12.474Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-03-27T07:44:51.975Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None
