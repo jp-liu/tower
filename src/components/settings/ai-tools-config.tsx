@@ -28,7 +28,7 @@ export function AIToolsConfig() {
     }
   }, []);
 
-  const handleAdapterChange = (value: string | null) => {
+  const handleAdapterChange = (value: string | null, _eventDetails: unknown) => {
     if (!value) return;
     setDefaultAdapter(value);
     localStorage.setItem(DEFAULT_CLI_ADAPTER_KEY, value);
@@ -37,18 +37,18 @@ export function AIToolsConfig() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <div className="rounded-lg bg-purple-100 p-2">
-          <Settings2 className="h-5 w-5 text-purple-600" />
+        <div className="rounded-lg bg-purple-100 dark:bg-purple-900/30 p-2">
+          <Settings2 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
         </div>
         <div>
           <h3 className="font-semibold">默认 CLI 适配器</h3>
-          <p className="text-sm text-gray-500">选择任务执行时默认使用的 CLI 适配器。</p>
+          <p className="text-sm text-muted-foreground">选择任务执行时默认使用的 CLI 适配器。</p>
         </div>
       </div>
 
       <Card>
         <CardContent className="p-6 space-y-4">
-          <Label className="text-sm text-gray-500">CLI 适配器</Label>
+          <Label className="text-sm text-muted-foreground">CLI 适配器</Label>
           <Select value={defaultAdapter} onValueChange={handleAdapterChange}>
             <SelectTrigger className="w-full">
               <SelectValue />
@@ -61,7 +61,7 @@ export function AIToolsConfig() {
               ))}
             </SelectContent>
           </Select>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             该设置保存在本地，用于确定调用哪个 CLI 工具执行任务。
           </p>
         </CardContent>

@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 Phase: 3
 Plan: Not started
 Status: Executing Phase 02
-Last activity: 2026-03-26
+Last activity: 2026-03-27 - Completed quick task 260327-fah: Simplify AI Tools settings + add prompt selector to task panel
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -73,6 +73,12 @@ Progress: [░░░░░░░░░░] 0%
 ### Pending Todos
 
 None yet.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260327-fah | Simplify AI Tools settings + add prompt selector to task panel | 2026-03-27 | pending | [260327-fah](./quick/260327-fah-simplify-ai-tools-settings-add-prompt-se/) |
 
 ### Blockers/Concerns
 
