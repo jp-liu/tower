@@ -25,13 +25,13 @@ Requirements for v0.2 — 项目知识库 & 智能 MCP. Each maps to roadmap pha
 - [x] **ASST-01**: 用户可上传文件作为项目级持久化资源（存储在 `data/assets/{projectId}/`）
 - [x] **ASST-02**: 任务级临时文件存储在 `data/cache/{taskId}/`，支持手动清理
 - [x] **ASST-03**: MCP 提供资源上传工具，通过 mv 将外部文件移入管理目录
-- [ ] **ASST-04**: Next.js API Route 安全地提供文件访问（防路径穿越）
+- [x] **ASST-04**: Next.js API Route 安全地提供文件访问（防路径穿越）
 
 ### Web 界面
 
 - [ ] **UI-01**: 项目内提供笔记管理页面（列表、Markdown 编辑器、分类筛选）
 - [ ] **UI-02**: 项目内提供资源查看页面（文件列表、预览、上传）
-- [ ] **UI-03**: 任务对话中的图片路径渲染为可查看的图片
+- [x] **UI-03**: 任务对话中的图片路径渲染为可查看的图片
 
 ## Future Requirements
 
@@ -73,10 +73,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ASST-01 | Phase 4 | Complete |
 | ASST-02 | Phase 4 | Complete |
 | ASST-03 | Phase 5 | Complete |
-| ASST-04 | Phase 6 | Pending |
+| ASST-04 | Phase 6 | Complete |
 | UI-01 | Phase 7 | Pending |
 | UI-02 | Phase 7 | Pending |
-| UI-03 | Phase 6 | Pending |
+| UI-03 | Phase 6 | Complete |
 
 **Coverage:**
 - v0.2 requirements: 14 total
