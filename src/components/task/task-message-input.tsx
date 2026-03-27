@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Send, Paperclip, Wrench } from "lucide-react";
+import { Send, Paperclip, Wrench, FileText, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,11 +11,21 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/lib/i18n";
 
+interface PromptOption {
+  id: string;
+  name: string;
+  content: string;
+  isDefault: boolean;
+}
+
 interface TaskMessageInputProps {
   onSend: (message: string) => void;
   isLoading?: boolean;
   fileChanges?: { added: number; removed: number };
   agentName?: string;
+  prompts?: PromptOption[];
+  selectedPromptId?: string | null;
+  onPromptChange?: (promptId: string | null) => void;
 }
 
 const MODES = [
@@ -29,6 +39,9 @@ export function TaskMessageInput({
   isLoading = false,
   fileChanges = { added: 0, removed: 0 },
   agentName = "Claude Code",
+  prompts = [],
+  selectedPromptId = null,
+  onPromptChange,
 }: TaskMessageInputProps) {
   const { t } = useI18n();
   const [message, setMessage] = useState("");
@@ -42,9 +55,18 @@ export function TaskMessageInput({
 
   const handleSend = useCallback(() => {
     if (!message.trim() || isLoading) return;
-    onSend(message.trim());
+
+    let finalMessage = message.trim();
+    if (selectedPromptId) {
+      const selectedPrompt = prompts.find((p) => p.id === selectedPromptId);
+      if (selectedPrompt) {
+        finalMessage = `${selectedPrompt.content}\n\n${finalMessage}`;
+      }
+    }
+
+    onSend(finalMessage);
     setMessage("");
-  }, [message, isLoading, onSend]);
+  }, [message, isLoading, onSend, selectedPromptId, prompts]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -57,6 +79,7 @@ export function TaskMessageInput({
   );
 
   const currentMode = MODES.find((m) => m.id === mode) ?? MODES[0];
+  const selectedPrompt = prompts.find((p) => p.id === selectedPromptId);
 
   return (
     <div className="relative border-t border-border bg-card/50">
@@ -94,6 +117,7 @@ export function TaskMessageInput({
 
         <div className="mt-2 flex items-center justify-between">
           <div className="flex items-center gap-1">
+            {/* Mode selector */}
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
@@ -110,6 +134,32 @@ export function TaskMessageInput({
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {/* Prompt selector */}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/50 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" />
+                }
+              >
+                <FileText className="h-3 w-3" />
+                {selectedPrompt ? selectedPrompt.name : "No Prompt"}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => onPromptChange?.(null)}>
+                  No Prompt
+                </DropdownMenuItem>
+                {prompts.map((p) => (
+                  <DropdownMenuItem key={p.id} onClick={() => onPromptChange?.(p.id)}>
+                    <span className="flex items-center gap-1.5">
+                      {p.isDefault && <Star className="h-3 w-3 text-amber-400" />}
+                      {p.name}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <button
               onClick={() => showToast("附件功能开发中")}
               className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
