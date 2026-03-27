@@ -67,8 +67,9 @@ Plans:
   1. GET /api/files/assets/{projectId}/{filename} returns the file with correct Content-Type header
   2. A path traversal attempt (e.g., ../../etc/passwd) returns 400 and never reads outside data/
   3. An image path stored in a task message renders as an inline image in the task conversation view
-**Plans**: TBD
-**UI hint**: yes
+**Plans**: 1 plan
+Plans:
+- [ ] 06-01-PLAN.md — File serving route with path traversal guard, image rendering in task conversation
 
 ### Phase 7: Notes & Assets Web UI
 **Goal**: Users can manage project notes and browse project assets through the web interface
@@ -94,5 +95,5 @@ Phases execute in numeric order: 4 → 5 → 6 → 7
 | 3. Agent Prompt Management | v0.1 | 2/2 | Complete | 2026-03-27 |
 | 4. Data Layer Foundation | v0.2 | 2/2 | Complete   | 2026-03-27 |
 | 5. MCP Knowledge Tools | v0.2 | 2/2 | Complete   | 2026-03-27 |
-| 6. File Serving & Image Rendering | v0.2 | 0/? | Not started | - |
+| 6. File Serving & Image Rendering | v0.2 | 0/1 | Not started | - |
 | 7. Notes & Assets Web UI | v0.2 | 0/? | Not started | - |
