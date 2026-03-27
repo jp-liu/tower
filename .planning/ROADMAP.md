@@ -56,7 +56,7 @@ Plans:
   5. Total MCP tool count remains at or below 30 after all new tools are registered
 **Plans**: 2 plans
 Plans:
-- [ ] 05-01-PLAN.md — identify_project tool with scored fuzzy matching and tests
+- [x] 05-01-PLAN.md — identify_project tool with scored fuzzy matching and tests
 - [ ] 05-02-PLAN.md — manage_notes and manage_assets action-dispatch tools, server registration, tests
 
 ### Phase 6: File Serving & Image Rendering
@@ -93,6 +93,6 @@ Phases execute in numeric order: 4 → 5 → 6 → 7
 | 2. CLI Adapter Verification | v0.1 | 2/2 | Complete | 2026-03-26 |
 | 3. Agent Prompt Management | v0.1 | 2/2 | Complete | 2026-03-27 |
 | 4. Data Layer Foundation | v0.2 | 2/2 | Complete   | 2026-03-27 |
-| 5. MCP Knowledge Tools | v0.2 | 0/2 | Not started | - |
+| 5. MCP Knowledge Tools | v0.2 | 1/2 | In Progress|  |
 | 6. File Serving & Image Rendering | v0.2 | 0/? | Not started | - |
 | 7. Notes & Assets Web UI | v0.2 | 0/? | Not started | - |

@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: 项目知识库 & 智能 MCP
-status: verifying
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-03-27T07:48:41.522Z"
+status: executing
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-27T08:27:12.314Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 4
+  completed_plans: 3
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-27)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration.
-**Current focus:** Phase 04 — data-layer-foundation
+**Current focus:** Phase 05 — mcp-knowledge-tools
 
 ## Current Position
 
-Phase: 5
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 05 (mcp-knowledge-tools) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-03-27
 
 Progress: [░░░░░░░░░░] 0%
@@ -49,6 +49,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 04-data-layer-foundation P01 | 10 | 2 tasks | 9 files |
 | Phase 04-data-layer-foundation P02 | 3 | 2 tasks | 6 files |
+| Phase 05-mcp-knowledge-tools P01 | 101 | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 04-data-layer-foundation]: Both PrismaClient instances (Next.js + MCP) now have PRAGMA busy_timeout=5000 to prevent database locked errors
 - [Phase 04-data-layer-foundation]: fts.ts uses dependency injection (PrismaClient parameter) so it works in both Next.js and MCP stdio without Next.js imports
 - [Phase 04-data-layer-foundation]: FTS5 sync uses delete-then-insert pattern since FTS5 does not support UPDATE — avoids duplicate rows on note updates
+- [Phase 05-mcp-knowledge-tools]: scoreProject exported as named export for direct unit testing without DB calls
+- [Phase 05-mcp-knowledge-tools]: JS-side scoring used instead of DB-level filtering — SQLite lacks mode:insensitive support
 
 ### Pending Todos
 
@@ -75,6 +78,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-27T07:44:51.975Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-03-27T08:27:12.309Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None

@@ -9,9 +9,9 @@ Requirements for v0.2 — 项目知识库 & 智能 MCP. Each maps to roadmap pha
 
 ### 智能项目识别
 
-- [ ] **PROJ-01**: 用户可通过项目名称、别名、描述模糊匹配找到目标项目
-- [ ] **PROJ-02**: 搜索结果按字段权重排序（名称 > 别名 > 描述）
-- [ ] **PROJ-03**: MCP 提供 `identify_project` 工具，返回匹配项目及置信度
+- [x] **PROJ-01**: 用户可通过项目名称、别名、描述模糊匹配找到目标项目
+- [x] **PROJ-02**: 搜索结果按字段权重排序（名称 > 别名 > 描述）
+- [x] **PROJ-03**: MCP 提供 `identify_project` 工具，返回匹配项目及置信度
 
 ### 笔记系统
 
@@ -63,9 +63,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PROJ-01 | Phase 5 | Pending |
-| PROJ-02 | Phase 5 | Pending |
-| PROJ-03 | Phase 5 | Pending |
+| PROJ-01 | Phase 5 | Complete |
+| PROJ-02 | Phase 5 | Complete |
+| PROJ-03 | Phase 5 | Complete |
 | NOTE-01 | Phase 4 | Complete |
 | NOTE-02 | Phase 4 | Complete |
 | NOTE-03 | Phase 4 | Complete |
