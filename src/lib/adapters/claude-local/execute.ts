@@ -21,7 +21,10 @@ export async function execute(ctx: ExecutionContext): Promise<ExecutionResult> {
   } = ctx;
 
   const buildArgs = (resumeSessionId: string | null): string[] => {
-    const args = ["--print", "-", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"];
+    const args = ["--print", "-", "--output-format", "stream-json", "--verbose"];
+    if (process.env.CLAUDE_SKIP_PERMISSIONS === "true") {
+      args.push("--dangerously-skip-permissions");
+    }
     if (resumeSessionId) args.push("--resume", resumeSessionId);
     if (model) args.push("--model", model);
     if (instructionsFile) args.push("--append-system-prompt-file", instructionsFile);

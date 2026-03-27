@@ -10,13 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/lib/i18n";
-
-interface PromptOption {
-  id: string;
-  name: string;
-  content: string;
-  isDefault: boolean;
-}
+import type { PromptOption } from "./types";
 
 interface TaskMessageInputProps {
   onSend: (message: string) => void;

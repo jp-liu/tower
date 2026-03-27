@@ -19,8 +19,8 @@ async function validateAndParseRequest(
   const body = await request.json();
   const bodySchema = z.object({
     prompt: z.string().min(1),
-    agent: z.string().optional(),
-    model: z.string().optional(),
+    agent: z.enum(["claude_local"]).optional(),
+    model: z.string().regex(/^[a-zA-Z0-9._-]{1,100}$/).optional(),
   });
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
@@ -300,12 +300,10 @@ export async function POST(
             })
             .catch(() => {});
 
+          console.error("[stream] Execution error:", error);
           sendEvent({
             type: "error",
-            content:
-              error instanceof Error
-                ? error.message
-                : "Agent execution failed",
+            content: "Agent execution failed",
           });
         } finally {
           // Clean up temp directory and file

@@ -78,7 +78,7 @@ None yet.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
-| 260327-fah | Simplify AI Tools settings + add prompt selector to task panel | 2026-03-27 | pending | [260327-fah](./quick/260327-fah-simplify-ai-tools-settings-add-prompt-se/) |
+| 260327-fah | Simplify AI Tools settings + add prompt selector to task panel | 2026-03-27 | 6036f21 | [260327-fah](./quick/260327-fah-simplify-ai-tools-settings-add-prompt-se/) |
 
 ### Blockers/Concerns
 

@@ -38,7 +38,7 @@ export async function updatePrompt(
   id: string,
   data: { name?: string; description?: string; content?: string; isDefault?: boolean }
 ) {
-  if (data.content && data.content.length > MAX_PROMPT_CONTENT_LENGTH) {
+  if (data.content !== undefined && data.content.length > MAX_PROMPT_CONTENT_LENGTH) {
     throw new Error(`Prompt content exceeds maximum length of ${MAX_PROMPT_CONTENT_LENGTH} characters`);
   }
   const prompt = await db.agentPrompt.update({ where: { id }, data });
@@ -54,8 +54,7 @@ export async function deletePrompt(id: string) {
 }
 
 export async function setDefaultPrompt(promptId: string, workspaceId?: string) {
-  return db.$transaction(async (tx) => {
-    // Clear all existing defaults in scope
+  const prompt = await db.$transaction(async (tx) => {
     const whereClause = workspaceId
       ? { workspaceId, isDefault: true }
       : { isDefault: true };
@@ -63,13 +62,12 @@ export async function setDefaultPrompt(promptId: string, workspaceId?: string) {
       where: whereClause,
       data: { isDefault: false },
     });
-    // Set new default
-    const prompt = await tx.agentPrompt.update({
+    return tx.agentPrompt.update({
       where: { id: promptId },
       data: { isDefault: true },
     });
-    revalidatePath("/workspaces");
-    revalidatePath("/settings");
-    return prompt;
   });
+  revalidatePath("/workspaces");
+  revalidatePath("/settings");
+  return prompt;
 }

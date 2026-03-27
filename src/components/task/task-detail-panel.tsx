@@ -7,23 +7,19 @@ import { TaskMessageInput } from "./task-message-input";
 import { getTaskMessages, sendTaskMessage } from "@/actions/agent-actions";
 import { getPrompts } from "@/actions/prompt-actions";
 import type { Task } from "@prisma/client";
+import type { PromptOption } from "./types";
+import { useI18n } from "@/lib/i18n";
 
 interface TaskDetailPanelProps {
   task: Task;
   onClose: () => void;
 }
 
-interface PromptOption {
-  id: string;
-  name: string;
-  content: string;
-  isDefault: boolean;
-}
-
 export function TaskDetailPanel({
   task,
   onClose,
 }: TaskDetailPanelProps) {
+  const { t } = useI18n();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [prompts, setPrompts] = useState<PromptOption[]>([]);
@@ -114,7 +110,7 @@ export function TaskDetailPanel({
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantMsgId
-                ? { ...m, role: "system" as const, content: errData.error || "执行失败" }
+                ? { ...m, role: "system" as const, content: errData.error || t("taskDetail.executionFailed") }
                 : m
             )
           );
@@ -179,7 +175,7 @@ export function TaskDetailPanel({
           {
             id: `err-${Date.now()}`,
             role: "system" as const,
-            content: "执行失败，请重试",
+            content: t("taskDetail.executionFailedRetry"),
             createdAt: new Date(),
           },
         ]);
@@ -198,7 +194,7 @@ export function TaskDetailPanel({
     >
       <TaskMetadata
         title={task.title}
-        description="聚焦当前任务的执行对话。分支状态和连续 follow-up 输入。"
+        description={t("taskDetail.panelDescription")}
         branch={`vk/${task.id.slice(0, 4)}-`}
         hasConversation={messages.length > 0}
         updatedAt={task.updatedAt}
