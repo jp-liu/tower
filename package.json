@@ -32,6 +32,7 @@
     "@modelcontextprotocol/sdk": "^1.28.0",
     "@prisma/client": "^6.19.2",
     "@tailwindcss/typography": "^0.5.19",
+    "@uiw/react-md-editor": "^4.0.11",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.6.0",
