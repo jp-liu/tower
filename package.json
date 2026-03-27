@@ -11,6 +11,7 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
+    "db:init-fts": "tsx prisma/init-fts.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",

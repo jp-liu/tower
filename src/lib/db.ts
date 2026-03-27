@@ -11,3 +11,14 @@ export const db =
   });
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
+
+let initialized = false;
+
+export async function initDb(): Promise<PrismaClient> {
+  if (initialized) return db;
+  await db.$connect();
+  await db.$queryRaw`PRAGMA journal_mode=WAL`;
+  await db.$queryRaw`PRAGMA busy_timeout=5000`;
+  initialized = true;
+  return db;
+}

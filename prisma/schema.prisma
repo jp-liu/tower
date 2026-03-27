@@ -34,6 +34,8 @@ model Project {
   workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   tasks        Task[]
   repositories Repository[]
+  notes        ProjectNote[]
+  assets       ProjectAsset[]
 
   @@index([workspaceId])
 }
@@ -122,6 +124,35 @@ model Repository {
   name      String
   path      String
   branch    String   @default("main")
+  projectId String
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model ProjectNote {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  category  String   @default("备忘")
+  projectId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([category])
+}
+
+model ProjectAsset {
+  id        String   @id @default(cuid())
+  filename  String
+  path      String
+  mimeType  String?
+  size      Int?
   projectId String
   createdAt DateTime @default(now())
 
