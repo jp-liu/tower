@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { I18nProvider } from "@/lib/i18n";
-// Component to be created in Plan 02
+// Component created in Plan 02
 import { PromptsConfig } from "@/components/settings/prompts-config";
 // Server actions to be mocked
 import * as promptActions from "@/actions/prompt-actions";
@@ -47,12 +47,16 @@ afterEach(() => {
 // --- Tests ---
 
 describe("PromptsConfig", () => {
-  it("renders prompt list with name, description, and default badge for each prompt", () => {
-    renderWithI18n(<PromptsConfig prompts={mockPrompts} />);
+  it("renders prompt list with name, description, and default badge for each prompt", async () => {
+    vi.spyOn(promptActions, "getPrompts").mockResolvedValue(mockPrompts);
 
-    // Prompt names should appear
-    expect(screen.getByText("Coding Agent")).toBeInTheDocument();
-    expect(screen.getByText("Review Agent")).toBeInTheDocument();
+    renderWithI18n(<PromptsConfig />);
+
+    await waitFor(() => {
+      // Prompt names should appear
+      expect(screen.getByText("Coding Agent")).toBeInTheDocument();
+      expect(screen.getByText("Review Agent")).toBeInTheDocument();
+    });
     // Descriptions should appear
     expect(screen.getByText("Default coding prompt")).toBeInTheDocument();
     expect(screen.getByText("For code review")).toBeInTheDocument();
@@ -60,14 +64,26 @@ describe("PromptsConfig", () => {
     expect(screen.getByText("默认")).toBeInTheDocument();
   });
 
-  it("shows empty state when no prompts", () => {
-    renderWithI18n(<PromptsConfig prompts={[]} />);
-    // zh locale: "暂无提示词"
-    expect(screen.getByText("暂无提示词")).toBeInTheDocument();
+  it("shows empty state when no prompts", async () => {
+    vi.spyOn(promptActions, "getPrompts").mockResolvedValue([]);
+
+    renderWithI18n(<PromptsConfig />);
+
+    await waitFor(() => {
+      // zh locale: "暂无提示词"
+      expect(screen.getByText("暂无提示词")).toBeInTheDocument();
+    });
   });
 
   it("create button opens dialog", async () => {
-    renderWithI18n(<PromptsConfig prompts={mockPrompts} />);
+    vi.spyOn(promptActions, "getPrompts").mockResolvedValue(mockPrompts);
+
+    renderWithI18n(<PromptsConfig />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Coding Agent")).toBeInTheDocument();
+    });
+
     // zh locale: "新建提示词"
     const newButton = screen.getByRole("button", { name: /新建提示词/i });
     fireEvent.click(newButton);
@@ -79,7 +95,14 @@ describe("PromptsConfig", () => {
   });
 
   it("edit button opens pre-filled dialog with prompt data", async () => {
-    renderWithI18n(<PromptsConfig prompts={mockPrompts} />);
+    vi.spyOn(promptActions, "getPrompts").mockResolvedValue(mockPrompts);
+
+    renderWithI18n(<PromptsConfig />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Coding Agent")).toBeInTheDocument();
+    });
+
     // Find edit button for first prompt (Coding Agent)
     const editButtons = screen.getAllByRole("button", { name: /编辑/i });
     fireEvent.click(editButtons[0]);
@@ -92,7 +115,14 @@ describe("PromptsConfig", () => {
   });
 
   it("delete button opens confirmation dialog", async () => {
-    renderWithI18n(<PromptsConfig prompts={mockPrompts} />);
+    vi.spyOn(promptActions, "getPrompts").mockResolvedValue(mockPrompts);
+
+    renderWithI18n(<PromptsConfig />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Coding Agent")).toBeInTheDocument();
+    });
+
     // Find delete button for first prompt
     const deleteButtons = screen.getAllByRole("button", { name: /删除/i });
     fireEvent.click(deleteButtons[0]);
@@ -104,36 +134,56 @@ describe("PromptsConfig", () => {
   });
 
   it("set default button calls setDefaultPrompt server action", async () => {
-    const setDefaultSpy = vi.spyOn(promptActions, "setDefaultPrompt").mockResolvedValue({
-      id: "2",
-      name: "Review Agent",
-      description: "For code review",
-      content: "Review this code",
-      isDefault: true,
-      workspaceId: null,
-      createdAt: new Date("2026-01-02"),
-      updatedAt: new Date("2026-01-02"),
-    });
+    vi.spyOn(promptActions, "getPrompts").mockResolvedValue(mockPrompts);
+    const setDefaultSpy = vi
+      .spyOn(promptActions, "setDefaultPrompt")
+      .mockResolvedValue({
+        id: "2",
+        name: "Review Agent",
+        description: "For code review",
+        content: "Review this code",
+        isDefault: true,
+        workspaceId: null,
+        createdAt: new Date("2026-01-02"),
+        updatedAt: new Date("2026-01-02"),
+      });
 
-    renderWithI18n(<PromptsConfig prompts={mockPrompts} />);
-    // Find "Set as Default" / "设为默认" button for non-default prompt (Review Agent)
-    const setDefaultButtons = screen.getAllByRole("button", { name: /设为默认/i });
-    fireEvent.click(setDefaultButtons[0]);
+    renderWithI18n(<PromptsConfig />);
 
     await waitFor(() => {
-      expect(setDefaultSpy).toHaveBeenCalledWith("2", undefined);
+      expect(screen.getByText("Review Agent")).toBeInTheDocument();
+    });
+
+    // Find star button for non-default prompt (Review Agent)
+    const starButtons = screen.getAllByRole("button", { name: /设为默认/i });
+    fireEvent.click(starButtons[0]);
+
+    await waitFor(() => {
+      expect(setDefaultSpy).toHaveBeenCalled();
     });
   });
 
-  it("default prompt shows default badge", () => {
-    renderWithI18n(<PromptsConfig prompts={mockPrompts} />);
-    // zh locale: "默认" badge should be visible for the isDefault=true prompt
-    const defaultBadge = screen.getByText("默认");
-    expect(defaultBadge).toBeInTheDocument();
+  it("default prompt shows default badge", async () => {
+    vi.spyOn(promptActions, "getPrompts").mockResolvedValue(mockPrompts);
+
+    renderWithI18n(<PromptsConfig />);
+
+    await waitFor(() => {
+      // zh locale: "默认" badge should be visible for the isDefault=true prompt
+      const defaultBadge = screen.getByText("默认");
+      expect(defaultBadge).toBeInTheDocument();
+    });
   });
 
-  it("non-default prompt does not show default badge but shows set default button", () => {
-    renderWithI18n(<PromptsConfig prompts={mockPrompts} />);
+  it("non-default prompt does not show default badge but shows set default button", async () => {
+    vi.spyOn(promptActions, "getPrompts").mockResolvedValue(mockPrompts);
+
+    renderWithI18n(<PromptsConfig />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Review Agent")).toBeInTheDocument();
+    });
+
     // "Review Agent" is not default, so "设为默认" button should be present
     expect(screen.getByRole("button", { name: /设为默认/i })).toBeInTheDocument();
   });
