@@ -40,7 +40,7 @@ export function TaskConversation({ messages }: TaskConversationProps) {
   }
 
   return (
-    <div ref={scrollRef} className="flex-1 overflow-auto p-4 space-y-4">
+    <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4">
       {messages.map((message) => (
         <MessageBubble key={message.id} message={message} />
       ))}
@@ -53,7 +53,7 @@ function MessageBubble({ message }: { message: Message }) {
     return (
       <div className="flex items-start gap-2 text-muted-foreground">
         <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-        <p className="text-xs">{message.content}</p>
+        <p className="text-xs break-words overflow-hidden">{message.content}</p>
       </div>
     );
   }
@@ -64,8 +64,8 @@ function MessageBubble({ message }: { message: Message }) {
         <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 ring-1 ring-emerald-500/25">
           <User className="h-3.5 w-3.5 text-emerald-400" />
         </div>
-        <div className="flex-1 rounded-lg bg-accent p-3">
-          <p className="text-sm text-foreground whitespace-pre-wrap">{message.content}</p>
+        <div className="flex-1 min-w-0 rounded-lg bg-accent p-3">
+          <p className="text-sm text-foreground whitespace-pre-wrap break-words">{message.content}</p>
         </div>
       </div>
     );
@@ -77,8 +77,8 @@ function MessageBubble({ message }: { message: Message }) {
       <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-amber-500/15 ring-1 ring-amber-500/25">
         <Bot className="h-3.5 w-3.5 text-amber-400" />
       </div>
-      <div className="flex-1 rounded-lg border border-border bg-card p-3">
-        <p className="text-sm text-foreground/90 whitespace-pre-wrap">{message.content}</p>
+      <div className="flex-1 min-w-0 rounded-lg border border-border bg-card p-3">
+        <p className="text-sm text-foreground/90 whitespace-pre-wrap break-words">{message.content}</p>
       </div>
     </div>
   );

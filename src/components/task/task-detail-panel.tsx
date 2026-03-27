@@ -140,12 +140,21 @@ export function TaskDetailPanel({
             if (!line.startsWith("data: ")) continue;
             try {
               const event = JSON.parse(line.slice(6));
-              if (event.type === "log") {
-                // Append streaming content to the assistant message
+              if (event.type === "log" || event.type === "result") {
+                // Append text content to the assistant message
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === assistantMsgId
                       ? { ...m, content: m.content + event.content }
+                      : m
+                  )
+                );
+              } else if (event.type === "tool") {
+                // Append tool usage info on its own line
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantMsgId
+                      ? { ...m, content: m.content + (m.content ? "\n" : "") + event.content }
                       : m
                   )
                 );
@@ -184,7 +193,7 @@ export function TaskDetailPanel({
 
   return (
     <div
-      className="flex h-full w-[520px] flex-shrink-0 flex-col border-l border-border bg-sidebar"
+      className="flex h-full w-[600px] flex-shrink-0 flex-col border-l border-border bg-sidebar"
       data-testid="task-detail-panel"
     >
       <TaskMetadata

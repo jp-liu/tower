@@ -219,7 +219,7 @@ export async function POST(
 
             const eventType = typeof event.type === "string" ? event.type : "";
 
-            // Extract assistant text content
+            // Extract assistant text content and tool usage
             if (eventType === "assistant") {
               const message = event.message as Record<string, unknown> | undefined;
               const content = Array.isArray(message?.content) ? message.content : [];
@@ -228,6 +228,27 @@ export async function POST(
                   const b = block as Record<string, unknown>;
                   if (b.type === "text" && typeof b.text === "string" && b.text) {
                     sendEvent({ type: "log", content: b.text });
+                  }
+                  // Extract tool use info (file edits, writes, bash commands etc)
+                  if (b.type === "tool_use" && typeof b.name === "string") {
+                    const input = b.input as Record<string, unknown> | undefined;
+                    const toolName = b.name;
+                    let toolInfo = "";
+                    if (toolName === "Write" && input?.file_path) {
+                      toolInfo = `📝 Write: ${input.file_path}`;
+                    } else if (toolName === "Edit" && input?.file_path) {
+                      toolInfo = `✏️ Edit: ${input.file_path}`;
+                    } else if (toolName === "Read" && input?.file_path) {
+                      toolInfo = `📖 Read: ${input.file_path}`;
+                    } else if (toolName === "Bash" && input?.command) {
+                      const cmd = String(input.command);
+                      toolInfo = `$ ${cmd.length > 80 ? cmd.slice(0, 80) + "..." : cmd}`;
+                    } else {
+                      toolInfo = `🔧 ${toolName}`;
+                    }
+                    if (toolInfo) {
+                      sendEvent({ type: "tool", content: toolInfo });
+                    }
                   }
                 }
               }
