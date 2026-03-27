@@ -41,7 +41,7 @@ See: [milestones/v0.1-ROADMAP.md](./milestones/v0.1-ROADMAP.md) for full details
   5. data/cache/{taskId}/ directory can be created programmatically without error
 **Plans**: 2 plans
 Plans:
-- [ ] 04-01-PLAN.md — Schema extension, DB pragmas, FTS5 init, file-utils, constants
+- [x] 04-01-PLAN.md — Schema extension, DB pragmas, FTS5 init, file-utils, constants
 - [ ] 04-02-PLAN.md — FTS5 search helper, note/asset server actions with tests
 
 ### Phase 5: MCP Knowledge Tools
@@ -89,7 +89,7 @@ Phases execute in numeric order: 4 → 5 → 6 → 7
 | 1. Theme + General Settings | v0.1 | 2/2 | Complete | 2026-03-26 |
 | 2. CLI Adapter Verification | v0.1 | 2/2 | Complete | 2026-03-26 |
 | 3. Agent Prompt Management | v0.1 | 2/2 | Complete | 2026-03-27 |
-| 4. Data Layer Foundation | v0.2 | 0/2 | Planning complete | - |
+| 4. Data Layer Foundation | v0.2 | 1/2 | In Progress|  |
 | 5. MCP Knowledge Tools | v0.2 | 0/? | Not started | - |
 | 6. File Serving & Image Rendering | v0.2 | 0/? | Not started | - |
 | 7. Notes & Assets Web UI | v0.2 | 0/? | Not started | - |

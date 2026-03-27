@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: 项目知识库 & 智能 MCP
-status: ready-to-plan
-stopped_at: null
-last_updated: "2026-03-27T14:00:00.000Z"
+status: executing
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-27T07:39:12.477Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-27)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration.
-**Current focus:** Phase 4 — Data Layer Foundation
+**Current focus:** Phase 04 — data-layer-foundation
 
 ## Current Position
 
-Phase: 4 of 7 (Data Layer Foundation)
-Plan: — (not yet planned)
-Status: Ready to plan
-Last activity: 2026-03-27 — Roadmap created for v0.2 (Phases 4-7)
+Phase: 04 (data-layer-foundation) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-03-27
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -47,6 +47,7 @@ Progress: [░░░░░░░░░░] 0%
 | - | - | - | - |
 
 *Updated after each plan completion*
+| Phase 04-data-layer-foundation P01 | 10 | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -57,6 +58,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Pre-v0.2]: MCP tools use action-dispatch pattern (manage_notes, manage_assets) to keep total tool count at or below 30
 - [Pre-v0.2]: file-utils.ts and fts.ts must never import Next.js modules — they are shared between Next.js and MCP stdio processes
 - [Pre-v0.2]: @uiw/react-md-editor requires dynamic import with ssr:false — test this first in Phase 7; fall back to textarea + react-markdown if hydration errors
+- [Phase 04-data-layer-foundation]: FTS5 virtual table created via raw SQL in prisma/init-fts.ts run after db:push — never in Prisma schema to avoid drift detection
+- [Phase 04-data-layer-foundation]: Both PrismaClient instances (Next.js + MCP) now have PRAGMA busy_timeout=5000 to prevent database locked errors
 
 ### Pending Todos
 
@@ -69,6 +72,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-27
-Stopped at: Roadmap written — ready to plan Phase 4
+Last session: 2026-03-27T07:39:12.474Z
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None
