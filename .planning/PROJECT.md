@@ -39,6 +39,13 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - File-utils for data/assets/ and data/cache/ directories
 - busy_timeout pragma on both PrismaClient instances
 
+**Phase 5 complete** (2026-03-27) — MCP Knowledge Tools
+- identify_project tool with confidence-scored fuzzy matching (name > alias > desc)
+- manage_notes action-dispatch tool (6 actions: create/update/delete/get/list/search + FTS sync)
+- manage_assets action-dispatch tool (4 actions: add/delete/list/get + EXDEV fallback)
+- All 3 tools registered in server.ts (total: 21 MCP tools, ceiling: 30)
+- 39 MCP tests passing
+
 ## Requirements
 
 ### Validated
@@ -120,4 +127,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-27 after Phase 4 (Data Layer Foundation) completed*
+*Last updated: 2026-03-27 after Phase 5 (MCP Knowledge Tools) completed*
