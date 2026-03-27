@@ -38,11 +38,10 @@ created: 2026-03-27
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 04-01-01 | 01 | 1 | NOTE-01 | unit | `pnpm vitest run src/lib/__tests__/note-actions.test.ts` | ❌ W0 | ⬜ pending |
-| 04-01-02 | 01 | 1 | NOTE-02 | unit | `pnpm vitest run src/lib/__tests__/note-categories.test.ts` | ❌ W0 | ⬜ pending |
-| 04-01-03 | 01 | 1 | NOTE-03 | unit | `pnpm vitest run src/lib/__tests__/fts.test.ts` | ❌ W0 | ⬜ pending |
-| 04-02-01 | 02 | 1 | ASST-01 | unit | `pnpm vitest run src/lib/__tests__/asset-actions.test.ts` | ❌ W0 | ⬜ pending |
-| 04-02-02 | 02 | 1 | ASST-02 | unit | `pnpm vitest run src/lib/__tests__/file-utils.test.ts` | ❌ W0 | ⬜ pending |
+| 04-01-02 | 01 | 1 | NOTE-01, ASST-01 | unit | `pnpm vitest run tests/unit/lib/file-utils.test.ts` | plan creates | ⬜ pending |
+| 04-02-01 | 02 | 2 | NOTE-03 | unit | `pnpm vitest run tests/unit/lib/fts.test.ts` | plan creates | ⬜ pending |
+| 04-02-02a | 02 | 2 | NOTE-01, NOTE-02 | unit | `pnpm vitest run tests/unit/lib/note-actions.test.ts` | plan creates | ⬜ pending |
+| 04-02-02b | 02 | 2 | ASST-01 | unit | `pnpm vitest run tests/unit/lib/asset-actions.test.ts` | plan creates | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -51,7 +50,7 @@ created: 2026-03-27
 ## Wave 0 Requirements
 
 - [ ] `vitest` — install if not already a dependency
-- [ ] `src/lib/__tests__/` — test directory structure
+- [ ] `tests/unit/lib/` — test directory structure
 - [ ] Test stubs for all requirement IDs
 
 *If none: "Existing infrastructure covers all phase requirements."*
