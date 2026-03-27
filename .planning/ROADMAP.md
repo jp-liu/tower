@@ -74,4 +74,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Theme + General Settings | 2/2 | Complete   | 2026-03-26 |
 | 2. CLI Adapter Verification | 2/2 | Complete   | 2026-03-26 |
-| 3. Agent Prompt Management | 0/2 | Not started | - |
+| 3. Agent Prompt Management | 0/2 | Planned    |  |

@@ -24,11 +24,11 @@ Requirements for Settings milestone. Each maps to roadmap phases.
 
 ### Agent Prompts
 
-- [ ] **PMPT-01**: User can create a new agent prompt with name, description, and content
-- [ ] **PMPT-02**: User can edit an existing agent prompt
-- [ ] **PMPT-03**: User can delete an agent prompt
-- [ ] **PMPT-04**: User can set a prompt as default
-- [ ] **PMPT-05**: Prompt list displays all prompts with name, description, and default indicator
+- [x] **PMPT-01**: User can create a new agent prompt with name, description, and content
+- [x] **PMPT-02**: User can edit an existing agent prompt
+- [x] **PMPT-03**: User can delete an agent prompt
+- [x] **PMPT-04**: User can set a prompt as default
+- [x] **PMPT-05**: Prompt list displays all prompts with name, description, and default indicator
 
 ## Future Requirements
 
@@ -59,11 +59,11 @@ Requirements for Settings milestone. Each maps to roadmap phases.
 | CLIV-02 | Phase 2 | Complete |
 | CLIV-03 | Phase 2 | Complete |
 | CLIV-04 | Phase 2 | Complete |
-| PMPT-01 | Phase 3 | Pending |
-| PMPT-02 | Phase 3 | Pending |
-| PMPT-03 | Phase 3 | Pending |
-| PMPT-04 | Phase 3 | Pending |
-| PMPT-05 | Phase 3 | Pending |
+| PMPT-01 | Phase 3 | Complete |
+| PMPT-02 | Phase 3 | Complete |
+| PMPT-03 | Phase 3 | Complete |
+| PMPT-04 | Phase 3 | Complete |
+| PMPT-05 | Phase 3 | Complete |
 
 **Coverage:**
 - v0.1 requirements: 14 total
