@@ -7,6 +7,7 @@ import { SettingsNav } from "@/components/settings/settings-nav";
 import { AIToolsConfig } from "@/components/settings/ai-tools-config";
 import { CLIAdapterTester } from "@/components/settings/cli-adapter-tester";
 import { GeneralConfig } from "@/components/settings/general-config";
+import { PromptsConfig } from "@/components/settings/prompts-config";
 import type { Prisma } from "@prisma/client";
 import {
   getAgentConfigs,
@@ -125,11 +126,7 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {activeSection === "prompts" && (
-            <div className="flex h-64 items-center justify-center text-muted-foreground">
-              <p>Prompts -- Coming in Phase 3</p>
-            </div>
-          )}
+          {activeSection === "prompts" && <PromptsConfig />}
         </div>
       </div>
     </div>
