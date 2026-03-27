@@ -29,7 +29,7 @@ Requirements for v0.2 — 项目知识库 & 智能 MCP. Each maps to roadmap pha
 
 ### Web 界面
 
-- [ ] **UI-01**: 项目内提供笔记管理页面（列表、Markdown 编辑器、分类筛选）
+- [x] **UI-01**: 项目内提供笔记管理页面（列表、Markdown 编辑器、分类筛选）
 - [ ] **UI-02**: 项目内提供资源查看页面（文件列表、预览、上传）
 - [x] **UI-03**: 任务对话中的图片路径渲染为可查看的图片
 
@@ -74,7 +74,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ASST-02 | Phase 4 | Complete |
 | ASST-03 | Phase 5 | Complete |
 | ASST-04 | Phase 6 | Complete |
-| UI-01 | Phase 7 | Pending |
+| UI-01 | Phase 7 | Complete |
 | UI-02 | Phase 7 | Pending |
 | UI-03 | Phase 6 | Complete |
 

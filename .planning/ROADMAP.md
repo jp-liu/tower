@@ -82,7 +82,7 @@ Plans:
   4. All new UI strings appear correctly in both Chinese and English
 **Plans**: 2 plans
 Plans:
-- [ ] 07-01-PLAN.md — i18n strings, sidebar navigation, Notes page with Markdown editor and category filter
+- [x] 07-01-PLAN.md — i18n strings, sidebar navigation, Notes page with Markdown editor and category filter
 - [ ] 07-02-PLAN.md — Assets page with file list, image preview, upload, and download
 
 ## Progress
@@ -98,4 +98,4 @@ Phases execute in numeric order: 4 → 5 → 6 → 7
 | 4. Data Layer Foundation | v0.2 | 2/2 | Complete   | 2026-03-27 |
 | 5. MCP Knowledge Tools | v0.2 | 2/2 | Complete   | 2026-03-27 |
 | 6. File Serving & Image Rendering | v0.2 | 0/1 | Not started | - |
-| 7. Notes & Assets Web UI | v0.2 | 0/2 | Not started | - |
+| 7. Notes & Assets Web UI | v0.2 | 1/2 | In Progress|  |
