@@ -12,6 +12,7 @@ export interface SearchResult {
   title: string;
   subtitle: string;
   navigateTo: string;
+  snippet?: string;
 }
 
 interface NoteRawRow {
@@ -31,6 +32,7 @@ function toNoteResult(row: NoteRawRow): SearchResult {
     title: row.title,
     subtitle: `${row.workspace_name} / ${row.project_name}`,
     navigateTo: `/workspaces/${row.workspaceId}?projectId=${row.projectId}`,
+    snippet: row.content ? row.content.slice(0, 80) : undefined,
   };
 }
 
@@ -200,6 +202,7 @@ export async function globalSearch(query: string, category: SearchCategory = "ta
       title: a.filename,
       subtitle: `${a.project.workspace.name} / ${a.project.name}`,
       navigateTo: `/workspaces/${a.project.workspaceId}?projectId=${a.projectId}`,
+      snippet: a.description || undefined,
     }));
   }
 

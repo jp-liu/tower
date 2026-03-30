@@ -162,6 +162,79 @@ describe("globalSearch - note category", () => {
   });
 });
 
+describe("globalSearch - note category - snippet", () => {
+  it("note result has snippet with first 80 chars of content", async () => {
+    const longContent = "A".repeat(120);
+    const note = await testDb.projectNote.create({
+      data: {
+        title: "Snippet Test Note",
+        content: longContent,
+        projectId: testProjectId,
+      },
+    });
+    await syncNoteToFts(testDb, { id: note.id, title: note.title, content: note.content });
+
+    const results = await globalSearchFn("Snippet Test", "note");
+    const found = results.find((r) => r.id === note.id);
+    expect(found).toBeDefined();
+    expect(found?.snippet).toBe("A".repeat(80));
+  });
+
+  it("note result with empty content has undefined snippet", async () => {
+    const note = await testDb.projectNote.create({
+      data: {
+        title: "Empty Content Snippet Note",
+        content: "",
+        projectId: testProjectId,
+      },
+    });
+    // Sync to FTS so the note is found by title match
+    await syncNoteToFts(testDb, { id: note.id, title: note.title, content: note.content });
+    const results = await globalSearchFn("Empty Content Snippet", "note");
+    const found = results.find((r) => r.id === note.id);
+    expect(found).toBeDefined();
+    expect(found?.snippet).toBeUndefined();
+  });
+});
+
+describe("globalSearch - asset category - snippet", () => {
+  it("asset result has snippet equal to description", async () => {
+    await testDb.projectAsset.create({
+      data: {
+        filename: "snippet-test.pdf",
+        path: "/data/assets/snippet-test.pdf",
+        size: 4096,
+        mimeType: "application/pdf",
+        description: "This is a detailed description of the test PDF file",
+        projectId: testProjectId,
+      },
+    });
+
+    const results = await globalSearchFn("snippet-test", "asset");
+    const found = results.find((r) => r.title === "snippet-test.pdf");
+    expect(found).toBeDefined();
+    expect(found?.snippet).toBe("This is a detailed description of the test PDF file");
+  });
+
+  it("asset result with empty description has undefined snippet", async () => {
+    await testDb.projectAsset.create({
+      data: {
+        filename: "no-desc-asset.txt",
+        path: "/data/assets/no-desc-asset.txt",
+        size: 128,
+        mimeType: "text/plain",
+        description: "",
+        projectId: testProjectId,
+      },
+    });
+
+    const results = await globalSearchFn("no-desc-asset", "asset");
+    const found = results.find((r) => r.title === "no-desc-asset.txt");
+    expect(found).toBeDefined();
+    expect(found?.snippet).toBeUndefined();
+  });
+});
+
 describe("globalSearch - asset category", () => {
   it("returns assets with matching filename", async () => {
     await testDb.projectAsset.create({
