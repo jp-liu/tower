@@ -27,7 +27,7 @@ Requirements for v0.4 — 系统配置化. Each maps to roadmap phases.
 ### 搜索优化
 
 - [x] **SRCH-05**: 用户可配置搜索参数（结果数量、All 模式 cap、防抖延迟、snippet 长度）
-- [ ] **SRCH-06**: search-actions.ts 和 search-tools.ts 共享搜索逻辑（提取到 src/lib/search.ts）
+- [x] **SRCH-06**: search-actions.ts 和 search-tools.ts 共享搜索逻辑（提取到 src/lib/search.ts）
 - [ ] **SRCH-07**: 搜索 useEffect 竞态条件修复（cancelled flag 防止旧请求覆盖新结果）
 
 ## Future Requirements
@@ -64,7 +64,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SYS-01 | Phase 13 | Complete |
 | SYS-02 | Phase 13 | Complete |
 | SRCH-05 | Phase 13 | Complete |
-| SRCH-06 | Phase 14 | Pending |
+| SRCH-06 | Phase 14 | Complete |
 | SRCH-07 | Phase 14 | Pending |
 
 **Coverage:**

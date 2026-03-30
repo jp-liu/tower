@@ -110,7 +110,7 @@ Plans:
   3. Changing a config value in settings takes effect in the running app without a server restart or page reload
 **Plans**: 2 plans
 Plans:
-- [ ] 14-01-PLAN.md — Extract shared search.ts module, refactor search-actions and search-tools to thin wrappers, unit tests
+- [x] 14-01-PLAN.md — Extract shared search.ts module, refactor search-actions and search-tools to thin wrappers, unit tests
 - [ ] 14-02-PLAN.md — Fix search dialog race condition with cancelled flag, move config fetch to open effect, test cases
 **UI hint**: no
 
@@ -131,4 +131,4 @@ Plans:
 | 11. SystemConfig Foundation | v0.4 | 2/2 | Complete    | 2026-03-30 |
 | 12. Git Path Mapping Rules | v0.4 | 2/2 | Complete    | 2026-03-30 |
 | 13. Configurable System Parameters | v0.4 | 2/2 | Complete    | 2026-03-30 |
-| 14. Search Quality & Realtime Config | v0.4 | 0/2 | Not started | - |
+| 14. Search Quality & Realtime Config | v0.4 | 1/2 | In Progress|  |
