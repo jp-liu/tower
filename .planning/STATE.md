@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: 系统配置化
 status: verifying
-stopped_at: Completed 14-01-PLAN.md
+stopped_at: Completed 14-01-PLAN.md and 14-02-PLAN.md
 last_updated: "2026-03-30T11:52:05.535Z"
 last_activity: 2026-03-30
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
   percent: 100
 ---
 
@@ -56,6 +56,7 @@ Progress: [██████████] 100%
 | Phase 13-configurable-system-parameters P01 | 458s | 2 tasks | 10 files |
 | Phase 13-configurable-system-parameters P02 | 420 | 2 tasks | 4 files |
 | Phase 14-search-quality-realtime-config P01 | 15min | 2 tasks | 4 files |
+| Phase 14-search-quality-realtime-config P02 | 5m | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,8 @@ Progress: [██████████] 100%
 - [Phase 14-search-quality-realtime-config]: search.ts framework-agnostic with SearchConfig dependency injection — safe for both Next.js and MCP stdio contexts
 - [Phase 14-search-quality-realtime-config]: 'all' branch in search.ts uses local recursive search() calls to avoid re-fetching config 5x
 - [Phase 14-search-quality-realtime-config]: search-tools.ts uses Promise.all for 3 parallel config reads via readConfigValue — no sequential await overhead
+- [Phase 14-search-quality-realtime-config]: Merged debounceMs config fetch into open effect so it reloads on each dialog open (CFG-02)
+- [Phase 14-search-quality-realtime-config]: cancelled flag at useEffect body level (outside setTimeout) prevents stale search results from overwriting newer results (SRCH-07)
 
 ### Pending Todos
 
@@ -99,5 +102,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-30T11:52:05.532Z
-Stopped at: Completed 14-01-PLAN.md
+Stopped at: Completed 14-01-PLAN.md and 14-02-PLAN.md
 Resume file: None
