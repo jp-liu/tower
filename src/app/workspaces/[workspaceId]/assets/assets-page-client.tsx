@@ -66,8 +66,8 @@ export function AssetsPageClient({
           <span>{t("assets.title")}</span>
         </div>
 
-        {/* Project selector */}
-        {projects.length > 1 && (
+        {/* Project selector — always visible so user knows which project is active */}
+        {projects.length > 0 && (
           <select
             value={project?.id ?? ""}
             onChange={(e) => handleProjectChange(e.target.value)}
