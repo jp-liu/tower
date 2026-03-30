@@ -43,7 +43,7 @@ See: [milestones/v0.3-ROADMAP.md](./milestones/v0.3-ROADMAP.md) for full details
 
 </details>
 
-### 🚧 v0.4 系统配置化 (In Progress)
+### v0.4 系统配置化 (In Progress)
 
 **Milestone Goal:** 将系统中的硬编码值提取为用户可配置项，通过设置页 UI 和数据库存储实现个性化配置。
 
@@ -108,7 +108,11 @@ Plans:
   1. A shared `src/lib/search.ts` module exists and both `search-actions.ts` and `search-tools.ts` delegate to it — no duplicated search logic
   2. Rapidly typing in the search box (changing query before previous result returns) never shows stale results from an earlier query
   3. Changing a config value in settings takes effect in the running app without a server restart or page reload
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 14-01-PLAN.md — Extract shared search.ts module, refactor search-actions and search-tools to thin wrappers, unit tests
+- [ ] 14-02-PLAN.md — Fix search dialog race condition with cancelled flag, move config fetch to open effect, test cases
+**UI hint**: no
 
 ## Progress
 
@@ -127,4 +131,4 @@ Plans:
 | 11. SystemConfig Foundation | v0.4 | 2/2 | Complete    | 2026-03-30 |
 | 12. Git Path Mapping Rules | v0.4 | 2/2 | Complete    | 2026-03-30 |
 | 13. Configurable System Parameters | v0.4 | 2/2 | Complete    | 2026-03-30 |
-| 14. Search Quality & Realtime Config | v0.4 | 0/TBD | Not started | - |
+| 14. Search Quality & Realtime Config | v0.4 | 0/2 | Not started | - |
