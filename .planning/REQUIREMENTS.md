@@ -55,22 +55,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CFG-01 | TBD | Pending |
-| CFG-02 | TBD | Pending |
-| GIT-01 | TBD | Pending |
-| GIT-02 | TBD | Pending |
-| GIT-03 | TBD | Pending |
-| GIT-04 | TBD | Pending |
-| SYS-01 | TBD | Pending |
-| SYS-02 | TBD | Pending |
-| SRCH-05 | TBD | Pending |
-| SRCH-06 | TBD | Pending |
-| SRCH-07 | TBD | Pending |
+| CFG-01 | Phase 11 | Pending |
+| CFG-02 | Phase 14 | Pending |
+| GIT-01 | Phase 12 | Pending |
+| GIT-02 | Phase 12 | Pending |
+| GIT-03 | Phase 13 | Pending |
+| GIT-04 | Phase 13 | Pending |
+| SYS-01 | Phase 13 | Pending |
+| SYS-02 | Phase 13 | Pending |
+| SRCH-05 | Phase 13 | Pending |
+| SRCH-06 | Phase 14 | Pending |
+| SRCH-07 | Phase 14 | Pending |
 
 **Coverage:**
 - v0.4 requirements: 11 total
-- Mapped to phases: 0
-- Unmapped: 11
+- Mapped to phases: 11
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-30*
