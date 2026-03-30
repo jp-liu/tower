@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: 全局搜索增强
-status: defining_requirements
-stopped_at: Milestone started
+status: roadmap_ready
+stopped_at: Roadmap created — ready for Phase 8 planning
 last_updated: "2026-03-30"
 last_activity: 2026-03-30
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,14 +21,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Defining requirements for v0.3 全局搜索增强
+**Current focus:** v0.3 全局搜索增强 — ready to begin Phase 8
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 8 — Asset Description Schema (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-03-30 — Milestone v0.3 started
+Status: Roadmap ready
+Last activity: 2026-03-30 — Roadmap created for v0.3
+
+```
+Phase 8 [          ] 0%
+Phase 9 [          ] 0%
+Phase 10[          ] 0%
+v0.3    [          ] 0% (0/3 phases)
+```
 
 ## Accumulated Context
 
@@ -40,10 +47,18 @@ Last activity: 2026-03-30 — Milestone v0.3 started
 - [Pre-v0.2]: file-utils.ts and fts.ts must never import Next.js modules — they are shared between Next.js and MCP stdio processes
 - [Phase 07]: Used textarea+ReactMarkdown fallback instead of @uiw/react-md-editor — React 19 compat concern validated
 - [Phase 07]: Upload dialog with workspace/project selector — user can upload to any project without switching list view
+- [v0.3 research]: ProjectAsset.description must be nullable String? @default("") — NOT NULL without default causes table recreation and potential data loss
+- [v0.3 research]: search-actions.ts and search-tools.ts (MCP) must be updated in the same commit when adding new SearchCategory values — they share no code and divergence is silent
+- [v0.3 research]: Use Promise.allSettled (not Promise.all) for parallel SQLite queries in "All" mode — single SQLITE_BUSY must not drop all results
+- [v0.3 research]: Back up dev.db before any prisma db push — Prisma may silently drop notes_fts FTS5 virtual table; verify with sqlite3 ".tables" and re-run pnpm db:init-fts if missing
 
 ### Pending Todos
 
-None yet.
+- Phase 8: Back up prisma/dev.db before running prisma db push
+- Phase 8: After db push, verify notes_fts table still exists via sqlite3
+- Phase 9: Verify PRAGMA busy_timeout=5000 is set in src/lib/db.ts before implementing Promise.allSettled fan-out
+- Phase 9: Validate FTS5 JOIN SQL column name quoting against live schema (n."projectId" vs n.projectId)
+- Phase 10: Check whether workspace page reads a ?tab= query param; add tab-param handling if missing before wiring Note/Asset search result navigation
 
 ### Blockers/Concerns
 
@@ -52,5 +67,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-30
-Stopped at: Milestone v0.3 started
+Stopped at: Roadmap created — ready to plan Phase 8
 Resume file: None

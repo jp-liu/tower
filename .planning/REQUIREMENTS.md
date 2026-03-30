@@ -89,22 +89,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ASSET-01 | — | Pending |
-| ASSET-02 | — | Pending |
-| ASSET-03 | — | Pending |
-| SRCH-01 | — | Pending |
-| SRCH-02 | — | Pending |
-| SRCH-03 | — | Pending |
-| SRCH-04 | — | Pending |
-| SUI-01 | — | Pending |
-| SUI-02 | — | Pending |
-| SUI-03 | — | Pending |
+| ASSET-01 | Phase 8 | Pending |
+| ASSET-02 | Phase 8 | Pending |
+| ASSET-03 | Phase 10 | Pending |
+| SRCH-01 | Phase 9 | Pending |
+| SRCH-02 | Phase 9 | Pending |
+| SRCH-03 | Phase 9 | Pending |
+| SRCH-04 | Phase 9 | Pending |
+| SUI-01 | Phase 10 | Pending |
+| SUI-02 | Phase 10 | Pending |
+| SUI-03 | Phase 10 | Pending |
 
 **Coverage:**
 - v0.3 requirements: 10 total
-- Mapped to phases: 0
-- Unmapped: 10 ⚠️
+- Mapped to phases: 10
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-27*
-*Last updated: 2026-03-30 after v0.3 requirements defined*
+*Last updated: 2026-03-30 after v0.3 roadmap created (phases 8-10)*
