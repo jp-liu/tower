@@ -72,31 +72,36 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load debounce delay from config
-  useEffect(() => {
-    getConfigValue<number>("search.debounceMs", 250).then(setDebounceMs);
-  }, []);
-
-  // Focus input when dialog opens
+  // Reload config and reset state on dialog open
   useEffect(() => {
     if (open) {
+      getConfigValue<number>("search.debounceMs", 250).then(setDebounceMs);
       setTimeout(() => inputRef.current?.focus(), 100);
       setQuery("");
       setResults([]);
     }
   }, [open]);
 
-  // Debounced search
+  // Debounced search with race condition fix
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    if (!query.trim()) { setResults([]); return; }
+    if (!query.trim()) { setResults([]); setIsSearching(false); return; }
     setIsSearching(true);
+
+    let cancelled = false;
+
     timerRef.current = setTimeout(async () => {
       const r = await globalSearch(query, category);
-      setResults(r);
-      setIsSearching(false);
+      if (!cancelled) {
+        setResults(r);
+        setIsSearching(false);
+      }
     }, debounceMs);
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      cancelled = true;
+    };
   }, [query, category, debounceMs]);
 
   const handleSelect = useCallback((result: SearchResult) => {
