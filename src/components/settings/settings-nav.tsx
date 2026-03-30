@@ -1,6 +1,6 @@
 "use client";
 
-import { Settings, Cpu, FileText } from "lucide-react";
+import { Settings, Cpu, FileText, SlidersHorizontal } from "lucide-react";
 
 const NAV_ITEMS = [
   {
@@ -20,6 +20,12 @@ const NAV_ITEMS = [
     label: "Prompts",
     description: "AI prompt templates",
     icon: FileText,
+  },
+  {
+    id: "config",
+    label: "Config",
+    description: "System configuration parameters",
+    icon: SlidersHorizontal,
   },
 ];
 
