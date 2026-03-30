@@ -245,6 +245,8 @@ const translations = {
     "notes.deleteConfirm": "确认删除笔记「{title}」？",
     "notes.noProject": "当前工作空间没有项目",
     "notes.noProjectHint": "请先创建一个项目",
+    "notes.backToBoard": "返回看板",
+    "notes.loading": "加载中...",
     // Assets
     "assets.title": "资源",
     "assets.upload": "上传文件",
@@ -260,6 +262,8 @@ const translations = {
     "assets.noProject": "当前工作空间没有项目",
     "assets.noProjectHint": "请先创建一个项目",
     "assets.uploading": "上传中...",
+    "assets.backToBoard": "返回看板",
+    "assets.loading": "加载中...",
   },
   en: {
     "sidebar.workspace": "Workspaces",
@@ -483,6 +487,8 @@ const translations = {
     "notes.deleteConfirm": "Delete note \"{title}\"?",
     "notes.noProject": "No projects in this workspace",
     "notes.noProjectHint": "Create a project first",
+    "notes.backToBoard": "Back to Board",
+    "notes.loading": "Loading...",
     // Assets
     "assets.title": "Assets",
     "assets.upload": "Upload File",
@@ -498,6 +504,8 @@ const translations = {
     "assets.noProject": "No projects in this workspace",
     "assets.noProjectHint": "Create a project first",
     "assets.uploading": "Uploading...",
+    "assets.backToBoard": "Back to Board",
+    "assets.loading": "Loading...",
   },
 } as const;
 

@@ -1,52 +1,39 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { getProjectNotes } from "@/actions/note-actions";
+import { getWorkspacesWithProjects } from "@/actions/workspace-actions";
 import { NotesPageClient } from "./notes-page-client";
 
 interface Props {
   params: Promise<{ workspaceId: string }>;
-  searchParams: Promise<{ projectId?: string }>;
 }
 
-export default async function NotesPage({ params, searchParams }: Props) {
+export default async function NotesPage({ params }: Props) {
   const { workspaceId } = await params;
-  const { projectId: selectedProjectId } = await searchParams;
 
+  // Verify current workspace exists
   const workspace = await db.workspace.findUnique({
     where: { id: workspaceId },
-    include: {
-      projects: {
-        select: { id: true, name: true, alias: true },
-        orderBy: { createdAt: "asc" },
-      },
-    },
+    select: { id: true },
   });
-
   if (!workspace) notFound();
 
-  if (workspace.projects.length === 0) {
-    return (
-      <NotesPageClient
-        workspaceId={workspaceId}
-        project={undefined}
-        projects={[]}
-        initialNotes={[]}
-      />
-    );
-  }
+  // All workspaces with their projects (lightweight) for the selector
+  const allWorkspaces = await getWorkspacesWithProjects();
 
-  const project = selectedProjectId
-    ? workspace.projects.find((p) => p.id === selectedProjectId) ?? workspace.projects[0]
-    : workspace.projects[0];
-
-  const notes = project ? await getProjectNotes(project.id) : [];
+  // Find current workspace's projects for initial data
+  const currentWs = allWorkspaces.find((ws) => ws.id === workspaceId);
+  const initialProject = currentWs?.projects[0];
+  const initialNotes = initialProject
+    ? await getProjectNotes(initialProject.id)
+    : [];
 
   return (
     <NotesPageClient
-      workspaceId={workspaceId}
-      project={project}
-      projects={workspace.projects}
-      initialNotes={notes}
+      allWorkspaces={allWorkspaces}
+      initialWorkspaceId={workspaceId}
+      initialProjectId={initialProject?.id ?? null}
+      initialNotes={initialNotes}
     />
   );
 }

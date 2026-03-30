@@ -1,52 +1,92 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ArrowLeft, FolderOpen } from "lucide-react";
 import type { ProjectAsset } from "@prisma/client";
 import { useI18n } from "@/lib/i18n";
-import { deleteAsset } from "@/actions/asset-actions";
+import { deleteAsset, getProjectAssets } from "@/actions/asset-actions";
 import { AssetList } from "@/components/assets/asset-list";
 import { AssetUpload } from "@/components/assets/asset-upload";
 
-interface Project {
+interface SimpleProject {
   id: string;
   name: string;
   alias: string | null;
 }
 
+interface SimpleWorkspace {
+  id: string;
+  name: string;
+  projects: SimpleProject[];
+}
+
 interface AssetsPageClientProps {
-  workspaceId: string;
-  project?: Project;
-  projects: Project[];
+  allWorkspaces: SimpleWorkspace[];
+  initialWorkspaceId: string;
+  initialProjectId: string | null;
   initialAssets: ProjectAsset[];
 }
 
 export function AssetsPageClient({
-  workspaceId,
-  project,
-  projects,
+  allWorkspaces,
+  initialWorkspaceId,
+  initialProjectId,
   initialAssets,
 }: AssetsPageClientProps) {
   const { t } = useI18n();
-  const router = useRouter();
-  const [, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
+
+  // Selection state — pure client, no router
+  const [selectedWsId, setSelectedWsId] = useState(initialWorkspaceId);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjectId);
+
+  // Data state
+  const [assets, setAssets] = useState<ProjectAsset[]>(initialAssets);
+
+  // Derived
+  const currentWs = allWorkspaces.find((ws) => ws.id === selectedWsId);
+  const projects = currentWs?.projects ?? [];
+
+  // Reload assets for the selected project
+  const reloadAssets = useCallback(
+    (projectId: string | null) => {
+      if (!projectId) {
+        setAssets([]);
+        return;
+      }
+      startTransition(async () => {
+        const freshAssets = await getProjectAssets(projectId);
+        setAssets(freshAssets);
+      });
+    },
+    [startTransition]
+  );
+
+  // Handlers: workspace / project switch
+  const handleWsChange = (wsId: string) => {
+    setSelectedWsId(wsId);
+    const ws = allWorkspaces.find((w) => w.id === wsId);
+    const firstProject = ws?.projects[0] ?? null;
+    setSelectedProjectId(firstProject?.id ?? null);
+    reloadAssets(firstProject?.id ?? null);
+  };
+
+  const handleProjectChange = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    reloadAssets(projectId);
+  };
 
   const handleDelete = async (assetId: string) => {
-    const asset = initialAssets.find((a) => a.id === assetId);
+    const asset = assets.find((a) => a.id === assetId);
     const filename = asset?.filename ?? assetId;
     if (!confirm(t("assets.deleteConfirm", { filename }))) return;
     await deleteAsset(assetId);
-    startTransition(() => router.refresh());
+    reloadAssets(selectedProjectId);
   };
 
   const handleUploaded = () => {
-    startTransition(() => router.refresh());
-  };
-
-  const handleProjectChange = (newProjectId: string) => {
-    router.push(`/workspaces/${workspaceId}/assets?projectId=${newProjectId}`);
+    reloadAssets(selectedProjectId);
   };
 
   return (
@@ -54,11 +94,11 @@ export function AssetsPageClient({
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-border px-6 py-4">
         <Link
-          href={`/workspaces/${workspaceId}`}
+          href={`/workspaces/${selectedWsId}`}
           className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          <span>返回看板</span>
+          <span>{t("assets.backToBoard")}</span>
         </Link>
         <span className="text-border">·</span>
         <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
@@ -66,12 +106,25 @@ export function AssetsPageClient({
           <span>{t("assets.title")}</span>
         </div>
 
-        {/* Project selector — always visible so user knows which project is active */}
+        {/* Workspace selector */}
+        <select
+          value={selectedWsId}
+          onChange={(e) => handleWsChange(e.target.value)}
+          className="ml-2 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+        >
+          {allWorkspaces.map((ws) => (
+            <option key={ws.id} value={ws.id}>
+              {ws.name}
+            </option>
+          ))}
+        </select>
+
+        {/* Project selector */}
         {projects.length > 0 && (
           <select
-            value={project?.id ?? ""}
+            value={selectedProjectId ?? ""}
             onChange={(e) => handleProjectChange(e.target.value)}
-            className="ml-2 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+            className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
           >
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
@@ -82,9 +135,9 @@ export function AssetsPageClient({
         )}
 
         {/* Upload button */}
-        {project && (
+        {selectedProjectId && (
           <div className="ml-auto">
-            <AssetUpload projectId={project.id} onUploaded={handleUploaded} />
+            <AssetUpload projectId={selectedProjectId} onUploaded={handleUploaded} />
           </div>
         )}
       </div>
@@ -97,7 +150,12 @@ export function AssetsPageClient({
             <p className="text-xs text-muted-foreground/60">{t("assets.noProjectHint")}</p>
           </div>
         ) : (
-          <AssetList assets={initialAssets} onDelete={handleDelete} />
+          <>
+            {isPending && (
+              <div className="text-xs text-muted-foreground animate-pulse mb-4">{t("assets.loading")}</div>
+            )}
+            <AssetList assets={assets} onDelete={handleDelete} />
+          </>
         )}
       </div>
     </div>

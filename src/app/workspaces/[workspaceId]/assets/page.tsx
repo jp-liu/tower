@@ -1,52 +1,36 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { getProjectAssets } from "@/actions/asset-actions";
+import { getWorkspacesWithProjects } from "@/actions/workspace-actions";
 import { AssetsPageClient } from "./assets-page-client";
 
 interface Props {
   params: Promise<{ workspaceId: string }>;
-  searchParams: Promise<{ projectId?: string }>;
 }
 
-export default async function AssetsPage({ params, searchParams }: Props) {
+export default async function AssetsPage({ params }: Props) {
   const { workspaceId } = await params;
-  const { projectId: selectedProjectId } = await searchParams;
 
   const workspace = await db.workspace.findUnique({
     where: { id: workspaceId },
-    include: {
-      projects: {
-        select: { id: true, name: true, alias: true },
-        orderBy: { createdAt: "asc" },
-      },
-    },
+    select: { id: true },
   });
-
   if (!workspace) notFound();
 
-  if (workspace.projects.length === 0) {
-    return (
-      <AssetsPageClient
-        workspaceId={workspaceId}
-        project={undefined}
-        projects={[]}
-        initialAssets={[]}
-      />
-    );
-  }
+  const allWorkspaces = await getWorkspacesWithProjects();
 
-  const project = selectedProjectId
-    ? workspace.projects.find((p) => p.id === selectedProjectId) ?? workspace.projects[0]
-    : workspace.projects[0];
-
-  const assets = project ? await getProjectAssets(project.id) : [];
+  const currentWs = allWorkspaces.find((ws) => ws.id === workspaceId);
+  const initialProject = currentWs?.projects[0];
+  const initialAssets = initialProject
+    ? await getProjectAssets(initialProject.id)
+    : [];
 
   return (
     <AssetsPageClient
-      workspaceId={workspaceId}
-      project={project}
-      projects={workspace.projects}
-      initialAssets={assets}
+      allWorkspaces={allWorkspaces}
+      initialWorkspaceId={workspaceId}
+      initialProjectId={initialProject?.id ?? null}
+      initialAssets={initialAssets}
     />
   );
 }

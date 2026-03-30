@@ -3,6 +3,21 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 
+/** Lightweight list: workspace names + project names only (for selectors) */
+export async function getWorkspacesWithProjects() {
+  return db.workspace.findMany({
+    select: {
+      id: true,
+      name: true,
+      projects: {
+        select: { id: true, name: true, alias: true },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+}
+
 export async function getWorkspaces() {
   return db.workspace.findMany({
     include: {
