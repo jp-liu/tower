@@ -3,9 +3,33 @@
 **Defined:** 2026-03-27
 **Core Value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration.
 
-## v0.2 Requirements
+## v0.3 Requirements
 
-Requirements for v0.2 — 项目知识库 & 智能 MCP. Each maps to roadmap phases.
+Requirements for v0.3 — 全局搜索增强. Each maps to roadmap phases.
+
+### Asset Metadata
+
+- [ ] **ASSET-01**: User can add a required description when uploading an asset
+- [ ] **ASSET-02**: ProjectAsset model includes description field persisted to database
+- [ ] **ASSET-03**: User sees content snippets (note content / asset description) in search results
+
+### Search Actions
+
+- [ ] **SRCH-01**: User can search notes by title and content via FTS5 full-text search
+- [ ] **SRCH-02**: User can search assets by filename and description
+- [ ] **SRCH-03**: User can search across all types ("All" mode) with results grouped by type
+- [ ] **SRCH-04**: MCP search tool supports note, asset, and all categories
+
+### Search UI
+
+- [ ] **SUI-01**: Search dialog shows All, Task, Project, Repository, Note, Asset tabs
+- [ ] **SUI-02**: "All" mode renders results grouped by type with section headers
+- [ ] **SUI-03**: All new search UI elements support Chinese and English (i18n)
+
+## v0.2 Requirements (Completed)
+
+<details>
+<summary>v0.2 项目知识库 & 智能 MCP — All 14 requirements complete</summary>
 
 ### 智能项目识别
 
@@ -33,14 +57,15 @@ Requirements for v0.2 — 项目知识库 & 智能 MCP. Each maps to roadmap pha
 - [x] **UI-02**: 项目内提供资源查看页面（文件列表、预览、上传）
 - [x] **UI-03**: 任务对话中的图片路径渲染为可查看的图片
 
+</details>
+
 ## Future Requirements
 
 Deferred to future release. Tracked but not in current roadmap.
 
 ### 高级搜索
 
-- **SRCH-01**: 跨项目全局笔记搜索
-- **SRCH-02**: 笔记标签系统（除分类外的细粒度标签）
+- **SRCH-F01**: 笔记标签系统（除分类外的细粒度标签）
 
 ### 协作增强
 
@@ -56,6 +81,7 @@ Deferred to future release. Tracked but not in current roadmap.
 | 笔记文件夹嵌套 | 分类已足够，文件夹增加复杂度 |
 | 自动 cache 清理 | 用户明确要求手动清理 |
 | base64 图片上传 | 本地文件系统 mv 更简单高效 |
+| 键盘导航搜索结果 | 可以后续优化，非核心功能 |
 
 ## Traceability
 
@@ -63,26 +89,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PROJ-01 | Phase 5 | Complete |
-| PROJ-02 | Phase 5 | Complete |
-| PROJ-03 | Phase 5 | Complete |
-| NOTE-01 | Phase 4 | Complete |
-| NOTE-02 | Phase 4 | Complete |
-| NOTE-03 | Phase 4 | Complete |
-| NOTE-04 | Phase 5 | Complete |
-| ASST-01 | Phase 4 | Complete |
-| ASST-02 | Phase 4 | Complete |
-| ASST-03 | Phase 5 | Complete |
-| ASST-04 | Phase 6 | Complete |
-| UI-01 | Phase 7 | Complete |
-| UI-02 | Phase 7 | Complete |
-| UI-03 | Phase 6 | Complete |
+| ASSET-01 | — | Pending |
+| ASSET-02 | — | Pending |
+| ASSET-03 | — | Pending |
+| SRCH-01 | — | Pending |
+| SRCH-02 | — | Pending |
+| SRCH-03 | — | Pending |
+| SRCH-04 | — | Pending |
+| SUI-01 | — | Pending |
+| SUI-02 | — | Pending |
+| SUI-03 | — | Pending |
 
 **Coverage:**
-- v0.2 requirements: 14 total
-- Mapped to phases: 14
-- Unmapped: 0 ✓
+- v0.3 requirements: 10 total
+- Mapped to phases: 0
+- Unmapped: 10 ⚠️
 
 ---
 *Requirements defined: 2026-03-27*
-*Last updated: 2026-03-27 after roadmap creation*
+*Last updated: 2026-03-30 after v0.3 requirements defined*
