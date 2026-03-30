@@ -96,7 +96,7 @@ Plans:
   5. User can set search result count, All-mode cap, debounce delay, and snippet length, and the search UI applies the configured values
 **Plans**: 2 plans
 Plans:
-- [ ] 13-01-PLAN.md — Config defaults registry, branch template utility, server-side consumer wiring, unit tests
+- [x] 13-01-PLAN.md — Config defaults registry, branch template utility, server-side consumer wiring, unit tests
 - [ ] 13-02-PLAN.md — Settings UI sections (System, Git Params, Search), client-side wiring, i18n keys, visual verification
 **UI hint**: yes
 
@@ -126,5 +126,5 @@ Plans:
 | 10. Search UI Extension | v0.3 | 2/2 | Complete | 2026-03-30 |
 | 11. SystemConfig Foundation | v0.4 | 2/2 | Complete    | 2026-03-30 |
 | 12. Git Path Mapping Rules | v0.4 | 2/2 | Complete    | 2026-03-30 |
-| 13. Configurable System Parameters | v0.4 | 0/2 | Not started | - |
+| 13. Configurable System Parameters | v0.4 | 1/2 | In Progress|  |
 | 14. Search Quality & Realtime Config | v0.4 | 0/TBD | Not started | - |
