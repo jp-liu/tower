@@ -50,7 +50,7 @@ See: [milestones/v0.3-ROADMAP.md](./milestones/v0.3-ROADMAP.md) for full details
 - [x] **Phase 11: SystemConfig Foundation** - SystemConfig model, key-value read/write API, and settings page infrastructure (completed 2026-03-30)
 - [x] **Phase 12: Git Path Mapping Rules** - Settings UI for adding/editing/deleting host+owner→localPath rules and auto-match on project creation (completed 2026-03-30)
 - [x] **Phase 13: Configurable System Parameters** - Wire upload limit, concurrency cap, git timeout, branch template, and search parameters to SystemConfig (completed 2026-03-30)
-- [ ] **Phase 14: Search Quality & Realtime Config** - Extract shared search logic, fix race condition, verify realtime config takes effect without restart
+- [x] **Phase 14: Search Quality & Realtime Config** - Extract shared search logic, fix race condition, verify realtime config takes effect without restart (completed 2026-03-30)
 
 ## Phase Details
 
@@ -131,4 +131,4 @@ Plans:
 | 11. SystemConfig Foundation | v0.4 | 2/2 | Complete    | 2026-03-30 |
 | 12. Git Path Mapping Rules | v0.4 | 2/2 | Complete    | 2026-03-30 |
 | 13. Configurable System Parameters | v0.4 | 2/2 | Complete    | 2026-03-30 |
-| 14. Search Quality & Realtime Config | v0.4 | 2/2 | In Progress|  |
+| 14. Search Quality & Realtime Config | v0.4 | 2/2 | Complete    | 2026-03-30 |
