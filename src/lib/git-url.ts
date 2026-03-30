@@ -1,3 +1,11 @@
+import os from "os";
+import path from "path";
+
+function expandHome(p: string): string {
+  if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
+  return p;
+}
+
 /**
  * Git URL → Local Path mapping (hardcoded rules for now, will extract to config later)
  *
@@ -26,16 +34,16 @@ export function gitUrlToLocalPath(url: string): string {
     const { host, pathSegments } = parsed;
 
     if (host === COMPANY_HOST) {
-      return companyPath(pathSegments);
+      return expandHome(companyPath(pathSegments));
     }
 
     if (host === "github.com") {
-      return githubPath(pathSegments);
+      return expandHome(githubPath(pathSegments));
     }
 
     // Unknown host — fallback: ~/project/f/{repo}
     const repo = pathSegments[pathSegments.length - 1];
-    return repo ? `~/project/f/${repo}` : "";
+    return repo ? expandHome(`~/project/f/${repo}`) : "";
   } catch {
     return "";
   }
