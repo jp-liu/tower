@@ -76,9 +76,9 @@ Plans:
   3. Note search results display a content snippet (first ~80 characters of note content) beneath the title
   4. Asset search results display the asset description beneath the filename
   5. All tab labels, section headers, and result metadata are displayed in both Chinese and English according to the active language setting
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
-- [ ] 10-01-PLAN.md — Data layer: snippet field on SearchResult + i18n key additions
+- [x] 10-01-PLAN.md — Data layer: snippet field on SearchResult + i18n key additions
 - [ ] 10-02-PLAN.md — UI: six-tab search dialog with grouped All rendering + snippets + component tests
 
 ## Progress
@@ -94,4 +94,4 @@ Plans:
 | 7. Notes & Assets Web UI | v0.2 | 2/2 | Complete | 2026-03-27 |
 | 8. Asset Description Schema | v0.3 | 0/1 | Not started | - |
 | 9. Search Actions Expansion | v0.3 | 1/1 | Complete   | 2026-03-30 |
-| 10. Search UI Extension | v0.3 | 0/2 | Not started | - |
+| 10. Search UI Extension | v0.3 | 1/2 | In Progress|  |

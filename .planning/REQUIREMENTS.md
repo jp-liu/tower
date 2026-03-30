@@ -11,7 +11,7 @@ Requirements for v0.3 — 全局搜索增强. Each maps to roadmap phases.
 
 - [x] **ASSET-01**: User can add a required description when uploading an asset
 - [x] **ASSET-02**: ProjectAsset model includes description field persisted to database
-- [ ] **ASSET-03**: User sees content snippets (note content / asset description) in search results
+- [x] **ASSET-03**: User sees content snippets (note content / asset description) in search results
 
 ### Search Actions
 
@@ -24,7 +24,7 @@ Requirements for v0.3 — 全局搜索增强. Each maps to roadmap phases.
 
 - [ ] **SUI-01**: Search dialog shows All, Task, Project, Repository, Note, Asset tabs
 - [ ] **SUI-02**: "All" mode renders results grouped by type with section headers
-- [ ] **SUI-03**: All new search UI elements support Chinese and English (i18n)
+- [x] **SUI-03**: All new search UI elements support Chinese and English (i18n)
 
 ## v0.2 Requirements (Completed)
 
@@ -91,14 +91,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | ASSET-01 | Phase 8 | Complete |
 | ASSET-02 | Phase 8 | Complete |
-| ASSET-03 | Phase 10 | Pending |
+| ASSET-03 | Phase 10 | Complete |
 | SRCH-01 | Phase 9 | Complete |
 | SRCH-02 | Phase 9 | Complete |
 | SRCH-03 | Phase 9 | Complete |
 | SRCH-04 | Phase 9 | Complete |
 | SUI-01 | Phase 10 | Pending |
 | SUI-02 | Phase 10 | Pending |
-| SUI-03 | Phase 10 | Pending |
+| SUI-03 | Phase 10 | Complete |
 
 **Coverage:**
 - v0.3 requirements: 10 total
