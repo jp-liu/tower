@@ -8,26 +8,29 @@ An AI task management platform with a Kanban board UI for managing workspaces, p
 
 Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base that AI agents can query and update.
 
-## Current Milestone: v0.3 全局搜索增强
-
-**Goal:** 将搜索从固定类型扩展为全局跨类型搜索，新增笔记和资源搜索支持，并为资源增加描述字段提升可搜索性。
-
-**Target features:**
-- "All" 全局搜索模式 — 跨所有类型统一内容匹配，结果按类型分组展示
-- 笔记搜索 — 利用 FTS5 全文索引搜索笔记标题和内容
-- 资源搜索 — 搜索资源文件名和描述
-- 资源描述字段 — ProjectAsset 新增必填 description 字段，上传弹窗同步更新
-- 保留精确搜索 — 用户可切换到特定类型 tab 进行精准搜索
-
 ## Current State
 
-**Shipped:** v0.2 项目知识库 & 智能 MCP (2026-03-30)
+**Shipped:** v0.3 全局搜索增强 (2026-03-30)
+- 六 tab 全局搜索 (All/Task/Project/Repository/Note/Asset)
+- 笔记 FTS5 全文搜索 + 恶意查询自动降级 LIKE
+- 资源搜索 (文件名 + 描述)
+- "All" 模式 Promise.allSettled 跨类型聚合，按类型分组展示
+- 搜索结果 snippet 预览 (笔记内容 80 字 / 资源描述)
+- 资源描述字段 + 上传弹窗必填描述
+- MCP search 工具同步支持 note/asset/all
+- 搜索结果智能跳转 (笔记→笔记页, 资源→资源页)
+
+<details>
+<summary>v0.2 项目知识库 & 智能 MCP (shipped 2026-03-30)</summary>
+
 - 智能项目识别 (identify_project with confidence-scored fuzzy matching)
 - 项目笔记系统 (Markdown editor, FTS5 全文搜索, 预设分类)
 - 项目资源管理 (文件上传弹窗, 图片预览, 安全文件服务)
 - 21 个 MCP 工具 (含 identify_project, manage_notes, manage_assets)
 - 任务消息内联图片渲染
 - 笔记/资源页面支持工作区和项目独立切换
+
+</details>
 
 <details>
 <summary>v0.1 Settings (shipped 2026-03-27)</summary>
@@ -73,12 +76,7 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 ### Active
 
-- ~~"All" 全局搜索模式 — 跨任务、项目、仓库、笔记、资源统一搜索~~ → Validated in Phase 9
-- ~~笔记搜索 — FTS5 全文索引搜索标题和内容~~ → Validated in Phase 9
-- ~~资源搜索 — 搜索文件名和描述~~ → Validated in Phase 9
-- ~~ProjectAsset 新增必填 description 字段~~ → Validated in Phase 8
-- ~~上传弹窗增加描述输入框~~ → Validated in Phase 8
-- ~~搜索 UI 扩展 — 新增 All/Note/Asset tab~~ → Validated in Phase 10
+(None — all v0.3 requirements shipped. Next milestone TBD.)
 
 ### Out of Scope
 
@@ -98,9 +96,9 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - Tailwind CSS v4 with @tailwindcss/typography for markdown
 - next-themes for FOUC-free theme switching
 - Adapter pattern for pluggable AI agent execution
-- ~159 commits, ~11,400 lines across 100 files (v0.1 + v0.2)
-- 126+ unit tests, 16 Playwright E2E tests
-- 现有 FTS5 全文搜索基础设施（notes_fts 虚拟表）可复用
+- ~180 commits across v0.1-v0.3
+- 190 unit/component tests, 23 Playwright E2E tests
+- FTS5 全文搜索基础设施 (notes_fts) + 全局搜索 6 类型支持
 
 ## Constraints
 
@@ -129,6 +127,11 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 | textarea + react-markdown over @uiw/react-md-editor | React 19 compatibility, simpler hydration | ✓ Good — v0.2 |
 | File transfer via mv (not base64) | Local tool, file system is natural transfer channel | ✓ Good — v0.2 |
 | Upload dialog with workspace/project selector | User can upload to any project without switching list view | ✓ Good — v0.2 |
+| Nullable description `String? @default("")` | Avoids NOT NULL constraint on existing rows during schema migration | ✓ Good — v0.3 |
+| Inline raw SQL for global note search | fts.ts must stay Next.js-free; global search needs different JOINs | ✓ Good — v0.3 |
+| Promise.allSettled for "all" mode | Single SQLITE_BUSY must not drop all results | ✓ Good — v0.3 |
+| FTS5 try/catch with LIKE fallback | Malformed queries degrade gracefully instead of crashing | ✓ Good — v0.3 |
+| path.basename + DB validation in uploadAsset | Prevents path traversal via crafted filenames or projectIds | ✓ Good — v0.3 |
 
 ## Evolution
 
@@ -147,4 +150,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-30 after Phase 10 complete — v0.3 milestone complete*
+*Last updated: 2026-03-30 after v0.3 milestone shipped*
