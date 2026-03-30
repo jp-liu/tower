@@ -157,7 +157,7 @@ describe("globalSearch - note category", () => {
     expect(results.length).toBeGreaterThan(0);
     const found = results.find((r) => r.id === note.id);
     expect(found?.navigateTo).toMatch(
-      new RegExp(`/workspaces/${testWorkspaceId}\\?projectId=${testProjectId}`)
+      new RegExp(`/workspaces/${testWorkspaceId}/notes\\?projectId=${testProjectId}`)
     );
   });
 });
@@ -289,7 +289,7 @@ describe("globalSearch - asset category", () => {
     expect(results.length).toBeGreaterThan(0);
     const found = results.find((r) => r.title === "nav-asset.png");
     expect(found?.navigateTo).toMatch(
-      new RegExp(`/workspaces/${testWorkspaceId}\\?projectId=${testProjectId}`)
+      new RegExp(`/workspaces/${testWorkspaceId}/assets\\?projectId=${testProjectId}`)
     );
   });
 });

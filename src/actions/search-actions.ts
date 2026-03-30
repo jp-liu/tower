@@ -31,7 +31,7 @@ function toNoteResult(row: NoteRawRow): SearchResult {
     type: "note" as const,
     title: row.title,
     subtitle: `${row.workspace_name} / ${row.project_name}`,
-    navigateTo: `/workspaces/${row.workspaceId}?projectId=${row.projectId}`,
+    navigateTo: `/workspaces/${row.workspaceId}/notes?projectId=${row.projectId}`,
     snippet: row.content ? row.content.slice(0, 80) : undefined,
   };
 }
@@ -201,7 +201,7 @@ export async function globalSearch(query: string, category: SearchCategory = "ta
       type: "asset" as const,
       title: a.filename,
       subtitle: `${a.project.workspace.name} / ${a.project.name}`,
-      navigateTo: `/workspaces/${a.project.workspaceId}?projectId=${a.projectId}`,
+      navigateTo: `/workspaces/${a.project.workspaceId}/assets?projectId=${a.projectId}`,
       snippet: a.description || undefined,
     }));
   }
