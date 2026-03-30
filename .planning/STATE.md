@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: 全局搜索增强
-status: executing
-stopped_at: Completed 10-01-PLAN.md
-last_updated: "2026-03-30T06:51:08.798Z"
+status: verifying
+stopped_at: Completed 10-02-PLAN.md
+last_updated: "2026-03-30T06:55:49.320Z"
 last_activity: 2026-03-30
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 
 Phase: 10 (Search UI Extension) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-03-30
 
 ```
@@ -55,6 +55,8 @@ v0.3    [          ] 0% (0/3 phases)
 - [Phase 09]: Inline raw SQL in search-actions.ts for global note search (no projectId filter) to keep fts.ts Next.js-free
 - [Phase 09]: SearchResultType excludes 'all' — 'all' is a query mode input, never a result type discriminant
 - [Phase 10-search-ui-extension]: Empty-content note test requires syncNoteToFts before FTS5 query since long queries bypass LIKE fallback
+- [Phase 10-search-ui-extension]: Used IIFE pattern for grouped All rendering to avoid intermediate variable in JSX
+- [Phase 10-search-ui-extension]: ResultRow extracted as module-level component to avoid recreation on each render
 
 ### Pending Todos
 
@@ -70,6 +72,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-30T06:51:08.795Z
-Stopped at: Completed 10-01-PLAN.md
+Last session: 2026-03-30T06:55:49.316Z
+Stopped at: Completed 10-02-PLAN.md
 Resume file: None

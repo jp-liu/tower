@@ -22,8 +22,8 @@ Requirements for v0.3 — 全局搜索增强. Each maps to roadmap phases.
 
 ### Search UI
 
-- [ ] **SUI-01**: Search dialog shows All, Task, Project, Repository, Note, Asset tabs
-- [ ] **SUI-02**: "All" mode renders results grouped by type with section headers
+- [x] **SUI-01**: Search dialog shows All, Task, Project, Repository, Note, Asset tabs
+- [x] **SUI-02**: "All" mode renders results grouped by type with section headers
 - [x] **SUI-03**: All new search UI elements support Chinese and English (i18n)
 
 ## v0.2 Requirements (Completed)
@@ -96,8 +96,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SRCH-02 | Phase 9 | Complete |
 | SRCH-03 | Phase 9 | Complete |
 | SRCH-04 | Phase 9 | Complete |
-| SUI-01 | Phase 10 | Pending |
-| SUI-02 | Phase 10 | Pending |
+| SUI-01 | Phase 10 | Complete |
+| SUI-02 | Phase 10 | Complete |
 | SUI-03 | Phase 10 | Complete |
 
 **Coverage:**
