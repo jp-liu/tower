@@ -88,9 +88,12 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - ✓ 系统参数配置 UI（上传限制、并发数、Git 超时、分支模板）— v0.4 Phase 13
 - ✓ 搜索参数配置（结果数量、防抖、snippet 长度）— v0.4 Phase 13
 
+- ✓ 搜索逻辑去重（search.ts 共享模块）— v0.4 Phase 14
+- ✓ 搜索 useEffect 竞态条件修复（cancelled flag）— v0.4 Phase 14
+- ✓ 配置变更实时生效（无需重启）— v0.4 Phase 14
+
 ### Active
-- [ ] 搜索逻辑去重（提取共享模块）
-- [ ] 搜索 useEffect 竞态条件修复
+(No active requirements — v0.4 complete)
 
 ### Out of Scope
 
@@ -164,4 +167,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-30 after Phase 13 complete*
+*Last updated: 2026-03-30 after Phase 14 complete (v0.4 milestone complete)*
