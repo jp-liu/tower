@@ -85,8 +85,11 @@ export function AssetsPageClient({
     reloadAssets(listProjectId);
   };
 
-  const handleUploaded = () => {
-    reloadAssets(listProjectId);
+  const handleUploaded = (uploadedToProjectId: string) => {
+    // Refresh list if we uploaded to the project currently being viewed
+    if (uploadedToProjectId === listProjectId) {
+      reloadAssets(listProjectId);
+    }
   };
 
   return (
@@ -105,12 +108,14 @@ export function AssetsPageClient({
           <FolderOpen className="h-4 w-4 text-muted-foreground" />
           <span>{t("assets.title")}</span>
         </div>
-        {/* Upload button — uses current list project */}
-        {listProjectId && (
-          <div className="ml-auto">
-            <AssetUpload projectId={listProjectId} onUploaded={handleUploaded} />
-          </div>
-        )}
+        <div className="ml-auto">
+          <AssetUpload
+            allWorkspaces={allWorkspaces}
+            initialWsId={listWsId}
+            initialProjectId={listProjectId}
+            onUploaded={handleUploaded}
+          />
+        </div>
       </div>
 
       {/* Content */}

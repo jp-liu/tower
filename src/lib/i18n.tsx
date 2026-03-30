@@ -266,6 +266,11 @@ const translations = {
     "assets.uploading": "上传中...",
     "assets.backToBoard": "返回看板",
     "assets.loading": "加载中...",
+    "assets.uploadTitle": "上传资源",
+    "assets.workspace": "工作区",
+    "assets.project": "项目",
+    "assets.file": "文件",
+    "assets.selectFile": "点击选择文件...",
   },
   en: {
     "sidebar.workspace": "Workspaces",
@@ -510,6 +515,11 @@ const translations = {
     "assets.uploading": "Uploading...",
     "assets.backToBoard": "Back to Board",
     "assets.loading": "Loading...",
+    "assets.uploadTitle": "Upload Asset",
+    "assets.workspace": "Workspace",
+    "assets.project": "Project",
+    "assets.file": "File",
+    "assets.selectFile": "Click to select file...",
   },
 } as const;
 
