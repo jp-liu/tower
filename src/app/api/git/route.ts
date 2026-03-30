@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const resolved = path.resolve(dirPath);
+    const resolved = path.resolve(expandHome(dirPath));
     const gitDir = path.join(resolved, ".git");
 
     if (!fs.existsSync(gitDir)) {
