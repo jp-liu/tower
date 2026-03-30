@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: 系统配置化
 status: planning
-stopped_at: Phase 11 context gathered
-last_updated: "2026-03-30T09:05:44.226Z"
+stopped_at: Completed 11-01-PLAN.md (SystemConfig Foundation)
+last_updated: "2026-03-30T09:25:01.251Z"
 last_activity: 2026-03-30 — Roadmap created for v0.4
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
   percent: 0
 ---
 
@@ -49,6 +49,7 @@ Progress: [░░░░░░░░░░] 0%
 | v0.3 (8-10) | 4 | ~2h | ~30m |
 
 *Updated after each plan completion*
+| Phase 11-systemconfig-foundation P01 | 4 | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -62,6 +63,9 @@ Progress: [░░░░░░░░░░] 0%
 - [v0.3]: Promise.allSettled for "all" mode parallel queries
 - [v0.3]: FTS5 try/catch with LIKE fallback for malformed queries
 - [v0.3]: Inline raw SQL for global note search (fts.ts stays Next.js-free)
+- [Phase 11-systemconfig-foundation]: JSON-serialized config values in SystemConfig.value — uniform storage for string/number/boolean/object
+- [Phase 11-systemconfig-foundation]: getConfigValue<T> returns defaultValue on missing row or malformed JSON — never throws to caller
+- [Phase 11-systemconfig-foundation]: CONFIG_DEFAULTS registry starts empty in Phase 11 — Phase 12-13 adds entries as parameters are wired
 
 ### Pending Todos
 
@@ -73,6 +77,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-30T09:05:44.223Z
-Stopped at: Phase 11 context gathered
-Resume file: .planning/phases/11-systemconfig-foundation/11-CONTEXT.md
+Last session: 2026-03-30T09:25:01.248Z
+Stopped at: Completed 11-01-PLAN.md (SystemConfig Foundation)
+Resume file: None
