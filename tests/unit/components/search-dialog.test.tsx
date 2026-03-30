@@ -18,6 +18,11 @@ vi.mock("@/actions/search-actions", async () => {
   };
 });
 
+// Mock config-actions — return numeric debounceMs
+vi.mock("@/actions/config-actions", () => ({
+  getConfigValue: vi.fn().mockResolvedValue(250),
+}));
+
 function renderDialog() {
   return render(
     <I18nProvider>
@@ -127,5 +132,92 @@ describe("SearchDialog - snippet rendering", () => {
       const childDivs = textContainer?.querySelectorAll(":scope > div");
       expect(childDivs?.length).toBe(2); // title + subtitle only, no snippet
     }, { timeout: 1000 });
+  });
+});
+
+describe("SearchDialog - race condition fix (SRCH-07)", () => {
+  it("does not display stale results when query changes rapidly", async () => {
+    const { globalSearch } = await import("@/actions/search-actions");
+    const mockSearch = vi.mocked(globalSearch);
+
+    // "stale" query resolves slowly; "fresh" query resolves immediately
+    mockSearch.mockImplementation(async (query) => {
+      if (query === "stale") {
+        await new Promise((r) => setTimeout(r, 800));
+        return [{ id: "old", type: "task" as const, title: "Old Result", subtitle: "ws", navigateTo: "/old" }];
+      }
+      return [{ id: "new", type: "task" as const, title: "New Result", subtitle: "ws", navigateTo: "/new" }];
+    });
+
+    renderDialog();
+
+    const input = screen.getByPlaceholderText(/搜索/);
+    const userEventMod = (await vi.importActual("@testing-library/user-event") as any).default;
+    const user = userEventMod.setup();
+
+    // Type "stale" query (fires debounce after 250ms) then immediately type "fresh"
+    // The "stale" debounce timer fires, globalSearch("stale") starts its 800ms delay
+    // Then "fresh" fires and resolves immediately — results should show "New Result"
+    await user.type(input, "stale");
+
+    // Small delay to let the debounce timer fire for "stale" (>250ms debounce)
+    await new Promise((r) => setTimeout(r, 300));
+
+    // Now type new query while "stale" request is still pending (< 800ms elapsed)
+    await user.clear(input);
+    await user.type(input, "fresh");
+
+    // Wait for "fresh" results to appear
+    await vi.waitFor(() => {
+      expect(screen.getByText("New Result")).toBeInTheDocument();
+    }, { timeout: 2000 });
+
+    // "Old Result" should NOT be present (stale result suppressed by cancelled flag)
+    expect(screen.queryByText("Old Result")).not.toBeInTheDocument();
+  });
+});
+
+describe("SearchDialog - realtime config (CFG-02)", () => {
+  it("re-fetches debounceMs config each time dialog opens", async () => {
+    const { getConfigValue } = await import("@/actions/config-actions");
+    const mockGetConfig = vi.mocked(getConfigValue);
+    mockGetConfig.mockClear();
+
+    const { rerender } = render(
+      <I18nProvider>
+        <SearchDialog open={true} onOpenChange={() => {}} />
+      </I18nProvider>
+    );
+
+    // First open — getConfigValue should be called
+    await vi.waitFor(() => {
+      expect(mockGetConfig).toHaveBeenCalledWith("search.debounceMs", 250);
+    });
+
+    const callCountAfterFirstOpen = mockGetConfig.mock.calls.filter(
+      (c) => c[0] === "search.debounceMs"
+    ).length;
+
+    // Close dialog
+    rerender(
+      <I18nProvider>
+        <SearchDialog open={false} onOpenChange={() => {}} />
+      </I18nProvider>
+    );
+
+    // Re-open dialog
+    rerender(
+      <I18nProvider>
+        <SearchDialog open={true} onOpenChange={() => {}} />
+      </I18nProvider>
+    );
+
+    // getConfigValue should be called again on re-open
+    await vi.waitFor(() => {
+      const totalCalls = mockGetConfig.mock.calls.filter(
+        (c) => c[0] === "search.debounceMs"
+      ).length;
+      expect(totalCalls).toBeGreaterThan(callCountAfterFirstOpen);
+    });
   });
 });
