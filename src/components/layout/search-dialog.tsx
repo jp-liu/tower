@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search, FileText, FolderKanban, GitBranch, StickyNote, Package2, X } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { globalSearch, type SearchResult, type SearchResultType, type SearchCategory } from "@/actions/search-actions";
+import { getConfigValue } from "@/actions/config-actions";
 import { useI18n } from "@/lib/i18n";
 
 type CategoryKey =
@@ -67,8 +68,14 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
   const [category, setCategory] = useState<SearchCategory>("all");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [debounceMs, setDebounceMs] = useState(250);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load debounce delay from config
+  useEffect(() => {
+    getConfigValue<number>("search.debounceMs", 250).then(setDebounceMs);
+  }, []);
 
   // Focus input when dialog opens
   useEffect(() => {
@@ -88,9 +95,9 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
       const r = await globalSearch(query, category);
       setResults(r);
       setIsSearching(false);
-    }, 250);
+    }, debounceMs);
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [query, category]);
+  }, [query, category, debounceMs]);
 
   const handleSelect = useCallback((result: SearchResult) => {
     router.push(result.navigateTo);

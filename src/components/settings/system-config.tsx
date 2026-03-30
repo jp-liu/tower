@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useI18n } from "@/lib/i18n";
-import { getConfigValue, setConfigValue } from "@/actions/config-actions";
+import { getConfigValue, setConfigValue, getConfigValues } from "@/actions/config-actions";
 import type { GitPathRule } from "@/lib/git-url";
+import { validateBranchTemplate } from "@/lib/branch-template";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -30,6 +31,10 @@ const EMPTY_FORM: RuleEditState = {
   priority: 0,
 };
 
+type SystemForm = { maxUploadMb: number; maxConcurrent: number };
+type GitParamsForm = { timeoutSec: number; branchTemplate: string };
+type SearchForm = { resultLimit: number; allModeCap: number; debounceMs: number; snippetLength: number };
+
 export function SystemConfig() {
   const { t } = useI18n();
   const [rules, setRules] = useState<GitPathRule[]>([]);
@@ -38,10 +43,62 @@ export function SystemConfig() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [addForm, setAddForm] = useState<RuleEditState>({ ...EMPTY_FORM });
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [systemForm, setSystemForm] = useState<SystemForm>({ maxUploadMb: 50, maxConcurrent: 3 });
+  const [gitParamsForm, setGitParamsForm] = useState<GitParamsForm>({ timeoutSec: 30, branchTemplate: "vk/{taskIdShort}-" });
+  const [searchForm, setSearchForm] = useState<SearchForm>({ resultLimit: 20, allModeCap: 5, debounceMs: 250, snippetLength: 80 });
+  const [branchTemplateError, setBranchTemplateError] = useState("");
 
   useEffect(() => {
     getConfigValue<GitPathRule[]>("git.pathMappingRules", []).then(setRules);
+    getConfigValues([
+      "system.maxUploadBytes",
+      "system.maxConcurrentExecutions",
+      "git.timeoutSec",
+      "git.branchTemplate",
+      "search.resultLimit",
+      "search.allModeCap",
+      "search.debounceMs",
+      "search.snippetLength",
+    ]).then((cfg) => {
+      const maxBytes = (cfg["system.maxUploadBytes"] as number) ?? 52428800;
+      setSystemForm({
+        maxUploadMb: Math.round(maxBytes / 1024 / 1024),
+        maxConcurrent: (cfg["system.maxConcurrentExecutions"] as number) ?? 3,
+      });
+      setGitParamsForm({
+        timeoutSec: (cfg["git.timeoutSec"] as number) ?? 30,
+        branchTemplate: (cfg["git.branchTemplate"] as string) ?? "vk/{taskIdShort}-",
+      });
+      setSearchForm({
+        resultLimit: (cfg["search.resultLimit"] as number) ?? 20,
+        allModeCap: (cfg["search.allModeCap"] as number) ?? 5,
+        debounceMs: (cfg["search.debounceMs"] as number) ?? 250,
+        snippetLength: (cfg["search.snippetLength"] as number) ?? 80,
+      });
+    });
   }, []);
+
+  const handleSaveSystem = async () => {
+    await setConfigValue("system.maxUploadBytes", systemForm.maxUploadMb * 1024 * 1024);
+    await setConfigValue("system.maxConcurrentExecutions", systemForm.maxConcurrent);
+  };
+
+  const handleSaveGitParams = async () => {
+    if (!validateBranchTemplate(gitParamsForm.branchTemplate)) {
+      setBranchTemplateError(t("settings.config.gitParams.branchTemplateInvalid"));
+      return;
+    }
+    setBranchTemplateError("");
+    await setConfigValue("git.timeoutSec", gitParamsForm.timeoutSec);
+    await setConfigValue("git.branchTemplate", gitParamsForm.branchTemplate);
+  };
+
+  const handleSaveSearch = async () => {
+    await setConfigValue("search.resultLimit", searchForm.resultLimit);
+    await setConfigValue("search.allModeCap", searchForm.allModeCap);
+    await setConfigValue("search.debounceMs", searchForm.debounceMs);
+    await setConfigValue("search.snippetLength", searchForm.snippetLength);
+  };
 
   const handleAddRule = async () => {
     if (!addForm.host.trim() || !addForm.localPathTemplate.trim()) return;
@@ -357,6 +414,136 @@ export function SystemConfig() {
               </tbody>
             </table>
           )}
+        </div>
+      </div>
+
+      {/* System Parameters section */}
+      <div className="mt-8">
+        <h3 className="text-lg font-semibold">{t("settings.config.system.title")}</h3>
+        <p className="mt-0.5 text-sm text-muted-foreground">{t("settings.config.system.desc")}</p>
+        <div className="mt-4 space-y-4">
+          {/* Max upload size */}
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-sm font-medium">{t("settings.config.system.maxUpload")}</label>
+              <p className="text-xs text-muted-foreground">{t("settings.config.system.maxUploadHint")}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input type="number" min={1} max={500}
+                value={systemForm.maxUploadMb}
+                onChange={(e) => setSystemForm((f) => ({ ...f, maxUploadMb: Number(e.target.value) }))}
+                className="w-24 text-right" />
+              <span className="text-sm text-muted-foreground">MB</span>
+            </div>
+          </div>
+          {/* Max concurrent executions */}
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-sm font-medium">{t("settings.config.system.maxConcurrent")}</label>
+              <p className="text-xs text-muted-foreground">{t("settings.config.system.maxConcurrentHint")}</p>
+            </div>
+            <Input type="number" min={1} max={10}
+              value={systemForm.maxConcurrent}
+              onChange={(e) => setSystemForm((f) => ({ ...f, maxConcurrent: Number(e.target.value) }))}
+              className="w-24 text-right" />
+          </div>
+          <Button size="sm" onClick={handleSaveSystem}>{t("common.save")}</Button>
+        </div>
+      </div>
+
+      {/* Git Parameters section */}
+      <div className="mt-8">
+        <h3 className="text-lg font-semibold">{t("settings.config.gitParams.title")}</h3>
+        <p className="mt-0.5 text-sm text-muted-foreground">{t("settings.config.gitParams.desc")}</p>
+        <div className="mt-4 space-y-4">
+          {/* Git timeout */}
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-sm font-medium">{t("settings.config.gitParams.timeout")}</label>
+              <p className="text-xs text-muted-foreground">{t("settings.config.gitParams.timeoutHint")}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input type="number" min={5} max={300}
+                value={gitParamsForm.timeoutSec}
+                onChange={(e) => setGitParamsForm((f) => ({ ...f, timeoutSec: Number(e.target.value) }))}
+                className="w-24 text-right" />
+              <span className="text-sm text-muted-foreground">s</span>
+            </div>
+          </div>
+          {/* Branch template */}
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-sm font-medium">{t("settings.config.gitParams.branchTemplate")}</label>
+              <p className="text-xs text-muted-foreground">{t("settings.config.gitParams.branchTemplateHint")}</p>
+              {branchTemplateError && (
+                <p className="text-xs text-destructive">{branchTemplateError}</p>
+              )}
+            </div>
+            <Input
+              value={gitParamsForm.branchTemplate}
+              onChange={(e) => {
+                setGitParamsForm((f) => ({ ...f, branchTemplate: e.target.value }));
+                setBranchTemplateError("");
+              }}
+              className="w-56" />
+          </div>
+          <Button size="sm" onClick={handleSaveGitParams}>{t("common.save")}</Button>
+        </div>
+      </div>
+
+      {/* Search Parameters section */}
+      <div className="mt-8">
+        <h3 className="text-lg font-semibold">{t("settings.config.search.title")}</h3>
+        <p className="mt-0.5 text-sm text-muted-foreground">{t("settings.config.search.desc")}</p>
+        <div className="mt-4 space-y-4">
+          {/* Result limit */}
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-sm font-medium">{t("settings.config.search.resultLimit")}</label>
+              <p className="text-xs text-muted-foreground">{t("settings.config.search.resultLimitHint")}</p>
+            </div>
+            <Input type="number" min={5} max={100}
+              value={searchForm.resultLimit}
+              onChange={(e) => setSearchForm((f) => ({ ...f, resultLimit: Number(e.target.value) }))}
+              className="w-24 text-right" />
+          </div>
+          {/* All-mode cap */}
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-sm font-medium">{t("settings.config.search.allModeCap")}</label>
+              <p className="text-xs text-muted-foreground">{t("settings.config.search.allModeCapHint")}</p>
+            </div>
+            <Input type="number" min={1} max={20}
+              value={searchForm.allModeCap}
+              onChange={(e) => setSearchForm((f) => ({ ...f, allModeCap: Number(e.target.value) }))}
+              className="w-24 text-right" />
+          </div>
+          {/* Debounce */}
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-sm font-medium">{t("settings.config.search.debounceMs")}</label>
+              <p className="text-xs text-muted-foreground">{t("settings.config.search.debounceMsHint")}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input type="number" min={50} max={1000}
+                value={searchForm.debounceMs}
+                onChange={(e) => setSearchForm((f) => ({ ...f, debounceMs: Number(e.target.value) }))}
+                className="w-24 text-right" />
+              <span className="text-sm text-muted-foreground">ms</span>
+            </div>
+          </div>
+          {/* Snippet length */}
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-sm font-medium">{t("settings.config.search.snippetLength")}</label>
+              <p className="text-xs text-muted-foreground">{t("settings.config.search.snippetLengthHint")}</p>
+            </div>
+            <Input type="number" min={20} max={500}
+              value={searchForm.snippetLength}
+              onChange={(e) => setSearchForm((f) => ({ ...f, snippetLength: Number(e.target.value) }))}
+              className="w-24 text-right" />
+          </div>
+          <Button size="sm" onClick={handleSaveSearch}>{t("common.save")}</Button>
         </div>
       </div>
 
