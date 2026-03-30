@@ -32,6 +32,10 @@ export async function createAsset(data: {
 }
 
 export async function deleteAsset(assetId: string) {
+  const asset = await db.projectAsset.findUnique({ where: { id: assetId } });
+  if (asset?.path) {
+    await fs.promises.unlink(asset.path).catch(() => {});
+  }
   await db.projectAsset.delete({ where: { id: assetId } });
   revalidatePath(`/workspaces`);
 }
@@ -47,17 +51,29 @@ export async function getAssetById(assetId: string) {
   return db.projectAsset.findUnique({ where: { id: assetId } });
 }
 
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB
+
 export async function uploadAsset(formData: FormData) {
   const file = formData.get("file") as File;
   const projectId = formData.get("projectId") as string;
   if (!file || !projectId) throw new Error("Missing file or projectId");
+  if (file.size > MAX_UPLOAD_BYTES) throw new Error("File too large (max 50 MB)");
   const description = (formData.get("description") as string | null) ?? "";
+
+  // Validate projectId exists in DB before any filesystem operation
+  const project = await db.project.findUnique({ where: { id: projectId } });
+  if (!project) throw new Error("Invalid projectId");
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const dir = ensureAssetsDir(projectId);
 
+  // Sanitize filename: strip directory components to prevent path traversal
+  let filename = path.basename(file.name);
+  if (!filename || filename === "." || filename === "..") {
+    filename = `upload-${Date.now()}`;
+  }
+
   // Avoid overwriting: append timestamp if file exists
-  let filename = file.name;
   const destCheck = path.join(dir, filename);
   if (fs.existsSync(destCheck)) {
     const ext = path.extname(filename);
@@ -66,6 +82,8 @@ export async function uploadAsset(formData: FormData) {
   }
 
   const dest = path.join(dir, filename);
+  // Containment check: ensure resolved path stays within assets directory
+  if (!dest.startsWith(dir)) throw new Error("Invalid filename");
   await fs.promises.writeFile(dest, buffer);
 
   const asset = await createAsset({
