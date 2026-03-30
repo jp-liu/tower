@@ -199,10 +199,10 @@ export function NotesPageClient({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto px-6 py-4">
+      <div className="flex-1 overflow-hidden px-6 py-4 flex flex-col">
         {showForm ? (
           /* ── Create / Edit form with its own workspace+project selectors ── */
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4 flex-1 min-h-0">
             {/* Form selectors row */}
             <div className="flex items-center gap-3 flex-wrap">
               {/* Workspace selector (only for create, not edit) */}
