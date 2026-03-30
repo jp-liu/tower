@@ -247,6 +247,8 @@ const translations = {
     "notes.noProjectHint": "请先创建一个项目",
     "notes.backToBoard": "返回看板",
     "notes.loading": "加载中...",
+    "notes.workspace": "工作区",
+    "notes.project": "项目",
     // Assets
     "assets.title": "资源",
     "assets.upload": "上传文件",
@@ -489,6 +491,8 @@ const translations = {
     "notes.noProjectHint": "Create a project first",
     "notes.backToBoard": "Back to Board",
     "notes.loading": "Loading...",
+    "notes.workspace": "Workspace",
+    "notes.project": "Project",
     // Assets
     "assets.title": "Assets",
     "assets.upload": "Upload File",

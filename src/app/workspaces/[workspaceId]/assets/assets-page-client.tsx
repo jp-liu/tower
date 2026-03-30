@@ -37,18 +37,18 @@ export function AssetsPageClient({
   const { t } = useI18n();
   const [isPending, startTransition] = useTransition();
 
-  // Selection state — pure client, no router
-  const [selectedWsId, setSelectedWsId] = useState(initialWorkspaceId);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjectId);
+  // List view selection state
+  const [listWsId, setListWsId] = useState(initialWorkspaceId);
+  const [listProjectId, setListProjectId] = useState<string | null>(initialProjectId);
 
   // Data state
   const [assets, setAssets] = useState<ProjectAsset[]>(initialAssets);
 
   // Derived
-  const currentWs = allWorkspaces.find((ws) => ws.id === selectedWsId);
-  const projects = currentWs?.projects ?? [];
+  const listWs = allWorkspaces.find((ws) => ws.id === listWsId);
+  const listProjects = listWs?.projects ?? [];
 
-  // Reload assets for the selected project
+  // Reload assets
   const reloadAssets = useCallback(
     (projectId: string | null) => {
       if (!projectId) {
@@ -63,17 +63,17 @@ export function AssetsPageClient({
     [startTransition]
   );
 
-  // Handlers: workspace / project switch
-  const handleWsChange = (wsId: string) => {
-    setSelectedWsId(wsId);
+  // List view handlers
+  const handleListWsChange = (wsId: string) => {
+    setListWsId(wsId);
     const ws = allWorkspaces.find((w) => w.id === wsId);
     const firstProject = ws?.projects[0] ?? null;
-    setSelectedProjectId(firstProject?.id ?? null);
+    setListProjectId(firstProject?.id ?? null);
     reloadAssets(firstProject?.id ?? null);
   };
 
-  const handleProjectChange = (projectId: string) => {
-    setSelectedProjectId(projectId);
+  const handleListProjectChange = (projectId: string) => {
+    setListProjectId(projectId);
     reloadAssets(projectId);
   };
 
@@ -82,11 +82,11 @@ export function AssetsPageClient({
     const filename = asset?.filename ?? assetId;
     if (!confirm(t("assets.deleteConfirm", { filename }))) return;
     await deleteAsset(assetId);
-    reloadAssets(selectedProjectId);
+    reloadAssets(listProjectId);
   };
 
   const handleUploaded = () => {
-    reloadAssets(selectedProjectId);
+    reloadAssets(listProjectId);
   };
 
   return (
@@ -94,7 +94,7 @@ export function AssetsPageClient({
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-border px-6 py-4">
         <Link
-          href={`/workspaces/${selectedWsId}`}
+          href={`/workspaces/${listWsId}`}
           className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -105,58 +105,56 @@ export function AssetsPageClient({
           <FolderOpen className="h-4 w-4 text-muted-foreground" />
           <span>{t("assets.title")}</span>
         </div>
-
-        {/* Workspace selector */}
-        <select
-          value={selectedWsId}
-          onChange={(e) => handleWsChange(e.target.value)}
-          className="ml-2 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
-        >
-          {allWorkspaces.map((ws) => (
-            <option key={ws.id} value={ws.id}>
-              {ws.name}
-            </option>
-          ))}
-        </select>
-
-        {/* Project selector */}
-        {projects.length > 0 && (
-          <select
-            value={selectedProjectId ?? ""}
-            onChange={(e) => handleProjectChange(e.target.value)}
-            className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
-          >
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}{p.alias ? ` (${p.alias})` : ""}
-              </option>
-            ))}
-          </select>
-        )}
-
-        {/* Upload button */}
-        {selectedProjectId && (
+        {/* Upload button — uses current list project */}
+        {listProjectId && (
           <div className="ml-auto">
-            <AssetUpload projectId={selectedProjectId} onUploaded={handleUploaded} />
+            <AssetUpload projectId={listProjectId} onUploaded={handleUploaded} />
           </div>
         )}
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-auto px-6 py-4">
-        {projects.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-            <p className="text-sm font-medium text-muted-foreground">{t("assets.noProject")}</p>
-            <p className="text-xs text-muted-foreground/60">{t("assets.noProjectHint")}</p>
-          </div>
-        ) : (
-          <>
-            {isPending && (
-              <div className="text-xs text-muted-foreground animate-pulse mb-4">{t("assets.loading")}</div>
+        <div className="space-y-4">
+          {/* List selectors */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <select
+              value={listWsId}
+              onChange={(e) => handleListWsChange(e.target.value)}
+              className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+            >
+              {allWorkspaces.map((ws) => (
+                <option key={ws.id} value={ws.id}>{ws.name}</option>
+              ))}
+            </select>
+            {listProjects.length > 0 && (
+              <select
+                value={listProjectId ?? ""}
+                onChange={(e) => handleListProjectChange(e.target.value)}
+                className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+              >
+                {listProjects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}{p.alias ? ` (${p.alias})` : ""}
+                  </option>
+                ))}
+              </select>
             )}
+          </div>
+
+          {isPending && (
+            <div className="text-xs text-muted-foreground animate-pulse">{t("assets.loading")}</div>
+          )}
+
+          {listProjects.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+              <p className="text-sm font-medium text-muted-foreground">{t("assets.noProject")}</p>
+              <p className="text-xs text-muted-foreground/60">{t("assets.noProjectHint")}</p>
+            </div>
+          ) : (
             <AssetList assets={assets} onDelete={handleDelete} />
-          </>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

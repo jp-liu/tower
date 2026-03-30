@@ -40,26 +40,30 @@ export function NotesPageClient({
   const { t } = useI18n();
   const [isPending, startTransition] = useTransition();
 
-  // Selection state — pure client, no router
-  const [selectedWsId, setSelectedWsId] = useState(initialWorkspaceId);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjectId);
+  // List view selection state (for browsing)
+  const [listWsId, setListWsId] = useState(initialWorkspaceId);
+  const [listProjectId, setListProjectId] = useState<string | null>(initialProjectId);
 
   // Data state
   const [notes, setNotes] = useState<ProjectNote[]>(initialNotes);
   const [activeCategory, setActiveCategory] = useState("all");
 
-  // Form state
+  // Form state (independent from list view)
   const [editingNote, setEditingNote] = useState<NoteItem | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [formTitle, setFormTitle] = useState("");
   const [formContent, setFormContent] = useState("");
   const [formCategory, setFormCategory] = useState<string>(NOTE_CATEGORIES_PRESET[3]);
+  const [formWsId, setFormWsId] = useState(initialWorkspaceId);
+  const [formProjectId, setFormProjectId] = useState<string | null>(initialProjectId);
 
   // Derived
-  const currentWs = allWorkspaces.find((ws) => ws.id === selectedWsId);
-  const projects = currentWs?.projects ?? [];
+  const listWs = allWorkspaces.find((ws) => ws.id === listWsId);
+  const listProjects = listWs?.projects ?? [];
+  const formWs = allWorkspaces.find((ws) => ws.id === formWsId);
+  const formProjects = formWs?.projects ?? [];
 
-  // Reload notes for the selected project
+  // Reload notes for the list view
   const reloadNotes = useCallback(
     (projectId: string | null) => {
       if (!projectId) {
@@ -74,29 +78,38 @@ export function NotesPageClient({
     [startTransition]
   );
 
-  // Handlers: workspace / project switch
-  const handleWsChange = (wsId: string) => {
-    setSelectedWsId(wsId);
+  // List view handlers
+  const handleListWsChange = (wsId: string) => {
+    setListWsId(wsId);
     const ws = allWorkspaces.find((w) => w.id === wsId);
     const firstProject = ws?.projects[0] ?? null;
-    setSelectedProjectId(firstProject?.id ?? null);
+    setListProjectId(firstProject?.id ?? null);
     setActiveCategory("all");
-    handleCancel();
     reloadNotes(firstProject?.id ?? null);
   };
 
-  const handleProjectChange = (projectId: string) => {
-    setSelectedProjectId(projectId);
+  const handleListProjectChange = (projectId: string) => {
+    setListProjectId(projectId);
     setActiveCategory("all");
-    handleCancel();
     reloadNotes(projectId);
   };
 
-  // Handlers: CRUD
+  // Form workspace/project handlers (don't affect list view)
+  const handleFormWsChange = (wsId: string) => {
+    setFormWsId(wsId);
+    const ws = allWorkspaces.find((w) => w.id === wsId);
+    const firstProject = ws?.projects[0] ?? null;
+    setFormProjectId(firstProject?.id ?? null);
+  };
+
+  // CRUD handlers
   const handleNewNote = () => {
     setFormTitle("");
     setFormContent("");
     setFormCategory(NOTE_CATEGORIES_PRESET[3]);
+    // Default form selectors to current list view selection
+    setFormWsId(listWsId);
+    setFormProjectId(listProjectId);
     setEditingNote(null);
     setIsCreating(true);
   };
@@ -115,15 +128,18 @@ export function NotesPageClient({
   };
 
   const handleCreate = async () => {
-    if (!selectedProjectId || !formTitle.trim()) return;
+    if (!formProjectId || !formTitle.trim()) return;
     await createNote({
       title: formTitle.trim(),
       content: formContent,
       category: formCategory,
-      projectId: selectedProjectId,
+      projectId: formProjectId,
     });
     setIsCreating(false);
-    reloadNotes(selectedProjectId);
+    // If we created in the same project as list view, reload
+    if (formProjectId === listProjectId) {
+      reloadNotes(listProjectId);
+    }
   };
 
   const handleUpdate = async () => {
@@ -134,7 +150,7 @@ export function NotesPageClient({
       category: formCategory,
     });
     setEditingNote(null);
-    reloadNotes(selectedProjectId);
+    reloadNotes(listProjectId);
   };
 
   const handleDelete = async (noteId: string) => {
@@ -142,7 +158,7 @@ export function NotesPageClient({
     if (!noteToDelete) return;
     if (!confirm(t("notes.deleteConfirm", { title: noteToDelete.title }))) return;
     await deleteNote(noteId);
-    reloadNotes(selectedProjectId);
+    reloadNotes(listProjectId);
   };
 
   // Filtered notes
@@ -157,10 +173,10 @@ export function NotesPageClient({
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Header */}
+      {/* Header — clean, just nav + title + new button */}
       <div className="flex items-center gap-3 border-b border-border px-6 py-4">
         <Link
-          href={`/workspaces/${selectedWsId}`}
+          href={`/workspaces/${listWsId}`}
           className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -171,37 +187,7 @@ export function NotesPageClient({
           <FileText className="h-4 w-4 text-muted-foreground" />
           <span>{t("notes.title")}</span>
         </div>
-
-        {/* Workspace selector */}
-        <select
-          value={selectedWsId}
-          onChange={(e) => handleWsChange(e.target.value)}
-          className="ml-2 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
-        >
-          {allWorkspaces.map((ws) => (
-            <option key={ws.id} value={ws.id}>
-              {ws.name}
-            </option>
-          ))}
-        </select>
-
-        {/* Project selector */}
-        {projects.length > 0 && (
-          <select
-            value={selectedProjectId ?? ""}
-            onChange={(e) => handleProjectChange(e.target.value)}
-            className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
-          >
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}{p.alias ? ` (${p.alias})` : ""}
-              </option>
-            ))}
-          </select>
-        )}
-
-        {/* New note button */}
-        {selectedProjectId && !showForm && (
+        {!showForm && (
           <button
             onClick={handleNewNote}
             className="ml-auto flex items-center gap-1.5 rounded-md bg-amber-500/15 px-3 py-1.5 text-xs font-medium text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25 transition-colors"
@@ -214,36 +200,66 @@ export function NotesPageClient({
 
       {/* Content */}
       <div className="flex-1 overflow-auto px-6 py-4">
-        {projects.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-            <p className="text-sm font-medium text-muted-foreground">{t("notes.noProject")}</p>
-            <p className="text-xs text-muted-foreground/60">{t("notes.noProjectHint")}</p>
-          </div>
-        ) : showForm ? (
+        {showForm ? (
+          /* ── Create / Edit form with its own workspace+project selectors ── */
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <input
-                type="text"
-                value={formTitle}
-                onChange={(e) => setFormTitle(e.target.value)}
-                placeholder={t("notes.titlePlaceholder")}
-                className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
-              />
+            {/* Form selectors row */}
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Workspace selector (only for create, not edit) */}
+              {!editingNote && (
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-muted-foreground whitespace-nowrap">{t("notes.workspace")}</label>
+                  <select
+                    value={formWsId}
+                    onChange={(e) => handleFormWsChange(e.target.value)}
+                    className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+                  >
+                    {allWorkspaces.map((ws) => (
+                      <option key={ws.id} value={ws.id}>{ws.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {/* Project selector (only for create, not edit) */}
+              {!editingNote && formProjects.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-muted-foreground whitespace-nowrap">{t("notes.project")}</label>
+                  <select
+                    value={formProjectId ?? ""}
+                    onChange={(e) => setFormProjectId(e.target.value)}
+                    className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+                  >
+                    {formProjects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}{p.alias ? ` (${p.alias})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {/* Category selector */}
               <div className="flex items-center gap-2">
-                <label className="text-xs text-muted-foreground">{t("notes.categoryLabel")}</label>
+                <label className="text-xs text-muted-foreground whitespace-nowrap">{t("notes.categoryLabel")}</label>
                 <select
                   value={formCategory}
                   onChange={(e) => setFormCategory(e.target.value)}
                   className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
                 >
                   {NOTE_CATEGORIES_PRESET.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
+                    <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>
               </div>
             </div>
+
+            {/* Title input */}
+            <input
+              type="text"
+              value={formTitle}
+              onChange={(e) => setFormTitle(e.target.value)}
+              placeholder={t("notes.titlePlaceholder")}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+            />
 
             <NoteEditor value={formContent} onChange={setFormContent} />
 
@@ -256,7 +272,7 @@ export function NotesPageClient({
               </button>
               <button
                 onClick={editingNote ? handleUpdate : handleCreate}
-                disabled={!formTitle.trim()}
+                disabled={!formTitle.trim() || (!editingNote && !formProjectId)}
                 className="rounded-md bg-amber-500/15 px-4 py-2 text-sm font-medium text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25 disabled:opacity-30 transition-colors"
               >
                 {t("notes.save")}
@@ -264,16 +280,51 @@ export function NotesPageClient({
             </div>
           </div>
         ) : (
+          /* ── List view with its own workspace+project filter ── */
           <div className="space-y-4">
+            {/* List selectors */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <select
+                value={listWsId}
+                onChange={(e) => handleListWsChange(e.target.value)}
+                className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+              >
+                {allWorkspaces.map((ws) => (
+                  <option key={ws.id} value={ws.id}>{ws.name}</option>
+                ))}
+              </select>
+              {listProjects.length > 0 && (
+                <select
+                  value={listProjectId ?? ""}
+                  onChange={(e) => handleListProjectChange(e.target.value)}
+                  className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+                >
+                  {listProjects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}{p.alias ? ` (${p.alias})` : ""}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <CategoryFilter active={activeCategory} onSelect={setActiveCategory} />
+            </div>
+
             {isPending && (
               <div className="text-xs text-muted-foreground animate-pulse">{t("notes.loading")}</div>
             )}
-            <CategoryFilter active={activeCategory} onSelect={setActiveCategory} />
-            <NoteList
-              notes={filteredNotes}
-              onEdit={handleEditNote}
-              onDelete={handleDelete}
-            />
+
+            {listProjects.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+                <p className="text-sm font-medium text-muted-foreground">{t("notes.noProject")}</p>
+                <p className="text-xs text-muted-foreground/60">{t("notes.noProjectHint")}</p>
+              </div>
+            ) : (
+              <NoteList
+                notes={filteredNotes}
+                onEdit={handleEditNote}
+                onDelete={handleDelete}
+              />
+            )}
           </div>
         )}
       </div>
