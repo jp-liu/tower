@@ -13,6 +13,7 @@ const createAssetSchema = z.object({
   mimeType: z.string().max(100).optional(),
   size: z.number().int().nonnegative().optional(),
   projectId: z.string().min(1),
+  description: z.string().max(500).optional(),
 });
 
 export async function createAsset(data: {
@@ -21,6 +22,7 @@ export async function createAsset(data: {
   mimeType?: string;
   size?: number;
   projectId: string;
+  description?: string;
 }) {
   const parsed = createAssetSchema.parse(data);
   ensureAssetsDir(parsed.projectId);
@@ -49,6 +51,7 @@ export async function uploadAsset(formData: FormData) {
   const file = formData.get("file") as File;
   const projectId = formData.get("projectId") as string;
   if (!file || !projectId) throw new Error("Missing file or projectId");
+  const description = (formData.get("description") as string | null) ?? "";
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const dir = ensureAssetsDir(projectId);
@@ -71,6 +74,7 @@ export async function uploadAsset(formData: FormData) {
     mimeType: file.type || undefined,
     size: file.size,
     projectId,
+    description: description || undefined,
   });
   revalidatePath(`/workspaces`);
   return asset;

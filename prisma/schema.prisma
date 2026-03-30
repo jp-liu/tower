@@ -148,13 +148,14 @@ model ProjectNote {
 }
 
 model ProjectAsset {
-  id        String   @id @default(cuid())
-  filename  String
-  path      String
-  mimeType  String?
-  size      Int?
-  projectId String
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  filename    String
+  path        String
+  mimeType    String?
+  size        Int?
+  description String?  @default("")
+  projectId   String
+  createdAt   DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 

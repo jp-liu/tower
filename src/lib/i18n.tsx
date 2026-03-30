@@ -271,6 +271,8 @@ const translations = {
     "assets.project": "项目",
     "assets.file": "文件",
     "assets.selectFile": "点击选择文件...",
+    "assets.description": "描述",
+    "assets.descriptionPlaceholder": "输入资源描述（可搜索）",
   },
   en: {
     "sidebar.workspace": "Workspaces",
@@ -520,6 +522,8 @@ const translations = {
     "assets.project": "Project",
     "assets.file": "File",
     "assets.selectFile": "Click to select file...",
+    "assets.description": "Description",
+    "assets.descriptionPlaceholder": "Enter asset description (searchable)",
   },
 } as const;
 

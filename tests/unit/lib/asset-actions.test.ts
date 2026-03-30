@@ -125,6 +125,45 @@ describe("createAsset", () => {
       })
     ).rejects.toThrow();
   });
+
+  it("creates an asset with a description", async () => {
+    const asset = await createAsset({
+      filename: "described.png",
+      path: `/data/assets/${testProjectId}/described.png`,
+      mimeType: "image/png",
+      size: 2048,
+      projectId: testProjectId,
+      description: "A screenshot of the dashboard",
+    });
+
+    expect(asset.description).toBe("A screenshot of the dashboard");
+
+    await testDb.projectAsset.delete({ where: { id: asset.id } });
+  });
+
+  it("creates an asset with null description when not provided", async () => {
+    const asset = await createAsset({
+      filename: "no-desc.png",
+      path: `/data/assets/${testProjectId}/no-desc.png`,
+      projectId: testProjectId,
+    });
+
+    // description is optional in Zod, so undefined input -> Prisma uses default (null or "")
+    expect(asset.description === null || asset.description === "").toBe(true);
+
+    await testDb.projectAsset.delete({ where: { id: asset.id } });
+  });
+
+  it("throws ZodError for description exceeding 500 chars", async () => {
+    await expect(
+      createAsset({
+        filename: "long-desc.png",
+        path: `/data/assets/${testProjectId}/long-desc.png`,
+        projectId: testProjectId,
+        description: "x".repeat(501),
+      })
+    ).rejects.toThrow();
+  });
 });
 
 describe("getProjectAssets", () => {
@@ -199,5 +238,20 @@ describe("getAssetById", () => {
   it("returns null for a non-existent asset", async () => {
     const found = await getAssetById("nonexistent-asset-id");
     expect(found).toBeNull();
+  });
+
+  it("returns the description field for an asset", async () => {
+    const asset = await createAsset({
+      filename: "with-desc.jpg",
+      path: `/data/assets/${testProjectId}/with-desc.jpg`,
+      projectId: testProjectId,
+      description: "Test description",
+    });
+
+    const found = await getAssetById(asset.id);
+    expect(found).not.toBeNull();
+    expect(found!.description).toBe("Test description");
+
+    await testDb.projectAsset.delete({ where: { id: asset.id } });
   });
 });
