@@ -37,6 +37,7 @@ export function AssetUpload({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadWsId, setUploadWsId] = useState(initialWsId);
   const [uploadProjectId, setUploadProjectId] = useState<string | null>(initialProjectId);
+  const [description, setDescription] = useState("");
 
   const uploadWs = allWorkspaces.find((ws) => ws.id === uploadWsId);
   const uploadProjects = uploadWs?.projects ?? [];
@@ -45,6 +46,7 @@ export function AssetUpload({
     setUploadWsId(initialWsId);
     setUploadProjectId(initialProjectId);
     setSelectedFile(null);
+    setDescription("");
     setIsOpen(true);
   };
 
@@ -75,6 +77,7 @@ export function AssetUpload({
       const formData = new FormData();
       formData.append("file", selectedFile);
       formData.append("projectId", uploadProjectId);
+      formData.append("description", description.trim());
       await uploadAsset(formData);
       onUploaded(uploadProjectId);
       handleClose();
@@ -161,6 +164,19 @@ export function AssetUpload({
                   {selectedFile ? selectedFile.name : t("assets.selectFile")}
                 </button>
               </div>
+
+              {/* Description */}
+              <div className="flex items-start gap-3">
+                <label className="text-xs text-muted-foreground w-16 shrink-0 pt-1.5">
+                  {t("assets.description")}
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder={t("assets.descriptionPlaceholder")}
+                  className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50 resize-none h-20"
+                />
+              </div>
             </div>
 
             {/* Actions */}
@@ -173,7 +189,7 @@ export function AssetUpload({
               </button>
               <button
                 onClick={handleUpload}
-                disabled={!selectedFile || !uploadProjectId || isUploading}
+                disabled={!selectedFile || !uploadProjectId || !description.trim() || isUploading}
                 className="rounded-md bg-amber-500/15 px-4 py-2 text-sm font-medium text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25 disabled:opacity-30 transition-colors"
               >
                 {isUploading ? t("assets.uploading") : t("assets.upload")}

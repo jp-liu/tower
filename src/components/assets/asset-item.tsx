@@ -10,6 +10,7 @@ export interface AssetItemType {
   path: string;
   mimeType: string | null;
   size: number | null;
+  description: string | null;
   createdAt: Date;
 }
 
@@ -59,6 +60,11 @@ export function AssetItem({ asset, onDelete }: AssetItemProps) {
       {/* Info */}
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-foreground">{asset.filename}</p>
+        {asset.description && (
+          <p className="mt-0.5 text-xs text-muted-foreground truncate">
+            {asset.description}
+          </p>
+        )}
         <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
           <span>{formatFileSize(asset.size)}</span>
           <span>{formatDate(asset.createdAt)}</span>

@@ -18,6 +18,7 @@ const mockAsset: AssetItemType = {
   path: "data/assets/proj-1/photo.png",
   mimeType: "image/png",
   size: 1024,
+  description: null,
   createdAt: new Date("2026-03-01"),
 };
 

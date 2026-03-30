@@ -21,6 +21,7 @@ const makeAsset = (id: string, filename: string) => ({
   path: `data/assets/proj-1/${filename}`,
   mimeType: "text/plain",
   size: 512,
+  description: null,
   createdAt: new Date("2026-03-01"),
 });
 
