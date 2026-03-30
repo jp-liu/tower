@@ -1,8 +1,20 @@
 # Feature Research
 
-**Domain:** Project knowledge base & intelligent MCP for AI task management tool (localhost dev tool)
-**Researched:** 2026-03-27
-**Confidence:** HIGH — analysis based on existing codebase + research into knowledge base patterns, MCP tool design, SQLite FTS, and competitor analysis (Notion, Obsidian, Linear)
+**Domain:** Global search enhancement — cross-type "All" search, notes search, asset search with metadata
+**Researched:** 2026-03-30
+**Confidence:** HIGH (codebase is fully known; UX patterns are well-established)
+
+---
+
+## Context
+
+This is a subsequent milestone on an existing app. The existing search dialog has:
+- Three fixed tabs: Task / Project / Repository
+- Debounced (250ms) search firing per active tab
+- FTS5 full-text search infrastructure exists for notes (`notes_fts` virtual table, trigram tokenizer)
+- `ProjectAsset` model has no `description` field yet
+
+The milestone adds: an "All" tab (cross-type unified search), a Note tab (FTS5), an Asset tab (filename + description), and a `description` field on `ProjectAsset`.
 
 ---
 
@@ -10,136 +22,110 @@
 
 ### Table Stakes (Users Expect These)
 
-Features users assume exist in any project knowledge base system. Missing these = the feature feels incomplete or unusable.
+Features users assume exist in any cross-type search. Missing these makes the search feel broken.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Note CRUD (create/read/update/delete) | Every notes system allows basic management | LOW | New `ProjectNote` model in SQLite: `id, projectId, title, content (Markdown), category, createdAt, updatedAt`. Server actions wrap Prisma. |
-| Markdown rendering for note content | Developers write in Markdown; plain text display is broken | LOW | `@tailwindcss/typography` + `react-markdown` already used for task messages. Reuse the same component. |
-| Category / type taxonomy | Users mentally organize notes by purpose (accounts, env vars, requirements, memos) | LOW | Enum or free-text category field. Preset values: `账号` (accounts), `环境` (environment), `需求` (requirements), `备忘` (memo). Allow custom string beyond presets. |
-| Notes scoped to project | A project's notes must not leak into other projects | LOW | `projectId` FK on `ProjectNote`, always filter by `projectId` in queries. Cascade delete when project is deleted. |
-| Full-text search across notes | Users need to find notes without remembering exact title | MEDIUM | SQLite FTS5 virtual table with external-content triggers on `title + content`. Prisma doesn't support FTS5 natively — use `prisma.$queryRaw` with MATCH syntax. Sort by BM25 rank. |
-| File asset storage per project | Users expect to store files (configs, screenshots, creds) alongside project | MEDIUM | `data/assets/{projectId}/` directory structure. File metadata tracked in `ProjectAsset` table (id, projectId, name, path, mimeType, size). |
-| Asset list and download | Can't store files without being able to retrieve them | LOW | List assets by projectId. Serve files from `data/assets/` via a Next.js route handler. |
-| Notes visible in Web UI | Notes must have a UI; API-only is not acceptable for a web app | MEDIUM | New route under `/projects/[projectId]/notes`. Notes list + markdown editor panel. Sidebar or tab navigation within project view. |
+| "All" tab with grouped results by type | Spotlight/Linear/Notion established this norm — users type once, see everything | MEDIUM | Fire all 5 searches in parallel; render each type section only if it has results |
+| Type label/section header per result group | Without grouping headers, a flat mixed list is disorienting | LOW | e.g. "Tasks (3)", "Notes (2)" section dividers |
+| Per-type result count shown in section header | Users need at-a-glance density signal before scrolling | LOW | Show "(N)" count next to section title |
+| Note search via FTS5 title + content | FTS5 is already wired for per-project; extend to global (no projectId filter) | LOW | Reuse `searchNotes` in `fts.ts`, drop `projectId` filter or pass null |
+| Asset search by filename | Filename is primary identifier; basic LIKE search matches existing pattern | LOW | `filename LIKE %q%` on `ProjectAsset` |
+| Asset search by description | Description is the new metadata field being added; must be co-searchable | LOW | Requires `description` field on `ProjectAsset` first |
+| `description` field on `ProjectAsset` schema | Assets with only a filename are hard to find — description makes them discoverable | LOW | Prisma migration: add nullable `String?` field |
+| Upload dialog `description` input | User must be able to set description at upload time | LOW | Add textarea/input to the existing upload dialog |
+| Preserve existing tabs (Task/Project/Repository) | Users already rely on precise per-type search; removing it would regress UX | LOW | Keep all 3 tabs; add All + Note + Asset as new tabs |
+| Note result navigates to note in project | Search result must be actionable — clicking a note result must open it | MEDIUM | Add `navigateTo` route that opens notes panel for the right project |
+| Asset result navigates to asset in project | Same principle as notes — result must land user on the relevant asset | MEDIUM | Route to assets panel for the project |
 
 ### Differentiators (Competitive Advantage)
 
-Features that set this tool apart. Aligned with the milestone goal: "让 AI 助手通过 MCP 智能识别项目、管理项目知识库".
+Features that make this search better than the baseline expectation for a local AI task manager.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Smart project identification via MCP | AI agents can say "update the notes for my-app" without knowing the exact projectId — fuzzy match by name, alias, or description resolves it | MEDIUM | Use SQLite LIKE + Levenshtein-style scoring or simple trigram match on `name`, `alias`, `description` fields. Existing schema already has `alias` and `description` on `Project`. Return top-N matches with confidence score. Implement in `search-tools.ts` or new `project-identify` tool. |
-| Task cache directory (`data/cache/{taskId}/`) | AI agents can write intermediate outputs (generated files, screenshots) to a per-task cache that users can inspect or wipe manually | LOW | Directory created on first write. No DB tracking needed for cache — treat as ephemeral. MCP tool `move_file_to_cache(taskId, srcPath)` calls `fs.rename`. |
-| Task message image attachments via MCP | AI agents can reference images in task conversations by moving files to cache and embedding path references | MEDIUM | MCP tool `attach_file_to_message(taskId, srcPath)` moves file to `data/cache/{taskId}/`, stores path in `TaskMessage.metadata` JSON field. Web UI renders `<img>` for image paths in metadata. |
-| MCP note knowledge tools | AI agents can read/write project notes via MCP, making the knowledge base accessible without opening the web UI | MEDIUM | New `note-tools.ts` in `src/mcp/tools/`: `list_notes`, `get_note`, `create_note`, `update_note`, `delete_note`, `search_notes`. Follow existing tool patterns from `task-tools.ts`. |
-| MCP asset management tools | AI agents can register and retrieve project assets via MCP, closing the loop from "generated file" to "stored asset" | MEDIUM | New `asset-tools.ts`: `list_assets`, `move_to_assets(projectId, srcPath, name)` — uses `fs.rename` + DB insert. `get_asset_path(assetId)` returns absolute path. |
-| Preset note categories with extensibility | `账号/环境/需求/备忘` covers 80% of developer use cases; custom categories handle the rest without forcing a taxonomy redesign | LOW | Store category as plain string. Preset values live in a shared constant (no DB enum). UI shows presets as quick-select chips + free-text input. |
-| Cross-note search with snippet highlighting | FTS5 snippet() function returns context around matches — much more useful than "note X matches" | MEDIUM | SQLite FTS5 `snippet(fts_notes, 0, '<mark>', '</mark>', '...', 10)` returns highlighted excerpts. Return in search results to help users identify the right note quickly. |
+| Note results show content snippet | FTS5 already has content; showing a 1-line excerpt dramatically reduces time to confirm relevance | LOW | Truncate `content` to ~80 chars in `subtitle` field of SearchResult |
+| Result type icon differentiation | Notes and assets have different icons than tasks/projects — visual scanning speed increases | LOW | Add `BookOpen` for notes, `Paperclip` for assets in `CATEGORY_DEFS` |
+| "All" tab capped per-type (3-5 per type) | Prevents one content type from flooding the "All" view | LOW | `take: 5` per type in the parallel search fan-out |
+| Empty-state per section in "All" tab | When a type has 0 results, omit its section entirely — cleaner than empty group headers | LOW | Conditional rendering, no extra work |
+| Asset result shows file type hint | Users scanning assets benefit from a visual "image / pdf / etc." indicator | LOW | Parse `mimeType` already stored on `ProjectAsset` |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| Note versioning / history | "Don't lose my notes" | Significant model complexity (new `NoteVersion` table, storage bloat) for a single-user localhost tool with no remote sync risk | SQLite is a single file — users can `cp dev.db dev.db.bak`. No versioning needed in v0.2. |
-| Embedding-based semantic search | "Find notes by meaning, not just keywords" | Requires embedding model inference (local or API call), vector storage, significant complexity | SQLite FTS5 BM25 is sufficient for a personal knowledge base with hundreds of notes. Add semantic search in v1+ if users hit limits. |
-| Hierarchical note folders | "Organize notes in trees like Obsidian" | Folder trees are complex to implement (parent/child FK, drag-and-drop, breadcrumbs) and overkill for project-scoped notes | Category tags + search achieves the same discoverability without tree complexity. |
-| Real-time collaborative editing | "Multiple users editing notes" | Out of scope — this is a localhost single-user tool (PROJECT.md: "No real-time collaboration") | Not applicable. Keep SQLite writes simple. |
-| Asset binary storage in SQLite (BLOB) | "Keep everything in one DB file" | Large blobs inflate SQLite file, slow backups, poor streaming | Store files in `data/assets/` filesystem. Store only metadata (path, name, size, mimeType) in DB. This is the standard pattern for SQLite-backed apps. |
-| Auto-tagging notes with AI | "Automatically categorize notes" | Requires LLM inference on every save; adds latency, cost, and an async pipeline | Manual category selection with preset quick-picks covers the use case with zero complexity. |
-| Note sharing / export to Notion/Confluence | "Share knowledge with team" | Adds external API integrations and auth; contradicts localhost-only constraint | Out of scope. Notes stay in local SQLite. Users can copy-paste Markdown if needed. |
-| Drag-and-drop file upload to assets | "Upload from browser like Dropbox" | File I/O via browser upload adds streaming, temp file handling, and size limits | MCP `move_to_assets` and file picker in Web UI via `<input type="file">` are sufficient for a local tool. Direct path input also works since user is always local. |
+| Keyboard arrow navigation through results | Common in command palettes (Linear, Raycast) | Medium implementation cost; state management adds risk; not in scope for this milestone | Defer to v0.4+; mouse/click navigation is sufficient for MVP |
+| Real-time result count badge on tabs | Keeps users informed of density across tabs | Requires firing all 5 searches regardless of active tab — wasteful at query time | Only fire the active tab's search; show count only in "All" grouped headers |
+| Fuzzy/typo-tolerant search | Nice for short queries | FTS5 trigram already handles partial matches adequately; adding fuzzy adds complexity and edge cases | Keep FTS5 + LIKE fallback as-is |
+| Semantic / embedding-based search | "Understands intent" | Out of scope per PROJECT.md (explicitly deferred); FTS5 is sufficient for current scale | Stay with FTS5 + LIKE; defer to v1.0+ if ever |
+| Search history / recent items | Reduces re-typing for frequent items | Requires persistent storage of queries per user; no user model exists (localhost tool) | Defer indefinitely; out of scope |
+| Inline asset preview in search results | Power feature | Adds significant complexity to the dialog (image sizing, overflow); results list would become cluttered | Navigate to asset page on click; preview lives there |
+| Per-workspace search scoping | Useful in large multi-workspace setups | Adds a filter dimension to an already-multi-tab UI; current user base is small, single developer | Not needed now; the subtitle already shows workspace/project path |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[Smart Project Identification — MCP]
-    └──uses──> [Project.name, Project.alias, Project.description]  (already in schema)
-    └──enhances──> [All MCP note/asset tools]  (identify project before operating on it)
+[ProjectAsset.description field (schema migration)]
+    └──required by──> [Asset search by description]
+    └──required by──> [Upload dialog description input]
 
-[Project Notes — Web UI]
-    └──requires──> [ProjectNote model + Prisma migration]
-    └──requires──> [note-actions.ts server actions]
-    └──enhances──> [FTS5 full-text search]  (search only useful once notes exist)
+[Asset search by filename + description]
+    └──required by──> [Asset tab in search dialog]
+    └──feeds into──> ["All" tab asset section]
 
-[FTS5 Full-Text Search]
-    └──requires──> [ProjectNote model]
-    └──requires──> [FTS5 virtual table + triggers via raw SQL migration]
-    └──note: Prisma does NOT generate FTS5 — must use prisma.$executeRaw in a custom migration
+[Note search via FTS5 (global, no projectId filter)]
+    └──required by──> [Note tab in search dialog]
+    └──feeds into──> ["All" tab note section]
 
-[MCP Note Tools]
-    └──requires──> [ProjectNote model + note-actions.ts]
-    └──requires──> [Smart Project Identification]  (to resolve project from name/alias)
-    └──follows──> [existing MCP tool patterns in task-tools.ts]
+["All" tab grouped results]
+    └──requires──> [Note search]
+    └──requires──> [Asset search]
+    └──requires──> [existing Task / Project / Repository search]
+    └──requires──> [type-aware result rendering with section headers]
 
-[Project Asset Management — filesystem]
-    └──requires──> [data/assets/{projectId}/ directory creation logic]
-    └──requires──> [ProjectAsset model + Prisma migration]
-    └──independent of──> [Notes system]  (can be built in parallel)
+[Note result navigateTo route]
+    └──required by──> [Note tab] and ["All" tab note section]
 
-[Task Cache — filesystem]
-    └──requires──> [data/cache/{taskId}/ directory creation logic]
-    └──independent of──> [ProjectAsset model]  (no DB tracking, ephemeral)
-
-[Task Message Image Attachments]
-    └──requires──> [Task Cache directory]
-    └──requires──> [TaskMessage.metadata JSON field]  (already in schema as String?)
-    └──requires──> [Web UI image rendering in message thread]
-
-[MCP Asset Tools]
-    └──requires──> [ProjectAsset model]
-    └──requires──> [data/assets/ filesystem layer]
-    └──requires──> [Smart Project Identification]
-
-[MCP note-tools.ts]
-    └──follows──> [task-tools.ts pattern]
-    └──new file──> [src/mcp/tools/note-tools.ts]
-
-[MCP asset-tools.ts]
-    └──follows──> [project-tools.ts pattern for project-scoped resources]
-    └──new file──> [src/mcp/tools/asset-tools.ts]
+[Asset result navigateTo route]
+    └──required by──> [Asset tab] and ["All" tab asset section]
 ```
 
 ### Dependency Notes
 
-- **FTS5 requires raw SQL migration:** Prisma schema cannot define FTS5 virtual tables. The migration must use `prisma.$executeRaw` or a custom SQL migration file. This is the single biggest technical gotcha in this milestone.
-- **Smart Project Identification is a prerequisite for useful MCP knowledge tools:** Without it, MCP callers must know exact projectId — which removes the "smart" value. Build identification first.
-- **Notes and Assets are independent subsystems:** They share the same project scope but have no mutual dependency. They can be developed in parallel phases.
-- **Task cache is simpler than project assets:** No DB model needed. Create directory on first write via `fs.mkdirSync(path, { recursive: true })`. This removes a blocker for image attachment feature.
-- **`TaskMessage.metadata` is already `String?`:** Store as JSON string. No schema migration needed for the metadata field itself. Only the Web UI rendering and MCP tool are new work.
+- **Schema migration blocks asset search:** `description` field must exist in Prisma schema and DB before asset search queries can reference it. Migration first, search second.
+- **FTS5 global note search is low-risk:** `searchNotes` in `fts.ts` already works; just drop the `projectId` filter for a global variant.
+- **"All" tab depends on all other types:** implement per-type search actions first, then compose in the "All" handler.
+- **Upload dialog description input is independent:** can be done in parallel with search changes once schema migration lands.
+- **i18n keys needed for new tabs:** Note, Asset, and All tab labels must have zh/en translations before UI ships.
 
 ---
 
 ## MVP Definition
 
-### Launch With (v0.2)
+### Launch With (v0.3 — this milestone)
 
-Minimum set to deliver the milestone goal: "个人多项目信息中枢" (personal multi-project information hub accessible via MCP).
+- [ ] `ProjectAsset.description` field (nullable `String?`) — schema migration, update `createAsset` / `uploadAsset` actions
+- [ ] Upload dialog `description` input — passes description to `uploadAsset`
+- [ ] Note search action (global, no projectId filter) — extend or add `globalSearchNotes` in `search-actions.ts`
+- [ ] Asset search action (filename + description LIKE) — add `globalSearchAssets` in `search-actions.ts`
+- [ ] `SearchCategory` type extended to include `"note"` | `"asset"` | `"all"`
+- [ ] `globalSearch` updated to handle new categories including `"all"` fan-out
+- [ ] `SearchDialog` new tabs: All, Note, Asset (extending `CATEGORY_DEFS`)
+- [ ] "All" grouped result rendering with section headers
+- [ ] i18n keys for new tabs and sections (zh + en)
 
-- [ ] **Smart project identification** — `identify_project(query)` MCP tool that fuzzy-matches by name/alias/description, returns top matches with project IDs. Unblocks all other MCP knowledge tools.
-- [ ] **ProjectNote model + Prisma migration** — `id, projectId, title, content, category, createdAt, updatedAt`. Cascade delete with project. This is the data foundation.
-- [ ] **Note CRUD server actions** — `createNote`, `updateNote`, `deleteNote`, `getNotesByProject`, `getNoteById` in `src/actions/note-actions.ts`.
-- [ ] **FTS5 search** — virtual table + triggers via custom SQL migration. `searchNotes(projectId, query)` returns results ranked by BM25 with snippet highlights.
-- [ ] **MCP note tools** — `list_notes`, `get_note`, `create_note`, `update_note`, `delete_note`, `search_notes` in `src/mcp/tools/note-tools.ts`. Register in MCP index.
-- [ ] **Notes Web UI** — Route `/projects/[projectId]/notes`. Notes list (sidebar) + markdown editor/viewer panel. Category filter. Search input.
-- [ ] **ProjectAsset model + filesystem layer** — `id, projectId, name, path, mimeType, size`. `data/assets/{projectId}/` directory. `move_to_assets` logic.
-- [ ] **MCP asset tools** — `list_assets`, `move_to_assets`, `get_asset_path` in `src/mcp/tools/asset-tools.ts`.
-- [ ] **Task cache + image attachments** — `data/cache/{taskId}/` directory. MCP `attach_file_to_message(taskId, srcPath)`. Web UI renders images in message thread from metadata.
-- [ ] **i18n** — all new user-facing strings in both zh/en translation maps.
+### Add After Validation (v0.4+)
 
-### Add After Validation (v0.2.x)
+- [ ] Keyboard arrow navigation through search results — adds power-user speed
+- [ ] Note result content snippet (excerpt in subtitle) — improves result relevance scanning
 
-- [ ] **Assets Web UI** — Asset list view under project, with file download. Deferred because MCP access is the primary use case; Web UI is secondary for assets.
-- [ ] **Note snippet highlighting in search UI** — FTS5 snippet() is implemented server-side; surface it in the Web UI search results.
-- [ ] **Category management** — UI to add/rename custom categories beyond the presets. Low priority since free-text category input already works.
+### Future Consideration (v1.0+)
 
-### Future Consideration (v1+)
-
-- [ ] **Semantic / embedding-based search** — Only if FTS5 proves insufficient at scale. Requires local embedding model or API.
-- [ ] **Note export (Markdown files)** — Bulk export project notes as `.md` files. Useful for portability but not needed for v0.2 use cases.
-- [ ] **Asset type filtering in MCP** — Filter `list_assets` by MIME type. Add when asset counts grow large enough to need filtering.
+- [ ] Semantic / embedding-based search
+- [ ] Search history / recent queries
+- [ ] Per-workspace scoping filter
 
 ---
 
@@ -147,161 +133,63 @@ Minimum set to deliver the milestone goal: "个人多项目信息中枢" (person
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| Smart project identification | HIGH | MEDIUM | P1 |
-| ProjectNote model + migration | HIGH | LOW | P1 |
-| Note CRUD server actions | HIGH | LOW | P1 |
-| FTS5 full-text search | HIGH | MEDIUM | P1 |
-| MCP note tools | HIGH | MEDIUM | P1 |
-| Notes Web UI | HIGH | MEDIUM | P1 |
-| ProjectAsset model + filesystem | MEDIUM | LOW | P1 |
-| MCP asset tools | MEDIUM | MEDIUM | P1 |
-| Task cache + image attachments | MEDIUM | LOW | P1 |
-| Assets Web UI | LOW | MEDIUM | P2 |
-| Snippet highlighting in UI | MEDIUM | LOW | P2 |
-| Custom category management UI | LOW | LOW | P2 |
-| Semantic search | LOW | HIGH | P3 |
-| Note export | LOW | LOW | P3 |
+| `ProjectAsset.description` schema field | HIGH | LOW | P1 |
+| Upload dialog description input | HIGH | LOW | P1 |
+| Note search (FTS5 global) | HIGH | LOW | P1 |
+| Asset search (filename + description) | HIGH | LOW | P1 |
+| "All" tab with grouped results | HIGH | MEDIUM | P1 |
+| Type section headers in "All" tab | HIGH | LOW | P1 |
+| Note / Asset result navigation routes | HIGH | MEDIUM | P1 |
+| i18n keys for new tabs | MEDIUM | LOW | P1 |
+| Note content snippet in subtitle | MEDIUM | LOW | P2 |
+| Keyboard arrow navigation | MEDIUM | MEDIUM | P3 |
+| Per-type count on tab headers | LOW | MEDIUM | P3 |
 
 **Priority key:**
-- P1: Must have for milestone v0.2
-- P2: Should have, add when core is validated
+- P1: Must have for this milestone
+- P2: Should have, add when possible
 - P3: Nice to have, future consideration
+
+---
+
+## Existing Infrastructure — Reuse Points
+
+These are already built and must be reused, not rebuilt.
+
+| Existing Asset | Reuse In |
+|----------------|----------|
+| `src/lib/fts.ts` — `searchNotes(db, projectId, query)` | Global note search: drop `projectId` filter, or add `globalSearchNotes` variant |
+| `src/actions/search-actions.ts` — `globalSearch(query, category)` | Extend to handle `"note"`, `"asset"`, `"all"` categories |
+| `src/components/layout/search-dialog.tsx` — tab + result rendering | Add 3 new entries to `CATEGORY_DEFS`; extend result rendering for group headers |
+| `SearchResult` interface — `{ id, type, title, subtitle, navigateTo }` | All new result types map cleanly to this shape |
+| Debounce pattern (250ms, `timerRef`) | No change needed; works for all categories |
+| `ProjectAsset` model and `asset-actions.ts` | Add `description` field; update create/upload actions |
 
 ---
 
 ## Competitor Feature Analysis
 
-| Feature | Notion (project docs) | Obsidian (personal notes) | Linear (project mgmt) | Our Approach (v0.2) |
-|---------|----------------------|--------------------------|----------------------|---------------------|
-| Note storage | Notion cloud DB | Local `.md` files | Attached to issues | SQLite rows (`ProjectNote`) |
-| Note organization | Databases + folders + tags | Folders + tags + links | Issue descriptions | Project-scoped + category field |
-| Full-text search | Built-in, fast | Built-in (local index) | Global issue search | SQLite FTS5 (BM25) |
-| Asset storage | Notion CDN | Local filesystem | GitHub-linked | `data/assets/{projectId}/` |
-| AI access | Notion AI (cloud) | Community plugins | Linear AI | MCP tools (local) |
-| Offline access | No (cloud) | Yes (local .md) | No (cloud) | Yes (local SQLite) |
-| Categories/taxonomy | Flexible databases | Free tags | Labels + status | Preset + custom string |
-| API / programmatic access | REST API | Obsidian API + plugins | GraphQL API | MCP tools (18 → 28+) |
-
-**Key insight:** Obsidian's model (local files + search index) is closest to our use case, but storing notes in SQLite (vs `.md` files) is the right tradeoff here because MCP can CRUD directly without filesystem access, and notes tie to the project lifecycle with cascade delete. Linear's pattern of keeping tasks and notes as separate but linked entities validates our approach of `ProjectNote` as a first-class model distinct from `Task`.
-
----
-
-## Implementation Notes by Feature
-
-### FTS5 — The Critical Technical Detail
-
-Prisma 6 does NOT support FTS5 virtual tables in schema.prisma. The correct approach:
-
-1. Create a normal Prisma migration for `ProjectNote` table.
-2. After migration, append raw SQL to create FTS5 virtual table and sync triggers:
-
-```sql
--- Add to migration file after ProjectNote table creation
-CREATE VIRTUAL TABLE IF NOT EXISTS project_notes_fts
-USING fts5(title, content, content=ProjectNote, content_rowid=rowid);
-
-CREATE TRIGGER IF NOT EXISTS project_notes_fts_insert
-AFTER INSERT ON ProjectNote BEGIN
-  INSERT INTO project_notes_fts(rowid, title, content)
-  VALUES (new.rowid, new.title, new.content);
-END;
-
-CREATE TRIGGER IF NOT EXISTS project_notes_fts_update
-AFTER UPDATE ON ProjectNote BEGIN
-  INSERT INTO project_notes_fts(project_notes_fts, rowid, title, content)
-  VALUES ('delete', old.rowid, old.title, old.content);
-  INSERT INTO project_notes_fts(rowid, title, content)
-  VALUES (new.rowid, new.title, new.content);
-END;
-
-CREATE TRIGGER IF NOT EXISTS project_notes_fts_delete
-AFTER DELETE ON ProjectNote BEGIN
-  INSERT INTO project_notes_fts(project_notes_fts, rowid, title, content)
-  VALUES ('delete', old.rowid, old.title, old.content);
-END;
-```
-
-Search query via `prisma.$queryRaw`:
-```typescript
-const results = await prisma.$queryRaw`
-  SELECT n.*, snippet(project_notes_fts, 1, '<mark>', '</mark>', '...', 10) as excerpt
-  FROM ProjectNote n
-  JOIN project_notes_fts fts ON fts.rowid = n.rowid
-  WHERE n.projectId = ${projectId}
-    AND project_notes_fts MATCH ${query}
-  ORDER BY rank
-  LIMIT 20
-`;
-```
-
-### Smart Project Identification
-
-Use SQLite LIKE for substring match + score by field priority (name > alias > description):
-
-```typescript
-// Pseudo-implementation
-const results = await prisma.$queryRaw`
-  SELECT id, name, alias, description,
-    CASE
-      WHEN lower(name) = lower(${query}) THEN 100
-      WHEN lower(name) LIKE lower('%' || ${query} || '%') THEN 80
-      WHEN lower(alias) LIKE lower('%' || ${query} || '%') THEN 60
-      WHEN lower(description) LIKE lower('%' || ${query} || '%') THEN 40
-      ELSE 0
-    END as score
-  FROM Project
-  WHERE score > 0
-  ORDER BY score DESC
-  LIMIT 5
-`;
-```
-
-Return top matches with score to let the MCP caller decide whether to confirm or proceed with highest-confidence match.
-
-### MCP Tool Naming Conventions
-
-Follow existing patterns in `task-tools.ts`. For note tools:
-- `list_notes` — `projectId` required, optional `category` filter
-- `get_note` — `noteId` required
-- `create_note` — `projectId`, `title`, `content`, `category?`
-- `update_note` — `noteId`, `title?`, `content?`, `category?`
-- `delete_note` — `noteId`
-- `search_notes` — `projectId`, `query` — returns title + excerpt, not full content
-
-For asset tools:
-- `list_assets` — `projectId`
-- `move_to_assets` — `projectId`, `srcPath`, `name?` (derive from filename if not given)
-- `get_asset_path` — `assetId` — returns absolute path for downstream tool use
-
-Keep descriptions explicit and concise. Return semantically meaningful fields (name, category, excerpt) rather than raw IDs where possible, following MCP tool design best practices.
-
-### Data Directory Layout
-
-```
-data/
-  assets/
-    {projectId}/
-      logo.png
-      credentials.json
-  cache/
-    {taskId}/
-      screenshot.png
-      generated-file.ts
-```
-
-Both directories created via `fs.mkdirSync(path, { recursive: true })` on first write. `data/` should be in `.gitignore`. No cleanup automation for `cache/` — manual deletion by user is the stated design decision (PROJECT.md: "手动清理").
+| Feature | Linear | Notion | Jira | Our Approach |
+|---------|--------|--------|------|--------------|
+| Cross-type "All" search | Yes — grouped sections in command palette | Yes — all content types in sidebar search | Yes — global issue/project/wiki search | Grouped sections in existing dialog |
+| Result type section headers | Yes, with type label | Yes, with content-type label | Yes, per type | Section header per type in "All" tab |
+| Notes/docs in search | Yes (issues + docs) | Core feature | Pages/wiki in search | Note tab + All tab |
+| File/attachment search | Limited | Yes (attachments) | Attachment search via JQL | Asset tab + All tab |
+| Keyboard navigation | Yes, arrow keys | Yes | Yes | Deferred — not blocking MVP |
+| Per-result type icon | Yes | Yes | Yes | Yes — distinct icons per type |
 
 ---
 
 ## Sources
 
-- Codebase analysis: `prisma/schema.prisma`, `src/mcp/tools/task-tools.ts`, `src/mcp/tools/search-tools.ts`, `.planning/PROJECT.md`
-- SQLite FTS5: [SQLite FTS5 Extension](https://www.sqlite.org/fts5.html), [SQLite FTS5 in Practice](https://thelinuxcode.com/sqlite-full-text-search-fts5-in-practice-fast-search-ranking-and-real-world-patterns/)
-- MCP tool design: [Writing Effective Tools for Agents](https://modelcontextprotocol.info/docs/tutorials/writing-effective-tools/), [Best MCP Servers for Knowledge Bases 2026](https://desktopcommander.app/blog/2026/02/06/best-mcp-servers-for-knowledge-bases-in-2026/)
-- Knowledge base patterns: [Top Knowledge Management System Features 2026](https://context-clue.com/blog/top-10-knowledge-management-system-features-in-2026/), [Private KB with MCP](https://pub.towardsai.net/building-a-private-knowledge-base-with-mcp-how-i-made-claude-search-my-own-articles-06c591bb300a)
-- Project notes organization: [Linear + Notion integration patterns](https://alaniswright.com/blog/how-we-are-using-linear-and-notion-to-manage-our-product-backlog-and-project-work/), [Obsidian notes organization](https://forum.obsidian.md/t/tips-for-organizing-project-notes-in-obsidian/105860)
-- Fuzzy matching: [Redis Fuzzy Matching Guide](https://redis.io/blog/what-is-fuzzy-matching/)
+- Codebase analysis: `src/actions/search-actions.ts`, `src/lib/fts.ts`, `src/components/layout/search-dialog.tsx`, `prisma/schema.prisma`
+- PROJECT.md milestone definition (v0.3 goal and out-of-scope list)
+- [Command Palette UX Patterns — Alicja Suska](https://medium.com/design-bootcamp/command-palette-ux-patterns-1-d6b6e68f30c1)
+- [Command Palette Interfaces — Philip Davis](https://philipcdavis.com/writing/command-palette-interfaces)
+- [Search UX Best Practices — Pencil & Paper](https://www.pencilandpaper.io/articles/search-ux)
+- [Master Search UX in 2026 — DesignMonks](https://www.designmonks.co/blog/search-ux-best-practices)
 
 ---
-*Feature research for: Project knowledge base & intelligent MCP — ai-manager v0.2*
-*Researched: 2026-03-27*
+
+*Feature research for: ai-manager v0.3 global search enhancement*
+*Researched: 2026-03-30*

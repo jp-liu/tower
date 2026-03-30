@@ -1,323 +1,221 @@
 # Pitfalls Research
 
-**Domain:** Knowledge base, notes, file management, and expanded MCP tools added to existing Next.js 16 + SQLite + Prisma system
-**Researched:** 2026-03-27
-**Confidence:** HIGH (pitfalls derived from codebase inspection, Prisma issue tracker, official SQLite docs, MCP spec, and multiple community sources)
+**Domain:** Global search enhancement — adding "All" cross-type search, FTS5 note search, asset description field, and parallel queries to an existing Next.js 16 + SQLite + Prisma app
+**Researched:** 2026-03-30
+**Confidence:** HIGH (derived from direct codebase inspection of `search-actions.ts`, `fts.ts`, `schema.prisma`, `search-dialog.tsx`, and confirmed against SQLite FTS5 docs, Prisma issue tracker, and SQLite WAL behaviour)
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: FTS5 Shadow Tables Break Prisma db push
+### Pitfall 1: `prisma db push` After Adding `description` Field Destroys FTS5 Tables
 
 **What goes wrong:**
-SQLite FTS5 virtual tables automatically create internal "shadow tables" (e.g., `notes_fts_data`, `notes_fts_idx`, `notes_fts_content`, `notes_fts_docsize`, `notes_fts_config`). Prisma's `db push` sees these shadow tables as schema drift — tables it didn't create and doesn't know about. The result is either a prompt to reset the database (destroying all data) or a migration failure that leaves the schema half-applied.
+Adding the `description` field to `ProjectAsset` requires running `prisma db push`. This project has manually created FTS5 shadow tables (`notes_fts`, `notes_fts_data`, `notes_fts_idx`, etc.) outside of Prisma. When `db push` runs against a schema with a changed model, Prisma re-inspects the full database state. The FTS5 shadow tables appear as unrecognised drift, and Prisma may prompt "We need to reset the database" — wiping all notes, assets, tasks and the FTS index.
 
 **Why it happens:**
-Prisma tracks schema state by comparing its model definitions against the actual database. FTS5 shadow tables are SQLite internals with no Prisma model equivalents. As of Prisma 6.x, this is a confirmed open issue ([#8106](https://github.com/prisma/prisma/issues/8106)). The FTS5 virtual table itself is skipped, but its shadow tables are not, causing drift detection to fire.
+This project uses `prisma db push` (not `prisma migrate`). There is no migration history. Each `db push` compares the Prisma schema against the live database. FTS5 shadow tables are visible in `sqlite_master` but have no corresponding Prisma model. On some Prisma 6.x versions the shadow tables are ignored; on others they trigger a drift warning that becomes a reset prompt. The risk is non-deterministic and environment-dependent. See the existing Pitfall 1 in this file (v0.2) for the root cause — it remains live for every subsequent schema change.
 
 **How to avoid:**
-Do NOT create FTS5 indexes via `prisma db push` schema changes. Instead:
-1. Create the FTS5 virtual table using a raw SQL seed/migration script run once at startup
-2. Use `db.$executeRaw` in a setup function called during database initialization
-3. The `initDb()` function in `src/mcp/db.ts` already sets `PRAGMA journal_mode=WAL` — add FTS5 setup there
-4. For the Next.js side, run FTS5 setup in a startup module (not per-request)
+1. Before touching `schema.prisma`, back up `prisma/dev.db`: `cp prisma/dev.db prisma/dev.db.backup`
+2. Check WAL is checkpointed first: `sqlite3 prisma/dev.db 'PRAGMA wal_checkpoint(TRUNCATE)'`
+3. Add the `description String? @default("")` field to `ProjectAsset` in `schema.prisma`
+4. Run `prisma db push --accept-data-loss` only after the backup is confirmed
+5. After `db push` succeeds, immediately re-run `pnpm db:init-fts` to restore the FTS5 virtual table if it was dropped
+6. Verify: `sqlite3 prisma/dev.db ".tables"` — `notes_fts` must appear in the output
+
+**Warning signs:**
+- `prisma db push` output includes "The following changes will be made to the database schema" followed by table drops
+- `prisma db push` shows a reset prompt — STOP; restore from backup
+- After push, `pnpm db:init-fts` exits with "table already exists" (FTS survived) — this is safe; `IF NOT EXISTS` handles it
+- After push, `searchNotes()` returns 0 results for a query that previously matched — FTS was wiped; re-run `db:init-fts` and re-index existing notes
+
+**Phase to address:**
+Phase 1 (Asset description field schema migration). Always perform the backup-push-verify sequence before any schema change that touches existing models.
+
+---
+
+### Pitfall 2: FTS5 Search in `globalSearch("all")` Skips the `projectId` Filter — Returns Cross-Project Note Leakage
+
+**What goes wrong:**
+The existing `searchNotes()` in `src/lib/fts.ts` accepts a required `projectId` parameter and filters to one project. The new "All" mode searches across the entire system with no project scope. When adapting `searchNotes()` for global use, developers omit the `projectId` filter and the JOIN with `ProjectNote` becomes the only filter. If the JOIN is also removed or loosened, all notes from all projects (and all workspaces) are returned — including private notes in unrelated workspaces. Even in a single-user tool this is confusing; if the tool is ever shared, it is a data boundary violation.
+
+**Why it happens:**
+The v0.2 `searchNotes()` was intentionally project-scoped. Extending it to "All" mode requires either a new function or a conditional filter. The easy path is to remove the `WHERE n."projectId" = ?` clause without considering the implication. Additionally, the FTS5 virtual table `notes_fts` stores only `note_id`, `title`, and `content` — it has no `workspaceId`. Cross-workspace scoping requires the JOIN with `ProjectNote` → `Project` → `Workspace`.
+
+**How to avoid:**
+Write a separate `searchNotesGlobal()` function that keeps the JOIN to `ProjectNote` and `Project`, but removes the `projectId` filter. The `subtitle` in results should show `workspace / project` so the user knows where the note lives. Return `projectId` and `workspaceId` in the result so `navigateTo` can be computed correctly.
 
 ```typescript
-// Add to initDb() or a dedicated setupFts() call
-await db.$executeRaw`
-  CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts
-  USING fts5(title, content, content='Note', content_rowid='id')
-`;
-// Keep FTS in sync with triggers on INSERT/UPDATE/DELETE
-await db.$executeRaw`
-  CREATE TRIGGER IF NOT EXISTS notes_fts_insert
-  AFTER INSERT ON "Note" BEGIN
-    INSERT INTO notes_fts(rowid, title, content) VALUES (new.id, new.title, new.content);
-  END
-`;
-```
-
-**Warning signs:**
-- `prisma db push` shows "The following changes will be made to the database" with unexpected table drops
-- `prisma db push` prompts "We need to reset the database" — STOP immediately
-- After a `db push`, notes become unsearchable (FTS table was dropped)
-
-**Phase to address:**
-Phase 1 (Note CRUD + Schema). Set up FTS5 outside Prisma schema before building any search feature.
-
----
-
-### Pitfall 2: Two Separate PrismaClient Instances Writing to the Same SQLite File
-
-**What goes wrong:**
-The Next.js app (`src/lib/db.ts`) and the MCP server (`src/mcp/db.ts`) are separate processes that each instantiate a `PrismaClient` pointing at the same `prisma/dev.db` file. When both are active simultaneously — which is the normal operating mode — concurrent writes can trigger `SQLITE_BUSY` / "database is locked" errors. This is especially likely when MCP tools perform note/asset writes at the same time as the web UI saves notes.
-
-**Why it happens:**
-SQLite WAL mode allows one writer at a time. When two processes try to write simultaneously, the second one blocks and eventually times out if the first holds the lock too long. The MCP process already sets `PRAGMA journal_mode=WAL` (in `initDb()`), but the Next.js process does not. Without WAL mode on both sides, even short concurrent writes contend on a journal lock. Additionally, there is no `busy_timeout` set on either connection, so lock contention fails immediately instead of retrying.
-
-**How to avoid:**
-1. Ensure both `src/lib/db.ts` and `src/mcp/db.ts` set `PRAGMA journal_mode=WAL` and `PRAGMA busy_timeout=5000` on connection open
-2. Add to `src/lib/db.ts` startup:
-```typescript
-// After creating PrismaClient
-await db.$executeRawUnsafe('PRAGMA journal_mode=WAL');
-await db.$executeRawUnsafe('PRAGMA busy_timeout=5000');
-```
-3. Keep write transactions short — avoid holding open transactions while waiting for user input
-4. For file move operations (mv), complete the database record update in a single fast transaction; don't interleave filesystem I/O inside a transaction
-
-**Warning signs:**
-- Intermittent 500 errors from server actions when MCP is active
-- `PrismaClientKnownRequestError` with code `P1001` or SQLite error code `SQLITE_BUSY`
-- Note saves fail only when Claude Code agent is actively running tasks
-
-**Phase to address:**
-Phase 1 (Schema + Database Setup). Add WAL/timeout pragmas to both DB clients before any concurrent write path is built.
-
----
-
-### Pitfall 3: fs.rename() Fails Across Filesystem Boundaries (EXDEV Error)
-
-**What goes wrong:**
-The v0.2 design uses `mv` (file rename/move) to transfer files from a source path (e.g., `/tmp/...` or the AI agent's working directory) into `data/assets/{projectId}/` or `data/cache/{taskId}/`. On macOS with Docker volumes, or when `/tmp` and the project directory are on different filesystems or APFS volumes, `fs.rename()` throws `EXDEV: cross-device link not permitted`. The app crashes or returns an error; the file is not moved and no cleanup occurs.
-
-**Why it happens:**
-`fs.rename()` calls the OS `rename(2)` syscall, which only works within the same filesystem. It cannot atomically move across device/filesystem boundaries. This is a Node.js fundamental constraint, not a bug. AI agents often write output to `/tmp` or their working directory, which may be on a different volume than `data/`.
-
-**How to avoid:**
-Never use `fs.rename()` directly for user-initiated file moves. Use a helper that:
-1. Attempts `fs.rename()` first (fast path, same-filesystem)
-2. On `EXDEV` error, falls back to `fs.copyFile()` followed by `fs.unlink()` (copy-then-delete)
-
-```typescript
-import { rename, copyFile, unlink } from 'fs/promises';
-
-async function moveFile(src: string, dest: string): Promise<void> {
-  try {
-    await rename(src, dest);
-  } catch (err: any) {
-    if (err.code === 'EXDEV') {
-      await copyFile(src, dest);
-      await unlink(src);
-    } else {
-      throw err;
-    }
-  }
-}
-```
-
-This pattern is identical to how `npm`, `pnpm`, and other tools handle cross-device moves.
-
-**Warning signs:**
-- `Error: EXDEV: cross-device link not permitted, rename` in server logs
-- File moves work in local development but fail in certain environments (Docker, network mounts)
-- Attachment links in messages are broken even though the file exists at the source
-
-**Phase to address:**
-Phase 3 (File Management / Asset Storage). Implement the `moveFile` utility before the first MCP tool that performs file moves.
-
----
-
-### Pitfall 4: Unvalidated File Paths Allow Directory Traversal
-
-**What goes wrong:**
-MCP tools and server actions that accept a `sourcePath` parameter for `mv` operations can be exploited to read or overwrite arbitrary files if the path is not validated. Even in a localhost-only single-user tool, a misbehaving or compromised AI agent could pass a path like `../../prisma/dev.db` or `../../.env` as the source, causing the move operation to expose or destroy sensitive files.
-
-**Why it happens:**
-`mv` operations require accepting an external file path as input. Without validation, any path is accepted. The MCP server already runs as a separate process with full filesystem access. An AI agent's tool call is untrusted input — it could produce any path string.
-
-**How to avoid:**
-For destination paths: always construct them from trusted components (projectId + filename), never from raw user/agent input.
-
-For source paths (the file being moved in): validate that the path is under an allowed source root. Since the use case is "AI agent writes a file to its working directory, then hands path to ai-manager," the source should be restricted to known project `localPath` values or explicitly whitelisted directories.
-
-```typescript
-import path from 'path';
-
-function validateSourcePath(src: string, allowedRoot: string): string {
-  const resolved = path.resolve(src);
-  const root = path.resolve(allowedRoot);
-  if (!resolved.startsWith(root + path.sep) && resolved !== root) {
-    throw new Error(`Source path outside allowed root: ${src}`);
-  }
-  return resolved;
-}
-```
-
-Additionally, sanitize filenames before writing to `data/assets/` — reject names containing `..`, `/`, or null bytes.
-
-**Warning signs:**
-- MCP tool accepts arbitrary path strings with no validation
-- `data/` directory contains files named with `..` segments
-- `fs.stat()` on a "source" path resolves to a sensitive file (DB, .env, private key)
-
-**Phase to address:**
-Phase 3 (File Management). Implement path validation utility before the first file-accepting MCP tool.
-
----
-
-### Pitfall 5: MCP Tool Proliferation Degrades AI Agent Performance
-
-**What goes wrong:**
-The existing MCP server exposes 18 tools. v0.2 adds approximately 8-10 more (note CRUD, asset management, enhanced search, fuzzy project resolution). At ~28 tools, each tool definition consuming 400-500 tokens means the tool list alone consumes 11,000-14,000 tokens of context before any conversation begins. Tool calling accuracy declines measurably at this scale. Some MCP clients (e.g., Cursor) have a hard limit of 40 tools total across all servers.
-
-**Why it happens:**
-Every MCP tool is serialized into the system context for every request. Unlike a REST API where endpoints don't consume context, MCP tools pay a per-tool context cost at all times. This is an architectural constraint of the protocol, not a bug. Adding 10 narrow-purpose tools (e.g., `note_create`, `note_update`, `note_delete`, `note_list`, `note_search`, `asset_upload`, `asset_list`, `asset_delete`) multiplies the context tax.
-
-**How to avoid:**
-Design tools with broader signatures that combine related operations, rather than one tool per CRUD verb:
-- `manage_note(action: 'create'|'update'|'delete'|'list'|'search', ...)` — one tool, five operations
-- `manage_asset(action: 'upload'|'list'|'delete', ...)` — one tool, three operations
-
-Also consolidate the fuzzy project lookup into the existing `search` tool via a new `category: 'project_fuzzy'` option rather than a new standalone tool.
-
-Write maximally concise tool descriptions — every word in a description is a token. Aim for 1-2 sentence descriptions, not paragraphs.
-
-**Warning signs:**
-- Agent stops calling certain tools (context window crowding pushes later tools out)
-- Token counter shows >10,000 tokens consumed before first message
-- Agent reports "I don't have a tool for X" when the tool exists (name/description crowded out)
-
-**Phase to address:**
-Phase 2 (MCP Knowledge Base Tools). Design tool surface before implementation; do not add CRUD-per-verb tools.
-
----
-
-### Pitfall 6: Fuzzy Project Matching Returns Wrong Project (Silent Mismatch)
-
-**What goes wrong:**
-The `identify_project` MCP tool is designed to let AI agents find a project by name/alias/description without knowing the exact ID. If the fuzzy match returns a wrong project (e.g., "ai-helper" matches "ai-manager" with 80% similarity), all subsequent note/task operations silently corrupt the wrong project's data. There is no warning — the tool returns a project, the agent proceeds confidently.
-
-**Why it happens:**
-Simple `LIKE`-based substring matching has no score threshold — it returns the best match regardless of quality. Fuzzy matching at low thresholds (60-70%) produces false positives when project names share common words ("ai-", "manager", "project"). The MCP caller (AI agent) treats any non-null return as authoritative.
-
-**How to avoid:**
-1. Return a `confidence` score alongside the match result
-2. Return `null` when the best match score is below a defined threshold (recommend: 0.85 for name/alias, 0.70 for description)
-3. When multiple projects score within 10% of each other, return all candidates instead of the top one — let the agent decide
-4. Always return `id`, `name`, `alias`, and `localPath` so the agent can confirm the match makes sense
-
-For implementation: use normalized Levenshtein distance or trigram similarity on `name` + `alias` fields. For `description` fuzzy search, use SQLite FTS5 BM25 ranking.
-
-```typescript
-// Return format for fuzzy project lookup
-type FuzzyProjectMatch = {
-  project: Project;
-  confidence: number;         // 0.0 - 1.0
-  matchedField: 'name' | 'alias' | 'description';
-  alternatives?: Project[];   // when multiple candidates close in score
-};
-```
-
-**Warning signs:**
-- Notes appear under the wrong project with no error
-- Agent says "I found project X" but the returned ID belongs to a different project
-- Multiple short-named projects (e.g., "app", "api", "web") get confused with each other
-
-**Phase to address:**
-Phase 2 (Smart Project Identification). Build scoring and threshold into the fuzzy lookup before any write operations depend on it.
-
----
-
-### Pitfall 7: Notes Schema Migration Breaks Existing Data Without Backup
-
-**What goes wrong:**
-Adding a `Note` model to `schema.prisma` and running `prisma db push` is generally safe (adding a new table). However, if the `Note` model also adds constraints or triggers (for FTS5 sync), and a previous partial push left the DB in an inconsistent state, `prisma db push` will prompt to reset the database. Since this project uses `db push` (not `prisma migrate`), there is no migration history and no rollback path.
-
-**Why it happens:**
-The project already uses `db push` as documented in the existing PITFALLS.md (Pitfall 5 of v0.1 research). The SQLite WAL files (`dev.db-shm`, `dev.db-wal`) are uncommitted — if a push fails midway, the WAL may hold partial writes. Additionally, adding a `Note` model with a `categoryId` foreign key after a `NoteCategory` model will fail if `NoteCategory` doesn't exist yet (ordering matters in `db push`).
-
-**How to avoid:**
-1. Before any schema change, copy `prisma/dev.db` to `prisma/dev.db.backup`
-2. Add `Note` and `NoteCategory` models to `schema.prisma` in a single push (not sequentially)
-3. Run `prisma db push --accept-data-loss` only after confirming the backup exists
-4. Do NOT add FTS5 triggers via schema — do it via raw SQL after push
-5. Add `@@index` on Note's `projectId`, `categoryId`, and `createdAt` in the same push to avoid a second migration
-
-**Warning signs:**
-- `prisma db push` output includes "The following tables need to be dropped and recreated"
-- WAL checkpoint is pending (`.db-wal` file is non-zero size before the push)
-- Push completes but `prisma studio` shows empty tables that had data
-
-**Phase to address:**
-Phase 1 (Note Schema). Run backup before push; add all Note-related models in one atomic push.
-
----
-
-### Pitfall 8: File Serving API Route Leaks Files Outside data/ Boundary
-
-**What goes wrong:**
-The planned `GET /api/files/[...path]` route that serves assets from `data/assets/{projectId}/` can be tricked into serving files outside the `data/` directory if the path segments are not normalized. A request like `/api/files/../../prisma/dev.db` resolves via `path.join(process.cwd(), 'data', '../../prisma/dev.db')` to the database file.
-
-**Why it happens:**
-`path.join()` resolves `..` segments. When route params are joined with a base directory without a containment check, `..` traversal escapes the intended root. Next.js does not automatically strip `..` from App Router catch-all route params.
-
-**How to avoid:**
-Always use `path.resolve()` and verify the resolved path starts with the allowed base:
-
-```typescript
-import path from 'path';
-import { readFile } from 'fs/promises';
-
-const DATA_ROOT = path.resolve(process.cwd(), 'data');
-
-export async function GET(req: Request, { params }: { params: { path: string[] } }) {
-  const joined = params.path.join('/');
-  const resolved = path.resolve(DATA_ROOT, joined);
-
-  // Containment check — must be inside DATA_ROOT
-  if (!resolved.startsWith(DATA_ROOT + path.sep)) {
-    return new Response('Forbidden', { status: 403 });
+// src/lib/fts.ts — global variant
+export async function searchNotesGlobal(
+  db: PrismaClient,
+  query: string
+): Promise<(FtsNoteResult & { projectId: string; workspaceId: string })[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  if (trimmed.length < 3) {
+    return db.$queryRawUnsafe(
+      `SELECT n.id as note_id, n.title, n.content, n."projectId", p."workspaceId"
+       FROM "ProjectNote" n
+       JOIN "Project" p ON p.id = n."projectId"
+       WHERE n.title LIKE ? OR n.content LIKE ?
+       LIMIT 20`,
+      `%${trimmed}%`, `%${trimmed}%`
+    );
   }
 
-  const buffer = await readFile(resolved);
-  // ... serve with appropriate Content-Type
+  return db.$queryRawUnsafe(
+    `SELECT f.note_id, f.title, f.content, n."projectId", p."workspaceId"
+     FROM notes_fts f
+     JOIN "ProjectNote" n ON n.id = f.note_id
+     JOIN "Project" p ON p.id = n."projectId"
+     WHERE f.notes_fts MATCH ?
+     ORDER BY rank
+     LIMIT 20`,
+    trimmed
+  );
 }
 ```
 
 **Warning signs:**
-- File serve route accepts path params without `path.resolve()` + startsWith check
-- Test with `GET /api/files/../../.env` — any non-403 response is a vulnerability
-- Route uses `path.join()` but no containment check
+- "All" search returns notes from projects the user did not select
+- `navigateTo` for note results points to the wrong workspace URL
+- Removing `projectId` filter from the SQL query with no alternative scope guard
 
 **Phase to address:**
-Phase 3 (File Management / Asset Serving). Implement containment check in the very first version of the file serve route.
+Phase 2 (Notes search integration into globalSearch). Review the SQL for every new search path to confirm scope is intentional.
 
 ---
 
-### Pitfall 9: react-markdown rawHtml Enabled Without Sanitization
+### Pitfall 3: `Promise.all` Parallel Queries in "All" Mode Cause SQLite WAL Contention
 
 **What goes wrong:**
-The existing codebase uses `react-markdown` (v10.1.0) for rendering assistant messages. When extending to notes (user-authored Markdown), there is a temptation to enable `rehypeRaw` for rich formatting (tables, embedded images, etc.). If `rehypeRaw` is enabled without `rehype-sanitize`, users can embed `<script>` tags, `<iframe>` elements with malicious src, or CSS injection via `style` attributes in their notes. Even in a single-user local tool, this creates risk if notes are shared or synced.
+The "All" mode fires 5 concurrent read queries (tasks, projects, repositories, notes FTS5, assets). SQLite in WAL mode supports multiple concurrent readers — but only when all connections share the same WAL file and are coordinated. The Next.js app uses a single `PrismaClient` singleton, so all 5 queries share one connection pool. However, `$queryRawUnsafe` (used for FTS5) and Prisma ORM queries (used for the others) may acquire separate transactions. Under high load or when the MCP process is also reading, contention on the WAL read lock can cause one or more `Promise.all` branches to throw `SQLITE_BUSY`. Because `Promise.all` rejects on the first failure, a single contended read silently drops all results.
 
 **Why it happens:**
-`react-markdown` is safe by default (strips raw HTML). But developers add `rehypeRaw` for legitimate reasons (tables in `.md` files, image sizing) and forget to pair it with `rehype-sanitize`. The risk is invisible during development because the developer's own content is safe.
+SQLite allows concurrent reads in WAL mode, but each query still opens a read transaction. If a write (from MCP or from a concurrent server action) holds a write lock at the instant the read transaction tries to start, and `busy_timeout` is 0 (the default in `src/lib/db.ts`), the read fails immediately with `SQLITE_BUSY`. With 5 parallel reads, the probability of one hitting a write window is 5x higher than with a single sequential query.
 
 **How to avoid:**
-If raw HTML rendering is required, always pair `rehypeRaw` with `rehype-sanitize` using a restrictive schema:
+1. Ensure `PRAGMA busy_timeout=5000` is set on `src/lib/db.ts` (this is a known gap from the v0.2 pitfall — verify it was actually added)
+2. Wrap `Promise.all` in a try/catch that returns partial results rather than crashing the search:
 
 ```typescript
-import rehypeRaw from 'rehype-raw';
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
-
-<ReactMarkdown
-  rehypePlugins={[rehypeRaw, rehypeSanitize]}
-  // defaultSchema blocks <script>, <iframe>, on* handlers, style injection
->
-  {noteContent}
-</ReactMarkdown>
+const [tasks, projects, repos, notes, assets] = await Promise.allSettled([
+  searchTasks(q), searchProjects(q), searchRepos(q),
+  searchNotesGlobal(q), searchAssets(q)
+]);
+// Use .status === 'fulfilled' to collect results; log rejections
 ```
 
-Do NOT enable `rehypeRaw` without `rehypeSanitize`. If only tables and fenced code blocks are needed, do not enable raw HTML at all — `remarkGfm` handles tables without raw HTML.
+3. Consider sequential fallback: if `Promise.allSettled` shows >1 rejection, retry sequentially
+4. Cap each branch at `LIMIT 10` in "All" mode (vs `LIMIT 20` in typed mode) to reduce query duration
 
 **Warning signs:**
-- Notes renderer uses `rehype-raw` without `rehype-sanitize` in the plugin list
-- `<script>alert(1)</script>` in a note renders as an alert, not as text
-- Notes can include `<img src="x" onerror="...">` and the onerror fires
+- "All" mode occasionally returns empty results for one result type while others populate correctly
+- Server logs show `SQLITE_BUSY` or `P1001` errors specifically during "All" mode searches
+- Intermittent 500 errors from `globalSearch` when "all" category is used
 
 **Phase to address:**
-Phase 4 (Notes Web UI). Verify sanitization is in place before the note editor ships.
+Phase 2 (globalSearch "All" mode implementation). Use `Promise.allSettled` from the start; never use bare `Promise.all` for parallel SQLite reads.
+
+---
+
+### Pitfall 4: `SearchCategory` Type Union Breaks Existing MCP Search Tool Silently
+
+**What goes wrong:**
+`SearchCategory` in `search-actions.ts` is currently a string union `"task" | "project" | "repository"`. The MCP `search-tools.ts` imports and uses the same type. Adding `"note" | "asset" | "all"` to this union in the server action file, combined with a default of `"task"` in the MCP tool, is safe in TypeScript — but the MCP tool still uses `category` in a switch/if-chain that has no branch for the new values. When an external agent calls `search` with `category: "note"`, the MCP handler falls through to `return []` silently with no error, no tool failure, and no agent feedback.
+
+**Why it happens:**
+`search-tools.ts` duplicates the search logic from `search-actions.ts` rather than importing it. Any expansion of the server action's search logic is not automatically reflected in the MCP tool. The TypeScript types align (both accept the new union values) but the runtime logic diverges. No test currently covers the MCP tool's note or asset search paths, so the gap is invisible until an agent tries to use it.
+
+**How to avoid:**
+1. Refactor the MCP `search-tools.ts` handler to delegate to the same underlying query functions as `search-actions.ts` — extract shared logic to `src/lib/search.ts` imported by both
+2. After adding new categories, explicitly add branches for `"note"`, `"asset"`, and `"all"` in BOTH files (or enforce DRY via the shared library)
+3. Add a unit test for the MCP tool that calls each category value and verifies it returns results (not an empty array for a query that should match)
+
+**Warning signs:**
+- MCP `search` tool returns `[]` for `category: "note"` even when notes exist with matching content
+- TypeScript compilation passes with no errors but runtime returns nothing
+- `search-actions.ts` and `search-tools.ts` have diverged — one handles `"note"` and the other does not
+
+**Phase to address:**
+Phase 2 (search-actions.ts expansion). Extract shared query logic to `src/lib/search.ts` before implementing new categories; update both consumers in the same PR.
+
+---
+
+### Pitfall 5: Adding Required `description` Field to `ProjectAsset` Without a Default Breaks Existing Records
+
+**What goes wrong:**
+`ProjectAsset.description` is planned as a "required" field in the new upload dialog. If added to `schema.prisma` as `String` (not nullable, no default), `prisma db push` will attempt to add a NOT NULL column to an existing table that has rows. SQLite does not support `ALTER TABLE ADD COLUMN NOT NULL` without a default value. Prisma handles this by internally creating a new table, copying data, and dropping the old one — a destructive operation that can fail if WAL is not clean. Even if it succeeds, existing assets will have an empty `description` that the new UI shows as a blank field.
+
+**Why it happens:**
+Prisma's SQLite adapter simulates `ALTER TABLE` via table recreation for NOT NULL columns (SQLite does not support `ADD COLUMN NOT NULL` natively). This recreation clears any FTS-related triggers if they existed on the old table (they don't currently, but the asset table may gain triggers in future). More critically, it can fail with "database is locked" if the WAL has uncommitted reads from the MCP process.
+
+**How to avoid:**
+Define the field as optional with an empty string default: `description String? @default("")` in `schema.prisma`. This allows SQLite to add the column via a simple `ALTER TABLE ADD COLUMN` with a default, which is always safe — no table recreation. The upload dialog can treat empty-string as "no description provided" rather than requiring it at the DB level. Enforce non-empty at the UI/action validation layer (Zod), not at the DB constraint layer.
+
+```prisma
+model ProjectAsset {
+  // ... existing fields
+  description String? @default("")
+  // ...
+}
+```
+
+```typescript
+// In createAsset Zod schema — enforce at action layer
+description: z.string().max(500).optional().default(""),
+```
+
+**Warning signs:**
+- `schema.prisma` has `description String` (no `?`, no `@default`) on `ProjectAsset`
+- `prisma db push` attempts table recreation ("The following changes will be made") for `ProjectAsset`
+- Existing assets lose their `filename` or `path` data after push (data loss during recreation)
+
+**Phase to address:**
+Phase 1 (Asset description field). Make `description` optional with a default in the schema; enforce content in the upload dialog via Zod.
+
+---
+
+### Pitfall 6: FTS5 `MATCH` Query Syntax Errors Throw Unhandled Exceptions in "All" Mode
+
+**What goes wrong:**
+FTS5's `MATCH` operator has its own query syntax. Characters like `"`, `(`, `)`, `-`, `*`, `AND`, `OR`, `NOT` have special meaning. A user query like `"my note"` (with quotes), `(task)`, or `NOT done` will be interpreted as FTS5 syntax rather than a literal string, often causing a SQLite error: `fts5: syntax error near "..."`. In the existing per-project notes search, this error surfaces as a 500 on the notes page. In the new "All" mode with `Promise.allSettled`, the FTS5 branch rejects but the others succeed — the user sees partial results with no indication that note search failed. Worse, the FTS error is swallowed by `allSettled` and never surfaces in the UI.
+
+**Why it happens:**
+FTS5 uses a structured query language. Raw user input must be escaped before being passed to `MATCH`. The current `searchNotes()` passes `trimmed` directly to `MATCH` without escaping. This worked in v0.2 because only simple alphanumeric terms were common in practice. With the "All" search bar handling all user input including punctuation and multi-word phrases, syntax errors become frequent.
+
+**How to avoid:**
+Escape user queries before passing to FTS5. The safest approach for a fuzzy search UX is to wrap the query in double quotes (FTS5 phrase search) and escape any internal double quotes:
+
+```typescript
+function escapeFtsQuery(q: string): string {
+  // Remove FTS5 operator characters or escape by wrapping in phrase
+  return '"' + q.replace(/"/g, '""') + '"';
+}
+```
+
+Or strip FTS5 special characters entirely and use trigram-native behaviour:
+
+```typescript
+function sanitizeFtsQuery(q: string): string {
+  // Strip characters that break FTS5 MATCH syntax
+  return q.replace(/["\(\)\-\*\^]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+```
+
+Apply this escape in `searchNotes()`, `searchNotesGlobal()`, and any future FTS5 query path. Add a try/catch around the `$queryRawUnsafe` call and fall back to the `LIKE` path on FTS5 syntax errors.
+
+**Warning signs:**
+- Searching for `"quoted text"` returns a 500 error or empty results instead of matching notes
+- Server logs show `SqliteError: fts5: syntax error`
+- The `LIKE` fallback path (for queries <3 chars) works fine, but FTS5 path (3+ chars) fails for certain inputs
+- "All" mode returns tasks and projects but not notes for the same query
+
+**Phase to address:**
+Phase 2 (FTS5 integration into globalSearch). Add FTS5 query sanitization/escaping before the first integration test; cover edge-case queries (quoted strings, operators, Chinese + punctuation) in unit tests.
 
 ---
 
@@ -325,13 +223,12 @@ Phase 4 (Notes Web UI). Verify sanitization is in place before the note editor s
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Use `LIKE '%term%'` for note search instead of FTS5 | No FTS5 setup complexity | Slow at 1,000+ notes; no relevance ranking; can't search across title+content efficiently | Acceptable as a short-term fallback if FTS5 setup is deferred — but plan migration path |
-| Store file paths as absolute paths in DB | Avoids path computation at serve time | Breaks if project directory moves or is shared; absolute paths are machine-specific | Never — always store relative to `data/` root |
-| Create one MCP tool per CRUD operation (note_create, note_update, note_delete, note_list) | Clear naming | Consumes 4x the context tokens for one feature area | Never for localhost MCP tool with >20 existing tools |
-| Skip `busy_timeout` PRAGMA on Next.js DB client | No code change | Intermittent "database is locked" when MCP and web UI write simultaneously | Never in a system with two concurrent DB connections |
-| Use `fs.rename()` directly without EXDEV fallback | One-line move | Fails silently on cross-device moves; no error recovery | Never — the copy+delete fallback is 5 lines |
-| Skip path containment check on file serve route | Faster initial implementation | Directory traversal vulnerability; exposes .env and SQLite DB | Never |
-| Store notes as `.md` files instead of in SQLite | No schema migration needed | MCP cannot search/CRUD efficiently; no FTS; breaks the "db as source of truth" design decision already made | Never — PROJECT.md already decided: notes in SQLite |
+| Duplicate search logic in `search-actions.ts` and `search-tools.ts` | No refactor needed now | Adding "note" + "asset" categories must be done twice; divergence is guaranteed | Never — extract to `src/lib/search.ts` in the same PR that adds new categories |
+| Pass raw user query to FTS5 `MATCH` without escaping | Simpler code | Syntax errors crash note search for any query containing `"`, `(`, `)`, `-` | Never — escape before every MATCH call |
+| Add `description` as NOT NULL to `ProjectAsset` | Cleaner schema | Requires SQLite table recreation; risks data loss for existing assets | Never — use `String? @default("")` |
+| Use bare `Promise.all` for parallel search queries | One less import | Single `SQLITE_BUSY` error silently drops all search results | Never in production — use `Promise.allSettled` |
+| Keep `LIMIT 20` per-type in "All" mode | Maximum results returned | 5 types × 20 = 100 rows fetched, assembled, then truncated in UI; wasted query time | Reduce to LIMIT 10 per type in "All" mode |
+| Skip updating MCP `search-tools.ts` when adding new categories | Less code to write | Agent calling `search` with `category: "note"` gets empty array silently | Never — update MCP tool in the same commit as server action |
 
 ---
 
@@ -339,14 +236,13 @@ Phase 4 (Notes Web UI). Verify sanitization is in place before the note editor s
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| Prisma + FTS5 | Add FTS5 virtual table to schema.prisma | Create FTS5 table and triggers via raw SQL in setup script; never in Prisma schema |
-| Prisma + FTS5 | Run `db push` after creating FTS5 table manually | FTS5 shadow tables cause Prisma to detect drift; run `db push` BEFORE creating FTS5 tables, then create FTS5 |
-| MCP + Next.js (same SQLite file) | Default PrismaClient with no WAL/timeout config | Set `PRAGMA journal_mode=WAL` and `PRAGMA busy_timeout=5000` on both `src/lib/db.ts` and `src/mcp/db.ts` at startup |
-| FTS5 + Prisma `$queryRaw` | Use `db.note.findMany()` for full-text search | Use `db.$queryRaw\`SELECT rowid, * FROM notes_fts WHERE notes_fts MATCH ${query}\`` for FTS queries |
-| react-markdown + notes editor | Enable `rehypeRaw` for table rendering | Use `remarkGfm` for GFM tables — no raw HTML required; only add `rehypeRaw` + `rehypeSanitize` if HTML passthrough is truly needed |
-| File move (MCP tool) | Use `fs.rename()` directly | Wrap in try/catch with EXDEV fallback to `copyFile` + `unlink` |
-| File serve route | `path.join(base, userParam)` without check | `path.resolve(base, userParam)` + `startsWith(base + sep)` guard |
-| Fuzzy project lookup | Return first result above any similarity | Return result only above 0.85 threshold; return `confidence` score; return multiple candidates when close |
+| Prisma `db push` + existing FTS5 tables | Run push without backup | Back up `dev.db` → WAL checkpoint → `db push` → verify `notes_fts` still present → re-run `db:init-fts` if needed |
+| `ProjectAsset` schema change + existing rows | Add `description String` (NOT NULL, no default) | Use `description String? @default("")`; SQLite can add nullable column without table recreation |
+| FTS5 `MATCH` + user input | Pass raw query string directly | Sanitize/escape FTS5 special characters before every `MATCH` call; wrap in try/catch to fall back to `LIKE` |
+| `Promise.all` + SQLite parallel reads | Assume WAL = no contention | Use `Promise.allSettled`; set `busy_timeout=5000`; log rejected branches |
+| `SearchCategory` type expansion + MCP tool | Update `search-actions.ts` only | Update both `search-actions.ts` and `search-tools.ts`; or extract shared logic to `src/lib/search.ts` |
+| FTS5 global search + workspace scoping | Remove `projectId` filter and use FTS table alone | Always JOIN `notes_fts` → `ProjectNote` → `Project` to get `workspaceId` for correct `navigateTo` construction |
+| Asset search via `LIKE` + `description` field | Search `description` field before it exists in schema | Phase 1 must land schema migration before Phase 2 adds asset search to `globalSearch` |
 
 ---
 
@@ -354,11 +250,10 @@ Phase 4 (Notes Web UI). Verify sanitization is in place before the note editor s
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| Loading all notes for a project without pagination | Note list slow when project has many notes | Add `take: 50` default limit + cursor-based pagination to note list query | At ~200+ notes per project |
-| FTS5 content table not kept in sync | Search returns stale results after update/delete | Create INSERT/UPDATE/DELETE triggers on `Note` table that update `notes_fts` virtual table | First time a note is edited or deleted |
-| Serving large files (images, PDFs) via Next.js route handler without streaming | Memory spike on large file requests | Use `fs.createReadStream()` piped to a `ReadableStream` response; set appropriate `Content-Length` and `Cache-Control` headers | For files >5MB |
-| Note search doing `MATCH '*term*'` (FTS5 prefix on both sides) | Search is slow; FTS5 ignores leading wildcard | FTS5 supports trailing wildcards (`term*`) but not leading. Use `term*` for prefix search; use `LIKE` for substring if truly needed | Immediately — leading wildcards disable the FTS index |
-| Fuzzy match scanning all projects on every MCP call | Acceptable at <100 projects; noticeable at 500+ | Add `@@index([name, alias])` to Project model; normalize candidate strings at write time | At ~500+ projects |
+| "All" mode with LIMIT 20 per type | 100 rows fetched across 5 queries; UI shows max 5-10 per type anyway | Cap each branch at LIMIT 10 in "All" mode; use LIMIT 20 only in typed mode | Immediately — wasteful from day one |
+| FTS5 query without `ORDER BY rank` in global mode | Notes results are not relevance-ranked; best matches buried | Always include `ORDER BY rank` in FTS5 `MATCH` queries | Noticeable once a project has >10 matching notes |
+| `LIKE '%term%'` on `ProjectAsset.description` with no index | Full table scan on every asset search | Add `@@index([description])` or accept LIKE-only at current scale (single user, <1000 assets) | At ~5,000+ assets — not a concern for v0.3 |
+| Debounce timer in `search-dialog.tsx` fires 5 parallel queries on each keypress | Each keystroke fires 5 SQLite queries when category is "all" | The existing 250ms debounce is sufficient; ensure the "all" category does not bypass the debounce | Not a concern at current single-user scale |
 
 ---
 
@@ -366,11 +261,9 @@ Phase 4 (Notes Web UI). Verify sanitization is in place before the note editor s
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| File serve route without path containment check | Directory traversal — agent or user can read arbitrary files including .env, dev.db | Always `path.resolve()` + `startsWith(DATA_ROOT + sep)` check before serving |
-| Accepting arbitrary sourcePath for mv operations | Agent can trick the system into moving sensitive files (keys, DB) into asset storage | Validate sourcePath is under a project's `localPath` or an explicitly allowed staging directory |
-| Storing image/file metadata with raw user-supplied filenames | Malicious filename (`../../.env`) used in path construction | Sanitize filenames: strip all path separators, `..` segments, and null bytes; use a UUID-based storage name with original name stored separately in DB |
-| Rendering note content with `dangerouslySetInnerHTML` | XSS via user-authored notes | Always render via `react-markdown` with sanitization; never raw HTML injection |
-| MCP tool accepting note content without size limit | AI agent can insert 50MB note crashing the DB | Enforce `MAX_NOTE_CONTENT_LENGTH` (suggest 500,000 chars) in Zod schema validation on both MCP tool and server action |
+| FTS5 `MATCH` with unescaped user input | SQL injection via FTS5 syntax; at worst, application crash from syntax error | Always sanitize/escape before `$queryRawUnsafe` FTS5 calls; `$queryRawUnsafe` does not parameterise the query itself |
+| Asset `description` field stored raw with no length limit | Arbitrarily long description could degrade search performance or cause OOM in FTS indexing (if notes_fts is extended to cover assets) | Enforce `max(500)` in Zod schema on `createAsset` and `updateAsset` actions |
+| Returning full `content` field of notes in global search results | Long note content (500k chars) serialised into search results inflates response payload | Return only a `snippet` (first 200 chars of content) in search results, not the full content |
 
 ---
 
@@ -378,28 +271,27 @@ Phase 4 (Notes Web UI). Verify sanitization is in place before the note editor s
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Note editor without autosave or unsaved-changes warning | User loses edits on navigation or accidental tab close | Add debounced autosave (2s after last keystroke) or `beforeunload` guard; show "Unsaved changes" indicator |
-| Asset list showing raw UUIDs or internal storage paths | User cannot identify which file is which | Store original filename in DB alongside internal storage path; display original name in UI |
-| Cache files (`data/cache/`) never cleaned up | Disk fills up over time with task execution artifacts | Add a "Clear cache" button in UI or a cache size indicator; document that cache is safe to delete |
-| No empty state for notes/assets panels | Users don't know what to do when a project has no notes | Add empty state with call-to-action ("Add your first note") |
-| Fuzzy project lookup returns a match without showing the user the matched project | User doesn't know which project was resolved | MCP tools that resolve a project should return the full project name and alias in their response so the AI agent can confirm out loud |
+| "All" tab returns results with no type label | User cannot tell if a result is a task, note, or asset | Always include a visible type badge on each result row; the existing `type` field on `SearchResult` must be surfaced in the UI |
+| Notes results in "All" mode navigate to the notes tab with no specific note highlighted | User sees the notes list but does not know which note matched | Pass `noteId` as a query param in `navigateTo` so the notes panel can auto-select the matched note |
+| Asset results show only filename — no project context | User cannot tell which project the asset belongs to | Include `workspace / project` as `subtitle` on asset results (same pattern as task results) |
+| "All" tab selected by default on dialog open | Fires 5 queries on first keystroke; slower than single-type search | Keep default category as `"task"` (existing behaviour); add "All" as an explicit tab the user selects |
+| Switching between category tabs while a query is in-flight | Previous search results flash before new ones load | Cancel in-flight search when category changes; the existing timer-based debounce does not cancel pending server action calls |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **FTS5 setup:** Run `prisma db push` after FTS5 tables are created — verify it does NOT prompt for database reset
-- [ ] **FTS5 sync:** Edit a note, then search for the new content — verify search returns the updated note
-- [ ] **FTS5 sync:** Delete a note, then search for its content — verify search no longer returns it
-- [ ] **Cross-device mv:** Test file move with source on `/tmp` and destination in `data/` — verify no EXDEV error
-- [ ] **Path traversal:** Test `GET /api/files/../../.env` — verify 403 response, not file content
-- [ ] **Concurrent writes:** Run MCP write tool and web UI save simultaneously — verify no "database is locked" errors
-- [ ] **Fuzzy match threshold:** Search for a non-existent project name — verify `null` is returned, not a low-confidence wrong match
-- [ ] **Fuzzy match ambiguity:** Add two projects with similar names — verify both are returned as candidates instead of silently picking one
-- [ ] **Note XSS:** Put `<script>alert(1)</script>` in a note — verify it renders as text, not as executable script
-- [ ] **MCP tool count:** Count total tools after v0.2 — verify total stays under 30, and each tool description is ≤ 3 sentences
-- [ ] **File size limit:** Upload a 50MB file via MCP asset tool — verify it is rejected with a clear error, not a silent timeout
-- [ ] **i18n coverage:** All new UI strings in notes and assets panels have both `zh` and `en` translations
+- [ ] **Schema migration safety:** Run `prisma db push` for `description` field — verify `notes_fts` still exists afterward (`sqlite3 dev.db ".tables"` shows `notes_fts`)
+- [ ] **Existing asset data:** After migration, query `SELECT description FROM ProjectAsset LIMIT 5` — existing rows should show `""` (empty string default), not `NULL` causing NULL pointer errors in the UI
+- [ ] **FTS5 escape:** Search for `"quoted"` in the search dialog — verify it returns results or an empty state, not a 500 error
+- [ ] **FTS5 escape:** Search for `(test)` and `NOT done` — verify no server error
+- [ ] **All-mode note scope:** Create a note in Workspace A, search for it from the "All" tab — verify `navigateTo` points to the correct workspace URL, not a 404
+- [ ] **All-mode partial failure:** Manually break the `notes_fts` table, then use "All" mode — verify tasks and projects still appear (graceful degradation via `allSettled`)
+- [ ] **MCP search tool:** Call `search` MCP tool with `category: "note"` and `category: "asset"` — verify non-empty results when matching data exists
+- [ ] **Asset search:** Upload an asset with a description, then search for a word from the description in "All" mode — verify the asset appears in results
+- [ ] **i18n:** New "All", "Note", "Asset" tab labels must have both `zh` and `en` translations in the i18n config
+- [ ] **Result type badges:** Every result row in "All" mode shows a visible type indicator (task/project/repository/note/asset)
+- [ ] **Debounce in "all" mode:** Rapidly type 5 characters — verify only 1 search fires (debounce active), not 5 parallel searches
 
 ---
 
@@ -407,13 +299,12 @@ Phase 4 (Notes Web UI). Verify sanitization is in place before the note editor s
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| FTS5 shadow tables broke db push, data lost | HIGH | Restore from `prisma/dev.db.backup`; recreate FTS5 table and triggers via raw SQL; do NOT re-run db push after FTS5 tables exist |
-| "database is locked" errors in production | LOW | Add `PRAGMA busy_timeout=5000` to both DB clients; restart both processes; errors should clear immediately |
-| Wrong project matched by fuzzy lookup, notes written to wrong project | MEDIUM | Identify affected notes by `createdAt` timestamp; move them via raw SQL update to correct `projectId`; tighten confidence threshold |
-| EXDEV error on file move left orphaned source file | LOW | Re-run the mv operation manually; implement the copyFile+unlink fallback going forward |
-| File serve route exploited for path traversal | MEDIUM | Add containment check immediately (single-line fix); audit `data/` directory for files that should not be there; rotate any credentials that were readable |
-| react-markdown XSS via missing sanitization | LOW | Add `rehype-sanitize` to the plugin list (one-line fix); no data migration needed |
-| MCP tool list too large, agent performance degraded | MEDIUM | Consolidate tools (combine CRUD verbs into single action-dispatch tool); update tool descriptions to be shorter; restart MCP server |
+| `db push` wiped FTS5 tables | MEDIUM | Restore `prisma/dev.db.backup`; run `pnpm db:init-fts`; re-sync FTS from ProjectNote table via bulk INSERT |
+| `description` NOT NULL migration failed, existing assets lost | HIGH | Restore backup; change schema to `String? @default("")`; re-run push |
+| FTS5 syntax error breaks note search in "All" mode | LOW | Add escape function to `searchNotesGlobal()`; the LIKE fallback path works for queries <3 chars as interim |
+| MCP `search` returns empty for notes/assets | LOW | Add missing category branches to `search-tools.ts` handler; no data changes needed |
+| "All" mode returns 0 results due to `Promise.all` rejection | LOW | Replace `Promise.all` with `Promise.allSettled`; check `busy_timeout` pragma on `src/lib/db.ts` |
+| Note search returns wrong workspace's notes | MEDIUM | Add `workspaceId` JOIN to `searchNotesGlobal()`; no data changes needed, only query fix |
 
 ---
 
@@ -421,35 +312,25 @@ Phase 4 (Notes Web UI). Verify sanitization is in place before the note editor s
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| FTS5 shadow tables break db push | Phase 1: Note schema | Run db push after FTS5 setup — no reset prompt |
-| Concurrent write "database is locked" | Phase 1: Note schema (DB setup) | Simulate concurrent MCP + web write — no lock errors |
-| Notes schema migration data loss | Phase 1: Note schema | Backup exists before push; push completes without reset |
-| Fuzzy match false positives | Phase 2: Smart project identification | Ambiguous names return multiple candidates; threshold rejects weak matches |
-| MCP tool proliferation | Phase 2: MCP knowledge base tools | Tool count ≤ 30; no CRUD-per-verb pattern |
-| EXDEV cross-device mv error | Phase 3: File management | File move works with `/tmp` source |
-| Path traversal in file serve | Phase 3: File management | `/api/files/../../.env` returns 403 |
-| Unvalidated source path in mv | Phase 3: File management | MCP mv tool rejects paths outside project localPath |
-| react-markdown XSS | Phase 4: Notes web UI | `<script>` in note renders as escaped text |
-| Autosave / unsaved changes loss | Phase 4: Notes web UI | Navigation away from dirty note shows warning |
+| `db push` destroys FTS5 tables on `description` migration | Phase 1: Asset description schema migration | After push: `sqlite3 dev.db ".tables"` includes `notes_fts` |
+| `description` NOT NULL breaks existing rows | Phase 1: Asset description schema migration | `SELECT description FROM ProjectAsset` returns `""` for pre-existing rows |
+| `SearchCategory` type divergence (actions vs MCP tool) | Phase 2: globalSearch + MCP expansion | MCP `search` with `category: "note"` returns matching notes |
+| FTS5 `MATCH` syntax error on special chars | Phase 2: FTS5 note search integration | Searching `"quoted"` and `(test)` returns results or empty state, never 500 |
+| FTS5 note scope leak across workspaces | Phase 2: globalSearch "All" mode | Notes from Workspace A do not appear when searching from Workspace B context |
+| `Promise.all` contention in "All" mode | Phase 2: globalSearch "All" mode implementation | `Promise.allSettled` used; partial failures degrade gracefully |
+| Asset search using description before migration | Phase ordering: Phase 1 must precede Phase 2 | Asset search branch in `globalSearch` is not wired until Phase 1 migration is verified |
 
 ---
 
 ## Sources
 
-- [Prisma issue #8106 — FTS5 shadow tables ignored by migrate but detected as drift](https://github.com/prisma/prisma/issues/8106)
-- [Prisma issue #9414 — FTS support for SQLite](https://github.com/prisma/prisma/issues/9414)
-- [SQLite FTS5 extension official docs](https://www.sqlite.org/fts5.html)
-- [SQLite WAL mode official docs](https://www.sqlite.org/wal.html)
-- [Node.js issue #19077 — fs.rename() cross-device EXDEV](https://github.com/nodejs/node/issues/19077)
-- [MCP tool bloat and context window degradation — demiliani.com](https://demiliani.com/2025/09/04/model-context-protocol-and-the-too-many-tools-problem/)
-- [MCP context window problem — junia.ai](https://www.junia.ai/blog/mcp-context-window-problem)
-- [react-markdown XSS pitfall — Medium](https://medium.com/@brian3814/pitfall-of-potential-xss-in-markdown-editors-1d9e0d2df93a)
-- [react-markdown security guide — Strapi](https://strapi.io/blog/react-markdown-complete-guide-security-styling)
-- [Next.js path traversal CVE-2020-5284 — Snyk](https://security.snyk.io/vuln/SNYK-JS-NEXT-561584)
-- [SQLite concurrent writes and "database is locked" errors](https://tenthousandmeters.com/blog/sqlite-concurrent-writes-and-database-is-locked-errors/)
-- [MCP versioning and breaking changes — Nordic APIs](https://nordicapis.com/the-weak-point-in-mcp-nobodys-talking-about-api-versioning/)
-- Codebase analysis: `src/lib/db.ts`, `src/mcp/db.ts`, `prisma/schema.prisma`, `src/mcp/tools/search-tools.ts`, `.planning/PROJECT.md`
+- Codebase analysis: `src/actions/search-actions.ts`, `src/lib/fts.ts`, `src/mcp/tools/search-tools.ts`, `src/components/layout/search-dialog.tsx`, `prisma/schema.prisma`, `prisma/init-fts.ts`
+- [SQLite FTS5 — Query Syntax](https://www.sqlite.org/fts5.html#full_text_query_syntax) — documents MATCH operator syntax and special characters
+- [SQLite ALTER TABLE limitations](https://www.sqlite.org/lang_altertable.html) — confirms NOT NULL without DEFAULT requires table recreation
+- [Prisma issue #8106 — FTS5 shadow table drift](https://github.com/prisma/prisma/issues/8106) — still open as of Prisma 6.x
+- [SQLite WAL concurrent readers](https://www.sqlite.org/wal.html#concurrency) — multiple readers allowed; writer blocks briefly
+- Existing `.planning/research/PITFALLS.md` (v0.2) — Pitfalls 1–9 remain valid for v0.3 context
 
 ---
-*Pitfalls research for: Knowledge base + notes + file management + expanded MCP tools in Next.js 16 + SQLite + Prisma*
-*Researched: 2026-03-27*
+*Pitfalls research for: Global search enhancement (v0.3) — "All" cross-type search, FTS5 note search, asset description migration, parallel queries*
+*Researched: 2026-03-30*
