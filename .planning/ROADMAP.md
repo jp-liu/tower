@@ -94,4 +94,4 @@ Plans:
 | 7. Notes & Assets Web UI | v0.2 | 2/2 | Complete | 2026-03-27 |
 | 8. Asset Description Schema | v0.3 | 0/1 | Not started | - |
 | 9. Search Actions Expansion | v0.3 | 1/1 | Complete   | 2026-03-30 |
-| 10. Search UI Extension | v0.3 | 2/2 | Complete   | 2026-03-30 |
+| 10. Search UI Extension | v0.3 | 2/2 | Complete    | 2026-03-30 |
