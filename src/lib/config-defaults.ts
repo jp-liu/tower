@@ -10,4 +10,44 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "object",
     label: "Git Path Mapping Rules",
   },
+  "system.maxUploadBytes": {
+    defaultValue: 52428800,
+    type: "number",
+    label: "Max Upload Size (bytes)",
+  },
+  "system.maxConcurrentExecutions": {
+    defaultValue: 3,
+    type: "number",
+    label: "Max Concurrent Executions",
+  },
+  "git.timeoutSec": {
+    defaultValue: 30,
+    type: "number",
+    label: "Git Operation Timeout (seconds)",
+  },
+  "git.branchTemplate": {
+    defaultValue: "vk/{taskIdShort}-",
+    type: "string",
+    label: "Branch Naming Template",
+  },
+  "search.resultLimit": {
+    defaultValue: 20,
+    type: "number",
+    label: "Search Result Limit",
+  },
+  "search.allModeCap": {
+    defaultValue: 5,
+    type: "number",
+    label: "All-Mode Per-Type Cap",
+  },
+  "search.debounceMs": {
+    defaultValue: 250,
+    type: "number",
+    label: "Search Debounce (ms)",
+  },
+  "search.snippetLength": {
+    defaultValue: 80,
+    type: "number",
+    label: "Snippet Length (characters)",
+  },
 };

@@ -1,6 +1,5 @@
 import { runningProcesses } from "./process-utils";
-
-const MAX_CONCURRENT = 3;
+import { readConfigValue } from "@/lib/config-reader";
 
 export function registerProcess(executionId: string, runId: string): void {
   // runChildProcess in process-utils stores processes by runId
@@ -25,8 +24,9 @@ export function killProcess(executionId: string): boolean {
   return false;
 }
 
-export function canStartExecution(): boolean {
-  return runningProcesses.size < MAX_CONCURRENT;
+export async function canStartExecution(): Promise<boolean> {
+  const max = await readConfigValue<number>("system.maxConcurrentExecutions", 3);
+  return runningProcesses.size < max;
 }
 
 export function getRunningCount(): number {
