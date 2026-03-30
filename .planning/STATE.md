@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: 系统配置化
 status: executing
-stopped_at: Completed 11-02-PLAN.md
-last_updated: "2026-03-30T09:23:50.197Z"
+stopped_at: Completed both 11-01 and 11-02 plans
+last_updated: "2026-03-30"
 last_activity: 2026-03-30
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 2
-  completed_plans: 1
-  percent: 0
+  completed_plans: 2
+  percent: 25
 ---
 
 # Project State
@@ -26,19 +26,19 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 11 (SystemConfig Foundation) — EXECUTING
-Plan: 2 of 2
-Status: Ready to execute
+Plan: 2 of 2 complete
+Status: All plans executed, pending verification
 Last activity: 2026-03-30
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 15 (across v0.1-v0.3)
+- Total plans completed: 17 (across v0.1-v0.4)
 - Average duration: ~30 min
-- Total execution time: ~7.5 hours
+- Total execution time: ~8.5 hours
 
 **By Phase:**
 
@@ -47,9 +47,10 @@ Progress: [░░░░░░░░░░] 0%
 | v0.1 (1-3) | 6 | ~3h | ~30m |
 | v0.2 (4-7) | 7 | ~3.5h | ~30m |
 | v0.3 (8-10) | 4 | ~2h | ~30m |
+| Phase 11 P01 | 4 min | 1 task | 4 files |
+| Phase 11 P02 | 5 min | 2 tasks | 4 files |
 
 *Updated after each plan completion*
-| Phase 11-systemconfig-foundation P02 | 5 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -63,8 +64,11 @@ Progress: [░░░░░░░░░░] 0%
 - [v0.3]: Promise.allSettled for "all" mode parallel queries
 - [v0.3]: FTS5 try/catch with LIKE fallback for malformed queries
 - [v0.3]: Inline raw SQL for global note search (fts.ts stays Next.js-free)
-- [Phase 11-02]: Follow existing NAV_ITEMS hardcoded English string pattern for Config nav item label/description
-- [Phase 11-02]: Use SlidersHorizontal lucide icon for Config nav item
+- [Phase 11]: JSON-serialized config values in SystemConfig.value — uniform storage for string/number/boolean/object
+- [Phase 11]: getConfigValue<T> returns defaultValue on missing row or malformed JSON — never throws to caller
+- [Phase 11]: CONFIG_DEFAULTS registry starts empty in Phase 11 — Phase 12-13 adds entries as parameters are wired
+- [Phase 11]: Follow existing NAV_ITEMS hardcoded English string pattern for Config nav item label/description
+- [Phase 11]: Use SlidersHorizontal lucide icon for Config nav item
 
 ### Pending Todos
 
@@ -76,6 +80,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-30T09:23:50.194Z
-Stopped at: Completed 11-02-PLAN.md
+Last session: 2026-03-30
+Stopped at: Phase 11 all plans executed, pending verification
 Resume file: None
