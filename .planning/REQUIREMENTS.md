@@ -9,7 +9,7 @@ Requirements for v0.4 — 系统配置化. Each maps to roadmap phases.
 
 ### 配置基础设施
 
-- [ ] **CFG-01**: 用户可通过 SystemConfig 表存储和读取系统配置项（key-value）
+- [x] **CFG-01**: 用户可通过 SystemConfig 表存储和读取系统配置项（key-value）
 - [ ] **CFG-02**: 配置变更后实时生效，无需重启服务
 
 ### Git 配置
@@ -55,7 +55,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CFG-01 | Phase 11 | Pending |
+| CFG-01 | Phase 11 | Complete |
 | CFG-02 | Phase 14 | Pending |
 | GIT-01 | Phase 12 | Pending |
 | GIT-02 | Phase 12 | Pending |

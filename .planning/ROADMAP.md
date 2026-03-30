@@ -66,7 +66,7 @@ See: [milestones/v0.3-ROADMAP.md](./milestones/v0.3-ROADMAP.md) for full details
 **Plans**: 2 plans
 Plans:
 - [ ] 11-01-PLAN.md — SystemConfig model, server actions API, defaults registry, and unit tests
-- [ ] 11-02-PLAN.md — Settings page Config nav item, placeholder component, page wiring, i18n keys
+- [x] 11-02-PLAN.md — Settings page Config nav item, placeholder component, page wiring, i18n keys
 **UI hint**: yes
 
 ### Phase 12: Git Path Mapping Rules
@@ -118,7 +118,7 @@ Plans:
 | 8. Asset Description Schema | v0.3 | 1/1 | Complete | 2026-03-30 |
 | 9. Search Actions Expansion | v0.3 | 1/1 | Complete | 2026-03-30 |
 | 10. Search UI Extension | v0.3 | 2/2 | Complete | 2026-03-30 |
-| 11. SystemConfig Foundation | v0.4 | 0/2 | In progress | - |
+| 11. SystemConfig Foundation | v0.4 | 1/2 | In Progress|  |
 | 12. Git Path Mapping Rules | v0.4 | 0/TBD | Not started | - |
 | 13. Configurable System Parameters | v0.4 | 0/TBD | Not started | - |
 | 14. Search Quality & Realtime Config | v0.4 | 0/TBD | Not started | - |
