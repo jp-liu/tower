@@ -47,7 +47,7 @@ See: [milestones/v0.3-ROADMAP.md](./milestones/v0.3-ROADMAP.md) for full details
 
 **Milestone Goal:** 将系统中的硬编码值提取为用户可配置项，通过设置页 UI 和数据库存储实现个性化配置。
 
-- [ ] **Phase 11: SystemConfig Foundation** - SystemConfig model, key-value read/write API, and settings page infrastructure
+- [x] **Phase 11: SystemConfig Foundation** - SystemConfig model, key-value read/write API, and settings page infrastructure (completed 2026-03-30)
 - [ ] **Phase 12: Git Path Mapping Rules** - Settings UI for adding/editing/deleting host+owner→localPath rules and auto-match on project creation
 - [ ] **Phase 13: Configurable System Parameters** - Wire upload limit, concurrency cap, git timeout, branch template, and search parameters to SystemConfig
 - [ ] **Phase 14: Search Quality & Realtime Config** - Extract shared search logic, fix race condition, verify realtime config takes effect without restart
@@ -118,7 +118,7 @@ Plans:
 | 8. Asset Description Schema | v0.3 | 1/1 | Complete | 2026-03-30 |
 | 9. Search Actions Expansion | v0.3 | 1/1 | Complete | 2026-03-30 |
 | 10. Search UI Extension | v0.3 | 2/2 | Complete | 2026-03-30 |
-| 11. SystemConfig Foundation | v0.4 | 2/2 | In Progress |  |
+| 11. SystemConfig Foundation | v0.4 | 2/2 | Complete    | 2026-03-30 |
 | 12. Git Path Mapping Rules | v0.4 | 0/TBD | Not started | - |
 | 13. Configurable System Parameters | v0.4 | 0/TBD | Not started | - |
 | 14. Search Quality & Realtime Config | v0.4 | 0/TBD | Not started | - |
