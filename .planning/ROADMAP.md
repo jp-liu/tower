@@ -94,7 +94,10 @@ Plans:
   3. User can set the Git operation timeout (clone/status/other) and Git commands use the configured value
   4. User can set the branch naming template (replacing the hardcoded `vk/${taskId}-` prefix) and new task branches follow the template
   5. User can set search result count, All-mode cap, debounce delay, and snippet length, and the search UI applies the configured values
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 13-01-PLAN.md — Config defaults registry, branch template utility, server-side consumer wiring, unit tests
+- [ ] 13-02-PLAN.md — Settings UI sections (System, Git Params, Search), client-side wiring, i18n keys, visual verification
 **UI hint**: yes
 
 ### Phase 14: Search Quality & Realtime Config
@@ -123,5 +126,5 @@ Plans:
 | 10. Search UI Extension | v0.3 | 2/2 | Complete | 2026-03-30 |
 | 11. SystemConfig Foundation | v0.4 | 2/2 | Complete    | 2026-03-30 |
 | 12. Git Path Mapping Rules | v0.4 | 2/2 | Complete    | 2026-03-30 |
-| 13. Configurable System Parameters | v0.4 | 0/TBD | Not started | - |
+| 13. Configurable System Parameters | v0.4 | 0/2 | Not started | - |
 | 14. Search Quality & Realtime Config | v0.4 | 0/TBD | Not started | - |
