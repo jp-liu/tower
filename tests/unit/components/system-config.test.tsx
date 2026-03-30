@@ -6,6 +6,7 @@ import { SystemConfig } from "@/components/settings/system-config";
 // Mock server actions (they cannot run in jsdom)
 vi.mock("@/actions/config-actions", () => ({
   getConfigValue: vi.fn().mockResolvedValue([]),
+  getConfigValues: vi.fn().mockResolvedValue({}),
   setConfigValue: vi.fn().mockResolvedValue(undefined),
 }));
 
