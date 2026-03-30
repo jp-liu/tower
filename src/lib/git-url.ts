@@ -1,9 +1,48 @@
 import os from "os";
 import path from "path";
 
-function expandHome(p: string): string {
+export function expandHome(p: string): string {
   if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
   return p;
+}
+
+export interface GitPathRule {
+  id: string;
+  host: string;
+  ownerMatch: string;        // exact owner, or "*" for any
+  localPathTemplate: string; // supports {owner} and {repo}
+  priority: number;          // lower number = higher priority
+}
+
+/**
+ * Match a git URL against a list of GitPathRule entries.
+ * Rules are sorted by priority (lower = higher priority).
+ * First matching rule returns the interpolated localPathTemplate.
+ * Returns "" if no rule matches.
+ */
+export function matchGitPathRule(url: string, rules: GitPathRule[]): string {
+  if (!rules.length) return "";
+  const trimmed = url.trim();
+  if (!trimmed) return "";
+  const parsed = parseGitUrl(trimmed);
+  if (!parsed) return "";
+
+  const { host, pathSegments } = parsed;
+  const owner = pathSegments[0] ?? "";
+  const repo = pathSegments[pathSegments.length - 1] ?? "";
+
+  const sorted = [...rules].sort((a, b) => a.priority - b.priority);
+
+  for (const rule of sorted) {
+    if (rule.host !== host) continue;
+    if (rule.ownerMatch !== "*" && rule.ownerMatch !== owner) continue;
+    return expandHome(
+      rule.localPathTemplate
+        .replace("{owner}", owner)
+        .replace("{repo}", repo)
+    );
+  }
+  return "";
 }
 
 /**
@@ -106,12 +145,12 @@ export function toCloneUrl(url: string): string {
 
 // ─── Internal ────────────────────────────────────────────────────────
 
-interface ParsedUrl {
+export interface ParsedUrl {
   host: string;
   pathSegments: string[];
 }
 
-function parseGitUrl(raw: string): ParsedUrl | null {
+export function parseGitUrl(raw: string): ParsedUrl | null {
   // SSH shorthand: git@github.com:owner/repo.git
   const sshShort = raw.match(/^git@([^:]+):(.+)$/);
   if (sshShort) {

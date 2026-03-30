@@ -5,5 +5,9 @@ export interface ConfigEntry {
 }
 
 export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
-  // Phase 11: empty registry — entries added in Phase 12-13
+  "git.pathMappingRules": {
+    defaultValue: [],
+    type: "object",
+    label: "Git Path Mapping Rules",
+  },
 };
