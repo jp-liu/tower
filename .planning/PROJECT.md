@@ -8,6 +8,17 @@ An AI task management platform with a Kanban board UI for managing workspaces, p
 
 Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base that AI agents can query and update.
 
+## Current Milestone: v0.3 全局搜索增强
+
+**Goal:** 将搜索从固定类型扩展为全局跨类型搜索，新增笔记和资源搜索支持，并为资源增加描述字段提升可搜索性。
+
+**Target features:**
+- "All" 全局搜索模式 — 跨所有类型统一内容匹配，结果按类型分组展示
+- 笔记搜索 — 利用 FTS5 全文索引搜索笔记标题和内容
+- 资源搜索 — 搜索资源文件名和描述
+- 资源描述字段 — ProjectAsset 新增必填 description 字段，上传弹窗同步更新
+- 保留精确搜索 — 用户可切换到特定类型 tab 进行精准搜索
+
 ## Current State
 
 **Shipped:** v0.2 项目知识库 & 智能 MCP (2026-03-30)
@@ -59,7 +70,12 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 ### Active
 
-(To be defined in next milestone)
+- [ ] "All" 全局搜索模式 — 跨任务、项目、仓库、笔记、资源统一搜索
+- [ ] 笔记搜索 — FTS5 全文索引搜索标题和内容
+- [ ] 资源搜索 — 搜索文件名和描述
+- [ ] ProjectAsset 新增必填 description 字段
+- [ ] 上传弹窗增加描述输入框
+- [ ] 搜索 UI 扩展 — 新增 All/Note/Asset tab
 
 ### Out of Scope
 
@@ -81,6 +97,7 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - Adapter pattern for pluggable AI agent execution
 - ~159 commits, ~11,400 lines across 100 files (v0.1 + v0.2)
 - 126+ unit tests, 16 Playwright E2E tests
+- 现有 FTS5 全文搜索基础设施（notes_fts 虚拟表）可复用
 
 ## Constraints
 
@@ -127,4 +144,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-30 after v0.2 milestone completed*
+*Last updated: 2026-03-30 after v0.3 milestone started*
