@@ -68,12 +68,13 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - ✓ 资源查看 Web UI (文件列表/预览/上传弹窗) — v0.2
 - ✓ 任务消息图片内联渲染 — v0.2
 - ✓ ProjectAsset description 字段 + 上传弹窗描述输入框 — v0.3 Phase 8
+- ✓ 全局搜索 note/asset/all 模式 + MCP 工具同步 + FTS5 容错 — v0.3 Phase 9
 
 ### Active
 
-- [ ] "All" 全局搜索模式 — 跨任务、项目、仓库、笔记、资源统一搜索
-- [ ] 笔记搜索 — FTS5 全文索引搜索标题和内容
-- [ ] 资源搜索 — 搜索文件名和描述
+- ~~"All" 全局搜索模式 — 跨任务、项目、仓库、笔记、资源统一搜索~~ → Validated in Phase 9
+- ~~笔记搜索 — FTS5 全文索引搜索标题和内容~~ → Validated in Phase 9
+- ~~资源搜索 — 搜索文件名和描述~~ → Validated in Phase 9
 - ~~ProjectAsset 新增必填 description 字段~~ → Validated in Phase 8
 - ~~上传弹窗增加描述输入框~~ → Validated in Phase 8
 - [ ] 搜索 UI 扩展 — 新增 All/Note/Asset tab
@@ -145,4 +146,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-30 after Phase 8 complete*
+*Last updated: 2026-03-30 after Phase 9 complete*
