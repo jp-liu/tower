@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: 全局搜索增强
-status: roadmap_ready
-stopped_at: Roadmap created — ready for Phase 8 planning
-last_updated: "2026-03-30"
+status: verifying
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-03-30T05:36:25.397Z"
 last_activity: 2026-03-30
 progress:
   total_phases: 3
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 1
+  total_plans: 1
+  completed_plans: 1
 ---
 
 # Project State
@@ -21,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** v0.3 全局搜索增强 — ready to begin Phase 8
+**Current focus:** Phase 08 — Asset Description Schema
 
 ## Current Position
 
-Phase: 8 — Asset Description Schema (not started)
-Plan: —
-Status: Roadmap ready
-Last activity: 2026-03-30 — Roadmap created for v0.3
+Phase: 08 (Asset Description Schema) — EXECUTING
+Plan: 1 of 1
+Status: Phase complete — ready for verification
+Last activity: 2026-03-30
 
 ```
 Phase 8 [          ] 0%
@@ -51,6 +50,8 @@ v0.3    [          ] 0% (0/3 phases)
 - [v0.3 research]: search-actions.ts and search-tools.ts (MCP) must be updated in the same commit when adding new SearchCategory values — they share no code and divergence is silent
 - [v0.3 research]: Use Promise.allSettled (not Promise.all) for parallel SQLite queries in "All" mode — single SQLITE_BUSY must not drop all results
 - [v0.3 research]: Back up dev.db before any prisma db push — Prisma may silently drop notes_fts FTS5 virtual table; verify with sqlite3 ".tables" and re-run pnpm db:init-fts if missing
+- [Phase 08]: Used String? @default('') for description to avoid NOT NULL constraint on existing rows
+- [Phase 08]: After db push partial failure on FTS5 tables, used prisma generate + db:init-fts to recover without data loss
 
 ### Pending Todos
 
@@ -66,6 +67,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-30
-Stopped at: Roadmap created — ready to plan Phase 8
+Last session: 2026-03-30T05:36:25.394Z
+Stopped at: Completed 08-01-PLAN.md
 Resume file: None

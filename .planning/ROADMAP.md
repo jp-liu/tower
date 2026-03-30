@@ -50,7 +50,7 @@ See: [milestones/v0.2-ROADMAP.md](./milestones/v0.2-ROADMAP.md) for full details
   4. The upload dialog form rejects submission when the description field is missing
 **Plans:** 1 plan
 Plans:
-- [ ] 08-01-PLAN.md — Schema + data layer + UI for asset description field
+- [x] 08-01-PLAN.md — Schema + data layer + UI for asset description field
 
 ### Phase 9: Search Actions Expansion
 **Goal**: Server-side search logic covers notes and assets across all projects, and MCP tool reflects the same capabilities
