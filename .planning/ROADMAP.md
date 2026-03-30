@@ -80,7 +80,7 @@ Plans:
   4. Rules are persisted across page reloads and app restarts
 **Plans**: 2 plans
 Plans:
-- [ ] 12-01-PLAN.md — GitPathRule type, matchGitPathRule logic, resolveGitLocalPath server action, top-bar async wiring, unit tests
+- [x] 12-01-PLAN.md — GitPathRule type, matchGitPathRule logic, resolveGitLocalPath server action, top-bar async wiring, unit tests
 - [ ] 12-02-PLAN.md — Settings UI CRUD for Git path mapping rules, i18n keys, visual verification
 **UI hint**: yes
 
@@ -122,6 +122,6 @@ Plans:
 | 9. Search Actions Expansion | v0.3 | 1/1 | Complete | 2026-03-30 |
 | 10. Search UI Extension | v0.3 | 2/2 | Complete | 2026-03-30 |
 | 11. SystemConfig Foundation | v0.4 | 2/2 | Complete    | 2026-03-30 |
-| 12. Git Path Mapping Rules | v0.4 | 0/2 | Planning | - |
+| 12. Git Path Mapping Rules | v0.4 | 1/2 | In Progress|  |
 | 13. Configurable System Parameters | v0.4 | 0/TBD | Not started | - |
 | 14. Search Quality & Realtime Config | v0.4 | 0/TBD | Not started | - |

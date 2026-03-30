@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: 系统配置化
-status: verifying
-stopped_at: Phase 12 context gathered
-last_updated: "2026-03-30T09:37:06.402Z"
+status: executing
+stopped_at: Completed 12-git-path-mapping-rules/12-01-PLAN.md
+last_updated: "2026-03-30T10:04:34.201Z"
 last_activity: 2026-03-30
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 4
+  completed_plans: 3
   percent: 100
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 11 — SystemConfig Foundation
+**Current focus:** Phase 12 — Git Path Mapping Rules
 
 ## Current Position
 
-Phase: 12
-Plan: Not started
-Status: All plans executed, pending verification
+Phase: 12 (Git Path Mapping Rules) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-03-30
 
 Progress: [██████████] 100%
@@ -51,6 +51,7 @@ Progress: [██████████] 100%
 | Phase 11 P02 | 5 min | 2 tasks | 4 files |
 
 *Updated after each plan completion*
+| Phase 12-git-path-mapping-rules P01 | 4 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,9 @@ Progress: [██████████] 100%
 - [Phase 11]: CONFIG_DEFAULTS registry starts empty in Phase 11 — Phase 12-13 adds entries as parameters are wired
 - [Phase 11]: Follow existing NAV_ITEMS hardcoded English string pattern for Config nav item label/description
 - [Phase 11]: Use SlidersHorizontal lucide icon for Config nav item
+- [Phase 12-git-path-mapping-rules]: D-13 bridge pattern: resolveGitLocalPath server action wraps DB lookup + matchGitPathRule + gitUrlToLocalPath fallback — keeps git-url.ts free of Next.js/server imports
+- [Phase 12-git-path-mapping-rules]: matchGitPathRule sorts rules by priority using [...rules].sort() — avoids array mutation, respects immutability constraint
+- [Phase 12-git-path-mapping-rules]: handleGitUrlChange async migration: sync state updates fire first, only setLocalPath awaits resolveGitLocalPath — no input lag
 
 ### Pending Todos
 
@@ -80,6 +84,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-30T09:37:06.399Z
-Stopped at: Phase 12 context gathered
-Resume file: .planning/phases/12-git-path-mapping-rules/12-CONTEXT.md
+Last session: 2026-03-30T10:04:34.198Z
+Stopped at: Completed 12-git-path-mapping-rules/12-01-PLAN.md
+Resume file: None

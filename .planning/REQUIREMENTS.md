@@ -15,7 +15,7 @@ Requirements for v0.4 — 系统配置化. Each maps to roadmap phases.
 ### Git 配置
 
 - [ ] **GIT-01**: 用户可在设置页添加、编辑、删除 Git 路径映射规则（host + owner → localPath 模板）
-- [ ] **GIT-02**: 创建项目输入 Git URL 时，自动匹配用户自定义规则生成 localPath
+- [x] **GIT-02**: 创建项目输入 Git URL 时，自动匹配用户自定义规则生成 localPath
 - [ ] **GIT-03**: 用户可配置任务分支命名模板（当前硬编码 vk/${taskId}-）
 - [ ] **GIT-04**: 用户可配置 Git 操作超时（clone/status/其他）
 
@@ -58,7 +58,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CFG-01 | Phase 11 | Complete |
 | CFG-02 | Phase 14 | Pending |
 | GIT-01 | Phase 12 | Pending |
-| GIT-02 | Phase 12 | Pending |
+| GIT-02 | Phase 12 | Complete |
 | GIT-03 | Phase 13 | Pending |
 | GIT-04 | Phase 13 | Pending |
 | SYS-01 | Phase 13 | Pending |
