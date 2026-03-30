@@ -34,7 +34,7 @@ See: [milestones/v0.2-ROADMAP.md](./milestones/v0.2-ROADMAP.md) for full details
 ### v0.3 全局搜索增强 (Phases 8-10)
 
 - [ ] **Phase 8: Asset Description Schema** — Add description field to ProjectAsset model and upload dialog
-- [ ] **Phase 9: Search Actions Expansion** — Extend globalSearch with note/asset/all categories; sync MCP tool
+- [x] **Phase 9: Search Actions Expansion** — Extend globalSearch with note/asset/all categories; sync MCP tool (completed 2026-03-30)
 - [ ] **Phase 10: Search UI Extension** — Six-tab search dialog with grouped All rendering, snippets, and i18n
 
 ## Phase Details
@@ -62,9 +62,9 @@ Plans:
   3. Calling globalSearch with category "all" returns results from all five types (task, project, repository, note, asset) grouped and capped per type
   4. MCP search tool accepts "note", "asset", and "all" as valid categories and returns the same results as the server action
   5. A malformed FTS5 query (e.g., unmatched quotes) does not crash the server — it falls back to LIKE search
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 Plans:
-- [ ] 09-01-PLAN.md — Note/asset/all search branches + MCP parity + test coverage
+- [x] 09-01-PLAN.md — Note/asset/all search branches + MCP parity + test coverage
 
 ### Phase 10: Search UI Extension
 **Goal**: Users can run a single search and see all matching content across every type in one unified view, or narrow to a specific type via tabs
@@ -91,5 +91,5 @@ Plans:
 | 6. File Serving & Image Rendering | v0.2 | 1/1 | Complete | 2026-03-27 |
 | 7. Notes & Assets Web UI | v0.2 | 2/2 | Complete | 2026-03-27 |
 | 8. Asset Description Schema | v0.3 | 0/1 | Not started | - |
-| 9. Search Actions Expansion | v0.3 | 0/1 | Not started | - |
+| 9. Search Actions Expansion | v0.3 | 1/1 | Complete   | 2026-03-30 |
 | 10. Search UI Extension | v0.3 | 0/? | Not started | - |

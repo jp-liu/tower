@@ -9,16 +9,16 @@ Requirements for v0.3 — 全局搜索增强. Each maps to roadmap phases.
 
 ### Asset Metadata
 
-- [ ] **ASSET-01**: User can add a required description when uploading an asset
-- [ ] **ASSET-02**: ProjectAsset model includes description field persisted to database
+- [x] **ASSET-01**: User can add a required description when uploading an asset
+- [x] **ASSET-02**: ProjectAsset model includes description field persisted to database
 - [ ] **ASSET-03**: User sees content snippets (note content / asset description) in search results
 
 ### Search Actions
 
-- [ ] **SRCH-01**: User can search notes by title and content via FTS5 full-text search
-- [ ] **SRCH-02**: User can search assets by filename and description
-- [ ] **SRCH-03**: User can search across all types ("All" mode) with results grouped by type
-- [ ] **SRCH-04**: MCP search tool supports note, asset, and all categories
+- [x] **SRCH-01**: User can search notes by title and content via FTS5 full-text search
+- [x] **SRCH-02**: User can search assets by filename and description
+- [x] **SRCH-03**: User can search across all types ("All" mode) with results grouped by type
+- [x] **SRCH-04**: MCP search tool supports note, asset, and all categories
 
 ### Search UI
 
@@ -89,13 +89,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ASSET-01 | Phase 8 | Pending |
-| ASSET-02 | Phase 8 | Pending |
+| ASSET-01 | Phase 8 | Complete |
+| ASSET-02 | Phase 8 | Complete |
 | ASSET-03 | Phase 10 | Pending |
-| SRCH-01 | Phase 9 | Pending |
-| SRCH-02 | Phase 9 | Pending |
-| SRCH-03 | Phase 9 | Pending |
-| SRCH-04 | Phase 9 | Pending |
+| SRCH-01 | Phase 9 | Complete |
+| SRCH-02 | Phase 9 | Complete |
+| SRCH-03 | Phase 9 | Complete |
+| SRCH-04 | Phase 9 | Complete |
 | SUI-01 | Phase 10 | Pending |
 | SUI-02 | Phase 10 | Pending |
 | SUI-03 | Phase 10 | Pending |

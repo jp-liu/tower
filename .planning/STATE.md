@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: 全局搜索增强
 status: verifying
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-03-30T05:39:32.116Z"
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-03-30T06:11:13.409Z"
 last_activity: 2026-03-30
 progress:
   total_phases: 3
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
 ---
 
 # Project State
@@ -20,12 +20,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 08 — Asset Description Schema
+**Current focus:** Phase 09 — Search Actions Expansion
 
 ## Current Position
 
-Phase: 9
-Plan: Not started
+Phase: 09 (Search Actions Expansion) — EXECUTING
+Plan: 1 of 1
 Status: Phase complete — ready for verification
 Last activity: 2026-03-30
 
@@ -52,6 +52,8 @@ v0.3    [          ] 0% (0/3 phases)
 - [v0.3 research]: Back up dev.db before any prisma db push — Prisma may silently drop notes_fts FTS5 virtual table; verify with sqlite3 ".tables" and re-run pnpm db:init-fts if missing
 - [Phase 08]: Used String? @default('') for description to avoid NOT NULL constraint on existing rows
 - [Phase 08]: After db push partial failure on FTS5 tables, used prisma generate + db:init-fts to recover without data loss
+- [Phase 09]: Inline raw SQL in search-actions.ts for global note search (no projectId filter) to keep fts.ts Next.js-free
+- [Phase 09]: SearchResultType excludes 'all' — 'all' is a query mode input, never a result type discriminant
 
 ### Pending Todos
 
@@ -67,6 +69,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-30T05:36:25.394Z
-Stopped at: Completed 08-01-PLAN.md
+Last session: 2026-03-30T06:11:13.406Z
+Stopped at: Completed 09-01-PLAN.md
 Resume file: None
