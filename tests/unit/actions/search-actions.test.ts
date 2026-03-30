@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { syncNoteToFts } from "@/lib/fts";
+import type { SearchCategory, SearchResult } from "@/actions/search-actions";
 
 const testDb = new PrismaClient({
   datasources: {
@@ -12,8 +13,7 @@ const testDb = new PrismaClient({
 let testWorkspaceId: string;
 let testProjectId: string;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let globalSearchFn: (query: string, category?: string) => Promise<any[]>;
+let globalSearchFn: (query: string, category?: SearchCategory) => Promise<SearchResult[]>;
 
 beforeAll(async () => {
   await testDb.$connect();
