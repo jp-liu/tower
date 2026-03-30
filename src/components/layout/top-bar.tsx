@@ -16,7 +16,8 @@ import { Input } from "@/components/ui/input";
 import { SearchDialog } from "./search-dialog";
 import { FolderBrowserDialog } from "./folder-browser-dialog";
 import { useI18n } from "@/lib/i18n";
-import { gitUrlToLocalPath, toCloneUrl } from "@/lib/git-url";
+import { toCloneUrl } from "@/lib/git-url";
+import { resolveGitLocalPath } from "@/actions/config-actions";
 
 interface CreateProjectData {
   name: string;
@@ -67,12 +68,13 @@ export function TopBar({ onCreateProject }: TopBarProps) {
     setCloneError("");
   };
 
-  const handleGitUrlChange = (value: string) => {
+  const handleGitUrlChange = async (value: string) => {
     setGitUrl(value);
     setCloneStatus("idle");
     setCloneError("");
     if (!localPathManual) {
-      setLocalPath(gitUrlToLocalPath(value));
+      const path = await resolveGitLocalPath(value);
+      setLocalPath(path);
     }
   };
 

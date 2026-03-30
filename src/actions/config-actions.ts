@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/db";
 import { CONFIG_DEFAULTS } from "@/lib/config-defaults";
+import { matchGitPathRule, gitUrlToLocalPath, type GitPathRule } from "@/lib/git-url";
 
 export async function getConfigValue<T>(key: string, defaultValue: T): Promise<T> {
   const row = await db.systemConfig.findUnique({ where: { key } });
@@ -21,6 +22,19 @@ export async function setConfigValue(key: string, value: unknown): Promise<void>
   });
   // Note: revalidatePath("/settings") omitted — settings page is a client component,
   // revalidatePath has no effect. Real reactivity is Phase 14 (CFG-02).
+}
+
+export async function resolveGitLocalPath(url: string): Promise<string> {
+  const trimmed = url.trim();
+  if (!trimmed) return "";
+  try {
+    const rules = await getConfigValue<GitPathRule[]>("git.pathMappingRules", []);
+    const matched = matchGitPathRule(trimmed, rules);
+    if (matched) return matched;
+    return gitUrlToLocalPath(trimmed);
+  } catch {
+    return gitUrlToLocalPath(trimmed);
+  }
 }
 
 export async function getConfigValues(keys: string[]): Promise<Record<string, unknown>> {

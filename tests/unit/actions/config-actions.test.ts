@@ -11,6 +11,7 @@ const testDb = new PrismaClient({
 let getConfigValueFn: <T>(key: string, defaultValue: T) => Promise<T>;
 let setConfigValueFn: (key: string, value: unknown) => Promise<void>;
 let getConfigValuesFn: (keys: string[]) => Promise<Record<string, unknown>>;
+let resolveGitLocalPathFn: (url: string) => Promise<string>;
 
 beforeAll(async () => {
   await testDb.$connect();
@@ -20,6 +21,7 @@ beforeAll(async () => {
   getConfigValueFn = mod.getConfigValue;
   setConfigValueFn = mod.setConfigValue;
   getConfigValuesFn = mod.getConfigValues;
+  resolveGitLocalPathFn = mod.resolveGitLocalPath;
 });
 
 afterAll(async () => {
@@ -29,7 +31,7 @@ afterAll(async () => {
 afterEach(async () => {
   // Clean up test rows
   await testDb.$executeRawUnsafe(
-    `DELETE FROM SystemConfig WHERE key LIKE 'test.%'`
+    `DELETE FROM SystemConfig WHERE key LIKE 'test.%' OR key = 'git.pathMappingRules'`
   );
 });
 
@@ -108,9 +110,61 @@ describe("getConfigValues", () => {
   });
 
   it("returns CONFIG_DEFAULTS defaultValue for keys registered in defaults", async () => {
-    // CONFIG_DEFAULTS is currently empty in Phase 11, so missing keys return null
-    // This test verifies the behavior with actual missing key
-    const result = await getConfigValuesFn(["test.unknown.key"]);
-    expect(result["test.unknown.key"]).toBeNull();
+    // git.pathMappingRules is in CONFIG_DEFAULTS with defaultValue: []
+    const result = await getConfigValuesFn(["git.pathMappingRules"]);
+    expect(result["git.pathMappingRules"]).toEqual([]);
+  });
+});
+
+describe("resolveGitLocalPath", () => {
+  it("returns empty string for empty URL input", async () => {
+    const result = await resolveGitLocalPathFn("");
+    expect(result).toBe("");
+  });
+
+  it("returns empty string for whitespace-only URL input", async () => {
+    const result = await resolveGitLocalPathFn("   ");
+    expect(result).toBe("");
+  });
+
+  it("falls back to hardcoded gitUrlToLocalPath when no rules in DB", async () => {
+    // No rules stored, should use hardcoded logic for github.com/jp-liu
+    const result = await resolveGitLocalPathFn("https://github.com/jp-liu/test-repo");
+    // Hardcoded logic maps jp-liu → ~/project/i/{repo}
+    expect(result).toContain("project/i/test-repo");
+  });
+
+  it("uses rule-based matching when matching rules exist in DB", async () => {
+    const rules = [
+      {
+        id: "rule-1",
+        host: "github.com",
+        ownerMatch: "jp-liu",
+        localPathTemplate: "~/custom/path/{repo}",
+        priority: 0,
+      },
+    ];
+    await setConfigValueFn("git.pathMappingRules", rules);
+
+    const result = await resolveGitLocalPathFn("https://github.com/jp-liu/test-repo");
+    const home = (await import("os")).default.homedir();
+    expect(result).toBe(`${home}/custom/path/test-repo`);
+  });
+
+  it("falls back to hardcoded logic when no rule matches the URL", async () => {
+    const rules = [
+      {
+        id: "rule-1",
+        host: "gitlab.com",
+        ownerMatch: "*",
+        localPathTemplate: "~/gitlab/{repo}",
+        priority: 0,
+      },
+    ];
+    await setConfigValueFn("git.pathMappingRules", rules);
+
+    // URL is github.com, rule is for gitlab.com — should fall back
+    const result = await resolveGitLocalPathFn("https://github.com/jp-liu/test-repo");
+    expect(result).toContain("project/i/test-repo");
   });
 });
