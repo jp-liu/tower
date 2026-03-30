@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getAdapter } from "@/lib/adapters/registry";
 import { canStartExecution, killProcess, registerProcess } from "@/lib/adapters/process-manager";
+import { getConfigValue } from "@/actions/config-actions";
 import { writeFile, rm, mkdtemp } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -63,7 +64,7 @@ async function validateAndParseRequest(
   }
 
   // Check concurrent limit
-  if (!canStartExecution()) {
+  if (!(await canStartExecution())) {
     return new Response(
       JSON.stringify({ error: "Max concurrent executions reached" }),
       { status: 503, headers: { "Content-Type": "application/json" } }
@@ -266,6 +267,7 @@ export async function POST(
 
         try {
           const adapter = getAdapter(agent ?? "claude_local");
+          const timeoutSec = await getConfigValue<number>("git.timeoutSec", 30);
 
           sendEvent({ type: "status", content: "Agent started" });
 
@@ -276,6 +278,7 @@ export async function POST(
             model,
             sessionId: resumeSessionId,
             instructionsFile,
+            timeoutSec,
             onLog: async (logStream, chunk) => {
               assistantContent += chunk;
               if (logStream === "stdout") {

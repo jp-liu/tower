@@ -49,7 +49,7 @@ export async function POST(
     }
 
     // Check concurrent limit
-    if (!canStartExecution()) {
+    if (!(await canStartExecution())) {
       return NextResponse.json(
         { error: "Max concurrent executions reached" },
         { status: 503 }

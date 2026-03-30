@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
+import { getConfigValues } from "@/actions/config-actions";
 
 export type SearchCategory = "task" | "project" | "repository" | "note" | "asset" | "all";
 
@@ -25,14 +26,14 @@ interface NoteRawRow {
   workspace_name: string;
 }
 
-function toNoteResult(row: NoteRawRow): SearchResult {
+function toNoteResult(row: NoteRawRow, snippetLength: number): SearchResult {
   return {
     id: row.note_id,
     type: "note" as const,
     title: row.title,
     subtitle: `${row.workspace_name} / ${row.project_name}`,
     navigateTo: `/workspaces/${row.workspaceId}/notes?projectId=${row.projectId}`,
-    snippet: row.content ? row.content.slice(0, 80) : undefined,
+    snippet: row.content ? row.content.slice(0, snippetLength) : undefined,
   };
 }
 
@@ -40,8 +41,16 @@ export async function globalSearch(query: string, category: SearchCategory = "ta
   if (!query.trim()) return [];
   const q = query.trim();
 
+  const cfg = await getConfigValues([
+    "search.resultLimit",
+    "search.allModeCap",
+    "search.snippetLength",
+  ]);
+  const resultLimit = (cfg["search.resultLimit"] as number) ?? 20;
+  const allModeCap = (cfg["search.allModeCap"] as number) ?? 5;
+  const snippetLength = (cfg["search.snippetLength"] as number) ?? 80;
+
   if (category === "all") {
-    const CAP = 5;
     const [taskRes, projectRes, repoRes, noteRes, assetRes] = await Promise.allSettled([
       globalSearch(q, "task"),
       globalSearch(q, "project"),
@@ -50,7 +59,7 @@ export async function globalSearch(query: string, category: SearchCategory = "ta
       globalSearch(q, "asset"),
     ]);
     const collect = (res: PromiseSettledResult<SearchResult[]>) =>
-      res.status === "fulfilled" ? res.value.slice(0, CAP) : [];
+      res.status === "fulfilled" ? res.value.slice(0, allModeCap) : [];
     return [
       ...collect(taskRes),
       ...collect(projectRes),
@@ -73,7 +82,7 @@ export async function globalSearch(query: string, category: SearchCategory = "ta
           include: { workspace: true },
         },
       },
-      take: 20,
+      take: resultLimit,
       orderBy: { updatedAt: "desc" },
     });
     return tasks.map((t) => ({
@@ -95,7 +104,7 @@ export async function globalSearch(query: string, category: SearchCategory = "ta
         ],
       },
       include: { workspace: true },
-      take: 20,
+      take: resultLimit,
       orderBy: { updatedAt: "desc" },
     });
     return projects.map((p) => ({
@@ -120,7 +129,7 @@ export async function globalSearch(query: string, category: SearchCategory = "ta
           include: { workspace: true },
         },
       },
-      take: 20,
+      take: resultLimit,
     });
     return repos.map((r) => ({
       id: r.id,
@@ -141,11 +150,12 @@ export async function globalSearch(query: string, category: SearchCategory = "ta
          JOIN "Project" p ON p.id = n."projectId"
          JOIN "Workspace" w ON w.id = p."workspaceId"
          WHERE n.title LIKE ? OR n.content LIKE ?
-         LIMIT 20`,
+         LIMIT ?`,
         `%${q}%`,
-        `%${q}%`
+        `%${q}%`,
+        resultLimit
       );
-      return rows.map(toNoteResult);
+      return rows.map((row) => toNoteResult(row, snippetLength));
     }
 
     // FTS5 search — catch malformed query and fall back to LIKE
@@ -159,10 +169,11 @@ export async function globalSearch(query: string, category: SearchCategory = "ta
          JOIN "Workspace" w ON w.id = p."workspaceId"
          WHERE f.notes_fts MATCH ?
          ORDER BY rank
-         LIMIT 20`,
-        q
+         LIMIT ?`,
+        q,
+        resultLimit
       );
-      return rows.map(toNoteResult);
+      return rows.map((row) => toNoteResult(row, snippetLength));
     } catch {
       // Malformed FTS5 query (e.g., unmatched quotes) — fall back to LIKE
       const rows = await db.$queryRawUnsafe<NoteRawRow[]>(
@@ -172,11 +183,12 @@ export async function globalSearch(query: string, category: SearchCategory = "ta
          JOIN "Project" p ON p.id = n."projectId"
          JOIN "Workspace" w ON w.id = p."workspaceId"
          WHERE n.title LIKE ? OR n.content LIKE ?
-         LIMIT 20`,
+         LIMIT ?`,
         `%${q}%`,
-        `%${q}%`
+        `%${q}%`,
+        resultLimit
       );
-      return rows.map(toNoteResult);
+      return rows.map((row) => toNoteResult(row, snippetLength));
     }
   }
 
@@ -193,7 +205,7 @@ export async function globalSearch(query: string, category: SearchCategory = "ta
           include: { workspace: true },
         },
       },
-      take: 20,
+      take: resultLimit,
       orderBy: { createdAt: "desc" },
     });
     return assets.map((a) => ({

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { ensureAssetsDir } from "@/lib/file-utils";
+import { getConfigValue } from "@/actions/config-actions";
 
 const createAssetSchema = z.object({
   filename: z.string().min(1).max(255),
@@ -51,13 +52,12 @@ export async function getAssetById(assetId: string) {
   return db.projectAsset.findUnique({ where: { id: assetId } });
 }
 
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB
-
 export async function uploadAsset(formData: FormData) {
   const file = formData.get("file") as File;
   const projectId = formData.get("projectId") as string;
   if (!file || !projectId) throw new Error("Missing file or projectId");
-  if (file.size > MAX_UPLOAD_BYTES) throw new Error("File too large (max 50 MB)");
+  const maxBytes = await getConfigValue<number>("system.maxUploadBytes", 52428800);
+  if (file.size > maxBytes) throw new Error(`File too large (max ${Math.round(maxBytes / 1024 / 1024)} MB)`);
   const description = (formData.get("description") as string | null) ?? "";
 
   // Validate projectId exists in DB before any filesystem operation
