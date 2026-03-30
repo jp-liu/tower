@@ -131,4 +131,4 @@ Plans:
 | 11. SystemConfig Foundation | v0.4 | 2/2 | Complete    | 2026-03-30 |
 | 12. Git Path Mapping Rules | v0.4 | 2/2 | Complete    | 2026-03-30 |
 | 13. Configurable System Parameters | v0.4 | 2/2 | Complete    | 2026-03-30 |
-| 14. Search Quality & Realtime Config | v0.4 | 0/2 | Not started | - |
+| 14. Search Quality & Realtime Config | v0.4 | 0/2 | Planned    |  |

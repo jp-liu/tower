@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: 系统配置化
 status: verifying
-stopped_at: Phase 14 context gathered
-last_updated: "2026-03-30T11:30:23.310Z"
+stopped_at: Completed 14-02-PLAN.md
+last_updated: "2026-03-30T11:50:03.646Z"
 last_activity: 2026-03-30
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 6
+  total_plans: 8
   completed_plans: 6
   percent: 100
 ---
@@ -55,6 +55,7 @@ Progress: [██████████] 100%
 | Phase 12-git-path-mapping-rules P02 | 4 | 2 tasks | 3 files |
 | Phase 13-configurable-system-parameters P01 | 458s | 2 tasks | 10 files |
 | Phase 13-configurable-system-parameters P02 | 420 | 2 tasks | 4 files |
+| Phase 14-search-quality-realtime-config P02 | 5m | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,8 @@ Progress: [██████████] 100%
 - [Phase 13-configurable-system-parameters]: search-actions uses getConfigValues batch for 3 keys in single DB query; SQL LIMIT parameterized
 - [Phase 13-configurable-system-parameters]: getConfigValues batch call on mount loads all 8 config values in single DB query for settings UI
 - [Phase 13-configurable-system-parameters]: debounceMs added to search useEffect dependency array to prevent stale closure capturing initial 250ms value
+- [Phase 14-search-quality-realtime-config]: Merged debounceMs config fetch into open effect so it reloads on each dialog open (CFG-02)
+- [Phase 14-search-quality-realtime-config]: cancelled flag at useEffect body level (outside setTimeout) prevents stale search results from overwriting newer results (SRCH-07)
 
 ### Pending Todos
 
@@ -94,6 +97,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-30T11:30:23.303Z
-Stopped at: Phase 14 context gathered
-Resume file: .planning/phases/14-search-quality-realtime-config/14-CONTEXT.md
+Last session: 2026-03-30T11:49:53.181Z
+Stopped at: Completed 14-02-PLAN.md
+Resume file: None
