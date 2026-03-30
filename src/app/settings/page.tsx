@@ -7,6 +7,7 @@ import { SettingsNav } from "@/components/settings/settings-nav";
 import { AIToolsConfig } from "@/components/settings/ai-tools-config";
 import { GeneralConfig } from "@/components/settings/general-config";
 import { PromptsConfig } from "@/components/settings/prompts-config";
+import { SystemConfig } from "@/components/settings/system-config";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -39,6 +40,8 @@ export default function SettingsPage() {
           {activeSection === "ai-tools" && <AIToolsConfig />}
 
           {activeSection === "prompts" && <PromptsConfig />}
+
+          {activeSection === "config" && <SystemConfig />}
         </div>
       </div>
     </div>
