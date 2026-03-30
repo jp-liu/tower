@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.3
-milestone_name: 全局搜索增强
-status: shipped
-stopped_at: v0.3 milestone complete
+milestone: v0.4
+milestone_name: 系统配置化
+status: defining_requirements
+stopped_at: Milestone v0.4 started
 last_updated: "2026-03-30"
 last_activity: 2026-03-30
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,21 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** v0.3 shipped — ready for next milestone
+**Current focus:** v0.4 系统配置化 — defining requirements
 
 ## Current Position
 
-Phase: All complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: v0.3 全局搜索增强 shipped
-Last activity: 2026-03-30
-
-```
-Phase 8  [██████████] 100%
-Phase 9  [██████████] 100%
-Phase 10 [██████████] 100%
-v0.3     [██████████] 100% (3/3 phases)
-```
+Status: Defining requirements
+Last activity: 2026-03-30 — Milestone v0.4 started
 
 ## Accumulated Context
 
@@ -54,7 +47,7 @@ v0.3     [██████████] 100% (3/3 phases)
 
 ### Pending Todos
 
-None — milestone complete.
+None.
 
 ### Blockers/Concerns
 
@@ -63,5 +56,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-30
-Stopped at: v0.3 milestone shipped
+Stopped at: Milestone v0.4 started — defining requirements
 Resume file: None

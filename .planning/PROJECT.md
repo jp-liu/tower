@@ -8,6 +8,16 @@ An AI task management platform with a Kanban board UI for managing workspaces, p
 
 Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base that AI agents can query and update.
 
+## Current Milestone: v0.4 系统配置化
+
+**Goal:** 将系统中的硬编码值提取为用户可配置项，通过设置页 UI 和数据库存储实现个性化配置。
+
+**Target features:**
+- Git 路径映射规则可配置（设置页 UI，替代 git-url.ts 硬编码）
+- 系统参数配置（上传大小限制、最大并发执行数、Git 超时、分支命名模板）
+- 搜索参数配置（结果数量、防抖延迟、snippet 长度）
+- 代码质量修复：搜索逻辑去重、搜索竞态条件修复
+
 ## Current State
 
 **Shipped:** v0.3 全局搜索增强 (2026-03-30)
@@ -76,7 +86,12 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 ### Active
 
-(None — all v0.3 requirements shipped. Next milestone TBD.)
+- [ ] Git 路径映射规则可配置（设置页 CRUD）
+- [ ] SystemConfig 数据模型 + 通用配置读写
+- [ ] 系统参数配置 UI（上传限制、并发数、Git 超时、分支模板）
+- [ ] 搜索参数配置（结果数量、防抖、snippet 长度）
+- [ ] 搜索逻辑去重（提取共享模块）
+- [ ] 搜索 useEffect 竞态条件修复
 
 ### Out of Scope
 
@@ -150,4 +165,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-30 after v0.3 milestone shipped*
+*Last updated: 2026-03-30 after v0.4 milestone started*
