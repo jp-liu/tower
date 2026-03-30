@@ -122,6 +122,6 @@ Plans:
 | 9. Search Actions Expansion | v0.3 | 1/1 | Complete | 2026-03-30 |
 | 10. Search UI Extension | v0.3 | 2/2 | Complete | 2026-03-30 |
 | 11. SystemConfig Foundation | v0.4 | 2/2 | Complete    | 2026-03-30 |
-| 12. Git Path Mapping Rules | v0.4 | 2/2 | Complete   | 2026-03-30 |
+| 12. Git Path Mapping Rules | v0.4 | 2/2 | Complete    | 2026-03-30 |
 | 13. Configurable System Parameters | v0.4 | 0/TBD | Not started | - |
 | 14. Search Quality & Realtime Config | v0.4 | 0/TBD | Not started | - |
