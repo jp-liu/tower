@@ -85,10 +85,10 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - ✓ 搜索 UI 六 tab + 分组 All 渲染 + snippet 显示 + i18n — v0.3 Phase 10
 - ✓ SystemConfig 数据模型 + 通用配置读写 — v0.4 Phase 11
 - ✓ Git 路径映射规则可配置（设置页 CRUD）— v0.4 Phase 12
+- ✓ 系统参数配置 UI（上传限制、并发数、Git 超时、分支模板）— v0.4 Phase 13
+- ✓ 搜索参数配置（结果数量、防抖、snippet 长度）— v0.4 Phase 13
 
 ### Active
-- [ ] 系统参数配置 UI（上传限制、并发数、Git 超时、分支模板）
-- [ ] 搜索参数配置（结果数量、防抖、snippet 长度）
 - [ ] 搜索逻辑去重（提取共享模块）
 - [ ] 搜索 useEffect 竞态条件修复
 
@@ -164,4 +164,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-30 after Phase 12 complete*
+*Last updated: 2026-03-30 after Phase 13 complete*
