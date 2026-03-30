@@ -48,7 +48,9 @@ See: [milestones/v0.2-ROADMAP.md](./milestones/v0.2-ROADMAP.md) for full details
   2. The submitted description is persisted to the database and visible after page reload
   3. Pre-existing assets without a description are not broken (they show an empty description, not an error)
   4. The upload dialog form rejects submission when the description field is missing
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 08-01-PLAN.md — Schema + data layer + UI for asset description field
 
 ### Phase 9: Search Actions Expansion
 **Goal**: Server-side search logic covers notes and assets across all projects, and MCP tool reflects the same capabilities
@@ -86,6 +88,6 @@ See: [milestones/v0.2-ROADMAP.md](./milestones/v0.2-ROADMAP.md) for full details
 | 5. MCP Knowledge Tools | v0.2 | 2/2 | Complete | 2026-03-27 |
 | 6. File Serving & Image Rendering | v0.2 | 1/1 | Complete | 2026-03-27 |
 | 7. Notes & Assets Web UI | v0.2 | 2/2 | Complete | 2026-03-27 |
-| 8. Asset Description Schema | v0.3 | 0/? | Not started | - |
+| 8. Asset Description Schema | v0.3 | 0/1 | Not started | - |
 | 9. Search Actions Expansion | v0.3 | 0/? | Not started | - |
 | 10. Search UI Extension | v0.3 | 0/? | Not started | - |
