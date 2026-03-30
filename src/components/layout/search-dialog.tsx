@@ -2,27 +2,69 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Search, FileText, FolderKanban, GitBranch, X } from "lucide-react";
+import { Search, FileText, FolderKanban, GitBranch, StickyNote, Package2, X } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { globalSearch, type SearchResult, type SearchCategory } from "@/actions/search-actions";
+import { globalSearch, type SearchResult, type SearchResultType, type SearchCategory } from "@/actions/search-actions";
 import { useI18n } from "@/lib/i18n";
 
-const CATEGORY_DEFS: { id: SearchCategory; key: "search.task" | "search.project" | "search.repository"; icon: typeof FileText }[] = [
-  { id: "task", key: "search.task", icon: FileText },
-  { id: "project", key: "search.project", icon: FolderKanban },
-  { id: "repository", key: "search.repository", icon: GitBranch },
+type CategoryKey =
+  | "search.all"
+  | "search.task"
+  | "search.project"
+  | "search.repository"
+  | "search.note"
+  | "search.asset";
+
+const CATEGORY_DEFS: { id: SearchCategory; key: CategoryKey; icon: typeof FileText }[] = [
+  { id: "all",        key: "search.all",        icon: Search },
+  { id: "task",       key: "search.task",        icon: FileText },
+  { id: "project",    key: "search.project",     icon: FolderKanban },
+  { id: "repository", key: "search.repository",  icon: GitBranch },
+  { id: "note",       key: "search.note",        icon: StickyNote },
+  { id: "asset",      key: "search.asset",       icon: Package2 },
 ];
+
+const SECTION_ORDER: SearchResultType[] = ["task", "project", "repository", "note", "asset"];
+
+const SECTION_KEY_MAP: Record<SearchResultType, CategoryKey> = {
+  task:       "search.task",
+  project:    "search.project",
+  repository: "search.repository",
+  note:       "search.note",
+  asset:      "search.asset",
+};
 
 interface SearchDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+function ResultRow({ result, onSelect }: { result: SearchResult; onSelect: (r: SearchResult) => void }) {
+  const Icon = CATEGORY_DEFS.find((c) => c.id === result.type)?.icon ?? FileText;
+  return (
+    <button
+      onClick={() => onSelect(result)}
+      className="flex w-full items-center gap-3 border-b border-border/30 px-4 py-3 text-left transition-colors hover:bg-accent last:border-b-0"
+    >
+      <div className="rounded-md bg-muted p-1.5">
+        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-foreground truncate">{result.title}</div>
+        <div className="text-xs text-muted-foreground truncate">{result.subtitle}</div>
+        {result.snippet && (
+          <div className="text-xs text-muted-foreground/70 truncate mt-0.5">{result.snippet}</div>
+        )}
+      </div>
+    </button>
+  );
+}
+
 export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
   const { t } = useI18n();
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<SearchCategory>("task");
+  const [category, setCategory] = useState<SearchCategory>("all");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -54,11 +96,6 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
     router.push(result.navigateTo);
     onOpenChange(false);
   }, [router, onOpenChange]);
-
-  const getCategoryIcon = (type: SearchCategory) => {
-    const cat = CATEGORY_DEFS.find((c) => c.id === type);
-    return cat?.icon ?? FileText;
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -115,24 +152,28 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
             </div>
           )}
 
-          {results.map((result) => {
-            const Icon = getCategoryIcon(result.type);
-            return (
-              <button
-                key={`${result.type}-${result.id}`}
-                onClick={() => handleSelect(result)}
-                className="flex w-full items-center gap-3 border-b border-border/30 px-4 py-3 text-left transition-colors hover:bg-accent last:border-b-0"
-              >
-                <div className="rounded-md bg-muted p-1.5">
-                  <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+          {/* Grouped rendering for All tab */}
+          {category === "all" && results.length > 0 && (() => {
+            const grouped = results.reduce<Record<string, SearchResult[]>>((acc, r) => {
+              (acc[r.type] ??= []).push(r);
+              return acc;
+            }, {});
+            return SECTION_ORDER.filter((type) => grouped[type]?.length).map((type) => (
+              <div key={type}>
+                <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/50">
+                  {t(SECTION_KEY_MAP[type])}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-foreground truncate">{result.title}</div>
-                  <div className="text-xs text-muted-foreground truncate">{result.subtitle}</div>
-                </div>
-              </button>
-            );
-          })}
+                {grouped[type].map((result) => (
+                  <ResultRow key={`${result.type}-${result.id}`} result={result} onSelect={handleSelect} />
+                ))}
+              </div>
+            ));
+          })()}
+
+          {/* Flat rendering for specific category tabs */}
+          {category !== "all" && results.map((result) => (
+            <ResultRow key={`${result.type}-${result.id}`} result={result} onSelect={handleSelect} />
+          ))}
         </div>
       </DialogContent>
     </Dialog>
