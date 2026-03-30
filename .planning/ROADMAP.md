@@ -48,7 +48,7 @@ See: [milestones/v0.3-ROADMAP.md](./milestones/v0.3-ROADMAP.md) for full details
 **Milestone Goal:** 将系统中的硬编码值提取为用户可配置项，通过设置页 UI 和数据库存储实现个性化配置。
 
 - [x] **Phase 11: SystemConfig Foundation** - SystemConfig model, key-value read/write API, and settings page infrastructure (completed 2026-03-30)
-- [ ] **Phase 12: Git Path Mapping Rules** - Settings UI for adding/editing/deleting host+owner→localPath rules and auto-match on project creation
+- [x] **Phase 12: Git Path Mapping Rules** - Settings UI for adding/editing/deleting host+owner→localPath rules and auto-match on project creation (completed 2026-03-30)
 - [ ] **Phase 13: Configurable System Parameters** - Wire upload limit, concurrency cap, git timeout, branch template, and search parameters to SystemConfig
 - [ ] **Phase 14: Search Quality & Realtime Config** - Extract shared search logic, fix race condition, verify realtime config takes effect without restart
 
@@ -81,7 +81,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 12-01-PLAN.md — GitPathRule type, matchGitPathRule logic, resolveGitLocalPath server action, top-bar async wiring, unit tests
-- [ ] 12-02-PLAN.md — Settings UI CRUD for Git path mapping rules, i18n keys, visual verification
+- [x] 12-02-PLAN.md — Settings UI CRUD for Git path mapping rules, i18n keys, visual verification
 **UI hint**: yes
 
 ### Phase 13: Configurable System Parameters
@@ -122,6 +122,6 @@ Plans:
 | 9. Search Actions Expansion | v0.3 | 1/1 | Complete | 2026-03-30 |
 | 10. Search UI Extension | v0.3 | 2/2 | Complete | 2026-03-30 |
 | 11. SystemConfig Foundation | v0.4 | 2/2 | Complete    | 2026-03-30 |
-| 12. Git Path Mapping Rules | v0.4 | 1/2 | In Progress|  |
+| 12. Git Path Mapping Rules | v0.4 | 2/2 | Complete   | 2026-03-30 |
 | 13. Configurable System Parameters | v0.4 | 0/TBD | Not started | - |
 | 14. Search Quality & Realtime Config | v0.4 | 0/TBD | Not started | - |

@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: 系统配置化
-status: executing
-stopped_at: Completed 12-git-path-mapping-rules/12-01-PLAN.md
-last_updated: "2026-03-30T10:04:34.201Z"
+status: verifying
+stopped_at: Completed 12-git-path-mapping-rules/12-02-PLAN.md
+last_updated: "2026-03-30T10:10:35.164Z"
 last_activity: 2026-03-30
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
   percent: 100
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 
 Phase: 12 (Git Path Mapping Rules) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-03-30
 
 Progress: [██████████] 100%
@@ -52,6 +52,7 @@ Progress: [██████████] 100%
 
 *Updated after each plan completion*
 | Phase 12-git-path-mapping-rules P01 | 4 | 2 tasks | 5 files |
+| Phase 12-git-path-mapping-rules P02 | 4 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -73,6 +74,8 @@ Progress: [██████████] 100%
 - [Phase 12-git-path-mapping-rules]: D-13 bridge pattern: resolveGitLocalPath server action wraps DB lookup + matchGitPathRule + gitUrlToLocalPath fallback — keeps git-url.ts free of Next.js/server imports
 - [Phase 12-git-path-mapping-rules]: matchGitPathRule sorts rules by priority using [...rules].sort() — avoids array mutation, respects immutability constraint
 - [Phase 12-git-path-mapping-rules]: handleGitUrlChange async migration: sync state updates fire first, only setLocalPath awaits resolveGitLocalPath — no input lag
+- [Phase 12-git-path-mapping-rules]: Inline table row editing (not Dialog) per D-10 — less modal overhead for tabular rule management
+- [Phase 12-git-path-mapping-rules]: RuleEditState type + EMPTY_FORM constant for SystemConfig form state management
 
 ### Pending Todos
 
@@ -84,6 +87,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-30T10:04:34.198Z
-Stopped at: Completed 12-git-path-mapping-rules/12-01-PLAN.md
+Last session: 2026-03-30T10:10:35.160Z
+Stopped at: Completed 12-git-path-mapping-rules/12-02-PLAN.md
 Resume file: None
