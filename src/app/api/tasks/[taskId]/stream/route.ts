@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getAdapter } from "@/lib/adapters/registry";
 import { canStartExecution, killProcess, registerProcess } from "@/lib/adapters/process-manager";
 import { getConfigValue } from "@/actions/config-actions";
+import { createWorktree } from "@/lib/worktree";
 import { writeFile, rm, mkdtemp } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -265,6 +266,38 @@ export async function POST(
           }
         }
 
+        // Determine cwd: worktree for GIT projects, localPath for NORMAL
+        let cwd = task.project!.localPath!;
+
+        if (task.project!.type === "GIT" && task.baseBranch) {
+          try {
+            const { worktreePath, worktreeBranch } = await createWorktree(
+              task.project!.localPath!,
+              taskId,
+              task.baseBranch
+            );
+            // Persist worktree info on execution record
+            await db.taskExecution.update({
+              where: { id: execution.id },
+              data: { worktreePath, worktreeBranch },
+            });
+            cwd = worktreePath;
+            sendEvent({ type: "status", content: `Worktree ready: ${worktreeBranch}` });
+          } catch (err) {
+            // Per D-09: explicit failure, no silent fallback
+            await db.taskExecution.update({
+              where: { id: execution.id },
+              data: { status: "FAILED", endedAt: new Date() },
+            }).catch(() => {});
+            sendEvent({
+              type: "error",
+              content: `Worktree creation failed: ${err instanceof Error ? err.message : String(err)}`,
+            });
+            controller.close();
+            return;
+          }
+        }
+
         try {
           const adapter = getAdapter(agent ?? "claude_local");
           const timeoutSec = await getConfigValue<number>("git.timeoutSec", 30);
@@ -274,7 +307,7 @@ export async function POST(
           const result = await adapter.execute({
             runId: execution.id,
             prompt: fullPrompt,
-            cwd: task.project!.localPath!,
+            cwd,  // worktree path for GIT projects, localPath for NORMAL
             model,
             sessionId: resumeSessionId,
             instructionsFile,
