@@ -23,6 +23,8 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 ## Current State
 
+**Phase 17 complete** (2026-03-31): Review & merge workflow — IN_REVIEW auto-transition on execution success, diff API with per-file structured output, squash merge with conflict detection via git merge-tree, send-back flow reusing existing worktree, dedicated task page with diff view + merge dialog, drawer enhancements
+
 **Phase 16 complete** (2026-03-31): Worktree execution engine — auto-create worktree + branch at execution start, cwd switch to worktree, base branch selector UI in create-task dialog
 
 **Phase 15 complete** (2026-03-31): Schema fields added (baseBranch, worktreePath, worktreeBranch), branch listing API, branchTemplate config removed
@@ -188,4 +190,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-31 — Phase 16 complete*
+*Last updated: 2026-03-31 — Phase 17 complete*
