@@ -7,7 +7,6 @@ import {
   FileCode,
   FileJson,
   FileText,
-  Palette,
   File,
   Folder,
   FolderOpen,
@@ -53,7 +52,7 @@ function getFileIcon(name: string, isDirectory: boolean, isExpanded: boolean) {
     return <FileText className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />;
   }
   if (ext === "css" || ext === "scss" || ext === "sass") {
-    return <Palette className="h-3.5 w-3.5 flex-shrink-0 text-pink-400" />;
+    return <File className="h-3.5 w-3.5 flex-shrink-0 text-pink-400" />;
   }
   return <File className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />;
 }
