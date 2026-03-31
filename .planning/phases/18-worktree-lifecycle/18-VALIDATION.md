@@ -2,8 +2,8 @@
 phase: 18
 slug: worktree-lifecycle
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-03-31
 ---
 
@@ -41,7 +41,7 @@ created: 2026-03-31
 | 18-01-01 | 01 | 1 | LC-01 (DONE) | unit | `pnpm test:run -- tests/unit/lib/worktree.test.ts` | ✅ (add describe) | ⬜ pending |
 | 18-01-02 | 01 | 1 | LC-01 (CANCELLED) | unit | `pnpm test:run -- tests/unit/actions/task-actions.test.ts` | ✅ (add describe) | ⬜ pending |
 | 18-01-03 | 01 | 1 | LC-01 (no-op) | unit | `pnpm test:run -- tests/unit/lib/worktree.test.ts` | ✅ (add describe) | ⬜ pending |
-| 18-01-04 | 01 | 1 | LC-02 | unit | `pnpm test:run -- tests/unit/lib/instrumentation.test.ts` | ❌ W0 | ⬜ pending |
+| 18-02-01 | 02 | 1 | LC-02 | unit | `pnpm test:run -- tests/unit/lib/instrumentation.test.ts` | ✅ (created by TDD task) | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -49,9 +49,7 @@ created: 2026-03-31
 
 ## Wave 0 Requirements
 
-- [ ] `tests/unit/lib/instrumentation.test.ts` — stubs for LC-02 (mock db and execSync)
-
-*Existing worktree.test.ts and task-actions.test.ts cover LC-01 test infrastructure.*
+*No Wave 0 gaps. All test files either exist (worktree.test.ts, task-actions.test.ts) or are created by TDD tasks within their plan (instrumentation.test.ts in 18-02-01).*
 
 ---
 
@@ -63,11 +61,11 @@ created: 2026-03-31
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 15s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 15s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved
