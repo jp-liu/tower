@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useI18n } from "@/lib/i18n";
 import { getConfigValue, setConfigValue, getConfigValues } from "@/actions/config-actions";
 import type { GitPathRule } from "@/lib/git-url";
-import { validateBranchTemplate } from "@/lib/branch-template";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -32,7 +31,7 @@ const EMPTY_FORM: RuleEditState = {
 };
 
 type SystemForm = { maxUploadMb: number; maxConcurrent: number };
-type GitParamsForm = { timeoutSec: number; branchTemplate: string };
+type GitParamsForm = { timeoutSec: number };
 type SearchForm = { resultLimit: number; allModeCap: number; debounceMs: number; snippetLength: number };
 
 export function SystemConfig() {
@@ -44,9 +43,8 @@ export function SystemConfig() {
   const [addForm, setAddForm] = useState<RuleEditState>({ ...EMPTY_FORM });
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [systemForm, setSystemForm] = useState<SystemForm>({ maxUploadMb: 50, maxConcurrent: 3 });
-  const [gitParamsForm, setGitParamsForm] = useState<GitParamsForm>({ timeoutSec: 30, branchTemplate: "vk/{taskIdShort}-" });
+  const [gitParamsForm, setGitParamsForm] = useState<GitParamsForm>({ timeoutSec: 30 });
   const [searchForm, setSearchForm] = useState<SearchForm>({ resultLimit: 20, allModeCap: 5, debounceMs: 250, snippetLength: 80 });
-  const [branchTemplateError, setBranchTemplateError] = useState("");
 
   useEffect(() => {
     getConfigValue<GitPathRule[]>("git.pathMappingRules", []).then(setRules);
@@ -54,7 +52,6 @@ export function SystemConfig() {
       "system.maxUploadBytes",
       "system.maxConcurrentExecutions",
       "git.timeoutSec",
-      "git.branchTemplate",
       "search.resultLimit",
       "search.allModeCap",
       "search.debounceMs",
@@ -67,7 +64,6 @@ export function SystemConfig() {
       });
       setGitParamsForm({
         timeoutSec: (cfg["git.timeoutSec"] as number) ?? 30,
-        branchTemplate: (cfg["git.branchTemplate"] as string) ?? "vk/{taskIdShort}-",
       });
       setSearchForm({
         resultLimit: (cfg["search.resultLimit"] as number) ?? 20,
@@ -84,13 +80,7 @@ export function SystemConfig() {
   };
 
   const handleSaveGitParams = async () => {
-    if (!validateBranchTemplate(gitParamsForm.branchTemplate)) {
-      setBranchTemplateError(t("settings.config.gitParams.branchTemplateInvalid"));
-      return;
-    }
-    setBranchTemplateError("");
     await setConfigValue("git.timeoutSec", gitParamsForm.timeoutSec);
-    await setConfigValue("git.branchTemplate", gitParamsForm.branchTemplate);
   };
 
   const handleSaveSearch = async () => {
@@ -469,23 +459,6 @@ export function SystemConfig() {
                 className="w-24 text-right" />
               <span className="text-sm text-muted-foreground">s</span>
             </div>
-          </div>
-          {/* Branch template */}
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              <label className="text-sm font-medium">{t("settings.config.gitParams.branchTemplate")}</label>
-              <p className="text-xs text-muted-foreground">{t("settings.config.gitParams.branchTemplateHint")}</p>
-              {branchTemplateError && (
-                <p className="text-xs text-destructive">{branchTemplateError}</p>
-              )}
-            </div>
-            <Input
-              value={gitParamsForm.branchTemplate}
-              onChange={(e) => {
-                setGitParamsForm((f) => ({ ...f, branchTemplate: e.target.value }));
-                setBranchTemplateError("");
-              }}
-              className="w-56" />
           </div>
           <Button size="sm" onClick={handleSaveGitParams}>{t("common.save")}</Button>
         </div>
