@@ -2,8 +2,8 @@
 phase: 16
 slug: worktree-execution-engine
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-03-31
 ---
 
@@ -40,8 +40,8 @@ created: 2026-03-31
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
 | 16-01-01 | 01 | 1 | WT-01 | unit | `pnpm vitest run tests/unit/lib/worktree.test.ts` | ❌ W0 | ⬜ pending |
 | 16-01-02 | 01 | 1 | WT-02 | unit | `pnpm vitest run tests/unit/lib/worktree.test.ts` | ❌ W0 | ⬜ pending |
-| 16-02-01 | 02 | 2 | BR-01 | unit | `pnpm vitest run tests/unit/components/create-task-dialog.test.tsx` | ❌ W0 | ⬜ pending |
-| 16-02-02 | 02 | 2 | WT-04 | integration | `pnpm vitest run` | ✅ | ⬜ pending |
+| 16-02-01 | 02 | 2 | BR-01 | unit | `pnpm vitest run tests/unit/components/create-task-dialog.test.tsx` | ✅ | ✅ green |
+| 16-02-02 | 02 | 2 | WT-04 | integration | `pnpm vitest run` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
