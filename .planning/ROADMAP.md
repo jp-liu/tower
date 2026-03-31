@@ -208,5 +208,5 @@ Plans:
 | 14. Search Quality & Realtime Config | v0.4 | 2/2 | Complete | 2026-03-30 |
 | 15. Schema & Cleanup | v0.5 | 2/2 | Complete    | 2026-03-31 |
 | 16. Worktree Execution Engine | v0.5 | 1/2 | Complete    | 2026-03-31 |
-| 17. Review & Merge Workflow | v0.5 | 4/4 | Complete   | 2026-03-31 |
+| 17. Review & Merge Workflow | v0.5 | 4/4 | Complete    | 2026-03-31 |
 | 18. Worktree Lifecycle | v0.5 | 0/TBD | Not started | - |
