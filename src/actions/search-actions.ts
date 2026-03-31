@@ -1,11 +1,8 @@
 "use server";
 
-import { search, type SearchResult, type SearchCategory } from "@/lib/search";
+import { search } from "@/lib/search";
+import type { SearchResult, SearchCategory } from "@/lib/search";
 import { getConfigValues } from "@/actions/config-actions";
-
-// Re-export types for existing consumers (per D-05)
-export type { SearchResult, SearchCategory };
-export type { SearchResultType, SearchConfig } from "@/lib/search";
 
 export async function globalSearch(
   query: string,

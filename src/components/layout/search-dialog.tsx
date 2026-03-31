@@ -4,7 +4,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Search, FileText, FolderKanban, GitBranch, StickyNote, Package2, X } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { globalSearch, type SearchResult, type SearchResultType, type SearchCategory } from "@/actions/search-actions";
+import { globalSearch } from "@/actions/search-actions";
+import type { SearchResult, SearchResultType, SearchCategory } from "@/lib/search";
 import { getConfigValue } from "@/actions/config-actions";
 import { useI18n } from "@/lib/i18n";
 

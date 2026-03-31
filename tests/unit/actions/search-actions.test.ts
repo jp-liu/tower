@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { syncNoteToFts } from "@/lib/fts";
-import type { SearchCategory, SearchResult } from "@/actions/search-actions";
+import type { SearchCategory, SearchResult } from "@/lib/search";
 
 const testDb = new PrismaClient({
   datasources: {
