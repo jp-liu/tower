@@ -189,6 +189,7 @@ export function BoardPageClient({
       {selectedTask ? (
         <TaskDetailPanel
           task={selectedTask}
+          workspaceId={workspaceId}
           onClose={() => setSelectedTask(null)}
         />
       ) : (
