@@ -23,6 +23,8 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 ## Current State
 
+**Phase 15 complete** (2026-03-31): Schema fields added (baseBranch, worktreePath, worktreeBranch), branch listing API, branchTemplate config removed
+
 **Shipped:** v0.4 系统配置化 (2026-03-30)
 - SystemConfig key-value 数据模型 + 通用配置读写 API
 - Git 路径映射规则可配置（设置页 CRUD）
@@ -100,15 +102,17 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - ✓ 搜索逻辑去重（search.ts 共享模块）— v0.4 Phase 14
 - ✓ 搜索 useEffect 竞态条件修复（cancelled flag）— v0.4 Phase 14
 - ✓ 配置变更实时生效（无需重启）— v0.4 Phase 14
+- ✓ Task.baseBranch + TaskExecution.worktreePath/worktreeBranch schema fields — v0.5 Phase 15
+- ✓ Branch listing API (getProjectBranches server action) — v0.5 Phase 15
+- ✓ 移除 git.branchTemplate 配置项 — v0.5 Phase 15
 
 ### Active
-- [ ] 创建任务时选择 base branch
+- [ ] 创建任务时选择 base branch (UI)
 - [ ] 任务执行前自动创建 worktree + task 分支
 - [ ] 执行 cwd 切换到 worktree 目录
 - [ ] 任务面板 diff 查看 + squash merge 操作
 - [ ] IN_REVIEW → IN_PROGRESS 退回重做流程
 - [ ] Worktree 清理（DONE/CANCELLED）
-- [ ] 移除 git.branchTemplate 配置项
 
 ### Out of Scope
 
@@ -182,4 +186,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-31 — v0.5 milestone started*
+*Last updated: 2026-03-31 — Phase 15 complete*
