@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/lib/i18n";
+import { getProjectBranches } from "@/actions/git-actions";
 import type { Task, Priority, TaskStatus } from "@prisma/client";
 
 interface LabelOption {
@@ -31,6 +32,7 @@ interface CreateTaskDialogProps {
     priority: Priority;
     status: TaskStatus;
     labelIds: string[];
+    baseBranch?: string;
   }) => void;
   onUpdate?: (taskId: string, data: {
     title: string;
@@ -42,6 +44,8 @@ interface CreateTaskDialogProps {
   editTask?: Task | null;
   editTaskLabelIds?: string[];
   labels: LabelOption[];
+  projectType?: string;
+  projectLocalPath?: string | null;
 }
 
 export function CreateTaskDialog({
@@ -53,14 +57,20 @@ export function CreateTaskDialog({
   editTask,
   editTaskLabelIds,
   labels,
+  projectType,
+  projectLocalPath,
 }: CreateTaskDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("MEDIUM");
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
+  const [branches, setBranches] = useState<string[]>([]);
+  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [selectedBranch, setSelectedBranch] = useState<string>("");
   const { t } = useI18n();
 
   const isEditing = !!editTask;
+  const isGitProject = projectType === "GIT" && !!projectLocalPath;
 
   // Pre-fill when editing
   useEffect(() => {
@@ -84,20 +94,46 @@ export function CreateTaskDialog({
       setDescription("");
       setPriority("MEDIUM");
       setSelectedLabelIds([]);
+      setBranches([]);
+      setSelectedBranch("");
     }
   }, [open, editTask]);
+
+  // Fetch branches when dialog opens for a GIT project in create mode
+  useEffect(() => {
+    if (!open || !isGitProject || editTask) return;
+    setBranchesLoading(true);
+    getProjectBranches(projectLocalPath!).then((list) => {
+      setBranches(list);
+      setSelectedBranch(list[0] ?? "");
+      setBranchesLoading(false);
+    }).catch(() => {
+      setBranches([]);
+      setSelectedBranch("");
+      setBranchesLoading(false);
+    });
+  }, [open, isGitProject, projectLocalPath, editTask]);
 
   const handleSubmit = () => {
     if (!title.trim()) return;
     if (isEditing && onUpdate) {
       onUpdate(editTask.id, { title, description, priority, labelIds: selectedLabelIds });
     } else {
-      onSubmit({ title, description, priority, status: defaultStatus, labelIds: selectedLabelIds });
+      onSubmit({
+        title,
+        description,
+        priority,
+        status: defaultStatus,
+        labelIds: selectedLabelIds,
+        ...(isGitProject && selectedBranch ? { baseBranch: selectedBranch } : {}),
+      });
     }
     setTitle("");
     setDescription("");
     setPriority("MEDIUM");
     setSelectedLabelIds([]);
+    setBranches([]);
+    setSelectedBranch("");
     onOpenChange(false);
   };
 
@@ -157,6 +193,28 @@ export function CreateTaskDialog({
               })}
             </div>
           </div>
+          {/* Base Branch Selector - only for GIT projects in create mode */}
+          {isGitProject && !isEditing && (
+            <div className="space-y-2">
+              <Label>{t("task.baseBranch")}</Label>
+              {branchesLoading ? (
+                <div className="text-sm text-muted-foreground">{t("task.branchLoading")}</div>
+              ) : branches.length > 0 ? (
+                <select
+                  value={selectedBranch}
+                  onChange={(e) => setSelectedBranch(e.target.value)}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                  data-testid="branch-selector"
+                >
+                  {branches.map((branch) => (
+                    <option key={branch} value={branch}>{branch}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="text-sm text-muted-foreground">{t("task.branchNone")}</div>
+              )}
+            </div>
+          )}
           {/* Labels */}
           {labels.length > 0 && (
             <div className="space-y-2">

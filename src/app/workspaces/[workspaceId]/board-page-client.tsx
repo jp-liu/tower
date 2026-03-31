@@ -78,7 +78,7 @@ export function BoardPageClient({
   }, [refreshData]);
 
   const handleCreateTask = useCallback(
-    async (data: { title: string; description: string; priority: Priority; status: TaskStatus; labelIds: string[] }) => {
+    async (data: { title: string; description: string; priority: Priority; status: TaskStatus; labelIds: string[]; baseBranch?: string }) => {
       await createTask({
         title: data.title,
         description: data.description,
@@ -86,6 +86,7 @@ export function BoardPageClient({
         priority: data.priority,
         status: data.status,
         labelIds: data.labelIds,
+        baseBranch: data.baseBranch,
       });
       refreshData();
     },
@@ -179,6 +180,8 @@ export function BoardPageClient({
               : []
           }
           labels={labels}
+          projectType={project.type}
+          projectLocalPath={project.localPath}
         />
       </div>
 

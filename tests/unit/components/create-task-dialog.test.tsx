@@ -60,7 +60,7 @@ const mockEditTask: Task = {
 
 afterEach(() => {
   cleanup();
-  vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
 beforeEach(() => {
