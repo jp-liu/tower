@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Git Worktree 任务隔离
-status: verifying
-stopped_at: Phase 16 context gathered
-last_updated: "2026-03-31T03:25:51.226Z"
+status: executing
+stopped_at: Completed 16-01-PLAN.md
+last_updated: "2026-03-31T03:53:57.432Z"
 last_activity: 2026-03-31
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 10
-  completed_plans: 10
+  total_plans: 12
+  completed_plans: 11
   percent: 25
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-31)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** v0.5 — Git Worktree 任务隔离
+**Current focus:** Phase 16 — worktree-execution-engine
 
 ## Current Position
 
-Phase: 16
-Plan: Not started
-Status: Both plans executed, pending verification
+Phase: 16 (worktree-execution-engine) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-03-31
 
 Progress: [██░░░░░░░░] 25%
@@ -59,6 +59,7 @@ Progress: [██░░░░░░░░] 25%
 | Phase 15 P02 | 480s | 2 tasks | 6 files |
 
 *Updated after each plan completion*
+| Phase 16-worktree-execution-engine P01 | 120s | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,8 @@ Progress: [██░░░░░░░░] 25%
 - [Phase 15]: baseBranch stored on Task (not TaskExecution) — branch choice is per-task, not per-execution-run
 - [Phase 15]: Fixed branch format task/{taskId} passed directly to TaskMetadata — no interpolation needed
 - [Phase 15]: getConfigValue import removed from task-detail-panel.tsx entirely — only branchTemplate used it there
+- [Phase phase16]: createWorktree propagates original git error on failure — no wrapping, maintains diagnostic clarity
+- [Phase phase16]: NORMAL projects and GIT without baseBranch: zero behavior change (cwd stays localPath)
 
 ### Pending Todos
 
@@ -114,6 +117,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-31T03:25:51.222Z
-Stopped at: Phase 16 context gathered
-Resume file: .planning/phases/16-worktree-execution-engine/16-CONTEXT.md
+Last session: 2026-03-31T03:53:57.428Z
+Stopped at: Completed 16-01-PLAN.md
+Resume file: None

@@ -154,7 +154,7 @@ Plans:
   5. Two tasks in the same project can be executing simultaneously, each working in their own worktree without file conflicts
 **Plans**: 2 plans
 Plans:
-- [ ] 16-01-PLAN.md — Worktree utility module and stream route integration
+- [x] 16-01-PLAN.md — Worktree utility module and stream route integration
 - [ ] 16-02-PLAN.md — Branch selector UI in create-task dialog
 **UI hint**: yes
 
@@ -202,6 +202,6 @@ Plans:
 | 13. Configurable System Parameters | v0.4 | 2/2 | Complete | 2026-03-30 |
 | 14. Search Quality & Realtime Config | v0.4 | 2/2 | Complete | 2026-03-30 |
 | 15. Schema & Cleanup | v0.5 | 2/2 | Complete    | 2026-03-31 |
-| 16. Worktree Execution Engine | v0.5 | 0/2 | Planned | - |
+| 16. Worktree Execution Engine | v0.5 | 1/2 | In Progress|  |
 | 17. Review & Merge Workflow | v0.5 | 0/TBD | Not started | - |
 | 18. Worktree Lifecycle | v0.5 | 0/TBD | Not started | - |
