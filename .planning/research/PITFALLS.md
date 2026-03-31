@@ -1,221 +1,328 @@
 # Pitfalls Research
 
-**Domain:** Global search enhancement — adding "All" cross-type search, FTS5 note search, asset description field, and parallel queries to an existing Next.js 16 + SQLite + Prisma app
-**Researched:** 2026-03-30
-**Confidence:** HIGH (derived from direct codebase inspection of `search-actions.ts`, `fts.ts`, `schema.prisma`, `search-dialog.tsx`, and confirmed against SQLite FTS5 docs, Prisma issue tracker, and SQLite WAL behaviour)
+**Domain:** Task development workbench — adding online code editor, file tree browser, diff view, and live preview to an existing Next.js 16 + React 19 + App Router application
+**Researched:** 2026-03-31
+**Confidence:** HIGH (verified against official Next.js 16 docs, Monaco Editor GitHub issues, React 19 release notes, Node.js fs/child_process docs, OWASP path traversal guides, and multiple community post-mortems)
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: `prisma db push` After Adding `description` Field Destroys FTS5 Tables
+### Pitfall 1: Monaco Editor Breaks SSR — Missing `dynamic({ ssr: false })` Wrapper
 
 **What goes wrong:**
-Adding the `description` field to `ProjectAsset` requires running `prisma db push`. This project has manually created FTS5 shadow tables (`notes_fts`, `notes_fts_data`, `notes_fts_idx`, etc.) outside of Prisma. When `db push` runs against a schema with a changed model, Prisma re-inspects the full database state. The FTS5 shadow tables appear as unrecognised drift, and Prisma may prompt "We need to reset the database" — wiping all notes, assets, tasks and the FTS index.
+Importing `@monaco-editor/react` or `monaco-editor` directly in a Server Component or even a Client Component without SSR-disabled dynamic import causes the build to fail with `window is not defined` or `navigator is not defined` at import time. Monaco references browser globals at the module level. The App Router pre-renders all Client Components on the server by default, so `"use client"` alone does not prevent the SSR execution path.
 
 **Why it happens:**
-This project uses `prisma db push` (not `prisma migrate`). There is no migration history. Each `db push` compares the Prisma schema against the live database. FTS5 shadow tables are visible in `sqlite_master` but have no corresponding Prisma model. On some Prisma 6.x versions the shadow tables are ignored; on others they trigger a drift warning that becomes a reset prompt. The risk is non-deterministic and environment-dependent. See the existing Pitfall 1 in this file (v0.2) for the root cause — it remains live for every subsequent schema change.
+Monaco was built for Electron/browser environments. Its top-level code accesses `window`, `document`, `navigator`, and `Worker`. These do not exist in the Node.js SSR environment. Developers assume `"use client"` means "client-only" but in Next.js 16 App Router, Client Components still execute on the server during initial render — the directive only marks the boundary for the client graph, not the execution environment for SSR.
 
 **How to avoid:**
-1. Before touching `schema.prisma`, back up `prisma/dev.db`: `cp prisma/dev.db prisma/dev.db.backup`
-2. Check WAL is checkpointed first: `sqlite3 prisma/dev.db 'PRAGMA wal_checkpoint(TRUNCATE)'`
-3. Add the `description String? @default("")` field to `ProjectAsset` in `schema.prisma`
-4. Run `prisma db push --accept-data-loss` only after the backup is confirmed
-5. After `db push` succeeds, immediately re-run `pnpm db:init-fts` to restore the FTS5 virtual table if it was dropped
-6. Verify: `sqlite3 prisma/dev.db ".tables"` — `notes_fts` must appear in the output
+Wrap the editor component with `next/dynamic` and `ssr: false`, inside a dedicated Client Component file:
+
+```typescript
+// src/components/workbench/editor-panel.tsx
+"use client"
+import dynamic from "next/dynamic"
+
+const MonacoEditor = dynamic(
+  () => import("@monaco-editor/react"),
+  { ssr: false, loading: () => <div className="editor-skeleton" /> }
+)
+```
+
+Never import `monaco-editor` directly at the top level of any file in the App Router tree.
 
 **Warning signs:**
-- `prisma db push` output includes "The following changes will be made to the database schema" followed by table drops
-- `prisma db push` shows a reset prompt — STOP; restore from backup
-- After push, `pnpm db:init-fts` exits with "table already exists" (FTS survived) — this is safe; `IF NOT EXISTS` handles it
-- After push, `searchNotes()` returns 0 results for a query that previously matched — FTS was wiped; re-run `db:init-fts` and re-index existing notes
+- Build error: `ReferenceError: window is not defined` or `self is not defined`
+- Error originates inside `monaco-editor/esm/...` during `next build`
+- Hydration errors on first render with Monaco-related stack traces
 
 **Phase to address:**
-Phase 1 (Asset description field schema migration). Always perform the backup-push-verify sequence before any schema change that touches existing models.
+Phase 1 (Code editor foundation). Establish the `dynamic({ ssr: false })` pattern as the very first step; all editor integration builds on top of this.
 
 ---
 
-### Pitfall 2: FTS5 Search in `globalSearch("all")` Skips the `projectId` Filter — Returns Cross-Project Note Leakage
+### Pitfall 2: Monaco Web Workers Fail to Load Under Turbopack
 
 **What goes wrong:**
-The existing `searchNotes()` in `src/lib/fts.ts` accepts a required `projectId` parameter and filters to one project. The new "All" mode searches across the entire system with no project scope. When adapting `searchNotes()` for global use, developers omit the `projectId` filter and the JOIN with `ProjectNote` becomes the only filter. If the JOIN is also removed or loosened, all notes from all projects (and all workspaces) are returned — including private notes in unrelated workspaces. Even in a single-user tool this is confusing; if the tool is ever shared, it is a data boundary violation.
+Monaco Editor requires web workers for language services (syntax highlighting, IntelliSense, validation). Under Next.js 16's default Turbopack bundler, the `monaco-editor-webpack-plugin` does not work — it is a Webpack-specific plugin. Without it, workers either fail silently (falling back to main-thread execution, causing UI freezes on large files) or throw `Could not create web worker(s)` at runtime. The Turbopack dynamic import of `monaco-editor/esm/vs/editor/editor.api` is also a known open issue as of early 2026.
 
 **Why it happens:**
-The v0.2 `searchNotes()` was intentionally project-scoped. Extending it to "All" mode requires either a new function or a conditional filter. The easy path is to remove the `WHERE n."projectId" = ?` clause without considering the implication. Additionally, the FTS5 virtual table `notes_fts` stores only `note_id`, `title`, and `content` — it has no `workspaceId`. Cross-workspace scoping requires the JOIN with `ProjectNote` → `Project` → `Workspace`.
+Turbopack does not support the full Webpack loader API. The Monaco editor webpack plugin registers custom loaders and resolves worker entry points via `MonacoEnvironment.getWorkerUrl`. Turbopack's loader support is limited to loaders that return JavaScript — CSS loaders and binary-transforming loaders are unsupported. The Monaco ESM migration (post-0.47) also changed workers to `module` workers, which the plugin's `getWorkerUrl` does not handle correctly in all bundler contexts.
 
 **How to avoid:**
-Write a separate `searchNotesGlobal()` function that keeps the JOIN to `ProjectNote` and `Project`, but removes the `projectId` filter. The `subtitle` in results should show `workspace / project` so the user knows where the note lives. Return `projectId` and `workspaceId` in the result so `navigateTo` can be computed correctly.
+Three viable options, in priority order:
+
+1. **Use `@monaco-editor/react` with CDN workers** (recommended for this use case): The `@monaco-editor/react` package defaults to loading Monaco from a CDN (`esm.sh` or `jsdelivr`) — no webpack plugin needed. Workers are loaded from the same CDN. This avoids the bundler problem entirely at the cost of a network request on first load.
+
+2. **Opt out of Turbopack for development builds** that include the workbench route by configuring webpack fallback: `next.config.js` `webpack` option is still supported even when Turbopack is active for other routes. Scope the Monaco webpack plugin only to the workbench bundle.
+
+3. **Disable Turbopack for the entire project** (`next dev --webpack`) if CDN loading is not acceptable and full Webpack control is required.
+
+**Warning signs:**
+- Console warning: `Could not create web worker(s). Falling back by loading the worker source in the main thread.`
+- Editor becomes unresponsive while typing in large files (worker fell back to main thread)
+- Build fails with Turbopack errors referencing `monaco-editor-webpack-plugin` loaders
+- Open GitHub issue: [vercel/next.js #72613](https://github.com/vercel/next.js/issues/72613) — check its status before the implementation phase
+
+**Phase to address:**
+Phase 1 (Code editor foundation). Decide CDN vs. bundled workers before any language service work; changing this later breaks the editor worker configuration.
+
+---
+
+### Pitfall 3: Monaco Bundle Inflates Initial Page Load by 5-51 MB
+
+**What goes wrong:**
+Monaco Editor is 5–10 MB uncompressed. With language service workers bundled via Webpack, one project measured 51 MB raw bundle contribution (5 MB parsed+gzipped). Loading this on the initial workbench page load causes a multi-second blank editor state and inflates the JavaScript parse budget for the entire app — affecting Kanban pages that don't use the editor at all if the bundle is not properly code-split.
+
+**Why it happens:**
+Developers add Monaco to a component file that is imported in a shared layout or parent component, causing it to be included in the root JS chunk. Even when the editor file is lazy, importing it inside a component that is already eagerly loaded pulls Monaco into the initial bundle. The App Router does not automatically code-split nested dynamic imports if the parent component is part of a Server Component that renders on every request.
+
+**How to avoid:**
+1. Keep the entire workbench route (`/tasks/[taskId]`) isolated: it should be a separate Next.js page segment that is never shared with the Kanban layout. This ensures the Monaco bundle is only loaded when navigating to that route.
+2. Use `@monaco-editor/react`'s CDN loader (`loader.config({ monaco })`) which defers the download entirely until the editor mounts.
+3. Consider CodeMirror 6 as an alternative (300 KB core vs. 5 MB+ for Monaco) — it supports tree-shaking and modular language packs. Sourcegraph migrated from Monaco to CodeMirror and reported a 43% reduction in JS download size. For a task workbench where VSCode-level IntelliSense is not required, CodeMirror 6 is the better fit.
+
+**Warning signs:**
+- `@next/bundle-analyzer` shows `monaco-editor` in the main or shared JS chunk
+- Initial page load for the Kanban board gets slower after adding the workbench route
+- Lighthouse JS bundle size warnings appear on non-workbench pages
+
+**Phase to address:**
+Phase 1 (Code editor foundation). Run `@next/bundle-analyzer` immediately after integrating the editor to verify isolation.
+
+---
+
+### Pitfall 4: File System API Routes Without Path Traversal Hardening Expose the Host Filesystem
+
+**What goes wrong:**
+The workbench needs API routes to read, write, and list files in the project's `localPath`. If the `filePath` parameter is passed directly to `fs.readFile` or `path.join(localPath, filePath)` without validation, an attacker (or a misconfigured client) can supply `../../etc/passwd` or `../../../.env` to read arbitrary files on the host system. For a localhost-only tool this is lower severity — but it remains a real risk if the user's browser has a malicious extension or if the tool is ever accidentally exposed on a local network.
+
+**Why it happens:**
+`path.normalize` and `path.join` resolve `..` components but do not prevent traversal outside the root. A path like `localPath + "/../../../.env"` after `path.normalize` still resolves to a path outside `localPath`. `path.basename` alone is insufficient because it strips directory components, losing the directory structure needed for the file tree. The existing `uploadAsset` action in this codebase already uses `path.basename` + DB validation — the file tree needs a different, stricter check.
+
+**How to avoid:**
+Always verify that the resolved path starts with the allowed root after normalization:
 
 ```typescript
-// src/lib/fts.ts — global variant
-export async function searchNotesGlobal(
-  db: PrismaClient,
-  query: string
-): Promise<(FtsNoteResult & { projectId: string; workspaceId: string })[]> {
-  const trimmed = query.trim();
-  if (!trimmed) return [];
+import path from "path"
 
-  if (trimmed.length < 3) {
-    return db.$queryRawUnsafe(
-      `SELECT n.id as note_id, n.title, n.content, n."projectId", p."workspaceId"
-       FROM "ProjectNote" n
-       JOIN "Project" p ON p.id = n."projectId"
-       WHERE n.title LIKE ? OR n.content LIKE ?
-       LIMIT 20`,
-      `%${trimmed}%`, `%${trimmed}%`
-    );
+function safeResolvePath(root: string, userPath: string): string {
+  const resolved = path.resolve(root, userPath)
+  if (!resolved.startsWith(path.resolve(root) + path.sep) &&
+      resolved !== path.resolve(root)) {
+    throw new Error("Path traversal attempt detected")
   }
-
-  return db.$queryRawUnsafe(
-    `SELECT f.note_id, f.title, f.content, n."projectId", p."workspaceId"
-     FROM notes_fts f
-     JOIN "ProjectNote" n ON n.id = f.note_id
-     JOIN "Project" p ON p.id = n."projectId"
-     WHERE f.notes_fts MATCH ?
-     ORDER BY rank
-     LIMIT 20`,
-    trimmed
-  );
+  return resolved
 }
 ```
 
+Apply this guard to every filesystem API route: read file, write file, list directory, watch path. Never pass `userPath` directly to `fs.*` methods.
+
 **Warning signs:**
-- "All" search returns notes from projects the user did not select
-- `navigateTo` for note results points to the wrong workspace URL
-- Removing `projectId` filter from the SQL query with no alternative scope guard
+- Any API route that constructs a file path by concatenating `localPath` + user-supplied string without a `startsWith` check
+- `path.normalize` used as the only sanitization step (insufficient — see OWASP path traversal)
+- URL-encoded paths like `%2e%2e%2f` accepted by the route without decoding before normalization
 
 **Phase to address:**
-Phase 2 (Notes search integration into globalSearch). Review the SQL for every new search path to confirm scope is intentional.
+Phase 2 (File tree browser). Implement `safeResolvePath` as a shared utility in `src/lib/fs-security.ts` before the first file read endpoint. All file API routes import this; none perform raw `path.join` with user input.
 
 ---
 
-### Pitfall 3: `Promise.all` Parallel Queries in "All" Mode Cause SQLite WAL Contention
+### Pitfall 5: Live Preview Subprocess Leaks Processes on Workbench Close or Task Navigation
 
 **What goes wrong:**
-The "All" mode fires 5 concurrent read queries (tasks, projects, repositories, notes FTS5, assets). SQLite in WAL mode supports multiple concurrent readers — but only when all connections share the same WAL file and are coordinated. The Next.js app uses a single `PrismaClient` singleton, so all 5 queries share one connection pool. However, `$queryRawUnsafe` (used for FTS5) and Prisma ORM queries (used for the others) may acquire separate transactions. Under high load or when the MCP process is also reading, contention on the WAL read lock can cause one or more `Promise.all` branches to throw `SQLITE_BUSY`. Because `Promise.all` rejects on the first failure, a single contended read silently drops all results.
+The Preview panel starts a user-defined dev server (e.g., `npm run dev`) as a child process from a Next.js Route Handler or Server Action. When the user navigates away, closes the browser tab, or the Next.js dev server hot-reloads, the spawned subprocess continues running. On repeated opens of the same workbench, a new subprocess is spawned on a different port, leaving the old one orphaned. After several sessions, multiple dev servers are running simultaneously, consuming ports and RAM, and conflicting with each other (EADDRINUSE).
 
 **Why it happens:**
-SQLite allows concurrent reads in WAL mode, but each query still opens a read transaction. If a write (from MCP or from a concurrent server action) holds a write lock at the instant the read transaction tries to start, and `busy_timeout` is 0 (the default in `src/lib/db.ts`), the read fails immediately with `SQLITE_BUSY`. With 5 parallel reads, the probability of one hitting a write window is 5x higher than with a single sequential query.
+Node.js child processes spawned with `child_process.spawn` do not automatically die when the parent connection closes. HTTP Route Handlers in Next.js have no lifecycle hooks for "client disconnected" or "route unmounted." The SSE connection drop (if using SSE to stream subprocess output) does trigger an `abortController` signal, but only if the route was set up to listen for it. Without `process.on('exit')` cleanup or a process registry, zombies accumulate.
 
 **How to avoid:**
-1. Ensure `PRAGMA busy_timeout=5000` is set on `src/lib/db.ts` (this is a known gap from the v0.2 pitfall — verify it was actually added)
-2. Wrap `Promise.all` in a try/catch that returns partial results rather than crashing the search:
+1. Maintain a server-side process registry (a `Map<taskId, ChildProcess>`) in a module-level singleton on the Node.js server. One subprocess per `taskId` maximum.
+2. Before spawning, check if a process for this `taskId` already exists and is running — reuse it.
+3. Listen on `AbortSignal` from the Route Handler: `request.signal.addEventListener('abort', () => subprocess.kill())`.
+4. Register a `process.on('SIGTERM')` + `process.on('exit')` handler in the singleton to kill all tracked subprocesses on Next.js shutdown.
+5. Expose a `POST /api/workbench/preview/stop` endpoint so the client can explicitly stop the server on workbench close (call from a `beforeunload` handler or a stop button).
 
-```typescript
-const [tasks, projects, repos, notes, assets] = await Promise.allSettled([
-  searchTasks(q), searchProjects(q), searchRepos(q),
-  searchNotesGlobal(q), searchAssets(q)
-]);
-// Use .status === 'fulfilled' to collect results; log rejections
+**Warning signs:**
+- `lsof -i :3001` shows multiple node processes after opening/closing the workbench several times
+- Preview panel shows "port already in use" error on the second open
+- Memory usage of the Next.js process grows linearly with workbench sessions
+
+**Phase to address:**
+Phase 4 (Preview panel). Implement the process registry singleton on day one of this phase — do not add it later as a fix.
+
+---
+
+### Pitfall 6: Preview iframe Without Proper CSP and Sandbox Allows Script Execution in Parent Context
+
+**What goes wrong:**
+The live preview iframe loads `http://localhost:PORT` — the user's running dev server. If the dev server serves a page that sets `document.domain` or uses `postMessage` to communicate, and the iframe's `sandbox` attribute is missing or too permissive, the embedded app can access the parent window's DOM, steal session-like data from `localStorage`, or trigger navigation in the parent frame. This is particularly relevant because the parent app also runs on `localhost`.
+
+**Why it happens:**
+Same-origin restrictions are relaxed between pages on `localhost` — `http://localhost:3000` (ai-manager) and `http://localhost:3001` (preview target) share the same hostname. The `sandbox` attribute without `allow-same-origin` prevents access, but with it enabled (often needed for form submissions and localStorage in the preview), the same-origin bypass is re-enabled. Developers frequently use `sandbox="allow-scripts allow-same-origin allow-forms"` without understanding the implications.
+
+**How to avoid:**
+For a localhost developer tool where the user controls both sides, an acceptable configuration is:
+```html
+<iframe
+  src="http://localhost:PORT"
+  sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
+  referrerpolicy="no-referrer"
+  title="Live Preview"
+/>
 ```
 
-3. Consider sequential fallback: if `Promise.allSettled` shows >1 rejection, retry sequentially
-4. Cap each branch at `LIMIT 10` in "All" mode (vs `LIMIT 20` in typed mode) to reduce query duration
+Document clearly that `allow-same-origin` is included because the preview app needs localStorage/cookies, but mitigated because this is a single-user localhost tool. Do NOT expose this configuration if the tool ever moves to a network-accessible server.
+
+Additionally, add a Next.js response header for the main app to prevent itself from being framed by unknown origins:
+```
+Content-Security-Policy: frame-ancestors 'self' http://localhost:*
+```
 
 **Warning signs:**
-- "All" mode occasionally returns empty results for one result type while others populate correctly
-- Server logs show `SQLITE_BUSY` or `P1001` errors specifically during "All" mode searches
-- Intermittent 500 errors from `globalSearch` when "all" category is used
+- iframe `sandbox` attribute is absent entirely
+- Preview page can call `window.parent.location.href = "..."` and redirect the main app
+- Console shows no `sandbox` violations when the preview page tries to access `window.parent`
 
 **Phase to address:**
-Phase 2 (globalSearch "All" mode implementation). Use `Promise.allSettled` from the start; never use bare `Promise.all` for parallel SQLite reads.
+Phase 4 (Preview panel). Document the sandbox decision in a code comment; include a security audit step in the phase verification.
 
 ---
 
-### Pitfall 4: `SearchCategory` Type Union Breaks Existing MCP Search Tool Silently
+### Pitfall 7: SSE Streaming for Subprocess Output Conflicts with Next.js Route Handler Buffering
 
 **What goes wrong:**
-`SearchCategory` in `search-actions.ts` is currently a string union `"task" | "project" | "repository"`. The MCP `search-tools.ts` imports and uses the same type. Adding `"note" | "asset" | "all"` to this union in the server action file, combined with a default of `"task"` in the MCP tool, is safe in TypeScript — but the MCP tool still uses `category` in a switch/if-chain that has no branch for the new values. When an external agent calls `search` with `category: "note"`, the MCP handler falls through to `return []` silently with no error, no tool failure, and no agent feedback.
+The Preview panel needs to stream dev server output (stdout/stderr) to the browser in real time. The existing SSE implementation in this project (for Claude CLI execution) uses `ReadableStream` in Route Handlers. Adding a second SSE stream for subprocess output while an execution SSE stream is active can cause the Next.js edge runtime or Node.js HTTP server to buffer responses, delay chunks, or fail to flush — resulting in the output appearing in bursts rather than line-by-line.
 
 **Why it happens:**
-`search-tools.ts` duplicates the search logic from `search-actions.ts` rather than importing it. Any expansion of the server action's search logic is not automatically reflected in the MCP tool. The TypeScript types align (both accept the new union values) but the runtime logic diverges. No test currently covers the MCP tool's note or asset search paths, so the gap is invisible until an agent tries to use it.
+Next.js 16 App Router Route Handlers in Node.js runtime support streaming via `ReadableStream`. However, when multiple long-lived SSE connections are open simultaneously (one for Claude execution, one for preview output), they share the same Node.js HTTP server. If response compression (gzip) is enabled, Node.js may buffer small chunks before sending — breaking the real-time feel of SSE. Additionally, if the Route Handler uses `Response` with `Transfer-Encoding: chunked` but the reverse proxy (if any) between the browser and Next.js buffers responses, chunks are held.
 
 **How to avoid:**
-1. Refactor the MCP `search-tools.ts` handler to delegate to the same underlying query functions as `search-actions.ts` — extract shared logic to `src/lib/search.ts` imported by both
-2. After adding new categories, explicitly add branches for `"note"`, `"asset"`, and `"all"` in BOTH files (or enforce DRY via the shared library)
-3. Add a unit test for the MCP tool that calls each category value and verifies it returns results (not an empty array for a query that should match)
+1. Set `Cache-Control: no-cache` and `X-Accel-Buffering: no` headers on all SSE responses to prevent proxy buffering.
+2. Ensure the subprocess output stream uses `\n\n` line endings (SSE spec requires double newline between events).
+3. Use the existing SSE pattern from the Claude execution adapter — do not invent a new streaming mechanism. Reuse `src/lib/sse.ts` or equivalent.
+4. Test with two simultaneous SSE connections (execution + preview) to verify neither starves the other.
+5. Use `controller.enqueue` with `TextEncoder` rather than manual string concatenation to avoid encoding bugs.
 
 **Warning signs:**
-- MCP `search` tool returns `[]` for `category: "note"` even when notes exist with matching content
-- TypeScript compilation passes with no errors but runtime returns nothing
-- `search-actions.ts` and `search-tools.ts` have diverged — one handles `"note"` and the other does not
+- Preview terminal output arrives in large bursts rather than line-by-line
+- Opening the Preview panel while a Claude execution is running causes one of the streams to freeze
+- `Content-Type: text/event-stream` header is present but chunks are delayed by 5-10 seconds
 
 **Phase to address:**
-Phase 2 (search-actions.ts expansion). Extract shared query logic to `src/lib/search.ts` before implementing new categories; update both consumers in the same PR.
+Phase 4 (Preview panel). Test SSE coexistence explicitly; add a concurrent test case to the Playwright suite.
 
 ---
 
-### Pitfall 5: Adding Required `description` Field to `ProjectAsset` Without a Default Breaks Existing Records
+### Pitfall 8: File Tree with Large Projects Renders Thousands of DOM Nodes, Freezing the UI
 
 **What goes wrong:**
-`ProjectAsset.description` is planned as a "required" field in the new upload dialog. If added to `schema.prisma` as `String` (not nullable, no default), `prisma db push` will attempt to add a NOT NULL column to an existing table that has rows. SQLite does not support `ALTER TABLE ADD COLUMN NOT NULL` without a default value. Prisma handles this by internally creating a new table, copying data, and dropping the old one — a destructive operation that can fail if WAL is not clean. Even if it succeeds, existing assets will have an empty `description` that the new UI shows as a blank field.
+A typical project directory (`localPath`) may contain `node_modules` with 50,000+ files. Rendering the file tree naively (recursive `<ul><li>` for every entry) will freeze the browser tab for several seconds on first mount. Even without `node_modules`, a medium-sized Next.js project has 200-500 source files across nested directories.
 
 **Why it happens:**
-Prisma's SQLite adapter simulates `ALTER TABLE` via table recreation for NOT NULL columns (SQLite does not support `ADD COLUMN NOT NULL` natively). This recreation clears any FTS-related triggers if they existed on the old table (they don't currently, but the asset table may gain triggers in future). More critically, it can fail with "database is locked" if the WAL has uncommitted reads from the MCP process.
+The React reconciler must create a DOM node for every visible list item. Without virtualization, rendering 500 items synchronously in React 19 still blocks the main thread for 100-200ms at minimum. Recursive tree components also tend to trigger cascading re-renders on any state change (file selection, expansion) across the entire tree.
 
 **How to avoid:**
-Define the field as optional with an empty string default: `description String? @default("")` in `schema.prisma`. This allows SQLite to add the column via a simple `ALTER TABLE ADD COLUMN` with a default, which is always safe — no table recreation. The upload dialog can treat empty-string as "no description provided" rather than requiring it at the DB level. Enforce non-empty at the UI/action validation layer (Zod), not at the DB constraint layer.
+1. **Always exclude `node_modules`, `.git`, `dist`, `.next`** from the file listing by default — configure an exclusion list in the API that performs the directory scan.
+2. **Implement lazy expansion**: only fetch directory contents when a directory node is expanded (API call per expand, not full tree on load).
+3. **Virtualize the tree list** using `react-window` or `@tanstack/virtual` once the flattened visible node list exceeds 100 items.
+4. Cap the API response at 500 entries per directory and show a "too many files" warning for the rest.
 
-```prisma
-model ProjectAsset {
-  // ... existing fields
-  description String? @default("")
-  // ...
+**Warning signs:**
+- File tree API returns the contents of `node_modules` without filtering
+- First mount of the file tree component causes a 2+ second React render (visible in React DevTools profiler)
+- Expanding a directory triggers a re-render of the entire tree component
+
+**Phase to address:**
+Phase 2 (File tree browser). Implement server-side exclusion list and lazy expansion before any virtualization work — these eliminate most of the problem without library overhead.
+
+---
+
+### Pitfall 9: Editor State Not Cleaned Up — Monaco Model Accumulation Causes Memory Leaks
+
+**What goes wrong:**
+Monaco Editor stores each open file as a `monaco.editor.ITextModel`. When the user opens 20 files in the workbench session (by clicking in the file tree), 20 models accumulate in Monaco's internal registry. When the React component unmounts (tab navigation, route change), the editor instance is disposed but the underlying text models are not — they remain in memory indefinitely. On long workbench sessions with many file opens, this causes steadily growing memory usage and eventually sluggish editor performance.
+
+**Why it happens:**
+`@monaco-editor/react`'s `Editor` component calls `editor.dispose()` on unmount, which disposes the editor view but not the associated `ITextModel`. Models must be explicitly disposed via `model.dispose()`. The library's documentation does not prominently highlight this distinction. The diff editor has an additional known bug where `Emitter` and `InteractionEmitter` objects are not disposed when the diff editor is disposed, causing further leaks (see Monaco issue #4659).
+
+**How to avoid:**
+```typescript
+// Track all created models
+const modelCache = new Map<string, monaco.editor.ITextModel>()
+
+function getOrCreateModel(uri: string, content: string, language: string) {
+  const existing = monaco.editor.getModel(monaco.Uri.parse(uri))
+  if (existing) return existing
+  const model = monaco.editor.createModel(content, language, monaco.Uri.parse(uri))
+  modelCache.set(uri, model)
+  return model
+}
+
+// On workbench unmount
+function disposeAllModels() {
+  modelCache.forEach(model => model.dispose())
+  modelCache.clear()
 }
 ```
 
-```typescript
-// In createAsset Zod schema — enforce at action layer
-description: z.string().max(500).optional().default(""),
-```
+Call `disposeAllModels()` in the `useEffect` cleanup of the workbench page component. Limit the model cache to the last 10 opened files (LRU eviction) to bound memory during long sessions.
 
 **Warning signs:**
-- `schema.prisma` has `description String` (no `?`, no `@default`) on `ProjectAsset`
-- `prisma db push` attempts table recreation ("The following changes will be made") for `ProjectAsset`
-- Existing assets lose their `filename` or `path` data after push (data loss during recreation)
+- Browser Task Manager shows the workbench tab memory growing by ~5 MB per 10 files opened
+- `monaco.editor.getModels().length` in the console grows unboundedly across file navigation
+- Editor becomes slower after 30+ file opens in one session
 
 **Phase to address:**
-Phase 1 (Asset description field). Make `description` optional with a default in the schema; enforce content in the upload dialog via Zod.
+Phase 3 (Editor file navigation). Implement model cache with LRU eviction and cleanup on mount; verify with `monaco.editor.getModels().length` in end-to-end tests.
 
 ---
 
-### Pitfall 6: FTS5 `MATCH` Query Syntax Errors Throw Unhandled Exceptions in "All" Mode
+### Pitfall 10: React 19 `useEffect` Double-Invocation Breaks Subprocess Singleton Registry
 
 **What goes wrong:**
-FTS5's `MATCH` operator has its own query syntax. Characters like `"`, `(`, `)`, `-`, `*`, `AND`, `OR`, `NOT` have special meaning. A user query like `"my note"` (with quotes), `(task)`, or `NOT done` will be interpreted as FTS5 syntax rather than a literal string, often causing a SQLite error: `fts5: syntax error near "..."`. In the existing per-project notes search, this error surfaces as a 500 on the notes page. In the new "All" mode with `Promise.allSettled`, the FTS5 branch rejects but the others succeed — the user sees partial results with no indication that note search failed. Worse, the FTS error is swallowed by `allSettled` and never surfaces in the UI.
+React 19 in Strict Mode (which Next.js 16 enables in development) double-invokes effects and their cleanup functions. A workbench component that starts a preview subprocess in `useEffect` will spawn two subprocesses in development — one for the initial mount, killed by cleanup, and a second for the re-mount. If the process registry singleton tracks by `taskId`, the first process gets registered and killed (cleanup), but the second registration may race with the cleanup of the first, leaving the registry in an inconsistent state with a stale PID.
 
 **Why it happens:**
-FTS5 uses a structured query language. Raw user input must be escaped before being passed to `MATCH`. The current `searchNotes()` passes `trimmed` directly to `MATCH` without escaping. This worked in v0.2 because only simple alphanumeric terms were common in practice. With the "All" search bar handling all user input including punctuation and multi-word phrases, syntax errors become frequent.
+React 19 Strict Mode mounts → unmounts → remounts every component on development load to surface side-effect bugs. The subprocess spawn is a side effect. The cleanup function must correctly kill the previous process before the second mount starts a new one. If the kill is async (SIGTERM + wait) and the second spawn fires before the kill completes, two processes share the same `taskId` key in the registry.
 
 **How to avoid:**
-Escape user queries before passing to FTS5. The safest approach for a fuzzy search UX is to wrap the query in double quotes (FTS5 phrase search) and escape any internal double quotes:
-
-```typescript
-function escapeFtsQuery(q: string): string {
-  // Remove FTS5 operator characters or escape by wrapping in phrase
-  return '"' + q.replace(/"/g, '""') + '"';
-}
-```
-
-Or strip FTS5 special characters entirely and use trigram-native behaviour:
-
-```typescript
-function sanitizeFtsQuery(q: string): string {
-  // Strip characters that break FTS5 MATCH syntax
-  return q.replace(/["\(\)\-\*\^]/g, ' ').replace(/\s+/g, ' ').trim();
-}
-```
-
-Apply this escape in `searchNotes()`, `searchNotesGlobal()`, and any future FTS5 query path. Add a try/catch around the `$queryRawUnsafe` call and fall back to the `LIKE` path on FTS5 syntax errors.
+1. Do not start the preview subprocess from a client-side `useEffect`. Instead, start it via an explicit user action (a "Start Preview" button that calls a Server Action or Route Handler).
+2. The Route Handler uses the server-side process registry (a Node.js module singleton) — React Strict Mode's double-invoke does not affect server-side code.
+3. If a client `useEffect` must be used for any subprocess-related logic, always check `isMounted` and use a `useRef` cancellation flag to handle the Strict Mode re-mount.
 
 **Warning signs:**
-- Searching for `"quoted text"` returns a 500 error or empty results instead of matching notes
-- Server logs show `SqliteError: fts5: syntax error`
-- The `LIKE` fallback path (for queries <3 chars) works fine, but FTS5 path (3+ chars) fails for certain inputs
-- "All" mode returns tasks and projects but not notes for the same query
+- Two dev server processes appear in `ps aux` after clicking "Start Preview" once in development
+- Console shows "subprocess already running" error on first start in development
+- Process registry Map has the same `taskId` key twice (impossible if Map — symptoms appear as port conflicts)
 
 **Phase to address:**
-Phase 2 (FTS5 integration into globalSearch). Add FTS5 query sanitization/escaping before the first integration test; cover edge-case queries (quoted strings, operators, Chinese + punctuation) in unit tests.
+Phase 4 (Preview panel). Architect subprocess control as server-side only from the start; never trigger subprocess spawn from a client-side effect.
+
+---
+
+### Pitfall 11: `fs.watch` / Chokidar inotify Limits Exhaust System File Watchers
+
+**What goes wrong:**
+If the file tree uses real-time file watching (to reflect changes made by Claude CLI in the worktree), and it watches the entire project directory recursively, the OS inotify limit (`fs.inotify.max_user_watches`) may be exhausted. On Linux, the default limit is 8,192 watches. A medium project with `node_modules` has 100,000+ files. Exhausting inotify causes `ENOSPC` errors (confusingly "no space left" despite disk space being available), breaks all file watching system-wide (including Next.js HMR), and may crash the development server.
+
+**Why it happens:**
+`chokidar` and Node.js `fs.watch` use one inotify watch per file/directory on Linux. Recursively watching a project directory without excluding `node_modules` and `.git` uses thousands of watches. When the ai-manager Next.js dev server is also running (which uses chokidar internally for HMR), the combined watch count easily exceeds the default limit.
+
+**How to avoid:**
+1. **Do not recursively watch the project directory**. Instead, poll the directory listing on demand (user triggers refresh) or watch only the opened files and their immediate parent directories.
+2. If reactive watching is required, scope it tightly: watch only `src/`, `app/`, `pages/` — configurable patterns, not the full `localPath`.
+3. Always pass `ignored: /(^|[\/\\])\.\.|node_modules/` to chokidar.
+4. Use chokidar's `awaitWriteFinish` option to debounce rapid file change events from Claude's batch writes.
+
+**Warning signs:**
+- `ENOSPC: System limit for number of file watchers reached` error in server logs
+- Next.js HMR stops working after the workbench is opened
+- `cat /proc/sys/fs/inotify/max_user_watches` is below 50,000 on the host machine
+
+**Phase to address:**
+Phase 2 (File tree browser). Decide on polling vs. watching before implementation; default to polling with a manual refresh button rather than reactive watching.
 
 ---
 
@@ -223,12 +330,14 @@ Phase 2 (FTS5 integration into globalSearch). Add FTS5 query sanitization/escapi
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Duplicate search logic in `search-actions.ts` and `search-tools.ts` | No refactor needed now | Adding "note" + "asset" categories must be done twice; divergence is guaranteed | Never — extract to `src/lib/search.ts` in the same PR that adds new categories |
-| Pass raw user query to FTS5 `MATCH` without escaping | Simpler code | Syntax errors crash note search for any query containing `"`, `(`, `)`, `-` | Never — escape before every MATCH call |
-| Add `description` as NOT NULL to `ProjectAsset` | Cleaner schema | Requires SQLite table recreation; risks data loss for existing assets | Never — use `String? @default("")` |
-| Use bare `Promise.all` for parallel search queries | One less import | Single `SQLITE_BUSY` error silently drops all search results | Never in production — use `Promise.allSettled` |
-| Keep `LIMIT 20` per-type in "All" mode | Maximum results returned | 5 types × 20 = 100 rows fetched, assembled, then truncated in UI; wasted query time | Reduce to LIMIT 10 per type in "All" mode |
-| Skip updating MCP `search-tools.ts` when adding new categories | Less code to write | Agent calling `search` with `category: "note"` gets empty array silently | Never — update MCP tool in the same commit as server action |
+| Skip `ssr: false` for Monaco and add `"use client"` only | Faster initial implementation | Build fails immediately — no benefit whatsoever | Never |
+| Use CDN-loaded Monaco without bundle analyzer verification | No webpack config needed | Cannot verify isolation; may still inflate unrelated chunks | Only in Phase 1 spike; must verify before Phase 1 complete |
+| Render full flat file tree without lazy expansion | Simpler tree component | Freezes on any project with >200 files or `node_modules` present | Never in production |
+| No path traversal guard on file read/write API | Simpler API handler | Arbitrary file read on host system via `../` traversal | Never |
+| Spawn preview subprocess without process registry | Quick implementation | Zombie processes accumulate; EADDRINUSE on second open | Never |
+| Use `Promise.all` for file tree + editor load | Slightly faster | Single FS error drops everything silently | Never — use `Promise.allSettled` |
+| Disable Monaco Diff editor cleanup | No unmount logic needed | Memory leak grows with every diff view open | Never — always dispose diff editor models |
+| Watch full project directory with chokidar | See all file changes | inotify exhaustion kills Next.js HMR system-wide | Never — scope watches tightly |
 
 ---
 
@@ -236,13 +345,16 @@ Phase 2 (FTS5 integration into globalSearch). Add FTS5 query sanitization/escapi
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| Prisma `db push` + existing FTS5 tables | Run push without backup | Back up `dev.db` → WAL checkpoint → `db push` → verify `notes_fts` still present → re-run `db:init-fts` if needed |
-| `ProjectAsset` schema change + existing rows | Add `description String` (NOT NULL, no default) | Use `description String? @default("")`; SQLite can add nullable column without table recreation |
-| FTS5 `MATCH` + user input | Pass raw query string directly | Sanitize/escape FTS5 special characters before every `MATCH` call; wrap in try/catch to fall back to `LIKE` |
-| `Promise.all` + SQLite parallel reads | Assume WAL = no contention | Use `Promise.allSettled`; set `busy_timeout=5000`; log rejected branches |
-| `SearchCategory` type expansion + MCP tool | Update `search-actions.ts` only | Update both `search-actions.ts` and `search-tools.ts`; or extract shared logic to `src/lib/search.ts` |
-| FTS5 global search + workspace scoping | Remove `projectId` filter and use FTS table alone | Always JOIN `notes_fts` → `ProjectNote` → `Project` to get `workspaceId` for correct `navigateTo` construction |
-| Asset search via `LIKE` + `description` field | Search `description` field before it exists in schema | Phase 1 must land schema migration before Phase 2 adds asset search to `globalSearch` |
+| Monaco + Next.js App Router | Import at top level of any component | `next/dynamic({ ssr: false })` wrapper — mandatory, no exceptions |
+| Monaco + Turbopack | Use `monaco-editor-webpack-plugin` | Use CDN loader (`@monaco-editor/react` default) or disable Turbopack for the workbench route |
+| Monaco + React 19 | Use `react-monaco-editor` (React 18 only) | Use `@monaco-editor/react@next` (v4.7.0-rc supports React 19) |
+| Monaco Diff Editor + unmount | Call `editor.dispose()` only | Also call `model.dispose()` on both original and modified models |
+| File tree + large projects | Fetch entire `localPath` recursively | Server-side exclusions (`node_modules`, `.git`, `dist`, `.next`) + lazy directory expansion |
+| File write + concurrent Claude execution | Write directly while Claude is modifying the same file | Show a warning if Claude execution is `IN_PROGRESS` on the task; lock file for writing |
+| Preview subprocess + Route Handler | Start subprocess on GET request | Only start on explicit POST; track with server-side Map singleton |
+| Preview iframe + same-origin localhost | No sandbox attribute | `sandbox="allow-scripts allow-forms allow-same-origin allow-popups"` with documented rationale |
+| SSE subprocess output + existing Claude SSE | Invent new streaming mechanism | Reuse existing `ReadableStream` SSE pattern from `src/lib/sse.ts` |
+| Chokidar file watcher + full project directory | Watch `localPath` recursively without exclusions | Scope to `src/`, `app/` only; default to polling |
 
 ---
 
@@ -250,10 +362,12 @@ Phase 2 (FTS5 integration into globalSearch). Add FTS5 query sanitization/escapi
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| "All" mode with LIMIT 20 per type | 100 rows fetched across 5 queries; UI shows max 5-10 per type anyway | Cap each branch at LIMIT 10 in "All" mode; use LIMIT 20 only in typed mode | Immediately — wasteful from day one |
-| FTS5 query without `ORDER BY rank` in global mode | Notes results are not relevance-ranked; best matches buried | Always include `ORDER BY rank` in FTS5 `MATCH` queries | Noticeable once a project has >10 matching notes |
-| `LIKE '%term%'` on `ProjectAsset.description` with no index | Full table scan on every asset search | Add `@@index([description])` or accept LIKE-only at current scale (single user, <1000 assets) | At ~5,000+ assets — not a concern for v0.3 |
-| Debounce timer in `search-dialog.tsx` fires 5 parallel queries on each keypress | Each keystroke fires 5 SQLite queries when category is "all" | The existing 250ms debounce is sufficient; ensure the "all" category does not bypass the debounce | Not a concern at current single-user scale |
+| Monaco loaded on first workbench open from CDN | 2-5 second blank editor while Monaco JS downloads | Pre-warm CDN cache with `<link rel="preload">` or use service worker caching | On every first visit, noticeable on slow connections |
+| File tree re-renders entire tree on single node expand | Expansion becomes sluggish after 50+ nodes | Memoize individual tree nodes; use `useCallback` for expand handlers | At ~100+ visible nodes |
+| Monaco model accumulation without LRU eviction | Memory grows ~2 MB per file opened | LRU cache with max 10 models; dispose evicted models | After 20+ file opens in one session |
+| Recursive directory listing without depth limit | API hangs for projects with deep nested directories | Limit API to 3 levels depth maximum; lazy-load deeper levels | Immediately for projects with `node_modules` |
+| Preview subprocess output not line-buffered | Terminal shows output in large bursts | Set `stdio: ['pipe', 'pipe', 'pipe']`; use `readline` to emit line events | Always without proper line buffering |
+| Chokidar watching 50K+ files | inotify exhausted; HMR broken | Tight scope + exclusions; prefer polling for workbench | On Linux with default inotify limits |
 
 ---
 
@@ -261,9 +375,12 @@ Phase 2 (FTS5 integration into globalSearch). Add FTS5 query sanitization/escapi
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| FTS5 `MATCH` with unescaped user input | SQL injection via FTS5 syntax; at worst, application crash from syntax error | Always sanitize/escape before `$queryRawUnsafe` FTS5 calls; `$queryRawUnsafe` does not parameterise the query itself |
-| Asset `description` field stored raw with no length limit | Arbitrarily long description could degrade search performance or cause OOM in FTS indexing (if notes_fts is extended to cover assets) | Enforce `max(500)` in Zod schema on `createAsset` and `updateAsset` actions |
-| Returning full `content` field of notes in global search results | Long note content (500k chars) serialised into search results inflates response payload | Return only a `snippet` (first 200 chars of content) in search results, not the full content |
+| File read/write API without `safeResolvePath` | Arbitrary file read/write on host system via `../` | `path.resolve` + `startsWith(root + sep)` check on every FS operation |
+| Preview subprocess command from user input without validation | Command injection — user runs arbitrary shell commands | Validate command against allowlist; use `execFileSync`/`spawn` with array args (not shell string); this project already uses `execFileSync` for git — same pattern |
+| iframe without `sandbox` attribute | Preview page can redirect parent window | Always set `sandbox` attribute; document the permissions granted |
+| Dev server proxy without origin validation | SSRF — proxy forwards requests to internal services | Restrict proxy target to `localhost` only; reject non-localhost targets |
+| File write without checking task execution state | Race condition — AI and user overwrite each other's changes | Check `TaskExecution.status`; warn if `IN_PROGRESS`; never silently overwrite |
+| Expose `localPath` directly in API responses | Reveals full host filesystem path to the browser | Only return relative paths in file tree responses; `localPath` is a server-side-only concept |
 
 ---
 
@@ -271,27 +388,30 @@ Phase 2 (FTS5 integration into globalSearch). Add FTS5 query sanitization/escapi
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| "All" tab returns results with no type label | User cannot tell if a result is a task, note, or asset | Always include a visible type badge on each result row; the existing `type` field on `SearchResult` must be surfaced in the UI |
-| Notes results in "All" mode navigate to the notes tab with no specific note highlighted | User sees the notes list but does not know which note matched | Pass `noteId` as a query param in `navigateTo` so the notes panel can auto-select the matched note |
-| Asset results show only filename — no project context | User cannot tell which project the asset belongs to | Include `workspace / project` as `subtitle` on asset results (same pattern as task results) |
-| "All" tab selected by default on dialog open | Fires 5 queries on first keystroke; slower than single-type search | Keep default category as `"task"` (existing behaviour); add "All" as an explicit tab the user selects |
-| Switching between category tabs while a query is in-flight | Previous search results flash before new ones load | Cancel in-flight search when category changes; the existing timer-based debounce does not cancel pending server action calls |
+| No loading skeleton for Monaco | Blank white rectangle while editor loads (1-5 seconds) | Show a code-colored skeleton or "Loading editor..." placeholder via `dynamic` `loading` prop |
+| File tree shows no indication that Claude is editing a file | User opens the same file in the editor — race condition with AI writes | Show a "being modified by AI" indicator on files currently being written by the Claude execution |
+| Preview iframe shows a blank page when dev server not started | Confusing — looks like the preview is broken | Show an explicit "Dev server not running — click Start to launch" state before spawning |
+| Preview subprocess failure output hidden | User cannot diagnose why the preview is not working | Stream stderr to the Preview terminal panel alongside stdout |
+| Editor saves overwrite worktree files without confirmation | User accidentally undoes Claude's work | Explicit Save button (not auto-save); confirm dialog if the file was modified by Claude after the editor opened it |
+| File tree does not reflect Claude's file additions after execution | Stale tree shows old file list | Manual Refresh button in file tree header; optionally, auto-refresh when task execution transitions to `IN_REVIEW` |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Schema migration safety:** Run `prisma db push` for `description` field — verify `notes_fts` still exists afterward (`sqlite3 dev.db ".tables"` shows `notes_fts`)
-- [ ] **Existing asset data:** After migration, query `SELECT description FROM ProjectAsset LIMIT 5` — existing rows should show `""` (empty string default), not `NULL` causing NULL pointer errors in the UI
-- [ ] **FTS5 escape:** Search for `"quoted"` in the search dialog — verify it returns results or an empty state, not a 500 error
-- [ ] **FTS5 escape:** Search for `(test)` and `NOT done` — verify no server error
-- [ ] **All-mode note scope:** Create a note in Workspace A, search for it from the "All" tab — verify `navigateTo` points to the correct workspace URL, not a 404
-- [ ] **All-mode partial failure:** Manually break the `notes_fts` table, then use "All" mode — verify tasks and projects still appear (graceful degradation via `allSettled`)
-- [ ] **MCP search tool:** Call `search` MCP tool with `category: "note"` and `category: "asset"` — verify non-empty results when matching data exists
-- [ ] **Asset search:** Upload an asset with a description, then search for a word from the description in "All" mode — verify the asset appears in results
-- [ ] **i18n:** New "All", "Note", "Asset" tab labels must have both `zh` and `en` translations in the i18n config
-- [ ] **Result type badges:** Every result row in "All" mode shows a visible type indicator (task/project/repository/note/asset)
-- [ ] **Debounce in "all" mode:** Rapidly type 5 characters — verify only 1 search fires (debounce active), not 5 parallel searches
+- [ ] **Monaco SSR:** Run `next build` — verify no `window is not defined` errors in the build output
+- [ ] **Monaco bundle isolation:** Run `@next/bundle-analyzer` — verify `monaco-editor` does not appear in the main or Kanban route JS chunk
+- [ ] **Monaco workers:** Open the editor with a TypeScript file — verify IntelliSense (hover type info) works, indicating workers loaded correctly
+- [ ] **Path traversal:** Call the file read API with `filePath: "../../.env"` — verify HTTP 400 is returned, not file contents
+- [ ] **Process leak:** Open Preview, start dev server, navigate to Kanban, navigate back — verify only ONE process per `taskId` in `ps aux`
+- [ ] **Process leak:** Close browser tab while preview running — verify subprocess is killed within 30 seconds
+- [ ] **inotify safety:** If file watching is used, verify `cat /proc/sys/fs/inotify/max_user_watches` is not exhausted after opening the workbench on a large project
+- [ ] **Memory leak:** Open 25 files in the editor — run `monaco.editor.getModels().length` in console — verify it does not exceed the LRU cache limit
+- [ ] **SSE coexistence:** Start Claude execution (SSE stream 1) then open Preview panel (SSE stream 2) — verify both streams receive data simultaneously
+- [ ] **iframe sandbox:** Verify the preview iframe has a `sandbox` attribute; attempt `window.parent.location = "http://evil.com"` from preview console — should be blocked
+- [ ] **Large project file tree:** Open the workbench on a Next.js project with `node_modules` — verify `node_modules` is excluded from the tree and the tree renders without freezing
+- [ ] **React Strict Mode subprocess:** In development, click "Start Preview" once — verify only ONE subprocess spawns (not two)
+- [ ] **i18n:** All workbench UI labels (Start Preview, Stop, Refresh, Save) have both `zh` and `en` translations
 
 ---
 
@@ -299,12 +419,13 @@ Phase 2 (FTS5 integration into globalSearch). Add FTS5 query sanitization/escapi
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| `db push` wiped FTS5 tables | MEDIUM | Restore `prisma/dev.db.backup`; run `pnpm db:init-fts`; re-sync FTS from ProjectNote table via bulk INSERT |
-| `description` NOT NULL migration failed, existing assets lost | HIGH | Restore backup; change schema to `String? @default("")`; re-run push |
-| FTS5 syntax error breaks note search in "All" mode | LOW | Add escape function to `searchNotesGlobal()`; the LIKE fallback path works for queries <3 chars as interim |
-| MCP `search` returns empty for notes/assets | LOW | Add missing category branches to `search-tools.ts` handler; no data changes needed |
-| "All" mode returns 0 results due to `Promise.all` rejection | LOW | Replace `Promise.all` with `Promise.allSettled`; check `busy_timeout` pragma on `src/lib/db.ts` |
-| Note search returns wrong workspace's notes | MEDIUM | Add `workspaceId` JOIN to `searchNotesGlobal()`; no data changes needed, only query fix |
+| Monaco SSR build failure | LOW | Add `dynamic({ ssr: false })` wrapper; rebuild |
+| Monaco Turbopack worker failure | MEDIUM | Switch to CDN loader (`@monaco-editor/react` default config); test workers in browser console |
+| Zombie subprocess accumulation | LOW | Kill processes manually with `pkill -f "task/"` pattern; then implement registry |
+| inotify limit exhausted | LOW | `echo 65536 | sudo tee /proc/sys/fs/inotify/max_user_watches`; scope watchers more tightly in code |
+| Memory leak from Monaco model accumulation | MEDIUM | Implement LRU model cache; refresh page as immediate workaround |
+| Path traversal vulnerability discovered | HIGH | Immediately add `safeResolvePath` guard; audit all FS API routes; rotate any exposed secrets |
+| Preview subprocess not cleaning up on crash | MEDIUM | Implement `process.on('exit')` registry cleanup; test with `kill -9` on the Next.js process |
 
 ---
 
@@ -312,25 +433,38 @@ Phase 2 (FTS5 integration into globalSearch). Add FTS5 query sanitization/escapi
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| `db push` destroys FTS5 tables on `description` migration | Phase 1: Asset description schema migration | After push: `sqlite3 dev.db ".tables"` includes `notes_fts` |
-| `description` NOT NULL breaks existing rows | Phase 1: Asset description schema migration | `SELECT description FROM ProjectAsset` returns `""` for pre-existing rows |
-| `SearchCategory` type divergence (actions vs MCP tool) | Phase 2: globalSearch + MCP expansion | MCP `search` with `category: "note"` returns matching notes |
-| FTS5 `MATCH` syntax error on special chars | Phase 2: FTS5 note search integration | Searching `"quoted"` and `(test)` returns results or empty state, never 500 |
-| FTS5 note scope leak across workspaces | Phase 2: globalSearch "All" mode | Notes from Workspace A do not appear when searching from Workspace B context |
-| `Promise.all` contention in "All" mode | Phase 2: globalSearch "All" mode implementation | `Promise.allSettled` used; partial failures degrade gracefully |
-| Asset search using description before migration | Phase ordering: Phase 1 must precede Phase 2 | Asset search branch in `globalSearch` is not wired until Phase 1 migration is verified |
+| Monaco SSR (`window is not defined`) | Phase 1: Code editor foundation | `next build` succeeds without SSR errors |
+| Monaco Turbopack worker failure | Phase 1: Code editor foundation | IntelliSense works in browser dev tools |
+| Monaco bundle inflation | Phase 1: Code editor foundation | `bundle-analyzer` shows Monaco only in workbench route chunk |
+| File tree large project freeze | Phase 2: File tree browser | File tree renders in <1s on project with `node_modules` (excluded) |
+| Path traversal on file API | Phase 2: File tree browser | `../` path returns HTTP 400; verified with curl |
+| Monaco model memory leak | Phase 3: Editor file navigation | `monaco.editor.getModels().length` bounded by LRU limit after 25 file opens |
+| inotify limit exhaustion | Phase 2: File tree browser | Decision documented: polling vs. watching; watchers scoped if used |
+| Preview subprocess leak | Phase 4: Preview panel | Single subprocess per task; cleaned up on workbench close |
+| Preview iframe sandbox | Phase 4: Preview panel | `sandbox` attribute present; `window.parent` access blocked from preview |
+| SSE coexistence | Phase 4: Preview panel | Two simultaneous SSE connections verified in Playwright test |
+| React Strict Mode double-spawn | Phase 4: Preview panel | Single subprocess on "Start Preview" in development mode |
 
 ---
 
 ## Sources
 
-- Codebase analysis: `src/actions/search-actions.ts`, `src/lib/fts.ts`, `src/mcp/tools/search-tools.ts`, `src/components/layout/search-dialog.tsx`, `prisma/schema.prisma`, `prisma/init-fts.ts`
-- [SQLite FTS5 — Query Syntax](https://www.sqlite.org/fts5.html#full_text_query_syntax) — documents MATCH operator syntax and special characters
-- [SQLite ALTER TABLE limitations](https://www.sqlite.org/lang_altertable.html) — confirms NOT NULL without DEFAULT requires table recreation
-- [Prisma issue #8106 — FTS5 shadow table drift](https://github.com/prisma/prisma/issues/8106) — still open as of Prisma 6.x
-- [SQLite WAL concurrent readers](https://www.sqlite.org/wal.html#concurrency) — multiple readers allowed; writer blocks briefly
-- Existing `.planning/research/PITFALLS.md` (v0.2) — Pitfalls 1–9 remain valid for v0.3 context
+- [Next.js App Router — Server and Client Components](https://nextjs.org/docs/app/getting-started/server-and-client-components) — `"use client"` does not disable SSR pre-rendering
+- [Next.js Lazy Loading Guide](https://nextjs.org/docs/pages/guides/lazy-loading) — `dynamic({ ssr: false })` for browser-only components
+- [Next.js Turbopack issue #72613 — Monaco Editor dynamic import](https://github.com/vercel/next.js/issues/72613) — known open issue as of early 2026
+- [Next.js Version 16 upgrade guide](https://nextjs.org/docs/app/guides/upgrading/version-16) — Turbopack is now default for `next dev`
+- [`@monaco-editor/react` npm — React 19 RC](https://www.npmjs.com/package/@monaco-editor/react) — v4.7.0-rc.0 for React 19
+- [Monaco Editor issue #4659 — Diff editor memory leak](https://github.com/microsoft/monaco-editor/issues/4659) — Emitter not disposed on diff editor dispose
+- [Monaco Editor issue #1693 — Memory leakage](https://github.com/microsoft/monaco-editor/issues/1693) — models not disposed on editor unmount
+- [Sourcegraph blog — Migrating from Monaco to CodeMirror](https://sourcegraph.com/blog/migrating-monaco-codemirror) — 43% JS size reduction
+- [Replit blog — Betting on CodeMirror](https://blog.replit.com/codemirror) — CodeMirror 6 architecture rationale
+- [OWASP Path Traversal](https://owasp.org/www-community/attacks/Path_Traversal) — prevention: resolve then startsWith check
+- [StackHawk — Node.js Path Traversal Guide](https://www.stackhawk.com/blog/node-js-path-traversal-guide-examples-and-prevention/) — `path.normalize` alone is insufficient
+- [MDN — CSP frame-ancestors](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors) — iframe clickjacking prevention
+- [chokidar GitHub — inotify limits](https://github.com/facebook/create-react-app/issues/7612) — ENOSPC when watching large directories
+- [Monaco webpack plugin issue #42 — Cross-origin worker failure](https://github.com/microsoft/monaco-editor-webpack-plugin/issues/42)
+- [Next.js GitHub discussion #48427 — SSE in App Router Route Handlers](https://github.com/vercel/next.js/discussions/48427)
 
 ---
-*Pitfalls research for: Global search enhancement (v0.3) — "All" cross-type search, FTS5 note search, asset description migration, parallel queries*
-*Researched: 2026-03-30*
+*Pitfalls research for: Task development workbench (v0.6) — online code editor, file tree, diff view, live preview*
+*Researched: 2026-03-31*

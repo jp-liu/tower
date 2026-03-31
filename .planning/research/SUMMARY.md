@@ -1,17 +1,17 @@
 # Project Research Summary
 
-**Project:** ai-manager v0.3 — Global Search Enhancement
-**Domain:** Cross-type search with FTS5 note indexing, asset metadata, and parallel query architecture
-**Researched:** 2026-03-30
+**Project:** ai-manager v0.6 — Task Development Workbench
+**Domain:** Agentic IDE workbench (online code editor, file tree, diff view, live preview) integrated into an existing AI task management platform
+**Researched:** 2026-03-31
 **Confidence:** HIGH
 
 ## Executive Summary
 
-The v0.3 milestone extends an already-functional search system (Next.js 16 + SQLite + Prisma + FTS5) by adding three new search categories (All, Note, Asset) and a `description` field on `ProjectAsset`. This is a purely additive change: zero new npm packages are required, no new architectural components are introduced, and all features integrate into existing files. The recommended approach is to extend the `SearchCategory` type union, add parallel fan-out in `globalSearch` using `Promise.allSettled`, reuse the existing `notes_fts` virtual table with a cross-project SQL variant, and wire a new description textarea into the asset upload dialog.
+ai-manager v0.6 extends the existing task page with a four-panel developer workbench: an online code editor (Monaco), a file tree browser scoped to the task worktree, a diff view panel (reusing v0.5 git infrastructure), and a live preview panel that spawns a child process and embeds localhost output in an iframe. The pattern is well-established — bolt.new, v0.dev, and Cursor have converged on the same layout — and the v0.5 codebase already provides the key foundations: worktree path storage in `TaskExecution`, git diff plumbing, SSE streaming, and a process singleton pattern. The new work is wiring these existing pieces together with three new libraries and a handful of new API routes.
 
-The primary risk is schema migration: adding a field to `ProjectAsset` via `prisma db push` can silently drop the manually-created `notes_fts` FTS5 virtual table if Prisma detects schema drift. The mitigation is straightforward — back up `dev.db`, run `db push`, and re-run `pnpm db:init-fts` if the FTS table is lost. A secondary structural risk is the query logic duplication between `search-actions.ts` and `search-tools.ts` (MCP): any new search category must be added to both files or the MCP `search` tool silently returns empty arrays for the new categories with no error signal.
+The recommended approach keeps the architecture close to existing patterns: Monaco loads via `@monaco-editor/react` with `ssr: false` dynamic import (mandatory for Next.js App Router), file reads and writes go through typed API routes with path-anchor validation (already the project's convention), preview subprocesses are tracked in a server-side module-level Map singleton (mirrors `process-manager.ts`), and the file tree is a custom recursive component over Server Actions (no third-party library needed). New external dependencies are minimal: `@monaco-editor/react@next`, `@git-diff-view/react`, and `react-resizable-panels@^2.1.7`.
 
-The recommended implementation order is strictly phased: Phase 1 lands the schema migration and asset description field (unblocking asset search), Phase 2 adds all search logic and MCP mirroring (consuming Phase 1's new column), and Phase 3 delivers the search UI extension (consuming Phase 2's expanded `SearchCategory` type). This ordering avoids every critical pitfall identified in research — the key rule is that no search code should reference `ProjectAsset.description` until after the schema migration is confirmed clean and `notes_fts` is verified intact.
+The dominant risks are all implementation-level, not architectural: Monaco's SSR incompatibility with Next.js App Router causes a hard build failure if the `dynamic({ ssr: false })` wrapper is skipped; preview subprocesses leak and accumulate orphaned dev servers if a process registry is not in place from day one; and file API routes without path-traversal guards expose arbitrary filesystem reads on the host. All three risks have straightforward, well-documented mitigations and must be addressed at the start of their respective phases, not retrofitted.
 
 ---
 
@@ -19,133 +19,133 @@ The recommended implementation order is strictly phased: Phase 1 lands the schem
 
 ### Recommended Stack
 
-v0.3 requires **no new dependencies**. All functionality is delivered through extensions to existing code. The base stack (Next.js 16.2.1, Prisma 6.x, SQLite with FTS5, TypeScript 5, Zod 4.x, Tailwind CSS v4) is fully capable of the new requirements. The `notes_fts` FTS5 virtual table created in v0.2 already indexes all notes content — the only change needed is a new cross-project SQL query that drops the `projectId` filter and adds workspace JOIN for context.
+The base stack (Next.js 16, React 19, Prisma 6, SQLite, Tailwind CSS v4, shadcn/ui, Zustand) is unchanged and validated. The v0.6 additions are three new libraries:
 
-See `.planning/research/STACK.md` for full integration point details.
+**New dependencies:**
+- `@monaco-editor/react@4.7.0-rc.0` (code editor) — the standard Monaco wrapper for Next.js; handles CDN worker loading without webpack plugin configuration; the `@next` release explicitly targets React 19
+- `@git-diff-view/react@^0.1.3` (diff rendering) — SSR/RSC-ready, zero dependencies, accepts unified diff strings that the existing `git diff` plumbing already produces
+- `react-resizable-panels@^2.1.7` (panel splitter) — pinned to v2.x because v4.x has unresolved export renames that break shadcn/ui's Resizable component
 
-**Core technologies:**
-- **Next.js 16.2.1 Server Actions:** handles `globalSearch` dispatch; no API routes needed — already the established pattern
-- **Prisma 6.x + `$queryRawUnsafe`:** ORM for LIKE-based queries; raw SQL for FTS5 MATCH queries — established pattern in `src/lib/fts.ts`
-- **SQLite FTS5 (trigram tokenizer):** cross-project note search via existing `notes_fts` virtual table; no new virtual tables needed for v0.3
-- **Zod 4.x:** schema validation for the new `description` field on asset create/upload actions; enforce `max(500)` at action layer, not DB constraint layer
+The file tree, dev server proxy, and preview process management require no new libraries: they use Node.js `fs`, `child_process`, Next.js 16's built-in `proxy.ts` convention, and existing SSE infrastructure. See `.planning/research/STACK.md` for full rationale and installation commands.
 
 ### Expected Features
 
-See `.planning/research/FEATURES.md` for the full feature dependency graph and prioritization matrix.
+**Must have for v0.6 launch (P1):**
+- Monaco Editor with syntax highlighting, line numbers, Ctrl+S save — core editor value
+- Tab-based multi-file editing with unsaved-changes indicator — prevents data loss
+- File tree with lazy expansion, gitignore-aware filtering, click-to-open — navigation foundation
+- Auto-refresh file tree on `status_changed` SSE event — Claude modifies files during execution
+- Unified/split diff view against base branch with reload button — core review workflow
+- Preview panel: configurable start command + port, start/stop lifecycle, iframe embed, error output display
 
-**Must have (table stakes — v0.3 scope):**
-- "All" tab with results grouped by type and section headers — users type once, see everything (Spotlight/Linear norm)
-- Note search via FTS5 global variant (no `projectId` filter) — exposes existing FTS5 investment in global context
-- Asset search by filename and description — requires `ProjectAsset.description` schema change first
-- `ProjectAsset.description` field — nullable `String?` with `@default("")` to avoid migration failure on existing rows
-- Upload dialog description input — textarea that passes `description` via FormData
-- Extended `SearchCategory` type: `"all" | "task" | "project" | "repository" | "note" | "asset"`
-- Preserve existing Task/Project/Repository tabs — no regression to current UX
-- Note and asset result `navigateTo` routes — actionable results that open the correct project tab
-- i18n keys for all new tabs and labels (zh + en)
+**Should have for v0.6.x patches (P2):**
+- Git diff status badges on file tree nodes (M/A/D indicators)
+- Auto-reload preview iframe on editor save
+- SSE-streamed preview process stdout (line-by-line output)
+- New file / rename / delete from file tree context menu
+- Whitespace-ignore toggle in diff view
+- Auto-format on save (Prettier via Server Action)
 
-**Should have (competitive differentiators — add when possible):**
-- Note content snippet in subtitle (first ~80 chars of content) — reduces relevance scanning time
-- Per-result type icon differentiation (BookOpen for notes, Paperclip for assets) — improves visual scanning speed
-- Empty-state per section in "All" tab (omit section header when 0 results for a type)
-- Asset result shows file type hint parsed from `mimeType`
+**Defer to v0.7+ (P3):**
+- TypeScript IntelliSense / LSP (requires project tsconfig loading and worker config)
+- AI inline suggestions wired to task chat
+- Mobile viewport emulation in preview
+- Inline diff comment anchoring
+- Multiple preview commands per project
 
-**Defer (v0.4+):**
-- Keyboard arrow navigation through search results — medium complexity, not blocking MVP
-- Real-time result count badges on tabs — requires firing all 5 searches regardless of active tab (wasteful)
-
-**Defer indefinitely (v1.0+ or never):**
-- Semantic / embedding-based search — explicitly out of scope per PROJECT.md
-- Search history / recent queries — requires persistent user state model that does not exist
-- Per-workspace scoping filter — not needed for single-developer localhost tool
+See `.planning/research/FEATURES.md` for the full prioritization matrix and competitor analysis.
 
 ### Architecture Approach
 
-All v0.3 changes are modifications to existing files — no new files are required. The architecture extends the existing category-dispatch pattern in `globalSearch` with three new `if (category === X)` branches, plus an `"all"` branch that uses `Promise.allSettled` (not `Promise.all`) to fan out 5 parallel SQLite queries and merge results capped at 5 per type. The search dialog extends `CATEGORY_DEFS` with 3 new tab entries; the "All" tab switches from a flat `results.map()` to a `useMemo` grouped reduce. The `search-tools.ts` MCP file must mirror every change to `search-actions.ts` — the two files are structurally coupled with no shared abstraction.
-
-See `.planning/research/ARCHITECTURE.md` for full data flow diagrams, component boundary table, and anti-pattern catalog.
+The workbench integrates into the existing task page (`/workspaces/[workspaceId]/tasks/[taskId]`) by expanding the right panel from a single tab to a three-tab layout: Files (tree + editor), Changes (existing `TaskDiffView` unchanged), and Preview. The left panel (AI chat + SSE execution stream) is untouched. New components follow the established `workbench-` prefix convention and communicate through typed API routes, not Server Actions, because file content and preview lifecycle require streaming and process management that Server Actions do not support.
 
 **Major components:**
-1. `prisma/schema.prisma` — add `description String? @default("")` to `ProjectAsset`; deploy via `pnpm db:push`
-2. `src/actions/search-actions.ts` + `src/mcp/tools/search-tools.ts` — extend `SearchCategory`; add note/asset/all branches; update in the same commit
-3. `src/components/layout/search-dialog.tsx` — add 3 tabs; grouped renderer for All mode; import updated `SearchCategory` type
-4. `src/actions/asset-actions.ts` + `src/components/assets/asset-upload.tsx` — accept and persist `description`; add textarea input
-5. `src/lib/i18n.tsx` — add translation keys for all new strings (zh + en)
+1. `WorkbenchFilesPanel` — horizontal resizable split containing `WorkbenchFileTree` + `WorkbenchEditor`; owns `selectedFile` state; receives `refreshKey` prop from parent
+2. `WorkbenchFileTree` — recursive file/dir listing from `/api/tasks/[taskId]/files`; lazy expansion; gitignore-aware filtering done server-side
+3. `WorkbenchEditor` — Monaco via `dynamic({ ssr: false })`; reads/writes via `/api/tasks/[taskId]/files/content`; LRU model cache (max 10 models); theme sync with next-themes
+4. `WorkbenchPreviewPanel` — start/stop controls; polls `/api/tasks/[taskId]/preview/status`; renders iframe after port confirmed; streams stderr to error log
+5. `preview-process-manager.ts` — server-side module singleton `Map<taskId, ChildProcess+port>`; mirrors existing `process-manager.ts` pattern
+6. Three new API route groups: `files/`, `files/content/`, `preview/start|stop|status` — all path-anchored against worktree root
+
+**Key patterns:**
+- All file paths on the wire are relative to the worktree root (never absolute)
+- Preview command split by whitespace into args array; `spawn(shell: false)` — no shell interpolation
+- Tab state owned by `TaskPageClient`; panel-internal state stays local; cross-panel communication via `refreshKey` prop
+- File tree refresh triggered only on `status_changed` SSE events (not on every event — prevents dozens of FS reads per second during execution)
+
+See `.planning/research/ARCHITECTURE.md` for full component diagram, data flow sequences, and build order rationale.
 
 ### Critical Pitfalls
 
-See `.planning/research/PITFALLS.md` for full detail, warning signs, recovery steps, and a "Looks Done But Isn't" verification checklist.
+1. **Monaco SSR crash** — Importing `@monaco-editor/react` without `dynamic({ ssr: false })` causes a hard build failure (`window is not defined`). The `"use client"` directive alone is insufficient — App Router Client Components still pre-render on the server. Must be established as the first step of the editor phase; verify with `next build`.
 
-1. **`prisma db push` destroying FTS5 virtual tables** — Back up `prisma/dev.db` before any `db push`; checkpoint WAL first; after push verify `notes_fts` exists via `sqlite3 dev.db ".tables"`; re-run `pnpm db:init-fts` if missing. This is Phase 1's most dangerous operation and the most likely cause of data loss.
+2. **File API path traversal** — `path.normalize` alone does not prevent `../../.env` traversal. Every file read/write route must verify `resolved.startsWith(worktreeRoot + path.sep)` after resolving. Implement as a shared `safeResolvePath()` utility in `src/lib/fs-security.ts` before the first file endpoint.
 
-2. **`description` as NOT NULL on `ProjectAsset`** — Always use `description String? @default("")`. A non-nullable field without a default triggers SQLite table recreation, which can cause existing asset data loss. Enforce non-empty at the Zod layer, not the DB constraint layer.
+3. **Preview subprocess leak** — Child processes spawned by preview start do not terminate when the user navigates away. A server-side `Map<taskId, ChildProcess>` singleton must exist from the first day of the preview phase. The start route must check for an existing process before spawning. Register `process.on('SIGTERM')` cleanup. Never start subprocesses from client-side `useEffect` (React Strict Mode double-invoke causes duplicate spawns in development).
 
-3. **`SearchCategory` type divergence between actions and MCP tool** — `search-actions.ts` and `search-tools.ts` share no code; adding new categories to one without the other silently returns `[]` from MCP with no error. Update both in the same commit.
+4. **Monaco model memory leak** — Monaco text models are not disposed on editor unmount; only the editor view is disposed. Accumulation after 20+ file opens causes memory growth and sluggishness. Implement a `Map<uri, ITextModel>` cache with LRU eviction (max 10 models) and call `model.dispose()` in the workbench unmount cleanup.
 
-4. **FTS5 `MATCH` syntax errors from unescaped user input** — Characters like `"`, `(`, `)`, `-`, `*`, `AND`, `OR`, `NOT` have special meaning in FTS5 syntax. Sanitize/escape queries before every `$queryRawUnsafe` FTS5 call; wrap in try/catch with LIKE fallback. Apply to `searchNotes()` and the new `searchNotesGlobal()`.
+5. **File tree inotify exhaustion** — Using `fs.watch` or chokidar recursively on a project with `node_modules` can exhaust the Linux inotify limit, breaking Next.js HMR system-wide. Default to polling (2-second interval) triggered by `status_changed` SSE events instead of reactive file watching. If watching is needed, exclude `node_modules`, `.git`, `dist`, `.next` and scope to `src/`/`app/` only.
 
-5. **`Promise.all` SQLite contention in "All" mode** — Never use bare `Promise.all` for parallel SQLite reads. Use `Promise.allSettled` so that a single `SQLITE_BUSY` error does not drop all search results. Verify `PRAGMA busy_timeout=5000` is set in `src/lib/db.ts` (known gap from v0.2).
+See `.planning/research/PITFALLS.md` for the full 11-pitfall catalog with verification checklists.
 
 ---
 
 ## Implications for Roadmap
 
-Research confirms a clear two-dependency chain: schema migration must land before asset search, and search logic must land before the search UI. The natural implementation breakdown is three phases with explicit verification gates between them.
+Based on the dependency graph in ARCHITECTURE.md and the pitfall-to-phase mapping in PITFALLS.md, the recommended build order is six sequential phases (A-F), with Phase F (Preview) parallelizable with C-D if two developers are available.
 
-### Phase 1: Asset Description Schema Migration
+### Phase A: Tab Bar Skeleton + Route Entry
+**Rationale:** Everything else builds on the multi-tab layout. Establishing the `[Files][Changes][Preview]` tab structure in `TaskPageClient` with empty placeholder panels lets Phases B-F work independently without layout conflicts.
+**Delivers:** Expanded task page with three-tab right panel; tab switching works; no content yet
+**Avoids:** Integration conflicts between workbench components during later phases
 
-**Rationale:** `ProjectAsset.description` is a hard prerequisite for asset search. Phase 2 cannot reference this column until it exists and the migration is verified clean. Isolating the migration reduces risk — if the migration causes FTS5 loss, recovery is contained to Phase 1 without any half-implemented search code to unwind.
+### Phase B: File Tree Browser
+**Rationale:** The file tree is the primary navigation primitive; the editor (Phase C) depends on file selection events from the tree. Server-side exclusion list and lazy expansion must be in place before the editor integration.
+**Delivers:** Working file tree with expand/collapse, gitignore filtering, lazy directory expansion, auto-refresh on `status_changed`
+**Implements:** `WorkbenchFileTree`, `/api/tasks/[taskId]/files/` route, `safeResolvePath` utility in `fs-security.ts`
+**Avoids:** File tree DOM freeze (lazy expansion), path traversal (shared `safeResolvePath`), inotify exhaustion (polling over watching)
 
-**Delivers:** `description` field on `ProjectAsset` (nullable, empty-string default); description input in upload dialog; updated `createAsset` and `uploadAsset` actions
+### Phase C: Code Editor (Monaco Integration)
+**Rationale:** Depends on Phase B's path convention and `safeResolvePath`. Monaco's `ssr: false` dynamic import is isolated to one component file — resolving this before panel integration keeps Phase D low-risk. Model cache and LRU cleanup must be implemented here, not retrofitted.
+**Delivers:** Monaco editor with syntax highlight, file read/write, Ctrl+S save, unsaved-changes indicator, tab-based multi-file editing
+**Implements:** `WorkbenchEditor`, `/api/tasks/[taskId]/files/content/` route, `language-map.ts`, Monaco model LRU cache
+**Avoids:** Monaco SSR build failure, Monaco bundle inflation (verify with bundle-analyzer), Monaco model memory leak
 
-**Addresses features:** `ProjectAsset.description` schema field (P1), upload dialog description input (P1)
+### Phase D: Files Panel Integration
+**Rationale:** Combines Phase B + C into the `WorkbenchFilesPanel` with a horizontal resizable splitter. Low-risk assembly step after both components are independently verified.
+**Delivers:** `WorkbenchFilesPanel` with `react-resizable-panels` v2 splitter; tree click opens file in editor; editor save shows toast; file tree refreshes on agent edits
+**Implements:** `WorkbenchFilesPanel`, `useFileContent` hook, `react-resizable-panels` integration
 
-**Avoids pitfalls:** FTS5 table loss from `db push` (Pitfall 1); NOT NULL migration failure on existing rows (Pitfall 5)
+### Phase E: Changes Tab (Diff View)
+**Rationale:** Nearly free — `TaskDiffView` already exists and is unchanged. Work is purely wiring it as the Changes tab in the new multi-tab layout. Can be done in parallel with Phase C or D.
+**Delivers:** Changes tab rendering existing `TaskDiffView`; old single-tab layout removed from `TaskPageClient`; unified/split toggle, file-by-file sections, reload button, summary header via `@git-diff-view/react`
+**Avoids:** Re-implementing diff logic that already exists (pure reuse)
 
-**Verification gate:** `sqlite3 prisma/dev.db ".tables"` shows `notes_fts`; `SELECT description FROM ProjectAsset LIMIT 5` returns `""` for pre-existing rows
-
-### Phase 2: Search Actions and MCP Expansion
-
-**Rationale:** Once the schema migration is confirmed, the server-side query logic can be added without touching any UI. Doing actions before UI means the full search contract (`SearchCategory` type, `SearchResult` shape, `navigateTo` patterns) is validated before the dialog is extended. The `search-tools.ts` MCP mirror must be updated in the same phase to prevent silent divergence.
-
-**Delivers:** `globalSearch` supporting `"note"`, `"asset"`, `"all"` categories; global note FTS5 query with proper workspace JOIN; FTS5 query sanitization/escape function; asset LIKE search on filename + description; `Promise.allSettled` parallel fan-out in All mode capped at 5 results per type; MCP `search` tool parity with all new categories
-
-**Uses:** Prisma `$queryRawUnsafe` (FTS5 established pattern); `Promise.allSettled`; FTS5 sanitization with LIKE fallback
-
-**Implements:** Category-dispatch extension pattern (ARCHITECTURE.md Pattern 1); cross-project note search (Pattern 2); `Promise.allSettled` fan-out (Pattern referenced in anti-patterns)
-
-**Avoids pitfalls:** SearchCategory type divergence (Pitfall 4); FTS5 syntax errors (Pitfall 6); `Promise.all` contention (Pitfall 3); FTS5 workspace scope leak (Pitfall 2)
-
-### Phase 3: Search UI Extension
-
-**Rationale:** With the expanded `SearchCategory` type exported from Phase 2, the dialog extension is a mechanical wiring task — add 3 entries to `CATEGORY_DEFS`, add a grouped renderer for All mode, add i18n keys. No risky operations exist in this phase; it is the safest phase to implement.
-
-**Delivers:** Search dialog with 6 tabs (All, Task, Project, Repository, Note, Asset); grouped section rendering for All mode with per-type headers; i18n keys for zh + en; result type icons (BookOpen/Paperclip); note content snippets in subtitle; asset mimeType hint
-
-**Uses:** Existing `CATEGORY_DEFS` tab extension pattern; `useMemo` grouped reduce (ARCHITECTURE.md Pattern 4)
-
-**Avoids pitfalls:** "All" tab as default on dialog open (UX pitfall — keep default as `"task"`); flat list mutation for group headers (Architecture anti-pattern 4); in-flight search not cancelled on tab switch (UX pitfall — clear results on category change)
+### Phase F: Live Preview Panel
+**Rationale:** Independent of Phases B-E (no shared components or routes). Can run in parallel with C-D or be deferred to a separate sprint. Process registry and security measures must be established from day one of this phase, not added later.
+**Delivers:** Preview panel with configurable command+port, start/stop controls, iframe embed, process error output, status polling
+**Implements:** `preview-process-manager.ts`, three preview API routes (start/stop/status), `WorkbenchPreviewPanel`, `usePreviewServer` hook, `previewCommand`/`previewPort` schema migration on `Project`
+**Avoids:** Subprocess leak (process registry from day one), React Strict Mode double-spawn (server-side only start), iframe sandbox omission
 
 ### Phase Ordering Rationale
 
-- Schema migration must precede any code that queries `ProjectAsset.description` — this is a hard compile-time and runtime dependency; there is no workaround
-- Server actions must precede UI — the TypeScript `SearchCategory` type must exist before the dialog imports it, and the `navigateTo` route patterns must be confirmed before navigation is wired
-- This three-phase structure matches the `ARCHITECTURE.md` integration order table exactly (Steps 1-2 then Steps 3-4 then Step 5-6)
-- Each phase has a clear verification gate before the next begins — no speculative parallel work across phases
+- Phases A through E are sequential due to layout to navigation to editor to integration dependencies; each is independently mergeable and testable
+- Phase E is nearly free (pure reuse of `TaskDiffView`) and can overlap with D if convenient
+- Phase F is independent and can run in parallel with C-D or be scheduled separately; Preview has the highest independent complexity (process lifecycle, security surface)
+- The Monaco SSR pitfall (Phase C) is isolated to one component; verifying it before Phase D integration avoids discovering a hard build failure mid-panel-assembly
+- The `safeResolvePath` utility created in Phase B is reused by Phase C's content routes — creating it once there prevents duplicated and potentially divergent traversal guards
 
 ### Research Flags
 
-Phases likely needing attention during implementation:
+Phases with standard, well-documented patterns (no additional research needed):
+- **Phase A** — Tab bar layout is a trivial shadcn/ui component composition
+- **Phase B** — File listing via `fs.readdir` with gitignore filtering is a solved problem; `ignore` npm package handles pattern matching
+- **Phase E** — Pure component reuse; no new patterns
 
-- **Phase 2 (FTS5 cross-project note search):** The SQL JOIN pattern traversing `notes_fts → ProjectNote → Project → Workspace` is defined in research with a complete example, but the exact Prisma column name quoting for SQLite (e.g., `n."projectId"` vs `n.projectId`) should be validated against the live schema before finalizing. The `navigateTo` URL pattern (`?projectId=X&tab=notes`) depends on the workspace page reading a `tab` query param — verify this param is consumed before Phase 3 wires navigation.
-
-- **Phase 2 (`busy_timeout` gap):** Research flags that `PRAGMA busy_timeout=5000` may not be set in `src/lib/db.ts` (carried over as a known gap from v0.2). Verify and add in Phase 2 before implementing `Promise.allSettled` fan-out.
-
-Phases with standard patterns (skip additional research):
-
-- **Phase 1 (schema migration):** Pattern is fully defined with the backup-push-verify sequence. Prisma nullable field with `@default("")` is well-documented behavior.
-
-- **Phase 3 (search UI):** Pure UI wiring following the existing `CATEGORY_DEFS` extension pattern. All code examples are provided in ARCHITECTURE.md.
+Phases that may need targeted lookup during implementation:
+- **Phase C** — Monaco Turbopack worker issue (#72613) is an open GitHub issue; check its status before starting. If unresolved, confirm CDN loader is sufficient for the project's use case (it should be, but verify worker loading in dev mode before committing to it).
+- **Phase F** — Preview subprocess `AbortSignal` integration with Next.js 16 Route Handlers: the pattern exists in the codebase (stream route) but the exact cleanup hook for non-SSE route handlers should be verified before implementation. Also requires a `prisma migrate dev` for the new `previewCommand`/`previewPort` fields on `Project`.
 
 ---
 
@@ -153,40 +153,48 @@ Phases with standard patterns (skip additional research):
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All conclusions from direct codebase inspection; zero new dependencies confirmed via `package.json`; no inferred compatibility required |
-| Features | HIGH | Codebase is fully known; feature dependencies are explicit and verified against existing code; UX patterns from established cross-type search products (Linear, Notion, Jira) |
-| Architecture | HIGH | All component boundaries confirmed via direct file inspection; data flow validated end-to-end with working code examples; integration order derived from explicit dependency analysis |
-| Pitfalls | HIGH | Pitfall 1 (FTS5/db push) confirmed via Prisma issue #8106 and v0.2 direct experience; all pitfalls derived from code inspection + SQLite official docs + WAL documentation |
+| Stack | HIGH | Core base stack unchanged and production-validated. New libraries verified via npm and official docs; React 19 compatibility confirmed for all three additions. `react-resizable-panels` v4 breakage confirmed via tracked GitHub issue. |
+| Features | HIGH | Editor and diff features are well-documented; preview proxy implementation is straightforward for a localhost-only tool. Competitor analysis (bolt.new, v0.dev, Cursor) confirms feature set convergence. |
+| Architecture | HIGH | Derived directly from codebase inspection of existing patterns (`process-manager.ts`, `file-serve.ts`, `diff/route.ts`, `stream/route.ts`). No speculative patterns — all components follow established project conventions. |
+| Pitfalls | HIGH | Verified against official Next.js 16 docs, Monaco Editor GitHub issue tracker, OWASP path traversal guides, and multiple production post-mortems. The 11 pitfalls are specific to this stack and domain, not generic warnings. |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **`navigateTo` `?tab=` param consumption:** Research flags that workspace page must read a `tab` query param to auto-activate Notes/Assets tabs on navigation. If not implemented, search results navigate correctly but do not focus the right tab — minor usability gap, not a blocker. Verify during Phase 3; add tab-param handling if missing.
-
-- **`busy_timeout` in `src/lib/db.ts`:** Known gap from v0.2 research. Verify `PRAGMA busy_timeout=5000` is actually set before implementing Phase 2's parallel queries. One-line fix if missing.
-
-- **`search-actions.ts` vs `search-tools.ts` DRY:** Research recommends extracting shared query logic to `src/lib/search.ts` to prevent divergence. Optional for v0.3 (manual sync is acceptable for a single milestone) but becomes a maintenance liability as more categories are added. Flag for v0.4 if not addressed in v0.3.
+- **Monaco Turbopack worker status:** The open issue (#72613) was confirmed as of early 2026 but may be resolved by implementation time. Check the issue status at the start of Phase C; if resolved, CDN loader may no longer be necessary (though it remains the simpler choice regardless).
+- **`previewCommand` / `previewPort` schema migration:** The Preview panel requires new fields on the `Project` model. The migration is straightforward (two nullable fields) but must be planned before Phase F begins — Prisma migration ordering relative to other pending schema changes should be confirmed.
+- **i18n coverage:** All workbench UI labels require both `zh` and `en` translations. The pitfalls checklist flags this as a verification requirement; confirm the project's i18n workflow before Phase A to avoid retrofitting translations at the end.
 
 ---
 
 ## Sources
 
 ### Primary (HIGH confidence)
-
-- Codebase inspection: `src/actions/search-actions.ts`, `src/lib/fts.ts`, `src/mcp/tools/search-tools.ts`, `src/components/layout/search-dialog.tsx`, `prisma/schema.prisma`, `src/actions/asset-actions.ts`, `src/components/assets/asset-upload.tsx`, `src/lib/i18n.tsx` — direct read, current state confirmed
-- `.planning/PROJECT.md` — authoritative v0.3 milestone scope and out-of-scope list
-- [SQLite FTS5 documentation](https://www.sqlite.org/fts5.html) — MATCH syntax, trigram tokenizer (3-char minimum), shadow table behavior
-- [SQLite ALTER TABLE](https://www.sqlite.org/lang_altertable.html) — NOT NULL without DEFAULT requires table recreation; nullable with DEFAULT is always safe
+- `/src/app/api/tasks/[taskId]/diff/route.ts` — path anchor + worktree DB query pattern (codebase)
+- `/src/lib/adapters/process-manager.ts` + `process-utils.ts` — singleton process registry + `spawn(shell: false)` pattern (codebase)
+- `/src/lib/file-serve.ts` — path traversal protection (`startsWith(safePrefix)` guard) (codebase)
+- `/src/lib/worktree.ts` — worktree path convention (`localPath/.worktrees/task-{taskId}`) (codebase)
+- [Next.js 16 proxy.ts docs](https://nextjs.org/docs/app/api-reference/file-conventions/proxy) — proxy.ts convention replacing middleware.ts
+- [Next.js App Router — Server and Client Components](https://nextjs.org/docs/app/getting-started/server-and-client-components) — `"use client"` does not disable SSR pre-rendering
+- [Next.js Lazy Loading Guide](https://nextjs.org/docs/pages/guides/lazy-loading) — `dynamic({ ssr: false })` requirement
+- [react-resizable-panels shadcn v4 issue #9136](https://github.com/shadcn-ui/ui/issues/9136) — confirmed v4.x export rename breakage
+- [OWASP Path Traversal](https://owasp.org/www-community/attacks/Path_Traversal) — `path.normalize` alone is insufficient
 
 ### Secondary (MEDIUM confidence)
+- [@monaco-editor/react npm](https://www.npmjs.com/package/@monaco-editor/react) — v4.7.0-rc.0 for React 19, CDN loader behavior
+- [@git-diff-view/react npm](https://www.npmjs.com/package/@git-diff-view/react) + [GitHub](https://github.com/MrWangJustToDo/git-diff-view) — SSR/RSC-ready, zero deps, unified diff input
+- [Next.js Turbopack issue #72613](https://github.com/vercel/next.js/issues/72613) — Monaco dynamic import issue under Turbopack
+- [Monaco Editor issue #4659](https://github.com/microsoft/monaco-editor/issues/4659) — Diff editor Emitter not disposed
+- [Monaco Editor issue #1693](https://github.com/microsoft/monaco-editor/issues/1693) — models not disposed on unmount
+- [RedMonk: 10 Things Developers Want from Agentic IDEs 2025](https://redmonk.com/kholterhoff/2025/12/22/10-things-developers-want-from-their-agentic-ides-in-2025/) — developer expectation research
+- [Builder.io: Best Agentic IDEs heading into 2026](https://www.builder.io/blog/agentic-ide) — UX patterns and feature convergence
 
-- [Prisma issue #8106](https://github.com/prisma/prisma/issues/8106) — FTS5 shadow table drift detection still open in Prisma 6.x; behavior non-deterministic
-- [SQLite WAL concurrency](https://www.sqlite.org/wal.html#concurrency) — multiple concurrent readers confirmed; writer briefly blocks reads; `busy_timeout` prevents immediate failure
-- [Command Palette UX Patterns — Alicja Suska](https://medium.com/design-bootcamp/command-palette-ux-patterns-1-d6b6e68f30c1) — grouped search result norms
-- [Search UX Best Practices — Pencil & Paper](https://www.pencilandpaper.io/articles/search-ux) — section header and empty-state conventions
+### Tertiary (MEDIUM-LOW confidence)
+- [Sourcegraph: Migrating Monaco to CodeMirror](https://sourcegraph.com/blog/migrating-monaco-codemirror) — bundle size trade-offs; Monaco chosen over CodeMirror for this use case (VSCode UX parity)
+- [Bolt.diy architecture — DeepWiki](https://deepwiki.com/stackblitz-labs/bolt.diy) — reference for preview iframe + file tree + editor panel layout pattern
+- [NxCode: V0 vs Bolt.new vs Lovable comparison 2026](https://www.nxcode.io/resources/news/v0-vs-bolt-vs-lovable-ai-app-builder-comparison-2025) — feature-level competitor comparison
 
 ---
-
-*Research completed: 2026-03-30*
+*Research completed: 2026-03-31*
 *Ready for roadmap: yes*

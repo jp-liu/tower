@@ -1,434 +1,415 @@
 # Architecture Research
 
-**Domain:** AI task management platform — global search enhancement (v0.3)
-**Researched:** 2026-03-30
-**Confidence:** HIGH (derived from direct codebase inspection of all relevant files)
+**Domain:** Task development workbench (code editor + file tree + diff + preview) integrated into an existing AI task management platform
+**Researched:** 2026-03-31
+**Confidence:** HIGH
 
----
+## Standard Architecture
 
-## Existing Architecture Baseline (v0.2 — shipped)
+### System Overview
 
-The v0.2 system is documented here as the integration baseline for v0.3.
-
-### Current Search Architecture
+The workbench adds four capabilities to the existing task page. The existing layout is a 40/60 split (Chat | Tabs). The workbench expands the right-side tab bar with three new panels: Files (editor + tree), Diff (already partially exists), and Preview.
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                     Browser (React 19)                           │
-│  ┌───────────────────────────────────────────────────────────┐   │
-│  │  search-dialog.tsx                                         │   │
-│  │  State: query, category ("task"|"project"|"repository"),   │   │
-│  │         results[], isSearching                            │   │
-│  │  UI: debounced input + 3 category tabs + flat result list  │   │
-│  └────────────────────────┬──────────────────────────────────┘   │
-└───────────────────────────┼──────────────────────────────────────┘
-                            │ Server Action call
-┌───────────────────────────▼──────────────────────────────────────┐
-│  src/actions/search-actions.ts                                    │
-│  globalSearch(query, category: SearchCategory) → SearchResult[]  │
-│  SearchCategory = "task" | "project" | "repository"              │
-│  SearchResult = { id, type, title, subtitle, navigateTo }        │
-│                                                                   │
-│  if (category === "task")       → Prisma LIKE on title/desc      │
-│  if (category === "project")    → Prisma LIKE on name/alias/desc │
-│  if (category === "repository") → Prisma LIKE on name/path       │
-└───────────────────────────┬──────────────────────────────────────┘
-                            │ Prisma ORM / raw SQL
-┌───────────────────────────▼──────────────────────────────────────┐
-│  SQLite (prisma/dev.db)                                           │
-│  Task, Project, Repository (LIKE queries)                        │
-│  ProjectNote ──── notes_fts (FTS5 virtual table, trigram)        │
-│  ProjectAsset (filename only; NO description field currently)    │
-└──────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Task Page Route                                  │
+│  /workspaces/[workspaceId]/tasks/[taskId]                                │
+├──────────────────────────┬──────────────────────────────────────────────┤
+│   Left Panel (40%)       │   Right Panel (60%)                          │
+│   AI Chat (existing)     │   Tab Bar: [Files] [Changes] [Preview]        │
+│                          ├──────────────────────────────────────────────┤
+│   - TaskConversation     │   Files Tab                                  │
+│   - TaskMessageInput     │   ┌────────────┐ ┌──────────────────────┐   │
+│   - SSE stream           │   │ FileTree   │ │ MonacoEditor         │   │
+│                          │   │ (worktree  │ │ (dynamic import,     │   │
+│                          │   │  or local  │ │  ssr: false)         │   │
+│                          │   │  path)     │ │                      │   │
+│                          │   └────────────┘ └──────────────────────┘   │
+│                          ├──────────────────────────────────────────────┤
+│                          │   Changes Tab (existing TaskDiffView)         │
+│                          ├──────────────────────────────────────────────┤
+│                          │   Preview Tab                                 │
+│                          │   ┌────────────────────────────────────────┐ │
+│                          │   │ PreviewPanel                           │ │
+│                          │   │ - Start/Stop command controls          │ │
+│                          │   │ - Port selector                        │ │
+│                          │   │ - iframe src="http://localhost:PORT"   │ │
+│                          │   └────────────────────────────────────────┘ │
+└──────────────────────────┴──────────────────────────────────────────────┘
 
-Parallel path (separate process):
-┌──────────────────────────────────────────────────────────────────┐
-│  src/mcp/tools/search-tools.ts                                    │
-│  Identical query logic to search-actions.ts                       │
-│  Uses src/mcp/db.ts (own PrismaClient) — cannot call actions     │
-└──────────────────────────────────────────────────────────────────┘
+Server-side support:
+┌─────────────────────────────────────────────────────────────────────────┐
+│  API Routes (new)                                                        │
+│  GET  /api/tasks/[taskId]/files          — list files in worktree/path  │
+│  GET  /api/tasks/[taskId]/files/content  — read file content            │
+│  PUT  /api/tasks/[taskId]/files/content  — write file content           │
+│  POST /api/tasks/[taskId]/preview/start  — spawn preview child process  │
+│  POST /api/tasks/[taskId]/preview/stop   — kill preview child process   │
+│  GET  /api/tasks/[taskId]/preview/status — preview running/port info    │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Existing Infrastructure (unchanged)                                     │
+│  - /api/tasks/[taskId]/stream  (SSE execution)                          │
+│  - /api/tasks/[taskId]/diff    (git diff)                               │
+│  - /api/tasks/[taskId]/merge   (squash merge)                           │
+│  - lib/worktree.ts             (path derivation reused)                 │
+│  - lib/adapters/process-utils.ts (runChildProcess reused for preview)   │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Key Confirmed Facts (from source inspection)
+### Component Responsibilities
 
-- `SearchCategory` type is exported from `search-actions.ts` and imported in `search-dialog.tsx`
-- `CATEGORY_DEFS` array in `search-dialog.tsx` drives both tab rendering and the icon map — extending tabs requires updating this array
-- `fts.ts` exposes `searchNotes(db, projectId, query)` — scoped to a single project; global search needs a cross-project variant
-- `ProjectAsset` has no `description` field in current schema — LIKE search can only match `filename`
-- `asset-actions.ts` `uploadAsset()` receives `FormData` with keys `file` and `projectId` — a `description` key needs to be added
-- `search-tools.ts` (MCP) duplicates query logic from `search-actions.ts` by design — both must be updated together
+| Component | Responsibility | Classification |
+|-----------|----------------|----------------|
+| `TaskPageClient` | Top-level layout, tab state, panel orchestration | Modified (existing) |
+| `WorkbenchFileTree` | Recursive file/dir listing from worktree path | New |
+| `WorkbenchEditor` | Monaco editor with file load/save via API | New |
+| `WorkbenchFilesPanel` | Combines FileTree + Editor in resizable split | New |
+| `TaskDiffView` | Git diff rendering + merge (already exists) | Unchanged |
+| `WorkbenchPreviewPanel` | Preview controls + iframe renderer | New |
+| `useFileContent` | Custom hook: fetch/save file via API | New |
+| `usePreviewServer` | Custom hook: start/stop/poll preview process | New |
+| `previewProcessManager` | Server-singleton: Map of taskId to ChildProcess+port | New |
 
----
-
-## v0.3 Integration Architecture
-
-### What Changes vs What Is New
-
-**MODIFIED (existing files touched):**
-
-| File | Nature of Change |
-|------|-----------------|
-| `prisma/schema.prisma` | Add `description String?` to `ProjectAsset` model |
-| `prisma/migrations/` | New migration for description column (auto-generated by Prisma) |
-| `src/actions/search-actions.ts` | Extend `SearchCategory` type; add `"note"`, `"asset"`, `"all"` branches |
-| `src/mcp/tools/search-tools.ts` | Mirror search-actions changes for MCP clients |
-| `src/actions/asset-actions.ts` | Accept and persist `description` in `createAsset` + `uploadAsset` |
-| `src/components/assets/asset-upload.tsx` | Add description textarea field to upload dialog |
-| `src/components/layout/search-dialog.tsx` | Add All/Note/Asset tabs; grouped result rendering for All mode |
-| `src/lib/i18n.tsx` | Add translation keys for new tabs and description label |
-
-**NEW (net-new files):**
-
-None required. All v0.3 features integrate into existing files.
-
----
-
-### System Overview After v0.3
+## Recommended Project Structure
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                     Browser (React 19)                           │
-│  ┌───────────────────────────────────────────────────────────┐   │
-│  │  search-dialog.tsx (MODIFIED)                              │   │
-│  │  State: query, category ("all"|"task"|"project"|           │   │
-│  │         "repository"|"note"|"asset"), results[]            │   │
-│  │  UI: debounced input + 6 category tabs (All/Task/Project/  │   │
-│  │       Repo/Note/Asset) + grouped result list (All mode)    │   │
-│  │       or flat list (specific category mode)                │   │
-│  └────────────────────────┬──────────────────────────────────┘   │
-└───────────────────────────┼──────────────────────────────────────┘
-                            │ Server Action call
-┌───────────────────────────▼──────────────────────────────────────┐
-│  src/actions/search-actions.ts (MODIFIED)                         │
-│  SearchCategory = "all" | "task" | "project" | "repository"      │
-│                 | "note" | "asset"                                │
-│                                                                   │
-│  "all"   → Promise.all([task, project, repo, note, asset])       │
-│  "note"  → raw SQL: notes_fts MATCH + JOIN Project + Workspace   │
-│  "asset" → Prisma LIKE on filename + description                 │
-│  (existing branches unchanged)                                    │
-└───────────────────────────┬──────────────────────────────────────┘
-                            │
-          ┌─────────────────┴──────────────────────┐
-          │                                        │
-┌─────────▼──────────────────────┐  ┌─────────────▼────────────────┐
-│  SQLite (prisma/dev.db)         │  │  src/lib/fts.ts (unchanged)  │
-│  ProjectNote + notes_fts (FTS5) │  │  searchNotes() used as       │
-│  ProjectAsset + description col │  │  reference; global search    │
-│  (migration required)           │  │  uses its own cross-project  │
-└────────────────────────────────┘  │  SQL directly                │
-                                    └──────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────────┐
-│  src/mcp/tools/search-tools.ts (MODIFIED — mirrors actions)      │
-│  Same category extensions; uses src/mcp/db.ts directly          │
-└──────────────────────────────────────────────────────────────────┘
+src/
+├── app/
+│   └── workspaces/[workspaceId]/tasks/[taskId]/
+│       ├── page.tsx                    # Server Component (unchanged)
+│       └── task-page-client.tsx        # Modified: add Files + Preview tabs
+│
+├── app/api/tasks/[taskId]/
+│   ├── files/
+│   │   └── route.ts                   # GET: list files in worktree/localPath
+│   ├── files/content/
+│   │   └── route.ts                   # GET: read file, PUT: write file
+│   ├── preview/
+│   │   ├── start/route.ts             # POST: spawn preview process
+│   │   ├── stop/route.ts              # POST: kill preview process
+│   │   └── status/route.ts            # GET: port + running state
+│   ├── diff/route.ts                  # (existing, unchanged)
+│   ├── execute/route.ts               # (existing, unchanged)
+│   ├── merge/route.ts                 # (existing, unchanged)
+│   └── stream/route.ts                # (existing, unchanged)
+│
+├── components/task/
+│   ├── workbench-file-tree.tsx        # New: recursive tree from API
+│   ├── workbench-editor.tsx           # New: Monaco dynamic import wrapper
+│   ├── workbench-files-panel.tsx      # New: FileTree + Editor layout
+│   ├── workbench-preview-panel.tsx    # New: iframe + controls
+│   ├── task-diff-view.tsx             # (existing, unchanged)
+│   ├── task-conversation.tsx          # (existing, unchanged)
+│   └── task-message-input.tsx         # (existing, unchanged)
+│
+└── lib/
+    ├── preview-process-manager.ts     # New: server singleton for preview processes
+    ├── language-map.ts                # New: file extension to Monaco language
+    ├── worktree.ts                    # (existing, reused for path derivation)
+    ├── adapters/process-utils.ts      # (existing, reused for preview spawn)
+    └── file-serve.ts                  # (existing, pattern reference)
 ```
 
----
+### Structure Rationale
 
-## Component Boundaries
-
-| Component | Responsibility | v0.3 Change |
-|-----------|----------------|-------------|
-| `search-dialog.tsx` | UI: input, tabs, result rendering, debounce, navigation | Add 3 tabs (All, Note, Asset); add grouped renderer for All mode |
-| `search-actions.ts` | Server Action: category dispatch, DB queries, SearchResult mapping | Add note/asset/all branches; extend SearchCategory type |
-| `search-tools.ts` (MCP) | Same query logic for MCP clients | Mirror all changes from search-actions.ts |
-| `fts.ts` | FTS5 helpers: searchNotes, syncNoteToFts, deleteNoteFromFts | No changes — existing infrastructure is sufficient |
-| `asset-actions.ts` | Asset CRUD: create, upload, delete, get | Add `description` param to createAsset + uploadAsset |
-| `asset-upload.tsx` | Upload dialog: workspace/project/file selectors | Add description textarea input |
-| `schema.prisma` | Data model | Add `description String?` to ProjectAsset |
-| `i18n.tsx` | Translation strings (zh/en) | Add keys: `search.all`, `search.note`, `search.asset`, `assets.description` |
-
----
+- **`app/api/tasks/[taskId]/files/`:** Follows existing per-task API grouping convention. File listing and content are separate routes to keep each handler focused.
+- **`app/api/tasks/[taskId]/preview/`:** Preview lifecycle needs three endpoints (start/stop/status) — mirrors how execution uses `/execute` and `/stream`.
+- **`components/task/workbench-*.tsx`:** Keeps workbench components co-located with other task components. All prefixed `workbench-` to distinguish from the chat-related `task-*` components.
+- **`lib/preview-process-manager.ts`:** A server-side singleton (module-level Map) following the pattern of `process-utils.ts`'s `runningProcesses`. Preview processes are long-lived unlike execution processes.
 
 ## Architectural Patterns
 
-### Pattern 1: Category-dispatch extension in globalSearch
+### Pattern 1: Monaco Editor as Dynamic Import with `ssr: false`
 
-**What:** `globalSearch` uses a chain of `if (category === X)` branches. Adding "all" mode is additive — run all 5 type queries in parallel via `Promise.all`, merge results, cap each type.
+**What:** Monaco Editor requires browser APIs (`document`, `window`). It cannot run on the server. Use Next.js `dynamic()` with `ssr: false` to ensure the editor only loads client-side.
 
-**When to use:** Extending to any new search type. The same pattern applies: add one `if` branch returning `SearchResult[]`.
+**When to use:** Any time Monaco is rendered. The `WorkbenchEditor` component must be a Client Component, and it must additionally wrap the `@monaco-editor/react` Editor in a `dynamic()` call.
 
-**Example — "all" mode and new branches:**
+**Trade-offs:** Adds approximately 2-4MB bundle to client (Monaco is large). First render shows a loading skeleton. Language services (IntelliSense) work without a language server — syntax highlighting and basic completion are built-in. Turbopack (Next.js 16 dev server) has known issues with Monaco's web workers; the `ssr: false` dynamic import is the stable workaround.
+
+**Example:**
+
 ```typescript
-export type SearchCategory = "all" | "task" | "project" | "repository" | "note" | "asset";
+// components/task/workbench-editor.tsx
+"use client";
+import dynamic from "next/dynamic";
 
-export async function globalSearch(
-  query: string,
-  category: SearchCategory = "task"
-): Promise<SearchResult[]> {
-  if (!query.trim()) return [];
-  const q = query.trim();
+const MonacoEditor = dynamic(
+  () => import("@monaco-editor/react").then((m) => m.default),
+  { ssr: false, loading: () => <EditorSkeleton /> }
+);
+```
 
-  if (category === "all") {
-    const [tasks, projects, repos, notes, assets] = await Promise.all([
-      searchTasks(db, q, 5),
-      searchProjects(db, q, 5),
-      searchRepositories(db, q, 5),
-      searchNotesCrossProject(db, q, 5),
-      searchAssets(db, q, 5),
-    ]);
-    return [...tasks, ...projects, ...repos, ...notes, ...assets];
-  }
-  // existing branches + new ones below ...
+### Pattern 2: File API Route with Path Anchoring
+
+**What:** All file read/write routes resolve the requested path relative to the task's worktree path (or `localPath` for NORMAL projects). They enforce that the resolved path stays within that root — the same path-traversal protection used in `file-serve.ts`.
+
+**When to use:** `/api/tasks/[taskId]/files/content` GET and PUT handlers.
+
+**Trade-offs:** The worktree path must be looked up from DB on every request (task to latest execution to worktreePath). Cache the worktree path in the route's request handling, not across requests. SQLite is fast enough for a local tool.
+
+**Example:**
+
+```typescript
+// app/api/tasks/[taskId]/files/content/route.ts
+const worktreeRoot = path.resolve(worktreePath);
+const requestedPath = path.resolve(worktreeRoot, filePath);
+if (!requestedPath.startsWith(worktreeRoot + path.sep)) {
+  return NextResponse.json({ error: "Invalid path" }, { status: 400 });
 }
 ```
 
-**Trade-offs:** `Promise.all` fires 5 parallel SQLite queries. SQLite handles this fine in WAL mode for single-user local use. Each type is capped at 5 in All mode to prevent result flooding.
+### Pattern 3: Preview Process as Server Singleton
 
-### Pattern 2: Cross-project note search (extends fts.ts pattern)
+**What:** A module-level `Map<taskId, { process: ChildProcess; port: number }>` in `lib/preview-process-manager.ts` tracks running preview servers. The preview start API route spawns `child_process.spawn()` with the user-configured command (e.g., `npm run dev -- --port 3100`) in the worktree directory. The stop route kills it. The status route reads the map.
 
-**What:** `fts.ts` `searchNotes()` is scoped to one `projectId`. For global search, use a single SQL join that traverses `notes_fts → ProjectNote → Project → Workspace` without a project filter.
+**When to use:** The Preview tab's start/stop controls POST to these routes.
 
-**When to use:** Only inside `globalSearch` when `category === "note"` or `"all"`. The per-project `searchNotes()` in `fts.ts` remains unchanged for the notes page.
+**Trade-offs:** This is a process-level singleton, not persisted in SQLite. On Next.js hot-reload, the Map clears but child processes may still be running on their ports. Mitigation: the start route checks whether a process for this taskId already exists in the map before spawning. The stop route uses SIGTERM then SIGKILL after a 3-second grace period, following the existing `process-utils.ts` pattern.
 
-**Example:**
-```typescript
-// In search-actions.ts — note branch
-type NoteRow = {
-  note_id: string;
-  title: string;
-  projectId: string;
-  workspaceName: string;
-  projectName: string;
-  workspaceId: string;
-};
-
-const notes = await db.$queryRawUnsafe<NoteRow[]>(
-  `SELECT f.note_id, n."projectId", n.title,
-          w.name as "workspaceName", p.name as "projectName", p."workspaceId"
-   FROM notes_fts f
-   JOIN "ProjectNote" n ON n.id = f.note_id
-   JOIN "Project" p ON p.id = n."projectId"
-   JOIN "Workspace" w ON w.id = p."workspaceId"
-   WHERE f.notes_fts MATCH ? ORDER BY rank LIMIT ?`,
-  q, limit
-);
-return notes.map(n => ({
-  id: n.note_id,
-  type: "note" as const,
-  title: n.title,
-  subtitle: `${n.workspaceName} / ${n.projectName}`,
-  navigateTo: `/workspaces/${n.workspaceId}?projectId=${n.projectId}&tab=notes`,
-}));
-```
-
-**Trade-offs:** Raw SQL — same risk surface as existing `fts.ts`. Acceptable given the existing precedent and small query scope.
-
-### Pattern 3: Asset description — additive nullable schema change
-
-**What:** Add `description String?` to `ProjectAsset`. Nullable means no migration default is needed. Existing rows get `NULL`. New rows can supply a description through the upload dialog. Search does LIKE on both `filename` and `description`.
-
-**When to use:** Any additive field on an existing model where historical data has no value for the new field.
-
-**Trade-offs:** Description is nullable — search code must handle `NULL` gracefully (Prisma `contains` on a nullable field returns no match for NULL rows, which is correct behavior).
-
-### Pattern 4: Grouped result rendering for All mode
-
-**What:** The current result list is a flat `results.map()`. For All mode, group by type before rendering to show section headers per type. For specific-category tabs, keep the flat list unchanged.
-
-**When to use:** Only when `activeCategory === "all"`. Avoids complicating the existing flat render path.
+Port selection: user configures a port in the Preview panel UI (default 3000). The system does not auto-assign ports — this is a local tool and users control their own port space.
 
 **Example:**
-```typescript
-// In search-dialog.tsx
-const grouped = useMemo(() => {
-  if (category !== "all") return null;
-  return results.reduce<Record<string, SearchResult[]>>((acc, r) => {
-    if (!acc[r.type]) acc[r.type] = [];
-    acc[r.type].push(r);
-    return acc;
-  }, {});
-}, [results, category]);
 
-// Render: if grouped → render sections, else → flat list
+```typescript
+// lib/preview-process-manager.ts
+interface PreviewEntry { process: ChildProcess; port: number; taskId: string }
+const previews = new Map<string, PreviewEntry>();
+
+export function startPreview(taskId: string, command: string, cwd: string, port: number): void
+export function stopPreview(taskId: string): void
+export function getPreviewStatus(taskId: string): { running: boolean; port: number | null }
 ```
 
----
+### Pattern 4: File Tree Listing with Lazy Expansion
+
+**What:** The file listing API route runs `fs.readdir` on the worktree path. By default it returns only the first level. When a directory node is expanded in the UI, a second fetch retrieves its children. The `WorkbenchFileTree` component renders this as a collapsible tree. The `path` returned is always relative to the worktree root, not absolute.
+
+**When to use:** The Files tab in the right panel.
+
+**Trade-offs:** Lazy expansion avoids loading large trees upfront. The content endpoint reconstructs the absolute path server-side from the relative path + worktree root. Hidden files/directories (dotfiles) are excluded by default with an opt-in toggle.
+
+### Pattern 5: Tab State in Parent, Panel State Local
+
+**What:** `TaskPageClient` owns which tab is active (Files / Changes / Preview) and manages the top-level layout. Each panel component (`WorkbenchFilesPanel`, `TaskDiffView`, `WorkbenchPreviewPanel`) owns its own internal state (selected file, preview port, etc.). Cross-panel communication (e.g., agent edit triggers file tree refresh) happens via a `refreshKey` prop incremented by the parent.
+
+**When to use:** Always — keeps the parent thin and panels independently testable.
+
+**Trade-offs:** File tree refresh after agent execution requires the parent to detect `status_changed` SSE events (already handled in `task-page-client.tsx`) and increment a `refreshKey` passed to `WorkbenchFilesPanel`. No global state or Zustand slice is needed.
 
 ## Data Flow
 
-### Request Flow — Specific Category (e.g., "note")
+### File Read Flow
 
 ```
-User selects Note tab, types "OAuth"
-    ↓
-search-dialog.tsx (debounced 250ms)
-    ↓
-globalSearch("OAuth", "note") — Server Action
-    ↓
-Cross-project SQL: notes_fts MATCH "OAuth" JOIN ProjectNote JOIN Project JOIN Workspace
-    ↓
-SearchResult[] → type="note", navigateTo="/workspaces/{wsId}?projectId={pid}&tab=notes"
-    ↓
-search-dialog.tsx flat result list
-    ↓
-User clicks → router.push(navigateTo) → opens workspace, navigates to notes tab for that project
+User clicks file in WorkbenchFileTree
+    |
+WorkbenchFilesPanel.handleFileSelect(relativePath)
+    |
+useFileContent hook: GET /api/tasks/[taskId]/files/content?path=<relativePath>
+    |
+API route: resolve worktree root from DB → anchor path → fs.readFile
+    |
+Response: { content: string; language: string }
+    |
+MonacoEditor: setValue(content), setLanguage(language)
 ```
 
-### Request Flow — All Mode
+### File Write Flow
 
 ```
-User selects All tab, types "auth"
-    ↓
-globalSearch("auth", "all") — Server Action
-    ↓
-Promise.all([task, project, repo, note, asset queries]) — 5 parallel SQLite queries
-    ↓
-Merged results array (up to 25 results, 5 per type)
-    ↓
-search-dialog.tsx: grouped by type → renders section per type with header
-    ↓
-User clicks any result → router.push to appropriate page
+User edits in Monaco, clicks Save (Ctrl+S handler)
+    |
+WorkbenchEditor.handleSave(content)
+    |
+useFileContent hook: PUT /api/tasks/[taskId]/files/content
+  body: { path: relativePath, content: string }
+    |
+API route: anchor path → fs.writeFile
+    |
+Response: { success: true }
+    |
+Toast notification "Saved"
 ```
 
-### Asset Description Upload Flow
+### Preview Start Flow
 
 ```
-User opens upload dialog in asset-upload.tsx
-    ↓
-User fills: workspace, project, file (existing), description (NEW textarea)
-    ↓
-handleUpload() builds FormData with keys: file, projectId, description (NEW)
-    ↓
-uploadAsset(formData) — Server Action (MODIFIED)
-    reads formData.get("description")
-    ↓
-createAsset({ filename, path, mimeType, size, projectId, description }) (MODIFIED)
-    ↓
-db.projectAsset.create({ ...data, description })
-    ↓
-ProjectAsset row now carries description; searchable via LIKE
+User configures command ("npm run dev") + port (3000) in WorkbenchPreviewPanel
+    |
+handleStart() → POST /api/tasks/[taskId]/preview/start
+  body: { command: string; port: number }
+    |
+API route: validate command (Zod), lookup worktree path from DB
+    |
+previewProcessManager.startPreview(taskId, command, cwd, port)
+  → spawn child_process in worktree directory (shell: false)
+    |
+Response: { started: true; port: number }
+    |
+WorkbenchPreviewPanel: polls GET /api/tasks/[taskId]/preview/status
+  every 2 seconds until running confirmed or 30-second timeout
+    |
+iframe src="http://localhost:{port}" renders once confirmed running
 ```
 
-### State Management (unchanged)
-
-The search dialog remains fully self-contained:
+### Agent Edit → File Tree Refresh Flow
 
 ```
-SearchDialog component state:
-  query: string              → controlled input
-  category: SearchCategory   → active tab (now 6 options)
-  results: SearchResult[]    → from server action
-  isSearching: boolean       → loading indicator
-
-category change → clears results → re-triggers search effect
-query change    → debounce 250ms → calls globalSearch(query, category)
+SSE event { type: "status_changed" } received in TaskPageClient
+    |
+TaskPageClient: increment fileTreeRefreshKey state
+    |
+WorkbenchFilesPanel receives new refreshKey prop
+    |
+useEffect on refreshKey: re-fetch file listing from API
+    |
+File tree re-renders with agent's new/modified files
 ```
 
-No global state store changes needed.
+### Key Data Flows
 
----
+1. **Worktree path resolution:** Every file/preview API route resolves the worktree path the same way: look up `db.taskExecution.findFirst({ where: { taskId, status: "COMPLETED" }, orderBy: { createdAt: "desc" } })` and use `worktreePath`. Falls back to `task.project.localPath` if no COMPLETED execution exists (NORMAL projects, or before first execution on GIT projects).
+
+2. **Language detection:** Map file extension to Monaco language string in `lib/language-map.ts`. The content API includes a `language` field in the response so the client does not need to do extension mapping itself.
+
+3. **Preview command security:** The command string from the user is split by whitespace and passed as args array to `child_process.spawn(shell: false)` — never interpolated into a shell string. This follows the existing `execFileSync` pattern in `diff/route.ts` and the security convention in `process-utils.ts`.
+
+## Scaling Considerations
+
+This is a localhost-only single-user tool. Scaling is not a concern. The relevant operational limits:
+
+| Concern | At 1 user (current target) | Notes |
+|---------|---------------------------|-------|
+| Concurrent preview servers | 1 per task, user-managed | No need to auto-limit |
+| File tree size | Bounded by user's project | Lazy expansion prevents UI freeze |
+| Monaco bundle size | ~2-4MB initial load | Acceptable for local dev tool |
+| File write conflicts | None (single user) | No optimistic locking needed |
+| SQLite reads per file op | 1 DB query per API call | Negligible for local SQLite |
+
+## Anti-Patterns
+
+### Anti-Pattern 1: Passing Absolute Filesystem Paths to the Client
+
+**What people do:** Return the full `worktreePath + "/" + filename` in the file listing API and send it back as-is for content requests.
+
+**Why it's wrong:** Exposes internal filesystem structure unnecessarily; makes path-traversal validation harder; couples client to server filesystem layout.
+
+**Do this instead:** Return only paths relative to the worktree root in the listing API. The content API accepts relative paths and resolves them server-side with anchor validation.
+
+### Anti-Pattern 2: Bundling Monaco Without `ssr: false`
+
+**What people do:** Import `@monaco-editor/react` directly at the top of a Client Component without `dynamic()`.
+
+**Why it's wrong:** Next.js still attempts to bundle Monaco for server rendering. Monaco accesses `window` and `document` during initialization, causing a crash at build time or a hydration error at runtime. Turbopack (used in `next dev`) has additional Monaco worker issues.
+
+**Do this instead:** Always use `dynamic(() => import("@monaco-editor/react"), { ssr: false })`. The `WorkbenchEditor` component is the single place this import appears.
+
+### Anti-Pattern 3: Shell-Interpolated Preview Commands
+
+**What people do:** Execute `exec(\`${userCommand}\`)` or `spawn("sh", ["-c", userCommand])` with the user-provided preview command.
+
+**Why it's wrong:** Even on a local tool, running a user-typed command through a shell interpreter enables accidental injection (e.g., `npm run dev; rm -rf ~`).
+
+**Do this instead:** Split the command string by whitespace and pass `spawn(cmd, args, { shell: false })`. This matches the existing `process-utils.ts` approach.
+
+### Anti-Pattern 4: Polling Preview Readiness Too Aggressively
+
+**What people do:** Poll `/api/tasks/[taskId]/preview/status` every 200-500ms immediately after the start response.
+
+**Why it's wrong:** Preview dev servers (Vite, Next.js) take 3-10 seconds to start and bind their port. Rapid polling creates unnecessary API calls and can overwhelm Next.js route handler processing.
+
+**Do this instead:** Poll at 2-second intervals. Show a "Starting..." state in the UI. Cap polling at 30 seconds, then show an error message with the process's stderr for diagnosis.
+
+### Anti-Pattern 5: Re-fetching the File Tree on Every SSE Event
+
+**What people do:** Subscribe to every SSE event and re-fetch the entire file tree on any `tool` or `log` event.
+
+**Why it's wrong:** During an active execution the SSE stream emits dozens of events per second. Each re-fetch is a filesystem read operation.
+
+**Do this instead:** Only re-fetch on `status_changed` events (which fire once per execution completion). Agent file changes are visible atomically after execution completes — not incrementally during streaming.
 
 ## Integration Points
 
-### Modified Files in Dependency Order
+### Existing Infrastructure Reused
 
-Build in this order — each step satisfies prerequisites before the next begins.
+| Integration | How Reused | Notes |
+|-------------|------------|-------|
+| `lib/worktree.ts` | Worktree path convention (`localPath/.worktrees/task-{taskId}`) | File routes derive the path using the same convention; no need to call `createWorktree()` on reads |
+| `lib/adapters/process-utils.ts` | `spawn` pattern for preview process | Mirror the `shell: false` spawn approach; or call `runChildProcess` if SSE-style logging of startup output is desired |
+| `lib/adapters/process-manager.ts` | Module-level singleton registry pattern | `preview-process-manager.ts` follows the same Map-based singleton approach |
+| `lib/file-serve.ts` | `resolveAssetPath` path-anchor guard | Replicate the `resolved.startsWith(safePrefix)` check for worktree-scoped file operations |
+| `app/api/tasks/[taskId]/diff/route.ts` | DB lookup pattern (task → project → localPath → worktreeBranch) | Copy the Zod validation + DB query + fallback pattern for the new file routes |
+| SSE `status_changed` event | Already emitted in `stream/route.ts` | `TaskPageClient` can use this to increment `fileTreeRefreshKey` without any server-side changes |
+| `components/task/task-diff-view.tsx` | Entire component reused unchanged | Just render it as the Changes tab content instead of the current sole tab content |
 
-| Step | File | Change | Prerequisite |
-|------|------|--------|--------------|
-| 1 | `prisma/schema.prisma` | Add `description String?` to `ProjectAsset` | None |
-| 2 | `prisma/migrations/` | Run `prisma migrate dev` to generate migration SQL | Step 1 |
-| 3 | `src/actions/asset-actions.ts` | Accept + persist `description` in createAsset/uploadAsset | Step 2 |
-| 3 | `src/components/assets/asset-upload.tsx` | Add description textarea to upload dialog | Step 3 (interface) |
-| 4 | `src/actions/search-actions.ts` | Extend SearchCategory; add note/asset/all branches | Steps 1-2 (asset.description must exist) |
-| 4 | `src/mcp/tools/search-tools.ts` | Mirror all changes from search-actions.ts | Step 4 (parallel) |
-| 5 | `src/components/layout/search-dialog.tsx` | Add 3 tabs; grouped All renderer | Step 4 (SearchCategory type) |
-| 6 | `src/lib/i18n.tsx` | Add translation keys for all new UI strings | Can accompany any above step |
+### New External Dependencies
 
-Steps 3 (asset-actions + upload dialog) and 4 (search-actions + search-tools) can be done in parallel once Step 2 is complete. Within Step 4, search-actions.ts and search-tools.ts are parallel.
+| Dependency | Version | Purpose | Integration |
+|------------|---------|---------|-------------|
+| `@monaco-editor/react` | ^4.x | Code editor component | Client Component, `dynamic()` import with `ssr: false` |
 
-### NavigateTo Targets for New Types
-
-| Type | `navigateTo` pattern | Destination |
-|------|---------------------|-------------|
-| `note` | `/workspaces/{wsId}?projectId={pid}&tab=notes` | Notes tab for that project |
-| `asset` | `/workspaces/{wsId}?projectId={pid}&tab=assets` | Assets tab for that project |
-
-**Verify:** Confirm that the workspace page reads a `tab` query param to auto-activate Notes/Assets tabs. If not, navigation will open the project without focusing the right tab — this is a minor usability issue, not a blocker.
+No other new external dependencies are needed. The preview iframe, file tree, and process management all use Node.js built-ins and existing patterns.
 
 ### Internal Boundaries
 
 | Boundary | Communication | Notes |
 |----------|---------------|-------|
-| `search-dialog.tsx` ↔ `search-actions.ts` | `SearchCategory` type exported from actions, imported in dialog | Extending the type in actions flows through automatically |
-| `search-actions.ts` ↔ `fts.ts` | Direct import, raw SQL for cross-project note search | fts.ts has per-project helper; global search uses its own SQL directly to avoid N+1 |
-| `search-actions.ts` ↔ `search-tools.ts` | No coupling — independent files | Must be updated in sync manually — no shared abstraction exists |
-| `asset-upload.tsx` ↔ `asset-actions.ts` | FormData keys: `file`, `projectId`, `description` (NEW) | Producer and consumer must agree on FormData key name |
-| Next.js actions ↔ MCP tools | Independent processes, share SQLite via WAL | MCP cannot import `"use server"` modules |
+| `WorkbenchFilesPanel` ↔ API | Fetch GET/PUT `/api/tasks/[taskId]/files/*` | Relative paths only; never absolute filesystem paths on the wire |
+| `WorkbenchPreviewPanel` ↔ API | Fetch POST/GET `/api/tasks/[taskId]/preview/*` | Command + port from UI controls |
+| `previewProcessManager` ↔ API routes | Module-level Map singleton (same process) | Not persisted; survives hot-reload only if the module is not re-evaluated |
+| `TaskPageClient` ↔ `WorkbenchFilesPanel` | `refreshKey: number` prop | Incremented on `status_changed` SSE event |
+| `TaskPageClient` ↔ active tab state | `useState<"files"|"changes"|"preview">` | Tab bar rendered in right panel header |
+| `WorkbenchEditor` ↔ `WorkbenchFileTree` | Selected file path via parent state in `WorkbenchFilesPanel` | Parent holds `selectedFile` state; tree fires `onFileSelect`; editor receives `filePath` |
 
----
+## Suggested Build Order
 
-## Anti-Patterns
+The features have the following dependency graph:
 
-### Anti-Pattern 1: Updating search-actions.ts without updating search-tools.ts
+```
+Phase A: Route entry + tab bar skeleton (no deps)
+    |
+Phase B: File listing API + WorkbenchFileTree (depends on worktree path convention)
+    |
+Phase C: File content API + WorkbenchEditor/Monaco (depends on Phase B path pattern)
+    |
+Phase D: Files tab integration (tree + editor combined, depends on B + C)
+    |
+Phase E: Changes tab (reuse TaskDiffView in new tab bar, depends on Phase A)
+    |
+Phase F: Preview process manager + API + WorkbenchPreviewPanel (independent)
+```
 
-**What people do:** Add `"note"` and `"asset"` branches to `search-actions.ts` but forget `search-tools.ts`.
+**Recommended phase breakdown:**
 
-**Why it's wrong:** MCP agents using the `search` tool will silently get `[]` for note/asset categories. No error thrown — just missing results.
+| Phase | Deliverable | Dependencies | Risk |
+|-------|-------------|--------------|------|
+| Phase A | "查看详情" entry in task drawer → task page route; expand tab bar to [Files][Changes][Preview] skeleton | None | Low |
+| Phase B | File listing API route + `WorkbenchFileTree` component with lazy expansion | Worktree path convention (existing) | Low |
+| Phase C | File content read/write API + `WorkbenchEditor` with Monaco (`ssr: false`) + `useFileContent` hook | Phase B (path anchor pattern) | Medium — Monaco SSR pitfall |
+| Phase D | `WorkbenchFilesPanel` integrating tree + editor in a horizontal split | Phases B + C | Low |
+| Phase E | Wire existing `TaskDiffView` as the Changes tab; remove old single-tab layout from `TaskPageClient` | Phase A | Low (pure reuse) |
+| Phase F | `preview-process-manager.ts` + 3 preview API routes + `WorkbenchPreviewPanel` with iframe | None (independent) | Medium — child process lifecycle |
 
-**Do this instead:** Treat these two files as a coupled pair. Update both in the same task/commit. After v0.3, both files have 5 category branches — they must stay in sync.
+**Why this order:**
 
-### Anti-Pattern 2: Scoping note search to a single project in globalSearch
-
-**What people do:** Reuse `searchNotes(db, projectId, query)` from fts.ts inside `globalSearch`, requiring a `projectId` that global search doesn't have.
-
-**Why it's wrong:** You would need to fetch all projects first, then run N queries — classic N+1. Even with `Promise.all`, N=50 projects means 50 FTS queries.
-
-**Do this instead:** Write a single cross-project SQL query joining `notes_fts → ProjectNote → Project → Workspace`. One query returns all relevant notes with breadcrumb context. See Pattern 2 example above.
-
-### Anti-Pattern 3: Making description required on ProjectAsset
-
-**What people do:** Add `description String` (non-optional) to the schema, requiring a migration default or breaking existing rows.
-
-**Why it's wrong:** Existing asset rows have no description. A non-nullable field without a `@default` value will fail migration on populated databases.
-
-**Do this instead:** Use `description String?` (nullable). The upload dialog may present it as visually recommended but keep submission optional.
-
-### Anti-Pattern 4: Adding group headers into the flat results.map() loop
-
-**What people do:** Try to detect type-boundary transitions inside the existing flat `results.map((result, i) => ...)` loop and inject section headers using index checks.
-
-**Why it's wrong:** Fragile logic that breaks if results are reordered. Hard to test and read.
-
-**Do this instead:** Pre-group results by type using `reduce` before rendering. Render grouped sections with headers only when `category === "all"`. Keep the existing flat list for single-category tabs — no changes needed to that path.
-
-### Anti-Pattern 5: Adding "all" mode as a new globalSearch call signature
-
-**What people do:** Create a separate `globalSearchAll(query)` function to avoid touching the existing `globalSearch` signature.
-
-**Why it's wrong:** The `SearchCategory` type already determines behavior. Adding a parallel function means `search-dialog.tsx` imports two functions instead of one, and `search-tools.ts` needs to be updated twice.
-
-**Do this instead:** Extend `SearchCategory` to include `"all"`. Handle it as a branch in the same `globalSearch` function. This is the same pattern already used for `"task"`, `"project"`, and `"repository"`.
-
----
-
-## Scaling Considerations
-
-This is a localhost single-user tool. No scaling targets.
-
-| Concern | Current approach | Notes |
-|---------|-----------------|-------|
-| All mode: 5 parallel queries | `Promise.all` with per-type LIMIT 5 | Acceptable; SQLite WAL handles concurrent reads |
-| Asset LIKE search | Prisma `contains` on filename + description | No FTS index needed at expected asset volume (<10k) |
-| Note FTS cross-project | Single SQL join with LIMIT 10 | FTS5 rank ordering ensures relevant results first |
-
----
+- Phases A through E build sequentially from routing to UI to editor, each independently testable and mergeable.
+- Phase F is independent of Phases B-E and can run in parallel with Phases C-D if two developers are available, or be deferred to a separate sprint.
+- The Monaco SSR issue (Phase C) is isolated to one component file — resolving it before integrating into the full panel (Phase D) keeps the integration step low-risk.
+- Phase E is nearly free — it reuses `TaskDiffView` unchanged, just wires it into the new multi-tab layout instead of the current hardcoded single-tab rendering in `TaskPageClient`.
 
 ## Sources
 
-- Direct inspection of `src/actions/search-actions.ts`
-- Direct inspection of `src/components/layout/search-dialog.tsx`
-- Direct inspection of `src/mcp/tools/search-tools.ts`
-- Direct inspection of `src/lib/fts.ts`
-- Direct inspection of `prisma/schema.prisma`
-- Direct inspection of `src/actions/asset-actions.ts`
-- Direct inspection of `src/components/assets/asset-upload.tsx`
-- Direct inspection of `src/lib/i18n.tsx` (existing translation keys)
-- `.planning/PROJECT.md` (v0.3 milestone goals and constraints)
+- Codebase: `/src/app/api/tasks/[taskId]/diff/route.ts` — path anchor + worktree query pattern
+- Codebase: `/src/app/api/tasks/[taskId]/stream/route.ts` — SSE + child process lifecycle pattern
+- Codebase: `/src/lib/adapters/process-manager.ts` + `process-utils.ts` — singleton process registry + `spawn(shell: false)` pattern
+- Codebase: `/src/lib/file-serve.ts` — path traversal protection (`startsWith(safePrefix)` guard)
+- Codebase: `/src/lib/worktree.ts` — worktree path convention (`localPath/.worktrees/task-{taskId}`)
+- Codebase: `/src/app/workspaces/[workspaceId]/tasks/[taskId]/task-page-client.tsx` — current 40/60 layout + SSE `status_changed` consumption
+- [@monaco-editor/react npm](https://www.npmjs.com/package/@monaco-editor/react) — React wrapper, `ssr: false` requirement (HIGH confidence)
+- [Next.js Turbopack Monaco issue #72613](https://github.com/vercel/next.js/issues/72613) — `ssr: false` is the stable workaround for both Turbopack and Webpack (MEDIUM confidence — known open issue)
+- [Bolt.diy architecture — DeepWiki](https://deepwiki.com/stackblitz-labs/bolt.diy) — reference for preview iframe + file tree + editor panel layout pattern (MEDIUM confidence)
 
 ---
-*Architecture research for: ai-manager v0.3 global search enhancement*
-*Researched: 2026-03-30*
+*Architecture research for: ai-manager v0.6 task development workbench*
+*Researched: 2026-03-31*
