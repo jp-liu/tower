@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Git Worktree 任务隔离
-status: roadmapped
-stopped_at: Roadmap created — ready for Phase 15 planning
-last_updated: "2026-03-31T00:00:00.000Z"
-last_activity: 2026-03-31
+status: planning
+stopped_at: Completed 15-02-PLAN.md
+last_updated: "2026-03-31T03:06:27.215Z"
+last_activity: 2026-03-31 — v0.5 roadmap created (Phases 15-18)
 progress:
-  total_phases: 4
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 8
+  completed_phases: 4
+  total_plans: 10
+  completed_plans: 9
   percent: 0
 ---
 
@@ -57,6 +57,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 14 P02 | 5m | 2 tasks | 2 files |
 
 *Updated after each plan completion*
+| Phase 15-schema-cleanup P02 | 480 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,8 @@ Progress: [░░░░░░░░░░] 0%
 - [v0.5]: Verification before merge — IN_REVIEW gate prevents merging unsatisfied work
 - [v0.5]: adapter.execute() changes only cwd — ExecutionResult interface unchanged, minimal adapter impact
 - [v0.5]: baseBranch on Task (not TaskExecution) — branch choice is per-task, not per-execution-run
+- [Phase 15-02]: Fixed branch format task/{taskId} passed directly to TaskMetadata — no interpolation needed
+- [Phase 15-02]: getConfigValue import removed from task-detail-panel.tsx entirely — only branchTemplate used it there
 
 ### Pending Todos
 
@@ -108,6 +111,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-31
-Stopped at: v0.5 roadmap created — Phases 15-18 defined
+Last session: 2026-03-31T03:06:27.211Z
+Stopped at: Completed 15-02-PLAN.md
 Resume file: None

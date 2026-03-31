@@ -64,7 +64,7 @@ Requirements for v0.5 — Git Worktree 任务隔离. Each maps to roadmap phases
 
 ### 配置清理
 
-- [ ] **CL-01**: 移除设置页 git.branchTemplate 配置项和相关代码（interpolateBranchTemplate 等）
+- [x] **CL-01**: 移除设置页 git.branchTemplate 配置项和相关代码（interpolateBranchTemplate 等）
 
 ## Future Requirements
 
@@ -111,7 +111,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SRCH-07 | Phase 14 | Complete |
 | BR-02 | Phase 15 | Pending |
 | WT-03 | Phase 15 | Pending |
-| CL-01 | Phase 15 | Pending |
+| CL-01 | Phase 15 | Complete |
 | BR-01 | Phase 16 | Pending |
 | WT-01 | Phase 16 | Pending |
 | WT-02 | Phase 16 | Pending |
