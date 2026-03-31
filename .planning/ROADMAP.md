@@ -74,7 +74,7 @@ See: [milestones/v0.5-ROADMAP.md](./milestones/v0.5-ROADMAP.md) for full details
 **Milestone Goal:** 为每个任务提供专属的全功能开发工作台页面，集成 AI 聊天、代码浏览编辑、diff 查看和实时预览。
 
 - [x] **Phase 19: Workbench Entry & Layout** - "查看详情"入口 + 任务专属页面路由 + 三标签右侧面板骨架 (completed 2026-03-31)
-- [ ] **Phase 20: File Tree Browser** - Worktree 目录树浏览、gitignore 过滤、git 状态标记、右键菜单操作
+- [x] **Phase 20: File Tree Browser** - Worktree 目录树浏览、gitignore 过滤、git 状态标记、右键菜单操作 (completed 2026-03-31)
 - [ ] **Phase 21: Code Editor** - Monaco 在线编辑器（语法高亮、多标签、Ctrl+S 保存、dirty 标记、主题同步）
 - [ ] **Phase 22: Diff View Integration** - "变更"标签页复用现有 TaskDiffView 组件接入工作台布局
 - [ ] **Phase 23: Preview Panel** - 前端项目类型字段 + 预览面板（启动命令、iframe 嵌入、终端打开、自动刷新）
@@ -111,7 +111,7 @@ Plans:
 Plans:
 - [x] 20-01-PLAN.md — Install ignore dep, safeResolvePath utility, test scaffolds (FT-01, FT-02, FT-03, FT-05)
 - [x] 20-02-PLAN.md — File CRUD server actions + getGitStatus (FT-01, FT-03, FT-05, FT-06)
-- [ ] 20-03-PLAN.md — FileTree/FileTreeNode/FileTreeContextMenu components + task page integration (FT-01-06)
+- [x] 20-03-PLAN.md — FileTree/FileTreeNode/FileTreeContextMenu components + task page integration (FT-01-06)
 **UI hint**: yes
 
 ### Phase 21: Code Editor
@@ -127,7 +127,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 20-01-PLAN.md — Install ignore dep, safeResolvePath utility, test scaffolds (FT-01, FT-02, FT-03, FT-05)
-- [ ] 20-02-PLAN.md — File CRUD server actions + getGitStatus (FT-01, FT-03, FT-05, FT-06)
+- [x] 20-02-PLAN.md — File CRUD server actions + getGitStatus (FT-01, FT-03, FT-05, FT-06)
 - [ ] 20-03-PLAN.md — FileTree/FileTreeNode/FileTreeContextMenu components + task page integration (FT-01-06)
 **UI hint**: yes
 
@@ -141,7 +141,7 @@ Plans:
   3. User can reload the diff to see the latest changes after Claude modifies files
 **Plans**: 3 plans
 Plans:
-- [ ] 20-01-PLAN.md — Install ignore dep, safeResolvePath utility, test scaffolds (FT-01, FT-02, FT-03, FT-05)
+- [x] 20-01-PLAN.md — Install ignore dep, safeResolvePath utility, test scaffolds (FT-01, FT-02, FT-03, FT-05)
 - [ ] 20-02-PLAN.md — File CRUD server actions + getGitStatus (FT-01, FT-03, FT-05, FT-06)
 - [ ] 20-03-PLAN.md — FileTree/FileTreeNode/FileTreeContextMenu components + task page integration (FT-01-06)
 **UI hint**: yes
@@ -187,7 +187,7 @@ Plans:
 | 17. Review & Merge Workflow | v0.5 | 4/4 | Complete | 2026-03-31 |
 | 18. Worktree Lifecycle | v0.5 | 2/2 | Complete | 2026-03-31 |
 | 19. Workbench Entry & Layout | v0.6 | 2/2 | Complete    | 2026-03-31 |
-| 20. File Tree Browser | v0.6 | 2/3 | In Progress|  |
+| 20. File Tree Browser | v0.6 | 3/3 | Complete   | 2026-03-31 |
 | 21. Code Editor | v0.6 | 0/TBD | Not started | - |
 | 22. Diff View Integration | v0.6 | 0/TBD | Not started | - |
 | 23. Preview Panel | v0.6 | 0/TBD | Not started | - |
