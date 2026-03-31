@@ -48,14 +48,14 @@ Requirements for v0.5 — Git Worktree 任务隔离. Each maps to roadmap phases
 
 ### 合并与验证
 
-- [ ] **MR-01**: 任务完成后状态变为 IN_REVIEW，用户可在任务面板查看 diff
-- [ ] **MR-02**: 用户可在任务面板 squash merge worktree 分支到任务的 base branch
-- [ ] **MR-03**: 合并前自动检测冲突，有冲突时提示用户
+- [x] **MR-01**: 任务完成后状态变为 IN_REVIEW，用户可在任务面板查看 diff
+- [x] **MR-02**: 用户可在任务面板 squash merge worktree 分支到任务的 base branch
+- [x] **MR-03**: 合并前自动检测冲突，有冲突时提示用户
 
 ### 退回重做
 
-- [ ] **RV-01**: IN_REVIEW 状态的任务可退回 IN_PROGRESS，Claude 在同一 worktree 继续修改
-- [ ] **RV-02**: 退回重做创建新的 TaskExecution 记录，复用同一 worktree 和分支
+- [x] **RV-01**: IN_REVIEW 状态的任务可退回 IN_PROGRESS，Claude 在同一 worktree 继续修改
+- [x] **RV-02**: 退回重做创建新的 TaskExecution 记录，复用同一 worktree 和分支
 
 ### Worktree 生命周期
 
@@ -116,11 +116,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WT-01 | Phase 16 | Complete |
 | WT-02 | Phase 16 | Complete |
 | WT-04 | Phase 16 | Complete |
-| MR-01 | Phase 17 | Pending |
-| MR-02 | Phase 17 | Pending |
-| MR-03 | Phase 17 | Pending |
-| RV-01 | Phase 17 | Pending |
-| RV-02 | Phase 17 | Pending |
+| MR-01 | Phase 17 | Complete |
+| MR-02 | Phase 17 | Complete |
+| MR-03 | Phase 17 | Complete |
+| RV-01 | Phase 17 | Complete |
+| RV-02 | Phase 17 | Complete |
 | LC-01 | Phase 18 | Pending |
 | LC-02 | Phase 18 | Pending |
 
