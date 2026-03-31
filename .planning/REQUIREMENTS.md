@@ -36,7 +36,7 @@ Requirements for v0.5 — Git Worktree 任务隔离. Each maps to roadmap phases
 
 ### 任务分支选择
 
-- [ ] **BR-01**: 创建任务时可从项目 git branches 列表选择 base branch
+- [x] **BR-01**: 创建任务时可从项目 git branches 列表选择 base branch
 - [x] **BR-02**: Task 数据模型新增 baseBranch 字段
 
 ### Worktree 执行隔离
@@ -112,7 +112,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BR-02 | Phase 15 | Complete |
 | WT-03 | Phase 15 | Complete |
 | CL-01 | Phase 15 | Complete |
-| BR-01 | Phase 16 | Pending |
+| BR-01 | Phase 16 | Complete |
 | WT-01 | Phase 16 | Complete |
 | WT-02 | Phase 16 | Complete |
 | WT-04 | Phase 16 | Complete |
