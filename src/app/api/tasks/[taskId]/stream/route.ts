@@ -11,11 +11,15 @@ import { join } from "path";
 
 // --- Helper: validate request body, load task+project, check guards ---
 
+type TaskWithProject = NonNullable<Awaited<ReturnType<typeof db.task.findUnique>>> & {
+  project: { id: string; name: string; type: string; localPath: string | null } | null;
+};
+
 async function validateAndParseRequest(
   request: NextRequest,
   taskId: string
 ): Promise<
-  | { prompt: string; agent: string | undefined; model: string | undefined; task: NonNullable<Awaited<ReturnType<typeof db.task.findUnique>>> }
+  | { prompt: string; agent: string | undefined; model: string | undefined; task: TaskWithProject }
   | Response
 > {
   const body = await request.json();
@@ -126,7 +130,7 @@ async function prepareInstructionsFile(
 async function persistResult(
   executionId: string,
   taskId: string,
-  result: { exitCode: number; sessionId?: string | null; summary?: string | null },
+  result: { exitCode: number | null; sessionId?: string | null; summary?: string | null },
   assistantContent: string
 ): Promise<void> {
   await db.taskExecution.update({
