@@ -212,4 +212,4 @@ Plans:
 | 15. Schema & Cleanup | v0.5 | 2/2 | Complete    | 2026-03-31 |
 | 16. Worktree Execution Engine | v0.5 | 1/2 | Complete    | 2026-03-31 |
 | 17. Review & Merge Workflow | v0.5 | 4/4 | Complete    | 2026-03-31 |
-| 18. Worktree Lifecycle | v0.5 | 0/2 | Not started | - |
+| 18. Worktree Lifecycle | v0.5 | 0/2 | Planned    |  |
