@@ -158,32 +158,32 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WB-01 | — | Pending |
-| WB-02 | — | Pending |
-| ED-01 | — | Pending |
-| ED-02 | — | Pending |
-| ED-03 | — | Pending |
-| ED-04 | — | Pending |
-| ED-05 | — | Pending |
-| FT-01 | — | Pending |
-| FT-02 | — | Pending |
-| FT-03 | — | Pending |
-| FT-04 | — | Pending |
-| FT-05 | — | Pending |
-| FT-06 | — | Pending |
-| DF-01 | — | Pending |
-| PV-01 | — | Pending |
-| PV-02 | — | Pending |
-| PV-03 | — | Pending |
-| PV-04 | — | Pending |
-| PV-05 | — | Pending |
-| PV-06 | — | Pending |
+| WB-01 | Phase 19 | Pending |
+| WB-02 | Phase 19 | Pending |
+| FT-01 | Phase 20 | Pending |
+| FT-02 | Phase 20 | Pending |
+| FT-03 | Phase 20 | Pending |
+| FT-04 | Phase 20 | Pending |
+| FT-05 | Phase 20 | Pending |
+| FT-06 | Phase 20 | Pending |
+| ED-01 | Phase 21 | Pending |
+| ED-02 | Phase 21 | Pending |
+| ED-03 | Phase 21 | Pending |
+| ED-04 | Phase 21 | Pending |
+| ED-05 | Phase 21 | Pending |
+| DF-01 | Phase 22 | Pending |
+| PV-01 | Phase 23 | Pending |
+| PV-02 | Phase 23 | Pending |
+| PV-03 | Phase 23 | Pending |
+| PV-04 | Phase 23 | Pending |
+| PV-05 | Phase 23 | Pending |
+| PV-06 | Phase 23 | Pending |
 
 **v0.6 Coverage:**
 - v0.6 requirements: 20 total
-- Mapped to phases: 0
-- Unmapped: 20 ⚠️
+- Mapped to phases: 20
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-31*
-*Last updated: 2026-03-31 after v0.6 milestone definition*
+*Last updated: 2026-03-31 — traceability filled after v0.6 roadmap creation (Phases 19-23)*

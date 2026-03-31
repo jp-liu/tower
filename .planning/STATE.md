@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v0.6
 milestone_name: 任务开发工作台
-status: defining
+status: roadmap_ready
 stopped_at: null
-last_updated: "2026-03-31T08:00:00.000Z"
+last_updated: "2026-03-31T08:30:00.000Z"
 last_activity: 2026-03-31
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-31)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Defining requirements for v0.6
+**Current focus:** v0.6 — 任务开发工作台 (Phases 19-23)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started (roadmap defined, awaiting phase planning)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-03-31 — Milestone v0.6 started
+Status: Roadmap ready
+Last activity: 2026-03-31 — v0.6 roadmap created (Phases 19-23)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -57,8 +57,6 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 14 P02 | 5m | 2 tasks | 2 files |
 | Phase 15 P01 | 344s | 2 tasks | 7 files |
 | Phase 15 P02 | 480s | 2 tasks | 6 files |
-
-*Updated after each plan completion*
 | Phase 16-worktree-execution-engine P01 | 120s | 2 tasks | 3 files |
 | Phase 17-review-merge-workflow P00 | 52s | 1 tasks | 4 files |
 | Phase 17-review-merge-workflow P01 | 217s | 2 tasks | 4 files |
@@ -66,6 +64,8 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 17-review-merge-workflow P03 | 180s | 2 tasks | 3 files |
 | Phase 18-worktree-lifecycle P02 | 246s | 1 task | 2 files |
 | Phase 18-worktree-lifecycle P01 | 290 | 2 tasks | 5 files |
+
+*Updated after each plan completion*
 
 ## Accumulated Context
 
@@ -122,6 +122,15 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 18-02]: initDb() called before DB query in instrumentation.ts to ensure WAL/busy_timeout PRAGMAs
 - [Phase 18-02]: src/instrumentation.ts chosen over root-level — consistent with project src/ convention
 - [Phase 18-worktree-lifecycle]: removeWorktree guards git ops with existsSync/branch-list checks; best-effort cleanup never blocks DONE/CANCELLED transitions
+- [v0.6 Roadmap]: Expand existing task-page-client.tsx — do NOT create new page from scratch
+- [v0.6 Roadmap]: DF-01 (diff) reuses existing TaskDiffView component — Phase 22 is pure wiring, no new diff logic
+- [v0.6 Roadmap]: File tree is a custom recursive component (~80 lines), no third-party library
+- [v0.6 Roadmap]: Monaco Editor must use dynamic({ ssr: false }) — "use client" alone is insufficient in App Router
+- [v0.6 Roadmap]: Preview uses child_process.spawn (not WebContainers) — Node.js is already on the host
+- [v0.6 Roadmap]: PV-01 (project type frontend/backend) requires Prisma schema migration — plan this before Phase 23
+- [v0.6 Roadmap]: Preview subprocess registry must exist from day one of Phase 23 — no retrofitting process leak mitigation
+- [v0.6 Roadmap]: safeResolvePath() utility in src/lib/fs-security.ts must be created in Phase 20 and reused in Phase 21
+- [v0.6 Roadmap]: File tree polling triggered by status_changed SSE events (2s interval during execution), not fs.watch — avoids inotify exhaustion
 
 ### Pending Todos
 
@@ -129,11 +138,12 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 16 worktree creation requires project to have a non-null `localPath` — branch selector and worktree ops should gracefully handle NORMAL-type projects (no git) with a clear no-op or disabled state.
-- Phase 17 diff view: decide between calling `git diff` via child_process vs using a diff library. Keep it simple — shell out to git.
+- Phase 20 file tree: verify Monaco Turbopack worker issue (#72613) status before starting Phase 21 — CDN loader is the safe fallback regardless.
+- Phase 23 preview schema migration: previewCommand + previewPort (nullable) on Project model; confirm no conflict with existing pending migrations before running prisma migrate dev.
+- Phase 23: previewCommand is split by whitespace into args array and passed to spawn(shell: false) — never interpolated as shell string (security requirement).
 
 ## Session Continuity
 
-Last session: 2026-03-31T06:57:06.167Z
-Stopped at: Completed 18-worktree-lifecycle-01-PLAN.md
-Resume file: None
+Last session: 2026-03-31
+Stopped at: Roadmap created for v0.6 (Phases 19-23)
+Resume file: None — start with `/gsd:plan-phase 19`
