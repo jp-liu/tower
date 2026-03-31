@@ -73,7 +73,7 @@ See: [milestones/v0.5-ROADMAP.md](./milestones/v0.5-ROADMAP.md) for full details
 
 **Milestone Goal:** 为每个任务提供专属的全功能开发工作台页面，集成 AI 聊天、代码浏览编辑、diff 查看和实时预览。
 
-- [ ] **Phase 19: Workbench Entry & Layout** - "查看详情"入口 + 任务专属页面路由 + 三标签右侧面板骨架
+- [x] **Phase 19: Workbench Entry & Layout** - "查看详情"入口 + 任务专属页面路由 + 三标签右侧面板骨架 (completed 2026-03-31)
 - [ ] **Phase 20: File Tree Browser** - Worktree 目录树浏览、gitignore 过滤、git 状态标记、右键菜单操作
 - [ ] **Phase 21: Code Editor** - Monaco 在线编辑器（语法高亮、多标签、Ctrl+S 保存、dirty 标记、主题同步）
 - [ ] **Phase 22: Diff View Integration** - "变更"标签页复用现有 TaskDiffView 组件接入工作台布局
@@ -93,7 +93,7 @@ See: [milestones/v0.5-ROADMAP.md](./milestones/v0.5-ROADMAP.md) for full details
 **Plans**: 2 plans
 Plans:
 - [x] 19-01-PLAN.md — Install react-resizable-panels, add i18n keys, verify 查看详情 button (WB-01)
-- [ ] 19-02-PLAN.md — Refactor task-page-client.tsx: resizable panels + three-tab layout (WB-02)
+- [x] 19-02-PLAN.md — Refactor task-page-client.tsx: resizable panels + three-tab layout (WB-02)
 **UI hint**: yes
 
 ### Phase 20: File Tree Browser
@@ -170,7 +170,7 @@ Plans:
 | 16. Worktree Execution Engine | v0.5 | 1/2 | Complete | 2026-03-31 |
 | 17. Review & Merge Workflow | v0.5 | 4/4 | Complete | 2026-03-31 |
 | 18. Worktree Lifecycle | v0.5 | 2/2 | Complete | 2026-03-31 |
-| 19. Workbench Entry & Layout | v0.6 | 1/2 | In Progress|  |
+| 19. Workbench Entry & Layout | v0.6 | 2/2 | Complete   | 2026-03-31 |
 | 20. File Tree Browser | v0.6 | 0/TBD | Not started | - |
 | 21. Code Editor | v0.6 | 0/TBD | Not started | - |
 | 22. Diff View Integration | v0.6 | 0/TBD | Not started | - |

@@ -10,7 +10,7 @@ Requirements for v0.6 — 任务开发工作台. Each maps to roadmap phases.
 ### 工作台入口
 
 - [x] **WB-01**: 用户可从任务抽屉点击"查看详情"跳转到任务专属工作台页面
-- [ ] **WB-02**: 工作台页面左侧为 AI 聊天窗口，右侧为多标签面板（文件/变更/预览）
+- [x] **WB-02**: 工作台页面左侧为 AI 聊天窗口，右侧为多标签面板（文件/变更/预览）
 
 ### 在线编辑器
 
@@ -159,7 +159,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | WB-01 | Phase 19 | Complete |
-| WB-02 | Phase 19 | Pending |
+| WB-02 | Phase 19 | Complete |
 | FT-01 | Phase 20 | Pending |
 | FT-02 | Phase 20 | Pending |
 | FT-03 | Phase 20 | Pending |
