@@ -76,3 +76,14 @@ metrics:
 ## Known Stubs
 
 None. All new fields are properly wired through the Prisma schema to the server action parameters.
+
+## Self-Check: PASSED
+
+- FOUND: src/actions/git-actions.ts
+- FOUND: tests/unit/actions/task-actions.test.ts
+- FOUND: tests/unit/actions/agent-actions.test.ts
+- FOUND: tests/unit/actions/git-actions.test.ts
+- FOUND: commit 9fdb41c (Task 1)
+- FOUND: commit 49703db (Task 2)
+- All schema fields verified in prisma/schema.prisma
+- All server action signatures verified in task-actions.ts and agent-actions.ts
