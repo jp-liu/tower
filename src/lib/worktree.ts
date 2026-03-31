@@ -1,4 +1,5 @@
 import { execSync } from "child_process";
+import { existsSync } from "fs";
 import { mkdir } from "fs/promises";
 import path from "path";
 
@@ -70,4 +71,45 @@ export async function createWorktree(
   }
 
   return { worktreePath, worktreeBranch };
+}
+
+/**
+ * Removes a git worktree and its associated task branch.
+ *
+ * Best-effort: skips steps that are already done (missing dir or branch).
+ * Never throws — callers should catch and log errors independently.
+ *
+ * @param localPath - Absolute path to the project root (git repo)
+ * @param taskId    - The task ID (used to derive worktree path and branch name)
+ */
+export async function removeWorktree(
+  localPath: string,
+  taskId: string
+): Promise<void> {
+  const worktreePath = path.join(localPath, ".worktrees", "task-" + taskId);
+  const worktreeBranch = "task/" + taskId;
+
+  // D-11: Only remove worktree dir if it exists
+  if (existsSync(worktreePath)) {
+    execSync(`git worktree remove "${worktreePath}" --force`, {
+      cwd: localPath,
+      encoding: "utf-8",
+      timeout: 30000,
+    });
+  }
+
+  // D-12: Only delete branch if it exists
+  const branchExists = execSync(`git branch --list ${worktreeBranch}`, {
+    cwd: localPath,
+    encoding: "utf-8",
+    timeout: 5000,
+  }).trim();
+
+  if (branchExists) {
+    execSync(`git branch -D ${worktreeBranch}`, {
+      cwd: localPath,
+      encoding: "utf-8",
+      timeout: 5000,
+    });
+  }
 }
