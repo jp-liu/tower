@@ -185,7 +185,10 @@ Plans:
   1. Moving a task to DONE or CANCELLED automatically removes its worktree directory and deletes the `task/{taskId}` branch
   2. If a task is cancelled before a worktree was created, the cleanup step is a no-op (no error thrown)
   3. When the Next.js server starts, `git worktree prune` runs for every GIT-type project that has a local path, clearing any orphaned worktree entries
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 18-01-PLAN.md — removeWorktree function, merge route + updateTaskStatus wiring, unit tests
+- [ ] 18-02-PLAN.md — instrumentation.ts startup prune for orphaned worktrees
 **UI hint**: no
 
 ## Progress
@@ -209,4 +212,4 @@ Plans:
 | 15. Schema & Cleanup | v0.5 | 2/2 | Complete    | 2026-03-31 |
 | 16. Worktree Execution Engine | v0.5 | 1/2 | Complete    | 2026-03-31 |
 | 17. Review & Merge Workflow | v0.5 | 4/4 | Complete    | 2026-03-31 |
-| 18. Worktree Lifecycle | v0.5 | 0/TBD | Not started | - |
+| 18. Worktree Lifecycle | v0.5 | 0/2 | Not started | - |
