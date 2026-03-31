@@ -12,6 +12,7 @@ export async function createTask(data: {
   priority?: Priority;
   status?: TaskStatus;
   labelIds?: string[];
+  baseBranch?: string;
 }) {
   const task = await db.task.create({
     data: {
@@ -20,6 +21,7 @@ export async function createTask(data: {
       projectId: data.projectId,
       priority: data.priority ?? "MEDIUM",
       status: data.status ?? "TODO",
+      baseBranch: data.baseBranch ?? null,
     },
   });
   // Set labels
@@ -43,7 +45,7 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
 
 export async function updateTask(
   taskId: string,
-  data: { title?: string; description?: string; priority?: Priority; labelIds?: string[] }
+  data: { title?: string; description?: string; priority?: Priority; labelIds?: string[]; baseBranch?: string }
 ) {
   const { labelIds, ...updateData } = data;
   const task = await db.task.update({

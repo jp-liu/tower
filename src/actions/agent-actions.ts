@@ -25,7 +25,9 @@ export async function getTaskMessages(taskId: string) {
 
 export async function startTaskExecution(
   taskId: string,
-  agent: string = "CLAUDE_CODE"
+  agent: string = "CLAUDE_CODE",
+  worktreePath?: string,
+  worktreeBranch?: string
 ) {
   const execution = await db.taskExecution.create({
     data: {
@@ -33,6 +35,8 @@ export async function startTaskExecution(
       agent,
       status: "RUNNING",
       startedAt: new Date(),
+      worktreePath: worktreePath ?? null,
+      worktreeBranch: worktreeBranch ?? null,
     },
   });
 
