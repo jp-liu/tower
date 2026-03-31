@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
 import { TaskPageClient } from "./task-page-client";
+import { getTaskExecutions } from "@/actions/agent-actions";
 
 interface Props {
   params: Promise<{ workspaceId: string; taskId: string }>;
@@ -51,5 +52,21 @@ export default async function TaskPage({ params }: Props) {
   const serialized = serializeTask(task);
   if (!serialized) notFound();
 
-  return <TaskPageClient task={serialized} workspaceId={workspaceId} />;
+  const executions = await getTaskExecutions(taskId);
+  const latestExecution = executions[0] ?? null;
+  const serializedExecution = latestExecution
+    ? {
+        worktreePath: latestExecution.worktreePath,
+        worktreeBranch: latestExecution.worktreeBranch,
+        status: latestExecution.status,
+      }
+    : null;
+
+  return (
+    <TaskPageClient
+      task={serialized}
+      workspaceId={workspaceId}
+      latestExecution={serializedExecution}
+    />
+  );
 }

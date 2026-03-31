@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { TaskConversation, type Message } from "@/components/task/task-conversation";
 import { TaskMessageInput } from "@/components/task/task-message-input";
 import { TaskDiffView } from "@/components/task/task-diff-view";
+import { FileTree } from "@/components/task/file-tree";
 import { Badge } from "@/components/ui/badge";
 import { getTaskMessages } from "@/actions/agent-actions";
 import { getPrompts } from "@/actions/prompt-actions";
@@ -30,6 +31,11 @@ interface TaskPageClientProps {
     project: { id: string; name: string; type: string; localPath: string | null } | null;
   };
   workspaceId: string;
+  latestExecution?: {
+    worktreePath: string | null;
+    worktreeBranch: string | null;
+    status: string;
+  } | null;
 }
 
 type DiffData = DiffResponse & { commitCount: number };
@@ -50,7 +56,7 @@ const STATUS_COLORS: Record<string, string> = {
   CANCELLED: "bg-muted text-muted-foreground",
 };
 
-export function TaskPageClient({ task, workspaceId }: TaskPageClientProps) {
+export function TaskPageClient({ task, workspaceId, latestExecution }: TaskPageClientProps) {
   const router = useRouter();
   const { t } = useI18n();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -60,6 +66,7 @@ export function TaskPageClient({ task, workspaceId }: TaskPageClientProps) {
   const [taskStatus, setTaskStatus] = useState(task.status);
   const [diffData, setDiffData] = useState<DiffData | null>(null);
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Load existing messages on mount
@@ -322,15 +329,18 @@ export function TaskPageClient({ task, workspaceId }: TaskPageClientProps) {
             )}
           </TabsList>
 
-          {/* Files tab — Phase 20 placeholder per UI-SPEC */}
-          <TabsContent value="files" className="flex-1 overflow-auto">
-            <div className="flex h-full flex-col items-center justify-center gap-3">
-              <FolderTree className="h-8 w-8 text-muted-foreground" />
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground">{t("taskPage.filesPlaceholder")}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{t("taskPage.comingSoon")}</p>
-              </div>
-            </div>
+          {/* Files tab — Phase 20: live file tree */}
+          <TabsContent value="files" className="flex-1 overflow-hidden">
+            <FileTree
+              worktreePath={latestExecution?.worktreePath ?? null}
+              baseBranch={task.baseBranch ?? null}
+              worktreeBranch={latestExecution?.worktreeBranch ?? null}
+              executionStatus={latestExecution?.status ?? "COMPLETED"}
+              onFileSelect={(absolutePath) => {
+                // Phase 21 will consume this — no-op in Phase 20 (per FT-02)
+                setSelectedFilePath(absolutePath);
+              }}
+            />
           </TabsContent>
 
           {/* Changes tab — functional, uses existing TaskDiffView */}
