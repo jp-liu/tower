@@ -169,8 +169,9 @@ Plans:
   3. Before merging, the system checks for conflicts and shows a warning if any exist — merge is blocked until resolved
   4. User can click "Send Back" on an IN_REVIEW task; the task returns to IN_PROGRESS with a new TaskExecution record pointing to the same worktree and branch
   5. After send-back, a subsequent execution resumes in the same `task/{taskId}` worktree without re-creating it
-**Plans**: 3 plans
+**Plans**: 4 plans
 Plans:
+- [ ] 17-00-PLAN.md — Wave 0: test stub scaffolding for Phase 17 API routes
 - [ ] 17-01-PLAN.md — Backend: diff API, merge API, stream route IN_REVIEW transition and send-back flow
 - [ ] 17-02-PLAN.md — Task page with diff view, merge confirmation dialog
 - [ ] 17-03-PLAN.md — Drawer enhancements (View Details, Changes tab) and i18n keys
@@ -207,5 +208,5 @@ Plans:
 | 14. Search Quality & Realtime Config | v0.4 | 2/2 | Complete | 2026-03-30 |
 | 15. Schema & Cleanup | v0.5 | 2/2 | Complete    | 2026-03-31 |
 | 16. Worktree Execution Engine | v0.5 | 1/2 | Complete    | 2026-03-31 |
-| 17. Review & Merge Workflow | v0.5 | 0/3 | Planned | - |
+| 17. Review & Merge Workflow | v0.5 | 0/4 | Planned | - |
 | 18. Worktree Lifecycle | v0.5 | 0/TBD | Not started | - |
