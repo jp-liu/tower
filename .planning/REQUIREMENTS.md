@@ -59,7 +59,7 @@ Requirements for v0.5 — Git Worktree 任务隔离. Each maps to roadmap phases
 
 ### Worktree 生命周期
 
-- [ ] **LC-01**: 任务 DONE 或 CANCELLED 后自动清理 worktree 目录和分支
+- [x] **LC-01**: 任务 DONE 或 CANCELLED 后自动清理 worktree 目录和分支
 - [x] **LC-02**: 应用启动时执行 `git worktree prune` 清理孤立 worktree
 
 ### 配置清理
@@ -121,7 +121,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MR-03 | Phase 17 | Complete |
 | RV-01 | Phase 17 | Complete |
 | RV-02 | Phase 17 | Complete |
-| LC-01 | Phase 18 | Pending |
+| LC-01 | Phase 18 | Complete |
 | LC-02 | Phase 18 | Complete |
 
 **v0.5 Coverage:**
