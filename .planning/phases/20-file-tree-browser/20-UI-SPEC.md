@@ -42,7 +42,7 @@ Declared values (multiples of 4, matching 8-point grid):
 | 3xl | 64px | Not used in this phase |
 
 Exceptions:
-- Tree node indent per depth level: 12px (`pl-3`) — intentionally sub-8 to keep deep trees readable
+- Tree node indent per depth level: 8px (`pl-2`) — compact IDE-style indent, on-grid
 - File/folder icon size: 14px (`h-3.5 w-3.5`) — consistent with tab bar icons in Phase 19
 - Git status badge width: 16px fixed (`w-4`) — character badge (M/A/D), needs exact sizing
 - Touch target minimum for tree node rows: 28px height — compact IDE-style tree, not touch-primary UI
@@ -54,13 +54,13 @@ Exceptions:
 | Role | Size | Weight | Line Height | Usage |
 |------|------|--------|-------------|-------|
 | Body | 13px (`text-[13px]`) | 400 (regular) | 1.5 | File/folder names in tree nodes |
-| Label | 11px (`text-[11px]`) | 500 (medium) | 1.4 | Git status badges (M/A/D); section headers |
+| Label | 11px (`text-[11px]`) | 400 (regular) | 1.4 | Git status badges (M/A/D); section headers |
 | Small | 12px (`text-xs`) | 400 (regular) | 1.5 | Context menu items; empty state body copy |
 | Heading | 14px (`text-sm`) | 600 (semibold) | 1.2 | Tab bar active trigger; inline rename input |
 
 Note: 13px body is intentional for this phase — file trees follow IDE convention (VS Code uses 13px). This overrides the 14px minimum used elsewhere in the app. No new font sizes are introduced; all map to Tailwind utilities.
 
-Font weight palette: regular (400) + semibold (600). Medium (500) used only for git badges — treated as a label modifier, not a third weight family.
+Font weight palette: regular (400) + semibold (600). Git status badges (M/A/D) use regular (400) — they are visually distinct via color (amber/emerald/red) and do not require a separate weight.
 
 ---
 
