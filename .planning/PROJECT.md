@@ -23,6 +23,8 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 ## Current State
 
+**Phase 18 complete** (2026-03-31): Worktree lifecycle — auto-cleanup on DONE/CANCELLED (removeWorktree with --force, branch deletion, existence guards), startup prune via instrumentation.ts register() hook for orphaned worktrees
+
 **Phase 17 complete** (2026-03-31): Review & merge workflow — IN_REVIEW auto-transition on execution success, diff API with per-file structured output, squash merge with conflict detection via git merge-tree, send-back flow reusing existing worktree, dedicated task page with diff view + merge dialog, drawer enhancements
 
 **Phase 16 complete** (2026-03-31): Worktree execution engine — auto-create worktree + branch at execution start, cwd switch to worktree, base branch selector UI in create-task dialog
@@ -112,11 +114,14 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - ✓ 创建任务时选择 base branch (UI) — v0.5 Phase 16
 - ✓ 任务执行前自动创建 worktree + task 分支 — v0.5 Phase 16
 - ✓ 执行 cwd 切换到 worktree 目录 — v0.5 Phase 16
+- ✓ 任务面板 diff 查看 + squash merge 操作 — v0.5 Phase 17
+- ✓ IN_REVIEW → IN_PROGRESS 退回重做流程 — v0.5 Phase 17
+- ✓ Worktree 清理（DONE/CANCELLED）— v0.5 Phase 18
+- ✓ 应用启动时清理孤立 worktree — v0.5 Phase 18
 
 ### Active
-- [ ] 任务面板 diff 查看 + squash merge 操作
-- [ ] IN_REVIEW → IN_PROGRESS 退回重做流程
-- [ ] Worktree 清理（DONE/CANCELLED）
+
+No active requirements — v0.5 milestone complete.
 
 ### Out of Scope
 
@@ -190,4 +195,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-31 — Phase 17 complete*
+*Last updated: 2026-03-31 — Phase 18 complete, v0.5 milestone complete*
