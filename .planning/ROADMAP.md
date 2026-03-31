@@ -62,7 +62,7 @@ See: [milestones/v0.4-ROADMAP.md](./milestones/v0.4-ROADMAP.md) for full details
 
 - [x] **Phase 15: Schema & Cleanup** - Add baseBranch to Task, worktreePath/worktreeBranch to TaskExecution, branch listing API, remove branchTemplate config (completed 2026-03-31)
 - [x] **Phase 16: Worktree Execution Engine** - Auto-create worktree + branch on execution start, switch cwd to worktree, task creation branch selector UI (completed 2026-03-31)
-- [ ] **Phase 17: Review & Merge Workflow** - Task panel diff view, squash merge operation, conflict detection, and revert-to-IN_PROGRESS flow
+- [x] **Phase 17: Review & Merge Workflow** - Task panel diff view, squash merge operation, conflict detection, and revert-to-IN_PROGRESS flow (completed 2026-03-31)
 - [ ] **Phase 18: Worktree Lifecycle** - Auto-cleanup on DONE/CANCELLED, startup prune of orphaned worktrees
 
 ## Phase Details
@@ -174,7 +174,7 @@ Plans:
 - [x] 17-00-PLAN.md — Wave 0: test stub scaffolding for Phase 17 API routes
 - [x] 17-01-PLAN.md — Backend: diff API, merge API, stream route IN_REVIEW transition and send-back flow
 - [x] 17-02-PLAN.md — Task page with diff view, merge confirmation dialog
-- [ ] 17-03-PLAN.md — Drawer enhancements (View Details, Changes tab) and i18n keys
+- [x] 17-03-PLAN.md — Drawer enhancements (View Details, Changes tab) and i18n keys
 **UI hint**: yes
 
 ### Phase 18: Worktree Lifecycle
@@ -208,5 +208,5 @@ Plans:
 | 14. Search Quality & Realtime Config | v0.4 | 2/2 | Complete | 2026-03-30 |
 | 15. Schema & Cleanup | v0.5 | 2/2 | Complete    | 2026-03-31 |
 | 16. Worktree Execution Engine | v0.5 | 1/2 | Complete    | 2026-03-31 |
-| 17. Review & Merge Workflow | v0.5 | 3/4 | In Progress|  |
+| 17. Review & Merge Workflow | v0.5 | 4/4 | Complete   | 2026-03-31 |
 | 18. Worktree Lifecycle | v0.5 | 0/TBD | Not started | - |

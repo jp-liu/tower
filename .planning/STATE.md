@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Git Worktree 任务隔离
-status: executing
-stopped_at: Completed 17-review-merge-workflow/17-02-PLAN.md
-last_updated: "2026-03-31T06:13:38.687Z"
+status: verifying
+stopped_at: Completed 17-review-merge-workflow/17-03-PLAN.md
+last_updated: "2026-03-31T06:18:06.143Z"
 last_activity: 2026-03-31
 progress:
   total_phases: 8
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 16
-  completed_plans: 15
+  completed_plans: 16
   percent: 25
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-31)
 
 Phase: 17 (review-merge-workflow) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-03-31
 
 Progress: [██░░░░░░░░] 25%
@@ -63,6 +63,7 @@ Progress: [██░░░░░░░░] 25%
 | Phase 17-review-merge-workflow P00 | 52s | 1 tasks | 4 files |
 | Phase 17-review-merge-workflow P01 | 217s | 2 tasks | 4 files |
 | Phase 17-review-merge-workflow P02 | 164s | 2 tasks | 4 files |
+| Phase 17-review-merge-workflow P03 | 180s | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -114,6 +115,7 @@ Progress: [██░░░░░░░░] 25%
 - [Phase 17]: send-back IN_REVIEW to IN_PROGRESS transition before TaskExecution creation in stream POST
 - [Phase 17]: TaskPage serializes Date fields to ISO strings before passing to client component
 - [Phase 17]: SSE status_changed event triggers both local taskStatus state update and router.refresh() for immediate UI + data sync
+- [Phase 17]: workspaceId passed from BoardPageClient into TaskDetailPanel for navigation
 
 ### Pending Todos
 
@@ -126,6 +128,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-31T06:13:33.734Z
-Stopped at: Completed 17-review-merge-workflow/17-02-PLAN.md
+Last session: 2026-03-31T06:18:06.139Z
+Stopped at: Completed 17-review-merge-workflow/17-03-PLAN.md
 Resume file: None
