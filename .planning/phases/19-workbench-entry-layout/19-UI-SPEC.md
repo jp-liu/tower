@@ -48,7 +48,7 @@ Standard 8-point scale. All values are multiples of 4.
 
 **Exceptions:**
 - Panel header height: `py-3` (12px top/bottom) — matches existing task-page-client.tsx header pattern.
-- Back link / small controls: `py-0.5` (2px) — inline with text.
+- Back link / small controls: `py-1` (4px) — inline with text.
 - Tab bar item: `px-4 py-3` (16px / 12px) — matches existing tab pattern in task-page-client.tsx.
 - Resize handle: 4px width, no padding — visual divider only.
 
@@ -59,8 +59,8 @@ Standard 8-point scale. All values are multiples of 4.
 | Role | Size | Weight | Line Height | Usage |
 |------|------|--------|-------------|-------|
 | Body | 14px (`text-sm`) | 400 (regular) | 1.5 | Message content, placeholder text, tab body |
-| Label | 12px (`text-xs`) | 400 (regular) | 1.4 | Back link, status badge text, branch badge, secondary metadata |
-| Heading | 14px (`text-sm`) | 600 (semibold) | 1.2 | Task title in panel header, tab bar labels |
+| Label | 12px (`text-xs`) | 400 (regular) | 1.4 | Back link, branch badge, secondary metadata |
+| Heading | 14px (`text-sm`) | 600 (semibold) | 1.2 | Task title in panel header, active tab labels, status badge text |
 | Code/Mono | 12px (`text-xs font-mono`) | 400 (regular) | 1.5 | Branch name badge |
 
 **Rule:** Exactly 2 weights in use: 400 (regular) and 600 (semibold). No other weights.
@@ -78,7 +78,7 @@ All values from `globals.css` CSS custom properties. Phase uses both light (Stud
 | Accent (10%) | `--primary` oklch(0.65 0.14 75) | oklch(0.80 0.14 75) | Active tab indicator border, "查看详情" hover foreground |
 | Destructive | `--destructive` oklch(0.55 0.2 25) | oklch(0.65 0.2 25) | Not used in this phase |
 | Border | `--border` oklch(0.82 0.008 260) | oklch(0.28 0.008 260) | Panel dividers, tab bar border, resize handle |
-| Muted text | `--muted-foreground` oklch(0.50 0.008 260) | oklch(0.65 0.008 260) | Back link, placeholder tab content |
+| Muted text | `--muted-foreground` oklch(0.50 0.008 260) | oklch(0.65 0.008 260) | Back link, placeholder tab content, inactive tab labels |
 
 **Accent reserved for:**
 1. Active tab indicator: `border-b-2 border-primary` on the selected tab button.
@@ -137,9 +137,9 @@ All values from `globals.css` CSS custom properties. Phase uses both light (Stud
 └─────────────────────────────────────────────────────┘
 ```
 
-- Back link: `ArrowLeft` icon (h-3.5 w-3.5) + "返回" text, `text-xs text-muted-foreground hover:text-foreground`.
+- Back link: `ArrowLeft` icon (h-3.5 w-3.5) + "返回" text, `text-xs text-muted-foreground hover:text-foreground`, vertical padding `py-1`.
 - Task title: `text-sm font-semibold text-foreground truncate`.
-- Status badge: inline-flex, `text-[10px] font-medium`, per STATUS_COLORS table above.
+- Status badge: inline-flex, `text-[10px] font-semibold`, per STATUS_COLORS table above.
 - Branch badge: `Badge variant="secondary"`, `text-[10px] font-mono`, `GitBranch` icon (h-2.5 w-2.5).
 
 ### Right Panel Tab Bar
@@ -147,8 +147,8 @@ All values from `globals.css` CSS custom properties. Phase uses both light (Stud
 **Tab order:** Files → Changes → Preview. **Default selected:** Files. Source: CONTEXT.md D-04.
 
 **Tab appearance:**
-- Inactive: `px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground`
-- Active: `px-4 py-3 text-sm font-medium text-foreground border-b-2 border-primary`
+- Inactive: `px-4 py-3 text-sm font-normal text-muted-foreground hover:text-foreground`
+- Active: `px-4 py-3 text-sm font-semibold text-foreground border-b-2 border-primary`
 - Each tab has icon + text label, icon on the left: `gap-2 flex items-center`
 
 **Icons (lucide-react):** Source: CONTEXT.md D-05.
@@ -318,7 +318,7 @@ Tasks the executor must complete using this contract:
 - [ ] Install `react-resizable-panels@^2.x` (confirm version is 2.x not 4.x)
 - [ ] Refactor `task-page-client.tsx`: replace fixed 40/60 divs with `ResizablePanelGroup` + `ResizablePanel` + `ResizableHandle`
 - [ ] Set left panel `defaultSize={35}` `minSize={20}`, right panel `defaultSize={65}` `minSize={20}`
-- [ ] Add tab bar with Files / Changes / Preview tabs (icon + label, active state with `border-b-2 border-primary`)
+- [ ] Add tab bar with Files / Changes / Preview tabs (icon + label, inactive: `font-normal text-muted-foreground`, active: `font-semibold text-foreground border-b-2 border-primary`)
 - [ ] Wire tab switching to local state; Changes tab renders existing `TaskDiffView` logic
 - [ ] Add Files placeholder content (centered icon + copy)
 - [ ] Add Preview placeholder content (centered icon + copy)
