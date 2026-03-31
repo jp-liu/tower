@@ -8,17 +8,26 @@ An AI task management platform with a Kanban board UI for managing workspaces, p
 
 Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base that AI agents can query and update.
 
-## Current Milestone: v0.4 系统配置化
+## Current Milestone: v0.5 Git Worktree 任务隔离
 
-**Goal:** 将系统中的硬编码值提取为用户可配置项，通过设置页 UI 和数据库存储实现个性化配置。
+**Goal:** 每个任务在独立的 git worktree 中执行，实现并行开发、逐个合并验证、不满意可退回重做。
 
 **Target features:**
-- Git 路径映射规则可配置（设置页 UI，替代 git-url.ts 硬编码）
-- 系统参数配置（上传大小限制、最大并发执行数、Git 超时、分支命名模板）
-- 搜索参数配置（结果数量、防抖延迟、snippet 长度）
-- 代码质量修复：搜索逻辑去重、搜索竞态条件修复
+- 创建任务时选择 base branch（从项目 git branches 列表）
+- 任务执行前自动创建 worktree + 独立分支 task/{taskId}
+- Claude CLI 在 worktree 目录中执行（同项目并行无冲突）
+- 任务完成后 IN_REVIEW，用户可查看 diff、squash merge 验证
+- 验证不通过退回 IN_PROGRESS，Claude 在同一 worktree 继续修改
+- Worktree 生命周期管理（DONE/CANCELLED 后清理）
+- 移除无用的 git.branchTemplate 配置项
 
 ## Current State
+
+**Shipped:** v0.4 系统配置化 (2026-03-30)
+- SystemConfig key-value 数据模型 + 通用配置读写 API
+- Git 路径映射规则可配置（设置页 CRUD）
+- 系统参数配置 UI（上传限制、并发数、Git 超时、分支模板、搜索参数）
+- 搜索逻辑去重（search.ts 共享模块）+ 竞态条件修复 + 配置实时生效
 
 **Shipped:** v0.3 全局搜索增强 (2026-03-30)
 - 六 tab 全局搜索 (All/Task/Project/Repository/Note/Asset)
@@ -93,7 +102,13 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - ✓ 配置变更实时生效（无需重启）— v0.4 Phase 14
 
 ### Active
-(No active requirements — v0.4 complete)
+- [ ] 创建任务时选择 base branch
+- [ ] 任务执行前自动创建 worktree + task 分支
+- [ ] 执行 cwd 切换到 worktree 目录
+- [ ] 任务面板 diff 查看 + squash merge 操作
+- [ ] IN_REVIEW → IN_PROGRESS 退回重做流程
+- [ ] Worktree 清理（DONE/CANCELLED）
+- [ ] 移除 git.branchTemplate 配置项
 
 ### Out of Scope
 
@@ -167,4 +182,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-30 after Phase 14 complete (v0.4 milestone complete)*
+*Last updated: 2026-03-31 — v0.5 milestone started*
