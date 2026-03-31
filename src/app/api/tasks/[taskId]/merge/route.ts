@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { execSync } from "child_process";
 import { revalidatePath } from "next/cache";
 import { checkConflicts } from "@/lib/diff-parser";
+import { removeWorktree } from "@/lib/worktree";
 
 export async function POST(
   _request: NextRequest,
@@ -92,6 +93,13 @@ export async function POST(
       where: { id: parsed.data },
       data: { status: "DONE" },
     });
+
+    // Best-effort worktree cleanup (D-05: failures don't block DONE transition)
+    try {
+      await removeWorktree(localPath, taskId);
+    } catch (error) {
+      console.error("[merge] Worktree cleanup failed:", error);
+    }
 
     revalidatePath("/workspaces");
 
