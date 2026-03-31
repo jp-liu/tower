@@ -30,6 +30,42 @@ Requirements for v0.4 — 系统配置化. Each maps to roadmap phases.
 - [x] **SRCH-06**: search-actions.ts 和 search-tools.ts 共享搜索逻辑（提取到 src/lib/search.ts）
 - [x] **SRCH-07**: 搜索 useEffect 竞态条件修复（cancelled flag 防止旧请求覆盖新结果）
 
+## v0.5 Requirements
+
+Requirements for v0.5 — Git Worktree 任务隔离. Each maps to roadmap phases.
+
+### 任务分支选择
+
+- [ ] **BR-01**: 创建任务时可从项目 git branches 列表选择 base branch
+- [ ] **BR-02**: Task 数据模型新增 baseBranch 字段
+
+### Worktree 执行隔离
+
+- [ ] **WT-01**: 任务执行前自动创建 worktree（`{localPath}/.worktrees/task-{taskId}`）+ 独立分支 `task/{taskId}`
+- [ ] **WT-02**: Claude CLI 在 worktree 目录中执行（cwd 切换到 worktree）
+- [ ] **WT-03**: TaskExecution 数据模型新增 worktreePath、worktreeBranch 字段
+- [ ] **WT-04**: 同项目多任务可并行执行，各自在独立 worktree 中工作
+
+### 合并与验证
+
+- [ ] **MR-01**: 任务完成后状态变为 IN_REVIEW，用户可在任务面板查看 diff
+- [ ] **MR-02**: 用户可在任务面板 squash merge worktree 分支到任务的 base branch
+- [ ] **MR-03**: 合并前自动检测冲突，有冲突时提示用户
+
+### 退回重做
+
+- [ ] **RV-01**: IN_REVIEW 状态的任务可退回 IN_PROGRESS，Claude 在同一 worktree 继续修改
+- [ ] **RV-02**: 退回重做创建新的 TaskExecution 记录，复用同一 worktree 和分支
+
+### Worktree 生命周期
+
+- [ ] **LC-01**: 任务 DONE 或 CANCELLED 后自动清理 worktree 目录和分支
+- [ ] **LC-02**: 应用启动时执行 `git worktree prune` 清理孤立 worktree
+
+### 配置清理
+
+- [ ] **CL-01**: 移除设置页 git.branchTemplate 配置项和相关代码（interpolateBranchTemplate 等）
+
 ## Future Requirements
 
 Deferred to future release. Tracked but not in current roadmap.
@@ -40,6 +76,12 @@ Deferred to future release. Tracked but not in current roadmap.
 - **CFG-F02**: 配置重置为默认值功能
 - **CFG-F03**: 项目搜索权重可配置
 
+### Worktree 高级功能
+
+- **WT-F01**: Worktree 存储路径可配置（默认项目旁边，可改为集中管理）
+- **WT-F02**: 合并冲突解析 UI（显示冲突文件，发送 Claude 修复）
+- **WT-F03**: 合并队列（串行合并，自动 rebase）
+
 ## Out of Scope
 
 | Feature | Reason |
@@ -48,6 +90,7 @@ Deferred to future release. Tracked but not in current roadmap.
 | 多用户配置隔离 | 本地单用户工具，不需要 |
 | 配置变更审计日志 | 个人工具无审计需求 |
 | i18n.tsx 拆分 | 虽然接近 800 行但可以后续做，不影响配置化 |
+| 在 main 上 revert 后重新 merge | git revert 历史污染导致冲突，改用 squash merge 一次性合并 |
 
 ## Traceability
 
@@ -67,10 +110,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SRCH-06 | Phase 14 | Complete |
 | SRCH-07 | Phase 14 | Complete |
 
-**Coverage:**
-- v0.4 requirements: 11 total
-- Mapped to phases: 11
-- Unmapped: 0
+**v0.5 Coverage:**
+- v0.5 requirements: 14 total
+- Mapped to phases: TBD
+- Unmapped: 14
 
 ---
-*Requirements defined: 2026-03-30*
+*Requirements updated: 2026-03-31 — v0.5 added*
