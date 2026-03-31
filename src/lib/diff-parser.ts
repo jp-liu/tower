@@ -1,4 +1,4 @@
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 
 export interface DiffFile {
   filename: string;
@@ -107,8 +107,8 @@ export function checkConflicts(
   worktreeBranch: string
 ): { hasConflicts: boolean; conflictFiles: string[] } {
   try {
-    execSync(
-      `git merge-tree --write-tree ${baseBranch} ${worktreeBranch}`,
+    execFileSync(
+      "git", ["merge-tree", "--write-tree", baseBranch, worktreeBranch],
       { cwd: localPath, encoding: "utf-8", timeout: 10000, stdio: "pipe" }
     );
     return { hasConflicts: false, conflictFiles: [] };

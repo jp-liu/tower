@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { parseDiffOutput, checkConflicts } from "@/lib/diff-parser";
 
 export async function GET(
@@ -49,14 +49,14 @@ export async function GET(
     const localPath = task.project.localPath;
 
     // Run numstat diff
-    const numstat = execSync(
-      `git diff --numstat ${task.baseBranch}...${worktreeBranch}`,
+    const numstat = execFileSync(
+      "git", ["diff", "--numstat", `${task.baseBranch}...${worktreeBranch}`],
       { cwd: localPath, encoding: "utf-8", timeout: 30000 }
     );
 
     // Run unified diff
-    const unified = execSync(
-      `git diff --unified=3 ${task.baseBranch}...${worktreeBranch}`,
+    const unified = execFileSync(
+      "git", ["diff", "--unified=3", `${task.baseBranch}...${worktreeBranch}`],
       { cwd: localPath, encoding: "utf-8", timeout: 30000 }
     );
 
@@ -71,8 +71,8 @@ export async function GET(
     );
 
     // Get commit count
-    const commitCountStr = execSync(
-      `git rev-list --count ${task.baseBranch}...${worktreeBranch}`,
+    const commitCountStr = execFileSync(
+      "git", ["rev-list", "--count", `${task.baseBranch}...${worktreeBranch}`],
       { cwd: localPath, encoding: "utf-8", timeout: 5000 }
     ).trim();
     const commitCount = parseInt(commitCountStr, 10) || 0;

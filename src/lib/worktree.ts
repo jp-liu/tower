@@ -1,4 +1,4 @@
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { existsSync } from "fs";
 import { mkdir } from "fs/promises";
 import path from "path";
@@ -29,15 +29,14 @@ export async function createWorktree(
   await mkdir(path.join(localPath, ".worktrees"), { recursive: true });
 
   // Check if worktree already exists (reuse case)
-  const worktreeList = execSync("git worktree list --porcelain", {
-    cwd: localPath,
-    encoding: "utf-8",
-    timeout: 10000,
-  });
+  const worktreeList = execFileSync(
+    "git", ["worktree", "list", "--porcelain"],
+    { cwd: localPath, encoding: "utf-8", timeout: 10000 }
+  );
 
   const worktreeLines = worktreeList.split("\n");
   const alreadyExists = worktreeLines.some(
-    (line) => line === `worktree ${worktreePath}`
+    (line: string) => line === `worktree ${worktreePath}`
   );
 
   if (alreadyExists) {
@@ -45,28 +44,22 @@ export async function createWorktree(
   }
 
   // Check if the task branch already exists
-  const branchList = execSync(`git branch --list task/${taskId}`, {
-    cwd: localPath,
-    encoding: "utf-8",
-    timeout: 5000,
-  }).trim();
+  const branchList = execFileSync(
+    "git", ["branch", "--list", worktreeBranch],
+    { cwd: localPath, encoding: "utf-8", timeout: 5000 }
+  ).trim();
 
   if (branchList) {
     // Branch exists: attach existing branch without -b flag (preserves previous work)
-    execSync(`git worktree add "${worktreePath}" ${worktreeBranch}`, {
-      cwd: localPath,
-      encoding: "utf-8",
-      timeout: 30000,
-    });
+    execFileSync(
+      "git", ["worktree", "add", worktreePath, worktreeBranch],
+      { cwd: localPath, encoding: "utf-8", timeout: 30000 }
+    );
   } else {
     // Branch does not exist: create new branch from baseBranch
-    execSync(
-      `git worktree add -b ${worktreeBranch} "${worktreePath}" ${baseBranch}`,
-      {
-        cwd: localPath,
-        encoding: "utf-8",
-        timeout: 30000,
-      }
+    execFileSync(
+      "git", ["worktree", "add", "-b", worktreeBranch, worktreePath, baseBranch],
+      { cwd: localPath, encoding: "utf-8", timeout: 30000 }
     );
   }
 
@@ -77,7 +70,7 @@ export async function createWorktree(
  * Removes a git worktree and its associated task branch.
  *
  * Best-effort: skips steps that are already done (missing dir or branch).
- * Never throws — callers should catch and log errors independently.
+ * Callers should wrap in try/catch — this function may throw on git errors.
  *
  * @param localPath - Absolute path to the project root (git repo)
  * @param taskId    - The task ID (used to derive worktree path and branch name)
@@ -91,25 +84,22 @@ export async function removeWorktree(
 
   // D-11: Only remove worktree dir if it exists
   if (existsSync(worktreePath)) {
-    execSync(`git worktree remove "${worktreePath}" --force`, {
-      cwd: localPath,
-      encoding: "utf-8",
-      timeout: 30000,
-    });
+    execFileSync(
+      "git", ["worktree", "remove", worktreePath, "--force"],
+      { cwd: localPath, encoding: "utf-8", timeout: 30000 }
+    );
   }
 
   // D-12: Only delete branch if it exists
-  const branchExists = execSync(`git branch --list ${worktreeBranch}`, {
-    cwd: localPath,
-    encoding: "utf-8",
-    timeout: 5000,
-  }).trim();
+  const branchExists = execFileSync(
+    "git", ["branch", "--list", worktreeBranch],
+    { cwd: localPath, encoding: "utf-8", timeout: 5000 }
+  ).trim();
 
   if (branchExists) {
-    execSync(`git branch -D ${worktreeBranch}`, {
-      cwd: localPath,
-      encoding: "utf-8",
-      timeout: 5000,
-    });
+    execFileSync(
+      "git", ["branch", "-D", worktreeBranch],
+      { cwd: localPath, encoding: "utf-8", timeout: 5000 }
+    );
   }
 }

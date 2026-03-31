@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { revalidatePath } from "next/cache";
 import { checkConflicts } from "@/lib/diff-parser";
 import { removeWorktree } from "@/lib/worktree";
@@ -71,18 +71,17 @@ export async function POST(
     }
 
     // Squash merge (per D-09): run three commands sequentially in main repo
-    const escapedTitle = task.title.replace(/"/g, '\\"');
-    execSync(`git checkout ${task.baseBranch}`, {
+    execFileSync("git", ["checkout", task.baseBranch], {
       cwd: localPath,
       encoding: "utf-8",
       timeout: 10000,
     });
-    execSync(`git merge --squash ${worktreeBranch}`, {
+    execFileSync("git", ["merge", "--squash", worktreeBranch], {
       cwd: localPath,
       encoding: "utf-8",
       timeout: 30000,
     });
-    execSync(`git commit -m "feat: ${escapedTitle}"`, {
+    execFileSync("git", ["commit", "-m", `feat: ${task.title}`], {
       cwd: localPath,
       encoding: "utf-8",
       timeout: 10000,
@@ -107,10 +106,7 @@ export async function POST(
   } catch (error) {
     console.error("[merge] Merge failed:", error);
     return NextResponse.json(
-      {
-        error: "Merge failed",
-        details: error instanceof Error ? error.message : String(error),
-      },
+      { error: "Merge failed" },
       { status: 500 }
     );
   }

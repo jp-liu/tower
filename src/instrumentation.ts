@@ -5,7 +5,7 @@ export async function register() {
 }
 
 async function pruneOrphanedWorktrees() {
-  const { execSync } = await import("child_process");
+  const { execFileSync } = await import("child_process");
   const { initDb, db } = await import("@/lib/db");
 
   try {
@@ -23,7 +23,7 @@ async function pruneOrphanedWorktrees() {
     for (const project of gitProjects) {
       // D-09: Process each project independently — one failure does not block others
       try {
-        execSync("git worktree prune", {
+        execFileSync("git", ["worktree", "prune"], {
           cwd: project.localPath!,
           encoding: "utf-8",
           timeout: 10000,

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock child_process before importing instrumentation
 vi.mock("child_process", () => ({
-  execSync: vi.fn(),
+  execFileSync: vi.fn(),
 }));
 
 // Mock @/lib/db before importing instrumentation
@@ -16,15 +16,16 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { initDb, db } from "@/lib/db";
 
-const mockedExecSync = vi.mocked(execSync);
+const mockedExecFileSync = vi.mocked(execFileSync);
 const mockedInitDb = vi.mocked(initDb);
 const mockedFindMany = vi.mocked(db.project.findMany);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.resetModules();
   process.env.NEXT_RUNTIME = "nodejs";
   mockedInitDb.mockResolvedValue(undefined as never);
   mockedFindMany.mockResolvedValue([]);
@@ -46,13 +47,13 @@ describe("register", () => {
       where: { type: "GIT", localPath: { not: null } },
       select: { id: true, localPath: true, name: true },
     });
-    expect(mockedExecSync).toHaveBeenCalledTimes(2);
-    expect(mockedExecSync).toHaveBeenCalledWith("git worktree prune", {
+    expect(mockedExecFileSync).toHaveBeenCalledTimes(2);
+    expect(mockedExecFileSync).toHaveBeenCalledWith("git", ["worktree", "prune"], {
       cwd: "/home/user/proj1",
       encoding: "utf-8",
       timeout: 10000,
     });
-    expect(mockedExecSync).toHaveBeenCalledWith("git worktree prune", {
+    expect(mockedExecFileSync).toHaveBeenCalledWith("git", ["worktree", "prune"], {
       cwd: "/home/user/proj2",
       encoding: "utf-8",
       timeout: 10000,
@@ -66,7 +67,7 @@ describe("register", () => {
     await register();
 
     expect(mockedInitDb).not.toHaveBeenCalled();
-    expect(mockedExecSync).not.toHaveBeenCalled();
+    expect(mockedExecFileSync).not.toHaveBeenCalled();
   });
 
   it("continues to next project when one prune fails", async () => {
@@ -76,7 +77,7 @@ describe("register", () => {
       { id: "proj3", name: "Project 3", localPath: "/home/user/proj3" },
     ];
     mockedFindMany.mockResolvedValue(projects as never);
-    mockedExecSync.mockImplementation((cmd: string, opts?: unknown) => {
+    mockedExecFileSync.mockImplementation((_cmd: string, args?: readonly string[], opts?: unknown) => {
       const options = opts as { cwd?: string };
       if (options?.cwd === "/home/user/proj2") {
         throw new Error("git: not a git repository");
@@ -88,13 +89,13 @@ describe("register", () => {
     await expect(register()).resolves.toBeUndefined();
 
     // All three projects should have been attempted
-    expect(mockedExecSync).toHaveBeenCalledTimes(3);
-    expect(mockedExecSync).toHaveBeenCalledWith("git worktree prune", {
+    expect(mockedExecFileSync).toHaveBeenCalledTimes(3);
+    expect(mockedExecFileSync).toHaveBeenCalledWith("git", ["worktree", "prune"], {
       cwd: "/home/user/proj1",
       encoding: "utf-8",
       timeout: 10000,
     });
-    expect(mockedExecSync).toHaveBeenCalledWith("git worktree prune", {
+    expect(mockedExecFileSync).toHaveBeenCalledWith("git", ["worktree", "prune"], {
       cwd: "/home/user/proj3",
       encoding: "utf-8",
       timeout: 10000,
@@ -107,7 +108,7 @@ describe("register", () => {
     const { register } = await import("@/instrumentation");
     await expect(register()).resolves.toBeUndefined();
 
-    expect(mockedExecSync).not.toHaveBeenCalled();
+    expect(mockedExecFileSync).not.toHaveBeenCalled();
   });
 
   it("completes without error when no GIT projects exist", async () => {
@@ -117,6 +118,6 @@ describe("register", () => {
     await register();
 
     expect(mockedInitDb).toHaveBeenCalledOnce();
-    expect(mockedExecSync).not.toHaveBeenCalled();
+    expect(mockedExecFileSync).not.toHaveBeenCalled();
   });
 });

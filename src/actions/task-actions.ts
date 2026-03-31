@@ -39,21 +39,15 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
   const task = await db.task.update({
     where: { id: taskId },
     data: { status },
+    include: { project: true },
   });
 
-  // LC-01: Auto-cleanup worktree on CANCELLED (per D-03)
-  if (status === "CANCELLED") {
-    // Load project to get localPath (per D-04: only for GIT projects)
-    const taskWithProject = await db.task.findUnique({
-      where: { id: taskId },
-      include: { project: true },
-    });
-    if (taskWithProject?.project?.localPath) {
-      try {
-        await removeWorktree(taskWithProject.project.localPath, taskId);
-      } catch (error) {
-        console.error("[updateTaskStatus] Worktree cleanup failed:", error);
-      }
+  // LC-01: Auto-cleanup worktree on CANCELLED (per D-03, D-04: only for GIT projects)
+  if (status === "CANCELLED" && task.project?.localPath) {
+    try {
+      await removeWorktree(task.project.localPath, taskId);
+    } catch (error) {
+      console.error("[updateTaskStatus] Worktree cleanup failed:", error);
     }
   }
 

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock child_process before importing worktree
 vi.mock("child_process", () => ({
-  execSync: vi.fn(),
+  execFileSync: vi.fn(),
 }));
 
 // Mock fs/promises before importing worktree
@@ -16,12 +16,12 @@ vi.mock("fs", () => ({
   existsSync: vi.fn(),
 }));
 
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import { createWorktree, removeWorktree } from "@/lib/worktree";
 
-const mockedExecSync = vi.mocked(execSync);
+const mockedExecFileSync = vi.mocked(execFileSync);
 const mockedMkdir = vi.mocked(mkdir);
 const mockedExistsSync = vi.mocked(existsSync);
 
@@ -34,22 +34,22 @@ const expectedBranch = `task/${TASK_ID}`;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Default: mkdir succeeds
   mockedMkdir.mockResolvedValue(undefined);
-  // Default: empty worktree list (no existing worktrees)
-  // Default: empty branch list (branch does not exist)
-  mockedExecSync.mockReturnValue("" as never);
+  mockedExecFileSync.mockReturnValue("" as never);
 });
+
+function findCall(args: string[]): boolean {
+  return mockedExecFileSync.mock.calls.some(
+    (call) => {
+      const [cmd, cmdArgs] = call as [string, string[]];
+      return cmd === args[0] && JSON.stringify(cmdArgs) === JSON.stringify(args.slice(1));
+    }
+  );
+}
 
 describe("createWorktree", () => {
   it("creates a new worktree when branch does not exist", async () => {
-    // Arrange: worktree list is empty, branch list is empty
-    mockedExecSync.mockImplementation((cmd: string) => {
-      if (cmd.includes("git worktree list")) return "" as never;
-      if (cmd.includes("git branch --list")) return "" as never;
-      // git worktree add -b branch path baseBranch
-      return "" as never;
-    });
+    mockedExecFileSync.mockReturnValue("" as never);
 
     const result = await createWorktree(LOCAL_PATH, TASK_ID, BASE_BRANCH);
 
@@ -57,75 +57,60 @@ describe("createWorktree", () => {
       `${LOCAL_PATH}/.worktrees`,
       { recursive: true }
     );
-    // Should call git worktree list --porcelain
-    expect(mockedExecSync).toHaveBeenCalledWith(
-      "git worktree list --porcelain",
+    expect(mockedExecFileSync).toHaveBeenCalledWith(
+      "git", ["worktree", "list", "--porcelain"],
       { cwd: LOCAL_PATH, encoding: "utf-8", timeout: 10000 }
     );
-    // Should check if branch exists
-    expect(mockedExecSync).toHaveBeenCalledWith(
-      `git branch --list task/${TASK_ID}`,
+    expect(mockedExecFileSync).toHaveBeenCalledWith(
+      "git", ["branch", "--list", expectedBranch],
       { cwd: LOCAL_PATH, encoding: "utf-8", timeout: 5000 }
     );
-    // Should create with -b flag since branch doesn't exist
-    expect(mockedExecSync).toHaveBeenCalledWith(
-      `git worktree add -b ${expectedBranch} "${expectedWorktreePath}" ${BASE_BRANCH}`,
+    expect(mockedExecFileSync).toHaveBeenCalledWith(
+      "git", ["worktree", "add", "-b", expectedBranch, expectedWorktreePath, BASE_BRANCH],
       { cwd: LOCAL_PATH, encoding: "utf-8", timeout: 30000 }
     );
     expect(result).toEqual({ worktreePath: expectedWorktreePath, worktreeBranch: expectedBranch });
   });
 
   it("reuses existing worktree when git worktree list contains target path", async () => {
-    // Arrange: worktree list contains the target path
     const porcelainOutput = `worktree /other/path\nHEAD abc123\nbranch refs/heads/main\n\nworktree ${expectedWorktreePath}\nHEAD def456\nbranch refs/heads/${expectedBranch}\n`;
-    mockedExecSync.mockImplementation((cmd: string) => {
-      if (cmd.includes("git worktree list")) return porcelainOutput as never;
-      return "" as never;
-    });
+    mockedExecFileSync.mockReturnValue(porcelainOutput as never);
 
     const result = await createWorktree(LOCAL_PATH, TASK_ID, BASE_BRANCH);
 
-    // Should check worktree list
-    expect(mockedExecSync).toHaveBeenCalledWith(
-      "git worktree list --porcelain",
+    expect(mockedExecFileSync).toHaveBeenCalledWith(
+      "git", ["worktree", "list", "--porcelain"],
       { cwd: LOCAL_PATH, encoding: "utf-8", timeout: 10000 }
     );
     // Should NOT call git branch --list or git worktree add (early return)
-    const calls = mockedExecSync.mock.calls.map((c) => c[0] as string);
-    expect(calls.some((c) => c.includes("git branch --list"))).toBe(false);
-    expect(calls.some((c) => c.includes("git worktree add"))).toBe(false);
-    // Returns same paths
+    expect(findCall(["git", "branch", "--list", expectedBranch])).toBe(false);
     expect(result).toEqual({ worktreePath: expectedWorktreePath, worktreeBranch: expectedBranch });
   });
 
   it("attaches existing branch without -b flag when branch already exists", async () => {
-    // Arrange: worktree list is empty, but branch already exists
-    mockedExecSync.mockImplementation((cmd: string) => {
-      if (cmd.includes("git worktree list")) return "" as never;
-      if (cmd.includes("git branch --list")) return `  task/${TASK_ID}` as never;
-      // git worktree add (no -b) — attaches existing branch
+    mockedExecFileSync.mockImplementation((cmd: string, args?: readonly string[]) => {
+      const argsArr = args as string[] | undefined;
+      if (argsArr?.[0] === "worktree" && argsArr?.[1] === "list") return "" as never;
+      if (argsArr?.[0] === "branch" && argsArr?.[1] === "--list") return `  task/${TASK_ID}` as never;
       return "" as never;
     });
 
     const result = await createWorktree(LOCAL_PATH, TASK_ID, BASE_BRANCH);
 
-    // Should attach existing branch WITHOUT -b flag
-    expect(mockedExecSync).toHaveBeenCalledWith(
-      `git worktree add "${expectedWorktreePath}" ${expectedBranch}`,
+    expect(mockedExecFileSync).toHaveBeenCalledWith(
+      "git", ["worktree", "add", expectedWorktreePath, expectedBranch],
       { cwd: LOCAL_PATH, encoding: "utf-8", timeout: 30000 }
     );
     // Should NOT have been called with -b
-    const calls = mockedExecSync.mock.calls.map((c) => c[0] as string);
-    expect(calls.some((c) => c.includes("worktree add -b"))).toBe(false);
+    expect(findCall(["git", "worktree", "add", "-b", expectedBranch, expectedWorktreePath, BASE_BRANCH])).toBe(false);
     expect(result).toEqual({ worktreePath: expectedWorktreePath, worktreeBranch: expectedBranch });
   });
 
   it("throws with descriptive message when git worktree add fails", async () => {
-    // Arrange: worktree list empty, branch doesn't exist, but add fails
-    mockedExecSync.mockImplementation((cmd: string) => {
-      if (cmd.includes("git worktree list")) return "" as never;
-      if (cmd.includes("git branch --list")) return "" as never;
-      // git worktree add fails
+    mockedExecFileSync.mockImplementation((cmd: string, args?: readonly string[]) => {
+      const argsArr = args as string[] | undefined;
+      if (argsArr?.[0] === "worktree" && argsArr?.[1] === "list") return "" as never;
+      if (argsArr?.[0] === "branch" && argsArr?.[1] === "--list") return "" as never;
       throw new Error("fatal: 'main' is not a commit and a branch 'task/clxabc123def' cannot be created from it");
     });
 
@@ -138,77 +123,68 @@ describe("createWorktree", () => {
 describe("removeWorktree", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedExecSync.mockReturnValue("" as never);
+    mockedExecFileSync.mockReturnValue("" as never);
     mockedExistsSync.mockReturnValue(false);
   });
 
   it("removes worktree dir and deletes branch when both exist", async () => {
-    // Arrange: worktree dir exists, branch also exists
     mockedExistsSync.mockReturnValue(true);
-    mockedExecSync.mockImplementation((cmd: string) => {
-      if (cmd.includes("git branch --list")) return `  task/${TASK_ID}` as never;
+    mockedExecFileSync.mockImplementation((cmd: string, args?: readonly string[]) => {
+      const argsArr = args as string[] | undefined;
+      if (argsArr?.[0] === "branch" && argsArr?.[1] === "--list") return `  task/${TASK_ID}` as never;
       return "" as never;
     });
 
     await removeWorktree(LOCAL_PATH, TASK_ID);
 
-    expect(mockedExecSync).toHaveBeenCalledWith(
-      `git worktree remove "${expectedWorktreePath}" --force`,
+    expect(mockedExecFileSync).toHaveBeenCalledWith(
+      "git", ["worktree", "remove", expectedWorktreePath, "--force"],
       { cwd: LOCAL_PATH, encoding: "utf-8", timeout: 30000 }
     );
-    expect(mockedExecSync).toHaveBeenCalledWith(
-      `git branch -D ${expectedBranch}`,
+    expect(mockedExecFileSync).toHaveBeenCalledWith(
+      "git", ["branch", "-D", expectedBranch],
       { cwd: LOCAL_PATH, encoding: "utf-8", timeout: 5000 }
     );
   });
 
   it("skips git worktree remove when dir does not exist but still deletes branch", async () => {
-    // Arrange: worktree dir does NOT exist, but branch still exists
     mockedExistsSync.mockReturnValue(false);
-    mockedExecSync.mockImplementation((cmd: string) => {
-      if (cmd.includes("git branch --list")) return `  task/${TASK_ID}` as never;
+    mockedExecFileSync.mockImplementation((cmd: string, args?: readonly string[]) => {
+      const argsArr = args as string[] | undefined;
+      if (argsArr?.[0] === "branch" && argsArr?.[1] === "--list") return `  task/${TASK_ID}` as never;
       return "" as never;
     });
 
     await removeWorktree(LOCAL_PATH, TASK_ID);
 
-    const calls = mockedExecSync.mock.calls.map((c) => c[0] as string);
-    expect(calls.some((c) => c.includes("git worktree remove"))).toBe(false);
-    expect(mockedExecSync).toHaveBeenCalledWith(
-      `git branch -D ${expectedBranch}`,
+    expect(findCall(["git", "worktree", "remove", expectedWorktreePath, "--force"])).toBe(false);
+    expect(mockedExecFileSync).toHaveBeenCalledWith(
+      "git", ["branch", "-D", expectedBranch],
       { cwd: LOCAL_PATH, encoding: "utf-8", timeout: 5000 }
     );
   });
 
   it("skips git branch -D when branch does not exist", async () => {
-    // Arrange: worktree dir exists, but branch is gone
     mockedExistsSync.mockReturnValue(true);
-    mockedExecSync.mockImplementation((cmd: string) => {
-      if (cmd.includes("git branch --list")) return "" as never;
-      return "" as never;
-    });
+    mockedExecFileSync.mockReturnValue("" as never);
 
     await removeWorktree(LOCAL_PATH, TASK_ID);
 
-    expect(mockedExecSync).toHaveBeenCalledWith(
-      `git worktree remove "${expectedWorktreePath}" --force`,
+    expect(mockedExecFileSync).toHaveBeenCalledWith(
+      "git", ["worktree", "remove", expectedWorktreePath, "--force"],
       { cwd: LOCAL_PATH, encoding: "utf-8", timeout: 30000 }
     );
-    const calls = mockedExecSync.mock.calls.map((c) => c[0] as string);
-    expect(calls.some((c) => c.includes("git branch -D"))).toBe(false);
+    expect(findCall(["git", "branch", "-D", expectedBranch])).toBe(false);
   });
 
   it("is a no-op when neither dir nor branch exist", async () => {
-    // Arrange: nothing exists
     mockedExistsSync.mockReturnValue(false);
-    mockedExecSync.mockReturnValue("" as never);
+    mockedExecFileSync.mockReturnValue("" as never);
 
     await removeWorktree(LOCAL_PATH, TASK_ID);
 
-    const calls = mockedExecSync.mock.calls.map((c) => c[0] as string);
-    // Only the branch --list check should happen; no remove, no delete
-    expect(calls.some((c) => c.includes("git worktree remove"))).toBe(false);
-    expect(calls.some((c) => c.includes("git branch -D"))).toBe(false);
-    expect(calls.some((c) => c.includes("git branch --list"))).toBe(true);
+    expect(findCall(["git", "worktree", "remove", expectedWorktreePath, "--force"])).toBe(false);
+    expect(findCall(["git", "branch", "-D", expectedBranch])).toBe(false);
+    expect(findCall(["git", "branch", "--list", expectedBranch])).toBe(true);
   });
 });
