@@ -41,10 +41,10 @@ Requirements for v0.5 — Git Worktree 任务隔离. Each maps to roadmap phases
 
 ### Worktree 执行隔离
 
-- [ ] **WT-01**: 任务执行前自动创建 worktree（`{localPath}/.worktrees/task-{taskId}`）+ 独立分支 `task/{taskId}`
-- [ ] **WT-02**: Claude CLI 在 worktree 目录中执行（cwd 切换到 worktree）
+- [x] **WT-01**: 任务执行前自动创建 worktree（`{localPath}/.worktrees/task-{taskId}`）+ 独立分支 `task/{taskId}`
+- [x] **WT-02**: Claude CLI 在 worktree 目录中执行（cwd 切换到 worktree）
 - [x] **WT-03**: TaskExecution 数据模型新增 worktreePath、worktreeBranch 字段
-- [ ] **WT-04**: 同项目多任务可并行执行，各自在独立 worktree 中工作
+- [x] **WT-04**: 同项目多任务可并行执行，各自在独立 worktree 中工作
 
 ### 合并与验证
 
@@ -113,9 +113,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WT-03 | Phase 15 | Complete |
 | CL-01 | Phase 15 | Complete |
 | BR-01 | Phase 16 | Pending |
-| WT-01 | Phase 16 | Pending |
-| WT-02 | Phase 16 | Pending |
-| WT-04 | Phase 16 | Pending |
+| WT-01 | Phase 16 | Complete |
+| WT-02 | Phase 16 | Complete |
+| WT-04 | Phase 16 | Complete |
 | MR-01 | Phase 17 | Pending |
 | MR-02 | Phase 17 | Pending |
 | MR-03 | Phase 17 | Pending |
