@@ -110,7 +110,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 20-01-PLAN.md — Install ignore dep, safeResolvePath utility, test scaffolds (FT-01, FT-02, FT-03, FT-05)
-- [ ] 20-02-PLAN.md — File CRUD server actions + getGitStatus (FT-01, FT-03, FT-05, FT-06)
+- [x] 20-02-PLAN.md — File CRUD server actions + getGitStatus (FT-01, FT-03, FT-05, FT-06)
 - [ ] 20-03-PLAN.md — FileTree/FileTreeNode/FileTreeContextMenu components + task page integration (FT-01-06)
 **UI hint**: yes
 
@@ -126,7 +126,7 @@ Plans:
   5. The editor color scheme switches automatically when the user toggles between dark and light mode in ai-manager
 **Plans**: 3 plans
 Plans:
-- [ ] 20-01-PLAN.md — Install ignore dep, safeResolvePath utility, test scaffolds (FT-01, FT-02, FT-03, FT-05)
+- [x] 20-01-PLAN.md — Install ignore dep, safeResolvePath utility, test scaffolds (FT-01, FT-02, FT-03, FT-05)
 - [ ] 20-02-PLAN.md — File CRUD server actions + getGitStatus (FT-01, FT-03, FT-05, FT-06)
 - [ ] 20-03-PLAN.md — FileTree/FileTreeNode/FileTreeContextMenu components + task page integration (FT-01-06)
 **UI hint**: yes
@@ -187,7 +187,7 @@ Plans:
 | 17. Review & Merge Workflow | v0.5 | 4/4 | Complete | 2026-03-31 |
 | 18. Worktree Lifecycle | v0.5 | 2/2 | Complete | 2026-03-31 |
 | 19. Workbench Entry & Layout | v0.6 | 2/2 | Complete    | 2026-03-31 |
-| 20. File Tree Browser | v0.6 | 1/3 | In Progress|  |
+| 20. File Tree Browser | v0.6 | 2/3 | In Progress|  |
 | 21. Code Editor | v0.6 | 0/TBD | Not started | - |
 | 22. Diff View Integration | v0.6 | 0/TBD | Not started | - |
 | 23. Preview Panel | v0.6 | 0/TBD | Not started | - |

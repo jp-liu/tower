@@ -27,7 +27,7 @@ Requirements for v0.6 — 任务开发工作台. Each maps to roadmap phases.
 - [x] **FT-03**: 文件树自动过滤 gitignore 规则匹配的目录和文件
 - [ ] **FT-04**: Claude 执行期间文件树每 2 秒自动刷新
 - [x] **FT-05**: 用户可通过右键菜单新建文件/文件夹、重命名、删除
-- [ ] **FT-06**: 文件树节点显示 git 变更状态标记（M/A/D）
+- [x] **FT-06**: 文件树节点显示 git 变更状态标记（M/A/D）
 
 ### Diff 查看
 
@@ -165,7 +165,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FT-03 | Phase 20 | Complete |
 | FT-04 | Phase 20 | Pending |
 | FT-05 | Phase 20 | Complete |
-| FT-06 | Phase 20 | Pending |
+| FT-06 | Phase 20 | Complete |
 | ED-01 | Phase 21 | Pending |
 | ED-02 | Phase 21 | Pending |
 | ED-03 | Phase 21 | Pending |

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.6
 milestone_name: 任务开发工作台
 status: executing
-stopped_at: Completed 20-file-tree-browser/20-01-PLAN.md
-last_updated: "2026-03-31T11:12:01.796Z"
+stopped_at: Completed 20-file-tree-browser/20-02-PLAN.md
+last_updated: "2026-03-31T11:16:43.448Z"
 last_activity: 2026-03-31
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 5
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-03-31)
 ## Current Position
 
 Phase: 20 (file-tree-browser) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-03-31
 
@@ -69,6 +69,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 19-workbench-entry-layout P01 | 31536248s | 2 tasks | 3 files |
 | Phase 19-workbench-entry-layout P02 | 480 | 1 tasks | 1 files |
 | Phase 20-file-tree-browser P01 | 180 | 2 tasks | 6 files |
+| Phase 20 P02 | 180 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -139,6 +140,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 19-workbench-entry-layout]: TabsList uses @base-ui/react/tabs — active state uses data-active, className overrides apply for visual tab bar styling
 - [Phase 20-file-tree-browser]: normalizedBase strategy: strip trailing sep before check, re-add for prefix comparison — handles trailing-slash base cleanly
 - [Phase 20-file-tree-browser]: it.todo() Wave 0 scaffold pattern: all describe blocks with it.todo stubs so runner exits 0, Plans 02/03 fill them
+- [Phase 20]: .git guard in deleteEntry fires BEFORE safeResolvePath — unconditional protection
+- [Phase 20]: getGitStatus returns empty {} on any error — UI degrades gracefully without surfacing git errors
 
 ### Pending Todos
 
@@ -152,6 +155,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-31T11:12:01.793Z
-Stopped at: Completed 20-file-tree-browser/20-01-PLAN.md
+Last session: 2026-03-31T11:16:43.444Z
+Stopped at: Completed 20-file-tree-browser/20-02-PLAN.md
 Resume file: None
