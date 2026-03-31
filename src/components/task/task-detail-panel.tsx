@@ -6,8 +6,6 @@ import { TaskConversation, type Message } from "./task-conversation";
 import { TaskMessageInput } from "./task-message-input";
 import { getTaskMessages, sendTaskMessage } from "@/actions/agent-actions";
 import { getPrompts } from "@/actions/prompt-actions";
-import { getConfigValue } from "@/actions/config-actions";
-import { interpolateBranchTemplate } from "@/lib/branch-template";
 import type { Task } from "@prisma/client";
 import type { PromptOption } from "./types";
 import { useI18n } from "@/lib/i18n";
@@ -26,7 +24,6 @@ export function TaskDetailPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [prompts, setPrompts] = useState<PromptOption[]>([]);
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
-  const [branchTemplate, setBranchTemplate] = useState("vk/{taskIdShort}-");
   const abortRef = useRef<AbortController | null>(null);
 
   // Load existing messages
@@ -64,11 +61,6 @@ export function TaskDetailPanel({
       }
     });
     return () => { cancelled = true; };
-  }, []);
-
-  // Load branch template from config
-  useEffect(() => {
-    getConfigValue<string>("git.branchTemplate", "vk/{taskIdShort}-").then(setBranchTemplate);
   }, []);
 
   // Cleanup abort on unmount
@@ -203,7 +195,7 @@ export function TaskDetailPanel({
       <TaskMetadata
         title={task.title}
         description={t("taskDetail.panelDescription")}
-        branch={interpolateBranchTemplate(branchTemplate, task.id)}
+        branch={`task/${task.id}`}
         hasConversation={messages.length > 0}
         updatedAt={task.updatedAt}
         onBack={onClose}

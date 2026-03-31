@@ -25,11 +25,6 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "number",
     label: "Git Operation Timeout (seconds)",
   },
-  "git.branchTemplate": {
-    defaultValue: "vk/{taskIdShort}-",
-    type: "string",
-    label: "Branch Naming Template",
-  },
   "search.resultLimit": {
     defaultValue: 20,
     type: "number",

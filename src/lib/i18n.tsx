@@ -205,12 +205,9 @@ const translations = {
     "settings.config.system.saved": "系统参数已保存",
     // Git params section
     "settings.config.gitParams.title": "Git 参数",
-    "settings.config.gitParams.desc": "Git 操作超时与分支命名模板",
+    "settings.config.gitParams.desc": "Git 操作超时",
     "settings.config.gitParams.timeout": "Git 操作超时",
     "settings.config.gitParams.timeoutHint": "clone/status 等操作的超时时间",
-    "settings.config.gitParams.branchTemplate": "分支命名模板",
-    "settings.config.gitParams.branchTemplateHint": "支持 {taskId}（完整 ID）和 {taskIdShort}（前 4 位）变量",
-    "settings.config.gitParams.branchTemplateInvalid": "模板必须包含 {taskId} 或 {taskIdShort}",
     "settings.config.gitParams.saved": "Git 参数已保存",
     // Search section
     "settings.config.search.title": "搜索参数",
@@ -516,12 +513,9 @@ const translations = {
     "settings.config.system.saved": "System parameters saved",
     // Git params section
     "settings.config.gitParams.title": "Git Parameters",
-    "settings.config.gitParams.desc": "Git operation timeout and branch naming template",
+    "settings.config.gitParams.desc": "Git operation timeout",
     "settings.config.gitParams.timeout": "Git Operation Timeout",
     "settings.config.gitParams.timeoutHint": "Timeout for clone/status and other operations",
-    "settings.config.gitParams.branchTemplate": "Branch Naming Template",
-    "settings.config.gitParams.branchTemplateHint": "Supports {taskId} (full ID) and {taskIdShort} (first 4 chars) variables",
-    "settings.config.gitParams.branchTemplateInvalid": "Template must contain {taskId} or {taskIdShort}",
     "settings.config.gitParams.saved": "Git parameters saved",
     // Search section
     "settings.config.search.title": "Search Parameters",
