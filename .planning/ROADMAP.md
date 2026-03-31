@@ -107,7 +107,11 @@ Plans:
   4. While Claude is executing, the file tree automatically refreshes every 2 seconds to reflect new or modified files
   5. User can right-click a node to create a file/folder, rename, or delete; changes take effect immediately on disk
   6. File tree nodes display M/A/D badges indicating their git change status relative to the base branch
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 20-01-PLAN.md — Install ignore dep, safeResolvePath utility, test scaffolds (FT-01, FT-02, FT-03, FT-05)
+- [ ] 20-02-PLAN.md — File CRUD server actions + getGitStatus (FT-01, FT-03, FT-05, FT-06)
+- [ ] 20-03-PLAN.md — FileTree/FileTreeNode/FileTreeContextMenu components + task page integration (FT-01-06)
 **UI hint**: yes
 
 ### Phase 21: Code Editor
@@ -120,7 +124,11 @@ Plans:
   3. Unsaved files display a dot indicator on their editor tab
   4. User can have multiple files open simultaneously as tabs and switch between them without losing edits
   5. The editor color scheme switches automatically when the user toggles between dark and light mode in ai-manager
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 20-01-PLAN.md — Install ignore dep, safeResolvePath utility, test scaffolds (FT-01, FT-02, FT-03, FT-05)
+- [ ] 20-02-PLAN.md — File CRUD server actions + getGitStatus (FT-01, FT-03, FT-05, FT-06)
+- [ ] 20-03-PLAN.md — FileTree/FileTreeNode/FileTreeContextMenu components + task page integration (FT-01-06)
 **UI hint**: yes
 
 ### Phase 22: Diff View Integration
@@ -131,7 +139,11 @@ Plans:
   1. The "Changes" tab in the workbench right panel renders a diff of the task branch against its base branch
   2. The diff view is the same component used in the v0.5 task drawer (no duplication of diff logic)
   3. User can reload the diff to see the latest changes after Claude modifies files
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 20-01-PLAN.md — Install ignore dep, safeResolvePath utility, test scaffolds (FT-01, FT-02, FT-03, FT-05)
+- [ ] 20-02-PLAN.md — File CRUD server actions + getGitStatus (FT-01, FT-03, FT-05, FT-06)
+- [ ] 20-03-PLAN.md — FileTree/FileTreeNode/FileTreeContextMenu components + task page integration (FT-01-06)
 **UI hint**: yes
 
 ### Phase 23: Preview Panel
@@ -145,7 +157,11 @@ Plans:
   4. User can click "Open in Terminal" to open the worktree directory in their configured terminal app (iTerm2/Terminal.app/Warp)
   5. User can configure the default terminal application in Settings
   6. After saving a file with Ctrl+S, the preview iframe automatically refreshes to reflect the change
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 20-01-PLAN.md — Install ignore dep, safeResolvePath utility, test scaffolds (FT-01, FT-02, FT-03, FT-05)
+- [ ] 20-02-PLAN.md — File CRUD server actions + getGitStatus (FT-01, FT-03, FT-05, FT-06)
+- [ ] 20-03-PLAN.md — FileTree/FileTreeNode/FileTreeContextMenu components + task page integration (FT-01-06)
 **UI hint**: yes
 
 ## Progress
