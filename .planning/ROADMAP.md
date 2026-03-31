@@ -136,7 +136,10 @@ Plans:
   2. TaskExecution records have `worktreePath` and `worktreeBranch` fields (both nullable strings) persisted in the database
   3. A server action or API route returns the list of local git branches for a project given its `localPath`
   4. The branchTemplate field is gone from settings UI, SystemConfig defaults, and all call sites — no reference remains
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 15-01-PLAN.md — Schema migration (baseBranch, worktreePath, worktreeBranch), server action extensions, getProjectBranches action
+- [ ] 15-02-PLAN.md — branchTemplate cleanup: delete lib + test, clean config-defaults, settings UI, task panel, i18n
 **UI hint**: no
 
 ### Phase 16: Worktree Execution Engine
@@ -194,7 +197,7 @@ Plans:
 | 12. Git Path Mapping Rules | v0.4 | 2/2 | Complete | 2026-03-30 |
 | 13. Configurable System Parameters | v0.4 | 2/2 | Complete | 2026-03-30 |
 | 14. Search Quality & Realtime Config | v0.4 | 2/2 | Complete | 2026-03-30 |
-| 15. Schema & Cleanup | v0.5 | 0/TBD | Not started | - |
+| 15. Schema & Cleanup | v0.5 | 0/2 | Not started | - |
 | 16. Worktree Execution Engine | v0.5 | 0/TBD | Not started | - |
 | 17. Review & Merge Workflow | v0.5 | 0/TBD | Not started | - |
 | 18. Worktree Lifecycle | v0.5 | 0/TBD | Not started | - |
