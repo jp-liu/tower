@@ -90,7 +90,10 @@ See: [milestones/v0.5-ROADMAP.md](./milestones/v0.5-ROADMAP.md) for full details
   2. The task workbench page shows a left AI chat panel and a right panel with three tabs: Files, Changes, Preview
   3. Switching between the three tabs does not lose AI chat state or scroll position
   4. The three right-panel tabs render placeholder content (not blank or crashing) before later phases fill them
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 19-01-PLAN.md — Install react-resizable-panels, add i18n keys, verify 查看详情 button (WB-01)
+- [ ] 19-02-PLAN.md — Refactor task-page-client.tsx: resizable panels + three-tab layout (WB-02)
 **UI hint**: yes
 
 ### Phase 20: File Tree Browser
@@ -167,7 +170,7 @@ See: [milestones/v0.5-ROADMAP.md](./milestones/v0.5-ROADMAP.md) for full details
 | 16. Worktree Execution Engine | v0.5 | 1/2 | Complete | 2026-03-31 |
 | 17. Review & Merge Workflow | v0.5 | 4/4 | Complete | 2026-03-31 |
 | 18. Worktree Lifecycle | v0.5 | 2/2 | Complete | 2026-03-31 |
-| 19. Workbench Entry & Layout | v0.6 | 0/TBD | Not started | - |
+| 19. Workbench Entry & Layout | v0.6 | 0/2 | Not started | - |
 | 20. File Tree Browser | v0.6 | 0/TBD | Not started | - |
 | 21. Code Editor | v0.6 | 0/TBD | Not started | - |
 | 22. Diff View Integration | v0.6 | 0/TBD | Not started | - |
