@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { setTaskLabels } from "@/actions/label-actions";
+import { removeWorktree } from "@/lib/worktree";
 import type { TaskStatus, Priority } from "@prisma/client";
 
 export async function createTask(data: {
@@ -39,6 +40,23 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
     where: { id: taskId },
     data: { status },
   });
+
+  // LC-01: Auto-cleanup worktree on CANCELLED (per D-03)
+  if (status === "CANCELLED") {
+    // Load project to get localPath (per D-04: only for GIT projects)
+    const taskWithProject = await db.task.findUnique({
+      where: { id: taskId },
+      include: { project: true },
+    });
+    if (taskWithProject?.project?.localPath) {
+      try {
+        await removeWorktree(taskWithProject.project.localPath, taskId);
+      } catch (error) {
+        console.error("[updateTaskStatus] Worktree cleanup failed:", error);
+      }
+    }
+  }
+
   revalidatePath("/workspaces");
   return task;
 }
