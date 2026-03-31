@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.1
-milestone_name: milestone
+milestone: v0.5
+milestone_name: Git Worktree 任务隔离
 status: executing
-stopped_at: Phase 2 plans verified
-last_updated: "2026-03-27T00:59:50.150Z"
-last_activity: 2026-03-27 -- Phase 03 execution started
+stopped_at: Completed 15-schema-cleanup-01-PLAN.md
+last_updated: "2026-03-31T03:07:00.924Z"
+last_activity: 2026-03-31
 progress:
-  total_phases: 3
-  completed_phases: 2
-  total_plans: 6
-  completed_plans: 4
+  total_phases: 8
+  completed_phases: 4
+  total_plans: 10
+  completed_plans: 8
   percent: 0
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 03 (agent-prompt-management) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 03
-Last activity: 2026-03-27 -- Phase 03 execution started
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-03-31
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -49,6 +49,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 01 P01 | 3 | 2 tasks | 4 files |
 | Phase 01 P02 | 8 | 2 tasks | 3 files |
+| Phase 15-schema-cleanup P01 | 344s | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 01]: ThemeProvider placed outermost in layout with attribute=class, defaultTheme=system, enableSystem for GNRL-03
 - [Phase Phase 01 P02]: Mounted guard on theme segmented control only — locale comes from React state (no hydration issue)
 - [Phase Phase 01 P02]: Segmented control uses bg-muted track / bg-background active tab — works in both light and dark modes
+- [Phase 15-schema-cleanup]: Mock next/cache (vi.mock) in unit tests — revalidatePath fails outside Next.js runtime
+- [Phase 15-schema-cleanup]: baseBranch stored on Task (not TaskExecution) — branch choice is per-task, not per-execution-run
 
 ### Pending Todos
 
@@ -75,6 +78,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T09:39:15.502Z
-Stopped at: Phase 2 plans verified
-Resume file: .planning/phases/02-cli-adapter-verification/02-01-PLAN.md
+Last session: 2026-03-31T03:07:00.921Z
+Stopped at: Completed 15-schema-cleanup-01-PLAN.md
+Resume file: None
