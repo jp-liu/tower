@@ -2,14 +2,17 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, GitBranch, Loader2 } from "lucide-react";
+import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye } from "lucide-react";
 import Link from "next/link";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { TaskConversation, type Message } from "@/components/task/task-conversation";
 import { TaskMessageInput } from "@/components/task/task-message-input";
 import { TaskDiffView } from "@/components/task/task-diff-view";
 import { Badge } from "@/components/ui/badge";
 import { getTaskMessages } from "@/actions/agent-actions";
 import { getPrompts } from "@/actions/prompt-actions";
+import { useI18n } from "@/lib/i18n";
 import type { PromptOption } from "@/components/task/types";
 import type { DiffResponse } from "@/lib/diff-parser";
 
@@ -49,6 +52,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function TaskPageClient({ task, workspaceId }: TaskPageClientProps) {
   const router = useRouter();
+  const { t } = useI18n();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [prompts, setPrompts] = useState<PromptOption[]>([]);
@@ -243,10 +247,10 @@ export function TaskPageClient({ task, workspaceId }: TaskPageClientProps) {
   }, [router]);
 
   return (
-    <div className="flex h-screen bg-background">
-      {/* Left panel: Chat (40%) */}
-      <div className="flex w-[40%] min-w-0 flex-col border-r border-border bg-sidebar">
-        {/* Header */}
+    <PanelGroup direction="horizontal" className="h-screen bg-background">
+      {/* Left panel: Chat — 35% default, 20% minimum per D-02 and D-03 */}
+      <Panel defaultSize={35} minSize={20} className="flex flex-col border-r border-border bg-sidebar">
+        {/* Header: back link + task title + status badge + branch badge */}
         <div className="flex items-center gap-3 border-b border-border px-4 py-3">
           <Link
             href={`/workspaces/${workspaceId}`}
@@ -255,14 +259,14 @@ export function TaskPageClient({ task, workspaceId }: TaskPageClientProps) {
             <ArrowLeft className="h-3.5 w-3.5" />
             返回
           </Link>
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-semibold text-foreground">{task.title}</h1>
             <div className="mt-1 flex items-center gap-2">
               <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[taskStatus] ?? "bg-muted text-muted-foreground"}`}>
                 {STATUS_LABELS[taskStatus] ?? taskStatus}
               </span>
               {task.baseBranch && (
-                <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px] font-mono border border-border gap-1">
+                <Badge variant="secondary" className="gap-1 border border-border bg-muted font-mono text-[10px] text-muted-foreground">
                   <GitBranch className="h-2.5 w-2.5" />
                   {task.baseBranch}
                 </Badge>
@@ -271,7 +275,7 @@ export function TaskPageClient({ task, workspaceId }: TaskPageClientProps) {
           </div>
         </div>
 
-        {/* Conversation */}
+        {/* Chat conversation */}
         <TaskConversation messages={messages} />
 
         {/* Message input */}
@@ -282,52 +286,94 @@ export function TaskPageClient({ task, workspaceId }: TaskPageClientProps) {
           selectedPromptId={selectedPromptId}
           onPromptChange={setSelectedPromptId}
         />
-      </div>
+      </Panel>
 
-      {/* Right panel: Tabs (60%) */}
-      <div className="flex w-[60%] min-w-0 flex-col">
-        {/* Tab bar */}
-        <div className="flex items-center border-b border-border px-4" role="tablist">
-          <button
-            role="tab"
-            aria-selected
-            className="border-b-2 border-primary px-4 py-3 text-sm font-medium text-foreground"
-          >
-            Changes
-          </button>
-        </div>
+      {/* Drag resize handle — 4px, bg-border at rest, bg-primary/20 on hover per UI-SPEC */}
+      <PanelResizeHandle className="relative w-px bg-border transition-colors hover:bg-primary/20 active:bg-primary/40 cursor-col-resize" />
 
-        {/* Tab content */}
-        <div className="flex-1 overflow-auto">
-          {isLoadingDiff ? (
-            <div className="flex h-full items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      {/* Right panel: Tabs — 65% default, 20% minimum per D-02 and D-03 */}
+      <Panel defaultSize={65} minSize={20} className="flex flex-col">
+        <Tabs defaultValue="files" className="flex h-full flex-col">
+          {/* Tab bar per D-04, D-05 */}
+          <TabsList className="h-auto justify-start rounded-none border-b border-border bg-transparent px-0">
+            <TabsTrigger
+              value="files"
+              className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 text-sm font-normal text-muted-foreground data-[state=active]:border-primary data-[state=active]:font-semibold data-[state=active]:text-foreground"
+            >
+              <FolderTree className="h-4 w-4" />
+              {t("taskPage.tabFiles")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="changes"
+              className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 text-sm font-normal text-muted-foreground data-[state=active]:border-primary data-[state=active]:font-semibold data-[state=active]:text-foreground"
+            >
+              <GitCompare className="h-4 w-4" />
+              {t("taskPage.changes")}
+            </TabsTrigger>
+            {/* D-06: hide Preview tab when project type is BACKEND (Phase 23 adds this type) */}
+            {task.project?.type !== "BACKEND" && (
+              <TabsTrigger
+                value="preview"
+                className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 text-sm font-normal text-muted-foreground data-[state=active]:border-primary data-[state=active]:font-semibold data-[state=active]:text-foreground"
+              >
+                <Eye className="h-4 w-4" />
+                {t("taskPage.tabPreview")}
+              </TabsTrigger>
+            )}
+          </TabsList>
+
+          {/* Files tab — Phase 20 placeholder per UI-SPEC */}
+          <TabsContent value="files" className="flex-1 overflow-auto">
+            <div className="flex h-full flex-col items-center justify-center gap-3">
+              <FolderTree className="h-8 w-8 text-muted-foreground" />
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground">{t("taskPage.filesPlaceholder")}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{t("taskPage.comingSoon")}</p>
+              </div>
             </div>
-          ) : diffData ? (
-            <TaskDiffView
-              files={diffData.files}
-              totalAdded={diffData.totalAdded}
-              totalRemoved={diffData.totalRemoved}
-              hasConflicts={diffData.hasConflicts}
-              conflictFiles={diffData.conflictFiles}
-              commitCount={diffData.commitCount}
-              taskId={task.id}
-              taskTitle={task.title}
-              taskStatus={taskStatus}
-              baseBranch={task.baseBranch ?? "main"}
-              onMergeComplete={handleMergeComplete}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center">
-              <p className="text-sm text-muted-foreground">
-                {taskStatus === "IN_REVIEW"
-                  ? "加载变更中..."
-                  : "Start an execution to see changes"}
-              </p>
+          </TabsContent>
+
+          {/* Changes tab — functional, uses existing TaskDiffView */}
+          <TabsContent value="changes" className="flex-1 overflow-auto">
+            {isLoadingDiff ? (
+              <div className="flex h-full items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : diffData ? (
+              <TaskDiffView
+                files={diffData.files}
+                totalAdded={diffData.totalAdded}
+                totalRemoved={diffData.totalRemoved}
+                hasConflicts={diffData.hasConflicts}
+                conflictFiles={diffData.conflictFiles}
+                commitCount={diffData.commitCount}
+                taskId={task.id}
+                taskTitle={task.title}
+                taskStatus={taskStatus}
+                baseBranch={task.baseBranch ?? "main"}
+                onMergeComplete={handleMergeComplete}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center">
+                <p className="text-sm text-muted-foreground">
+                  {taskStatus === "IN_REVIEW" ? t("taskPage.loadingDiff") : t("taskPage.startExecution")}
+                </p>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Preview tab — Phase 23 placeholder per UI-SPEC */}
+          <TabsContent value="preview" className="flex-1 overflow-auto">
+            <div className="flex h-full flex-col items-center justify-center gap-3">
+              <Eye className="h-8 w-8 text-muted-foreground" />
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground">{t("taskPage.previewPlaceholder")}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{t("taskPage.comingSoonPhase23")}</p>
+              </div>
             </div>
-          )}
-        </div>
-      </div>
-    </div>
+          </TabsContent>
+        </Tabs>
+      </Panel>
+    </PanelGroup>
   );
 }
