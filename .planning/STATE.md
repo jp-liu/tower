@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.6
 milestone_name: 任务开发工作台
-status: verifying
-stopped_at: Completed 19-workbench-entry-layout/19-02-PLAN.md
-last_updated: "2026-03-31T10:16:27.904Z"
+status: executing
+stopped_at: Completed 20-file-tree-browser/20-01-PLAN.md
+last_updated: "2026-03-31T11:12:01.796Z"
 last_activity: 2026-03-31
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 5
+  completed_plans: 3
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-31)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 19 — workbench-entry-layout
+**Current focus:** Phase 20 — file-tree-browser
 
 ## Current Position
 
-Phase: 20
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 20 (file-tree-browser) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
 Last activity: 2026-03-31
 
 Progress: [░░░░░░░░░░] 0%
@@ -68,6 +68,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 19-workbench-entry-layout P01 | 31536248s | 2 tasks | 3 files |
 | Phase 19-workbench-entry-layout P02 | 480 | 1 tasks | 1 files |
+| Phase 20-file-tree-browser P01 | 180 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -136,6 +137,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 19-workbench-entry-layout]: react-resizable-panels v2.x pinned at ^2.1.9 — v4.x API breaks with different component names (ResizablePanel vs Panel)
 - [Phase 19-workbench-entry-layout]: 查看详情 button in task-detail-panel.tsx already correctly wired from Phase 17 — no code change needed in Plan 01
 - [Phase 19-workbench-entry-layout]: TabsList uses @base-ui/react/tabs — active state uses data-active, className overrides apply for visual tab bar styling
+- [Phase 20-file-tree-browser]: normalizedBase strategy: strip trailing sep before check, re-add for prefix comparison — handles trailing-slash base cleanly
+- [Phase 20-file-tree-browser]: it.todo() Wave 0 scaffold pattern: all describe blocks with it.todo stubs so runner exits 0, Plans 02/03 fill them
 
 ### Pending Todos
 
@@ -149,6 +152,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-31T10:12:42.760Z
-Stopped at: Completed 19-workbench-entry-layout/19-02-PLAN.md
+Last session: 2026-03-31T11:12:01.793Z
+Stopped at: Completed 20-file-tree-browser/20-01-PLAN.md
 Resume file: None

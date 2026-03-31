@@ -22,11 +22,11 @@ Requirements for v0.6 — 任务开发工作台. Each maps to roadmap phases.
 
 ### 文件树浏览器
 
-- [ ] **FT-01**: 用户可浏览任务 worktree 的目录结构（展开/折叠文件夹，文件图标）
-- [ ] **FT-02**: 点击文件树中的文件在编辑器中打开
-- [ ] **FT-03**: 文件树自动过滤 gitignore 规则匹配的目录和文件
+- [x] **FT-01**: 用户可浏览任务 worktree 的目录结构（展开/折叠文件夹，文件图标）
+- [x] **FT-02**: 点击文件树中的文件在编辑器中打开
+- [x] **FT-03**: 文件树自动过滤 gitignore 规则匹配的目录和文件
 - [ ] **FT-04**: Claude 执行期间文件树每 2 秒自动刷新
-- [ ] **FT-05**: 用户可通过右键菜单新建文件/文件夹、重命名、删除
+- [x] **FT-05**: 用户可通过右键菜单新建文件/文件夹、重命名、删除
 - [ ] **FT-06**: 文件树节点显示 git 变更状态标记（M/A/D）
 
 ### Diff 查看
@@ -160,11 +160,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | WB-01 | Phase 19 | Complete |
 | WB-02 | Phase 19 | Complete |
-| FT-01 | Phase 20 | Pending |
-| FT-02 | Phase 20 | Pending |
-| FT-03 | Phase 20 | Pending |
+| FT-01 | Phase 20 | Complete |
+| FT-02 | Phase 20 | Complete |
+| FT-03 | Phase 20 | Complete |
 | FT-04 | Phase 20 | Pending |
-| FT-05 | Phase 20 | Pending |
+| FT-05 | Phase 20 | Complete |
 | FT-06 | Phase 20 | Pending |
 | ED-01 | Phase 21 | Pending |
 | ED-02 | Phase 21 | Pending |
