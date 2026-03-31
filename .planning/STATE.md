@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Git Worktree 任务隔离
 status: verifying
-stopped_at: Phase 18 context gathered
-last_updated: "2026-03-31T06:33:04.921Z"
+stopped_at: Completed 18-worktree-lifecycle-01-PLAN.md
+last_updated: "2026-03-31T06:57:06.170Z"
 last_activity: 2026-03-31
 progress:
   total_phases: 8
-  completed_phases: 7
-  total_plans: 16
-  completed_plans: 16
+  completed_phases: 8
+  total_plans: 18
+  completed_plans: 18
   percent: 25
 ---
 
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-31)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 17 — review-merge-workflow
+**Current focus:** Phase 18 — worktree-lifecycle
 
 ## Current Position
 
-Phase: 18
-Plan: Not started
+Phase: 18 (worktree-lifecycle) — EXECUTING
+Plan: 2 of 2 (18-02 COMPLETE)
 Status: Phase complete — ready for verification
 Last activity: 2026-03-31
 
@@ -64,6 +64,8 @@ Progress: [██░░░░░░░░] 25%
 | Phase 17-review-merge-workflow P01 | 217s | 2 tasks | 4 files |
 | Phase 17-review-merge-workflow P02 | 164s | 2 tasks | 4 files |
 | Phase 17-review-merge-workflow P03 | 180s | 2 tasks | 3 files |
+| Phase 18-worktree-lifecycle P02 | 246s | 1 task | 2 files |
+| Phase 18-worktree-lifecycle P01 | 290 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -116,6 +118,10 @@ Progress: [██░░░░░░░░] 25%
 - [Phase 17]: TaskPage serializes Date fields to ISO strings before passing to client component
 - [Phase 17]: SSE status_changed event triggers both local taskStatus state update and router.refresh() for immediate UI + data sync
 - [Phase 17]: workspaceId passed from BoardPageClient into TaskDetailPanel for navigation
+- [Phase 18-02]: Dynamic imports inside instrumentation register() prevent Edge runtime import errors
+- [Phase 18-02]: initDb() called before DB query in instrumentation.ts to ensure WAL/busy_timeout PRAGMAs
+- [Phase 18-02]: src/instrumentation.ts chosen over root-level — consistent with project src/ convention
+- [Phase 18-worktree-lifecycle]: removeWorktree guards git ops with existsSync/branch-list checks; best-effort cleanup never blocks DONE/CANCELLED transitions
 
 ### Pending Todos
 
@@ -128,6 +134,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-31T06:33:04.917Z
-Stopped at: Phase 18 context gathered
-Resume file: .planning/phases/18-worktree-lifecycle/18-CONTEXT.md
+Last session: 2026-03-31T06:57:06.167Z
+Stopped at: Completed 18-worktree-lifecycle-01-PLAN.md
+Resume file: None

@@ -63,7 +63,7 @@ See: [milestones/v0.4-ROADMAP.md](./milestones/v0.4-ROADMAP.md) for full details
 - [x] **Phase 15: Schema & Cleanup** - Add baseBranch to Task, worktreePath/worktreeBranch to TaskExecution, branch listing API, remove branchTemplate config (completed 2026-03-31)
 - [x] **Phase 16: Worktree Execution Engine** - Auto-create worktree + branch on execution start, switch cwd to worktree, task creation branch selector UI (completed 2026-03-31)
 - [x] **Phase 17: Review & Merge Workflow** - Task panel diff view, squash merge operation, conflict detection, and revert-to-IN_PROGRESS flow (completed 2026-03-31)
-- [ ] **Phase 18: Worktree Lifecycle** - Auto-cleanup on DONE/CANCELLED, startup prune of orphaned worktrees
+- [x] **Phase 18: Worktree Lifecycle** - Auto-cleanup on DONE/CANCELLED, startup prune of orphaned worktrees (completed 2026-03-31)
 
 ## Phase Details
 
@@ -187,8 +187,8 @@ Plans:
   3. When the Next.js server starts, `git worktree prune` runs for every GIT-type project that has a local path, clearing any orphaned worktree entries
 **Plans**: 2 plans
 Plans:
-- [ ] 18-01-PLAN.md — removeWorktree function, merge route + updateTaskStatus wiring, unit tests
-- [ ] 18-02-PLAN.md — instrumentation.ts startup prune for orphaned worktrees
+- [x] 18-01-PLAN.md — removeWorktree function, merge route + updateTaskStatus wiring, unit tests
+- [x] 18-02-PLAN.md — instrumentation.ts startup prune for orphaned worktrees
 **UI hint**: no
 
 ## Progress
@@ -212,4 +212,4 @@ Plans:
 | 15. Schema & Cleanup | v0.5 | 2/2 | Complete    | 2026-03-31 |
 | 16. Worktree Execution Engine | v0.5 | 1/2 | Complete    | 2026-03-31 |
 | 17. Review & Merge Workflow | v0.5 | 4/4 | Complete    | 2026-03-31 |
-| 18. Worktree Lifecycle | v0.5 | 0/2 | Not started | - |
+| 18. Worktree Lifecycle | v0.5 | 2/2 | Complete   | 2026-03-31 |
