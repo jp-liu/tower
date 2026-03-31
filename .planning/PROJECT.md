@@ -23,6 +23,8 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 ## Current State
 
+**Phase 16 complete** (2026-03-31): Worktree execution engine — auto-create worktree + branch at execution start, cwd switch to worktree, base branch selector UI in create-task dialog
+
 **Phase 15 complete** (2026-03-31): Schema fields added (baseBranch, worktreePath, worktreeBranch), branch listing API, branchTemplate config removed
 
 **Shipped:** v0.4 系统配置化 (2026-03-30)
@@ -105,11 +107,11 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - ✓ Task.baseBranch + TaskExecution.worktreePath/worktreeBranch schema fields — v0.5 Phase 15
 - ✓ Branch listing API (getProjectBranches server action) — v0.5 Phase 15
 - ✓ 移除 git.branchTemplate 配置项 — v0.5 Phase 15
+- ✓ 创建任务时选择 base branch (UI) — v0.5 Phase 16
+- ✓ 任务执行前自动创建 worktree + task 分支 — v0.5 Phase 16
+- ✓ 执行 cwd 切换到 worktree 目录 — v0.5 Phase 16
 
 ### Active
-- [ ] 创建任务时选择 base branch (UI)
-- [ ] 任务执行前自动创建 worktree + task 分支
-- [ ] 执行 cwd 切换到 worktree 目录
 - [ ] 任务面板 diff 查看 + squash merge 操作
 - [ ] IN_REVIEW → IN_PROGRESS 退回重做流程
 - [ ] Worktree 清理（DONE/CANCELLED）
@@ -186,4 +188,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-31 — Phase 15 complete*
+*Last updated: 2026-03-31 — Phase 16 complete*
