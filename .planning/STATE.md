@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.5
-milestone_name: Git Worktree 任务隔离
-status: verifying
-stopped_at: Completed 18-worktree-lifecycle-01-PLAN.md
-last_updated: "2026-03-31T07:21:28.780Z"
+milestone: v0.6
+milestone_name: 任务开发工作台
+status: defining
+stopped_at: null
+last_updated: "2026-03-31T08:00:00.000Z"
 last_activity: 2026-03-31
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 18
-  completed_plans: 18
-  percent: 25
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-31)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 18 — worktree-lifecycle
+**Current focus:** Defining requirements for v0.6
 
 ## Current Position
 
-Phase: 18
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-03-31
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-31 — Milestone v0.6 started
 
-Progress: [██░░░░░░░░] 25%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 

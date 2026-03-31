@@ -21,31 +21,27 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - Worktree 生命周期管理（DONE/CANCELLED 后自动清理 + 启动时 prune）
 - 移除无用的 git.branchTemplate 配置项
 
+## Current Milestone: v0.6 任务开发工作台
+
+**Goal:** 为每个任务提供专属的全功能开发工作台页面，集成 AI 聊天、代码浏览编辑、diff 查看和实时预览。
+
+**Target features:**
+- 任务抽屉增加"查看详情"入口，跳转到任务专属页面
+- 左侧：AI 聊天上下文窗口（任务消息历史 + 实时对话）
+- 右侧面板 1：项目文件树浏览 + 在线代码编辑器（类似 VSCode / v0 / bolt.new）
+- 右侧面板 2：Diff 查看（代码变更对比）
+- 右侧面板 3：Preview 预览（前端项目可自定义启动命令，实时预览效果）
+
 ## Current State
 
-**Phase 18 complete** (2026-03-31): Worktree lifecycle — auto-cleanup on DONE/CANCELLED (removeWorktree with --force, branch deletion, existence guards), startup prune via instrumentation.ts register() hook for orphaned worktrees
-
-**Phase 17 complete** (2026-03-31): Review & merge workflow — IN_REVIEW auto-transition on execution success, diff API with per-file structured output, squash merge with conflict detection via git merge-tree, send-back flow reusing existing worktree, dedicated task page with diff view + merge dialog, drawer enhancements
-
-**Phase 16 complete** (2026-03-31): Worktree execution engine — auto-create worktree + branch at execution start, cwd switch to worktree, base branch selector UI in create-task dialog
-
-**Phase 15 complete** (2026-03-31): Schema fields added (baseBranch, worktreePath, worktreeBranch), branch listing API, branchTemplate config removed
+**Shipped:** v0.5 Git Worktree 任务隔离 (2026-03-31)
+- Phase 15-18: worktree schema, execution engine, review/merge workflow, lifecycle management
 
 **Shipped:** v0.4 系统配置化 (2026-03-30)
-- SystemConfig key-value 数据模型 + 通用配置读写 API
-- Git 路径映射规则可配置（设置页 CRUD）
-- 系统参数配置 UI（上传限制、并发数、Git 超时、分支模板、搜索参数）
-- 搜索逻辑去重（search.ts 共享模块）+ 竞态条件修复 + 配置实时生效
+- SystemConfig 数据模型 + Git 路径映射 + 系统参数配置 UI + 搜索去重优化
 
 **Shipped:** v0.3 全局搜索增强 (2026-03-30)
-- 六 tab 全局搜索 (All/Task/Project/Repository/Note/Asset)
-- 笔记 FTS5 全文搜索 + 恶意查询自动降级 LIKE
-- 资源搜索 (文件名 + 描述)
-- "All" 模式 Promise.allSettled 跨类型聚合，按类型分组展示
-- 搜索结果 snippet 预览 (笔记内容 80 字 / 资源描述)
-- 资源描述字段 + 上传弹窗必填描述
-- MCP search 工具同步支持 note/asset/all
-- 搜索结果智能跳转 (笔记→笔记页, 资源→资源页)
+- 六 tab 全局搜索 + FTS5 + 资源搜索 + snippet 预览 + MCP 同步
 
 <details>
 <summary>v0.2 项目知识库 & 智能 MCP (shipped 2026-03-30)</summary>
@@ -121,7 +117,11 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 ### Active
 
-No active requirements — v0.5 milestone complete.
+- [ ] 任务抽屉"查看详情"入口 → 任务专属页面路由
+- [ ] 任务页面左侧 AI 聊天窗口（消息历史 + 实时对话）
+- [ ] 任务页面右侧文件树浏览 + 在线代码编辑器
+- [ ] 任务页面右侧 Diff 查看面板
+- [ ] 任务页面右侧 Preview 预览面板（自定义启动命令）
 
 ### Out of Scope
 
@@ -195,4 +195,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-31 — v0.5 milestone shipped*
+*Last updated: 2026-03-31 — v0.6 milestone started*
