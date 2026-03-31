@@ -4,7 +4,7 @@ milestone: v0.5
 milestone_name: Git Worktree 任务隔离
 status: verifying
 stopped_at: Completed 18-worktree-lifecycle-01-PLAN.md
-last_updated: "2026-03-31T07:04:41.345Z"
+last_updated: "2026-03-31T07:21:28.780Z"
 last_activity: 2026-03-31
 progress:
   total_phases: 8

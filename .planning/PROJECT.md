@@ -8,17 +8,17 @@ An AI task management platform with a Kanban board UI for managing workspaces, p
 
 Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base that AI agents can query and update.
 
-## Current Milestone: v0.5 Git Worktree 任务隔离
+## Shipped: v0.5 Git Worktree 任务隔离 (2026-03-31)
 
-**Goal:** 每个任务在独立的 git worktree 中执行，实现并行开发、逐个合并验证、不满意可退回重做。
+**Delivered:** 每个任务在独立的 git worktree 中执行，实现并行开发、逐个合并验证、不满意可退回重做、完成后自动清理。
 
-**Target features:**
+**Key features shipped:**
 - 创建任务时选择 base branch（从项目 git branches 列表）
 - 任务执行前自动创建 worktree + 独立分支 task/{taskId}
 - Claude CLI 在 worktree 目录中执行（同项目并行无冲突）
 - 任务完成后 IN_REVIEW，用户可查看 diff、squash merge 验证
 - 验证不通过退回 IN_PROGRESS，Claude 在同一 worktree 继续修改
-- Worktree 生命周期管理（DONE/CANCELLED 后清理）
+- Worktree 生命周期管理（DONE/CANCELLED 后自动清理 + 启动时 prune）
 - 移除无用的 git.branchTemplate 配置项
 
 ## Current State
@@ -195,4 +195,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-31 — Phase 18 complete, v0.5 milestone complete*
+*Last updated: 2026-03-31 — v0.5 milestone shipped*

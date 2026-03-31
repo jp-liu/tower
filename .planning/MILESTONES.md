@@ -1,5 +1,30 @@
 # Milestones
 
+## v0.5 Git Worktree 任务隔离 (Shipped: 2026-03-31)
+
+**Phases completed:** 8 phases, 18 plans, 19 tasks
+
+**Key accomplishments:**
+
+- Prisma SystemConfig table + typed getConfigValue/setConfigValue/getConfigValues server actions with JSON round-trip, upsert, and CONFIG_DEFAULTS registry
+- Config nav item (SlidersHorizontal icon) and SystemConfig placeholder component with bilingual i18n wired into the settings page
+- GitPathRule type, matchGitPathRule pure function, resolveGitLocalPath server action, and async top-bar integration wiring DB-stored rules into project-creation auto-path logic
+- Inline CRUD table UI for GitPathRule in Settings > Config with bilingual i18n, input validation, persistence via setConfigValue, and a smoke test
+- One-liner:
+- One-liner:
+- Extracted shared search SQL into framework-agnostic src/lib/search.ts with dependency-injected SearchConfig, making both search-actions.ts (24 lines) and search-tools.ts (32 lines) thin wrappers that delegate to it — MCP search now respects user-configured limits
+- 1. [Rule 1 - Bug] Fixed spinner stuck state on empty query clear
+- One-liner:
+- One-liner:
+- One-liner:
+- One-liner:
+- One-liner:
+- One-liner:
+- One-liner:
+- One-liner:
+
+---
+
 ## v0.2 项目知识库 & 智能 MCP (Shipped: 2026-03-30)
 
 **Phases completed:** 4 phases, 7 plans, 10 tasks
