@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Git Worktree 任务隔离
 status: executing
-stopped_at: Phase 17 context gathered
-last_updated: "2026-03-31T05:35:12.150Z"
+stopped_at: Completed 17-00-PLAN.md
+last_updated: "2026-03-31T06:04:43.461Z"
 last_activity: 2026-03-31
 progress:
   total_phases: 8
   completed_phases: 6
-  total_plans: 12
-  completed_plans: 12
+  total_plans: 16
+  completed_plans: 13
   percent: 25
 ---
 
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-31)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 16 — worktree-execution-engine
+**Current focus:** Phase 17 — review-merge-workflow
 
 ## Current Position
 
-Phase: 17
-Plan: Not started
+Phase: 17 (review-merge-workflow) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
 Last activity: 2026-03-31
 
@@ -60,6 +60,7 @@ Progress: [██░░░░░░░░] 25%
 
 *Updated after each plan completion*
 | Phase 16-worktree-execution-engine P01 | 120s | 2 tasks | 3 files |
+| Phase 17-review-merge-workflow P00 | 52s | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -105,6 +106,7 @@ Progress: [██░░░░░░░░] 25%
 - [Phase 15]: getConfigValue import removed from task-detail-panel.tsx entirely — only branchTemplate used it there
 - [Phase phase16]: createWorktree propagates original git error on failure — no wrapping, maintains diagnostic clarity
 - [Phase phase16]: NORMAL projects and GIT without baseBranch: zero behavior change (cwd stays localPath)
+- [Phase 17-review-merge-workflow]: Test stubs use it.todo() for all placeholder cases — runnable by vitest without errors, 16 todo tests total
 
 ### Pending Todos
 
@@ -117,6 +119,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-31T05:35:12.146Z
-Stopped at: Phase 17 context gathered
-Resume file: .planning/phases/17-review-merge-workflow/17-CONTEXT.md
+Last session: 2026-03-31T06:04:43.457Z
+Stopped at: Completed 17-00-PLAN.md
+Resume file: None
