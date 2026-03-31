@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.5
-milestone_name: Git Worktree 任务隔离
-status: roadmapped
-stopped_at: Roadmap created — ready for Phase 15 planning
-last_updated: "2026-03-31T00:00:00.000Z"
-last_activity: 2026-03-31
+milestone: v0.1
+milestone_name: milestone
+status: executing
+stopped_at: Phase 2 plans verified
+last_updated: "2026-03-27T00:59:50.150Z"
+last_activity: 2026-03-27 -- Phase 03 execution started
 progress:
-  total_phases: 4
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 3
+  completed_phases: 2
+  total_plans: 6
+  completed_plans: 4
   percent: 0
 ---
 
@@ -18,17 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-31)
+See: .planning/PROJECT.md (updated 2026-03-26)
 
-**Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** v0.5 — Git Worktree 任务隔离
+**Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration.
+**Current focus:** Phase 03 — agent-prompt-management
 
 ## Current Position
 
-Phase: 15 — Schema & Cleanup (not started)
-Plan: —
-Status: Roadmap complete, ready to plan Phase 15
-Last activity: 2026-03-31 — v0.5 roadmap created (Phases 15-18)
+Phase: 03 (agent-prompt-management) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 03
+Last activity: 2026-03-27 -- Phase 03 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -36,78 +36,45 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 17 (across v0.1-v0.4)
-- Average duration: ~30 min
-- Total execution time: ~8.5 hours
+- Total plans completed: 0
+- Average duration: -
+- Total execution time: 0 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| v0.1 (1-3) | 6 | ~3h | ~30m |
-| v0.2 (4-7) | 7 | ~3.5h | ~30m |
-| v0.3 (8-10) | 4 | ~2h | ~30m |
-| Phase 11 P01 | 4 min | 1 task | 4 files |
-| Phase 11 P02 | 5 min | 2 tasks | 4 files |
-| Phase 12 P01 | 4 | 2 tasks | 5 files |
-| Phase 12 P02 | 4 | 2 tasks | 3 files |
-| Phase 13 P01 | 458s | 2 tasks | 10 files |
-| Phase 13 P02 | 420s | 2 tasks | 4 files |
-| Phase 14 P01 | 15min | 2 tasks | 4 files |
-| Phase 14 P02 | 5m | 2 tasks | 2 files |
+| - | - | - | - |
 
 *Updated after each plan completion*
+| Phase 01 P01 | 3 | 2 tasks | 4 files |
+| Phase 01 P02 | 8 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
 ### Decisions
 
-- [Pre-v0.2]: FTS5 virtual tables must be created via raw SQL AFTER prisma db push
-- [Pre-v0.2]: Both PrismaClient instances need PRAGMA busy_timeout=5000
-- [Pre-v0.2]: MCP tools use action-dispatch pattern to keep tool count ≤30
-- [Pre-v0.2]: file-utils.ts and fts.ts must never import Next.js modules
-- [v0.3]: ProjectAsset.description as nullable String? @default("")
-- [v0.3]: Promise.allSettled for "all" mode parallel queries
-- [v0.3]: FTS5 try/catch with LIKE fallback for malformed queries
-- [v0.3]: Inline raw SQL for global note search (fts.ts stays Next.js-free)
-- [Phase 11]: JSON-serialized config values in SystemConfig.value — uniform storage for string/number/boolean/object
-- [Phase 11]: getConfigValue<T> returns defaultValue on missing row or malformed JSON — never throws to caller
-- [Phase 11]: CONFIG_DEFAULTS registry starts empty in Phase 11 — Phase 12-13 adds entries as parameters are wired
-- [Phase 11]: Follow existing NAV_ITEMS hardcoded English string pattern for Config nav item label/description
-- [Phase 11]: Use SlidersHorizontal lucide icon for Config nav item
-- [Phase 12]: D-13 bridge pattern: resolveGitLocalPath server action wraps DB lookup + matchGitPathRule + gitUrlToLocalPath fallback — keeps git-url.ts free of Next.js/server imports
-- [Phase 12]: matchGitPathRule sorts rules by priority using [...rules].sort() — avoids array mutation, respects immutability constraint
-- [Phase 12]: handleGitUrlChange async migration: sync state updates fire first, only setLocalPath awaits resolveGitLocalPath — no input lag
-- [Phase 12]: Inline table row editing (not Dialog) per D-10 — less modal overhead for tabular rule management
-- [Phase 12]: RuleEditState type + EMPTY_FORM constant for SystemConfig form state management
-- [Phase 13]: config-reader.ts (not config-actions.ts) used in process-manager to avoid use-server boundary issues
-- [Phase 13]: canStartExecution promoted to async — all callers updated with await to prevent silent concurrency bypass
-- [Phase 13]: search-actions uses getConfigValues batch for 3 keys in single DB query; SQL LIMIT parameterized
-- [Phase 13]: getConfigValues batch call on mount loads all 8 config values in single DB query for settings UI
-- [Phase 13]: debounceMs added to search useEffect dependency array to prevent stale closure capturing initial 250ms value
-- [Phase 14]: search.ts framework-agnostic with SearchConfig dependency injection — safe for both Next.js and MCP stdio contexts
-- [Phase 14]: 'all' branch in search.ts uses local recursive search() calls to avoid re-fetching config 5x
-- [Phase 14]: search-tools.ts uses Promise.all for 3 parallel config reads via readConfigValue — no sequential await overhead
-- [Phase 14]: Merged debounceMs config fetch into open effect so it reloads on each dialog open (CFG-02)
-- [Phase 14]: cancelled flag at useEffect body level (outside setTimeout) prevents stale search results from overwriting newer results (SRCH-07)
-- [v0.5]: Worktree stored at {localPath}/.worktrees/task-{taskId}/ — co-located with project, no separate config needed
-- [v0.5]: Branch name is task/{taskId} — fixed format, no template interpolation required
-- [v0.5]: Squash merge only (never revert on main) — squash keeps main history clean
-- [v0.5]: Verification before merge — IN_REVIEW gate prevents merging unsatisfied work
-- [v0.5]: adapter.execute() changes only cwd — ExecutionResult interface unchanged, minimal adapter impact
-- [v0.5]: baseBranch on Task (not TaskExecution) — branch choice is per-task, not per-execution-run
+- [Pre-Phase 1]: Fix `@custom-variant dark (&:is(.dark *))` → `(&:where(.dark, .dark *))` in globals.css FIRST — prerequisite for all theme work
+- [Pre-Phase 1]: Use `next-themes ^0.4.6` (not manual useEffect) to avoid FOUC in App Router
+- [Pre-Phase 2]: CLI test must be user-initiated only — never triggered on page mount (45s blocking)
+- [Pre-Phase 3]: `isDefault` enforcement requires `db.$transaction()` to clear other defaults first
+- [Phase 01]: Fixed @custom-variant dark to use :where(.dark, .dark *) — matches both html.dark element and all descendants
+- [Phase 01]: Light theme :root uses inverted oklch lightness (1.0 - dark_value); dark theme moved to .dark block unchanged
+- [Phase 01]: ThemeProvider placed outermost in layout with attribute=class, defaultTheme=system, enableSystem for GNRL-03
+- [Phase Phase 01 P02]: Mounted guard on theme segmented control only — locale comes from React state (no hydration issue)
+- [Phase Phase 01 P02]: Segmented control uses bg-muted track / bg-background active tab — works in both light and dark modes
 
 ### Pending Todos
 
-None.
+None yet.
 
 ### Blockers/Concerns
 
-- Phase 16 worktree creation requires project to have a non-null `localPath` — branch selector and worktree ops should gracefully handle NORMAL-type projects (no git) with a clear no-op or disabled state.
-- Phase 17 diff view: decide between calling `git diff` via child_process vs using a diff library. Keep it simple — shell out to git.
+- **Light theme CSS variables**: Codebase has only one theme (Midnight Studio dark). Light theme needs a separate CSS variable block or toggle will show unstyled white. Product decision needed before Phase 1 ships.
+- **Visual regression**: After `@custom-variant` fix, verify existing Kanban dark styles still render correctly.
 
 ## Session Continuity
 
-Last session: 2026-03-31
-Stopped at: v0.5 roadmap created — Phases 15-18 defined
-Resume file: None
+Last session: 2026-03-26T09:39:15.502Z
+Stopped at: Phase 2 plans verified
+Resume file: .planning/phases/02-cli-adapter-verification/02-01-PLAN.md
