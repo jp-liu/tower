@@ -60,7 +60,7 @@ See: [milestones/v0.4-ROADMAP.md](./milestones/v0.4-ROADMAP.md) for full details
 
 **Milestone Goal:** 每个任务在独立的 git worktree 中执行，实现并行开发、逐个合并验证、不满意可退回重做。
 
-- [ ] **Phase 15: Schema & Cleanup** - Add baseBranch to Task, worktreePath/worktreeBranch to TaskExecution, branch listing API, remove branchTemplate config
+- [x] **Phase 15: Schema & Cleanup** - Add baseBranch to Task, worktreePath/worktreeBranch to TaskExecution, branch listing API, remove branchTemplate config (completed 2026-03-31)
 - [ ] **Phase 16: Worktree Execution Engine** - Auto-create worktree + branch on execution start, switch cwd to worktree, task creation branch selector UI
 - [ ] **Phase 17: Review & Merge Workflow** - Task panel diff view, squash merge operation, conflict detection, and revert-to-IN_PROGRESS flow
 - [ ] **Phase 18: Worktree Lifecycle** - Auto-cleanup on DONE/CANCELLED, startup prune of orphaned worktrees
@@ -152,8 +152,12 @@ Plans:
   3. The TaskExecution record stores the worktree path and branch after creation
   4. Claude CLI receives the worktree directory as its working directory (cwd), not the project root
   5. Two tasks in the same project can be executing simultaneously, each working in their own worktree without file conflicts
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 16-01-PLAN.md — Worktree utility module and stream route integration
+- [ ] 16-02-PLAN.md — Branch selector UI in create-task dialog
 **UI hint**: yes
+
 
 ### Phase 17: Review & Merge Workflow
 **Goal**: After a task execution completes, users can inspect the diff, squash merge to the base branch when satisfied, or send the task back for more work
@@ -197,7 +201,7 @@ Plans:
 | 12. Git Path Mapping Rules | v0.4 | 2/2 | Complete | 2026-03-30 |
 | 13. Configurable System Parameters | v0.4 | 2/2 | Complete | 2026-03-30 |
 | 14. Search Quality & Realtime Config | v0.4 | 2/2 | Complete | 2026-03-30 |
-| 15. Schema & Cleanup | v0.5 | 2/2 | In Progress |  |
-| 16. Worktree Execution Engine | v0.5 | 0/TBD | Not started | - |
+| 15. Schema & Cleanup | v0.5 | 2/2 | Complete    | 2026-03-31 |
+| 16. Worktree Execution Engine | v0.5 | 0/2 | Planned | - |
 | 17. Review & Merge Workflow | v0.5 | 0/TBD | Not started | - |
 | 18. Worktree Lifecycle | v0.5 | 0/TBD | Not started | - |
