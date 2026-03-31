@@ -5,7 +5,8 @@
 - ✅ **v0.1 Settings** — Phases 1-3 (shipped 2026-03-27)
 - ✅ **v0.2 项目知识库 & 智能 MCP** — Phases 4-7 (shipped 2026-03-30)
 - ✅ **v0.3 全局搜索增强** — Phases 8-10 (shipped 2026-03-30)
-- 🚧 **v0.4 系统配置化** — Phases 11-14 (in progress)
+- ✅ **v0.4 系统配置化** — Phases 11-14 (shipped 2026-03-30)
+- 🚧 **v0.5 Git Worktree 任务隔离** — Phases 15-18 (in progress)
 
 ## Phases
 
@@ -43,14 +44,26 @@ See: [milestones/v0.3-ROADMAP.md](./milestones/v0.3-ROADMAP.md) for full details
 
 </details>
 
-### v0.4 系统配置化 (In Progress)
-
-**Milestone Goal:** 将系统中的硬编码值提取为用户可配置项，通过设置页 UI 和数据库存储实现个性化配置。
+<details>
+<summary>✅ v0.4 系统配置化 (Phases 11-14) — SHIPPED 2026-03-30</summary>
 
 - [x] **Phase 11: SystemConfig Foundation** - SystemConfig model, key-value read/write API, and settings page infrastructure (completed 2026-03-30)
 - [x] **Phase 12: Git Path Mapping Rules** - Settings UI for adding/editing/deleting host+owner→localPath rules and auto-match on project creation (completed 2026-03-30)
 - [x] **Phase 13: Configurable System Parameters** - Wire upload limit, concurrency cap, git timeout, branch template, and search parameters to SystemConfig (completed 2026-03-30)
 - [x] **Phase 14: Search Quality & Realtime Config** - Extract shared search logic, fix race condition, verify realtime config takes effect without restart (completed 2026-03-30)
+
+See: [milestones/v0.4-ROADMAP.md](./milestones/v0.4-ROADMAP.md) for full details.
+
+</details>
+
+### v0.5 Git Worktree 任务隔离 (In Progress)
+
+**Milestone Goal:** 每个任务在独立的 git worktree 中执行，实现并行开发、逐个合并验证、不满意可退回重做。
+
+- [ ] **Phase 15: Schema & Cleanup** - Add baseBranch to Task, worktreePath/worktreeBranch to TaskExecution, branch listing API, remove branchTemplate config
+- [ ] **Phase 16: Worktree Execution Engine** - Auto-create worktree + branch on execution start, switch cwd to worktree, task creation branch selector UI
+- [ ] **Phase 17: Review & Merge Workflow** - Task panel diff view, squash merge operation, conflict detection, and revert-to-IN_PROGRESS flow
+- [ ] **Phase 18: Worktree Lifecycle** - Auto-cleanup on DONE/CANCELLED, startup prune of orphaned worktrees
 
 ## Phase Details
 
@@ -111,7 +124,56 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 14-01-PLAN.md — Extract shared search.ts module, refactor search-actions and search-tools to thin wrappers, unit tests
-- [ ] 14-02-PLAN.md — Fix search dialog race condition with cancelled flag, move config fetch to open effect, test cases
+- [x] 14-02-PLAN.md — Fix search dialog race condition with cancelled flag, move config fetch to open effect, test cases
+**UI hint**: no
+
+### Phase 15: Schema & Cleanup
+**Goal**: The database schema reflects worktree fields, a branch listing API exists for git projects, and the dead branchTemplate config is removed from the codebase
+**Depends on**: Phase 14
+**Requirements**: BR-02, WT-03, CL-01
+**Success Criteria** (what must be TRUE):
+  1. Task records have a `baseBranch` field (nullable string) that is persisted and readable via server actions
+  2. TaskExecution records have `worktreePath` and `worktreeBranch` fields (both nullable strings) persisted in the database
+  3. A server action or API route returns the list of local git branches for a project given its `localPath`
+  4. The branchTemplate field is gone from settings UI, SystemConfig defaults, and all call sites — no reference remains
+**Plans**: TBD
+**UI hint**: no
+
+### Phase 16: Worktree Execution Engine
+**Goal**: When a task starts executing, a dedicated worktree and branch are automatically created, the Claude CLI runs inside that worktree, and multiple tasks in the same project can execute concurrently without conflict
+**Depends on**: Phase 15
+**Requirements**: BR-01, WT-01, WT-02, WT-04
+**Success Criteria** (what must be TRUE):
+  1. Creating a task on a GIT-type project shows a base branch selector populated from the project's local git branches
+  2. Starting execution on a task automatically creates `{localPath}/.worktrees/task-{taskId}/` with a new branch `task/{taskId}` based on the selected base branch
+  3. The TaskExecution record stores the worktree path and branch after creation
+  4. Claude CLI receives the worktree directory as its working directory (cwd), not the project root
+  5. Two tasks in the same project can be executing simultaneously, each working in their own worktree without file conflicts
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 17: Review & Merge Workflow
+**Goal**: After a task execution completes, users can inspect the diff, squash merge to the base branch when satisfied, or send the task back for more work
+**Depends on**: Phase 16
+**Requirements**: MR-01, MR-02, MR-03, RV-01, RV-02
+**Success Criteria** (what must be TRUE):
+  1. A completed task transitions to IN_REVIEW status and the task panel shows a diff of changes in the worktree branch vs the base branch
+  2. User can trigger a squash merge from the task panel; the worktree branch is squash-merged into the base branch and the task moves to DONE
+  3. Before merging, the system checks for conflicts and shows a warning if any exist — merge is blocked until resolved
+  4. User can click "Send Back" on an IN_REVIEW task; the task returns to IN_PROGRESS with a new TaskExecution record pointing to the same worktree and branch
+  5. After send-back, a subsequent execution resumes in the same `task/{taskId}` worktree without re-creating it
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 18: Worktree Lifecycle
+**Goal**: Worktrees are automatically cleaned up when tasks are closed out, and stale worktrees from previous sessions are pruned at app startup
+**Depends on**: Phase 17
+**Requirements**: LC-01, LC-02
+**Success Criteria** (what must be TRUE):
+  1. Moving a task to DONE or CANCELLED automatically removes its worktree directory and deletes the `task/{taskId}` branch
+  2. If a task is cancelled before a worktree was created, the cleanup step is a no-op (no error thrown)
+  3. When the Next.js server starts, `git worktree prune` runs for every GIT-type project that has a local path, clearing any orphaned worktree entries
+**Plans**: TBD
 **UI hint**: no
 
 ## Progress
@@ -128,7 +190,11 @@ Plans:
 | 8. Asset Description Schema | v0.3 | 1/1 | Complete | 2026-03-30 |
 | 9. Search Actions Expansion | v0.3 | 1/1 | Complete | 2026-03-30 |
 | 10. Search UI Extension | v0.3 | 2/2 | Complete | 2026-03-30 |
-| 11. SystemConfig Foundation | v0.4 | 2/2 | Complete    | 2026-03-30 |
-| 12. Git Path Mapping Rules | v0.4 | 2/2 | Complete    | 2026-03-30 |
-| 13. Configurable System Parameters | v0.4 | 2/2 | Complete    | 2026-03-30 |
-| 14. Search Quality & Realtime Config | v0.4 | 2/2 | Complete    | 2026-03-30 |
+| 11. SystemConfig Foundation | v0.4 | 2/2 | Complete | 2026-03-30 |
+| 12. Git Path Mapping Rules | v0.4 | 2/2 | Complete | 2026-03-30 |
+| 13. Configurable System Parameters | v0.4 | 2/2 | Complete | 2026-03-30 |
+| 14. Search Quality & Realtime Config | v0.4 | 2/2 | Complete | 2026-03-30 |
+| 15. Schema & Cleanup | v0.5 | 0/TBD | Not started | - |
+| 16. Worktree Execution Engine | v0.5 | 0/TBD | Not started | - |
+| 17. Review & Merge Workflow | v0.5 | 0/TBD | Not started | - |
+| 18. Worktree Lifecycle | v0.5 | 0/TBD | Not started | - |

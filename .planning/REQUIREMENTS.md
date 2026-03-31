@@ -109,11 +109,25 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SRCH-05 | Phase 13 | Complete |
 | SRCH-06 | Phase 14 | Complete |
 | SRCH-07 | Phase 14 | Complete |
+| BR-02 | Phase 15 | Pending |
+| WT-03 | Phase 15 | Pending |
+| CL-01 | Phase 15 | Pending |
+| BR-01 | Phase 16 | Pending |
+| WT-01 | Phase 16 | Pending |
+| WT-02 | Phase 16 | Pending |
+| WT-04 | Phase 16 | Pending |
+| MR-01 | Phase 17 | Pending |
+| MR-02 | Phase 17 | Pending |
+| MR-03 | Phase 17 | Pending |
+| RV-01 | Phase 17 | Pending |
+| RV-02 | Phase 17 | Pending |
+| LC-01 | Phase 18 | Pending |
+| LC-02 | Phase 18 | Pending |
 
 **v0.5 Coverage:**
 - v0.5 requirements: 14 total
-- Mapped to phases: TBD
-- Unmapped: 14
+- Mapped to phases: 14
+- Unmapped: 0
 
 ---
-*Requirements updated: 2026-03-31 — v0.5 added*
+*Requirements updated: 2026-03-31 — v0.5 phase mappings added (Phases 15-18)*
