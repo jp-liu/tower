@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Git Worktree 任务隔离
 status: executing
-stopped_at: Completed 17-review-merge-workflow/17-01-PLAN.md
-last_updated: "2026-03-31T06:07:54.906Z"
+stopped_at: Completed 17-review-merge-workflow/17-02-PLAN.md
+last_updated: "2026-03-31T06:13:38.687Z"
 last_activity: 2026-03-31
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 16
-  completed_plans: 14
+  completed_plans: 15
   percent: 25
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-03-31)
 ## Current Position
 
 Phase: 17 (review-merge-workflow) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-03-31
 
@@ -62,6 +62,7 @@ Progress: [██░░░░░░░░] 25%
 | Phase 16-worktree-execution-engine P01 | 120s | 2 tasks | 3 files |
 | Phase 17-review-merge-workflow P00 | 52s | 1 tasks | 4 files |
 | Phase 17-review-merge-workflow P01 | 217s | 2 tasks | 4 files |
+| Phase 17-review-merge-workflow P02 | 164s | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -111,6 +112,8 @@ Progress: [██░░░░░░░░] 25%
 - [Phase 17]: git merge-tree --write-tree used for conflict pre-check (dry-run, no index modification)
 - [Phase 17]: status_changed SSE event emitted on exitCode 0 so client can refresh without polling
 - [Phase 17]: send-back IN_REVIEW to IN_PROGRESS transition before TaskExecution creation in stream POST
+- [Phase 17]: TaskPage serializes Date fields to ISO strings before passing to client component
+- [Phase 17]: SSE status_changed event triggers both local taskStatus state update and router.refresh() for immediate UI + data sync
 
 ### Pending Todos
 
@@ -123,6 +126,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-31T06:07:54.903Z
-Stopped at: Completed 17-review-merge-workflow/17-01-PLAN.md
+Last session: 2026-03-31T06:13:33.734Z
+Stopped at: Completed 17-review-merge-workflow/17-02-PLAN.md
 Resume file: None
