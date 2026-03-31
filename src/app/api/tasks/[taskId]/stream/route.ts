@@ -142,6 +142,14 @@ async function persistResult(
     },
   });
 
+  // Auto-transition to IN_REVIEW on successful execution (per D-15, D-16)
+  if (result.exitCode === 0) {
+    await db.task.update({
+      where: { id: taskId },
+      data: { status: "IN_REVIEW" },
+    });
+  }
+
   const summaryContent = result.summary || assistantContent;
   if (summaryContent) {
     await db.taskMessage.create({
@@ -168,6 +176,14 @@ export async function POST(
       return validated;
     }
     const { prompt, agent, model, task } = validated;
+
+    // Send-back: if task is IN_REVIEW, transition to IN_PROGRESS (per D-12, D-13, D-14)
+    if (task.status === "IN_REVIEW") {
+      await db.task.update({
+        where: { id: taskId },
+        data: { status: "IN_PROGRESS" },
+      });
+    }
 
     // Find last session for resume
     const lastCompleted = await db.taskExecution.findFirst({
@@ -325,6 +341,11 @@ export async function POST(
           });
 
           await persistResult(execution.id, taskId, result, assistantContent);
+
+          // Emit status_changed SSE event for client refresh (per research Pitfall 3)
+          if (result.exitCode === 0) {
+            sendEvent({ type: "status_changed", status: "IN_REVIEW" });
+          }
 
           if (result.errorMessage) {
             sendEvent({ type: "error", content: result.errorMessage });
