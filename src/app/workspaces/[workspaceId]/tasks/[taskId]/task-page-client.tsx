@@ -289,10 +289,10 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[taskStatus] ?? "bg-muted text-muted-foreground"}`}>
               {STATUS_LABELS[taskStatus] ?? taskStatus}
             </span>
-            {task.baseBranch && (
+            {(task.baseBranch || latestExecution?.worktreeBranch) && (
               <Badge variant="secondary" className="gap-1 border border-border bg-muted font-mono text-[10px] text-muted-foreground">
                 <GitBranch className="h-2.5 w-2.5" />
-                {task.baseBranch}
+                {task.baseBranch ?? latestExecution?.worktreeBranch}
               </Badge>
             )}
           </div>
@@ -320,16 +320,16 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           {/* Tab bar — segmented control style matching Settings page */}
           <div className="flex shrink-0 items-center border-b border-border px-3 py-2">
             <TabsList className="h-auto border border-border">
-              <TabsTrigger value="files">
+              <TabsTrigger value="files" className="data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
                 <FolderTree className="h-3.5 w-3.5" />
                 {t("taskPage.tabFiles")}
               </TabsTrigger>
-              <TabsTrigger value="changes">
+              <TabsTrigger value="changes" className="data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
                 <GitCompare className="h-3.5 w-3.5" />
                 {t("taskPage.changes")}
               </TabsTrigger>
               {task.project?.projectType !== "BACKEND" && (
-                <TabsTrigger value="preview">
+                <TabsTrigger value="preview" className="data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
                   <Eye className="h-3.5 w-3.5" />
                   {t("taskPage.tabPreview")}
                 </TabsTrigger>
