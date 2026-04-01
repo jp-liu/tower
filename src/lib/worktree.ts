@@ -2,6 +2,14 @@ import { execFileSync } from "child_process";
 import { existsSync } from "fs";
 import { mkdir } from "fs/promises";
 import path from "path";
+import os from "os";
+
+function expandHome(p: string): string {
+  if (p.startsWith("~/") || p === "~") {
+    return path.join(os.homedir(), p.slice(1));
+  }
+  return p;
+}
 
 export interface WorktreeResult {
   worktreePath: string;
@@ -18,10 +26,11 @@ export interface WorktreeResult {
  * @throws If git worktree add fails with a non-recoverable error
  */
 export async function createWorktree(
-  localPath: string,
+  localPathRaw: string,
   taskId: string,
   baseBranch: string
 ): Promise<WorktreeResult> {
+  const localPath = expandHome(localPathRaw);
   const worktreePath = path.join(localPath, ".worktrees", "task-" + taskId);
   const worktreeBranch = "task/" + taskId;
 
@@ -88,9 +97,10 @@ export async function createWorktree(
  * @param taskId    - The task ID (used to derive worktree path and branch name)
  */
 export async function removeWorktree(
-  localPath: string,
+  localPathRaw: string,
   taskId: string
 ): Promise<void> {
+  const localPath = expandHome(localPathRaw);
   const worktreePath = path.join(localPath, ".worktrees", "task-" + taskId);
   const worktreeBranch = "task/" + taskId;
 
