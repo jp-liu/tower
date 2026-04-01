@@ -34,8 +34,11 @@ export function LayoutClient({ workspaces, children }: LayoutClientProps) {
 
   if (isTaskDetailPage) {
     return (
-      <div className="h-screen overflow-hidden bg-background">
-        {children}
+      <div className="flex h-screen flex-col overflow-hidden">
+        <TopBar onCreateProject={handleCreateProject} />
+        <main className="flex-1 overflow-hidden bg-background">
+          {children}
+        </main>
       </div>
     );
   }

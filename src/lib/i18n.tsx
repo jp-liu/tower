@@ -332,6 +332,7 @@ const translations = {
     "assets.descriptionPlaceholder": "输入资源描述（可搜索）",
     // Task page (Phase 17)
     "taskPage.title": "任务详情",
+    "taskPage.back": "返回",
     "taskPage.backToBoard": "返回看板",
     "taskPage.conversation": "对话",
     "taskPage.changes": "变更",
@@ -722,6 +723,7 @@ const translations = {
     "assets.descriptionPlaceholder": "Enter asset description (searchable)",
     // Task page (Phase 17)
     "taskPage.title": "Task Details",
+    "taskPage.back": "Back",
     "taskPage.backToBoard": "Back to Board",
     "taskPage.conversation": "Conversation",
     "taskPage.changes": "Changes",

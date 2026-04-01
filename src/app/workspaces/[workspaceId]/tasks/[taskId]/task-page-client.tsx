@@ -261,26 +261,29 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     <PanelGroup direction="horizontal" className="h-screen bg-background">
       {/* Left panel: Chat — 35% default, 20% minimum per D-02 and D-03 */}
       <Panel defaultSize={35} minSize={20} className="flex flex-col border-r border-border bg-sidebar">
-        {/* Header: breadcrumb + task title + status + branch */}
+        {/* Header: back button + breadcrumb + task title + status + branch */}
         <div className="border-b border-border px-4 py-3">
-          {/* Breadcrumb: workspace > project */}
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {/* Back button + breadcrumb */}
+          <div className="flex items-center gap-2">
             <Link
               href={`/workspaces/${workspaceId}`}
-              className="flex items-center gap-1 transition-colors hover:text-foreground"
+              className="flex items-center justify-center rounded-md border border-border bg-muted px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
-              <ArrowLeft className="h-3 w-3" />
-              {workspaceName}
+              <ArrowLeft className="mr-1 h-4 w-4" />
+              {t("taskPage.back")}
             </Link>
-            {task.project && (
-              <>
-                <span>/</span>
-                <span className="truncate">{task.project.name}</span>
-              </>
-            )}
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <span className="truncate font-medium">{workspaceName}</span>
+              {task.project && (
+                <>
+                  <span>/</span>
+                  <span className="truncate font-medium">{task.project.name}</span>
+                </>
+              )}
+            </div>
           </div>
           {/* Task title + badges */}
-          <h1 className="mt-1.5 truncate text-sm font-semibold text-foreground">{task.title}</h1>
+          <h1 className="mt-2 truncate text-sm font-semibold text-foreground">{task.title}</h1>
           <div className="mt-1 flex items-center gap-2">
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[taskStatus] ?? "bg-muted text-muted-foreground"}`}>
               {STATUS_LABELS[taskStatus] ?? taskStatus}
@@ -312,29 +315,20 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
 
       {/* Right panel: Tabs — 65% default, 20% minimum per D-02 and D-03 */}
       <Panel defaultSize={65} minSize={20} className="flex flex-col">
-        <Tabs defaultValue="files" className="flex h-full flex-col">
-          {/* Tab bar per D-04, D-05 */}
-          <div className="flex items-center border-b border-border px-3 py-2">
-            <TabsList className="inline-flex rounded-md border border-border bg-muted p-1 gap-1">
-              <TabsTrigger
-                value="files"
-                className="flex items-center gap-1.5 rounded px-3 py-1 text-sm transition-colors text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-              >
+        <Tabs defaultValue="files" className="flex h-full flex-col gap-0">
+          {/* Tab bar — segmented control style matching Settings page */}
+          <div className="flex shrink-0 items-center border-b border-border px-3 py-2">
+            <TabsList className="h-auto">
+              <TabsTrigger value="files">
                 <FolderTree className="h-3.5 w-3.5" />
                 {t("taskPage.tabFiles")}
               </TabsTrigger>
-              <TabsTrigger
-                value="changes"
-                className="flex items-center gap-1.5 rounded px-3 py-1 text-sm transition-colors text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-              >
+              <TabsTrigger value="changes">
                 <GitCompare className="h-3.5 w-3.5" />
                 {t("taskPage.changes")}
               </TabsTrigger>
               {task.project?.projectType !== "BACKEND" && (
-                <TabsTrigger
-                  value="preview"
-                  className="flex items-center gap-1.5 rounded px-3 py-1 text-sm transition-colors text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-                >
+                <TabsTrigger value="preview">
                   <Eye className="h-3.5 w-3.5" />
                   {t("taskPage.tabPreview")}
                 </TabsTrigger>
@@ -343,7 +337,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           </div>
 
           {/* Files tab — Phase 21: FileTree + CodeEditor split layout */}
-          <TabsContent value="files" className="flex-1 overflow-hidden">
+          <TabsContent value="files" className="flex-1 min-h-0 overflow-hidden">
             <div className="flex h-full flex-row overflow-hidden">
               {/* Left: file tree, fixed 240px */}
               <div className="w-60 flex-none border-r border-border overflow-hidden">
@@ -376,7 +370,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           </TabsContent>
 
           {/* Changes tab — functional, uses existing TaskDiffView */}
-          <TabsContent value="changes" className="flex-1 overflow-auto">
+          <TabsContent value="changes" className="flex-1 min-h-0 overflow-auto">
             {isLoadingDiff ? (
               <div className="flex h-full items-center justify-center">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -405,7 +399,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           </TabsContent>
 
           {/* Preview tab — Phase 23: functional PreviewPanel */}
-          <TabsContent value="preview" className="flex-1 overflow-hidden">
+          <TabsContent value="preview" className="flex-1 min-h-0 overflow-hidden">
             <PreviewPanel
               taskId={task.id}
               worktreePath={latestExecution?.worktreePath ?? null}
