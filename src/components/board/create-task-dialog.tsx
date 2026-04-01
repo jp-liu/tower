@@ -58,7 +58,7 @@ export function CreateTaskDialog({
   editTask,
   editTaskLabelIds,
   labels,
-  projectType,
+  projectType: _projectType,
   projectLocalPath,
 }: CreateTaskDialogProps) {
   const [title, setTitle] = useState("");
@@ -74,7 +74,7 @@ export function CreateTaskDialog({
   const { t } = useI18n();
 
   const isEditing = !!editTask;
-  const isGitProject = projectType === "GIT" && !!projectLocalPath;
+  const isGitProject = !!projectLocalPath;
 
   // Pre-fill when editing
   useEffect(() => {
