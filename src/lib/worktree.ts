@@ -56,6 +56,18 @@ export async function createWorktree(
       { cwd: localPath, encoding: "utf-8", timeout: 30000 }
     );
   } else {
+    // Validate baseBranch exists before creating worktree
+    const baseBranchCheck = execFileSync(
+      "git", ["rev-parse", "--verify", baseBranch],
+      { cwd: localPath, encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
+    ).trim();
+    if (!baseBranchCheck) {
+      throw new Error(
+        `Base branch '${baseBranch}' does not exist. Available branches: ` +
+        execFileSync("git", ["branch", "--format=%(refname:short)"], { cwd: localPath, encoding: "utf-8", timeout: 5000 }).trim().split("\n").join(", ")
+      );
+    }
+
     // Branch does not exist: create new branch from baseBranch
     execFileSync(
       "git", ["worktree", "add", "-b", worktreeBranch, worktreePath, baseBranch],

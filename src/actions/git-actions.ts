@@ -19,7 +19,19 @@ export async function getProjectBranches(localPath: string): Promise<string[]> {
       "git branch --format='%(refname:short)'",
       { cwd: resolved, encoding: "utf-8", timeout: 5000 }
     ).trim();
-    return raw.split("\n").filter(Boolean).map((b) => b.replace(/'/g, ""));
+    const locals = raw.split("\n").filter(Boolean).map((b) => b.replace(/'/g, ""));
+    if (locals.length > 0) return locals;
+
+    // Fallback: if no local branches, try remote tracking branches
+    const remoteRaw = execSync(
+      "git branch -r --format='%(refname:short)'",
+      { cwd: resolved, encoding: "utf-8", timeout: 5000 }
+    ).trim();
+    return remoteRaw
+      .split("\n")
+      .filter(Boolean)
+      .map((b) => b.replace(/'/g, "").replace(/^origin\//, ""))
+      .filter((b) => b !== "HEAD");
   } catch {
     return [];
   }
