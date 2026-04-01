@@ -126,9 +126,9 @@ Plans:
   5. The editor color scheme switches automatically when the user toggles between dark and light mode in ai-manager
 **Plans**: 3 plans
 Plans:
-- [x] 20-01-PLAN.md — Install ignore dep, safeResolvePath utility, test scaffolds (FT-01, FT-02, FT-03, FT-05)
-- [x] 20-02-PLAN.md — File CRUD server actions + getGitStatus (FT-01, FT-03, FT-05, FT-06)
-- [ ] 20-03-PLAN.md — FileTree/FileTreeNode/FileTreeContextMenu components + task page integration (FT-01-06)
+- [ ] 21-01-PLAN.md — Install Monaco packages, readFileContent/writeFileContent server actions, editor i18n keys (ED-01, ED-02)
+- [ ] 21-02-PLAN.md — EditorTabs component + CodeEditor (Monaco, multi-tab, dirty dot, Ctrl+S, theme sync) (ED-01-05)
+- [ ] 21-03-PLAN.md — Wire CodeEditor into task-page-client.tsx Files tab split layout (ED-01-05)
 **UI hint**: yes
 
 ### Phase 22: Diff View Integration
