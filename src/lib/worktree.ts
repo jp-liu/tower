@@ -65,21 +65,26 @@ export async function createWorktree(
       { cwd: localPath, encoding: "utf-8", timeout: 30000 }
     );
   } else {
-    // Validate baseBranch exists before creating worktree
-    const baseBranchCheck = execFileSync(
-      "git", ["rev-parse", "--verify", baseBranch],
-      { cwd: localPath, encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
-    ).trim();
-    if (!baseBranchCheck) {
-      throw new Error(
-        `Base branch '${baseBranch}' does not exist. Available branches: ` +
-        execFileSync("git", ["branch", "--format=%(refname:short)"], { cwd: localPath, encoding: "utf-8", timeout: 5000 }).trim().split("\n").join(", ")
-      );
+    // Resolve baseBranch — try local first, then remote (origin/xxx)
+    let resolvedBase = baseBranch;
+    try {
+      execFileSync("git", ["rev-parse", "--verify", baseBranch], { cwd: localPath, encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] });
+    } catch {
+      // Local branch doesn't exist — try as remote tracking branch
+      try {
+        execFileSync("git", ["rev-parse", "--verify", `origin/${baseBranch}`], { cwd: localPath, encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] });
+        resolvedBase = `origin/${baseBranch}`;
+      } catch {
+        throw new Error(
+          `Base branch '${baseBranch}' does not exist locally or on remote. Available branches: ` +
+          execFileSync("git", ["branch", "-a", "--format=%(refname:short)"], { cwd: localPath, encoding: "utf-8", timeout: 5000 }).trim().split("\n").join(", ")
+        );
+      }
     }
 
-    // Branch does not exist: create new branch from baseBranch
+    // Branch does not exist: create new branch from resolved base
     execFileSync(
-      "git", ["worktree", "add", "-b", worktreeBranch, worktreePath, baseBranch],
+      "git", ["worktree", "add", "-b", worktreeBranch, worktreePath, resolvedBase],
       { cwd: localPath, encoding: "utf-8", timeout: 30000 }
     );
   }

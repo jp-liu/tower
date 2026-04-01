@@ -15,6 +15,13 @@ export async function getProjectBranches(localPath: string): Promise<string[]> {
   if (!localPath?.trim()) return [];
   const resolved = path.resolve(expandHome(localPath));
   try {
+    // Fetch latest remote refs (best-effort, don't block on failure)
+    try {
+      execSync("git fetch --prune", { cwd: resolved, encoding: "utf-8", timeout: 15000, stdio: "ignore" });
+    } catch {
+      // Fetch failed (offline, no remote, etc.) — continue with cached refs
+    }
+
     // Local branches
     const localRaw = execSync(
       "git branch --format='%(refname:short)'",
