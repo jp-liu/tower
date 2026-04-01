@@ -159,9 +159,9 @@ Plans:
   6. After saving a file with Ctrl+S, the preview iframe automatically refreshes to reflect the change
 **Plans**: 3 plans
 Plans:
-- [ ] 20-01-PLAN.md — Install ignore dep, safeResolvePath utility, test scaffolds (FT-01, FT-02, FT-03, FT-05)
-- [ ] 20-02-PLAN.md — File CRUD server actions + getGitStatus (FT-01, FT-03, FT-05, FT-06)
-- [ ] 20-03-PLAN.md — FileTree/FileTreeNode/FileTreeContextMenu components + task page integration (FT-01-06)
+- [ ] 23-01-PLAN.md — Schema migration (projectType/previewCommand), preview process manager, server actions, config defaults, i18n (PV-01, PV-03, PV-04, PV-05)
+- [ ] 23-02-PLAN.md — PreviewPanel component, project type selector in TopBar dialog, Settings terminal input (PV-01, PV-02, PV-03, PV-04, PV-05)
+- [ ] 23-03-PLAN.md — CodeEditor onSave prop, task-page-client wiring, human-verify checkpoint (PV-01, PV-02, PV-03, PV-04, PV-06)
 **UI hint**: yes
 
 ## Progress
@@ -190,4 +190,4 @@ Plans:
 | 20. File Tree Browser | v0.6 | 3/3 | Complete    | 2026-04-01 |
 | 21. Code Editor | v0.6 | 3/3 | Complete    | 2026-04-01 |
 | 22. Diff View Integration | v0.6 | 0/TBD | Complete    | 2026-04-01 |
-| 23. Preview Panel | v0.6 | 0/TBD | Not started | - |
+| 23. Preview Panel | v0.6 | 0/3 | Not started | - |
