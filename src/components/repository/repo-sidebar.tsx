@@ -17,6 +17,7 @@ import { updateProject, createProject, getRecentLocalProjects } from "@/actions/
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 
 interface ProjectSidebarProps {
   project: {
@@ -65,6 +66,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
   const [browseCreateName, setBrowseCreateName] = useState("");
   const [browseCreateAlias, setBrowseCreateAlias] = useState("");
   const [browseCreateDesc, setBrowseCreateDesc] = useState("");
+  const [browseCreateProjectType, setBrowseCreateProjectType] = useState<"FRONTEND" | "BACKEND">("FRONTEND");
   const [browseCreateLoading, setBrowseCreateLoading] = useState(false);
 
   // Git state
@@ -169,6 +171,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
         alias: browseCreateAlias.trim() || undefined,
         description: browseCreateDesc.trim() || undefined,
         localPath: browsePath,
+        projectType: browseCreateProjectType,
         workspaceId,
       });
       setShowBrowseCreate(false);
@@ -499,6 +502,19 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
                 placeholder={t("project.namePlaceholder")}
                 className="mt-1.5"
               />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">{t("project.type.label")}</label>
+              <div className="mt-1.5">
+                <SegmentedControl
+                  options={[
+                    { value: "FRONTEND" as const, label: t("project.type.frontend") },
+                    { value: "BACKEND" as const, label: t("project.type.backend") },
+                  ]}
+                  value={browseCreateProjectType}
+                  onChange={setBrowseCreateProjectType}
+                />
+              </div>
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">{t("project.alias")}</label>
