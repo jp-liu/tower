@@ -220,7 +220,7 @@ export async function POST(
           );
         };
 
-        let assistantContent = "";
+        let assistantContent = "";  // Parsed meaningful content only (for DB storage)
         let lineBuf = "";
 
         // Parse stream-json lines and extract only meaningful content
@@ -241,6 +241,11 @@ export async function POST(
 
             const eventType = typeof event.type === "string" ? event.type : "";
 
+            // Skip system events (hooks, session info) — never show to user
+            if (eventType === "system" || eventType === "start" || eventType === "ping") {
+              continue;
+            }
+
             // Extract assistant text content and tool usage
             if (eventType === "assistant") {
               const message = event.message as Record<string, unknown> | undefined;
@@ -249,6 +254,7 @@ export async function POST(
                 if (typeof block === "object" && block !== null && !Array.isArray(block)) {
                   const b = block as Record<string, unknown>;
                   if (b.type === "text" && typeof b.text === "string" && b.text) {
+                    assistantContent += b.text;
                     sendEvent({ type: "log", content: b.text });
                   }
                   // Extract tool use info (file edits, writes, bash commands etc)
@@ -257,18 +263,21 @@ export async function POST(
                     const toolName = b.name;
                     let toolInfo = "";
                     if (toolName === "Write" && input?.file_path) {
-                      toolInfo = `📝 Write: ${input.file_path}`;
+                      toolInfo = `Write: ${input.file_path}`;
                     } else if (toolName === "Edit" && input?.file_path) {
-                      toolInfo = `✏️ Edit: ${input.file_path}`;
+                      toolInfo = `Edit: ${input.file_path}`;
                     } else if (toolName === "Read" && input?.file_path) {
-                      toolInfo = `📖 Read: ${input.file_path}`;
+                      toolInfo = `Read: ${input.file_path}`;
                     } else if (toolName === "Bash" && input?.command) {
                       const cmd = String(input.command);
                       toolInfo = `$ ${cmd.length > 80 ? cmd.slice(0, 80) + "..." : cmd}`;
+                    } else if (toolName === "Grep" || toolName === "Glob") {
+                      toolInfo = `${toolName}: ${input?.pattern ?? input?.path ?? ""}`;
                     } else {
-                      toolInfo = `🔧 ${toolName}`;
+                      toolInfo = `${toolName}`;
                     }
                     if (toolInfo) {
+                      assistantContent += "\n" + toolInfo;
                       sendEvent({ type: "tool", content: toolInfo });
                     }
                   }
@@ -278,8 +287,14 @@ export async function POST(
 
             // Extract final result text
             if (eventType === "result") {
-              const resultText = typeof event.result === "string" ? event.result : "";
+              const resultObj = event.result as string | Record<string, unknown> | undefined;
+              const resultText = typeof resultObj === "string"
+                ? resultObj
+                : typeof resultObj === "object" && resultObj !== null && typeof (resultObj as Record<string, unknown>).text === "string"
+                  ? (resultObj as Record<string, unknown>).text as string
+                  : "";
               if (resultText) {
+                assistantContent += "\n" + resultText;
                 sendEvent({ type: "result", content: resultText });
               }
             }
@@ -333,7 +348,6 @@ export async function POST(
             instructionsFile,
             timeoutSec,
             onLog: async (logStream, chunk) => {
-              assistantContent += chunk;
               if (logStream === "stdout") {
                 processStreamChunk(chunk);
               }
