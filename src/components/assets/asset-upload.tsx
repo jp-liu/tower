@@ -134,7 +134,7 @@ export function AssetUpload({
               <div className="flex items-center gap-3">
                 <label className="text-xs text-muted-foreground w-16 shrink-0">{t("assets.project")}</label>
                 {uploadProjects.length > 0 ? (
-                  <Select value={uploadProjectId ?? ""} onValueChange={(v) => setUploadProjectId(v ?? "")}>
+                  <Select value={uploadProjectId ?? ""} onValueChange={(v: string | null) => setUploadProjectId(v ?? "")}>
                     <SelectTrigger size="sm" className="flex-1 text-xs">
                       <SelectValue />
                     </SelectTrigger>
