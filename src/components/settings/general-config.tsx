@@ -3,6 +3,7 @@
 import { useTheme } from "next-themes";
 import { useState, useEffect } from "react";
 import { useI18n } from "@/lib/i18n";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import type { Locale } from "@/lib/i18n";
 import { getConfigValue, setConfigValue } from "@/actions/config-actions";
 
@@ -45,23 +46,13 @@ export function GeneralConfig() {
           <p className="mt-1 text-sm text-muted-foreground">{t("settings.themeDesc")}</p>
           <div className="mt-3">
             {!mounted ? (
-              <div className="inline-flex h-9 rounded-md border bg-muted p-1 gap-1 w-[200px]" />
+              <div className="inline-flex h-9 rounded-md border border-border bg-muted p-1 gap-1 w-[200px]" />
             ) : (
-              <div className="inline-flex rounded-md border bg-muted p-1 gap-1">
-                {themeOptions.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setTheme(opt.value)}
-                    className={`rounded px-3 py-1 text-sm transition-colors ${
-                      theme === opt.value
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+              <SegmentedControl
+                options={themeOptions.map((o) => ({ value: o.value, label: o.label }))}
+                value={theme ?? "system"}
+                onChange={(v) => setTheme(v)}
+              />
             )}
           </div>
         </div>
@@ -71,21 +62,11 @@ export function GeneralConfig() {
           <h3 className="text-sm font-medium">{t("settings.language")}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{t("settings.languageDesc")}</p>
           <div className="mt-3">
-            <div className="inline-flex rounded-md border bg-muted p-1 gap-1">
-              {langOptions.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => setLocale(opt.value)}
-                  className={`rounded px-3 py-1 text-sm transition-colors ${
-                    locale === opt.value
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              options={langOptions.map((o) => ({ value: o.value, label: o.label }))}
+              value={locale}
+              onChange={(v) => setLocale(v as typeof locale)}
+            />
           </div>
         </div>
 

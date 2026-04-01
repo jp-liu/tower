@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Search, Settings, Plus, Command, Globe, Sun, Moon, GitBranch, Loader2, Check, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   Dialog,
   DialogContent,
@@ -205,24 +206,15 @@ export function TopBar({ onCreateProject }: TopBarProps) {
             {/* Project type — D-01 */}
             <div>
               <label className="text-xs font-medium text-muted-foreground">{t("project.type.label")}</label>
-              <div className="mt-1.5 inline-flex rounded-md border border-border bg-muted p-1 gap-1">
-                {([
-                  { value: "FRONTEND" as const, label: t("project.type.frontend") },
-                  { value: "BACKEND" as const, label: t("project.type.backend") },
-                ]).map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setProjectType(opt.value)}
-                    className={`rounded px-3 py-1 text-sm transition-colors ${
-                      projectType === opt.value
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+              <div className="mt-1.5">
+                <SegmentedControl
+                  options={[
+                    { value: "FRONTEND" as const, label: t("project.type.frontend") },
+                    { value: "BACKEND" as const, label: t("project.type.backend") },
+                  ]}
+                  value={projectType}
+                  onChange={setProjectType}
+                />
               </div>
             </div>
 

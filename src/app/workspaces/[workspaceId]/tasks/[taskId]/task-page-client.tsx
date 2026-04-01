@@ -261,30 +261,31 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     <PanelGroup direction="horizontal" className="h-screen bg-background">
       {/* Left panel: Chat — 35% default, 20% minimum per D-02 and D-03 */}
       <Panel defaultSize={35} minSize={20} className="flex flex-col border-r border-border bg-sidebar">
-        {/* Header: back button + breadcrumb + task title + status + branch */}
+        {/* Header: back + breadcrumb + status + branch */}
         <div className="border-b border-border px-4 py-3">
-          {/* Back button + breadcrumb */}
+          {/* Back button + breadcrumb: workspace / project / task */}
           <div className="flex items-center gap-2">
             <Link
               href={`/workspaces/${workspaceId}`}
-              className="flex items-center justify-center rounded-md border border-border bg-muted px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="flex shrink-0 items-center justify-center rounded-md border border-border bg-muted px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
-              <ArrowLeft className="mr-1 h-4 w-4" />
+              <ArrowLeft className="mr-1.5 h-4 w-4" />
               {t("taskPage.back")}
             </Link>
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <span className="truncate font-medium">{workspaceName}</span>
+            <div className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+              <span className="shrink-0">{workspaceName}</span>
               {task.project && (
                 <>
-                  <span>/</span>
-                  <span className="truncate font-medium">{task.project.name}</span>
+                  <span className="shrink-0">/</span>
+                  <span className="shrink-0">{task.project.name}</span>
                 </>
               )}
+              <span className="shrink-0">/</span>
+              <span className="truncate font-semibold text-foreground">{task.title}</span>
             </div>
           </div>
-          {/* Task title + badges */}
-          <h1 className="mt-2 truncate text-sm font-semibold text-foreground">{task.title}</h1>
-          <div className="mt-1 flex items-center gap-2">
+          {/* Status + branch badges */}
+          <div className="mt-2 flex items-center gap-2">
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[taskStatus] ?? "bg-muted text-muted-foreground"}`}>
               {STATUS_LABELS[taskStatus] ?? taskStatus}
             </span>
@@ -318,7 +319,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
         <Tabs defaultValue="files" className="flex h-full flex-col gap-0">
           {/* Tab bar — segmented control style matching Settings page */}
           <div className="flex shrink-0 items-center border-b border-border px-3 py-2">
-            <TabsList className="h-auto">
+            <TabsList className="h-auto border border-border">
               <TabsTrigger value="files">
                 <FolderTree className="h-3.5 w-3.5" />
                 {t("taskPage.tabFiles")}
