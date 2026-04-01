@@ -35,11 +35,11 @@ Requirements for v0.6 — 任务开发工作台. Each maps to roadmap phases.
 
 ### 预览面板
 
-- [ ] **PV-01**: 项目支持"前端/后端"类型区分，创建时默认前端，可选后端
+- [x] **PV-01**: 项目支持"前端/后端"类型区分，创建时默认前端，可选后端
 - [ ] **PV-02**: 前端项目工作台有预览面板，包含地址栏输入本地 URL + iframe 嵌入显示
-- [ ] **PV-03**: 用户可配置项目预览启动命令，点击"运行"按钮启动 dev server
-- [ ] **PV-04**: 预览面板提供"在终端打开"按钮，在本地终端 app 中打开 worktree 目录
-- [ ] **PV-05**: 用户可在设置中配置默认终端应用（iTerm2/Terminal.app/Warp 等）
+- [x] **PV-03**: 用户可配置项目预览启动命令，点击"运行"按钮启动 dev server
+- [x] **PV-04**: 预览面板提供"在终端打开"按钮，在本地终端 app 中打开 worktree 目录
+- [x] **PV-05**: 用户可在设置中配置默认终端应用（iTerm2/Terminal.app/Warp 等）
 - [ ] **PV-06**: 编辑器保存文件后自动刷新预览 iframe
 
 ## v0.4 Requirements (Complete)
@@ -172,11 +172,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ED-04 | Phase 21 | Complete |
 | ED-05 | Phase 21 | Complete |
 | DF-01 | Phase 22 | Pending |
-| PV-01 | Phase 23 | Pending |
+| PV-01 | Phase 23 | Complete |
 | PV-02 | Phase 23 | Pending |
-| PV-03 | Phase 23 | Pending |
-| PV-04 | Phase 23 | Pending |
-| PV-05 | Phase 23 | Pending |
+| PV-03 | Phase 23 | Complete |
+| PV-04 | Phase 23 | Complete |
+| PV-05 | Phase 23 | Complete |
 | PV-06 | Phase 23 | Pending |
 
 **v0.6 Coverage:**
