@@ -57,6 +57,7 @@ export function PreviewPanel({
   const [addressInput, setAddressInput] = useState("");
   const [iframeUrl, setIframeUrl] = useState("");
   const [commandInput, setCommandInput] = useState("");
+  const [manualRefreshKey, setManualRefreshKey] = useState(0);
 
   useEffect(() => {
     if (previewCommand) {
@@ -172,8 +173,7 @@ export function PreviewPanel({
           title={t("preview.refresh")}
           onClick={() => {
             if (iframeUrl) {
-              // refreshKey is parent-controlled; trigger re-render by re-setting iframeUrl
-              setIframeUrl((url) => url);
+              setManualRefreshKey((k) => k + 1);
             }
           }}
         >
@@ -228,7 +228,7 @@ export function PreviewPanel({
       {/* iframe — fills remaining height */}
       <div className="flex-1 overflow-hidden">
         <iframe
-          key={refreshKey}
+          key={`${refreshKey}-${manualRefreshKey}`}
           src={iframeUrl || undefined}
           className="h-full w-full border-0"
           allow="clipboard-read; clipboard-write"

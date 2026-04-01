@@ -25,7 +25,7 @@ interface CreateProjectData {
   description?: string;
   gitUrl?: string;
   localPath?: string;
-  projectType?: string;
+  projectType?: "FRONTEND" | "BACKEND";
 }
 
 interface TopBarProps {
