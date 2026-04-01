@@ -2,37 +2,29 @@
 
 ## What This Is
 
-An AI task management platform with a Kanban board UI for managing workspaces, projects, and tasks. Supports AI agent execution (Claude Code) via an adapter system with real-time SSE streaming, prompt template management, and an MCP server exposing 21 tools for external AI agent integration. Features a per-project knowledge base (notes with FTS5 full-text search, asset management) and bilingual (Chinese/English) interface with dark/light/system theme support.
+An AI task management platform with a Kanban board UI for managing workspaces, projects, and tasks. Supports AI agent execution (Claude Code) via an adapter system with real-time SSE streaming, prompt template management, and an MCP server exposing 21 tools for external AI agent integration. Features a per-project knowledge base (notes with FTS5 full-text search, asset management), bilingual (Chinese/English) interface with dark/light/system theme support, git worktree task isolation with review/merge workflow, and a full-featured task development workbench with Monaco code editor, file tree browser, diff view, and live preview panel.
 
 ## Core Value
 
 Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base that AI agents can query and update.
 
-## Shipped: v0.5 Git Worktree 任务隔离 (2026-03-31)
+## Shipped: v0.6 任务开发工作台 (2026-04-01)
 
-**Delivered:** 每个任务在独立的 git worktree 中执行，实现并行开发、逐个合并验证、不满意可退回重做、完成后自动清理。
+**Delivered:** 每个任务拥有专属的全功能开发工作台页面，集成 AI 聊天、Monaco 代码编辑器、文件树浏览、Diff 查看和实时预览。
 
 **Key features shipped:**
-- 创建任务时选择 base branch（从项目 git branches 列表）
-- 任务执行前自动创建 worktree + 独立分支 task/{taskId}
-- Claude CLI 在 worktree 目录中执行（同项目并行无冲突）
-- 任务完成后 IN_REVIEW，用户可查看 diff、squash merge 验证
-- 验证不通过退回 IN_PROGRESS，Claude 在同一 worktree 继续修改
-- Worktree 生命周期管理（DONE/CANCELLED 后自动清理 + 启动时 prune）
-- 移除无用的 git.branchTemplate 配置项
-
-## Current Milestone: v0.6 任务开发工作台
-
-**Goal:** 为每个任务提供专属的全功能开发工作台页面，集成 AI 聊天、代码浏览编辑、diff 查看和实时预览。
-
-**Target features:**
-- 任务抽屉增加"查看详情"入口，跳转到任务专属页面
-- 左侧：AI 聊天上下文窗口（任务消息历史 + 实时对话）
-- 右侧面板 1：项目文件树浏览 + 在线代码编辑器（类似 VSCode / v0 / bolt.new）
-- 右侧面板 2：Diff 查看（代码变更对比）
-- 右侧面板 3：Preview 预览（前端项目可自定义启动命令，实时预览效果）
+- 任务抽屉"查看详情"跳转到任务专属工作台页面
+- 可调整大小的面板布局（左侧 AI 聊天 + 右侧三标签面板）
+- Monaco Editor 在线代码编辑（语法高亮、多标签页、Ctrl+S 保存、dirty 标记、主题同步）
+- 文件树浏览器（gitignore 过滤、git M/A/D 状态标记、右键 CRUD、执行时自动刷新）
+- Diff 变更查看（复用 v0.5 TaskDiffView 组件）
+- Preview 预览面板（地址栏 + iframe、启动命令、终端打开、保存后自动刷新）
+- 项目类型区分（前端/后端）+ 终端应用配置
 
 ## Current State
+
+**Shipped:** v0.6 任务开发工作台 (2026-04-01)
+- Phase 19-23: workbench layout, file tree, Monaco editor, diff view, preview panel
 
 **Shipped:** v0.5 Git Worktree 任务隔离 (2026-03-31)
 - Phase 15-18: worktree schema, execution engine, review/merge workflow, lifecycle management
@@ -115,13 +107,18 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - ✓ Worktree 清理（DONE/CANCELLED）— v0.5 Phase 18
 - ✓ 应用启动时清理孤立 worktree — v0.5 Phase 18
 
+- ✓ 任务抽屉"查看详情"入口 → 任务专属工作台页面 — v0.6 Phase 19
+- ✓ 工作台可调整大小面板布局（AI 聊天 + 三标签面板）— v0.6 Phase 19
+- ✓ 文件树浏览器（gitignore 过滤、git 状态、右键 CRUD、自动刷新）— v0.6 Phase 20
+- ✓ Monaco 在线代码编辑器（语法高亮、多标签、Ctrl+S、dirty、主题）— v0.6 Phase 21
+- ✓ Diff 变更查看标签页 — v0.6 Phase 22
+- ✓ Preview 预览面板（地址栏 + iframe + 启动命令 + 终端打开 + 自动刷新）— v0.6 Phase 23
+- ✓ 项目类型区分（前端/后端）— v0.6 Phase 23
+- ✓ 终端应用配置（Settings > General）— v0.6 Phase 23
+
 ### Active
 
-- [ ] 任务抽屉"查看详情"入口 → 任务专属页面路由
-- [ ] 任务页面左侧 AI 聊天窗口（消息历史 + 实时对话）
-- [ ] 任务页面右侧文件树浏览 + 在线代码编辑器
-- [ ] 任务页面右侧 Diff 查看面板
-- [ ] 任务页面右侧 Preview 预览面板（自定义启动命令）
+No active requirements — v0.6 milestone complete.
 
 ### Out of Scope
 
@@ -177,6 +174,12 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 | Promise.allSettled for "all" mode | Single SQLITE_BUSY must not drop all results | ✓ Good — v0.3 |
 | FTS5 try/catch with LIKE fallback | Malformed queries degrade gracefully instead of crashing | ✓ Good — v0.3 |
 | path.basename + DB validation in uploadAsset | Prevents path traversal via crafted filenames or projectIds | ✓ Good — v0.3 |
+| react-resizable-panels@^2.x (not v4) | v4 has breaking export renames incompatible with shadcn | ✓ Good — v0.6 |
+| Monaco Editor via @monaco-editor/react with CDN loader | Turbopack incompatible with webpack plugin; CDN avoids bundling issues | ✓ Good — v0.6 |
+| safeResolvePath utility for all file ops | Centralized path traversal prevention, reused across file-actions and editor | ✓ Good — v0.6 |
+| Custom file tree (no library) | No well-maintained React 19 file tree library; ~80 line recursive component is simpler | ✓ Good — v0.6 |
+| child_process.spawn for preview (not WebContainers) | Localhost-only tool, Node.js already running — spawn is simpler and more reliable | ✓ Good — v0.6 |
+| ProjectCategory enum (not reusing ProjectType) | Avoids collision with existing NORMAL/GIT enum | ✓ Good — v0.6 |
 
 ## Evolution
 
@@ -195,4 +198,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-31 — v0.6 milestone started*
+*Last updated: 2026-04-01 — v0.6 milestone shipped*

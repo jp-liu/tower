@@ -1,5 +1,23 @@
 # Milestones
 
+## v0.6 任务开发工作台 (Shipped: 2026-04-01)
+
+**Phases completed:** 5 phases, 11 plans, 15 tasks
+
+**Key accomplishments:**
+
+- react-resizable-panels v2.1.9 installed and 12 workbench i18n entries added; 查看详情 navigation confirmed correct
+- safeResolvePath path-traversal security utility (src/lib/fs-security.ts) with 6 passing tests, ignore@7.0.5 installed, and Wave 0 it.todo test scaffolds for file-actions and FileTree
+- One-liner:
+- One-liner:
+- Monaco-powered EditorTabs + CodeEditor with CDN loader, multi-tab state, Ctrl+S save via server action, dirty tracking, and theme sync
+- FileTree (240px left) + CodeEditor (flex-1 right) split layout wired into task-page-client.tsx Files tab via selectedFilePath state bridge
+- Prisma ProjectCategory enum + previewCommand field migrated, subprocess registry with SIGTERM kill, 3 server actions (startPreview/stopPreview/openInTerminal), terminal.app config default, and 24 i18n keys
+- PreviewPanel client component with server controls, address bar, and iframe; project type selector in create dialog; terminal app config in General Settings
+- CodeEditor onSave prop with ref-based stale closure fix wires into PreviewPanel iframe auto-refresh, completing the end-to-end Ctrl+S → preview reload flow (PV-06) and hiding Preview tab for BACKEND projects (PV-01)
+
+---
+
 ## v0.5 Git Worktree 任务隔离 (Shipped: 2026-03-31)
 
 **Phases completed:** 8 phases, 18 plans, 19 tasks
