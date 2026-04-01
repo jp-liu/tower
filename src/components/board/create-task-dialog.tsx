@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useI18n } from "@/lib/i18n";
 import { getProjectBranches } from "@/actions/git-actions";
 import type { Task, Priority, TaskStatus } from "@prisma/client";
@@ -200,16 +201,16 @@ export function CreateTaskDialog({
               {branchesLoading ? (
                 <div className="text-sm text-muted-foreground">{t("task.branchLoading")}</div>
               ) : branches.length > 0 ? (
-                <select
-                  value={selectedBranch}
-                  onChange={(e) => setSelectedBranch(e.target.value)}
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                  data-testid="branch-selector"
-                >
-                  {branches.map((branch) => (
-                    <option key={branch} value={branch}>{branch}</option>
-                  ))}
-                </select>
+                <Select value={selectedBranch} onValueChange={(v) => setSelectedBranch(v ?? "")}>
+                  <SelectTrigger className="w-full" data-testid="branch-selector">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branches.map((branch) => (
+                      <SelectItem key={branch} value={branch}>{branch}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               ) : (
                 <div className="text-sm text-muted-foreground">{t("task.branchNone")}</div>
               )}

@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Upload, X } from "lucide-react";
 import { uploadAsset } from "@/actions/asset-actions";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useI18n } from "@/lib/i18n";
 
 interface SimpleProject {
@@ -117,32 +118,34 @@ export function AssetUpload({
               {/* Workspace */}
               <div className="flex items-center gap-3">
                 <label className="text-xs text-muted-foreground w-16 shrink-0">{t("assets.workspace")}</label>
-                <select
-                  value={uploadWsId}
-                  onChange={(e) => handleWsChange(e.target.value)}
-                  className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
-                >
-                  {allWorkspaces.map((ws) => (
-                    <option key={ws.id} value={ws.id}>{ws.name}</option>
-                  ))}
-                </select>
+                <Select value={uploadWsId} onValueChange={(v) => handleWsChange(v ?? "")}>
+                  <SelectTrigger size="sm" className="flex-1 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allWorkspaces.map((ws) => (
+                      <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Project */}
               <div className="flex items-center gap-3">
                 <label className="text-xs text-muted-foreground w-16 shrink-0">{t("assets.project")}</label>
                 {uploadProjects.length > 0 ? (
-                  <select
-                    value={uploadProjectId ?? ""}
-                    onChange={(e) => setUploadProjectId(e.target.value)}
-                    className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
-                  >
-                    {uploadProjects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}{p.alias ? ` (${p.alias})` : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={uploadProjectId ?? ""} onValueChange={(v) => setUploadProjectId(v ?? "")}>
+                    <SelectTrigger size="sm" className="flex-1 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {uploadProjects.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}{p.alias ? ` (${p.alias})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 ) : (
                   <span className="text-xs text-muted-foreground">{t("assets.noProject")}</span>
                 )}
