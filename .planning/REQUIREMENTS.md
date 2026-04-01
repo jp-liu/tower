@@ -40,7 +40,7 @@ Requirements for v0.6 — 任务开发工作台. Each maps to roadmap phases.
 - [x] **PV-03**: 用户可配置项目预览启动命令，点击"运行"按钮启动 dev server
 - [x] **PV-04**: 预览面板提供"在终端打开"按钮，在本地终端 app 中打开 worktree 目录
 - [x] **PV-05**: 用户可在设置中配置默认终端应用（iTerm2/Terminal.app/Warp 等）
-- [ ] **PV-06**: 编辑器保存文件后自动刷新预览 iframe
+- [x] **PV-06**: 编辑器保存文件后自动刷新预览 iframe
 
 ## v0.4 Requirements (Complete)
 
@@ -177,7 +177,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PV-03 | Phase 23 | Complete |
 | PV-04 | Phase 23 | Complete |
 | PV-05 | Phase 23 | Complete |
-| PV-06 | Phase 23 | Pending |
+| PV-06 | Phase 23 | Complete |
 
 **v0.6 Coverage:**
 - v0.6 requirements: 20 total

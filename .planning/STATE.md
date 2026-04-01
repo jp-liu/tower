@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.6
 milestone_name: 任务开发工作台
-status: executing
-stopped_at: Completed 23-02-PLAN.md (both tasks)
-last_updated: "2026-04-01T03:47:36.818Z"
+status: verifying
+stopped_at: Completed 23-03-PLAN.md (Tasks 1 and 2 — awaiting checkpoint verification)
+last_updated: "2026-04-01T03:52:09.795Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-31)
 
 Phase: 23 (preview-panel) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-01
 
 Progress: [░░░░░░░░░░] 0%
@@ -76,6 +76,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 21-code-editor P03 | 300 | 1 tasks | 1 files |
 | Phase 23-preview-panel P01 | 720 | 2 tasks | 8 files |
 | Phase 23-preview-panel P02 | 480 | 2 tasks | 3 files |
+| Phase 23 P03 | 480 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -160,6 +161,9 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 23]: Preview subprocess registry: module-level Map<taskId, ChildProcess> in src/lib/adapters/preview-process-manager.ts
 - [Phase 23-preview-panel]: PreviewPanel refreshKey is parent-controlled; iframe key={refreshKey} forces re-render; Plan 03 wires refresh trigger
 - [Phase 23-preview-panel]: onBlur-persist for commandInput: updateProject called on blur, not on every keystroke — avoids excessive DB writes
+- [Phase 23]: onSaveRef pattern: useRef + useEffect sync mirrors existing activeTabRef pattern — avoids stale closure in Monaco addAction
+- [Phase 23]: projectType check (not .type) for Preview tab visibility — .type is GIT/NORMAL, .projectType is FRONTEND/BACKEND
+- [Phase 23]: previewRefreshKey is parent-controlled in task-page-client — PreviewPanel receives it as prop, uses key={refreshKey} to force iframe re-render
 
 ### Pending Todos
 
@@ -173,6 +177,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T03:47:36.813Z
-Stopped at: Completed 23-02-PLAN.md (both tasks)
+Last session: 2026-04-01T03:52:09.792Z
+Stopped at: Completed 23-03-PLAN.md (Tasks 1 and 2 — awaiting checkpoint verification)
 Resume file: None

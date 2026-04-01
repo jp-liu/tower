@@ -77,7 +77,7 @@ See: [milestones/v0.5-ROADMAP.md](./milestones/v0.5-ROADMAP.md) for full details
 - [x] **Phase 20: File Tree Browser** - Worktree 目录树浏览、gitignore 过滤、git 状态标记、右键菜单操作 (completed 2026-03-31)
 - [x] **Phase 21: Code Editor** - Monaco 在线编辑器（语法高亮、多标签、Ctrl+S 保存、dirty 标记、主题同步） (completed 2026-04-01)
 - [x] **Phase 22: Diff View Integration** - "变更"标签页复用现有 TaskDiffView 组件接入工作台布局 (completed 2026-04-01)
-- [ ] **Phase 23: Preview Panel** - 前端项目类型字段 + 预览面板（启动命令、iframe 嵌入、终端打开、自动刷新）
+- [x] **Phase 23: Preview Panel** - 前端项目类型字段 + 预览面板（启动命令、iframe 嵌入、终端打开、自动刷新） (completed 2026-04-01)
 
 ## Phase Details
 
@@ -161,7 +161,7 @@ Plans:
 Plans:
 - [x] 23-01-PLAN.md — Schema migration (projectType/previewCommand), preview process manager, server actions, config defaults, i18n (PV-01, PV-03, PV-04, PV-05)
 - [x] 23-02-PLAN.md — PreviewPanel component, project type selector in TopBar dialog, Settings terminal input (PV-01, PV-02, PV-03, PV-04, PV-05)
-- [ ] 23-03-PLAN.md — CodeEditor onSave prop, task-page-client wiring, human-verify checkpoint (PV-01, PV-02, PV-03, PV-04, PV-06)
+- [x] 23-03-PLAN.md — CodeEditor onSave prop, task-page-client wiring, human-verify checkpoint (PV-01, PV-02, PV-03, PV-04, PV-06)
 **UI hint**: yes
 
 ## Progress
@@ -190,4 +190,4 @@ Plans:
 | 20. File Tree Browser | v0.6 | 3/3 | Complete    | 2026-04-01 |
 | 21. Code Editor | v0.6 | 3/3 | Complete    | 2026-04-01 |
 | 22. Diff View Integration | v0.6 | 0/TBD | Complete    | 2026-04-01 |
-| 23. Preview Panel | v0.6 | 2/3 | In Progress|  |
+| 23. Preview Panel | v0.6 | 3/3 | Complete   | 2026-04-01 |
