@@ -45,4 +45,9 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "number",
     label: "Snippet Length (characters)",
   },
+  "terminal.app": {
+    defaultValue: "Terminal",
+    type: "string",
+    label: "Default Terminal App",
+  },
 };

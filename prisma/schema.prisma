@@ -24,10 +24,12 @@ model Project {
   name        String
   alias       String?
   description String?
-  type        ProjectType @default(NORMAL)
-  gitUrl      String?
-  localPath   String?
-  workspaceId String
+  type           ProjectType     @default(NORMAL)
+  gitUrl         String?
+  localPath      String?
+  projectType    ProjectCategory @default(FRONTEND)
+  previewCommand String?
+  workspaceId    String
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -233,4 +235,9 @@ enum MessageRole {
   USER
   ASSISTANT
   SYSTEM
+}
+
+enum ProjectCategory {
+  FRONTEND
+  BACKEND
 }
