@@ -360,6 +360,13 @@ const translations = {
     "taskPage.fileTree.deleteConfirmBody": "删除「{name}」？此操作不可撤销。",
     "taskPage.fileTree.deleteConfirmBodyFolder": "「{name}」及其所有内容将被删除。",
     "taskPage.fileTree.deleteConfirmAction": "删除",
+    // Editor (Phase 21)
+    "editor.selectFile": "选择文件以打开",
+    "editor.selectFileHint": "在左侧文件树中点击任意文件",
+    "editor.saveSuccess": "保存成功",
+    "editor.saveError": "保存失败，请重试",
+    "editor.closeTab": "关闭标签页",
+    "editor.noWorktree": "暂无工作区，请先执行任务",
     // Diff view (Phase 17)
     "diff.filesChanged": "{count} 个文件更改",
     "diff.additions": "+{count}",
@@ -719,6 +726,13 @@ const translations = {
     "taskPage.fileTree.deleteConfirmBody": "Delete \"{name}\"? This cannot be undone.",
     "taskPage.fileTree.deleteConfirmBodyFolder": "\"{name}\" and all its contents will be deleted.",
     "taskPage.fileTree.deleteConfirmAction": "Delete",
+    // Editor (Phase 21)
+    "editor.selectFile": "Select a file to open",
+    "editor.selectFileHint": "Click any file in the file tree on the left",
+    "editor.saveSuccess": "File saved",
+    "editor.saveError": "Save failed, please try again",
+    "editor.closeTab": "Close tab",
+    "editor.noWorktree": "No worktree — run the task first",
     // Diff view (Phase 17)
     "diff.filesChanged": "{count} files changed",
     "diff.additions": "+{count}",
