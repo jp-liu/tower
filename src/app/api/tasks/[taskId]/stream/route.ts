@@ -301,10 +301,10 @@ export async function POST(
           }
         }
 
-        // Determine cwd: worktree for GIT projects, localPath for NORMAL
+        // Determine cwd: worktree if baseBranch selected, otherwise localPath
         let cwd = task.project!.localPath!;
 
-        if (task.project!.type === "GIT" && task.baseBranch) {
+        if (task.baseBranch && task.project!.localPath) {
           try {
             const { worktreePath, worktreeBranch } = await createWorktree(
               task.project!.localPath!,

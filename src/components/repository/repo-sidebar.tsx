@@ -52,6 +52,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
   const [editAlias, setEditAlias] = useState(project.alias ?? "");
   const [editDesc, setEditDesc] = useState(project.description ?? "");
   const [editLocalPath, setEditLocalPath] = useState(project.localPath ?? "");
+  const [editProjectType, setEditProjectType] = useState<"FRONTEND" | "BACKEND">((project as any).projectType ?? "FRONTEND");
 
   // Recent local projects
   const [recentProjects, setRecentProjects] = useState<Array<{ id: string; name: string; alias: string | null; localPath: string | null; workspaceId: string; type: string }>>([]);
@@ -187,6 +188,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
       alias: editAlias.trim() || undefined,
       description: editDesc.trim() || undefined,
       localPath: editLocalPath.trim() || undefined,
+      projectType: editProjectType,
     });
     router.refresh();
     setShowEditDialog(false);
@@ -425,6 +427,19 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
             <div>
               <label className="text-xs font-medium text-muted-foreground">{t("project.name")}</label>
               <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="mt-1.5" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">{t("project.type.label")}</label>
+              <div className="mt-1.5">
+                <SegmentedControl
+                  options={[
+                    { value: "FRONTEND" as const, label: t("project.type.frontend") },
+                    { value: "BACKEND" as const, label: t("project.type.backend") },
+                  ]}
+                  value={editProjectType}
+                  onChange={setEditProjectType}
+                />
+              </div>
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">{t("project.alias")}</label>
