@@ -126,7 +126,7 @@ Plans:
   5. The editor color scheme switches automatically when the user toggles between dark and light mode in ai-manager
 **Plans**: 3 plans
 Plans:
-- [ ] 21-01-PLAN.md — Install Monaco packages, readFileContent/writeFileContent server actions, editor i18n keys (ED-01, ED-02)
+- [x] 21-01-PLAN.md — Install Monaco packages, readFileContent/writeFileContent server actions, editor i18n keys (ED-01, ED-02)
 - [ ] 21-02-PLAN.md — EditorTabs component + CodeEditor (Monaco, multi-tab, dirty dot, Ctrl+S, theme sync) (ED-01-05)
 - [ ] 21-03-PLAN.md — Wire CodeEditor into task-page-client.tsx Files tab split layout (ED-01-05)
 **UI hint**: yes
@@ -188,6 +188,6 @@ Plans:
 | 18. Worktree Lifecycle | v0.5 | 2/2 | Complete | 2026-03-31 |
 | 19. Workbench Entry & Layout | v0.6 | 2/2 | Complete    | 2026-03-31 |
 | 20. File Tree Browser | v0.6 | 3/3 | Complete    | 2026-04-01 |
-| 21. Code Editor | v0.6 | 0/TBD | Not started | - |
+| 21. Code Editor | v0.6 | 1/3 | In Progress|  |
 | 22. Diff View Integration | v0.6 | 0/TBD | Not started | - |
 | 23. Preview Panel | v0.6 | 0/TBD | Not started | - |

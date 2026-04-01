@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.6
 milestone_name: 任务开发工作台
 status: executing
-stopped_at: "Checkpoint 20-03 task3: human-verify file tree"
-last_updated: "2026-04-01T01:07:03.256Z"
+stopped_at: Completed 21-01-PLAN.md
+last_updated: "2026-04-01T01:45:46.640Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 8
+  completed_plans: 6
   percent: 0
 ---
 
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-31)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 20 — file-tree-browser
+**Current focus:** Phase 21 — code-editor
 
 ## Current Position
 
-Phase: 21
-Plan: Not started
+Phase: 21 (code-editor) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
 Last activity: 2026-04-01
 
@@ -71,6 +71,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 20-file-tree-browser P01 | 180 | 2 tasks | 6 files |
 | Phase 20 P02 | 180 | 2 tasks | 2 files |
 | Phase 20-file-tree-browser P03 | 900 | 2 tasks | 7 files |
+| Phase 21-code-editor P01 | 780 | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -144,6 +145,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 20]: .git guard in deleteEntry fires BEFORE safeResolvePath — unconditional protection
 - [Phase 20]: getGitStatus returns empty {} on any error — UI degrades gracefully without surfacing git errors
 - [Phase 20-03]: path module removed from client components — use string manipulation for browser-compatible path operations
+- [Phase 21-code-editor]: @monaco-editor/react@next (4.8.0-rc.3) used — React 19 compatible, no webpack plugin (Turbopack incompatible)
+- [Phase 21-code-editor]: readFileContent/writeFileContent named to avoid collision with readFile/writeFile fs/promises imports
 
 ### Pending Todos
 
@@ -157,6 +160,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-31T11:28:22.658Z
-Stopped at: Checkpoint 20-03 task3: human-verify file tree
+Last session: 2026-04-01T01:45:46.636Z
+Stopped at: Completed 21-01-PLAN.md
 Resume file: None
