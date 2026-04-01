@@ -140,3 +140,35 @@ export async function deleteEntry(
     await unlink(absolute);
   }
 }
+
+// ---- readFileContent ----
+const readFileContentSchema = z.object({
+  worktreePath: z.string().min(1),
+  relativePath: z.string().min(1),
+});
+
+export async function readFileContent(
+  worktreePath: string,
+  relativePath: string
+): Promise<string> {
+  readFileContentSchema.parse({ worktreePath, relativePath });
+  const absolute = safeResolvePath(worktreePath, relativePath);
+  return readFile(absolute, "utf-8");
+}
+
+// ---- writeFileContent ----
+const writeFileContentSchema = z.object({
+  worktreePath: z.string().min(1),
+  relativePath: z.string().min(1),
+  content: z.string(),
+});
+
+export async function writeFileContent(
+  worktreePath: string,
+  relativePath: string,
+  content: string
+): Promise<void> {
+  writeFileContentSchema.parse({ worktreePath, relativePath, content });
+  const absolute = safeResolvePath(worktreePath, relativePath);
+  await writeFile(absolute, content, "utf-8");
+}
