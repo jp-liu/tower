@@ -190,4 +190,4 @@ Plans:
 | 20. File Tree Browser | v0.6 | 3/3 | Complete    | 2026-04-01 |
 | 21. Code Editor | v0.6 | 3/3 | Complete    | 2026-04-01 |
 | 22. Diff View Integration | v0.6 | 0/TBD | Complete    | 2026-04-01 |
-| 23. Preview Panel | v0.6 | 3/3 | Complete   | 2026-04-01 |
+| 23. Preview Panel | v0.6 | 3/3 | Complete    | 2026-04-01 |
