@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.6
 milestone_name: 任务开发工作台
 status: executing
-stopped_at: Completed 23-01-PLAN.md (both tasks)
-last_updated: "2026-04-01T03:41:48.873Z"
+stopped_at: Completed 23-02-PLAN.md (both tasks)
+last_updated: "2026-04-01T03:47:36.818Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-03-31)
 ## Current Position
 
 Phase: 23 (preview-panel) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-01
 
@@ -75,6 +75,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 21-code-editor P02 | 134 | 2 tasks | 2 files |
 | Phase 21-code-editor P03 | 300 | 1 tasks | 1 files |
 | Phase 23-preview-panel P01 | 720 | 2 tasks | 8 files |
+| Phase 23-preview-panel P02 | 480 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -157,6 +158,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 23]: spawn with shell: false — command split by whitespace into args array (security requirement, overrides RESEARCH.md D-05 shell: true)
 - [Phase 23]: execFileSync with args array for open -a terminal command — no shell interpolation (security constraint D-08)
 - [Phase 23]: Preview subprocess registry: module-level Map<taskId, ChildProcess> in src/lib/adapters/preview-process-manager.ts
+- [Phase 23-preview-panel]: PreviewPanel refreshKey is parent-controlled; iframe key={refreshKey} forces re-render; Plan 03 wires refresh trigger
+- [Phase 23-preview-panel]: onBlur-persist for commandInput: updateProject called on blur, not on every keystroke — avoids excessive DB writes
 
 ### Pending Todos
 
@@ -170,6 +173,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T03:41:48.870Z
-Stopped at: Completed 23-01-PLAN.md (both tasks)
+Last session: 2026-04-01T03:47:36.813Z
+Stopped at: Completed 23-02-PLAN.md (both tasks)
 Resume file: None
