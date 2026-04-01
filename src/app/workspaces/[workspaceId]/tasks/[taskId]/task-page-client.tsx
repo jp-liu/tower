@@ -10,6 +10,7 @@ import { TaskConversation, type Message } from "@/components/task/task-conversat
 import { TaskMessageInput } from "@/components/task/task-message-input";
 import { TaskDiffView } from "@/components/task/task-diff-view";
 import { FileTree } from "@/components/task/file-tree";
+import { CodeEditor } from "@/components/task/code-editor";
 import { Badge } from "@/components/ui/badge";
 import { getTaskMessages } from "@/actions/agent-actions";
 import { getPrompts } from "@/actions/prompt-actions";
@@ -329,18 +330,36 @@ export function TaskPageClient({ task, workspaceId, latestExecution }: TaskPageC
             )}
           </TabsList>
 
-          {/* Files tab — Phase 20: live file tree */}
+          {/* Files tab — Phase 21: FileTree + CodeEditor split layout */}
           <TabsContent value="files" className="flex-1 overflow-hidden">
-            <FileTree
-              worktreePath={latestExecution?.worktreePath ?? null}
-              baseBranch={task.baseBranch ?? null}
-              worktreeBranch={latestExecution?.worktreeBranch ?? null}
-              executionStatus={latestExecution?.status ?? "COMPLETED"}
-              onFileSelect={(absolutePath) => {
-                // Phase 21 will consume this — no-op in Phase 20 (per FT-02)
-                setSelectedFilePath(absolutePath);
-              }}
-            />
+            <div className="flex h-full flex-row overflow-hidden">
+              {/* Left: file tree, fixed 240px */}
+              <div className="w-60 flex-none border-r border-border overflow-hidden">
+                <FileTree
+                  worktreePath={latestExecution?.worktreePath ?? null}
+                  baseBranch={task.baseBranch ?? null}
+                  worktreeBranch={latestExecution?.worktreeBranch ?? null}
+                  executionStatus={latestExecution?.status ?? "COMPLETED"}
+                  onFileSelect={(absolutePath) => {
+                    setSelectedFilePath(absolutePath);
+                  }}
+                />
+              </div>
+              {/* Right: Monaco editor, fills remaining width */}
+              <div className="flex-1 min-w-0 overflow-hidden">
+                {latestExecution?.worktreePath ? (
+                  <CodeEditor
+                    worktreePath={latestExecution.worktreePath}
+                    selectedFilePath={selectedFilePath}
+                    onFilePathChange={setSelectedFilePath}
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center">
+                    <p className="text-sm text-muted-foreground">{t("editor.noWorktree")}</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </TabsContent>
 
           {/* Changes tab — functional, uses existing TaskDiffView */}
