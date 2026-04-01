@@ -76,7 +76,7 @@ See: [milestones/v0.5-ROADMAP.md](./milestones/v0.5-ROADMAP.md) for full details
 - [x] **Phase 19: Workbench Entry & Layout** - "查看详情"入口 + 任务专属页面路由 + 三标签右侧面板骨架 (completed 2026-03-31)
 - [x] **Phase 20: File Tree Browser** - Worktree 目录树浏览、gitignore 过滤、git 状态标记、右键菜单操作 (completed 2026-03-31)
 - [x] **Phase 21: Code Editor** - Monaco 在线编辑器（语法高亮、多标签、Ctrl+S 保存、dirty 标记、主题同步） (completed 2026-04-01)
-- [ ] **Phase 22: Diff View Integration** - "变更"标签页复用现有 TaskDiffView 组件接入工作台布局
+- [x] **Phase 22: Diff View Integration** - "变更"标签页复用现有 TaskDiffView 组件接入工作台布局 (completed 2026-04-01)
 - [ ] **Phase 23: Preview Panel** - 前端项目类型字段 + 预览面板（启动命令、iframe 嵌入、终端打开、自动刷新）
 
 ## Phase Details
@@ -189,5 +189,5 @@ Plans:
 | 19. Workbench Entry & Layout | v0.6 | 2/2 | Complete    | 2026-03-31 |
 | 20. File Tree Browser | v0.6 | 3/3 | Complete    | 2026-04-01 |
 | 21. Code Editor | v0.6 | 3/3 | Complete    | 2026-04-01 |
-| 22. Diff View Integration | v0.6 | 0/TBD | Not started | - |
+| 22. Diff View Integration | v0.6 | 0/TBD | Complete    | 2026-04-01 |
 | 23. Preview Panel | v0.6 | 0/TBD | Not started | - |
