@@ -15,23 +15,28 @@ export async function getProjectBranches(localPath: string): Promise<string[]> {
   if (!localPath?.trim()) return [];
   const resolved = path.resolve(expandHome(localPath));
   try {
-    const raw = execSync(
+    // Local branches
+    const localRaw = execSync(
       "git branch --format='%(refname:short)'",
       { cwd: resolved, encoding: "utf-8", timeout: 5000 }
     ).trim();
-    const locals = raw.split("\n").filter(Boolean).map((b) => b.replace(/'/g, ""));
-    if (locals.length > 0) return locals;
+    const locals = new Set(
+      localRaw.split("\n").filter(Boolean).map((b) => b.replace(/'/g, ""))
+    );
 
-    // Fallback: if no local branches, try remote tracking branches
+    // Remote branches (strip origin/ prefix, deduplicate against locals)
     const remoteRaw = execSync(
       "git branch -r --format='%(refname:short)'",
       { cwd: resolved, encoding: "utf-8", timeout: 5000 }
     ).trim();
-    return remoteRaw
+    const remotes = remoteRaw
       .split("\n")
       .filter(Boolean)
       .map((b) => b.replace(/'/g, "").replace(/^origin\//, ""))
-      .filter((b) => b !== "HEAD");
+      .filter((b) => b !== "HEAD" && !locals.has(b));
+
+    // Local branches first, then remote-only branches
+    return [...locals, ...remotes];
   } catch {
     return [];
   }
