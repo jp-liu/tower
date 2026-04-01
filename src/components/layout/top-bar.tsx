@@ -204,8 +204,8 @@ export function TopBar({ onCreateProject }: TopBarProps) {
 
             {/* Project type — D-01 */}
             <div>
-              <label className="text-sm font-medium">{t("project.type.label")}</label>
-              <div className="mt-2 inline-flex rounded-md border bg-muted p-1 gap-1">
+              <label className="text-xs font-medium text-muted-foreground">{t("project.type.label")}</label>
+              <div className="mt-1.5 inline-flex rounded-md border border-border bg-muted p-1 gap-1">
                 {([
                   { value: "FRONTEND" as const, label: t("project.type.frontend") },
                   { value: "BACKEND" as const, label: t("project.type.backend") },

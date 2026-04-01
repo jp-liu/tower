@@ -29,6 +29,17 @@ export function LayoutClient({ workspaces, children }: LayoutClientProps) {
     router.push(`/workspaces/${workspaceId}`);
   };
 
+  // Task detail page (/workspaces/xxx/tasks/xxx) — full screen, no sidebar/topbar
+  const isTaskDetailPage = /\/workspaces\/[^/]+\/tasks\/[^/]+/.test(pathname);
+
+  if (isTaskDetailPage) {
+    return (
+      <div className="h-screen overflow-hidden bg-background">
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen overflow-hidden">
       <AppSidebar workspaces={workspaces} />

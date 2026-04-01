@@ -33,6 +33,7 @@ interface TaskPageClientProps {
     project: { id: string; name: string; type: string; localPath: string | null; projectType: string; previewCommand: string | null } | null;
   };
   workspaceId: string;
+  workspaceName: string;
   latestExecution?: {
     worktreePath: string | null;
     worktreeBranch: string | null;
@@ -58,7 +59,7 @@ const STATUS_COLORS: Record<string, string> = {
   CANCELLED: "bg-muted text-muted-foreground",
 };
 
-export function TaskPageClient({ task, workspaceId, latestExecution }: TaskPageClientProps) {
+export function TaskPageClient({ task, workspaceId, workspaceName, latestExecution }: TaskPageClientProps) {
   const router = useRouter();
   const { t } = useI18n();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -260,28 +261,36 @@ export function TaskPageClient({ task, workspaceId, latestExecution }: TaskPageC
     <PanelGroup direction="horizontal" className="h-screen bg-background">
       {/* Left panel: Chat — 35% default, 20% minimum per D-02 and D-03 */}
       <Panel defaultSize={35} minSize={20} className="flex flex-col border-r border-border bg-sidebar">
-        {/* Header: back link + task title + status badge + branch badge */}
-        <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-          <Link
-            href={`/workspaces/${workspaceId}`}
-            className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            返回
-          </Link>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-semibold text-foreground">{task.title}</h1>
-            <div className="mt-1 flex items-center gap-2">
-              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[taskStatus] ?? "bg-muted text-muted-foreground"}`}>
-                {STATUS_LABELS[taskStatus] ?? taskStatus}
-              </span>
-              {task.baseBranch && (
-                <Badge variant="secondary" className="gap-1 border border-border bg-muted font-mono text-[10px] text-muted-foreground">
-                  <GitBranch className="h-2.5 w-2.5" />
-                  {task.baseBranch}
-                </Badge>
-              )}
-            </div>
+        {/* Header: breadcrumb + task title + status + branch */}
+        <div className="border-b border-border px-4 py-3">
+          {/* Breadcrumb: workspace > project */}
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Link
+              href={`/workspaces/${workspaceId}`}
+              className="flex items-center gap-1 transition-colors hover:text-foreground"
+            >
+              <ArrowLeft className="h-3 w-3" />
+              {workspaceName}
+            </Link>
+            {task.project && (
+              <>
+                <span>/</span>
+                <span className="truncate">{task.project.name}</span>
+              </>
+            )}
+          </div>
+          {/* Task title + badges */}
+          <h1 className="mt-1.5 truncate text-sm font-semibold text-foreground">{task.title}</h1>
+          <div className="mt-1 flex items-center gap-2">
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[taskStatus] ?? "bg-muted text-muted-foreground"}`}>
+              {STATUS_LABELS[taskStatus] ?? taskStatus}
+            </span>
+            {task.baseBranch && (
+              <Badge variant="secondary" className="gap-1 border border-border bg-muted font-mono text-[10px] text-muted-foreground">
+                <GitBranch className="h-2.5 w-2.5" />
+                {task.baseBranch}
+              </Badge>
+            )}
           </div>
         </div>
 
@@ -305,32 +314,33 @@ export function TaskPageClient({ task, workspaceId, latestExecution }: TaskPageC
       <Panel defaultSize={65} minSize={20} className="flex flex-col">
         <Tabs defaultValue="files" className="flex h-full flex-col">
           {/* Tab bar per D-04, D-05 */}
-          <TabsList className="h-auto justify-start rounded-none border-b border-border bg-transparent px-0">
-            <TabsTrigger
-              value="files"
-              className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 text-sm font-normal text-muted-foreground data-[state=active]:border-primary data-[state=active]:font-semibold data-[state=active]:text-foreground"
-            >
-              <FolderTree className="h-4 w-4" />
-              {t("taskPage.tabFiles")}
-            </TabsTrigger>
-            <TabsTrigger
-              value="changes"
-              className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 text-sm font-normal text-muted-foreground data-[state=active]:border-primary data-[state=active]:font-semibold data-[state=active]:text-foreground"
-            >
-              <GitCompare className="h-4 w-4" />
-              {t("taskPage.changes")}
-            </TabsTrigger>
-            {/* D-06: hide Preview tab when project type is BACKEND (Phase 23 adds this type) */}
-            {task.project?.projectType !== "BACKEND" && (
+          <div className="flex items-center border-b border-border px-3 py-2">
+            <TabsList className="inline-flex rounded-md border border-border bg-muted p-1 gap-1">
               <TabsTrigger
-                value="preview"
-                className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 text-sm font-normal text-muted-foreground data-[state=active]:border-primary data-[state=active]:font-semibold data-[state=active]:text-foreground"
+                value="files"
+                className="flex items-center gap-1.5 rounded px-3 py-1 text-sm transition-colors text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
               >
-                <Eye className="h-4 w-4" />
-                {t("taskPage.tabPreview")}
+                <FolderTree className="h-3.5 w-3.5" />
+                {t("taskPage.tabFiles")}
               </TabsTrigger>
-            )}
-          </TabsList>
+              <TabsTrigger
+                value="changes"
+                className="flex items-center gap-1.5 rounded px-3 py-1 text-sm transition-colors text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              >
+                <GitCompare className="h-3.5 w-3.5" />
+                {t("taskPage.changes")}
+              </TabsTrigger>
+              {task.project?.projectType !== "BACKEND" && (
+                <TabsTrigger
+                  value="preview"
+                  className="flex items-center gap-1.5 rounded px-3 py-1 text-sm transition-colors text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  {t("taskPage.tabPreview")}
+                </TabsTrigger>
+              )}
+            </TabsList>
+          </div>
 
           {/* Files tab — Phase 21: FileTree + CodeEditor split layout */}
           <TabsContent value="files" className="flex-1 overflow-hidden">

@@ -45,7 +45,10 @@ async function fetchTask(taskId: string) {
 export default async function TaskPage({ params }: Props) {
   const { workspaceId, taskId } = await params;
 
-  const task = await fetchTask(taskId);
+  const [task, workspace] = await Promise.all([
+    fetchTask(taskId),
+    db.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } }),
+  ]);
 
   if (!task || task.project?.workspaceId !== workspaceId) {
     notFound();
@@ -68,6 +71,7 @@ export default async function TaskPage({ params }: Props) {
     <TaskPageClient
       task={serialized}
       workspaceId={workspaceId}
+      workspaceName={workspace?.name ?? ""}
       latestExecution={serializedExecution}
     />
   );
