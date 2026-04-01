@@ -41,12 +41,14 @@ export interface CodeEditorProps {
   worktreePath: string;
   selectedFilePath: string | null;
   onFilePathChange?: (path: string | null) => void;
+  onSave?: () => void;
 }
 
 export function CodeEditor({
   worktreePath,
   selectedFilePath,
   onFilePathChange,
+  onSave,
 }: CodeEditorProps) {
   const { t } = useI18n();
   const { resolvedTheme } = useTheme();
@@ -63,11 +65,17 @@ export function CodeEditor({
   const monacoRef = useRef<unknown>(null);
   const modelsRef = useRef<Map<string, unknown>>(new Map());
   const activeTabRef = useRef<EditorTab | null>(null);
+  const onSaveRef = useRef<(() => void) | undefined>(undefined);
 
   // Keep activeTabRef in sync with current state for use in Monaco action callbacks
   useEffect(() => {
     activeTabRef.current = tabs.find((t) => t.path === activeTabPath) ?? null;
   }, [tabs, activeTabPath]);
+
+  // Keep onSaveRef in sync to avoid stale closure in Monaco addAction
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  }, [onSave]);
 
   function showToast(type: "success" | "error") {
     setToast({ type, visible: true });
@@ -189,6 +197,7 @@ export function CodeEditor({
             )
           );
           showToast("success");
+          onSaveRef.current?.();
         } catch {
           showToast("error");
         }
