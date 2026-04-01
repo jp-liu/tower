@@ -111,9 +111,9 @@ export function PreviewPanel({
     if (!worktreePath) return;
     try {
       await openInTerminal(worktreePath);
-    } catch (err) {
-      // Log error — no toast library; error shown in console
-      console.error(t("preview.terminalError"), err);
+    } catch {
+      setServerStatus("error");
+      setErrorMsg(t("preview.terminalError"));
     }
   }
 
