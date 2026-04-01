@@ -79,6 +79,7 @@ const translations = {
     "task.baseBranch": "基础分支",
     "task.branchLoading": "加载分支...",
     "task.branchNone": "未找到分支",
+    "task.branchSearch": "搜索分支...",
     // Task detail
     "taskDetail.title": "任务对话",
     "taskDetail.back": "返回任务列表",
@@ -477,6 +478,7 @@ const translations = {
     "task.baseBranch": "Base Branch",
     "task.branchLoading": "Loading branches...",
     "task.branchNone": "No branches found",
+    "task.branchSearch": "Search branches...",
     "taskDetail.title": "Task Chat",
     "taskDetail.back": "Back to list",
     "taskDetail.hasConversation": "Has chat",
