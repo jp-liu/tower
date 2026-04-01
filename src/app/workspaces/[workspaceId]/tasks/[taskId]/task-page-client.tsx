@@ -11,6 +11,7 @@ import { TaskMessageInput } from "@/components/task/task-message-input";
 import { TaskDiffView } from "@/components/task/task-diff-view";
 import { FileTree } from "@/components/task/file-tree";
 import { CodeEditor } from "@/components/task/code-editor";
+import { PreviewPanel } from "@/components/task/preview-panel";
 import { Badge } from "@/components/ui/badge";
 import { getTaskMessages } from "@/actions/agent-actions";
 import { getPrompts } from "@/actions/prompt-actions";
@@ -29,7 +30,7 @@ interface TaskPageClientProps {
     projectId: string;
     createdAt: string;
     updatedAt: string;
-    project: { id: string; name: string; type: string; localPath: string | null } | null;
+    project: { id: string; name: string; type: string; localPath: string | null; projectType: string; previewCommand: string | null } | null;
   };
   workspaceId: string;
   latestExecution?: {
@@ -68,6 +69,7 @@ export function TaskPageClient({ task, workspaceId, latestExecution }: TaskPageC
   const [diffData, setDiffData] = useState<DiffData | null>(null);
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
+  const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
 
   // Load existing messages on mount
@@ -319,7 +321,7 @@ export function TaskPageClient({ task, workspaceId, latestExecution }: TaskPageC
               {t("taskPage.changes")}
             </TabsTrigger>
             {/* D-06: hide Preview tab when project type is BACKEND (Phase 23 adds this type) */}
-            {task.project?.type !== "BACKEND" && (
+            {task.project?.projectType !== "BACKEND" && (
               <TabsTrigger
                 value="preview"
                 className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 text-sm font-normal text-muted-foreground data-[state=active]:border-primary data-[state=active]:font-semibold data-[state=active]:text-foreground"
@@ -352,6 +354,7 @@ export function TaskPageClient({ task, workspaceId, latestExecution }: TaskPageC
                     worktreePath={latestExecution.worktreePath}
                     selectedFilePath={selectedFilePath}
                     onFilePathChange={setSelectedFilePath}
+                    onSave={() => setPreviewRefreshKey((k) => k + 1)}
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center">
@@ -391,15 +394,15 @@ export function TaskPageClient({ task, workspaceId, latestExecution }: TaskPageC
             )}
           </TabsContent>
 
-          {/* Preview tab — Phase 23 placeholder per UI-SPEC */}
-          <TabsContent value="preview" className="flex-1 overflow-auto">
-            <div className="flex h-full flex-col items-center justify-center gap-3">
-              <Eye className="h-8 w-8 text-muted-foreground" />
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground">{t("taskPage.previewPlaceholder")}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{t("taskPage.comingSoonPhase23")}</p>
-              </div>
-            </div>
+          {/* Preview tab — Phase 23: functional PreviewPanel */}
+          <TabsContent value="preview" className="flex-1 overflow-hidden">
+            <PreviewPanel
+              taskId={task.id}
+              worktreePath={latestExecution?.worktreePath ?? null}
+              previewCommand={task.project?.previewCommand ?? null}
+              refreshKey={previewRefreshKey}
+              projectId={task.projectId}
+            />
           </TabsContent>
         </Tabs>
       </Panel>
