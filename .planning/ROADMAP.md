@@ -188,6 +188,6 @@ Plans:
 | 18. Worktree Lifecycle | v0.5 | 2/2 | Complete | 2026-03-31 |
 | 19. Workbench Entry & Layout | v0.6 | 2/2 | Complete    | 2026-03-31 |
 | 20. File Tree Browser | v0.6 | 3/3 | Complete    | 2026-04-01 |
-| 21. Code Editor | v0.6 | 3/3 | Complete   | 2026-04-01 |
+| 21. Code Editor | v0.6 | 3/3 | Complete    | 2026-04-01 |
 | 22. Diff View Integration | v0.6 | 0/TBD | Not started | - |
 | 23. Preview Panel | v0.6 | 0/TBD | Not started | - |
