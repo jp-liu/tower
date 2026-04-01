@@ -25,6 +25,7 @@ interface CreateProjectData {
   description?: string;
   gitUrl?: string;
   localPath?: string;
+  projectType?: string;
 }
 
 interface TopBarProps {
@@ -42,6 +43,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
   const [localPath, setLocalPath] = useState("");
   const [localPathManual, setLocalPathManual] = useState(false);
   const [showFolderBrowser, setShowFolderBrowser] = useState(false);
+  const [projectType, setProjectType] = useState<"FRONTEND" | "BACKEND">("FRONTEND");
   const [cloneStatus, setCloneStatus] = useState<"idle" | "cloning" | "success" | "error">("idle");
   const [cloneError, setCloneError] = useState("");
 
@@ -64,6 +66,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
     setGitUrl("");
     setLocalPath("");
     setLocalPathManual(false);
+    setProjectType("FRONTEND");
     setCloneStatus("idle");
     setCloneError("");
   };
@@ -115,6 +118,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
         description: projectDesc.trim() || undefined,
         gitUrl: gitUrl.trim() || undefined,
         localPath: localPath.trim() || undefined,
+        projectType,
       });
       resetForm();
       setShowNewProject(false);
@@ -196,6 +200,30 @@ export function TopBar({ onCreateProject }: TopBarProps) {
                 onChange={(e) => setProjectName(e.target.value)}
                 className="mt-1.5"
               />
+            </div>
+
+            {/* Project type — D-01 */}
+            <div>
+              <label className="text-sm font-medium">{t("project.type.label")}</label>
+              <div className="mt-2 inline-flex rounded-md border bg-muted p-1 gap-1">
+                {([
+                  { value: "FRONTEND" as const, label: t("project.type.frontend") },
+                  { value: "BACKEND" as const, label: t("project.type.backend") },
+                ]).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setProjectType(opt.value)}
+                    className={`rounded px-3 py-1 text-sm transition-colors ${
+                      projectType === opt.value
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Alias */}

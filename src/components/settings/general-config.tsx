@@ -4,13 +4,23 @@ import { useTheme } from "next-themes";
 import { useState, useEffect } from "react";
 import { useI18n } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n";
+import { getConfigValue, setConfigValue } from "@/actions/config-actions";
 
 export function GeneralConfig() {
   const { theme, setTheme } = useTheme();
   const { locale, setLocale, t } = useI18n();
   const [mounted, setMounted] = useState(false);
+  const [terminalApp, setTerminalApp] = useState("Terminal");
 
   useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    getConfigValue<string>("terminal.app", "Terminal").then(setTerminalApp);
+  }, []);
+
+  async function handleSaveTerminal() {
+    await setConfigValue("terminal.app", terminalApp);
+  }
 
   const themeOptions = [
     { value: "light", label: t("settings.themeLight") },
@@ -76,6 +86,22 @@ export function GeneralConfig() {
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+
+        {/* Terminal app section — D-09 per PV-05 */}
+        <div>
+          <h3 className="text-sm font-medium">{t("settings.terminal.label")}</h3>
+          <p className="mt-1 text-sm text-muted-foreground">{t("settings.terminal.desc")}</p>
+          <div className="mt-3 flex gap-2">
+            <input
+              type="text"
+              value={terminalApp}
+              onChange={(e) => setTerminalApp(e.target.value)}
+              onBlur={handleSaveTerminal}
+              placeholder={t("settings.terminal.placeholder")}
+              className="h-9 w-48 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            />
           </div>
         </div>
       </div>
