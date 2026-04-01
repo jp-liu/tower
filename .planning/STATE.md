@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.6
 milestone_name: 任务开发工作台
 status: executing
-stopped_at: Completed 21-01-PLAN.md
-last_updated: "2026-04-01T01:45:46.640Z"
+stopped_at: Completed 21-02-PLAN.md
+last_updated: "2026-04-01T01:50:26.997Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-03-31)
 ## Current Position
 
 Phase: 21 (code-editor) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-01
 
@@ -72,6 +72,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 20 P02 | 180 | 2 tasks | 2 files |
 | Phase 20-file-tree-browser P03 | 900 | 2 tasks | 7 files |
 | Phase 21-code-editor P01 | 780 | 3 tasks | 4 files |
+| Phase 21-code-editor P02 | 134 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -147,6 +148,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 20-03]: path module removed from client components — use string manipulation for browser-compatible path operations
 - [Phase 21-code-editor]: @monaco-editor/react@next (4.8.0-rc.3) used — React 19 compatible, no webpack plugin (Turbopack incompatible)
 - [Phase 21-code-editor]: readFileContent/writeFileContent named to avoid collision with readFile/writeFile fs/promises imports
+- [Phase 21-code-editor]: activeTabRef pattern solves stale closure in Monaco addAction() — useRef kept in sync via useEffect([tabs, activeTabPath])
+- [Phase 21-code-editor]: handleTabClose combines Monaco model disposal and setTabs in single call to avoid double-render on active tab close
 
 ### Pending Todos
 
@@ -160,6 +163,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T01:45:46.636Z
-Stopped at: Completed 21-01-PLAN.md
+Last session: 2026-04-01T01:50:26.993Z
+Stopped at: Completed 21-02-PLAN.md
 Resume file: None

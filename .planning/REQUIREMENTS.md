@@ -16,9 +16,9 @@ Requirements for v0.6 — 任务开发工作台. Each maps to roadmap phases.
 
 - [x] **ED-01**: 用户可在工作台中打开文件并查看语法高亮代码（Monaco Editor）
 - [x] **ED-02**: 用户可通过 Ctrl+S 保存文件到 worktree 磁盘
-- [ ] **ED-03**: 编辑器显示未保存文件标记（dirty dot）
-- [ ] **ED-04**: 用户可同时打开多个文件标签页切换编辑
-- [ ] **ED-05**: 编辑器主题跟随 ai-manager 的 dark/light 设置
+- [x] **ED-03**: 编辑器显示未保存文件标记（dirty dot）
+- [x] **ED-04**: 用户可同时打开多个文件标签页切换编辑
+- [x] **ED-05**: 编辑器主题跟随 ai-manager 的 dark/light 设置
 
 ### 文件树浏览器
 
@@ -168,9 +168,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FT-06 | Phase 20 | Complete |
 | ED-01 | Phase 21 | Complete |
 | ED-02 | Phase 21 | Complete |
-| ED-03 | Phase 21 | Pending |
-| ED-04 | Phase 21 | Pending |
-| ED-05 | Phase 21 | Pending |
+| ED-03 | Phase 21 | Complete |
+| ED-04 | Phase 21 | Complete |
+| ED-05 | Phase 21 | Complete |
 | DF-01 | Phase 22 | Pending |
 | PV-01 | Phase 23 | Pending |
 | PV-02 | Phase 23 | Pending |
