@@ -73,31 +73,31 @@ Deferred to future release.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PTY-01 | — | Pending |
-| PTY-02 | — | Pending |
-| PTY-03 | — | Pending |
-| WS-01 | — | Pending |
-| WS-02 | — | Pending |
-| WS-03 | — | Pending |
-| WS-04 | — | Pending |
-| TERM-01 | — | Pending |
-| TERM-02 | — | Pending |
-| TERM-03 | — | Pending |
-| TERM-04 | — | Pending |
-| INT-01 | — | Pending |
-| INT-02 | — | Pending |
-| INT-03 | — | Pending |
-| TASK-01 | — | Pending |
-| TASK-02 | — | Pending |
-| TASK-03 | — | Pending |
-| FIX-01 | — | Pending |
-| FIX-02 | — | Pending |
+| PTY-01 | Phase 24 | Pending |
+| PTY-02 | Phase 24 | Pending |
+| PTY-03 | Phase 24 | Pending |
+| WS-01 | Phase 24 | Pending |
+| WS-02 | Phase 24 | Pending |
+| WS-03 | Phase 24 | Pending |
+| WS-04 | Phase 24 | Pending |
+| TERM-01 | Phase 25 | Pending |
+| TERM-02 | Phase 25 | Pending |
+| TERM-03 | Phase 25 | Pending |
+| TERM-04 | Phase 25 | Pending |
+| INT-01 | Phase 26 | Pending |
+| INT-02 | Phase 26 | Pending |
+| INT-03 | Phase 26 | Pending |
+| TASK-01 | Phase 27 | Pending |
+| TASK-02 | Phase 27 | Pending |
+| TASK-03 | Phase 27 | Pending |
+| FIX-01 | Phase 28 | Pending |
+| FIX-02 | Phase 28 | Pending |
 
 **v0.7 Coverage:**
 - v0.7 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19 ⚠️
+- Mapped to phases: 19
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-02*
-*Last updated: 2026-04-02 after v0.7 milestone definition*
+*Last updated: 2026-04-02 — traceability updated after v0.7 roadmap creation*

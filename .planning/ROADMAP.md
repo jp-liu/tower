@@ -7,7 +7,8 @@
 - ✅ **v0.3 全局搜索增强** — Phases 8-10 (shipped 2026-03-30)
 - ✅ **v0.4 系统配置化** — Phases 11-14 (shipped 2026-03-30)
 - ✅ **v0.5 Git Worktree 任务隔离** — Phases 15-18 (shipped 2026-03-31)
-- 🚧 **v0.6 任务开发工作台** — Phases 19-23 (in progress)
+- ✅ **v0.6 任务开发工作台** — Phases 19-23 (shipped 2026-04-01)
+- 🚧 **v0.7 终端交互体验** — Phases 24-28 (in progress)
 
 ## Phases
 
@@ -69,15 +70,28 @@ See: [milestones/v0.5-ROADMAP.md](./milestones/v0.5-ROADMAP.md) for full details
 
 </details>
 
-### 🚧 v0.6 任务开发工作台 (In Progress)
-
-**Milestone Goal:** 为每个任务提供专属的全功能开发工作台页面，集成 AI 聊天、代码浏览编辑、diff 查看和实时预览。
+<details>
+<summary>✅ v0.6 任务开发工作台 (Phases 19-23) — SHIPPED 2026-04-01</summary>
 
 - [x] **Phase 19: Workbench Entry & Layout** - "查看详情"入口 + 任务专属页面路由 + 三标签右侧面板骨架 (completed 2026-03-31)
-- [x] **Phase 20: File Tree Browser** - Worktree 目录树浏览、gitignore 过滤、git 状态标记、右键菜单操作 (completed 2026-03-31)
+- [x] **Phase 20: File Tree Browser** - Worktree 目录树浏览、gitignore 过滤、git 状态标记、右键菜单操作 (completed 2026-04-01)
 - [x] **Phase 21: Code Editor** - Monaco 在线编辑器（语法高亮、多标签、Ctrl+S 保存、dirty 标记、主题同步） (completed 2026-04-01)
 - [x] **Phase 22: Diff View Integration** - "变更"标签页复用现有 TaskDiffView 组件接入工作台布局 (completed 2026-04-01)
 - [x] **Phase 23: Preview Panel** - 前端项目类型字段 + 预览面板（启动命令、iframe 嵌入、终端打开、自动刷新） (completed 2026-04-01)
+
+See: [milestones/v0.6-ROADMAP.md](./milestones/v0.6-ROADMAP.md) for full details.
+
+</details>
+
+### 🚧 v0.7 终端交互体验 (In Progress)
+
+**Milestone Goal:** 将任务执行界面从 SSE 聊天气泡替换为真正的浏览器内终端（node-pty + WebSocket + xterm.js），用户在网页上看到的和本地运行 Claude Code 完全一样。
+
+- [ ] **Phase 24: PTY Backend & WebSocket Server** - node-pty 会话注册表 + 独立 WebSocket server (port 3001) 双向通信 + 安全防护
+- [ ] **Phase 25: xterm.js Terminal Component** - 浏览器终端组件（ANSI 渲染、键盘输入、resize 同步、主题跟随）
+- [ ] **Phase 26: Workbench Integration** - 工作台左侧面板替换 SSE 聊天气泡为终端组件 + 执行生命周期对接
+- [ ] **Phase 27: Task Card Context Menu** - Kanban 卡片右键菜单（更改状态、启动任务、前往详情页）
+- [ ] **Phase 28: v0.6 Bug Fixes** - Monaco 加载稳定性修复 + Diff 显示条件修复
 
 ## Phase Details
 
@@ -139,11 +153,9 @@ Plans:
   1. The "Changes" tab in the workbench right panel renders a diff of the task branch against its base branch
   2. The diff view is the same component used in the v0.5 task drawer (no duplication of diff logic)
   3. User can reload the diff to see the latest changes after Claude modifies files
-**Plans**: 3 plans
+**Plans**: 1 plan
 Plans:
-- [x] 20-01-PLAN.md — Install ignore dep, safeResolvePath utility, test scaffolds (FT-01, FT-02, FT-03, FT-05)
-- [ ] 20-02-PLAN.md — File CRUD server actions + getGitStatus (FT-01, FT-03, FT-05, FT-06)
-- [ ] 20-03-PLAN.md — FileTree/FileTreeNode/FileTreeContextMenu components + task page integration (FT-01-06)
+- [x] 22-01-PLAN.md — Wire TaskDiffView into workbench Changes tab (DF-01)
 **UI hint**: yes
 
 ### Phase 23: Preview Panel
@@ -163,6 +175,61 @@ Plans:
 - [x] 23-02-PLAN.md — PreviewPanel component, project type selector in TopBar dialog, Settings terminal input (PV-01, PV-02, PV-03, PV-04, PV-05)
 - [x] 23-03-PLAN.md — CodeEditor onSave prop, task-page-client wiring, human-verify checkpoint (PV-01, PV-02, PV-03, PV-04, PV-06)
 **UI hint**: yes
+
+### Phase 24: PTY Backend & WebSocket Server
+**Goal**: A working, leak-proof WebSocket server that spawns Claude CLI in a PTY, streams output, handles input and resize, and cleans up correctly
+**Depends on**: Phase 23 (instrumentation.ts already exists for worktree pruning)
+**Requirements**: PTY-01, PTY-02, PTY-03, WS-01, WS-02, WS-03, WS-04
+**Success Criteria** (what must be TRUE):
+  1. `wscat -c ws://localhost:3001` can connect and receive raw Claude CLI output including ANSI escape sequences
+  2. Typing input through the WebSocket connection is forwarded to the PTY and accepted by Claude CLI interactively
+  3. A cross-origin connection attempt (non-localhost origin) is rejected with 403
+  4. Closing the WebSocket does not kill the PTY session; reconnecting within 30 seconds reattaches to the same running process
+  5. Running 5 open/close cycles produces zero zombie processes (verified via `ps aux | grep pty`)
+**Plans**: TBD
+
+### Phase 25: xterm.js Terminal Component
+**Goal**: Users see a fully functional browser terminal that renders PTY output with ANSI colors, accepts keyboard input, and resizes with the panel
+**Depends on**: Phase 24
+**Requirements**: TERM-01, TERM-02, TERM-03, TERM-04
+**Success Criteria** (what must be TRUE):
+  1. The terminal renders ANSI color sequences from Claude CLI output (progress bars, colored text, cursor movement)
+  2. User can type in the terminal and the input is forwarded to Claude CLI (interactive prompts work)
+  3. Resizing the workbench panel causes the terminal to refit and PTY columns/rows to update within 100ms
+  4. The terminal background and text colors switch automatically when user toggles dark/light mode
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 26: Workbench Integration
+**Goal**: Users can start task execution and see Claude CLI running live in the workbench terminal, with task status updating when done
+**Depends on**: Phase 25
+**Requirements**: INT-01, INT-02, INT-03
+**Success Criteria** (what must be TRUE):
+  1. Clicking "Execute" on a task opens a PTY session and the workbench left panel shows the live terminal output
+  2. Claude CLI output appears with full ANSI formatting — no JSON parsing, no chat bubbles
+  3. When Claude CLI exits successfully, the task status automatically transitions to IN_REVIEW; on failure the status stays unchanged
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 27: Task Card Context Menu
+**Goal**: Users can right-click any task card on the Kanban board to change status, launch execution, or navigate to the workbench
+**Depends on**: Phase 23 (workbench page exists), Phase 26 (execution integrated)
+**Requirements**: TASK-01, TASK-02, TASK-03
+**Success Criteria** (what must be TRUE):
+  1. Right-clicking a task card opens a context menu with options: change status, launch task, go to detail page
+  2. "Launch task" in the context menu starts Claude CLI execution; the option is greyed out for tasks that have already been executed
+  3. "Go to detail page" in the context menu navigates to `/workspaces/[id]/tasks/[taskId]`
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 28: v0.6 Bug Fixes
+**Goal**: The Monaco editor loads reliably and the Diff tab works for all project types including NORMAL projects
+**Depends on**: Phase 23 (v0.6 code exists to fix)
+**Requirements**: FIX-01, FIX-02
+**Success Criteria** (what must be TRUE):
+  1. The Monaco editor initializes successfully on first load without requiring a page refresh
+  2. The Changes tab displays a diff for NORMAL type projects (not just GIT type projects)
+**Plans**: TBD
 
 ## Progress
 
@@ -186,8 +253,13 @@ Plans:
 | 16. Worktree Execution Engine | v0.5 | 1/2 | Complete | 2026-03-31 |
 | 17. Review & Merge Workflow | v0.5 | 4/4 | Complete | 2026-03-31 |
 | 18. Worktree Lifecycle | v0.5 | 2/2 | Complete | 2026-03-31 |
-| 19. Workbench Entry & Layout | v0.6 | 2/2 | Complete    | 2026-03-31 |
-| 20. File Tree Browser | v0.6 | 3/3 | Complete    | 2026-04-01 |
-| 21. Code Editor | v0.6 | 3/3 | Complete    | 2026-04-01 |
-| 22. Diff View Integration | v0.6 | 0/TBD | Complete    | 2026-04-01 |
-| 23. Preview Panel | v0.6 | 3/3 | Complete    | 2026-04-01 |
+| 19. Workbench Entry & Layout | v0.6 | 2/2 | Complete | 2026-03-31 |
+| 20. File Tree Browser | v0.6 | 3/3 | Complete | 2026-04-01 |
+| 21. Code Editor | v0.6 | 3/3 | Complete | 2026-04-01 |
+| 22. Diff View Integration | v0.6 | 0/TBD | Complete | 2026-04-01 |
+| 23. Preview Panel | v0.6 | 3/3 | Complete | 2026-04-01 |
+| 24. PTY Backend & WebSocket Server | v0.7 | 0/TBD | Not started | - |
+| 25. xterm.js Terminal Component | v0.7 | 0/TBD | Not started | - |
+| 26. Workbench Integration | v0.7 | 0/TBD | Not started | - |
+| 27. Task Card Context Menu | v0.7 | 0/TBD | Not started | - |
+| 28. v0.6 Bug Fixes | v0.7 | 0/TBD | Not started | - |

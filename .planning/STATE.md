@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v0.7
 milestone_name: 终端交互体验
-status: defining
+status: roadmapped
 stopped_at: null
 last_updated: "2026-04-02T00:00:00.000Z"
 last_activity: 2026-04-02
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Defining requirements for v0.7
+**Current focus:** v0.7 — Roadmap defined, ready for Phase 24
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started (roadmap defined)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-04-02 — Milestone v0.7 started
+Status: Ready to begin Phase 24
+Last activity: 2026-04-02 — v0.7 roadmap created (Phases 24-28)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -36,9 +36,9 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 19 (across v0.1-v0.5)
+- Total plans completed: 19 (across v0.1-v0.5) + 11 (v0.6) = 30
 - Average duration: ~30 min
-- Total execution time: ~9.5 hours
+- Total execution time: ~15 hours
 
 **By Phase:**
 
@@ -64,8 +64,6 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 17-review-merge-workflow P03 | 180s | 2 tasks | 3 files |
 | Phase 18-worktree-lifecycle P02 | 246s | 1 task | 2 files |
 | Phase 18-worktree-lifecycle P01 | 290 | 2 tasks | 5 files |
-
-*Updated after each plan completion*
 | Phase 19-workbench-entry-layout P01 | 31536248s | 2 tasks | 3 files |
 | Phase 19-workbench-entry-layout P02 | 480 | 1 tasks | 1 files |
 | Phase 20-file-tree-browser P01 | 180 | 2 tasks | 6 files |
@@ -77,6 +75,8 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 23-preview-panel P01 | 720 | 2 tasks | 8 files |
 | Phase 23-preview-panel P02 | 480 | 2 tasks | 3 files |
 | Phase 23 P03 | 480 | 2 tasks | 3 files |
+
+*Updated after each plan completion*
 
 ## Accumulated Context
 
@@ -164,6 +164,16 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 23]: onSaveRef pattern: useRef + useEffect sync mirrors existing activeTabRef pattern — avoids stale closure in Monaco addAction
 - [Phase 23]: projectType check (not .type) for Preview tab visibility — .type is GIT/NORMAL, .projectType is FRONTEND/BACKEND
 - [Phase 23]: previewRefreshKey is parent-controlled in task-page-client — PreviewPanel receives it as prop, uses key={refreshKey} to force iframe re-render
+- [v0.7 Roadmap]: WS server on port 3001 started from instrumentation.ts (not Route Handler — Next.js App Router does not support HTTP Upgrade)
+- [v0.7 Roadmap]: node-pty requires --webpack flag; Turbopack cannot bundle native .node addon (Next.js issue #85449)
+- [v0.7 Roadmap]: PTY sessions keyed by taskId (not WebSocket connection) — browser refresh reattaches without killing the process
+- [v0.7 Roadmap]: TaskTerminal must use next/dynamic({ ssr: false }) — xterm.js accesses window at import time
+- [v0.7 Roadmap]: Claude CLI spawn args must remove --output-format stream-json --print - for PTY mode (raw TTY output)
+- [v0.7 Roadmap]: PTY session registry (Map<taskId, PtySession>) must be implemented before any UI work — no retrofitting
+- [v0.7 Roadmap]: Double-kill guard: killed boolean flag + try-catch on all pty.kill() calls; pty.onExit sets killed=true but does NOT call kill()
+- [v0.7 Roadmap]: CSWSH origin validation: reject non-localhost origins with 403 — non-negotiable security requirement
+- [v0.7 Roadmap]: Phase 27 (Task Card Context Menu) is independent of terminal work — can proceed after Phase 23 exists
+- [v0.7 Roadmap]: Phase 28 (Bug Fixes) is fully independent — can run in parallel with any other phase
 
 ### Pending Todos
 
@@ -171,12 +181,12 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 20 file tree: verify Monaco Turbopack worker issue (#72613) status before starting Phase 21 — CDN loader is the safe fallback regardless.
-- Phase 23 preview schema migration: previewCommand + previewPort (nullable) on Project model; confirm no conflict with existing pending migrations before running prisma migrate dev.
-- Phase 23: previewCommand is split by whitespace into args array and passed to spawn(shell: false) — never interpolated as shell string (security requirement).
+- Phase 24: Verify `node -e "require('node-pty')"` passes after install — native addon compilation may require Xcode command line tools on macOS.
+- Phase 24: Switch dev script from `next dev --turbo` to `next dev --webpack` before any node-pty work — Turbopack is incompatible.
+- Phase 26: DB persistence decision for terminal sessions is unresolved (raw transcript as TaskMessage vs. no persistence). Must decide during Phase 26 planning.
 
 ## Session Continuity
 
-Last session: 2026-04-01T03:52:09.792Z
-Stopped at: Completed 23-03-PLAN.md (Tasks 1 and 2 — awaiting checkpoint verification)
-Resume file: None
+Last session: 2026-04-02
+Stopped at: Roadmap created for v0.7 (Phases 24-28)
+Resume file: None — start with `/gsd:plan-phase 24`
