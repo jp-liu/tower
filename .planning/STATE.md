@@ -4,7 +4,7 @@ milestone: v0.7
 milestone_name: 终端交互体验
 status: verifying
 stopped_at: Completed 24-02-PLAN.md
-last_updated: "2026-04-02T13:04:37.031Z"
+last_updated: "2026-04-02T13:08:20.040Z"
 last_activity: 2026-04-02
 progress:
   total_phases: 9
@@ -25,8 +25,8 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 
 ## Current Position
 
-Phase: 24 (pty-backend-websocket-server) — EXECUTING
-Plan: 2 of 2
+Phase: 25
+Plan: Not started
 Status: Phase complete — ready for verification
 Last activity: 2026-04-02
 

@@ -261,7 +261,7 @@ Plans:
 | 21. Code Editor | v0.6 | 3/3 | Complete | 2026-04-01 |
 | 22. Diff View Integration | v0.6 | 0/TBD | Complete | 2026-04-01 |
 | 23. Preview Panel | v0.6 | 3/3 | Complete | 2026-04-01 |
-| 24. PTY Backend & WebSocket Server | v0.7 | 2/2 | Complete   | 2026-04-02 |
+| 24. PTY Backend & WebSocket Server | v0.7 | 2/2 | Complete    | 2026-04-02 |
 | 25. xterm.js Terminal Component | v0.7 | 0/TBD | Not started | - |
 | 26. Workbench Integration | v0.7 | 0/TBD | Not started | - |
 | 27. Task Card Context Menu | v0.7 | 0/TBD | Not started | - |
