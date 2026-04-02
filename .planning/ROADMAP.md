@@ -88,7 +88,7 @@ See: [milestones/v0.6-ROADMAP.md](./milestones/v0.6-ROADMAP.md) for full details
 **Milestone Goal:** 将任务执行界面从 SSE 聊天气泡替换为真正的浏览器内终端（node-pty + WebSocket + xterm.js），用户在网页上看到的和本地运行 Claude Code 完全一样。
 
 - [x] **Phase 24: PTY Backend & WebSocket Server** - node-pty 会话注册表 + 独立 WebSocket server (port 3001) 双向通信 + 安全防护 (completed 2026-04-02)
-- [ ] **Phase 25: xterm.js Terminal Component** - 浏览器终端组件（ANSI 渲染、键盘输入、resize 同步、主题跟随）
+- [x] **Phase 25: xterm.js Terminal Component** - 浏览器终端组件（ANSI 渲染、键盘输入、resize 同步、主题跟随） (completed 2026-04-02)
 - [ ] **Phase 26: Workbench Integration** - 工作台左侧面板替换 SSE 聊天气泡为终端组件 + 执行生命周期对接
 - [ ] **Phase 27: Task Card Context Menu** - Kanban 卡片右键菜单（更改状态、启动任务、前往详情页）
 - [ ] **Phase 28: v0.6 Bug Fixes** - Monaco 加载稳定性修复 + Diff 显示条件修复
@@ -203,7 +203,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 25-01-PLAN.md — Install xterm addons + i18n keys (TERM-01, TERM-02, TERM-03, TERM-04)
-- [ ] 25-02-PLAN.md — TaskTerminal component (TERM-01, TERM-02, TERM-03, TERM-04)
+- [x] 25-02-PLAN.md — TaskTerminal component (TERM-01, TERM-02, TERM-03, TERM-04)
 **UI hint**: yes
 
 ### Phase 26: Workbench Integration
@@ -265,7 +265,7 @@ Plans:
 | 22. Diff View Integration | v0.6 | 0/TBD | Complete | 2026-04-01 |
 | 23. Preview Panel | v0.6 | 3/3 | Complete | 2026-04-01 |
 | 24. PTY Backend & WebSocket Server | v0.7 | 2/2 | Complete    | 2026-04-02 |
-| 25. xterm.js Terminal Component | v0.7 | 1/2 | In Progress|  |
+| 25. xterm.js Terminal Component | v0.7 | 2/2 | Complete   | 2026-04-02 |
 | 26. Workbench Integration | v0.7 | 0/TBD | Not started | - |
 | 27. Task Card Context Menu | v0.7 | 0/TBD | Not started | - |
 | 28. v0.6 Bug Fixes | v0.7 | 0/TBD | Not started | - |
