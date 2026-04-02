@@ -413,6 +413,13 @@ const translations = {
     "settings.terminal.label": "默认终端",
     "settings.terminal.desc": "用于\"在终端中打开\"的终端应用（如 Terminal、iTerm2、Warp）",
     "settings.terminal.placeholder": "Terminal",
+    // Terminal component (Phase 25)
+    "terminal.connecting": "正在连接...",
+    "terminal.connected": "已连接",
+    "terminal.disconnected": "已断开",
+    "terminal.reconnecting": "正在重连...",
+    "terminal.noWorktree": "无工作区",
+    "terminal.noWorktreeDesc": "请先运行任务以启动终端",
   },
   en: {
     "sidebar.workspace": "Workspaces",
@@ -804,6 +811,13 @@ const translations = {
     "settings.terminal.label": "Default Terminal",
     "settings.terminal.desc": "Terminal app used for \"Open in Terminal\" (e.g. Terminal, iTerm2, Warp)",
     "settings.terminal.placeholder": "Terminal",
+    // Terminal component (Phase 25)
+    "terminal.connecting": "Connecting...",
+    "terminal.connected": "Connected",
+    "terminal.disconnected": "Disconnected",
+    "terminal.reconnecting": "Reconnecting...",
+    "terminal.noWorktree": "No Worktree",
+    "terminal.noWorktreeDesc": "Run the task first to start the terminal",
   },
 } as const;
 
