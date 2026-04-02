@@ -9,9 +9,9 @@ Requirements for v0.7 — 终端交互体验. Each maps to roadmap phases.
 
 ### 终端后端
 
-- [ ] **PTY-01**: 系统可通过 node-pty 为每个任务创建 PTY 伪终端会话
-- [ ] **PTY-02**: PTY 会话注册表管理会话生命周期（创建/查询/销毁）
-- [ ] **PTY-03**: PTY 进程退出或任务完成时自动清理（防止僵尸进程）
+- [x] **PTY-01**: 系统可通过 node-pty 为每个任务创建 PTY 伪终端会话
+- [x] **PTY-02**: PTY 会话注册表管理会话生命周期（创建/查询/销毁）
+- [x] **PTY-03**: PTY 进程退出或任务完成时自动清理（防止僵尸进程）
 
 ### WebSocket 通信
 
@@ -73,9 +73,9 @@ Deferred to future release.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PTY-01 | Phase 24 | Pending |
-| PTY-02 | Phase 24 | Pending |
-| PTY-03 | Phase 24 | Pending |
+| PTY-01 | Phase 24 | Complete |
+| PTY-02 | Phase 24 | Complete |
+| PTY-03 | Phase 24 | Complete |
 | WS-01 | Phase 24 | Pending |
 | WS-02 | Phase 24 | Pending |
 | WS-03 | Phase 24 | Pending |

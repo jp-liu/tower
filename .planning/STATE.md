@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.7
 milestone_name: 终端交互体验
-status: roadmapped
-stopped_at: null
-last_updated: "2026-04-02T00:00:00.000Z"
+status: executing
+stopped_at: Completed 24-01-PLAN.md
+last_updated: "2026-04-02T12:59:04.330Z"
 last_activity: 2026-04-02
 progress:
-  total_phases: 5
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 9
+  completed_phases: 4
+  total_plans: 13
+  completed_plans: 12
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** v0.7 — Roadmap defined, ready for Phase 24
+**Current focus:** Phase 24 — pty-backend-websocket-server
 
 ## Current Position
 
-Phase: Not started (roadmap defined)
-Plan: —
-Status: Ready to begin Phase 24
-Last activity: 2026-04-02 — v0.7 roadmap created (Phases 24-28)
+Phase: 24 (pty-backend-websocket-server) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-04-02
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -77,6 +77,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 23 P03 | 480 | 2 tasks | 3 files |
 
 *Updated after each plan completion*
+| Phase 24 P01 | 900 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -174,6 +175,9 @@ Progress: [░░░░░░░░░░] 0%
 - [v0.7 Roadmap]: CSWSH origin validation: reject non-localhost origins with 403 — non-negotiable security requirement
 - [v0.7 Roadmap]: Phase 27 (Task Card Context Menu) is independent of terminal work — can proceed after Phase 23 exists
 - [v0.7 Roadmap]: Phase 28 (Bug Fixes) is fully independent — can run in parallel with any other phase
+- [Phase 24]: spawn-helper +x fix: pnpm strips execute permissions on native addon helpers; must chmod after rebuild
+- [Phase 24]: dev script --webpack (not --turbopack): Turbopack cannot bundle node-pty native addon (Next.js #85449)
+- [Phase 24]: onExit sets killed=true but does NOT call pty.kill() — prevents double-kill crash (D-07)
 
 ### Pending Todos
 
@@ -187,6 +191,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-02
-Stopped at: Roadmap created for v0.7 (Phases 24-28)
-Resume file: None — start with `/gsd:plan-phase 24`
+Last session: 2026-04-02T12:59:04.327Z
+Stopped at: Completed 24-01-PLAN.md
+Resume file: None
