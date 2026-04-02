@@ -116,9 +116,24 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - ✓ 项目类型区分（前端/后端）— v0.6 Phase 23
 - ✓ 终端应用配置（Settings > General）— v0.6 Phase 23
 
+## Current Milestone: v0.7 终端交互体验
+
+**Goal:** 将任务执行界面从 SSE 聊天气泡替换为真正的浏览器内终端（node-pty + WebSocket + xterm.js），用户在网页上看到的和本地运行 Claude Code 完全一样。
+
+**Target features:**
+- node-pty 创建 PTY 伪终端，Claude CLI 运行在真实 TTY 环境中
+- WebSocket API route 双向流式通信（替代当前 SSE 单向推送）
+- xterm.js 浏览器终端组件替换聊天气泡（带颜色、光标、交互输入）
+- 终端会话管理（创建/销毁/重连）
+- v0.6 遗留 bug 修复（编辑器稳定性、Diff 显示条件等）
+
 ### Active
 
-No active requirements — v0.6 milestone complete.
+- [ ] PTY 终端后端（node-pty + 会话管理）
+- [ ] WebSocket API route 双向通信
+- [ ] xterm.js 终端组件替换聊天气泡
+- [ ] 终端会话生命周期管理（创建/销毁/重连）
+- [ ] v0.6 遗留 bug 修复
 
 ### Out of Scope
 
@@ -198,4 +213,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-01 — v0.6 milestone shipped*
+*Last updated: 2026-04-02 — v0.7 milestone started*

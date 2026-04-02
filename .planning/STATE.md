@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.6
-milestone_name: 任务开发工作台
-status: verifying
-stopped_at: Completed 23-03-PLAN.md (Tasks 1 and 2 — awaiting checkpoint verification)
-last_updated: "2026-04-01T04:33:56.502Z"
-last_activity: 2026-04-01
+milestone: v0.7
+milestone_name: 终端交互体验
+status: defining
+stopped_at: null
+last_updated: "2026-04-02T00:00:00.000Z"
+last_activity: 2026-04-02
 progress:
-  total_phases: 5
-  completed_phases: 4
-  total_plans: 11
-  completed_plans: 11
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
   percent: 0
 ---
 
@@ -18,17 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-31)
+See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 23 — preview-panel
+**Current focus:** Defining requirements for v0.7
 
 ## Current Position
 
-Phase: 23
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-04-01
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-02 — Milestone v0.7 started
 
 Progress: [░░░░░░░░░░] 0%
 
