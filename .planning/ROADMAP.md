@@ -200,7 +200,10 @@ Plans:
   2. User can type in the terminal and the input is forwarded to Claude CLI (interactive prompts work)
   3. Resizing the workbench panel causes the terminal to refit and PTY columns/rows to update within 100ms
   4. The terminal background and text colors switch automatically when user toggles dark/light mode
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 25-01-PLAN.md — Install xterm addons + i18n keys (TERM-01, TERM-02, TERM-03, TERM-04)
+- [ ] 25-02-PLAN.md — TaskTerminal component (TERM-01, TERM-02, TERM-03, TERM-04)
 **UI hint**: yes
 
 ### Phase 26: Workbench Integration
