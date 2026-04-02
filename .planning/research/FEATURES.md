@@ -1,244 +1,149 @@
 # Feature Research
 
-**Domain:** Task development workbench — online code editor, file tree browser, diff view, live preview
+**Domain:** Browser-based terminal (xterm.js + node-pty + WebSocket) for AI task execution
 **Researched:** 2026-03-31
-**Confidence:** HIGH (editor/diff/file tree), MEDIUM (preview — proxy implementation details depend on local environment)
+**Confidence:** HIGH (xterm.js API — official docs + npm); MEDIUM (session management patterns — multiple community sources); MEDIUM (Next.js WebSocket integration — community-verified)
 
 ---
 
 ## Scope
 
-This document covers ONLY the new v0.6 features: (1) online code editor, (2) file tree browser, (3) diff view panel, (4) live preview panel. Existing shipped features (Kanban board, AI chat, SSE streaming, git worktree, diff/merge dialog) are treated as dependencies, not subjects of research.
+This document covers ONLY the new v0.7 features: replacing SSE chat bubbles with a real browser terminal. Existing shipped features (Kanban board, AI chat bubbles, SSE streaming, git worktree, file tree, Monaco editor, diff view, preview panel) are treated as context, not subjects of research.
+
+The five feature domains are: (1) terminal display, (2) input handling, (3) session management, (4) terminal resize, (5) reconnection.
 
 ---
 
 ## Feature Landscape
 
-### Category 1: Online Code Editor
+### Table Stakes (Users Expect These)
 
-#### Table Stakes (Users Expect These)
-
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Syntax highlighting | Every code editor has this; absence is jarring | LOW | Monaco gives this for free across 80+ languages |
-| Line numbers | Universal expectation from any code view | LOW | Monaco default |
-| Read file from disk and display | Core function — open a file and see it | LOW | Server Action reads file via Node `fs.readFile`; path must be validated against worktree root |
-| Save file to disk on explicit action | Users expect Ctrl+S / save button | LOW | Server Action writes file; must validate path stays within worktree (no path traversal) |
-| Correct language detection per file extension | `.ts` → TypeScript, `.py` → Python | LOW | Monaco detects via URI extension |
-| Cursor position / line:col indicator | Status bar expectation from VS Code | LOW | Monaco exposes this via editor model |
-| Basic keyboard shortcuts (Ctrl+Z undo, Ctrl+F find, etc.) | Users muscle-memory from VS Code | LOW | Monaco bundles these |
-| Unsaved-changes indicator | Prevent accidental tab close losing work | MEDIUM | Track editor dirty state; show dot in tab label |
-| Tab-based multi-file editing | Users want multiple open files without losing context | MEDIUM | Need tab state management; Monaco supports multiple models |
-
-#### Differentiators (Competitive Advantage)
-
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| TypeScript / LSP IntelliSense | Context-aware completion feels like VS Code | HIGH | Monaco ships TypeScript language service; enabling it for project node_modules requires worker config and tsconfig loading |
-| AI inline suggestions keyed to task context | Agent has already been working on this code; inline hints from chat history | HIGH | Requires custom Monaco completion provider wired to task messages |
-| Jump-to-definition within the worktree | Feels like a real IDE | HIGH | Requires language server or Monaco's built-in TS service with project file loading |
-| Auto-format on save (Prettier / ESLint) | DX expectation for JS/TS projects | MEDIUM | Call `prettier --write` via Server Action on save; surface errors inline |
-| Editor theme matching app theme | Dark/light consistency with the rest of ai-manager | LOW | Monaco ships light/dark themes; wire to next-themes signal |
-
-#### Anti-Features
-
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| Full terminal emulator in editor | Developers want "run commands" | xterm.js + PTY is a significant scope addition; scope creep for v0.6 | The AI chat panel already drives Claude CLI execution; use that for commands |
-| Real-time multi-cursor collaboration | Sounds modern | Single-user local tool by design; adds websocket complexity for zero benefit | Not applicable |
-| Auto-save on every keystroke | Prevents data loss | Triggers server writes hundreds of times per minute; races with Claude CLI writes to same file | Explicit save (Ctrl+S) + unsaved-changes indicator |
-| File creation / rename / delete from editor | Power users want full IDE | Scope belongs in file tree context menu, not the editor itself | Implement in file tree category |
-
----
-
-### Category 2: File Tree Browser
-
-#### Table Stakes (Users Expect These)
+Features a user expects in any browser terminal. Missing any of these makes the terminal feel broken compared to ttyd or code-server.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Display directory structure of worktree root | Core function; absence means cannot navigate project | LOW | Server Action reads directory recursively via `fs.readdir`; scope is worktree path from `TaskExecution.worktreePath` |
-| Expand/collapse folders | Navigating nested directories is universal | LOW | Component state; lazy load children on expand |
-| File icons by type | Visual differentiation; VS Code / bolt.new standard | LOW | `react-icons` or vscode-icons dataset |
-| Click to open file in editor | Primary interaction | LOW | Pass selected file path to editor component |
-| Highlight currently open file | Show where you are | LOW | Match active editor path against tree node |
-| Right-click context menu with relevant actions | VS Code / JetBrains user muscle memory | MEDIUM | "Open", "Copy path" are minimum; "New file", "Delete" are additions |
-| Gitignore-aware filtering | Developers do not want to see `node_modules/` in file tree | MEDIUM | Read `.gitignore` from worktree root; filter entries; `ignore` npm package handles patterns |
-| Tree auto-refresh when Claude CLI modifies files | Claude writes files; tree must stay current | MEDIUM | Poll via setInterval (1-2 s) or use `fs.watch` streamed through SSE; polling is simpler and sufficient |
+| **ANSI color + escape code rendering** | Claude CLI outputs colored output, progress bars, cursor movement; without this the terminal is illegible | LOW | xterm.js handles this natively — instantiate `Terminal`, call `term.write(data)`. Zero extra code. |
+| **Text selection + copy (mouse)** | Users expect to select output and copy it like any native terminal | LOW | xterm.js enables mouse text selection by default. `@xterm/addon-clipboard` adds Ctrl+Shift+C shortcut. |
+| **Keyboard input forwarding** | Users type commands; keystrokes must reach the PTY process | LOW | `term.onData(data => pty.write(data))` — one line. Any key not wired = terminal is read-only. |
+| **Ctrl+C (SIGINT) passthrough** | Users expect to interrupt the running Claude CLI process | LOW | Forward raw `\x03` byte to PTY. node-pty `handleSIGINT` option (default true) controls whether library intercepts it first. |
+| **Scrollback buffer** | Output longer than the viewport must be scrollable | LOW | xterm.js `scrollback` constructor option (default 1,000 lines). Set to 5,000–10,000 for AI output volume. |
+| **Fit terminal to container** | Terminal must fill the panel without overflow or whitespace gaps | LOW | `@xterm/addon-fit` — call `fitAddon.fit()` on mount and whenever the containing panel resizes. |
+| **PTY resize sync** | When the browser panel resizes, the PTY must resize so ncurses layout and Claude CLI line-wrapping are correct | MEDIUM | Two-step: `fitAddon.fit()` fires `term.onResize(cols, rows)` → handler sends message over WebSocket → server calls `pty.resize(cols, rows)`. Debounce recommended to avoid rapid-fire resize during drag. |
+| **Session destroy on task end** | When execution completes or is cancelled, the PTY must be killed and memory freed | LOW | `pty.kill()` + remove from server-side session map. Detect PTY exit event, notify client with structured exit message. |
+| **WebSocket bidirectional communication** | Terminal output flows server→client; keyboard input flows client→server. SSE is one-directional and cannot carry input. | MEDIUM | Next.js App Router Route Handlers do not natively support HTTP Upgrade for WebSocket. Requires custom server (`server.js`) or the `next-ws` library. This is the foundational infrastructure dependency. |
+| **Terminal cursor display** | Blinking or block cursor shows where input will appear | LOW | xterm.js renders cursor by default. `cursorBlink`, `cursorStyle` constructor options. |
+| **Execution status update on PTY exit** | Workbench header and task card must reflect "Completed" / "Failed" when Claude CLI exits | LOW | Server sends structured `{type: "exit", code: N}` message on PTY exit event. Client calls `stopTaskExecution` server action. |
 
-#### Differentiators
+### Differentiators (Competitive Advantage)
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Visual diff indicators on file tree nodes | Show modified / added / deleted files at a glance (like VS Code Source Control decorations) | MEDIUM | Derive from `git diff --name-status` against base branch; annotate file nodes with M/A/D badges |
-| New file / new folder via context menu or button | Power users want full control without switching to terminal | MEDIUM | Server Action: `fs.mkdir` / `fs.writeFile`; validate path stays in worktree |
-| Rename / delete via context menu | Same expectation | MEDIUM | Server Action: `fs.rename` / `fs.rm`; guard against deleting `.git/` |
-| Search files by name (fuzzy) | Large projects have hundreds of files | MEDIUM | Client-side fuzzy filter over flattened file list |
-
-#### Anti-Features
-
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| Full file manager (cut/copy/paste across worktrees) | Power user appeal | Worktrees are isolated by design; cross-worktree ops risk corruption | Single-worktree scope only |
-| Drag-and-drop file move | VS Code does it | Complex edge cases (cross-directory moves, git tracking) for v0.6 | Defer to v0.7; context menu rename covers 90% of needs |
-| Show all workspace projects in one tree | Unified view sounds useful | Violates task isolation — each task has its own worktree | Scope tree to current task worktree only |
-
----
-
-### Category 3: Diff View Panel
-
-#### Table Stakes (Users Expect These)
-
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Show unified diff of all changes vs base branch | Core purpose of the panel | LOW | `git diff <baseBranch>...<taskBranch>` — already used in v0.5 merge flow |
-| Syntax-highlighted diff lines | Red/green coloring is universal diff expectation | LOW | `diff2html` or `react-diff-view` renders colored diffs from unified diff text |
-| File-by-file navigation | Large diffs span many files; jumping by file is critical | LOW | Parse diff into file sections; render file headers as anchors or list |
-| Line numbers for each hunk | Context for where change is in the file | LOW | Included in unified diff output; rendered by diff libraries |
-| Summary header (N files changed, N insertions, N deletions) | GitHub / GitLab standard; immediate context | LOW | Parse from `git diff --stat` |
-| Toggle between unified and split (side-by-side) view | Users have strong preference; GitHub offers both | MEDIUM | `react-diff-view` supports both modes; `git-diff-view` is an alternative |
-| Refresh/reload diff | Claude may have made more changes since diff was last shown | LOW | Button triggers re-run of `git diff` |
-
-#### Differentiators
+Features that raise the terminal experience above baseline ttyd-level, appropriate for an integrated AI task workbench.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Per-file collapse/expand | Long diffs become unreadable; file-level folding restores clarity | LOW | CSS show/hide; no library change needed |
-| Whitespace change toggle (ignore / show) | Formatting-only changes distract from logic changes | LOW | `git diff --ignore-space-change` flag |
-| Inline comment anchoring (select lines to comment) | Code review workflow without leaving the workbench | HIGH | Requires comment storage model; defer to post-v0.6 |
-| Merge conflict view | Show conflicts when Claude's branch diverges | HIGH | Different problem domain; defer |
+| **Automatic reconnection with output buffer replay** | Network blip or hot-reload during dev does not lose terminal state | MEDIUM | Client: exponential backoff reconnect loop. Server: ring buffer of last N bytes per session. On reconnect, flush ring buffer before resuming live stream. |
+| **Session persistence across page navigations** | User navigates to Kanban and back — running Claude CLI process and terminal history survive | HIGH | Requires: server-side session map keyed by taskId (PTY stays alive), `@xterm/addon-serialize` serializes terminal buffer on disconnect, client replays serialized state on reconnect. |
+| **WebGL-accelerated rendering** | High-throughput AI output (thousands of lines/sec) renders without frame drops | LOW | `@xterm/addon-webgl` is a drop-in addon. Falls back to canvas renderer automatically if WebGL unavailable. Strongly recommended given Claude CLI's output volume. |
+| **Clickable URLs in output** | URLs printed by Claude CLI open in browser with one click | LOW | `@xterm/addon-web-links` — one addon registration. High perceived quality for very low effort. |
+| **Dark/light theme sync** | Terminal colors follow the app theme automatically | LOW | xterm.js `theme` option accepts a color map object. Wire to next-themes current theme. Maintain two theme configs (dark/light). |
+| **Input disabled while disconnected** | Visual indicator and input block prevent silently dropped keystrokes when WebSocket is closed | LOW | `term.options.disableStdin = true` while WebSocket disconnected. Re-enable on reconnect. |
+| **Ctrl+C stops execution cleanly** | Forwards interrupt to Claude CLI, updates task status to CANCELLED, no zombie process | MEDIUM | Forward `\x03` to PTY. Detect PTY exit, call `stopTaskExecution` server action. Guard against double-kill. |
+| **Search in terminal output** | Find specific error or filename in scrollback history | MEDIUM | `@xterm/addon-search` provides `findNext`/`findPrevious`. Requires search input UI. Optional for v0.7 core but worthwhile for dense AI output. |
+| **PTY spawn with correct TERM environment** | Claude CLI and shell utilities that check `$TERM` behave correctly (color support detection, readline) | LOW | node-pty sets `TERM=xterm-256color` by default. Ensure `COLORTERM=truecolor` is set for full color support. |
 
-#### Anti-Features
-
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| Editable diff view (edit code inside the diff) | Power appeal | Merging editor state with diff state is complex; creates ambiguity about what gets saved | Open file in editor tab for editing; diff is read-only review |
-| Commit-level diff navigation (browse individual commits) | Git history exploration | Out of scope for task workbench; task branch is a single unit of work | Full git history is for separate tooling |
-| Diff between arbitrary branches | Flexible but vague | Scope should be fixed: task branch vs base branch | The fixed comparison is the value; keep it simple |
-
----
-
-### Category 4: Live Preview Panel
-
-#### Table Stakes (Users Expect These)
-
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Configurable start command per project | Projects vary: `npm run dev`, `python -m flask run`, etc. | MEDIUM | Store `previewCommand` + `previewPort` on Project; spawn child process via Server Action |
-| Show running / stopped / error status | User needs feedback that the preview server started | LOW | Track process state; surface in panel header |
-| iframe embedding of localhost:PORT | The actual preview window | MEDIUM | `<iframe src="http://localhost:{port}" />` works for same-machine local tool; HTTPS not required since ai-manager is localhost-only |
-| Start / stop controls | Manual lifecycle management | LOW | Button triggers Server Action to spawn / kill process |
-| Error log display when start command fails | Process crash output is critical for debugging | MEDIUM | Capture stderr/stdout from child process; display in panel below iframe |
-| Reload button | Force refresh the iframe after Claude makes changes | LOW | `iframeRef.current.src = iframeRef.current.src` |
-
-#### Differentiators
-
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Auto-reload on file save | Developer ergonomics; bolt.new / StackBlitz do this | MEDIUM | Watch for file-save events (already happening via editor save); reload iframe on save callback |
-| Process output live tail | See `vite` output, errors, HMR messages in real time | MEDIUM | SSE stream from child process stdout; reuse existing SSE infrastructure from agent execution |
-| Resize handle between preview and other panels | UX comfort for different project types | LOW | CSS flex resize or `react-resizable-panels` |
-| Multiple preview commands (e.g., Storybook + app) | Complex projects have multiple servers | HIGH | Defer to post-v0.6; single preview covers 90% |
-| Mobile viewport emulation (resize to phone dimensions) | Design review use case | LOW | CSS `width` + `height` selector on iframe wrapper; no iframe API needed |
-
-#### Anti-Features
+### Anti-Features (Commonly Requested, Often Problematic)
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| WebContainer in-browser execution (like StackBlitz) | No external server needed | Requires Service Worker + WebAssembly Node.js runtime; massive complexity; ai-manager runs on localhost with Node already available | Use native child_process to spawn real dev server |
-| Automatic port detection | Less config for user | Port conflicts are silent and confusing; wrong port silently shows wrong content | Require explicit port config; auto-suggest from common defaults (3000, 5173, 8080) |
-| OAuth / cookie passthrough in iframe | Some dev servers need auth | Same-origin complications; CSP issues; out of scope for localhost tool | Document workaround: open in browser tab |
-| Preview for non-web projects (CLI tools, APIs) | Completeness | iframe is a browser; non-HTTP output has no natural preview | Show process output log only; no iframe for non-web projects |
+| **Infinite scrollback buffer** | "I want all output preserved" | Browser memory exhaustion — Claude CLI can produce millions of lines in long sessions. xterm.js holds all lines in JS heap. 10,000 lines ≈ 10–40 MB depending on line length. | Set scrollback to 10,000 lines. Persist full PTY output to a log file server-side if archival is needed; surface via file tree + Monaco. |
+| **Multiple terminal tabs per task** | "I want a shell alongside Claude" | Scope creep for v0.7 — goal is replacing chat bubbles with one terminal per task. Multiple tabs require tab UI, session multiplexing, and additional state. | Ship one terminal per task. The existing "open in system terminal" button (v0.6 Preview panel) covers extra shell needs. |
+| **tmux/screen integration** | "Persistent sessions even after server restarts" | PTY sessions do not survive Node.js process exit regardless of tmux. Attaching to existing tmux sessions requires exec-ing into them, complicates session management, and tmux is not universally available. | Server-side session map with serialize/replay covers 95% of the reconnection use case without the complexity. Document that server restarts require re-running execution. |
+| **Real-time shared terminal (collaboration)** | "Watch the AI agent's terminal together" | Single-user localhost tool by explicit design constraint. Broadcasting requires auth, session fan-out, cursor multiplexing. | Out of scope per PROJECT.md. Not applicable to localhost-only tool. |
+| **Terminal recording/playback (asciinema)** | "Record sessions for post-execution review" | Serialization format, playback UI, storage management are all separate features. High cost for low frequency use. | Store raw PTY output to log file. User can open it in Monaco editor for review. No additional infrastructure needed. |
+| **Custom shell per task** | "I want zsh for this task, bash for that one" | Claude CLI is the process, not a general shell. node-pty spawns Claude CLI directly. User does not pick a shell; Claude CLI inherits the system shell. | Claude CLI inherits system shell via PTY environment. No configuration needed. |
+| **Paste confirmation dialog** | "Warn before pasting large content" | Claude CLI expects pasted content to flow directly to its readline. A dialog interrupts the flow and adds no safety in a single-user tool. | Use `term.paste()` which applies correct bracketed paste escape sequences. Trust the user. |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[File Tree Browser]
-    └──requires──> [Server Action: fs read directory (scoped to worktree)]
-                       └──requires──> [TaskExecution.worktreePath (v0.5 shipped)]
+[WebSocket bidirectional comms]
+    └──required by──> [Keyboard input forwarding]
+    └──required by──> [PTY resize sync message]
+    └──required by──> [Execution status update on PTY exit]
+    └──required by──> [Automatic reconnection with buffer replay]
+    └──required by──> [Session persistence across navigations]
 
-[Online Code Editor]
-    └──requires──> [File Tree Browser] (click to open file)
-    └──requires──> [Server Action: fs read file / write file (path-validated)]
+[node-pty PTY spawn]
+    └──required by──> [ANSI color + escape rendering]  (PTY provides VT100 data stream)
+    └──required by──> [Ctrl+C SIGINT passthrough]
+    └──required by──> [PTY resize sync]
+    └──required by──> [Session destroy on task end]
 
-[Diff View Panel]
-    └──requires──> [TaskExecution.worktreeBranch + Task.baseBranch (v0.5 shipped)]
-    └──shares──> [git diff logic (v0.5 merge dialog already calls this)]
+[@xterm/addon-fit]
+    └──required by──> [PTY resize sync]  (fit() triggers onResize event; no other way to detect container resize)
 
-[Live Preview Panel]
-    └──requires──> [Project.previewCommand + Project.previewPort (new schema fields)]
-    └──requires──> [Child process management (new server-side capability)]
-    └──enhances──> [Online Code Editor: auto-reload on save]
+[Server-side session map (taskId → PTY)]
+    └──required by──> [Session persistence across navigations]
+    └──required by──> [Automatic reconnection with buffer replay]
+    └──required by──> [Session destroy on task end]
 
-[Git diff indicators on file tree]
-    └──requires──> [Diff View Panel: git diff --name-status output]
-    └──enhances──> [File Tree Browser]
+[@xterm/addon-serialize]
+    └──required by──> [Session persistence across navigations]
 
-[Unsaved-changes indicator in editor]
-    └──requires──> [Online Code Editor tab state]
-    └──enhances──> [Live Preview: know when to auto-reload]
+[Server-side PTY output ring buffer]
+    └──required by──> [Automatic reconnection with buffer replay]
+
+[@xterm/addon-webgl]
+    └──enhances──> [ANSI color rendering]  (performance upgrade, not functional dependency)
+
+[@xterm/addon-web-links]
+    └──enhances──> [ANSI color rendering]  (cosmetic addon layered on top)
+
+[@xterm/addon-clipboard]
+    └──enhances──> [Text selection + copy]  (adds Ctrl+Shift+C shortcut; selection still works without it)
 ```
 
 ### Dependency Notes
 
-- **File tree requires worktreePath**: `TaskExecution.worktreePath` is the root for all fs operations in the workbench. This was shipped in v0.5. All file reads/writes must be validated against this path to prevent traversal attacks.
-- **Diff view reuses v0.5 work**: The v0.5 diff/merge dialog already calls `git diff`. The diff panel reuses the same git diff output; new work is the rendering library and panel UI, not the diff computation itself.
-- **Preview requires new schema fields**: `previewCommand` and `previewPort` are not in the current Project model. This is a new schema migration needed before Preview can work.
-- **Child process management is new scope**: The existing SSE streaming is for Claude CLI. Preview panel needs a separate child_process lifecycle — spawn, monitor, stream stdout, kill. This is a distinct new capability with no current equivalent in the codebase.
-- **Editor auto-reload enhances preview**: If Preview auto-reload is implemented, it depends on an explicit save event from the editor (not auto-save). This creates a clean integration point without tight coupling.
+- **WebSocket is the foundational infrastructure dependency.** Every interactive terminal feature — input, resize, reconnection, session management — depends on it. This must be designed and implemented first. The existing SSE infrastructure cannot be upgraded to support bidirectional comms.
+- **node-pty is the second foundational dependency.** The PTY is the data source; xterm.js is the renderer. Both must exist before any terminal feature works.
+- **`@xterm/addon-fit` must load before PTY resize sync is wired.** FitAddon's `fit()` call is what fires the `terminal.onResize` event. Without it, the resize handler has no trigger.
+- **Session persistence requires both client-side (`@xterm/addon-serialize`) and server-side (ring buffer + PTY keepalive).** Half-measures do not work: serialize without keepalive means the PTY is dead on reconnect; keepalive without serialize means the client shows a blank terminal for a running process.
+- **`@xterm/addon-webgl` is independent** — it can be added or removed without affecting any other feature. Recommended as a day-one addon given Claude CLI output volume.
 
 ---
 
 ## MVP Definition
 
-### Launch With (v0.6)
+### Launch With — v0.7 Core Terminal
 
-Minimum viable workbench — enough to replace context-switching between the app and a local file explorer/terminal.
+The minimum needed to replace chat bubbles with a working browser terminal.
 
-**Editor:**
-- [ ] Monaco Editor (`@monaco-editor/react`) with syntax highlighting — core value of an online editor
-- [ ] Read file on tree click, display with line numbers — cannot edit what you cannot see
-- [ ] Ctrl+S save with Server Action path-validated write — editor is useless without save
-- [ ] Unsaved-changes dot indicator in tab — prevents data loss
-- [ ] Tab-based multi-file editing (2-3 tabs minimum) — single-file view requires constant re-opening
+- [ ] node-pty spawns Claude CLI in a PTY (real TTY environment)
+- [ ] WebSocket route — bidirectional comms (custom server or `next-ws`)
+- [ ] xterm.js renders PTY output with ANSI colors, cursor, scrollback (5,000+ lines)
+- [ ] `@xterm/addon-fit` + debounced PTY resize sync — terminal fills its panel
+- [ ] Keyboard input forwarding — user can type into Claude CLI
+- [ ] Ctrl+C forwarding (`\x03`) — user can interrupt execution
+- [ ] Session destroy on PTY exit — clean lifecycle, no zombie PTY processes
+- [ ] Execution status message on PTY exit — task status updates automatically
+- [ ] Dark/light theme sync — terminal theme follows app theme
+- [ ] `@xterm/addon-webgl` — GPU rendering for high-throughput AI output
 
-**File Tree:**
-- [ ] Directory listing scoped to `TaskExecution.worktreePath` — navigation foundation
-- [ ] Expand/collapse folders, file icons by extension — visual orientation
-- [ ] Click to open in editor — primary interaction
-- [ ] Gitignore-aware filtering (hide `node_modules/`, `.git/`) — unusable noise without this
-- [ ] Auto-refresh every 2s when task execution is RUNNING — Claude modifies files; stale tree breaks context
+### Add After Core is Stable — v0.7 Polish
 
-**Diff View:**
-- [ ] Unified diff against base branch rendered via `react-diff-view` or `diff2html` — core review workflow
-- [ ] File-by-file sections with summary header — orientation in large diffs
-- [ ] Reload button — Claude keeps changing code; diff must be refreshable
-- [ ] Toggle unified/split — strong user preference
+- [ ] `@xterm/addon-web-links` — clickable URLs in output (one line of code)
+- [ ] `@xterm/addon-clipboard` — Ctrl+Shift+C copy shortcut
+- [ ] Input disabled while disconnected — prevents silently dropped keystrokes
+- [ ] Automatic reconnection with ring buffer replay — needed if hot-reload disrupts sessions during development
+- [ ] Ctrl+C clean cancellation — forward interrupt AND update task status to CANCELLED
 
-**Preview:**
-- [ ] Configurable `previewCommand` + `previewPort` on Project (new schema fields) — no preview without config
-- [ ] Start/stop child process, status indicator — lifecycle control
-- [ ] iframe embed of localhost:PORT — the actual preview
-- [ ] Process error output displayed below iframe — debugging failed starts
+### Future Consideration — v0.8+
 
-### Add After Validation (v0.6.x)
-
-- [ ] Git diff status indicators on file tree nodes — trigger: users ask "which files did Claude change?"
-- [ ] Auto-reload preview on editor save — trigger: manual reload friction observed
-- [ ] SSE-streamed process stdout in preview panel — trigger: HMR output visibility requested
-- [ ] New file / new folder / rename / delete from file tree context menu — trigger: users want to scaffold files without switching to terminal
-- [ ] Whitespace ignore toggle in diff view — trigger: formatting-heavy diffs reported as noise
-- [ ] Auto-format on save (Prettier) — trigger: TypeScript projects have strong expectation
-
-### Future Consideration (v0.7+)
-
-- [ ] TypeScript IntelliSense / LSP — defer: Monaco TS service requires project tsconfig loading and worker configuration; high complexity
-- [ ] AI inline suggestions wired to task chat — defer: requires custom completion provider and message indexing
-- [ ] Mobile viewport emulation in preview — defer: low priority for a localhost dev tool
-- [ ] Multiple preview commands per project — defer: single preview covers the common case
-- [ ] Inline comment anchoring in diff — defer: requires new data model; review workflow is post-MVP
+- [ ] Session persistence across page navigations (serialize + server keepalive) — high complexity; validate whether users actually navigate away mid-execution
+- [ ] Search in terminal output (`@xterm/addon-search`) — useful for dense AI output; not blocking
+- [ ] Full PTY output log file archival — long-running task review
 
 ---
 
@@ -246,61 +151,73 @@ Minimum viable workbench — enough to replace context-switching between the app
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| Monaco Editor with syntax highlight + save | HIGH | LOW | P1 |
-| File tree with gitignore filtering | HIGH | MEDIUM | P1 |
-| Unified diff view (react-diff-view) | HIGH | LOW | P1 |
-| Multi-file tabs in editor | HIGH | MEDIUM | P1 |
-| Preview panel start/stop + iframe | HIGH | MEDIUM | P1 |
-| Auto-refresh file tree during execution | HIGH | LOW | P1 |
-| Split diff view toggle | MEDIUM | LOW | P2 |
-| Git diff badges on file tree nodes | MEDIUM | MEDIUM | P2 |
-| SSE stdout stream for preview | MEDIUM | MEDIUM | P2 |
-| Auto-reload preview on save | MEDIUM | LOW | P2 |
-| File create/rename/delete in tree | MEDIUM | MEDIUM | P2 |
-| Auto-format on save (Prettier) | MEDIUM | LOW | P2 |
-| TypeScript IntelliSense | HIGH | HIGH | P3 |
-| AI inline suggestions | HIGH | HIGH | P3 |
-| Inline diff comments | MEDIUM | HIGH | P3 |
-| Multiple preview commands | LOW | HIGH | P3 |
+| node-pty PTY spawn | HIGH | MEDIUM | P1 |
+| WebSocket bidirectional comms | HIGH | MEDIUM | P1 |
+| xterm.js ANSI rendering + scrollback | HIGH | LOW | P1 |
+| Keyboard input forwarding | HIGH | LOW | P1 |
+| Fit addon + PTY resize sync | HIGH | LOW | P1 |
+| Ctrl+C SIGINT passthrough | HIGH | LOW | P1 |
+| Session destroy on PTY exit | HIGH | LOW | P1 |
+| Execution status on PTY exit | HIGH | LOW | P1 |
+| Dark/light theme sync | MEDIUM | LOW | P1 |
+| WebGL rendering (@xterm/addon-webgl) | MEDIUM | LOW | P1 |
+| Clickable URLs (@xterm/addon-web-links) | LOW | LOW | P2 |
+| Clipboard addon (Ctrl+Shift+C) | LOW | LOW | P2 |
+| Automatic reconnection + ring buffer | MEDIUM | MEDIUM | P2 |
+| Input disabled while disconnected | MEDIUM | LOW | P2 |
+| Ctrl+C → CANCELLED task status | MEDIUM | LOW | P2 |
+| Session persistence across navigations | MEDIUM | HIGH | P3 |
+| Search in terminal output | LOW | MEDIUM | P3 |
 
 **Priority key:**
-- P1: Must have for v0.6 launch
-- P2: Should have, add in v0.6.x patch
-- P3: Future milestone consideration
+- P1: Must have for v0.7 — chat bubble replacement is incomplete without these
+- P2: Should have — quality-of-life improvements, add in same milestone if time permits
+- P3: Defer to v0.8+ — useful but not blocking
 
 ---
 
 ## Competitor Feature Analysis
 
-| Feature | bolt.new | v0.dev | Cursor | Our Approach |
-|---------|----------|--------|--------|--------------|
-| Code editor | Monaco (full IDE) | Monaco (read/edit) | VS Code fork | Monaco via @monaco-editor/react |
-| File tree | Full project tree, context menu CRUD | Simplified tree | Full VS Code explorer | Worktree-scoped tree, gitignore-aware |
-| Diff view | Inline diff in chat messages | Inline preview | Dedicated diff panel with split view | Dedicated panel, reuses v0.5 git diff |
-| Live preview | WebContainer in-browser (no external server) | Vercel deploy preview | External browser / browser preview extension | localhost child_process + iframe (simpler, viable since localhost-only) |
-| AI chat | Full-width chat drives everything | Prompt then generate | Chat panel + composer | Existing SSE chat; workbench is right panel |
-| Multi-agent | Not yet | No | Background agents (2025) | Each task = one worktree = one agent (v0.5 foundation) |
-| Auto-reload | Yes, on WebContainer change | Yes | Yes (HMR passthrough) | File save triggers iframe reload (simple, sufficient) |
+Reference implementations in the browser terminal ecosystem:
 
-**Key insight:** bolt.new uses WebContainers (Service Worker + WASM Node.js) to avoid needing an external dev server. That technology is not warranted for ai-manager because the app is localhost-only and Node is already running on the machine. A plain `child_process.spawn` is simpler, more reliable, and gives the same UX result for zero additional infrastructure.
+| Feature | VS Code Terminal | ttyd | code-server | Our Approach |
+|---------|-----------------|------|-------------|--------------|
+| ANSI rendering | xterm.js (forked) | xterm.js | xterm.js | xterm.js `@xterm/xterm` |
+| Input forwarding | IPC (Electron) | WebSocket | WebSocket | WebSocket |
+| PTY resize | IPC resize message | WebSocket resize msg | WebSocket | WebSocket + FitAddon |
+| Session persistence | Process-local (Electron) | No (reconnect kills) | Yes (server-side) | Server session map + serialize addon |
+| Reconnection | Auto (process-local) | Configurable timeout; known bugs | Yes | Exponential backoff + ring buffer |
+| Scrollback | 1,000 lines default, configurable | Configurable | Configurable | 5,000–10,000 lines (AI output is dense) |
+| GPU rendering | WebGL addon (default on) | Canvas only | WebGL addon | WebGL addon (opt-in P1) |
+| Theme | VS Code theme tokens | None | VS Code themes | next-themes integration |
+| Clickable URLs | Web links addon | No | Web links addon | Web links addon (P2) |
+| Input guard on disconnect | Yes | No | Yes | Yes (P2) |
+
+**Key insight from wetty analysis:** Wetty's reconnect does not resume session — it kills the PTY and starts fresh. This is the failure mode to avoid. The correct pattern (from ttyd, code-server, WebSocket.org guide) is: issue a session ID on first connection, store it client-side, present it on reconnect, server re-associates WebSocket with the surviving PTY.
 
 ---
 
 ## Sources
 
-- [bolt.new GitHub (StackBlitz)](https://github.com/stackblitz/bolt.new) — feature reference for agentic workbench UX
-- [RedMonk: 10 Things Developers Want from Agentic IDEs 2025](https://redmonk.com/kholterhoff/2025/12/22/10-things-developers-want-from-their-agentic-ides-in-2025/) — developer expectation research
-- [Builder.io: Best Agentic IDEs heading into 2026](https://www.builder.io/blog/agentic-ide) — UX patterns and feature convergence
-- [@monaco-editor/react npm](https://www.npmjs.com/package/@monaco-editor/react) — 380k weekly downloads, no webpack config needed
-- [Sourcegraph: Migrating Monaco to CodeMirror](https://sourcegraph.com/blog/migrating-monaco-codemirror) — Monaco vs CodeMirror tradeoff analysis
-- [react-diff-view npm](https://www.npmjs.com/package/react-diff-view) — git diff rendering component for React
-- [git-diff-view GitHub](https://github.com/MrWangJustToDo/git-diff-view) — alternative diff viewer (React/Vue/Solid/Svelte/Ink)
-- [diff2html](https://diff2html.xyz/) — alternative diff renderer, simpler API
-- [MDN: iframe sandbox directive](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/sandbox) — preview panel security considerations
-- [Zed: Split Diffs blog post](https://zed.dev/blog/split-diffs) — split diff UX patterns, top user request after git integration launch
-- [NxCode: V0 vs Bolt.new vs Lovable comparison 2026](https://www.nxcode.io/resources/news/v0-vs-bolt-vs-lovable-ai-app-builder-comparison-2025) — feature-level comparison of workbench tools
+- [xterm.js official site](https://xtermjs.org/) — terminal class overview, addon index (HIGH confidence)
+- [xterm.js Terminal class API](https://xtermjs.org/docs/api/terminal/classes/terminal/) — onData, onResize, resize, paste, input, buffer, dispose methods (HIGH confidence)
+- [xterm.js addons guide](https://xtermjs.org/docs/guides/using-addons/) — FitAddon, WebGLAddon, WebLinksAddon, SearchAddon, ClipboardAddon list (HIGH confidence)
+- [@xterm/addon-serialize npm](https://www.npmjs.com/package/@xterm/addon-serialize) — buffer serialization for reconnection replay; v0.14.0 (HIGH confidence)
+- [@xterm/addon-clipboard npm](https://www.npmjs.com/package/@xterm/addon-clipboard) — browser clipboard access; v0.2.0 (HIGH confidence)
+- [node-pty GitHub (microsoft/node-pty)](https://github.com/microsoft/node-pty) — PTY spawn, resize, kill, signal handling (HIGH confidence)
+- [node-pty SIGINT handling PR #240](https://github.com/microsoft/node-pty/pull/240/files) — `handleSIGINT` option details (MEDIUM confidence)
+- [Efficient node-pty with Socket.io — multiple users](https://medium.com/@deysouvik700/efficient-and-scalable-usage-of-node-js-pty-with-socket-io-for-multiple-users-402851075c4a) — TerminalManager session map pattern (MEDIUM confidence)
+- [WebSocket reconnection: state sync and recovery](https://websocket.org/guides/reconnection/) — session ID issuance, detach/resume, ring buffer, exponential backoff (MEDIUM confidence)
+- [xterm.js scrollback issue #518](https://github.com/xtermjs/xterm.js/issues/518) — default 10,000 lines, memory trade-offs (MEDIUM confidence)
+- [next-ws GitHub (apteryxxyz/next-ws)](https://github.com/apteryxxyz/next-ws) — WebSocket support in Next.js App Router (MEDIUM confidence)
+- [Next.js WebSocket discussion #58698](https://github.com/vercel/next.js/discussions/58698) — App Router WebSocket upgrade limitations and workarounds (MEDIUM confidence)
+- [ttyd reconnection issue #1068](https://github.com/tsl0922/ttyd/issues/1068) — known reconnection edge cases in reference implementation (MEDIUM confidence)
+- [Wetty reconnection issue #447](https://github.com/butlerx/wetty/issues/447) — wetty does not support session resume (MEDIUM confidence)
+- [xterm.js resize debounce recommendation (VS Code wiki)](https://github.com/microsoft/vscode/wiki/Working-with-xterm.js/) — debounce best practice for resize (MEDIUM confidence)
+- [xterm.js terminal resize roundtrip issue #1914](https://github.com/xtermjs/xterm.js/issues/1914) — async resize race condition detail (MEDIUM confidence)
+- [xterm.js scrollback in alt screen issue #802](https://github.com/xtermjs/xterm.js/issues/802) — alt screen buffer (vim, htop) does not use scrollback (MEDIUM confidence)
 
 ---
 
-*Feature research for: ai-manager v0.6 task development workbench*
+*Feature research for: ai-manager v0.7 browser-based terminal*
 *Researched: 2026-03-31*

@@ -1,415 +1,381 @@
 # Architecture Research
 
-**Domain:** Task development workbench (code editor + file tree + diff + preview) integrated into an existing AI task management platform
-**Researched:** 2026-03-31
-**Confidence:** HIGH
+**Domain:** Browser terminal integration — node-pty + WebSocket + xterm.js added to existing Next.js 16 App Router AI task management platform
+**Researched:** 2026-04-02
+**Confidence:** HIGH (WebSocket approach verified via official Next.js 16 docs + npm package audit; node-pty auto-exclusion confirmed in official serverExternalPackages list)
 
-## Standard Architecture
+## The Core Architectural Question
 
-### System Overview
+**Can Next.js 16 App Router handle WebSocket connections in API routes?**
 
-The workbench adds four capabilities to the existing task page. The existing layout is a 40/60 split (Chat | Tabs). The workbench expands the right-side tab bar with three new panels: Files (editor + tree), Diff (already partially exists), and Preview.
+Answer: **No, not natively.** Next.js route handlers do not support HTTP Upgrade (WebSocket handshake). Official docs and the GitHub discussion #58698 confirm this is a known gap with no official fix as of Next.js 16.2.2 (March 2026).
+
+**Recommended approach for this project:** Start a standalone `ws` WebSocket server on a separate port inside `instrumentation.ts` — the existing `register()` function already runs server-side startup code (worktree pruning). This avoids patching Next.js internals and requires no custom server.
+
+Source: [Next.js instrumentation guide](https://nextjs.org/docs/app/guides/instrumentation), [serverExternalPackages docs](https://nextjs.org/docs/app/api-reference/config/next-config-js/serverExternalPackages)
+
+---
+
+## System Overview
+
+### Existing Architecture (v0.6)
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         Task Page Route                                  │
-│  /workspaces/[workspaceId]/tasks/[taskId]                                │
-├──────────────────────────┬──────────────────────────────────────────────┤
-│   Left Panel (40%)       │   Right Panel (60%)                          │
-│   AI Chat (existing)     │   Tab Bar: [Files] [Changes] [Preview]        │
-│                          ├──────────────────────────────────────────────┤
-│   - TaskConversation     │   Files Tab                                  │
-│   - TaskMessageInput     │   ┌────────────┐ ┌──────────────────────┐   │
-│   - SSE stream           │   │ FileTree   │ │ MonacoEditor         │   │
-│                          │   │ (worktree  │ │ (dynamic import,     │   │
-│                          │   │  or local  │ │  ssr: false)         │   │
-│                          │   │  path)     │ │                      │   │
-│                          │   └────────────┘ └──────────────────────┘   │
-│                          ├──────────────────────────────────────────────┤
-│                          │   Changes Tab (existing TaskDiffView)         │
-│                          ├──────────────────────────────────────────────┤
-│                          │   Preview Tab                                 │
-│                          │   ┌────────────────────────────────────────┐ │
-│                          │   │ PreviewPanel                           │ │
-│                          │   │ - Start/Stop command controls          │ │
-│                          │   │ - Port selector                        │ │
-│                          │   │ - iframe src="http://localhost:PORT"   │ │
-│                          │   └────────────────────────────────────────┘ │
-└──────────────────────────┴──────────────────────────────────────────────┘
+Browser
+  |
+  | HTTP/SSE (POST /api/tasks/[taskId]/stream)
+  v
+Next.js App Router (port 3000)
+  |
+  | child_process.spawn()
+  v
+Claude CLI process
+  |
+  | stdout stream-json
+  v
+stream/route.ts SSE handler
+  |
+  | SSE events (log/tool/result/status)
+  v
+Browser — TaskConversation chat bubbles
+```
 
-Server-side support:
-┌─────────────────────────────────────────────────────────────────────────┐
-│  API Routes (new)                                                        │
-│  GET  /api/tasks/[taskId]/files          — list files in worktree/path  │
-│  GET  /api/tasks/[taskId]/files/content  — read file content            │
-│  PUT  /api/tasks/[taskId]/files/content  — write file content           │
-│  POST /api/tasks/[taskId]/preview/start  — spawn preview child process  │
-│  POST /api/tasks/[taskId]/preview/stop   — kill preview child process   │
-│  GET  /api/tasks/[taskId]/preview/status — preview running/port info    │
-├─────────────────────────────────────────────────────────────────────────┤
-│  Existing Infrastructure (unchanged)                                     │
-│  - /api/tasks/[taskId]/stream  (SSE execution)                          │
-│  - /api/tasks/[taskId]/diff    (git diff)                               │
-│  - /api/tasks/[taskId]/merge   (squash merge)                           │
-│  - lib/worktree.ts             (path derivation reused)                 │
-│  - lib/adapters/process-utils.ts (runChildProcess reused for preview)   │
-└─────────────────────────────────────────────────────────────────────────┘
+### Target Architecture (v0.7)
+
+```
+Browser
+  |-- HTTP (Next.js App Router, port 3000)  — pages, server actions, file APIs
+  |-- WebSocket (WS Server, port 3001)      — PTY terminal I/O
+  v
++--------------------------------------------------+
+|  Same Node.js Process                            |
+|                                                  |
+|  Next.js (port 3000)                             |
+|  instrumentation.ts → register()                 |
+|    └── starts WS server (port 3001)              |
+|    └── PTY session store (Map<taskId, PtySession>)|
+|                                                  |
+|  ws server (port 3001)                           |
+|    WS message: { type: "input", data: string }   |
+|    WS message: { type: "resize", cols, rows }    |
+|    ← PTY output → WS broadcast                   |
+|                                                  |
+|  node-pty (native module, server-excluded)       |
+|    ptyProcess.spawn("claude", args, { cwd })     |
+|    ptyProcess.onData → ws.send(data)             |
+|    ptyProcess.write(userInput)                   |
+|    ptyProcess.resize(cols, rows)                 |
++--------------------------------------------------+
+  |
+  | xterm.js (browser)
+  | @xterm/addon-fit  — resize to container
+  | WebSocket client
+  v
+TaskTerminal component (replaces TaskConversation)
 ```
 
 ### Component Responsibilities
 
-| Component | Responsibility | Classification |
-|-----------|----------------|----------------|
-| `TaskPageClient` | Top-level layout, tab state, panel orchestration | Modified (existing) |
-| `WorkbenchFileTree` | Recursive file/dir listing from worktree path | New |
-| `WorkbenchEditor` | Monaco editor with file load/save via API | New |
-| `WorkbenchFilesPanel` | Combines FileTree + Editor in resizable split | New |
-| `TaskDiffView` | Git diff rendering + merge (already exists) | Unchanged |
-| `WorkbenchPreviewPanel` | Preview controls + iframe renderer | New |
-| `useFileContent` | Custom hook: fetch/save file via API | New |
-| `usePreviewServer` | Custom hook: start/stop/poll preview process | New |
-| `previewProcessManager` | Server-singleton: Map of taskId to ChildProcess+port | New |
+| Component | Responsibility | Location |
+|-----------|----------------|----------|
+| `instrumentation.ts` | Starts WS server at app boot (nodejs runtime only) | `src/instrumentation.ts` |
+| `src/lib/pty/session-store.ts` | Map of taskId → PtySession; create/destroy/reconnect | `src/lib/pty/` |
+| `src/lib/pty/ws-server.ts` | `ws.WebSocketServer` on port 3001; message routing | `src/lib/pty/` |
+| `src/lib/pty/pty-session.ts` | node-pty spawn, onData, write, resize, lifecycle | `src/lib/pty/` |
+| `TaskTerminal` | xterm.js component, WebSocket client, addon-fit | `src/components/task/task-terminal.tsx` |
+| `task-page-client.tsx` | Replace left panel (chat → terminal), keep right tabs | `src/app/workspaces/.../task-page-client.tsx` |
+| Existing `stream/route.ts` | Keep for reference/fallback; replace in UI only | `src/app/api/tasks/[taskId]/stream/route.ts` |
+| Existing `process-manager.ts` | Extend to manage PTY processes alongside ChildProcess | `src/lib/adapters/process-manager.ts` |
 
-## Recommended Project Structure
+---
+
+## Recommended Project Structure (New Files)
 
 ```
 src/
-├── app/
-│   └── workspaces/[workspaceId]/tasks/[taskId]/
-│       ├── page.tsx                    # Server Component (unchanged)
-│       └── task-page-client.tsx        # Modified: add Files + Preview tabs
-│
-├── app/api/tasks/[taskId]/
-│   ├── files/
-│   │   └── route.ts                   # GET: list files in worktree/localPath
-│   ├── files/content/
-│   │   └── route.ts                   # GET: read file, PUT: write file
-│   ├── preview/
-│   │   ├── start/route.ts             # POST: spawn preview process
-│   │   ├── stop/route.ts              # POST: kill preview process
-│   │   └── status/route.ts            # GET: port + running state
-│   ├── diff/route.ts                  # (existing, unchanged)
-│   ├── execute/route.ts               # (existing, unchanged)
-│   ├── merge/route.ts                 # (existing, unchanged)
-│   └── stream/route.ts                # (existing, unchanged)
-│
-├── components/task/
-│   ├── workbench-file-tree.tsx        # New: recursive tree from API
-│   ├── workbench-editor.tsx           # New: Monaco dynamic import wrapper
-│   ├── workbench-files-panel.tsx      # New: FileTree + Editor layout
-│   ├── workbench-preview-panel.tsx    # New: iframe + controls
-│   ├── task-diff-view.tsx             # (existing, unchanged)
-│   ├── task-conversation.tsx          # (existing, unchanged)
-│   └── task-message-input.tsx         # (existing, unchanged)
-│
-└── lib/
-    ├── preview-process-manager.ts     # New: server singleton for preview processes
-    ├── language-map.ts                # New: file extension to Monaco language
-    ├── worktree.ts                    # (existing, reused for path derivation)
-    ├── adapters/process-utils.ts      # (existing, reused for preview spawn)
-    └── file-serve.ts                  # (existing, pattern reference)
+├── lib/
+│   └── pty/
+│       ├── session-store.ts     # Singleton Map<taskId, PtySession>
+│       ├── pty-session.ts       # node-pty spawn + lifecycle
+│       └── ws-server.ts         # ws.WebSocketServer + message routing
+├── components/
+│   └── task/
+│       └── task-terminal.tsx    # xterm.js client component (dynamic import)
+└── instrumentation.ts           # Extended: add WS server bootstrap
 ```
 
-### Structure Rationale
+### next.config.ts additions
 
-- **`app/api/tasks/[taskId]/files/`:** Follows existing per-task API grouping convention. File listing and content are separate routes to keep each handler focused.
-- **`app/api/tasks/[taskId]/preview/`:** Preview lifecycle needs three endpoints (start/stop/status) — mirrors how execution uses `/execute` and `/stream`.
-- **`components/task/workbench-*.tsx`:** Keeps workbench components co-located with other task components. All prefixed `workbench-` to distinguish from the chat-related `task-*` components.
-- **`lib/preview-process-manager.ts`:** A server-side singleton (module-level Map) following the pattern of `process-utils.ts`'s `runningProcesses`. Preview processes are long-lived unlike execution processes.
+`node-pty` is already on Next.js's automatic `serverExternalPackages` exclusion list (confirmed in [Next.js docs](https://nextjs.org/docs/app/api-reference/config/next-config-js/serverExternalPackages)). No manual configuration needed.
+
+---
 
 ## Architectural Patterns
 
-### Pattern 1: Monaco Editor as Dynamic Import with `ssr: false`
+### Pattern 1: instrumentation.ts WS Server Bootstrap
 
-**What:** Monaco Editor requires browser APIs (`document`, `window`). It cannot run on the server. Use Next.js `dynamic()` with `ssr: false` to ensure the editor only loads client-side.
+**What:** Export `register()` in `instrumentation.ts` that conditionally starts a WebSocket server on the nodejs runtime. This runs once at Next.js server startup, in the same process.
 
-**When to use:** Any time Monaco is rendered. The `WorkbenchEditor` component must be a Client Component, and it must additionally wrap the `@monaco-editor/react` Editor in a `dynamic()` call.
+**When to use:** Localhost tools where a separate process is undesirable. Avoids needing a custom `server.ts` file or patching Next.js internals.
 
-**Trade-offs:** Adds approximately 2-4MB bundle to client (Monaco is large). First render shows a loading skeleton. Language services (IntelliSense) work without a language server — syntax highlighting and basic completion are built-in. Turbopack (Next.js 16 dev server) has known issues with Monaco's web workers; the `ssr: false` dynamic import is the stable workaround.
-
-**Example:**
-
-```typescript
-// components/task/workbench-editor.tsx
-"use client";
-import dynamic from "next/dynamic";
-
-const MonacoEditor = dynamic(
-  () => import("@monaco-editor/react").then((m) => m.default),
-  { ssr: false, loading: () => <EditorSkeleton /> }
-);
-```
-
-### Pattern 2: File API Route with Path Anchoring
-
-**What:** All file read/write routes resolve the requested path relative to the task's worktree path (or `localPath` for NORMAL projects). They enforce that the resolved path stays within that root — the same path-traversal protection used in `file-serve.ts`.
-
-**When to use:** `/api/tasks/[taskId]/files/content` GET and PUT handlers.
-
-**Trade-offs:** The worktree path must be looked up from DB on every request (task to latest execution to worktreePath). Cache the worktree path in the route's request handling, not across requests. SQLite is fast enough for a local tool.
+**Trade-offs:** WS port (3001) must be hardcoded or env-configured. Browser must connect to a different port than the Next.js app. Works perfectly for localhost dev tools.
 
 **Example:**
-
 ```typescript
-// app/api/tasks/[taskId]/files/content/route.ts
-const worktreeRoot = path.resolve(worktreePath);
-const requestedPath = path.resolve(worktreeRoot, filePath);
-if (!requestedPath.startsWith(worktreeRoot + path.sep)) {
-  return NextResponse.json({ error: "Invalid path" }, { status: 400 });
+// src/instrumentation.ts
+export async function register() {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    await pruneOrphanedWorktrees();   // existing
+    const { startWsServer } = await import("./lib/pty/ws-server");
+    startWsServer();                  // new: idempotent, port 3001
+  }
 }
 ```
 
-### Pattern 3: Preview Process as Server Singleton
+### Pattern 2: PTY Session Lifecycle Mapped to TaskExecution
 
-**What:** A module-level `Map<taskId, { process: ChildProcess; port: number }>` in `lib/preview-process-manager.ts` tracks running preview servers. The preview start API route spawns `child_process.spawn()` with the user-configured command (e.g., `npm run dev -- --port 3100`) in the worktree directory. The stop route kills it. The status route reads the map.
+**What:** Each `TaskExecution` row corresponds to exactly one PTY session. Session identified by `taskId` (one active per task). Create PTY on WS "start" message, destroy on "stop" or disconnect.
 
-**When to use:** The Preview tab's start/stop controls POST to these routes.
+**When to use:** Always. This is the only sensible mapping for this domain.
 
-**Trade-offs:** This is a process-level singleton, not persisted in SQLite. On Next.js hot-reload, the Map clears but child processes may still be running on their ports. Mitigation: the start route checks whether a process for this taskId already exists in the map before spawning. The stop route uses SIGTERM then SIGKILL after a 3-second grace period, following the existing `process-utils.ts` pattern.
+**Trade-offs:** Reconnect must reattach to existing PTY (not spawn new), or terminal history must be replayed. Simplest approach: replay buffered output on reconnect.
 
-Port selection: user configures a port in the Preview panel UI (default 3000). The system does not auto-assign ports — this is a local tool and users control their own port space.
+**Session states:**
 
-**Example:**
-
-```typescript
-// lib/preview-process-manager.ts
-interface PreviewEntry { process: ChildProcess; port: number; taskId: string }
-const previews = new Map<string, PreviewEntry>();
-
-export function startPreview(taskId: string, command: string, cwd: string, port: number): void
-export function stopPreview(taskId: string): void
-export function getPreviewStatus(taskId: string): { running: boolean; port: number | null }
+```
+WS connect → session exists? → yes → send buffered output, attach onData
+                             → no  → spawn PTY, store session
+WS disconnect → keep PTY alive for 30s (reconnect window)
+                → timer fires → kill PTY, update DB execution.status
+"stop" message → kill PTY immediately → update DB execution.status
 ```
 
-### Pattern 4: File Tree Listing with Lazy Expansion
+**Example:**
+```typescript
+// src/lib/pty/pty-session.ts
+interface PtySession {
+  pty: IPty;
+  taskId: string;
+  executionId: string;
+  outputBuffer: string[];    // Last N lines for reconnect replay
+  clients: Set<WebSocket>;   // Multiple tabs reconnecting
+  disconnectTimer?: NodeJS.Timeout;
+}
+```
 
-**What:** The file listing API route runs `fs.readdir` on the worktree path. By default it returns only the first level. When a directory node is expanded in the UI, a second fetch retrieves its children. The `WorkbenchFileTree` component renders this as a collapsible tree. The `path` returned is always relative to the worktree root, not absolute.
+### Pattern 3: xterm.js as Pure Passthrough Display
 
-**When to use:** The Files tab in the right panel.
+**What:** xterm.js renders PTY output verbatim — no JSON parsing, no filtering, no chat bubble formatting. ANSI escape codes are preserved. User input is forwarded directly to PTY.
 
-**Trade-offs:** Lazy expansion avoids loading large trees upfront. The content endpoint reconstructs the absolute path server-side from the relative path + worktree root. Hidden files/directories (dotfiles) are excluded by default with an opt-in toggle.
+**When to use:** Always for PTY terminals. Do not strip or filter output.
 
-### Pattern 5: Tab State in Parent, Panel State Local
+**Trade-offs:** DB storage of terminal output must happen server-side (PTY session), not client-side. No more `assistantContent` assembly in the stream route.
 
-**What:** `TaskPageClient` owns which tab is active (Files / Changes / Preview) and manages the top-level layout. Each panel component (`WorkbenchFilesPanel`, `TaskDiffView`, `WorkbenchPreviewPanel`) owns its own internal state (selected file, preview port, etc.). Cross-panel communication (e.g., agent edit triggers file tree refresh) happens via a `refreshKey` prop incremented by the parent.
+**Data flow:**
+```
+User types → xterm.js onData → WS send { type: "input", data: "\r" }
+PTY stdout → WS send binary/text frame → xterm.js term.write(data)
+User resizes container → addon-fit → { type: "resize", cols, rows } → pty.resize()
+```
 
-**When to use:** Always — keeps the parent thin and panels independently testable.
-
-**Trade-offs:** File tree refresh after agent execution requires the parent to detect `status_changed` SSE events (already handled in `task-page-client.tsx`) and increment a `refreshKey` passed to `WorkbenchFilesPanel`. No global state or Zustand slice is needed.
+---
 
 ## Data Flow
 
-### File Read Flow
+### Full Round-Trip: User Input to Terminal Output
 
 ```
-User clicks file in WorkbenchFileTree
-    |
-WorkbenchFilesPanel.handleFileSelect(relativePath)
-    |
-useFileContent hook: GET /api/tasks/[taskId]/files/content?path=<relativePath>
-    |
-API route: resolve worktree root from DB → anchor path → fs.readFile
-    |
-Response: { content: string; language: string }
-    |
-MonacoEditor: setValue(content), setLanguage(language)
+1. User types in xterm.js
+   term.onData(data) → ws.send(JSON.stringify({ type:"input", data }))
+
+2. WS server receives message
+   ws.on("message") → parse → session.pty.write(data)
+
+3. node-pty writes to Claude CLI PTY
+   pty.write(data) → Claude CLI stdin (running in real TTY)
+
+4. Claude CLI produces output (ANSI colored, cursor-positioned)
+   pty.onData(chunk) → ws.send(chunk) to all session.clients
+
+5. Browser receives PTY output
+   ws.onmessage → xterm.term.write(event.data)
 ```
 
-### File Write Flow
+### Session Start Flow
 
 ```
-User edits in Monaco, clicks Save (Ctrl+S handler)
-    |
-WorkbenchEditor.handleSave(content)
-    |
-useFileContent hook: PUT /api/tasks/[taskId]/files/content
-  body: { path: relativePath, content: string }
-    |
-API route: anchor path → fs.writeFile
-    |
-Response: { success: true }
-    |
-Toast notification "Saved"
+1. User clicks "Start Execution" on task page
+2. POST /api/tasks/[taskId]/execute (existing route, creates TaskExecution row)
+3. UI opens WebSocket: ws://localhost:3001
+4. WS client sends: { type: "start", taskId, executionId, cwd, args }
+5. WS server: session-store.createSession(taskId)
+   → node-pty.spawn("claude", buildArgs(), { name:"xterm-256color", cwd })
+   → register pty.onData → broadcast to ws clients
+   → store session in Map
+6. PTY output streams to xterm.js
+7. On Claude exit: update DB (execution.status, task.status)
+   → WS server sends { type: "exit", exitCode }
 ```
 
-### Preview Start Flow
+### Session Stop / Kill Flow
 
 ```
-User configures command ("npm run dev") + port (3000) in WorkbenchPreviewPanel
-    |
-handleStart() → POST /api/tasks/[taskId]/preview/start
-  body: { command: string; port: number }
-    |
-API route: validate command (Zod), lookup worktree path from DB
-    |
-previewProcessManager.startPreview(taskId, command, cwd, port)
-  → spawn child_process in worktree directory (shell: false)
-    |
-Response: { started: true; port: number }
-    |
-WorkbenchPreviewPanel: polls GET /api/tasks/[taskId]/preview/status
-  every 2 seconds until running confirmed or 30-second timeout
-    |
-iframe src="http://localhost:{port}" renders once confirmed running
+1. User clicks "Stop"
+2. WS client sends: { type: "stop", executionId }
+   OR: user closes browser tab (WS disconnect)
+3. WS server: session-store.destroySession(taskId)
+   → pty.kill("SIGTERM")
+   → db.taskExecution.update({ status: "FAILED" })
+4. WS closes
 ```
 
-### Agent Edit → File Tree Refresh Flow
+### Reconnect Flow (browser refresh)
 
 ```
-SSE event { type: "status_changed" } received in TaskPageClient
-    |
-TaskPageClient: increment fileTreeRefreshKey state
-    |
-WorkbenchFilesPanel receives new refreshKey prop
-    |
-useEffect on refreshKey: re-fetch file listing from API
-    |
-File tree re-renders with agent's new/modified files
+1. WS client connects with { type: "reconnect", taskId }
+2. WS server checks session-store: session exists?
+   → yes: cancel disconnect timer, send buffered output, attach client
+   → no: send { type: "session_not_found" } → UI shows "no active session"
 ```
 
-### Key Data Flows
-
-1. **Worktree path resolution:** Every file/preview API route resolves the worktree path the same way: look up `db.taskExecution.findFirst({ where: { taskId, status: "COMPLETED" }, orderBy: { createdAt: "desc" } })` and use `worktreePath`. Falls back to `task.project.localPath` if no COMPLETED execution exists (NORMAL projects, or before first execution on GIT projects).
-
-2. **Language detection:** Map file extension to Monaco language string in `lib/language-map.ts`. The content API includes a `language` field in the response so the client does not need to do extension mapping itself.
-
-3. **Preview command security:** The command string from the user is split by whitespace and passed as args array to `child_process.spawn(shell: false)` — never interpolated into a shell string. This follows the existing `execFileSync` pattern in `diff/route.ts` and the security convention in `process-utils.ts`.
-
-## Scaling Considerations
-
-This is a localhost-only single-user tool. Scaling is not a concern. The relevant operational limits:
-
-| Concern | At 1 user (current target) | Notes |
-|---------|---------------------------|-------|
-| Concurrent preview servers | 1 per task, user-managed | No need to auto-limit |
-| File tree size | Bounded by user's project | Lazy expansion prevents UI freeze |
-| Monaco bundle size | ~2-4MB initial load | Acceptable for local dev tool |
-| File write conflicts | None (single user) | No optimistic locking needed |
-| SQLite reads per file op | 1 DB query per API call | Negligible for local SQLite |
-
-## Anti-Patterns
-
-### Anti-Pattern 1: Passing Absolute Filesystem Paths to the Client
-
-**What people do:** Return the full `worktreePath + "/" + filename` in the file listing API and send it back as-is for content requests.
-
-**Why it's wrong:** Exposes internal filesystem structure unnecessarily; makes path-traversal validation harder; couples client to server filesystem layout.
-
-**Do this instead:** Return only paths relative to the worktree root in the listing API. The content API accepts relative paths and resolves them server-side with anchor validation.
-
-### Anti-Pattern 2: Bundling Monaco Without `ssr: false`
-
-**What people do:** Import `@monaco-editor/react` directly at the top of a Client Component without `dynamic()`.
-
-**Why it's wrong:** Next.js still attempts to bundle Monaco for server rendering. Monaco accesses `window` and `document` during initialization, causing a crash at build time or a hydration error at runtime. Turbopack (used in `next dev`) has additional Monaco worker issues.
-
-**Do this instead:** Always use `dynamic(() => import("@monaco-editor/react"), { ssr: false })`. The `WorkbenchEditor` component is the single place this import appears.
-
-### Anti-Pattern 3: Shell-Interpolated Preview Commands
-
-**What people do:** Execute `exec(\`${userCommand}\`)` or `spawn("sh", ["-c", userCommand])` with the user-provided preview command.
-
-**Why it's wrong:** Even on a local tool, running a user-typed command through a shell interpreter enables accidental injection (e.g., `npm run dev; rm -rf ~`).
-
-**Do this instead:** Split the command string by whitespace and pass `spawn(cmd, args, { shell: false })`. This matches the existing `process-utils.ts` approach.
-
-### Anti-Pattern 4: Polling Preview Readiness Too Aggressively
-
-**What people do:** Poll `/api/tasks/[taskId]/preview/status` every 200-500ms immediately after the start response.
-
-**Why it's wrong:** Preview dev servers (Vite, Next.js) take 3-10 seconds to start and bind their port. Rapid polling creates unnecessary API calls and can overwhelm Next.js route handler processing.
-
-**Do this instead:** Poll at 2-second intervals. Show a "Starting..." state in the UI. Cap polling at 30 seconds, then show an error message with the process's stderr for diagnosis.
-
-### Anti-Pattern 5: Re-fetching the File Tree on Every SSE Event
-
-**What people do:** Subscribe to every SSE event and re-fetch the entire file tree on any `tool` or `log` event.
-
-**Why it's wrong:** During an active execution the SSE stream emits dozens of events per second. Each re-fetch is a filesystem read operation.
-
-**Do this instead:** Only re-fetch on `status_changed` events (which fire once per execution completion). Agent file changes are visible atomically after execution completes — not incrementally during streaming.
+---
 
 ## Integration Points
 
-### Existing Infrastructure Reused
+### With Existing Code
 
-| Integration | How Reused | Notes |
-|-------------|------------|-------|
-| `lib/worktree.ts` | Worktree path convention (`localPath/.worktrees/task-{taskId}`) | File routes derive the path using the same convention; no need to call `createWorktree()` on reads |
-| `lib/adapters/process-utils.ts` | `spawn` pattern for preview process | Mirror the `shell: false` spawn approach; or call `runChildProcess` if SSE-style logging of startup output is desired |
-| `lib/adapters/process-manager.ts` | Module-level singleton registry pattern | `preview-process-manager.ts` follows the same Map-based singleton approach |
-| `lib/file-serve.ts` | `resolveAssetPath` path-anchor guard | Replicate the `resolved.startsWith(safePrefix)` check for worktree-scoped file operations |
-| `app/api/tasks/[taskId]/diff/route.ts` | DB lookup pattern (task → project → localPath → worktreeBranch) | Copy the Zod validation + DB query + fallback pattern for the new file routes |
-| SSE `status_changed` event | Already emitted in `stream/route.ts` | `TaskPageClient` can use this to increment `fileTreeRefreshKey` without any server-side changes |
-| `components/task/task-diff-view.tsx` | Entire component reused unchanged | Just render it as the Changes tab content instead of the current sole tab content |
+| Existing Component | Integration | Notes |
+|--------------------|-------------|-------|
+| `instrumentation.ts` | Extend `register()` to start WS server | Keep worktree prune; add WS bootstrap after |
+| `process-manager.ts` | Add PTY process tracking alongside ChildProcess | Or create separate `pty-process-manager.ts` |
+| `/api/tasks/[taskId]/execute/route.ts` | Keep as-is — creates TaskExecution row | UI calls this before opening WS |
+| `/api/tasks/[taskId]/stream/route.ts` | Keep but unused by new UI | Remove in a later cleanup phase |
+| `task-page-client.tsx` | Replace left panel: chat → terminal | Right panel (files/diff/preview) unchanged |
+| `TaskConversation` + `TaskMessageInput` | Remove from workbench page | Keep for any other usage |
+| `worktree.ts` + `createWorktree()` | WS server must call this before spawning PTY | Same logic as current stream route |
 
 ### New External Dependencies
 
-| Dependency | Version | Purpose | Integration |
-|------------|---------|---------|-------------|
-| `@monaco-editor/react` | ^4.x | Code editor component | Client Component, `dynamic()` import with `ssr: false` |
+| Library | Role | Notes |
+|---------|------|-------|
+| `node-pty` | PTY process spawning | Native module; auto-excluded by Next.js |
+| `ws` | WebSocket server | Lightweight; prefer over socket.io for simplicity |
+| `@xterm/xterm` | Browser terminal renderer | Use scoped package, not legacy `xterm` |
+| `@xterm/addon-fit` | Resize terminal to container | Required for responsive layout |
 
-No other new external dependencies are needed. The preview iframe, file tree, and process management all use Node.js built-ins and existing patterns.
+### Port Configuration
 
-### Internal Boundaries
+| Service | Port | Config |
+|---------|------|--------|
+| Next.js | 3000 | Default |
+| WS server | 3001 | `TERMINAL_WS_PORT` env var, default 3001 |
 
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| `WorkbenchFilesPanel` ↔ API | Fetch GET/PUT `/api/tasks/[taskId]/files/*` | Relative paths only; never absolute filesystem paths on the wire |
-| `WorkbenchPreviewPanel` ↔ API | Fetch POST/GET `/api/tasks/[taskId]/preview/*` | Command + port from UI controls |
-| `previewProcessManager` ↔ API routes | Module-level Map singleton (same process) | Not persisted; survives hot-reload only if the module is not re-evaluated |
-| `TaskPageClient` ↔ `WorkbenchFilesPanel` | `refreshKey: number` prop | Incremented on `status_changed` SSE event |
-| `TaskPageClient` ↔ active tab state | `useState<"files"|"changes"|"preview">` | Tab bar rendered in right panel header |
-| `WorkbenchEditor` ↔ `WorkbenchFileTree` | Selected file path via parent state in `WorkbenchFilesPanel` | Parent holds `selectedFile` state; tree fires `onFileSelect`; editor receives `filePath` |
+The browser connects to `ws://localhost:${TERMINAL_WS_PORT}`. The port must be exposed in the client via an env var prefixed with `NEXT_PUBLIC_` or hardcoded for localhost-only tools.
 
-## Suggested Build Order
+---
 
-The features have the following dependency graph:
+## Build Order (Phase Dependencies)
 
 ```
-Phase A: Route entry + tab bar skeleton (no deps)
-    |
-Phase B: File listing API + WorkbenchFileTree (depends on worktree path convention)
-    |
-Phase C: File content API + WorkbenchEditor/Monaco (depends on Phase B path pattern)
-    |
-Phase D: Files tab integration (tree + editor combined, depends on B + C)
-    |
-Phase E: Changes tab (reuse TaskDiffView in new tab bar, depends on Phase A)
-    |
-Phase F: Preview process manager + API + WorkbenchPreviewPanel (independent)
+Phase A: WS Server + PTY Session Backend
+  → instrumentation.ts extension
+  → src/lib/pty/session-store.ts
+  → src/lib/pty/pty-session.ts
+  → src/lib/pty/ws-server.ts
+  → Manual test: curl/wscat to verify WS handshake
+
+Phase B: xterm.js Terminal Component
+  → Install @xterm/xterm, @xterm/addon-fit, ws
+  → src/components/task/task-terminal.tsx (dynamic import, ssr:false)
+  → Wire to WS server
+  → Manual test: terminal renders, input echoes
+
+Phase C: Workbench Integration
+  → Replace left panel in task-page-client.tsx
+  → Remove TaskConversation from workbench
+  → DB lifecycle: create/update execution on start/stop
+  → Claude CLI args: same as stream route (--dangerously-skip-permissions, cwd, etc.)
+
+Phase D: Lifecycle + Edge Cases
+  → Reconnect on refresh
+  → Disconnect timer
+  → Stop/kill handling
+  → Exit code → DB status update (COMPLETED/FAILED)
+  → Task status transition (IN_PROGRESS → IN_REVIEW on success)
+
+Phase E: v0.6 Bug Fixes (parallel, no PTY dependency)
+  → Can be done alongside Phase A or B
 ```
 
-**Recommended phase breakdown:**
+---
 
-| Phase | Deliverable | Dependencies | Risk |
-|-------|-------------|--------------|------|
-| Phase A | "查看详情" entry in task drawer → task page route; expand tab bar to [Files][Changes][Preview] skeleton | None | Low |
-| Phase B | File listing API route + `WorkbenchFileTree` component with lazy expansion | Worktree path convention (existing) | Low |
-| Phase C | File content read/write API + `WorkbenchEditor` with Monaco (`ssr: false`) + `useFileContent` hook | Phase B (path anchor pattern) | Medium — Monaco SSR pitfall |
-| Phase D | `WorkbenchFilesPanel` integrating tree + editor in a horizontal split | Phases B + C | Low |
-| Phase E | Wire existing `TaskDiffView` as the Changes tab; remove old single-tab layout from `TaskPageClient` | Phase A | Low (pure reuse) |
-| Phase F | `preview-process-manager.ts` + 3 preview API routes + `WorkbenchPreviewPanel` with iframe | None (independent) | Medium — child process lifecycle |
+## Anti-Patterns
 
-**Why this order:**
+### Anti-Pattern 1: WebSocket in Next.js Route Handlers
 
-- Phases A through E build sequentially from routing to UI to editor, each independently testable and mergeable.
-- Phase F is independent of Phases B-E and can run in parallel with Phases C-D if two developers are available, or be deferred to a separate sprint.
-- The Monaco SSR issue (Phase C) is isolated to one component file — resolving it before integrating into the full panel (Phase D) keeps the integration step low-risk.
-- Phase E is nearly free — it reuses `TaskDiffView` unchanged, just wires it into the new multi-tab layout instead of the current hardcoded single-tab rendering in `TaskPageClient`.
+**What people do:** Try to handle the WebSocket upgrade inside an App Router route handler (e.g., `src/app/api/terminal/route.ts`).
+
+**Why it's wrong:** Next.js route handlers do not support HTTP Upgrade. The internal Next.js server intercepts and rejects upgrade requests before they reach route handler code. No workaround exists without patching Next.js internals.
+
+**Do this instead:** Start a `ws.WebSocketServer` in `instrumentation.ts` on a separate port.
+
+### Anti-Pattern 2: Parsing PTY Output Like SSE JSON
+
+**What people do:** Continue parsing `stream-json` from Claude CLI and constructing chat messages from PTY output.
+
+**Why it's wrong:** node-pty provides a real TTY. Claude CLI will output ANSI escape codes, interactive prompts, progress spinners — none of which are valid JSON. The stream-json format only appears when Claude CLI runs with `--output-format stream-json --print -`, which suppresses TTY behavior.
+
+**Do this instead:** Pass PTY output verbatim to xterm.js. Store terminal transcripts in a separate field if DB persistence is needed. Remove `--output-format stream-json` and `--print -` from the Claude CLI args when running in PTY mode.
+
+### Anti-Pattern 3: Spawning PTY in a Next.js Route Handler
+
+**What people do:** Create a PTY session in a POST route handler (like the current stream route pattern).
+
+**Why it's wrong:** Route handlers run per-request. PTY sessions outlive HTTP requests. The PTY must live in a singleton store (the WS server module scope), not inside a request handler's closure.
+
+**Do this instead:** All PTY lifecycle management lives in `src/lib/pty/session-store.ts`, initialized at server startup via `instrumentation.ts`.
+
+### Anti-Pattern 4: One PTY per WebSocket Connection
+
+**What people do:** Spawn a new PTY whenever a client connects to the WebSocket.
+
+**Why it's wrong:** Browser refresh would kill the running Claude session. Multiple browser tabs to the same task would spawn multiple Claude processes.
+
+**Do this instead:** Keyed by `taskId`. One PTY per task. WebSocket connections are clients that attach/detach from the existing session.
+
+### Anti-Pattern 5: next-ws Package Patching
+
+**What people do:** Use the `next-ws` package to patch Next.js and add WebSocket support to route files.
+
+**Why it's wrong:** Patches Next.js internals (fragile, breaks on Next.js upgrades). Adds a build step (`next-ws patch`). Unnecessary complexity for a localhost tool that can simply use a second port.
+
+**Do this instead:** Standalone WS server in `instrumentation.ts`.
+
+---
+
+## Scaling Considerations
+
+This is a localhost-only single-user tool. Scaling is not a real concern. The relevant constraint is **concurrent PTY sessions**: the existing `maxConcurrentExecutions` config (default 3) should gate PTY creation, same as the current SSE stream route.
+
+| Concern | Approach |
+|---------|----------|
+| Too many Claude processes | Reuse existing `canStartExecution()` guard before spawning PTY |
+| PTY memory leak | Destroy session on exit + 30s disconnect timer |
+| WS server startup order | `instrumentation.register()` is awaited before server handles requests |
+
+---
 
 ## Sources
 
-- Codebase: `/src/app/api/tasks/[taskId]/diff/route.ts` — path anchor + worktree query pattern
-- Codebase: `/src/app/api/tasks/[taskId]/stream/route.ts` — SSE + child process lifecycle pattern
-- Codebase: `/src/lib/adapters/process-manager.ts` + `process-utils.ts` — singleton process registry + `spawn(shell: false)` pattern
-- Codebase: `/src/lib/file-serve.ts` — path traversal protection (`startsWith(safePrefix)` guard)
-- Codebase: `/src/lib/worktree.ts` — worktree path convention (`localPath/.worktrees/task-{taskId}`)
-- Codebase: `/src/app/workspaces/[workspaceId]/tasks/[taskId]/task-page-client.tsx` — current 40/60 layout + SSE `status_changed` consumption
-- [@monaco-editor/react npm](https://www.npmjs.com/package/@monaco-editor/react) — React wrapper, `ssr: false` requirement (HIGH confidence)
-- [Next.js Turbopack Monaco issue #72613](https://github.com/vercel/next.js/issues/72613) — `ssr: false` is the stable workaround for both Turbopack and Webpack (MEDIUM confidence — known open issue)
-- [Bolt.diy architecture — DeepWiki](https://deepwiki.com/stackblitz-labs/bolt.diy) — reference for preview iframe + file tree + editor panel layout pattern (MEDIUM confidence)
+- [Next.js instrumentation docs](https://nextjs.org/docs/app/guides/instrumentation) — official, version 16.2.2, 2026-03-31
+- [Next.js serverExternalPackages](https://nextjs.org/docs/app/api-reference/config/next-config-js/serverExternalPackages) — confirms `node-pty` is auto-excluded, version 16.2.2
+- [GitHub discussion #58698](https://github.com/vercel/next.js/discussions/58698) — WebSocket in route handlers: not supported
+- [next-ws package](https://github.com/apteryxxyz/next-ws) — patching approach; not recommended
+- [xterm.js](https://xtermjs.org/) — official site, addon guide
+- [@xterm/addon-fit npm](https://www.npmjs.com/package/@xterm/addon-fit) — v0.11.0, active 2025
+- [Web terminal with xterm.js + node-pty + WebSockets](https://ashishpoudel.substack.com/p/web-terminal-with-xtermjs-node-pty) — architecture pattern reference
 
 ---
-*Architecture research for: ai-manager v0.6 task development workbench*
-*Researched: 2026-03-31*
+
+*Architecture research for: node-pty + WebSocket + xterm.js terminal integration in Next.js 16 App Router*
+*Researched: 2026-04-02*

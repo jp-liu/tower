@@ -1,19 +1,21 @@
 # Stack Research
 
-**Domain:** Task development workbench — online code editor, file tree, diff viewer, live preview proxy (v0.6)
-**Researched:** 2026-03-31
-**Confidence:** MEDIUM-HIGH — core library choices verified via npm + official docs; Next.js 16 proxy.ts behavior confirmed via official docs; React 19 compatibility caveats noted
+**Domain:** Browser-based terminal interaction — node-pty + WebSocket + xterm.js replacing SSE chat bubbles (v0.7)
+**Researched:** 2026-04-02
+**Confidence:** HIGH — core library choices verified via official npm pages, Next.js 16.2.2 official docs, and GitHub release history. node-pty's automatic exemption from bundling confirmed directly in Next.js official documentation.
 
 ---
 
 ## Scope
 
-This is a **delta research document** for the v0.6 milestone. The base stack (Next.js 16, React 19, Prisma 6, SQLite, Tailwind CSS v4, shadcn/ui, zustand) is validated and unchanged. This document covers only the **four new capability areas**:
+This is a **delta research document** for the v0.7 milestone. The base stack (Next.js 16, React 19, Prisma 6, SQLite, Tailwind CSS v4, zustand, `@xterm/xterm`, `@xterm/addon-fit`) is validated and unchanged.
 
-1. Online code editor (view + edit files in the worktree)
-2. File tree panel (browse worktree directory structure)
-3. Diff viewer (git diff of the worktree vs base branch)
-4. Live preview / dev server proxy (iframe into a running dev server)
+This document covers only what is **new or changed** for the browser terminal:
+
+1. PTY backend — creating real pseudo-terminals for Claude CLI
+2. WebSocket server — bidirectional communication replacing SSE
+3. xterm.js addons — bridging the WebSocket to the terminal
+4. Session lifecycle management — create/destroy/reconnect
 
 ---
 
@@ -23,87 +25,168 @@ This is a **delta research document** for the v0.6 milestone. The base stack (Ne
 
 | Library | Version | Purpose | Why Recommended |
 |---------|---------|---------|-----------------|
-| `@monaco-editor/react` | `4.7.0-rc.0` (React 19 RC) | In-browser code editor | Monaco is the VSCode engine — syntax highlighting, IntelliSense stubs, multi-language support out of the box. The `@monaco-editor/react` wrapper handles webpack worker configuration automatically via CDN loader, eliminating the typical Next.js webpack plugin dance. The `4.7.0-rc.0` release explicitly targets React 19. |
-| `monaco-editor` | `^0.55.1` | Monaco core (peer dep) | Latest stable; AMD build deprecated in 0.53+, the React wrapper handles this via CDN so the peer dep is only needed for TypeScript types. |
-| `@git-diff-view/react` | `^0.1.3` | GitHub-style diff viewer | SSR/RSC-ready, zero dependencies, 25kb core + 15kb UI. Accepts unified diff strings (which the existing git worktree infrastructure already produces) and renders split/unified views with syntax highlighting via Web Worker. Actively maintained (published within days of research date). |
-| `react-resizable-panels` | `^2.x` (NOT v4.x) | Resizable panel layout | The workbench needs a draggable splitter between the chat panel and the right-side editor/diff/preview tabs. Use v2.x — v4.x introduced breaking export renames that as of late 2025 remain unresolved in shadcn/ui's Resizable component. Pin to `^2.1.7` until shadcn fixes the v4 mismatch. |
+| `node-pty` | `^1.1.0` | Spawn Claude CLI in a real PTY (pseudo-terminal) | Only production-quality PTY library for Node.js. Microsoft-maintained, powers VS Code's integrated terminal. v1.1.0 is the latest stable (Dec 2025). Runs Claude Code in a genuine TTY environment so ANSI colors, cursor movement, and interactive prompts all work natively — the exact "local terminal" experience the v0.7 milestone requires. |
+| `ws` | `^8.18.0` | WebSocket server (RFC 6455) | The de facto standard Node.js WebSocket library. Minimal, fast, no framework dependencies. Required peer dependency of `next-ws` (see below). v8 targets Node.js 18+, compatible with the project's Node.js 22. |
+| `next-ws` | `^2.2.2` | WebSocket support inside Next.js App Router API routes | Patches Next.js to expose `SOCKET` upgrade handlers in route files, eliminating the need for a separate custom server. Latest release is 2.2.2 (March 2026), actively maintained. Designed for server-based (non-serverless) deployments — the project is localhost-only, so this is exactly the right fit. Requires a `"prepare": "next-ws patch"` script in `package.json`. |
+| `@xterm/addon-attach` | `^0.12.0` | Attach a WebSocket to an xterm.js terminal | Official xterm.js addon that pipes raw WebSocket frames directly into the terminal buffer and sends keystrokes back. When a WebSocket carries raw PTY bytes (which node-pty produces), this addon is the canonical bridge. `@xterm/xterm` and `@xterm/addon-fit` are already installed — this is the only missing piece. |
 
-### No New Dependencies Needed
+### Already Installed — No Version Change Needed
 
-| Capability | Approach | Rationale |
-|-----------|---------|-----------|
-| File tree | Custom recursive component | No well-maintained npm library matches the project's aesthetic and React 19 requirements. The worktree is a local filesystem — a Server Action reads the directory tree via `fs.readdir` recursively and returns a JSON tree. The UI is a straightforward recursive component using existing Tailwind + lucide-react (already installed). |
-| Dev server proxy | Next.js 16 built-in `proxy.ts` + `next.config.js` rewrites | Next.js 16 renamed `middleware.ts` to `proxy.ts`. Use `next.config.js` rewrites to forward `/preview/[taskId]/**` to `localhost:{port}`. Port registry lives in a simple in-memory Map in a Server Action. No `http-proxy-middleware` needed. |
-| Terminal output (preview startup) | Reuse existing SSE streaming | The project already streams Claude CLI output via SSE. The same pattern (`ReadableStream` + `res.write`) can stream dev server stdout for the preview panel startup log. No xterm.js needed — a `<pre>` with auto-scroll is sufficient for startup log display. |
+| Library | Installed Version | Role in v0.7 |
+|---------|-----------------|--------------|
+| `@xterm/xterm` | `^6.0.0` | Terminal renderer in the browser |
+| `@xterm/addon-fit` | `^0.11.0` | Resize the terminal to fill its container |
+
+### Supporting Libraries — No Install Needed
+
+| Capability | Approach |
+|-----------|---------|
+| Terminal session registry | In-memory `Map<sessionId, IPty>` in a server-side module — same pattern as the existing `process-manager.ts` for Claude CLI processes. No Redis, no DB changes. |
+| ANSI / resize messages | Use a simple JSON envelope on the WebSocket: `{ type: 'data', payload: string }` for PTY output, `{ type: 'resize', cols: number, rows: number }` for terminal resize events. The attach addon handles the raw path; this envelope is used for control messages. |
 
 ---
 
-## Integration Points with Existing Stack
+## WebSocket Integration: next-ws vs Custom Server
 
-### Monaco Editor + Next.js 16 App Router
+### Recommendation: next-ws
 
-Monaco requires a browser environment. Mark the editor component `"use client"`. Use `next/dynamic` with `{ ssr: false }` to prevent SSR:
+**Use `next-ws`** because:
 
-```typescript
-// src/components/workbench/CodeEditor.tsx
-"use client"
-import dynamic from "next/dynamic"
+1. The project runs locally as a persistent server — the critical limitation of next-ws (no serverless/Vercel support) does not apply.
+2. next-ws keeps WebSocket handlers co-located with the rest of the API routes (`app/api/terminal/[sessionId]/route.ts`), consistent with the existing codebase pattern.
+3. A custom server requires replacing `next dev --turbopack` with `tsx server.ts`, which requires maintaining a separate server entrypoint and changes the dev script. The project's Turbopack setup (`"dev": "next dev --turbopack"`) is unchanged with next-ws.
+4. next-ws 2.2.2 was released March 2026, showing active maintenance.
 
-const MonacoEditor = dynamic(
-  () => import("@monaco-editor/react").then(m => m.default),
-  { ssr: false, loading: () => <div>Loading editor...</div> }
-)
-```
+### When Custom Server Would Be Right Instead
 
-`@monaco-editor/react` loads the Monaco worker scripts via CDN by default (no webpack config needed). This is the correct approach for Next.js — the alternative of using `monaco-editor-webpack-plugin` requires a custom webpack config and conflicts with Next.js's built-in webpack setup.
+Use a custom `server.ts` if:
+- next-ws breaks with a future Next.js patch (the patch approach is inherently fragile)
+- Turbopack-specific incompatibilities are discovered during implementation
+- The WS server needs to be accessible by the MCP process as well as the browser
 
-**Theme integration:** Monaco has its own theming system. Map `next-themes` values (`dark`/`light`) to Monaco's `vs-dark`/`vs` themes via a `useEffect` that calls `monaco.editor.setTheme()`.
+The custom server approach (official Next.js docs example) passes `turbopack: true` to the `next()` function call, preserving Turbopack in dev mode. Switching is a contained change — the session management logic is identical either way.
 
-### File Tree + Server Actions
+---
 
-```typescript
-// src/actions/file-actions.ts (new)
-export async function getWorktreeFiles(worktreePath: string): Promise<FileNode[]>
-export async function readFile(worktreePath: string, relativePath: string): Promise<string>
-export async function writeFile(worktreePath: string, relativePath: string, content: string): Promise<void>
-```
+## node-pty: Native Addon Considerations
 
-`worktreePath` comes from `TaskExecution.worktreePath` (already stored in DB). Validate that the requested path is within the worktree root before any `fs` operation — path traversal prevention is established pattern in this codebase (see `src/actions/asset-actions.ts`).
+### Next.js 16 Automatic Exemption
 
-### Diff Viewer + Existing Git Infrastructure
+`node-pty` is on Next.js 16's **built-in `serverExternalPackages` allowlist** (confirmed in Next.js 16.2.2 official docs at `nextjs.org/docs/app/api-reference/config/next-config-js/serverExternalPackages`). This means:
 
-The v0.5 worktree implementation already runs `git diff` to produce unified diff strings (used in the task panel diff view). Feed the same diff string to `@git-diff-view/react`'s `DiffView` component. No new git plumbing needed.
+- No manual `serverExternalPackages: ['node-pty']` entry needed in `next.config.ts`
+- Next.js will not attempt to bundle node-pty through webpack or Turbopack
+- Native `.node` addon file is loaded via native `require()` at runtime
 
-### Preview Proxy + Next.js 16 `proxy.ts`
+### Native Compilation
 
-```typescript
-// proxy.ts (project root — Next.js 16 convention)
-import type { NextRequest } from "next/server"
+node-pty compiles a native C++ addon on `npm install`. Requirements:
 
-export function proxy(request: NextRequest) {
-  const taskId = extractTaskId(request.pathname)
-  const port = devServerRegistry.get(taskId)
-  if (!port) return // fall through to Next.js routes
-  return Response.redirect(`http://localhost:${port}${rest}`)
+- **macOS (this project's runtime):** Xcode command line tools (`xcode-select --install`) — almost certainly already installed on a developer machine
+- **Node.js version:** Requires Node.js 16+. Project runs Node.js 22 — fully compatible
+- **pnpm:** Add `node-pty` to `pnpm.onlyBuiltDependencies` in `package.json` (alongside the existing `@prisma/engines`, `esbuild`, `prisma`) to ensure the native build runs in pnpm's isolated store
+
+### pnpm Configuration
+
+```json
+"pnpm": {
+  "onlyBuiltDependencies": [
+    "@prisma/engines",
+    "esbuild",
+    "node-pty",
+    "prisma"
+  ]
 }
 ```
 
-The dev server registry (`Map<taskId, port>`) is managed by a Server Action that spawns the preview process and stores the assigned port. The process lifecycle (start/stop) uses Node's `child_process.spawn` (same as the existing Claude CLI execution).
+---
+
+## next-ws Setup
+
+### Installation
+
+```bash
+pnpm add next-ws ws @xterm/addon-attach
+pnpm add -D @types/ws
+```
+
+### package.json scripts addition
+
+```json
+{
+  "scripts": {
+    "prepare": "next-ws patch"
+  }
+}
+```
+
+Run `pnpm prepare` after install to patch Next.js. The patch must be re-applied after every Next.js upgrade.
+
+### Route handler pattern
+
+```typescript
+// src/app/api/terminal/[sessionId]/route.ts
+import { type NextRequest } from "next/server"
+
+export function SOCKET(
+  client: import("ws").WebSocket,
+  request: NextRequest,
+  server: import("ws").WebSocketServer
+) {
+  // Attach to PTY session, wire up bidirectional data flow
+}
+```
+
+---
+
+## xterm.js: What Addons Are Needed
+
+| Addon | Status | Purpose |
+|-------|--------|---------|
+| `@xterm/xterm` | Already installed | Core terminal renderer |
+| `@xterm/addon-fit` | Already installed | Fill container dimensions |
+| `@xterm/addon-attach` | **New — install** | Pipe WebSocket ↔ terminal buffer |
+
+**Not needed:**
+- `@xterm/addon-web-links` — link detection is cosmetic; skip for v0.7
+- `@xterm/addon-search` — terminal search is out of scope for v0.7
+- `@xterm/addon-canvas` / `@xterm/addon-webgl` — the default DOM renderer is sufficient for this use case; GPU renderers add complexity without meaningful benefit for a single embedded terminal
+
+### Client-side terminal component
+
+The terminal component must be:
+1. Marked `"use client"`
+2. Lazy-loaded with `next/dynamic` + `{ ssr: false }` — xterm.js requires a DOM environment
+
+```typescript
+const Terminal = dynamic(() => import("@/components/workbench/TerminalPanel"), {
+  ssr: false,
+})
+```
+
+---
+
+## Claude Code CLI: Terminal Rendering Behavior
+
+Claude Code uses **Ink (React for CLI)** which re-renders the full screen buffer via ANSI escape sequences on every state change. This means:
+
+- Claude Code **requires a real TTY** to render correctly. When spawned via `child_process.spawn` (the current SSE approach), it detects a non-TTY stdout and either switches to plain JSON output mode (`--output-format stream-json`) or disables color/formatting.
+- When spawned via `node-pty`, it gets a genuine PTY — Claude Code renders exactly as it does in a local terminal: colored output, cursor positioning, progress indicators, interactive permission prompts.
+- The current `--output-format stream-json` flag will be **removed** when switching to PTY mode. The PTY carries raw terminal bytes; there is no structured JSON to parse. The DB persistence logic (storing assistant messages, tool calls) needs to be reconsidered — v0.7's scope replaces the SSE chat UI with a terminal, so raw terminal bytes are the output rather than parsed message objects.
+
+**Implication for DB writes:** The existing `persistResult()` function in `stream/route.ts` extracts structured content from `stream-json` events to write `TaskMessage` records. In PTY mode, this structured extraction is no longer available. The v0.7 implementation should decide: (a) write the raw terminal transcript as a single `TaskMessage` after the session ends, or (b) drop DB message persistence for terminal sessions entirely. This is a design decision for the phase planning, not a stack question.
 
 ---
 
 ## Alternatives Considered
 
-| Capability | Recommended | Alternative | Why Not |
-|-----------|-------------|-------------|---------|
-| Code editor | `@monaco-editor/react` | `@uiw/react-codemirror` (CodeMirror 6) | CodeMirror is smaller (300KB vs 5-10MB) but Monaco's VSCode-identical UX is the right call here: the project's target users are developers who expect VSCode keybindings, multi-cursor, IntelliSense-like completions. CodeMirror's modular system requires assembling language packs manually. Monaco wins on DX for this use case. |
-| Code editor | `@monaco-editor/react` | `react-monaco-editor` | `react-monaco-editor` requires webpack config changes; `@monaco-editor/react` works without bundler changes via CDN loader. For a Next.js project, `@monaco-editor/react` is the right wrapper. |
-| Diff viewer | `@git-diff-view/react` | `react-diff-view` (v3.3.2) | `react-diff-view` is older and not SSR/RSC-ready. `@git-diff-view/react` is newer, SSR-ready, and specifically designed around unified git diff strings (exactly what the existing git plumbing produces). |
-| Diff viewer | `@git-diff-view/react` | `react-diff-viewer` | `react-diff-viewer` is text-only, requires both old/new strings (not a unified diff). The existing infrastructure produces unified diffs from `git diff`; converting is unnecessary overhead. |
-| Panel splitter | `react-resizable-panels` v2 | `allotment` | Allotment has a known SSR issue requiring `dynamic` import. `react-resizable-panels` is what shadcn/ui uses — staying in that ecosystem is consistent. Use v2.x until shadcn resolves the v4 export renames. |
-| File tree | Custom component | `react-folder-tree`, `react-fs-treeview` | No third-party file tree library has meaningful npm adoption AND React 19 compatibility AND matches this project's aesthetic. A recursive component over a Server Action is ~80 lines and fully controllable. |
-| Preview proxy | Next.js 16 built-in | `http-proxy-middleware` | `http-proxy-middleware` requires wrapping Next.js in a custom Express server, losing serverless deployment capability and fighting Next.js's request pipeline. The built-in `proxy.ts` + `next.config.js` rewrites handle this natively in Next.js 16. |
-| Preview terminal | xterm.js | Plain `<pre>` with SSE stream | xterm.js (~600KB gzipped) is overkill for displaying startup logs. The existing SSE streaming infrastructure renders output fine in a scrollable `<pre>`. If interactive terminal is needed in a future milestone, xterm.js is the right choice. |
+| Recommended | Alternative | Why Not |
+|-------------|-------------|---------|
+| `next-ws` | Custom `server.ts` | Custom server requires replacing `next dev --turbopack` dev script and maintaining a separate Node.js entrypoint. next-ws preserves the existing dev workflow entirely. Fallback to custom server is viable if next-ws proves incompatible. |
+| `next-ws` | Socket.IO | Socket.IO is 3x heavier than raw `ws`, adds a custom protocol layer, and is overkill for a localhost terminal where a raw WebSocket is sufficient. Socket.IO's reconnection logic would also conflict with the custom session management the PTY lifecycle requires. |
+| `node-pty` | `node-pty-prebuilt-multiarch` | The prebuilt fork (homebridge) targets specific Node.js versions and may lag behind the Microsoft upstream. Since this is a developer machine (Xcode installed), compiling from source with `node-pty` v1.1.0 is cleaner and keeps the dependency tree minimal. |
+| `@xterm/addon-attach` | Manual WebSocket message handling | The attach addon handles binary/text frame detection, buffering, and terminal write correctly. Reimplementing this is unnecessary complexity. |
+| Raw PTY bytes over WebSocket | JSON-framed chunks | JSON framing adds parsing overhead and requires re-encoding binary data. Raw PTY bytes over WebSocket binary frames is what the attach addon expects and is the lowest-latency approach. For control messages (resize, session end), a separate `{ type, payload }` envelope on text frames is sufficient. |
 
 ---
 
@@ -111,29 +194,44 @@ The dev server registry (`Map<taskId, port>`) is managed by a Server Action that
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| `monaco-editor-webpack-plugin` | Conflicts with Next.js built-in webpack; `@monaco-editor/react` CDN loader makes it unnecessary | `@monaco-editor/react` default CDN mode |
-| `@uiw/react-codemirror` in addition to Monaco | Two code editors is redundant; pick one. Monaco is already chosen. | `@monaco-editor/react` only |
-| `react-resizable-panels` v4.x | Breaking export renames unresolved in shadcn/ui as of late 2025 | Pin to `^2.1.7` |
-| WebContainers (StackBlitz) | Runs Node.js in-browser — massive complexity for a local tool where the filesystem IS the host system | Native `fs` + `child_process` Server Actions |
-| xterm.js for preview logs | ~600KB bundle, React integration libraries are poorly maintained | Plain `<pre>` auto-scroll with SSE |
-| `socket.io` for file watching | Adds a WebSocket server; SSE already exists in the codebase | Native `fs.watch` + existing SSE pattern |
+| `socket.io` | Custom protocol overhead, unnecessary for localhost WebSocket | `ws` (peer dep of next-ws) |
+| `xterm-addon-attach` (old package, not `@xterm/...`) | The legacy `xterm-addon-attach` package is incompatible with `@xterm/xterm` v5+ | `@xterm/addon-attach` (scoped package) |
+| `@xterm/addon-webgl` or `@xterm/addon-canvas` | GPU renderers add ~200KB and complexity; default DOM renderer is fine for a single embedded terminal | Default renderer in `@xterm/xterm` |
+| `node-pty-prebuilt-multiarch` | Prebuilt fork may lag behind upstream, adds another dependency | `node-pty` v1.1.0 compiled from source |
+| `--output-format stream-json` flag (kept from SSE era) | PTY mode produces raw terminal bytes, not structured JSON. Keeping the flag would disable Claude Code's interactive rendering. | Remove flag when switching to PTY execution |
+| Manual `serverExternalPackages: ['node-pty']` in next.config.ts | Already on Next.js 16's automatic allowlist — manually adding it is harmless but redundant | No change to next.config.ts needed |
 
 ---
 
 ## Installation
 
 ```bash
-# Code editor
-pnpm add @monaco-editor/react@next monaco-editor
+# New runtime dependencies
+pnpm add node-pty next-ws ws @xterm/addon-attach
 
-# Diff viewer
-pnpm add @git-diff-view/react
+# New type definitions
+pnpm add -D @types/ws
 
-# Panel splitter (pin to v2 — NOT latest v4)
-pnpm add react-resizable-panels@^2.1.7
+# Patch Next.js for WebSocket support (run once, re-run after Next.js upgrades)
+pnpm prepare
 ```
 
-No new dev dependencies required.
+Add to `package.json`:
+```json
+{
+  "scripts": {
+    "prepare": "next-ws patch"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/engines",
+      "esbuild",
+      "node-pty",
+      "prisma"
+    ]
+  }
+}
+```
 
 ---
 
@@ -141,38 +239,27 @@ No new dev dependencies required.
 
 | Package | Version | Compatibility Notes |
 |---------|---------|---------------------|
-| `@monaco-editor/react` | `4.7.0-rc.0` | Requires `@next` tag; explicitly targets React 19. Stable `4.6.0` works with React 18 but has React 19 hydration warnings. |
-| `monaco-editor` | `^0.55.1` | Latest stable; 0.53+ deprecates AMD build — the CDN loader in `@monaco-editor/react` handles this transparently. |
-| `@git-diff-view/react` | `^0.1.3` | SSR/RSC-ready; actively maintained; zero dependencies. |
-| `react-resizable-panels` | `^2.1.7` | Compatible with React 19. v4.x has unresolved export renames breaking shadcn Resizable. |
-| `next` | `16.2.1` | `proxy.ts` convention replaces `middleware.ts` in Next.js 16. |
-
----
-
-## Key Architectural Decisions
-
-| Decision | Rationale |
-|----------|-----------|
-| Monaco via CDN loader (no webpack plugin) | Next.js's webpack setup does not expose a clean extension point for the Monaco Webpack Plugin without `next.config.js` webpack customization. The CDN loader in `@monaco-editor/react` is the established pattern for Next.js projects. |
-| File tree as recursive Server Component + Client interaction | Directory listing is a server concern (filesystem access). Initial tree loads as RSC data; expand/collapse is client-side state. Splitting at this boundary avoids unnecessary client bundle size. |
-| Dev server port registry in memory (not DB) | Preview dev servers are transient — they don't survive Next.js restarts and don't need persistence. A module-level `Map` in a Server Action file is sufficient and avoids a schema change. |
-| `react-resizable-panels` v2 (pinned) | The workbench layout is a core UX element; introducing a broken shadcn/v4 interaction is a risk not worth taking. v2 is stable, well-tested, and the API is identical for our use case. |
+| `node-pty` | `^1.1.0` | Node.js 16+ required; Node.js 22 (project runtime) is fully supported. Compiles native addon — Xcode CLI tools required on macOS. Automatically excluded from Next.js bundling (on built-in allowlist). |
+| `ws` | `^8.18.0` | Node.js 18+ target; compatible with Node.js 22. Peer dependency of next-ws. |
+| `next-ws` | `^2.2.2` | Built for Next.js App Router only (not Pages Router). Requires `prepare: "next-ws patch"` lifecycle script. Must be re-patched after Next.js version upgrades. Compatible with localhost server deployments only. |
+| `@xterm/addon-attach` | `^0.12.0` | Requires `@xterm/xterm` v5+. Project has `^6.0.0` — compatible. |
+| `@xterm/xterm` | `^6.0.0` (existing) | Already installed. No version change. |
+| `@xterm/addon-fit` | `^0.11.0` (existing) | Already installed. No version change. |
+| `next` | `16.2.1` | node-pty on built-in serverExternalPackages list since Next.js 15+. Verified in 16.2.2 docs. |
 
 ---
 
 ## Sources
 
-- [@monaco-editor/react on npm](https://www.npmjs.com/package/@monaco-editor/react) — version 4.7.0-rc.0 for React 19, CDN loader behavior — MEDIUM confidence (npm page, official package)
-- [monaco-editor releases](https://github.com/microsoft/monaco-editor/releases) — version 0.55.1 latest stable — MEDIUM confidence (GitHub releases)
-- [@git-diff-view/react on npm](https://www.npmjs.com/package/@git-diff-view/react) — version 0.1.3, SSR/RSC-ready, zero deps — HIGH confidence (npm + library homepage)
-- [git-diff-view GitHub](https://github.com/MrWangJustToDo/git-diff-view) — feature list, SSR support, active maintenance — MEDIUM confidence
-- [react-resizable-panels shadcn v4 issues](https://github.com/shadcn-ui/ui/issues/9136) — v4.x export rename breakage — HIGH confidence (tracked GitHub issues)
-- [Next.js 16 proxy.ts docs](https://nextjs.org/docs/app/api-reference/file-conventions/proxy) — proxy.ts convention, replaces middleware.ts — HIGH confidence (official docs)
-- [CodeMirror vs Monaco comparison — Sourcegraph](https://sourcegraph.com/blog/migrating-monaco-codemirror) — real-world migration rationale — MEDIUM confidence
-- [Replit: Betting on CodeMirror](https://blog.replit.com/codemirror) — use case guidance — MEDIUM confidence
-- `package.json` codebase inspection — confirmed existing dependencies and React 19.2.4 — HIGH confidence
+- [Next.js 16.2.2 serverExternalPackages official docs](https://nextjs.org/docs/app/api-reference/config/next-config-js/serverExternalPackages) — confirmed `node-pty` on automatic allowlist — HIGH confidence (official docs, version 16.2.2, updated 2026-03-31)
+- [next-ws GitHub (apteryxxyz/next-ws)](https://github.com/apteryxxyz/next-ws) — latest version 2.2.2 (March 2026), SOCKET handler API, prepare script requirement — HIGH confidence (official repo)
+- [microsoft/node-pty GitHub](https://github.com/microsoft/node-pty) — version 1.1.0 (Dec 2025), Node.js 16+ requirement, macOS compilation needs — HIGH confidence (official repo)
+- [@xterm/addon-attach on npm](https://www.npmjs.com/package/@xterm/addon-attach) — version 0.12.0, WebSocket bridge functionality — HIGH confidence (official scoped package)
+- [Next.js Custom Server docs](https://nextjs.org/docs/pages/guides/custom-server) — turbopack option available in next() function call; custom server tradeoffs — HIGH confidence (official docs)
+- [Next.js 16 Turbopack blog](https://nextjs.org/blog/next-16) — Turbopack stable by default in Next.js 16 — HIGH confidence (official announcement)
+- `package.json` codebase inspection — confirmed existing deps, Node.js 22 runtime, pnpm usage, `--turbopack` dev flag — HIGH confidence (direct codebase read)
 
 ---
 
-*Stack research for: ai-manager v0.6 — task development workbench (code editor, file tree, diff viewer, preview proxy)*
-*Researched: 2026-03-31*
+*Stack research for: ai-manager v0.7 — browser terminal (node-pty + WebSocket + xterm.js)*
+*Researched: 2026-04-02*

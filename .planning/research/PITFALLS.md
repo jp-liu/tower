@@ -1,328 +1,582 @@
 # Pitfalls Research
 
-**Domain:** Task development workbench — adding online code editor, file tree browser, diff view, and live preview to an existing Next.js 16 + React 19 + App Router application
+**Domain:** Browser terminal integration — node-pty + WebSocket + xterm.js added to a Next.js 16 App Router application (v0.7 milestone)
 **Researched:** 2026-03-31
-**Confidence:** HIGH (verified against official Next.js 16 docs, Monaco Editor GitHub issues, React 19 release notes, Node.js fs/child_process docs, OWASP path traversal guides, and multiple community post-mortems)
+**Confidence:** HIGH (verified against Next.js 16 upgrade guide, node-pty GitHub issues, xterm.js GitHub issues, Turbopack GitHub issues, WebSocket discussion threads, and VS Code terminal source)
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Monaco Editor Breaks SSR — Missing `dynamic({ ssr: false })` Wrapper
+### Pitfall 1: Turbopack Cannot Bundle node-pty Native Addon
 
 **What goes wrong:**
-Importing `@monaco-editor/react` or `monaco-editor` directly in a Server Component or even a Client Component without SSR-disabled dynamic import causes the build to fail with `window is not defined` or `navigator is not defined` at import time. Monaco references browser globals at the module level. The App Router pre-renders all Client Components on the server by default, so `"use client"` alone does not prevent the SSR execution path.
+Next.js 16 uses Turbopack by default for both `next dev` and `next build`. node-pty is a native Node.js addon (compiled `.node` binary via `node-gyp`). Turbopack's module resolution does not support native `.node` addons the same way webpack does. Even when `serverExternalPackages: ['node-pty']` is declared in `next.config.ts`, Turbopack may still attempt to trace and bundle the package, leading to build failures or silent runtime errors where `node-pty` functions resolve to `undefined`.
+
+A confirmed Next.js 16 issue ([#85449](https://github.com/vercel/next.js/issues/85449)) shows that Turbopack fails to load native node addons compiled as separate packages in pnpm workspaces — the symptom is `TypeError: (void 0) is not a function` at runtime even after correct `serverExternalPackages` configuration.
 
 **Why it happens:**
-Monaco was built for Electron/browser environments. Its top-level code accesses `window`, `document`, `navigator`, and `Worker`. These do not exist in the Node.js SSR environment. Developers assume `"use client"` means "client-only" but in Next.js 16 App Router, Client Components still execute on the server during initial render — the directive only marks the boundary for the client graph, not the execution environment for SSR.
+Turbopack performs static module graph analysis at build time. Native addons loaded via `bindings` or relative `build/Release/pty.node` paths are not resolvable in the static analysis phase. The pnpm non-hoisting layout means the `.node` file is not at the expected path relative to the Next.js output directory.
 
 **How to avoid:**
-Wrap the editor component with `next/dynamic` and `ssr: false`, inside a dedicated Client Component file:
+Use `--webpack` flag for builds that include the PTY server route:
+
+```json
+{
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build --webpack"
+  }
+}
+```
+
+Add `node-pty` to `serverExternalPackages` in `next.config.ts`:
 
 ```typescript
-// src/components/workbench/editor-panel.tsx
-"use client"
-import dynamic from "next/dynamic"
+const nextConfig: NextConfig = {
+  serverExternalPackages: ['node-pty'],
+}
+```
 
-const MonacoEditor = dynamic(
-  () => import("@monaco-editor/react"),
-  { ssr: false, loading: () => <div className="editor-skeleton" /> }
+This is the same precedent already set by Monaco Editor in this project (`@monaco-editor/react` with CDN loader avoided the Turbopack/webpack-plugin conflict). Apply the same principle here: opt out of Turbopack where native modules are involved.
+
+**Warning signs:**
+- `TypeError: (void 0) is not a function` when calling `pty.spawn()`
+- Build succeeds but runtime PTY creation throws on the first WebSocket connection
+- `serverExternalPackages` is set but Turbopack ignores it for pnpm-installed packages
+
+**Phase to address:**
+Phase 1 (PTY backend foundation). Verify node-pty loads correctly in a minimal route handler before building any WebSocket or session management logic.
+
+---
+
+### Pitfall 2: WebSocket Upgrade Not Supported in Next.js App Router Route Handlers
+
+**What goes wrong:**
+Next.js App Router Route Handlers (`app/api/*/route.ts`) do NOT support HTTP upgrade requests (the mechanism WebSockets require). Next.js intercepts all `upgrade` events at the HTTP server level and closes the socket for routes it owns. There is no official stable API to handle WebSocket connections inside App Router route handlers as of Next.js 16.
+
+Attempting to use the `ws` library inside a Route Handler will silently fail — the WebSocket handshake is rejected before the handler code runs.
+
+**Why it happens:**
+Next.js App Router was designed around the fetch-based Request/Response API, which is inherently request-response. HTTP upgrade to WebSocket is a different protocol transition that happens at the Node.js `http.Server` level, below where Next.js route handlers operate. The Next.js `upgrade` event handler actively closes sockets to prevent protocol confusion.
+
+The feature request has been open since November 2023 ([discussion #58698](https://github.com/vercel/next.js/discussions/58698)) with no stable implementation timeline.
+
+**How to avoid:**
+Use a custom server (`server.ts`) that intercepts upgrade requests before passing other requests to Next.js. This is the same pattern Next.js docs describe for WebSocket integration:
+
+```typescript
+// server.ts
+import { createServer } from 'http'
+import { parse } from 'url'
+import next from 'next'
+import { WebSocketServer } from 'ws'
+import { handlePtyUpgrade } from './src/lib/pty-server'
+
+const app = next({ dev: process.env.NODE_ENV !== 'production' })
+const handle = app.getRequestHandler()
+
+app.prepare().then(() => {
+  const httpServer = createServer((req, res) => {
+    const parsedUrl = parse(req.url!, true)
+    handle(req, res, parsedUrl)
+  })
+
+  const wss = new WebSocketServer({ noServer: true })
+
+  httpServer.on('upgrade', (req, socket, head) => {
+    const { pathname } = parse(req.url!)
+    if (pathname === '/api/terminal/ws') {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        handlePtyUpgrade(ws, req)
+      })
+    } else {
+      socket.destroy()
+    }
+  })
+
+  httpServer.listen(3000)
+})
+```
+
+Update `package.json` to run `server.ts` instead of `next start`:
+```json
+{
+  "scripts": {
+    "dev": "tsx server.ts",
+    "start": "node dist/server.js"
+  }
+}
+```
+
+The `next-ws` library is an alternative that patches Next.js to re-enable upgrade handling, but it relies on Next.js internals that may break on minor version upgrades. The custom server approach is more stable for production use.
+
+**Warning signs:**
+- WebSocket connection shows `101 Switching Protocols` in the network tab but immediately closes
+- Client `WebSocket.onclose` fires instantly after `onopen`
+- No WebSocket upgrade logs appear in the Next.js server console despite connection attempts
+
+**Phase to address:**
+Phase 1 (PTY backend foundation). The custom server is foundational — all WebSocket work depends on it. Establish and test the upgrade handler before any PTY logic.
+
+---
+
+### Pitfall 3: node-pty Process Leaks on WebSocket Disconnect
+
+**What goes wrong:**
+When the browser tab is closed, the network connection drops, or the user navigates away, the WebSocket closes — but the node-pty process spawned for that session continues running indefinitely. Each new workbench session that opens the terminal creates another PTY process. After 5-10 sessions (open/close cycles), dozens of Claude CLI processes and their shell children are running on the host, consuming CPU, memory, and file descriptors.
+
+On macOS/Linux, zombie shells survive until the OS reclaims them (which may be never without explicit cleanup). Each Claude CLI process also holds an open file lock on the git worktree directory, potentially blocking worktree operations from other phases.
+
+**Why it happens:**
+Node.js child processes spawned by node-pty are independent OS processes. They are not children of the WebSocket connection or the HTTP request — they live in the Node.js process tree. When the WebSocket closes, nothing automatically kills the spawned PTY shell. `ws` library `close` events fire on the WebSocket but the PTY process lifecycle is completely decoupled.
+
+**How to avoid:**
+Maintain a server-side session registry (module-level singleton):
+
+```typescript
+// src/lib/pty-registry.ts
+import type { IPty } from 'node-pty'
+
+interface PtySession {
+  pty: IPty
+  taskId: string
+  createdAt: Date
+}
+
+const sessions = new Map<string, PtySession>()
+
+export function registerSession(sessionId: string, pty: IPty, taskId: string) {
+  sessions.set(sessionId, { pty, taskId, createdAt: new Date() })
+}
+
+export function destroySession(sessionId: string) {
+  const session = sessions.get(sessionId)
+  if (session) {
+    try { session.pty.kill() } catch {}
+    sessions.delete(sessionId)
+  }
+}
+
+export function destroyAllSessions() {
+  sessions.forEach((_, id) => destroySession(id))
+}
+
+// Register cleanup on process exit
+process.on('exit', destroyAllSessions)
+process.on('SIGTERM', () => { destroyAllSessions(); process.exit(0) })
+process.on('SIGINT', () => { destroyAllSessions(); process.exit(0) })
+```
+
+Hook the WebSocket `close` event to destroy the session:
+
+```typescript
+ws.on('close', () => destroySession(sessionId))
+ws.on('error', () => destroySession(sessionId))
+```
+
+Add a periodic cleanup sweep (every 5 minutes) to kill sessions whose WebSocket has been closed but cleanup was missed:
+
+```typescript
+setInterval(() => {
+  sessions.forEach((session, id) => {
+    // If PTY process has already exited, remove from registry
+    if (session.pty.pid === undefined) destroySession(id)
+  })
+}, 5 * 60 * 1000)
+```
+
+**Warning signs:**
+- `ps aux | grep claude` shows more processes than open terminal tabs
+- Memory usage of the Next.js/custom server process grows linearly over the work session
+- Git worktree operations hang after opening/closing the terminal several times
+
+**Phase to address:**
+Phase 1 (PTY backend foundation). Implement the registry before any terminal features. Verify with a close-and-reopen cycle that zero zombie processes remain.
+
+---
+
+### Pitfall 4: node-pty Compilation Fails with pnpm Due to Non-Hoisted Layout
+
+**What goes wrong:**
+pnpm's default module resolution uses a content-addressable store with symlinks — packages are NOT hoisted to `node_modules/node-pty` the way npm/yarn do. node-pty's install script runs `node-gyp rebuild`, which looks for build tool dependencies (Python, node headers, MSVC on Windows) using paths relative to the package location. The symlink structure can cause `node-gyp rebuild` to either fail silently or compile but put the `.node` file at a path that `bindings` cannot resolve at runtime.
+
+A confirmed pnpm issue ([#7128](https://github.com/pnpm/pnpm/issues/7128)) shows `pnpm rebuild --build-addon-from-source` fails in certain configurations.
+
+**Why it happens:**
+pnpm's isolated node_modules layout places `node-pty` at `.pnpm/node-pty@X.Y.Z/node_modules/node-pty/` with symlinks from the project's `node_modules/node-pty`. The `node-gyp` build writes its output relative to the real package location, not the symlink. The `bindings` package (used by node-pty to locate the `.node` file) may resolve the symlink incorrectly.
+
+**How to avoid:**
+Add to `.npmrc` at the project root:
+```
+# Ensure node-gyp runs correctly for native addons under pnpm
+shamefully-hoist=false
+node-linker=isolated
+```
+
+After `pnpm install`, explicitly rebuild:
+```bash
+pnpm rebuild node-pty
+```
+
+Or use `node-pty-prebuilt-multiarch` (maintained by Homebridge) instead of `node-pty`. This fork provides prebuilt binaries for macOS/Linux/Windows on multiple architectures, eliminating the need for `node-gyp` entirely:
+
+```bash
+pnpm add node-pty-prebuilt-multiarch
+```
+
+Import from the prebuilt fork if standard `node-pty` compilation fails:
+```typescript
+import pty from 'node-pty-prebuilt-multiarch'
+// API is identical to node-pty
+```
+
+**Warning signs:**
+- `pnpm install` completes but `node-pty` is missing `build/Release/pty.node`
+- `Error: Could not load native bindings` on first PTY spawn
+- The `.node` file exists but at `.pnpm/node-pty.../build/Release/pty.node` — not accessible via the symlink resolution path
+
+**Phase to address:**
+Phase 1 (PTY backend foundation). Verify compilation by running a one-liner PTY test before any server code: `node -e "require('node-pty').spawn('/bin/bash', [], {})"`.
+
+---
+
+### Pitfall 5: xterm.js Terminal Not Disposed on React Component Unmount — Memory Leak
+
+**What goes wrong:**
+When the workbench component unmounts (user navigates to Kanban, closes the tab, or switches tasks), the xterm.js `Terminal` instance is not disposed. The Terminal object holds references to canvas elements, WebGL contexts (if WebGL renderer addon is used), DOM event listeners, and the internal buffer. These are retained in memory indefinitely.
+
+VS Code's terminal implementation hit this exact bug and fixed it in 2025 — 10 idle terminals accumulated 167 MB of GPU memory because WebGL contexts were not released on terminal close ([VS Code PR #279579](https://github.com/microsoft/vscode/pull/279579)).
+
+xterm.js WebGL memory leak in versions before 5.0.0 ([issue #3889](https://github.com/xtermjs/xterm.js/issues/3889)) was fixed in v5.0.0 — but the application-level failure to call `terminal.dispose()` is a separate issue that any version can suffer from.
+
+**Why it happens:**
+The xterm.js `Terminal` class is not garbage-collected automatically. It registers DOM listeners on `document` after mounting, and these listeners hold a reference to the Terminal object. Without calling `terminal.dispose()`, the Terminal (and its WebGL context) remains on the JavaScript heap even after the React component is removed from the DOM.
+
+React's `useEffect` cleanup is the correct hook, but developers frequently forget to call `terminal.dispose()` there, especially when addons (WebGL renderer, FitAddon, WebLinksAddon) are also loaded and must be disposed in order.
+
+**How to avoid:**
+Always dispose in `useEffect` cleanup, in reverse instantiation order:
+
+```typescript
+useEffect(() => {
+  const terminal = new Terminal({ /* options */ })
+  const fitAddon = new FitAddon()
+  const webglAddon = new WebglAddon()  // optional
+
+  terminal.loadAddon(fitAddon)
+  terminal.loadAddon(webglAddon)
+  terminal.open(containerRef.current!)
+  fitAddon.fit()
+
+  return () => {
+    // Dispose in reverse order
+    webglAddon.dispose()  // disposes WebGL context first
+    fitAddon.dispose()
+    terminal.dispose()    // finally dispose the terminal
+  }
+}, [])
+```
+
+Never store the Terminal instance in React state (use `useRef`) — storing in state triggers re-renders that can create multiple Terminal instances if the effect runs multiple times.
+
+**Warning signs:**
+- Browser Task Manager shows the workbench tab memory growing by 15-30 MB per close/reopen cycle
+- `document.querySelectorAll('.xterm').length` in the console grows beyond the number of open terminals
+- WebGL context count in `chrome://gpu` grows without bound
+
+**Phase to address:**
+Phase 2 (xterm.js terminal component). Implement dispose in the very first version of the component. Add a test: mount → navigate away → navigate back → verify memory is not growing.
+
+---
+
+### Pitfall 6: Terminal Resize Not Synced to PTY — Causes Garbled Output
+
+**What goes wrong:**
+When the user resizes the browser window or the workbench panel, xterm.js reflows its internal buffer. But the PTY process on the server side still thinks the terminal is the old size. Commands like `vim`, `htop`, `git diff`, and Claude CLI's interactive TUI elements render based on the PTY's reported dimensions. If the PTY size is not updated, output is garbled — line wrapping at the wrong column, TUI elements overflowing, cursor in wrong position.
+
+A subtler variant: the FitAddon calculates the correct `cols`/`rows` based on the container size, but if the resize message is sent to the PTY before the DOM finishes reflowing, the new dimensions are wrong — causing a second resize to be needed.
+
+**Why it happens:**
+The xterm.js `Terminal.onResize` event fires when the terminal's internal dimensions change. But the PTY resize (`pty.resize(cols, rows)`) must happen on the server side via the WebSocket. This means: client DOM resize → FitAddon recalculates → `terminal.resize(cols, rows)` → WebSocket message → server `pty.resize()`. There is a round-trip delay. If the user resizes rapidly, queued resize messages can arrive out of order or cause the PTY to thrash between sizes.
+
+**How to avoid:**
+1. Use `FitAddon.fit()` triggered by a `ResizeObserver` on the terminal container (not `window.resize`), so panel resizing is captured:
+
+```typescript
+const resizeObserver = new ResizeObserver(() => {
+  fitAddon.fit()
+})
+resizeObserver.observe(containerRef.current!)
+
+// In useEffect cleanup:
+resizeObserver.disconnect()
+```
+
+2. Debounce the resize message to the server (100ms debounce prevents thrashing):
+
+```typescript
+const debouncedResize = useMemo(
+  () => debounce((cols: number, rows: number) => {
+    ws.send(JSON.stringify({ type: 'resize', cols, rows }))
+  }, 100),
+  [ws]
+)
+
+terminal.onResize(({ cols, rows }) => {
+  debouncedResize(cols, rows)
+})
+```
+
+3. On the server, apply the resize immediately without queuing:
+
+```typescript
+ws.on('message', (data) => {
+  const msg = JSON.parse(data.toString())
+  if (msg.type === 'resize') {
+    pty.resize(msg.cols, msg.rows)
+  } else if (msg.type === 'input') {
+    pty.write(msg.data)
+  }
+})
+```
+
+4. Send the initial terminal size when creating the PTY session so it starts at the correct dimensions.
+
+**Warning signs:**
+- `vim` or `htop` renders correctly initially but becomes garbled after a panel resize
+- Claude CLI's interactive prompts wrap at the wrong column width
+- The terminal appears to have extra blank lines at the bottom that are not filled
+
+**Phase to address:**
+Phase 2 (xterm.js terminal component). Implement `ResizeObserver` + debounced resize from the start. Test explicitly by resizing the panel while a `watch` command is running.
+
+---
+
+### Pitfall 7: Double PTY Kill on Already-Exited Process Throws Uncaught Exception
+
+**What goes wrong:**
+When the PTY process exits naturally (Claude CLI finishes), node-pty emits an `onExit` event. If the cleanup code also calls `pty.kill()` in the WebSocket `close` handler, calling `kill()` on an already-exited process throws `Error: pty.kill: process already closed` (or a native binding error). If this exception is not caught, it crashes the custom server process — taking down all active terminal sessions.
+
+A related issue: `pty.kill()` is called from two concurrent paths (WebSocket close + natural process exit) with no guard, creating a race condition where the second call always throws.
+
+**Why it happens:**
+node-pty's `kill()` method calls into the native binding, which calls `kill(pid, signal)` on the OS. If the process has already exited, the OS returns `ESRCH` (no such process). The native binding propagates this as a JavaScript exception. `pty.kill()` does not check whether the process is already dead before calling into the OS.
+
+**How to avoid:**
+Wrap all PTY kill calls in try-catch and use a "killed" flag to prevent double invocation:
+
+```typescript
+function destroySession(sessionId: string) {
+  const session = sessions.get(sessionId)
+  if (!session || session.killed) return
+
+  session.killed = true
+  try {
+    session.pty.kill()
+  } catch (e) {
+    // Process may have already exited — this is safe to ignore
+  }
+  sessions.delete(sessionId)
+}
+```
+
+Register the `onExit` handler to mark the session as killed when the process exits naturally:
+
+```typescript
+pty.onExit(() => {
+  const session = sessions.get(sessionId)
+  if (session) session.killed = true
+  // Do NOT call pty.kill() here — the process already exited
+})
+```
+
+**Warning signs:**
+- Custom server crashes with `Error: pty.kill: process already closed` after a Claude CLI session completes
+- All WebSocket connections drop simultaneously when one PTY process exits
+- Unhandled exception in `process.on('uncaughtException')` originating from node-pty native code
+
+**Phase to address:**
+Phase 1 (PTY backend foundation). Test this case explicitly: let Claude CLI run to completion, then close the WebSocket — verify no exception is thrown.
+
+---
+
+### Pitfall 8: xterm.js SSR Import Fails in Next.js — Browser-Only Module
+
+**What goes wrong:**
+Importing `xterm` (or `@xterm/xterm`) in a Next.js component without `dynamic({ ssr: false })` causes a build error because xterm.js accesses `window`, `document`, and `navigator` at import time. This is the same class of error as Monaco Editor (Pitfall 1 in the v0.6 PITFALLS.md) but for xterm.js.
+
+The `FitAddon`, `WebLinksAddon`, `WebglAddon`, and any other xterm.js addons have the same constraint — they must all be imported inside `dynamic` boundaries or using `import()` lazily inside `useEffect`.
+
+**Why it happens:**
+xterm.js is a DOM rendering library — it renders to a `<canvas>` element and reads `window.devicePixelRatio`. The entire package is browser-only. Next.js App Router pre-renders Client Components on the server (SSR), so any top-level import of xterm.js will run in Node.js where `window` does not exist.
+
+**How to avoid:**
+Either use `next/dynamic`:
+```typescript
+const XtermTerminal = dynamic(
+  () => import('@/components/workbench/xterm-terminal'),
+  { ssr: false }
 )
 ```
 
-Never import `monaco-editor` directly at the top level of any file in the App Router tree.
+Or import xterm lazily inside a `useEffect`:
+```typescript
+useEffect(() => {
+  Promise.all([
+    import('@xterm/xterm'),
+    import('@xterm/addon-fit'),
+  ]).then(([{ Terminal }, { FitAddon }]) => {
+    const term = new Terminal(...)
+    // ...
+  })
+}, [])
+```
+
+The dynamic import approach is cleaner. Ensure the terminal container component file has `'use client'` at the top AND is wrapped with `dynamic({ ssr: false })` in the parent.
 
 **Warning signs:**
-- Build error: `ReferenceError: window is not defined` or `self is not defined`
-- Error originates inside `monaco-editor/esm/...` during `next build`
-- Hydration errors on first render with Monaco-related stack traces
+- Build error: `ReferenceError: window is not defined` or `document is not defined` from inside `@xterm/xterm`
+- Error stack trace shows `node_modules/@xterm/xterm/lib/...` during `next build`
 
 **Phase to address:**
-Phase 1 (Code editor foundation). Establish the `dynamic({ ssr: false })` pattern as the very first step; all editor integration builds on top of this.
+Phase 2 (xterm.js terminal component). Establish the `dynamic({ ssr: false })` wrapper as the very first file created in this phase.
 
 ---
 
-### Pitfall 2: Monaco Web Workers Fail to Load Under Turbopack
+### Pitfall 9: WebSocket Flow Control — Fast PTY Output Overflows Client Buffer
 
 **What goes wrong:**
-Monaco Editor requires web workers for language services (syntax highlighting, IntelliSense, validation). Under Next.js 16's default Turbopack bundler, the `monaco-editor-webpack-plugin` does not work — it is a Webpack-specific plugin. Without it, workers either fail silently (falling back to main-thread execution, causing UI freezes on large files) or throw `Could not create web worker(s)` at runtime. The Turbopack dynamic import of `monaco-editor/esm/vs/editor/editor.api` is also a known open issue as of early 2026.
+Claude CLI can emit output very rapidly (hundreds of lines per second when streaming responses). The WebSocket client may not process incoming messages fast enough. When this happens:
+1. The browser's WebSocket receive buffer fills up
+2. TCP back-pressure propagates to the server
+3. The server's WebSocket `send()` call blocks (or buffers in memory)
+4. The server-side buffer grows unboundedly, consuming hundreds of MB of RAM per slow client
+
+In practice for a localhost tool (client and server on the same machine), this is less severe — but it still causes the xterm.js render loop to lag, producing visible stutter and UI freeze while large output batches are processed.
 
 **Why it happens:**
-Turbopack does not support the full Webpack loader API. The Monaco editor webpack plugin registers custom loaders and resolves worker entry points via `MonacoEnvironment.getWorkerUrl`. Turbopack's loader support is limited to loaders that return JavaScript — CSS loaders and binary-transforming loaders are unsupported. The Monaco ESM migration (post-0.47) also changed workers to `module` workers, which the plugin's `getWorkerUrl` does not handle correctly in all bundler contexts.
+WebSocket does not have built-in flow control between the application layer and the transport. `ws.send(data)` in Node.js queues the data for transmission but does not wait for the client to process it. node-pty's `onData` callback fires synchronously for each chunk — rapid output chunks all queue immediately into the WebSocket's internal send buffer.
 
 **How to avoid:**
-Three viable options, in priority order:
-
-1. **Use `@monaco-editor/react` with CDN workers** (recommended for this use case): The `@monaco-editor/react` package defaults to loading Monaco from a CDN (`esm.sh` or `jsdelivr`) — no webpack plugin needed. Workers are loaded from the same CDN. This avoids the bundler problem entirely at the cost of a network request on first load.
-
-2. **Opt out of Turbopack for development builds** that include the workbench route by configuring webpack fallback: `next.config.js` `webpack` option is still supported even when Turbopack is active for other routes. Scope the Monaco webpack plugin only to the workbench bundle.
-
-3. **Disable Turbopack for the entire project** (`next dev --webpack`) if CDN loading is not acceptable and full Webpack control is required.
-
-**Warning signs:**
-- Console warning: `Could not create web worker(s). Falling back by loading the worker source in the main thread.`
-- Editor becomes unresponsive while typing in large files (worker fell back to main thread)
-- Build fails with Turbopack errors referencing `monaco-editor-webpack-plugin` loaders
-- Open GitHub issue: [vercel/next.js #72613](https://github.com/vercel/next.js/issues/72613) — check its status before the implementation phase
-
-**Phase to address:**
-Phase 1 (Code editor foundation). Decide CDN vs. bundled workers before any language service work; changing this later breaks the editor worker configuration.
-
----
-
-### Pitfall 3: Monaco Bundle Inflates Initial Page Load by 5-51 MB
-
-**What goes wrong:**
-Monaco Editor is 5–10 MB uncompressed. With language service workers bundled via Webpack, one project measured 51 MB raw bundle contribution (5 MB parsed+gzipped). Loading this on the initial workbench page load causes a multi-second blank editor state and inflates the JavaScript parse budget for the entire app — affecting Kanban pages that don't use the editor at all if the bundle is not properly code-split.
-
-**Why it happens:**
-Developers add Monaco to a component file that is imported in a shared layout or parent component, causing it to be included in the root JS chunk. Even when the editor file is lazy, importing it inside a component that is already eagerly loaded pulls Monaco into the initial bundle. The App Router does not automatically code-split nested dynamic imports if the parent component is part of a Server Component that renders on every request.
-
-**How to avoid:**
-1. Keep the entire workbench route (`/tasks/[taskId]`) isolated: it should be a separate Next.js page segment that is never shared with the Kanban layout. This ensures the Monaco bundle is only loaded when navigating to that route.
-2. Use `@monaco-editor/react`'s CDN loader (`loader.config({ monaco })`) which defers the download entirely until the editor mounts.
-3. Consider CodeMirror 6 as an alternative (300 KB core vs. 5 MB+ for Monaco) — it supports tree-shaking and modular language packs. Sourcegraph migrated from Monaco to CodeMirror and reported a 43% reduction in JS download size. For a task workbench where VSCode-level IntelliSense is not required, CodeMirror 6 is the better fit.
-
-**Warning signs:**
-- `@next/bundle-analyzer` shows `monaco-editor` in the main or shared JS chunk
-- Initial page load for the Kanban board gets slower after adding the workbench route
-- Lighthouse JS bundle size warnings appear on non-workbench pages
-
-**Phase to address:**
-Phase 1 (Code editor foundation). Run `@next/bundle-analyzer` immediately after integrating the editor to verify isolation.
-
----
-
-### Pitfall 4: File System API Routes Without Path Traversal Hardening Expose the Host Filesystem
-
-**What goes wrong:**
-The workbench needs API routes to read, write, and list files in the project's `localPath`. If the `filePath` parameter is passed directly to `fs.readFile` or `path.join(localPath, filePath)` without validation, an attacker (or a misconfigured client) can supply `../../etc/passwd` or `../../../.env` to read arbitrary files on the host system. For a localhost-only tool this is lower severity — but it remains a real risk if the user's browser has a malicious extension or if the tool is ever accidentally exposed on a local network.
-
-**Why it happens:**
-`path.normalize` and `path.join` resolve `..` components but do not prevent traversal outside the root. A path like `localPath + "/../../../.env"` after `path.normalize` still resolves to a path outside `localPath`. `path.basename` alone is insufficient because it strips directory components, losing the directory structure needed for the file tree. The existing `uploadAsset` action in this codebase already uses `path.basename` + DB validation — the file tree needs a different, stricter check.
-
-**How to avoid:**
-Always verify that the resolved path starts with the allowed root after normalization:
+Batch PTY output chunks before sending (combine multiple rapid chunks into one WebSocket message):
 
 ```typescript
-import path from "path"
+let buffer = ''
+let flushTimer: NodeJS.Timeout | null = null
 
-function safeResolvePath(root: string, userPath: string): string {
-  const resolved = path.resolve(root, userPath)
-  if (!resolved.startsWith(path.resolve(root) + path.sep) &&
-      resolved !== path.resolve(root)) {
-    throw new Error("Path traversal attempt detected")
+pty.onData((data) => {
+  buffer += data
+  if (!flushTimer) {
+    flushTimer = setTimeout(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'output', data: buffer }))
+      }
+      buffer = ''
+      flushTimer = null
+    }, 8) // ~8ms batching window (about 2 animation frames)
   }
-  return resolved
-}
+})
 ```
 
-Apply this guard to every filesystem API route: read file, write file, list directory, watch path. Never pass `userPath` directly to `fs.*` methods.
+Check `ws.bufferedAmount` before sending and skip frames if the client is falling behind:
 
-**Warning signs:**
-- Any API route that constructs a file path by concatenating `localPath` + user-supplied string without a `startsWith` check
-- `path.normalize` used as the only sanitization step (insufficient — see OWASP path traversal)
-- URL-encoded paths like `%2e%2e%2f` accepted by the route without decoding before normalization
-
-**Phase to address:**
-Phase 2 (File tree browser). Implement `safeResolvePath` as a shared utility in `src/lib/fs-security.ts` before the first file read endpoint. All file API routes import this; none perform raw `path.join` with user input.
-
----
-
-### Pitfall 5: Live Preview Subprocess Leaks Processes on Workbench Close or Task Navigation
-
-**What goes wrong:**
-The Preview panel starts a user-defined dev server (e.g., `npm run dev`) as a child process from a Next.js Route Handler or Server Action. When the user navigates away, closes the browser tab, or the Next.js dev server hot-reloads, the spawned subprocess continues running. On repeated opens of the same workbench, a new subprocess is spawned on a different port, leaving the old one orphaned. After several sessions, multiple dev servers are running simultaneously, consuming ports and RAM, and conflicting with each other (EADDRINUSE).
-
-**Why it happens:**
-Node.js child processes spawned with `child_process.spawn` do not automatically die when the parent connection closes. HTTP Route Handlers in Next.js have no lifecycle hooks for "client disconnected" or "route unmounted." The SSE connection drop (if using SSE to stream subprocess output) does trigger an `abortController` signal, but only if the route was set up to listen for it. Without `process.on('exit')` cleanup or a process registry, zombies accumulate.
-
-**How to avoid:**
-1. Maintain a server-side process registry (a `Map<taskId, ChildProcess>`) in a module-level singleton on the Node.js server. One subprocess per `taskId` maximum.
-2. Before spawning, check if a process for this `taskId` already exists and is running — reuse it.
-3. Listen on `AbortSignal` from the Route Handler: `request.signal.addEventListener('abort', () => subprocess.kill())`.
-4. Register a `process.on('SIGTERM')` + `process.on('exit')` handler in the singleton to kill all tracked subprocesses on Next.js shutdown.
-5. Expose a `POST /api/workbench/preview/stop` endpoint so the client can explicitly stop the server on workbench close (call from a `beforeunload` handler or a stop button).
-
-**Warning signs:**
-- `lsof -i :3001` shows multiple node processes after opening/closing the workbench several times
-- Preview panel shows "port already in use" error on the second open
-- Memory usage of the Next.js process grows linearly with workbench sessions
-
-**Phase to address:**
-Phase 4 (Preview panel). Implement the process registry singleton on day one of this phase — do not add it later as a fix.
-
----
-
-### Pitfall 6: Preview iframe Without Proper CSP and Sandbox Allows Script Execution in Parent Context
-
-**What goes wrong:**
-The live preview iframe loads `http://localhost:PORT` — the user's running dev server. If the dev server serves a page that sets `document.domain` or uses `postMessage` to communicate, and the iframe's `sandbox` attribute is missing or too permissive, the embedded app can access the parent window's DOM, steal session-like data from `localStorage`, or trigger navigation in the parent frame. This is particularly relevant because the parent app also runs on `localhost`.
-
-**Why it happens:**
-Same-origin restrictions are relaxed between pages on `localhost` — `http://localhost:3000` (ai-manager) and `http://localhost:3001` (preview target) share the same hostname. The `sandbox` attribute without `allow-same-origin` prevents access, but with it enabled (often needed for form submissions and localStorage in the preview), the same-origin bypass is re-enabled. Developers frequently use `sandbox="allow-scripts allow-same-origin allow-forms"` without understanding the implications.
-
-**How to avoid:**
-For a localhost developer tool where the user controls both sides, an acceptable configuration is:
-```html
-<iframe
-  src="http://localhost:PORT"
-  sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
-  referrerpolicy="no-referrer"
-  title="Live Preview"
-/>
-```
-
-Document clearly that `allow-same-origin` is included because the preview app needs localStorage/cookies, but mitigated because this is a single-user localhost tool. Do NOT expose this configuration if the tool ever moves to a network-accessible server.
-
-Additionally, add a Next.js response header for the main app to prevent itself from being framed by unknown origins:
-```
-Content-Security-Policy: frame-ancestors 'self' http://localhost:*
-```
-
-**Warning signs:**
-- iframe `sandbox` attribute is absent entirely
-- Preview page can call `window.parent.location.href = "..."` and redirect the main app
-- Console shows no `sandbox` violations when the preview page tries to access `window.parent`
-
-**Phase to address:**
-Phase 4 (Preview panel). Document the sandbox decision in a code comment; include a security audit step in the phase verification.
-
----
-
-### Pitfall 7: SSE Streaming for Subprocess Output Conflicts with Next.js Route Handler Buffering
-
-**What goes wrong:**
-The Preview panel needs to stream dev server output (stdout/stderr) to the browser in real time. The existing SSE implementation in this project (for Claude CLI execution) uses `ReadableStream` in Route Handlers. Adding a second SSE stream for subprocess output while an execution SSE stream is active can cause the Next.js edge runtime or Node.js HTTP server to buffer responses, delay chunks, or fail to flush — resulting in the output appearing in bursts rather than line-by-line.
-
-**Why it happens:**
-Next.js 16 App Router Route Handlers in Node.js runtime support streaming via `ReadableStream`. However, when multiple long-lived SSE connections are open simultaneously (one for Claude execution, one for preview output), they share the same Node.js HTTP server. If response compression (gzip) is enabled, Node.js may buffer small chunks before sending — breaking the real-time feel of SSE. Additionally, if the Route Handler uses `Response` with `Transfer-Encoding: chunked` but the reverse proxy (if any) between the browser and Next.js buffers responses, chunks are held.
-
-**How to avoid:**
-1. Set `Cache-Control: no-cache` and `X-Accel-Buffering: no` headers on all SSE responses to prevent proxy buffering.
-2. Ensure the subprocess output stream uses `\n\n` line endings (SSE spec requires double newline between events).
-3. Use the existing SSE pattern from the Claude execution adapter — do not invent a new streaming mechanism. Reuse `src/lib/sse.ts` or equivalent.
-4. Test with two simultaneous SSE connections (execution + preview) to verify neither starves the other.
-5. Use `controller.enqueue` with `TextEncoder` rather than manual string concatenation to avoid encoding bugs.
-
-**Warning signs:**
-- Preview terminal output arrives in large bursts rather than line-by-line
-- Opening the Preview panel while a Claude execution is running causes one of the streams to freeze
-- `Content-Type: text/event-stream` header is present but chunks are delayed by 5-10 seconds
-
-**Phase to address:**
-Phase 4 (Preview panel). Test SSE coexistence explicitly; add a concurrent test case to the Playwright suite.
-
----
-
-### Pitfall 8: File Tree with Large Projects Renders Thousands of DOM Nodes, Freezing the UI
-
-**What goes wrong:**
-A typical project directory (`localPath`) may contain `node_modules` with 50,000+ files. Rendering the file tree naively (recursive `<ul><li>` for every entry) will freeze the browser tab for several seconds on first mount. Even without `node_modules`, a medium-sized Next.js project has 200-500 source files across nested directories.
-
-**Why it happens:**
-The React reconciler must create a DOM node for every visible list item. Without virtualization, rendering 500 items synchronously in React 19 still blocks the main thread for 100-200ms at minimum. Recursive tree components also tend to trigger cascading re-renders on any state change (file selection, expansion) across the entire tree.
-
-**How to avoid:**
-1. **Always exclude `node_modules`, `.git`, `dist`, `.next`** from the file listing by default — configure an exclusion list in the API that performs the directory scan.
-2. **Implement lazy expansion**: only fetch directory contents when a directory node is expanded (API call per expand, not full tree on load).
-3. **Virtualize the tree list** using `react-window` or `@tanstack/virtual` once the flattened visible node list exceeds 100 items.
-4. Cap the API response at 500 entries per directory and show a "too many files" warning for the rest.
-
-**Warning signs:**
-- File tree API returns the contents of `node_modules` without filtering
-- First mount of the file tree component causes a 2+ second React render (visible in React DevTools profiler)
-- Expanding a directory triggers a re-render of the entire tree component
-
-**Phase to address:**
-Phase 2 (File tree browser). Implement server-side exclusion list and lazy expansion before any virtualization work — these eliminate most of the problem without library overhead.
-
----
-
-### Pitfall 9: Editor State Not Cleaned Up — Monaco Model Accumulation Causes Memory Leaks
-
-**What goes wrong:**
-Monaco Editor stores each open file as a `monaco.editor.ITextModel`. When the user opens 20 files in the workbench session (by clicking in the file tree), 20 models accumulate in Monaco's internal registry. When the React component unmounts (tab navigation, route change), the editor instance is disposed but the underlying text models are not — they remain in memory indefinitely. On long workbench sessions with many file opens, this causes steadily growing memory usage and eventually sluggish editor performance.
-
-**Why it happens:**
-`@monaco-editor/react`'s `Editor` component calls `editor.dispose()` on unmount, which disposes the editor view but not the associated `ITextModel`. Models must be explicitly disposed via `model.dispose()`. The library's documentation does not prominently highlight this distinction. The diff editor has an additional known bug where `Emitter` and `InteractionEmitter` objects are not disposed when the diff editor is disposed, causing further leaks (see Monaco issue #4659).
-
-**How to avoid:**
 ```typescript
-// Track all created models
-const modelCache = new Map<string, monaco.editor.ITextModel>()
-
-function getOrCreateModel(uri: string, content: string, language: string) {
-  const existing = monaco.editor.getModel(monaco.Uri.parse(uri))
-  if (existing) return existing
-  const model = monaco.editor.createModel(content, language, monaco.Uri.parse(uri))
-  modelCache.set(uri, model)
-  return model
-}
-
-// On workbench unmount
-function disposeAllModels() {
-  modelCache.forEach(model => model.dispose())
-  modelCache.clear()
+if (ws.bufferedAmount < 64 * 1024) { // 64KB threshold
+  ws.send(data)
 }
 ```
 
-Call `disposeAllModels()` in the `useEffect` cleanup of the workbench page component. Limit the model cache to the last 10 opened files (LRU eviction) to bound memory during long sessions.
+On the xterm.js side, use `terminal.write(data, callback)` — the optional callback fires when the data is fully processed. Use it to implement back-pressure signaling if needed.
 
 **Warning signs:**
-- Browser Task Manager shows the workbench tab memory growing by ~5 MB per 10 files opened
-- `monaco.editor.getModels().length` in the console grows unboundedly across file navigation
-- Editor becomes slower after 30+ file opens in one session
+- `ws.bufferedAmount` in server-side logs grows above 1 MB during Claude output
+- xterm.js terminal freezes for 1-2 seconds then displays a large block of output all at once
+- Custom server memory usage spikes during Claude CLI streaming sessions
 
 **Phase to address:**
-Phase 3 (Editor file navigation). Implement model cache with LRU eviction and cleanup on mount; verify with `monaco.editor.getModels().length` in end-to-end tests.
+Phase 1 (PTY backend foundation). Implement output batching before connecting xterm.js — test with a `yes` command (extremely high output rate) to verify the buffer stays bounded.
 
 ---
 
-### Pitfall 10: React 19 `useEffect` Double-Invocation Breaks Subprocess Singleton Registry
+### Pitfall 10: Cross-Site WebSocket Hijacking (CSWSH) — WebSocket Has No Same-Origin Policy
 
 **What goes wrong:**
-React 19 in Strict Mode (which Next.js 16 enables in development) double-invokes effects and their cleanup functions. A workbench component that starts a preview subprocess in `useEffect` will spawn two subprocesses in development — one for the initial mount, killed by cleanup, and a second for the re-mount. If the process registry singleton tracks by `taskId`, the first process gets registered and killed (cleanup), but the second registration may race with the cleanup of the first, leaving the registry in an inconsistent state with a stale PID.
+Unlike fetch/XHR, WebSocket connections are NOT subject to the browser's same-origin policy by default. Any page — including a malicious page open in another tab — can open a WebSocket to `ws://localhost:3000/api/terminal/ws` and get full PTY shell access to the host machine. Since this project is localhost-only with no authentication, a malicious browser extension or a tab the user accidentally opened could silently spawn shells.
+
+This is a well-documented attack class: Cross-Site WebSocket Hijacking (CSWSH), analogous to CSRF but for WebSockets.
 
 **Why it happens:**
-React 19 Strict Mode mounts → unmounts → remounts every component on development load to surface side-effect bugs. The subprocess spawn is a side effect. The cleanup function must correctly kill the previous process before the second mount starts a new one. If the kill is async (SIGTERM + wait) and the second spawn fires before the kill completes, two processes share the same `taskId` key in the registry.
+The WebSocket protocol sends an `Origin` header during the handshake, but servers must explicitly validate it. The `ws` library does not validate `Origin` by default — it accepts all connections. For a localhost tool without auth tokens, `Origin` validation is the primary defense.
 
 **How to avoid:**
-1. Do not start the preview subprocess from a client-side `useEffect`. Instead, start it via an explicit user action (a "Start Preview" button that calls a Server Action or Route Handler).
-2. The Route Handler uses the server-side process registry (a Node.js module singleton) — React Strict Mode's double-invoke does not affect server-side code.
-3. If a client `useEffect` must be used for any subprocess-related logic, always check `isMounted` and use a `useRef` cancellation flag to handle the Strict Mode re-mount.
+In the custom server's upgrade handler, validate the `Origin` header before accepting the WebSocket handshake:
+
+```typescript
+httpServer.on('upgrade', (req, socket, head) => {
+  const origin = req.headers.origin || ''
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+  ]
+
+  if (!allowedOrigins.includes(origin)) {
+    socket.write('HTTP/1.1 403 Forbidden\r\n\r\n')
+    socket.destroy()
+    return
+  }
+
+  // Proceed with WebSocket upgrade
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    handlePtyUpgrade(ws, req)
+  })
+})
+```
+
+For extra protection, generate a short-lived token when the workbench page loads (Server Component generates it, passes as a prop), and require it in the WebSocket connection URL as a query parameter. Validate the token server-side before accepting the upgrade.
 
 **Warning signs:**
-- Two dev server processes appear in `ps aux` after clicking "Start Preview" once in development
-- Console shows "subprocess already running" error on first start in development
-- Process registry Map has the same `taskId` key twice (impossible if Map — symptoms appear as port conflicts)
+- The WebSocket upgrade handler accepts connections with `Origin: null` or arbitrary origins
+- No `Origin` header validation in the upgrade handler
+- A test page on a different port can open a WebSocket to the PTY endpoint
 
 **Phase to address:**
-Phase 4 (Preview panel). Architect subprocess control as server-side only from the start; never trigger subprocess spawn from a client-side effect.
+Phase 1 (PTY backend foundation). Add origin validation before the first PTY session is created. This is non-negotiable even for a localhost tool.
 
 ---
 
-### Pitfall 11: `fs.watch` / Chokidar inotify Limits Exhaust System File Watchers
+### Pitfall 11: PTY Spawns Shell Instead of Claude CLI Directly — Gives Full Interactive Shell
 
 **What goes wrong:**
-If the file tree uses real-time file watching (to reflect changes made by Claude CLI in the worktree), and it watches the entire project directory recursively, the OS inotify limit (`fs.inotify.max_user_watches`) may be exhausted. On Linux, the default limit is 8,192 watches. A medium project with `node_modules` has 100,000+ files. Exhausting inotify causes `ENOSPC` errors (confusingly "no space left" despite disk space being available), breaks all file watching system-wide (including Next.js HMR), and may crash the development server.
+The common pattern `pty.spawn('/bin/bash', ['-c', command])` spawns a full interactive shell with the command as an argument. If `command` is composed from user input (task config, agent config fields), shell injection is possible. Additionally, spawning bash first then running Claude CLI means the user has access to full bash — they can `Ctrl-C` the Claude process and drop into a raw bash prompt with arbitrary command execution.
+
+For a localhost single-user tool, the threat model is less severe, but spawning Claude CLI directly (not via a shell) is still the correct approach to avoid unintended behavior.
 
 **Why it happens:**
-`chokidar` and Node.js `fs.watch` use one inotify watch per file/directory on Linux. Recursively watching a project directory without excluding `node_modules` and `.git` uses thousands of watches. When the ai-manager Next.js dev server is also running (which uses chokidar internally for HMR), the combined watch count easily exceeds the default limit.
+Developers use `spawn('/bin/bash', ['-c', commandString])` because it is simpler — it handles PATH lookup and shell expansion. But string-interpolated commands are vulnerable to injection if any part of `commandString` comes from user-controlled data. This project already uses `execFileSync` for git operations to prevent injection — the same discipline applies here.
 
 **How to avoid:**
-1. **Do not recursively watch the project directory**. Instead, poll the directory listing on demand (user triggers refresh) or watch only the opened files and their immediate parent directories.
-2. If reactive watching is required, scope it tightly: watch only `src/`, `app/`, `pages/` — configurable patterns, not the full `localPath`.
-3. Always pass `ignored: /(^|[\/\\])\.\.|node_modules/` to chokidar.
-4. Use chokidar's `awaitWriteFinish` option to debounce rapid file change events from Claude's batch writes.
+Spawn Claude CLI directly with an array of arguments:
+
+```typescript
+const ptyProcess = pty.spawn('claude', ['--model', 'claude-opus-4-5', ...otherArgs], {
+  name: 'xterm-256color',
+  cols: 80,
+  rows: 24,
+  cwd: task.worktreePath || project.localPath,
+  env: process.env,
+})
+```
+
+Never construct the command string by concatenating user-provided fields. Validate each argument against an allowlist before passing to `pty.spawn`. If Claude CLI requires a shell for PATH lookup, use `which claude` at server startup to get the absolute path, then use that path directly.
 
 **Warning signs:**
-- `ENOSPC: System limit for number of file watchers reached` error in server logs
-- Next.js HMR stops working after the workbench is opened
-- `cat /proc/sys/fs/inotify/max_user_watches` is below 50,000 on the host machine
+- `pty.spawn('/bin/bash', ['-c', `claude ${userInput}`])` — injection risk
+- User can `Ctrl-C` the Claude process and get a bash prompt
+- Arbitrary environment variables from user input are passed in the `env` option
 
 **Phase to address:**
-Phase 2 (File tree browser). Decide on polling vs. watching before implementation; default to polling with a manual refresh button rather than reactive watching.
+Phase 1 (PTY backend foundation). Document the spawn call explicitly; code review must flag any shell string interpolation.
 
 ---
 
@@ -330,14 +584,14 @@ Phase 2 (File tree browser). Decide on polling vs. watching before implementatio
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Skip `ssr: false` for Monaco and add `"use client"` only | Faster initial implementation | Build fails immediately — no benefit whatsoever | Never |
-| Use CDN-loaded Monaco without bundle analyzer verification | No webpack config needed | Cannot verify isolation; may still inflate unrelated chunks | Only in Phase 1 spike; must verify before Phase 1 complete |
-| Render full flat file tree without lazy expansion | Simpler tree component | Freezes on any project with >200 files or `node_modules` present | Never in production |
-| No path traversal guard on file read/write API | Simpler API handler | Arbitrary file read on host system via `../` traversal | Never |
-| Spawn preview subprocess without process registry | Quick implementation | Zombie processes accumulate; EADDRINUSE on second open | Never |
-| Use `Promise.all` for file tree + editor load | Slightly faster | Single FS error drops everything silently | Never — use `Promise.allSettled` |
-| Disable Monaco Diff editor cleanup | No unmount logic needed | Memory leak grows with every diff view open | Never — always dispose diff editor models |
-| Watch full project directory with chokidar | See all file changes | inotify exhaustion kills Next.js HMR system-wide | Never — scope watches tightly |
+| Skip `serverExternalPackages` and let Turbopack try to bundle node-pty | No config changes needed | Runtime `TypeError: (void 0) is not a function` — silent failure | Never |
+| Use `next-ws` library instead of custom server | No server.ts needed | Patches Next.js internals; breaks on minor version upgrades | Only in prototype/spike; not production |
+| No PTY session registry — create a new PTY per WebSocket | Simplest implementation | Zombie processes accumulate; resource exhaustion in hours | Never |
+| No Origin validation on WebSocket upgrade | Simpler handler | CSWSH — any page can spawn a shell on localhost | Never |
+| Call `pty.spawn('/bin/bash', ['-c', cmd])` with string interpolation | Easier command construction | Shell injection if any arg comes from user input | Never when user input is involved |
+| Skip xterm.js `dynamic({ ssr: false })` and rely on `"use client"` | Slightly simpler component | Build fails with `window is not defined` | Never |
+| No WebSocket flow control / output batching | Simpler data pipe | Memory spike and UI freeze during high-output Claude sessions | Acceptable only in an initial prototype |
+| Single WebSocket session per browser tab (no session ID) | Simpler session tracking | Cannot reconnect to existing PTY after navigation; PTY killed on every route change | Acceptable if reconnection is explicitly out of scope |
 
 ---
 
@@ -345,16 +599,16 @@ Phase 2 (File tree browser). Decide on polling vs. watching before implementatio
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| Monaco + Next.js App Router | Import at top level of any component | `next/dynamic({ ssr: false })` wrapper — mandatory, no exceptions |
-| Monaco + Turbopack | Use `monaco-editor-webpack-plugin` | Use CDN loader (`@monaco-editor/react` default) or disable Turbopack for the workbench route |
-| Monaco + React 19 | Use `react-monaco-editor` (React 18 only) | Use `@monaco-editor/react@next` (v4.7.0-rc supports React 19) |
-| Monaco Diff Editor + unmount | Call `editor.dispose()` only | Also call `model.dispose()` on both original and modified models |
-| File tree + large projects | Fetch entire `localPath` recursively | Server-side exclusions (`node_modules`, `.git`, `dist`, `.next`) + lazy directory expansion |
-| File write + concurrent Claude execution | Write directly while Claude is modifying the same file | Show a warning if Claude execution is `IN_PROGRESS` on the task; lock file for writing |
-| Preview subprocess + Route Handler | Start subprocess on GET request | Only start on explicit POST; track with server-side Map singleton |
-| Preview iframe + same-origin localhost | No sandbox attribute | `sandbox="allow-scripts allow-forms allow-same-origin allow-popups"` with documented rationale |
-| SSE subprocess output + existing Claude SSE | Invent new streaming mechanism | Reuse existing `ReadableStream` SSE pattern from `src/lib/sse.ts` |
-| Chokidar file watcher + full project directory | Watch `localPath` recursively without exclusions | Scope to `src/`, `app/` only; default to polling |
+| node-pty + Next.js 16 Turbopack | Rely on `serverExternalPackages` under Turbopack | Use `--webpack` flag for dev and build; `serverExternalPackages` for runtime exclusion |
+| node-pty + pnpm | Assume `pnpm install` compiles the native addon | Run `pnpm rebuild node-pty` explicitly; consider `node-pty-prebuilt-multiarch` |
+| WebSocket + App Router | Create Route Handler at `app/api/terminal/route.ts` | Use custom server with explicit `upgrade` event handler — Route Handlers cannot handle WebSocket upgrades |
+| WebSocket + CSWSH | No Origin header validation | Validate `req.headers.origin` against allowlist before `handleUpgrade` |
+| xterm.js + Next.js SSR | Import `@xterm/xterm` at top level of component | `next/dynamic({ ssr: false })` wrapper mandatory |
+| xterm.js + React unmount | Call `terminal.dispose()` only | Dispose all addons (WebGL, Fit) in reverse order before `terminal.dispose()` |
+| PTY output + WebSocket | Send each `onData` chunk immediately | Batch with 8ms timeout; check `bufferedAmount` before sending |
+| PTY resize + FitAddon | Use `window.resize` event | Use `ResizeObserver` on the container element for panel resizes |
+| PTY kill + natural process exit | Call `pty.kill()` unconditionally in cleanup | Guard with `session.killed` flag; wrap in try-catch |
+| Claude CLI spawn | Use shell string: `pty.spawn('bash', ['-c', cmd])` | Spawn Claude directly with argument array; resolve path with `which claude` at startup |
 
 ---
 
@@ -362,12 +616,12 @@ Phase 2 (File tree browser). Decide on polling vs. watching before implementatio
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| Monaco loaded on first workbench open from CDN | 2-5 second blank editor while Monaco JS downloads | Pre-warm CDN cache with `<link rel="preload">` or use service worker caching | On every first visit, noticeable on slow connections |
-| File tree re-renders entire tree on single node expand | Expansion becomes sluggish after 50+ nodes | Memoize individual tree nodes; use `useCallback` for expand handlers | At ~100+ visible nodes |
-| Monaco model accumulation without LRU eviction | Memory grows ~2 MB per file opened | LRU cache with max 10 models; dispose evicted models | After 20+ file opens in one session |
-| Recursive directory listing without depth limit | API hangs for projects with deep nested directories | Limit API to 3 levels depth maximum; lazy-load deeper levels | Immediately for projects with `node_modules` |
-| Preview subprocess output not line-buffered | Terminal shows output in large bursts | Set `stdio: ['pipe', 'pipe', 'pipe']`; use `readline` to emit line events | Always without proper line buffering |
-| Chokidar watching 50K+ files | inotify exhausted; HMR broken | Tight scope + exclusions; prefer polling for workbench | On Linux with default inotify limits |
+| No PTY output batching | xterm.js freezes for 1-2s then jumps | Batch with 8ms setTimeout; combine rapid chunks | During any command with high output rate (git log, npm install) |
+| FitAddon triggered on every `window.resize` | Multiple rapid PTY resize messages; garbled TUI | Use ResizeObserver + 100ms debounce | When user drags panel divider |
+| xterm.js Terminal not disposed | Memory grows ~15-30 MB per close/reopen | `terminal.dispose()` in `useEffect` cleanup | After 5-10 open/close cycles in one session |
+| PTY spawned per WebSocket message instead of per session | New shell process per message | Session-based: one PTY per session ID | Immediately if misimplemented |
+| WebSocket bufferedAmount unchecked | Server OOM on slow client | Check `ws.bufferedAmount < 64KB` before send | When Claude CLI emits >1MB of output |
+| No session cleanup on server restart | Orphaned PTYs survive Next.js hot-reload | `process.on('SIGTERM')` cleanup in session registry | On every Next.js dev server hot-reload |
 
 ---
 
@@ -375,12 +629,12 @@ Phase 2 (File tree browser). Decide on polling vs. watching before implementatio
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| File read/write API without `safeResolvePath` | Arbitrary file read/write on host system via `../` | `path.resolve` + `startsWith(root + sep)` check on every FS operation |
-| Preview subprocess command from user input without validation | Command injection — user runs arbitrary shell commands | Validate command against allowlist; use `execFileSync`/`spawn` with array args (not shell string); this project already uses `execFileSync` for git — same pattern |
-| iframe without `sandbox` attribute | Preview page can redirect parent window | Always set `sandbox` attribute; document the permissions granted |
-| Dev server proxy without origin validation | SSRF — proxy forwards requests to internal services | Restrict proxy target to `localhost` only; reject non-localhost targets |
-| File write without checking task execution state | Race condition — AI and user overwrite each other's changes | Check `TaskExecution.status`; warn if `IN_PROGRESS`; never silently overwrite |
-| Expose `localPath` directly in API responses | Reveals full host filesystem path to the browser | Only return relative paths in file tree responses; `localPath` is a server-side-only concept |
+| No Origin validation on WebSocket upgrade | CSWSH — any browser tab can spawn a shell | Validate `Origin` header allowlist in upgrade handler |
+| Shell string interpolation in `pty.spawn` | Command injection via task/agent config fields | Spawn with argument array; never interpolate user input into shell strings |
+| PTY exposed on `0.0.0.0` (all interfaces) | LAN users can access the terminal | Bind the custom server to `127.0.0.1` only |
+| No session ID / token validation | Replay attacks — any WebSocket can attach to any PTY | Generate session token server-side; validate before upgrade |
+| PTY CWD set to server root instead of task worktreePath | Claude CLI runs in wrong directory; can access all project files | Always set `cwd` to `task.worktreePath` or `project.localPath`; never to `process.cwd()` |
+| Environment variables from user input passed to PTY | Arbitrary env injection | Build env explicitly from `process.env`; never spread user-supplied objects |
 
 ---
 
@@ -388,30 +642,29 @@ Phase 2 (File tree browser). Decide on polling vs. watching before implementatio
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| No loading skeleton for Monaco | Blank white rectangle while editor loads (1-5 seconds) | Show a code-colored skeleton or "Loading editor..." placeholder via `dynamic` `loading` prop |
-| File tree shows no indication that Claude is editing a file | User opens the same file in the editor — race condition with AI writes | Show a "being modified by AI" indicator on files currently being written by the Claude execution |
-| Preview iframe shows a blank page when dev server not started | Confusing — looks like the preview is broken | Show an explicit "Dev server not running — click Start to launch" state before spawning |
-| Preview subprocess failure output hidden | User cannot diagnose why the preview is not working | Stream stderr to the Preview terminal panel alongside stdout |
-| Editor saves overwrite worktree files without confirmation | User accidentally undoes Claude's work | Explicit Save button (not auto-save); confirm dialog if the file was modified by Claude after the editor opened it |
-| File tree does not reflect Claude's file additions after execution | Stale tree shows old file list | Manual Refresh button in file tree header; optionally, auto-refresh when task execution transitions to `IN_REVIEW` |
+| No loading state before PTY is ready | Blank terminal rectangle; user types before connection | Show "Connecting..." overlay until WebSocket is open and PTY is ready |
+| PTY session destroyed on navigation | User loses terminal history when switching to Kanban view | Keep PTY session alive server-side; reconnect on return; replay buffer on reconnect |
+| Resize not triggered on workbench panel resize | Claude CLI TUI garbled after panel drag | ResizeObserver on container; FitAddon.fit() on every size change |
+| No indication when Claude CLI exits | Terminal appears frozen; user keeps typing | Detect `onExit` from PTY; display exit code banner; disable input |
+| Terminal scrollback cleared on reconnect | User cannot see previous Claude output | Buffer last N lines server-side; replay to client on reconnect |
+| Ctrl-C passes through to kill Claude mid-response | User accidentally cancels long-running task | Optionally show a confirmation for `Ctrl-C` when task execution is `IN_PROGRESS` |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Monaco SSR:** Run `next build` — verify no `window is not defined` errors in the build output
-- [ ] **Monaco bundle isolation:** Run `@next/bundle-analyzer` — verify `monaco-editor` does not appear in the main or Kanban route JS chunk
-- [ ] **Monaco workers:** Open the editor with a TypeScript file — verify IntelliSense (hover type info) works, indicating workers loaded correctly
-- [ ] **Path traversal:** Call the file read API with `filePath: "../../.env"` — verify HTTP 400 is returned, not file contents
-- [ ] **Process leak:** Open Preview, start dev server, navigate to Kanban, navigate back — verify only ONE process per `taskId` in `ps aux`
-- [ ] **Process leak:** Close browser tab while preview running — verify subprocess is killed within 30 seconds
-- [ ] **inotify safety:** If file watching is used, verify `cat /proc/sys/fs/inotify/max_user_watches` is not exhausted after opening the workbench on a large project
-- [ ] **Memory leak:** Open 25 files in the editor — run `monaco.editor.getModels().length` in console — verify it does not exceed the LRU cache limit
-- [ ] **SSE coexistence:** Start Claude execution (SSE stream 1) then open Preview panel (SSE stream 2) — verify both streams receive data simultaneously
-- [ ] **iframe sandbox:** Verify the preview iframe has a `sandbox` attribute; attempt `window.parent.location = "http://evil.com"` from preview console — should be blocked
-- [ ] **Large project file tree:** Open the workbench on a Next.js project with `node_modules` — verify `node_modules` is excluded from the tree and the tree renders without freezing
-- [ ] **React Strict Mode subprocess:** In development, click "Start Preview" once — verify only ONE subprocess spawns (not two)
-- [ ] **i18n:** All workbench UI labels (Start Preview, Stop, Refresh, Save) have both `zh` and `en` translations
+- [ ] **node-pty compilation:** Run `node -e "require('node-pty').spawn('/bin/bash', [], {})"` — verify no native binding error
+- [ ] **Turbopack conflict:** Run `next dev` (Turbopack default) with `serverExternalPackages: ['node-pty']` — verify PTY spawns correctly; if not, confirm `--webpack` flag resolves it
+- [ ] **WebSocket upgrade:** Open `ws://localhost:3000/api/terminal/ws` from a browser — verify `101 Switching Protocols` in network tab and terminal output appears
+- [ ] **Origin validation:** Open a WebSocket from a page on `http://localhost:3001` — verify the connection is rejected with 403
+- [ ] **PTY process leak:** Open terminal, close tab, reopen 5 times — `ps aux | grep claude` must show zero orphaned processes
+- [ ] **xterm.js memory:** Mount terminal component, unmount (navigate away), remount 10 times — browser Task Manager memory must not grow linearly
+- [ ] **Resize sync:** Open `vim` in the terminal, resize the workbench panel — verify `vim` redraws correctly at new dimensions
+- [ ] **Double kill guard:** Let Claude CLI finish naturally, then close the WebSocket — verify no uncaught exception in server logs
+- [ ] **Flow control:** Run `yes | head -100000` in the terminal — verify server-side `ws.bufferedAmount` stays below 1 MB; UI remains responsive
+- [ ] **SSR guard:** Run `next build` — verify no `window is not defined` or `document is not defined` errors from xterm.js imports
+- [ ] **spawn security:** Verify `pty.spawn` is called with a fixed executable path and argument array — no string interpolation of user input in the command
+- [ ] **pnpm rebuild:** After fresh `pnpm install`, verify node-pty native addon is present at the correct path before starting the server
 
 ---
 
@@ -419,13 +672,14 @@ Phase 2 (File tree browser). Decide on polling vs. watching before implementatio
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Monaco SSR build failure | LOW | Add `dynamic({ ssr: false })` wrapper; rebuild |
-| Monaco Turbopack worker failure | MEDIUM | Switch to CDN loader (`@monaco-editor/react` default config); test workers in browser console |
-| Zombie subprocess accumulation | LOW | Kill processes manually with `pkill -f "task/"` pattern; then implement registry |
-| inotify limit exhausted | LOW | `echo 65536 | sudo tee /proc/sys/fs/inotify/max_user_watches`; scope watchers more tightly in code |
-| Memory leak from Monaco model accumulation | MEDIUM | Implement LRU model cache; refresh page as immediate workaround |
-| Path traversal vulnerability discovered | HIGH | Immediately add `safeResolvePath` guard; audit all FS API routes; rotate any exposed secrets |
-| Preview subprocess not cleaning up on crash | MEDIUM | Implement `process.on('exit')` registry cleanup; test with `kill -9` on the Next.js process |
+| Turbopack / native addon build failure | LOW | Add `--webpack` flag to dev and build scripts; clear `.next` cache and rebuild |
+| pnpm node-pty compilation failure | LOW | Run `pnpm rebuild node-pty`; if still failing, switch to `node-pty-prebuilt-multiarch` |
+| WebSocket upgrade rejected (Route Handler approach used) | MEDIUM | Create `server.ts` custom server; update `package.json` scripts; test upgrade handler |
+| PTY zombie process accumulation | LOW | `pkill -f "node .* claude"` to clear zombies; then implement session registry |
+| xterm.js memory leak discovered | MEDIUM | Add `terminal.dispose()` + addon dispose to `useEffect` cleanup; reload page as immediate workaround |
+| CSWSH vulnerability discovered | HIGH | Add `Origin` header validation immediately; audit all WebSocket upgrade paths; consider adding session tokens |
+| Double kill crash bringing down server | MEDIUM | Add try-catch + `killed` flag around all `pty.kill()` calls; restart server immediately |
+| PTY output flood causing server OOM | MEDIUM | Add output batching with `bufferedAmount` check; restart server; reduce Claude output verbosity |
 
 ---
 
@@ -433,38 +687,41 @@ Phase 2 (File tree browser). Decide on polling vs. watching before implementatio
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| Monaco SSR (`window is not defined`) | Phase 1: Code editor foundation | `next build` succeeds without SSR errors |
-| Monaco Turbopack worker failure | Phase 1: Code editor foundation | IntelliSense works in browser dev tools |
-| Monaco bundle inflation | Phase 1: Code editor foundation | `bundle-analyzer` shows Monaco only in workbench route chunk |
-| File tree large project freeze | Phase 2: File tree browser | File tree renders in <1s on project with `node_modules` (excluded) |
-| Path traversal on file API | Phase 2: File tree browser | `../` path returns HTTP 400; verified with curl |
-| Monaco model memory leak | Phase 3: Editor file navigation | `monaco.editor.getModels().length` bounded by LRU limit after 25 file opens |
-| inotify limit exhaustion | Phase 2: File tree browser | Decision documented: polling vs. watching; watchers scoped if used |
-| Preview subprocess leak | Phase 4: Preview panel | Single subprocess per task; cleaned up on workbench close |
-| Preview iframe sandbox | Phase 4: Preview panel | `sandbox` attribute present; `window.parent` access blocked from preview |
-| SSE coexistence | Phase 4: Preview panel | Two simultaneous SSE connections verified in Playwright test |
-| React Strict Mode double-spawn | Phase 4: Preview panel | Single subprocess on "Start Preview" in development mode |
+| Turbopack incompatibility with node-pty | Phase 1: PTY backend | `next build --webpack` succeeds; PTY spawns without runtime error |
+| pnpm native addon compilation | Phase 1: PTY backend | `node -e "require('node-pty')"` succeeds after fresh install |
+| WebSocket upgrade in App Router | Phase 1: PTY backend | Custom server `server.ts` handles upgrade; Route Handler not used |
+| CSWSH / Origin validation | Phase 1: PTY backend | Cross-origin WebSocket connection rejected with 403 |
+| PTY process leak | Phase 1: PTY backend | Zero zombie processes after 5 open/close cycles |
+| Double kill crash | Phase 1: PTY backend | Natural PTY exit + WebSocket close does not throw uncaught exception |
+| WebSocket flow control | Phase 1: PTY backend | `yes | head -100000` does not cause memory spike or UI freeze |
+| xterm.js SSR import failure | Phase 2: xterm.js component | `next build` completes without `window is not defined` error |
+| xterm.js terminal not disposed | Phase 2: xterm.js component | Memory stable across 10 mount/unmount cycles |
+| Terminal resize not synced to PTY | Phase 2: xterm.js component | `vim` redraws correctly after panel resize |
+| Claude CLI spawn security | Phase 1: PTY backend | Code review confirms argument array; no shell string interpolation |
 
 ---
 
 ## Sources
 
-- [Next.js App Router — Server and Client Components](https://nextjs.org/docs/app/getting-started/server-and-client-components) — `"use client"` does not disable SSR pre-rendering
-- [Next.js Lazy Loading Guide](https://nextjs.org/docs/pages/guides/lazy-loading) — `dynamic({ ssr: false })` for browser-only components
-- [Next.js Turbopack issue #72613 — Monaco Editor dynamic import](https://github.com/vercel/next.js/issues/72613) — known open issue as of early 2026
-- [Next.js Version 16 upgrade guide](https://nextjs.org/docs/app/guides/upgrading/version-16) — Turbopack is now default for `next dev`
-- [`@monaco-editor/react` npm — React 19 RC](https://www.npmjs.com/package/@monaco-editor/react) — v4.7.0-rc.0 for React 19
-- [Monaco Editor issue #4659 — Diff editor memory leak](https://github.com/microsoft/monaco-editor/issues/4659) — Emitter not disposed on diff editor dispose
-- [Monaco Editor issue #1693 — Memory leakage](https://github.com/microsoft/monaco-editor/issues/1693) — models not disposed on editor unmount
-- [Sourcegraph blog — Migrating from Monaco to CodeMirror](https://sourcegraph.com/blog/migrating-monaco-codemirror) — 43% JS size reduction
-- [Replit blog — Betting on CodeMirror](https://blog.replit.com/codemirror) — CodeMirror 6 architecture rationale
-- [OWASP Path Traversal](https://owasp.org/www-community/attacks/Path_Traversal) — prevention: resolve then startsWith check
-- [StackHawk — Node.js Path Traversal Guide](https://www.stackhawk.com/blog/node-js-path-traversal-guide-examples-and-prevention/) — `path.normalize` alone is insufficient
-- [MDN — CSP frame-ancestors](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors) — iframe clickjacking prevention
-- [chokidar GitHub — inotify limits](https://github.com/facebook/create-react-app/issues/7612) — ENOSPC when watching large directories
-- [Monaco webpack plugin issue #42 — Cross-origin worker failure](https://github.com/microsoft/monaco-editor-webpack-plugin/issues/42)
-- [Next.js GitHub discussion #48427 — SSE in App Router Route Handlers](https://github.com/vercel/next.js/discussions/48427)
+- [Next.js 16 upgrade guide — Turbopack by default](https://nextjs.org/docs/app/guides/upgrading/version-16) — webpack flag opt-out documented
+- [Next.js issue #85449 — Turbopack fails to load native node addons in pnpm workspaces](https://github.com/vercel/next.js/issues/85449) — unresolved as of Dec 2025
+- [Next.js issue #68805 — Turbopack can't locate serverExternalPackages in pnpm child dependencies](https://github.com/vercel/next.js/issues/68805)
+- [Next.js discussion #58698 — WebSocket upgrade support in App Router route handlers](https://github.com/vercel/next.js/discussions/58698) — not yet supported
+- [node-pty issue #382 — Proper PTY kill in Electron/Node](https://github.com/microsoft/node-pty/issues/382) — kill() best practices
+- [node-pty issue #167 — Sending signal to process group](https://github.com/microsoft/node-pty/issues/167) — background process cleanup
+- [pnpm issue #7128 — rebuild --build-addon-from-source failure](https://github.com/pnpm/pnpm/issues/7128)
+- [pnpm issue #2135 — node-gyp rebuild failures](https://github.com/pnpm/pnpm/issues/2135)
+- [node-pty-prebuilt-multiarch — Homebridge fork with prebuilt binaries](https://github.com/homebridge/node-pty-prebuilt-multiarch) — eliminates node-gyp dependency
+- [xterm.js issue #3889 — WebGL addon GPU memory leak (fixed in v5.0.0)](https://github.com/xtermjs/xterm.js/issues/3889)
+- [VS Code PR #279579 — Fix terminal WebGL context memory leak (2025)](https://github.com/microsoft/vscode/pull/279579)
+- [xterm.js issue #1341 — Terminals retained forever without dispose()](https://github.com/xtermjs/xterm.js/issues/1341)
+- [xterm.js discussion #5144 — resize/cols/rows not syncing to PTY](https://github.com/xtermjs/xterm.js/discussions/5144)
+- [xterm.js issue #1914 — Terminal resize round-trip race condition](https://github.com/xtermjs/xterm.js/issues/1914)
+- [WebSocket.org — CSWSH security guide](https://websocket.org/guides/security/) — Origin validation requirement
+- [Heroku — WebSocket security](https://devcenter.heroku.com/articles/websocket-security) — authentication and CSWSH prevention
+- [Gemini CLI issue #20941 — PTY shell orphans nested background processes](https://github.com/google-gemini/gemini-cli/issues/20941)
+- [xterm.js flowcontrol guide](https://xtermjs.org/docs/guides/flowcontrol/) — buffering and back-pressure patterns
 
 ---
-*Pitfalls research for: Task development workbench (v0.6) — online code editor, file tree, diff view, live preview*
+*Pitfalls research for: Browser terminal integration (v0.7) — node-pty + WebSocket + xterm.js in Next.js 16*
 *Researched: 2026-03-31*

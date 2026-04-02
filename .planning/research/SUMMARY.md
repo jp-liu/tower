@@ -1,17 +1,17 @@
 # Project Research Summary
 
-**Project:** ai-manager v0.6 — Task Development Workbench
-**Domain:** Agentic IDE workbench (online code editor, file tree, diff view, live preview) integrated into an existing AI task management platform
-**Researched:** 2026-03-31
+**Project:** ai-manager v0.7
+**Domain:** Browser terminal integration — node-pty + WebSocket + xterm.js replacing SSE chat bubbles
+**Researched:** 2026-04-02
 **Confidence:** HIGH
 
 ## Executive Summary
 
-ai-manager v0.6 extends the existing task page with a four-panel developer workbench: an online code editor (Monaco), a file tree browser scoped to the task worktree, a diff view panel (reusing v0.5 git infrastructure), and a live preview panel that spawns a child process and embeds localhost output in an iframe. The pattern is well-established — bolt.new, v0.dev, and Cursor have converged on the same layout — and the v0.5 codebase already provides the key foundations: worktree path storage in `TaskExecution`, git diff plumbing, SSE streaming, and a process singleton pattern. The new work is wiring these existing pieces together with three new libraries and a handful of new API routes.
+The v0.7 milestone replaces the existing SSE-based chat bubble UI with a real browser terminal powered by node-pty, WebSocket, and xterm.js. The goal is to give users a genuine TTY experience — ANSI colors, interactive prompts, cursor positioning — rather than parsed JSON chat messages. This is a well-understood architectural pattern (VS Code terminal, ttyd, code-server all use the same primitives), and the technology choices are unambiguous: `node-pty` for PTY spawning, `ws` for WebSocket, `@xterm/xterm` for rendering.
 
-The recommended approach keeps the architecture close to existing patterns: Monaco loads via `@monaco-editor/react` with `ssr: false` dynamic import (mandatory for Next.js App Router), file reads and writes go through typed API routes with path-anchor validation (already the project's convention), preview subprocesses are tracked in a server-side module-level Map singleton (mirrors `process-manager.ts`), and the file tree is a custom recursive component over Server Actions (no third-party library needed). New external dependencies are minimal: `@monaco-editor/react@next`, `@git-diff-view/react`, and `react-resizable-panels@^2.1.7`.
+The most consequential architectural decision is how to integrate WebSocket support into a Next.js 16 App Router application. Next.js App Router route handlers do not support HTTP Upgrade natively. The ARCHITECTURE.md and PITFALLS.md research converge on the same recommendation: run a standalone `ws.WebSocketServer` on port 3001, started from `instrumentation.ts`. This avoids patching Next.js internals (`next-ws` approach) and avoids replacing the dev script with a custom `server.ts`. The two research files diverge on one point — PITFALLS.md recommends a custom `server.ts` for production stability while ARCHITECTURE.md recommends the `instrumentation.ts` approach as simpler. For a localhost-only single-user tool, either is acceptable; `instrumentation.ts` is preferred as the lower-friction path.
 
-The dominant risks are all implementation-level, not architectural: Monaco's SSR incompatibility with Next.js App Router causes a hard build failure if the `dynamic({ ssr: false })` wrapper is skipped; preview subprocesses leak and accumulate orphaned dev servers if a process registry is not in place from day one; and file API routes without path-traversal guards expose arbitrary filesystem reads on the host. All three risks have straightforward, well-documented mitigations and must be addressed at the start of their respective phases, not retrofitted.
+The critical risks are: (1) Turbopack's inability to handle node-pty's native `.node` addon — addressed by switching to `--webpack` mode; (2) PTY process leaks if the session registry is not implemented before any UI work; and (3) double-kill exceptions that can crash the entire server if PTY lifecycle is not carefully guarded. All three are Phase 1 concerns and have clear, documented prevention strategies.
 
 ---
 
@@ -19,133 +19,178 @@ The dominant risks are all implementation-level, not architectural: Monaco's SSR
 
 ### Recommended Stack
 
-The base stack (Next.js 16, React 19, Prisma 6, SQLite, Tailwind CSS v4, shadcn/ui, Zustand) is unchanged and validated. The v0.6 additions are three new libraries:
+The base stack (Next.js 16, React 19, Prisma 6, SQLite, Tailwind CSS v4, zustand, `@xterm/xterm`, `@xterm/addon-fit`) is unchanged. Four new dependencies are needed for v0.7:
 
-**New dependencies:**
-- `@monaco-editor/react@4.7.0-rc.0` (code editor) — the standard Monaco wrapper for Next.js; handles CDN worker loading without webpack plugin configuration; the `@next` release explicitly targets React 19
-- `@git-diff-view/react@^0.1.3` (diff rendering) — SSR/RSC-ready, zero dependencies, accepts unified diff strings that the existing `git diff` plumbing already produces
-- `react-resizable-panels@^2.1.7` (panel splitter) — pinned to v2.x because v4.x has unresolved export renames that break shadcn/ui's Resizable component
+**Core technologies:**
+- `node-pty ^1.1.0`: Spawns Claude CLI in a real pseudo-terminal — provides the genuine TTY environment Claude Code requires for ANSI rendering, interactive prompts, and progress indicators. Microsoft-maintained, powers VS Code terminal. Auto-excluded from Next.js bundling via the built-in `serverExternalPackages` allowlist.
+- `ws ^8.18.0`: Raw WebSocket server, minimal and fast. Peer dependency of `next-ws`; used directly in the `instrumentation.ts` standalone server pattern.
+- `next-ws ^2.2.2` (optional alternative): Patches Next.js to expose `SOCKET` handlers in route files. Viable for localhost tools but fragile across Next.js upgrades. PITFALLS.md recommends the custom server / instrumentation approach instead.
+- `@xterm/addon-attach ^0.12.0`: Official xterm.js addon that pipes raw WebSocket frames into the terminal buffer. The canonical bridge between a WebSocket carrying raw PTY bytes and xterm.js. The only missing xterm.js addon for v0.7.
 
-The file tree, dev server proxy, and preview process management require no new libraries: they use Node.js `fs`, `child_process`, Next.js 16's built-in `proxy.ts` convention, and existing SSE infrastructure. See `.planning/research/STACK.md` for full rationale and installation commands.
+**Critical version requirements:**
+- Use `--webpack` flag (`"dev": "next dev --webpack"`) — Turbopack cannot reliably handle native `.node` addons from pnpm's isolated store (Next.js issue #85449, unresolved).
+- Add `node-pty` to `pnpm.onlyBuiltDependencies` to ensure the native addon is compiled by pnpm.
+- Remove `--output-format stream-json --print -` from the Claude CLI spawn args — these flags suppress TTY behavior; PTY mode requires raw terminal output.
 
 ### Expected Features
 
-**Must have for v0.6 launch (P1):**
-- Monaco Editor with syntax highlighting, line numbers, Ctrl+S save — core editor value
-- Tab-based multi-file editing with unsaved-changes indicator — prevents data loss
-- File tree with lazy expansion, gitignore-aware filtering, click-to-open — navigation foundation
-- Auto-refresh file tree on `status_changed` SSE event — Claude modifies files during execution
-- Unified/split diff view against base branch with reload button — core review workflow
-- Preview panel: configurable start command + port, start/stop lifecycle, iframe embed, error output display
+**Must have (P1 — v0.7 core terminal):**
+- node-pty spawns Claude CLI in real PTY
+- WebSocket bidirectional communication (foundational; all other features depend on it)
+- xterm.js renders ANSI output with 5,000+ line scrollback
+- `@xterm/addon-fit` + debounced PTY resize sync
+- Keyboard input forwarding (one-line wire: `term.onData` to `pty.write`)
+- Ctrl+C (`\x03`) SIGINT passthrough
+- Session destroy on PTY exit (no zombie processes)
+- Execution status update on PTY exit (DB and UI)
+- Dark/light theme sync (wire to next-themes)
+- `@xterm/addon-webgl` for GPU rendering (Claude CLI outputs at high volume)
 
-**Should have for v0.6.x patches (P2):**
-- Git diff status badges on file tree nodes (M/A/D indicators)
-- Auto-reload preview iframe on editor save
-- SSE-streamed preview process stdout (line-by-line output)
-- New file / rename / delete from file tree context menu
-- Whitespace-ignore toggle in diff view
-- Auto-format on save (Prettier via Server Action)
+**Should have (P2 — v0.7 polish, add after core is stable):**
+- `@xterm/addon-web-links` — clickable URLs (one line of code, high perceived quality)
+- `@xterm/addon-clipboard` — Ctrl+Shift+C copy shortcut
+- Input disabled while WebSocket is disconnected
+- Automatic reconnection with server-side ring buffer replay
+- Ctrl+C updating task status to CANCELLED
 
-**Defer to v0.7+ (P3):**
-- TypeScript IntelliSense / LSP (requires project tsconfig loading and worker config)
-- AI inline suggestions wired to task chat
-- Mobile viewport emulation in preview
-- Inline diff comment anchoring
-- Multiple preview commands per project
+**Defer to v0.8+:**
+- Session persistence across page navigations (requires `@xterm/addon-serialize` + server-side PTY keepalive; high complexity, validate whether users actually navigate away mid-execution first)
+- Search in terminal output (`@xterm/addon-search`)
+- Full PTY output log file archival
 
-See `.planning/research/FEATURES.md` for the full prioritization matrix and competitor analysis.
+**Anti-features (do not build):**
+- Infinite scrollback (memory exhaustion)
+- Multiple terminal tabs per task (scope creep for v0.7)
+- tmux/screen integration (unnecessary complexity; server restart still kills PTYs)
+- Real-time shared terminal (out of scope — localhost single-user tool)
 
 ### Architecture Approach
 
-The workbench integrates into the existing task page (`/workspaces/[workspaceId]/tasks/[taskId]`) by expanding the right panel from a single tab to a three-tab layout: Files (tree + editor), Changes (existing `TaskDiffView` unchanged), and Preview. The left panel (AI chat + SSE execution stream) is untouched. New components follow the established `workbench-` prefix convention and communicate through typed API routes, not Server Actions, because file content and preview lifecycle require streaming and process management that Server Actions do not support.
+The architecture adds three new source modules (`src/lib/pty/session-store.ts`, `src/lib/pty/pty-session.ts`, `src/lib/pty/ws-server.ts`) and one new component (`src/components/task/task-terminal.tsx`), bootstrapped from `instrumentation.ts`. The WS server runs on port 3001 alongside the Next.js app on port 3000 — same process, separate port. The workbench left panel (`task-page-client.tsx`) replaces `TaskConversation` with `TaskTerminal`; the right panel (files/diff/preview) is unchanged.
 
 **Major components:**
-1. `WorkbenchFilesPanel` — horizontal resizable split containing `WorkbenchFileTree` + `WorkbenchEditor`; owns `selectedFile` state; receives `refreshKey` prop from parent
-2. `WorkbenchFileTree` — recursive file/dir listing from `/api/tasks/[taskId]/files`; lazy expansion; gitignore-aware filtering done server-side
-3. `WorkbenchEditor` — Monaco via `dynamic({ ssr: false })`; reads/writes via `/api/tasks/[taskId]/files/content`; LRU model cache (max 10 models); theme sync with next-themes
-4. `WorkbenchPreviewPanel` — start/stop controls; polls `/api/tasks/[taskId]/preview/status`; renders iframe after port confirmed; streams stderr to error log
-5. `preview-process-manager.ts` — server-side module singleton `Map<taskId, ChildProcess+port>`; mirrors existing `process-manager.ts` pattern
-6. Three new API route groups: `files/`, `files/content/`, `preview/start|stop|status` — all path-anchored against worktree root
+1. `instrumentation.ts` — bootstraps the WS server at Next.js startup (nodejs runtime guard); extends the existing `register()` function that already runs worktree pruning
+2. `src/lib/pty/session-store.ts` — singleton `Map<taskId, PtySession>`; PTY lifecycle mapped 1:1 to `TaskExecution` rows; reconnect window is 30 seconds before PTY is killed
+3. `src/lib/pty/ws-server.ts` — `ws.WebSocketServer` on port 3001; routes `input`, `resize`, `start`, `stop`, `reconnect` messages; broadcasts PTY output to all session clients
+4. `src/lib/pty/pty-session.ts` — node-pty spawn/write/resize/kill; output ring buffer for reconnect replay; `killed` flag guards double-kill
+5. `TaskTerminal` (`task-terminal.tsx`) — `"use client"` + `next/dynamic({ ssr: false })` wrapper; xterm.js instance with FitAddon and WebGL addon; `ResizeObserver` on container for panel resize; `useEffect` cleanup disposes all addons in reverse order
 
 **Key patterns:**
-- All file paths on the wire are relative to the worktree root (never absolute)
-- Preview command split by whitespace into args array; `spawn(shell: false)` — no shell interpolation
-- Tab state owned by `TaskPageClient`; panel-internal state stays local; cross-panel communication via `refreshKey` prop
-- File tree refresh triggered only on `status_changed` SSE events (not on every event — prevents dozens of FS reads per second during execution)
-
-See `.planning/research/ARCHITECTURE.md` for full component diagram, data flow sequences, and build order rationale.
+- PTY session is keyed by `taskId`, not by WebSocket connection — browser refresh reattaches without killing the process
+- WS server started in `instrumentation.ts` (not a custom `server.ts`) — preserves the existing `next dev --webpack` workflow
+- xterm.js is a pure passthrough renderer — no JSON parsing, no message assembly; DB persistence decision deferred to phase planning (raw transcript or no persistence)
 
 ### Critical Pitfalls
 
-1. **Monaco SSR crash** — Importing `@monaco-editor/react` without `dynamic({ ssr: false })` causes a hard build failure (`window is not defined`). The `"use client"` directive alone is insufficient — App Router Client Components still pre-render on the server. Must be established as the first step of the editor phase; verify with `next build`.
+1. **Turbopack cannot bundle node-pty native addon** — Add `--webpack` to dev and build scripts; add `serverExternalPackages: ['node-pty']` to `next.config.ts`. Verify with `node -e "require('node-pty').spawn('/bin/bash', [], {})"` before any other work. Phase 1.
 
-2. **File API path traversal** — `path.normalize` alone does not prevent `../../.env` traversal. Every file read/write route must verify `resolved.startsWith(worktreeRoot + path.sep)` after resolving. Implement as a shared `safeResolvePath()` utility in `src/lib/fs-security.ts` before the first file endpoint.
+2. **WebSocket upgrade not supported in Next.js App Router route handlers** — Do not attempt `app/api/terminal/route.ts` for WebSocket. Use standalone WS server in `instrumentation.ts` on port 3001, or a custom `server.ts`. Attempting the Route Handler approach results in silent handshake rejection. Phase 1.
 
-3. **Preview subprocess leak** — Child processes spawned by preview start do not terminate when the user navigates away. A server-side `Map<taskId, ChildProcess>` singleton must exist from the first day of the preview phase. The start route must check for an existing process before spawning. Register `process.on('SIGTERM')` cleanup. Never start subprocesses from client-side `useEffect` (React Strict Mode double-invoke causes duplicate spawns in development).
+3. **PTY process leaks on WebSocket disconnect** — Implement session registry (`Map<sessionId, PtySession>`) before any terminal UI. Hook `ws.on('close')` and `ws.on('error')` to `destroySession()`. Register `process.on('SIGTERM')` cleanup. Phase 1.
 
-4. **Monaco model memory leak** — Monaco text models are not disposed on editor unmount; only the editor view is disposed. Accumulation after 20+ file opens causes memory growth and sluggishness. Implement a `Map<uri, ITextModel>` cache with LRU eviction (max 10 models) and call `model.dispose()` in the workbench unmount cleanup.
+4. **Double PTY kill crashes the server** — Guard all `pty.kill()` calls with a `session.killed` boolean flag and wrap in try-catch. Register `pty.onExit` to set `killed = true` (do not call `kill()` inside `onExit`). A crash here takes down all active sessions. Phase 1.
 
-5. **File tree inotify exhaustion** — Using `fs.watch` or chokidar recursively on a project with `node_modules` can exhaust the Linux inotify limit, breaking Next.js HMR system-wide. Default to polling (2-second interval) triggered by `status_changed` SSE events instead of reactive file watching. If watching is needed, exclude `node_modules`, `.git`, `dist`, `.next` and scope to `src/`/`app/` only.
+5. **xterm.js SSR import failure** — xterm.js accesses `window` at import time. Mandatory: `next/dynamic({ ssr: false })` wrapper for the terminal component. Never import `@xterm/xterm` at the top level of any component. Phase 2.
 
-See `.planning/research/PITFALLS.md` for the full 11-pitfall catalog with verification checklists.
+6. **xterm.js terminal not disposed on unmount** — Always call `addon.dispose()` in reverse load order, then `terminal.dispose()`, in `useEffect` cleanup. Store Terminal in `useRef`, not `useState`. VS Code hit this exact bug in 2025 (167 MB GPU memory leak across 10 idle terminals). Phase 2.
+
+7. **Terminal resize not synced to PTY** — Use `ResizeObserver` on the container element (not `window.resize`) to catch panel resizes. Debounce the WS resize message at 100ms to prevent PTY thrashing. Send initial size when spawning PTY. Phase 2.
+
+8. **Cross-site WebSocket hijacking (CSWSH)** — WebSocket has no same-origin policy. Validate `req.headers.origin` against `['http://localhost:3000', 'http://127.0.0.1:3000']` in the upgrade handler before accepting. Reject with 403 otherwise. Phase 1 — non-negotiable.
+
+9. **Shell injection via pty.spawn** — Always spawn Claude CLI directly with an argument array: `pty.spawn('claude', [...args], { cwd })`. Never use `pty.spawn('/bin/bash', ['-c', commandString])` when any part of the command comes from user input. Phase 1.
+
+10. **WebSocket output flood** — Batch PTY `onData` chunks with an 8ms setTimeout before sending. Check `ws.bufferedAmount < 64KB` before each send. Test with `yes | head -100000` to verify memory stays bounded. Phase 1.
 
 ---
 
 ## Implications for Roadmap
 
-Based on the dependency graph in ARCHITECTURE.md and the pitfall-to-phase mapping in PITFALLS.md, the recommended build order is six sequential phases (A-F), with Phase F (Preview) parallelizable with C-D if two developers are available.
+Based on the dependency graph and pitfall-to-phase mapping from research, the implementation should follow this phase structure:
 
-### Phase A: Tab Bar Skeleton + Route Entry
-**Rationale:** Everything else builds on the multi-tab layout. Establishing the `[Files][Changes][Preview]` tab structure in `TaskPageClient` with empty placeholder panels lets Phases B-F work independently without layout conflicts.
-**Delivers:** Expanded task page with three-tab right panel; tab switching works; no content yet
-**Avoids:** Integration conflicts between workbench components during later phases
+### Phase 1: PTY Backend Foundation
 
-### Phase B: File Tree Browser
-**Rationale:** The file tree is the primary navigation primitive; the editor (Phase C) depends on file selection events from the tree. Server-side exclusion list and lazy expansion must be in place before the editor integration.
-**Delivers:** Working file tree with expand/collapse, gitignore filtering, lazy directory expansion, auto-refresh on `status_changed`
-**Implements:** `WorkbenchFileTree`, `/api/tasks/[taskId]/files/` route, `safeResolvePath` utility in `fs-security.ts`
-**Avoids:** File tree DOM freeze (lazy expansion), path traversal (shared `safeResolvePath`), inotify exhaustion (polling over watching)
+**Rationale:** Every terminal feature depends on a working, leak-proof PTY server. All critical (server-crashing) pitfalls live here. Build and verify this completely before touching the browser side.
 
-### Phase C: Code Editor (Monaco Integration)
-**Rationale:** Depends on Phase B's path convention and `safeResolvePath`. Monaco's `ssr: false` dynamic import is isolated to one component file — resolving this before panel integration keeps Phase D low-risk. Model cache and LRU cleanup must be implemented here, not retrofitted.
-**Delivers:** Monaco editor with syntax highlight, file read/write, Ctrl+S save, unsaved-changes indicator, tab-based multi-file editing
-**Implements:** `WorkbenchEditor`, `/api/tasks/[taskId]/files/content/` route, `language-map.ts`, Monaco model LRU cache
-**Avoids:** Monaco SSR build failure, Monaco bundle inflation (verify with bundle-analyzer), Monaco model memory leak
+**Delivers:** A working WebSocket server that spawns Claude CLI in a PTY, streams output, handles input and resize, and cleans up correctly. Verifiable via `wscat` without any UI changes.
 
-### Phase D: Files Panel Integration
-**Rationale:** Combines Phase B + C into the `WorkbenchFilesPanel` with a horizontal resizable splitter. Low-risk assembly step after both components are independently verified.
-**Delivers:** `WorkbenchFilesPanel` with `react-resizable-panels` v2 splitter; tree click opens file in editor; editor save shows toast; file tree refreshes on agent edits
-**Implements:** `WorkbenchFilesPanel`, `useFileContent` hook, `react-resizable-panels` integration
+**Implements:** `instrumentation.ts` extension, `src/lib/pty/session-store.ts`, `src/lib/pty/pty-session.ts`, `src/lib/pty/ws-server.ts`, `package.json` script changes (`--webpack`), `pnpm.onlyBuiltDependencies` update
 
-### Phase E: Changes Tab (Diff View)
-**Rationale:** Nearly free — `TaskDiffView` already exists and is unchanged. Work is purely wiring it as the Changes tab in the new multi-tab layout. Can be done in parallel with Phase C or D.
-**Delivers:** Changes tab rendering existing `TaskDiffView`; old single-tab layout removed from `TaskPageClient`; unified/split toggle, file-by-file sections, reload button, summary header via `@git-diff-view/react`
-**Avoids:** Re-implementing diff logic that already exists (pure reuse)
+**Must address in this phase:**
+- Turbopack vs. node-pty (switch to `--webpack`)
+- pnpm native addon compilation (`pnpm rebuild node-pty`)
+- WebSocket via instrumentation.ts, not Route Handler
+- PTY session registry with cleanup hooks
+- Double-kill guard with `killed` flag + try-catch
+- CSWSH Origin validation
+- Claude CLI spawn via argument array (no shell interpolation)
+- Output batching (8ms window + bufferedAmount check)
 
-### Phase F: Live Preview Panel
-**Rationale:** Independent of Phases B-E (no shared components or routes). Can run in parallel with C-D or be deferred to a separate sprint. Process registry and security measures must be established from day one of this phase, not added later.
-**Delivers:** Preview panel with configurable command+port, start/stop controls, iframe embed, process error output, status polling
-**Implements:** `preview-process-manager.ts`, three preview API routes (start/stop/status), `WorkbenchPreviewPanel`, `usePreviewServer` hook, `previewCommand`/`previewPort` schema migration on `Project`
-**Avoids:** Subprocess leak (process registry from day one), React Strict Mode double-spawn (server-side only start), iframe sandbox omission
+**Verification before Phase 2:**
+- `node -e "require('node-pty')"` passes
+- `wscat` connects and receives Claude CLI output
+- Cross-origin connection rejected with 403
+- 5 open/close cycles yield zero zombie processes
+- Natural PTY exit + WS close generates no uncaught exception
+- `yes | head -100000` keeps server memory stable
+
+### Phase 2: xterm.js Terminal Component
+
+**Rationale:** Frontend layer. Depends entirely on Phase 1 being stable. Pitfalls here are containable (memory leaks, rendering glitches) rather than server-crashing.
+
+**Delivers:** A `TaskTerminal` React component that renders PTY output correctly, handles resize, and integrates with the existing workbench layout.
+
+**Implements:** `src/components/task/task-terminal.tsx`, `next/dynamic({ ssr: false })` wrapper, WebSocket client, FitAddon + ResizeObserver, WebGL addon, dark/light theme sync
+
+**Must address in this phase:**
+- `dynamic({ ssr: false })` wrapper as the very first file (before any xterm.js import)
+- Terminal dispose in reverse addon order in `useEffect` cleanup
+- ResizeObserver on container + 100ms debounced resize WS message
+- Initial size sent when opening WebSocket connection
+
+**Uses from STACK.md:** `@xterm/xterm ^6.0.0` (existing), `@xterm/addon-fit ^0.11.0` (existing), `@xterm/addon-attach ^0.12.0` (new), `@xterm/addon-webgl` (new)
+
+### Phase 3: Workbench Integration
+
+**Rationale:** Wire the backend (Phase 1) and component (Phase 2) into the existing workbench UI. Replace `TaskConversation` with `TaskTerminal` in `task-page-client.tsx`. Handle DB lifecycle.
+
+**Delivers:** Full end-to-end terminal experience in the workbench — start execution, Claude CLI runs in terminal, status updates when done.
+
+**Implements:** `task-page-client.tsx` left panel swap, execution lifecycle (create TaskExecution before WS connect, update status on PTY exit), Claude CLI arg migration (remove `--output-format stream-json`, remove `--print -`), DB persistence decision (raw transcript or no persistence)
+
+**Key decision during phase planning:** Whether to write raw terminal transcript as a single `TaskMessage` after session ends, or drop DB message persistence for terminal sessions entirely. The existing `persistResult()` function in `stream/route.ts` cannot be reused.
+
+### Phase 4: Polish and Reliability
+
+**Rationale:** Quality-of-life improvements that do not block the core replacement but significantly raise the experience.
+
+**Delivers:** Reconnection after hot-reload, visual disconnect state, clean Ctrl+C cancellation, clickable URLs.
+
+**Implements:** Exponential backoff reconnect loop, server-side ring buffer (last N bytes per session), input-disabled-while-disconnected state, `@xterm/addon-web-links`, `@xterm/addon-clipboard`, Ctrl+C to CANCELLED task status flow
+
+### Phase 5: v0.6 Bug Fixes (Parallel Track)
+
+**Rationale:** Bug fixes identified in v0.6 that are independent of the PTY work. Can run in parallel with Phase 1 or Phase 2.
+
+**Delivers:** v0.6 stability without coupling to the v0.7 terminal feature.
 
 ### Phase Ordering Rationale
 
-- Phases A through E are sequential due to layout to navigation to editor to integration dependencies; each is independently mergeable and testable
-- Phase E is nearly free (pure reuse of `TaskDiffView`) and can overlap with D if convenient
-- Phase F is independent and can run in parallel with C-D or be scheduled separately; Preview has the highest independent complexity (process lifecycle, security surface)
-- The Monaco SSR pitfall (Phase C) is isolated to one component; verifying it before Phase D integration avoids discovering a hard build failure mid-panel-assembly
-- The `safeResolvePath` utility created in Phase B is reused by Phase C's content routes — creating it once there prevents duplicated and potentially divergent traversal guards
+- Phases 1 through 3 are strictly sequential: backend must exist before the component, and both must exist before workbench integration.
+- Phase 4 is additive and can be partially parallelized with Phase 3.
+- Phase 5 is fully independent and can run at any point.
+- All server-crashing risks are concentrated in Phase 1, ensuring they are verified before Phase 2 or 3 work begins.
 
 ### Research Flags
 
-Phases with standard, well-documented patterns (no additional research needed):
-- **Phase A** — Tab bar layout is a trivial shadcn/ui component composition
-- **Phase B** — File listing via `fs.readdir` with gitignore filtering is a solved problem; `ignore` npm package handles pattern matching
-- **Phase E** — Pure component reuse; no new patterns
+Phases likely needing deeper research during planning:
+- **Phase 3 (Workbench Integration):** DB persistence decision for terminal sessions is unresolved. Two valid approaches (raw transcript vs. no persistence) have different implications for the task history UI. Needs a design decision before coding.
+- **Phase 4 (Reconnection):** The ring buffer size and reconnect window (currently suggested at 30s) need validation against real Claude CLI session lengths. The `@xterm/addon-serialize` approach for full buffer replay is a P3 feature worth prototyping here.
 
-Phases that may need targeted lookup during implementation:
-- **Phase C** — Monaco Turbopack worker issue (#72613) is an open GitHub issue; check its status before starting. If unresolved, confirm CDN loader is sufficient for the project's use case (it should be, but verify worker loading in dev mode before committing to it).
-- **Phase F** — Preview subprocess `AbortSignal` integration with Next.js 16 Route Handlers: the pattern exists in the codebase (stream route) but the exact cleanup hook for non-SSE route handlers should be verified before implementation. Also requires a `prisma migrate dev` for the new `previewCommand`/`previewPort` fields on `Project`.
+Phases with standard patterns (skip research-phase):
+- **Phase 1 (PTY Backend):** All patterns are well-documented in research. node-pty + ws + session registry is a proven pattern.
+- **Phase 2 (xterm.js Component):** Official xterm.js docs cover all required APIs. `dynamic({ ssr: false })` is the established pattern for DOM-only libraries in this codebase (same approach as Monaco Editor).
+- **Phase 5 (Bug Fixes):** Existing codebase, no new research needed.
 
 ---
 
@@ -153,48 +198,49 @@ Phases that may need targeted lookup during implementation:
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Core base stack unchanged and production-validated. New libraries verified via npm and official docs; React 19 compatibility confirmed for all three additions. `react-resizable-panels` v4 breakage confirmed via tracked GitHub issue. |
-| Features | HIGH | Editor and diff features are well-documented; preview proxy implementation is straightforward for a localhost-only tool. Competitor analysis (bolt.new, v0.dev, Cursor) confirms feature set convergence. |
-| Architecture | HIGH | Derived directly from codebase inspection of existing patterns (`process-manager.ts`, `file-serve.ts`, `diff/route.ts`, `stream/route.ts`). No speculative patterns — all components follow established project conventions. |
-| Pitfalls | HIGH | Verified against official Next.js 16 docs, Monaco Editor GitHub issue tracker, OWASP path traversal guides, and multiple production post-mortems. The 11 pitfalls are specific to this stack and domain, not generic warnings. |
+| Stack | HIGH | All library choices verified via official npm pages, GitHub release history, and Next.js 16.2.2 official docs. node-pty auto-exclusion confirmed in official serverExternalPackages list. |
+| Features | HIGH (table stakes) / MEDIUM (differentiators) | Core terminal features verified against official xterm.js docs and node-pty GitHub. Session persistence and reconnection patterns based on community sources (ttyd, code-server analysis). |
+| Architecture | HIGH | WebSocket-in-App-Router limitation confirmed via official Next.js docs and GitHub discussion #58698. instrumentation.ts approach confirmed via official Next.js instrumentation guide. |
+| Pitfalls | HIGH | Pitfalls 1-4 and 8-9 confirmed via official Next.js issue tracker, node-pty GitHub, pnpm GitHub, and VS Code codebase. CSWSH pitfall confirmed via WebSocket security documentation. |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Monaco Turbopack worker status:** The open issue (#72613) was confirmed as of early 2026 but may be resolved by implementation time. Check the issue status at the start of Phase C; if resolved, CDN loader may no longer be necessary (though it remains the simpler choice regardless).
-- **`previewCommand` / `previewPort` schema migration:** The Preview panel requires new fields on the `Project` model. The migration is straightforward (two nullable fields) but must be planned before Phase F begins — Prisma migration ordering relative to other pending schema changes should be confirmed.
-- **i18n coverage:** All workbench UI labels require both `zh` and `en` translations. The pitfalls checklist flags this as a verification requirement; confirm the project's i18n workflow before Phase A to avoid retrofitting translations at the end.
+- **DB persistence for terminal sessions:** The existing `TaskMessage` model was designed for structured chat messages, not raw PTY transcripts. Decide during Phase 3 planning: (a) write compressed terminal transcript as a single `TaskMessage` of role `ASSISTANT` after session ends, or (b) skip DB persistence for terminal sessions and rely on the server-side ring buffer for recent history only.
+
+- **Turbopack dev experience trade-off:** Switching to `--webpack` means slower incremental compilation compared to Turbopack. This is the correct trade-off for correctness. Monitor Next.js issue #85449 for Turbopack native addon support — if resolved, revert to `--turbopack`.
+
+- **next-ws vs. instrumentation.ts:** STACK.md recommends `next-ws` while ARCHITECTURE.md and PITFALLS.md both recommend the standalone `instrumentation.ts` approach. Resolution: use `instrumentation.ts` + standalone WS server on port 3001. If `next-ws` is chosen, budget time for re-patching after each Next.js upgrade.
+
+- **TERMINAL_WS_PORT client exposure:** The client must know the WS server port (3001). For localhost, hardcoding is acceptable. If configurable, expose via `NEXT_PUBLIC_TERMINAL_WS_PORT` env var and document in `.env.example`.
 
 ---
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- `/src/app/api/tasks/[taskId]/diff/route.ts` — path anchor + worktree DB query pattern (codebase)
-- `/src/lib/adapters/process-manager.ts` + `process-utils.ts` — singleton process registry + `spawn(shell: false)` pattern (codebase)
-- `/src/lib/file-serve.ts` — path traversal protection (`startsWith(safePrefix)` guard) (codebase)
-- `/src/lib/worktree.ts` — worktree path convention (`localPath/.worktrees/task-{taskId}`) (codebase)
-- [Next.js 16 proxy.ts docs](https://nextjs.org/docs/app/api-reference/file-conventions/proxy) — proxy.ts convention replacing middleware.ts
-- [Next.js App Router — Server and Client Components](https://nextjs.org/docs/app/getting-started/server-and-client-components) — `"use client"` does not disable SSR pre-rendering
-- [Next.js Lazy Loading Guide](https://nextjs.org/docs/pages/guides/lazy-loading) — `dynamic({ ssr: false })` requirement
-- [react-resizable-panels shadcn v4 issue #9136](https://github.com/shadcn-ui/ui/issues/9136) — confirmed v4.x export rename breakage
-- [OWASP Path Traversal](https://owasp.org/www-community/attacks/Path_Traversal) — `path.normalize` alone is insufficient
+- [Next.js 16.2.2 serverExternalPackages official docs](https://nextjs.org/docs/app/api-reference/config/next-config-js/serverExternalPackages) — `node-pty` on auto-exclusion list
+- [Next.js instrumentation guide](https://nextjs.org/docs/app/guides/instrumentation) — `register()` pattern for server-side startup code
+- [microsoft/node-pty GitHub v1.1.0](https://github.com/microsoft/node-pty) — PTY spawn API, macOS compilation requirements
+- [apteryxxyz/next-ws GitHub v2.2.2](https://github.com/apteryxxyz/next-ws) — `SOCKET` handler API, prepare script requirement
+- [@xterm/addon-attach npm v0.12.0](https://www.npmjs.com/package/@xterm/addon-attach) — WebSocket bridge for xterm.js
+- [xterm.js official docs](https://xtermjs.org/) — Terminal class API, addon index, flowcontrol guide
+- [Next.js 16 Turbopack upgrade guide](https://nextjs.org/docs/app/guides/upgrading/version-16) — `--webpack` opt-out documented
+- Project `package.json` — confirmed existing deps, Node.js 22, pnpm, Turbopack dev flag
 
 ### Secondary (MEDIUM confidence)
-- [@monaco-editor/react npm](https://www.npmjs.com/package/@monaco-editor/react) — v4.7.0-rc.0 for React 19, CDN loader behavior
-- [@git-diff-view/react npm](https://www.npmjs.com/package/@git-diff-view/react) + [GitHub](https://github.com/MrWangJustToDo/git-diff-view) — SSR/RSC-ready, zero deps, unified diff input
-- [Next.js Turbopack issue #72613](https://github.com/vercel/next.js/issues/72613) — Monaco dynamic import issue under Turbopack
-- [Monaco Editor issue #4659](https://github.com/microsoft/monaco-editor/issues/4659) — Diff editor Emitter not disposed
-- [Monaco Editor issue #1693](https://github.com/microsoft/monaco-editor/issues/1693) — models not disposed on unmount
-- [RedMonk: 10 Things Developers Want from Agentic IDEs 2025](https://redmonk.com/kholterhoff/2025/12/22/10-things-developers-want-from-their-agentic-ides-in-2025/) — developer expectation research
-- [Builder.io: Best Agentic IDEs heading into 2026](https://www.builder.io/blog/agentic-ide) — UX patterns and feature convergence
-
-### Tertiary (MEDIUM-LOW confidence)
-- [Sourcegraph: Migrating Monaco to CodeMirror](https://sourcegraph.com/blog/migrating-monaco-codemirror) — bundle size trade-offs; Monaco chosen over CodeMirror for this use case (VSCode UX parity)
-- [Bolt.diy architecture — DeepWiki](https://deepwiki.com/stackblitz-labs/bolt.diy) — reference for preview iframe + file tree + editor panel layout pattern
-- [NxCode: V0 vs Bolt.new vs Lovable comparison 2026](https://www.nxcode.io/resources/news/v0-vs-bolt-vs-lovable-ai-app-builder-comparison-2025) — feature-level competitor comparison
+- [GitHub discussion #58698](https://github.com/vercel/next.js/discussions/58698) — WebSocket upgrade not supported in App Router route handlers
+- [Next.js issue #85449](https://github.com/vercel/next.js/issues/85449) — Turbopack fails to load native addons in pnpm workspaces (unresolved Dec 2025)
+- [pnpm issue #7128](https://github.com/pnpm/pnpm/issues/7128) — rebuild failure with native addons
+- [VS Code PR #279579](https://github.com/microsoft/vscode/pull/279579) — xterm.js WebGL context memory leak fix (2025)
+- [node-pty issue #382](https://github.com/microsoft/node-pty/issues/382) — `kill()` best practices
+- [xterm.js issue #3889](https://github.com/xtermjs/xterm.js/issues/3889) — WebGL addon memory leak (fixed v5.0.0)
+- [WebSocket.org CSWSH security guide](https://websocket.org/guides/security/) — Origin validation requirement
+- [@xterm/addon-serialize npm v0.14.0](https://www.npmjs.com/package/@xterm/addon-serialize) — buffer serialization for reconnection replay
+- [homebridge/node-pty-prebuilt-multiarch](https://github.com/homebridge/node-pty-prebuilt-multiarch) — prebuilt binaries fallback if node-gyp fails
+- [Web terminal with xterm.js + node-pty + WebSockets](https://ashishpoudel.substack.com/p/web-terminal-with-xtermjs-node-pty) — architecture pattern reference
 
 ---
-*Research completed: 2026-03-31*
+*Research completed: 2026-04-02*
 *Ready for roadmap: yes*
