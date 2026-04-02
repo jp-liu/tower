@@ -22,10 +22,10 @@ Requirements for v0.7 — 终端交互体验. Each maps to roadmap phases.
 
 ### 终端前端
 
-- [ ] **TERM-01**: xterm.js 终端组件替换任务页左侧聊天气泡界面
-- [ ] **TERM-02**: 终端支持键盘输入（交互式 Claude CLI 操作）
-- [ ] **TERM-03**: 终端 resize 与浏览器窗口同步（FitAddon + PTY resize）
-- [ ] **TERM-04**: 终端主题跟随应用 dark/light 设置
+- [x] **TERM-01**: xterm.js 终端组件替换任务页左侧聊天气泡界面
+- [x] **TERM-02**: 终端支持键盘输入（交互式 Claude CLI 操作）
+- [x] **TERM-03**: 终端 resize 与浏览器窗口同步（FitAddon + PTY resize）
+- [x] **TERM-04**: 终端主题跟随应用 dark/light 设置
 
 ### 会话集成
 
@@ -80,10 +80,10 @@ Deferred to future release.
 | WS-02 | Phase 24 | Complete |
 | WS-03 | Phase 24 | Complete |
 | WS-04 | Phase 24 | Complete |
-| TERM-01 | Phase 25 | Pending |
-| TERM-02 | Phase 25 | Pending |
-| TERM-03 | Phase 25 | Pending |
-| TERM-04 | Phase 25 | Pending |
+| TERM-01 | Phase 25 | Complete |
+| TERM-02 | Phase 25 | Complete |
+| TERM-03 | Phase 25 | Complete |
+| TERM-04 | Phase 25 | Complete |
 | INT-01 | Phase 26 | Pending |
 | INT-02 | Phase 26 | Pending |
 | INT-03 | Phase 26 | Pending |

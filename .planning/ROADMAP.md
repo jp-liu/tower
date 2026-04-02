@@ -202,7 +202,7 @@ Plans:
   4. The terminal background and text colors switch automatically when user toggles dark/light mode
 **Plans**: 2 plans
 Plans:
-- [ ] 25-01-PLAN.md — Install xterm addons + i18n keys (TERM-01, TERM-02, TERM-03, TERM-04)
+- [x] 25-01-PLAN.md — Install xterm addons + i18n keys (TERM-01, TERM-02, TERM-03, TERM-04)
 - [ ] 25-02-PLAN.md — TaskTerminal component (TERM-01, TERM-02, TERM-03, TERM-04)
 **UI hint**: yes
 
@@ -265,7 +265,7 @@ Plans:
 | 22. Diff View Integration | v0.6 | 0/TBD | Complete | 2026-04-01 |
 | 23. Preview Panel | v0.6 | 3/3 | Complete | 2026-04-01 |
 | 24. PTY Backend & WebSocket Server | v0.7 | 2/2 | Complete    | 2026-04-02 |
-| 25. xterm.js Terminal Component | v0.7 | 0/TBD | Not started | - |
+| 25. xterm.js Terminal Component | v0.7 | 1/2 | In Progress|  |
 | 26. Workbench Integration | v0.7 | 0/TBD | Not started | - |
 | 27. Task Card Context Menu | v0.7 | 0/TBD | Not started | - |
 | 28. v0.6 Bug Fixes | v0.7 | 0/TBD | Not started | - |

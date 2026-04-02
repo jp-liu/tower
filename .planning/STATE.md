@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.7
 milestone_name: 终端交互体验
-status: verifying
-stopped_at: Completed 24-02-PLAN.md
-last_updated: "2026-04-02T13:08:20.040Z"
+status: executing
+stopped_at: Completed 25-01-PLAN.md
+last_updated: "2026-04-02T13:19:08.850Z"
 last_activity: 2026-04-02
 progress:
   total_phases: 9
   completed_phases: 5
-  total_plans: 13
-  completed_plans: 13
+  total_plans: 15
+  completed_plans: 14
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 24 — pty-backend-websocket-server
+**Current focus:** Phase 25 — xterm-terminal-component
 
 ## Current Position
 
-Phase: 25
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 25 (xterm-terminal-component) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-04-02
 
 Progress: [░░░░░░░░░░] 0%
@@ -79,6 +79,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 24 P01 | 900 | 2 tasks | 3 files |
 | Phase 24-pty-backend-websocket-server P02 | 182 | 2 tasks | 2 files |
+| Phase 25-xterm-terminal-component P01 | 180 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -181,6 +182,7 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 24]: onExit sets killed=true but does NOT call pty.kill() — prevents double-kill crash (D-07)
 - [Phase 24-pty-backend-websocket-server]: noServer + HTTP upgrade handler for WS 403 rejection: correct path for standalone port 3001 server not attached to Next.js HTTP server
 - [Phase 24-pty-backend-websocket-server]: makeBatchedSender closes over ws: onData callback captures WS reference from connection scope — no per-chunk Map lookup needed
+- [Phase 25-01]: @xterm/addon-webgl resolved to 0.19.0 (latest at time of install) — plan specified 'latest'
 
 ### Pending Todos
 
@@ -194,6 +196,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-02T13:04:37.028Z
-Stopped at: Completed 24-02-PLAN.md
+Last session: 2026-04-02T13:19:08.847Z
+Stopped at: Completed 25-01-PLAN.md
 Resume file: None
