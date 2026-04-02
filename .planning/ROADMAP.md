@@ -186,7 +186,10 @@ Plans:
   3. A cross-origin connection attempt (non-localhost origin) is rejected with 403
   4. Closing the WebSocket does not kill the PTY session; reconnecting within 30 seconds reattaches to the same running process
   5. Running 5 open/close cycles produces zero zombie processes (verified via `ps aux | grep pty`)
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 24-01-PLAN.md — Install node-pty + ws, switch to --webpack, PTY session registry (PTY-01, PTY-02, PTY-03)
+- [ ] 24-02-PLAN.md — WebSocket server with bidirectional I/O, origin validation, keepalive (WS-01, WS-02, WS-03, WS-04)
 
 ### Phase 25: xterm.js Terminal Component
 **Goal**: Users see a fully functional browser terminal that renders PTY output with ANSI colors, accepts keyboard input, and resizes with the panel
@@ -258,7 +261,7 @@ Plans:
 | 21. Code Editor | v0.6 | 3/3 | Complete | 2026-04-01 |
 | 22. Diff View Integration | v0.6 | 0/TBD | Complete | 2026-04-01 |
 | 23. Preview Panel | v0.6 | 3/3 | Complete | 2026-04-01 |
-| 24. PTY Backend & WebSocket Server | v0.7 | 0/TBD | Not started | - |
+| 24. PTY Backend & WebSocket Server | v0.7 | 0/2 | Not started | - |
 | 25. xterm.js Terminal Component | v0.7 | 0/TBD | Not started | - |
 | 26. Workbench Integration | v0.7 | 0/TBD | Not started | - |
 | 27. Task Card Context Menu | v0.7 | 0/TBD | Not started | - |
