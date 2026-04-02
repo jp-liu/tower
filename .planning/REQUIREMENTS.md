@@ -15,10 +15,10 @@ Requirements for v0.7 — 终端交互体验. Each maps to roadmap phases.
 
 ### WebSocket 通信
 
-- [ ] **WS-01**: `instrumentation.ts` 启动独立 WebSocket server (port 3001)
-- [ ] **WS-02**: WebSocket 双向转发 xterm.js ↔ PTY 输入输出
-- [ ] **WS-03**: WebSocket 连接断开时 PTY 保活（不立即销毁，等待重连）
-- [ ] **WS-04**: WebSocket Origin 校验防止 CSWSH 攻击
+- [x] **WS-01**: `instrumentation.ts` 启动独立 WebSocket server (port 3001)
+- [x] **WS-02**: WebSocket 双向转发 xterm.js ↔ PTY 输入输出
+- [x] **WS-03**: WebSocket 连接断开时 PTY 保活（不立即销毁，等待重连）
+- [x] **WS-04**: WebSocket Origin 校验防止 CSWSH 攻击
 
 ### 终端前端
 
@@ -76,10 +76,10 @@ Deferred to future release.
 | PTY-01 | Phase 24 | Complete |
 | PTY-02 | Phase 24 | Complete |
 | PTY-03 | Phase 24 | Complete |
-| WS-01 | Phase 24 | Pending |
-| WS-02 | Phase 24 | Pending |
-| WS-03 | Phase 24 | Pending |
-| WS-04 | Phase 24 | Pending |
+| WS-01 | Phase 24 | Complete |
+| WS-02 | Phase 24 | Complete |
+| WS-03 | Phase 24 | Complete |
+| WS-04 | Phase 24 | Complete |
 | TERM-01 | Phase 25 | Pending |
 | TERM-02 | Phase 25 | Pending |
 | TERM-03 | Phase 25 | Pending |
