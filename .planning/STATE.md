@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.7
 milestone_name: 终端交互体验
-status: executing
-stopped_at: Completed 26-01-PLAN.md
-last_updated: "2026-04-03T01:21:58.466Z"
+status: verifying
+stopped_at: "Completed 26-02-PLAN.md (awaiting checkpoint:human-verify Task 3)"
+last_updated: "2026-04-03T01:25:51.424Z"
 last_activity: 2026-04-03
 progress:
   total_phases: 9
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 17
-  completed_plans: 16
+  completed_plans: 17
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 
 Phase: 26 (workbench-integration) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-03
 
 Progress: [░░░░░░░░░░] 0%
@@ -82,6 +82,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 25-xterm-terminal-component P01 | 180 | 2 tasks | 3 files |
 | Phase 25-xterm-terminal-component P02 | 153 | 1 tasks | 1 files |
 | Phase 26-workbench-integration P01 | 300 | 2 tasks | 3 files |
+| Phase 26 P02 | 180 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -189,6 +190,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 25]: TaskTerminal JSDoc documents next/dynamic({ ssr: false }) requirement inline — consumers (Phase 26) must wrap with dynamic import
 - [Phase 26-01]: No-op onData at PTY creation in startPtyExecution; ws-server wires real broadcaster via setDataListener on WS connect
 - [Phase 26-01]: setDataListener on PtySession replaces mutable _onData field — supports pre-created PTY sessions pattern
+- [Phase 26]: TaskTerminal loaded via next/dynamic({ ssr: false }) per Phase 25 JSDoc requirement — xterm.js accesses window at import time
+- [Phase 26]: handleSessionEnd sets IN_REVIEW on exitCode 0 + calls router.refresh() for immediate UI + data sync
 
 ### Pending Todos
 
@@ -202,6 +205,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-03T01:21:58.463Z
-Stopped at: Completed 26-01-PLAN.md
+Last session: 2026-04-03T01:25:51.421Z
+Stopped at: Completed 26-02-PLAN.md (awaiting checkpoint:human-verify Task 3)
 Resume file: None
