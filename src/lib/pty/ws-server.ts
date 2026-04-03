@@ -90,6 +90,8 @@ function handleConnection(ws: WebSocket, req: IncomingMessage): void {
       clearTimeout(session.disconnectTimer);
       session.disconnectTimer = null;
     }
+    // Wire the batched sender so new PTY data flows to this WS client
+    session.setDataListener(makeBatchedSender(ws));
     // Replay buffered output so the client sees what it missed
     const buffer = session.getBuffer();
     if (buffer && ws.readyState === WebSocket.OPEN) {
@@ -99,20 +101,22 @@ function handleConnection(ws: WebSocket, req: IncomingMessage): void {
       `[ws-server] Reconnected to existing session for task ${taskId}`
     );
   } else {
-    // New session — spawn a PTY
-    // Phase 26 will pass the real Claude CLI command; bash is the default for testing
+    // New session — spawn a PTY (fallback for direct WS connections without startPtyExecution)
+    // Phase 26 pre-creates sessions via startPtyExecution; bash is the fallback for testing
     session = createSession(
       taskId,
       "bash",
       [],
       process.cwd(),
-      makeBatchedSender(ws),
+      () => {},
       (exitCode) => {
         console.error(
           `[ws-server] PTY exited for task ${taskId} with code ${exitCode}`
         );
       }
     );
+    // Wire the real broadcaster immediately after creating the session
+    session.setDataListener(makeBatchedSender(ws));
     console.error(`[ws-server] Created new PTY session for task ${taskId}`);
   }
 
@@ -149,6 +153,8 @@ function handleConnection(ws: WebSocket, req: IncomingMessage): void {
     );
     const s = getSession(taskId);
     if (!s || s.killed) return;
+    // Reset data listener to no-op so PTY output during keepalive window is discarded
+    s.setDataListener(() => {});
     s.disconnectTimer = setTimeout(() => {
       console.error(
         `[ws-server] Keepalive expired for task ${taskId} — destroying session`
@@ -162,6 +168,11 @@ function handleConnection(ws: WebSocket, req: IncomingMessage): void {
       `[ws-server] WS error for task ${taskId}:`,
       err.message
     );
+    // Reset data listener to no-op on error to prevent writes to a broken socket
+    const s = getSession(taskId);
+    if (s && !s.killed) {
+      s.setDataListener(() => {});
+    }
   });
 }
 
