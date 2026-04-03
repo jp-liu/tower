@@ -420,6 +420,11 @@ const translations = {
     "terminal.reconnecting": "正在重连...",
     "terminal.noWorktree": "无工作区",
     "terminal.noWorktreeDesc": "请先运行任务以启动终端",
+    "terminal.execute": "执行",
+    "terminal.executing": "执行中...",
+    "terminal.noPrompt": "请输入执行提示词",
+    "terminal.stopExecution": "停止执行",
+    "terminal.promptPlaceholder": "输入任务提示词...",
   },
   en: {
     "sidebar.workspace": "Workspaces",
@@ -818,6 +823,11 @@ const translations = {
     "terminal.reconnecting": "Reconnecting...",
     "terminal.noWorktree": "No Worktree",
     "terminal.noWorktreeDesc": "Run the task first to start the terminal",
+    "terminal.execute": "Execute",
+    "terminal.executing": "Executing...",
+    "terminal.noPrompt": "Enter a prompt to execute",
+    "terminal.stopExecution": "Stop",
+    "terminal.promptPlaceholder": "Enter task prompt...",
   },
 } as const;
 
