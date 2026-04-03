@@ -1,7 +1,7 @@
 import http from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import type { IncomingMessage } from "http";
-import { createSession, getSession, destroySession } from "./session-store";
+import { getSession, destroySession } from "./session-store";
 
 // D-11: CSWSH prevention — only localhost origins are allowed
 const ALLOWED_ORIGINS = new Set([
@@ -111,30 +111,10 @@ function handleConnection(ws: WebSocket, req: IncomingMessage): void {
       `[ws-server] Reconnected to existing session for task ${taskId}`
     );
   } else {
-    // New session — spawn a PTY (fallback for direct WS connections without startPtyExecution)
-    // Phase 26 pre-creates sessions via startPtyExecution; bash is the fallback for testing
-    session = createSession(
-      taskId,
-      "bash",
-      [],
-      process.cwd(),
-      () => {},
-      (exitCode) => {
-        console.error(
-          `[ws-server] PTY exited for task ${taskId} with code ${exitCode}`
-        );
-      }
-    );
-    // Wire the real broadcaster immediately after creating the session
-    session.setDataListener(makeBatchedSender(ws));
-    sessionClients.set(taskId, ws);
-    // Send session_end to browser when PTY exits
-    session.addExitListener((exitCode) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "session_end", exitCode }));
-      }
-    });
-    console.error(`[ws-server] Created new PTY session for task ${taskId}`);
+    // No pre-created session — reject. Sessions must be created via startPtyExecution.
+    console.error(`[ws-server] No session found for task ${taskId} — rejecting`);
+    ws.close(1008, "No PTY session for this task. Start execution first.");
+    return;
   }
 
   // D-12 / D-13: WS → PTY: forward input; detect resize JSON
