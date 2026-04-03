@@ -116,20 +116,6 @@ export function TaskTerminal({
         })
       );
 
-      // Intercept session_end messages before AttachAddon processes them
-      ws.addEventListener("message", (event) => {
-        if (typeof event.data === "string") {
-          try {
-            const msg = JSON.parse(event.data);
-            if (msg.type === "session_end" && typeof msg.exitCode === "number") {
-              onSessionEndRef.current?.(msg.exitCode);
-            }
-          } catch {
-            // Not JSON — let AttachAddon handle it
-          }
-        }
-      });
-
       // 8. AttachAddon handles bidirectional piping:
       //    ws.onmessage → terminal.write (TERM-01: ANSI rendering)
       //    terminal.onData → ws.send (TERM-02: keyboard input)
@@ -141,8 +127,13 @@ export function TaskTerminal({
       setTimeout(() => setConnectedVisible(false), 2000);
     });
 
-    ws.addEventListener("close", () => {
+    // Session end is signaled via WS close code 4000+exitCode (not JSON message)
+    // This avoids AttachAddon rendering JSON garbage in the terminal
+    ws.addEventListener("close", (event) => {
       setWsStatus("disconnected");
+      if (event.code >= 4000) {
+        onSessionEndRef.current?.(event.code - 4000);
+      }
     });
 
     ws.addEventListener("error", () => {

@@ -28,7 +28,12 @@ const SEND_BUFFER_MAX = 64 * 1024;
  * cross-origin connections with a proper HTTP 403 response before the WS
  * handshake completes.
  */
+const g = globalThis as typeof globalThis & { __wsServerStarted?: boolean };
+
 export async function startWsServer(): Promise<void> {
+  // Singleton guard — prevent EADDRINUSE on HMR/config restarts
+  if (g.__wsServerStarted) return;
+  g.__wsServerStarted = true;
   const httpServer = http.createServer((_req, res) => {
     res.writeHead(426, { "Content-Type": "text/plain" });
     res.end("WebSocket upgrade required");
@@ -74,9 +79,11 @@ function wireSession(session: import("./pty-session").PtySession, ws: WebSocket,
   if (buffer && ws.readyState === WebSocket.OPEN) {
     ws.send(buffer);
   }
+  // Signal session end via WS close code (4000+exitCode) — not JSON text frame.
+  // AttachAddon would render JSON as garbage in terminal if sent as a message.
   session.addExitListener((exitCode) => {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "session_end", exitCode }));
+      ws.close(4000 + exitCode, "session_end");
     }
   });
 }
@@ -127,6 +134,8 @@ function handleConnection(ws: WebSocket, req: IncomingMessage): void {
 
   // D-12 / D-13: WS → PTY: forward input; detect resize JSON
   ws.on("message", (rawData) => {
+    // Guard: session may not exist yet during poll-wait phase
+    if (!session) return;
     const data = rawData.toString();
     // D-13: Resize messages arrive as JSON starting with "{"
     if (data.startsWith("{")) {
@@ -141,14 +150,14 @@ function handleConnection(ws: WebSocket, req: IncomingMessage): void {
           typeof msg.cols === "number" &&
           typeof msg.rows === "number"
         ) {
-          session!.resize(msg.cols, msg.rows);
+          session.resize(msg.cols, msg.rows);
           return;
         }
       } catch {
         // Not valid JSON — treat as regular terminal input
       }
     }
-    session!.write(data);
+    session.write(data);
   });
 
   // D-14: WS disconnect → start 30s keepalive timer, do NOT kill PTY
