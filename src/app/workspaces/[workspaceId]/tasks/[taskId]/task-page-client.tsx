@@ -69,7 +69,6 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
-  const [prompt, setPrompt] = useState("");
   const [isExecuting, setIsExecuting] = useState(false);
   const [activeWorktreePath, setActiveWorktreePath] = useState<string | null>(
     latestExecution?.worktreePath ?? null
@@ -97,20 +96,17 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   }, [task.id, taskStatus]);
 
   const handleExecute = useCallback(async () => {
-    if (!prompt.trim() || isExecuting) return;
+    if (isExecuting) return;
     setIsExecuting(true);
     try {
-      const { worktreePath } = await startPtyExecution(task.id, prompt.trim());
+      const { worktreePath } = await startPtyExecution(task.id, "");
       if (worktreePath) {
         setActiveWorktreePath(worktreePath);
       }
-      // Terminal auto-connects via WebSocket; status update fires onSessionEnd
-    } catch (err) {
-      // Show minimal error — terminal area will show nothing if PTY failed to start
-      console.error("[execute]", err);
+    } catch {
       setIsExecuting(false);
     }
-  }, [task.id, prompt, isExecuting]);
+  }, [task.id, isExecuting]);
 
   const handleSessionEnd = useCallback((exitCode: number) => {
     setIsExecuting(false);
@@ -166,48 +162,32 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           </div>
         </div>
 
-        {/* Terminal fills available space */}
+        {/* Terminal fills all remaining space */}
         <div className="flex-1 min-h-0 overflow-hidden">
-          <TaskTerminal
-            taskId={task.id}
-            worktreePath={activeWorktreePath}
-            onSessionEnd={handleSessionEnd}
-          />
-        </div>
-
-        {/* Execute controls — bottom bar */}
-        <div className="flex shrink-0 flex-col gap-2 border-t border-border p-3">
-          <textarea
-            className="w-full resize-none rounded-md border border-border bg-muted px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-0 disabled:opacity-50"
-            rows={3}
-            placeholder={t("terminal.promptPlaceholder")}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            disabled={isExecuting}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                handleExecute();
-              }
-            }}
-          />
-          <button
-            onClick={handleExecute}
-            disabled={isExecuting || !prompt.trim()}
-            className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {isExecuting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {t("terminal.executing")}
-              </>
-            ) : (
-              <>
-                <Terminal className="h-4 w-4" />
-                {t("terminal.execute")}
-              </>
-            )}
-          </button>
+          {activeWorktreePath ? (
+            <TaskTerminal
+              taskId={task.id}
+              worktreePath={activeWorktreePath}
+              onSessionEnd={handleSessionEnd}
+            />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#0a0a0a] p-8">
+              <Terminal className="h-12 w-12 text-neutral-600" />
+              <p className="text-sm text-neutral-400">{t("terminal.readyToLaunch")}</p>
+              <button
+                onClick={handleExecute}
+                disabled={isExecuting}
+                className="flex items-center gap-2 rounded-md bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+              >
+                {isExecuting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Terminal className="h-4 w-4" />
+                )}
+                {isExecuting ? t("terminal.executing") : t("terminal.launch")}
+              </button>
+            </div>
+          )}
         </div>
       </Panel>
 

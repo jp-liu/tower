@@ -428,6 +428,8 @@ const translations = {
     "terminal.noPrompt": "请输入执行提示词",
     "terminal.stopExecution": "停止执行",
     "terminal.promptPlaceholder": "输入任务提示词...",
+    "terminal.launch": "启动终端",
+    "terminal.readyToLaunch": "点击启动终端开始执行任务",
   },
   en: {
     "sidebar.workspace": "Workspaces",
@@ -834,6 +836,8 @@ const translations = {
     "terminal.noPrompt": "Enter a prompt to execute",
     "terminal.stopExecution": "Stop",
     "terminal.promptPlaceholder": "Enter task prompt...",
+    "terminal.launch": "Launch Terminal",
+    "terminal.readyToLaunch": "Click to launch terminal and start task execution",
   },
 } as const;
 
