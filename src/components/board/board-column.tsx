@@ -15,6 +15,7 @@ interface BoardColumnProps {
   onEditTask?: (task: Task) => void;
   onAddTask?: () => void;
   onDeleteTask?: (taskId: string) => void;
+  onContextMenu?: (task: Task, x: number, y: number) => void;
 }
 
 export function BoardColumn({
@@ -26,6 +27,7 @@ export function BoardColumn({
   onEditTask,
   onAddTask,
   onDeleteTask,
+  onContextMenu,
 }: BoardColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id });
 
@@ -69,6 +71,7 @@ export function BoardColumn({
               onClick={() => onTaskClick?.(task)}
               onEdit={onEditTask}
               onDelete={onDeleteTask}
+              onContextMenu={onContextMenu}
             />
           ))}
         </SortableContext>

@@ -18,9 +18,10 @@ interface TaskCardProps {
   onClick?: () => void;
   onEdit?: (task: Task) => void;
   onDelete?: (taskId: string) => void;
+  onContextMenu?: (task: Task, x: number, y: number) => void;
 }
 
-export function TaskCard({ task, onClick, onEdit, onDelete }: TaskCardProps) {
+export function TaskCard({ task, onClick, onEdit, onDelete, onContextMenu }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -46,6 +47,11 @@ export function TaskCard({ task, onClick, onEdit, onDelete }: TaskCardProps) {
       {...listeners}
       className="group cursor-grab rounded-lg border border-border bg-card p-3 transition-all hover:border-amber-500/20 hover:bg-accent/50 active:cursor-grabbing"
       onClick={onClick}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onContextMenu?.(task, e.clientX, e.clientY);
+      }}
       data-testid="task-card"
     >
       <div className="flex items-start justify-between">
