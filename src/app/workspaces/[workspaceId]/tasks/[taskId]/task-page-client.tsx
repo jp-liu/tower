@@ -1,23 +1,25 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye } from "lucide-react";
+import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal } from "lucide-react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { TaskConversation, type Message } from "@/components/task/task-conversation";
-import { TaskMessageInput } from "@/components/task/task-message-input";
 import { TaskDiffView } from "@/components/task/task-diff-view";
 import { FileTree } from "@/components/task/file-tree";
 import { CodeEditor } from "@/components/task/code-editor";
 import { PreviewPanel } from "@/components/task/preview-panel";
 import { Badge } from "@/components/ui/badge";
-import { getTaskMessages } from "@/actions/agent-actions";
-import { getPrompts } from "@/actions/prompt-actions";
+import { startPtyExecution } from "@/actions/agent-actions";
 import { useI18n } from "@/lib/i18n";
-import type { PromptOption } from "@/components/task/types";
 import type { DiffResponse } from "@/lib/diff-parser";
+
+const TaskTerminal = dynamic(
+  () => import("@/components/task/task-terminal").then(m => ({ default: m.TaskTerminal })),
+  { ssr: false }
+);
 
 interface TaskPageClientProps {
   task: {
@@ -62,58 +64,16 @@ const STATUS_COLORS: Record<string, string> = {
 export function TaskPageClient({ task, workspaceId, workspaceName, latestExecution }: TaskPageClientProps) {
   const router = useRouter();
   const { t } = useI18n();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [prompts, setPrompts] = useState<PromptOption[]>([]);
-  const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
   const [taskStatus, setTaskStatus] = useState(task.status);
   const [diffData, setDiffData] = useState<DiffData | null>(null);
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
-  const abortRef = useRef<AbortController | null>(null);
-
-  // Load existing messages on mount
-  useEffect(() => {
-    let cancelled = false;
-    getTaskMessages(task.id).then((serverMessages) => {
-      if (cancelled) return;
-      setMessages(
-        serverMessages.map((m) => ({
-          id: m.id,
-          role: m.role.toLowerCase() as "user" | "assistant" | "system",
-          content: m.content,
-          createdAt: new Date(m.createdAt),
-        }))
-      );
-    });
-    return () => { cancelled = true; };
-  }, [task.id]);
-
-  // Load prompts on mount
-  useEffect(() => {
-    let cancelled = false;
-    getPrompts().then((data) => {
-      if (cancelled) return;
-      const mapped: PromptOption[] = data.map((p) => ({
-        id: p.id,
-        name: p.name,
-        content: p.content,
-        isDefault: p.isDefault,
-      }));
-      setPrompts(mapped);
-      const defaultPrompt = mapped.find((p) => p.isDefault);
-      if (defaultPrompt) {
-        setSelectedPromptId(defaultPrompt.id);
-      }
-    });
-    return () => { cancelled = true; };
-  }, []);
-
-  // Cleanup abort on unmount
-  useEffect(() => {
-    return () => { abortRef.current?.abort(); };
-  }, []);
+  const [prompt, setPrompt] = useState("");
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [activeWorktreePath, setActiveWorktreePath] = useState<string | null>(
+    latestExecution?.worktreePath ?? null
+  );
 
   // Auto-fetch diff when task is IN_REVIEW
   useEffect(() => {
@@ -136,121 +96,29 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     return () => { cancelled = true; };
   }, [task.id, taskStatus]);
 
-  const handleSend = useCallback(
-    async (content: string) => {
-      const userMsg: Message = {
-        id: `msg-${Date.now()}`,
-        role: "user",
-        content,
-        createdAt: new Date(),
-      };
-      setMessages((prev) => [...prev, userMsg]);
-      setIsLoading(true);
-
-      try {
-        const { sendTaskMessage } = await import("@/actions/agent-actions");
-        await sendTaskMessage(task.id, content);
-
-        const assistantMsgId = `assistant-${Date.now()}`;
-        const assistantMsg: Message = {
-          id: assistantMsgId,
-          role: "assistant",
-          content: "",
-          createdAt: new Date(),
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
-
-        const abortController = new AbortController();
-        abortRef.current = abortController;
-
-        const res = await fetch(`/api/tasks/${task.id}/stream`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: content }),
-          signal: abortController.signal,
-        });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({ error: "Execution failed" }));
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMsgId
-                ? { ...m, role: "system" as const, content: errData.error || "执行失败" }
-                : m
-            )
-          );
-          return;
-        }
-
-        const reader = res.body?.getReader();
-        if (!reader) return;
-
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-            try {
-              const event = JSON.parse(line.slice(6));
-              if (event.type === "log" || event.type === "result") {
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantMsgId
-                      ? { ...m, content: m.content + event.content }
-                      : m
-                  )
-                );
-              } else if (event.type === "tool") {
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantMsgId
-                      ? { ...m, content: m.content + (m.content ? "\n" : "") + event.content }
-                      : m
-                  )
-                );
-              } else if (event.type === "error") {
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantMsgId
-                      ? { ...m, content: m.content || event.content }
-                      : m
-                  )
-                );
-              } else if (event.type === "status_changed") {
-                setTaskStatus(event.status);
-                router.refresh();
-              }
-            } catch {
-              // Skip malformed JSON lines
-            }
-          }
-        }
-      } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `err-${Date.now()}`,
-            role: "system" as const,
-            content: "执行失败，请重试",
-            createdAt: new Date(),
-          },
-        ]);
-      } finally {
-        setIsLoading(false);
-        abortRef.current = null;
+  const handleExecute = useCallback(async () => {
+    if (!prompt.trim() || isExecuting) return;
+    setIsExecuting(true);
+    try {
+      const { worktreePath } = await startPtyExecution(task.id, prompt.trim());
+      if (worktreePath) {
+        setActiveWorktreePath(worktreePath);
       }
-    },
-    [task.id, router]
-  );
+      // Terminal auto-connects via WebSocket; status update fires onSessionEnd
+    } catch (err) {
+      // Show minimal error — terminal area will show nothing if PTY failed to start
+      console.error("[execute]", err);
+      setIsExecuting(false);
+    }
+  }, [task.id, prompt, isExecuting]);
+
+  const handleSessionEnd = useCallback((exitCode: number) => {
+    setIsExecuting(false);
+    if (exitCode === 0) {
+      setTaskStatus("IN_REVIEW");
+    }
+    router.refresh();
+  }, [router]);
 
   const handleMergeComplete = useCallback(() => {
     setTaskStatus("DONE");
@@ -259,7 +127,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
 
   return (
     <PanelGroup direction="horizontal" className="h-screen bg-background">
-      {/* Left panel: Chat — 35% default, 20% minimum per D-02 and D-03 */}
+      {/* Left panel: Terminal — 35% default, 20% minimum */}
       <Panel defaultSize={35} minSize={20} className="flex flex-col border-r border-border bg-sidebar">
         {/* Header: back + breadcrumb + status + branch */}
         <div className="border-b border-border px-4 py-3">
@@ -298,17 +166,49 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           </div>
         </div>
 
-        {/* Chat conversation */}
-        <TaskConversation messages={messages} />
+        {/* Terminal fills available space */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <TaskTerminal
+            taskId={task.id}
+            worktreePath={activeWorktreePath}
+            onSessionEnd={handleSessionEnd}
+          />
+        </div>
 
-        {/* Message input */}
-        <TaskMessageInput
-          onSend={handleSend}
-          isLoading={isLoading}
-          prompts={prompts}
-          selectedPromptId={selectedPromptId}
-          onPromptChange={setSelectedPromptId}
-        />
+        {/* Execute controls — bottom bar */}
+        <div className="flex shrink-0 flex-col gap-2 border-t border-border p-3">
+          <textarea
+            className="w-full resize-none rounded-md border border-border bg-muted px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-0 disabled:opacity-50"
+            rows={3}
+            placeholder={t("terminal.promptPlaceholder")}
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            disabled={isExecuting}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                handleExecute();
+              }
+            }}
+          />
+          <button
+            onClick={handleExecute}
+            disabled={isExecuting || !prompt.trim()}
+            className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {isExecuting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {t("terminal.executing")}
+              </>
+            ) : (
+              <>
+                <Terminal className="h-4 w-4" />
+                {t("terminal.execute")}
+              </>
+            )}
+          </button>
+        </div>
       </Panel>
 
       {/* Drag resize handle — 4px, bg-border at rest, bg-primary/20 on hover per UI-SPEC */}
