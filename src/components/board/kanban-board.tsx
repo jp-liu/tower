@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { TaskCardContextMenu } from "./task-card-context-menu";
 import {
   DndContext,
   DragOverlay,
@@ -23,6 +24,9 @@ interface KanbanBoardProps {
   onEditTask?: (task: Task) => void;
   onAddTask?: (status: TaskStatus) => void;
   onDeleteTask?: (taskId: string) => void;
+  onContextMenuStatusChange?: (taskId: string, status: TaskStatus) => void;
+  onContextMenuLaunch?: (taskId: string) => void;
+  workspaceId?: string;
 }
 
 export function KanbanBoard({
@@ -32,10 +36,18 @@ export function KanbanBoard({
   onEditTask,
   onAddTask,
   onDeleteTask,
+  onContextMenuStatusChange,
+  onContextMenuLaunch,
+  workspaceId,
 }: KanbanBoardProps) {
   // Local tasks state for optimistic drag updates
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    task: Task;
+    x: number;
+    y: number;
+  } | null>(null);
 
   // Sync with server data when props change
   useEffect(() => {
@@ -47,6 +59,10 @@ export function KanbanBoard({
       activationConstraint: { distance: 8 },
     })
   );
+
+  const handleContextMenu = useCallback((task: Task, x: number, y: number) => {
+    setContextMenu({ task, x, y });
+  }, []);
 
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
@@ -111,6 +127,7 @@ export function KanbanBoard({
             onEditTask={onEditTask}
             onAddTask={() => onAddTask?.(column.id)}
             onDeleteTask={onDeleteTask}
+            onContextMenu={handleContextMenu}
           />
         ))}
       </div>
@@ -122,6 +139,26 @@ export function KanbanBoard({
           </div>
         ) : null}
       </DragOverlay>
+
+      {contextMenu && (
+        <TaskCardContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          taskId={contextMenu.task.id}
+          currentStatus={contextMenu.task.status}
+          hasExecutions={((contextMenu.task as any)._count?.executions ?? 0) > 0}
+          workspaceId={workspaceId ?? ""}
+          onClose={() => setContextMenu(null)}
+          onStatusChange={(taskId, status) => {
+            onContextMenuStatusChange?.(taskId, status);
+            setContextMenu(null);
+          }}
+          onLaunch={(taskId) => {
+            onContextMenuLaunch?.(taskId);
+            setContextMenu(null);
+          }}
+        />
+      )}
     </DndContext>
   );
 }

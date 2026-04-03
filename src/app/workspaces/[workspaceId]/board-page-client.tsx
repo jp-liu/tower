@@ -9,6 +9,7 @@ import { CreateTaskDialog } from "@/components/board/create-task-dialog";
 import { RepoSidebar } from "@/components/repository/repo-sidebar";
 import { TaskDetailPanel } from "@/components/task/task-detail-panel";
 import { createTask, updateTaskStatus, updateTask, deleteTask } from "@/actions/task-actions";
+import { startPtyExecution } from "@/actions/agent-actions";
 import { ProjectTabs } from "@/components/board/project-tabs";
 import type { Task, TaskStatus, Priority } from "@prisma/client";
 
@@ -107,6 +108,20 @@ export function BoardPageClient({
     refreshData();
   }, [refreshData, selectedTask]);
 
+  const handleLaunchTask = useCallback(async (taskId: string) => {
+    try {
+      await startPtyExecution(taskId, "");
+    } catch {
+      // Ignore errors (e.g., already running) — navigation still proceeds
+    }
+    router.push(`/workspaces/${workspaceId}/tasks/${taskId}`);
+  }, [router, workspaceId]);
+
+  const handleContextMenuStatusChange = useCallback(async (taskId: string, status: TaskStatus) => {
+    await updateTaskStatus(taskId, status);
+    refreshData();
+  }, [refreshData]);
+
   const handleAddTaskToColumn = useCallback((status: TaskStatus) => {
     setCreateDefaultStatus(status);
     setEditingTask(null);
@@ -160,6 +175,9 @@ export function BoardPageClient({
             onEditTask={handleEditTask}
             onAddTask={handleAddTaskToColumn}
             onDeleteTask={handleDeleteTask}
+            workspaceId={workspaceId}
+            onContextMenuStatusChange={handleContextMenuStatusChange}
+            onContextMenuLaunch={handleLaunchTask}
           />
         </div>
 
