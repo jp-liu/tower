@@ -216,7 +216,7 @@ Plans:
   3. When Claude CLI exits successfully, the task status automatically transitions to IN_REVIEW; on failure the status stays unchanged
 **Plans**: 2 plans
 Plans:
-- [ ] 26-01-PLAN.md — Server action startPtyExecution + PtySession.setDataListener + ws-server onExit DB update (INT-01, INT-02, INT-03)
+- [x] 26-01-PLAN.md — Server action startPtyExecution + PtySession.setDataListener + ws-server onExit DB update (INT-01, INT-02, INT-03)
 - [ ] 26-02-PLAN.md — Replace left panel chat UI with TaskTerminal + Execute button; wire onSessionEnd (INT-01, INT-02, INT-03)
 **UI hint**: yes
 
@@ -269,6 +269,6 @@ Plans:
 | 23. Preview Panel | v0.6 | 3/3 | Complete | 2026-04-01 |
 | 24. PTY Backend & WebSocket Server | v0.7 | 2/2 | Complete    | 2026-04-02 |
 | 25. xterm.js Terminal Component | v0.7 | 2/2 | Complete    | 2026-04-03 |
-| 26. Workbench Integration | v0.7 | 0/TBD | Not started | - |
+| 26. Workbench Integration | v0.7 | 1/2 | In Progress|  |
 | 27. Task Card Context Menu | v0.7 | 0/TBD | Not started | - |
 | 28. v0.6 Bug Fixes | v0.7 | 0/TBD | Not started | - |

@@ -29,9 +29,9 @@ Requirements for v0.7 — 终端交互体验. Each maps to roadmap phases.
 
 ### 会话集成
 
-- [ ] **INT-01**: 点击"执行"时创建 PTY 会话并在终端组件显示
-- [ ] **INT-02**: Claude CLI 在 PTY 中运行（不用 stream-json，保留原始 TTY 输出）
-- [ ] **INT-03**: PTY 退出后更新任务状态（成功→IN_REVIEW，失败→保持）
+- [x] **INT-01**: 点击"执行"时创建 PTY 会话并在终端组件显示
+- [x] **INT-02**: Claude CLI 在 PTY 中运行（不用 stream-json，保留原始 TTY 输出）
+- [x] **INT-03**: PTY 退出后更新任务状态（成功→IN_REVIEW，失败→保持）
 
 ### 任务交互增强
 
@@ -84,9 +84,9 @@ Deferred to future release.
 | TERM-02 | Phase 25 | Complete |
 | TERM-03 | Phase 25 | Complete |
 | TERM-04 | Phase 25 | Complete |
-| INT-01 | Phase 26 | Pending |
-| INT-02 | Phase 26 | Pending |
-| INT-03 | Phase 26 | Pending |
+| INT-01 | Phase 26 | Complete |
+| INT-02 | Phase 26 | Complete |
+| INT-03 | Phase 26 | Complete |
 | TASK-01 | Phase 27 | Pending |
 | TASK-02 | Phase 27 | Pending |
 | TASK-03 | Phase 27 | Pending |

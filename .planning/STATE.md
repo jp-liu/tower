@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.7
 milestone_name: 终端交互体验
-status: verifying
-stopped_at: Completed 25-02-PLAN.md (Task 1); awaiting human-verify checkpoint (Task 2)
-last_updated: "2026-04-03T01:10:42.082Z"
+status: executing
+stopped_at: Completed 26-01-PLAN.md
+last_updated: "2026-04-03T01:21:58.466Z"
 last_activity: 2026-04-03
 progress:
   total_phases: 9
   completed_phases: 6
-  total_plans: 15
-  completed_plans: 15
+  total_plans: 17
+  completed_plans: 16
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 25 — xterm-terminal-component
+**Current focus:** Phase 26 — workbench-integration
 
 ## Current Position
 
-Phase: 26
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 26 (workbench-integration) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-04-03
 
 Progress: [░░░░░░░░░░] 0%
@@ -81,6 +81,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 24-pty-backend-websocket-server P02 | 182 | 2 tasks | 2 files |
 | Phase 25-xterm-terminal-component P01 | 180 | 2 tasks | 3 files |
 | Phase 25-xterm-terminal-component P02 | 153 | 1 tasks | 1 files |
+| Phase 26-workbench-integration P01 | 300 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -186,6 +187,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 25-01]: @xterm/addon-webgl resolved to 0.19.0 (latest at time of install) — plan specified 'latest'
 - [Phase 25]: Single-component TaskTerminal: hooks called unconditionally, conditional return after all hook calls — avoids prop-drilling typed t() function
 - [Phase 25]: TaskTerminal JSDoc documents next/dynamic({ ssr: false }) requirement inline — consumers (Phase 26) must wrap with dynamic import
+- [Phase 26-01]: No-op onData at PTY creation in startPtyExecution; ws-server wires real broadcaster via setDataListener on WS connect
+- [Phase 26-01]: setDataListener on PtySession replaces mutable _onData field — supports pre-created PTY sessions pattern
 
 ### Pending Todos
 
@@ -199,6 +202,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-02T13:24:05.589Z
-Stopped at: Completed 25-02-PLAN.md (Task 1); awaiting human-verify checkpoint (Task 2)
+Last session: 2026-04-03T01:21:58.463Z
+Stopped at: Completed 26-01-PLAN.md
 Resume file: None
