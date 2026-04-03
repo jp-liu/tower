@@ -90,7 +90,7 @@ See: [milestones/v0.6-ROADMAP.md](./milestones/v0.6-ROADMAP.md) for full details
 - [x] **Phase 24: PTY Backend & WebSocket Server** - node-pty 会话注册表 + 独立 WebSocket server (port 3001) 双向通信 + 安全防护 (completed 2026-04-02)
 - [x] **Phase 25: xterm.js Terminal Component** - 浏览器终端组件（ANSI 渲染、键盘输入、resize 同步、主题跟随） (completed 2026-04-02)
 - [x] **Phase 26: Workbench Integration** - 工作台左侧面板替换 SSE 聊天气泡为终端组件 + 执行生命周期对接 (completed 2026-04-03)
-- [ ] **Phase 27: Task Card Context Menu** - Kanban 卡片右键菜单（更改状态、启动任务、前往详情页）
+- [x] **Phase 27: Task Card Context Menu** - Kanban 卡片右键菜单（更改状态、启动任务、前往详情页） (completed 2026-04-03)
 - [ ] **Phase 28: v0.6 Bug Fixes** - Monaco 加载稳定性修复 + Diff 显示条件修复
 
 ## Phase Details
@@ -231,7 +231,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 27-01-PLAN.md — TaskCardContextMenu component + i18n keys (TASK-01, TASK-02, TASK-03)
-- [ ] 27-02-PLAN.md — Wire context menu into board stack + execution disable guard (TASK-01, TASK-02, TASK-03)
+- [x] 27-02-PLAN.md — Wire context menu into board stack + execution disable guard (TASK-01, TASK-02, TASK-03)
 **UI hint**: yes
 
 ### Phase 28: v0.6 Bug Fixes
@@ -273,5 +273,5 @@ Plans:
 | 24. PTY Backend & WebSocket Server | v0.7 | 2/2 | Complete    | 2026-04-02 |
 | 25. xterm.js Terminal Component | v0.7 | 2/2 | Complete    | 2026-04-03 |
 | 26. Workbench Integration | v0.7 | 2/2 | Complete    | 2026-04-03 |
-| 27. Task Card Context Menu | v0.7 | 1/2 | In Progress|  |
+| 27. Task Card Context Menu | v0.7 | 2/2 | Complete   | 2026-04-03 |
 | 28. v0.6 Bug Fixes | v0.7 | 0/TBD | Not started | - |

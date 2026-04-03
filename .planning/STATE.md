@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.7
 milestone_name: 终端交互体验
-status: executing
-stopped_at: Completed 27-01-PLAN.md
-last_updated: "2026-04-03T01:44:05.310Z"
+status: verifying
+stopped_at: Completed 27-02-PLAN.md
+last_updated: "2026-04-03T01:49:25.311Z"
 last_activity: 2026-04-03
 progress:
   total_phases: 9
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 19
-  completed_plans: 18
+  completed_plans: 19
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 
 Phase: 27 (task-card-context-menu) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-03
 
 Progress: [░░░░░░░░░░] 0%
@@ -84,6 +84,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 26-workbench-integration P01 | 300 | 2 tasks | 3 files |
 | Phase 26 P02 | 180 | 2 tasks | 2 files |
 | Phase 27-task-card-context-menu P01 | 300 | 2 tasks | 2 files |
+| Phase 27-task-card-context-menu P02 | 180 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -194,6 +195,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 26]: TaskTerminal loaded via next/dynamic({ ssr: false }) per Phase 25 JSDoc requirement — xterm.js accesses window at import time
 - [Phase 26]: handleSessionEnd sets IN_REVIEW on exitCode 0 + calls router.refresh() for immediate UI + data sync
 - [Phase 27]: Followed FileTreeContextMenu portal pattern exactly for TaskCardContextMenu — useRef + mousedown/keydown useEffect + createPortal to document.body
+- [Phase 27]: startPtyExecution called with empty string prompt from context menu — task title/description already in DB record; user can refine in task detail page
+- [Phase 27]: hasExecutions derived via _count.executions from Prisma include — consistent with (task as any) pattern for extended fields
 
 ### Pending Todos
 
@@ -207,6 +210,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-03T01:44:05.306Z
-Stopped at: Completed 27-01-PLAN.md
+Last session: 2026-04-03T01:49:19.948Z
+Stopped at: Completed 27-02-PLAN.md
 Resume file: None
