@@ -8,6 +8,8 @@ export class PtySession {
   /** Ring buffer: last 50 KB of PTY output for reconnect replay */
   private _buffer = "";
   private static readonly BUFFER_MAX = 50 * 1024; // 50 KB
+  /** Mutable data listener — replaced by ws-server on connect/disconnect */
+  private _onData: (data: string) => void;
 
   constructor(
     taskId: string,
@@ -18,6 +20,7 @@ export class PtySession {
     onExit: (exitCode: number, signal?: number) => void
   ) {
     this.taskId = taskId;
+    this._onData = onData;
     this._pty = pty.spawn(command, args, {
       name: "xterm-color",
       cols: 80,
@@ -34,7 +37,7 @@ export class PtySession {
           this._buffer.length - PtySession.BUFFER_MAX
         );
       }
-      onData(data);
+      this._onData(data);
     });
 
     // D-07: onExit sets killed=true but does NOT call pty.kill()
@@ -42,6 +45,15 @@ export class PtySession {
       this.killed = true;
       onExit(exitCode, signal);
     });
+  }
+
+  /**
+   * Replace the live data listener — called by ws-server on connect/disconnect.
+   * Allows startPtyExecution to pre-create the session with a no-op onData,
+   * then the WebSocket handler wires in the real broadcaster on first connect.
+   */
+  setDataListener(fn: (data: string) => void): void {
+    this._onData = fn;
   }
 
   write(data: string): void {
