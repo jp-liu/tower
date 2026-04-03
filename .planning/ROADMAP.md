@@ -214,7 +214,10 @@ Plans:
   1. Clicking "Execute" on a task opens a PTY session and the workbench left panel shows the live terminal output
   2. Claude CLI output appears with full ANSI formatting — no JSON parsing, no chat bubbles
   3. When Claude CLI exits successfully, the task status automatically transitions to IN_REVIEW; on failure the status stays unchanged
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 26-01-PLAN.md — Server action startPtyExecution + PtySession.setDataListener + ws-server onExit DB update (INT-01, INT-02, INT-03)
+- [ ] 26-02-PLAN.md — Replace left panel chat UI with TaskTerminal + Execute button; wire onSessionEnd (INT-01, INT-02, INT-03)
 **UI hint**: yes
 
 ### Phase 27: Task Card Context Menu
