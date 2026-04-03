@@ -268,6 +268,7 @@ export function CodeEditor({
               );
             }}
             options={{
+              automaticLayout: true,
               minimap: { enabled: false },
               fontSize: 13,
               fontFamily: '"JetBrains Mono", "Geist Mono", monospace',
