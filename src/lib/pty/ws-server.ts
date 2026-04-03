@@ -62,15 +62,27 @@ export async function startWsServer(): Promise<void> {
   });
 }
 
+/** Wire a PTY session to a WebSocket client — shared by initial connect + poll-wait paths */
+function wireSession(session: import("./pty-session").PtySession, ws: WebSocket, taskId: string): void {
+  if (session.disconnectTimer) {
+    clearTimeout(session.disconnectTimer);
+    session.disconnectTimer = null;
+  }
+  session.setDataListener(makeBatchedSender(ws));
+  sessionClients.set(taskId, ws);
+  const buffer = session.getBuffer();
+  if (buffer && ws.readyState === WebSocket.OPEN) {
+    ws.send(buffer);
+  }
+  session.addExitListener((exitCode) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "session_end", exitCode }));
+    }
+  });
+}
+
 /**
  * Handle a new WebSocket connection.
- *
- * - D-10: Parses taskId from /terminal?taskId=xxx
- * - D-12: Forwards WS messages to the PTY (input)
- * - D-13: Detects resize messages ({ type:"resize", cols, rows })
- * - D-14: 30s keepalive — WS close does NOT kill the PTY
- * - D-15: 8ms output batching + bufferedAmount guard
- * - WS-03: Ring buffer replay on reconnect
  */
 function handleConnection(ws: WebSocket, req: IncomingMessage): void {
   const url = new URL(req.url ?? "/", "http://localhost:3001");
@@ -88,33 +100,29 @@ function handleConnection(ws: WebSocket, req: IncomingMessage): void {
   let session = getSession(taskId);
 
   if (session) {
-    // Cancel any pending destroy timer so the PTY stays alive
-    if (session.disconnectTimer) {
-      clearTimeout(session.disconnectTimer);
-      session.disconnectTimer = null;
-    }
-    // Wire the batched sender so new PTY data flows to this WS client
-    session.setDataListener(makeBatchedSender(ws));
-    sessionClients.set(taskId, ws);
-    // Replay buffered output so the client sees what it missed
-    const buffer = session.getBuffer();
-    if (buffer && ws.readyState === WebSocket.OPEN) {
-      ws.send(buffer);
-    }
-    // Send session_end to browser when PTY exits
-    session.addExitListener((exitCode) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "session_end", exitCode }));
-      }
-    });
-    console.error(
-      `[ws-server] Reconnected to existing session for task ${taskId}`
-    );
+    wireSession(session, ws, taskId);
+    console.error(`[ws-server] Attached to existing session for task ${taskId}`);
   } else {
-    // No pre-created session — reject. Sessions must be created via startPtyExecution.
-    console.error(`[ws-server] No session found for task ${taskId} — rejecting`);
-    ws.close(1008, "No PTY session for this task. Start execution first.");
-    return;
+    // No session yet — wait for startPtyExecution to create it (polls every 500ms, max 30s)
+    console.error(`[ws-server] No session for task ${taskId} — waiting for creation...`);
+    let waited = 0;
+    const POLL_MS = 500;
+    const MAX_WAIT_MS = 30_000;
+    const pollTimer = setInterval(() => {
+      waited += POLL_MS;
+      session = getSession(taskId);
+      if (session) {
+        clearInterval(pollTimer);
+        wireSession(session, ws, taskId);
+        console.error(`[ws-server] Session appeared for task ${taskId} after ${waited}ms`);
+      } else if (waited >= MAX_WAIT_MS || ws.readyState !== WebSocket.OPEN) {
+        clearInterval(pollTimer);
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close(1008, "No PTY session created within timeout.");
+        }
+      }
+    }, POLL_MS);
+    // Still set up message/close handlers below — they'll work once session is wired
   }
 
   // D-12 / D-13: WS → PTY: forward input; detect resize JSON
