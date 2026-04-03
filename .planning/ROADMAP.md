@@ -273,5 +273,5 @@ Plans:
 | 24. PTY Backend & WebSocket Server | v0.7 | 2/2 | Complete    | 2026-04-02 |
 | 25. xterm.js Terminal Component | v0.7 | 2/2 | Complete    | 2026-04-03 |
 | 26. Workbench Integration | v0.7 | 2/2 | Complete    | 2026-04-03 |
-| 27. Task Card Context Menu | v0.7 | 2/2 | Complete   | 2026-04-03 |
+| 27. Task Card Context Menu | v0.7 | 2/2 | Complete    | 2026-04-03 |
 | 28. v0.6 Bug Fixes | v0.7 | 0/TBD | Not started | - |
