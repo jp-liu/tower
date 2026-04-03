@@ -12,6 +12,9 @@ const ALLOWED_ORIGINS = new Set([
 // D-14: 30-second keepalive window before PTY is destroyed on WS disconnect
 const DISCONNECT_TIMEOUT_MS = 30_000;
 
+// Track active WS client per task for sending session_end events
+const sessionClients = new Map<string, WebSocket>();
+
 // D-15: Batch PTY output with 8ms window to avoid flooding the WS send buffer
 const BATCH_INTERVAL_MS = 8;
 
@@ -92,11 +95,18 @@ function handleConnection(ws: WebSocket, req: IncomingMessage): void {
     }
     // Wire the batched sender so new PTY data flows to this WS client
     session.setDataListener(makeBatchedSender(ws));
+    sessionClients.set(taskId, ws);
     // Replay buffered output so the client sees what it missed
     const buffer = session.getBuffer();
     if (buffer && ws.readyState === WebSocket.OPEN) {
       ws.send(buffer);
     }
+    // Send session_end to browser when PTY exits
+    session.addExitListener((exitCode) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "session_end", exitCode }));
+      }
+    });
     console.error(
       `[ws-server] Reconnected to existing session for task ${taskId}`
     );
@@ -117,6 +127,13 @@ function handleConnection(ws: WebSocket, req: IncomingMessage): void {
     );
     // Wire the real broadcaster immediately after creating the session
     session.setDataListener(makeBatchedSender(ws));
+    sessionClients.set(taskId, ws);
+    // Send session_end to browser when PTY exits
+    session.addExitListener((exitCode) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "session_end", exitCode }));
+      }
+    });
     console.error(`[ws-server] Created new PTY session for task ${taskId}`);
   }
 

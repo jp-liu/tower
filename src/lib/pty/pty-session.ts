@@ -10,6 +10,8 @@ export class PtySession {
   private static readonly BUFFER_MAX = 50 * 1024; // 50 KB
   /** Mutable data listener — replaced by ws-server on connect/disconnect */
   private _onData: (data: string) => void;
+  /** Additional exit listeners — ws-server hooks in to send session_end to browser */
+  private _exitListeners: Array<(exitCode: number) => void> = [];
 
   constructor(
     taskId: string,
@@ -44,6 +46,10 @@ export class PtySession {
     this._pty.onExit(({ exitCode, signal }) => {
       this.killed = true;
       onExit(exitCode, signal);
+      // Notify all registered exit listeners (ws-server uses this)
+      for (const listener of this._exitListeners) {
+        listener(exitCode);
+      }
     });
   }
 
@@ -54,6 +60,11 @@ export class PtySession {
    */
   setDataListener(fn: (data: string) => void): void {
     this._onData = fn;
+  }
+
+  /** Register a callback for PTY exit — ws-server uses this to send session_end */
+  addExitListener(fn: (exitCode: number) => void): void {
+    this._exitListeners.push(fn);
   }
 
   write(data: string): void {

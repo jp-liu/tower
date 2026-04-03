@@ -40,7 +40,7 @@ type WsStatus = "connecting" | "connected" | "disconnected";
 export function TaskTerminal({
   taskId,
   worktreePath,
-  onSessionEnd: _onSessionEnd,
+  onSessionEnd,
 }: TaskTerminalProps) {
   const { t } = useI18n();
   const { resolvedTheme } = useTheme();
@@ -49,6 +49,9 @@ export function TaskTerminal({
   const terminalRef = useRef<Terminal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+
+  const onSessionEndRef = useRef(onSessionEnd);
+  onSessionEndRef.current = onSessionEnd;
 
   const [wsStatus, setWsStatus] = useState<WsStatus>("connecting");
   const [connectedVisible, setConnectedVisible] = useState(false);
@@ -112,6 +115,20 @@ export function TaskTerminal({
           rows: terminal.rows,
         })
       );
+
+      // Intercept session_end messages before AttachAddon processes them
+      ws.addEventListener("message", (event) => {
+        if (typeof event.data === "string") {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === "session_end" && typeof msg.exitCode === "number") {
+              onSessionEndRef.current?.(msg.exitCode);
+            }
+          } catch {
+            // Not JSON — let AttachAddon handle it
+          }
+        }
+      });
 
       // 8. AttachAddon handles bidirectional piping:
       //    ws.onmessage → terminal.write (TERM-01: ANSI rendering)
