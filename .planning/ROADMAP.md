@@ -230,7 +230,7 @@ Plans:
   3. "Go to detail page" in the context menu navigates to `/workspaces/[id]/tasks/[taskId]`
 **Plans**: 2 plans
 Plans:
-- [ ] 27-01-PLAN.md — TaskCardContextMenu component + i18n keys (TASK-01, TASK-02, TASK-03)
+- [x] 27-01-PLAN.md — TaskCardContextMenu component + i18n keys (TASK-01, TASK-02, TASK-03)
 - [ ] 27-02-PLAN.md — Wire context menu into board stack + execution disable guard (TASK-01, TASK-02, TASK-03)
 **UI hint**: yes
 
@@ -273,5 +273,5 @@ Plans:
 | 24. PTY Backend & WebSocket Server | v0.7 | 2/2 | Complete    | 2026-04-02 |
 | 25. xterm.js Terminal Component | v0.7 | 2/2 | Complete    | 2026-04-03 |
 | 26. Workbench Integration | v0.7 | 2/2 | Complete    | 2026-04-03 |
-| 27. Task Card Context Menu | v0.7 | 0/2 | Not started | - |
+| 27. Task Card Context Menu | v0.7 | 1/2 | In Progress|  |
 | 28. v0.6 Bug Fixes | v0.7 | 0/TBD | Not started | - |

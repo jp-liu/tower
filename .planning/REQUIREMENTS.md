@@ -35,9 +35,9 @@ Requirements for v0.7 — 终端交互体验. Each maps to roadmap phases.
 
 ### 任务交互增强
 
-- [ ] **TASK-01**: 任务 Kanban 卡片支持右键菜单（更改状态、启动任务、前往详情页）
-- [ ] **TASK-02**: 右键"启动任务"直接运行 Claude CLI（仅未执行过的任务可点击，已执行过的置灰）
-- [ ] **TASK-03**: 右键"前往详情页"跳转到任务工作台页面
+- [x] **TASK-01**: 任务 Kanban 卡片支持右键菜单（更改状态、启动任务、前往详情页）
+- [x] **TASK-02**: 右键"启动任务"直接运行 Claude CLI（仅未执行过的任务可点击，已执行过的置灰）
+- [x] **TASK-03**: 右键"前往详情页"跳转到任务工作台页面
 
 ### Bug 修复
 
@@ -87,9 +87,9 @@ Deferred to future release.
 | INT-01 | Phase 26 | Complete |
 | INT-02 | Phase 26 | Complete |
 | INT-03 | Phase 26 | Complete |
-| TASK-01 | Phase 27 | Pending |
-| TASK-02 | Phase 27 | Pending |
-| TASK-03 | Phase 27 | Pending |
+| TASK-01 | Phase 27 | Complete |
+| TASK-02 | Phase 27 | Complete |
+| TASK-03 | Phase 27 | Complete |
 | FIX-01 | Phase 28 | Pending |
 | FIX-02 | Phase 28 | Pending |
 

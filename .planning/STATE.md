@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.7
 milestone_name: 终端交互体验
-status: verifying
-stopped_at: "Completed 26-02-PLAN.md (awaiting checkpoint:human-verify Task 3)"
-last_updated: "2026-04-03T01:35:52.657Z"
+status: executing
+stopped_at: Completed 27-01-PLAN.md
+last_updated: "2026-04-03T01:44:05.310Z"
 last_activity: 2026-04-03
 progress:
   total_phases: 9
   completed_phases: 7
-  total_plans: 17
-  completed_plans: 17
+  total_plans: 19
+  completed_plans: 18
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 26 — workbench-integration
+**Current focus:** Phase 27 — task-card-context-menu
 
 ## Current Position
 
-Phase: 27
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 27 (task-card-context-menu) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-04-03
 
 Progress: [░░░░░░░░░░] 0%
@@ -83,6 +83,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 25-xterm-terminal-component P02 | 153 | 1 tasks | 1 files |
 | Phase 26-workbench-integration P01 | 300 | 2 tasks | 3 files |
 | Phase 26 P02 | 180 | 2 tasks | 2 files |
+| Phase 27-task-card-context-menu P01 | 300 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -192,6 +193,7 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 26-01]: setDataListener on PtySession replaces mutable _onData field — supports pre-created PTY sessions pattern
 - [Phase 26]: TaskTerminal loaded via next/dynamic({ ssr: false }) per Phase 25 JSDoc requirement — xterm.js accesses window at import time
 - [Phase 26]: handleSessionEnd sets IN_REVIEW on exitCode 0 + calls router.refresh() for immediate UI + data sync
+- [Phase 27]: Followed FileTreeContextMenu portal pattern exactly for TaskCardContextMenu — useRef + mousedown/keydown useEffect + createPortal to document.body
 
 ### Pending Todos
 
@@ -205,6 +207,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-03T01:25:51.421Z
-Stopped at: Completed 26-02-PLAN.md (awaiting checkpoint:human-verify Task 3)
+Last session: 2026-04-03T01:44:05.306Z
+Stopped at: Completed 27-01-PLAN.md
 Resume file: None
