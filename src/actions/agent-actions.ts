@@ -101,13 +101,11 @@ export async function startPtyExecution(
     throw new Error("Project has no local path configured");
   }
 
-  // 2. Check for existing RUNNING execution (409 guard)
-  const runningExecution = await db.taskExecution.findFirst({
+  // 2. Clean up stale RUNNING executions (from crashed/killed processes)
+  await db.taskExecution.updateMany({
     where: { taskId, status: "RUNNING" },
+    data: { status: "FAILED", endedAt: new Date() },
   });
-  if (runningExecution) {
-    throw new Error("Task already has a running execution");
-  }
 
   // 3. Send-back: if task is IN_REVIEW, transition back to IN_PROGRESS
   if (task.status === "IN_REVIEW") {
