@@ -27,11 +27,5 @@ export function resolveAssetPath(
   return { resolved, error: null };
 }
 
-export function localPathToApiUrl(src: string): string {
-  // Match data/assets/{projectId}/{filename} or /data/assets/{projectId}/{filename}
-  const match = src.match(/(?:^|\/)data\/assets\/([^/]+)\/([^/]+)$/);
-  if (match) {
-    return `/api/files/assets/${match[1]}/${match[2]}`;
-  }
-  return src;
-}
+// Re-export from browser-safe module for backward compatibility
+export { localPathToApiUrl } from "./file-serve-client";

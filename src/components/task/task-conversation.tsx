@@ -5,7 +5,7 @@ import { Info, User, Bot } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { localPathToApiUrl } from "@/lib/file-serve";
+import { localPathToApiUrl } from "@/lib/file-serve-client";
 
 export interface Message {
   id: string;

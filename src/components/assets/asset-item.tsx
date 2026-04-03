@@ -1,7 +1,7 @@
 "use client";
 
 import { FileText, Download, Trash2 } from "lucide-react";
-import { localPathToApiUrl } from "@/lib/file-serve";
+import { localPathToApiUrl } from "@/lib/file-serve-client";
 import { useI18n } from "@/lib/i18n";
 
 export interface AssetItemType {
