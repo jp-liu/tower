@@ -1,7 +1,14 @@
 import { PtySession } from "./pty-session";
 
-// D-04: Module-level singleton — persists across requests in same Node.js process
-const sessions = new Map<string, PtySession>();
+// D-04: globalThis singleton — survives HMR/module re-evaluation in Next.js dev mode.
+// Without this, ws-server.ts (loaded once via instrumentation) and agent-actions.ts
+// (re-bundled on HMR) would get different Map instances, causing sessions to be invisible
+// to the WS server after creation.
+const g = globalThis as typeof globalThis & { __ptySessions?: Map<string, PtySession> };
+if (!g.__ptySessions) {
+  g.__ptySessions = new Map<string, PtySession>();
+}
+const sessions = g.__ptySessions;
 
 export function createSession(
   taskId: string,

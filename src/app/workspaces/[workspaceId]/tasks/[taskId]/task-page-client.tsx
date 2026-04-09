@@ -70,8 +70,9 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [isExecuting, setIsExecuting] = useState(false);
+  // Only show live terminal if execution is actively RUNNING
   const [activeWorktreePath, setActiveWorktreePath] = useState<string | null>(
-    latestExecution?.worktreePath ?? null
+    latestExecution?.status === "RUNNING" ? (latestExecution?.worktreePath ?? null) : null
   );
 
   // Auto-fetch diff when task is IN_REVIEW
@@ -110,6 +111,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
 
   const handleSessionEnd = useCallback((exitCode: number) => {
     setIsExecuting(false);
+    setActiveWorktreePath(null); // Hide terminal, show re-launch button
     if (exitCode === 0) {
       setTaskStatus("IN_REVIEW");
     }
