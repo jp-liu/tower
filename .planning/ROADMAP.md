@@ -101,7 +101,7 @@ See: [milestones/v0.7-ROADMAP.md](./milestones/v0.7-ROADMAP.md) for full details
 
 **Milestone Goal:** 清理废弃 adapter 架构，建立 CLI Profile 配置表，实现龙虾（Paperclip/OpenClaw）外部调度的完整闭环（派活 → 查进度 → 追加指令 → 完成通知）。
 
-- [ ] **Phase 29: Adapter Dead Code Removal** - 删除废弃 SSE/adapter 文件，迁移有用模块到 lib/ 目录，修复路由引用，通过 tsc 检查
+- [x] **Phase 29: Adapter Dead Code Removal** - 删除废弃 SSE/adapter 文件，迁移有用模块到 lib/ 目录，修复路由引用，通过 tsc 检查 (completed 2026-04-10)
 - [ ] **Phase 30: Schema Foundation** - CliProfile 数据模型 + TaskExecution.callbackUrl 字段 + Prisma 迁移 + 默认行种子
 - [ ] **Phase 31: PTY Primitives & Env Injection** - startPtyExecution/resumePtyExecution 读 CliProfile 构建参数 + envOverrides 传参 + idle 检测
 - [ ] **Phase 32: Agent Actions & Feishu Wiring** - notify-agi.sh 更新（任务 ID 检查 + 结构化模板）+ Stop hook 挂接 + callbackUrl 注入
@@ -272,7 +272,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 29-01-PLAN.md — Relocate cli-test.ts + preview-process.ts, update consumer imports (CLEAN-02, CLEAN-03)
-- [ ] 29-02-PLAN.md — Delete adapters/ directory + deprecated execute route, verify tsc (CLEAN-01, CLEAN-04, CLEAN-05)
+- [x] 29-02-PLAN.md — Delete adapters/ directory + deprecated execute route, verify tsc (CLEAN-01, CLEAN-04, CLEAN-05)
 
 ### Phase 30: Schema Foundation
 **Goal**: The database has a `CliProfile` table with a seeded default row and `TaskExecution` has a `callbackUrl` field; the Prisma client is regenerated and ready for application code
@@ -373,7 +373,7 @@ Plans:
 | 26. Workbench Integration | v0.7 | 2/2 | Complete | 2026-04-03 |
 | 27. Task Card Context Menu | v0.7 | 2/2 | Complete | 2026-04-03 |
 | 28. v0.6 Bug Fixes | v0.7 | 0/TBD | Complete | 2026-04-10 |
-| 29. Adapter Dead Code Removal | v0.9 | 1/2 | In Progress|  |
+| 29. Adapter Dead Code Removal | v0.9 | 2/2 | Complete   | 2026-04-10 |
 | 30. Schema Foundation | v0.9 | 0/TBD | Not started | - |
 | 31. PTY Primitives & Env Injection | v0.9 | 0/TBD | Not started | - |
 | 32. Agent Actions & Feishu Wiring | v0.9 | 0/TBD | Not started | - |

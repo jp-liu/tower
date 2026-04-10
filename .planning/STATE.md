@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v0.9
 milestone_name: 架构清理 + 外部调度闭环
-status: executing
-stopped_at: Completed 29-01-PLAN.md
-last_updated: "2026-04-10T11:56:14.128Z"
+status: verifying
+stopped_at: Completed 29-02-PLAN.md
+last_updated: "2026-04-10T11:59:52.763Z"
 last_activity: 2026-04-10
 progress:
   total_phases: 9
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 
 Phase: 29 (adapter-dead-code-removal) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-10
 
 Progress: [░░░░░░░░░░] 0%
@@ -86,6 +86,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 29 P01 | 185 | 2 tasks | 6 files |
+| Phase 29 P02 | 127 | 2 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -208,6 +209,7 @@ Progress: [░░░░░░░░░░] 0%
 - [v0.9 Roadmap]: callbackUrl and AI_MANAGER_TASK_ID grouped together in Phase 31 — both are env injection concerns, same code path
 - [Phase 29]: cli-test.ts combines types, process-utils helpers, parse functions, and testEnvironment into one self-contained file — zero adapters/ imports
 - [Phase 29]: route.ts GET handler hardcodes adapters: ["claude_local"] — registry concept removed, only one CLI exists
+- [Phase 29]: Pre-existing type errors in agent-config-actions.ts and pty-session.test.ts are unrelated to adapter removal — not fixed per CLEAN-05 scope rule
 
 ### Pending Todos
 
@@ -222,6 +224,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-10T11:56:14.124Z
-Stopped at: Completed 29-01-PLAN.md
+Last session: 2026-04-10T11:59:52.760Z
+Stopped at: Completed 29-02-PLAN.md
 Resume file: None

@@ -9,11 +9,11 @@ Requirements for milestone v0.9: 架构清理 + 外部调度闭环.
 
 ### 架构清理 (CLEAN)
 
-- [ ] **CLEAN-01**: Adapter dead code removed — `execute.ts`, `parse.ts`, `process-utils.ts`, `registry.ts`, `types.ts` deleted
+- [x] **CLEAN-01**: Adapter dead code removed — `execute.ts`, `parse.ts`, `process-utils.ts`, `registry.ts`, `types.ts` deleted
 - [x] **CLEAN-02**: CLI verification module (`test.ts`) relocated to `src/lib/cli-test.ts` with `/api/adapters/test` route updated
 - [x] **CLEAN-03**: Preview process manager relocated to `src/lib/preview-process.ts`
-- [ ] **CLEAN-04**: 废弃路由 `/api/tasks/[taskId]/execute` 删除
-- [ ] **CLEAN-05**: `tsc --noEmit` 通过，无新增类型错误
+- [x] **CLEAN-04**: 废弃路由 `/api/tasks/[taskId]/execute` 删除
+- [x] **CLEAN-05**: `tsc --noEmit` 通过，无新增类型错误
 
 ### CLI Profile (CLIP)
 
@@ -66,11 +66,11 @@ Requirements for milestone v0.9: 架构清理 + 外部调度闭环.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CLEAN-01 | Phase 29 | Pending |
+| CLEAN-01 | Phase 29 | Complete |
 | CLEAN-02 | Phase 29 | Complete |
 | CLEAN-03 | Phase 29 | Complete |
-| CLEAN-04 | Phase 29 | Pending |
-| CLEAN-05 | Phase 29 | Pending |
+| CLEAN-04 | Phase 29 | Complete |
+| CLEAN-05 | Phase 29 | Complete |
 | DATA-01 | Phase 30 | Pending |
 | DATA-02 | Phase 30 | Pending |
 | CLIP-01 | Phase 30 | Pending |
