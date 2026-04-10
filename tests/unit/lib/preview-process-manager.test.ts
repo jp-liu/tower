@@ -6,7 +6,7 @@ import {
   registerPreviewProcess,
   killPreviewProcess,
   isPreviewRunning,
-} from "@/lib/adapters/preview-process-manager";
+} from "@/lib/preview-process";
 
 import type { ChildProcess } from "node:child_process";
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { I18nProvider } from "@/lib/i18n";
-import type { TestResult } from "@/lib/adapters/types";
+import type { TestResult } from "@/lib/cli-test";
 // Component to be created in Plan 02
 import { CLIAdapterTester } from "@/components/settings/cli-adapter-tester";
 

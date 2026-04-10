@@ -8,7 +8,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 // Mock preview-process-manager
-vi.mock("@/lib/adapters/preview-process-manager", () => ({
+vi.mock("@/lib/preview-process", () => ({
   registerPreviewProcess: vi.fn(),
   killPreviewProcess: vi.fn(),
   isPreviewRunning: vi.fn(),
@@ -29,7 +29,7 @@ import {
   registerPreviewProcess,
   killPreviewProcess,
   isPreviewRunning,
-} from "@/lib/adapters/preview-process-manager";
+} from "@/lib/preview-process";
 import { readConfigValue } from "@/lib/config-reader";
 import { startPreview, stopPreview, openInTerminal } from "@/actions/preview-actions";
 
