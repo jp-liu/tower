@@ -73,6 +73,28 @@ export async function updateTask(
 }
 
 export async function deleteTask(taskId: string) {
+  // Clean up worktree + PTY session before deleting DB record
+  const task = await db.task.findUnique({
+    where: { id: taskId },
+    include: { project: true },
+  });
+
+  if (task?.project?.localPath) {
+    try {
+      await removeWorktree(task.project.localPath, taskId);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+
+  // Kill any running PTY session
+  try {
+    const { destroySession } = await import("@/lib/pty/session-store");
+    destroySession(taskId);
+  } catch {
+    // best-effort
+  }
+
   await db.task.delete({ where: { id: taskId } });
   revalidatePath("/workspaces");
 }

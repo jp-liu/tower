@@ -11,6 +11,13 @@ function expandHome(p: string): string {
   return p;
 }
 
+/** Get the currently checked-out branch name */
+function readCurrentBranch(resolved: string): string {
+  return execSync("git rev-parse --abbrev-ref HEAD", {
+    cwd: resolved, encoding: "utf-8", timeout: 5000,
+  }).trim();
+}
+
 /**
  * Read local + remote branches from the cached git refs.
  * No network call — returns instantly from the local .git directory.
@@ -43,6 +50,16 @@ function readBranches(resolved: string): string[] {
  * Get branches instantly from cache, kick off a background fetch.
  * Call again after a few seconds to get updated list.
  */
+export async function getCurrentBranch(localPath: string): Promise<string | null> {
+  if (!localPath?.trim()) return null;
+  const resolved = path.resolve(expandHome(localPath));
+  try {
+    return readCurrentBranch(resolved);
+  } catch {
+    return null;
+  }
+}
+
 export async function getProjectBranches(localPath: string): Promise<string[]> {
   if (!localPath?.trim()) return [];
   const resolved = path.resolve(expandHome(localPath));

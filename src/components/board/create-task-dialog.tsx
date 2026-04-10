@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { GitBranch, Check } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
-import { getProjectBranches, fetchRemoteBranches } from "@/actions/git-actions";
+import { getProjectBranches, fetchRemoteBranches, getCurrentBranch } from "@/actions/git-actions";
 import type { Task, Priority, TaskStatus } from "@prisma/client";
 
 interface LabelOption {
@@ -121,10 +121,14 @@ export function CreateTaskDialog({
   useEffect(() => {
     if (!open || !isGitProject || editTask) return;
     setBranchesLoading(true);
-    // 1. Load cached branches immediately (no network)
-    getProjectBranches(projectLocalPath!).then((list) => {
+    // 1. Load cached branches + current branch immediately (no network)
+    Promise.all([
+      getProjectBranches(projectLocalPath!),
+      getCurrentBranch(projectLocalPath!),
+    ]).then(([list, current]) => {
       setBranches(list);
-      setSelectedBranch(list[0] ?? "");
+      // Default to current active branch, fallback to first
+      setSelectedBranch(current && list.includes(current) ? current : list[0] ?? "");
       setBranchesLoading(false);
       // 2. Trigger background git fetch, then refresh list
       fetchRemoteBranches(projectLocalPath!).then(() => {

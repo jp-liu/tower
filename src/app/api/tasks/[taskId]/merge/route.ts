@@ -12,14 +12,12 @@ export async function POST(
 ) {
   const { taskId } = await params;
 
-  // Validate taskId with Zod (per project convention)
   const parsed = z.string().cuid().safeParse(taskId);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid task ID" }, { status: 400 });
   }
 
   try {
-    // Load task with project
     const task = await db.task.findUnique({
       where: { id: parsed.data },
       include: { project: true },
@@ -47,16 +45,16 @@ export async function POST(
       );
     }
 
-    // Get latest COMPLETED execution for worktreeBranch
     const latestExecution = await db.taskExecution.findFirst({
       where: { taskId: parsed.data, status: "COMPLETED" },
       orderBy: { createdAt: "desc" },
     });
 
     const worktreeBranch = latestExecution?.worktreeBranch ?? `task/${taskId}`;
+    const worktreePath = latestExecution?.worktreePath;
     const localPath = task.project.localPath;
 
-    // Pre-merge conflict check (per D-10)
+    // Pre-merge conflict check
     const { hasConflicts, conflictFiles } = checkConflicts(
       localPath,
       task.baseBranch,
@@ -70,30 +68,43 @@ export async function POST(
       );
     }
 
-    // Squash merge (per D-09): run three commands sequentially in main repo
-    execFileSync("git", ["checkout", task.baseBranch], {
-      cwd: localPath,
-      encoding: "utf-8",
-      timeout: 10000,
-    });
-    execFileSync("git", ["merge", "--squash", worktreeBranch], {
-      cwd: localPath,
-      encoding: "utf-8",
-      timeout: 30000,
-    });
-    execFileSync("git", ["commit", "-m", `feat: ${task.title}`], {
-      cwd: localPath,
-      encoding: "utf-8",
-      timeout: 10000,
-    });
+    const gitOpts = { encoding: "utf-8" as const, timeout: 10000 };
+    const cwd = worktreePath ?? localPath;
 
-    // Update status to DONE (per D-11)
+    // Safe merge: use git plumbing commands to update baseBranch ref
+    // without touching any working directory.
+    //
+    // 1. Get the tree of the task branch (what we want to merge)
+    const taskTree = execFileSync(
+      "git", ["rev-parse", `${worktreeBranch}^{tree}`],
+      { ...gitOpts, cwd }
+    ).trim();
+
+    // 2. Get the current HEAD of baseBranch
+    const baseHead = execFileSync(
+      "git", ["rev-parse", task.baseBranch],
+      { ...gitOpts, cwd }
+    ).trim();
+
+    // 3. Create a new squash commit on baseBranch with the task's tree
+    const commitHash = execFileSync(
+      "git", ["commit-tree", taskTree, "-p", baseHead, "-m", `feat: ${task.title}`],
+      { ...gitOpts, cwd }
+    ).trim();
+
+    // 4. Update baseBranch ref to point to the new commit (no checkout needed)
+    execFileSync(
+      "git", ["update-ref", `refs/heads/${task.baseBranch}`, commitHash],
+      { ...gitOpts, cwd }
+    );
+
+    // Update status to DONE
     await db.task.update({
       where: { id: parsed.data },
       data: { status: "DONE" },
     });
 
-    // Best-effort worktree cleanup (D-05: failures don't block DONE transition)
+    // Best-effort worktree cleanup
     try {
       await removeWorktree(localPath, taskId);
     } catch (error) {
