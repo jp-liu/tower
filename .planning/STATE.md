@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.9
 milestone_name: 架构清理 + 外部调度闭环
-status: planning
-stopped_at: null
-last_updated: "2026-04-10T16:30:00.000Z"
+status: executing
+stopped_at: Completed 29-01-PLAN.md
+last_updated: "2026-04-10T11:56:14.128Z"
 last_activity: 2026-04-10
 progress:
-  total_phases: 7
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 9
+  completed_phases: 8
+  total_plans: 19
+  completed_plans: 19
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** v0.9 — 架构清理 + 外部调度闭环
+**Current focus:** Phase 29 — adapter-dead-code-removal
 
 ## Current Position
 
-Phase: Phase 29 (not yet started)
-Plan: —
-Status: Roadmap defined, ready to plan Phase 29
-Last activity: 2026-04-10 — v0.9 roadmap created (Phases 29-35)
+Phase: 29 (adapter-dead-code-removal) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-04-10
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -85,6 +85,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 27-task-card-context-menu P02 | 180 | 2 tasks | 5 files |
 
 *Updated after each plan completion*
+| Phase 29 P01 | 185 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -205,6 +206,8 @@ Progress: [░░░░░░░░░░] 0%
 - [v0.9 Roadmap]: Idle detection threshold minimum 180s — Claude silent reasoning (30-120s) must not trigger false positive
 - [v0.9 Roadmap]: HTTP bridge routes return 404 (not 500) when no active session for taskId — clean signal for MCP tools to report "not running"
 - [v0.9 Roadmap]: callbackUrl and AI_MANAGER_TASK_ID grouped together in Phase 31 — both are env injection concerns, same code path
+- [Phase 29]: cli-test.ts combines types, process-utils helpers, parse functions, and testEnvironment into one self-contained file — zero adapters/ imports
+- [Phase 29]: route.ts GET handler hardcodes adapters: ["claude_local"] — registry concept removed, only one CLI exists
 
 ### Pending Todos
 
@@ -219,6 +222,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-10T16:30:00.000Z
-Stopped at: v0.9 roadmap created (Phases 29-35)
+Last session: 2026-04-10T11:56:14.124Z
+Stopped at: Completed 29-01-PLAN.md
 Resume file: None
