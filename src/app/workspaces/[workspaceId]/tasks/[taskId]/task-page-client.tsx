@@ -2,9 +2,8 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal } from "lucide-react";
+import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal, Square } from "lucide-react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { TaskDiffView } from "@/components/task/task-diff-view";
@@ -12,14 +11,14 @@ import { FileTree } from "@/components/task/file-tree";
 import { CodeEditor } from "@/components/task/code-editor";
 import { PreviewPanel } from "@/components/task/preview-panel";
 import { Badge } from "@/components/ui/badge";
-import { startPtyExecution } from "@/actions/agent-actions";
+import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
+import { startPtyExecution, stopPtyExecution, resumePtyExecution } from "@/actions/agent-actions";
+import { getPrompts } from "@/actions/prompt-actions";
+import { ExecutionTimeline } from "@/components/task/execution-timeline";
 import { useI18n } from "@/lib/i18n";
 import type { DiffResponse } from "@/lib/diff-parser";
 
-const TaskTerminal = dynamic(
-  () => import("@/components/task/task-terminal").then(m => ({ default: m.TaskTerminal })),
-  { ssr: false }
-);
+import { TerminalOutlet } from "@/components/task/terminal-portal";
 
 interface TaskPageClientProps {
   task: {
@@ -41,6 +40,18 @@ interface TaskPageClientProps {
     worktreeBranch: string | null;
     status: string;
   } | null;
+  executions?: Array<{
+    id: string;
+    status: string;
+    sessionId?: string | null;
+    summary?: string | null;
+    gitLog?: string | null;
+    gitStats?: string | null;
+    exitCode?: number | null;
+    terminalLog?: string | null;
+    startedAt?: string | null;
+    endedAt?: string | null;
+  }>;
 }
 
 type DiffData = DiffResponse & { commitCount: number };
@@ -61,7 +72,7 @@ const STATUS_COLORS: Record<string, string> = {
   CANCELLED: "bg-muted text-muted-foreground",
 };
 
-export function TaskPageClient({ task, workspaceId, workspaceName, latestExecution }: TaskPageClientProps) {
+export function TaskPageClient({ task, workspaceId, workspaceName, latestExecution, executions = [] }: TaskPageClientProps) {
   const router = useRouter();
   const { t } = useI18n();
   const [taskStatus, setTaskStatus] = useState(task.status);
@@ -70,10 +81,24 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [prompts, setPrompts] = useState<Array<{ id: string; name: string; isDefault: boolean }>>([]);
+  const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
   // Only show live terminal if execution is actively RUNNING
   const [activeWorktreePath, setActiveWorktreePath] = useState<string | null>(
     latestExecution?.status === "RUNNING" ? (latestExecution?.worktreePath ?? null) : null
   );
+
+  // Load available prompts
+  useEffect(() => {
+    let cancelled = false;
+    getPrompts().then((data) => {
+      if (cancelled) return;
+      setPrompts(data.map((p) => ({ id: p.id, name: p.name, isDefault: p.isDefault })));
+      const defaultP = data.find((p) => p.isDefault);
+      if (defaultP) setSelectedPromptId(defaultP.id);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   // Auto-fetch diff when task is IN_REVIEW
   useEffect(() => {
@@ -100,7 +125,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     if (isExecuting) return;
     setIsExecuting(true);
     try {
-      const { worktreePath } = await startPtyExecution(task.id, "");
+      const { worktreePath } = await startPtyExecution(task.id, "", selectedPromptId);
       if (worktreePath) {
         setActiveWorktreePath(worktreePath);
       }
@@ -111,12 +136,32 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
 
   const handleSessionEnd = useCallback((exitCode: number) => {
     setIsExecuting(false);
-    setActiveWorktreePath(null); // Hide terminal, show re-launch button
+    setActiveWorktreePath(null);
     if (exitCode === 0) {
       setTaskStatus("IN_REVIEW");
     }
     router.refresh();
   }, [router]);
+
+  const handleStop = useCallback(async () => {
+    await stopPtyExecution(task.id);
+    setIsExecuting(false);
+    setActiveWorktreePath(null);
+    router.refresh();
+  }, [task.id, router]);
+
+  const handleResume = useCallback(async (sessionId: string) => {
+    setIsExecuting(true);
+    try {
+      const { worktreePath } = await resumePtyExecution(task.id, sessionId);
+      if (worktreePath) {
+        setActiveWorktreePath(worktreePath);
+      }
+      setTaskStatus("IN_PROGRESS");
+    } catch {
+      setIsExecuting(false);
+    }
+  }, [task.id]);
 
   const handleMergeComplete = useCallback(() => {
     setTaskStatus("DONE");
@@ -132,10 +177,10 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           {/* Back button + breadcrumb: workspace / project / task */}
           <div className="flex items-center gap-2">
             <Link
-              href={`/workspaces/${workspaceId}`}
-              className="flex shrink-0 items-center justify-center rounded-md border border-border bg-muted px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              href={`/workspaces/${workspaceId}?projectId=${task.projectId}&taskId=${task.id}`}
+              className="flex shrink-0 items-center justify-center rounded-md border border-border bg-muted px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
-              <ArrowLeft className="mr-1.5 h-4 w-4" />
+              <ArrowLeft className="mr-1 h-3 w-3" />
               {t("taskPage.back")}
             </Link>
             <div className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
@@ -167,27 +212,70 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
         {/* Terminal fills all remaining space */}
         <div className="flex-1 min-h-0 overflow-hidden">
           {activeWorktreePath ? (
-            <TaskTerminal
-              taskId={task.id}
-              worktreePath={activeWorktreePath}
-              onSessionEnd={handleSessionEnd}
-            />
+            <div className="flex h-full flex-col overflow-hidden">
+              {/* Stop button bar */}
+              <div className="shrink-0 flex items-center justify-between border-b border-neutral-800 px-3 py-2 bg-[#0a0a0a]">
+                <span className="flex items-center gap-1.5 text-xs text-emerald-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  {t("execution.running")}
+                </span>
+                <button
+                  onClick={handleStop}
+                  className="flex items-center gap-1.5 rounded-md bg-red-500/15 px-3 py-1 text-xs font-medium text-red-400 hover:bg-red-500/25 transition-colors"
+                >
+                  <Square className="h-3 w-3" />
+                  {t("terminal.stopExecution")}
+                </button>
+              </div>
+              <div className="flex-1 min-h-0">
+                <TerminalOutlet
+                  taskId={task.id}
+                  worktreePath={activeWorktreePath}
+                  onSessionEnd={handleSessionEnd}
+                />
+              </div>
+            </div>
           ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#0a0a0a] p-8">
-              <Terminal className="h-12 w-12 text-neutral-600" />
-              <p className="text-sm text-neutral-400">{t("terminal.readyToLaunch")}</p>
-              <button
-                onClick={handleExecute}
-                disabled={isExecuting}
-                className="flex items-center gap-2 rounded-md bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
-              >
-                {isExecuting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Terminal className="h-4 w-4" />
+            <div className="flex h-full flex-col overflow-hidden bg-[#0a0a0a]">
+              {/* Launch button */}
+              <div className="shrink-0 flex items-center gap-3 border-b border-neutral-800 px-4 py-3">
+                {/* Prompt selector */}
+                {prompts.length > 0 && (
+                  <Select key={`prompt-${prompts.length}`} defaultValue={selectedPromptId ?? "none"} onValueChange={(v) => setSelectedPromptId(v === "none" ? null : v)}>
+                    <SelectTrigger size="sm" className="h-9 min-w-[140px]">
+                      <span className="text-left truncate">
+                        {selectedPromptId
+                          ? prompts.find((p) => p.id === selectedPromptId)?.name ?? t("terminal.noPrompt")
+                          : t("terminal.noPrompt")}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent className="min-w-[200px]">
+                      <SelectItem value="none">{t("terminal.noPrompt")}</SelectItem>
+                      {prompts.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}{p.isDefault ? " ★" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
-                {isExecuting ? t("terminal.executing") : t("terminal.launch")}
-              </button>
+                <button
+                  onClick={handleExecute}
+                  disabled={isExecuting}
+                  className="flex items-center gap-2 rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+                >
+                  {isExecuting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Terminal className="h-4 w-4" />
+                  )}
+                  {isExecuting ? t("terminal.executing") : t("terminal.launch")}
+                </button>
+              </div>
+              {/* Execution history */}
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <ExecutionTimeline executions={executions} onResume={handleResume} />
+              </div>
             </div>
           )}
         </div>

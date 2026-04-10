@@ -3,6 +3,7 @@
 import { useRouter, usePathname } from "next/navigation";
 import { AppSidebar } from "./app-sidebar";
 import { TopBar } from "./top-bar";
+import { TerminalPortalProvider } from "@/components/task/terminal-portal";
 import { createProject, createWorkspace } from "@/actions/workspace-actions";
 
 interface LayoutClientProps {
@@ -34,24 +35,28 @@ export function LayoutClient({ workspaces, children }: LayoutClientProps) {
 
   if (isTaskDetailPage) {
     return (
-      <div className="flex h-screen flex-col overflow-hidden">
-        <TopBar onCreateProject={handleCreateProject} />
-        <main className="flex-1 overflow-hidden bg-background">
-          {children}
-        </main>
-      </div>
+      <TerminalPortalProvider>
+        <div className="flex h-screen flex-col overflow-hidden">
+          <TopBar onCreateProject={handleCreateProject} />
+          <main className="flex-1 overflow-hidden bg-background">
+            {children}
+          </main>
+        </div>
+      </TerminalPortalProvider>
     );
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <AppSidebar workspaces={workspaces} />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <TopBar onCreateProject={handleCreateProject} />
-        <main className="flex-1 overflow-auto bg-background">
-          {children}
-        </main>
+    <TerminalPortalProvider>
+      <div className="flex h-screen overflow-hidden">
+        <AppSidebar workspaces={workspaces} />
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <TopBar onCreateProject={handleCreateProject} />
+          <main className="flex-1 overflow-auto bg-background">
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </TerminalPortalProvider>
   );
 }

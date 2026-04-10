@@ -63,11 +63,130 @@ export async function stopTaskExecution(executionId: string, status: "COMPLETED"
   return execution;
 }
 
+/**
+ * Stop a running PTY session for a task. Kills the process, captures summary,
+ * and updates the execution status to COMPLETED.
+ */
+export async function stopPtyExecution(taskId: string): Promise<void> {
+  const { destroySession, getSession } = await import("@/lib/pty/session-store");
+
+  // Capture buffer before destroying
+  const session = getSession(taskId);
+  const terminalBuffer = session?.getBuffer() ?? "";
+
+  // Find the RUNNING execution
+  const execution = await db.taskExecution.findFirst({
+    where: { taskId, status: "RUNNING" },
+    orderBy: { createdAt: "desc" },
+  });
+
+  // Destroy the PTY session (kills the process)
+  destroySession(taskId);
+
+  if (execution) {
+    await db.taskExecution.update({
+      where: { id: execution.id },
+      data: { status: "COMPLETED", endedAt: new Date() },
+    });
+
+    // Capture summary
+    const { captureExecutionSummary } = await import("@/lib/execution-summary");
+    await captureExecutionSummary(
+      execution.id, taskId, 0, terminalBuffer, execution.worktreePath
+    );
+  }
+
+  revalidatePath("/workspaces");
+}
+
 export async function getTaskExecutions(taskId: string) {
   return db.taskExecution.findMany({
     where: { taskId },
     orderBy: { createdAt: "desc" },
   });
+}
+
+/**
+ * Resume a previous Claude CLI session for a task.
+ * Reuses the existing TaskExecution record (same session = same execution).
+ */
+export async function resumePtyExecution(
+  taskId: string,
+  previousSessionId: string
+): Promise<{ executionId: string; worktreePath: string | null }> {
+  const task = await db.task.findUnique({
+    where: { id: taskId },
+    include: { project: true },
+  });
+
+  if (!task) throw new Error("Task not found");
+  if (!task.project?.localPath) throw new Error("Project has no local path configured");
+
+  // Clean up stale RUNNING executions (not the one we're resuming)
+  await db.taskExecution.updateMany({
+    where: { taskId, status: "RUNNING", NOT: { sessionId: previousSessionId } },
+    data: { status: "FAILED", endedAt: new Date() },
+  });
+
+  // Find the existing execution for this session — reuse it
+  const prevExec = await db.taskExecution.findFirst({
+    where: { taskId, sessionId: previousSessionId },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!prevExec) throw new Error("Previous execution not found");
+
+  const cwd = prevExec.worktreePath ?? task.project.localPath;
+
+  // Reuse execution: set back to RUNNING
+  const execution = await db.taskExecution.update({
+    where: { id: prevExec.id },
+    data: { status: "RUNNING", endedAt: null },
+  });
+
+  await db.task.update({
+    where: { id: taskId },
+    data: { status: "IN_PROGRESS" },
+  });
+
+  const claudeArgs: string[] = [
+    "--resume", previousSessionId,
+    "--dangerously-skip-permissions",
+  ];
+
+  createSession(
+    taskId,
+    "claude",
+    claudeArgs,
+    cwd,
+    () => {},
+    async (exitCode) => {
+      // Guard: if stopPtyExecution already handled this, skip
+      const currentExec = await db.taskExecution.findUnique({ where: { id: execution.id } });
+      if (currentExec?.status !== "RUNNING") return;
+
+      const { getSession } = await import("@/lib/pty/session-store");
+      const session = getSession(taskId);
+      const terminalBuffer = session?.getBuffer() ?? "";
+
+      await db.taskExecution.update({
+        where: { id: execution.id },
+        data: {
+          status: exitCode === 0 ? "COMPLETED" : "FAILED",
+          endedAt: new Date(),
+        },
+      }).catch(() => {});
+
+      const { captureExecutionSummary } = await import("@/lib/execution-summary");
+      await captureExecutionSummary(execution.id, taskId, exitCode, terminalBuffer, prevExec.worktreePath);
+
+      if (exitCode === 0) {
+        await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW" } }).catch(() => {});
+      }
+    }
+  );
+
+  return { executionId: execution.id, worktreePath: prevExec.worktreePath };
 }
 
 /**
@@ -194,6 +313,18 @@ export async function startPtyExecution(
     cwd,
     () => {},
     async (exitCode) => {
+      // Guard: if stopPtyExecution already handled this execution, skip
+      const currentExec = await db.taskExecution.findUnique({ where: { id: execution.id } });
+      if (currentExec?.status !== "RUNNING") {
+        // Already finalized by stopPtyExecution — don't overwrite
+        return;
+      }
+
+      // Capture terminal buffer FIRST (before session might be destroyed)
+      const { getSession } = await import("@/lib/pty/session-store");
+      const session = getSession(taskId);
+      const terminalBuffer = session?.getBuffer() ?? "";
+
       // INT-03: Update execution status and task status on PTY exit
       await db.taskExecution
         .update({
@@ -206,6 +337,16 @@ export async function startPtyExecution(
         .catch((err: unknown) => {
           console.error("[startPtyExecution] Failed to update execution status:", err);
         });
+
+      // Capture execution summary (git log, stats, terminal log)
+      const { captureExecutionSummary } = await import("@/lib/execution-summary");
+      await captureExecutionSummary(
+        execution.id,
+        taskId,
+        exitCode,
+        terminalBuffer,
+        resolvedWorktreePath
+      );
 
       if (exitCode === 0) {
         await db.task

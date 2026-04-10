@@ -144,11 +144,11 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
                 <TooltipTrigger
                   render={
                     <button
-                      onClick={() => router.push(`/workspaces/${ws.id}`)}
+                      onClick={() => { if (!isActive) router.push(`/workspaces/${ws.id}`); }}
                       className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm transition-all ${
                         isActive
-                          ? "bg-accent ring-1 ring-amber-500/20 text-foreground"
-                          : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                          ? "bg-accent ring-1 ring-amber-500/20 text-foreground cursor-default"
+                          : "text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
                       }`}
                     />
                   }
@@ -264,8 +264,8 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
               }`}
             >
               <button
-                onClick={() => router.push(`/workspaces/${ws.id}`)}
-                className="flex flex-1 items-center gap-2.5 px-3 py-2.5 text-left"
+                onClick={() => { if (!isActive) router.push(`/workspaces/${ws.id}`); }}
+                className={`flex flex-1 items-center gap-2.5 px-3 py-2.5 text-left ${isActive ? "cursor-default" : "cursor-pointer"}`}
               >
                 <span className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-sm">
                   {WORKSPACE_ICONS.includes(icon) ? icon : <span className="text-xs font-semibold text-muted-foreground">{icon}</span>}

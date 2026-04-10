@@ -392,9 +392,9 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
                   {recentProjects.map((rp) => (
                     <button
                       key={rp.id}
-                      onClick={() => navigateToProject(rp.workspaceId, rp.id)}
-                      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent ${
-                        rp.id === project.id ? "bg-amber-500/10 text-amber-300" : ""
+                      onClick={() => { if (rp.id !== project.id) navigateToProject(rp.workspaceId, rp.id); }}
+                      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
+                        rp.id === project.id ? "bg-amber-500/10 text-amber-300 cursor-default" : "hover:bg-accent cursor-pointer"
                       }`}
                     >
                       {rp.type === "GIT" ? (

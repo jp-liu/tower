@@ -5,12 +5,12 @@ import { BoardPageClient } from "./board-page-client";
 
 interface Props {
   params: Promise<{ workspaceId: string }>;
-  searchParams: Promise<{ projectId?: string }>;
+  searchParams: Promise<{ projectId?: string; taskId?: string }>;
 }
 
 export default async function WorkspaceBoardPage({ params, searchParams }: Props) {
   const { workspaceId } = await params;
-  const { projectId: selectedProjectId } = await searchParams;
+  const { projectId: selectedProjectId, taskId: openTaskId } = await searchParams;
 
   const workspace = await db.workspace.findUnique({
     where: { id: workspaceId },
@@ -70,6 +70,7 @@ export default async function WorkspaceBoardPage({ params, searchParams }: Props
       totalTasks={tasks.length}
       runningTasks={runningTasks}
       labels={labels.map((l) => ({ id: l.id, name: l.name, color: l.color, isBuiltin: l.isBuiltin }))}
+      openTaskId={openTaskId}
     />
   );
 }

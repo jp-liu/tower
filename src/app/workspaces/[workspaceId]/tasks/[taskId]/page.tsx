@@ -67,12 +67,29 @@ export default async function TaskPage({ params }: Props) {
       }
     : null;
 
+  // Serialize all executions for the timeline (Date → string)
+  const serializedExecutions = (executions as Record<string, unknown>[])
+    .filter((e) => e.status !== "RUNNING")
+    .map((e) => ({
+      id: e.id as string,
+      status: e.status as string,
+      sessionId: (e.sessionId as string) ?? null,
+      summary: (e.summary as string) ?? null,
+      gitLog: (e.gitLog as string) ?? null,
+      gitStats: (e.gitStats as string) ?? null,
+      exitCode: (e.exitCode as number) ?? null,
+      terminalLog: (e.terminalLog as string) ?? null,
+      startedAt: e.startedAt instanceof Date ? e.startedAt.toISOString() : null,
+      endedAt: e.endedAt instanceof Date ? e.endedAt.toISOString() : null,
+    }));
+
   return (
     <TaskPageClient
       task={serialized}
       workspaceId={workspaceId}
       workspaceName={workspace?.name ?? ""}
       latestExecution={serializedExecution}
+      executions={serializedExecutions}
     />
   );
 }

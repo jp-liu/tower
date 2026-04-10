@@ -1,16 +1,16 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Terminal, Loader2, Square } from "lucide-react";
+import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { TaskMetadata } from "./task-metadata";
-import { TaskConversation, type Message } from "./task-conversation";
-import { TaskMessageInput } from "./task-message-input";
 import { TaskDiffView } from "./task-diff-view";
-import { getTaskMessages, sendTaskMessage } from "@/actions/agent-actions";
+import { TerminalOutlet } from "./terminal-portal";
+import { getTaskExecutions, startPtyExecution, stopPtyExecution, resumePtyExecution } from "@/actions/agent-actions";
 import { getPrompts } from "@/actions/prompt-actions";
-import type { Task } from "@prisma/client";
-import type { PromptOption } from "./types";
+import { ExecutionTimeline } from "./execution-timeline";
+import type { Task, TaskExecution } from "@prisma/client";
 import { useI18n } from "@/lib/i18n";
 
 interface TaskDetailPanelProps {
@@ -19,6 +19,8 @@ interface TaskDetailPanelProps {
   onClose: () => void;
 }
 
+type TabType = "terminal" | "changes";
+
 export function TaskDetailPanel({
   task,
   workspaceId,
@@ -26,52 +28,46 @@ export function TaskDetailPanel({
 }: TaskDetailPanelProps) {
   const { t } = useI18n();
   const router = useRouter();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [prompts, setPrompts] = useState<PromptOption[]>([]);
-  const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"conversation" | "changes">("conversation");
+  const [activeTab, setActiveTab] = useState<TabType>("terminal");
   const [diffData, setDiffData] = useState<any>(null);
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
   const [taskStatus, setTaskStatus] = useState(task.status);
-  const abortRef = useRef<AbortController | null>(null);
 
-  // Load existing messages
-  useEffect(() => {
-    let cancelled = false;
-    getTaskMessages(task.id).then((serverMessages) => {
-      if (cancelled) return;
-      setMessages(
-        serverMessages.map((m) => ({
-          id: m.id,
-          role: m.role.toLowerCase() as "user" | "assistant" | "system",
-          content: m.content,
-          createdAt: new Date(m.createdAt),
-        }))
-      );
-    });
-    return () => { cancelled = true; };
-  }, [task.id]);
+  // Terminal + execution history state
+  const [activeWorktreePath, setActiveWorktreePath] = useState<string | null>(null);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [executionLoaded, setExecutionLoaded] = useState(false);
+  const [pastExecutions, setPastExecutions] = useState<TaskExecution[]>([]);
+  const [prompts, setPrompts] = useState<Array<{ id: string; name: string; isDefault: boolean }>>([]);
+  const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
 
   // Load prompts
   useEffect(() => {
     let cancelled = false;
     getPrompts().then((data) => {
       if (cancelled) return;
-      const mapped: PromptOption[] = data.map((p) => ({
-        id: p.id,
-        name: p.name,
-        content: p.content,
-        isDefault: p.isDefault,
-      }));
-      setPrompts(mapped);
-      const defaultPrompt = mapped.find((p) => p.isDefault);
-      if (defaultPrompt) {
-        setSelectedPromptId(defaultPrompt.id);
-      }
+      setPrompts(data.map((p) => ({ id: p.id, name: p.name, isDefault: p.isDefault })));
+      const defaultP = data.find((p) => p.isDefault);
+      if (defaultP) setSelectedPromptId(defaultP.id);
     });
     return () => { cancelled = true; };
   }, []);
+
+  // Load executions: check for active terminal + build history
+  useEffect(() => {
+    let cancelled = false;
+    getTaskExecutions(task.id).then((executions) => {
+      if (cancelled) return;
+      const latest = executions[0];
+      if (latest?.status === "RUNNING" && latest.worktreePath) {
+        setActiveWorktreePath(latest.worktreePath);
+      }
+      // Past executions = all non-RUNNING ones
+      setPastExecutions(executions.filter((e) => e.status !== "RUNNING"));
+      setExecutionLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, [task.id]);
 
   // Fetch diff when Changes tab is active and task is IN_REVIEW
   useEffect(() => {
@@ -79,139 +75,65 @@ export function TaskDetailPanel({
     let cancelled = false;
     setIsLoadingDiff(true);
     fetch(`/api/tasks/${task.id}/diff`)
-      .then(res => res.ok ? res.json() : null)
-      .then(data => { if (!cancelled) setDiffData(data); })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (!cancelled) setDiffData(data); })
       .catch(() => {})
       .finally(() => { if (!cancelled) setIsLoadingDiff(false); });
     return () => { cancelled = true; };
   }, [activeTab, taskStatus, task.id]);
 
-  // Cleanup abort on unmount
-  useEffect(() => {
-    return () => { abortRef.current?.abort(); };
-  }, []);
-
-  const handleSend = useCallback(
-    async (content: string) => {
-      // Show user message immediately
-      const userMsg: Message = {
-        id: `msg-${Date.now()}`,
-        role: "user",
-        content,
-        createdAt: new Date(),
-      };
-      setMessages((prev) => [...prev, userMsg]);
-      setIsLoading(true);
-
-      try {
-        // Save user message to DB
-        await sendTaskMessage(task.id, content);
-
-        // Create a streaming assistant message placeholder
-        const assistantMsgId = `assistant-${Date.now()}`;
-        const assistantMsg: Message = {
-          id: assistantMsgId,
-          role: "assistant",
-          content: "",
-          createdAt: new Date(),
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
-
-        // Call the SSE stream endpoint
-        const abortController = new AbortController();
-        abortRef.current = abortController;
-
-        const res = await fetch(`/api/tasks/${task.id}/stream`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: content }),
-          signal: abortController.signal,
-        });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({ error: "Execution failed" }));
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMsgId
-                ? { ...m, role: "system" as const, content: errData.error || t("taskDetail.executionFailed") }
-                : m
-            )
-          );
-          return;
-        }
-
-        // Read SSE stream
-        const reader = res.body?.getReader();
-        if (!reader) return;
-
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-            try {
-              const event = JSON.parse(line.slice(6));
-              if (event.type === "log" || event.type === "result") {
-                // Append text content to the assistant message
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantMsgId
-                      ? { ...m, content: m.content + event.content }
-                      : m
-                  )
-                );
-              } else if (event.type === "tool") {
-                // Append tool usage info on its own line
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantMsgId
-                      ? { ...m, content: m.content + (m.content ? "\n" : "") + event.content }
-                      : m
-                  )
-                );
-              } else if (event.type === "error") {
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantMsgId
-                      ? { ...m, content: m.content || event.content }
-                      : m
-                  )
-                );
-              } else if (event.type === "status_changed") {
-                setTaskStatus(event.status);
-                router.refresh();
-              }
-            } catch {
-              // Skip malformed JSON lines
-            }
-          }
-        }
-      } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `err-${Date.now()}`,
-            role: "system" as const,
-            content: t("taskDetail.executionFailedRetry"),
-            createdAt: new Date(),
-          },
-        ]);
-      } finally {
-        setIsLoading(false);
-        abortRef.current = null;
+  const handleExecute = useCallback(async () => {
+    if (isExecuting) return;
+    setIsExecuting(true);
+    try {
+      const { worktreePath } = await startPtyExecution(task.id, "", selectedPromptId);
+      if (worktreePath) {
+        setActiveWorktreePath(worktreePath);
       }
+      setTaskStatus("IN_PROGRESS");
+    } catch {
+      setIsExecuting(false);
+    }
+  }, [task.id, isExecuting]);
+
+  const handleSessionEnd = useCallback(
+    (exitCode: number) => {
+      setIsExecuting(false);
+      setActiveWorktreePath(null);
+      if (exitCode === 0) {
+        setTaskStatus("IN_REVIEW");
+      }
+      // Reload executions for history
+      getTaskExecutions(task.id).then((execs) => {
+        setPastExecutions(execs.filter((e) => e.status !== "RUNNING"));
+      });
+      router.refresh();
     },
-    [task.id, router, t]
+    [router, task.id]
   );
+
+  const handleStop = useCallback(async () => {
+    await stopPtyExecution(task.id);
+    setIsExecuting(false);
+    setActiveWorktreePath(null);
+    getTaskExecutions(task.id).then((execs) => {
+      setPastExecutions(execs.filter((e) => e.status !== "RUNNING"));
+    });
+    router.refresh();
+  }, [task.id, router]);
+
+  const handleResume = useCallback(async (sessionId: string) => {
+    setIsExecuting(true);
+    try {
+      const { worktreePath } = await resumePtyExecution(task.id, sessionId);
+      if (worktreePath) {
+        setActiveWorktreePath(worktreePath);
+      }
+      setTaskStatus("IN_PROGRESS");
+    } catch {
+      setIsExecuting(false);
+    }
+  }, [task.id]);
 
   return (
     <div
@@ -222,7 +144,7 @@ export function TaskDetailPanel({
         title={task.title}
         description={t("taskDetail.panelDescription")}
         branch={`task/${task.id}`}
-        hasConversation={messages.length > 0}
+        hasConversation={false}
         updatedAt={task.updatedAt}
         onBack={onClose}
       />
@@ -231,14 +153,23 @@ export function TaskDetailPanel({
       <div className="flex items-center justify-between border-b border-border px-4 py-2">
         <div className="flex gap-1">
           <button
-            onClick={() => setActiveTab("conversation")}
-            className={`px-3 py-1 text-xs font-medium rounded-md ${activeTab === "conversation" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            onClick={() => setActiveTab("terminal")}
+            className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md ${
+              activeTab === "terminal"
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
           >
-            {t("taskPage.conversation")}
+            <Terminal className="h-3 w-3" />
+            {t("terminal.execute")}
           </button>
           <button
             onClick={() => setActiveTab("changes")}
-            className={`px-3 py-1 text-xs font-medium rounded-md ${activeTab === "changes" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            className={`px-3 py-1 text-xs font-medium rounded-md ${
+              activeTab === "changes"
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
           >
             {t("taskPage.changes")}
           </button>
@@ -253,19 +184,81 @@ export function TaskDetailPanel({
       </div>
 
       {/* Content area */}
-      {activeTab === "conversation" ? (
-        <>
-          <TaskConversation messages={messages} />
-          <TaskMessageInput
-            onSend={handleSend}
-            isLoading={isLoading}
-            prompts={prompts}
-            selectedPromptId={selectedPromptId}
-            onPromptChange={setSelectedPromptId}
-          />
-        </>
+      {activeTab === "terminal" ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {!executionLoaded ? (
+            <div className="flex h-full items-center justify-center bg-[#0f1419]">
+              <Loader2 className="h-5 w-5 animate-spin text-neutral-500" />
+            </div>
+          ) : activeWorktreePath ? (
+            <div className="flex h-full flex-col overflow-hidden">
+              {/* Stop button bar */}
+              <div className="shrink-0 flex items-center justify-between border-b border-neutral-800 px-3 py-2 bg-[#0f1419]">
+                <span className="flex items-center gap-1.5 text-xs text-emerald-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  {t("execution.running")}
+                </span>
+                <button
+                  onClick={handleStop}
+                  className="flex items-center gap-1.5 rounded-md bg-red-500/15 px-3 py-1 text-xs font-medium text-red-400 hover:bg-red-500/25 transition-colors"
+                >
+                  <Square className="h-3 w-3" />
+                  {t("terminal.stopExecution")}
+                </button>
+              </div>
+              <div className="flex-1 min-h-0">
+                <TerminalOutlet
+                  taskId={task.id}
+                  worktreePath={activeWorktreePath}
+                  onSessionEnd={handleSessionEnd}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-full flex-col overflow-hidden">
+              {/* Prompt selector + Launch button */}
+              <div className="shrink-0 flex items-center gap-2 border-b border-border px-4 py-3">
+                {prompts.length > 0 && (
+                  <Select key={`prompt-${prompts.length}`} defaultValue={selectedPromptId ?? "none"} onValueChange={(v) => setSelectedPromptId(v === "none" ? null : v)}>
+                    <SelectTrigger size="sm" className="h-8 min-w-[120px]">
+                      <span className="text-left truncate">
+                        {selectedPromptId
+                          ? prompts.find((p) => p.id === selectedPromptId)?.name ?? t("terminal.noPrompt")
+                          : t("terminal.noPrompt")}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent className="min-w-[200px]">
+                      <SelectItem value="none">{t("terminal.noPrompt")}</SelectItem>
+                      {prompts.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}{p.isDefault ? " ★" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <button
+                  onClick={handleExecute}
+                  disabled={isExecuting}
+                  className="flex items-center gap-2 rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+                >
+                  {isExecuting ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Terminal className="h-3.5 w-3.5" />
+                  )}
+                  {isExecuting ? t("terminal.executing") : t("terminal.launch")}
+                </button>
+              </div>
+              {/* Execution history */}
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <ExecutionTimeline executions={pastExecutions} onResume={handleResume} />
+              </div>
+            </div>
+          )}
+        </div>
       ) : (
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-hidden">
           {isLoadingDiff ? (
             <div className="flex h-full items-center justify-center">
               <p className="text-sm text-muted-foreground">{t("taskPage.loadingDiff")}</p>

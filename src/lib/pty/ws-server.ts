@@ -7,7 +7,11 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000",
 ]);
 
-const DISCONNECT_TIMEOUT_MS = 30_000;
+// Keepalive: how long a PTY session survives after WS disconnect.
+// Process still running → 2 hours (user may switch tasks, take a break).
+// Process already exited → 5 minutes (just preserving output buffer for review).
+const KEEPALIVE_RUNNING_MS = 2 * 60 * 60 * 1000; // 2 hours
+const KEEPALIVE_EXITED_MS = 5 * 60 * 1000;        // 5 minutes
 const sessionClients = new Map<string, WebSocket>();
 const BATCH_INTERVAL_MS = 8;
 const SEND_BUFFER_MAX = 64 * 1024;
@@ -90,10 +94,11 @@ export async function startWsServer(): Promise<void> {
       const s = getSession(taskId);
       if (!s || s.killed) return;
       s.setDataListener(() => {});
+      const timeout = s.killed ? KEEPALIVE_EXITED_MS : KEEPALIVE_RUNNING_MS;
       s.disconnectTimer = setTimeout(() => {
         console.error(`[ws-server] Keepalive expired for task ${taskId}`);
         destroySession(taskId);
-      }, DISCONNECT_TIMEOUT_MS);
+      }, timeout);
     });
 
     ws.on("error", (err) => {

@@ -62,11 +62,11 @@ export function ProjectTabs({ projects, activeProjectId, onSelect }: ProjectTabs
           return (
             <button
               key={p.id}
-              onClick={() => onSelect(p.id)}
+              onClick={() => { if (!isActive) onSelect(p.id); }}
               className={`shrink-0 rounded-lg border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
                 isActive
-                  ? "border-amber-400 bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20"
-                  : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
+                  ? "border-amber-400 bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20 cursor-default"
+                  : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
               }`}
             >
               <span>{p.name}</span>

@@ -42,6 +42,7 @@ interface BoardPageClientProps {
   totalTasks: number;
   runningTasks: number;
   labels: LabelOption[];
+  openTaskId?: string;
 }
 
 export function BoardPageClient({
@@ -54,13 +55,16 @@ export function BoardPageClient({
   totalTasks,
   runningTasks,
   labels,
+  openTaskId,
 }: BoardPageClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [filter, setFilter] = useState<FilterType>("ALL");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createDefaultStatus, setCreateDefaultStatus] = useState<TaskStatus>("TODO");
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(
+    openTaskId ? initialTasks.find((t) => t.id === openTaskId) ?? null : null
+  );
   const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   const refreshData = useCallback(() => {
