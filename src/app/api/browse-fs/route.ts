@@ -7,8 +7,12 @@ export async function GET(request: NextRequest) {
   const dirPath = request.nextUrl.searchParams.get("path") || os.homedir();
 
   try {
-    // Resolve to absolute path
+    // Resolve to absolute path — restrict to user's home directory
     const resolved = path.resolve(dirPath);
+    const home = os.homedir();
+    if (!resolved.startsWith(home)) {
+      return NextResponse.json({ error: "Access denied: path must be within home directory" }, { status: 403 });
+    }
 
     // Check directory exists
     const stat = fs.statSync(resolved);

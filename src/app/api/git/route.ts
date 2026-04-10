@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     // Current branch
     let currentBranch = "";
     try {
-      currentBranch = execSync("git rev-parse --abbrev-ref HEAD", opts).trim();
+      currentBranch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], opts).trim();
     } catch {
       currentBranch = "HEAD";
     }
@@ -32,8 +32,8 @@ export async function GET(request: NextRequest) {
     // All local branches
     let branches: string[] = [];
     try {
-      const raw = execSync("git branch --format='%(refname:short)'", opts).trim();
-      branches = raw.split("\n").filter(Boolean).map((b) => b.replace(/'/g, ""));
+      const raw = execFileSync("git", ["branch", "--format=%(refname:short)"], opts).trim();
+      branches = raw.split("\n").filter(Boolean);
     } catch {
       branches = [currentBranch];
     }
@@ -41,12 +41,12 @@ export async function GET(request: NextRequest) {
     // Remote branches
     let remoteBranches: string[] = [];
     try {
-      const raw = execSync("git branch -r --format='%(refname:short)'", opts).trim();
+      const raw = execFileSync("git", ["branch", "-r", "--format=%(refname:short)"], opts).trim();
       remoteBranches = raw
         .split("\n")
         .filter(Boolean)
-        .map((b) => b.replace(/'/g, "").replace(/^origin\//, ""))
-        .filter((b) => b !== "HEAD");
+        .map((b: string) => b.replace(/^origin\//, ""))
+        .filter((b: string) => b !== "HEAD");
     } catch {
       // no remote
     }
@@ -54,12 +54,12 @@ export async function GET(request: NextRequest) {
     // Status summary
     let statusSummary = { modified: 0, staged: 0, untracked: 0 };
     try {
-      const raw = execSync("git status --porcelain", opts).trim();
+      const raw = execFileSync("git", ["status", "--porcelain"], opts).trim();
       if (raw) {
         const lines = raw.split("\n");
-        statusSummary.modified = lines.filter((l) => l[1] === "M").length;
-        statusSummary.staged = lines.filter((l) => l[0] !== " " && l[0] !== "?").length;
-        statusSummary.untracked = lines.filter((l) => l.startsWith("??")).length;
+        statusSummary.modified = lines.filter((l: string) => l[1] === "M").length;
+        statusSummary.staged = lines.filter((l: string) => l[0] !== " " && l[0] !== "?").length;
+        statusSummary.untracked = lines.filter((l: string) => l.startsWith("??")).length;
       }
     } catch {
       // ignore
@@ -110,17 +110,17 @@ export async function POST(request: NextRequest) {
     try {
       // Create parent directories
       fs.mkdirSync(path.dirname(resolved), { recursive: true });
-      execSync(`git clone ${JSON.stringify(url)} ${JSON.stringify(resolved)}`, {
+      execFileSync("git", ["clone", url, resolved], {
         encoding: "utf-8",
-        timeout: 120000, // 2 min for large repos
+        timeout: 120000,
       });
       return NextResponse.json({ success: true, message: "cloned", path: resolved });
-    } catch (e: any) {
+    } catch (e: unknown) {
       // Clean up empty dir on failure
       if (fs.existsSync(resolved) && fs.readdirSync(resolved).length === 0) {
         fs.rmdirSync(resolved);
       }
-      return NextResponse.json({ error: e.message || "Clone failed" }, { status: 500 });
+      return NextResponse.json({ error: (e as Error).message || "Clone failed" }, { status: 500 });
     }
   }
 
@@ -136,10 +136,10 @@ export async function POST(request: NextRequest) {
       if (!fs.existsSync(resolved)) {
         return NextResponse.json({ error: "Directory not found" }, { status: 400 });
       }
-      execSync("git init", opts);
-      execSync("git add -A", opts);
+      execFileSync("git", ["init"], opts);
+      execFileSync("git", ["add", "-A"], opts);
       try {
-        execSync('git commit -m "Initial commit" --allow-empty', opts);
+        execFileSync("git", ["commit", "-m", "Initial commit", "--allow-empty"], opts);
       } catch {
         // may fail if no user configured, that's ok
       }
@@ -147,14 +147,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "checkout" && branch) {
-      // Check if branch exists locally
+      // Sanitize branch name
+      const safeBranch = branch.replace(/[^a-zA-Z0-9_\-\/\.]/g, "");
+      if (!safeBranch) return NextResponse.json({ error: "Invalid branch name" }, { status: 400 });
       try {
-        execSync(`git rev-parse --verify ${branch}`, opts);
-        execSync(`git checkout ${branch}`, opts);
+        execFileSync("git", ["rev-parse", "--verify", safeBranch], opts);
+        execFileSync("git", ["checkout", safeBranch], opts);
       } catch {
-        // Try checking out remote branch
         try {
-          execSync(`git checkout -b ${branch} origin/${branch}`, opts);
+          execFileSync("git", ["checkout", "-b", safeBranch, `origin/${safeBranch}`], opts);
         } catch {
           return NextResponse.json({ error: `Branch "${branch}" not found` }, { status: 400 });
         }
@@ -169,11 +170,11 @@ export async function POST(request: NextRequest) {
       }
       // Sanitize branch name
       const safeBranch = branch.replace(/[^a-zA-Z0-9_\-\/\.]/g, "-");
-      const base = baseBranch || "HEAD";
+      const base = (baseBranch || "HEAD").replace(/[^a-zA-Z0-9_\-\/\.]/g, "");
       try {
-        execSync(`git checkout -b ${safeBranch} ${base}`, opts);
-      } catch (err: any) {
-        return NextResponse.json({ error: err.message || "Failed to create branch" }, { status: 400 });
+        execFileSync("git", ["checkout", "-b", safeBranch, base], opts);
+      } catch (err: unknown) {
+        return NextResponse.json({ error: (err as Error).message || "Failed to create branch" }, { status: 400 });
       }
       return NextResponse.json({ success: true, branch: safeBranch });
     }

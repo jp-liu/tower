@@ -6,7 +6,7 @@ import { ExternalLink, Terminal, Loader2, Square } from "lucide-react";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { TaskMetadata } from "./task-metadata";
 import { TaskDiffView } from "./task-diff-view";
-import { TerminalOutlet } from "./terminal-portal";
+import { TerminalOutlet, useTerminalPortal } from "./terminal-portal";
 import { getTaskExecutions, startPtyExecution, stopPtyExecution, resumePtyExecution } from "@/actions/agent-actions";
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "./execution-timeline";
@@ -28,6 +28,7 @@ export function TaskDetailPanel({
 }: TaskDetailPanelProps) {
   const { t } = useI18n();
   const router = useRouter();
+  const { removePortal } = useTerminalPortal();
   const [activeTab, setActiveTab] = useState<TabType>("terminal");
   const [diffData, setDiffData] = useState<any>(null);
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
@@ -94,16 +95,16 @@ export function TaskDetailPanel({
     } catch {
       setIsExecuting(false);
     }
-  }, [task.id, isExecuting]);
+  }, [task.id, isExecuting, selectedPromptId]);
 
   const handleSessionEnd = useCallback(
     (exitCode: number) => {
       setIsExecuting(false);
       setActiveWorktreePath(null);
+      removePortal(task.id);
       if (exitCode === 0) {
         setTaskStatus("IN_REVIEW");
       }
-      // Reload executions for history
       getTaskExecutions(task.id).then((execs) => {
         setPastExecutions(execs.filter((e) => e.status !== "RUNNING"));
       });

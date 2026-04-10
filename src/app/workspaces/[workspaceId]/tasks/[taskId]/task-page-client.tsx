@@ -18,7 +18,7 @@ import { ExecutionTimeline } from "@/components/task/execution-timeline";
 import { useI18n } from "@/lib/i18n";
 import type { DiffResponse } from "@/lib/diff-parser";
 
-import { TerminalOutlet } from "@/components/task/terminal-portal";
+import { TerminalOutlet, useTerminalPortal } from "@/components/task/terminal-portal";
 
 interface TaskPageClientProps {
   task: {
@@ -75,6 +75,7 @@ const STATUS_COLORS: Record<string, string> = {
 export function TaskPageClient({ task, workspaceId, workspaceName, latestExecution, executions = [] }: TaskPageClientProps) {
   const router = useRouter();
   const { t } = useI18n();
+  const { removePortal } = useTerminalPortal();
   const [taskStatus, setTaskStatus] = useState(task.status);
   const [diffData, setDiffData] = useState<DiffData | null>(null);
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
@@ -132,16 +133,17 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     } catch {
       setIsExecuting(false);
     }
-  }, [task.id, isExecuting]);
+  }, [task.id, isExecuting, selectedPromptId]);
 
   const handleSessionEnd = useCallback((exitCode: number) => {
     setIsExecuting(false);
     setActiveWorktreePath(null);
+    removePortal(task.id);
     if (exitCode === 0) {
       setTaskStatus("IN_REVIEW");
     }
     router.refresh();
-  }, [router]);
+  }, [router, removePortal, task.id]);
 
   const handleStop = useCallback(async () => {
     await stopPtyExecution(task.id);

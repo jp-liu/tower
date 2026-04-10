@@ -28,7 +28,15 @@ export class PtySession {
       cols: 80,
       rows: 24,
       cwd,
-      env: process.env as Record<string, string>,
+      env: {
+        PATH: process.env.PATH ?? "",
+        HOME: process.env.HOME ?? "",
+        SHELL: process.env.SHELL ?? "/bin/zsh",
+        TERM: "xterm-color",
+        LANG: process.env.LANG ?? "en_US.UTF-8",
+        USER: process.env.USER ?? "",
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? "",
+      },
     });
 
     this._pty.onData((data) => {
@@ -62,9 +70,10 @@ export class PtySession {
     this._onData = fn;
   }
 
-  /** Register a callback for PTY exit — ws-server uses this to send session_end */
-  addExitListener(fn: (exitCode: number) => void): void {
-    this._exitListeners.push(fn);
+  /** Register a callback for PTY exit — ws-server uses this to send session_end.
+   *  Replaces previous listeners to prevent accumulation on reconnect. */
+  setExitListener(fn: (exitCode: number) => void): void {
+    this._exitListeners = [fn];
   }
 
   write(data: string): void {

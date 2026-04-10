@@ -26,7 +26,7 @@ export async function startWsServer(): Promise<void> {
     await new Promise((r) => setTimeout(r, 200));
   }
 
-  const wss = new WebSocketServer({ port: 3001, perMessageDeflate: false });
+  const wss = new WebSocketServer({ port: 3001, host: "127.0.0.1", perMessageDeflate: false });
   g.__wss = wss;
   console.error("[ws-server] WebSocket server listening on port 3001");
 
@@ -92,7 +92,7 @@ export async function startWsServer(): Promise<void> {
       console.error(`[ws-server] WS disconnected for task ${taskId}`);
       sessionClients.delete(taskId);
       const s = getSession(taskId);
-      if (!s || s.killed) return;
+      if (!s) return;
       s.setDataListener(() => {});
       const timeout = s.killed ? KEEPALIVE_EXITED_MS : KEEPALIVE_RUNNING_MS;
       s.disconnectTimer = setTimeout(() => {
@@ -121,7 +121,7 @@ function wireSession(session: import("./pty-session").PtySession, ws: WebSocket,
   if (buffer && ws.readyState === WebSocket.OPEN) {
     ws.send(buffer);
   }
-  session.addExitListener((exitCode) => {
+  session.setExitListener((exitCode: number) => {
     if (ws.readyState === WebSocket.OPEN) {
       ws.close(4000 + exitCode, "session_end");
     }
