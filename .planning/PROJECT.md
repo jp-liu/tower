@@ -8,20 +8,26 @@ An AI task management platform with a Kanban board UI for managing workspaces, p
 
 Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base that AI agents can query and update.
 
-## Shipped: v0.6 任务开发工作台 (2026-04-01)
+## Shipped: v0.8 执行历史与会话恢复 (2026-04-10)
 
-**Delivered:** 每个任务拥有专属的全功能开发工作台页面，集成 AI 聊天、Monaco 代码编辑器、文件树浏览、Diff 查看和实时预览。
+**Delivered:** 执行历史时间线、AI 摘要生成、会话恢复（--resume）、终端门户组件、代码质量优化。
 
 **Key features shipped:**
-- 任务抽屉"查看详情"跳转到任务专属工作台页面
-- 可调整大小的面板布局（左侧 AI 聊天 + 右侧三标签面板）
-- Monaco Editor 在线代码编辑（语法高亮、多标签页、Ctrl+S 保存、dirty 标记、主题同步）
-- 文件树浏览器（gitignore 过滤、git M/A/D 状态标记、右键 CRUD、执行时自动刷新）
-- Diff 变更查看（复用 v0.5 TaskDiffView 组件）
-- Preview 预览面板（地址栏 + iframe、启动命令、终端打开、保存后自动刷新）
-- 项目类型区分（前端/后端）+ 终端应用配置
+- 执行历史时间线（git stats、终端日志、AI 摘要）
+- Claude CLI session resume（继续上次对话）
+- 终端门户组件（跨页面终端保活）
+- 全局 Toast 通知组件
+- Zod 输入校验 + label 事务 + builtin 删除保护
+- @ts-nocheck 清理 + TaskWithLabels 类型安全
+- 结构化日志 + Error Boundary + stale execution 清理
 
 ## Current State
+
+**Shipped:** v0.8 执行历史与会话恢复 (2026-04-10)
+- Execution history timeline, AI summary, session resume, terminal portal, code quality
+
+**Shipped:** v0.7 终端交互体验 (2026-04-03)
+- Phase 24-28: PTY backend, WebSocket server, xterm.js terminal, session management, bug fixes
 
 **Shipped:** v0.6 任务开发工作台 (2026-04-01)
 - Phase 19-23: workbench layout, file tree, Monaco editor, diff view, preview panel
@@ -116,24 +122,28 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - ✓ 项目类型区分（前端/后端）— v0.6 Phase 23
 - ✓ 终端应用配置（Settings > General）— v0.6 Phase 23
 
-## Current Milestone: v0.7 终端交互体验
+## Current Milestone: v0.9 架构清理 + 外部调度闭环
 
-**Goal:** 将任务执行界面从 SSE 聊天气泡替换为真正的浏览器内终端（node-pty + WebSocket + xterm.js），用户在网页上看到的和本地运行 Claude Code 完全一样。
+**Goal:** 清理废弃 adapter 架构，建立 CLI Profile 配置表，实现龙虾（Paperclip/OpenClaw）外部调度的完整闭环（派活 → 查进度 → 追加指令 → 完成通知）。
 
 **Target features:**
-- node-pty 创建 PTY 伪终端，Claude CLI 运行在真实 TTY 环境中
-- WebSocket API route 双向流式通信（替代当前 SSE 单向推送）
-- xterm.js 浏览器终端组件替换聊天气泡（带颜色、光标、交互输入）
-- 终端会话管理（创建/销毁/重连）
-- v0.6 遗留 bug 修复（编辑器稳定性、Diff 显示条件等）
+- 清理 adapter 死代码，保留 CLI 验证和预览进程管理
+- CLI Profile 配置表（command + buildArgs），支持未来切换不同 CLI
+- 龙虾启动 → 飞书通知对接（env 区分 + 复用 notify-agi.sh）
+- 飞书通知模板优化（notify-agi.sh 里定义结构化模板）
+- MCP 工具：get_task_terminal_output（查进度）
+- MCP 工具：send_task_terminal_input（发指令）
+- PTY 静止检测通用回调
+- 数据模型对齐 + 废弃路由清理
 
 ### Active
 
-- [ ] PTY 终端后端（node-pty + 会话管理）
-- [ ] WebSocket API route 双向通信
-- [ ] xterm.js 终端组件替换聊天气泡
-- [ ] 终端会话生命周期管理（创建/销毁/重连）
-- [ ] v0.6 遗留 bug 修复
+- [ ] 清理 adapter 死代码 + 迁移有用模块
+- [ ] CLI Profile 配置表
+- [ ] 龙虾飞书通知对接（env 区分 + notify-agi.sh 模板优化）
+- [ ] MCP 终端交互工具（查进度 + 发指令）
+- [ ] PTY 静止检测通用回调
+- [ ] 数据模型对齐 + 废弃路由清理
 
 ### Out of Scope
 
@@ -152,9 +162,9 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - SQLite via Prisma ORM with FTS5 full-text search (trigram tokenizer)
 - Tailwind CSS v4 with @tailwindcss/typography for markdown
 - next-themes for FOUC-free theme switching
-- Adapter pattern for pluggable AI agent execution
-- ~180 commits across v0.1-v0.3
-- 190 unit/component tests, 23 Playwright E2E tests
+- PTY-based terminal execution (node-pty + WebSocket + xterm.js)
+- notify-agi.sh hook for Feishu notifications via OpenClaw CLI
+- ~250 commits across v0.1-v0.8
 - FTS5 全文搜索基础设施 (notes_fts) + 全局搜索 6 类型支持
 
 ## Constraints
@@ -213,4 +223,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-02 — v0.7 milestone started*
+*Last updated: 2026-04-10 — v0.9 milestone started*
