@@ -4,10 +4,10 @@ milestone: v0.9
 milestone_name: 架构清理 + 外部调度闭环
 status: planning
 stopped_at: null
-last_updated: "2026-04-10T16:00:00.000Z"
+last_updated: "2026-04-10T16:30:00.000Z"
 last_activity: 2026-04-10
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Phase 29 (not yet started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-04-10 — Milestone v0.9 started
+Status: Roadmap defined, ready to plan Phase 29
+Last activity: 2026-04-10 — v0.9 roadmap created (Phases 29-35)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -36,9 +36,9 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 19 (across v0.1-v0.5) + 11 (v0.6) = 30
+- Total plans completed: 19 (across v0.1-v0.5) + 11 (v0.6) + 8 (v0.7) = 38
 - Average duration: ~30 min
-- Total execution time: ~15 hours
+- Total execution time: ~19 hours
 
 **By Phase:**
 
@@ -75,8 +75,6 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 23-preview-panel P01 | 720 | 2 tasks | 8 files |
 | Phase 23-preview-panel P02 | 480 | 2 tasks | 3 files |
 | Phase 23 P03 | 480 | 2 tasks | 3 files |
-
-*Updated after each plan completion*
 | Phase 24 P01 | 900 | 2 tasks | 3 files |
 | Phase 24-pty-backend-websocket-server P02 | 182 | 2 tasks | 2 files |
 | Phase 25-xterm-terminal-component P01 | 180 | 2 tasks | 3 files |
@@ -85,6 +83,8 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 26 P02 | 180 | 2 tasks | 2 files |
 | Phase 27-task-card-context-menu P01 | 300 | 2 tasks | 2 files |
 | Phase 27-task-card-context-menu P02 | 180 | 2 tasks | 5 files |
+
+*Updated after each plan completion*
 
 ## Accumulated Context
 
@@ -197,6 +197,14 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 27]: Followed FileTreeContextMenu portal pattern exactly for TaskCardContextMenu — useRef + mousedown/keydown useEffect + createPortal to document.body
 - [Phase 27]: startPtyExecution called with empty string prompt from context menu — task title/description already in DB record; user can refine in task detail page
 - [Phase 27]: hasExecutions derived via _count.executions from Prisma include — consistent with (task as any) pattern for extended fields
+- [v0.9 Roadmap]: Adapter cleanup must audit ALL import sites first — registry.ts is actively used by /api/adapters/test route; migrate cli-verify before deleting
+- [v0.9 Roadmap]: CliProfile uses `baseArgs` field name (not `buildArgs`) — aligns with agent-actions.ts call site semantics
+- [v0.9 Roadmap]: envOverrides passed directly to pty.spawn() env param — NEVER mutate process.env for per-session vars (prevents concurrent session contamination)
+- [v0.9 Roadmap]: notify-agi.sh must check AI_MANAGER_TASK_ID at entry — no env var means manual Claude session, exit silently
+- [v0.9 Roadmap]: Internal HTTP bridge is the only correct MCP↔PTY IPC channel — MCP stdio process has separate globalThis, cannot share in-memory sessions
+- [v0.9 Roadmap]: Idle detection threshold minimum 180s — Claude silent reasoning (30-120s) must not trigger false positive
+- [v0.9 Roadmap]: HTTP bridge routes return 404 (not 500) when no active session for taskId — clean signal for MCP tools to report "not running"
+- [v0.9 Roadmap]: callbackUrl and AI_MANAGER_TASK_ID grouped together in Phase 31 — both are env injection concerns, same code path
 
 ### Pending Todos
 
@@ -204,12 +212,13 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 24: Verify `node -e "require('node-pty')"` passes after install — native addon compilation may require Xcode command line tools on macOS.
-- Phase 24: Switch dev script from `next dev --turbo` to `next dev --webpack` before any node-pty work — Turbopack is incompatible.
-- Phase 26: DB persistence decision for terminal sessions is unresolved (raw transcript as TaskMessage vs. no persistence). Must decide during Phase 26 planning.
+- Phase 29: Run `grep -r "from.*adapters" src/ --include="*.ts"` before any deletion — enumerate ALL import sites first to avoid silent breakage.
+- Phase 30: Confirm CliProfile field name is `baseArgs` (not `buildArgs`) before writing migration — avoid follow-up rename migration.
+- Phase 32: Read `~/.claude/hooks/notify-agi.sh` before implementing — exact argument interface and SESSION_ID availability must be confirmed before coding.
+- Phase 33: Smoke-test that App Router route handlers can import `getSession` from `session-store.ts` and see the `globalThis.__ptySessions` Map populated by instrumentation.ts — not a fresh empty Map.
 
 ## Session Continuity
 
-Last session: 2026-04-03T01:49:19.948Z
-Stopped at: Completed 27-02-PLAN.md
+Last session: 2026-04-10T16:30:00.000Z
+Stopped at: v0.9 roadmap created (Phases 29-35)
 Resume file: None

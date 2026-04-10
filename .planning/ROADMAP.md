@@ -8,7 +8,8 @@
 - ✅ **v0.4 系统配置化** — Phases 11-14 (shipped 2026-03-30)
 - ✅ **v0.5 Git Worktree 任务隔离** — Phases 15-18 (shipped 2026-03-31)
 - ✅ **v0.6 任务开发工作台** — Phases 19-23 (shipped 2026-04-01)
-- 🚧 **v0.7 终端交互体验** — Phases 24-28 (in progress)
+- ✅ **v0.7 终端交互体验** — Phases 24-28 (shipped 2026-04-10)
+- 🚧 **v0.9 架构清理 + 外部调度闭环** — Phases 29-35 (in progress)
 
 ## Phases
 
@@ -83,15 +84,30 @@ See: [milestones/v0.6-ROADMAP.md](./milestones/v0.6-ROADMAP.md) for full details
 
 </details>
 
-### 🚧 v0.7 终端交互体验 (In Progress)
-
-**Milestone Goal:** 将任务执行界面从 SSE 聊天气泡替换为真正的浏览器内终端（node-pty + WebSocket + xterm.js），用户在网页上看到的和本地运行 Claude Code 完全一样。
+<details>
+<summary>✅ v0.7 终端交互体验 (Phases 24-28) — SHIPPED 2026-04-10</summary>
 
 - [x] **Phase 24: PTY Backend & WebSocket Server** - node-pty 会话注册表 + 独立 WebSocket server (port 3001) 双向通信 + 安全防护 (completed 2026-04-02)
 - [x] **Phase 25: xterm.js Terminal Component** - 浏览器终端组件（ANSI 渲染、键盘输入、resize 同步、主题跟随） (completed 2026-04-02)
 - [x] **Phase 26: Workbench Integration** - 工作台左侧面板替换 SSE 聊天气泡为终端组件 + 执行生命周期对接 (completed 2026-04-03)
 - [x] **Phase 27: Task Card Context Menu** - Kanban 卡片右键菜单（更改状态、启动任务、前往详情页） (completed 2026-04-03)
-- [ ] **Phase 28: v0.6 Bug Fixes** - Monaco 加载稳定性修复 + Diff 显示条件修复
+- [x] **Phase 28: v0.6 Bug Fixes** - Monaco 加载稳定性修复 + Diff 显示条件修复 (completed 2026-04-10)
+
+See: [milestones/v0.7-ROADMAP.md](./milestones/v0.7-ROADMAP.md) for full details.
+
+</details>
+
+### 🚧 v0.9 架构清理 + 外部调度闭环 (In Progress)
+
+**Milestone Goal:** 清理废弃 adapter 架构，建立 CLI Profile 配置表，实现龙虾（Paperclip/OpenClaw）外部调度的完整闭环（派活 → 查进度 → 追加指令 → 完成通知）。
+
+- [ ] **Phase 29: Adapter Dead Code Removal** - 删除废弃 SSE/adapter 文件，迁移有用模块到 lib/ 目录，修复路由引用，通过 tsc 检查
+- [ ] **Phase 30: Schema Foundation** - CliProfile 数据模型 + TaskExecution.callbackUrl 字段 + Prisma 迁移 + 默认行种子
+- [ ] **Phase 31: PTY Primitives & Env Injection** - startPtyExecution/resumePtyExecution 读 CliProfile 构建参数 + envOverrides 传参 + idle 检测
+- [ ] **Phase 32: Agent Actions & Feishu Wiring** - notify-agi.sh 更新（任务 ID 检查 + 结构化模板）+ Stop hook 挂接 + callbackUrl 注入
+- [ ] **Phase 33: Internal HTTP Bridge** - /api/internal/terminal/[taskId]/buffer 和 /input 路由，供 MCP 进程跨进程读写 PTY
+- [ ] **Phase 34: MCP Terminal Tools** - get_task_terminal_output + send_task_terminal_input + get_task_execution_status 三个 MCP 工具
+- [ ] **Phase 35: Settings UI for CLI Profile** - Settings 页面 CLI Profile 查看/编辑卡片
 
 ## Phase Details
 
@@ -243,6 +259,85 @@ Plans:
   2. The Changes tab displays a diff for NORMAL type projects (not just GIT type projects)
 **Plans**: TBD
 
+### Phase 29: Adapter Dead Code Removal
+**Goal**: The codebase contains no dead SSE/adapter execution files; all live modules are relocated to their correct paths and the build passes with zero new type errors
+**Depends on**: Phase 28 (v0.8 shipped, clean starting point)
+**Requirements**: CLEAN-01, CLEAN-02, CLEAN-03, CLEAN-04, CLEAN-05
+**Success Criteria** (what must be TRUE):
+  1. `src/lib/adapters/execute.ts`, `parse.ts`, `process-utils.ts`, `registry.ts`, and `types.ts` no longer exist in the repository
+  2. The Settings > AI Tools verify button still works — CLI verification now comes from `src/lib/cli-test.ts` via the updated `/api/adapters/test` route
+  3. Preview process management now lives at `src/lib/preview-process.ts` with no broken imports in existing consumers
+  4. The deprecated `/api/tasks/[taskId]/execute` route no longer exists and hitting it returns 404
+  5. `tsc --noEmit` exits with code 0 (no new type errors introduced by the reorganization)
+**Plans**: TBD
+
+### Phase 30: Schema Foundation
+**Goal**: The database has a `CliProfile` table with a seeded default row and `TaskExecution` has a `callbackUrl` field; the Prisma client is regenerated and ready for application code
+**Depends on**: Phase 29 (clean codebase before schema changes)
+**Requirements**: DATA-01, DATA-02, CLIP-01
+**Success Criteria** (what must be TRUE):
+  1. `prisma studio` shows a `CliProfile` table with at least one row: `command: "claude"`, `baseArgs: ["--dangerously-skip-permissions"]`
+  2. `TaskExecution` rows have an optional `callbackUrl` column visible in prisma studio
+  3. `prisma db push` (or `prisma migrate deploy`) runs without errors on a fresh database
+  4. TypeScript code can import `CliProfile` and `TaskExecution.callbackUrl` from `@prisma/client` without type errors
+**Plans**: TBD
+
+### Phase 31: PTY Primitives & Env Injection
+**Goal**: PTY sessions accept per-session environment overrides and detect idle state; `startPtyExecution` and `resumePtyExecution` read from `CliProfile` instead of hardcoded strings
+**Depends on**: Phase 30 (CliProfile schema exists)
+**Requirements**: CLIP-02, CLIP-03, NTFY-01, NTFY-02, NTFY-06, NTFY-07
+**Success Criteria** (what must be TRUE):
+  1. Starting a task execution reads `command` and `baseArgs` from the `CliProfile` default row — changing the DB row changes what CLI is spawned without any code change
+  2. A `callbackUrl` passed to `startPtyExecution` appears as `CALLBACK_URL` in the spawned process's environment (verified via `env` command in terminal)
+  3. `AI_MANAGER_TASK_ID` is injected into every PTY session environment automatically
+  4. After 180 seconds of zero PTY output, the configured `onIdle` callback fires
+  5. User typing in the terminal (via WebSocket) resets the idle timer; the callback does not fire if the user is actively interacting
+**Plans**: TBD
+
+### Phase 32: Agent Actions & Feishu Wiring
+**Goal**: Claude completions trigger a Feishu notification with structured task metadata; the notification only fires for ai-manager-dispatched sessions, not manual Claude runs
+**Depends on**: Phase 31 (PTY primitives + env injection in place)
+**Requirements**: NTFY-03, NTFY-04, NTFY-05
+**Success Criteria** (what must be TRUE):
+  1. When a task execution completes (Claude exits 0), a Feishu message arrives containing: task title, final status, elapsed time, and a brief summary
+  2. Running Claude manually (outside ai-manager) does not produce a Feishu notification — the `AI_MANAGER_TASK_ID` environment variable controls the gate
+  3. The `~/.claude/settings.json` Stop hook entry points to `notify-agi.sh` and is present after setup
+  4. A failed execution (exit code non-zero) sends a Feishu notification tagged as failed, not completed
+**Plans**: TBD
+
+### Phase 33: Internal HTTP Bridge
+**Goal**: The Next.js server exposes two localhost-only HTTP routes that allow any process (including the MCP stdio process) to read PTY buffer contents and send input to a running PTY session
+**Depends on**: Phase 31 (PTY sessions have buffer and write APIs)
+**Requirements**: TERM-01, TERM-02
+**Success Criteria** (what must be TRUE):
+  1. `curl http://localhost:3000/api/internal/terminal/{taskId}/buffer` returns the last N lines of PTY output as JSON for a running session
+  2. `curl -X POST http://localhost:3000/api/internal/terminal/{taskId}/input -d '{"text":"y\n"}'` sends the text to the running PTY and it appears in the terminal
+  3. Both routes return 404 when no active PTY session exists for the given taskId
+  4. Both routes reject requests from non-localhost origins (loopback-only guard enforced)
+**Plans**: TBD
+
+### Phase 34: MCP Terminal Tools
+**Goal**: External orchestrators (Paperclip/OpenClaw) can poll PTY terminal output and inject input into running task sessions via MCP tools
+**Depends on**: Phase 33 (HTTP bridge routes exist and are tested)
+**Requirements**: TERM-03, TERM-04, TERM-05
+**Success Criteria** (what must be TRUE):
+  1. Calling `get_task_terminal_output` from an MCP client returns recent terminal output lines for a running task
+  2. Calling `send_task_terminal_input` from an MCP client sends text to the running PTY — Claude receives and acts on it
+  3. Calling `get_task_execution_status` returns whether the execution is running, idle, or exited, plus the last output snippet
+  4. MCP tool count does not exceed 30 (currently 21 → target 24 after adding 3 new tools)
+**Plans**: TBD
+
+### Phase 35: Settings UI for CLI Profile
+**Goal**: Users can view and edit the active CLI Profile directly in the Settings UI without touching the database
+**Depends on**: Phase 30 (CliProfile schema), Phase 31 (server actions for profile CRUD)
+**Requirements**: CLIP-04
+**Success Criteria** (what must be TRUE):
+  1. Settings page has a CLI Profile card showing the current command, base args, and any env vars
+  2. User can edit the command and base args inline and save; the next task execution uses the updated values
+  3. The CLI Profile card is bilingual (zh/en) and follows existing settings card visual patterns
+**Plans**: TBD
+**UI hint**: yes
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -270,8 +365,15 @@ Plans:
 | 21. Code Editor | v0.6 | 3/3 | Complete | 2026-04-01 |
 | 22. Diff View Integration | v0.6 | 0/TBD | Complete | 2026-04-01 |
 | 23. Preview Panel | v0.6 | 3/3 | Complete | 2026-04-01 |
-| 24. PTY Backend & WebSocket Server | v0.7 | 2/2 | Complete    | 2026-04-02 |
-| 25. xterm.js Terminal Component | v0.7 | 2/2 | Complete    | 2026-04-03 |
-| 26. Workbench Integration | v0.7 | 2/2 | Complete    | 2026-04-03 |
-| 27. Task Card Context Menu | v0.7 | 2/2 | Complete    | 2026-04-03 |
-| 28. v0.6 Bug Fixes | v0.7 | 0/TBD | Not started | - |
+| 24. PTY Backend & WebSocket Server | v0.7 | 2/2 | Complete | 2026-04-02 |
+| 25. xterm.js Terminal Component | v0.7 | 2/2 | Complete | 2026-04-03 |
+| 26. Workbench Integration | v0.7 | 2/2 | Complete | 2026-04-03 |
+| 27. Task Card Context Menu | v0.7 | 2/2 | Complete | 2026-04-03 |
+| 28. v0.6 Bug Fixes | v0.7 | 0/TBD | Complete | 2026-04-10 |
+| 29. Adapter Dead Code Removal | v0.9 | 0/TBD | Not started | - |
+| 30. Schema Foundation | v0.9 | 0/TBD | Not started | - |
+| 31. PTY Primitives & Env Injection | v0.9 | 0/TBD | Not started | - |
+| 32. Agent Actions & Feishu Wiring | v0.9 | 0/TBD | Not started | - |
+| 33. Internal HTTP Bridge | v0.9 | 0/TBD | Not started | - |
+| 34. MCP Terminal Tools | v0.9 | 0/TBD | Not started | - |
+| 35. Settings UI for CLI Profile | v0.9 | 0/TBD | Not started | - |

@@ -66,13 +66,35 @@ Requirements for milestone v0.9: 架构清理 + 外部调度闭环.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| — | — | — |
+| CLEAN-01 | Phase 29 | Pending |
+| CLEAN-02 | Phase 29 | Pending |
+| CLEAN-03 | Phase 29 | Pending |
+| CLEAN-04 | Phase 29 | Pending |
+| CLEAN-05 | Phase 29 | Pending |
+| DATA-01 | Phase 30 | Pending |
+| DATA-02 | Phase 30 | Pending |
+| CLIP-01 | Phase 30 | Pending |
+| CLIP-02 | Phase 31 | Pending |
+| CLIP-03 | Phase 31 | Pending |
+| NTFY-01 | Phase 31 | Pending |
+| NTFY-02 | Phase 31 | Pending |
+| NTFY-06 | Phase 31 | Pending |
+| NTFY-07 | Phase 31 | Pending |
+| NTFY-03 | Phase 32 | Pending |
+| NTFY-04 | Phase 32 | Pending |
+| NTFY-05 | Phase 32 | Pending |
+| TERM-01 | Phase 33 | Pending |
+| TERM-02 | Phase 33 | Pending |
+| TERM-03 | Phase 34 | Pending |
+| TERM-04 | Phase 34 | Pending |
+| TERM-05 | Phase 34 | Pending |
+| CLIP-04 | Phase 35 | Pending |
 
 **Coverage:**
 - v0.9 requirements: 19 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 19
+- Mapped to phases: 19 (100%)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-10*
-*Last updated: 2026-04-10 after initial definition*
+*Last updated: 2026-04-10 — traceability added after roadmap creation*
