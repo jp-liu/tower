@@ -269,7 +269,10 @@ Plans:
   3. Preview process management now lives at `src/lib/preview-process.ts` with no broken imports in existing consumers
   4. The deprecated `/api/tasks/[taskId]/execute` route no longer exists and hitting it returns 404
   5. `tsc --noEmit` exits with code 0 (no new type errors introduced by the reorganization)
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 29-01-PLAN.md — Relocate cli-test.ts + preview-process.ts, update consumer imports (CLEAN-02, CLEAN-03)
+- [ ] 29-02-PLAN.md — Delete adapters/ directory + deprecated execute route, verify tsc (CLEAN-01, CLEAN-04, CLEAN-05)
 
 ### Phase 30: Schema Foundation
 **Goal**: The database has a `CliProfile` table with a seeded default row and `TaskExecution` has a `callbackUrl` field; the Prisma client is regenerated and ready for application code
@@ -370,7 +373,7 @@ Plans:
 | 26. Workbench Integration | v0.7 | 2/2 | Complete | 2026-04-03 |
 | 27. Task Card Context Menu | v0.7 | 2/2 | Complete | 2026-04-03 |
 | 28. v0.6 Bug Fixes | v0.7 | 0/TBD | Complete | 2026-04-10 |
-| 29. Adapter Dead Code Removal | v0.9 | 0/TBD | Not started | - |
+| 29. Adapter Dead Code Removal | v0.9 | 0/2 | Planning | - |
 | 30. Schema Foundation | v0.9 | 0/TBD | Not started | - |
 | 31. PTY Primitives & Env Injection | v0.9 | 0/TBD | Not started | - |
 | 32. Agent Actions & Feishu Wiring | v0.9 | 0/TBD | Not started | - |
