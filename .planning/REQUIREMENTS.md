@@ -1,103 +1,78 @@
-# Requirements: ai-manager
+# Requirements: ai-manager v0.9
 
-**Defined:** 2026-04-02
-**Core Value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration.
+**Defined:** 2026-04-10
+**Core Value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
 
-## v0.7 Requirements
+## v0.9 Requirements
 
-Requirements for v0.7 — 终端交互体验. Each maps to roadmap phases.
+Requirements for milestone v0.9: 架构清理 + 外部调度闭环.
 
-### 终端后端
+### 架构清理 (CLEAN)
 
-- [x] **PTY-01**: 系统可通过 node-pty 为每个任务创建 PTY 伪终端会话
-- [x] **PTY-02**: PTY 会话注册表管理会话生命周期（创建/查询/销毁）
-- [x] **PTY-03**: PTY 进程退出或任务完成时自动清理（防止僵尸进程）
+- [ ] **CLEAN-01**: Adapter dead code removed — `execute.ts`, `parse.ts`, `process-utils.ts`, `registry.ts`, `types.ts` deleted
+- [ ] **CLEAN-02**: CLI verification module (`test.ts`) relocated to `src/lib/cli-test.ts` with `/api/adapters/test` route updated
+- [ ] **CLEAN-03**: Preview process manager relocated to `src/lib/preview-process.ts`
+- [ ] **CLEAN-04**: 废弃路由 `/api/tasks/[taskId]/execute` 删除
+- [ ] **CLEAN-05**: `tsc --noEmit` 通过，无新增类型错误
 
-### WebSocket 通信
+### CLI Profile (CLIP)
 
-- [x] **WS-01**: `instrumentation.ts` 启动独立 WebSocket server (port 3001)
-- [x] **WS-02**: WebSocket 双向转发 xterm.js ↔ PTY 输入输出
-- [x] **WS-03**: WebSocket 连接断开时 PTY 保活（不立即销毁，等待重连）
-- [x] **WS-04**: WebSocket Origin 校验防止 CSWSH 攻击
+- [ ] **CLIP-01**: CLI Profile 配置对象定义（command、buildArgs、envVars）
+- [ ] **CLIP-02**: `startPtyExecution` 通过 profile 构建命令和参数（替代硬编码 "claude"）
+- [ ] **CLIP-03**: `resumePtyExecution` 通过 profile 构建命令和参数
+- [ ] **CLIP-04**: Settings 页面 CLI Profile 查看/编辑
 
-### 终端前端
+### 外部调度通知 (NTFY)
 
-- [x] **TERM-01**: xterm.js 终端组件替换任务页左侧聊天气泡界面
-- [x] **TERM-02**: 终端支持键盘输入（交互式 Claude CLI 操作）
-- [x] **TERM-03**: 终端 resize 与浏览器窗口同步（FitAddon + PTY resize）
-- [x] **TERM-04**: 终端主题跟随应用 dark/light 设置
+- [ ] **NTFY-01**: `createSession` 支持 envOverrides 参数，传递到 PTY 子进程
+- [ ] **NTFY-02**: `startPtyExecution` 接受 callbackUrl 参数，注入 `AI_MANAGER_TASK_ID` + `CALLBACK_URL` 环境变量
+- [ ] **NTFY-03**: `notify-agi.sh` 开头检查 `AI_MANAGER_TASK_ID`，无则静默退出
+- [ ] **NTFY-04**: `~/.claude/settings.json` Stop hook 挂回 notify-agi.sh
+- [ ] **NTFY-05**: 飞书通知模板优化 — 包含任务标题、状态、耗时、摘要
+- [ ] **NTFY-06**: PTY idle 检测 — `lastActivityAt` + 可配置阈值（≥180s），触发 onIdle 回调
+- [ ] **NTFY-07**: idle 检测响应用户输入 resetIdleTimer
 
-### 会话集成
+### MCP 终端交互 (TERM)
 
-- [x] **INT-01**: 点击"执行"时创建 PTY 会话并在终端组件显示
-- [x] **INT-02**: Claude CLI 在 PTY 中运行（不用 stream-json，保留原始 TTY 输出）
-- [x] **INT-03**: PTY 退出后更新任务状态（成功→IN_REVIEW，失败→保持）
+- [ ] **TERM-01**: Internal HTTP route `GET /api/internal/terminal/[taskId]/buffer` — 返回 PTY 缓冲区最近 N 行
+- [ ] **TERM-02**: Internal HTTP route `POST /api/internal/terminal/[taskId]/input` — 往 PTY 发送文本
+- [ ] **TERM-03**: MCP 工具 `get_task_terminal_output` — 通过 HTTP bridge 读取终端输出
+- [ ] **TERM-04**: MCP 工具 `send_task_terminal_input` — 通过 HTTP bridge 发送指令
+- [ ] **TERM-05**: MCP 工具 `get_task_execution_status` — 返回任务执行状态（running/idle/exited + 最后输出摘要）
 
-### 任务交互增强
+### 数据模型 (DATA)
 
-- [x] **TASK-01**: 任务 Kanban 卡片支持右键菜单（更改状态、启动任务、前往详情页）
-- [x] **TASK-02**: 右键"启动任务"直接运行 Claude CLI（仅未执行过的任务可点击，已执行过的置灰）
-- [x] **TASK-03**: 右键"前往详情页"跳转到任务工作台页面
-
-### Bug 修复
-
-- [ ] **FIX-01**: v0.6 编辑器加载不稳定修复
-- [ ] **FIX-02**: v0.6 Diff 显示条件修复（NORMAL 类型项目也支持）
+- [ ] **DATA-01**: TaskExecution 增加 `callbackUrl` 可选字段
+- [ ] **DATA-02**: Prisma migration 生成并应用
 
 ## Future Requirements
 
-Deferred to future release.
+### 多 CLI 深度集成
 
-### 终端进阶
-
-- **TERM-F01**: 终端会话重连（浏览器刷新后恢复终端状态）
-- **TERM-F02**: 终端输出序列化存储（@xterm/addon-serialize）
-- **TERM-F03**: 多终端标签页支持
-- **TERM-F04**: 终端历史记录回放
-
-### 交互进阶
-
-- **TASK-F01**: 任务批量操作（多选 + 批量状态变更）
-- **TASK-F02**: 任务拖拽到不同项目
+- **MCLI-01**: Prisma `CliProfile` 数据模型（支持多个 CLI 配置持久化）
+- **MCLI-02**: CLI Profile 切换 UI（任务执行时选择使用哪个 CLI）
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| WebContainer 浏览器内运行 | localhost 已有 Node.js，node-pty 更直接 |
-| SSH 远程终端 | 本地工具，不需要远程连接 |
-| 终端录制/回放 | 复杂度高，延迟到 v0.8+ |
-| 多用户终端共享 | 本地单用户工具 |
+| Adapter 接口重建 | 当前只有一个 CLI，不需要抽象层 |
+| MCP 工具实时推送（SSE/WebSocket） | 轮询 HTTP bridge 足够，实时推送复杂度高 |
+| 多飞书群通知路由 | 固定默认群 ID，后续按需扩展 |
+| Settings 通知模板编辑 UI | 模板在 notify-agi.sh 里改，不需要 UI |
+| 认证系统 | localhost-only 个人工具 |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PTY-01 | Phase 24 | Complete |
-| PTY-02 | Phase 24 | Complete |
-| PTY-03 | Phase 24 | Complete |
-| WS-01 | Phase 24 | Complete |
-| WS-02 | Phase 24 | Complete |
-| WS-03 | Phase 24 | Complete |
-| WS-04 | Phase 24 | Complete |
-| TERM-01 | Phase 25 | Complete |
-| TERM-02 | Phase 25 | Complete |
-| TERM-03 | Phase 25 | Complete |
-| TERM-04 | Phase 25 | Complete |
-| INT-01 | Phase 26 | Complete |
-| INT-02 | Phase 26 | Complete |
-| INT-03 | Phase 26 | Complete |
-| TASK-01 | Phase 27 | Complete |
-| TASK-02 | Phase 27 | Complete |
-| TASK-03 | Phase 27 | Complete |
-| FIX-01 | Phase 28 | Pending |
-| FIX-02 | Phase 28 | Pending |
+| — | — | — |
 
-**v0.7 Coverage:**
-- v0.7 requirements: 19 total
-- Mapped to phases: 19
-- Unmapped: 0 ✓
+**Coverage:**
+- v0.9 requirements: 19 total
+- Mapped to phases: 0 (pending roadmap)
+- Unmapped: 19
 
 ---
-*Requirements defined: 2026-04-02*
-*Last updated: 2026-04-02 — traceability updated after v0.7 roadmap creation*
+*Requirements defined: 2026-04-10*
+*Last updated: 2026-04-10 after initial definition*
