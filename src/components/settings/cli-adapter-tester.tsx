@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Check, X, Terminal, CheckCircle2, XCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import type { TestResult } from "@/lib/adapters/types";
+import type { TestResult } from "@/lib/cli-test";
 
 interface CLIAdapterTesterProps {
   adapterType: string;

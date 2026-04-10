@@ -6,7 +6,7 @@ import {
   registerPreviewProcess,
   killPreviewProcess,
   isPreviewRunning,
-} from "@/lib/adapters/preview-process-manager";
+} from "@/lib/preview-process";
 import { readConfigValue } from "@/lib/config-reader";
 
 export async function startPreview(

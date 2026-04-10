@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { existsSync } from "fs";
-import { getAdapter, listAdapters } from "@/lib/adapters/registry";
+import { testEnvironment, type TestResult } from "@/lib/cli-test";
 import { db } from "@/lib/db";
 
 const bodySchema = z.object({
-  adapterType: z.string(),
+  adapterType: z.string().optional(),
   cwd: z.string().optional(),
 });
 
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "Invalid request body" }, { status: 400 });
     }
 
-    const { adapterType, cwd } = parsed.data;
+    const { cwd } = parsed.data;
 
     // Validate cwd: must be an existing project localPath or use process.cwd()
     let resolvedCwd = process.cwd();
@@ -37,8 +37,7 @@ export async function POST(request: NextRequest) {
       resolvedCwd = cwd;
     }
 
-    const adapter = getAdapter(adapterType);
-    const result = await adapter.testEnvironment(resolvedCwd);
+    const result: TestResult = await testEnvironment(resolvedCwd);
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
@@ -49,5 +48,5 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
-  return NextResponse.json({ adapters: listAdapters() });
+  return NextResponse.json({ adapters: ["claude_local"] });
 }

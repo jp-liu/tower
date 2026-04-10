@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import type { TestResult } from "@/lib/adapters/types";
+import type { TestResult } from "@/lib/cli-test";
 
 const DEFAULT_CLI_ADAPTER_KEY = "ai-manager:default-cli-adapter";
 
