@@ -1,246 +1,178 @@
 # Project Research Summary
 
-**Project:** ai-manager v0.7
-**Domain:** Browser terminal integration — node-pty + WebSocket + xterm.js replacing SSE chat bubbles
-**Researched:** 2026-04-02
+**Project:** ai-manager v0.9 — 架构清理 + 外部调度闭环
+**Domain:** AI task execution platform — adapter cleanup, CLI Profile config, MCP terminal tools, PTY idle detection, external dispatch via Feishu
+**Researched:** 2026-04-10
 **Confidence:** HIGH
 
 ## Executive Summary
 
-The v0.7 milestone replaces the existing SSE-based chat bubble UI with a real browser terminal powered by node-pty, WebSocket, and xterm.js. The goal is to give users a genuine TTY experience — ANSI colors, interactive prompts, cursor positioning — rather than parsed JSON chat messages. This is a well-understood architectural pattern (VS Code terminal, ttyd, code-server all use the same primitives), and the technology choices are unambiguous: `node-pty` for PTY spawning, `ws` for WebSocket, `@xterm/xterm` for rendering.
+ai-manager v0.9 is a focused architectural cleanup and external-dispatch milestone. The codebase already has a fully functional PTY execution engine (v0.7–v0.8): node-pty spawns CLI processes, a 50 KB ring buffer stores output, WebSocket streams it to xterm.js, and an onExit callback persists the result to SQLite. v0.9's job is to (1) remove the dead SSE/adapter execution path that predates PTY, (2) lift hardcoded CLI invocation parameters into a DB-backed `CliProfile` table, (3) expose the PTY session to the external MCP orchestrator (Paperclip/OpenClaw) via two new MCP tools backed by a localhost HTTP bridge, and (4) wire idle detection plus Feishu notifications to close the human-in-the-loop feedback loop. No new npm packages are required — every capability is achievable with existing installed libraries.
 
-The most consequential architectural decision is how to integrate WebSocket support into a Next.js 16 App Router application. Next.js App Router route handlers do not support HTTP Upgrade natively. The ARCHITECTURE.md and PITFALLS.md research converge on the same recommendation: run a standalone `ws.WebSocketServer` on port 3001, started from `instrumentation.ts`. This avoids patching Next.js internals (`next-ws` approach) and avoids replacing the dev script with a custom `server.ts`. The two research files diverge on one point — PITFALLS.md recommends a custom `server.ts` for production stability while ARCHITECTURE.md recommends the `instrumentation.ts` approach as simpler. For a localhost-only single-user tool, either is acceptable; `instrumentation.ts` is preferred as the lower-friction path.
+The recommended approach is strict phase sequencing driven by dependency order: adapter dead code removal first (zero risk, clears confusion), then schema additions, then PTY primitives, then the agent-actions wiring, and finally the MCP surface. This order ensures each phase is independently testable and no phase has untested predecessors. The single most important architectural decision is the internal HTTP bridge (`/api/internal/pty/[taskId]/...`) as the IPC channel between the MCP process and the Next.js process — this is the only safe solution given the separate-process constraint validated in v0.2 that must not be reversed.
 
-The critical risks are: (1) Turbopack's inability to handle node-pty's native `.node` addon — addressed by switching to `--webpack` mode; (2) PTY process leaks if the session registry is not implemented before any UI work; and (3) double-kill exceptions that can crash the entire server if PTY lifecycle is not carefully guarded. All three are Phase 1 concerns and have clear, documented prevention strategies.
-
----
+The main risks are: (a) severing live references during adapter cleanup — specifically `registry.ts` is still imported by the Settings verification route, and removing it without migrating `testEnvironment` breaks the UI silently; (b) PTY idle detection false-positives during Claude's silent reasoning phases (30–120 s of zero output is normal), which requires a 180 s minimum threshold and two-phase verification; and (c) Feishu notifications firing for manual Claude sessions because `notify-agi.sh` uses a shared `task-meta.json` that must be cleaned up after each send.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The base stack (Next.js 16, React 19, Prisma 6, SQLite, Tailwind CSS v4, zustand, `@xterm/xterm`, `@xterm/addon-fit`) is unchanged. Four new dependencies are needed for v0.7:
+All v0.9 features are implementable with the existing stack — no `pnpm add` commands are needed. The base stack (Next.js 16.2.1, React 19, Prisma 6 + SQLite, node-pty 1.1.0, ws 8.x, @modelcontextprotocol/sdk 1.28.0, zod 4.x) provides everything required. New capabilities map directly to existing packages: the `CliProfile` table uses Prisma + `prisma db push`, the internal HTTP bridge uses native Node.js 18 `fetch()`, idle detection uses `setTimeout` in TypeScript, env injection uses object spread in the existing `pty.spawn` env parameter, and Feishu notification uses `child_process.execFile` to call the existing `notify-agi.sh` shell script.
 
 **Core technologies:**
-- `node-pty ^1.1.0`: Spawns Claude CLI in a real pseudo-terminal — provides the genuine TTY environment Claude Code requires for ANSI rendering, interactive prompts, and progress indicators. Microsoft-maintained, powers VS Code terminal. Auto-excluded from Next.js bundling via the built-in `serverExternalPackages` allowlist.
-- `ws ^8.18.0`: Raw WebSocket server, minimal and fast. Peer dependency of `next-ws`; used directly in the `instrumentation.ts` standalone server pattern.
-- `next-ws ^2.2.2` (optional alternative): Patches Next.js to expose `SOCKET` handlers in route files. Viable for localhost tools but fragile across Next.js upgrades. PITFALLS.md recommends the custom server / instrumentation approach instead.
-- `@xterm/addon-attach ^0.12.0`: Official xterm.js addon that pipes raw WebSocket frames into the terminal buffer. The canonical bridge between a WebSocket carrying raw PTY bytes and xterm.js. The only missing xterm.js addon for v0.7.
-
-**Critical version requirements:**
-- Use `--webpack` flag (`"dev": "next dev --webpack"`) — Turbopack cannot reliably handle native `.node` addons from pnpm's isolated store (Next.js issue #85449, unresolved).
-- Add `node-pty` to `pnpm.onlyBuiltDependencies` to ensure the native addon is compiled by pnpm.
-- Remove `--output-format stream-json --print -` from the Claude CLI spawn args — these flags suppress TTY behavior; PTY mode requires raw terminal output.
+- `@prisma/client` (v6): new `CliProfile` model — stores CLI command and base args as JSON string, consistent with existing `AgentConfig.settings` pattern; no migration tool change needed
+- `node-pty` (v1.1.0): extended with `envOverrides` constructor param and idle detection via `setTimeout` polling — purely additive, no behavior change for existing call sites
+- Native Node.js `fetch()` (Node 18+): MCP-to-Next.js HTTP bridge — eliminates need for `node-fetch` or `axios`
+- `ws` (v8.x): unchanged — WebSocket server at port 3001 is fully decoupled from the new idle/MCP features
+- `child_process.execFile` (Node built-in): programmatic Feishu notification from `onExit` and idle callbacks via `notify-agi.sh`
 
 ### Expected Features
 
-**Must have (P1 — v0.7 core terminal):**
-- node-pty spawns Claude CLI in real PTY
-- WebSocket bidirectional communication (foundational; all other features depend on it)
-- xterm.js renders ANSI output with 5,000+ line scrollback
-- `@xterm/addon-fit` + debounced PTY resize sync
-- Keyboard input forwarding (one-line wire: `term.onData` to `pty.write`)
-- Ctrl+C (`\x03`) SIGINT passthrough
-- Session destroy on PTY exit (no zombie processes)
-- Execution status update on PTY exit (DB and UI)
-- Dark/light theme sync (wire to next-themes)
-- `@xterm/addon-webgl` for GPU rendering (Claude CLI outputs at high volume)
+**Must have (table stakes):**
+- Adapter dead code removal (`execute.ts`, `parse.ts`, `registry.ts`, `process-manager.ts`) — clears architectural confusion before new features land
+- CLI Profile DB table (`CliProfile` model) with seeded default row — replaces hardcoded `"claude"` command and `["--dangerously-skip-permissions"]` args in `startPtyExecution` and `resumePtyExecution`
+- Internal HTTP bridge (`GET /api/internal/pty/[taskId]/buffer`, `POST /api/internal/pty/[taskId]/write`) — shared IPC foundation for both MCP terminal tools, loopback-only
+- MCP tool: `get_task_terminal_output` — enables Paperclip to poll PTY ring buffer without a browser terminal open
+- MCP tool: `send_task_terminal_input` — enables Paperclip to inject input mid-execution (e.g., answer Claude confirmation prompts)
+- PTY idle detection with configurable callback — detects Claude's "waiting for input" state after configurable silence threshold
+- Feishu completion notification from `onExit` — gated on `FEISHU_NOTIFY_GROUP` env var; calls `notify-agi.sh` with task metadata
 
-**Should have (P2 — v0.7 polish, add after core is stable):**
-- `@xterm/addon-web-links` — clickable URLs (one line of code, high perceived quality)
-- `@xterm/addon-clipboard` — Ctrl+Shift+C copy shortcut
-- Input disabled while WebSocket is disconnected
-- Automatic reconnection with server-side ring buffer replay
-- Ctrl+C updating task status to CANCELLED
+**Should have (differentiators):**
+- Structured Feishu message templates (task.completed, task.idle, task.failed) — parameterized shell `case` blocks in `notify-agi.sh`
+- MCP tool: `get_task_execution_status` — execution-level granularity (RUNNING vs task's IN_PROGRESS); direct DB query, no bridge needed
+- Settings UI for CLI Profile CRUD — view/edit profile without touching DB directly; medium complexity
+- Idle threshold configurable via `SystemConfig` key `pty.idleThresholdSec`
 
-**Defer to v0.8+:**
-- Session persistence across page navigations (requires `@xterm/addon-serialize` + server-side PTY keepalive; high complexity, validate whether users actually navigate away mid-execution first)
-- Search in terminal output (`@xterm/addon-search`)
-- Full PTY output log file archival
-
-**Anti-features (do not build):**
-- Infinite scrollback (memory exhaustion)
-- Multiple terminal tabs per task (scope creep for v0.7)
-- tmux/screen integration (unnecessary complexity; server restart still kills PTYs)
-- Real-time shared terminal (out of scope — localhost single-user tool)
+**Defer (v2+):**
+- Full multi-CLI adapter with UI switcher — only Claude is in use; one-row CliProfile table is sufficient for now
+- Generic webhook push to external URLs — network egress and auth complexity; `openclaw` CLI call covers all current needs
+- Continuous PTY output flush to DB — SQLite write volume at 8 ms batch rate is prohibitive; flush summary at execution end only
+- Multi-target notification (Telegram, Slack) — single Feishu target via `openclaw` covers all current needs
+- Inbound Paperclip API endpoint — external auth complexity; MCP tool calls from Paperclip side suffice
 
 ### Architecture Approach
 
-The architecture adds three new source modules (`src/lib/pty/session-store.ts`, `src/lib/pty/pty-session.ts`, `src/lib/pty/ws-server.ts`) and one new component (`src/components/task/task-terminal.tsx`), bootstrapped from `instrumentation.ts`. The WS server runs on port 3001 alongside the Next.js app on port 3000 — same process, separate port. The workbench left panel (`task-page-client.tsx`) replaces `TaskConversation` with `TaskTerminal`; the right panel (files/diff/preview) is unchanged.
+v0.9 makes targeted, additive modifications to four existing files (`pty-session.ts`, `session-store.ts`, `agent-actions.ts`, `mcp/server.ts`) and adds three new files (two Next.js route handlers, one MCP tool module), while deleting four dead adapter files and migrating four live ones. The process boundary between the MCP stdio process and the Next.js HTTP server is bridged via localhost HTTP — a clean, zero-new-dependency solution consistent with the existing WebSocket origin-check pattern. All PTY-session mutations are confined to `agent-actions.ts`; the WebSocket layer (`ws-server.ts`) requires no changes.
 
 **Major components:**
-1. `instrumentation.ts` — bootstraps the WS server at Next.js startup (nodejs runtime guard); extends the existing `register()` function that already runs worktree pruning
-2. `src/lib/pty/session-store.ts` — singleton `Map<taskId, PtySession>`; PTY lifecycle mapped 1:1 to `TaskExecution` rows; reconnect window is 30 seconds before PTY is killed
-3. `src/lib/pty/ws-server.ts` — `ws.WebSocketServer` on port 3001; routes `input`, `resize`, `start`, `stop`, `reconnect` messages; broadcasts PTY output to all session clients
-4. `src/lib/pty/pty-session.ts` — node-pty spawn/write/resize/kill; output ring buffer for reconnect replay; `killed` flag guards double-kill
-5. `TaskTerminal` (`task-terminal.tsx`) — `"use client"` + `next/dynamic({ ssr: false })` wrapper; xterm.js instance with FitAddon and WebGL addon; `ResizeObserver` on container for panel resize; `useEffect` cleanup disposes all addons in reverse order
-
-**Key patterns:**
-- PTY session is keyed by `taskId`, not by WebSocket connection — browser refresh reattaches without killing the process
-- WS server started in `instrumentation.ts` (not a custom `server.ts`) — preserves the existing `next dev --webpack` workflow
-- xterm.js is a pure passthrough renderer — no JSON parsing, no message assembly; DB persistence decision deferred to phase planning (raw transcript or no persistence)
+1. `prisma/schema.prisma` + migration — adds `CliProfile` model with seeded default row (`command: "claude"`, `baseArgs: ["--dangerously-skip-permissions"]`)
+2. `src/lib/pty/pty-session.ts` — extended with optional `envOverrides` constructor param + idle detection API (`setIdleTimeout`, `addIdleCallback`, `clearIdleCallbacks`, `_resetIdleTimer`)
+3. `src/lib/pty/session-store.ts` — forwards `envOverrides` optional param to `PtySession` constructor
+4. `src/actions/agent-actions.ts` — reads `CliProfile` from DB; uses profile command+args; passes `envOverrides`; registers idle callback; wires Feishu completion notification in `onExit`
+5. `src/app/api/internal/pty/[taskId]/buffer/route.ts` (new) — GET: returns ring buffer for MCP process; loopback-only guard
+6. `src/app/api/internal/pty/[taskId]/write/route.ts` (new) — POST: writes to PTY stdin for MCP process; guards against dead sessions
+7. `src/mcp/tools/terminal-tools.ts` (new) — `get_task_terminal_output` + `send_task_terminal_input` calling bridge via `fetch()`
+8. `src/lib/adapters/` — 4 files deleted, 4 files migrated to `src/lib/cli-verify.ts`, `src/lib/process-utils.ts`, `src/lib/preview-process-manager.ts`, `src/lib/claude-stream-parse.ts`
 
 ### Critical Pitfalls
 
-1. **Turbopack cannot bundle node-pty native addon** — Add `--webpack` to dev and build scripts; add `serverExternalPackages: ['node-pty']` to `next.config.ts`. Verify with `node -e "require('node-pty').spawn('/bin/bash', [], {})"` before any other work. Phase 1.
+1. **Dead code removal severs live Settings verification** — `registry.ts` is actively imported by `src/app/api/adapters/test/route.ts` (the Settings > AI Tools verify button) and has an unused import in `execute/route.ts`. Run `grep -r "from.*adapters" src/ --include="*.ts"` to enumerate all import sites; migrate `testEnvironment` to `src/lib/cli-verify.ts` before deleting the registry; run `tsc --noEmit` after each deletion step, not just at the end.
 
-2. **WebSocket upgrade not supported in Next.js App Router route handlers** — Do not attempt `app/api/terminal/route.ts` for WebSocket. Use standalone WS server in `instrumentation.ts` on port 3001, or a custom `server.ts`. Attempting the Route Handler approach results in silent handshake rejection. Phase 1.
+2. **PTY idle detection false positives during Claude reasoning** — Claude emits zero output for 30–120 s during extended thinking; a naive timer misclassifies this as idle. Use 180 s minimum threshold, implement two-phase verification (check PTY PID is still alive via `process.kill(pid, 0)` before acting), and expose `resetIdleTimer()` so WebSocket user keystrokes reset the timer independently.
 
-3. **PTY process leaks on WebSocket disconnect** — Implement session registry (`Map<sessionId, PtySession>`) before any terminal UI. Hook `ws.on('close')` and `ws.on('error')` to `destroySession()`. Register `process.on('SIGTERM')` cleanup. Phase 1.
+3. **MCP process cannot access in-memory PTY sessions** — `globalThis.__ptySessions` is a Next.js-process singleton; the MCP stdio process has a separate `globalThis` that is always empty. This is the only correct solution: build and test the HTTP bridge routes with `curl` before writing any MCP tool code. Option B (shared file buffer) is one-way only and insufficient.
 
-4. **Double PTY kill crashes the server** — Guard all `pty.kill()` calls with a `session.killed` boolean flag and wrap in try-catch. Register `pty.onExit` to set `killed = true` (do not call `kill()` inside `onExit`). A crash here takes down all active sessions. Phase 1.
+4. **Environment variable leakage between concurrent PTY sessions** — if CLI Profile env vars are written into `process.env` (global to the Node.js process) instead of passed directly to `pty.spawn()`'s `env` argument, concurrent sessions share state. Always pass per-session vars as the `envOverrides` constructor parameter; never mutate `process.env`.
 
-5. **xterm.js SSR import failure** — xterm.js accesses `window` at import time. Mandatory: `next/dynamic({ ssr: false })` wrapper for the terminal component. Never import `@xterm/xterm` at the top level of any component. Phase 2.
-
-6. **xterm.js terminal not disposed on unmount** — Always call `addon.dispose()` in reverse load order, then `terminal.dispose()`, in `useEffect` cleanup. Store Terminal in `useRef`, not `useState`. VS Code hit this exact bug in 2025 (167 MB GPU memory leak across 10 idle terminals). Phase 2.
-
-7. **Terminal resize not synced to PTY** — Use `ResizeObserver` on the container element (not `window.resize`) to catch panel resizes. Debounce the WS resize message at 100ms to prevent PTY thrashing. Send initial size when spawning PTY. Phase 2.
-
-8. **Cross-site WebSocket hijacking (CSWSH)** — WebSocket has no same-origin policy. Validate `req.headers.origin` against `['http://localhost:3000', 'http://127.0.0.1:3000']` in the upgrade handler before accepting. Reject with 403 otherwise. Phase 1 — non-negotiable.
-
-9. **Shell injection via pty.spawn** — Always spawn Claude CLI directly with an argument array: `pty.spawn('claude', [...args], { cwd })`. Never use `pty.spawn('/bin/bash', ['-c', commandString])` when any part of the command comes from user input. Phase 1.
-
-10. **WebSocket output flood** — Batch PTY `onData` chunks with an 8ms setTimeout before sending. Check `ws.bufferedAmount < 64KB` before each send. Test with `yes | head -100000` to verify memory stays bounded. Phase 1.
-
----
+5. **Feishu hook fires for manual Claude sessions** — `notify-agi.sh` reads a shared `task-meta.json` that persists across sessions. Add an `ai_manager_dispatched: true` field; verify `session_id` in the file matches the hook's `SESSION_ID`; delete or mark the file as processed after each send to prevent stale-meta cross-contamination between dispatched and manual sessions.
 
 ## Implications for Roadmap
 
-Based on the dependency graph and pitfall-to-phase mapping from research, the implementation should follow this phase structure:
+Based on research, dependency order unambiguously determines phase sequence. Phases 1–3 are foundational (no user-visible features), Phases 4–6 deliver the external dispatch capabilities, and Phase 7 adds the optional Settings UI polish.
 
-### Phase 1: PTY Backend Foundation
+### Phase 1: Adapter Dead Code Removal
+**Rationale:** Zero functional risk; clears architectural confusion that would otherwise make CLI Profile work harder to reason about. Must land before any new adapter-adjacent code is written. Has the highest leverage-per-line-of-code of any phase.
+**Delivers:** Smaller, clearer codebase — only live adapter code remains, migrated to non-adapter paths; dead SSE/registry code gone
+**Addresses:** Table stake: "Adapter dead code removal"
+**Avoids:** Pitfall 1 (severing live Settings verification) — audit imports first, migrate `testEnvironment` to `src/lib/cli-verify.ts`, remove unused `listAdapters` import from `execute/route.ts` as the very first step, run `tsc --noEmit` after each file deletion
 
-**Rationale:** Every terminal feature depends on a working, leak-proof PTY server. All critical (server-crashing) pitfalls live here. Build and verify this completely before touching the browser side.
+### Phase 2: Schema — CliProfile Table
+**Rationale:** Schema must exist before any application code reads from it. Seeding the default row in the migration ensures `loadDefaultCliProfile()` never returns null, eliminating null-guard branches in the hot execution path.
+**Delivers:** New `CliProfile` Prisma model, migration with seeded default row, regenerated Prisma client
+**Uses:** `@prisma/client` v6, `prisma db push` / `prisma migrate`
+**Avoids:** Pitfall 4 (env leakage) — schema design establishes that `envVars` is a per-profile JSON field, not a mutation of `process.env`
 
-**Delivers:** A working WebSocket server that spawns Claude CLI in a PTY, streams output, handles input and resize, and cleans up correctly. Verifiable via `wscat` without any UI changes.
+### Phase 3: PTY Primitives — envOverrides + Idle Detection
+**Rationale:** Purely additive changes to `pty-session.ts` and `session-store.ts`; no existing call sites break (default `envOverrides = {}` is identity). Must land before agent-actions reads the profile and passes env vars. Design the idle API contract before coding.
+**Delivers:** `PtySession` with `envOverrides` param; idle detection API (`setIdleTimeout`, `addIdleCallback`, `clearIdleCallbacks`, `_resetIdleTimer`); timer cleanup in `kill()`
+**Uses:** `node-pty` v1.1.0 (existing), native `setTimeout`
+**Avoids:** Pitfall 2 (idle false positives) — 180 s minimum threshold, two-phase verify, `resetIdleTimer` exposed for user keystroke resets
+**Avoids:** Pitfall 4 (env leakage) — `envOverrides` is merged inside the constructor at `pty.spawn()` call time
 
-**Implements:** `instrumentation.ts` extension, `src/lib/pty/session-store.ts`, `src/lib/pty/pty-session.ts`, `src/lib/pty/ws-server.ts`, `package.json` script changes (`--webpack`), `pnpm.onlyBuiltDependencies` update
+### Phase 4: Agent Actions — CLI Profile Loading + Feishu Wiring
+**Rationale:** With schema (Phase 2) and PTY primitives (Phase 3) in place, `agent-actions.ts` can be updated in one coherent pass: load profile, build args, pass `envOverrides`, register idle callback, wire Feishu completion notification from `onExit`.
+**Delivers:** `startPtyExecution` and `resumePtyExecution` read from `CliProfile`; `DISPATCH_SOURCE` env var injected; idle callback registered; `onExit` triggers Feishu if `FEISHU_NOTIFY_GROUP` is set; server actions for profile CRUD
+**Uses:** `@prisma/client`, `child_process.execFile` (Node built-in), `notify-agi.sh`
+**Avoids:** Pitfall 5 (notify-agi.sh fires for manual sessions) — `DISPATCH_SOURCE` env var distinguishes automated vs manual; `notify-agi.sh` updated with `ai_manager_dispatched` check and meta-file cleanup after send
 
-**Must address in this phase:**
-- Turbopack vs. node-pty (switch to `--webpack`)
-- pnpm native addon compilation (`pnpm rebuild node-pty`)
-- WebSocket via instrumentation.ts, not Route Handler
-- PTY session registry with cleanup hooks
-- Double-kill guard with `killed` flag + try-catch
-- CSWSH Origin validation
-- Claude CLI spawn via argument array (no shell interpolation)
-- Output batching (8ms window + bufferedAmount check)
+### Phase 5: Internal HTTP Bridge
+**Rationale:** Shared foundation for both MCP terminal tools. Build once, test independently with `curl` before any MCP code is written. Both routes are stateless wrappers over existing `getSession()` and `write()` APIs.
+**Delivers:** `GET /api/internal/pty/[taskId]/buffer` and `POST /api/internal/pty/[taskId]/write` — loopback-only, consistent with existing ws-server origin-check pattern
+**Uses:** Next.js App Router route handlers, `globalThis.__ptySessions`, `getSession()` from `session-store.ts`
+**Avoids:** Pitfall 3 (MCP cannot access PTY sessions) — HTTP is the only correct cross-process solution; validate routes with `curl` before MCP integration begins
 
-**Verification before Phase 2:**
-- `node -e "require('node-pty')"` passes
-- `wscat` connects and receives Claude CLI output
-- Cross-origin connection rejected with 403
-- 5 open/close cycles yield zero zombie processes
-- Natural PTY exit + WS close generates no uncaught exception
-- `yes | head -100000` keeps server memory stable
+### Phase 6: MCP Terminal Tools
+**Rationale:** Can only land after the HTTP bridge (Phase 5) exists and is independently tested. Both tools are thin wrappers over `fetch()` calls — low implementation risk, high leverage for Paperclip integration.
+**Delivers:** `get_task_terminal_output` and `send_task_terminal_input` registered in `mcp/server.ts`; MCP tool count: 21 → 23 (ceiling 30, headroom 7)
+**Uses:** Native Node.js `fetch()`, `zod` v4 for input validation
+**Avoids:** Pitfall 8 (MCP tool ceiling) — 23 tools is well within the 30-tool ceiling; no need for action-dispatch pattern consolidation
 
-### Phase 2: xterm.js Terminal Component
-
-**Rationale:** Frontend layer. Depends entirely on Phase 1 being stable. Pitfalls here are containable (memory leaks, rendering glitches) rather than server-crashing.
-
-**Delivers:** A `TaskTerminal` React component that renders PTY output correctly, handles resize, and integrates with the existing workbench layout.
-
-**Implements:** `src/components/task/task-terminal.tsx`, `next/dynamic({ ssr: false })` wrapper, WebSocket client, FitAddon + ResizeObserver, WebGL addon, dark/light theme sync
-
-**Must address in this phase:**
-- `dynamic({ ssr: false })` wrapper as the very first file (before any xterm.js import)
-- Terminal dispose in reverse addon order in `useEffect` cleanup
-- ResizeObserver on container + 100ms debounced resize WS message
-- Initial size sent when opening WebSocket connection
-
-**Uses from STACK.md:** `@xterm/xterm ^6.0.0` (existing), `@xterm/addon-fit ^0.11.0` (existing), `@xterm/addon-attach ^0.12.0` (new), `@xterm/addon-webgl` (new)
-
-### Phase 3: Workbench Integration
-
-**Rationale:** Wire the backend (Phase 1) and component (Phase 2) into the existing workbench UI. Replace `TaskConversation` with `TaskTerminal` in `task-page-client.tsx`. Handle DB lifecycle.
-
-**Delivers:** Full end-to-end terminal experience in the workbench — start execution, Claude CLI runs in terminal, status updates when done.
-
-**Implements:** `task-page-client.tsx` left panel swap, execution lifecycle (create TaskExecution before WS connect, update status on PTY exit), Claude CLI arg migration (remove `--output-format stream-json`, remove `--print -`), DB persistence decision (raw transcript or no persistence)
-
-**Key decision during phase planning:** Whether to write raw terminal transcript as a single `TaskMessage` after session ends, or drop DB message persistence for terminal sessions entirely. The existing `persistResult()` function in `stream/route.ts` cannot be reused.
-
-### Phase 4: Polish and Reliability
-
-**Rationale:** Quality-of-life improvements that do not block the core replacement but significantly raise the experience.
-
-**Delivers:** Reconnection after hot-reload, visual disconnect state, clean Ctrl+C cancellation, clickable URLs.
-
-**Implements:** Exponential backoff reconnect loop, server-side ring buffer (last N bytes per session), input-disabled-while-disconnected state, `@xterm/addon-web-links`, `@xterm/addon-clipboard`, Ctrl+C to CANCELLED task status flow
-
-### Phase 5: v0.6 Bug Fixes (Parallel Track)
-
-**Rationale:** Bug fixes identified in v0.6 that are independent of the PTY work. Can run in parallel with Phase 1 or Phase 2.
-
-**Delivers:** v0.6 stability without coupling to the v0.7 terminal feature.
+### Phase 7: Settings UI — CLI Profile CRUD (Optional)
+**Rationale:** Developer convenience; the primary user can edit the profile via DB directly. Ship if time permits after Phases 1–6 are complete and validated.
+**Delivers:** Settings card for viewing/editing `CliProfile` (label, command, baseArgs, default toggle)
+**Uses:** Server actions from Phase 4, existing settings UI pattern
+**Addresses:** Differentiator: "Settings UI for CLI Profile"
 
 ### Phase Ordering Rationale
 
-- Phases 1 through 3 are strictly sequential: backend must exist before the component, and both must exist before workbench integration.
-- Phase 4 is additive and can be partially parallelized with Phase 3.
-- Phase 5 is fully independent and can run at any point.
-- All server-crashing risks are concentrated in Phase 1, ensuring they are verified before Phase 2 or 3 work begins.
+- **Adapter cleanup first** because it has zero risk and maximum clarity benefit — every subsequent phase is easier to reason about in a clean codebase with no dead code misleading the reader.
+- **Schema before application code** because Prisma generates the typed client that `agent-actions.ts` imports; skipping this order causes TypeScript errors at the first build.
+- **PTY primitives before agent-actions** because `startPtyExecution` will call `createSession()` with the new `envOverrides` parameter — the callee signature must exist before the caller is updated.
+- **HTTP bridge before MCP tools** because the bridge is the only dependency of the MCP tools; building the tools against a not-yet-existing endpoint guarantees integration failures.
+- **All table-stakes phases (1–6) before optional UI (7)** because the UI is a convenience layer, not a blocker for the external dispatch close-loop functionality that defines the milestone.
 
 ### Research Flags
 
-Phases likely needing deeper research during planning:
-- **Phase 3 (Workbench Integration):** DB persistence decision for terminal sessions is unresolved. Two valid approaches (raw transcript vs. no persistence) have different implications for the task history UI. Needs a design decision before coding.
-- **Phase 4 (Reconnection):** The ring buffer size and reconnect window (currently suggested at 30s) need validation against real Claude CLI session lengths. The `@xterm/addon-serialize` approach for full buffer replay is a P3 feature worth prototyping here.
+Phases with well-documented patterns (skip research-phase):
+- **Phase 1 (Adapter cleanup):** Standard import audit and file deletion — no research needed; direct codebase inspection is sufficient
+- **Phase 2 (Schema):** Standard Prisma migration with seed SQL — well-documented pattern; existing `AgentConfig` migration is the template
+- **Phase 3 (PTY primitives):** Additive TypeScript with no external dependencies — all patterns are documented in ARCHITECTURE.md
+- **Phase 6 (MCP tools):** Standard MCP tool registration — established pattern in existing `src/mcp/tools/` modules
 
-Phases with standard patterns (skip research-phase):
-- **Phase 1 (PTY Backend):** All patterns are well-documented in research. node-pty + ws + session registry is a proven pattern.
-- **Phase 2 (xterm.js Component):** Official xterm.js docs cover all required APIs. `dynamic({ ssr: false })` is the established pattern for DOM-only libraries in this codebase (same approach as Monaco Editor).
-- **Phase 5 (Bug Fixes):** Existing codebase, no new research needed.
-
----
+Phases that may need targeted micro-research during planning:
+- **Phase 4 (Agent actions / Feishu wiring):** `notify-agi.sh` integration requires understanding the exact `openclaw message send` argument interface and Claude Stop hook `SESSION_ID` availability — read the script and hook docs before finalizing the implementation plan
+- **Phase 5 (HTTP bridge):** Confirm Next.js App Router route handlers can import `globalThis.__ptySessions` from `session-store.ts` without triggering a new module evaluation. The `globalThis` singleton pattern should handle this, but worth a quick stub-route smoke test before Phase 5 proper begins.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All library choices verified via official npm pages, GitHub release history, and Next.js 16.2.2 official docs. node-pty auto-exclusion confirmed in official serverExternalPackages list. |
-| Features | HIGH (table stakes) / MEDIUM (differentiators) | Core terminal features verified against official xterm.js docs and node-pty GitHub. Session persistence and reconnection patterns based on community sources (ttyd, code-server analysis). |
-| Architecture | HIGH | WebSocket-in-App-Router limitation confirmed via official Next.js docs and GitHub discussion #58698. instrumentation.ts approach confirmed via official Next.js instrumentation guide. |
-| Pitfalls | HIGH | Pitfalls 1-4 and 8-9 confirmed via official Next.js issue tracker, node-pty GitHub, pnpm GitHub, and VS Code codebase. CSWSH pitfall confirmed via WebSocket security documentation. |
+| Stack | HIGH | All findings from direct `package.json` and source inspection — the "no new packages required" conclusion is strongly verifiable; no inference involved |
+| Features | HIGH | Features derived from `.planning/PROJECT.md` milestone definition plus direct codebase inspection; scope is tightly bounded with explicit anti-features listed |
+| Architecture | HIGH | All architectural decisions derived from reading the running v0.8 code — execution flow, process boundaries, and globalThis singletons are directly observed facts, not inference |
+| Pitfalls | HIGH | Critical pitfalls 1–3 are grounded in specific file/line references from live import graph analysis; pitfalls 4–5 are grounded in directly observable code patterns |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **DB persistence for terminal sessions:** The existing `TaskMessage` model was designed for structured chat messages, not raw PTY transcripts. Decide during Phase 3 planning: (a) write compressed terminal transcript as a single `TaskMessage` of role `ASSISTANT` after session ends, or (b) skip DB persistence for terminal sessions and rely on the server-side ring buffer for recent history only.
+- **notify-agi.sh argument interface:** The script currently reads from flat files. Phase 4 requires it to also accept arguments directly from Node.js `execFile`. The exact refactoring (argument order, env var names, backward compatibility with the Claude Stop hook path) should be validated by reading the script before implementing Phase 4 — do not assume.
 
-- **Turbopack dev experience trade-off:** Switching to `--webpack` means slower incremental compilation compared to Turbopack. This is the correct trade-off for correctness. Monitor Next.js issue #85449 for Turbopack native addon support — if resolved, revert to `--turbopack`.
+- **App Router + globalThis import boundary:** Next.js App Router route handlers run in a different module evaluation context than `instrumentation.ts`. Confirm that importing `getSession` from `session-store.ts` inside a route handler correctly references the `globalThis.__ptySessions` Map populated by the instrumentation hook — not a fresh empty Map. A one-line smoke test before Phase 5 proper will resolve this.
 
-- **next-ws vs. instrumentation.ts:** STACK.md recommends `next-ws` while ARCHITECTURE.md and PITFALLS.md both recommend the standalone `instrumentation.ts` approach. Resolution: use `instrumentation.ts` + standalone WS server on port 3001. If `next-ws` is chosen, budget time for re-patching after each Next.js upgrade.
-
-- **TERMINAL_WS_PORT client exposure:** The client must know the WS server port (3001). For localhost, hardcoding is acceptable. If configurable, expose via `NEXT_PUBLIC_TERMINAL_WS_PORT` env var and document in `.env.example`.
-
----
+- **CliProfile field naming inconsistency:** STACK.md uses `buildArgs`/`envVars` while ARCHITECTURE.md uses `baseArgs`. Align on a single field name before writing the migration to avoid a follow-up rename migration. Recommendation: use `baseArgs` (ARCHITECTURE.md is closer to the actual call site semantics in `agent-actions.ts`).
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- [Next.js 16.2.2 serverExternalPackages official docs](https://nextjs.org/docs/app/api-reference/config/next-config-js/serverExternalPackages) — `node-pty` on auto-exclusion list
-- [Next.js instrumentation guide](https://nextjs.org/docs/app/guides/instrumentation) — `register()` pattern for server-side startup code
-- [microsoft/node-pty GitHub v1.1.0](https://github.com/microsoft/node-pty) — PTY spawn API, macOS compilation requirements
-- [apteryxxyz/next-ws GitHub v2.2.2](https://github.com/apteryxxyz/next-ws) — `SOCKET` handler API, prepare script requirement
-- [@xterm/addon-attach npm v0.12.0](https://www.npmjs.com/package/@xterm/addon-attach) — WebSocket bridge for xterm.js
-- [xterm.js official docs](https://xtermjs.org/) — Terminal class API, addon index, flowcontrol guide
-- [Next.js 16 Turbopack upgrade guide](https://nextjs.org/docs/app/guides/upgrading/version-16) — `--webpack` opt-out documented
-- Project `package.json` — confirmed existing deps, Node.js 22, pnpm, Turbopack dev flag
+- Direct codebase inspection: `src/lib/pty/pty-session.ts`, `src/lib/pty/session-store.ts`, `src/lib/pty/ws-server.ts`, `src/actions/agent-actions.ts`, `src/lib/adapters/` (full tree), `src/mcp/index.ts`, `src/mcp/server.ts`, `prisma/schema.prisma`, `package.json`
+- `.planning/PROJECT.md` — v0.9 milestone definition, MCP tool ceiling (30), architectural decisions from v0.2
+- `/Users/liujunping/.claude/hooks/notify-agi.sh` — hook dedup logic, meta file handling, Feishu send path via `openclaw`
 
 ### Secondary (MEDIUM confidence)
-- [GitHub discussion #58698](https://github.com/vercel/next.js/discussions/58698) — WebSocket upgrade not supported in App Router route handlers
-- [Next.js issue #85449](https://github.com/vercel/next.js/issues/85449) — Turbopack fails to load native addons in pnpm workspaces (unresolved Dec 2025)
-- [pnpm issue #7128](https://github.com/pnpm/pnpm/issues/7128) — rebuild failure with native addons
-- [VS Code PR #279579](https://github.com/microsoft/vscode/pull/279579) — xterm.js WebGL context memory leak fix (2025)
-- [node-pty issue #382](https://github.com/microsoft/node-pty/issues/382) — `kill()` best practices
-- [xterm.js issue #3889](https://github.com/xtermjs/xterm.js/issues/3889) — WebGL addon memory leak (fixed v5.0.0)
-- [WebSocket.org CSWSH security guide](https://websocket.org/guides/security/) — Origin validation requirement
-- [@xterm/addon-serialize npm v0.14.0](https://www.npmjs.com/package/@xterm/addon-serialize) — buffer serialization for reconnection replay
-- [homebridge/node-pty-prebuilt-multiarch](https://github.com/homebridge/node-pty-prebuilt-multiarch) — prebuilt binaries fallback if node-gyp fails
-- [Web terminal with xterm.js + node-pty + WebSockets](https://ashishpoudel.substack.com/p/web-terminal-with-xtermjs-node-pty) — architecture pattern reference
+- Node.js 18 documentation: native `fetch()` available globally since Node 18.0.0 (project constraint: Node 18.18+)
+- `.planning/research/` v0.7 STACK.md — validated baseline stack decisions for node-pty, ws, MCP SDK versions; referenced but not repeated
 
 ---
-*Research completed: 2026-04-02*
+*Research completed: 2026-04-10*
 *Ready for roadmap: yes*

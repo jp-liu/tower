@@ -1,381 +1,489 @@
-# Architecture Research
+# Architecture Patterns — v0.9 Integration
 
-**Domain:** Browser terminal integration — node-pty + WebSocket + xterm.js added to existing Next.js 16 App Router AI task management platform
-**Researched:** 2026-04-02
-**Confidence:** HIGH (WebSocket approach verified via official Next.js 16 docs + npm package audit; node-pty auto-exclusion confirmed in official serverExternalPackages list)
-
-## The Core Architectural Question
-
-**Can Next.js 16 App Router handle WebSocket connections in API routes?**
-
-Answer: **No, not natively.** Next.js route handlers do not support HTTP Upgrade (WebSocket handshake). Official docs and the GitHub discussion #58698 confirm this is a known gap with no official fix as of Next.js 16.2.2 (March 2026).
-
-**Recommended approach for this project:** Start a standalone `ws` WebSocket server on a separate port inside `instrumentation.ts` — the existing `register()` function already runs server-side startup code (worktree pruning). This avoids patching Next.js internals and requires no custom server.
-
-Source: [Next.js instrumentation guide](https://nextjs.org/docs/app/guides/instrumentation), [serverExternalPackages docs](https://nextjs.org/docs/app/api-reference/config/next-config-js/serverExternalPackages)
+**Domain:** AI task management platform — adapter cleanup + external dispatch integration
+**Researched:** 2026-04-10
+**Confidence:** HIGH (all findings derived from direct source-code inspection of the running v0.8 codebase)
 
 ---
 
-## System Overview
+## Existing Architecture (v0.8 baseline)
 
-### Existing Architecture (v0.6)
-
-```
-Browser
-  |
-  | HTTP/SSE (POST /api/tasks/[taskId]/stream)
-  v
-Next.js App Router (port 3000)
-  |
-  | child_process.spawn()
-  v
-Claude CLI process
-  |
-  | stdout stream-json
-  v
-stream/route.ts SSE handler
-  |
-  | SSE events (log/tool/result/status)
-  v
-Browser — TaskConversation chat bubbles
-```
-
-### Target Architecture (v0.7)
+### Execution Flow
 
 ```
-Browser
-  |-- HTTP (Next.js App Router, port 3000)  — pages, server actions, file APIs
-  |-- WebSocket (WS Server, port 3001)      — PTY terminal I/O
-  v
-+--------------------------------------------------+
-|  Same Node.js Process                            |
-|                                                  |
-|  Next.js (port 3000)                             |
-|  instrumentation.ts → register()                 |
-|    └── starts WS server (port 3001)              |
-|    └── PTY session store (Map<taskId, PtySession>)|
-|                                                  |
-|  ws server (port 3001)                           |
-|    WS message: { type: "input", data: string }   |
-|    WS message: { type: "resize", cols, rows }    |
-|    ← PTY output → WS broadcast                   |
-|                                                  |
-|  node-pty (native module, server-excluded)       |
-|    ptyProcess.spawn("claude", args, { cwd })     |
-|    ptyProcess.onData → ws.send(data)             |
-|    ptyProcess.write(userInput)                   |
-|    ptyProcess.resize(cols, rows)                 |
-+--------------------------------------------------+
-  |
-  | xterm.js (browser)
-  | @xterm/addon-fit  — resize to container
-  | WebSocket client
-  v
-TaskTerminal component (replaces TaskConversation)
+User (browser)
+  └── Server Action: startPtyExecution()           [agent-actions.ts]
+        ├── db.taskExecution.create (RUNNING)
+        ├── createWorktree (if baseBranch set)
+        ├── writeFile: instructions.md (if promptId)
+        └── createSession(taskId, "claude", claudeArgs, cwd, noopOnData, onExit)
+              └── session-store.ts: Map<taskId, PtySession>   [globalThis.__ptySessions]
+                    └── PtySession: node-pty.spawn("claude", args, { hardcoded env })
+
+WebSocket client (xterm.js) → ws://127.0.0.1:3001?taskId=X
+  └── ws-server.ts: wireSession(session, ws, taskId)
+        ├── session.setDataListener(batchedSender)   [live streaming]
+        ├── ws.send(session.getBuffer())              [replay on reconnect]
+        └── session.setExitListener(sendSessionEnd)  [close WS on PTY exit]
+
+PTY onExit callback (closure in agent-actions.ts):
+  ├── db.taskExecution.update(COMPLETED/FAILED)
+  ├── captureExecutionSummary()                      [git log, stats, terminal log]
+  └── db.task.update(IN_REVIEW)                      [if exit 0]
 ```
 
-### Component Responsibilities
-
-| Component | Responsibility | Location |
-|-----------|----------------|----------|
-| `instrumentation.ts` | Starts WS server at app boot (nodejs runtime only) | `src/instrumentation.ts` |
-| `src/lib/pty/session-store.ts` | Map of taskId → PtySession; create/destroy/reconnect | `src/lib/pty/` |
-| `src/lib/pty/ws-server.ts` | `ws.WebSocketServer` on port 3001; message routing | `src/lib/pty/` |
-| `src/lib/pty/pty-session.ts` | node-pty spawn, onData, write, resize, lifecycle | `src/lib/pty/` |
-| `TaskTerminal` | xterm.js component, WebSocket client, addon-fit | `src/components/task/task-terminal.tsx` |
-| `task-page-client.tsx` | Replace left panel (chat → terminal), keep right tabs | `src/app/workspaces/.../task-page-client.tsx` |
-| Existing `stream/route.ts` | Keep for reference/fallback; replace in UI only | `src/app/api/tasks/[taskId]/stream/route.ts` |
-| Existing `process-manager.ts` | Extend to manage PTY processes alongside ChildProcess | `src/lib/adapters/process-manager.ts` |
-
----
-
-## Recommended Project Structure (New Files)
+### MCP Process Boundary
 
 ```
-src/
-├── lib/
-│   └── pty/
-│       ├── session-store.ts     # Singleton Map<taskId, PtySession>
-│       ├── pty-session.ts       # node-pty spawn + lifecycle
-│       └── ws-server.ts         # ws.WebSocketServer + message routing
-├── components/
-│   └── task/
-│       └── task-terminal.tsx    # xterm.js client component (dynamic import)
-└── instrumentation.ts           # Extended: add WS server bootstrap
+MCP process (stdio, separate Node.js)
+  └── src/mcp/index.ts
+        ├── PrismaClient (own instance, WAL mode)
+        └── tool handlers: direct DB reads/writes only
+
+Next.js process
+  ├── globalThis.__ptySessions  (Map<taskId, PtySession>)
+  ├── globalThis.__wss          (WebSocketServer on :3001)
+  └── Server Actions + ws-server share the same globalThis
 ```
 
-### next.config.ts additions
+**Critical constraint:** MCP process has NO access to `globalThis.__ptySessions`. The session Map lives exclusively in the Next.js process. Any MCP tool that needs live PTY data must cross this process boundary via HTTP — there is no shared memory or IPC channel.
 
-`node-pty` is already on Next.js's automatic `serverExternalPackages` exclusion list (confirmed in [Next.js docs](https://nextjs.org/docs/app/api-reference/config/next-config-js/serverExternalPackages)). No manual configuration needed.
+### Current Env Injection (hardcoded in PtySession constructor)
 
----
-
-## Architectural Patterns
-
-### Pattern 1: instrumentation.ts WS Server Bootstrap
-
-**What:** Export `register()` in `instrumentation.ts` that conditionally starts a WebSocket server on the nodejs runtime. This runs once at Next.js server startup, in the same process.
-
-**When to use:** Localhost tools where a separate process is undesirable. Avoids needing a custom `server.ts` file or patching Next.js internals.
-
-**Trade-offs:** WS port (3001) must be hardcoded or env-configured. Browser must connect to a different port than the Next.js app. Works perfectly for localhost dev tools.
-
-**Example:**
 ```typescript
-// src/instrumentation.ts
-export async function register() {
-  if (process.env.NEXT_RUNTIME === "nodejs") {
-    await pruneOrphanedWorktrees();   // existing
-    const { startWsServer } = await import("./lib/pty/ws-server");
-    startWsServer();                  // new: idempotent, port 3001
-  }
+// pty-session.ts line 32-39
+env: {
+  PATH: process.env.PATH ?? "",
+  HOME: process.env.HOME ?? "",
+  SHELL: process.env.SHELL ?? "/bin/zsh",
+  TERM: "xterm-color",
+  LANG: process.env.LANG ?? "en_US.UTF-8",
+  USER: process.env.USER ?? "",
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? "",
 }
 ```
 
-### Pattern 2: PTY Session Lifecycle Mapped to TaskExecution
+The env is captured at `PtySession` construction time. Any additional env vars must be passed to the constructor before `node-pty.spawn()` is called — they cannot be injected after spawning.
 
-**What:** Each `TaskExecution` row corresponds to exactly one PTY session. Session identified by `taskId` (one active per task). Create PTY on WS "start" message, destroy on "stop" or disconnect.
+### Current CLI Args (hardcoded in agent-actions.ts)
 
-**When to use:** Always. This is the only sensible mapping for this domain.
-
-**Trade-offs:** Reconnect must reattach to existing PTY (not spawn new), or terminal history must be replayed. Simplest approach: replay buffered output on reconnect.
-
-**Session states:**
-
-```
-WS connect → session exists? → yes → send buffered output, attach onData
-                             → no  → spawn PTY, store session
-WS disconnect → keep PTY alive for 30s (reconnect window)
-                → timer fires → kill PTY, update DB execution.status
-"stop" message → kill PTY immediately → update DB execution.status
-```
-
-**Example:**
 ```typescript
-// src/lib/pty/pty-session.ts
-interface PtySession {
-  pty: IPty;
-  taskId: string;
-  executionId: string;
-  outputBuffer: string[];    // Last N lines for reconnect replay
-  clients: Set<WebSocket>;   // Multiple tabs reconnecting
-  disconnectTimer?: NodeJS.Timeout;
+// agent-actions.ts line ~304
+const claudeArgs: string[] = ["--dangerously-skip-permissions"];
+if (instructionsFile) claudeArgs.push("--system-prompt", instructionsFile);
+claudeArgs.push(fullPrompt);
+createSession(taskId, "claude", claudeArgs, cwd, () => {}, onExitFn);
+```
+
+Both the command (`"claude"`) and base flags (`["--dangerously-skip-permissions"]`) are hardcoded strings. There is no indirection layer.
+
+### Adapter Dead Code
+
+`src/lib/adapters/` contains two distinct concerns — one live, one dead:
+
+| File | Status | Reason |
+|------|--------|--------|
+| `claude-local/execute.ts` | Dead | SSE streaming path; PTY execution no longer uses it |
+| `claude-local/parse.ts` | Dead | stream-json parsing; only used by execute.ts and test.ts |
+| `claude-local/test.ts` | **Live** | `testEnvironment()` used by Settings > AI Tools verification |
+| `claude-local/index.ts` | **Live** | Re-exports testEnvironment |
+| `types.ts` | **Live** | `TestResult`, `TestCheck` interfaces used by test.ts |
+| `process-utils.ts` | **Live** | `runChildProcess`, `ensureCommandResolvable` used by test.ts |
+| `registry.ts` | Likely dead | Verify callers before deleting |
+| `process-manager.ts` | Likely dead | Verify callers before deleting |
+| `preview-process-manager.ts` | **Live** | Manages preview child processes (workbench preview panel) |
+
+---
+
+## Integration Points for v0.9 New Features
+
+### 1. CLI Profile — Position in Execution Flow
+
+**What it is:** A `CliProfile` DB table that replaces the hardcoded `"claude"` command and `["--dangerously-skip-permissions"]` base flags. Supports future switching to different CLI binaries or flag combinations.
+
+**Where it integrates:** `startPtyExecution()` in `agent-actions.ts`, between step 6 (worktree creation) and step 9 (createSession call). Specifically, step 8 which currently hardcodes the args.
+
+**Current hardcode → new indirection:**
+
+```
+Before:
+  createSession(taskId, "claude", ["--dangerously-skip-permissions", ...promptArgs], cwd, ...)
+
+After:
+  profile = await loadDefaultCliProfile()   // DB read
+  buildArgs = [...JSON.parse(profile.baseArgs), ...promptArgs]
+  createSession(taskId, profile.command, buildArgs, cwd, ...)
+```
+
+**Schema addition:**
+
+```prisma
+model CliProfile {
+  id        String   @id @default(cuid())
+  name      String
+  command   String   @default("claude")
+  baseArgs  String   @default("[\"--dangerously-skip-permissions\"]")
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 ```
 
-### Pattern 3: xterm.js as Pure Passthrough Display
+`baseArgs` is stored as a JSON string because SQLite has no array type — consistent with the existing `settings` field on `AgentConfig`. A default row must be seeded in the migration so `loadDefaultCliProfile()` never returns null.
 
-**What:** xterm.js renders PTY output verbatim — no JSON parsing, no filtering, no chat bubble formatting. ANSI escape codes are preserved. User input is forwarded directly to PTY.
+The profile stores only fixed base flags — not the prompt text, not `--system-prompt` (those are always appended at call time). The profile controls what varies across CLI modes (binary path, auth method flags, model selection flags).
 
-**When to use:** Always for PTY terminals. Do not strip or filter output.
+**`resumePtyExecution` also contains hardcoded `"claude"` and must be updated in the same pass.**
 
-**Trade-offs:** DB storage of terminal output must happen server-side (PTY session), not client-side. No more `assistantContent` assembly in the stream route.
+**No changes to `PtySession`, `session-store`, or `ws-server`.** The profile abstraction is confined to `agent-actions.ts` and the new server actions for profile CRUD.
 
-**Data flow:**
+---
+
+### 2. PTY Idle Detection — Wiring Without Breaking WebSocket
+
+**What it is:** A general-purpose callback that fires after N seconds of PTY silence (no output). Used to trigger Feishu notifications or other automation.
+
+**The constraint:** `PtySession` currently has one mutable `_onData` slot that `ws-server.ts` replaces on connect via `setDataListener()`. Idle detection must NOT replace or conflict with this mechanism.
+
+**Solution: side-channel, not a replacement.**
+
+The `_onData` handler already flows: `ring buffer update → this._onData(data)`. Insert idle timer reset between those two steps:
+
+```typescript
+// Inside the pty.onData handler — new code injected at existing callsite
+this._buffer += data;
+// ... trim buffer ... (existing)
+this._resetIdleTimer();   // NEW — fires before dispatching to ws-server
+this._onData(data);       // existing — replaced by ws-server on connect
 ```
-User types → xterm.js onData → WS send { type: "input", data: "\r" }
-PTY stdout → WS send binary/text frame → xterm.js term.write(data)
-User resizes container → addon-fit → { type: "resize", cols, rows } → pty.resize()
+
+New fields and methods on `PtySession`:
+
+```typescript
+private _idleTimeoutMs = 0;
+private _idleTimer: ReturnType<typeof setTimeout> | null = null;
+private _idleCallbacks: Array<() => void> = [];
+
+private _resetIdleTimer(): void {
+  if (this._idleTimer) clearTimeout(this._idleTimer);
+  if (this._idleCallbacks.length === 0 || this._idleTimeoutMs <= 0) return;
+  this._idleTimer = setTimeout(() => {
+    this._idleTimer = null;
+    for (const cb of this._idleCallbacks) cb();
+  }, this._idleTimeoutMs);
+}
+
+setIdleTimeout(ms: number): void { this._idleTimeoutMs = ms; }
+addIdleCallback(fn: () => void): void { this._idleCallbacks.push(fn); }
+clearIdleCallbacks(): void { this._idleCallbacks = []; }
+```
+
+Clear the idle timer in `kill()` to prevent spurious callbacks after PTY exit.
+
+**Registration:** After `createSession()` returns in `agent-actions.ts`, the caller sets the timeout and callback:
+
+```typescript
+const session = createSession(taskId, command, args, cwd, () => {}, onExitFn);
+session.setIdleTimeout(5 * 60 * 1000);  // 5 min
+session.addIdleCallback(() => triggerFeishuNotification(taskId));
+```
+
+`session-store.createSession()` does not need changes. `ws-server.ts` does not need changes.
+
+**Why this is safe for the WebSocket path:**
+- `setDataListener()` still replaces `_onData` as before
+- Idle timer resets on every PTY character, regardless of whether a WebSocket is connected
+- The idle timer and the WebSocket broadcaster are independent; one does not block the other
+
+---
+
+### 3. MCP Tools Accessing PTY Sessions (Cross-Process Boundary)
+
+**The fundamental problem:** MCP is a separate `stdio` Node.js process. `globalThis.__ptySessions` lives only in the Next.js process. No shared memory exists between them.
+
+**Recommended solution: internal HTTP bridge.**
+
+Add two Next.js route handlers that the MCP process calls via `fetch`:
+
+```
+MCP: get_task_terminal_output
+  └── fetch("http://127.0.0.1:3000/api/internal/pty/[taskId]/buffer")
+        └── Next.js handler: getSession(taskId)?.getBuffer()
+
+MCP: send_task_terminal_input
+  └── fetch("http://127.0.0.1:3000/api/internal/pty/[taskId]/write", POST body: input)
+        └── Next.js handler: getSession(taskId)?.write(input)
+```
+
+The internal routes must reject non-loopback requests (check `req.headers.host` or `x-forwarded-for`; reject if not `127.0.0.1` or `localhost`). The ws-server already does origin checks — use the same pattern.
+
+**Why not DB polling for the read tool:** `terminalLog` in `TaskExecution` is only written at session end. It is useless for progress queries on a running session. The ring buffer in `getBuffer()` is the only source of live output.
+
+**MCP tool schemas:**
+
+```typescript
+// get_task_terminal_output
+schema: z.object({
+  taskId: z.string(),
+  lastNBytes: z.number().int().min(0).max(50000).optional().default(5000),
+})
+// Returns: { running: boolean, output: string }
+
+// send_task_terminal_input
+schema: z.object({
+  taskId: z.string(),
+  input: z.string().max(4096),
+})
+// Returns: { sent: boolean, error?: string }
+```
+
+**Security note on `send_task_terminal_input`:** Writing to PTY stdin is effectively running arbitrary shell commands. Document that this tool is for agent-to-agent automation on a localhost trust model. The HTTP handler must verify the session exists and `!session.killed` before calling `session.write()`.
+
+**MCP tool count impact:** +2 new tools = 23 total (ceiling is 30).
+
+---
+
+### 4. Env Injection with node-pty Spawn
+
+**What needs to change:** `PtySession` constructor currently closes over a hardcoded env object. To support:
+- CLI Profile-specific env vars (e.g., different `ANTHROPIC_API_KEY` per profile)
+- External dispatch context (`DISPATCH_SOURCE=paperclip`, `TASK_ID=xyz`) for `notify-agi.sh`
+
+The constructor must accept an `envOverrides` parameter.
+
+**Change: one optional parameter added to `PtySession` constructor:**
+
+```typescript
+constructor(
+  taskId: string,
+  command: string,
+  args: string[],
+  cwd: string,
+  onData: (data: string) => void,
+  onExit: (exitCode: number, signal?: number) => void,
+  envOverrides: Record<string, string> = {}   // NEW — merged last, wins over defaults
+) {
+  // ...
+  this._pty = pty.spawn(command, args, {
+    env: {
+      PATH: process.env.PATH ?? "",
+      HOME: process.env.HOME ?? "",
+      SHELL: process.env.SHELL ?? "/bin/zsh",
+      TERM: "xterm-color",
+      LANG: process.env.LANG ?? "en_US.UTF-8",
+      USER: process.env.USER ?? "",
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? "",
+      ...envOverrides,  // caller overrides win
+    },
+  });
+```
+
+**Propagate through `session-store.createSession()`:**
+
+```typescript
+export function createSession(
+  taskId: string,
+  command: string,
+  args: string[],
+  cwd: string,
+  onData: (data: string) => void,
+  onExit: (exitCode: number, signal?: number) => void,
+  envOverrides?: Record<string, string>   // NEW — optional, defaults to {}
+): PtySession
+```
+
+**Usage in `startPtyExecution` for Paperclip dispatch context:**
+
+```typescript
+const envOverrides: Record<string, string> = {
+  DISPATCH_SOURCE: isExternalDispatch ? "paperclip" : "manual",
+  TASK_ID: taskId,
+};
+createSession(taskId, profile.command, buildArgs, cwd, () => {}, onExitFn, envOverrides);
+```
+
+**Backward compatibility:** All existing call sites pass no `envOverrides` parameter. The default `{}` means behavior is identical to current. No existing code breaks.
+
+---
+
+### 5. Feishu Notification — notify-agi.sh Integration Pattern
+
+**Existing mechanism:** `notify-agi.sh` is invoked by the Claude CLI Stop hook defined in `~/.claude/settings.json`. This hook fires inside the Claude CLI process after Claude finishes responding. The hook's environment is the PTY process environment — so env vars set at `node-pty.spawn()` time are available to the hook.
+
+**v0.9 pattern:** Set `DISPATCH_SOURCE` in `envOverrides` (from Section 4 above). The Stop hook reads `DISPATCH_SOURCE` and decides whether to send a Feishu notification. No changes needed to `agent-actions.ts` beyond the env injection.
+
+This means:
+- No Feishu logic enters the Next.js codebase
+- Notification logic stays in `notify-agi.sh` (shell, not TypeScript)
+- env injection via `envOverrides` is the only code change needed on the Node side
+
+---
+
+## Component Map: New vs Modified
+
+| Component | Status | Change |
+|-----------|--------|--------|
+| `prisma/schema.prisma` | **Modified** | Add `CliProfile` model with default row seed |
+| `src/lib/pty/pty-session.ts` | **Modified** | Add `envOverrides` param; add idle detection fields + 3 methods |
+| `src/lib/pty/session-store.ts` | **Modified** | Forward `envOverrides` optional param to `PtySession` |
+| `src/actions/agent-actions.ts` | **Modified** | Load CLI Profile; use profile command+args; pass `envOverrides`; update `resumePtyExecution` |
+| `src/lib/adapters/claude-local/execute.ts` | **Deleted** | Dead code — SSE streaming path |
+| `src/lib/adapters/claude-local/parse.ts` | **Deleted** | Dead code — stream-json parsing |
+| `src/lib/adapters/registry.ts` | **Deleted** (verify) | Verify no callers before deleting |
+| `src/lib/adapters/process-manager.ts` | **Deleted** (verify) | Verify no callers before deleting |
+| `src/app/api/internal/pty/[taskId]/buffer/route.ts` | **New** | GET: return ring buffer for MCP |
+| `src/app/api/internal/pty/[taskId]/write/route.ts` | **New** | POST: write to PTY stdin for MCP |
+| `src/mcp/tools/terminal-tools.ts` | **New** | `get_task_terminal_output`, `send_task_terminal_input` |
+| `src/mcp/server.ts` | **Modified** | Import and register `terminalTools` |
+| Settings UI — CLI Profile CRUD | **New** | Create/edit/delete profiles; mark default |
+
+**Unchanged:** `src/lib/pty/ws-server.ts`, `src/mcp/db.ts`, all existing MCP tools.
+
+---
+
+## Suggested Build Order
+
+Dependencies flow: schema → PTY changes → action changes → internal HTTP → MCP tools. Each phase below is a fully releasable increment.
+
+### Phase 1: Adapter Cleanup (no dependencies)
+
+Delete dead code from `src/lib/adapters/`:
+- Remove `execute.ts`, `parse.ts`
+- Audit and remove `registry.ts`, `process-manager.ts` if no callers
+- Keep: `types.ts`, `process-utils.ts`, `claude-local/test.ts`, `preview-process-manager.ts`
+
+Run `tsc --noEmit` after deletion to confirm no broken imports. This phase has zero functional risk and reduces noise for all subsequent changes.
+
+### Phase 2: Schema — CliProfile table
+
+Add `CliProfile` model to `schema.prisma`. Write a Prisma migration that also inserts the default row:
+
+```sql
+INSERT INTO "CliProfile" (id, name, command, "baseArgs", "isDefault", "createdAt", "updatedAt")
+VALUES (lower(hex(randomblob(9))), 'Default', 'claude',
+        '["--dangerously-skip-permissions"]', 1,
+        datetime('now'), datetime('now'));
+```
+
+Regenerate Prisma client. No application code changes yet.
+
+### Phase 3: PTY Primitives — envOverrides + idle detection
+
+Modify `pty-session.ts`: add `envOverrides` param, add `_resetIdleTimer` and public idle API. Modify `session-store.ts`: forward `envOverrides` param. All additive — no behavior change for existing call sites.
+
+**Depends on:** nothing (pure addition)
+
+### Phase 4: Agent Actions — CLI Profile loading
+
+Modify `startPtyExecution` and `resumePtyExecution` in `agent-actions.ts`:
+1. Call `loadDefaultCliProfile()` from DB
+2. Build command and args from profile
+3. Pass `envOverrides` to `createSession`
+
+Add `getDefaultCliProfile()`, `createCliProfile()`, `updateCliProfile()`, `deleteCliProfile()` server actions for the Settings UI.
+
+**Depends on:** Phase 2 (schema), Phase 3 (session-store signature)
+
+### Phase 5: Internal HTTP API for PTY access
+
+Add Next.js route handlers at:
+- `GET /api/internal/pty/[taskId]/buffer` — returns `{ running, output }` JSON
+- `POST /api/internal/pty/[taskId]/write` — body `{ input: string }`, returns `{ sent }`
+
+Both handlers validate loopback origin, resolve session from `globalThis.__ptySessions`.
+
+**Depends on:** Phase 3 (PtySession has getBuffer and write)
+
+### Phase 6: MCP Terminal Tools
+
+Add `src/mcp/tools/terminal-tools.ts` implementing `get_task_terminal_output` and `send_task_terminal_input`. Both call the internal HTTP endpoints via `fetch("http://127.0.0.1:3000/api/internal/pty/...")`.
+
+Register in `src/mcp/server.ts`.
+
+**Depends on:** Phase 5 (HTTP endpoints must exist and be testable independently)
+
+### Phase 7: Settings UI — CLI Profile CRUD
+
+Add a CLI Profile section to Settings. Uses server actions from Phase 4. Allows users to name profiles, edit `command` and `baseArgs`, and set the default.
+
+**Depends on:** Phase 2 (schema), Phase 4 (server actions)
+
+### Phase 8: Feishu Notification Wiring
+
+Refine `notify-agi.sh` templates. Verify `DISPATCH_SOURCE` env var (injected in Phase 4) reaches the Stop hook. Test end-to-end with a Paperclip-dispatched task.
+
+**Depends on:** Phase 4 (env injection must land first)
+
+---
+
+## Full v0.9 Data Flow (Target)
+
+```
+External agent (Paperclip/OpenClaw)
+  └── MCP: create_task → DB                          [existing]
+  └── MCP: move_task (→ IN_PROGRESS) OR
+      HTTP trigger → startPtyExecution()
+            └── loadDefaultCliProfile()              [DB: CliProfile]
+            └── createSession(profile.command,
+                              profile.baseArgs + promptArgs,
+                              cwd,
+                              { DISPATCH_SOURCE: "paperclip", TASK_ID: taskId })
+                  └── PtySession: node-pty.spawn
+                        ├── idle timer (side-channel)
+                        └── _onData → ws-server batchedSender
+
+External agent (polling progress)
+  └── MCP: get_task_terminal_output
+        └── fetch http://127.0.0.1:3000/api/internal/pty/[taskId]/buffer
+              └── getSession(taskId)?.getBuffer()
+
+External agent (sending instructions)
+  └── MCP: send_task_terminal_input
+        └── fetch http://127.0.0.1:3000/api/internal/pty/[taskId]/write
+              └── getSession(taskId)?.write(input)
+
+PTY exits
+  └── onExit closure in agent-actions.ts:
+        ├── db.taskExecution.update (COMPLETED/FAILED)
+        ├── captureExecutionSummary()
+        ├── db.task.update (IN_REVIEW if exit 0)
+        └── Stop hook fires in Claude CLI env:
+              └── notify-agi.sh checks DISPATCH_SOURCE → Feishu if "paperclip"
+
+Idle detection (if PTY silent > N minutes)
+  └── idleCallback in agent-actions.ts → triggerFeishuNotification()
 ```
 
 ---
 
-## Data Flow
+## Key Architecture Decisions for v0.9
 
-### Full Round-Trip: User Input to Terminal Output
-
-```
-1. User types in xterm.js
-   term.onData(data) → ws.send(JSON.stringify({ type:"input", data }))
-
-2. WS server receives message
-   ws.on("message") → parse → session.pty.write(data)
-
-3. node-pty writes to Claude CLI PTY
-   pty.write(data) → Claude CLI stdin (running in real TTY)
-
-4. Claude CLI produces output (ANSI colored, cursor-positioned)
-   pty.onData(chunk) → ws.send(chunk) to all session.clients
-
-5. Browser receives PTY output
-   ws.onmessage → xterm.term.write(event.data)
-```
-
-### Session Start Flow
-
-```
-1. User clicks "Start Execution" on task page
-2. POST /api/tasks/[taskId]/execute (existing route, creates TaskExecution row)
-3. UI opens WebSocket: ws://localhost:3001
-4. WS client sends: { type: "start", taskId, executionId, cwd, args }
-5. WS server: session-store.createSession(taskId)
-   → node-pty.spawn("claude", buildArgs(), { name:"xterm-256color", cwd })
-   → register pty.onData → broadcast to ws clients
-   → store session in Map
-6. PTY output streams to xterm.js
-7. On Claude exit: update DB (execution.status, task.status)
-   → WS server sends { type: "exit", exitCode }
-```
-
-### Session Stop / Kill Flow
-
-```
-1. User clicks "Stop"
-2. WS client sends: { type: "stop", executionId }
-   OR: user closes browser tab (WS disconnect)
-3. WS server: session-store.destroySession(taskId)
-   → pty.kill("SIGTERM")
-   → db.taskExecution.update({ status: "FAILED" })
-4. WS closes
-```
-
-### Reconnect Flow (browser refresh)
-
-```
-1. WS client connects with { type: "reconnect", taskId }
-2. WS server checks session-store: session exists?
-   → yes: cancel disconnect timer, send buffered output, attach client
-   → no: send { type: "session_not_found" } → UI shows "no active session"
-```
-
----
-
-## Integration Points
-
-### With Existing Code
-
-| Existing Component | Integration | Notes |
-|--------------------|-------------|-------|
-| `instrumentation.ts` | Extend `register()` to start WS server | Keep worktree prune; add WS bootstrap after |
-| `process-manager.ts` | Add PTY process tracking alongside ChildProcess | Or create separate `pty-process-manager.ts` |
-| `/api/tasks/[taskId]/execute/route.ts` | Keep as-is — creates TaskExecution row | UI calls this before opening WS |
-| `/api/tasks/[taskId]/stream/route.ts` | Keep but unused by new UI | Remove in a later cleanup phase |
-| `task-page-client.tsx` | Replace left panel: chat → terminal | Right panel (files/diff/preview) unchanged |
-| `TaskConversation` + `TaskMessageInput` | Remove from workbench page | Keep for any other usage |
-| `worktree.ts` + `createWorktree()` | WS server must call this before spawning PTY | Same logic as current stream route |
-
-### New External Dependencies
-
-| Library | Role | Notes |
-|---------|------|-------|
-| `node-pty` | PTY process spawning | Native module; auto-excluded by Next.js |
-| `ws` | WebSocket server | Lightweight; prefer over socket.io for simplicity |
-| `@xterm/xterm` | Browser terminal renderer | Use scoped package, not legacy `xterm` |
-| `@xterm/addon-fit` | Resize terminal to container | Required for responsive layout |
-
-### Port Configuration
-
-| Service | Port | Config |
-|---------|------|--------|
-| Next.js | 3000 | Default |
-| WS server | 3001 | `TERMINAL_WS_PORT` env var, default 3001 |
-
-The browser connects to `ws://localhost:${TERMINAL_WS_PORT}`. The port must be exposed in the client via an env var prefixed with `NEXT_PUBLIC_` or hardcoded for localhost-only tools.
-
----
-
-## Build Order (Phase Dependencies)
-
-```
-Phase A: WS Server + PTY Session Backend
-  → instrumentation.ts extension
-  → src/lib/pty/session-store.ts
-  → src/lib/pty/pty-session.ts
-  → src/lib/pty/ws-server.ts
-  → Manual test: curl/wscat to verify WS handshake
-
-Phase B: xterm.js Terminal Component
-  → Install @xterm/xterm, @xterm/addon-fit, ws
-  → src/components/task/task-terminal.tsx (dynamic import, ssr:false)
-  → Wire to WS server
-  → Manual test: terminal renders, input echoes
-
-Phase C: Workbench Integration
-  → Replace left panel in task-page-client.tsx
-  → Remove TaskConversation from workbench
-  → DB lifecycle: create/update execution on start/stop
-  → Claude CLI args: same as stream route (--dangerously-skip-permissions, cwd, etc.)
-
-Phase D: Lifecycle + Edge Cases
-  → Reconnect on refresh
-  → Disconnect timer
-  → Stop/kill handling
-  → Exit code → DB status update (COMPLETED/FAILED)
-  → Task status transition (IN_PROGRESS → IN_REVIEW on success)
-
-Phase E: v0.6 Bug Fixes (parallel, no PTY dependency)
-  → Can be done alongside Phase A or B
-```
-
----
-
-## Anti-Patterns
-
-### Anti-Pattern 1: WebSocket in Next.js Route Handlers
-
-**What people do:** Try to handle the WebSocket upgrade inside an App Router route handler (e.g., `src/app/api/terminal/route.ts`).
-
-**Why it's wrong:** Next.js route handlers do not support HTTP Upgrade. The internal Next.js server intercepts and rejects upgrade requests before they reach route handler code. No workaround exists without patching Next.js internals.
-
-**Do this instead:** Start a `ws.WebSocketServer` in `instrumentation.ts` on a separate port.
-
-### Anti-Pattern 2: Parsing PTY Output Like SSE JSON
-
-**What people do:** Continue parsing `stream-json` from Claude CLI and constructing chat messages from PTY output.
-
-**Why it's wrong:** node-pty provides a real TTY. Claude CLI will output ANSI escape codes, interactive prompts, progress spinners — none of which are valid JSON. The stream-json format only appears when Claude CLI runs with `--output-format stream-json --print -`, which suppresses TTY behavior.
-
-**Do this instead:** Pass PTY output verbatim to xterm.js. Store terminal transcripts in a separate field if DB persistence is needed. Remove `--output-format stream-json` and `--print -` from the Claude CLI args when running in PTY mode.
-
-### Anti-Pattern 3: Spawning PTY in a Next.js Route Handler
-
-**What people do:** Create a PTY session in a POST route handler (like the current stream route pattern).
-
-**Why it's wrong:** Route handlers run per-request. PTY sessions outlive HTTP requests. The PTY must live in a singleton store (the WS server module scope), not inside a request handler's closure.
-
-**Do this instead:** All PTY lifecycle management lives in `src/lib/pty/session-store.ts`, initialized at server startup via `instrumentation.ts`.
-
-### Anti-Pattern 4: One PTY per WebSocket Connection
-
-**What people do:** Spawn a new PTY whenever a client connects to the WebSocket.
-
-**Why it's wrong:** Browser refresh would kill the running Claude session. Multiple browser tabs to the same task would spawn multiple Claude processes.
-
-**Do this instead:** Keyed by `taskId`. One PTY per task. WebSocket connections are clients that attach/detach from the existing session.
-
-### Anti-Pattern 5: next-ws Package Patching
-
-**What people do:** Use the `next-ws` package to patch Next.js and add WebSocket support to route files.
-
-**Why it's wrong:** Patches Next.js internals (fragile, breaks on Next.js upgrades). Adds a build step (`next-ws patch`). Unnecessary complexity for a localhost tool that can simply use a second port.
-
-**Do this instead:** Standalone WS server in `instrumentation.ts`.
-
----
-
-## Scaling Considerations
-
-This is a localhost-only single-user tool. Scaling is not a real concern. The relevant constraint is **concurrent PTY sessions**: the existing `maxConcurrentExecutions` config (default 3) should gate PTY creation, same as the current SSE stream route.
-
-| Concern | Approach |
-|---------|----------|
-| Too many Claude processes | Reuse existing `canStartExecution()` guard before spawning PTY |
-| PTY memory leak | Destroy session on exit + 30s disconnect timer |
-| WS server startup order | `instrumentation.register()` is awaited before server handles requests |
+| Decision | Rationale |
+|----------|-----------|
+| HTTP bridge for MCP→PTY access | No IPC plumbing needed; localhost HTTP is zero-config; same origin model as ws-server |
+| `envOverrides` as optional last param | Additive — zero existing call sites break; default `{}` is identity |
+| Idle detection as side-channel in PtySession | Preserves `setDataListener` contract; ws-server requires no changes |
+| `CliProfile.baseArgs` as JSON string | SQLite has no array type; consistent with `AgentConfig.settings` field |
+| Seed default CliProfile row in migration | `loadDefaultCliProfile()` never returns null; no null-guard branches in hot path |
+| Internal routes under `/api/internal/` | Clear namespace; loopback-only guard prevents external access |
+| Feishu notification via Stop hook env, not Next.js code | Keeps notification logic in shell; Node.js side only injects env vars |
+| Adapter cleanup before new feature work | Smaller diff surface; dead code removal has zero functional risk |
 
 ---
 
 ## Sources
 
-- [Next.js instrumentation docs](https://nextjs.org/docs/app/guides/instrumentation) — official, version 16.2.2, 2026-03-31
-- [Next.js serverExternalPackages](https://nextjs.org/docs/app/api-reference/config/next-config-js/serverExternalPackages) — confirms `node-pty` is auto-excluded, version 16.2.2
-- [GitHub discussion #58698](https://github.com/vercel/next.js/discussions/58698) — WebSocket in route handlers: not supported
-- [next-ws package](https://github.com/apteryxxyz/next-ws) — patching approach; not recommended
-- [xterm.js](https://xtermjs.org/) — official site, addon guide
-- [@xterm/addon-fit npm](https://www.npmjs.com/package/@xterm/addon-fit) — v0.11.0, active 2025
-- [Web terminal with xterm.js + node-pty + WebSockets](https://ashishpoudel.substack.com/p/web-terminal-with-xtermjs-node-pty) — architecture pattern reference
+All findings from direct source-code inspection (no web search required — confidence HIGH):
 
----
-
-*Architecture research for: node-pty + WebSocket + xterm.js terminal integration in Next.js 16 App Router*
-*Researched: 2026-04-02*
+- `/Users/liujunping/project/i/ai-manager/src/lib/pty/pty-session.ts`
+- `/Users/liujunping/project/i/ai-manager/src/lib/pty/session-store.ts`
+- `/Users/liujunping/project/i/ai-manager/src/lib/pty/ws-server.ts`
+- `/Users/liujunping/project/i/ai-manager/src/actions/agent-actions.ts`
+- `/Users/liujunping/project/i/ai-manager/src/mcp/server.ts`
+- `/Users/liujunping/project/i/ai-manager/src/mcp/index.ts`
+- `/Users/liujunping/project/i/ai-manager/src/mcp/db.ts`
+- `/Users/liujunping/project/i/ai-manager/src/mcp/tools/task-tools.ts`
+- `/Users/liujunping/project/i/ai-manager/prisma/schema.prisma`
+- `/Users/liujunping/project/i/ai-manager/src/lib/adapters/` (full tree)
+- `/Users/liujunping/project/i/ai-manager/src/lib/execution-summary.ts`
+- `/Users/liujunping/project/i/ai-manager/.planning/PROJECT.md`
