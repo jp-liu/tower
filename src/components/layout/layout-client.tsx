@@ -4,6 +4,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { AppSidebar } from "./app-sidebar";
 import { TopBar } from "./top-bar";
 import { TerminalPortalProvider } from "@/components/task/terminal-portal";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { createProject, createWorkspace } from "@/actions/workspace-actions";
 
 interface LayoutClientProps {
@@ -19,7 +20,7 @@ export function LayoutClient({ workspaces, children }: LayoutClientProps) {
   const handleCreateProject = async (data: { name: string; alias?: string; description?: string; gitUrl?: string; localPath?: string; projectType?: "FRONTEND" | "BACKEND" }) => {
     const workspaceId = activeWorkspaceId || (workspaces.length > 0 ? workspaces[0].id : null);
     if (!workspaceId) {
-      const ws = await createWorkspace({ name: "默认工作空间" });
+      const ws = await createWorkspace({ name: "Default Workspace" });
       await createProject({ ...data, workspaceId: ws.id });
       router.refresh();
       router.push(`/workspaces/${ws.id}`);
@@ -39,7 +40,7 @@ export function LayoutClient({ workspaces, children }: LayoutClientProps) {
         <div className="flex h-screen flex-col overflow-hidden">
           <TopBar onCreateProject={handleCreateProject} />
           <main className="flex-1 overflow-hidden bg-background">
-            {children}
+            <ErrorBoundary>{children}</ErrorBoundary>
           </main>
         </div>
       </TerminalPortalProvider>
@@ -53,7 +54,7 @@ export function LayoutClient({ workspaces, children }: LayoutClientProps) {
         <div className="flex flex-1 flex-col overflow-hidden">
           <TopBar onCreateProject={handleCreateProject} />
           <main className="flex-1 overflow-auto bg-background">
-            {children}
+            <ErrorBoundary>{children}</ErrorBoundary>
           </main>
         </div>
       </div>

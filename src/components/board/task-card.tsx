@@ -11,17 +11,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PRIORITY_CONFIG } from "@/lib/constants";
-import type { Task } from "@prisma/client";
+import { useI18n } from "@/lib/i18n";
+import type { TaskWithLabels } from "@/types";
 
 interface TaskCardProps {
-  task: Task;
+  task: TaskWithLabels;
   onClick?: () => void;
-  onEdit?: (task: Task) => void;
+  onEdit?: (task: TaskWithLabels) => void;
   onDelete?: (taskId: string) => void;
-  onContextMenu?: (task: Task, x: number, y: number) => void;
+  onContextMenu?: (task: TaskWithLabels, x: number, y: number) => void;
 }
 
 export function TaskCard({ task, onClick, onEdit, onDelete, onContextMenu }: TaskCardProps) {
+  const { t } = useI18n();
   const {
     attributes,
     listeners,
@@ -70,14 +72,14 @@ export function TaskCard({ task, onClick, onEdit, onDelete, onContextMenu }: Tas
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => onEdit?.(task)}>
               <Pencil className="mr-2 h-3.5 w-3.5" />
-              编辑
+              {t("common.edit")}
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-rose-400"
               onClick={() => onDelete?.(task.id)}
             >
               <Trash2 className="mr-2 h-3.5 w-3.5" />
-              删除
+              {t("common.delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -95,9 +97,9 @@ export function TaskCard({ task, onClick, onEdit, onDelete, onContextMenu }: Tas
         </Badge>
       </div>
 
-      {(task as any).labels && (task as any).labels.length > 0 && (
+      {task.labels && task.labels.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-1">
-          {(task as any).labels.map((tl: any) => (
+          {task.labels.map((tl) => (
             <span
               key={tl.label.id}
               className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"

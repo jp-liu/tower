@@ -4,6 +4,8 @@ import type {
   Task,
   TaskExecution,
   TaskMessage,
+  TaskLabel,
+  Label,
   Repository,
   AgentConfig,
 } from "@prisma/client";
@@ -20,6 +22,10 @@ export type ProjectWithRelations = Project & {
 
 export type WorkspaceWithProjects = Workspace & {
   projects: ProjectWithRelations[];
+};
+
+export type TaskWithLabels = Task & {
+  labels: (TaskLabel & { label: Label })[];
 };
 
 export type BoardColumn = {

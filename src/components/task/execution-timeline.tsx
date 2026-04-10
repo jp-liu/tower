@@ -51,19 +51,20 @@ function formatDuration(start: Date | string | null, end: Date | string | null):
   return `${hr}h ${min % 60}m`;
 }
 
-function formatTime(date: Date | string | null): string {
+function formatTime(date: Date | string | null, locale: string = "zh"): string {
   if (!date) return "";
   const d = new Date(date);
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  const time = d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+  const loc = locale === "zh" ? "zh-CN" : "en-US";
+  const time = d.toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" });
 
   if (diffDays === 0) return time;
-  if (diffDays === 1) return `昨天 ${time}`;
-  if (diffDays < 7) return `${diffDays}天前 ${time}`;
-  return d.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" }) + " " + time;
+  if (diffDays === 1) return locale === "zh" ? `昨天 ${time}` : `Yesterday ${time}`;
+  if (diffDays < 7) return locale === "zh" ? `${diffDays}天前 ${time}` : `${diffDays}d ago ${time}`;
+  return d.toLocaleDateString(loc, { month: "2-digit", day: "2-digit" }) + " " + time;
 }
 
 function StatusIcon({ status }: { status: string }) {
@@ -98,7 +99,7 @@ function statusColor(status: string): string {
 }
 
 export function ExecutionTimeline({ executions, onResume }: ExecutionTimelineProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   if (executions.length === 0) {
@@ -132,7 +133,7 @@ export function ExecutionTimeline({ executions, onResume }: ExecutionTimelinePro
                 <span className={`font-medium ${statusColor(exec.status)}`}>
                   {statusLabel(exec.status, t)}
                 </span>
-                <span className="text-muted-foreground">{formatTime(exec.startedAt ?? null)}</span>
+                <span className="text-muted-foreground">{formatTime(exec.startedAt ?? null, locale)}</span>
                 {duration && (
                   <span className="text-muted-foreground/60">({duration})</span>
                 )}

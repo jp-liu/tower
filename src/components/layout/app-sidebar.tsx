@@ -1,8 +1,6 @@
-// @ts-nocheck eslint-disable
-/* eslint-disable */
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
@@ -49,7 +47,7 @@ interface AppSidebarProps {
 export function AppSidebar({ workspaces }: AppSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { t, locale, setLocale } = useI18n();
+  const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("sidebar-collapsed") === "true";

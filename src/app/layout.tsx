@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { LayoutClient } from "@/components/layout/layout-client";
 import { I18nProvider } from "@/lib/i18n";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { ToastProvider } from "@/components/ui/toast";
 import { db } from "@/lib/db";
 import "./globals.css";
 
@@ -45,9 +46,11 @@ export default async function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <TooltipProvider>
             <I18nProvider>
-              <LayoutClient workspaces={workspaces}>
-                {children}
-              </LayoutClient>
+              <ToastProvider>
+                <LayoutClient workspaces={workspaces}>
+                  {children}
+                </LayoutClient>
+              </ToastProvider>
             </I18nProvider>
           </TooltipProvider>
         </ThemeProvider>

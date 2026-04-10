@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { createWorkspaceSchema, updateWorkspaceSchema, createProjectSchema, updateProjectSchema } from "@/lib/schemas";
 
 /** Lightweight list: workspace names + project names only (for selectors) */
 export async function getWorkspacesWithProjects() {
@@ -12,20 +13,6 @@ export async function getWorkspacesWithProjects() {
       projects: {
         select: { id: true, name: true, alias: true },
         orderBy: { createdAt: "asc" },
-      },
-    },
-    orderBy: { updatedAt: "desc" },
-  });
-}
-
-export async function getWorkspaces() {
-  return db.workspace.findMany({
-    include: {
-      projects: {
-        include: {
-          tasks: true,
-          repositories: true,
-        },
       },
     },
     orderBy: { updatedAt: "desc" },
@@ -49,15 +36,17 @@ export async function getWorkspaceById(id: string) {
 }
 
 export async function createWorkspace(data: { name: string; description?: string }) {
-  const workspace = await db.workspace.create({ data });
+  const v = createWorkspaceSchema.parse(data);
+  const workspace = await db.workspace.create({ data: v });
   revalidatePath("/workspaces");
   return workspace;
 }
 
 export async function updateWorkspace(id: string, data: { name?: string; description?: string }) {
+  const v = updateWorkspaceSchema.parse(data);
   const workspace = await db.workspace.update({
     where: { id },
-    data,
+    data: v,
   });
   revalidatePath("/workspaces");
   return workspace;
@@ -78,17 +67,18 @@ export async function createProject(data: {
   projectType?: "FRONTEND" | "BACKEND";
   previewCommand?: string | null;
 }) {
+  const v = createProjectSchema.parse(data);
   const project = await db.project.create({
     data: {
-      name: data.name,
-      alias: data.alias,
-      description: data.description,
-      type: data.gitUrl ? "GIT" : "NORMAL",
-      gitUrl: data.gitUrl,
-      localPath: data.localPath,
-      projectType: data.projectType,
-      previewCommand: data.previewCommand,
-      workspaceId: data.workspaceId,
+      name: v.name,
+      alias: v.alias,
+      description: v.description,
+      type: v.gitUrl ? "GIT" : "NORMAL",
+      gitUrl: v.gitUrl || undefined,
+      localPath: v.localPath,
+      projectType: v.projectType,
+      previewCommand: v.previewCommand,
+      workspaceId: v.workspaceId,
     },
   });
   revalidatePath("/workspaces");
@@ -96,9 +86,10 @@ export async function createProject(data: {
 }
 
 export async function updateProject(id: string, data: { name?: string; alias?: string; description?: string; localPath?: string; projectType?: "FRONTEND" | "BACKEND"; previewCommand?: string | null }) {
+  const v = updateProjectSchema.parse(data);
   const project = await db.project.update({
     where: { id },
-    data,
+    data: v,
   });
   revalidatePath("/workspaces");
   return project;

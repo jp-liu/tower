@@ -4,7 +4,11 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { setTaskLabels } from "@/actions/label-actions";
 import { removeWorktree } from "@/lib/worktree";
+import { createTaskSchema, updateTaskSchema, taskStatusSchema } from "@/lib/schemas";
+import { logger } from "@/lib/logger";
 import type { TaskStatus, Priority } from "@prisma/client";
+
+const log = logger.create("task-actions");
 
 export async function createTask(data: {
   title: string;
@@ -15,20 +19,21 @@ export async function createTask(data: {
   labelIds?: string[];
   baseBranch?: string;
 }) {
+  const v = createTaskSchema.parse(data);
   const task = await db.task.create({
     data: {
-      title: data.title,
-      description: data.description,
-      projectId: data.projectId,
-      priority: data.priority ?? "MEDIUM",
-      status: data.status ?? "TODO",
-      baseBranch: data.baseBranch ?? null,
+      title: v.title,
+      description: v.description,
+      projectId: v.projectId,
+      priority: (v.priority as Priority) ?? "MEDIUM",
+      status: (v.status as TaskStatus) ?? "TODO",
+      baseBranch: v.baseBranch ?? null,
     },
   });
   // Set labels
-  if (data.labelIds && data.labelIds.length > 0) {
+  if (v.labelIds && v.labelIds.length > 0) {
     await db.taskLabel.createMany({
-      data: data.labelIds.map((labelId) => ({ taskId: task.id, labelId })),
+      data: v.labelIds.map((labelId) => ({ taskId: task.id, labelId })),
     });
   }
   revalidatePath("/workspaces");
@@ -36,6 +41,7 @@ export async function createTask(data: {
 }
 
 export async function updateTaskStatus(taskId: string, status: TaskStatus) {
+  taskStatusSchema.parse(status);
   const task = await db.task.update({
     where: { id: taskId },
     data: { status },
@@ -47,7 +53,7 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
     try {
       await removeWorktree(task.project.localPath, taskId);
     } catch (error) {
-      console.error("[updateTaskStatus] Worktree cleanup failed:", error);
+      log.error("Worktree cleanup failed", error, { taskId });
     }
   }
 
@@ -59,7 +65,8 @@ export async function updateTask(
   taskId: string,
   data: { title?: string; description?: string; priority?: Priority; labelIds?: string[]; baseBranch?: string }
 ) {
-  const { labelIds, ...updateData } = data;
+  const v = updateTaskSchema.parse(data);
+  const { labelIds, ...updateData } = v;
   const task = await db.task.update({
     where: { id: taskId },
     data: updateData,

@@ -11,7 +11,8 @@ import { TaskDetailPanel } from "@/components/task/task-detail-panel";
 import { createTask, updateTaskStatus, updateTask, deleteTask } from "@/actions/task-actions";
 import { startPtyExecution } from "@/actions/agent-actions";
 import { ProjectTabs } from "@/components/board/project-tabs";
-import type { Task, TaskStatus, Priority } from "@prisma/client";
+import type { TaskStatus, Priority } from "@prisma/client";
+import type { TaskWithLabels } from "@/types";
 
 type FilterType = "ALL" | "IN_PROGRESS" | "IN_REVIEW";
 
@@ -35,10 +36,9 @@ interface ProjectInfo {
 interface BoardPageClientProps {
   workspaceId: string;
   projectId: string;
-  projectName: string;
   project: ProjectInfo;
   projects: Array<{ id: string; name: string; alias: string | null }>;
-  initialTasks: Task[];
+  initialTasks: TaskWithLabels[];
   totalTasks: number;
   runningTasks: number;
   labels: LabelOption[];
@@ -48,7 +48,6 @@ interface BoardPageClientProps {
 export function BoardPageClient({
   workspaceId,
   projectId,
-  projectName,
   project,
   projects,
   initialTasks,
@@ -58,14 +57,14 @@ export function BoardPageClient({
   openTaskId,
 }: BoardPageClientProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [filter, setFilter] = useState<FilterType>("ALL");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createDefaultStatus, setCreateDefaultStatus] = useState<TaskStatus>("TODO");
-  const [selectedTask, setSelectedTask] = useState<Task | null>(
+  const [selectedTask, setSelectedTask] = useState<TaskWithLabels | null>(
     openTaskId ? initialTasks.find((t) => t.id === openTaskId) ?? null : null
   );
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editingTask, setEditingTask] = useState<TaskWithLabels | null>(null);
 
   const refreshData = useCallback(() => {
     startTransition(() => {
@@ -132,7 +131,7 @@ export function BoardPageClient({
     setShowCreateDialog(true);
   }, []);
 
-  const handleEditTask = useCallback((task: Task) => {
+  const handleEditTask = useCallback((task: TaskWithLabels) => {
     setEditingTask(task);
     setShowCreateDialog(true);
   }, []);
@@ -197,8 +196,8 @@ export function BoardPageClient({
           defaultStatus={createDefaultStatus}
           editTask={editingTask}
           editTaskLabelIds={
-            editingTask && (editingTask as any).labels
-              ? (editingTask as any).labels.map((tl: any) => tl.labelId)
+            editingTask?.labels
+              ? editingTask.labels.map((tl) => tl.labelId)
               : []
           }
           labels={labels}

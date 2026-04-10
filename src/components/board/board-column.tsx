@@ -4,18 +4,18 @@ import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Plus } from "lucide-react";
 import { TaskCard } from "./task-card";
-import type { Task } from "@prisma/client";
+import type { TaskWithLabels } from "@/types";
 
 interface BoardColumnProps {
   id: string;
   label: string;
   color: string;
-  tasks: Task[];
-  onTaskClick?: (task: Task) => void;
-  onEditTask?: (task: Task) => void;
+  tasks: TaskWithLabels[];
+  onTaskClick?: (task: TaskWithLabels) => void;
+  onEditTask?: (task: TaskWithLabels) => void;
   onAddTask?: () => void;
   onDeleteTask?: (taskId: string) => void;
-  onContextMenu?: (task: Task, x: number, y: number) => void;
+  onContextMenu?: (task: TaskWithLabels, x: number, y: number) => void;
 }
 
 export function BoardColumn({

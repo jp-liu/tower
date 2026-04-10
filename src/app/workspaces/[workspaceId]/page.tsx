@@ -55,7 +55,6 @@ export default async function WorkspaceBoardPage({ params, searchParams }: Props
     <BoardPageClient
       workspaceId={workspaceId}
       projectId={project.id}
-      projectName={project.name}
       project={{
         id: project.id,
         name: project.name,

@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { loader } from "@monaco-editor/react";
 import { useTheme } from "next-themes";
 import { useI18n } from "@/lib/i18n";
+import { useToast } from "@/components/ui/toast";
 import { readFileContent, writeFileContent } from "@/actions/file-actions";
 import { EditorTabs } from "./editor-tabs";
 import type { EditorTab } from "./editor-tabs";
@@ -56,10 +57,7 @@ export function CodeEditor({
 
   const [tabs, setTabs] = useState<EditorTab[]>([]);
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
-  const [toast, setToast] = useState<{
-    type: "success" | "error";
-    visible: boolean;
-  }>({ type: "success", visible: false });
+  const toast = useToast();
 
   const editorRef = useRef<unknown>(null);
   const monacoRef = useRef<unknown>(null);
@@ -78,11 +76,11 @@ export function CodeEditor({
   }, [onSave]);
 
   function showToast(type: "success" | "error") {
-    setToast({ type, visible: true });
-    setTimeout(
-      () => setToast((prev) => ({ ...prev, visible: false })),
-      3000
-    );
+    if (type === "success") {
+      toast.success(t("editor.saveSuccess"));
+    } else {
+      toast.error(t("editor.saveError"));
+    }
   }
 
   // Sync Monaco theme when resolvedTheme changes (D-05)
@@ -286,17 +284,6 @@ export function CodeEditor({
         </div>
       )}
 
-      {/* Toast notification (D-07) */}
-      {toast.visible && (
-        <div
-          className={[
-            "absolute bottom-4 right-4 z-50 rounded-md px-4 py-2 text-sm shadow-md text-white",
-            toast.type === "success" ? "bg-green-600" : "bg-destructive",
-          ].join(" ")}
-        >
-          {toast.type === "success" ? t("editor.saveSuccess") : t("editor.saveError")}
-        </div>
-      )}
     </div>
   );
 }

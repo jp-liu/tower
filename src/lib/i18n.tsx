@@ -345,10 +345,6 @@ const translations = {
     "taskPage.loadingDiff": "加载变更中...",
     "taskPage.tabFiles": "文件",
     "taskPage.tabPreview": "预览",
-    "taskPage.filesPlaceholder": "文件浏览器",
-    "taskPage.previewPlaceholder": "预览面板",
-    "taskPage.comingSoon": "即将推出",
-    "taskPage.comingSoonPhase23": "即将推出（Phase 23）",
     // File tree (Phase 20)
     "taskPage.fileTree.newFile": "新建文件",
     "taskPage.fileTree.newFolder": "新建文件夹",
@@ -767,10 +763,6 @@ const translations = {
     "taskPage.loadingDiff": "Loading changes...",
     "taskPage.tabFiles": "Files",
     "taskPage.tabPreview": "Preview",
-    "taskPage.filesPlaceholder": "File browser",
-    "taskPage.previewPlaceholder": "Preview panel",
-    "taskPage.comingSoon": "Coming in next phase",
-    "taskPage.comingSoonPhase23": "Coming in Phase 23",
     // File tree (Phase 20)
     "taskPage.fileTree.newFile": "New File",
     "taskPage.fileTree.newFolder": "New Folder",

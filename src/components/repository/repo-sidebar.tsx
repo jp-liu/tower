@@ -1,10 +1,8 @@
-// @ts-nocheck
-/* eslint-disable */
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  ChevronDown, ChevronRight, Search, FolderPlus, Package, Plus,
+  ChevronDown, ChevronRight, Search, Plus,
   GitBranch, Globe, FileText, Pencil, FolderOpen, GitCommitVertical,
   Check, AlertCircle, Loader2,
 } from "lucide-react";
@@ -16,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { updateProject, createProject, getRecentLocalProjects } from "@/actions/workspace-actions";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
+import { useToast } from "@/components/ui/toast";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 
@@ -28,6 +27,7 @@ interface ProjectSidebarProps {
     type: string;
     gitUrl: string | null;
     localPath: string | null;
+    projectType?: string | null;
   };
   workspaceId: string;
 }
@@ -45,14 +45,14 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
   const router = useRouter();
   const [gitExpanded, setGitExpanded] = useState(true);
   const [browseExpanded, setBrowseExpanded] = useState(true);
-  const [toast, setToast] = useState<string | null>(null);
+  const toast = useToast();
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showFolderBrowser, setShowFolderBrowser] = useState(false);
   const [editName, setEditName] = useState(project.name);
   const [editAlias, setEditAlias] = useState(project.alias ?? "");
   const [editDesc, setEditDesc] = useState(project.description ?? "");
   const [editLocalPath, setEditLocalPath] = useState(project.localPath ?? "");
-  const [editProjectType, setEditProjectType] = useState<"FRONTEND" | "BACKEND">((project as any).projectType ?? "FRONTEND");
+  const [editProjectType, setEditProjectType] = useState<"FRONTEND" | "BACKEND">((project.projectType as "FRONTEND" | "BACKEND") ?? "FRONTEND");
 
   // Recent local projects
   const [recentProjects, setRecentProjects] = useState<Array<{ id: string; name: string; alias: string | null; localPath: string | null; workspaceId: string; type: string }>>([]);
@@ -77,8 +77,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
   const [showCreateBranch, setShowCreateBranch] = useState(false);
 
   const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
+    toast.info(msg);
   };
 
   // Load git info when localPath is available
@@ -196,11 +195,6 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
 
   return (
     <aside className="relative w-72 flex-shrink-0 overflow-y-auto border-l border-border bg-sidebar">
-      {toast && (
-        <div className="sticky left-3 right-3 top-3 z-10 mx-3 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 shadow-lg">
-          {toast}
-        </div>
-      )}
 
       {/* ── Project Details ── */}
       <div className="border-b border-border p-4">

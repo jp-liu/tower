@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { createLabelSchema } from "@/lib/schemas";
 
 // Get all labels available for a workspace (builtin + workspace-specific)
 export async function getLabelsForWorkspace(workspaceId: string) {
@@ -22,11 +23,12 @@ export async function createLabel(data: {
   color: string;
   workspaceId: string;
 }) {
+  const v = createLabelSchema.parse(data);
   const label = await db.label.create({
     data: {
-      name: data.name,
-      color: data.color,
-      workspaceId: data.workspaceId,
+      name: v.name,
+      color: v.color,
+      workspaceId: v.workspaceId,
     },
   });
   revalidatePath("/workspaces");
@@ -35,20 +37,23 @@ export async function createLabel(data: {
 
 // Delete a custom label (not builtin)
 export async function deleteLabel(id: string) {
+  const label = await db.label.findUnique({ where: { id } });
+  if (!label) throw new Error("Label not found");
+  if (label.isBuiltin) throw new Error("Cannot delete builtin labels");
   await db.label.delete({ where: { id } });
   revalidatePath("/workspaces");
 }
 
-// Set labels on a task (replace all)
+// Set labels on a task (replace all) — wrapped in transaction for atomicity
 export async function setTaskLabels(taskId: string, labelIds: string[]) {
-  // Delete existing
-  await db.taskLabel.deleteMany({ where: { taskId } });
-  // Create new
-  if (labelIds.length > 0) {
-    await db.taskLabel.createMany({
-      data: labelIds.map((labelId) => ({ taskId, labelId })),
-    });
-  }
+  await db.$transaction(async (tx) => {
+    await tx.taskLabel.deleteMany({ where: { taskId } });
+    if (labelIds.length > 0) {
+      await tx.taskLabel.createMany({
+        data: labelIds.map((labelId) => ({ taskId, labelId })),
+      });
+    }
+  });
   revalidatePath("/workspaces");
 }
 

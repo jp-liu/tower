@@ -15,13 +15,14 @@ import {
 import { BoardColumn } from "./board-column";
 import { TaskCard } from "./task-card";
 import { BOARD_COLUMNS } from "@/lib/constants";
-import type { Task, TaskStatus } from "@prisma/client";
+import type { TaskStatus } from "@prisma/client";
+import type { TaskWithLabels } from "@/types";
 
 interface KanbanBoardProps {
-  initialTasks: Task[];
+  initialTasks: TaskWithLabels[];
   onTaskMove?: (taskId: string, newStatus: TaskStatus) => void;
-  onTaskClick?: (task: Task) => void;
-  onEditTask?: (task: Task) => void;
+  onTaskClick?: (task: TaskWithLabels) => void;
+  onEditTask?: (task: TaskWithLabels) => void;
   onAddTask?: (status: TaskStatus) => void;
   onDeleteTask?: (taskId: string) => void;
   onContextMenuStatusChange?: (taskId: string, status: TaskStatus) => void;
@@ -41,10 +42,10 @@ export function KanbanBoard({
   workspaceId,
 }: KanbanBoardProps) {
   // Local tasks state for optimistic drag updates
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
-  const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [tasks, setTasks] = useState<TaskWithLabels[]>(initialTasks);
+  const [activeTask, setActiveTask] = useState<TaskWithLabels | null>(null);
   const [contextMenu, setContextMenu] = useState<{
-    task: Task;
+    task: TaskWithLabels;
     x: number;
     y: number;
   } | null>(null);
@@ -60,7 +61,7 @@ export function KanbanBoard({
     })
   );
 
-  const handleContextMenu = useCallback((task: Task, x: number, y: number) => {
+  const handleContextMenu = useCallback((task: TaskWithLabels, x: number, y: number) => {
     setContextMenu({ task, x, y });
   }, []);
 

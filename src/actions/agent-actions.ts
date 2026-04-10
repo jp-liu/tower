@@ -4,9 +4,12 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { createWorktree } from "@/lib/worktree";
 import { createSession } from "@/lib/pty/session-store";
+import { logger } from "@/lib/logger";
 import { writeFile, rm, mkdtemp } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+
+const log = logger.create("agent-actions");
 
 export async function sendTaskMessage(taskId: string, content: string) {
   const userMessage = await db.taskMessage.create({
@@ -335,7 +338,7 @@ export async function startPtyExecution(
           },
         })
         .catch((err: unknown) => {
-          console.error("[startPtyExecution] Failed to update execution status:", err);
+          log.error("Failed to update execution status", err);
         });
 
       // Capture execution summary (git log, stats, terminal log)
@@ -352,7 +355,7 @@ export async function startPtyExecution(
         await db.task
           .update({ where: { id: taskId }, data: { status: "IN_REVIEW" } })
           .catch((err: unknown) => {
-            console.error("[startPtyExecution] Failed to update task status:", err);
+            log.error("Failed to update task status", err);
           });
       }
 

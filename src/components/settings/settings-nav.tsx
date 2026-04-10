@@ -1,30 +1,31 @@
 "use client";
 
 import { Settings, Cpu, FileText, SlidersHorizontal } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 const NAV_ITEMS = [
   {
     id: "general",
-    label: "General",
-    description: "Appearance and language preferences",
+    labelKey: "settings.general" as const,
+    descKey: "settings.generalDesc" as const,
     icon: Settings,
   },
   {
     id: "ai-tools",
-    label: "AI Tools",
-    description: "AI tool configuration",
+    labelKey: "settings.aiTools.title" as const,
+    descKey: "settings.aiTools.cliVerificationDesc" as const,
     icon: Cpu,
   },
   {
     id: "prompts",
-    label: "Prompts",
-    description: "AI prompt templates",
+    labelKey: "settings.prompts" as const,
+    descKey: "settings.promptsDesc" as const,
     icon: FileText,
   },
   {
     id: "config",
-    label: "Config",
-    description: "System configuration parameters",
+    labelKey: "settings.config" as const,
+    descKey: "settings.configDesc" as const,
     icon: SlidersHorizontal,
   },
 ];
@@ -35,11 +36,12 @@ interface SettingsNavProps {
 }
 
 export function SettingsNav({ activeSection, onSectionChange }: SettingsNavProps) {
+  const { t } = useI18n();
   return (
     <nav className="w-64 flex-shrink-0 border-r bg-card p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">配置</h1>
-        <p className="text-sm text-muted-foreground">配置说明</p>
+        <h1 className="text-2xl font-bold">{t("settings.title")}</h1>
+        <p className="text-sm text-muted-foreground">{t("settings.configDesc")}</p>
       </div>
 
       <div className="space-y-1">
@@ -58,8 +60,8 @@ export function SettingsNav({ activeSection, onSectionChange }: SettingsNavProps
             >
               <Icon className={`mt-0.5 h-4 w-4 ${isActive ? "text-accent-foreground" : "text-muted-foreground"}`} />
               <div>
-                <div className="text-sm font-medium">{item.label}</div>
-                <div className="text-xs text-muted-foreground/70">{item.description}</div>
+                <div className="text-sm font-medium">{t(item.labelKey)}</div>
+                <div className="text-xs text-muted-foreground/70">{t(item.descKey)}</div>
               </div>
             </button>
           );
