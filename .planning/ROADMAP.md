@@ -373,7 +373,7 @@ Plans:
 | 26. Workbench Integration | v0.7 | 2/2 | Complete | 2026-04-03 |
 | 27. Task Card Context Menu | v0.7 | 2/2 | Complete | 2026-04-03 |
 | 28. v0.6 Bug Fixes | v0.7 | 0/TBD | Complete | 2026-04-10 |
-| 29. Adapter Dead Code Removal | v0.9 | 2/2 | Complete   | 2026-04-10 |
+| 29. Adapter Dead Code Removal | v0.9 | 2/2 | Complete    | 2026-04-10 |
 | 30. Schema Foundation | v0.9 | 0/TBD | Not started | - |
 | 31. PTY Primitives & Env Injection | v0.9 | 0/TBD | Not started | - |
 | 32. Agent Actions & Feishu Wiring | v0.9 | 0/TBD | Not started | - |
