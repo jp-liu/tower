@@ -141,6 +141,22 @@ export async function resumePtyExecution(
 
   const cwd = prevExec.worktreePath ?? task.project.localPath;
 
+  // Read CliProfile — determines which CLI binary to spawn
+  const profile = await db.cliProfile.findFirst({ where: { isDefault: true } });
+  if (!profile) throw new Error("No default CLI profile found — run seed first");
+  const profileCommand = profile.command;
+  const profileBaseArgs: string[] = JSON.parse(profile.baseArgs);
+  const profileEnvVars: Record<string, string> = JSON.parse(profile.envVars);
+
+  // Build env overrides — inherit callbackUrl from previous execution if it had one
+  const envOverrides: Record<string, string> = {
+    ...profileEnvVars,
+    AI_MANAGER_TASK_ID: taskId,
+  };
+  if (prevExec.callbackUrl) {
+    envOverrides.CALLBACK_URL = prevExec.callbackUrl;
+  }
+
   // Reuse execution: set back to RUNNING
   const execution = await db.taskExecution.update({
     where: { id: prevExec.id },
@@ -154,12 +170,12 @@ export async function resumePtyExecution(
 
   const claudeArgs: string[] = [
     "--resume", previousSessionId,
-    "--dangerously-skip-permissions",
+    ...profileBaseArgs,
   ];
 
   createSession(
     taskId,
-    "claude",
+    profileCommand,
     claudeArgs,
     cwd,
     () => {},
@@ -186,7 +202,8 @@ export async function resumePtyExecution(
       if (exitCode === 0) {
         await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW" } }).catch(() => {});
       }
-    }
+    },
+    envOverrides
   );
 
   return { executionId: execution.id, worktreePath: prevExec.worktreePath };
