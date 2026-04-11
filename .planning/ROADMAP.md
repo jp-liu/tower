@@ -311,7 +311,9 @@ Plans:
   2. Running Claude manually (outside ai-manager) does not produce a Feishu notification — the `AI_MANAGER_TASK_ID` environment variable controls the gate
   3. The `~/.claude/settings.json` Stop hook entry points to `notify-agi.sh` and is present after setup
   4. A failed execution (exit code non-zero) sends a Feishu notification tagged as failed, not completed
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 32-01-PLAN.md — notify-agi.sh gate + structured Feishu template + settings.json Stop hook + env var injection (NTFY-03, NTFY-04, NTFY-05)
 
 ### Phase 33: Internal HTTP Bridge
 **Goal**: The Next.js server exposes two localhost-only HTTP routes that allow any process (including the MCP stdio process) to read PTY buffer contents and send input to a running PTY session
