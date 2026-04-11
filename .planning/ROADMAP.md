@@ -324,7 +324,9 @@ Plans:
   2. `curl -X POST http://localhost:3000/api/internal/terminal/{taskId}/input -d '{"text":"y\n"}'` sends the text to the running PTY and it appears in the terminal
   3. Both routes return 404 when no active PTY session exists for the given taskId
   4. Both routes reject requests from non-localhost origins (loopback-only guard enforced)
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 33-01-PLAN.md — Localhost guard utility + buffer GET route + input POST route (TERM-01, TERM-02)
 
 ### Phase 34: MCP Terminal Tools
 **Goal**: External orchestrators (Paperclip/OpenClaw) can poll PTY terminal output and inject input into running task sessions via MCP tools
@@ -384,6 +386,6 @@ Plans:
 | 30. Schema Foundation | v0.9 | 1/1 | Complete    | 2026-04-11 |
 | 31. PTY Primitives & Env Injection | v0.9 | 2/2 | Complete    | 2026-04-11 |
 | 32. Agent Actions & Feishu Wiring | v0.9 | 1/1 | Complete    | 2026-04-11 |
-| 33. Internal HTTP Bridge | v0.9 | 0/TBD | Not started | - |
+| 33. Internal HTTP Bridge | v0.9 | 0/1 | In progress | - |
 | 34. MCP Terminal Tools | v0.9 | 0/TBD | Not started | - |
 | 35. Settings UI for CLI Profile | v0.9 | 0/TBD | Not started | - |
