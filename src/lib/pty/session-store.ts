@@ -16,12 +16,15 @@ export function createSession(
   args: string[],
   cwd: string,
   onData: (data: string) => void,
-  onExit: (exitCode: number, signal?: number) => void
+  onExit: (exitCode: number, signal?: number) => void,
+  envOverrides?: Record<string, string>,
+  onIdle?: () => void,
+  idleThresholdMs?: number
 ): PtySession {
   // Destroy any existing session for this taskId before creating new one
   destroySession(taskId);
 
-  const session = new PtySession(taskId, command, args, cwd, onData, onExit);
+  const session = new PtySession(taskId, command, args, cwd, onData, onExit, envOverrides, onIdle, idleThresholdMs);
   sessions.set(taskId, session);
   return session;
 }
