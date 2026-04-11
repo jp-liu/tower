@@ -24,13 +24,13 @@ Requirements for milestone v0.9: 架构清理 + 外部调度闭环.
 
 ### 外部调度通知 (NTFY)
 
-- [ ] **NTFY-01**: `createSession` 支持 envOverrides 参数，传递到 PTY 子进程
+- [x] **NTFY-01**: `createSession` 支持 envOverrides 参数，传递到 PTY 子进程
 - [ ] **NTFY-02**: `startPtyExecution` 接受 callbackUrl 参数，注入 `AI_MANAGER_TASK_ID` + `CALLBACK_URL` 环境变量
 - [ ] **NTFY-03**: `notify-agi.sh` 开头检查 `AI_MANAGER_TASK_ID`，无则静默退出
 - [ ] **NTFY-04**: `~/.claude/settings.json` Stop hook 挂回 notify-agi.sh
 - [ ] **NTFY-05**: 飞书通知模板优化 — 包含任务标题、状态、耗时、摘要
-- [ ] **NTFY-06**: PTY idle 检测 — `lastActivityAt` + 可配置阈值（≥180s），触发 onIdle 回调
-- [ ] **NTFY-07**: idle 检测响应用户输入 resetIdleTimer
+- [x] **NTFY-06**: PTY idle 检测 — `lastActivityAt` + 可配置阈值（≥180s），触发 onIdle 回调
+- [x] **NTFY-07**: idle 检测响应用户输入 resetIdleTimer
 
 ### MCP 终端交互 (TERM)
 
@@ -76,10 +76,10 @@ Requirements for milestone v0.9: 架构清理 + 外部调度闭环.
 | CLIP-01 | Phase 30 | Complete |
 | CLIP-02 | Phase 31 | Pending |
 | CLIP-03 | Phase 31 | Pending |
-| NTFY-01 | Phase 31 | Pending |
+| NTFY-01 | Phase 31 | Complete |
 | NTFY-02 | Phase 31 | Pending |
-| NTFY-06 | Phase 31 | Pending |
-| NTFY-07 | Phase 31 | Pending |
+| NTFY-06 | Phase 31 | Complete |
+| NTFY-07 | Phase 31 | Complete |
 | NTFY-03 | Phase 32 | Pending |
 | NTFY-04 | Phase 32 | Pending |
 | NTFY-05 | Phase 32 | Pending |

@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v0.9
 milestone_name: 架构清理 + 外部调度闭环
-status: verifying
-stopped_at: Completed 30-01-PLAN.md
-last_updated: "2026-04-11T02:09:53.164Z"
+status: executing
+stopped_at: Completed 31-01-PLAN.md
+last_updated: "2026-04-11T02:26:28.460Z"
 last_activity: 2026-04-11
 progress:
   total_phases: 9
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 30 — schema-foundation
+**Current focus:** Phase 31 — pty-primitives-env-injection
 
 ## Current Position
 
-Phase: 30
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 31 (pty-primitives-env-injection) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-04-11
 
 Progress: [░░░░░░░░░░] 0%
@@ -88,6 +88,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 29 P01 | 185 | 2 tasks | 6 files |
 | Phase 29 P02 | 127 | 2 tasks | 14 files |
 | Phase 30-schema-foundation P01 | 300 | 2 tasks | 2 files |
+| Phase 31-pty-primitives-env-injection P01 | 120 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -213,6 +214,9 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 29]: Pre-existing type errors in agent-config-actions.ts and pty-session.test.ts are unrelated to adapter removal — not fixed per CLEAN-05 scope rule
 - [Phase 30-schema-foundation]: CliProfile.baseArgs stored as JSON string (not String[]) — SQLite has no native array type; consumers call JSON.parse()
 - [Phase 30-schema-foundation]: Default CliProfile upsert with update:{} makes seed idempotent — unique constraint never violated on repeated runs
+- [Phase 31]: envOverrides spread via ...envOverrides AFTER existing env keys in pty.spawn() — overrides take precedence, no process.env mutation
+- [Phase 31]: 180s minimum enforced via Math.max for idle detection — prevents false positives from Claude silent reasoning
+- [Phase 31]: _idleFired flag ensures onIdle fires exactly once per session lifetime
 
 ### Pending Todos
 
@@ -227,6 +231,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-11T02:05:54.521Z
-Stopped at: Completed 30-01-PLAN.md
+Last session: 2026-04-11T02:26:28.456Z
+Stopped at: Completed 31-01-PLAN.md
 Resume file: None

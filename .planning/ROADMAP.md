@@ -299,7 +299,7 @@ Plans:
   5. User typing in the terminal (via WebSocket) resets the idle timer; the callback does not fire if the user is actively interacting
 **Plans**: 2 plans
 Plans:
-- [ ] 31-01-PLAN.md — PtySession envOverrides support + idle detection timer (NTFY-01, NTFY-06, NTFY-07)
+- [x] 31-01-PLAN.md — PtySession envOverrides support + idle detection timer (NTFY-01, NTFY-06, NTFY-07)
 - [ ] 31-02-PLAN.md — startPtyExecution/resumePtyExecution read CliProfile + inject env vars (CLIP-02, CLIP-03, NTFY-02)
 
 ### Phase 32: Agent Actions & Feishu Wiring
@@ -380,7 +380,7 @@ Plans:
 | 28. v0.6 Bug Fixes | v0.7 | 0/TBD | Complete | 2026-04-10 |
 | 29. Adapter Dead Code Removal | v0.9 | 2/2 | Complete    | 2026-04-10 |
 | 30. Schema Foundation | v0.9 | 1/1 | Complete    | 2026-04-11 |
-| 31. PTY Primitives & Env Injection | v0.9 | 0/2 | Not started | - |
+| 31. PTY Primitives & Env Injection | v0.9 | 1/2 | In Progress|  |
 | 32. Agent Actions & Feishu Wiring | v0.9 | 0/TBD | Not started | - |
 | 33. Internal HTTP Bridge | v0.9 | 0/TBD | Not started | - |
 | 34. MCP Terminal Tools | v0.9 | 0/TBD | Not started | - |
