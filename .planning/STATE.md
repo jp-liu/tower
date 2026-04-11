@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.9
 milestone_name: 架构清理 + 外部调度闭环
 status: verifying
-stopped_at: Completed 32-01-PLAN.md
-last_updated: "2026-04-11T02:55:04.718Z"
+stopped_at: Completed 33-01-PLAN.md
+last_updated: "2026-04-11T03:06:19.957Z"
 last_activity: 2026-04-11
 progress:
   total_phases: 9
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 32 — agent-actions-feishu-wiring
+**Current focus:** Phase 33 — internal-http-bridge
 
 ## Current Position
 
-Phase: 32
-Plan: Not started
+Phase: 33 (internal-http-bridge) — EXECUTING
+Plan: 1 of 1
 Status: Phase complete — ready for verification
 Last activity: 2026-04-11
 
@@ -91,6 +91,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 31-pty-primitives-env-injection P01 | 120 | 2 tasks | 2 files |
 | Phase 31-pty-primitives-env-injection P02 | 142 | 2 tasks | 1 files |
 | Phase 32 P01 | 126 | 2 tasks | 3 files |
+| Phase 33-internal-http-bridge P01 | 113 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -223,6 +224,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 31]: profileBaseArgs replaces hardcoded --dangerously-skip-permissions in both startPtyExecution and resumePtyExecution
 - [Phase 32]: Exit code signal file written at TOP of onExit before async DB ops — maximizes chance notify-agi.sh reads it before Stop hook fires
 - [Phase 32]: notify-agi.sh uses AI_MANAGER_TASK_ID gate + exit 0 before legacy path — ai-manager sessions get structured Feishu notification, manual sessions use legacy path unchanged
+- [Phase 33]: Header-based localhost detection only — request.ip is unreliable in all Next.js runtimes
+- [Phase 33]: 410 Gone for killed PTY sessions in input route — distinct signal from 404 (never existed)
 
 ### Pending Todos
 
@@ -237,6 +240,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-11T02:51:49.876Z
-Stopped at: Completed 32-01-PLAN.md
+Last session: 2026-04-11T03:06:19.954Z
+Stopped at: Completed 33-01-PLAN.md
 Resume file: None

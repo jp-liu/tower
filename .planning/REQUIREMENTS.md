@@ -26,16 +26,16 @@ Requirements for milestone v0.9: 架构清理 + 外部调度闭环.
 
 - [x] **NTFY-01**: `createSession` 支持 envOverrides 参数，传递到 PTY 子进程
 - [x] **NTFY-02**: `startPtyExecution` 接受 callbackUrl 参数，注入 `AI_MANAGER_TASK_ID` + `CALLBACK_URL` 环境变量
-- [ ] **NTFY-03**: `notify-agi.sh` 开头检查 `AI_MANAGER_TASK_ID`，无则静默退出
-- [ ] **NTFY-04**: `~/.claude/settings.json` Stop hook 挂回 notify-agi.sh
-- [ ] **NTFY-05**: 飞书通知模板优化 — 包含任务标题、状态、耗时、摘要
+- [x] **NTFY-03**: `notify-agi.sh` 开头检查 `AI_MANAGER_TASK_ID`，无则静默退出
+- [x] **NTFY-04**: `~/.claude/settings.json` Stop hook 挂回 notify-agi.sh
+- [x] **NTFY-05**: 飞书通知模板优化 — 包含任务标题、状态、耗时、摘要
 - [x] **NTFY-06**: PTY idle 检测 — `lastActivityAt` + 可配置阈值（≥180s），触发 onIdle 回调
 - [x] **NTFY-07**: idle 检测响应用户输入 resetIdleTimer
 
 ### MCP 终端交互 (TERM)
 
-- [ ] **TERM-01**: Internal HTTP route `GET /api/internal/terminal/[taskId]/buffer` — 返回 PTY 缓冲区最近 N 行
-- [ ] **TERM-02**: Internal HTTP route `POST /api/internal/terminal/[taskId]/input` — 往 PTY 发送文本
+- [x] **TERM-01**: Internal HTTP route `GET /api/internal/terminal/[taskId]/buffer` — 返回 PTY 缓冲区最近 N 行
+- [x] **TERM-02**: Internal HTTP route `POST /api/internal/terminal/[taskId]/input` — 往 PTY 发送文本
 - [ ] **TERM-03**: MCP 工具 `get_task_terminal_output` — 通过 HTTP bridge 读取终端输出
 - [ ] **TERM-04**: MCP 工具 `send_task_terminal_input` — 通过 HTTP bridge 发送指令
 - [ ] **TERM-05**: MCP 工具 `get_task_execution_status` — 返回任务执行状态（running/idle/exited + 最后输出摘要）
@@ -80,11 +80,11 @@ Requirements for milestone v0.9: 架构清理 + 外部调度闭环.
 | NTFY-02 | Phase 31 | Complete |
 | NTFY-06 | Phase 31 | Complete |
 | NTFY-07 | Phase 31 | Complete |
-| NTFY-03 | Phase 32 | Pending |
-| NTFY-04 | Phase 32 | Pending |
-| NTFY-05 | Phase 32 | Pending |
-| TERM-01 | Phase 33 | Pending |
-| TERM-02 | Phase 33 | Pending |
+| NTFY-03 | Phase 32 | Complete |
+| NTFY-04 | Phase 32 | Complete |
+| NTFY-05 | Phase 32 | Complete |
+| TERM-01 | Phase 33 | Complete |
+| TERM-02 | Phase 33 | Complete |
 | TERM-03 | Phase 34 | Pending |
 | TERM-04 | Phase 34 | Pending |
 | TERM-05 | Phase 34 | Pending |
