@@ -107,7 +107,7 @@ See: [milestones/v0.7-ROADMAP.md](./milestones/v0.7-ROADMAP.md) for full details
 - [x] **Phase 32: Agent Actions & Feishu Wiring** - notify-agi.sh 更新（任务 ID 检查 + 结构化模板）+ Stop hook 挂接 + callbackUrl 注入 (completed 2026-04-11)
 - [x] **Phase 33: Internal HTTP Bridge** - /api/internal/terminal/[taskId]/buffer 和 /input 路由，供 MCP 进程跨进程读写 PTY (completed 2026-04-11)
 - [x] **Phase 34: MCP Terminal Tools** - get_task_terminal_output + send_task_terminal_input + get_task_execution_status 三个 MCP 工具 (completed 2026-04-11)
-- [ ] **Phase 35: Settings UI for CLI Profile** - Settings 页面 CLI Profile 查看/编辑卡片
+- [x] **Phase 35: Settings UI for CLI Profile** - Settings 页面 CLI Profile 查看/编辑卡片 (completed 2026-04-11)
 
 ## Phase Details
 
@@ -341,7 +341,7 @@ Plans:
   4. MCP tool count does not exceed 30 (currently 21 → target 24 after adding 3 new tools)
 **Plans**: 1 plan
 Plans:
-- [ ] 35-01-PLAN.md — CLI Profile server actions + i18n + settings card component (CLIP-04)
+- [x] 35-01-PLAN.md — CLI Profile server actions + i18n + settings card component (CLIP-04)
 
 ### Phase 35: Settings UI for CLI Profile
 **Goal**: Users can view and edit the active CLI Profile directly in the Settings UI without touching the database
@@ -394,4 +394,4 @@ Plans:
 | 32. Agent Actions & Feishu Wiring | v0.9 | 1/1 | Complete    | 2026-04-11 |
 | 33. Internal HTTP Bridge | v0.9 | 1/1 | Complete    | 2026-04-11 |
 | 34. MCP Terminal Tools | v0.9 | 1/1 | Complete    | 2026-04-11 |
-| 35. Settings UI for CLI Profile | v0.9 | 0/1 | Not started | - |
+| 35. Settings UI for CLI Profile | v0.9 | 1/1 | Complete   | 2026-04-11 |

@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.9
 milestone_name: 架构清理 + 外部调度闭环
 status: verifying
-stopped_at: Completed 34-01-PLAN.md
-last_updated: "2026-04-11T03:21:19.377Z"
+stopped_at: Completed 35-01-PLAN.md
+last_updated: "2026-04-11T03:32:21.047Z"
 last_activity: 2026-04-11
 progress:
   total_phases: 9
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 34 — mcp-terminal-tools
+**Current focus:** Phase 35 — settings-ui-cli-profile
 
 ## Current Position
 
-Phase: 34
-Plan: Not started
+Phase: 35 (settings-ui-cli-profile) — EXECUTING
+Plan: 1 of 1
 Status: Phase complete — ready for verification
 Last activity: 2026-04-11
 
@@ -93,6 +93,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 32 P01 | 126 | 2 tasks | 3 files |
 | Phase 33-internal-http-bridge P01 | 113 | 3 tasks | 3 files |
 | Phase 34-mcp-terminal-tools P01 | 83 | 2 tasks | 2 files |
+| Phase 35 P01 | 146 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -228,6 +229,7 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 33]: Header-based localhost detection only — request.ip is unreliable in all Next.js runtimes
 - [Phase 33]: 410 Gone for killed PTY sessions in input route — distinct signal from 404 (never existed)
 - [Phase 34]: Terminal MCP tools use fetch() to localhost:3000 HTTP bridge — MCP stdio process has separate globalThis from Next.js, cannot share in-memory PTY sessions
+- [Phase 35]: CLI Profile save converts baseArgsText (newline-separated) to JSON array and envVarsText (KEY=VALUE lines) to JSON object before DB write
 
 ### Pending Todos
 
@@ -242,6 +244,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-11T03:17:43.869Z
-Stopped at: Completed 34-01-PLAN.md
+Last session: 2026-04-11T03:32:21.044Z
+Stopped at: Completed 35-01-PLAN.md
 Resume file: None

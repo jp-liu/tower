@@ -20,7 +20,7 @@ Requirements for milestone v0.9: 架构清理 + 外部调度闭环.
 - [x] **CLIP-01**: CLI Profile 配置对象定义（command、buildArgs、envVars）
 - [x] **CLIP-02**: `startPtyExecution` 通过 profile 构建命令和参数（替代硬编码 "claude"）
 - [x] **CLIP-03**: `resumePtyExecution` 通过 profile 构建命令和参数
-- [ ] **CLIP-04**: Settings 页面 CLI Profile 查看/编辑
+- [x] **CLIP-04**: Settings 页面 CLI Profile 查看/编辑
 
 ### 外部调度通知 (NTFY)
 
@@ -88,7 +88,7 @@ Requirements for milestone v0.9: 架构清理 + 外部调度闭环.
 | TERM-03 | Phase 34 | Complete |
 | TERM-04 | Phase 34 | Complete |
 | TERM-05 | Phase 34 | Complete |
-| CLIP-04 | Phase 35 | Pending |
+| CLIP-04 | Phase 35 | Complete |
 
 **Coverage:**
 - v0.9 requirements: 19 total
