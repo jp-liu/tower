@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, Terminal, Loader2, Square } from "lucide-react";
+import { ExternalLink, Terminal, Loader2, Square, FileText } from "lucide-react";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { TaskMetadata } from "./task-metadata";
 import { TaskDiffView } from "./task-diff-view";
@@ -10,6 +10,7 @@ import { TerminalOutlet, useTerminalPortal } from "./terminal-portal";
 import { getTaskExecutions, startPtyExecution, stopPtyExecution, resumePtyExecution } from "@/actions/agent-actions";
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "./execution-timeline";
+import { TaskNotesPanel } from "./task-notes-panel";
 import type { Task, TaskExecution } from "@prisma/client";
 import { useI18n } from "@/lib/i18n";
 
@@ -19,7 +20,7 @@ interface TaskDetailPanelProps {
   onClose: () => void;
 }
 
-type TabType = "terminal" | "changes";
+type TabType = "terminal" | "changes" | "notes";
 
 export function TaskDetailPanel({
   task,
@@ -174,6 +175,17 @@ export function TaskDetailPanel({
           >
             {t("taskPage.changes")}
           </button>
+          <button
+            onClick={() => setActiveTab("notes")}
+            className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md ${
+              activeTab === "notes"
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <FileText className="h-3 w-3" />
+            {t("taskPage.notes")}
+          </button>
         </div>
         <button
           onClick={() => router.push(`/workspaces/${workspaceId}/tasks/${task.id}`)}
@@ -258,7 +270,7 @@ export function TaskDetailPanel({
             </div>
           )}
         </div>
-      ) : (
+      ) : activeTab === "changes" ? (
         <div className="flex-1 min-h-0 overflow-hidden">
           {isLoadingDiff ? (
             <div className="flex h-full items-center justify-center">
@@ -284,7 +296,11 @@ export function TaskDetailPanel({
             </div>
           )}
         </div>
-      )}
+      ) : activeTab === "notes" ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <TaskNotesPanel taskId={task.id} projectId={task.projectId} />
+        </div>
+      ) : null}
     </div>
   );
 }

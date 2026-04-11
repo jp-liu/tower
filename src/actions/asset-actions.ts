@@ -15,6 +15,7 @@ const createAssetSchema = z.object({
   size: z.number().int().nonnegative().optional(),
   projectId: z.string().min(1),
   description: z.string().max(500).optional(),
+  taskId: z.string().optional(),
 });
 
 export async function createAsset(data: {
@@ -24,10 +25,11 @@ export async function createAsset(data: {
   size?: number;
   projectId: string;
   description?: string;
+  taskId?: string;
 }) {
   const parsed = createAssetSchema.parse(data);
   ensureAssetsDir(parsed.projectId);
-  const asset = await db.projectAsset.create({ data: parsed });
+  const asset = await db.projectAsset.create({ data: { ...parsed, taskId: parsed.taskId ?? null } });
   revalidatePath(`/workspaces`);
   return asset;
 }
@@ -43,7 +45,14 @@ export async function deleteAsset(assetId: string) {
 
 export async function getProjectAssets(projectId: string) {
   return db.projectAsset.findMany({
-    where: { projectId },
+    where: { projectId, taskId: null },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export async function getTaskAssets(taskId: string) {
+  return db.projectAsset.findMany({
+    where: { taskId },
     orderBy: { createdAt: "desc" },
   });
 }
@@ -55,6 +64,7 @@ export async function getAssetById(assetId: string) {
 export async function uploadAsset(formData: FormData) {
   const file = formData.get("file") as File;
   const projectId = formData.get("projectId") as string;
+  const taskId = (formData.get("taskId") as string | null) || undefined;
   if (!file || !projectId) throw new Error("Missing file or projectId");
   const maxBytes = await getConfigValue<number>("system.maxUploadBytes", 52428800);
   if (file.size > maxBytes) throw new Error(`File too large (max ${Math.round(maxBytes / 1024 / 1024)} MB)`);
@@ -93,6 +103,7 @@ export async function uploadAsset(formData: FormData) {
     size: file.size,
     projectId,
     description: description || undefined,
+    taskId,
   });
   revalidatePath(`/workspaces`);
   return asset;

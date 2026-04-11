@@ -10,6 +10,7 @@ const createNoteSchema = z.object({
   content: z.string(),
   category: z.string().max(50).optional(),
   projectId: z.string().min(1),
+  taskId: z.string().optional(),
 });
 
 const updateNoteSchema = z.object({
@@ -23,6 +24,7 @@ export async function createNote(data: {
   content: string;
   category?: string;
   projectId: string;
+  taskId?: string;
 }) {
   const parsed = createNoteSchema.parse(data);
   const note = await db.projectNote.create({
@@ -31,6 +33,7 @@ export async function createNote(data: {
       content: parsed.content,
       category: parsed.category ?? "备忘",
       projectId: parsed.projectId,
+      taskId: parsed.taskId ?? null,
     },
   });
   await syncNoteToFts(db, { id: note.id, title: note.title, content: note.content });
@@ -69,8 +72,16 @@ export async function getProjectNotes(
   return db.projectNote.findMany({
     where: {
       projectId,
+      taskId: null,
       ...(options?.category ? { category: options.category } : {}),
     },
+    orderBy: { updatedAt: "desc" },
+  });
+}
+
+export async function getTaskNotes(taskId: string) {
+  return db.projectNote.findMany({
+    where: { taskId },
     orderBy: { updatedAt: "desc" },
   });
 }

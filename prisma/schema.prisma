@@ -83,6 +83,8 @@ model Task {
   executions TaskExecution[]
   messages   TaskMessage[]
   labels     TaskLabel[]
+  notes      ProjectNote[]
+  assets     ProjectAsset[]
 
   @@index([projectId])
   @@index([status])
@@ -149,12 +151,15 @@ model ProjectNote {
   content   String
   category  String   @default("备忘")
   projectId String
+  taskId    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task    Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
+  @@index([taskId])
   @@index([category])
 }
 
@@ -166,11 +171,14 @@ model ProjectAsset {
   size        Int?
   description String?  @default("")
   projectId   String
+  taskId      String?
   createdAt   DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task    Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
+  @@index([taskId])
 }
 
 model AgentConfig {
