@@ -51,6 +51,7 @@ export async function startWsServer(): Promise<void> {
     console.error(`[ws-server] Connection for task ${taskId}`);
 
     let session = getSession(taskId);
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
 
     if (session) {
       wireSession(session, ws, taskId);
@@ -58,15 +59,15 @@ export async function startWsServer(): Promise<void> {
     } else {
       console.error(`[ws-server] No session for task ${taskId} — polling...`);
       let waited = 0;
-      const pollTimer = setInterval(() => {
+      pollTimer = setInterval(() => {
         waited += 500;
         session = getSession(taskId);
         if (session) {
-          clearInterval(pollTimer);
+          clearInterval(pollTimer!); pollTimer = null;
           wireSession(session, ws, taskId);
           console.error(`[ws-server] Session appeared for task ${taskId} after ${waited}ms`);
         } else if (waited >= 30_000 || ws.readyState !== WebSocket.OPEN) {
-          clearInterval(pollTimer);
+          clearInterval(pollTimer!); pollTimer = null;
           if (ws.readyState === WebSocket.OPEN) {
             ws.close(1008, "No PTY session created within timeout.");
           }
@@ -90,6 +91,9 @@ export async function startWsServer(): Promise<void> {
     });
 
     ws.on("close", () => {
+      // Flush any pending batched data
+      (ws as WebSocket & { _batcher?: BatchedSender })._batcher?.flush();
+
       if (sessionClients.get(taskId) !== ws) return;
       console.error(`[ws-server] WS disconnected for task ${taskId}`);
       sessionClients.delete(taskId);
@@ -105,6 +109,8 @@ export async function startWsServer(): Promise<void> {
 
     ws.on("error", (err) => {
       console.error(`[ws-server] WS error for task ${taskId}:`, err.message);
+      // Clear polling timer if still active
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
       if (sessionClients.get(taskId) !== ws) return;
       const s = getSession(taskId);
       if (s && !s.killed) s.setDataListener(() => {});
@@ -117,7 +123,10 @@ function wireSession(session: import("./pty-session").PtySession, ws: WebSocket,
     clearTimeout(session.disconnectTimer);
     session.disconnectTimer = null;
   }
-  session.setDataListener(makeBatchedSender(ws));
+  const batcher = makeBatchedSender(ws);
+  session.setDataListener(batcher.send);
+  // Store batcher so close handler can flush pending data
+  (ws as WebSocket & { _batcher?: BatchedSender })._batcher = batcher;
   sessionClients.set(taskId, ws);
   const buffer = session.getBuffer();
   if (buffer && ws.readyState === WebSocket.OPEN) {
@@ -130,10 +139,22 @@ function wireSession(session: import("./pty-session").PtySession, ws: WebSocket,
   });
 }
 
-function makeBatchedSender(ws: WebSocket): (data: string) => void {
+interface BatchedSender {
+  send: (data: string) => void;
+  flush: () => void;
+}
+
+function makeBatchedSender(ws: WebSocket): BatchedSender {
   let pending = "";
   let timer: ReturnType<typeof setTimeout> | null = null;
-  return (data: string) => {
+  const flush = () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (pending && ws.readyState === WebSocket.OPEN && ws.bufferedAmount < SEND_BUFFER_MAX) {
+      ws.send(pending);
+    }
+    pending = "";
+  };
+  const send = (data: string) => {
     pending += data;
     if (timer) return;
     timer = setTimeout(() => {
@@ -144,4 +165,5 @@ function makeBatchedSender(ws: WebSocket): (data: string) => void {
       pending = "";
     }, BATCH_INTERVAL_MS);
   };
+  return { send, flush };
 }

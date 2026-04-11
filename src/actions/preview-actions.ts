@@ -27,7 +27,6 @@ export async function startPreview(
       detached: false,
       stdio: "ignore",
     });
-    child.unref();
     registerPreviewProcess(taskId, child);
     return { started: true };
   } catch (err) {

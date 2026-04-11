@@ -175,7 +175,10 @@ export function TaskTerminal({
     });
     resizeObserver.observe(el);
 
-    return () => { resizeObserver.disconnect(); };
+    return () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeObserver.disconnect();
+    };
   }, [worktreePath]);
 
   // Theme effect

@@ -22,3 +22,7 @@ export async function initDb(): Promise<PrismaClient> {
   initialized = true;
   return db;
 }
+
+// Ensure WAL is flushed and connections closed on exit
+process.on("SIGTERM", () => { db.$disconnect().catch(() => {}); });
+process.on("SIGINT", () => { db.$disconnect().catch(() => {}); });
