@@ -17,7 +17,7 @@ Requirements for milestone v0.9: 架构清理 + 外部调度闭环.
 
 ### CLI Profile (CLIP)
 
-- [ ] **CLIP-01**: CLI Profile 配置对象定义（command、buildArgs、envVars）
+- [x] **CLIP-01**: CLI Profile 配置对象定义（command、buildArgs、envVars）
 - [ ] **CLIP-02**: `startPtyExecution` 通过 profile 构建命令和参数（替代硬编码 "claude"）
 - [ ] **CLIP-03**: `resumePtyExecution` 通过 profile 构建命令和参数
 - [ ] **CLIP-04**: Settings 页面 CLI Profile 查看/编辑
@@ -42,8 +42,8 @@ Requirements for milestone v0.9: 架构清理 + 外部调度闭环.
 
 ### 数据模型 (DATA)
 
-- [ ] **DATA-01**: TaskExecution 增加 `callbackUrl` 可选字段
-- [ ] **DATA-02**: Prisma migration 生成并应用
+- [x] **DATA-01**: TaskExecution 增加 `callbackUrl` 可选字段
+- [x] **DATA-02**: Prisma migration 生成并应用
 
 ## Future Requirements
 
@@ -71,9 +71,9 @@ Requirements for milestone v0.9: 架构清理 + 外部调度闭环.
 | CLEAN-03 | Phase 29 | Complete |
 | CLEAN-04 | Phase 29 | Complete |
 | CLEAN-05 | Phase 29 | Complete |
-| DATA-01 | Phase 30 | Pending |
-| DATA-02 | Phase 30 | Pending |
-| CLIP-01 | Phase 30 | Pending |
+| DATA-01 | Phase 30 | Complete |
+| DATA-02 | Phase 30 | Complete |
+| CLIP-01 | Phase 30 | Complete |
 | CLIP-02 | Phase 31 | Pending |
 | CLIP-03 | Phase 31 | Pending |
 | NTFY-01 | Phase 31 | Pending |

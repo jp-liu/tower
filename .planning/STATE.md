@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.9
 milestone_name: 架构清理 + 外部调度闭环
 status: verifying
-stopped_at: Completed 29-02-PLAN.md
-last_updated: "2026-04-10T12:04:22.956Z"
-last_activity: 2026-04-10
+stopped_at: Completed 30-01-PLAN.md
+last_updated: "2026-04-11T02:05:54.527Z"
+last_activity: 2026-04-11
 progress:
   total_phases: 9
   completed_phases: 8
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 29 — adapter-dead-code-removal
+**Current focus:** Phase 30 — schema-foundation
 
 ## Current Position
 
-Phase: 29
-Plan: Not started
+Phase: 30 (schema-foundation) — EXECUTING
+Plan: 1 of 1
 Status: Phase complete — ready for verification
-Last activity: 2026-04-10
+Last activity: 2026-04-11
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -87,6 +87,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 29 P01 | 185 | 2 tasks | 6 files |
 | Phase 29 P02 | 127 | 2 tasks | 14 files |
+| Phase 30-schema-foundation P01 | 300 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -210,6 +211,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 29]: cli-test.ts combines types, process-utils helpers, parse functions, and testEnvironment into one self-contained file — zero adapters/ imports
 - [Phase 29]: route.ts GET handler hardcodes adapters: ["claude_local"] — registry concept removed, only one CLI exists
 - [Phase 29]: Pre-existing type errors in agent-config-actions.ts and pty-session.test.ts are unrelated to adapter removal — not fixed per CLEAN-05 scope rule
+- [Phase 30-schema-foundation]: CliProfile.baseArgs stored as JSON string (not String[]) — SQLite has no native array type; consumers call JSON.parse()
+- [Phase 30-schema-foundation]: Default CliProfile upsert with update:{} makes seed idempotent — unique constraint never violated on repeated runs
 
 ### Pending Todos
 
@@ -224,6 +227,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-10T11:59:52.760Z
-Stopped at: Completed 29-02-PLAN.md
+Last session: 2026-04-11T02:05:54.521Z
+Stopped at: Completed 30-01-PLAN.md
 Resume file: None

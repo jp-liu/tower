@@ -102,7 +102,7 @@ See: [milestones/v0.7-ROADMAP.md](./milestones/v0.7-ROADMAP.md) for full details
 **Milestone Goal:** 清理废弃 adapter 架构，建立 CLI Profile 配置表，实现龙虾（Paperclip/OpenClaw）外部调度的完整闭环（派活 → 查进度 → 追加指令 → 完成通知）。
 
 - [x] **Phase 29: Adapter Dead Code Removal** - 删除废弃 SSE/adapter 文件，迁移有用模块到 lib/ 目录，修复路由引用，通过 tsc 检查 (completed 2026-04-10)
-- [ ] **Phase 30: Schema Foundation** - CliProfile 数据模型 + TaskExecution.callbackUrl 字段 + Prisma 迁移 + 默认行种子
+- [x] **Phase 30: Schema Foundation** - CliProfile 数据模型 + TaskExecution.callbackUrl 字段 + Prisma 迁移 + 默认行种子 (completed 2026-04-11)
 - [ ] **Phase 31: PTY Primitives & Env Injection** - startPtyExecution/resumePtyExecution 读 CliProfile 构建参数 + envOverrides 传参 + idle 检测
 - [ ] **Phase 32: Agent Actions & Feishu Wiring** - notify-agi.sh 更新（任务 ID 检查 + 结构化模板）+ Stop hook 挂接 + callbackUrl 注入
 - [ ] **Phase 33: Internal HTTP Bridge** - /api/internal/terminal/[taskId]/buffer 和 /input 路由，供 MCP 进程跨进程读写 PTY
@@ -285,7 +285,7 @@ Plans:
   4. TypeScript code can import `CliProfile` and `TaskExecution.callbackUrl` from `@prisma/client` without type errors
 **Plans**: 1 plan
 Plans:
-- [ ] 30-01-PLAN.md — CliProfile model + TaskExecution.callbackUrl + seed default row (DATA-01, DATA-02, CLIP-01)
+- [x] 30-01-PLAN.md — CliProfile model + TaskExecution.callbackUrl + seed default row (DATA-01, DATA-02, CLIP-01)
 
 ### Phase 31: PTY Primitives & Env Injection
 **Goal**: PTY sessions accept per-session environment overrides and detect idle state; `startPtyExecution` and `resumePtyExecution` read from `CliProfile` instead of hardcoded strings
@@ -376,7 +376,7 @@ Plans:
 | 27. Task Card Context Menu | v0.7 | 2/2 | Complete | 2026-04-03 |
 | 28. v0.6 Bug Fixes | v0.7 | 0/TBD | Complete | 2026-04-10 |
 | 29. Adapter Dead Code Removal | v0.9 | 2/2 | Complete    | 2026-04-10 |
-| 30. Schema Foundation | v0.9 | 0/1 | In progress | - |
+| 30. Schema Foundation | v0.9 | 1/1 | Complete   | 2026-04-11 |
 | 31. PTY Primitives & Env Injection | v0.9 | 0/TBD | Not started | - |
 | 32. Agent Actions & Feishu Wiring | v0.9 | 0/TBD | Not started | - |
 | 33. Internal HTTP Bridge | v0.9 | 0/TBD | Not started | - |
