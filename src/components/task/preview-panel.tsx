@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Eye, Loader2, RefreshCw, Terminal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
@@ -88,6 +88,15 @@ export function PreviewPanel({
       setIframeUrl(previewUrl);
     }
   }, [previewUrl]);
+
+  // Auto-stop preview when leaving the page (component unmount)
+  const taskIdRef = useRef(taskId);
+  taskIdRef.current = taskId;
+  useEffect(() => {
+    return () => {
+      stopPreview(taskIdRef.current).catch(() => {});
+    };
+  }, []);
 
   const statusLabel = (() => {
     switch (serverStatus) {
