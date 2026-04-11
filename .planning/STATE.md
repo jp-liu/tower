@@ -4,7 +4,7 @@ milestone: v0.9
 milestone_name: 架构清理 + 外部调度闭环
 status: verifying
 stopped_at: Completed 31-02-PLAN.md
-last_updated: "2026-04-11T02:30:28.581Z"
+last_updated: "2026-04-11T02:34:14.140Z"
 last_activity: 2026-04-11
 progress:
   total_phases: 9
@@ -25,8 +25,8 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 
 ## Current Position
 
-Phase: 31 (pty-primitives-env-injection) — EXECUTING
-Plan: 2 of 2
+Phase: 31
+Plan: Not started
 Status: Phase complete — ready for verification
 Last activity: 2026-04-11
 
