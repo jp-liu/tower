@@ -207,7 +207,8 @@ export async function resumePtyExecution(
 export async function startPtyExecution(
   taskId: string,
   prompt: string,
-  selectedPromptId?: string | null
+  selectedPromptId?: string | null,
+  callbackUrl?: string | null
 ): Promise<{ executionId: string; worktreePath: string | null }> {
   // 1. Load task with project
   const task = await db.task.findUnique({
@@ -222,6 +223,13 @@ export async function startPtyExecution(
   if (!task.project?.localPath) {
     throw new Error("Project has no local path configured");
   }
+
+  // 1b. Read CliProfile — determines which CLI binary to spawn
+  const profile = await db.cliProfile.findFirst({ where: { isDefault: true } });
+  if (!profile) throw new Error("No default CLI profile found — run seed first");
+  const profileCommand = profile.command;
+  const profileBaseArgs: string[] = JSON.parse(profile.baseArgs);
+  const profileEnvVars: Record<string, string> = JSON.parse(profile.envVars);
 
   // 2. Clean up stale RUNNING executions (from crashed/killed processes)
   await db.taskExecution.updateMany({
@@ -297,11 +305,21 @@ export async function startPtyExecution(
       startedAt: new Date(),
       worktreePath: resolvedWorktreePath ?? null,
       worktreeBranch: resolvedWorktreeBranch ?? null,
+      callbackUrl: callbackUrl ?? null,
     },
   });
 
-  // 8. Build Claude CLI args — INT-02: no --output-format stream-json, no --print -
-  const claudeArgs: string[] = ["--dangerously-skip-permissions"];
+  // 7b. Build env overrides — AI_MANAGER_TASK_ID always injected; CALLBACK_URL when provided
+  const envOverrides: Record<string, string> = {
+    ...profileEnvVars,
+    AI_MANAGER_TASK_ID: taskId,
+  };
+  if (callbackUrl) {
+    envOverrides.CALLBACK_URL = callbackUrl;
+  }
+
+  // 8. Build CLI args from CliProfile — INT-02: no --output-format stream-json, no --print -
+  const claudeArgs: string[] = [...profileBaseArgs];
   if (instructionsFile) {
     claudeArgs.push("--system-prompt", instructionsFile);
   }
@@ -311,7 +329,7 @@ export async function startPtyExecution(
   //    broadcaster via setDataListener when the WebSocket client connects
   createSession(
     taskId,
-    "claude",
+    profileCommand,
     claudeArgs,
     cwd,
     () => {},
@@ -363,7 +381,8 @@ export async function startPtyExecution(
       if (tempDir) {
         await rm(tempDir, { recursive: true, force: true }).catch(() => {});
       }
-    }
+    },
+    envOverrides
   );
 
   return { executionId: execution.id, worktreePath: resolvedWorktreePath };
