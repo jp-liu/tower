@@ -97,7 +97,7 @@ See: [milestones/v0.7-ROADMAP.md](./milestones/v0.7-ROADMAP.md) for full details
 
 </details>
 
-### 🚧 v0.9 架构清理 + 外部调度闭环 (In Progress)
+### v0.9 架构清理 + 外部调度闭环 (In Progress)
 
 **Milestone Goal:** 清理废弃 adapter 架构，建立 CLI Profile 配置表，实现龙虾（Paperclip/OpenClaw）外部调度的完整闭环（派活 → 查进度 → 追加指令 → 完成通知）。
 
@@ -297,7 +297,10 @@ Plans:
   3. `AI_MANAGER_TASK_ID` is injected into every PTY session environment automatically
   4. After 180 seconds of zero PTY output, the configured `onIdle` callback fires
   5. User typing in the terminal (via WebSocket) resets the idle timer; the callback does not fire if the user is actively interacting
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 31-01-PLAN.md — PtySession envOverrides support + idle detection timer (NTFY-01, NTFY-06, NTFY-07)
+- [ ] 31-02-PLAN.md — startPtyExecution/resumePtyExecution read CliProfile + inject env vars (CLIP-02, CLIP-03, NTFY-02)
 
 ### Phase 32: Agent Actions & Feishu Wiring
 **Goal**: Claude completions trigger a Feishu notification with structured task metadata; the notification only fires for ai-manager-dispatched sessions, not manual Claude runs
@@ -377,7 +380,7 @@ Plans:
 | 28. v0.6 Bug Fixes | v0.7 | 0/TBD | Complete | 2026-04-10 |
 | 29. Adapter Dead Code Removal | v0.9 | 2/2 | Complete    | 2026-04-10 |
 | 30. Schema Foundation | v0.9 | 1/1 | Complete    | 2026-04-11 |
-| 31. PTY Primitives & Env Injection | v0.9 | 0/TBD | Not started | - |
+| 31. PTY Primitives & Env Injection | v0.9 | 0/2 | Not started | - |
 | 32. Agent Actions & Feishu Wiring | v0.9 | 0/TBD | Not started | - |
 | 33. Internal HTTP Bridge | v0.9 | 0/TBD | Not started | - |
 | 34. MCP Terminal Tools | v0.9 | 0/TBD | Not started | - |
