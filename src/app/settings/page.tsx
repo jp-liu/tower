@@ -8,6 +8,7 @@ import { AIToolsConfig } from "@/components/settings/ai-tools-config";
 import { GeneralConfig } from "@/components/settings/general-config";
 import { PromptsConfig } from "@/components/settings/prompts-config";
 import { SystemConfig } from "@/components/settings/system-config";
+import { CliProfileConfig } from "@/components/settings/cli-profile-config";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -42,6 +43,8 @@ export default function SettingsPage() {
           {activeSection === "prompts" && <PromptsConfig />}
 
           {activeSection === "config" && <SystemConfig />}
+
+          {activeSection === "cli-profile" && <CliProfileConfig />}
         </div>
       </div>
     </div>
