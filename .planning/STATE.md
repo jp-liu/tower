@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v0.9
 milestone_name: 架构清理 + 外部调度闭环
-status: executing
-stopped_at: Completed 31-01-PLAN.md
-last_updated: "2026-04-11T02:26:28.460Z"
+status: verifying
+stopped_at: Completed 31-02-PLAN.md
+last_updated: "2026-04-11T02:30:28.581Z"
 last_activity: 2026-04-11
 progress:
   total_phases: 9
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 
 Phase: 31 (pty-primitives-env-injection) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-11
 
 Progress: [░░░░░░░░░░] 0%
@@ -89,6 +89,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 29 P02 | 127 | 2 tasks | 14 files |
 | Phase 30-schema-foundation P01 | 300 | 2 tasks | 2 files |
 | Phase 31-pty-primitives-env-injection P01 | 120 | 2 tasks | 2 files |
+| Phase 31-pty-primitives-env-injection P02 | 142 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -217,6 +218,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 31]: envOverrides spread via ...envOverrides AFTER existing env keys in pty.spawn() — overrides take precedence, no process.env mutation
 - [Phase 31]: 180s minimum enforced via Math.max for idle detection — prevents false positives from Claude silent reasoning
 - [Phase 31]: _idleFired flag ensures onIdle fires exactly once per session lifetime
+- [Phase 31]: callbackUrl persisted to TaskExecution.callbackUrl on start; inherited from prevExec.callbackUrl on resume
+- [Phase 31]: profileBaseArgs replaces hardcoded --dangerously-skip-permissions in both startPtyExecution and resumePtyExecution
 
 ### Pending Todos
 
@@ -231,6 +234,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-11T02:26:28.456Z
-Stopped at: Completed 31-01-PLAN.md
+Last session: 2026-04-11T02:30:28.577Z
+Stopped at: Completed 31-02-PLAN.md
 Resume file: None

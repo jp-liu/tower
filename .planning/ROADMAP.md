@@ -103,7 +103,7 @@ See: [milestones/v0.7-ROADMAP.md](./milestones/v0.7-ROADMAP.md) for full details
 
 - [x] **Phase 29: Adapter Dead Code Removal** - 删除废弃 SSE/adapter 文件，迁移有用模块到 lib/ 目录，修复路由引用，通过 tsc 检查 (completed 2026-04-10)
 - [x] **Phase 30: Schema Foundation** - CliProfile 数据模型 + TaskExecution.callbackUrl 字段 + Prisma 迁移 + 默认行种子 (completed 2026-04-11)
-- [ ] **Phase 31: PTY Primitives & Env Injection** - startPtyExecution/resumePtyExecution 读 CliProfile 构建参数 + envOverrides 传参 + idle 检测
+- [x] **Phase 31: PTY Primitives & Env Injection** - startPtyExecution/resumePtyExecution 读 CliProfile 构建参数 + envOverrides 传参 + idle 检测 (completed 2026-04-11)
 - [ ] **Phase 32: Agent Actions & Feishu Wiring** - notify-agi.sh 更新（任务 ID 检查 + 结构化模板）+ Stop hook 挂接 + callbackUrl 注入
 - [ ] **Phase 33: Internal HTTP Bridge** - /api/internal/terminal/[taskId]/buffer 和 /input 路由，供 MCP 进程跨进程读写 PTY
 - [ ] **Phase 34: MCP Terminal Tools** - get_task_terminal_output + send_task_terminal_input + get_task_execution_status 三个 MCP 工具
@@ -300,7 +300,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 31-01-PLAN.md — PtySession envOverrides support + idle detection timer (NTFY-01, NTFY-06, NTFY-07)
-- [ ] 31-02-PLAN.md — startPtyExecution/resumePtyExecution read CliProfile + inject env vars (CLIP-02, CLIP-03, NTFY-02)
+- [x] 31-02-PLAN.md — startPtyExecution/resumePtyExecution read CliProfile + inject env vars (CLIP-02, CLIP-03, NTFY-02)
 
 ### Phase 32: Agent Actions & Feishu Wiring
 **Goal**: Claude completions trigger a Feishu notification with structured task metadata; the notification only fires for ai-manager-dispatched sessions, not manual Claude runs
@@ -380,7 +380,7 @@ Plans:
 | 28. v0.6 Bug Fixes | v0.7 | 0/TBD | Complete | 2026-04-10 |
 | 29. Adapter Dead Code Removal | v0.9 | 2/2 | Complete    | 2026-04-10 |
 | 30. Schema Foundation | v0.9 | 1/1 | Complete    | 2026-04-11 |
-| 31. PTY Primitives & Env Injection | v0.9 | 1/2 | In Progress|  |
+| 31. PTY Primitives & Env Injection | v0.9 | 2/2 | Complete   | 2026-04-11 |
 | 32. Agent Actions & Feishu Wiring | v0.9 | 0/TBD | Not started | - |
 | 33. Internal HTTP Bridge | v0.9 | 0/TBD | Not started | - |
 | 34. MCP Terminal Tools | v0.9 | 0/TBD | Not started | - |

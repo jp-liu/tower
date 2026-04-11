@@ -18,14 +18,14 @@ Requirements for milestone v0.9: 架构清理 + 外部调度闭环.
 ### CLI Profile (CLIP)
 
 - [x] **CLIP-01**: CLI Profile 配置对象定义（command、buildArgs、envVars）
-- [ ] **CLIP-02**: `startPtyExecution` 通过 profile 构建命令和参数（替代硬编码 "claude"）
-- [ ] **CLIP-03**: `resumePtyExecution` 通过 profile 构建命令和参数
+- [x] **CLIP-02**: `startPtyExecution` 通过 profile 构建命令和参数（替代硬编码 "claude"）
+- [x] **CLIP-03**: `resumePtyExecution` 通过 profile 构建命令和参数
 - [ ] **CLIP-04**: Settings 页面 CLI Profile 查看/编辑
 
 ### 外部调度通知 (NTFY)
 
 - [x] **NTFY-01**: `createSession` 支持 envOverrides 参数，传递到 PTY 子进程
-- [ ] **NTFY-02**: `startPtyExecution` 接受 callbackUrl 参数，注入 `AI_MANAGER_TASK_ID` + `CALLBACK_URL` 环境变量
+- [x] **NTFY-02**: `startPtyExecution` 接受 callbackUrl 参数，注入 `AI_MANAGER_TASK_ID` + `CALLBACK_URL` 环境变量
 - [ ] **NTFY-03**: `notify-agi.sh` 开头检查 `AI_MANAGER_TASK_ID`，无则静默退出
 - [ ] **NTFY-04**: `~/.claude/settings.json` Stop hook 挂回 notify-agi.sh
 - [ ] **NTFY-05**: 飞书通知模板优化 — 包含任务标题、状态、耗时、摘要
@@ -74,10 +74,10 @@ Requirements for milestone v0.9: 架构清理 + 外部调度闭环.
 | DATA-01 | Phase 30 | Complete |
 | DATA-02 | Phase 30 | Complete |
 | CLIP-01 | Phase 30 | Complete |
-| CLIP-02 | Phase 31 | Pending |
-| CLIP-03 | Phase 31 | Pending |
+| CLIP-02 | Phase 31 | Complete |
+| CLIP-03 | Phase 31 | Complete |
 | NTFY-01 | Phase 31 | Complete |
-| NTFY-02 | Phase 31 | Pending |
+| NTFY-02 | Phase 31 | Complete |
 | NTFY-06 | Phase 31 | Complete |
 | NTFY-07 | Phase 31 | Complete |
 | NTFY-03 | Phase 32 | Pending |
