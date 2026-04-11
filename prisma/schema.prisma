@@ -104,6 +104,7 @@ model TaskExecution {
   gitLog         String?
   gitStats       String?
   exitCode       Int?
+  callbackUrl    String?
   terminalLog    String?
   createdAt      DateTime        @default(now())
 
@@ -183,6 +184,17 @@ model AgentConfig {
   updatedAt    DateTime @updatedAt
 
   @@unique([agent, configName])
+}
+
+model CliProfile {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  command   String
+  baseArgs  String   @default("[]")
+  envVars   String   @default("{}")
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model AgentPrompt {
