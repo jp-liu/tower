@@ -36,9 +36,9 @@ Requirements for milestone v0.9: 架构清理 + 外部调度闭环.
 
 - [x] **TERM-01**: Internal HTTP route `GET /api/internal/terminal/[taskId]/buffer` — 返回 PTY 缓冲区最近 N 行
 - [x] **TERM-02**: Internal HTTP route `POST /api/internal/terminal/[taskId]/input` — 往 PTY 发送文本
-- [ ] **TERM-03**: MCP 工具 `get_task_terminal_output` — 通过 HTTP bridge 读取终端输出
-- [ ] **TERM-04**: MCP 工具 `send_task_terminal_input` — 通过 HTTP bridge 发送指令
-- [ ] **TERM-05**: MCP 工具 `get_task_execution_status` — 返回任务执行状态（running/idle/exited + 最后输出摘要）
+- [x] **TERM-03**: MCP 工具 `get_task_terminal_output` — 通过 HTTP bridge 读取终端输出
+- [x] **TERM-04**: MCP 工具 `send_task_terminal_input` — 通过 HTTP bridge 发送指令
+- [x] **TERM-05**: MCP 工具 `get_task_execution_status` — 返回任务执行状态（running/idle/exited + 最后输出摘要）
 
 ### 数据模型 (DATA)
 
@@ -85,9 +85,9 @@ Requirements for milestone v0.9: 架构清理 + 外部调度闭环.
 | NTFY-05 | Phase 32 | Complete |
 | TERM-01 | Phase 33 | Complete |
 | TERM-02 | Phase 33 | Complete |
-| TERM-03 | Phase 34 | Pending |
-| TERM-04 | Phase 34 | Pending |
-| TERM-05 | Phase 34 | Pending |
+| TERM-03 | Phase 34 | Complete |
+| TERM-04 | Phase 34 | Complete |
+| TERM-05 | Phase 34 | Complete |
 | CLIP-04 | Phase 35 | Pending |
 
 **Coverage:**

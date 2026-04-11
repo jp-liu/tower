@@ -106,7 +106,7 @@ See: [milestones/v0.7-ROADMAP.md](./milestones/v0.7-ROADMAP.md) for full details
 - [x] **Phase 31: PTY Primitives & Env Injection** - startPtyExecution/resumePtyExecution 读 CliProfile 构建参数 + envOverrides 传参 + idle 检测 (completed 2026-04-11)
 - [x] **Phase 32: Agent Actions & Feishu Wiring** - notify-agi.sh 更新（任务 ID 检查 + 结构化模板）+ Stop hook 挂接 + callbackUrl 注入 (completed 2026-04-11)
 - [x] **Phase 33: Internal HTTP Bridge** - /api/internal/terminal/[taskId]/buffer 和 /input 路由，供 MCP 进程跨进程读写 PTY (completed 2026-04-11)
-- [ ] **Phase 34: MCP Terminal Tools** - get_task_terminal_output + send_task_terminal_input + get_task_execution_status 三个 MCP 工具
+- [x] **Phase 34: MCP Terminal Tools** - get_task_terminal_output + send_task_terminal_input + get_task_execution_status 三个 MCP 工具 (completed 2026-04-11)
 - [ ] **Phase 35: Settings UI for CLI Profile** - Settings 页面 CLI Profile 查看/编辑卡片
 
 ## Phase Details
@@ -259,7 +259,7 @@ Plans:
   2. The Changes tab displays a diff for NORMAL type projects (not just GIT type projects)
 **Plans**: 1 plan
 Plans:
-- [ ] 34-01-PLAN.md — Create 3 MCP terminal tools + register in server (TERM-03, TERM-04, TERM-05)
+- [x] 34-01-PLAN.md — Create 3 MCP terminal tools + register in server (TERM-03, TERM-04, TERM-05)
 
 ### Phase 29: Adapter Dead Code Removal
 **Goal**: The codebase contains no dead SSE/adapter execution files; all live modules are relocated to their correct paths and the build passes with zero new type errors
@@ -393,5 +393,5 @@ Plans:
 | 31. PTY Primitives & Env Injection | v0.9 | 2/2 | Complete    | 2026-04-11 |
 | 32. Agent Actions & Feishu Wiring | v0.9 | 1/1 | Complete    | 2026-04-11 |
 | 33. Internal HTTP Bridge | v0.9 | 1/1 | Complete    | 2026-04-11 |
-| 34. MCP Terminal Tools | v0.9 | 0/TBD | Not started | - |
+| 34. MCP Terminal Tools | v0.9 | 1/1 | Complete   | 2026-04-11 |
 | 35. Settings UI for CLI Profile | v0.9 | 0/TBD | Not started | - |
