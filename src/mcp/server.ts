@@ -6,6 +6,7 @@ import { labelTools } from "./tools/label-tools";
 import { searchTools } from "./tools/search-tools";
 import { knowledgeTools } from "./tools/knowledge-tools";
 import { noteAssetTools } from "./tools/note-asset-tools";
+import { terminalTools } from "./tools/terminal-tools";
 
 export function createServer(): McpServer {
   const server = new McpServer({ name: "ai-manager", version: "0.1.0" });
@@ -18,6 +19,7 @@ export function createServer(): McpServer {
     ...searchTools,
     ...knowledgeTools,
     ...noteAssetTools,
+    ...terminalTools,
   };
 
   for (const [name, tool] of Object.entries(allTools)) {
