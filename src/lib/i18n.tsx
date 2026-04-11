@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 
 export type Locale = "zh" | "en";
 
@@ -912,12 +912,17 @@ interface I18nContextValue {
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem("locale") as Locale) || "zh";
+  // Always start with "zh" on both server and client to avoid hydration mismatch.
+  // The real locale is read from localStorage in useEffect after mount.
+  const [locale, setLocaleState] = useState<Locale>("zh");
+
+  useEffect(() => {
+    const stored = localStorage.getItem("locale") as Locale | null;
+    if (stored && stored !== locale) {
+      setLocaleState(stored);
     }
-    return "zh";
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const setLocale = useCallback((l: Locale) => {
     setLocaleState(l);
