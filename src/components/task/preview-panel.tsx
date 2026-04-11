@@ -13,6 +13,8 @@ export interface PreviewPanelProps {
   previewCommand: string | null;       // initial command from project.previewCommand
   refreshKey: number;                  // parent-controlled; increment on editor save (PV-06)
   projectId: string;                   // needed for updateProject when command changes
+  previewUrl?: string;                 // parent-controlled URL (persists across tab switches)
+  onPreviewUrlChange?: (url: string) => void;
 }
 
 type ServerStatus = "stopped" | "starting" | "running" | "error";
@@ -43,19 +45,33 @@ function StatusIcon({ status }: { status: ServerStatus }) {
   return <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 inline-block" />;
 }
 
+function guessPortFromCommand(cmd: string): number {
+  const lower = cmd.toLowerCase();
+  if (lower.includes("vite") || lower.includes("nuxt")) return 5173;
+  if (lower.includes("next")) return 3000;
+  if (lower.includes("angular") || lower.includes("ng serve")) return 4200;
+  if (lower.includes("gatsby")) return 8000;
+  // Check for explicit --port flag
+  const portMatch = cmd.match(/--port\s+(\d+)|-p\s+(\d+)/);
+  if (portMatch) return parseInt(portMatch[1] || portMatch[2], 10);
+  return 3000; // default
+}
+
 export function PreviewPanel({
   taskId,
   worktreePath,
   previewCommand,
   refreshKey,
   projectId,
+  previewUrl,
+  onPreviewUrlChange,
 }: PreviewPanelProps) {
   const { t } = useI18n();
 
   const [serverStatus, setServerStatus] = useState<ServerStatus>("stopped");
   const [errorMsg, setErrorMsg] = useState("");
-  const [addressInput, setAddressInput] = useState("");
-  const [iframeUrl, setIframeUrl] = useState("");
+  const [addressInput, setAddressInput] = useState(previewUrl ?? "");
+  const [iframeUrl, setIframeUrl] = useState(previewUrl ?? "");
   const [commandInput, setCommandInput] = useState("");
   const [manualRefreshKey, setManualRefreshKey] = useState(0);
 
@@ -64,6 +80,14 @@ export function PreviewPanel({
       setCommandInput(previewCommand);
     }
   }, [previewCommand]);
+
+  // Sync parent URL on mount (restores state after tab switch)
+  useEffect(() => {
+    if (previewUrl) {
+      setAddressInput(previewUrl);
+      setIframeUrl(previewUrl);
+    }
+  }, [previewUrl]);
 
   const statusLabel = (() => {
     switch (serverStatus) {
@@ -86,6 +110,14 @@ export function PreviewPanel({
       const result = await startPreview(taskId, commandInput, worktreePath);
       if (result.started) {
         setServerStatus("running");
+        // Auto-fill preview URL based on common dev server patterns
+        if (!addressInput) {
+          const port = guessPortFromCommand(commandInput);
+          const url = `http://localhost:${port}`;
+          setAddressInput(url);
+          setIframeUrl(url);
+          onPreviewUrlChange?.(url);
+        }
       } else {
         setServerStatus("error");
         setErrorMsg(result.error ?? "");
@@ -104,6 +136,7 @@ export function PreviewPanel({
   function handleAddressKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
       setIframeUrl(addressInput);
+      onPreviewUrlChange?.(addressInput);
     }
   }
 

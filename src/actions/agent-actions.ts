@@ -287,8 +287,8 @@ export async function startPtyExecution(
     data: { status: "FAILED", endedAt: new Date() },
   });
 
-  // 3. Send-back: if task is IN_REVIEW, transition back to IN_PROGRESS
-  if (task.status === "IN_REVIEW") {
+  // 3. Transition task to IN_PROGRESS (from TODO, IN_REVIEW, or any non-terminal state)
+  if (task.status !== "IN_PROGRESS") {
     await db.task.update({
       where: { id: taskId },
       data: { status: "IN_PROGRESS" },
@@ -310,7 +310,7 @@ export async function startPtyExecution(
           .map((m) => `${m.role}: ${m.content}`)
           .join("\n")}`
       : "",
-    `User message: ${prompt}`,
+    prompt.trim() ? `User message: ${prompt}` : "",
   ].filter(Boolean);
   const fullPrompt = contextParts.join("\n\n");
 
@@ -373,7 +373,9 @@ export async function startPtyExecution(
   // 8. Build CLI args from CliProfile — INT-02: no --output-format stream-json, no --print -
   const claudeArgs: string[] = [...profileBaseArgs];
   if (instructionsFile) {
-    claudeArgs.push("--system-prompt", instructionsFile);
+    const { readFile } = await import("fs/promises");
+    const promptContent = await readFile(instructionsFile, "utf-8");
+    claudeArgs.push("--append-system-prompt", promptContent);
   }
   claudeArgs.push(fullPrompt);
 

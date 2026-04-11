@@ -1,44 +1,33 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 
-type FilterType = "ALL" | "IN_PROGRESS" | "IN_REVIEW";
-
 interface BoardFiltersProps {
-  activeFilter: FilterType;
-  onFilterChange: (filter: FilterType) => void;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
   onCreateTask: () => void;
 }
 
-const FILTER_KEYS: { id: FilterType; key: "board.allFilter" | "board.inProgressFilter" | "board.inReviewFilter" }[] = [
-  { id: "ALL", key: "board.allFilter" },
-  { id: "IN_PROGRESS", key: "board.inProgressFilter" },
-  { id: "IN_REVIEW", key: "board.inReviewFilter" },
-];
-
 export function BoardFilters({
-  activeFilter,
-  onFilterChange,
+  searchQuery,
+  onSearchChange,
   onCreateTask,
 }: BoardFiltersProps) {
   const { t } = useI18n();
   return (
     <div className="flex items-center gap-2 px-6 py-2">
-      {FILTER_KEYS.map((filter) => (
-        <button
-          key={filter.id}
-          onClick={() => onFilterChange(filter.id)}
-          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-            activeFilter === filter.id
-              ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20"
-              : "text-muted-foreground hover:bg-accent hover:text-foreground"
-          }`}
-        >
-          {t(filter.key)}
-        </button>
-      ))}
+      <div className="relative flex-1 max-w-xs">
+        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder={t("board.searchPlaceholder")}
+          className="h-8 w-full rounded-lg border border-border bg-background pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+        />
+      </div>
       <Button
         size="sm"
         variant="outline"

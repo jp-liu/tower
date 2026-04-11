@@ -65,12 +65,21 @@ export async function GET(request: NextRequest) {
       // ignore
     }
 
+    // Remote URL (origin)
+    let remoteUrl = "";
+    try {
+      remoteUrl = execFileSync("git", ["remote", "get-url", "origin"], opts).trim();
+    } catch {
+      // no remote configured
+    }
+
     return NextResponse.json({
       isGit: true,
       path: resolved,
       currentBranch,
       branches,
       remoteBranches,
+      remoteUrl,
       statusSummary,
     });
   } catch (e: any) {

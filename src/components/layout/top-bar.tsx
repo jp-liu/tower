@@ -106,9 +106,23 @@ export function TopBar({ onCreateProject }: TopBarProps) {
     }
   };
 
-  const handleLocalPathChange = (value: string) => {
+  const handleLocalPathChange = async (value: string) => {
     setLocalPath(value);
     setLocalPathManual(true);
+    // Auto-detect git remote if local path is a git repo
+    if (value.trim() && !gitUrl.trim()) {
+      try {
+        const res = await fetch(`/api/git?path=${encodeURIComponent(value.trim())}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.isGit && data.remoteUrl) {
+            setGitUrl(data.remoteUrl);
+          }
+        }
+      } catch {
+        // ignore — not a git repo or path doesn't exist yet
+      }
+    }
   };
 
   const handleCreateProject = async () => {
@@ -326,7 +340,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
       <FolderBrowserDialog
         open={showFolderBrowser}
         onOpenChange={setShowFolderBrowser}
-        onSelect={(path) => { setLocalPath(path); setLocalPathManual(true); }}
+        onSelect={(p) => handleLocalPathChange(p)}
       />
     </>
   );

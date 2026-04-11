@@ -81,6 +81,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
+  const [previewUrl, setPreviewUrl] = useState("");
   const [isExecuting, setIsExecuting] = useState(false);
   const [prompts, setPrompts] = useState<Array<{ id: string; name: string; isDefault: boolean }>>([]);
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
@@ -379,6 +380,8 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
               previewCommand={task.project?.previewCommand ?? null}
               refreshKey={previewRefreshKey}
               projectId={task.projectId}
+              previewUrl={previewUrl}
+              onPreviewUrlChange={setPreviewUrl}
             />
           </TabsContent>
         </Tabs>

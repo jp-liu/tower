@@ -14,7 +14,7 @@ import { ProjectTabs } from "@/components/board/project-tabs";
 import type { TaskStatus, Priority } from "@prisma/client";
 import type { TaskWithLabels } from "@/types";
 
-type FilterType = "ALL" | "IN_PROGRESS" | "IN_REVIEW";
+
 
 interface LabelOption {
   id: string;
@@ -58,7 +58,7 @@ export function BoardPageClient({
 }: BoardPageClientProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [filter, setFilter] = useState<FilterType>("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createDefaultStatus, setCreateDefaultStatus] = useState<TaskStatus>("TODO");
   const [selectedTask, setSelectedTask] = useState<TaskWithLabels | null>(
@@ -72,8 +72,8 @@ export function BoardPageClient({
     });
   }, [router]);
 
-  const handleFilterChange = useCallback((newFilter: FilterType) => {
-    setFilter(newFilter);
+  const handleSearchChange = useCallback((query: string) => {
+    setSearchQuery(query);
   }, []);
 
   const handleTaskMove = useCallback(async (taskId: string, newStatus: TaskStatus) => {
@@ -136,10 +136,13 @@ export function BoardPageClient({
     setShowCreateDialog(true);
   }, []);
 
-  const filteredTasks =
-    filter === "ALL"
-      ? initialTasks
-      : initialTasks.filter((t) => t.status === filter);
+  const filteredTasks = searchQuery.trim()
+    ? initialTasks.filter((t) => {
+        const q = searchQuery.toLowerCase();
+        return t.title.toLowerCase().includes(q) ||
+          (t.description?.toLowerCase().includes(q) ?? false);
+      })
+    : initialTasks;
 
   return (
     <div className="flex h-full">
@@ -161,8 +164,8 @@ export function BoardPageClient({
 
         {/* Filters */}
         <BoardFilters
-          activeFilter={filter}
-          onFilterChange={handleFilterChange}
+          searchQuery={searchQuery}
+          onSearchChange={handleSearchChange}
           onCreateTask={() => {
             setEditingTask(null);
             setShowCreateDialog(true);
