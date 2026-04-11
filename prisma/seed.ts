@@ -12,6 +12,7 @@ async function main() {
   await prisma.project.deleteMany();
   await prisma.workspace.deleteMany();
   await prisma.agentConfig.deleteMany();
+  await prisma.cliProfile.deleteMany();
 
   // Built-in labels (no workspace = global)
   await prisma.label.create({ data: { name: "需求", color: "#3b82f6", isBuiltin: true } });
@@ -55,6 +56,19 @@ async function main() {
         model: "claude-sonnet-4-6",
         maxTokens: 8096,
       }),
+    },
+  });
+
+  // Default CLI Profile — used by startPtyExecution/resumePtyExecution
+  await prisma.cliProfile.upsert({
+    where: { name: "default" },
+    update: {},
+    create: {
+      name: "default",
+      command: "claude",
+      baseArgs: JSON.stringify(["--dangerously-skip-permissions"]),
+      envVars: JSON.stringify({}),
+      isDefault: true,
     },
   });
 
