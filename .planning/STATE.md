@@ -4,7 +4,7 @@ milestone: v0.9
 milestone_name: 架构清理 + 外部调度闭环
 status: verifying
 stopped_at: Completed 35-01-PLAN.md
-last_updated: "2026-04-11T03:32:21.047Z"
+last_updated: "2026-04-11T03:35:30.513Z"
 last_activity: 2026-04-11
 progress:
   total_phases: 9
@@ -25,8 +25,8 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 
 ## Current Position
 
-Phase: 35 (settings-ui-cli-profile) — EXECUTING
-Plan: 1 of 1
+Phase: 35
+Plan: Not started
 Status: Phase complete — ready for verification
 Last activity: 2026-04-11
 

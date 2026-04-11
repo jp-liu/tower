@@ -394,4 +394,4 @@ Plans:
 | 32. Agent Actions & Feishu Wiring | v0.9 | 1/1 | Complete    | 2026-04-11 |
 | 33. Internal HTTP Bridge | v0.9 | 1/1 | Complete    | 2026-04-11 |
 | 34. MCP Terminal Tools | v0.9 | 1/1 | Complete    | 2026-04-11 |
-| 35. Settings UI for CLI Profile | v0.9 | 1/1 | Complete   | 2026-04-11 |
+| 35. Settings UI for CLI Profile | v0.9 | 1/1 | Complete    | 2026-04-11 |
