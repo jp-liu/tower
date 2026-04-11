@@ -1,10 +1,17 @@
 import { z } from "zod";
 import { db } from "../db";
 
-const BRIDGE_BASE = "http://localhost:3000/api/internal/terminal";
+const PORT = process.env.PORT ?? "3000";
+const BRIDGE_BASE = `http://localhost:${PORT}/api/internal/terminal`;
+const CUID_RE = /^c[a-z0-9]{20,30}$/;
 
 async function bridgeFetch(path: string, init?: RequestInit): Promise<Response> {
   return fetch(`${BRIDGE_BASE}${path}`, init);
+}
+
+function validateMcpTaskId(taskId: string): string | null {
+  if (!CUID_RE.test(taskId)) return "Invalid taskId format — expected CUID";
+  return null;
 }
 
 export const terminalTools = {
@@ -16,7 +23,10 @@ export const terminalTools = {
       lines: z.number().int().min(1).max(500).optional(),
     }),
     handler: async (args: { taskId: string; lines?: number }) => {
-      const response = await bridgeFetch(`/${args.taskId}/buffer?lines=${args.lines ?? 50}`);
+      const err = validateMcpTaskId(args.taskId);
+      if (err) return { error: err, taskId: args.taskId };
+      const tid = encodeURIComponent(args.taskId);
+      const response = await bridgeFetch(`/${tid}/buffer?lines=${args.lines ?? 50}`);
 
       if (response.status === 404) {
         return { error: "No active terminal session for this task", taskId: args.taskId };
@@ -39,7 +49,10 @@ export const terminalTools = {
       text: z.string().min(1).max(10000),
     }),
     handler: async (args: { taskId: string; text: string }) => {
-      const response = await bridgeFetch(`/${args.taskId}/input`, {
+      const err = validateMcpTaskId(args.taskId);
+      if (err) return { error: err, taskId: args.taskId };
+      const tid = encodeURIComponent(args.taskId);
+      const response = await bridgeFetch(`/${tid}/input`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: args.text }),
@@ -68,6 +81,9 @@ export const terminalTools = {
       taskId: z.string(),
     }),
     handler: async (args: { taskId: string }) => {
+      const err = validateMcpTaskId(args.taskId);
+      if (err) return { error: err, taskId: args.taskId };
+
       const execution = await db.taskExecution.findFirst({
         where: { taskId: args.taskId },
         orderBy: { createdAt: "desc" },
@@ -77,7 +93,8 @@ export const terminalTools = {
         return { error: "No execution found for this task", taskId: args.taskId };
       }
 
-      const bufferResponse = await bridgeFetch(`/${args.taskId}/buffer?lines=10`);
+      const tid = encodeURIComponent(args.taskId);
+      const bufferResponse = await bridgeFetch(`/${tid}/buffer?lines=10`);
 
       let terminalStatus: "running" | "exited" | "not_running";
       let outputSnippet: string | null = null;

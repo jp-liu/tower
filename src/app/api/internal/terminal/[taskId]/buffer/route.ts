@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/pty/session-store";
-import { requireLocalhost } from "@/lib/internal-api-guard";
+import { requireLocalhost, validateTaskId } from "@/lib/internal-api-guard";
 
 // Prevent response caching — output changes on every call
 export const dynamic = "force-dynamic";
@@ -18,6 +18,9 @@ export async function GET(
   if (blocked) return blocked;
 
   const { taskId } = await params;
+
+  const invalid = validateTaskId(taskId);
+  if (invalid) return invalid;
 
   const session = getSession(taskId);
   if (!session) {

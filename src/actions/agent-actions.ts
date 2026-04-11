@@ -5,11 +5,30 @@ import { revalidatePath } from "next/cache";
 import { createWorktree } from "@/lib/worktree";
 import { createSession } from "@/lib/pty/session-store";
 import { logger } from "@/lib/logger";
-import { writeFile, rm, mkdtemp } from "fs/promises";
+import { writeFile, rm, mkdtemp, mkdir } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 
 const log = logger.create("agent-actions");
+
+const SIGNAL_DIR = join(tmpdir(), "ai-manager-signals");
+
+async function writeExitSignal(taskId: string, exitCode: number): Promise<void> {
+  try {
+    await mkdir(SIGNAL_DIR, { recursive: true, mode: 0o700 });
+    await writeFile(join(SIGNAL_DIR, `exit-${taskId}`), String(exitCode), { mode: 0o600 });
+  } catch {
+    // Best-effort — notification degraded, not fatal
+  }
+}
+
+function parseProfileJson<T>(raw: string, label: string): T {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    throw new Error(`CLI Profile ${label} 格式损坏，请在 Settings 中修复`);
+  }
+}
 
 export async function sendTaskMessage(taskId: string, content: string) {
   const userMessage = await db.taskMessage.create({
@@ -145,8 +164,8 @@ export async function resumePtyExecution(
   const profile = await db.cliProfile.findFirst({ where: { isDefault: true } });
   if (!profile) throw new Error("No default CLI profile found — run seed first");
   const profileCommand = profile.command;
-  const profileBaseArgs: string[] = JSON.parse(profile.baseArgs);
-  const profileEnvVars: Record<string, string> = JSON.parse(profile.envVars);
+  const profileBaseArgs = parseProfileJson<string[]>(profile.baseArgs, "baseArgs");
+  const profileEnvVars = parseProfileJson<Record<string, string>>(profile.envVars, "envVars");
 
   // Build env overrides — inherit callbackUrl from previous execution if it had one
   const envOverrides: Record<string, string> = {
@@ -183,7 +202,7 @@ export async function resumePtyExecution(
     () => {},
     async (exitCode) => {
       // Write exit code signal file for notify-agi.sh (runs before DB update)
-      await writeFile(`/tmp/ai-manager-exit-${taskId}`, String(exitCode)).catch(() => {});
+      await writeExitSignal(taskId, exitCode);
 
       // Guard: if stopPtyExecution already handled this, skip
       const currentExec = await db.taskExecution.findUnique({ where: { id: execution.id } });
@@ -250,8 +269,8 @@ export async function startPtyExecution(
   const profile = await db.cliProfile.findFirst({ where: { isDefault: true } });
   if (!profile) throw new Error("No default CLI profile found — run seed first");
   const profileCommand = profile.command;
-  const profileBaseArgs: string[] = JSON.parse(profile.baseArgs);
-  const profileEnvVars: Record<string, string> = JSON.parse(profile.envVars);
+  const profileBaseArgs = parseProfileJson<string[]>(profile.baseArgs, "baseArgs");
+  const profileEnvVars = parseProfileJson<Record<string, string>>(profile.envVars, "envVars");
 
   // 2. Clean up stale RUNNING executions (from crashed/killed processes)
   await db.taskExecution.updateMany({
@@ -359,7 +378,7 @@ export async function startPtyExecution(
     () => {},
     async (exitCode) => {
       // Write exit code signal file for notify-agi.sh (runs before DB update)
-      await writeFile(`/tmp/ai-manager-exit-${taskId}`, String(exitCode)).catch(() => {});
+      await writeExitSignal(taskId, exitCode);
 
       // Guard: if stopPtyExecution already handled this execution, skip
       const currentExec = await db.taskExecution.findUnique({ where: { id: execution.id } });
