@@ -104,7 +104,7 @@ See: [milestones/v0.7-ROADMAP.md](./milestones/v0.7-ROADMAP.md) for full details
 - [x] **Phase 29: Adapter Dead Code Removal** - 删除废弃 SSE/adapter 文件，迁移有用模块到 lib/ 目录，修复路由引用，通过 tsc 检查 (completed 2026-04-10)
 - [x] **Phase 30: Schema Foundation** - CliProfile 数据模型 + TaskExecution.callbackUrl 字段 + Prisma 迁移 + 默认行种子 (completed 2026-04-11)
 - [x] **Phase 31: PTY Primitives & Env Injection** - startPtyExecution/resumePtyExecution 读 CliProfile 构建参数 + envOverrides 传参 + idle 检测 (completed 2026-04-11)
-- [ ] **Phase 32: Agent Actions & Feishu Wiring** - notify-agi.sh 更新（任务 ID 检查 + 结构化模板）+ Stop hook 挂接 + callbackUrl 注入
+- [x] **Phase 32: Agent Actions & Feishu Wiring** - notify-agi.sh 更新（任务 ID 检查 + 结构化模板）+ Stop hook 挂接 + callbackUrl 注入 (completed 2026-04-11)
 - [ ] **Phase 33: Internal HTTP Bridge** - /api/internal/terminal/[taskId]/buffer 和 /input 路由，供 MCP 进程跨进程读写 PTY
 - [ ] **Phase 34: MCP Terminal Tools** - get_task_terminal_output + send_task_terminal_input + get_task_execution_status 三个 MCP 工具
 - [ ] **Phase 35: Settings UI for CLI Profile** - Settings 页面 CLI Profile 查看/编辑卡片
@@ -313,7 +313,7 @@ Plans:
   4. A failed execution (exit code non-zero) sends a Feishu notification tagged as failed, not completed
 **Plans**: 1 plan
 Plans:
-- [ ] 32-01-PLAN.md — notify-agi.sh gate + structured Feishu template + settings.json Stop hook + env var injection (NTFY-03, NTFY-04, NTFY-05)
+- [x] 32-01-PLAN.md — notify-agi.sh gate + structured Feishu template + settings.json Stop hook + env var injection (NTFY-03, NTFY-04, NTFY-05)
 
 ### Phase 33: Internal HTTP Bridge
 **Goal**: The Next.js server exposes two localhost-only HTTP routes that allow any process (including the MCP stdio process) to read PTY buffer contents and send input to a running PTY session
@@ -383,7 +383,7 @@ Plans:
 | 29. Adapter Dead Code Removal | v0.9 | 2/2 | Complete    | 2026-04-10 |
 | 30. Schema Foundation | v0.9 | 1/1 | Complete    | 2026-04-11 |
 | 31. PTY Primitives & Env Injection | v0.9 | 2/2 | Complete    | 2026-04-11 |
-| 32. Agent Actions & Feishu Wiring | v0.9 | 0/TBD | Not started | - |
+| 32. Agent Actions & Feishu Wiring | v0.9 | 1/1 | Complete    | 2026-04-11 |
 | 33. Internal HTTP Bridge | v0.9 | 0/TBD | Not started | - |
 | 34. MCP Terminal Tools | v0.9 | 0/TBD | Not started | - |
 | 35. Settings UI for CLI Profile | v0.9 | 0/TBD | Not started | - |

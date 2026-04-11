@@ -4,7 +4,7 @@ milestone: v0.9
 milestone_name: 架构清理 + 外部调度闭环
 status: verifying
 stopped_at: Completed 32-01-PLAN.md
-last_updated: "2026-04-11T02:51:49.879Z"
+last_updated: "2026-04-11T02:55:04.718Z"
 last_activity: 2026-04-11
 progress:
   total_phases: 9
@@ -25,8 +25,8 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 
 ## Current Position
 
-Phase: 32 (agent-actions-feishu-wiring) — EXECUTING
-Plan: 1 of 1
+Phase: 32
+Plan: Not started
 Status: Phase complete — ready for verification
 Last activity: 2026-04-11
 
