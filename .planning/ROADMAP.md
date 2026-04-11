@@ -257,7 +257,9 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. The Monaco editor initializes successfully on first load without requiring a page refresh
   2. The Changes tab displays a diff for NORMAL type projects (not just GIT type projects)
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 34-01-PLAN.md — Create 3 MCP terminal tools + register in server (TERM-03, TERM-04, TERM-05)
 
 ### Phase 29: Adapter Dead Code Removal
 **Goal**: The codebase contains no dead SSE/adapter execution files; all live modules are relocated to their correct paths and the build passes with zero new type errors
@@ -337,7 +339,9 @@ Plans:
   2. Calling `send_task_terminal_input` from an MCP client sends text to the running PTY — Claude receives and acts on it
   3. Calling `get_task_execution_status` returns whether the execution is running, idle, or exited, plus the last output snippet
   4. MCP tool count does not exceed 30 (currently 21 → target 24 after adding 3 new tools)
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 34-01-PLAN.md — Create 3 MCP terminal tools + register in server (TERM-03, TERM-04, TERM-05)
 
 ### Phase 35: Settings UI for CLI Profile
 **Goal**: Users can view and edit the active CLI Profile directly in the Settings UI without touching the database
@@ -347,7 +351,9 @@ Plans:
   1. Settings page has a CLI Profile card showing the current command, base args, and any env vars
   2. User can edit the command and base args inline and save; the next task execution uses the updated values
   3. The CLI Profile card is bilingual (zh/en) and follows existing settings card visual patterns
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 34-01-PLAN.md — Create 3 MCP terminal tools + register in server (TERM-03, TERM-04, TERM-05)
 **UI hint**: yes
 
 ## Progress
