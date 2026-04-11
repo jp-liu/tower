@@ -241,12 +241,15 @@ export function TaskDetailPanel({
                       </span>
                     </SelectTrigger>
                     <SelectContent className="min-w-[200px]">
-                      <SelectItem value="none">{t("terminal.noPrompt")}</SelectItem>
-                      {prompts.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name}{p.isDefault ? " ★" : ""}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="none" label={t("terminal.noPrompt")}>{t("terminal.noPrompt")}</SelectItem>
+                      {prompts.map((p) => {
+                        const display = `${p.name}${p.isDefault ? " ★" : ""}`;
+                        return (
+                          <SelectItem key={p.id} value={p.id} label={display}>
+                            {display}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 )}

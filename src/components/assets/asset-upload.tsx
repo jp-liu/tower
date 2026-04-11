@@ -124,7 +124,7 @@ export function AssetUpload({
                   </SelectTrigger>
                   <SelectContent>
                     {allWorkspaces.map((ws) => (
-                      <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
+                      <SelectItem key={ws.id} value={ws.id} label={ws.name}>{ws.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -139,11 +139,14 @@ export function AssetUpload({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {uploadProjects.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name}{p.alias ? ` (${p.alias})` : ""}
-                        </SelectItem>
-                      ))}
+                      {uploadProjects.map((p) => {
+                        const display = p.alias ? `${p.name} (${p.alias})` : p.name;
+                        return (
+                          <SelectItem key={p.id} value={p.id} label={display}>
+                            {display}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 ) : (
