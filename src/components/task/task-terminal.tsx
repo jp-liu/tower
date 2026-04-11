@@ -6,6 +6,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { useTheme } from "next-themes";
 import { useI18n } from "@/lib/i18n";
+import { getConfigValue } from "@/actions/config-actions";
 import "@xterm/xterm/css/xterm.css";
 
 export interface TaskTerminalProps {
@@ -80,62 +81,72 @@ export function TaskTerminal({
     fitAddon.fit();
     terminal.focus();
 
-    // Create WebSocket
-    setWsStatus("connecting");
-    const ws = new WebSocket(
-      `ws://localhost:3001/terminal?taskId=${encodeURIComponent(taskId)}`
-    );
+    // Fetch WS port from config, then connect
+    let ws: WebSocket | null = null;
+    let dataDisposable: { dispose: () => void } | null = null;
+    let cancelled = false;
 
-    ws.addEventListener("open", () => {
-      ws.send(JSON.stringify({ type: "resize", cols: terminal.cols, rows: terminal.rows }));
-      terminal.focus();
-      setWsStatus("connected");
-      setConnectedVisible(true);
-      setTimeout(() => setConnectedVisible(false), 2000);
+    getConfigValue<number>("terminal.wsPort", 3001).then((wsPort) => {
+      if (cancelled) return;
+      setWsStatus("connecting");
+      const socket = new WebSocket(
+        `ws://localhost:${wsPort}/terminal?taskId=${encodeURIComponent(taskId)}`
+      );
+      ws = socket;
+
+      socket.addEventListener("open", () => {
+        socket.send(JSON.stringify({ type: "resize", cols: terminal.cols, rows: terminal.rows }));
+        terminal.focus();
+        setWsStatus("connected");
+        setConnectedVisible(true);
+        setTimeout(() => setConnectedVisible(false), 2000);
+      });
+
+      // Output: WS → terminal (replaces AttachAddon for React Strict Mode compat)
+      socket.addEventListener("message", (event) => {
+        const data = event.data;
+        if (typeof data === "string") {
+          terminal.write(data);
+        } else if (data instanceof Blob) {
+          data.text().then((text) => terminal.write(text));
+        } else if (data instanceof ArrayBuffer) {
+          terminal.write(new Uint8Array(data));
+        }
+      });
+
+      // Input: terminal → WS
+      dataDisposable = terminal.onData((data) => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(data);
+        }
+      });
+
+      // Session end: WS close code 4000+exitCode
+      socket.addEventListener("close", (event) => {
+        setWsStatus("disconnected");
+        if (event.code >= 4000) {
+          onSessionEndRef.current?.(event.code - 4000);
+        }
+      });
+
+      socket.addEventListener("error", () => {
+        setWsStatus("disconnected");
+      });
+
+      // Store refs for resize/theme effects
+      wsRef.current = socket;
     });
 
-    // Output: WS → terminal (replaces AttachAddon for React Strict Mode compat)
-    ws.addEventListener("message", (event) => {
-      const data = event.data;
-      if (typeof data === "string") {
-        terminal.write(data);
-      } else if (data instanceof Blob) {
-        data.text().then((text) => terminal.write(text));
-      } else if (data instanceof ArrayBuffer) {
-        terminal.write(new Uint8Array(data));
-      }
-    });
-
-    // Input: terminal → WS
-    const dataDisposable = terminal.onData((data) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(data);
-      }
-    });
-
-    // Session end: WS close code 4000+exitCode
-    ws.addEventListener("close", (event) => {
-      setWsStatus("disconnected");
-      if (event.code >= 4000) {
-        onSessionEndRef.current?.(event.code - 4000);
-      }
-    });
-
-    ws.addEventListener("error", () => {
-      setWsStatus("disconnected");
-    });
-
-    // Store refs for resize/theme effects
     terminalRef.current = terminal;
-    wsRef.current = ws;
     fitAddonRef.current = fitAddon;
 
     return () => {
-      dataDisposable.dispose();
+      cancelled = true;
+      dataDisposable?.dispose();
       webglAddon?.dispose();
       fitAddon.dispose();
       terminal.dispose();
-      ws.close();
+      ws?.close();
       terminalRef.current = null;
       wsRef.current = null;
       fitAddonRef.current = null;

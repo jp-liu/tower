@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { IncomingMessage } from "http";
 import { getSession, destroySession } from "./session-store";
+import { readConfigValue } from "@/lib/config-reader";
 
 const ALLOWED_ORIGINS = new Set([
   "http://localhost:3000",
@@ -26,9 +27,10 @@ export async function startWsServer(): Promise<void> {
     await new Promise((r) => setTimeout(r, 200));
   }
 
-  const wss = new WebSocketServer({ port: 3001, host: "127.0.0.1", perMessageDeflate: false });
+  const wsPort = await readConfigValue<number>("terminal.wsPort", 3001);
+  const wss = new WebSocketServer({ port: wsPort, host: "127.0.0.1", perMessageDeflate: false });
   g.__wss = wss;
-  console.error("[ws-server] WebSocket server listening on port 3001");
+  console.error(`[ws-server] WebSocket server listening on port ${wsPort}`);
 
   wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     const origin = req.headers.origin ?? "";
@@ -38,7 +40,7 @@ export async function startWsServer(): Promise<void> {
       return;
     }
 
-    const url = new URL(req.url ?? "/", "http://localhost:3001");
+    const url = new URL(req.url ?? "/", `http://localhost:${wsPort}`);
     const taskId = url.searchParams.get("taskId");
 
     if (!taskId) {

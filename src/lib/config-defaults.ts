@@ -50,4 +50,14 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "string",
     label: "Default Terminal App",
   },
+  "terminal.wsPort": {
+    defaultValue: 3001,
+    type: "number",
+    label: "WebSocket Port",
+  },
+  "terminal.idleTimeoutSec": {
+    defaultValue: 180,
+    type: "number",
+    label: "Idle Timeout (seconds)",
+  },
 };

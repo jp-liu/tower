@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createWorktree } from "@/lib/worktree";
 import { createSession } from "@/lib/pty/session-store";
 import { logger } from "@/lib/logger";
+import { readConfigValue } from "@/lib/config-reader";
 import { writeFile, rm, mkdtemp, mkdir } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -167,6 +168,9 @@ export async function resumePtyExecution(
   const profileBaseArgs = parseProfileJson<string[]>(profile.baseArgs, "baseArgs");
   const profileEnvVars = parseProfileJson<Record<string, string>>(profile.envVars, "envVars");
 
+  // Read idle timeout from config
+  const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
+
   // Build env overrides — inherit callbackUrl from previous execution if it had one
   const envOverrides: Record<string, string> = {
     ...profileEnvVars,
@@ -227,7 +231,9 @@ export async function resumePtyExecution(
         await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW" } }).catch(() => {});
       }
     },
-    envOverrides
+    envOverrides,
+    undefined,
+    idleTimeoutSec * 1000
   );
 
   return { executionId: execution.id, worktreePath: prevExec.worktreePath };
@@ -271,6 +277,9 @@ export async function startPtyExecution(
   const profileCommand = profile.command;
   const profileBaseArgs = parseProfileJson<string[]>(profile.baseArgs, "baseArgs");
   const profileEnvVars = parseProfileJson<Record<string, string>>(profile.envVars, "envVars");
+
+  // 1c. Read idle timeout from config
+  const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
 
   // 2. Clean up stale RUNNING executions (from crashed/killed processes)
   await db.taskExecution.updateMany({
@@ -428,7 +437,9 @@ export async function startPtyExecution(
         await rm(tempDir, { recursive: true, force: true }).catch(() => {});
       }
     },
-    envOverrides
+    envOverrides,
+    undefined,
+    idleTimeoutSec * 1000
   );
 
   return { executionId: execution.id, worktreePath: resolvedWorktreePath };
