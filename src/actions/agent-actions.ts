@@ -152,6 +152,8 @@ export async function resumePtyExecution(
   const envOverrides: Record<string, string> = {
     ...profileEnvVars,
     AI_MANAGER_TASK_ID: taskId,
+    AI_MANAGER_TASK_TITLE: task.title,
+    AI_MANAGER_STARTED_AT: new Date().toISOString(),
   };
   if (prevExec.callbackUrl) {
     envOverrides.CALLBACK_URL = prevExec.callbackUrl;
@@ -180,6 +182,9 @@ export async function resumePtyExecution(
     cwd,
     () => {},
     async (exitCode) => {
+      // Write exit code signal file for notify-agi.sh (runs before DB update)
+      await writeFile(`/tmp/ai-manager-exit-${taskId}`, String(exitCode)).catch(() => {});
+
       // Guard: if stopPtyExecution already handled this, skip
       const currentExec = await db.taskExecution.findUnique({ where: { id: execution.id } });
       if (currentExec?.status !== "RUNNING") return;
@@ -330,6 +335,8 @@ export async function startPtyExecution(
   const envOverrides: Record<string, string> = {
     ...profileEnvVars,
     AI_MANAGER_TASK_ID: taskId,
+    AI_MANAGER_TASK_TITLE: task.title,
+    AI_MANAGER_STARTED_AT: new Date().toISOString(),
   };
   if (callbackUrl) {
     envOverrides.CALLBACK_URL = callbackUrl;
@@ -351,6 +358,9 @@ export async function startPtyExecution(
     cwd,
     () => {},
     async (exitCode) => {
+      // Write exit code signal file for notify-agi.sh (runs before DB update)
+      await writeFile(`/tmp/ai-manager-exit-${taskId}`, String(exitCode)).catch(() => {});
+
       // Guard: if stopPtyExecution already handled this execution, skip
       const currentExec = await db.taskExecution.findUnique({ where: { id: execution.id } });
       if (currentExec?.status !== "RUNNING") {
