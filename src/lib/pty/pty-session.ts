@@ -13,16 +13,28 @@ export class PtySession {
   /** Additional exit listeners — ws-server hooks in to send session_end to browser */
   private _exitListeners: Array<(exitCode: number) => void> = [];
 
+  // Idle detection fields (NTFY-06, NTFY-07)
+  private _idleTimer: ReturnType<typeof setTimeout> | null = null;
+  private _idleThresholdMs: number;
+  private _onIdle: (() => void) | null;
+  private _idleFired = false;
+
   constructor(
     taskId: string,
     command: string,
     args: string[],
     cwd: string,
     onData: (data: string) => void,
-    onExit: (exitCode: number, signal?: number) => void
+    onExit: (exitCode: number, signal?: number) => void,
+    envOverrides?: Record<string, string>,
+    onIdle?: () => void,
+    idleThresholdMs?: number
   ) {
     this.taskId = taskId;
     this._onData = onData;
+    this._onIdle = onIdle ?? null;
+    this._idleThresholdMs = Math.max(idleThresholdMs ?? 180_000, 180_000);
+
     this._pty = pty.spawn(command, args, {
       name: "xterm-color",
       cols: 80,
@@ -36,6 +48,7 @@ export class PtySession {
         LANG: process.env.LANG ?? "en_US.UTF-8",
         USER: process.env.USER ?? "",
         ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? "",
+        ...envOverrides,
       },
     });
 
@@ -47,18 +60,46 @@ export class PtySession {
           this._buffer.length - PtySession.BUFFER_MAX
         );
       }
+      // NTFY-06: reset idle timer on every PTY output
+      this._resetIdleTimer();
       this._onData(data);
     });
 
     // D-07: onExit sets killed=true but does NOT call pty.kill()
     this._pty.onExit(({ exitCode, signal }) => {
       this.killed = true;
+      // Clear idle timer on PTY exit — no callbacks fire after session ends
+      if (this._idleTimer) {
+        clearTimeout(this._idleTimer);
+        this._idleTimer = null;
+      }
       onExit(exitCode, signal);
       // Notify all registered exit listeners (ws-server uses this)
       for (const listener of this._exitListeners) {
         listener(exitCode);
       }
     });
+
+    // Start initial idle countdown
+    this._resetIdleTimer();
+  }
+
+  /**
+   * Reset the idle timer. Fires _onIdle after _idleThresholdMs of no activity.
+   * Called on PTY output and on user write() to reset the countdown.
+   */
+  private _resetIdleTimer(): void {
+    if (this._idleTimer) {
+      clearTimeout(this._idleTimer);
+      this._idleTimer = null;
+    }
+    if (this._onIdle === null || this.killed || this._idleFired) {
+      return;
+    }
+    this._idleTimer = setTimeout(() => {
+      this._idleFired = true;
+      this._onIdle?.();
+    }, this._idleThresholdMs);
   }
 
   /**
@@ -78,6 +119,8 @@ export class PtySession {
 
   write(data: string): void {
     if (!this.killed) {
+      // NTFY-07: user input resets idle timer
+      this._resetIdleTimer();
       this._pty.write(data);
     }
   }
@@ -93,10 +136,20 @@ export class PtySession {
     return this._buffer;
   }
 
+  /** Returns true if the idle callback has fired — Phase 34 MCP tools use this */
+  get isIdle(): boolean {
+    return this._idleFired;
+  }
+
   /** D-06: double-kill guard */
   kill(): void {
     if (this.killed) return;
     this.killed = true;
+    // Clear idle timer when session is killed
+    if (this._idleTimer) {
+      clearTimeout(this._idleTimer);
+      this._idleTimer = null;
+    }
     try {
       this._pty.kill();
     } catch {
