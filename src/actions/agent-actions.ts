@@ -10,6 +10,20 @@ import { writeFile, rm, mkdtemp, mkdir } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 
+export interface ActiveExecutionInfo {
+  executionId: string;
+  taskId: string;
+  taskTitle: string;
+  projectId: string;
+  projectName: string;
+  projectAlias: string | null;
+  projectLocalPath: string | null;
+  workspaceId: string;
+  workspaceName: string;
+  worktreePath: string | null;
+  startedAt: string | null; // ISO string for serialization
+}
+
 const log = logger.create("agent-actions");
 
 const SIGNAL_DIR = join(tmpdir(), "ai-manager-signals");
@@ -452,4 +466,33 @@ export async function startPtyExecution(
   );
 
   return { executionId: execution.id, worktreePath: resolvedWorktreePath };
+}
+
+export async function getActiveExecutionsAcrossWorkspaces(): Promise<ActiveExecutionInfo[]> {
+  const executions = await db.taskExecution.findMany({
+    where: { status: "RUNNING" },
+    orderBy: { startedAt: "asc" },
+    include: {
+      task: {
+        include: {
+          project: {
+            include: { workspace: true },
+          },
+        },
+      },
+    },
+  });
+  return executions.map((e) => ({
+    executionId: e.id,
+    taskId: e.taskId,
+    taskTitle: e.task.title,
+    projectId: e.task.project.id,
+    projectName: e.task.project.name,
+    projectAlias: e.task.project.alias,
+    projectLocalPath: e.task.project.localPath,
+    workspaceId: e.task.project.workspace.id,
+    workspaceName: e.task.project.workspace.name,
+    worktreePath: e.worktreePath,
+    startedAt: e.startedAt?.toISOString() ?? null,
+  }));
 }
