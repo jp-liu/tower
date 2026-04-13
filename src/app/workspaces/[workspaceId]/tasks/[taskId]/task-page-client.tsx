@@ -16,6 +16,7 @@ import { startPtyExecution, stopPtyExecution, resumePtyExecution } from "@/actio
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "@/components/task/execution-timeline";
 import { useI18n } from "@/lib/i18n";
+import { useToast } from "@/components/ui/toast";
 import type { DiffResponse } from "@/lib/diff-parser";
 
 import { TerminalOutlet, useTerminalPortal } from "@/components/task/terminal-portal";
@@ -75,6 +76,7 @@ const STATUS_COLORS: Record<string, string> = {
 export function TaskPageClient({ task, workspaceId, workspaceName, latestExecution, executions = [] }: TaskPageClientProps) {
   const router = useRouter();
   const { t } = useI18n();
+  const { toast } = useToast();
   const { removePortal } = useTerminalPortal();
   const [taskStatus, setTaskStatus] = useState(task.status);
   const [diffData, setDiffData] = useState<DiffData | null>(null);
@@ -131,8 +133,9 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
       if (worktreePath) {
         setActiveWorktreePath(worktreePath);
       }
-    } catch {
+    } catch (err) {
       setIsExecuting(false);
+      toast("error", err instanceof Error ? err.message : String(err));
     }
   }, [task.id, isExecuting, selectedPromptId]);
 

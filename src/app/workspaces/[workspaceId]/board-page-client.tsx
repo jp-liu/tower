@@ -13,7 +13,7 @@ import { startPtyExecution } from "@/actions/agent-actions";
 import { ProjectTabs } from "@/components/board/project-tabs";
 import type { TaskStatus, Priority } from "@prisma/client";
 import type { TaskWithLabels } from "@/types";
-
+import { useToast } from "@/components/ui/toast";
 
 
 interface LabelOption {
@@ -57,6 +57,7 @@ export function BoardPageClient({
   openTaskId,
 }: BoardPageClientProps) {
   const router = useRouter();
+  const { toast } = useToast();
   const [, startTransition] = useTransition();
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -114,8 +115,8 @@ export function BoardPageClient({
   const handleLaunchTask = useCallback(async (taskId: string) => {
     try {
       await startPtyExecution(taskId, "");
-    } catch {
-      // Ignore errors (e.g., already running) — navigation still proceeds
+    } catch (err) {
+      toast("error", err instanceof Error ? err.message : String(err));
     }
     router.push(`/workspaces/${workspaceId}/tasks/${taskId}`);
   }, [router, workspaceId]);
