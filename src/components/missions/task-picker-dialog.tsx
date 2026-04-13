@@ -111,7 +111,7 @@ export function TaskPickerDialog({
             <label className="text-sm font-medium">
               {t("missions.launcher.workspace")}
             </label>
-            <Select value={selectedWsId} onValueChange={(v) => { setSelectedWsId(v); setSelectedProjectId(""); }}>
+            <Select value={selectedWsId} onValueChange={(v) => { setSelectedWsId(v ?? ""); setSelectedProjectId(""); }}>
               <SelectTrigger className="w-full h-8">
                 <span className="truncate">
                   {workspaces.find((w) => w.id === selectedWsId)?.name ??
@@ -135,7 +135,7 @@ export function TaskPickerDialog({
             </label>
             <Select
               value={selectedProjectId}
-              onValueChange={setSelectedProjectId}
+              onValueChange={(v) => setSelectedProjectId(v ?? "")}
               disabled={!selectedWsId}
             >
               <SelectTrigger className="w-full h-8">
@@ -161,7 +161,7 @@ export function TaskPickerDialog({
             </label>
             <Select
               value={selectedTaskId}
-              onValueChange={setSelectedTaskId}
+              onValueChange={(v) => setSelectedTaskId(v ?? "")}
               disabled={!selectedProjectId}
             >
               <SelectTrigger className="w-full h-8">

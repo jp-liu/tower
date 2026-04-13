@@ -67,7 +67,8 @@ export function MissionsClient({
 
   const preset = GRID_PRESETS.find((p) => p.id === presetId) ?? GRID_PRESETS[2];
 
-  const handlePresetChange = useCallback((newId: string) => {
+  const handlePresetChange = useCallback((newId: string | null) => {
+    if (!newId) return;
     setPresetId(newId);
     localStorage.setItem("missions-grid-preset", newId);
   }, []);
