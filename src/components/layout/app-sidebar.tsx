@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   Settings, Archive, Plus, Pencil, Trash2,
-  MoreHorizontal, Layers, ChevronsLeft, Tag, FileText, FolderOpen,
+  MoreHorizontal, Layers, ChevronsLeft, Tag, FileText, FolderOpen, Gauge,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -177,6 +177,23 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
             <TooltipTrigger
               render={
                 <button
+                  onClick={() => router.push("/missions")}
+                  className={`rounded-lg p-2 transition-colors ${
+                    pathname === "/missions"
+                      ? "text-foreground bg-accent"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  }`}
+                />
+              }
+            >
+              <Gauge className="h-4 w-4" />
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={8}>{t("missions.navLabel")}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
                   onClick={() => router.push("/settings")}
                   className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 />
@@ -307,6 +324,17 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
       </div>
 
       {/* Footer */}
+      <Link
+        href="/missions"
+        className={`relative z-10 flex items-center gap-2 border-t border-border px-4 py-3 text-[11px] cursor-pointer transition-colors ${
+          pathname === "/missions"
+            ? "text-foreground"
+            : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        <Gauge className="h-3.5 w-3.5" />
+        <span>{t("missions.navLabel")}</span>
+      </Link>
       {activeWorkspaceId ? (
         <>
           <Link
