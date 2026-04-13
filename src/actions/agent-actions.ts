@@ -271,6 +271,13 @@ export async function startPtyExecution(
     throw new Error("Project has no local path configured");
   }
 
+  // 1a. Enforce concurrency limit
+  const maxConcurrent = await readConfigValue<number>("system.maxConcurrentExecutions", 20);
+  const runningCount = await db.taskExecution.count({ where: { status: "RUNNING" } });
+  if (runningCount >= maxConcurrent) {
+    throw new Error(`已达并发上限（${maxConcurrent}），请等待其他任务完成后再启动`);
+  }
+
   // 1b. Read CliProfile — determines which CLI binary to spawn
   const profile = await db.cliProfile.findFirst({ where: { isDefault: true } });
   if (!profile) throw new Error("No default CLI profile found — run seed first");

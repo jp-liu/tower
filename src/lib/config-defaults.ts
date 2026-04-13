@@ -16,7 +16,7 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     label: "Max Upload Size (bytes)",
   },
   "system.maxConcurrentExecutions": {
-    defaultValue: 3,
+    defaultValue: 20,
     type: "number",
     label: "Max Concurrent Executions",
   },
