@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { updateProject, createProject, getRecentLocalProjects } from "@/actions/workspace-actions";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
-import { useToast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 
@@ -45,7 +45,6 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
   const router = useRouter();
   const [gitExpanded, setGitExpanded] = useState(true);
   const [browseExpanded, setBrowseExpanded] = useState(true);
-  const toast = useToast();
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showFolderBrowser, setShowFolderBrowser] = useState(false);
   const [editName, setEditName] = useState(project.name);

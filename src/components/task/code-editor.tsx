@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { loader } from "@monaco-editor/react";
 import { useTheme } from "next-themes";
 import { useI18n } from "@/lib/i18n";
-import { useToast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import { readFileContent, writeFileContent } from "@/actions/file-actions";
 import { EditorTabs } from "./editor-tabs";
 import type { EditorTab } from "./editor-tabs";
@@ -57,8 +57,6 @@ export function CodeEditor({
 
   const [tabs, setTabs] = useState<EditorTab[]>([]);
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
-  const toast = useToast();
-
   const editorRef = useRef<unknown>(null);
   const monacoRef = useRef<unknown>(null);
   const modelsRef = useRef<Map<string, unknown>>(new Map());

@@ -8,7 +8,7 @@ import { TaskMetadata } from "./task-metadata";
 import { TaskDiffView } from "./task-diff-view";
 import { TerminalOutlet, useTerminalPortal } from "./terminal-portal";
 import { getTaskExecutions, startPtyExecution, stopPtyExecution, resumePtyExecution } from "@/actions/agent-actions";
-import { useToast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "./execution-timeline";
 import { TaskNotesPanel } from "./task-notes-panel";
@@ -29,7 +29,6 @@ export function TaskDetailPanel({
   onClose,
 }: TaskDetailPanelProps) {
   const { t } = useI18n();
-  const { toast } = useToast();
   const router = useRouter();
   const { removePortal } = useTerminalPortal();
   const [activeTab, setActiveTab] = useState<TabType>("terminal");
@@ -97,9 +96,9 @@ export function TaskDetailPanel({
       setTaskStatus("IN_PROGRESS");
     } catch (err) {
       setIsExecuting(false);
-      toast("error", err instanceof Error ? err.message : String(err));
+      toast.error(err instanceof Error ? err.message : String(err));
     }
-  }, [task.id, isExecuting, selectedPromptId, toast]);
+  }, [task.id, isExecuting, selectedPromptId]);
 
   const handleSessionEnd = useCallback(
     (exitCode: number) => {
