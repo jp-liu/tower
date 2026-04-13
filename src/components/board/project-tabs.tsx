@@ -65,7 +65,7 @@ export function ProjectTabs({ projects, activeProjectId, onSelect }: ProjectTabs
               onClick={() => { if (!isActive) onSelect(p.id); }}
               className={`shrink-0 rounded-lg border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
                 isActive
-                  ? "border-amber-400 bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20 cursor-default"
+                  ? "border-primary bg-primary/10 text-primary ring-1 ring-primary/20 cursor-default"
                   : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
               }`}
             >

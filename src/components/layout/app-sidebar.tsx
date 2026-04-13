@@ -145,7 +145,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
                       onClick={() => { if (!isActive) router.push(`/workspaces/${ws.id}`); }}
                       className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm transition-all ${
                         isActive
-                          ? "bg-accent ring-1 ring-amber-500/20 text-foreground cursor-default"
+                          ? "bg-accent ring-1 ring-primary/20 text-foreground cursor-default"
                           : "text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
                       }`}
                     />

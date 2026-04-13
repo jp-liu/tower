@@ -179,7 +179,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
             <Settings className="h-4 w-4" />
           </Link>
           <Button
-            className="gap-1.5 bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25 hover:text-amber-200"
+            className="gap-1.5 bg-primary/10 text-primary ring-1 ring-primary/25 hover:bg-primary/20"
             onClick={() => setShowNewProject(true)}
           >
             <Plus className="h-3.5 w-3.5" />
@@ -325,7 +325,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
             <Button
               onClick={handleCreateProject}
               disabled={!projectName.trim()}
-              className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
+              className="bg-primary/10 text-primary ring-1 ring-primary/25 hover:bg-primary/20"
             >
               {t("common.create")}
             </Button>
