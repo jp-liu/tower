@@ -498,6 +498,12 @@ const translations = {
     "missions.launcher.noTasks": "暂无可执行任务",
     "missions.error.launchFailed": "启动任务失败",
     "missions.error.stopFailed": "停止任务失败",
+    "missions.filterAll": "全部工作区",
+    "missions.alreadyMonitored": "已在监控",
+    "missions.showMoreTasks": "选择其他任务...",
+    "missions.pickerTitle": "选择要启动的任务",
+    "missions.pickerFooter": "点击 Launch 启动执行",
+    "missions.noAvailableTasks": "暂无可用任务",
   },
   en: {
     "sidebar.workspace": "Workspaces",
@@ -974,6 +980,12 @@ const translations = {
     "missions.launcher.noTasks": "No executable tasks",
     "missions.error.launchFailed": "Failed to launch task",
     "missions.error.stopFailed": "Failed to stop task",
+    "missions.filterAll": "All Workspaces",
+    "missions.alreadyMonitored": "Already monitored",
+    "missions.showMoreTasks": "Show more tasks...",
+    "missions.pickerTitle": "Select a task to launch",
+    "missions.pickerFooter": "Click Launch to start execution",
+    "missions.noAvailableTasks": "No available tasks",
   },
 } as const;
 

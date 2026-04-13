@@ -107,6 +107,37 @@ export async function getProjectByLocalPath(localPath: string) {
   });
 }
 
+export async function getWorkspacesWithRecentTasks(limit = 3) {
+  return db.workspace.findMany({
+    select: {
+      id: true,
+      name: true,
+      projects: {
+        select: {
+          id: true,
+          name: true,
+          alias: true,
+          tasks: {
+            where: { status: { in: ["TODO", "IN_PROGRESS", "IN_REVIEW"] } },
+            select: { id: true, title: true, status: true, priority: true },
+            orderBy: { updatedAt: "desc" },
+            take: limit,
+          },
+          _count: {
+            select: {
+              tasks: {
+                where: { status: { in: ["TODO", "IN_PROGRESS", "IN_REVIEW"] } },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+}
+
 export async function getRecentLocalProjects(limit = 10) {
   return db.project.findMany({
     where: { localPath: { not: null } },

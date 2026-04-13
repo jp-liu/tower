@@ -51,6 +51,8 @@ export function MissionsClient({
     return DEFAULT_PRESET_ID;
   });
   const [launcherOpen, setLauncherOpen] = useState(false);
+  const [filterWsId, setFilterWsId] = useState<string>("");
+  const launchBtnRef = useRef<HTMLButtonElement>(null);
 
   // removingIds: Map<executionId, "stopped" | "completed"> — tracks fading cards with their reason
   const [removingIds, setRemovingIds] = useState<Map<string, "stopped" | "completed">>(
@@ -182,12 +184,46 @@ export function MissionsClient({
       .catch(() => {});
   }, []);
 
+  // Derive deduplicated workspace list from current cards for filter
+  const workspaceOptions = Array.from(
+    new Map(cards.map((c) => [c.workspaceId, c.workspaceName])).entries()
+  ).map(([id, name]) => ({ id, name }));
+
+  // Apply workspace filter
+  const visibleCards = filterWsId
+    ? cards.filter((c) => c.workspaceId === filterWsId)
+    : cards;
+
+  // Running task IDs set (for picker to mark already-monitored tasks)
+  const runningTaskIds = new Set(cards.map((c) => c.taskId));
+
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-full flex-col">
       {/* Toolbar */}
       <div className="h-12 shrink-0 border-b border-border px-4 flex items-center justify-between">
         <h1 className="text-base font-semibold">{t("missions.pageTitle")}</h1>
         <div className="flex items-center gap-2">
+          {/* Workspace filter */}
+          {workspaceOptions.length > 0 && (
+            <Select value={filterWsId} onValueChange={(v) => setFilterWsId(v ?? "")}>
+              <SelectTrigger className="w-36 h-8">
+                <span className="truncate">
+                  {filterWsId
+                    ? (workspaceOptions.find((w) => w.id === filterWsId)?.name ?? t("missions.filterAll"))
+                    : t("missions.filterAll")}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">{t("missions.filterAll")}</SelectItem>
+                {workspaceOptions.map((ws) => (
+                  <SelectItem key={ws.id} value={ws.id}>
+                    {ws.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
           {/* Grid preset selector */}
           <Select value={presetId} onValueChange={handlePresetChange}>
             <SelectTrigger className="w-32 h-8">
@@ -201,16 +237,29 @@ export function MissionsClient({
               ))}
             </SelectContent>
           </Select>
-          {/* Launch task button */}
-          <Button onClick={() => setLauncherOpen(true)}>
-            {t("missions.launchTask")}
-          </Button>
+
+          {/* Launch task button — anchor for popover */}
+          <div className="relative">
+            <Button
+              ref={launchBtnRef}
+              onClick={() => setLauncherOpen((v) => !v)}
+            >
+              {t("missions.launchTask")}
+            </Button>
+            <TaskPickerDialog
+              open={launcherOpen}
+              onOpenChange={setLauncherOpen}
+              onLaunched={handleLaunched}
+              runningTaskIds={runningTaskIds}
+              anchorRef={launchBtnRef}
+            />
+          </div>
         </div>
       </div>
 
       {/* Grid area */}
-      <div className="flex-1 overflow-auto p-4">
-        {cards.length === 0 && removingIds.size === 0 ? (
+      <div className="flex-1 overflow-auto min-h-0 p-4">
+        {visibleCards.length === 0 && removingIds.size === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-4">
             <Rocket className="h-12 w-12 text-muted-foreground" />
             <h2 className="text-xl font-semibold">{t("missions.emptyTitle")}</h2>
@@ -227,7 +276,7 @@ export function MissionsClient({
             onDragEnd={handleDragEnd}
           >
             <SortableContext
-              items={cards.map((c) => c.executionId)}
+              items={visibleCards.map((c) => c.executionId)}
               strategy={rectSortingStrategy}
             >
               <div
@@ -237,7 +286,7 @@ export function MissionsClient({
                   gridAutoRows: `minmax(${preset.minHeight}, 1fr)`,
                 }}
               >
-                {cards.map((c) => (
+                {visibleCards.map((c) => (
                   <MissionCard
                     key={c.executionId}
                     execution={c}
@@ -252,12 +301,6 @@ export function MissionsClient({
           </DndContext>
         )}
       </div>
-
-      <TaskPickerDialog
-        open={launcherOpen}
-        onOpenChange={setLauncherOpen}
-        onLaunched={handleLaunched}
-      />
     </div>
   );
 }
