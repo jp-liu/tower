@@ -64,6 +64,69 @@ afterEach(async () => {
   await testDb.task.update({ where: { id: taskId }, data: { status: "TODO" } });
 });
 
+let getActiveExecutionsFn: () => Promise<any[]>;
+
+describe("getActiveExecutionsAcrossWorkspaces", () => {
+  beforeAll(async () => {
+    const mod = await import("@/actions/agent-actions");
+    getActiveExecutionsFn = mod.getActiveExecutionsAcrossWorkspaces as any;
+  });
+
+  it("returns empty array when no RUNNING executions exist", async () => {
+    // Ensure no running executions
+    await testDb.taskExecution.updateMany({
+      where: { taskId, status: "RUNNING" },
+      data: { status: "FAILED", endedAt: new Date() },
+    });
+    const result = await getActiveExecutionsFn();
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.filter((e: any) => e.taskId === taskId)).toEqual([]);
+  });
+
+  it("returns RUNNING executions with full join chain", async () => {
+    const execution = await testDb.taskExecution.create({
+      data: {
+        taskId,
+        agent: "CLAUDE_CODE",
+        status: "RUNNING",
+        startedAt: new Date(),
+      },
+    });
+
+    const result = await getActiveExecutionsFn();
+    const found = result.find((e: any) => e.executionId === execution.id);
+    expect(found).toBeDefined();
+    expect(found).toMatchObject({
+      executionId: execution.id,
+      taskId,
+      projectId,
+      workspaceId,
+    });
+    expect(typeof found.taskTitle).toBe("string");
+    expect(typeof found.projectName).toBe("string");
+    expect(typeof found.workspaceName).toBe("string");
+
+    // Cleanup
+    await testDb.taskExecution.delete({ where: { id: execution.id } });
+  });
+
+  it("excludes COMPLETED and FAILED executions", async () => {
+    const completed = await testDb.taskExecution.create({
+      data: { taskId, agent: "CLAUDE_CODE", status: "COMPLETED", startedAt: new Date(), endedAt: new Date() },
+    });
+    const failed = await testDb.taskExecution.create({
+      data: { taskId, agent: "CLAUDE_CODE", status: "FAILED", startedAt: new Date(), endedAt: new Date() },
+    });
+
+    const result = await getActiveExecutionsFn();
+    const ids = result.map((e: any) => e.executionId);
+    expect(ids).not.toContain(completed.id);
+    expect(ids).not.toContain(failed.id);
+
+    await testDb.taskExecution.deleteMany({ where: { id: { in: [completed.id, failed.id] } } });
+  });
+});
+
 describe("startTaskExecution with worktree fields", () => {
   it("persists worktreePath and worktreeBranch when provided", async () => {
     const execution = await startTaskExecutionFn(
