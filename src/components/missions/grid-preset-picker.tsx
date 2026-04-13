@@ -8,7 +8,7 @@ function MiniGrid({ cols, rows, active }: { cols: number; rows: number; active: 
   const cells = Array.from({ length: cols * rows });
   return (
     <div
-      className={`grid gap-[2px] w-10 h-7 p-1 rounded border shrink-0 ${
+      className={`grid gap-[1px] w-7 h-5 p-[3px] rounded-sm border shrink-0 ${
         active ? "border-primary bg-primary/10" : "border-border bg-muted"
       }`}
       style={{
