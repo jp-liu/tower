@@ -8,21 +8,20 @@ function MiniGrid({ cols, rows, active }: { cols: number; rows: number; active: 
   const cells = Array.from({ length: cols * rows });
   return (
     <div
-      className="grid gap-[2px] w-10 h-7 p-1 rounded border shrink-0"
+      className={`grid gap-[2px] w-10 h-7 p-1 rounded border shrink-0 ${
+        active ? "border-primary bg-primary/10" : "border-border bg-muted"
+      }`}
       style={{
         gridTemplateColumns: `repeat(${cols}, 1fr)`,
         gridTemplateRows: `repeat(${rows}, 1fr)`,
-        borderColor: active ? "hsl(var(--primary))" : "hsl(var(--border))",
-        background: active ? "hsl(var(--primary) / 0.08)" : "hsl(var(--muted))",
       }}
     >
       {cells.map((_, i) => (
         <div
           key={i}
-          className="rounded-[1px]"
-          style={{
-            background: active ? "hsl(var(--primary))" : "hsl(var(--muted-foreground) / 0.4)",
-          }}
+          className={`rounded-[1px] min-w-0 min-h-0 ${
+            active ? "bg-primary" : "bg-muted-foreground/40"
+          }`}
         />
       ))}
     </div>
