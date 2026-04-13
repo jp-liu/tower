@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Rocket } from "lucide-react";
+import { GridPresetPicker } from "@/components/missions/grid-preset-picker";
 import {
   DndContext,
   closestCenter,
@@ -200,60 +201,48 @@ export function MissionsClient({
   return (
     <div className="flex h-full flex-col">
       {/* Toolbar */}
-      <div className="h-12 shrink-0 border-b border-border px-4 flex items-center justify-between">
+      <div className="h-12 shrink-0 border-b border-border px-4 flex items-center gap-3">
         <h1 className="text-base font-semibold">{t("missions.pageTitle")}</h1>
-        <div className="flex items-center gap-2">
-          {/* Workspace filter */}
-          {workspaceOptions.length > 0 && (
-            <Select value={filterWsId} onValueChange={(v) => setFilterWsId(v ?? "")}>
-              <SelectTrigger className="w-36 h-8">
-                <span className="truncate">
-                  {filterWsId
-                    ? (workspaceOptions.find((w) => w.id === filterWsId)?.name ?? t("missions.filterAll"))
-                    : t("missions.filterAll")}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">{t("missions.filterAll")}</SelectItem>
-                {workspaceOptions.map((ws) => (
-                  <SelectItem key={ws.id} value={ws.id}>
-                    {ws.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
 
-          {/* Grid preset selector */}
-          <Select value={presetId} onValueChange={handlePresetChange}>
-            <SelectTrigger className="w-32 h-8">
-              <span className="truncate">{preset.label}</span>
-            </SelectTrigger>
-            <SelectContent>
-              {GRID_PRESETS.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Workspace filter — right of title */}
+        <Select value={filterWsId} onValueChange={(v) => setFilterWsId(v ?? "")}>
+          <SelectTrigger className="w-36 h-8">
+            <span className="truncate">
+              {filterWsId
+                ? (workspaceOptions.find((w) => w.id === filterWsId)?.name ?? t("missions.filterAll"))
+                : t("missions.filterAll")}
+            </span>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">{t("missions.filterAll")}</SelectItem>
+            {workspaceOptions.map((ws) => (
+              <SelectItem key={ws.id} value={ws.id}>
+                {ws.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-          {/* Launch task button — click to toggle popover */}
-          <div className="relative">
-            <Button
-              ref={launchBtnRef}
-              onClick={() => setLauncherOpen((v) => !v)}
-            >
-              {t("missions.launchTask")}
-            </Button>
-            <TaskPickerDialog
-              open={launcherOpen}
-              onOpenChange={setLauncherOpen}
-              onLaunched={handleLaunched}
-              runningTaskIds={runningTaskIds}
-              anchorRef={launchBtnRef}
-            />
-          </div>
+        <div className="flex-1" />
+
+        {/* Grid preset picker — visual grid icons */}
+        <GridPresetPicker value={presetId} onChange={handlePresetChange} />
+
+        {/* Launch task button — click to toggle popover */}
+        <div className="relative">
+          <Button
+            ref={launchBtnRef}
+            onClick={() => setLauncherOpen((v) => !v)}
+          >
+            {t("missions.launchTask")}
+          </Button>
+          <TaskPickerDialog
+            open={launcherOpen}
+            onOpenChange={setLauncherOpen}
+            onLaunched={handleLaunched}
+            runningTaskIds={runningTaskIds}
+            anchorRef={launchBtnRef}
+          />
         </div>
       </div>
 
