@@ -100,7 +100,7 @@ function TaskRow({
   const isLaunching = launchingId === task.id;
 
   return (
-    <div className="group flex items-center gap-2 px-3 py-1.5 hover:bg-accent/50 cursor-default">
+    <div className="group/task flex items-center gap-2 px-3 py-1.5 hover:bg-accent/50 cursor-default">
       <div className="flex-1 min-w-0">
         <p className={`text-sm truncate ${isRunning ? "italic text-muted-foreground" : ""}`}>
           {task.title}
@@ -117,7 +117,7 @@ function TaskRow({
           {t("missions.alreadyMonitored")}
         </span>
       ) : (
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 shrink-0">
+        <div className="flex items-center gap-1 opacity-0 group-hover/task:opacity-100 transition-opacity shrink-0">
           {lastSessionId && (
             <Button
               variant="outline"
