@@ -108,6 +108,7 @@ See: [milestones/v0.7-ROADMAP.md](./milestones/v0.7-ROADMAP.md) for full details
 - [x] **Phase 33: Internal HTTP Bridge** - /api/internal/terminal/[taskId]/buffer 和 /input 路由，供 MCP 进程跨进程读写 PTY (completed 2026-04-11)
 - [x] **Phase 34: MCP Terminal Tools** - get_task_terminal_output + send_task_terminal_input + get_task_execution_status 三个 MCP 工具 (completed 2026-04-11)
 - [x] **Phase 35: Settings UI for CLI Profile** - Settings 页面 CLI Profile 查看/编辑卡片 (completed 2026-04-11)
+- [ ] **Phase 35.1: Mission Control Dashboard** - 多任务监控面板：跨工作区聚合所有运行中任务终端，Grid Layout Presets，Task Picker 启动任务 (INSERTED)
 
 ## Phase Details
 
@@ -356,6 +357,25 @@ Plans:
 - [ ] 35-01-PLAN.md — CLI Profile server actions + i18n + settings card component (CLIP-04)
 **UI hint**: yes
 
+### Phase 35.1: Mission Control Dashboard (INSERTED)
+**Goal**: Users can view and interact with all running task terminals in a single page across all workspaces, without switching between projects
+**Depends on**: Phase 26 (Workbench Integration — terminal portal + PTY execution), Phase 33 (Internal HTTP Bridge)
+**Requirements**: MC-01, MC-02, MC-03, MC-04, MC-05
+**Success Criteria** (what must be TRUE):
+  1. A new `/missions` route exists and is accessible from the sidebar navigation
+  2. The page displays all tasks with RUNNING executions across all workspaces, each in its own card with a real xterm.js terminal
+  3. Users can select a grid layout preset (1x1, 2x1, 3x2, 2x2, 4x2, 3x3) from a dropdown; the choice persists in localStorage
+  4. Users can click "Launch Task" to pick an existing task from any workspace/project and start its execution; the task appears as a new card
+  5. Stopping a task execution removes its card from the grid; tasks that complete (exit 0) auto-remove
+  6. Each card shows workspace/project breadcrumb, task title, running time, and a drag handle for reordering
+  7. Clicking "Open full view" navigates to the existing task detail page (`/workspaces/[wsId]/tasks/[taskId]`)
+**Plans**: 3 plans
+Plans:
+- [x] 35.1-01-PLAN.md — Server action getActiveExecutionsAcrossWorkspaces + /missions route + page skeleton + sidebar nav + i18n
+- [ ] 35.1-02-PLAN.md — GridLayoutPresets + TaskPicker + MissionCard components + page integration
+- [ ] 35.1-03-PLAN.md — MissionTerminal (xterm.js) + real-time refresh + stop/auto-remove lifecycle
+**UI hint**: yes
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -395,3 +415,4 @@ Plans:
 | 33. Internal HTTP Bridge | v0.9 | 1/1 | Complete    | 2026-04-11 |
 | 34. MCP Terminal Tools | v0.9 | 1/1 | Complete    | 2026-04-11 |
 | 35. Settings UI for CLI Profile | v0.9 | 1/1 | Complete    | 2026-04-11 |
+| 35.1. Mission Control Dashboard | v0.9 | 1/3 | In Progress|  |

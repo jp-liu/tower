@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.9
 milestone_name: 架构清理 + 外部调度闭环
-status: verifying
-stopped_at: Phase 35.1 UI-SPEC approved
-last_updated: "2026-04-13T09:16:19.906Z"
-last_activity: 2026-04-11
+status: executing
+stopped_at: Completed 35.1-01-PLAN.md
+last_updated: "2026-04-13T09:59:51.277Z"
+last_activity: 2026-04-13
 progress:
   total_phases: 9
   completed_phases: 8
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 35 — settings-ui-cli-profile
+**Current focus:** Phase 35.1 — mission-control-dashboard
 
 ## Current Position
 
-Phase: 35
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-04-11
+Phase: 35.1 (mission-control-dashboard) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-04-13
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -94,6 +94,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 33-internal-http-bridge P01 | 113 | 3 tasks | 3 files |
 | Phase 34-mcp-terminal-tools P01 | 83 | 2 tasks | 2 files |
 | Phase 35 P01 | 146 | 2 tasks | 5 files |
+| Phase 35.1 P01 | 365 | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -234,6 +235,9 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 33]: 410 Gone for killed PTY sessions in input route — distinct signal from 404 (never existed)
 - [Phase 34]: Terminal MCP tools use fetch() to localhost:3000 HTTP bridge — MCP stdio process has separate globalThis from Next.js, cannot share in-memory PTY sessions
 - [Phase 35]: CLI Profile save converts baseArgsText (newline-separated) to JSON array and envVarsText (KEY=VALUE lines) to JSON object before DB write
+- [Phase 35.1]: ActiveExecutionInfo.startedAt serialized as ISO string for safe server/client boundary crossing
+- [Phase 35.1]: Missions sidebar link unconditionally visible (not inside activeWorkspaceId conditional) — global view not workspace-scoped
+- [Phase 35.1]: Grid preset Select uses manual span (not SelectValue) per project ui.md convention
 
 ### Pending Todos
 
@@ -248,6 +252,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-13T09:16:19.901Z
-Stopped at: Phase 35.1 UI-SPEC approved
-Resume file: .planning/phases/35.1-mission-control-dashboard/35.1-UI-SPEC.md
+Last session: 2026-04-13T09:59:51.273Z
+Stopped at: Completed 35.1-01-PLAN.md
+Resume file: None
