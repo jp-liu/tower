@@ -108,7 +108,7 @@ See: [milestones/v0.7-ROADMAP.md](./milestones/v0.7-ROADMAP.md) for full details
 - [x] **Phase 33: Internal HTTP Bridge** - /api/internal/terminal/[taskId]/buffer 和 /input 路由，供 MCP 进程跨进程读写 PTY (completed 2026-04-11)
 - [x] **Phase 34: MCP Terminal Tools** - get_task_terminal_output + send_task_terminal_input + get_task_execution_status 三个 MCP 工具 (completed 2026-04-11)
 - [x] **Phase 35: Settings UI for CLI Profile** - Settings 页面 CLI Profile 查看/编辑卡片 (completed 2026-04-11)
-- [ ] **Phase 35.1: Mission Control Dashboard** - 多任务监控面板：跨工作区聚合所有运行中任务终端，Grid Layout Presets，Task Picker 启动任务 (INSERTED)
+- [x] **Phase 35.1: Mission Control Dashboard** - 多任务监控面板：跨工作区聚合所有运行中任务终端，Grid Layout Presets，Task Picker 启动任务 (INSERTED) (completed 2026-04-13)
 
 ## Phase Details
 
@@ -373,7 +373,7 @@ Plans:
 Plans:
 - [x] 35.1-01-PLAN.md — Server action getActiveExecutionsAcrossWorkspaces + /missions route + page skeleton + sidebar nav + i18n
 - [x] 35.1-02-PLAN.md — GridLayoutPresets + TaskPicker + MissionCard components + page integration
-- [ ] 35.1-03-PLAN.md — MissionTerminal (xterm.js) + real-time refresh + stop/auto-remove lifecycle
+- [x] 35.1-03-PLAN.md — MissionTerminal (xterm.js) + real-time refresh + stop/auto-remove lifecycle
 **UI hint**: yes
 
 ## Progress
@@ -415,4 +415,4 @@ Plans:
 | 33. Internal HTTP Bridge | v0.9 | 1/1 | Complete    | 2026-04-11 |
 | 34. MCP Terminal Tools | v0.9 | 1/1 | Complete    | 2026-04-11 |
 | 35. Settings UI for CLI Profile | v0.9 | 1/1 | Complete    | 2026-04-11 |
-| 35.1. Mission Control Dashboard | v0.9 | 2/3 | In Progress|  |
+| 35.1. Mission Control Dashboard | v0.9 | 3/3 | Complete   | 2026-04-13 |

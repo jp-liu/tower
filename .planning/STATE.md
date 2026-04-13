@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v0.9
 milestone_name: 架构清理 + 外部调度闭环
-status: executing
-stopped_at: Completed 35.1-02-PLAN.md
-last_updated: "2026-04-13T10:06:42.625Z"
+status: verifying
+stopped_at: Completed 35.1-03-PLAN.md
+last_updated: "2026-04-13T10:13:29.404Z"
 last_activity: 2026-04-13
 progress:
   total_phases: 9
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 
 Phase: 35.1 (mission-control-dashboard) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-13
 
 Progress: [░░░░░░░░░░] 0%
@@ -96,6 +96,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 35 P01 | 146 | 2 tasks | 5 files |
 | Phase 35.1 P01 | 365 | 3 tasks | 8 files |
 | Phase 35.1 P02 | 252 | 2 tasks | 3 files |
+| Phase 35.1 P03 | 17 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -242,6 +243,7 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 35.1]: removingIds stored as Map<string, stopped|completed> (not Set) to carry removal reason per D-11 badge distinction
 - [Phase 35.1]: removingIdsRef useRef mirror pattern avoids polling setInterval teardown on every removingIds change; startFadeOut stable with empty useCallback deps
 - [Phase 35.1]: worktreePath ?? projectLocalPath for TaskTerminal — avoids no-worktree state when execution starts before worktree is created
+- [Phase 35.1]: Base UI Select onValueChange type is (string | null, eventDetails) — all handlers must accept null and guard with ?? '' or early return
 
 ### Pending Todos
 
@@ -256,6 +258,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-13T10:06:42.621Z
-Stopped at: Completed 35.1-02-PLAN.md
+Last session: 2026-04-13T10:13:29.400Z
+Stopped at: Completed 35.1-03-PLAN.md
 Resume file: None
