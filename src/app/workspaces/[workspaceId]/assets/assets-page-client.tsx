@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n";
 import { deleteAsset, getProjectAssets } from "@/actions/asset-actions";
 import { AssetList } from "@/components/assets/asset-list";
 import { AssetUpload } from "@/components/assets/asset-upload";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 
 interface SimpleProject {
   id: string;
@@ -123,27 +124,31 @@ export function AssetsPageClient({
         <div className="space-y-4">
           {/* List selectors */}
           <div className="flex items-center gap-3 flex-wrap">
-            <select
-              value={listWsId}
-              onChange={(e) => handleListWsChange(e.target.value)}
-              className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
-            >
-              {allWorkspaces.map((ws) => (
-                <option key={ws.id} value={ws.id}>{ws.name}</option>
-              ))}
-            </select>
-            {listProjects.length > 0 && (
-              <select
-                value={listProjectId ?? ""}
-                onChange={(e) => handleListProjectChange(e.target.value)}
-                className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
-              >
-                {listProjects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}{p.alias ? ` (${p.alias})` : ""}
-                  </option>
+            <Select value={listWsId} onValueChange={(v) => v && handleListWsChange(v)}>
+              <SelectTrigger size="sm" className="min-w-[140px] text-xs">
+                <span className="truncate">{allWorkspaces.find((ws) => ws.id === listWsId)?.name ?? listWsId}</span>
+              </SelectTrigger>
+              <SelectContent>
+                {allWorkspaces.map((ws) => (
+                  <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
                 ))}
-              </select>
+              </SelectContent>
+            </Select>
+            {listProjects.length > 0 && (
+              <Select value={listProjectId ?? ""} onValueChange={(v) => v && handleListProjectChange(v)}>
+                <SelectTrigger size="sm" className="min-w-[160px] text-xs">
+                  <span className="truncate">
+                    {(() => { const p = listProjects.find((x) => x.id === listProjectId); return p ? (p.alias ? `${p.name} (${p.alias})` : p.name) : ""; })()}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {listProjects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}{p.alias ? ` (${p.alias})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           </div>
 

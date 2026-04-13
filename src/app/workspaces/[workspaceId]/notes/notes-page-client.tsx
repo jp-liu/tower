@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n";
 import { NOTE_CATEGORIES_PRESET } from "@/lib/constants";
 import { createNote, updateNote, deleteNote, getProjectNotes } from "@/actions/note-actions";
 import { CategoryFilter } from "@/components/notes/category-filter";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { NoteList } from "@/components/notes/note-list";
 import { NoteEditor } from "@/components/notes/note-editor";
 import type { NoteItem } from "@/components/notes/note-card";
@@ -209,46 +210,51 @@ export function NotesPageClient({
               {!editingNote && (
                 <div className="flex items-center gap-2">
                   <label className="text-xs text-muted-foreground whitespace-nowrap">{t("notes.workspace")}</label>
-                  <select
-                    value={formWsId}
-                    onChange={(e) => handleFormWsChange(e.target.value)}
-                    className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
-                  >
-                    {allWorkspaces.map((ws) => (
-                      <option key={ws.id} value={ws.id}>{ws.name}</option>
-                    ))}
-                  </select>
+                  <Select value={formWsId} onValueChange={(v) => v && handleFormWsChange(v)}>
+                    <SelectTrigger size="sm" className="min-w-[140px] text-xs">
+                      <span className="truncate">{allWorkspaces.find((ws) => ws.id === formWsId)?.name ?? formWsId}</span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allWorkspaces.map((ws) => (
+                        <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
               {/* Project selector (only for create, not edit) */}
               {!editingNote && formProjects.length > 0 && (
                 <div className="flex items-center gap-2">
                   <label className="text-xs text-muted-foreground whitespace-nowrap">{t("notes.project")}</label>
-                  <select
-                    value={formProjectId ?? ""}
-                    onChange={(e) => setFormProjectId(e.target.value)}
-                    className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
-                  >
-                    {formProjects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}{p.alias ? ` (${p.alias})` : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={formProjectId ?? ""} onValueChange={(v) => v && setFormProjectId(v)}>
+                    <SelectTrigger size="sm" className="min-w-[160px] text-xs">
+                      <span className="truncate">
+                        {(() => { const p = formProjects.find((x) => x.id === formProjectId); return p ? (p.alias ? `${p.name} (${p.alias})` : p.name) : ""; })()}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {formProjects.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}{p.alias ? ` (${p.alias})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
               {/* Category selector */}
               <div className="flex items-center gap-2">
                 <label className="text-xs text-muted-foreground whitespace-nowrap">{t("notes.categoryLabel")}</label>
-                <select
-                  value={formCategory}
-                  onChange={(e) => setFormCategory(e.target.value)}
-                  className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
-                >
-                  {NOTE_CATEGORIES_PRESET.map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
+                <Select value={formCategory} onValueChange={(v) => v && setFormCategory(v)}>
+                  <SelectTrigger size="sm" className="min-w-[120px] text-xs">
+                    <span className="truncate">{formCategory}</span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {NOTE_CATEGORIES_PRESET.map((cat) => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -284,27 +290,31 @@ export function NotesPageClient({
           <div className="space-y-4">
             {/* List selectors */}
             <div className="flex items-center gap-3 flex-wrap">
-              <select
-                value={listWsId}
-                onChange={(e) => handleListWsChange(e.target.value)}
-                className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
-              >
-                {allWorkspaces.map((ws) => (
-                  <option key={ws.id} value={ws.id}>{ws.name}</option>
-                ))}
-              </select>
-              {listProjects.length > 0 && (
-                <select
-                  value={listProjectId ?? ""}
-                  onChange={(e) => handleListProjectChange(e.target.value)}
-                  className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
-                >
-                  {listProjects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}{p.alias ? ` (${p.alias})` : ""}
-                    </option>
+              <Select value={listWsId} onValueChange={(v) => v && handleListWsChange(v)}>
+                <SelectTrigger size="sm" className="min-w-[140px] text-xs">
+                  <span className="truncate">{allWorkspaces.find((ws) => ws.id === listWsId)?.name ?? listWsId}</span>
+                </SelectTrigger>
+                <SelectContent>
+                  {allWorkspaces.map((ws) => (
+                    <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
                   ))}
-                </select>
+                </SelectContent>
+              </Select>
+              {listProjects.length > 0 && (
+                <Select value={listProjectId ?? ""} onValueChange={(v) => v && handleListProjectChange(v)}>
+                  <SelectTrigger size="sm" className="min-w-[160px] text-xs">
+                    <span className="truncate">
+                      {(() => { const p = listProjects.find((x) => x.id === listProjectId); return p ? (p.alias ? `${p.name} (${p.alias})` : p.name) : ""; })()}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {listProjects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}{p.alias ? ` (${p.alias})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               )}
               <CategoryFilter active={activeCategory} onSelect={setActiveCategory} />
             </div>
