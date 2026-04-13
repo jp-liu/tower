@@ -1,47 +1,33 @@
-@AGENTS.md
+# AI Manager
 
-## UI Rules
+AI 任务管理平台 — 看板 + 终端 + 代码编辑器 + MCP 工具链。
 
-### Component Sizing
+**Tech:** Next.js 16 / TypeScript / SQLite (Prisma) / TailwindCSS 4 / shadcn (base-nova)
 
-- All Button and SelectTrigger use **default size** (`h-8` = 32px). Never use `size="sm"`.
-- Inputs, selects, and buttons that sit side by side must use the same height.
+## Quick Reference
 
-### Select Component (Base UI)
+```bash
+pnpm dev              # 启动（Webpack 模式，node-pty 需要）
+pnpm db:push          # 同步 schema
+pnpm db:seed          # 种子数据
+pnpm db:init-fts      # 全文搜索索引
+pnpm test:run         # 测试
+```
 
-- **Never use `<SelectValue />`** — it shows the raw `value` (ID) instead of the display name.
-- Always use a manual `<span>` inside `<SelectTrigger>` to render the selected item's name:
-  ```tsx
-  <SelectTrigger>
-    <span className="truncate">{items.find(x => x.id === value)?.name ?? value}</span>
-  </SelectTrigger>
-  ```
-- `SelectContent` defaults: `alignItemWithTrigger=false`, `align="start"` — dropdown appears below trigger, left-aligned.
-- Never use native `<select>/<option>` — always use the shadcn Select component.
+## Architecture
 
-### Toast Notifications
+```
+Workspace → Project → Task → Execution
+```
 
-- Use **Sonner** (`import { toast } from "sonner"`), not the legacy custom toast.
-- API: `toast.success("msg")` / `toast.error("msg")` / `toast.info("msg")`
-- `<Toaster richColors position="top-right" />` is in layout.tsx.
+- 数据模型和 API 参考见 @AGENTS.md
+- UI 规范见 `.claude/rules/ui.md`（组件尺寸、Select、Toast、Loading、i18n）
+- 安全规则见 `.claude/rules/security.md`（输入校验、环境注入、API 防护）
+- 进程生命周期见 `.claude/rules/process-lifecycle.md`（PTY、Preview、WS、定时器）
 
-### Loading States
+## Key Conventions
 
-- Never insert/remove loading text that causes layout shift.
-- Use opacity overlay + spinner on the content area:
-  ```tsx
-  <div className={`relative ${isPending ? "opacity-40 pointer-events-none" : ""}`}>
-    {isPending && <Loader2 className="absolute inset-0 m-auto size-5 animate-spin" />}
-    {children}
-  </div>
-  ```
-
-### Internationalization
-
-- `I18nProvider` starts with `"zh"` on both server and client (avoids hydration mismatch).
-- Locale is read from localStorage in `useEffect` after mount.
-- All user-facing strings must use `t("key")` from `useI18n()`.
-
-### DnD Kit
-
-- Always pass a stable `id` prop to `<DndContext>` to prevent hydration mismatch.
+- 国际化：所有用户可见文本用 `t("key")`，zh/en 双语
+- Next.js 15+ 异步 params：`const { id } = await params`
+- App Router routes：`export const runtime = "nodejs"` + `export const dynamic = "force-dynamic"`
+- 数据库：SQLite 单文件，Prisma ORM，配置在 `.env` 的 `DATABASE_URL`
