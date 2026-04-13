@@ -115,14 +115,14 @@ export function TaskMergeConfirmDialog({
         <DialogFooter>
           <Button
             variant="outline"
-            size="sm"
+           
             onClick={() => onOpenChange(false)}
             disabled={isMerging}
           >
             Cancel
           </Button>
           <Button
-            size="sm"
+           
             onClick={handleConfirmMerge}
             disabled={isMerging}
             className="gap-2"

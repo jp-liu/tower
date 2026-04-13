@@ -43,7 +43,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           </div>
           <Button
             variant="outline"
-            size="sm"
+           
             onClick={() => this.setState({ hasError: false, error: null })}
           >
             <RefreshCw className="mr-2 h-3.5 w-3.5" />

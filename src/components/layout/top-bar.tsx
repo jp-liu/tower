@@ -179,8 +179,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
             <Settings className="h-4 w-4" />
           </Link>
           <Button
-            size="sm"
-            className="h-8 gap-1.5 bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25 hover:text-amber-200"
+            className="gap-1.5 bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25 hover:text-amber-200"
             onClick={() => setShowNewProject(true)}
           >
             <Plus className="h-3.5 w-3.5" />
@@ -281,9 +280,8 @@ export function TopBar({ onCreateProject }: TopBarProps) {
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
                   onClick={() => setShowFolderBrowser(true)}
-                  className="h-8 shrink-0"
+                  className="shrink-0"
                 >
                   {t("folder.browse")}
                 </Button>
@@ -294,10 +292,9 @@ export function TopBar({ onCreateProject }: TopBarProps) {
                 <div className="mt-2 flex items-center gap-2">
                   <Button
                     type="button"
-                    size="sm"
                     disabled={cloneStatus === "cloning" || cloneStatus === "success"}
                     onClick={handleClone}
-                    className="h-7 gap-1.5 text-xs bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25 hover:bg-emerald-500/25 disabled:opacity-50"
+                    className="gap-1.5 text-xs bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25 hover:bg-emerald-500/25 disabled:opacity-50"
                   >
                     {cloneStatus === "cloning" ? (
                       <Loader2 className="h-3 w-3 animate-spin" />

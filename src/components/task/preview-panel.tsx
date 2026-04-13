@@ -188,13 +188,13 @@ export function PreviewPanel({
 
         {/* Run / Stop button */}
         {serverStatus === "running" ? (
-          <Button variant="destructive" size="sm" onClick={handleStop}>
+          <Button variant="destructive" onClick={handleStop}>
             {t("preview.stop")}
           </Button>
         ) : (
           <Button
             variant="default"
-            size="sm"
+           
             disabled={serverStatus === "starting" || !commandInput || !worktreePath}
             onClick={handleRun}
           >

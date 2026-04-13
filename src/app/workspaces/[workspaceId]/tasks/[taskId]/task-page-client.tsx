@@ -247,7 +247,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                 {/* Prompt selector */}
                 {prompts.length > 0 && (
                   <Select key={`prompt-${prompts.length}`} defaultValue={selectedPromptId ?? "none"} onValueChange={(v) => setSelectedPromptId(v === "none" ? null : v)}>
-                    <SelectTrigger size="sm" className="h-9 min-w-[140px]">
+                    <SelectTrigger className="h-9 min-w-[140px]">
                       <span className="text-left truncate">
                         {selectedPromptId
                           ? prompts.find((p) => p.id === selectedPromptId)?.name ?? t("terminal.noPrompt")

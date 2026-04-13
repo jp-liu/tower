@@ -117,7 +117,7 @@ export function AIToolsConfig() {
                     {!isDefault && (
                       <Button
                         variant="ghost"
-                        size="sm"
+                       
                         onClick={() => handleSetDefault(adapter.type)}
                       >
                         <Star className="h-4 w-4 mr-1 text-muted-foreground" />
@@ -126,7 +126,7 @@ export function AIToolsConfig() {
                     )}
                     <Button
                       variant="outline"
-                      size="sm"
+                     
                       onClick={() => handleTest(adapter.type)}
                       disabled={isTesting}
                     >

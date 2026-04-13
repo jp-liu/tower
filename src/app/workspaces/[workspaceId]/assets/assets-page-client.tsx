@@ -127,7 +127,7 @@ export function AssetsPageClient({
           {/* List selectors */}
           <div className="flex items-center gap-3 flex-wrap">
             <Select value={listWsId} onValueChange={(v) => v && handleListWsChange(v)}>
-              <SelectTrigger size="sm" className="min-w-[140px] text-xs">
+              <SelectTrigger className="min-w-[140px] text-xs">
                 <span className="truncate">{allWorkspaces.find((ws) => ws.id === listWsId)?.name ?? listWsId}</span>
               </SelectTrigger>
               <SelectContent>
@@ -138,7 +138,7 @@ export function AssetsPageClient({
             </Select>
             {listProjects.length > 0 && (
               <Select value={listProjectId ?? ""} onValueChange={(v) => v && handleListProjectChange(v)}>
-                <SelectTrigger size="sm" className="min-w-[160px] text-xs">
+                <SelectTrigger className="min-w-[160px] text-xs">
                   <span className="truncate">
                     {(() => { const p = listProjects.find((x) => x.id === listProjectId); return p ? (p.alias ? `${p.name} (${p.alias})` : p.name) : ""; })()}
                   </span>

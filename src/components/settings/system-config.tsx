@@ -164,7 +164,7 @@ export function SystemConfig() {
             </p>
           </div>
           <Button
-            size="sm"
+           
             onClick={() => {
               setAddForm({ ...EMPTY_FORM });
               setShowAddForm(true);
@@ -437,7 +437,7 @@ export function SystemConfig() {
               onChange={(e) => setSystemForm((f) => ({ ...f, maxConcurrent: Number(e.target.value) }))}
               className="w-24 text-right" />
           </div>
-          <Button size="sm" onClick={handleSaveSystem}>{t("common.save")}</Button>
+          <Button onClick={handleSaveSystem}>{t("common.save")}</Button>
         </div>
       </div>
 
@@ -460,7 +460,7 @@ export function SystemConfig() {
               <span className="text-sm text-muted-foreground">s</span>
             </div>
           </div>
-          <Button size="sm" onClick={handleSaveGitParams}>{t("common.save")}</Button>
+          <Button onClick={handleSaveGitParams}>{t("common.save")}</Button>
         </div>
       </div>
 
@@ -516,7 +516,7 @@ export function SystemConfig() {
               onChange={(e) => setSearchForm((f) => ({ ...f, snippetLength: Number(e.target.value) }))}
               className="w-24 text-right" />
           </div>
-          <Button size="sm" onClick={handleSaveSearch}>{t("common.save")}</Button>
+          <Button onClick={handleSaveSearch}>{t("common.save")}</Button>
         </div>
       </div>
 

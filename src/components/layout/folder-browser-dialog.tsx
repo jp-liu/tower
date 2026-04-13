@@ -126,7 +126,7 @@ export function FolderBrowserDialog({
               />
               <Button
                 variant="outline"
-                size="sm"
+               
                 onClick={handleGoTo}
                 className="h-8 px-3 shrink-0"
               >

@@ -101,7 +101,7 @@ export function TaskNotesPanel({ taskId, projectId }: TaskNotesPanelProps) {
           </h3>
           <Button
             variant="ghost"
-            size="sm"
+           
             className="h-6 gap-1 px-2 text-xs"
             onClick={() => setShowAddNote(!showAddNote)}
           >
@@ -128,7 +128,7 @@ export function TaskNotesPanel({ taskId, projectId }: TaskNotesPanelProps) {
               rows={3}
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none"
             />
-            <Button size="sm" className="h-7 text-xs" onClick={handleAddNote} disabled={!noteTitle.trim()}>
+            <Button className="text-xs" onClick={handleAddNote} disabled={!noteTitle.trim()}>
               {t("taskPage.addNote")}
             </Button>
           </div>
@@ -173,7 +173,7 @@ export function TaskNotesPanel({ taskId, projectId }: TaskNotesPanelProps) {
           </h3>
           <Button
             variant="ghost"
-            size="sm"
+           
             className="h-6 gap-1 px-2 text-xs"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}

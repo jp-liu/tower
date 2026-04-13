@@ -65,7 +65,7 @@ export function CLIAdapterTester({ adapterType, adapterLabel }: CLIAdapterTester
               onClick={handleTestConnection}
               disabled={testing}
               variant="outline"
-              size="sm"
+             
             >
               {testing ? (
                 <>

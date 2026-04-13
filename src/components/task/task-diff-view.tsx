@@ -67,7 +67,7 @@ export function TaskDiffView({
         </div>
         {taskStatus === "IN_REVIEW" && (
           <Button
-            size="sm"
+           
             onClick={() => setShowMergeDialog(true)}
             disabled={hasConflicts}
             className="h-8 gap-2 px-3 text-sm"

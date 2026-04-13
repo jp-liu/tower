@@ -214,7 +214,7 @@ export function NotesPageClient({
                 <div className="flex items-center gap-2">
                   <label className="text-xs text-muted-foreground whitespace-nowrap">{t("notes.workspace")}</label>
                   <Select value={formWsId} onValueChange={(v) => v && handleFormWsChange(v)}>
-                    <SelectTrigger size="sm" className="min-w-[140px] text-xs">
+                    <SelectTrigger className="min-w-[140px] text-xs">
                       <span className="truncate">{allWorkspaces.find((ws) => ws.id === formWsId)?.name ?? formWsId}</span>
                     </SelectTrigger>
                     <SelectContent>
@@ -230,7 +230,7 @@ export function NotesPageClient({
                 <div className="flex items-center gap-2">
                   <label className="text-xs text-muted-foreground whitespace-nowrap">{t("notes.project")}</label>
                   <Select value={formProjectId ?? ""} onValueChange={(v) => v && setFormProjectId(v)}>
-                    <SelectTrigger size="sm" className="min-w-[160px] text-xs">
+                    <SelectTrigger className="min-w-[160px] text-xs">
                       <span className="truncate">
                         {(() => { const p = formProjects.find((x) => x.id === formProjectId); return p ? (p.alias ? `${p.name} (${p.alias})` : p.name) : ""; })()}
                       </span>
@@ -249,7 +249,7 @@ export function NotesPageClient({
               <div className="flex items-center gap-2">
                 <label className="text-xs text-muted-foreground whitespace-nowrap">{t("notes.categoryLabel")}</label>
                 <Select value={formCategory} onValueChange={(v) => v && setFormCategory(v)}>
-                  <SelectTrigger size="sm" className="min-w-[120px] text-xs">
+                  <SelectTrigger className="min-w-[120px] text-xs">
                     <span className="truncate">{formCategory}</span>
                   </SelectTrigger>
                   <SelectContent>
@@ -294,7 +294,7 @@ export function NotesPageClient({
             {/* List selectors */}
             <div className="flex items-center gap-3 flex-wrap">
               <Select value={listWsId} onValueChange={(v) => v && handleListWsChange(v)}>
-                <SelectTrigger size="sm" className="min-w-[140px] text-xs">
+                <SelectTrigger className="min-w-[140px] text-xs">
                   <span className="truncate">{allWorkspaces.find((ws) => ws.id === listWsId)?.name ?? listWsId}</span>
                 </SelectTrigger>
                 <SelectContent>
@@ -305,7 +305,7 @@ export function NotesPageClient({
               </Select>
               {listProjects.length > 0 && (
                 <Select value={listProjectId ?? ""} onValueChange={(v) => v && handleListProjectChange(v)}>
-                  <SelectTrigger size="sm" className="min-w-[160px] text-xs">
+                  <SelectTrigger className="min-w-[160px] text-xs">
                     <span className="truncate">
                       {(() => { const p = listProjects.find((x) => x.id === listProjectId); return p ? (p.alias ? `${p.name} (${p.alias})` : p.name) : ""; })()}
                     </span>

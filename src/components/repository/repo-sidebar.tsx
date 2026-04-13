@@ -280,7 +280,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
                   <p className="text-xs">{t("git.notInitialized")}</p>
                 </div>
                 <Button
-                  size="sm"
+                 
                   className="mt-3 h-7 w-full gap-1.5 bg-amber-500/15 text-xs text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
                   onClick={handleInitGit}
                   disabled={initLoading}
@@ -342,7 +342,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">{t("common.edit")}</p>
                   <Button
                     variant="outline"
-                    size="sm"
+                   
                     className="w-full h-7 gap-1.5 text-xs"
                     onClick={() => setShowCreateBranch(true)}
                   >
@@ -369,7 +369,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
           <div className="mt-3 space-y-3">
             <Button
               variant="outline"
-              size="sm"
+             
               className="w-full h-8 gap-1.5 text-xs"
               onClick={() => setShowFolderBrowser(true)}
             >
@@ -456,7 +456,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
                   placeholder={t("project.localPathPlaceholder")}
                   className="flex-1 font-mono text-xs"
                 />
-                <Button variant="outline" size="sm" onClick={() => setShowFolderBrowser(true)} className="h-8 shrink-0">
+                <Button variant="outline" onClick={() => setShowFolderBrowser(true)} className="h-8 shrink-0">
                   {t("folder.browse")}
                 </Button>
               </div>

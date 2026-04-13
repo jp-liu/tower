@@ -119,7 +119,7 @@ export function AssetUpload({
               <div className="flex items-center gap-3">
                 <label className="text-xs text-muted-foreground w-16 shrink-0">{t("assets.workspace")}</label>
                 <Select value={uploadWsId} onValueChange={(v) => handleWsChange(v ?? "")}>
-                  <SelectTrigger size="sm" className="flex-1 text-xs">
+                  <SelectTrigger className="flex-1 text-xs">
                     <span className="truncate">{uploadWs?.name ?? uploadWsId}</span>
                   </SelectTrigger>
                   <SelectContent>
@@ -135,7 +135,7 @@ export function AssetUpload({
                 <label className="text-xs text-muted-foreground w-16 shrink-0">{t("assets.project")}</label>
                 {uploadProjects.length > 0 ? (
                   <Select value={uploadProjectId ?? ""} onValueChange={(v: string | null) => setUploadProjectId(v ?? "")}>
-                    <SelectTrigger size="sm" className="flex-1 text-xs">
+                    <SelectTrigger className="flex-1 text-xs">
                       <span className="truncate">
                         {(() => { const p = uploadProjects.find((x) => x.id === uploadProjectId); return p ? (p.alias ? `${p.name} (${p.alias})` : p.name) : uploadProjectId; })()}
                       </span>
