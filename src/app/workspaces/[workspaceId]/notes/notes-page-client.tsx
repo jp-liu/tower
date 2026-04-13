@@ -319,22 +319,20 @@ export function NotesPageClient({
               <CategoryFilter active={activeCategory} onSelect={setActiveCategory} />
             </div>
 
-            {isPending && (
-              <div className="text-xs text-muted-foreground animate-pulse">{t("notes.loading")}</div>
-            )}
-
-            {listProjects.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-                <p className="text-sm font-medium text-muted-foreground">{t("notes.noProject")}</p>
-                <p className="text-xs text-muted-foreground/60">{t("notes.noProjectHint")}</p>
-              </div>
-            ) : (
-              <NoteList
-                notes={filteredNotes}
-                onEdit={handleEditNote}
-                onDelete={handleDelete}
-              />
-            )}
+            <div className={isPending ? "opacity-40 pointer-events-none transition-opacity" : "transition-opacity"}>
+              {listProjects.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+                  <p className="text-sm font-medium text-muted-foreground">{t("notes.noProject")}</p>
+                  <p className="text-xs text-muted-foreground/60">{t("notes.noProjectHint")}</p>
+                </div>
+              ) : (
+                <NoteList
+                  notes={filteredNotes}
+                  onEdit={handleEditNote}
+                  onDelete={handleDelete}
+                />
+              )}
+            </div>
           </div>
         )}
       </div>

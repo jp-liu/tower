@@ -152,18 +152,16 @@ export function AssetsPageClient({
             )}
           </div>
 
-          {isPending && (
-            <div className="text-xs text-muted-foreground animate-pulse">{t("assets.loading")}</div>
-          )}
-
-          {listProjects.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-              <p className="text-sm font-medium text-muted-foreground">{t("assets.noProject")}</p>
-              <p className="text-xs text-muted-foreground/60">{t("assets.noProjectHint")}</p>
-            </div>
-          ) : (
-            <AssetList assets={assets} onDelete={handleDelete} />
-          )}
+          <div className={isPending ? "opacity-40 pointer-events-none transition-opacity" : "transition-opacity"}>
+            {listProjects.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+                <p className="text-sm font-medium text-muted-foreground">{t("assets.noProject")}</p>
+                <p className="text-xs text-muted-foreground/60">{t("assets.noProjectHint")}</p>
+              </div>
+            ) : (
+              <AssetList assets={assets} onDelete={handleDelete} />
+            )}
+          </div>
         </div>
       </div>
     </div>
