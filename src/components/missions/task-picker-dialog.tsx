@@ -274,7 +274,7 @@ export function TaskPickerDialog({
       .finally(() => setLoading(false));
   }, [open, t]);
 
-  // Click-outside to close
+  // Click-outside to close (fallback for when hover doesn't apply)
   useEffect(() => {
     if (!open) return;
     function handleClick(e: MouseEvent) {
@@ -284,13 +284,8 @@ export function TaskPickerDialog({
         onOpenChange(false);
       }
     }
-    const timer = setTimeout(() => {
-      document.addEventListener("mousedown", handleClick);
-    }, 10);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("mousedown", handleClick);
-    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
   }, [open, onOpenChange, anchorRef]);
 
   const handleLaunchNew = useCallback(async (taskId: string) => {
@@ -359,7 +354,7 @@ export function TaskPickerDialog({
                 <div key={ws.id}>
                   {/* Workspace header */}
                   <div className="sticky top-0 z-10 px-3 py-1.5 bg-popover border-b border-border/50">
-                    <span className="text-xs font-semibold text-violet-500 uppercase tracking-wider">
+                    <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                       {ws.name}
                     </span>
                   </div>
@@ -369,7 +364,7 @@ export function TaskPickerDialog({
                     return (
                       <div key={project.id} className="mb-1">
                         <div className="px-3 pt-2 pb-0.5">
-                          <span className="text-xs font-medium text-blue-500">
+                          <span className="text-xs font-medium text-foreground">
                             {project.alias ?? project.name}
                           </span>
                         </div>

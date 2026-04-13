@@ -238,12 +238,19 @@ export function MissionsClient({
             </SelectContent>
           </Select>
 
-          {/* Launch task button — anchor for popover */}
-          <div className="relative">
-            <Button
-              ref={launchBtnRef}
-              onClick={() => setLauncherOpen((v) => !v)}
-            >
+          {/* Launch task button — hover to show popover */}
+          <div
+            className="relative"
+            onMouseEnter={() => setLauncherOpen(true)}
+            onMouseLeave={(e) => {
+              // Don't close if mouse moves into the popover
+              const related = e.relatedTarget as Node | null;
+              const container = e.currentTarget;
+              if (related && container.contains(related)) return;
+              setLauncherOpen(false);
+            }}
+          >
+            <Button ref={launchBtnRef}>
               {t("missions.launchTask")}
             </Button>
             <TaskPickerDialog
