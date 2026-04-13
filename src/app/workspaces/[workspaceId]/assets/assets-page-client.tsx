@@ -66,6 +66,7 @@ export function AssetsPageClient({
 
   // List view handlers
   const handleListWsChange = (wsId: string) => {
+    if (wsId === listWsId) return;
     setListWsId(wsId);
     const ws = allWorkspaces.find((w) => w.id === wsId);
     const firstProject = ws?.projects[0] ?? null;
@@ -74,6 +75,7 @@ export function AssetsPageClient({
   };
 
   const handleListProjectChange = (projectId: string) => {
+    if (projectId === listProjectId) return;
     setListProjectId(projectId);
     reloadAssets(projectId);
   };

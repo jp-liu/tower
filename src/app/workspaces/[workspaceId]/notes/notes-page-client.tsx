@@ -81,6 +81,7 @@ export function NotesPageClient({
 
   // List view handlers
   const handleListWsChange = (wsId: string) => {
+    if (wsId === listWsId) return;
     setListWsId(wsId);
     const ws = allWorkspaces.find((w) => w.id === wsId);
     const firstProject = ws?.projects[0] ?? null;
@@ -90,6 +91,7 @@ export function NotesPageClient({
   };
 
   const handleListProjectChange = (projectId: string) => {
+    if (projectId === listProjectId) return;
     setListProjectId(projectId);
     setActiveCategory("all");
     reloadNotes(projectId);
@@ -97,6 +99,7 @@ export function NotesPageClient({
 
   // Form workspace/project handlers (don't affect list view)
   const handleFormWsChange = (wsId: string) => {
+    if (wsId === formWsId) return;
     setFormWsId(wsId);
     const ws = allWorkspaces.find((w) => w.id === wsId);
     const firstProject = ws?.projects[0] ?? null;
