@@ -372,7 +372,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 35.1-01-PLAN.md — Server action getActiveExecutionsAcrossWorkspaces + /missions route + page skeleton + sidebar nav + i18n
-- [ ] 35.1-02-PLAN.md — GridLayoutPresets + TaskPicker + MissionCard components + page integration
+- [x] 35.1-02-PLAN.md — GridLayoutPresets + TaskPicker + MissionCard components + page integration
 - [ ] 35.1-03-PLAN.md — MissionTerminal (xterm.js) + real-time refresh + stop/auto-remove lifecycle
 **UI hint**: yes
 
@@ -415,4 +415,4 @@ Plans:
 | 33. Internal HTTP Bridge | v0.9 | 1/1 | Complete    | 2026-04-11 |
 | 34. MCP Terminal Tools | v0.9 | 1/1 | Complete    | 2026-04-11 |
 | 35. Settings UI for CLI Profile | v0.9 | 1/1 | Complete    | 2026-04-11 |
-| 35.1. Mission Control Dashboard | v0.9 | 1/3 | In Progress|  |
+| 35.1. Mission Control Dashboard | v0.9 | 2/3 | In Progress|  |
