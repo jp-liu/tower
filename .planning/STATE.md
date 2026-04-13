@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.9
 milestone_name: 架构清理 + 外部调度闭环
 status: verifying
-stopped_at: Phase 35.1 context gathered
-last_updated: "2026-04-13T08:51:07.031Z"
+stopped_at: Phase 35.1 UI-SPEC approved
+last_updated: "2026-04-13T09:16:19.906Z"
 last_activity: 2026-04-11
 progress:
   total_phases: 9
@@ -248,6 +248,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-13T08:51:07.026Z
-Stopped at: Phase 35.1 context gathered
-Resume file: .planning/phases/35.1-mission-control-dashboard/35.1-CONTEXT.md
+Last session: 2026-04-13T09:16:19.901Z
+Stopped at: Phase 35.1 UI-SPEC approved
+Resume file: .planning/phases/35.1-mission-control-dashboard/35.1-UI-SPEC.md
