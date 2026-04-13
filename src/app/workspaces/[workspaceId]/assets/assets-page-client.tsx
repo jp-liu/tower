@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useCallback } from "react";
 import Link from "next/link";
-import { ArrowLeft, FolderOpen } from "lucide-react";
+import { ArrowLeft, FolderOpen, Loader2 } from "lucide-react";
 import type { ProjectAsset } from "@prisma/client";
 import { useI18n } from "@/lib/i18n";
 import { deleteAsset, getProjectAssets } from "@/actions/asset-actions";
@@ -152,7 +152,12 @@ export function AssetsPageClient({
             )}
           </div>
 
-          <div className={isPending ? "opacity-40 pointer-events-none transition-opacity" : "transition-opacity"}>
+          <div className={`relative ${isPending ? "opacity-40 pointer-events-none" : ""} transition-opacity`}>
+            {isPending && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center">
+                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              </div>
+            )}
             {listProjects.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
                 <p className="text-sm font-medium text-muted-foreground">{t("assets.noProject")}</p>
