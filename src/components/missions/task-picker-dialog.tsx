@@ -4,9 +4,22 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useI18n } from "@/lib/i18n";
 import { getWorkspacesWithRecentTasks } from "@/actions/workspace-actions";
 import { getProjectTasks } from "@/actions/task-actions";
-import { startPtyExecution } from "@/actions/agent-actions";
+import { startPtyExecution, resumePtyExecution } from "@/actions/agent-actions";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import { Play, RotateCcw } from "lucide-react";
 
 type TaskStatus = "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED";
 type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -16,6 +29,7 @@ interface TaskItem {
   title: string;
   status: TaskStatus;
   priority: TaskPriority;
+  executions?: Array<{ sessionId: string | null }>;
 }
 
 interface ProjectItem {
@@ -66,6 +80,175 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+/** Task row with Continue / New launch actions */
+function TaskRow({
+  task,
+  isRunning,
+  launchingId,
+  onLaunchNew,
+  onResume,
+  t,
+}: {
+  task: TaskItem;
+  isRunning: boolean;
+  launchingId: string | null;
+  onLaunchNew: (taskId: string) => void;
+  onResume: (taskId: string, sessionId: string) => void;
+  t: ReturnType<typeof useI18n>["t"];
+}) {
+  const lastSessionId = task.executions?.[0]?.sessionId;
+  const isLaunching = launchingId === task.id;
+
+  return (
+    <div className="group flex items-center gap-2 px-3 py-1.5 hover:bg-accent/50 cursor-default">
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm truncate ${isRunning ? "italic text-muted-foreground" : ""}`}>
+          {task.title}
+        </p>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <StatusBadge status={task.status} />
+          <span className="text-[10px] text-muted-foreground">
+            {PRIORITY_LABELS[task.priority] ?? task.priority}
+          </span>
+        </div>
+      </div>
+      {isRunning ? (
+        <span className="text-[10px] italic text-muted-foreground shrink-0">
+          {t("missions.alreadyMonitored")}
+        </span>
+      ) : (
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 shrink-0">
+          {lastSessionId && (
+            <Button
+              variant="ghost"
+              className="h-6 px-2 text-xs"
+              onClick={() => onResume(task.id, lastSessionId)}
+              disabled={isLaunching}
+              title={t("missions.continueSession")}
+            >
+              <RotateCcw className="h-3 w-3 mr-1" />
+              {t("missions.continueLabel")}
+            </Button>
+          )}
+          <Button
+            className="h-6 px-2 text-xs"
+            onClick={() => onLaunchNew(task.id)}
+            disabled={isLaunching}
+            title={t("missions.launchNew")}
+          >
+            <Play className="h-3 w-3 mr-1" />
+            {isLaunching ? "..." : t("missions.launchNewLabel")}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Full task selector Dialog — opened from popover footer */
+function FullTaskDialog({
+  open,
+  onOpenChange,
+  onLaunchNew,
+  onResume,
+  runningTaskIds,
+  launchingId,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onLaunchNew: (taskId: string) => void;
+  onResume: (taskId: string, sessionId: string) => void;
+  runningTaskIds: Set<string>;
+  launchingId: string | null;
+}) {
+  const { t } = useI18n();
+  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
+  const [selectedWsId, setSelectedWsId] = useState("");
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    setSelectedWsId("");
+    setSelectedProjectId("");
+    setTasks([]);
+    getWorkspacesWithRecentTasks(100)
+      .then(setWorkspaces)
+      .catch(() => toast.error(t("missions.error.launchFailed")));
+  }, [open, t]);
+
+  useEffect(() => {
+    if (!selectedProjectId) { setTasks([]); return; }
+    getProjectTasks(selectedProjectId)
+      .then((all) => {
+        setTasks(
+          all.filter(
+            (tk) => tk.status === "TODO" || tk.status === "IN_PROGRESS" || tk.status === "IN_REVIEW"
+          ) as TaskItem[]
+        );
+      })
+      .catch(() => toast.error(t("missions.error.launchFailed")));
+  }, [selectedProjectId, t]);
+
+  const selectedWs = workspaces.find((w) => w.id === selectedWsId);
+  const projects = selectedWs?.projects ?? [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[70vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>{t("missions.fullPickerTitle")}</DialogTitle>
+        </DialogHeader>
+        <div className="flex items-center gap-2 shrink-0">
+          <Select value={selectedWsId} onValueChange={(v) => { setSelectedWsId(v ?? ""); setSelectedProjectId(""); }}>
+            <SelectTrigger id="full-picker-ws" className="w-48 h-8">
+              <span className="truncate">
+                {workspaces.find((w) => w.id === selectedWsId)?.name ?? t("missions.launcher.selectWorkspace")}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              {workspaces.map((ws) => (
+                <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={selectedProjectId} onValueChange={(v) => setSelectedProjectId(v ?? "")} disabled={!selectedWsId}>
+            <SelectTrigger id="full-picker-proj" className="w-48 h-8">
+              <span className="truncate">
+                {projects.find((p) => p.id === selectedProjectId)?.name ?? t("missions.launcher.selectProject")}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.alias ?? p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex-1 overflow-y-auto min-h-0 -mx-2">
+          {tasks.length === 0 && selectedProjectId ? (
+            <p className="text-sm text-muted-foreground text-center py-8">{t("missions.launcher.noTasks")}</p>
+          ) : tasks.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">{t("missions.fullPickerHint")}</p>
+          ) : (
+            tasks.map((task) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                isRunning={runningTaskIds.has(task.id)}
+                launchingId={launchingId}
+                onLaunchNew={onLaunchNew}
+                onResume={onResume}
+                t={t}
+              />
+            ))
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function TaskPickerDialog({
   open,
   onOpenChange,
@@ -78,16 +261,11 @@ export function TaskPickerDialog({
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
-  // projectId -> all tasks (expanded view)
-  const [expandedProjects, setExpandedProjects] = useState<Record<string, TaskItem[]>>({});
-  const [loadingProjects, setLoadingProjects] = useState<Set<string>>(new Set());
+  const [fullDialogOpen, setFullDialogOpen] = useState(false);
 
   // Load data when opened
   useEffect(() => {
-    if (!open) {
-      setExpandedProjects({});
-      return;
-    }
+    if (!open) return;
     setLoading(true);
     getWorkspacesWithRecentTasks(3)
       .then(setWorkspaces)
@@ -101,12 +279,10 @@ export function TaskPickerDialog({
     function handleClick(e: MouseEvent) {
       const target = e.target as Node;
       if (popoverRef.current && !popoverRef.current.contains(target)) {
-        // Also don't close if click was on the anchor button (it will toggle)
         if (anchorRef?.current && anchorRef.current.contains(target)) return;
         onOpenChange(false);
       }
     }
-    // Delay to avoid immediate close on the open click
     const timer = setTimeout(() => {
       document.addEventListener("mousedown", handleClick);
     }, 10);
@@ -116,12 +292,13 @@ export function TaskPickerDialog({
     };
   }, [open, onOpenChange, anchorRef]);
 
-  const handleLaunch = useCallback(async (taskId: string) => {
+  const handleLaunchNew = useCallback(async (taskId: string) => {
     try {
       setLaunchingId(taskId);
       await startPtyExecution(taskId, "");
       onLaunched(taskId);
       onOpenChange(false);
+      setFullDialogOpen(false);
     } catch {
       toast.error(t("missions.error.launchFailed"));
     } finally {
@@ -129,140 +306,110 @@ export function TaskPickerDialog({
     }
   }, [onLaunched, onOpenChange, t]);
 
-  const handleShowMore = useCallback(async (projectId: string) => {
-    if (expandedProjects[projectId]) return;
-    setLoadingProjects((prev) => new Set([...prev, projectId]));
+  const handleResume = useCallback(async (taskId: string, sessionId: string) => {
     try {
-      const all = await getProjectTasks(projectId);
-      const filtered = all.filter(
-        (tk) => tk.status === "TODO" || tk.status === "IN_PROGRESS" || tk.status === "IN_REVIEW"
-      ) as TaskItem[];
-      setExpandedProjects((prev) => ({ ...prev, [projectId]: filtered }));
+      setLaunchingId(taskId);
+      await resumePtyExecution(taskId, sessionId);
+      onLaunched(taskId);
+      onOpenChange(false);
+      setFullDialogOpen(false);
     } catch {
       toast.error(t("missions.error.launchFailed"));
     } finally {
-      setLoadingProjects((prev) => {
-        const next = new Set(prev);
-        next.delete(projectId);
-        return next;
-      });
+      setLaunchingId(null);
     }
-  }, [expandedProjects, t]);
+  }, [onLaunched, onOpenChange, t]);
 
-  if (!open) return null;
+  const handleOpenFullDialog = useCallback(() => {
+    onOpenChange(false);
+    setFullDialogOpen(true);
+  }, [onOpenChange]);
+
+  if (!open && !fullDialogOpen) return null;
 
   return (
-    <div
-      ref={popoverRef}
-      className="absolute z-50 mt-1 w-80 rounded-lg border border-border bg-popover shadow-xl flex flex-col overflow-hidden"
-      style={{ maxHeight: "480px" }}
-    >
-      {/* Header */}
-      <div className="px-3 py-2 border-b border-border shrink-0">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-          {t("missions.pickerTitle")}
-        </p>
-      </div>
+    <>
+      {/* Quick picker popover */}
+      {open && (
+        <div
+          ref={popoverRef}
+          className="absolute right-0 z-50 mt-1 w-96 rounded-lg border border-border bg-popover shadow-xl flex flex-col overflow-hidden"
+          style={{ maxHeight: "480px" }}
+        >
+          {/* Header */}
+          <div className="px-3 py-2 border-b border-border shrink-0">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              {t("missions.pickerTitle")}
+            </p>
+          </div>
 
-      {/* Tree list */}
-      <div className="flex-1 overflow-y-auto">
-        {loading ? (
-          <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-            Loading...
-          </div>
-        ) : workspaces.length === 0 ? (
-          <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-            {t("missions.noAvailableTasks")}
-          </div>
-        ) : (
-          workspaces.map((ws) => (
-            <div key={ws.id}>
-              {/* Workspace header */}
-              <div className="sticky top-0 z-10 px-3 py-1.5 bg-popover border-b border-border/50">
-                <span className="text-xs font-semibold text-violet-500 uppercase tracking-wider">
-                  {ws.name}
-                </span>
+          {/* Tree list */}
+          <div className="flex-1 overflow-y-auto">
+            {loading ? (
+              <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                Loading...
               </div>
-
-              {ws.projects.map((project) => {
-                const displayTasks = expandedProjects[project.id] ?? project.tasks;
-                const hasMore =
-                  !expandedProjects[project.id] &&
-                  project._count.tasks > project.tasks.length;
-                const isLoadingMore = loadingProjects.has(project.id);
-
-                if (project._count.tasks === 0) return null;
-
-                return (
-                  <div key={project.id} className="mb-1">
-                    {/* Project subheader */}
-                    <div className="px-3 pt-2 pb-0.5">
-                      <span className="text-xs font-medium text-blue-500">
-                        {project.alias ?? project.name}
-                      </span>
-                    </div>
-
-                    {/* Task rows */}
-                    {displayTasks.map((task) => {
-                      const isRunning = runningTaskIds.has(task.id);
-                      const isLaunching = launchingId === task.id;
-                      return (
-                        <div
-                          key={task.id}
-                          className="group flex items-center gap-2 px-3 py-1.5 hover:bg-accent/50 cursor-default"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm truncate ${isRunning ? "italic text-muted-foreground" : ""}`}>
-                              {task.title}
-                            </p>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <StatusBadge status={task.status} />
-                              <span className="text-[10px] text-muted-foreground">
-                                {PRIORITY_LABELS[task.priority] ?? task.priority}
-                              </span>
-                            </div>
-                          </div>
-                          {isRunning ? (
-                            <span className="text-[10px] italic text-muted-foreground shrink-0">
-                              {t("missions.alreadyMonitored")}
-                            </span>
-                          ) : (
-                            <Button
-                              className="h-6 px-2 text-xs opacity-0 group-hover:opacity-100 shrink-0"
-                              onClick={() => handleLaunch(task.id)}
-                              disabled={isLaunching}
-                            >
-                              {isLaunching ? "..." : "Launch"}
-                            </Button>
-                          )}
-                        </div>
-                      );
-                    })}
-
-                    {/* Show more */}
-                    {hasMore && (
-                      <button
-                        className="w-full text-left px-3 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors"
-                        onClick={() => handleShowMore(project.id)}
-                        disabled={isLoadingMore}
-                      >
-                        {isLoadingMore ? "Loading..." : t("missions.showMoreTasks")}
-                      </button>
-                    )}
+            ) : workspaces.length === 0 ? (
+              <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                {t("missions.noAvailableTasks")}
+              </div>
+            ) : (
+              workspaces.map((ws) => (
+                <div key={ws.id}>
+                  {/* Workspace header */}
+                  <div className="sticky top-0 z-10 px-3 py-1.5 bg-popover border-b border-border/50">
+                    <span className="text-xs font-semibold text-violet-500 uppercase tracking-wider">
+                      {ws.name}
+                    </span>
                   </div>
-                );
-              })}
-            </div>
-          ))
-        )}
-      </div>
 
-      {/* Footer */}
-      <div className="px-3 py-2 border-t border-border shrink-0">
-        <p className="text-[11px] text-muted-foreground text-center">
-          {t("missions.pickerFooter")}
-        </p>
-      </div>
-    </div>
+                  {ws.projects.map((project) => {
+                    if (project._count.tasks === 0) return null;
+                    return (
+                      <div key={project.id} className="mb-1">
+                        <div className="px-3 pt-2 pb-0.5">
+                          <span className="text-xs font-medium text-blue-500">
+                            {project.alias ?? project.name}
+                          </span>
+                        </div>
+                        {project.tasks.map((task) => (
+                          <TaskRow
+                            key={task.id}
+                            task={task}
+                            isRunning={runningTaskIds.has(task.id)}
+                            launchingId={launchingId}
+                            onLaunchNew={handleLaunchNew}
+                            onResume={handleResume}
+                            t={t}
+                          />
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Footer — clickable to open full dialog */}
+          <button
+            className="w-full px-3 py-2 border-t border-border shrink-0 text-xs text-primary hover:bg-accent/50 transition-colors text-center font-medium"
+            onClick={handleOpenFullDialog}
+          >
+            {t("missions.showMoreTasks")}
+          </button>
+        </div>
+      )}
+
+      {/* Full task selector dialog */}
+      <FullTaskDialog
+        open={fullDialogOpen}
+        onOpenChange={setFullDialogOpen}
+        onLaunchNew={handleLaunchNew}
+        onResume={handleResume}
+        runningTaskIds={runningTaskIds}
+        launchingId={launchingId}
+      />
+    </>
   );
 }

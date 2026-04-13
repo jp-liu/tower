@@ -504,6 +504,12 @@ const translations = {
     "missions.pickerTitle": "选择要启动的任务",
     "missions.pickerFooter": "点击 Launch 启动执行",
     "missions.noAvailableTasks": "暂无可用任务",
+    "missions.continueSession": "继续上次会话",
+    "missions.continueLabel": "继续",
+    "missions.launchNew": "启动新终端",
+    "missions.launchNewLabel": "新建",
+    "missions.fullPickerTitle": "选择任务",
+    "missions.fullPickerHint": "选择工作区和项目查看任务",
   },
   en: {
     "sidebar.workspace": "Workspaces",
@@ -986,6 +992,12 @@ const translations = {
     "missions.pickerTitle": "Select a task to launch",
     "missions.pickerFooter": "Click Launch to start execution",
     "missions.noAvailableTasks": "No available tasks",
+    "missions.continueSession": "Continue last session",
+    "missions.continueLabel": "Continue",
+    "missions.launchNew": "Start new terminal",
+    "missions.launchNewLabel": "New",
+    "missions.fullPickerTitle": "Select Task",
+    "missions.fullPickerHint": "Select a workspace and project to see tasks",
   },
 } as const;
 

@@ -119,7 +119,18 @@ export async function getWorkspacesWithRecentTasks(limit = 3) {
           alias: true,
           tasks: {
             where: { status: { in: ["TODO", "IN_PROGRESS", "IN_REVIEW"] } },
-            select: { id: true, title: true, status: true, priority: true },
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              priority: true,
+              executions: {
+                where: { sessionId: { not: null } },
+                select: { sessionId: true },
+                orderBy: { createdAt: "desc" },
+                take: 1,
+              },
+            },
             orderBy: { updatedAt: "desc" },
             take: limit,
           },
