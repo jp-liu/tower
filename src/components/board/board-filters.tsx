@@ -1,9 +1,8 @@
 "use client";
 
-import { Plus, Search, Bell } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
-import { toast } from "sonner";
 
 interface BoardFiltersProps {
   searchQuery: string;
@@ -32,20 +31,7 @@ export function BoardFilters({
       <Button
         size="sm"
         variant="outline"
-        className="h-7 gap-1.5 border-border text-xs text-muted-foreground"
-        onClick={() => {
-          toast.success("操作成功！");
-          setTimeout(() => toast.error("这是一个错误提示"), 500);
-          setTimeout(() => toast.info("这是一条信息"), 1000);
-        }}
-      >
-        <Bell className="h-3.5 w-3.5" />
-        Test Toast
-      </Button>
-      <Button
-        size="sm"
-        variant="outline"
-        className="ml-auto h-7 gap-1.5 border-border text-xs text-muted-foreground hover:border-amber-500/30 hover:text-amber-300"
+        className="ml-auto gap-1.5 border-border text-xs text-muted-foreground hover:border-amber-500/30 hover:text-amber-300"
         onClick={onCreateTask}
       >
         <Plus className="h-3.5 w-3.5" />
