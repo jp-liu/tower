@@ -23,6 +23,10 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 ## Current State
 
+**In Progress:** v0.9 架构清理 + 外部调度闭环
+- Phase 29-35: adapter cleanup, CLI profile, PTY env injection, Feishu notifications, HTTP bridge, MCP terminal tools, settings UI
+- Phase 35.1: Mission Control multi-task dashboard — /missions route with grid layout, cross-workspace terminal monitoring, task launcher (completed 2026-04-13)
+
 **Shipped:** v0.8 执行历史与会话恢复 (2026-04-10)
 - Execution history timeline, AI summary, session resume, terminal portal, code quality
 
@@ -223,4 +227,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-10 — v0.9 milestone started*
+*Last updated: 2026-04-13 — Phase 35.1 Mission Control Dashboard complete*
