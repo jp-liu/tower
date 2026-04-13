@@ -5,7 +5,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 <!-- END:nextjs-agent-rules -->
 
 # currentDate
-Today's date is 2026-03-26.
+Today's date is 2026-04-13.
 
 ---
 
@@ -67,6 +67,14 @@ Workspace (id, name, description?)
 - `id` (cuid), `taskId`, `agent` (default `CLAUDE_CODE`), `config?`
 - `status`: `PENDING` | `RUNNING` | `PAUSED` | `COMPLETED` | `FAILED`
 - `branch?`, `startedAt?`, `endedAt?`
+- `sessionId?` — Claude CLI session ID for resume support
+- `worktreePath?`, `worktreeBranch?` — git worktree isolation
+- `callbackUrl?` — external orchestrator callback URL
+
+**CliProfile**
+- `id` (cuid), `command` (default `claude`), `baseArgs` (JSON string array), `envVars` (JSON object)
+- `isDefault`: boolean — only one default profile allowed
+- Controls which CLI binary and arguments are used for PTY spawning
 
 **TaskMessage**
 - `id` (cuid), `taskId`, `executionId?`
@@ -104,7 +112,7 @@ Replace `<project-root>` with the absolute path to this repository.
 
 ## Available MCP Tools
 
-18 tools across 5 categories.
+21 tools across 6 categories.
 
 ### Workspace Tools (`src/mcp/tools/workspace-tools.ts`)
 
@@ -149,6 +157,14 @@ Replace `<project-root>` with the absolute path to this repository.
 |------|-------------|------------|
 | `search` | Search tasks, projects, or repositories by query string | `query`, `category?` (`task`\|`project`\|`repository`) |
 
+### Terminal Tools (`src/mcp/tools/terminal-tools.ts`)
+
+| Tool | Description | Key Params |
+|------|-------------|------------|
+| `get_task_terminal_output` | Get recent terminal output lines from a running task's PTY session | `taskId`, `lines?` (default 50, max 500) |
+| `send_task_terminal_input` | Send text input to a running task's PTY terminal (include `\n` for Enter) | `taskId`, `text` |
+| `get_task_execution_status` | Get execution status (running/idle/exited) with output snippet | `taskId` |
+
 ---
 
 ## Server Actions
@@ -169,6 +185,8 @@ For AI working directly in the Next.js codebase, use these server actions (all i
 | `deleteProject` | `(id) → void` |
 | `getProjectByLocalPath` | `(localPath) → Project \| null` |
 | `getRecentLocalProjects` | `(limit?) → Project[]` |
+| `getWorkspacesWithProjects` | `() → { id, name, projects: { id, name, alias }[] }[]` |
+| `getWorkspacesWithRecentTasks` | `(limit?) → { id, name, projects: { id, name, alias, tasks: Task[], _count }[] }[]` — includes recent tasks per project with last sessionId for resume |
 
 ### `task-actions.ts`
 
@@ -204,7 +222,11 @@ For AI working directly in the Next.js codebase, use these server actions (all i
 | `getTaskMessages` | `(taskId) → TaskMessage[]` |
 | `startTaskExecution` | `(taskId, agent?) → TaskExecution` — also sets task status to IN_PROGRESS |
 | `stopTaskExecution` | `(executionId) → TaskExecution` — sets status to COMPLETED |
+| `stopPtyExecution` | `(taskId) → void` — stops the PTY session for a task |
 | `getTaskExecutions` | `(taskId) → TaskExecution[]` |
+| `startPtyExecution` | `(taskId, prompt) → { executionId, worktreePath }` — spawns Claude CLI in PTY with CliProfile settings |
+| `resumePtyExecution` | `(taskId, previousSessionId) → { executionId, worktreePath }` — resumes a previous Claude CLI session |
+| `getActiveExecutionsAcrossWorkspaces` | `() → ActiveExecutionInfo[]` — all RUNNING executions with workspace/project/task metadata |
 
 ---
 
@@ -215,3 +237,50 @@ For AI working directly in the Next.js codebase, use these server actions (all i
 - **Task order**: The `order` field controls Kanban card position within a status column. Lower values appear higher. Always preserve existing order values when creating tasks unless explicitly reordering.
 - **Project type**: `type` is derived from `gitUrl` — always `GIT` when `gitUrl` is set, `NORMAL` otherwise. Do not set type independently.
 - **Label replacement**: `set_task_labels` / `setTaskLabels` / `update_task` with `labelIds` all perform a full replace, not a merge. Pass the complete desired set.
+- **PTY sessions**: Keyed by `taskId` — one active session per task. Use `startPtyExecution` to create, `resumePtyExecution` to resume with a `sessionId`, `stopPtyExecution` to kill.
+- **CliProfile**: Only one default profile (`isDefault: true`). `baseArgs` and `envVars` are JSON strings — parse before use.
+- **Environment injection**: `AI_MANAGER_TASK_ID` and `CALLBACK_URL` are injected into every PTY session environment. Never mutate `process.env` — use `envOverrides`.
+- **Internal HTTP bridge**: `/api/internal/terminal/[taskId]/buffer` (GET) and `/api/internal/terminal/[taskId]/input` (POST) — localhost-only routes for cross-process PTY access. MCP tools use these since MCP stdio processes cannot share in-memory PTY sessions.
+
+---
+
+## Mission Control
+
+**Route:** `/missions` — multi-task monitoring dashboard across all workspaces.
+
+**Capabilities:**
+- View all RUNNING task executions with embedded xterm.js terminals
+- Grid layout presets (1×1, 2×1, 3×2, 2×2, 4×2, 3×3) persisted in localStorage
+- Workspace filter dropdown to narrow visible tasks
+- Launch new task execution or resume previous session from Task Picker
+- Stop execution (card removed) / auto-remove on natural completion
+- Drag-and-drop card reordering via dnd-kit
+- 4-second polling for live updates
+
+**For external orchestrators (OpenClaw/Paperclip):**
+
+To dispatch and monitor tasks programmatically, use MCP tools in this workflow:
+
+1. **Create task:** `create_task` → get `taskId`
+2. **Start execution:** Call `startPtyExecution(taskId, prompt)` via server action (or use the internal HTTP bridge)
+3. **Monitor:** `get_task_execution_status` for high-level status, `get_task_terminal_output` for live output
+4. **Send input:** `send_task_terminal_input` to interact with the running Claude CLI
+5. **Check completion:** Poll `get_task_execution_status` — `terminalStatus: "exited"` means done
+6. **Resume if needed:** `resumePtyExecution(taskId, sessionId)` to continue a previous session
+
+**ActiveExecutionInfo type** (returned by `getActiveExecutionsAcrossWorkspaces`):
+```typescript
+{
+  executionId: string;
+  taskId: string;
+  taskTitle: string;
+  projectId: string;
+  projectName: string;
+  projectAlias: string | null;
+  projectLocalPath: string | null;
+  workspaceId: string;
+  workspaceName: string;
+  worktreePath: string | null;
+  startedAt: string | null; // ISO string
+}
+```
