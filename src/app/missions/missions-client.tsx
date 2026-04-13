@@ -34,6 +34,7 @@ import {
 } from "@dnd-kit/sortable";
 import { MissionCard } from "@/components/missions/mission-card";
 import { TaskPickerDialog } from "@/components/missions/task-picker-dialog";
+import { mergeMissions } from "@/components/missions/merge-missions";
 import { toast } from "sonner";
 
 export function MissionsClient({
@@ -113,25 +114,16 @@ export function MissionsClient({
     const timer = setInterval(async () => {
       try {
         const fresh = await getActiveExecutionsAcrossWorkspaces();
-        const freshIds = new Set(fresh.map((e) => e.executionId));
 
         setCards((prev) => {
           const currentRemoving = removingIdsRef.current;
-
-          // Cards that disappeared (ended naturally = "completed")
-          const gone = prev.filter(
-            (c) => !freshIds.has(c.executionId) && !currentRemoving.has(c.executionId)
-          );
-          gone.forEach((c) => startFadeOut(c.executionId, "completed"));
-
-          // Keep existing ordered cards still running or fading
-          const retained = prev.filter(
-            (c) => freshIds.has(c.executionId) || currentRemoving.has(c.executionId)
-          );
-          // Append newly appeared executions
-          const prevIds = new Set(prev.map((c) => c.executionId));
-          const added = fresh.filter((e) => !prevIds.has(e.executionId));
-          return [...retained, ...added];
+          const { merged, goneIds } = mergeMissions({
+            prev,
+            fresh,
+            removingIds: new Set(currentRemoving.keys()),
+          });
+          goneIds.forEach((id) => startFadeOut(id, "completed"));
+          return merged;
         });
       } catch {
         // Silent on poll failure — retry next tick (per UI-SPEC error states)
@@ -148,16 +140,16 @@ export function MissionsClient({
     };
   }, []);
 
-  // handleStop — initiates optimistic fade with "stopped" reason (D-11), then calls stopPtyExecution
+  // handleStop — calls stopPtyExecution first, then fades out on success (avoids ghost removal on failure)
   const handleStop = useCallback(
     async (taskId: string) => {
-      setCards((prev) => {
-        const card = prev.find((c) => c.taskId === taskId);
-        if (card) startFadeOut(card.executionId, "stopped");
-        return prev;
-      });
       try {
         await stopPtyExecution(taskId);
+        setCards((prev) => {
+          const card = prev.find((c) => c.taskId === taskId);
+          if (card) startFadeOut(card.executionId, "stopped");
+          return prev;
+        });
       } catch {
         toast.error(t("missions.error.stopFailed"));
       }

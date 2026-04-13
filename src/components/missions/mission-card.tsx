@@ -81,6 +81,8 @@ export function MissionCard({
         {/* Drag handle */}
         <button
           {...listeners}
+          aria-label={t("missions.dragHandle")}
+          aria-roledescription="sortable"
           className="cursor-grab text-muted-foreground hover:text-foreground mr-1"
         >
           <GripVertical className="h-3.5 w-3.5" />
@@ -108,7 +110,7 @@ export function MissionCard({
             variant="outline"
             className="text-[11px] text-primary border-primary/30 bg-primary/10 ml-1 shrink-0"
           >
-            RUNNING
+            {t("missions.statusRunning")}
           </Badge>
         )}
 

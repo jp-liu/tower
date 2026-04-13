@@ -1,29 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-
-// Pure function: merge fresh poll results into existing ordered card list
-// This will be extracted to a util in Plan 02 Task 2
-interface MergeInput {
-  prev: { executionId: string }[];
-  fresh: { executionId: string }[];
-  removingIds: Set<string>;
-}
-
-function mergeMissions({ prev, fresh, removingIds }: MergeInput) {
-  const freshIds = new Set(fresh.map((e) => e.executionId));
-  const goneIds: string[] = [];
-  prev.forEach((c) => {
-    if (!freshIds.has(c.executionId) && !removingIds.has(c.executionId)) {
-      goneIds.push(c.executionId);
-    }
-  });
-  const retained = prev.filter(
-    (c) => freshIds.has(c.executionId) || removingIds.has(c.executionId)
-  );
-  const prevIds = new Set(prev.map((c) => c.executionId));
-  const added = fresh.filter((e) => !prevIds.has(e.executionId));
-  return { merged: [...retained, ...added], goneIds };
-}
+import { mergeMissions } from "@/components/missions/merge-missions";
 
 describe("mergeMissions", () => {
   it("retains existing order when no changes", () => {

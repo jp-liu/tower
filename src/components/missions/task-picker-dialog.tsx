@@ -60,7 +60,9 @@ export function TaskPickerDialog({
     setSelectedProjectId("");
     setSelectedTaskId("");
     setTasks([]);
-    getWorkspacesWithProjects().then(setWorkspaces).catch(() => {});
+    getWorkspacesWithProjects().then(setWorkspaces).catch(() => {
+      toast.error(t("missions.error.launchFailed"));
+    });
   }, [open]);
 
   // Load tasks when project changes
@@ -73,13 +75,15 @@ export function TaskPickerDialog({
     getProjectTasks(selectedProjectId)
       .then((all) => {
         const filtered = all.filter(
-          (tk) => tk.status === "TODO" || tk.status === "IN_PROGRESS"
+          (tk) => tk.status === "TODO" || tk.status === "IN_PROGRESS" || tk.status === "IN_REVIEW"
         );
         setTasks(filtered);
         setSelectedTaskId("");
       })
-      .catch(() => {});
-  }, [selectedProjectId]);
+      .catch(() => {
+        toast.error(t("missions.error.launchFailed"));
+      });
+  }, [selectedProjectId, t]);
 
   const selectedWs = workspaces.find((w) => w.id === selectedWsId);
   const projects = selectedWs?.projects ?? [];
@@ -108,11 +112,11 @@ export function TaskPickerDialog({
         <div className="flex flex-col gap-4 py-2">
           {/* Workspace select */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">
+            <label htmlFor="mission-ws-select" className="text-sm font-medium">
               {t("missions.launcher.workspace")}
             </label>
             <Select value={selectedWsId} onValueChange={(v) => { setSelectedWsId(v ?? ""); setSelectedProjectId(""); }}>
-              <SelectTrigger className="w-full h-8">
+              <SelectTrigger id="mission-ws-select" className="w-full h-8">
                 <span className="truncate">
                   {workspaces.find((w) => w.id === selectedWsId)?.name ??
                     t("missions.launcher.selectWorkspace")}
@@ -130,7 +134,7 @@ export function TaskPickerDialog({
 
           {/* Project select */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">
+            <label htmlFor="mission-project-select" className="text-sm font-medium">
               {t("missions.launcher.project")}
             </label>
             <Select
@@ -138,7 +142,7 @@ export function TaskPickerDialog({
               onValueChange={(v) => setSelectedProjectId(v ?? "")}
               disabled={!selectedWsId}
             >
-              <SelectTrigger className="w-full h-8">
+              <SelectTrigger id="mission-project-select" className="w-full h-8">
                 <span className="truncate">
                   {projects.find((p) => p.id === selectedProjectId)?.name ??
                     t("missions.launcher.selectProject")}
@@ -156,7 +160,7 @@ export function TaskPickerDialog({
 
           {/* Task select */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">
+            <label htmlFor="mission-task-select" className="text-sm font-medium">
               {t("missions.launcher.task")}
             </label>
             <Select
@@ -164,7 +168,7 @@ export function TaskPickerDialog({
               onValueChange={(v) => setSelectedTaskId(v ?? "")}
               disabled={!selectedProjectId}
             >
-              <SelectTrigger className="w-full h-8">
+              <SelectTrigger id="mission-task-select" className="w-full h-8">
                 <span className="truncate">
                   {tasks.find((tk) => tk.id === selectedTaskId)?.title ??
                     t("missions.launcher.selectTask")}

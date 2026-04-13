@@ -5,6 +5,6 @@ import { getActiveExecutionsAcrossWorkspaces } from "@/actions/agent-actions";
 import { MissionsClient } from "./missions-client";
 
 export default async function MissionsPage() {
-  const initialExecutions = await getActiveExecutionsAcrossWorkspaces();
+  const initialExecutions = await getActiveExecutionsAcrossWorkspaces().catch(() => []);
   return <MissionsClient initialExecutions={initialExecutions} />;
 }
