@@ -120,7 +120,7 @@ function TaskRow({
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 shrink-0">
           {lastSessionId && (
             <Button
-              variant="ghost"
+              variant="outline"
               className="h-6 px-2 text-xs"
               onClick={() => onResume(task.id, lastSessionId)}
               disabled={isLaunching}
@@ -131,6 +131,7 @@ function TaskRow({
             </Button>
           )}
           <Button
+            variant="outline"
             className="h-6 px-2 text-xs"
             onClick={() => onLaunchNew(task.id)}
             disabled={isLaunching}
