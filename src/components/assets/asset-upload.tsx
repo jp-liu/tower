@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Upload, X } from "lucide-react";
 import { uploadAsset } from "@/actions/asset-actions";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { useI18n } from "@/lib/i18n";
 
 interface SimpleProject {
@@ -120,11 +120,11 @@ export function AssetUpload({
                 <label className="text-xs text-muted-foreground w-16 shrink-0">{t("assets.workspace")}</label>
                 <Select value={uploadWsId} onValueChange={(v) => handleWsChange(v ?? "")}>
                   <SelectTrigger size="sm" className="flex-1 text-xs">
-                    <SelectValue />
+                    <span className="truncate">{uploadWs?.name ?? uploadWsId}</span>
                   </SelectTrigger>
                   <SelectContent>
                     {allWorkspaces.map((ws) => (
-                      <SelectItem key={ws.id} value={ws.id} label={ws.name}>{ws.name}</SelectItem>
+                      <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -136,13 +136,15 @@ export function AssetUpload({
                 {uploadProjects.length > 0 ? (
                   <Select value={uploadProjectId ?? ""} onValueChange={(v: string | null) => setUploadProjectId(v ?? "")}>
                     <SelectTrigger size="sm" className="flex-1 text-xs">
-                      <SelectValue />
+                      <span className="truncate">
+                        {(() => { const p = uploadProjects.find((x) => x.id === uploadProjectId); return p ? (p.alias ? `${p.name} (${p.alias})` : p.name) : uploadProjectId; })()}
+                      </span>
                     </SelectTrigger>
                     <SelectContent>
                       {uploadProjects.map((p) => {
                         const display = p.alias ? `${p.name} (${p.alias})` : p.name;
                         return (
-                          <SelectItem key={p.id} value={p.id} label={display}>
+                          <SelectItem key={p.id} value={p.id}>
                             {display}
                           </SelectItem>
                         );
