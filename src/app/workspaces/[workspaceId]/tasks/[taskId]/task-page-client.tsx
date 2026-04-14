@@ -13,7 +13,7 @@ import { PreviewPanel } from "@/components/task/preview-panel";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { startPtyExecution, stopPtyExecution, resumePtyExecution } from "@/actions/agent-actions";
-import { updateTaskStatus } from "@/actions/task-actions";
+import { updateTaskStatus, checkWorktreeClean } from "@/actions/task-actions";
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "@/components/task/execution-timeline";
 import { useI18n } from "@/lib/i18n";
@@ -114,11 +114,11 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
-      .then((data: DiffData) => {
+      .then((data: DiffData & { branchDeleted?: boolean }) => {
         if (cancelled) return;
-        // Ignore error responses that lack files array
-        if (!data.files) { setDiffData(null); return; }
-        setDiffData(data);
+        // Accept branchDeleted responses or valid diff responses
+        if (!data.files && !data.branchDeleted) { setDiffData(null); return; }
+        setDiffData(data as DiffData);
       })
       .catch(() => {
         if (cancelled) return;
@@ -181,6 +181,11 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
 
   const handleComplete = useCallback(async () => {
     try {
+      const { clean, files } = await checkWorktreeClean(task.id);
+      if (!clean) {
+        toast.error(t("taskPage.uncommittedChanges", { count: String(files.length) }));
+        return;
+      }
       await updateTaskStatus(task.id, "DONE");
       setTaskStatus("DONE");
       router.refresh();
@@ -386,6 +391,10 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
             {isLoadingDiff ? (
               <div className="flex h-full items-center justify-center">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (diffData as any)?.branchDeleted ? (
+              <div className="flex h-full items-center justify-center">
+                <p className="text-sm text-muted-foreground">{t("taskPage.branchDeleted")}</p>
               </div>
             ) : diffData ? (
               <TaskDiffView

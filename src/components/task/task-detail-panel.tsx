@@ -8,7 +8,7 @@ import { TaskMetadata } from "./task-metadata";
 import { TaskDiffView } from "./task-diff-view";
 import { TerminalOutlet, useTerminalPortal } from "./terminal-portal";
 import { getTaskExecutions, startPtyExecution, stopPtyExecution, resumePtyExecution } from "@/actions/agent-actions";
-import { updateTaskStatus } from "@/actions/task-actions";
+import { updateTaskStatus, checkWorktreeClean } from "@/actions/task-actions";
 import { toast } from "sonner";
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "./execution-timeline";
@@ -152,6 +152,11 @@ export function TaskDetailPanel({
 
   const handleComplete = useCallback(async () => {
     try {
+      const { clean, files } = await checkWorktreeClean(task.id);
+      if (!clean) {
+        toast.error(t("taskPage.uncommittedChanges", { count: String(files.length) }));
+        return;
+      }
       await updateTaskStatus(task.id, "DONE");
       setTaskStatus("DONE");
       toast.success(t("taskPage.taskCompleted"));

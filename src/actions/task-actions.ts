@@ -155,6 +155,38 @@ export async function getArchivedTasks(projectId: string) {
   });
 }
 
+/**
+ * Check if a task's worktree has uncommitted changes.
+ * Returns { clean: true } or { clean: false, files: string[] }
+ */
+export async function checkWorktreeClean(taskId: string): Promise<{ clean: boolean; files: string[] }> {
+  const { execFileSync } = await import("child_process");
+  const { existsSync } = await import("fs");
+
+  const execution = await db.taskExecution.findFirst({
+    where: { taskId },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!execution?.worktreePath || !existsSync(execution.worktreePath)) {
+    return { clean: true, files: [] };
+  }
+
+  try {
+    const status = execFileSync(
+      "git", ["status", "--porcelain"],
+      { cwd: execution.worktreePath, encoding: "utf-8", timeout: 5000 }
+    ).trim();
+
+    if (!status) return { clean: true, files: [] };
+
+    const files = status.split("\n").map((l) => l.trim()).filter(Boolean);
+    return { clean: false, files };
+  } catch {
+    return { clean: true, files: [] };
+  }
+}
+
 export async function getArchivedTaskCount(projectId: string) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
