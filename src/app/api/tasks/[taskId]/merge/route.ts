@@ -7,11 +7,10 @@ import { checkConflicts } from "@/lib/diff-parser";
 import { removeWorktree } from "@/lib/worktree";
 
 export async function POST(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ taskId: string }> }
 ) {
   const { taskId } = await params;
-  const body = await request.json().catch(() => ({})) as { commitMessage?: string };
 
   const parsed = z.string().cuid().safeParse(taskId);
   if (!parsed.success) {
@@ -70,11 +69,9 @@ export async function POST(
     }
 
     const gitOpts = { encoding: "utf-8" as const, timeout: 30000 };
-    const commitMessage = body.commitMessage || `feat: ${task.title}`;
 
-    // Proper squash merge: checkout baseBranch, merge --squash, commit
-    // This does a three-way merge preserving baseBranch's new commits
-    // We operate in the main repo (not worktree) to avoid corrupting worktree state
+    // Normal merge: checkout baseBranch, merge task branch
+    // Preserves full commit history from the task branch
 
     // 1. Stash any uncommitted changes in main repo (safety)
     const mainStatus = execFileSync(
@@ -91,13 +88,10 @@ export async function POST(
       // 2. Checkout baseBranch in main repo
       execFileSync("git", ["checkout", task.baseBranch], { ...gitOpts, cwd: localPath });
 
-      // 3. Squash merge the task branch (three-way merge, keeps baseBranch changes)
-      execFileSync("git", ["merge", "--squash", worktreeBranch], { ...gitOpts, cwd: localPath });
+      // 3. Merge the task branch (normal merge, preserves commit history)
+      execFileSync("git", ["merge", worktreeBranch, "--no-edit"], { ...gitOpts, cwd: localPath });
 
-      // 4. Commit the squash result
-      execFileSync("git", ["commit", "-m", commitMessage], { ...gitOpts, cwd: localPath });
-
-      // 5. Get the commit hash
+      // 4. Get the merge commit hash
       commitHash = execFileSync(
         "git", ["rev-parse", "--short", "HEAD"],
         { ...gitOpts, cwd: localPath }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -46,7 +46,7 @@ export function TaskMergeConfirmDialog({
       const res = await fetch(`/api/tasks/${taskId}/merge`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ commitMessage: commitMessage.trim() }),
+        body: JSON.stringify({}),
       });
 
       if (res.ok) {
@@ -72,20 +72,13 @@ export function TaskMergeConfirmDialog({
     }
   };
 
-  const [commitMessage, setCommitMessage] = useState("");
-
-  // Reset message when dialog opens — use initialMessage if provided
-  useEffect(() => {
-    if (open) setCommitMessage(initialMessage ?? `feat: ${taskTitle}`);
-  }, [open, initialMessage, taskTitle]);
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent showCloseButton className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <GitMerge className="h-4 w-4 text-emerald-400" />
-            Confirm Squash Merge
+            Confirm Merge
           </DialogTitle>
         </DialogHeader>
 
@@ -102,15 +95,9 @@ export function TaskMergeConfirmDialog({
               <span className="text-xs font-medium text-foreground">{fileCount}</span>
             </div>
             <div className="flex items-start justify-between gap-4">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">Commits to squash</span>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Commits</span>
               <span className="text-xs font-medium text-foreground">{commitCount}</span>
             </div>
-          </div>
-
-          {/* Commit message (read-only) */}
-          <div>
-            <span className="text-xs text-muted-foreground mb-1 block">Commit message</span>
-            <pre className="w-full rounded-md border border-border bg-muted/30 px-3 py-2 text-sm font-mono text-foreground whitespace-pre-wrap">{commitMessage}</pre>
           </div>
 
           {errorMessage && (
