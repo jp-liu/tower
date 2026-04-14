@@ -72,15 +72,20 @@ export function TaskDetailPanel({
     return () => { cancelled = true; };
   }, [task.id]);
 
-  // Fetch diff when Changes tab is active and task is IN_REVIEW
+  // Fetch diff when Changes tab is active and task has been executed
   useEffect(() => {
-    if (activeTab !== "changes" || taskStatus !== "IN_REVIEW") return;
+    if (activeTab !== "changes" || taskStatus === "TODO" || taskStatus === "CANCELLED") return;
     let cancelled = false;
     setIsLoadingDiff(true);
     fetch(`/api/tasks/${task.id}/diff`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (!cancelled) setDiffData(data); })
-      .catch(() => {})
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (!cancelled) setDiffData(data?.files ? data : null);
+      })
+      .catch(() => { if (!cancelled) setDiffData(null); })
       .finally(() => { if (!cancelled) setIsLoadingDiff(false); });
     return () => { cancelled = true; };
   }, [activeTab, taskStatus, task.id]);
