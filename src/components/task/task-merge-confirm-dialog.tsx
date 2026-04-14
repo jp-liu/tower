@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -44,6 +44,7 @@ export function TaskMergeConfirmDialog({
       const res = await fetch(`/api/tasks/${taskId}/merge`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commitMessage: commitMessage.trim() }),
       });
 
       if (res.ok) {
@@ -69,7 +70,12 @@ export function TaskMergeConfirmDialog({
     }
   };
 
-  const commitMessage = `feat: ${taskTitle}`;
+  const [commitMessage, setCommitMessage] = useState(`feat: ${taskTitle}`);
+
+  // Reset message when dialog opens
+  useEffect(() => {
+    if (open) setCommitMessage(`feat: ${taskTitle}`);
+  }, [open, taskTitle]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -97,12 +103,17 @@ export function TaskMergeConfirmDialog({
               <span className="text-xs text-muted-foreground whitespace-nowrap">Commits to squash</span>
               <span className="text-xs font-medium text-foreground">{commitCount}</span>
             </div>
-            <div className="flex items-start justify-between gap-4">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">Commit message</span>
-              <code className="text-xs font-mono bg-muted px-2 py-0.5 rounded text-foreground break-all text-right">
-                {commitMessage}
-              </code>
-            </div>
+          </div>
+
+          {/* Editable commit message */}
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Commit message</label>
+            <textarea
+              value={commitMessage}
+              onChange={(e) => setCommitMessage(e.target.value)}
+              rows={3}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono text-foreground placeholder-muted-foreground outline-none resize-y min-h-[60px]"
+            />
           </div>
 
           {errorMessage && (

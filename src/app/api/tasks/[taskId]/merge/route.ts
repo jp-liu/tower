@@ -7,10 +7,11 @@ import { checkConflicts } from "@/lib/diff-parser";
 import { removeWorktree } from "@/lib/worktree";
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ taskId: string }> }
 ) {
   const { taskId } = await params;
+  const body = await request.json().catch(() => ({})) as { commitMessage?: string };
 
   const parsed = z.string().cuid().safeParse(taskId);
   if (!parsed.success) {
@@ -88,7 +89,7 @@ export async function POST(
 
     // 3. Create a new squash commit on baseBranch with the task's tree
     const commitHash = execFileSync(
-      "git", ["commit-tree", taskTree, "-p", baseHead, "-m", `feat: ${task.title}`],
+      "git", ["commit-tree", taskTree, "-p", baseHead, "-m", body.commitMessage || `feat: ${task.title}`],
       { ...gitOpts, cwd }
     ).trim();
 
@@ -97,6 +98,18 @@ export async function POST(
       "git", ["update-ref", `refs/heads/${task.baseBranch}`, commitHash],
       { ...gitOpts, cwd }
     );
+
+    // Record mergeCommit on the execution (commitHash is the squash commit just created)
+    if (latestExecution && commitHash) {
+      try {
+        await db.taskExecution.update({
+          where: { id: latestExecution.id },
+          data: { mergeCommit: commitHash },
+        });
+      } catch {
+        // Best effort — diff will fallback gracefully
+      }
+    }
 
     // Update status to DONE
     await db.task.update({
