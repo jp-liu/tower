@@ -109,6 +109,8 @@ model TaskExecution {
   exitCode       Int?
   callbackUrl    String?
   terminalLog    String?
+  forkCommit     String?
+  mergeCommit    String?
   createdAt      DateTime        @default(now())
 
   task     Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
