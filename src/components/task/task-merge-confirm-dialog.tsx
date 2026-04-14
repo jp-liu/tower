@@ -107,15 +107,10 @@ export function TaskMergeConfirmDialog({
             </div>
           </div>
 
-          {/* Editable commit message */}
+          {/* Commit message (read-only) */}
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Commit message</label>
-            <textarea
-              value={commitMessage}
-              onChange={(e) => setCommitMessage(e.target.value)}
-              rows={3}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono text-foreground placeholder-muted-foreground outline-none resize-y min-h-[60px]"
-            />
+            <span className="text-xs text-muted-foreground mb-1 block">Commit message</span>
+            <pre className="w-full rounded-md border border-border bg-muted/30 px-3 py-2 text-sm font-mono text-foreground whitespace-pre-wrap">{commitMessage}</pre>
           </div>
 
           {errorMessage && (
