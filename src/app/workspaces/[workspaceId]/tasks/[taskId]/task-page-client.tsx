@@ -103,9 +103,9 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     return () => { cancelled = true; };
   }, []);
 
-  // Auto-fetch diff when task is IN_REVIEW
+  // Auto-fetch diff when task has an execution (IN_PROGRESS, IN_REVIEW, DONE)
   useEffect(() => {
-    if (taskStatus !== "IN_REVIEW") return;
+    if (taskStatus === "TODO" || taskStatus === "CANCELLED") return;
     let cancelled = false;
     setIsLoadingDiff(true);
     fetch(`/api/tasks/${task.id}/diff`)

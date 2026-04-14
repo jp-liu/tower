@@ -207,6 +207,7 @@ export async function resumePtyExecution(
     where: { id: taskId },
     data: { status: "IN_PROGRESS" },
   });
+  revalidatePath("/workspaces");
 
   const claudeArgs: string[] = [
     "--resume", previousSessionId,
@@ -264,7 +265,7 @@ export async function resumePtyExecution(
  * Differences from stream route:
  * - No --output-format stream-json or --print - flags (INT-02: raw TTY mode)
  * - Status update happens in the PTY onExit callback (INT-03)
- * - No revalidatePath — client calls router.refresh() after onSessionEnd (D-08)
+ * - revalidatePath called after status transition to IN_PROGRESS
  */
 export async function startPtyExecution(
   taskId: string,
@@ -315,6 +316,7 @@ export async function startPtyExecution(
       where: { id: taskId },
       data: { status: "IN_PROGRESS" },
     });
+    revalidatePath("/workspaces");
   }
 
   // 4. Build full prompt string (mirrors stream/route.ts buildExecutionPrompt)

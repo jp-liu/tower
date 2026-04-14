@@ -26,12 +26,6 @@ export async function GET(
     if (!task) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
-    if (!task.baseBranch) {
-      return NextResponse.json(
-        { error: "Task has no base branch configured" },
-        { status: 400 }
-      );
-    }
     if (!task.project?.localPath) {
       return NextResponse.json(
         { error: "Project has no local path" },
@@ -39,24 +33,34 @@ export async function GET(
       );
     }
 
-    // Get latest COMPLETED execution for worktreeBranch
+    // Use baseBranch if set, otherwise default to "main"
+    const baseBranch = task.baseBranch || "main";
+
+    // Get latest execution (any terminal status) for worktreeBranch
     const latestExecution = await db.taskExecution.findFirst({
-      where: { taskId: parsed.data, status: "COMPLETED" },
+      where: { taskId: parsed.data },
       orderBy: { createdAt: "desc" },
     });
 
-    const worktreeBranch = latestExecution?.worktreeBranch ?? `task/${taskId}`;
+    if (!latestExecution?.worktreeBranch) {
+      return NextResponse.json({
+        files: [], totalAdded: 0, totalRemoved: 0,
+        hasConflicts: false, conflictFiles: [], commitCount: 0,
+      });
+    }
+
+    const worktreeBranch = latestExecution.worktreeBranch;
     const localPath = task.project.localPath;
 
     // Run numstat diff
     const numstat = execFileSync(
-      "git", ["diff", "--numstat", `${task.baseBranch}...${worktreeBranch}`],
+      "git", ["diff", "--numstat", `${baseBranch}...${worktreeBranch}`],
       { cwd: localPath, encoding: "utf-8", timeout: 30000 }
     );
 
     // Run unified diff
     const unified = execFileSync(
-      "git", ["diff", "--unified=3", `${task.baseBranch}...${worktreeBranch}`],
+      "git", ["diff", "--unified=3", `${baseBranch}...${worktreeBranch}`],
       { cwd: localPath, encoding: "utf-8", timeout: 30000 }
     );
 
@@ -66,13 +70,13 @@ export async function GET(
     // Check for merge conflicts
     const { hasConflicts, conflictFiles } = checkConflicts(
       localPath,
-      task.baseBranch,
+      baseBranch,
       worktreeBranch
     );
 
     // Get commit count
     const commitCountStr = execFileSync(
-      "git", ["rev-list", "--count", `${task.baseBranch}...${worktreeBranch}`],
+      "git", ["rev-list", "--count", `${baseBranch}...${worktreeBranch}`],
       { cwd: localPath, encoding: "utf-8", timeout: 5000 }
     ).trim();
     const commitCount = parseInt(commitCountStr, 10) || 0;
