@@ -3,25 +3,55 @@ import { join } from "path";
 import { execFile } from "child_process";
 import { homedir } from "os";
 
+const PROJECTS_DIR = join(homedir(), ".claude", "projects");
+
 /**
- * Claude CLI encodes project paths by replacing / and . with -
+ * Find Claude session directory by scanning ~/.claude/projects/ for directories
+ * that match the given cwd path. Claude CLI encodes paths by replacing various
+ * characters (including non-ASCII) with dashes, so exact key computation is unreliable.
+ * Instead, we look for directories whose name contains recognizable path segments.
  */
-function getProjectKey(cwd: string): string {
-  return cwd.replace(/[/.]/g, "-");
+function findSessionDir(cwd: string): string | null {
+  try {
+    const dirs = readdirSync(PROJECTS_DIR);
+
+    // Extract key path segments from cwd (last 2-3 meaningful directory names)
+    const segments = cwd.split("/").filter(Boolean);
+    // Use the last few unique segments for matching
+    const matchSegments = segments.slice(-3).map((s) => s.replace(/[/.]/g, "-"));
+
+    // Find directories that match all segments
+    const matches = dirs.filter((dir) => {
+      return matchSegments.every((seg) => dir.includes(seg));
+    });
+
+    if (matches.length === 0) return null;
+
+    // If multiple matches, prefer exact cwd match, then most recently modified
+    const withStats = matches.map((dir) => {
+      const fullPath = join(PROJECTS_DIR, dir);
+      try {
+        return { dir, path: fullPath, mtime: statSync(fullPath).mtimeMs };
+      } catch {
+        return null;
+      }
+    }).filter(Boolean) as { dir: string; path: string; mtime: number }[];
+
+    withStats.sort((a, b) => b.mtime - a.mtime);
+    return withStats[0]?.path ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Find the latest Claude CLI session ID in the sessions directory for a given cwd.
+ * Find the latest .jsonl session file in a Claude projects directory.
  */
-function findSessionInDir(cwd: string): string | null {
+function findLatestSessionInDir(sessionsDir: string): string | null {
   try {
-    const projectKey = getProjectKey(cwd);
-    const sessionsDir = join(homedir(), ".claude", "projects", projectKey);
-
     const files = readdirSync(sessionsDir)
       .filter((f) => f.endsWith(".jsonl"))
       .map((f) => ({
-        name: f,
         id: f.replace(".jsonl", ""),
         mtime: statSync(join(sessionsDir, f)).mtimeMs,
       }))
@@ -35,18 +65,25 @@ function findSessionInDir(cwd: string): string | null {
 
 /**
  * Find the latest Claude CLI session ID for a given working directory.
- * Falls back to the parent project root when cwd is a worktree path.
+ * Scans ~/.claude/projects/ to find matching session directories.
  */
 export function findLatestSessionId(cwd: string): string | null {
-  // Try the given cwd first
-  const result = findSessionInDir(cwd);
-  if (result) return result;
+  // Try the cwd directly
+  const dir = findSessionDir(cwd);
+  if (dir) {
+    const id = findLatestSessionInDir(dir);
+    if (id) return id;
+  }
 
   // Fallback: if cwd is a worktree, try the parent project root
   const worktreeMatch = cwd.match(/(.+)\/.worktrees\/task-/);
   if (worktreeMatch) {
-    return findSessionInDir(worktreeMatch[1]);
+    const parentDir = findSessionDir(worktreeMatch[1]);
+    if (parentDir) {
+      return findLatestSessionInDir(parentDir);
+    }
   }
+
   return null;
 }
 
