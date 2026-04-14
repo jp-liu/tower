@@ -11,9 +11,9 @@ function getProjectKey(cwd: string): string {
 }
 
 /**
- * Find the latest Claude CLI session ID for a given working directory.
+ * Find the latest Claude CLI session ID in the sessions directory for a given cwd.
  */
-export function findLatestSessionId(cwd: string): string | null {
+function findSessionInDir(cwd: string): string | null {
   try {
     const projectKey = getProjectKey(cwd);
     const sessionsDir = join(homedir(), ".claude", "projects", projectKey);
@@ -31,6 +31,23 @@ export function findLatestSessionId(cwd: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Find the latest Claude CLI session ID for a given working directory.
+ * Falls back to the parent project root when cwd is a worktree path.
+ */
+export function findLatestSessionId(cwd: string): string | null {
+  // Try the given cwd first
+  const result = findSessionInDir(cwd);
+  if (result) return result;
+
+  // Fallback: if cwd is a worktree, try the parent project root
+  const worktreeMatch = cwd.match(/(.+)\/.worktrees\/task-/);
+  if (worktreeMatch) {
+    return findSessionInDir(worktreeMatch[1]);
+  }
+  return null;
 }
 
 /**

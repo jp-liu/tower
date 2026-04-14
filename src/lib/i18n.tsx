@@ -361,6 +361,8 @@ const translations = {
     "taskPage.noDiff": "暂无变更（需要项目配置本地路径和基础分支）",
     "taskPage.tabFiles": "文件",
     "taskPage.tabPreview": "预览",
+    "taskPage.completeTask": "完成任务",
+    "taskPage.taskCompleted": "任务已完成",
     // File tree (Phase 20)
     "taskPage.fileTree.newFile": "新建文件",
     "taskPage.fileTree.newFolder": "新建文件夹",
@@ -853,6 +855,8 @@ const translations = {
     "taskPage.noDiff": "No changes (project needs local path and base branch configured)",
     "taskPage.tabFiles": "Files",
     "taskPage.tabPreview": "Preview",
+    "taskPage.completeTask": "Complete Task",
+    "taskPage.taskCompleted": "Task completed",
     // File tree (Phase 20)
     "taskPage.fileTree.newFile": "New File",
     "taskPage.fileTree.newFolder": "New Folder",

@@ -191,7 +191,7 @@ export function ExecutionTimeline({ executions, onResume }: ExecutionTimelinePro
                       {t("execution.gitLog")}
                     </p>
                     <pre className="rounded-md bg-muted/50 p-2.5 text-xs font-mono text-foreground/70 overflow-x-auto whitespace-pre-wrap">
-                      {exec.gitLog}
+                      {exec.gitLog.split("\n").slice(0, 3).join("\n")}
                     </pre>
                   </div>
                 )}

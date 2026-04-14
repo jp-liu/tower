@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal, Square } from "lucide-react";
+import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal, Square, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -13,6 +13,7 @@ import { PreviewPanel } from "@/components/task/preview-panel";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { startPtyExecution, stopPtyExecution, resumePtyExecution } from "@/actions/agent-actions";
+import { updateTaskStatus } from "@/actions/task-actions";
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "@/components/task/execution-timeline";
 import { useI18n } from "@/lib/i18n";
@@ -178,6 +179,17 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     router.refresh();
   }, [router]);
 
+  const handleComplete = useCallback(async () => {
+    try {
+      await updateTaskStatus(task.id, "DONE");
+      setTaskStatus("DONE");
+      router.refresh();
+      toast.success(t("taskPage.taskCompleted"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
+  }, [task.id, router, t]);
+
   return (
     <PanelGroup direction="horizontal" className="h-screen bg-background">
       {/* Left panel: Terminal — 35% default, 20% minimum */}
@@ -217,6 +229,18 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
               </Badge>
             )}
           </div>
+          {/* Complete button — only for IN_REVIEW tasks */}
+          {taskStatus === "IN_REVIEW" && (
+            <div className="mt-2">
+              <button
+                onClick={handleComplete}
+                className="flex items-center gap-1.5 rounded-md bg-emerald-500/15 px-3 py-1.5 text-xs font-medium text-emerald-400 ring-1 ring-emerald-500/20 hover:bg-emerald-500/25 transition-colors"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {t("taskPage.completeTask")}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Terminal fills all remaining space */}
@@ -243,6 +267,13 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                   worktreePath={activeWorktreePath}
                   onSessionEnd={handleSessionEnd}
                 />
+              </div>
+            </div>
+          ) : taskStatus === "DONE" || taskStatus === "CANCELLED" ? (
+            <div className="flex h-full flex-col overflow-hidden bg-[#0a0a0a]">
+              {/* Execution history only — no launch button for completed/cancelled tasks */}
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <ExecutionTimeline executions={executions} onResume={handleResume} />
               </div>
             </div>
           ) : (
