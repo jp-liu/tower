@@ -22,7 +22,7 @@ interface TaskDiffViewProps {
   hasConflicts: boolean;
   conflictFiles: string[];
   onCommit?: (message: string) => Promise<void>;
-  canCommit?: boolean;
+  hasUncommitted?: boolean;
 }
 
 export function TaskDiffView({
@@ -32,7 +32,7 @@ export function TaskDiffView({
   hasConflicts,
   conflictFiles,
   onCommit,
-  canCommit,
+  hasUncommitted,
 }: TaskDiffViewProps) {
   const { t } = useI18n();
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
@@ -62,7 +62,7 @@ export function TaskDiffView({
           <span className="text-red-400 font-mono text-xs">-{totalRemoved}</span>
         </div>
         <div className="flex items-center gap-2">
-          {canCommit && onCommit && (
+          {hasUncommitted && onCommit && (
             <button
               onClick={() => setShowCommitDialog(true)}
               className="h-8 gap-2 px-3 text-sm flex items-center rounded-md border border-border hover:bg-accent transition-colors"

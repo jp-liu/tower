@@ -33,68 +33,125 @@ export async function GET(
     }
 
     const baseBranch = task.baseBranch || "main";
+    const localPath = task.project.localPath;
 
     const latestExecution = await db.taskExecution.findFirst({
       where: { taskId: parsed.data },
       orderBy: { createdAt: "desc" },
     });
 
-    if (!latestExecution?.worktreeBranch) {
+    if (!latestExecution) {
       return NextResponse.json({
         files: [], totalAdded: 0, totalRemoved: 0,
         hasConflicts: false, conflictFiles: [], commitCount: 0,
       });
     }
 
+    const forkCommit = latestExecution.forkCommit;
+    const mergeCommit = latestExecution.mergeCommit;
     const worktreeBranch = latestExecution.worktreeBranch;
     const worktreePath = latestExecution.worktreePath;
-    const localPath = task.project.localPath;
 
-    // Determine the fork point: the commit where task branch diverged from base
-    let forkPoint: string;
-    try {
-      forkPoint = execFileSync(
-        "git", ["merge-base", baseBranch, worktreeBranch],
-        { cwd: localPath, encoding: "utf-8", timeout: 5000 }
-      ).trim();
-    } catch {
-      forkPoint = baseBranch;
+    let diffCwd: string;
+    let diffTarget: string;
+
+    if (mergeCommit && forkCommit) {
+      // DONE state — task branch may be deleted, use saved commits on main repo
+      diffCwd = localPath;
+      diffTarget = `${forkCommit}..${mergeCommit}`;
+    } else if (forkCommit && worktreePath && existsSync(worktreePath)) {
+      // IN_PROGRESS/IN_REVIEW — diff from fork point in worktree (includes uncommitted)
+      diffCwd = worktreePath;
+      diffTarget = forkCommit;
+    } else if (worktreeBranch) {
+      // Fallback — use branch names to compute merge-base
+      try {
+        const mb = execFileSync(
+          "git", ["merge-base", baseBranch, worktreeBranch],
+          { cwd: localPath, encoding: "utf-8", timeout: 5000 }
+        ).trim();
+        const wtp = worktreePath && existsSync(worktreePath) ? worktreePath : localPath;
+        diffCwd = wtp;
+        diffTarget = mb;
+      } catch {
+        return NextResponse.json({
+          error: "Branch deleted", branchDeleted: true,
+          files: [], totalAdded: 0, totalRemoved: 0,
+          hasConflicts: false, conflictFiles: [], commitCount: 0,
+        });
+      }
+    } else {
+      return NextResponse.json({
+        files: [], totalAdded: 0, totalRemoved: 0,
+        hasConflicts: false, conflictFiles: [], commitCount: 0,
+      });
     }
 
-    // Strategy: diff from fork point, run inside worktree if it exists
-    // This captures both committed AND uncommitted changes
-    const diffCwd = (worktreePath && existsSync(worktreePath)) ? worktreePath : localPath;
-
-    // numstat: committed changes (fork-point to branch HEAD) + uncommitted working dir changes
+    // Run numstat + unified diff
     const numstat = execFileSync(
-      "git", ["diff", "--numstat", forkPoint],
+      "git", ["diff", "--numstat", diffTarget],
       { cwd: diffCwd, encoding: "utf-8", timeout: 30000 }
     );
-
-    // unified diff
     const unified = execFileSync(
-      "git", ["diff", "--unified=3", forkPoint],
+      "git", ["diff", "--unified=3", diffTarget],
       { cwd: diffCwd, encoding: "utf-8", timeout: 30000 }
     );
 
     const parsedDiff = parseDiffOutput(numstat, unified);
 
-    const { hasConflicts, conflictFiles } = checkConflicts(
-      localPath,
-      baseBranch,
-      worktreeBranch
-    );
+    // Conflict check only relevant before merge
+    let hasConflicts = false;
+    let conflictFiles: string[] = [];
+    if (!mergeCommit && worktreeBranch) {
+      ({ hasConflicts, conflictFiles } = checkConflicts(localPath, baseBranch, worktreeBranch));
+    }
 
-    // Commit count on task branch since fork point
+    // Commit count
     let commitCount = 0;
-    try {
-      const commitCountStr = execFileSync(
-        "git", ["rev-list", "--count", `${forkPoint}..${worktreeBranch}`],
-        { cwd: localPath, encoding: "utf-8", timeout: 5000 }
-      ).trim();
-      commitCount = parseInt(commitCountStr, 10) || 0;
-    } catch {
-      // ignore
+    if (mergeCommit && forkCommit) {
+      try {
+        const str = execFileSync(
+          "git", ["rev-list", "--count", `${forkCommit}..${mergeCommit}`],
+          { cwd: diffCwd, encoding: "utf-8", timeout: 5000 }
+        ).trim();
+        commitCount = parseInt(str, 10) || 0;
+      } catch {
+        // ignore
+      }
+    } else if (forkCommit) {
+      try {
+        const str = execFileSync(
+          "git", ["rev-list", "--count", `${forkCommit}..HEAD`],
+          { cwd: diffCwd, encoding: "utf-8", timeout: 5000 }
+        ).trim();
+        commitCount = parseInt(str, 10) || 0;
+      } catch {
+        // ignore
+      }
+    } else if (worktreeBranch) {
+      try {
+        const commitCountStr = execFileSync(
+          "git", ["rev-list", "--count", `${diffTarget}..${worktreeBranch}`],
+          { cwd: localPath, encoding: "utf-8", timeout: 5000 }
+        ).trim();
+        commitCount = parseInt(commitCountStr, 10) || 0;
+      } catch {
+        // ignore
+      }
+    }
+
+    // Check for uncommitted changes in worktree
+    let hasUncommitted = false;
+    if (worktreePath && existsSync(worktreePath) && !mergeCommit) {
+      try {
+        const status = execFileSync(
+          "git", ["status", "--porcelain"],
+          { cwd: worktreePath, encoding: "utf-8", timeout: 5000 }
+        ).trim();
+        hasUncommitted = status.length > 0;
+      } catch {
+        // ignore
+      }
     }
 
     return NextResponse.json({
@@ -102,6 +159,7 @@ export async function GET(
       hasConflicts,
       conflictFiles,
       commitCount,
+      hasUncommitted,
     });
   } catch (error) {
     console.error("[diff] Failed to generate diff:", error);

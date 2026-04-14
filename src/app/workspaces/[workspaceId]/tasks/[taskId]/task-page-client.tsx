@@ -58,7 +58,7 @@ interface TaskPageClientProps {
   }>;
 }
 
-type DiffData = DiffResponse & { commitCount: number };
+type DiffData = DiffResponse & { commitCount: number; hasUncommitted?: boolean; branchDeleted?: boolean };
 
 const STATUS_LABELS: Record<string, string> = {
   TODO: "待处理",
@@ -445,7 +445,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                 hasConflicts={diffData.hasConflicts}
                 conflictFiles={diffData.conflictFiles}
                 onCommit={handleCommit}
-                canCommit={taskStatus !== "DONE" && taskStatus !== "CANCELLED"}
+                hasUncommitted={diffData.hasUncommitted}
               />
             ) : (
               <div className="flex h-full items-center justify-center">

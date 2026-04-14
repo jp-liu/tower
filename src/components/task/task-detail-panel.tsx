@@ -384,7 +384,7 @@ export function TaskDetailPanel({
               hasConflicts={diffData.hasConflicts}
               conflictFiles={diffData.conflictFiles}
               onCommit={handleCommit}
-              canCommit={taskStatus !== "DONE" && taskStatus !== "CANCELLED"}
+              hasUncommitted={diffData.hasUncommitted}
             />
           ) : (
             <div className="flex h-full items-center justify-center">
