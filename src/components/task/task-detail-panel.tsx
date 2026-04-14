@@ -4,11 +4,13 @@ import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ExternalLink, Terminal, Loader2, Square, FileText, CheckCircle2 } from "lucide-react";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { TaskMetadata } from "./task-metadata";
 import { TaskDiffView } from "./task-diff-view";
+import { TaskMergeConfirmDialog } from "./task-merge-confirm-dialog";
 import { TerminalOutlet, useTerminalPortal } from "./terminal-portal";
 import { getTaskExecutions, startPtyExecution, stopPtyExecution, resumePtyExecution } from "@/actions/agent-actions";
-import { updateTaskStatus, checkWorktreeClean } from "@/actions/task-actions";
+import { updateTaskStatus, checkWorktreeClean, commitWorktreeChanges } from "@/actions/task-actions";
 import { toast } from "sonner";
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "./execution-timeline";
@@ -150,6 +152,8 @@ export function TaskDetailPanel({
     }
   }, [task.id]);
 
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
+
   const handleComplete = useCallback(async () => {
     try {
       const { clean, files } = await checkWorktreeClean(task.id);
@@ -157,12 +161,41 @@ export function TaskDetailPanel({
         toast.error(t("taskPage.uncommittedChanges", { count: String(files.length) }));
         return;
       }
+      // If task has a worktree branch, show merge confirmation dialog
+      const latestExec = pastExecutions[0];
+      if (latestExec?.worktreeBranch) {
+        setShowMergeDialog(true);
+        return;
+      }
+      // No worktree — just mark DONE
       await updateTaskStatus(task.id, "DONE");
       setTaskStatus("DONE");
       toast.success(t("taskPage.taskCompleted"));
       router.refresh();
     } catch {
       toast.error("Failed to complete task");
+    }
+  }, [task.id, router, t, pastExecutions]);
+
+  const handleMergeComplete = useCallback(() => {
+    setTaskStatus("DONE");
+    setShowMergeDialog(false);
+    toast.success(t("taskPage.taskCompleted"));
+    router.refresh();
+  }, [router, t]);
+
+  const handleCommit = useCallback(async (message: string) => {
+    try {
+      const { hash } = await commitWorktreeChanges(task.id, message);
+      toast.success(t("diff.commitSuccess", { hash }));
+      router.refresh();
+      const res = await fetch(`/api/tasks/${task.id}/diff`);
+      if (res.ok) {
+        const data = await res.json();
+        setDiffData(data?.files ? data : null);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Commit failed");
     }
   }, [task.id, router, t]);
 
@@ -251,13 +284,18 @@ export function TaskDetailPanel({
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   {t("execution.running")}
                 </span>
-                <button
-                  onClick={handleStop}
-                  className="flex items-center gap-1.5 rounded-md bg-red-500/15 px-3 py-1 text-xs font-medium text-red-400 hover:bg-red-500/25 transition-colors"
-                >
-                  <Square className="h-3 w-3" />
-                  {t("terminal.stopExecution")}
-                </button>
+                <Tooltip>
+                  <TooltipTrigger
+                    onClick={handleStop}
+                    className="flex items-center gap-1.5 rounded-md bg-red-500/15 px-3 py-1 text-xs font-medium text-red-400 hover:bg-red-500/25 transition-colors"
+                  >
+                    <Square className="h-3 w-3" />
+                    {t("terminal.stopExecution")}
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    {t("terminal.stopHint")}
+                  </TooltipContent>
+                </Tooltip>
               </div>
               <div className="flex-1 min-h-0">
                 <TerminalOutlet
@@ -334,12 +372,8 @@ export function TaskDetailPanel({
               totalRemoved={diffData.totalRemoved}
               hasConflicts={diffData.hasConflicts}
               conflictFiles={diffData.conflictFiles}
-              commitCount={diffData.commitCount}
-              taskId={task.id}
-              taskTitle={task.title}
-              taskStatus={taskStatus}
-              baseBranch={(task as any).baseBranch ?? "main"}
-              onMergeComplete={() => router.refresh()}
+              onCommit={handleCommit}
+              canCommit={taskStatus !== "DONE" && taskStatus !== "CANCELLED"}
             />
           ) : (
             <div className="flex h-full items-center justify-center">
@@ -352,6 +386,18 @@ export function TaskDetailPanel({
           <TaskNotesPanel taskId={task.id} projectId={task.projectId} />
         </div>
       ) : null}
+
+      {/* Merge confirm dialog — triggered by Complete button */}
+      <TaskMergeConfirmDialog
+        open={showMergeDialog}
+        onOpenChange={setShowMergeDialog}
+        taskId={task.id}
+        taskTitle={task.title}
+        baseBranch={(task as any).baseBranch ?? "main"}
+        fileCount={diffData?.files?.length ?? 0}
+        commitCount={diffData?.commitCount ?? 0}
+        onMergeComplete={handleMergeComplete}
+      />
     </div>
   );
 }

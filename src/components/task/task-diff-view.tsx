@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, ChevronDown, GitMerge, AlertTriangle } from "lucide-react";
+import { ChevronRight, ChevronDown, AlertTriangle, GitCommitHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { TaskMergeConfirmDialog } from "./task-merge-confirm-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useI18n } from "@/lib/i18n";
 
 interface DiffFileEntry {
   filename: string;
@@ -20,12 +21,8 @@ interface TaskDiffViewProps {
   totalRemoved: number;
   hasConflicts: boolean;
   conflictFiles: string[];
-  commitCount: number;
-  taskId: string;
-  taskTitle: string;
-  taskStatus: string;
-  baseBranch: string;
-  onMergeComplete: () => void;
+  onCommit?: (message: string) => Promise<void>;
+  canCommit?: boolean;
 }
 
 export function TaskDiffView({
@@ -34,15 +31,14 @@ export function TaskDiffView({
   totalRemoved,
   hasConflicts,
   conflictFiles,
-  commitCount,
-  taskId,
-  taskTitle,
-  taskStatus,
-  baseBranch,
-  onMergeComplete,
+  onCommit,
+  canCommit,
 }: TaskDiffViewProps) {
+  const { t } = useI18n();
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
-  const [showMergeDialog, setShowMergeDialog] = useState(false);
+  const [showCommitDialog, setShowCommitDialog] = useState(false);
+  const [commitMessage, setCommitMessage] = useState("");
+  const [isCommitting, setIsCommitting] = useState(false);
 
   const toggleFile = (filename: string) => {
     setExpandedFiles((prev) => {
@@ -65,17 +61,17 @@ export function TaskDiffView({
           <span className="text-green-400 font-mono text-xs">+{totalAdded}</span>
           <span className="text-red-400 font-mono text-xs">-{totalRemoved}</span>
         </div>
-        {taskStatus === "IN_REVIEW" && (
-          <Button
-           
-            onClick={() => setShowMergeDialog(true)}
-            disabled={hasConflicts}
-            className="h-8 gap-2 px-3 text-sm"
-          >
-            <GitMerge className="h-4 w-4" />
-            Merge
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {canCommit && onCommit && (
+            <button
+              onClick={() => setShowCommitDialog(true)}
+              className="h-8 gap-2 px-3 text-sm flex items-center rounded-md border border-border hover:bg-accent transition-colors"
+            >
+              <GitCommitHorizontal className="h-4 w-4" />
+              {t("diff.commit")}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Conflict warning */}
@@ -169,17 +165,44 @@ export function TaskDiffView({
         )}
       </div>
 
-      {/* Merge confirm dialog */}
-      <TaskMergeConfirmDialog
-        open={showMergeDialog}
-        onOpenChange={setShowMergeDialog}
-        taskId={taskId}
-        taskTitle={taskTitle}
-        baseBranch={baseBranch}
-        fileCount={files.length}
-        commitCount={commitCount}
-        onMergeComplete={onMergeComplete}
-      />
+      {/* Commit dialog */}
+      <Dialog open={showCommitDialog} onOpenChange={setShowCommitDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("diff.commitChanges")}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <textarea
+              value={commitMessage}
+              onChange={(e) => setCommitMessage(e.target.value)}
+              placeholder={t("diff.commitMessagePlaceholder")}
+              rows={5}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none resize-y min-h-[80px]"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowCommitDialog(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!commitMessage.trim() || !onCommit) return;
+                setIsCommitting(true);
+                try {
+                  await onCommit(commitMessage.trim());
+                  setCommitMessage("");
+                  setShowCommitDialog(false);
+                } finally {
+                  setIsCommitting(false);
+                }
+              }}
+              disabled={!commitMessage.trim() || isCommitting}
+            >
+              {isCommitting ? "..." : t("diff.commit")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

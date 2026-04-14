@@ -3,17 +3,19 @@
 import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal, Square, CheckCircle2 } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import Link from "next/link";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { TaskDiffView } from "@/components/task/task-diff-view";
+import { TaskMergeConfirmDialog } from "@/components/task/task-merge-confirm-dialog";
 import { FileTree } from "@/components/task/file-tree";
 import { CodeEditor } from "@/components/task/code-editor";
 import { PreviewPanel } from "@/components/task/preview-panel";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { startPtyExecution, stopPtyExecution, resumePtyExecution } from "@/actions/agent-actions";
-import { updateTaskStatus, checkWorktreeClean } from "@/actions/task-actions";
+import { updateTaskStatus, checkWorktreeClean, commitWorktreeChanges } from "@/actions/task-actions";
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "@/components/task/execution-timeline";
 import { useI18n } from "@/lib/i18n";
@@ -176,8 +178,12 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
 
   const handleMergeComplete = useCallback(() => {
     setTaskStatus("DONE");
+    setShowMergeDialog(false);
+    toast.success(t("taskPage.taskCompleted"));
     router.refresh();
-  }, [router]);
+  }, [router, t]);
+
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
 
   const handleComplete = useCallback(async () => {
     try {
@@ -186,12 +192,33 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
         toast.error(t("taskPage.uncommittedChanges", { count: String(files.length) }));
         return;
       }
+      // If task has a worktree branch, show merge confirmation
+      if (latestExecution?.worktreeBranch) {
+        setShowMergeDialog(true);
+        return;
+      }
+      // No worktree — just mark DONE
       await updateTaskStatus(task.id, "DONE");
       setTaskStatus("DONE");
       router.refresh();
       toast.success(t("taskPage.taskCompleted"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
+    }
+  }, [task.id, router, t, latestExecution]);
+
+  const handleCommit = useCallback(async (message: string) => {
+    try {
+      const { hash } = await commitWorktreeChanges(task.id, message);
+      toast.success(t("diff.commitSuccess", { hash }));
+      router.refresh();
+      const res = await fetch(`/api/tasks/${task.id}/diff`);
+      if (res.ok) {
+        const data = await res.json();
+        setDiffData(data?.files ? data : null);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Commit failed");
     }
   }, [task.id, router, t]);
 
@@ -258,13 +285,18 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   {t("execution.running")}
                 </span>
-                <button
-                  onClick={handleStop}
-                  className="flex items-center gap-1.5 rounded-md bg-red-500/15 px-3 py-1 text-xs font-medium text-red-400 hover:bg-red-500/25 transition-colors"
-                >
-                  <Square className="h-3 w-3" />
-                  {t("terminal.stopExecution")}
-                </button>
+                <Tooltip>
+                  <TooltipTrigger
+                    onClick={handleStop}
+                    className="flex items-center gap-1.5 rounded-md bg-red-500/15 px-3 py-1 text-xs font-medium text-red-400 hover:bg-red-500/25 transition-colors"
+                  >
+                    <Square className="h-3 w-3" />
+                    {t("terminal.stopExecution")}
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    {t("terminal.stopHint")}
+                  </TooltipContent>
+                </Tooltip>
               </div>
               <div className="flex-1 min-h-0">
                 <TerminalOutlet
@@ -403,12 +435,8 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                 totalRemoved={diffData.totalRemoved}
                 hasConflicts={diffData.hasConflicts}
                 conflictFiles={diffData.conflictFiles}
-                commitCount={diffData.commitCount}
-                taskId={task.id}
-                taskTitle={task.title}
-                taskStatus={taskStatus}
-                baseBranch={task.baseBranch ?? "main"}
-                onMergeComplete={handleMergeComplete}
+                onCommit={handleCommit}
+                canCommit={taskStatus !== "DONE" && taskStatus !== "CANCELLED"}
               />
             ) : (
               <div className="flex h-full items-center justify-center">
@@ -433,6 +461,18 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           </TabsContent>
         </Tabs>
       </Panel>
+
+      {/* Merge confirm dialog — triggered by Complete button */}
+      <TaskMergeConfirmDialog
+        open={showMergeDialog}
+        onOpenChange={setShowMergeDialog}
+        taskId={task.id}
+        taskTitle={task.title}
+        baseBranch={task.baseBranch ?? "main"}
+        fileCount={diffData?.files?.length ?? 0}
+        commitCount={diffData?.commitCount ?? 0}
+        onMergeComplete={handleMergeComplete}
+      />
     </PanelGroup>
   );
 }
