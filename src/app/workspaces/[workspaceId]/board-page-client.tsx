@@ -78,8 +78,11 @@ export function BoardPageClient({
 
   const handleTaskMove = useCallback(async (taskId: string, newStatus: TaskStatus) => {
     await updateTaskStatus(taskId, newStatus);
+    if (selectedTask?.id === taskId) {
+      setSelectedTask({ ...selectedTask, status: newStatus });
+    }
     refreshData();
-  }, [refreshData]);
+  }, [refreshData, selectedTask]);
 
   const handleCreateTask = useCallback(
     async (data: { title: string; description: string; priority: Priority; status: TaskStatus; labelIds: string[]; baseBranch?: string; subPath?: string }) => {
@@ -123,8 +126,11 @@ export function BoardPageClient({
 
   const handleContextMenuStatusChange = useCallback(async (taskId: string, status: TaskStatus) => {
     await updateTaskStatus(taskId, status);
+    if (selectedTask?.id === taskId) {
+      setSelectedTask({ ...selectedTask, status });
+    }
     refreshData();
-  }, [refreshData]);
+  }, [refreshData, selectedTask]);
 
   const handleAddTaskToColumn = useCallback((status: TaskStatus) => {
     setCreateDefaultStatus(status);

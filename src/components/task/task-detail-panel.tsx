@@ -37,6 +37,11 @@ export function TaskDetailPanel({
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
   const [taskStatus, setTaskStatus] = useState(task.status);
 
+  // Sync taskStatus when task prop changes (e.g. drag-and-drop status change)
+  useEffect(() => {
+    setTaskStatus(task.status);
+  }, [task.status]);
+
   // Terminal + execution history state
   const [activeWorktreePath, setActiveWorktreePath] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
