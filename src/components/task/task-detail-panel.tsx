@@ -133,6 +133,7 @@ export function TaskDetailPanel({
     await stopPtyExecution(task.id);
     setIsExecuting(false);
     setActiveWorktreePath(null);
+    setTaskStatus("IN_REVIEW");
     getTaskExecutions(task.id).then((execs) => {
       setPastExecutions(execs.filter((e) => e.status !== "RUNNING"));
     });
@@ -173,7 +174,7 @@ export function TaskDetailPanel({
 
       // Has worktree with commits → show merge dialog
       if (result.hasWorktree && result.hasCommits) {
-        setMergeCommitMessage(result.lastCommitMessage ?? `feat: ${task.title}`);
+        setMergeCommitMessage(`feat: ${task.title}`);
         setShowMergeDialog(true);
         return;
       }

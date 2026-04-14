@@ -126,6 +126,12 @@ export async function stopPtyExecution(taskId: string): Promise<void> {
       data: { status: "COMPLETED", endedAt: new Date() },
     });
 
+    // Transition task to IN_REVIEW
+    await db.task.update({
+      where: { id: taskId },
+      data: { status: "IN_REVIEW" },
+    });
+
     // Capture summary
     const { captureExecutionSummary } = await import("@/lib/execution-summary");
     await captureExecutionSummary(
@@ -384,7 +390,26 @@ export async function startPtyExecution(
     },
   });
 
-  // 7b. Build env overrides — AI_MANAGER_TASK_ID always injected; CALLBACK_URL when provided
+  // 7b. Record forkCommit — the commit where the task branch diverged from baseBranch
+  if (resolvedWorktreePath && task.baseBranch) {
+    try {
+      const { execFileSync } = await import("child_process");
+      const forkCommit = execFileSync(
+        "git", ["merge-base", task.baseBranch, "HEAD"],
+        { cwd: resolvedWorktreePath, encoding: "utf-8", timeout: 5000 }
+      ).trim();
+      if (forkCommit) {
+        await db.taskExecution.update({
+          where: { id: execution.id },
+          data: { forkCommit },
+        });
+      }
+    } catch {
+      // Best effort — diff will fallback to branch comparison
+    }
+  }
+
+  // 7c. Build env overrides — AI_MANAGER_TASK_ID always injected; CALLBACK_URL when provided
   const envOverrides: Record<string, string> = {
     ...profileEnvVars,
     AI_MANAGER_TASK_ID: taskId,

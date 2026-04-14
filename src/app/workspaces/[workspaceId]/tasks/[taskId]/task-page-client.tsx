@@ -160,6 +160,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     await stopPtyExecution(task.id);
     setIsExecuting(false);
     setActiveWorktreePath(null);
+    setTaskStatus("IN_REVIEW");
     router.refresh();
   }, [task.id, router]);
 
