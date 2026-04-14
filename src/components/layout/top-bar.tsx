@@ -199,7 +199,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
       <SearchDialog open={showSearch} onOpenChange={setShowSearch} />
 
       {/* Create Project Dialog */}
-      <Dialog open={showNewProject} onOpenChange={(open) => { setShowNewProject(open); if (!open) resetForm(); }}>
+      <Dialog open={showNewProject} onOpenChange={(open) => { setShowNewProject(open); if (!open) resetForm(); }} disablePointerDismissal>
         <DialogContent style={{ maxWidth: '32rem' }}>
           <DialogHeader>
             <DialogTitle>{t("topbar.newProject")}</DialogTitle>

@@ -180,7 +180,7 @@ export function CreateTaskDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{isEditing ? t("task.edit") : t("task.create")}</DialogTitle>
@@ -194,7 +194,7 @@ export function CreateTaskDialog({
               placeholder={t("task.titlePlaceholder")}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
             />
           </div>
           <div className="space-y-2">

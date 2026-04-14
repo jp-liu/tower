@@ -423,7 +423,7 @@ function WorkspaceDialog({
   cancelLabel: string;
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
@@ -435,7 +435,7 @@ function WorkspaceDialog({
               placeholder={namePlaceholder}
               value={name}
               onChange={(e) => onNameChange(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && onSubmit()}
+              onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
               className="mt-1.5"
             />
           </div>
@@ -517,7 +517,7 @@ function LabelManagerDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>{t("label.manage")}</DialogTitle>
@@ -552,7 +552,7 @@ function LabelManagerDialog({
                 placeholder={t("label.name")}
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+                onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
                 className="flex-1 h-8"
               />
               <button
