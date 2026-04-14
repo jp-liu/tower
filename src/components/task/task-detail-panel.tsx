@@ -2,12 +2,13 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, Terminal, Loader2, Square, FileText } from "lucide-react";
+import { ExternalLink, Terminal, Loader2, Square, FileText, CheckCircle2 } from "lucide-react";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { TaskMetadata } from "./task-metadata";
 import { TaskDiffView } from "./task-diff-view";
 import { TerminalOutlet, useTerminalPortal } from "./terminal-portal";
 import { getTaskExecutions, startPtyExecution, stopPtyExecution, resumePtyExecution } from "@/actions/agent-actions";
+import { updateTaskStatus } from "@/actions/task-actions";
 import { toast } from "sonner";
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "./execution-timeline";
@@ -83,7 +84,7 @@ export function TaskDetailPanel({
         return res.json();
       })
       .then((data) => {
-        if (!cancelled) setDiffData(data?.files ? data : null);
+        if (!cancelled) setDiffData(data?.files || data?.branchDeleted ? data : null);
       })
       .catch(() => { if (!cancelled) setDiffData(null); })
       .finally(() => { if (!cancelled) setIsLoadingDiff(false); });
@@ -144,6 +145,17 @@ export function TaskDetailPanel({
     }
   }, [task.id]);
 
+  const handleComplete = useCallback(async () => {
+    try {
+      await updateTaskStatus(task.id, "DONE");
+      setTaskStatus("DONE");
+      toast.success(t("taskPage.taskCompleted"));
+      router.refresh();
+    } catch {
+      toast.error("Failed to complete task");
+    }
+  }, [task.id, router, t]);
+
   return (
     <div
       className="flex h-full w-[600px] flex-shrink-0 flex-col border-l border-border bg-sidebar"
@@ -194,13 +206,24 @@ export function TaskDetailPanel({
             {t("taskPage.notes")}
           </button>
         </div>
-        <button
-          onClick={() => router.push(`/workspaces/${workspaceId}/tasks/${task.id}`)}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <ExternalLink className="h-3 w-3" />
-          {t("taskPage.viewDetails")}
-        </button>
+        <div className="flex items-center gap-2">
+          {taskStatus === "IN_REVIEW" && (
+            <button
+              onClick={handleComplete}
+              className="flex items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-400 ring-1 ring-emerald-500/20 hover:bg-emerald-500/25 transition-colors"
+            >
+              <CheckCircle2 className="h-3 w-3" />
+              {t("taskPage.completeTask")}
+            </button>
+          )}
+          <button
+            onClick={() => router.push(`/workspaces/${workspaceId}/tasks/${task.id}`)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <ExternalLink className="h-3 w-3" />
+            {t("taskPage.viewDetails")}
+          </button>
+        </div>
       </div>
 
       {/* Content area */}
@@ -282,6 +305,10 @@ export function TaskDetailPanel({
           {isLoadingDiff ? (
             <div className="flex h-full items-center justify-center">
               <p className="text-sm text-muted-foreground">{t("taskPage.loadingDiff")}</p>
+            </div>
+          ) : diffData?.branchDeleted ? (
+            <div className="flex h-full items-center justify-center">
+              <p className="text-sm text-muted-foreground">{t("taskPage.branchDeleted")}</p>
             </div>
           ) : diffData ? (
             <TaskDiffView
