@@ -20,7 +20,7 @@ interface TaskMergeConfirmDialogProps {
   baseBranch: string;
   fileCount: number;
   commitCount: number;
-  initialMessage?: string;
+  commitLog?: string[];
   onMergeComplete: () => void;
 }
 
@@ -32,7 +32,7 @@ export function TaskMergeConfirmDialog({
   baseBranch,
   fileCount,
   commitCount,
-  initialMessage,
+  commitLog = [],
   onMergeComplete,
 }: TaskMergeConfirmDialogProps) {
   const router = useRouter();
@@ -99,6 +99,17 @@ export function TaskMergeConfirmDialog({
               <span className="text-xs font-medium text-foreground">{commitCount}</span>
             </div>
           </div>
+
+          {commitLog.length > 0 && (
+            <div>
+              <span className="text-xs text-muted-foreground mb-1 block">Commits</span>
+              <div className="rounded-md border border-border bg-muted/30 p-2 space-y-1 max-h-32 overflow-y-auto">
+                {commitLog.map((line, i) => (
+                  <div key={i} className="text-xs font-mono text-foreground/80">{line}</div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {errorMessage && (
             <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2">

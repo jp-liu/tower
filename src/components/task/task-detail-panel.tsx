@@ -154,7 +154,7 @@ export function TaskDetailPanel({
   }, [task.id]);
 
   const [showMergeDialog, setShowMergeDialog] = useState(false);
-  const [mergeCommitMessage, setMergeCommitMessage] = useState("");
+  const [mergeCommitLog, setMergeCommitLog] = useState<string[]>([]);
 
   const handleComplete = useCallback(async () => {
     try {
@@ -174,7 +174,7 @@ export function TaskDetailPanel({
 
       // Has worktree with commits → show merge dialog
       if (result.hasWorktree && result.hasCommits) {
-        setMergeCommitMessage(`feat: ${task.title}`);
+        setMergeCommitLog(result.commitLog);
         setShowMergeDialog(true);
         return;
       }
@@ -408,7 +408,7 @@ export function TaskDetailPanel({
         baseBranch={(task as any).baseBranch ?? "main"}
         fileCount={diffData?.files?.length ?? 0}
         commitCount={diffData?.commitCount ?? 0}
-        initialMessage={mergeCommitMessage}
+        commitLog={mergeCommitLog}
         onMergeComplete={handleMergeComplete}
       />
     </div>

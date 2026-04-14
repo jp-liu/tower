@@ -164,6 +164,7 @@ export async function checkWorktreeClean(taskId: string): Promise<{
   files: string[];
   hasCommits: boolean;
   lastCommitMessage: string | null;
+  commitLog: string[];
   hasWorktree: boolean;
 }> {
   const { execFileSync } = await import("child_process");
@@ -176,7 +177,7 @@ export async function checkWorktreeClean(taskId: string): Promise<{
   });
 
   if (!execution?.worktreePath || !existsSync(execution.worktreePath)) {
-    return { clean: true, files: [], hasCommits: false, lastCommitMessage: null, hasWorktree: false };
+    return { clean: true, files: [], hasCommits: false, lastCommitMessage: null, commitLog: [], hasWorktree: false };
   }
 
   const cwd = execution.worktreePath;
@@ -194,6 +195,7 @@ export async function checkWorktreeClean(taskId: string): Promise<{
     // Check if there are commits on the task branch beyond the fork point
     let hasCommits = false;
     let lastCommitMessage: string | null = null;
+    let commitLog: string[] = [];
     try {
       const forkPoint = execFileSync(
         "git", ["merge-base", baseBranch, "HEAD"],
@@ -209,14 +211,19 @@ export async function checkWorktreeClean(taskId: string): Promise<{
           "git", ["log", "-1", "--format=%B"],
           { cwd, encoding: "utf-8", timeout: 5000 }
         ).trim();
+        const log = execFileSync(
+          "git", ["log", "--oneline", `${forkPoint}..HEAD`],
+          { cwd, encoding: "utf-8", timeout: 5000 }
+        ).trim();
+        commitLog = log ? log.split("\n").filter(Boolean) : [];
       }
     } catch {
       // ignore — fallback to no commits
     }
 
-    return { clean, files, hasCommits, lastCommitMessage, hasWorktree: true };
+    return { clean, files, hasCommits, lastCommitMessage, commitLog, hasWorktree: true };
   } catch {
-    return { clean: true, files: [], hasCommits: false, lastCommitMessage: null, hasWorktree: true };
+    return { clean: true, files: [], hasCommits: false, lastCommitMessage: null, commitLog: [], hasWorktree: true };
   }
 }
 

@@ -185,7 +185,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   }, [router, t]);
 
   const [showMergeDialog, setShowMergeDialog] = useState(false);
-  const [mergeCommitMessage, setMergeCommitMessage] = useState("");
+  const [mergeCommitLog, setMergeCommitLog] = useState<string[]>([]);
 
   const handleComplete = useCallback(async () => {
     try {
@@ -202,7 +202,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
       }
 
       if (result.hasWorktree && result.hasCommits) {
-        setMergeCommitMessage(result.lastCommitMessage ?? `feat: ${task.title}`);
+        setMergeCommitLog(result.commitLog);
         setShowMergeDialog(true);
         return;
       }
@@ -481,7 +481,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
         baseBranch={task.baseBranch ?? "main"}
         fileCount={diffData?.files?.length ?? 0}
         commitCount={diffData?.commitCount ?? 0}
-        initialMessage={mergeCommitMessage}
+        commitLog={mergeCommitLog}
         onMergeComplete={handleMergeComplete}
       />
     </PanelGroup>
