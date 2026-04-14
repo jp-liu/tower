@@ -69,35 +69,45 @@ export async function POST(
       );
     }
 
-    const gitOpts = { encoding: "utf-8" as const, timeout: 10000 };
-    const cwd = worktreePath ?? localPath;
+    const gitOpts = { encoding: "utf-8" as const, timeout: 30000 };
+    const commitMessage = body.commitMessage || `feat: ${task.title}`;
 
-    // Safe merge: use git plumbing commands to update baseBranch ref
-    // without touching any working directory.
-    //
-    // 1. Get the tree of the task branch (what we want to merge)
-    const taskTree = execFileSync(
-      "git", ["rev-parse", `${worktreeBranch}^{tree}`],
-      { ...gitOpts, cwd }
+    // Proper squash merge: checkout baseBranch, merge --squash, commit
+    // This does a three-way merge preserving baseBranch's new commits
+    // We operate in the main repo (not worktree) to avoid corrupting worktree state
+
+    // 1. Stash any uncommitted changes in main repo (safety)
+    const mainStatus = execFileSync(
+      "git", ["status", "--porcelain"],
+      { ...gitOpts, cwd: localPath }
     ).trim();
+    const hadStash = mainStatus.length > 0;
+    if (hadStash) {
+      execFileSync("git", ["stash", "push", "-m", "ai-manager-merge-temp"], { ...gitOpts, cwd: localPath });
+    }
 
-    // 2. Get the current HEAD of baseBranch
-    const baseHead = execFileSync(
-      "git", ["rev-parse", task.baseBranch],
-      { ...gitOpts, cwd }
-    ).trim();
+    let commitHash: string;
+    try {
+      // 2. Checkout baseBranch in main repo
+      execFileSync("git", ["checkout", task.baseBranch], { ...gitOpts, cwd: localPath });
 
-    // 3. Create a new squash commit on baseBranch with the task's tree
-    const commitHash = execFileSync(
-      "git", ["commit-tree", taskTree, "-p", baseHead, "-m", body.commitMessage || `feat: ${task.title}`],
-      { ...gitOpts, cwd }
-    ).trim();
+      // 3. Squash merge the task branch (three-way merge, keeps baseBranch changes)
+      execFileSync("git", ["merge", "--squash", worktreeBranch], { ...gitOpts, cwd: localPath });
 
-    // 4. Update baseBranch ref to point to the new commit (no checkout needed)
-    execFileSync(
-      "git", ["update-ref", `refs/heads/${task.baseBranch}`, commitHash],
-      { ...gitOpts, cwd }
-    );
+      // 4. Commit the squash result
+      execFileSync("git", ["commit", "-m", commitMessage], { ...gitOpts, cwd: localPath });
+
+      // 5. Get the commit hash
+      commitHash = execFileSync(
+        "git", ["rev-parse", "--short", "HEAD"],
+        { ...gitOpts, cwd: localPath }
+      ).trim();
+    } finally {
+      // Restore stash if we had one
+      if (hadStash) {
+        execFileSync("git", ["stash", "pop"], { ...gitOpts, cwd: localPath }).toString();
+      }
+    }
 
     // Record mergeCommit on the execution (commitHash is the squash commit just created)
     if (latestExecution && commitHash) {
