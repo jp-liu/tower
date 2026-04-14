@@ -40,8 +40,8 @@ function captureGitLog(cwd: string): string | null {
       const log = runGit(["log", "--oneline", `${mergeBase}..HEAD`], cwd);
       if (log) return log;
     }
-    // Fallback: last 20 commits
-    return runGit(["log", "--oneline", "-20"], cwd) || null;
+    // Fallback: last 3 commits
+    return runGit(["log", "--oneline", "-3"], cwd) || null;
   } catch {
     return null;
   }
