@@ -358,6 +358,7 @@ const translations = {
     "taskPage.noChanges": "暂无变更",
     "taskPage.startExecution": "启动执行以查看变更",
     "taskPage.loadingDiff": "加载变更中...",
+    "taskPage.noDiff": "暂无变更（需要项目配置本地路径和基础分支）",
     "taskPage.tabFiles": "文件",
     "taskPage.tabPreview": "预览",
     // File tree (Phase 20)
@@ -849,6 +850,7 @@ const translations = {
     "taskPage.noChanges": "No changes to display",
     "taskPage.startExecution": "Start an execution to see changes",
     "taskPage.loadingDiff": "Loading changes...",
+    "taskPage.noDiff": "No changes (project needs local path and base branch configured)",
     "taskPage.tabFiles": "Files",
     "taskPage.tabPreview": "Preview",
     // File tree (Phase 20)

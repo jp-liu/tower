@@ -109,9 +109,14 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     let cancelled = false;
     setIsLoadingDiff(true);
     fetch(`/api/tasks/${task.id}/diff`)
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
       .then((data: DiffData) => {
         if (cancelled) return;
+        // Ignore error responses that lack files array
+        if (!data.files) { setDiffData(null); return; }
         setDiffData(data);
       })
       .catch(() => {
@@ -368,7 +373,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
             ) : (
               <div className="flex h-full items-center justify-center">
                 <p className="text-sm text-muted-foreground">
-                  {taskStatus === "IN_REVIEW" ? t("taskPage.loadingDiff") : t("taskPage.startExecution")}
+                  {taskStatus === "TODO" ? t("taskPage.startExecution") : t("taskPage.noDiff")}
                 </p>
               </div>
             )}
