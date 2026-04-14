@@ -262,6 +262,13 @@ export function TaskDetailPanel({
                 />
               </div>
             </div>
+          ) : taskStatus === "DONE" || taskStatus === "CANCELLED" ? (
+            <div className="flex h-full flex-col overflow-hidden">
+              {/* History only — no launch for completed/cancelled tasks */}
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <ExecutionTimeline executions={pastExecutions} onResume={handleResume} />
+              </div>
+            </div>
           ) : (
             <div className="flex h-full flex-col overflow-hidden">
               {/* Prompt selector + Launch button */}
