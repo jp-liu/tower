@@ -153,20 +153,31 @@ export function TaskDetailPanel({
   }, [task.id]);
 
   const [showMergeDialog, setShowMergeDialog] = useState(false);
+  const [mergeCommitMessage, setMergeCommitMessage] = useState("");
 
   const handleComplete = useCallback(async () => {
     try {
-      const { clean, files } = await checkWorktreeClean(task.id);
-      if (!clean) {
-        toast.error(t("taskPage.uncommittedChanges", { count: String(files.length) }));
+      const result = await checkWorktreeClean(task.id);
+
+      // Has worktree with uncommitted files → tell user to commit first
+      if (result.hasWorktree && !result.clean) {
+        toast.error(t("taskPage.uncommittedChanges", { count: String(result.files.length) }));
         return;
       }
-      // If task has a worktree branch, show merge confirmation dialog
-      const latestExec = pastExecutions[0];
-      if (latestExec?.worktreeBranch) {
+
+      // Has worktree but no commits and no uncommitted files → nothing was done
+      if (result.hasWorktree && result.clean && !result.hasCommits) {
+        toast.error(t("taskPage.noChangesToComplete"));
+        return;
+      }
+
+      // Has worktree with commits → show merge dialog
+      if (result.hasWorktree && result.hasCommits) {
+        setMergeCommitMessage(result.lastCommitMessage ?? `feat: ${task.title}`);
         setShowMergeDialog(true);
         return;
       }
+
       // No worktree — just mark DONE
       await updateTaskStatus(task.id, "DONE");
       setTaskStatus("DONE");
@@ -175,7 +186,7 @@ export function TaskDetailPanel({
     } catch {
       toast.error("Failed to complete task");
     }
-  }, [task.id, router, t, pastExecutions]);
+  }, [task.id, router, t]);
 
   const handleMergeComplete = useCallback(() => {
     setTaskStatus("DONE");
@@ -396,6 +407,7 @@ export function TaskDetailPanel({
         baseBranch={(task as any).baseBranch ?? "main"}
         fileCount={diffData?.files?.length ?? 0}
         commitCount={diffData?.commitCount ?? 0}
+        initialMessage={mergeCommitMessage}
         onMergeComplete={handleMergeComplete}
       />
     </div>

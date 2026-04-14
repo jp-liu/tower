@@ -20,6 +20,7 @@ interface TaskMergeConfirmDialogProps {
   baseBranch: string;
   fileCount: number;
   commitCount: number;
+  initialMessage?: string;
   onMergeComplete: () => void;
 }
 
@@ -31,6 +32,7 @@ export function TaskMergeConfirmDialog({
   baseBranch,
   fileCount,
   commitCount,
+  initialMessage,
   onMergeComplete,
 }: TaskMergeConfirmDialogProps) {
   const router = useRouter();
@@ -70,12 +72,12 @@ export function TaskMergeConfirmDialog({
     }
   };
 
-  const [commitMessage, setCommitMessage] = useState(`feat: ${taskTitle}`);
+  const [commitMessage, setCommitMessage] = useState("");
 
-  // Reset message when dialog opens
+  // Reset message when dialog opens — use initialMessage if provided
   useEffect(() => {
-    if (open) setCommitMessage(`feat: ${taskTitle}`);
-  }, [open, taskTitle]);
+    if (open) setCommitMessage(initialMessage ?? `feat: ${taskTitle}`);
+  }, [open, initialMessage, taskTitle]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

@@ -159,7 +159,68 @@ export async function getArchivedTasks(projectId: string) {
  * Check if a task's worktree has uncommitted changes.
  * Returns { clean: true } or { clean: false, files: string[] }
  */
-export async function checkWorktreeClean(taskId: string): Promise<{ clean: boolean; files: string[] }> {
+export async function checkWorktreeClean(taskId: string): Promise<{
+  clean: boolean;
+  files: string[];
+  hasCommits: boolean;
+  lastCommitMessage: string | null;
+  hasWorktree: boolean;
+}> {
+  const { execFileSync } = await import("child_process");
+  const { existsSync } = await import("fs");
+
+  const task = await db.task.findUnique({ where: { id: taskId } });
+  const execution = await db.taskExecution.findFirst({
+    where: { taskId },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!execution?.worktreePath || !existsSync(execution.worktreePath)) {
+    return { clean: true, files: [], hasCommits: false, lastCommitMessage: null, hasWorktree: false };
+  }
+
+  const cwd = execution.worktreePath;
+  const baseBranch = task?.baseBranch || "main";
+
+  try {
+    // Check uncommitted files
+    const status = execFileSync(
+      "git", ["status", "--porcelain"],
+      { cwd, encoding: "utf-8", timeout: 5000 }
+    ).trim();
+    const files = status ? status.split("\n").map((l) => l.trim()).filter(Boolean) : [];
+    const clean = files.length === 0;
+
+    // Check if there are commits on the task branch beyond the fork point
+    let hasCommits = false;
+    let lastCommitMessage: string | null = null;
+    try {
+      const forkPoint = execFileSync(
+        "git", ["merge-base", baseBranch, "HEAD"],
+        { cwd, encoding: "utf-8", timeout: 5000 }
+      ).trim();
+      const commitCount = execFileSync(
+        "git", ["rev-list", "--count", `${forkPoint}..HEAD`],
+        { cwd, encoding: "utf-8", timeout: 5000 }
+      ).trim();
+      hasCommits = parseInt(commitCount, 10) > 0;
+      if (hasCommits) {
+        lastCommitMessage = execFileSync(
+          "git", ["log", "-1", "--format=%B"],
+          { cwd, encoding: "utf-8", timeout: 5000 }
+        ).trim();
+      }
+    } catch {
+      // ignore — fallback to no commits
+    }
+
+    return { clean, files, hasCommits, lastCommitMessage, hasWorktree: true };
+  } catch {
+    return { clean: true, files: [], hasCommits: false, lastCommitMessage: null, hasWorktree: true };
+  }
+}
+
+export async function commitWorktreeChanges(taskId: string, message: string): Promise<{ hash: string }> {
   const { execFileSync } = await import("child_process");
   const { existsSync } = await import("fs");
 
@@ -169,22 +230,27 @@ export async function checkWorktreeClean(taskId: string): Promise<{ clean: boole
   });
 
   if (!execution?.worktreePath || !existsSync(execution.worktreePath)) {
-    return { clean: true, files: [] };
+    throw new Error("No active worktree for this task");
   }
 
-  try {
-    const status = execFileSync(
-      "git", ["status", "--porcelain"],
-      { cwd: execution.worktreePath, encoding: "utf-8", timeout: 5000 }
-    ).trim();
+  const cwd = execution.worktreePath;
 
-    if (!status) return { clean: true, files: [] };
+  // Stage all changes
+  execFileSync("git", ["add", "-A"], { cwd, timeout: 10000 });
 
-    const files = status.split("\n").map((l) => l.trim()).filter(Boolean);
-    return { clean: false, files };
-  } catch {
-    return { clean: true, files: [] };
+  // Check if there's anything staged
+  const status = execFileSync("git", ["status", "--porcelain"], { cwd, encoding: "utf-8", timeout: 5000 }).trim();
+  if (!status) {
+    throw new Error("No changes to commit");
   }
+
+  // Commit with the provided message
+  execFileSync("git", ["commit", "-m", message], { cwd, encoding: "utf-8", timeout: 15000 });
+
+  // Get the commit hash
+  const hash = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd, encoding: "utf-8", timeout: 5000 }).trim();
+
+  return { hash };
 }
 
 export async function getArchivedTaskCount(projectId: string) {
