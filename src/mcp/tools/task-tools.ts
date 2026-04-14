@@ -31,7 +31,7 @@ export const taskTools = {
   },
 
   create_task: {
-    description: "Create a new task in a project. Priority defaults to MEDIUM, status defaults to TODO. Optionally assigns labels by ID.",
+    description: "Create a new task in a project. Priority defaults to MEDIUM, status defaults to TODO. Optionally assigns labels by ID. Use subPath for mono-repo sub-directory targeting.",
     schema: z.object({
       projectId: z.string(),
       title: z.string(),
@@ -39,6 +39,7 @@ export const taskTools = {
       priority: Priority.optional().default("MEDIUM"),
       status: TaskStatus.optional().default("TODO"),
       labelIds: z.array(z.string()).optional(),
+      subPath: z.string().optional(),
     }),
     handler: async (args: {
       projectId: string;
@@ -47,6 +48,7 @@ export const taskTools = {
       priority?: string;
       status?: string;
       labelIds?: string[];
+      subPath?: string;
     }) => {
       const task = await db.task.create({
         data: {
@@ -55,6 +57,7 @@ export const taskTools = {
           projectId: args.projectId,
           priority: (args.priority ?? "MEDIUM") as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
           status: (args.status ?? "TODO") as "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED",
+          subPath: args.subPath ?? null,
         },
       });
 
@@ -69,13 +72,14 @@ export const taskTools = {
   },
 
   update_task: {
-    description: "Update a task's title, description, priority, and/or labels. If labelIds is provided, replaces all existing labels.",
+    description: "Update a task's title, description, priority, labels, and/or subPath. If labelIds is provided, replaces all existing labels.",
     schema: z.object({
       taskId: z.string(),
       title: z.string().optional(),
       description: z.string().optional(),
       priority: Priority.optional(),
       labelIds: z.array(z.string()).optional(),
+      subPath: z.string().optional(),
     }),
     handler: async (args: {
       taskId: string;
@@ -83,13 +87,14 @@ export const taskTools = {
       description?: string;
       priority?: string;
       labelIds?: string[];
+      subPath?: string;
     }) => {
       const { labelIds, taskId, ...updateData } = args;
 
       return db.$transaction(async (tx) => {
         const task = await tx.task.update({
           where: { id: taskId },
-          data: updateData as { title?: string; description?: string; priority?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" },
+          data: updateData as { title?: string; description?: string; priority?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"; subPath?: string },
         });
 
         if (labelIds !== undefined) {

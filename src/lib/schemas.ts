@@ -44,6 +44,7 @@ export const createTaskSchema = z.object({
   status: z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"]).optional(),
   labelIds: z.array(cuid).optional(),
   baseBranch: z.string().max(200).optional(),
+  subPath: z.string().max(500).optional(),
 });
 
 export const updateTaskSchema = z.object({
@@ -52,6 +53,7 @@ export const updateTaskSchema = z.object({
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).optional(),
   labelIds: z.array(cuid).optional(),
   baseBranch: z.string().max(200).optional(),
+  subPath: z.string().max(500).optional(),
 });
 
 export const taskStatusSchema = z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"]);

@@ -75,6 +75,7 @@ model Task {
   order       Int        @default(0)
   promptId    String?
   baseBranch  String?
+  subPath     String?
   projectId   String
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt

@@ -82,7 +82,7 @@ export function BoardPageClient({
   }, [refreshData]);
 
   const handleCreateTask = useCallback(
-    async (data: { title: string; description: string; priority: Priority; status: TaskStatus; labelIds: string[]; baseBranch?: string }) => {
+    async (data: { title: string; description: string; priority: Priority; status: TaskStatus; labelIds: string[]; baseBranch?: string; subPath?: string }) => {
       await createTask({
         title: data.title,
         description: data.description,
@@ -91,13 +91,14 @@ export function BoardPageClient({
         status: data.status,
         labelIds: data.labelIds,
         baseBranch: data.baseBranch,
+        subPath: data.subPath,
       });
       refreshData();
     },
     [projectId, refreshData]
   );
 
-  const handleUpdateTask = useCallback(async (taskId: string, data: { title: string; description: string; priority: Priority; labelIds: string[] }) => {
+  const handleUpdateTask = useCallback(async (taskId: string, data: { title: string; description: string; priority: Priority; labelIds: string[]; subPath?: string }) => {
     await updateTask(taskId, { ...data, labelIds: data.labelIds });
     setEditingTask(null);
     refreshData();

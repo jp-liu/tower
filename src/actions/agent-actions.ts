@@ -173,7 +173,8 @@ export async function resumePtyExecution(
 
   if (!prevExec) throw new Error("Previous execution not found");
 
-  const cwd = prevExec.worktreePath ?? task.project.localPath;
+  const baseCwd = prevExec.worktreePath ?? task.project.localPath;
+  const cwd = task.subPath ? join(baseCwd, task.subPath) : baseCwd;
 
   // Read CliProfile — determines which CLI binary to spawn
   const profile = await db.cliProfile.findFirst({ where: { isDefault: true } });
@@ -365,7 +366,8 @@ export async function startPtyExecution(
     resolvedWorktreeBranch = worktreeBranch;
   }
 
-  const cwd = resolvedWorktreePath ?? task.project.localPath;
+  const baseCwd = resolvedWorktreePath ?? task.project.localPath;
+  const cwd = task.subPath ? join(baseCwd, task.subPath) : baseCwd;
 
   // 7. Create TaskExecution row with RUNNING status
   const execution = await db.taskExecution.create({

@@ -34,12 +34,14 @@ interface CreateTaskDialogProps {
     status: TaskStatus;
     labelIds: string[];
     baseBranch?: string;
+    subPath?: string;
   }) => void;
   onUpdate?: (taskId: string, data: {
     title: string;
     description: string;
     priority: Priority;
     labelIds: string[];
+    subPath?: string;
   }) => void;
   defaultStatus?: TaskStatus;
   editTask?: Task | null;
@@ -64,6 +66,7 @@ export function CreateTaskDialog({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("MEDIUM");
+  const [subPath, setSubPath] = useState("");
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
   const [branches, setBranches] = useState<string[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
@@ -82,11 +85,13 @@ export function CreateTaskDialog({
       setTitle(editTask.title);
       setDescription(editTask.description ?? "");
       setPriority(editTask.priority);
+      setSubPath((editTask as any).subPath ?? "");
       setSelectedLabelIds(editTaskLabelIds ?? []);
     } else {
       setTitle("");
       setDescription("");
       setPriority("MEDIUM");
+      setSubPath("");
       setSelectedLabelIds([]);
     }
   }, [editTask, editTaskLabelIds]);
@@ -97,6 +102,7 @@ export function CreateTaskDialog({
       setTitle("");
       setDescription("");
       setPriority("MEDIUM");
+      setSubPath("");
       setSelectedLabelIds([]);
       setBranches([]);
       setSelectedBranch("");
@@ -151,7 +157,7 @@ export function CreateTaskDialog({
   const handleSubmit = () => {
     if (!title.trim()) return;
     if (isEditing && onUpdate) {
-      onUpdate(editTask.id, { title, description, priority, labelIds: selectedLabelIds });
+      onUpdate(editTask.id, { title, description, priority, labelIds: selectedLabelIds, ...(subPath.trim() ? { subPath: subPath.trim() } : {}) });
     } else {
       onSubmit({
         title,
@@ -160,11 +166,13 @@ export function CreateTaskDialog({
         status: defaultStatus,
         labelIds: selectedLabelIds,
         ...(isGitProject && selectedBranch ? { baseBranch: selectedBranch } : {}),
+        ...(subPath.trim() ? { subPath: subPath.trim() } : {}),
       });
     }
     setTitle("");
     setDescription("");
     setPriority("MEDIUM");
+    setSubPath("");
     setSelectedLabelIds([]);
     setBranches([]);
     setSelectedBranch("");
@@ -198,6 +206,16 @@ export function CreateTaskDialog({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="subPath">{t("task.subPath")}</Label>
+            <Input
+              id="subPath"
+              placeholder={t("task.subPathPlaceholder")}
+              value={subPath}
+              onChange={(e) => setSubPath(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">{t("task.subPathHint")}</p>
           </div>
           {/* Priority - Button Group instead of Select */}
           <div className="space-y-2">

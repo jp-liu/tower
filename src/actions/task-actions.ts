@@ -18,6 +18,7 @@ export async function createTask(data: {
   status?: TaskStatus;
   labelIds?: string[];
   baseBranch?: string;
+  subPath?: string;
 }) {
   const v = createTaskSchema.parse(data);
   const task = await db.task.create({
@@ -28,6 +29,7 @@ export async function createTask(data: {
       priority: (v.priority as Priority) ?? "MEDIUM",
       status: (v.status as TaskStatus) ?? "TODO",
       baseBranch: v.baseBranch ?? null,
+      subPath: v.subPath ?? null,
     },
   });
   // Set labels
@@ -63,7 +65,7 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
 
 export async function updateTask(
   taskId: string,
-  data: { title?: string; description?: string; priority?: Priority; labelIds?: string[]; baseBranch?: string }
+  data: { title?: string; description?: string; priority?: Priority; labelIds?: string[]; baseBranch?: string; subPath?: string }
 ) {
   const v = updateTaskSchema.parse(data);
   const { labelIds, ...updateData } = v;

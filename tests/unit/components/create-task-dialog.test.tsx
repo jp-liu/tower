@@ -55,6 +55,7 @@ const mockEditTask: Task = {
   promptId: null,
   projectId: "proj-1",
   baseBranch: null,
+  subPath: null,
   createdAt: new Date("2026-01-01"),
   updatedAt: new Date("2026-01-01"),
 };
