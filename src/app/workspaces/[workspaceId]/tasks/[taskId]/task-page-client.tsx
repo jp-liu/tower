@@ -318,9 +318,9 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
             </div>
           ) : taskStatus === "DONE" || taskStatus === "CANCELLED" ? (
             <div className="flex h-full flex-col overflow-hidden bg-[#0a0a0a]">
-              {/* Execution history only — no launch button for completed/cancelled tasks */}
+              {/* Execution history only — no launch/resume for completed/cancelled tasks */}
               <div className="flex-1 min-h-0 overflow-y-auto">
-                <ExecutionTimeline executions={executions} onResume={handleResume} />
+                <ExecutionTimeline executions={executions} />
               </div>
             </div>
           ) : (
