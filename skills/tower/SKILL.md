@@ -116,6 +116,35 @@ TODO → IN_PROGRESS → IN_REVIEW → DONE
 
 ---
 
+## Task Description Format
+
+The `description` field supports Markdown. **Never copy the user's raw message as-is.** Always restructure it into a clear, actionable format:
+
+```markdown
+## 目标
+<one sentence summary of what to achieve>
+
+## 需求
+- <requirement 1>
+- <requirement 2>
+- ...
+
+## 参考
+- <file paths, API endpoints, design references if any>
+
+## 备注
+- <constraints, edge cases, things to watch out for>
+```
+
+Rules:
+- `title` should be short (under 30 chars), summarizing the task
+- `description` should be structured Markdown that an AI agent can execute from
+- Extract actionable requirements from the user's natural language
+- Omit sections that have no content (e.g. skip 备注 if nothing to note)
+- If user provides file paths, put them in 参考 section AND in `references` parameter
+
+---
+
 ## Important Rules
 
 - **SubPath**: for monorepo or multi-folder projects, use `subPath` on task creation to specify the working directory (e.g. "packages/web"). The project description should document the directory structure. If not sure, omit subPath.
