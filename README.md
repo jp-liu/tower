@@ -1,8 +1,8 @@
-# AI Manager
+# Tower
 
 [中文文档](./README.zh.md)
 
-An AI task management platform — manage, dispatch, and execute AI-assisted development tasks through a visual Kanban board.
+An AI task orchestration platform — manage, dispatch, and execute AI-assisted development tasks through a visual Kanban board.
 
 Integrates terminal, code editor, file tree, live preview, and MCP toolchain into an all-in-one AI development workflow assistant for individual developers.
 
@@ -146,12 +146,12 @@ Supports Chinese and English. Switch in Settings.
 
 ## MCP Integration
 
-AI Manager exposes an MCP Server for external AI agents:
+Tower exposes an MCP Server for external AI agents:
 
 ```json
 {
   "mcpServers": {
-    "ai-manager": {
+    "tower": {
       "command": "npx",
       "args": ["tsx", "<project-root>/src/mcp/index.ts"]
     }
@@ -203,3 +203,8 @@ pnpm mcp            # Start MCP Server (standalone process)
 |----------|-------------|---------|
 | DATABASE_URL | Database connection string | `file:./prisma/dev.db` (SQLite) |
 | PORT | Server port | 3000 |
+
+## TODO
+
+- [ ] Non-ASCII path support — Claude CLI encodes non-ASCII characters (Chinese, Japanese, etc.) as dashes in session directory names; current matching uses ASCII-only segments as workaround, need to replicate Claude's exact encoding algorithm for reliable session lookup
+- [ ] Terminal rendering stability — investigate garbled text when multiple xterm.js terminals run simultaneously (WebGL context conflicts)
