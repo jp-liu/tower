@@ -111,10 +111,14 @@ export async function stopPtyExecution(taskId: string): Promise<void> {
   const session = getSession(taskId);
   const terminalBuffer = session?.getBuffer() ?? "";
 
-  // Find the RUNNING execution
+  // Find the RUNNING execution + task project for direct mode fallback
   const execution = await db.taskExecution.findFirst({
     where: { taskId, status: "RUNNING" },
     orderBy: { createdAt: "desc" },
+  });
+  const task = await db.task.findUnique({
+    where: { id: taskId },
+    include: { project: { select: { localPath: true } } },
   });
 
   // Destroy the PTY session (kills the process)
@@ -132,10 +136,11 @@ export async function stopPtyExecution(taskId: string): Promise<void> {
       data: { status: "IN_REVIEW" },
     });
 
-    // Capture summary
+    // Capture summary — use worktreePath or project localPath for direct mode
+    const summaryPath = execution.worktreePath || task?.project?.localPath || null;
     const { captureExecutionSummary } = await import("@/lib/execution-summary");
     await captureExecutionSummary(
-      execution.id, taskId, 0, terminalBuffer, execution.worktreePath
+      execution.id, taskId, 0, terminalBuffer, summaryPath
     );
   }
 
@@ -246,8 +251,10 @@ export async function resumePtyExecution(
         },
       }).catch(() => {});
 
+      // Use worktreePath if available, otherwise fall back to project localPath (direct mode)
+      const summaryPath = prevExec.worktreePath || task.project!.localPath;
       const { captureExecutionSummary } = await import("@/lib/execution-summary");
-      await captureExecutionSummary(execution.id, taskId, exitCode, terminalBuffer, prevExec.worktreePath);
+      await captureExecutionSummary(execution.id, taskId, exitCode, terminalBuffer, summaryPath);
 
       if (exitCode === 0) {
         await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW" } }).catch(() => {});
@@ -477,13 +484,15 @@ export async function startPtyExecution(
         });
 
       // Capture execution summary (git log, stats, terminal log)
+      // Use worktreePath if available, otherwise fall back to project localPath (direct mode)
+      const summaryPath = resolvedWorktreePath || task.project!.localPath;
       const { captureExecutionSummary } = await import("@/lib/execution-summary");
       await captureExecutionSummary(
         execution.id,
         taskId,
         exitCode,
         terminalBuffer,
-        resolvedWorktreePath
+        summaryPath
       );
 
       if (exitCode === 0) {

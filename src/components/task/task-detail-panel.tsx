@@ -21,6 +21,7 @@ import { useI18n } from "@/lib/i18n";
 interface TaskDetailPanelProps {
   task: Task;
   workspaceId: string;
+  projectLocalPath?: string | null;
   onClose: () => void;
 }
 
@@ -29,6 +30,7 @@ type TabType = "terminal" | "changes" | "notes";
 export function TaskDetailPanel({
   task,
   workspaceId,
+  projectLocalPath,
   onClose,
 }: TaskDetailPanelProps) {
   const { t } = useI18n();
@@ -44,11 +46,21 @@ export function TaskDetailPanel({
     setTaskStatus(task.status);
   }, [task.status]);
 
-  // Terminal + execution history state
+  // Terminal + execution history state — reset when task changes
   const [activeWorktreePath, setActiveWorktreePath] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionLoaded, setExecutionLoaded] = useState(false);
   const [pastExecutions, setPastExecutions] = useState<TaskExecution[]>([]);
+
+  // Reset terminal state when switching tasks
+  useEffect(() => {
+    setActiveWorktreePath(null);
+    setIsExecuting(false);
+    setExecutionLoaded(false);
+    setPastExecutions([]);
+    setDiffData(null);
+    setActiveTab("terminal");
+  }, [task.id]);
   const [prompts, setPrompts] = useState<Array<{ id: string; name: string; isDefault: boolean }>>([]);
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
 
@@ -70,8 +82,10 @@ export function TaskDetailPanel({
     getTaskExecutions(task.id).then((executions) => {
       if (cancelled) return;
       const latest = executions[0];
-      if (latest?.status === "RUNNING" && latest.worktreePath) {
-        setActiveWorktreePath(latest.worktreePath);
+      if (latest?.status === "RUNNING") {
+        // worktreePath for worktree mode, or project localPath for direct mode
+        const cwdPath = latest.worktreePath || projectLocalPath || null;
+        if (cwdPath) setActiveWorktreePath(cwdPath);
       }
       // Past executions = all non-RUNNING ones
       setPastExecutions(executions.filter((e) => e.status !== "RUNNING"));
