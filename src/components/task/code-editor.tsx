@@ -34,6 +34,8 @@ const LANG_MAP: Record<string, string> = {
   sh: "shell",
   yaml: "yaml",
   yml: "yaml",
+  vue: "html",
+  svelte: "html",
   prisma: "prisma",
   txt: "plaintext",
 };

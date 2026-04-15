@@ -141,6 +141,44 @@ export async function deleteEntry(
   }
 }
 
+// ---- listAllFiles ----
+const listAllFilesSchema = z.object({
+  worktreePath: z.string().min(1),
+});
+
+export async function listAllFiles(
+  worktreePath: string
+): Promise<string[]> {
+  listAllFilesSchema.parse({ worktreePath });
+
+  const ig = ignore();
+  ig.add(".git");
+  const gitignorePath = path.join(worktreePath, ".gitignore");
+  if (existsSync(gitignorePath)) {
+    const content = await readFile(gitignorePath, "utf-8");
+    ig.add(content);
+  }
+
+  const results: string[] = [];
+
+  async function walk(dir: string) {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const abs = path.join(dir, entry.name);
+      const rel = path.relative(worktreePath, abs);
+      if (ig.ignores(rel)) continue;
+      if (entry.isDirectory()) {
+        await walk(abs);
+      } else {
+        results.push(rel);
+      }
+    }
+  }
+
+  await walk(worktreePath);
+  return results;
+}
+
 // ---- readFileContent ----
 const readFileContentSchema = z.object({
   worktreePath: z.string().min(1),

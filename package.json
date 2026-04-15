@@ -1,5 +1,5 @@
 {
-  "name": "ai-manager",
+  "name": "tower",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -41,6 +41,7 @@
     "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "fuse.js": "^7.3.0",
     "ignore": "^7.0.5",
     "lucide-react": "^1.6.0",
     "monaco-editor": "^0.55.1",
