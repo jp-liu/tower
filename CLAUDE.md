@@ -1,6 +1,6 @@
-# AI Manager
+# Tower
 
-AI 任务管理平台 — 看板 + 终端 + 代码编辑器 + MCP 工具链。
+AI 任务调度平台 — 看板 + 终端 + 代码编辑器 + MCP 工具链。
 
 **Tech:** Next.js 16 / TypeScript / SQLite (Prisma) / TailwindCSS 4 / shadcn (base-nova)
 

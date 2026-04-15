@@ -233,7 +233,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
           <Layers className="h-4 w-4 text-amber-400" />
         </div>
         <div className="flex-1">
-          <div className="text-sm font-semibold tracking-tight text-foreground">AI Manager</div>
+          <div className="text-sm font-semibold tracking-tight text-foreground">Tower</div>
           <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Studio</div>
         </div>
         <button

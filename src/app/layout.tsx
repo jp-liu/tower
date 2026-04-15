@@ -19,8 +19,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Manager - 项目管理平台",
-  description: "AI 项目管理看板和任务执行平台",
+  title: "AI Task Platform - Tower",
+  description: "AI task orchestration and multi-project management platform",
 };
 
 export default async function RootLayout({

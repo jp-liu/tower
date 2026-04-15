@@ -1,4 +1,4 @@
-# ai-manager
+# Tower
 
 ## What This Is
 
@@ -23,9 +23,12 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 ## Current State
 
-**In Progress:** v0.9 架构清理 + 外部调度闭环
+**Shipped:** v0.91 工作流优化 + 子页面重构 (2026-04-15)
+- Diff 精确化 (branchTipCommit + untracked)、看板自动归档、子页面独立布局、可选 worktree
+
+**Shipped:** v0.9 架构清理 + 外部调度闭环 (2026-04-13)
 - Phase 29-35: adapter cleanup, CLI profile, PTY env injection, Feishu notifications, HTTP bridge, MCP terminal tools, settings UI
-- Phase 35.1: Mission Control multi-task dashboard — /missions route with grid layout, cross-workspace terminal monitoring, task launcher (completed 2026-04-13)
+- Phase 35.1: Mission Control multi-task dashboard — /missions route with grid layout, cross-workspace terminal monitoring, task launcher
 
 **Shipped:** v0.8 执行历史与会话恢复 (2026-04-10)
 - Execution history timeline, AI summary, session resume, terminal portal, code quality
@@ -126,28 +129,25 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - ✓ 项目类型区分（前端/后端）— v0.6 Phase 23
 - ✓ 终端应用配置（Settings > General）— v0.6 Phase 23
 
-## Current Milestone: v0.9 架构清理 + 外部调度闭环
+## Completed Milestone: v0.91 工作流优化 + 子页面重构
 
-**Goal:** 清理废弃 adapter 架构，建立 CLI Profile 配置表，实现龙虾（Paperclip/OpenClaw）外部调度的完整闭环（派活 → 查进度 → 追加指令 → 完成通知）。
+**Commits:** dfdd273..3f9dcd2
 
-**Target features:**
-- 清理 adapter 死代码，保留 CLI 验证和预览进程管理
-- CLI Profile 配置表（command + buildArgs），支持未来切换不同 CLI
-- 龙虾启动 → 飞书通知对接（env 区分 + 复用 notify-agi.sh）
-- 飞书通知模板优化（notify-agi.sh 里定义结构化模板）
-- MCP 工具：get_task_terminal_output（查进度）
-- MCP 工具：send_task_terminal_input（发指令）
-- PTY 静止检测通用回调
-- 数据模型对齐 + 废弃路由清理
+**Shipped:**
+- [x] 合并后 diff 精确化：branchTipCommit 记录分支顶端，排除其他分支改动
+- [x] Diff 支持 untracked 文件展示
+- [x] 修复 merge stash 误检测 untracked 文件导致合并失败
+- [x] 看板自动归档：DONE/CANCELLED 只显示当天，过期自动隐藏
+- [x] DONE/CANCELLED 任务隐藏 Continue 按钮
+- [x] 笔记/资源/归档独立全屏布局（脱离 sidebar）
+- [x] SubPageNav 统一导航 + 统一操作栏（左选择器、右操作按钮）
+- [x] 可选 worktree 模式：创建任务时可选择不使用分支隔离
 
-### Active
+---
 
-- [ ] 清理 adapter 死代码 + 迁移有用模块
-- [ ] CLI Profile 配置表
-- [ ] 龙虾飞书通知对接（env 区分 + notify-agi.sh 模板优化）
-- [ ] MCP 终端交互工具（查进度 + 发指令）
-- [ ] PTY 静止检测通用回调
-- [ ] 数据模型对齐 + 废弃路由清理
+## Current: 日常使用 & Bug 修复
+
+**Goal:** 基于日常使用发现问题并修复，待稳定后再决定是否发布 v1.0。
 
 ### Out of Scope
 
@@ -168,7 +168,7 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - next-themes for FOUC-free theme switching
 - PTY-based terminal execution (node-pty + WebSocket + xterm.js)
 - notify-agi.sh hook for Feishu notifications via OpenClaw CLI
-- ~250 commits across v0.1-v0.8
+- ~614 commits across v0.1-v0.91
 - FTS5 全文搜索基础设施 (notes_fts) + 全局搜索 6 类型支持
 
 ## Constraints
@@ -192,7 +192,7 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 | stream-json + SSE for execution | Real-time CLI output with clean parsing | ✓ Good |
 | --dangerously-skip-permissions via env var | Enables autonomous execution while keeping security configurable | ✓ Good |
 | Notes in SQLite over local .md files | MCP can CRUD directly, supports search, ties to project lifecycle | ✓ Good — v0.2 |
-| data/ directory for assets & cache | Centralized file storage managed by ai-manager | ✓ Good — v0.2 |
+| data/ directory for assets & cache | Centralized file storage managed by Tower | ✓ Good — v0.2 |
 | FTS5 trigram + LIKE fallback | Chinese/English 3+ char queries + short query coverage | ✓ Good — v0.2 |
 | Action-dispatch MCP pattern | Keep tool count low (manage_notes, manage_assets vs 10+ tools) | ✓ Good — v0.2 |
 | textarea + react-markdown over @uiw/react-md-editor | React 19 compatibility, simpler hydration | ✓ Good — v0.2 |

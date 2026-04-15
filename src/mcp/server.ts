@@ -9,7 +9,7 @@ import { noteAssetTools } from "./tools/note-asset-tools";
 import { terminalTools } from "./tools/terminal-tools";
 
 export function createServer(): McpServer {
-  const server = new McpServer({ name: "ai-manager", version: "0.1.0" });
+  const server = new McpServer({ name: "tower", version: "0.1.0" });
 
   const allTools = {
     ...workspaceTools,

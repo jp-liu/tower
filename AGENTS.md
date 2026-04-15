@@ -9,11 +9,11 @@ Today's date is 2026-04-13.
 
 ---
 
-# ai-manager — Agent Reference
+# Tower — Agent Reference
 
 ## Project Overview
 
-ai-manager is an AI task management platform with a Kanban board UI. The core hierarchy is:
+Tower is an AI task management platform with a Kanban board UI. The core hierarchy is:
 
 ```
 Workspace → Projects → Tasks
@@ -93,12 +93,12 @@ Workspace (id, name, description?)
 
 ## MCP Server
 
-To expose ai-manager tools to an AI agent via MCP, add the following to your MCP client configuration:
+To expose Tower tools to an AI agent via MCP, add the following to your MCP client configuration:
 
 ```json
 {
   "mcpServers": {
-    "ai-manager": {
+    "tower": {
       "command": "npx",
       "args": ["tsx", "<project-root>/src/mcp/index.ts"]
     }
