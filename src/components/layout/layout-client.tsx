@@ -31,10 +31,11 @@ export function LayoutClient({ workspaces, children }: LayoutClientProps) {
     router.push(`/workspaces/${workspaceId}`);
   };
 
-  // Task detail page (/workspaces/xxx/tasks/xxx) — full screen, no sidebar/topbar
+  // Full-screen pages (no sidebar): task detail, notes, assets, archive
   const isTaskDetailPage = /\/workspaces\/[^/]+\/tasks\/[^/]+/.test(pathname);
+  const isSubPage = /\/workspaces\/[^/]+\/(notes|assets|archive)/.test(pathname);
 
-  if (isTaskDetailPage) {
+  if (isTaskDetailPage || isSubPage) {
     return (
       <TerminalPortalProvider>
         <div className="flex h-screen flex-col overflow-hidden">

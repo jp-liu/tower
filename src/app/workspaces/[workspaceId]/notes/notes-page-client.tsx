@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useTransition, useCallback } from "react";
-import Link from "next/link";
-import { ArrowLeft, FileText, Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
+import { SubPageNav } from "@/components/layout/sub-page-nav";
 import type { ProjectNote } from "@prisma/client";
 import { useI18n } from "@/lib/i18n";
 import { NOTE_CATEGORIES_PRESET } from "@/lib/constants";
@@ -177,20 +177,36 @@ export function NotesPageClient({
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Header — clean, just nav + title + new button */}
-      <div className="flex items-center gap-3 border-b border-border px-6 py-4">
-        <Link
-          href={`/workspaces/${listWsId}`}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          <span>{t("notes.backToBoard")}</span>
-        </Link>
-        <span className="text-border">·</span>
-        <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-          <FileText className="h-4 w-4 text-muted-foreground" />
-          <span>{t("notes.title")}</span>
-        </div>
+      <SubPageNav workspaceId={listWsId} />
+
+      {/* Action bar */}
+      <div className="flex items-center gap-3 border-b border-border px-6 py-2">
+        <Select value={listWsId} onValueChange={(v) => v && handleListWsChange(v)}>
+          <SelectTrigger className="h-8 w-auto min-w-[120px]">
+            <span className="truncate">{allWorkspaces.find((ws) => ws.id === listWsId)?.name ?? listWsId}</span>
+          </SelectTrigger>
+          <SelectContent>
+            {allWorkspaces.map((ws) => (
+              <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {listProjects.length > 0 && (
+          <Select value={listProjectId ?? ""} onValueChange={(v) => v && handleListProjectChange(v)}>
+            <SelectTrigger className="h-8 w-auto min-w-[140px]">
+              <span className="truncate">
+                {(() => { const p = listProjects.find((x) => x.id === listProjectId); return p ? (p.alias ? `${p.name} (${p.alias})` : p.name) : ""; })()}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              {listProjects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}{p.alias ? ` (${p.alias})` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         {!showForm && (
           <button
             onClick={handleNewNote}
@@ -289,38 +305,9 @@ export function NotesPageClient({
             </div>
           </div>
         ) : (
-          /* ── List view with its own workspace+project filter ── */
+          /* ── List view ── */
           <div className="space-y-4">
-            {/* List selectors */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <Select value={listWsId} onValueChange={(v) => v && handleListWsChange(v)}>
-                <SelectTrigger className="min-w-[140px] text-xs">
-                  <span className="truncate">{allWorkspaces.find((ws) => ws.id === listWsId)?.name ?? listWsId}</span>
-                </SelectTrigger>
-                <SelectContent>
-                  {allWorkspaces.map((ws) => (
-                    <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {listProjects.length > 0 && (
-                <Select value={listProjectId ?? ""} onValueChange={(v) => v && handleListProjectChange(v)}>
-                  <SelectTrigger className="min-w-[160px] text-xs">
-                    <span className="truncate">
-                      {(() => { const p = listProjects.find((x) => x.id === listProjectId); return p ? (p.alias ? `${p.name} (${p.alias})` : p.name) : ""; })()}
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {listProjects.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}{p.alias ? ` (${p.alias})` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              <CategoryFilter active={activeCategory} onSelect={setActiveCategory} />
-            </div>
+            <CategoryFilter active={activeCategory} onSelect={setActiveCategory} />
 
             <div className={`relative ${isPending ? "opacity-40 pointer-events-none" : ""} transition-opacity`}>
               {isPending && (
