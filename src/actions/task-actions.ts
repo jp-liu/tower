@@ -109,8 +109,19 @@ export async function deleteTask(taskId: string) {
 }
 
 export async function getProjectTasks(projectId: string) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   return db.task.findMany({
-    where: { projectId },
+    where: {
+      projectId,
+      OR: [
+        // Active tasks: always show
+        { status: { notIn: ["DONE", "CANCELLED"] } },
+        // DONE/CANCELLED: only show if updated today
+        { status: { in: ["DONE", "CANCELLED"] }, updatedAt: { gte: today } },
+      ],
+    },
     orderBy: [{ order: "asc" }, { createdAt: "desc" }],
   });
 }

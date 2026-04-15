@@ -12,12 +12,21 @@ export default async function WorkspaceBoardPage({ params, searchParams }: Props
   const { workspaceId } = await params;
   const { projectId: selectedProjectId, taskId: openTaskId } = await searchParams;
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   const workspace = await db.workspace.findUnique({
     where: { id: workspaceId },
     include: {
       projects: {
         include: {
           tasks: {
+            where: {
+              OR: [
+                { status: { notIn: ["DONE", "CANCELLED"] } },
+                { status: { in: ["DONE", "CANCELLED"] }, updatedAt: { gte: today } },
+              ],
+            },
             orderBy: [{ order: "asc" }, { createdAt: "desc" }],
             include: {
               labels: {
