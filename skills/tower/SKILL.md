@@ -37,6 +37,8 @@ Use Tower tools when the user wants to:
 - Interact with a running task's terminal
 - Search across workspaces, projects, or tasks
 - Organize tasks with labels or status changes
+- Get daily work summary or pending todo list
+- Check what was done today or what's left to do
 
 ---
 
@@ -91,6 +93,27 @@ Use Tower tools when the user wants to:
 1. Call `list_labels` with workspaceId to see available labels
 2. Call `set_task_labels` with taskId and the desired labelId array
 3. Note: this replaces all existing labels — include current ones if you want to keep them
+
+### "今天做了什么？" / "Daily summary" / "工作总结"
+
+1. Call `daily_summary` (no params for today, or pass `date: "YYYY-MM-DD"` for a specific day)
+2. Results are grouped by workspace → project, with:
+   - **completed**: tasks moved to DONE today
+   - **inProgress**: tasks with activity today but not yet done, including `progressSummary` (last AI chat excerpt)
+3. Present stats: totalCompleted, totalInProgress
+4. Format as a readable report
+
+### "今天有什么待办？" / "Daily todo" / "还有哪些任务没完成？"
+
+1. Call `daily_todo` (returns all TODO/IN_PROGRESS/IN_REVIEW tasks)
+2. Optional filters:
+   - `workspaceId` — narrow to one workspace
+   - `projectId` — narrow to one project
+   - `status` — e.g. `["IN_PROGRESS"]` for only active tasks
+   - `priority` — e.g. `["CRITICAL", "HIGH"]` for urgent only
+3. Results sorted by priority severity (CRITICAL first), grouped by workspace → project
+4. Each task includes `lastSessionId` for resuming execution
+5. Present stats: total count, breakdown by status and priority
 
 ### "Create a project" / "Set up a new project"
 
