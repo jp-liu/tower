@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, GitBranch, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatRelativeTime } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
@@ -9,6 +9,7 @@ interface TaskMetadataProps {
   title: string;
   description?: string;
   branch?: string;
+  baseBranch?: string | null;
   hasConversation: boolean;
   updatedAt: Date;
   onBack: () => void;
@@ -18,6 +19,7 @@ export function TaskMetadata({
   title,
   description,
   branch,
+  baseBranch,
   hasConversation,
   updatedAt,
   onBack,
@@ -46,11 +48,16 @@ export function TaskMetadata({
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {branch && (
+        {baseBranch ? (
           <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px] font-mono border border-border">
-            {branch}
+            <GitBranch className="mr-1 h-3 w-3" />
+            {baseBranch} · worktree
           </Badge>
-        )}
+        ) : branch ? (
+          <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px] font-mono border border-border">
+            {t("taskDetail.directMode")}
+          </Badge>
+        ) : null}
         {hasConversation && (
           <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-400 text-[10px] border border-emerald-500/20">
             {t("taskDetail.hasConversation")}

@@ -73,6 +73,7 @@ export function CreateTaskDialog({
   const [selectedBranch, setSelectedBranch] = useState<string>("");
   const [branchFilter, setBranchFilter] = useState("");
   const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
+  const [useWorktree, setUseWorktree] = useState(true);
   const branchDropdownRef = useRef<HTMLDivElement>(null);
   const { t } = useI18n();
 
@@ -165,7 +166,7 @@ export function CreateTaskDialog({
         priority,
         status: defaultStatus,
         labelIds: selectedLabelIds,
-        ...(isGitProject && selectedBranch ? { baseBranch: selectedBranch } : {}),
+        ...(isGitProject && useWorktree && selectedBranch ? { baseBranch: selectedBranch } : {}),
         ...(subPath.trim() ? { subPath: subPath.trim() } : {}),
       });
     }
@@ -176,6 +177,7 @@ export function CreateTaskDialog({
     setSelectedLabelIds([]);
     setBranches([]);
     setSelectedBranch("");
+    setUseWorktree(true);
     onOpenChange(false);
   };
 
@@ -260,7 +262,7 @@ export function CreateTaskDialog({
                     className="flex w-full items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <span className={`flex-1 truncate text-left text-xs ${selectedBranch ? "font-mono" : "text-muted-foreground"}`}>{selectedBranch || t("task.branchDirect")}</span>
+                    <span className="flex-1 truncate text-left font-mono text-xs">{selectedBranch || t("task.branchNone")}</span>
                     <svg className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${branchDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                   </button>
                   {/* Dropdown */}
@@ -279,17 +281,6 @@ export function CreateTaskDialog({
                       </div>
                       {/* Branch list */}
                       <div className="max-h-48 overflow-y-auto p-1">
-                        {/* Direct mode option */}
-                        {!branchFilter && (
-                          <button
-                            type="button"
-                            onClick={() => { setSelectedBranch(""); setBranchDropdownOpen(false); }}
-                            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent text-muted-foreground"
-                          >
-                            <span className="flex-1 truncate">{t("task.branchDirect")}</span>
-                            {selectedBranch === "" && <Check className="h-3 w-3 text-primary shrink-0" />}
-                          </button>
-                        )}
                         {branches
                           .filter((b) => b.toLowerCase().includes(branchFilter.toLowerCase()))
                           .map((branch) => (
@@ -314,6 +305,26 @@ export function CreateTaskDialog({
               ) : (
                 <div className="text-sm text-muted-foreground">{t("task.branchNone")}</div>
               )}
+              {/* Worktree toggle */}
+              <div className="mt-3 flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground">{t("task.worktreeLabel")}</Label>
+                <div className="flex gap-1">
+                  {([true, false] as const).map((val) => (
+                    <button
+                      key={String(val)}
+                      type="button"
+                      onClick={() => setUseWorktree(val)}
+                      className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                        useWorktree === val
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {val ? t("task.worktreeYes") : t("task.worktreeNo")}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
           {/* Labels */}

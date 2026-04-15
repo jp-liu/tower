@@ -220,6 +220,7 @@ export function TaskDetailPanel({
         title={task.title}
         description={t("taskDetail.panelDescription")}
         branch={`task/${task.id}`}
+        baseBranch={task.baseBranch}
         hasConversation={false}
         updatedAt={task.updatedAt}
         onBack={onClose}
@@ -271,13 +272,15 @@ export function TaskDetailPanel({
               {t("taskPage.completeTask")}
             </button>
           )}
-          <button
-            onClick={() => router.push(`/workspaces/${workspaceId}/tasks/${task.id}`)}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ExternalLink className="h-3 w-3" />
-            {t("taskPage.viewDetails")}
-          </button>
+          {taskStatus !== "DONE" && taskStatus !== "CANCELLED" && (
+            <button
+              onClick={() => router.push(`/workspaces/${workspaceId}/tasks/${task.id}`)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <ExternalLink className="h-3 w-3" />
+              {t("taskPage.viewDetails")}
+            </button>
+          )}
         </div>
       </div>
 
