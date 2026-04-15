@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { execFileSync } from "child_process";
+import { copyFileSync, existsSync, statSync, mkdirSync } from "fs";
+import { basename, extname, join } from "path";
 import { db } from "../db";
 
 const TaskStatus = z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"]);
@@ -31,7 +34,7 @@ export const taskTools = {
   },
 
   create_task: {
-    description: "Create a new task in a project. Priority defaults to MEDIUM, status defaults to TODO. Optionally assigns labels by ID. Use subPath for mono-repo sub-directory targeting.",
+    description: "Create a new task in a project. Priority defaults to MEDIUM, status defaults to TODO. Set useWorktree=true for branch isolation. Set autoStart=true (default) to immediately start execution. Pass references as file paths to attach as project assets.",
     schema: z.object({
       projectId: z.string(),
       title: z.string(),
@@ -40,6 +43,9 @@ export const taskTools = {
       status: TaskStatus.optional().default("TODO"),
       labelIds: z.array(z.string()).optional(),
       subPath: z.string().optional(),
+      useWorktree: z.boolean().optional().default(false),
+      autoStart: z.boolean().optional().default(true),
+      references: z.array(z.string()).optional(),
     }),
     handler: async (args: {
       projectId: string;
@@ -49,7 +55,25 @@ export const taskTools = {
       status?: string;
       labelIds?: string[];
       subPath?: string;
+      useWorktree?: boolean;
+      autoStart?: boolean;
+      references?: string[];
     }) => {
+      // Auto-detect baseBranch from project's current git branch
+      let baseBranch: string | null = null;
+      if (args.useWorktree) {
+        const project = await db.project.findUnique({ where: { id: args.projectId }, select: { localPath: true } });
+        if (project?.localPath) {
+          try {
+            baseBranch = execFileSync("git", ["branch", "--show-current"], {
+              cwd: project.localPath, encoding: "utf-8", timeout: 5000,
+            }).trim() || null;
+          } catch {
+            // fallback: no baseBranch, task runs in direct mode
+          }
+        }
+      }
+
       const task = await db.task.create({
         data: {
           title: args.title,
@@ -57,7 +81,7 @@ export const taskTools = {
           projectId: args.projectId,
           priority: (args.priority ?? "MEDIUM") as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
           status: (args.status ?? "TODO") as "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED",
-          subPath: args.subPath ?? null,
+          baseBranch,
         },
       });
 
@@ -65,6 +89,72 @@ export const taskTools = {
         await db.taskLabel.createMany({
           data: args.labelIds.map((labelId) => ({ taskId: task.id, labelId })),
         });
+      }
+
+      // Copy reference files to assets and create ProjectAsset records
+      const attachedFiles: string[] = [];
+      if (args.references && args.references.length > 0) {
+        const assetsDir = join(process.cwd(), "data", "assets", args.projectId);
+        mkdirSync(assetsDir, { recursive: true });
+
+        for (const filePath of args.references) {
+          try {
+            if (!existsSync(filePath)) continue;
+            const stat = statSync(filePath);
+            if (!stat.isFile()) continue;
+
+            let filename = basename(filePath);
+            // Avoid overwriting: append timestamp if file exists
+            const destCheck = join(assetsDir, filename);
+            if (existsSync(destCheck)) {
+              const ext = extname(filename);
+              const base = basename(filename, ext);
+              filename = `${base}-${Date.now()}${ext}`;
+            }
+            const dest = join(assetsDir, filename);
+            copyFileSync(filePath, dest);
+
+            await db.projectAsset.create({
+              data: {
+                filename,
+                path: dest,
+                size: stat.size,
+                projectId: args.projectId,
+                taskId: task.id,
+                description: `Reference: ${basename(filePath)}`,
+              },
+            });
+            attachedFiles.push(filename);
+          } catch {
+            // Skip files that can't be copied
+          }
+        }
+
+        // Append reference info to task description
+        if (attachedFiles.length > 0) {
+          const refText = attachedFiles.map((f) => `- ${f}`).join("\n");
+          const updatedDesc = (task.description ?? "") + `\n\nAttached references:\n${refText}`;
+          await db.task.update({ where: { id: task.id }, data: { description: updatedDesc } });
+        }
+      }
+
+      // Auto-start execution if requested
+      if (args.autoStart) {
+        const PORT = process.env.PORT ?? "3000";
+        const prompt = args.description || args.title;
+        try {
+          const res = await fetch(`http://localhost:${PORT}/api/internal/terminal/${task.id}/start`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt }),
+          });
+          if (res.ok) {
+            const execData = await res.json();
+            return { ...task, execution: execData };
+          }
+        } catch {
+          // Task created but auto-start failed — return task anyway
+        }
       }
 
       return task;

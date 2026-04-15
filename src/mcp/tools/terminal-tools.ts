@@ -15,6 +15,33 @@ function validateMcpTaskId(taskId: string): string | null {
 }
 
 export const terminalTools = {
+  start_task_execution: {
+    description:
+      "Start a Claude CLI terminal session for a task. The prompt is sent as the initial instruction. The task status will change to IN_PROGRESS. Returns executionId and worktreePath (if worktree mode).",
+    schema: z.object({
+      taskId: z.string(),
+      prompt: z.string().optional(),
+    }),
+    handler: async (args: { taskId: string; prompt?: string }) => {
+      const err = validateMcpTaskId(args.taskId);
+      if (err) return { error: err, taskId: args.taskId };
+      const tid = encodeURIComponent(args.taskId);
+      const response = await bridgeFetch(`/${tid}/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: args.prompt ?? "" }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return { ok: true, ...data };
+      }
+
+      const errData = await response.json().catch(() => ({}));
+      return { error: (errData as Record<string, unknown>).error ?? "Failed to start execution", status: response.status };
+    },
+  },
+
   get_task_terminal_output: {
     description:
       "Get recent terminal output lines from a running task's PTY session. Returns the last N lines (default 50, max 500).",
