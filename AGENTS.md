@@ -112,7 +112,7 @@ Replace `<project-root>` with the absolute path to this repository.
 
 ## Available MCP Tools
 
-21 tools across 6 categories.
+23 tools across 7 categories.
 
 ### Workspace Tools (`src/mcp/tools/workspace-tools.ts`)
 
@@ -165,6 +165,13 @@ Replace `<project-root>` with the absolute path to this repository.
 | `send_task_terminal_input` | Send text input to a running task's PTY terminal (include `\n` for Enter) | `taskId`, `text` |
 | `get_task_execution_status` | Get execution status (running/idle/exited) with output snippet | `taskId` |
 
+### Report Tools (`src/mcp/tools/report-tools.ts`)
+
+| Tool | Description | Key Params |
+|------|-------------|------------|
+| `daily_summary` | Today's work summary — completed tasks, in-progress tasks with last chat summary, grouped by workspace → project | `date?` (YYYY-MM-DD) |
+| `daily_todo` | All pending tasks (TODO/IN_PROGRESS/IN_REVIEW), sorted by priority severity | `workspaceId?`, `projectId?`, `status?`, `priority?` |
+
 ---
 
 ## Server Actions
@@ -213,6 +220,13 @@ For AI working directly in the Next.js codebase, use these server actions (all i
 | Function | Signature |
 |----------|-----------|
 | `globalSearch` | `(query, category?) → SearchResult[]` |
+
+### `report-actions.ts`
+
+| Function | Signature |
+|----------|-----------|
+| `getDailySummary` | `(dateStr?) → DailySummaryResult` — tasks with activity on given date, grouped by workspace/project |
+| `getDailyTodo` | `(filters?) → DailyTodoResult` — pending tasks, filterable by workspace/project/status/priority |
 
 ### `agent-actions.ts`
 
