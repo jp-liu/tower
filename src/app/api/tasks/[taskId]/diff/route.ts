@@ -64,8 +64,12 @@ export async function GET(
       const endCommit = branchTipCommit || mergeCommit;
       diffTarget = `${forkCommit}..${endCommit}`;
     } else if (forkCommit && worktreePath && existsSync(worktreePath)) {
-      // IN_PROGRESS/IN_REVIEW — diff from fork point in worktree (includes uncommitted)
+      // IN_PROGRESS/IN_REVIEW worktree mode — diff from fork point in worktree (includes uncommitted)
       diffCwd = worktreePath;
+      diffTarget = forkCommit;
+    } else if (forkCommit && !worktreePath) {
+      // IN_PROGRESS/IN_REVIEW direct mode — diff from fork point on main repo
+      diffCwd = localPath;
       diffTarget = forkCommit;
     } else if (worktreeBranch) {
       // Fallback — use branch names to compute merge-base

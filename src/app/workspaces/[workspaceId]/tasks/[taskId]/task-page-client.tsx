@@ -137,9 +137,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     setIsExecuting(true);
     try {
       const { worktreePath } = await startPtyExecution(task.id, "", selectedPromptId);
-      if (worktreePath) {
-        setActiveWorktreePath(worktreePath);
-      }
+      setActiveWorktreePath(worktreePath);
     } catch (err) {
       setIsExecuting(false);
       toast.error(err instanceof Error ? err.message : String(err));
@@ -168,9 +166,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     setIsExecuting(true);
     try {
       const { worktreePath } = await resumePtyExecution(task.id, sessionId);
-      if (worktreePath) {
-        setActiveWorktreePath(worktreePath);
-      }
+      setActiveWorktreePath(worktreePath);
       setTaskStatus("IN_PROGRESS");
     } catch {
       setIsExecuting(false);

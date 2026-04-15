@@ -258,7 +258,7 @@ export async function resumePtyExecution(
     idleTimeoutSec * 1000
   );
 
-  return { executionId: execution.id, worktreePath: prevExec.worktreePath };
+  return { executionId: execution.id, worktreePath: prevExec.worktreePath ?? baseCwd ?? null };
 }
 
 /**
@@ -390,14 +390,24 @@ export async function startPtyExecution(
     },
   });
 
-  // 7b. Record forkCommit — the commit where the task branch diverged from baseBranch
-  if (resolvedWorktreePath && task.baseBranch) {
+  // 7b. Record forkCommit
+  // Worktree mode: merge-base between baseBranch and HEAD
+  // Direct mode: current HEAD commit (baseline for diff)
+  if (task.project.localPath) {
     try {
       const { execFileSync } = await import("child_process");
-      const forkCommit = execFileSync(
-        "git", ["merge-base", task.baseBranch, "HEAD"],
-        { cwd: resolvedWorktreePath, encoding: "utf-8", timeout: 5000 }
-      ).trim();
+      let forkCommit: string;
+      if (resolvedWorktreePath && task.baseBranch) {
+        forkCommit = execFileSync(
+          "git", ["merge-base", task.baseBranch, "HEAD"],
+          { cwd: resolvedWorktreePath, encoding: "utf-8", timeout: 5000 }
+        ).trim();
+      } else {
+        forkCommit = execFileSync(
+          "git", ["rev-parse", "HEAD"],
+          { cwd: task.project.localPath, encoding: "utf-8", timeout: 5000 }
+        ).trim();
+      }
       if (forkCommit) {
         await db.taskExecution.update({
           where: { id: execution.id },
@@ -494,7 +504,7 @@ export async function startPtyExecution(
     idleTimeoutSec * 1000
   );
 
-  return { executionId: execution.id, worktreePath: resolvedWorktreePath };
+  return { executionId: execution.id, worktreePath: resolvedWorktreePath ?? baseCwd ?? null };
 }
 
 export async function getActiveExecutionsAcrossWorkspaces(): Promise<ActiveExecutionInfo[]> {

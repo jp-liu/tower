@@ -50,6 +50,31 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
     include: { project: true },
   });
 
+  // Direct mode DONE: record current HEAD as mergeCommit for diff archive
+  if (status === "DONE" && !task.baseBranch && task.project?.localPath) {
+    try {
+      const { execFileSync } = await import("child_process");
+      const headCommit = execFileSync(
+        "git", ["rev-parse", "HEAD"],
+        { cwd: task.project.localPath, encoding: "utf-8", timeout: 5000 }
+      ).trim();
+      if (headCommit) {
+        const latestExec = await db.taskExecution.findFirst({
+          where: { taskId },
+          orderBy: { createdAt: "desc" },
+        });
+        if (latestExec) {
+          await db.taskExecution.update({
+            where: { id: latestExec.id },
+            data: { mergeCommit: headCommit },
+          });
+        }
+      }
+    } catch {
+      // Best effort
+    }
+  }
+
   // LC-01: Auto-cleanup worktree on CANCELLED (per D-03, D-04: only for GIT projects)
   if (status === "CANCELLED" && task.project?.localPath) {
     try {

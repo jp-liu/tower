@@ -103,9 +103,7 @@ export function TaskDetailPanel({
     setIsExecuting(true);
     try {
       const { worktreePath } = await startPtyExecution(task.id, "", selectedPromptId);
-      if (worktreePath) {
-        setActiveWorktreePath(worktreePath);
-      }
+      setActiveWorktreePath(worktreePath);
       setTaskStatus("IN_PROGRESS");
     } catch (err) {
       setIsExecuting(false);
@@ -144,9 +142,7 @@ export function TaskDetailPanel({
     setIsExecuting(true);
     try {
       const { worktreePath } = await resumePtyExecution(task.id, sessionId);
-      if (worktreePath) {
-        setActiveWorktreePath(worktreePath);
-      }
+      setActiveWorktreePath(worktreePath);
       setTaskStatus("IN_PROGRESS");
     } catch {
       setIsExecuting(false);
