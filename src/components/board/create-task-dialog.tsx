@@ -158,7 +158,7 @@ export function CreateTaskDialog({
   const handleSubmit = () => {
     if (!title.trim()) return;
     if (isEditing && onUpdate) {
-      onUpdate(editTask.id, { title, description, priority, labelIds: selectedLabelIds, ...(subPath.trim() ? { subPath: subPath.trim() } : {}) });
+      onUpdate(editTask.id, { title, description, priority, labelIds: selectedLabelIds, subPath: subPath.trim() || "" });
     } else {
       onSubmit({
         title,
