@@ -98,17 +98,21 @@ export function TaskCardContextMenu({
       >
         {t("board.contextMenu.launch")}
       </button>
-      <hr className="my-1 border-border" />
-      <button
-        type="button"
-        className={itemClass}
-        onClick={() => {
-          router.push(`/workspaces/${workspaceId}/tasks/${taskId}`);
-          onClose();
-        }}
-      >
-        {t("board.contextMenu.goToDetail")}
-      </button>
+      {currentStatus !== "DONE" && currentStatus !== "CANCELLED" && (
+        <>
+          <hr className="my-1 border-border" />
+          <button
+            type="button"
+            className={itemClass}
+            onClick={() => {
+              router.push(`/workspaces/${workspaceId}/tasks/${taskId}`);
+              onClose();
+            }}
+          >
+            {t("board.contextMenu.goToDetail")}
+          </button>
+        </>
+      )}
     </div>
   );
 
