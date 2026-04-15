@@ -27,6 +27,7 @@ function serializeTask(task: Awaited<ReturnType<typeof fetchTask>>) {
           localPath: task.project.localPath,
           projectType: task.project.projectType,
           previewCommand: task.project.previewCommand,
+          previewPort: task.project.previewPort,
         }
       : null,
   };

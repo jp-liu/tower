@@ -29,6 +29,7 @@ model Project {
   localPath      String?
   projectType    ProjectCategory @default(FRONTEND)
   previewCommand String?
+  previewPort    Int?
   workspaceId    String
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt

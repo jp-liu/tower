@@ -33,6 +33,7 @@ export const updateProjectSchema = z.object({
   localPath: z.string().optional(),
   projectType: z.enum(["FRONTEND", "BACKEND"]).optional(),
   previewCommand: z.string().max(500).nullable().optional(),
+  previewPort: z.number().int().min(1).max(65535).nullable().optional(),
 });
 
 // ── Task schemas ──

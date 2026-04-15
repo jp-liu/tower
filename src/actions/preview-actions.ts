@@ -2,6 +2,8 @@
 
 import { spawn } from "node:child_process";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   registerPreviewProcess,
   killPreviewProcess,
@@ -21,6 +23,7 @@ export async function startPreview(
     // Split command by whitespace into args — shell: false (security requirement)
     const parts = command.trim().split(/\s+/);
     const [cmd, ...args] = parts;
+    console.log(`[preview] Starting: ${command} | cwd: ${cwd}`);
     const child = spawn(cmd, args, {
       cwd,
       shell: false,
@@ -36,6 +39,25 @@ export async function startPreview(
 
 export async function stopPreview(taskId: string): Promise<void> {
   killPreviewProcess(taskId);
+}
+
+/**
+ * Detect the frontend framework from package.json in the given directory.
+ * Returns "vite" | "next" | "nuxt" | "angular" | null
+ */
+export async function detectFramework(cwd: string): Promise<string | null> {
+  try {
+    const raw = readFileSync(join(cwd, "package.json"), "utf-8");
+    const pkg = JSON.parse(raw);
+    const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+    if (allDeps["vite"] || allDeps["@vitejs/plugin-vue"] || allDeps["@vitejs/plugin-react"]) return "vite";
+    if (allDeps["next"]) return "next";
+    if (allDeps["nuxt"]) return "nuxt";
+    if (allDeps["@angular/core"]) return "angular";
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // macOS-only: uses built-in `open -a` command

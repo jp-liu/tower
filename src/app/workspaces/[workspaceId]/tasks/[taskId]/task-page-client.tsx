@@ -35,7 +35,7 @@ interface TaskPageClientProps {
     projectId: string;
     createdAt: string;
     updatedAt: string;
-    project: { id: string; name: string; type: string; localPath: string | null; projectType: string; previewCommand: string | null } | null;
+    project: { id: string; name: string; type: string; localPath: string | null; projectType: string; previewCommand: string | null; previewPort: number | null } | null;
   };
   workspaceId: string;
   workspaceName: string;
@@ -181,8 +181,14 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     setTaskStatus("DONE");
     setShowMergeDialog(false);
     toast.success(t("taskPage.taskCompleted"));
+    // Refresh diff data to show final state
+    fetch(`/api/tasks/${task.id}/diff`).then((res) => {
+      if (res.ok) return res.json();
+    }).then((data) => {
+      if (data?.files) setDiffData(data);
+    }).catch(() => {});
     router.refresh();
-  }, [router, t]);
+  }, [router, t, task.id]);
 
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   const [mergeCommitLog, setMergeCommitLog] = useState<string[]>([]);
@@ -374,19 +380,26 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
 
       {/* Right panel: Tabs — 65% default, 20% minimum per D-02 and D-03 */}
       <Panel defaultSize={65} minSize={20} className="flex flex-col">
-        <Tabs defaultValue="files" className="flex h-full flex-col gap-0">
+        {(() => {
+          // DONE + worktree mode: worktree is gone, hide files/preview, show only changes
+          const isWorktreeDone = taskStatus === "DONE" && !!task.baseBranch;
+          const defaultTab = isWorktreeDone ? "changes" : "files";
+          return (
+        <Tabs defaultValue={defaultTab} key={defaultTab} className="flex h-full flex-col gap-0">
           {/* Tab bar — segmented control style matching Settings page */}
           <div className="flex shrink-0 items-center border-b border-border px-3 py-2">
             <TabsList className="h-auto border border-border">
-              <TabsTrigger value="files" className="data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
-                <FolderTree className="h-3.5 w-3.5" />
-                {t("taskPage.tabFiles")}
-              </TabsTrigger>
+              {!isWorktreeDone && (
+                <TabsTrigger value="files" className="data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
+                  <FolderTree className="h-3.5 w-3.5" />
+                  {t("taskPage.tabFiles")}
+                </TabsTrigger>
+              )}
               <TabsTrigger value="changes" className="data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
                 <GitCompare className="h-3.5 w-3.5" />
                 {t("taskPage.changes")}
               </TabsTrigger>
-              {task.project?.projectType !== "BACKEND" && (
+              {!isWorktreeDone && task.project?.projectType !== "BACKEND" && (
                 <TabsTrigger value="preview" className="data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
                   <Eye className="h-3.5 w-3.5" />
                   {t("taskPage.tabPreview")}
@@ -463,6 +476,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
               taskId={task.id}
               worktreePath={latestExecution?.worktreePath ?? null}
               previewCommand={task.project?.previewCommand ?? null}
+              previewPort={task.project?.previewPort ?? null}
               refreshKey={previewRefreshKey}
               projectId={task.projectId}
               previewUrl={previewUrl}
@@ -470,6 +484,8 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
             />
           </TabsContent>
         </Tabs>
+          );
+        })()}
       </Panel>
 
       {/* Merge confirm dialog — triggered by Complete button */}

@@ -85,7 +85,7 @@ export async function createProject(data: {
   return project;
 }
 
-export async function updateProject(id: string, data: { name?: string; alias?: string; description?: string; localPath?: string; projectType?: "FRONTEND" | "BACKEND"; previewCommand?: string | null }) {
+export async function updateProject(id: string, data: { name?: string; alias?: string; description?: string; localPath?: string; projectType?: "FRONTEND" | "BACKEND"; previewCommand?: string | null; previewPort?: number | null }) {
   const v = updateProjectSchema.parse(data);
   const project = await db.project.update({
     where: { id },
