@@ -70,15 +70,29 @@ export async function POST(
 
     const gitOpts = { encoding: "utf-8" as const, timeout: 30000 };
 
+    // Record the branch tip BEFORE merge — used for accurate post-merge diff
+    let branchTipCommit: string | undefined;
+    try {
+      branchTipCommit = execFileSync(
+        "git", ["rev-parse", worktreeBranch],
+        { ...gitOpts, cwd: localPath }
+      ).trim();
+    } catch {
+      // Best effort — diff will fallback gracefully
+    }
+
     // Normal merge: checkout baseBranch, merge task branch
     // Preserves full commit history from the task branch
 
     // 1. Stash any uncommitted changes in main repo (safety)
+    // Filter out untracked files (??) — git stash push doesn't handle them without -u
     const mainStatus = execFileSync(
       "git", ["status", "--porcelain"],
       { ...gitOpts, cwd: localPath }
     ).trim();
-    const hadStash = mainStatus.length > 0;
+    const hadStash = mainStatus.split("\n").some(
+      (line) => line.trim() !== "" && !line.startsWith("??")
+    );
     if (hadStash) {
       execFileSync("git", ["stash", "push", "-m", "ai-manager-merge-temp"], { ...gitOpts, cwd: localPath });
     }
@@ -103,12 +117,15 @@ export async function POST(
       }
     }
 
-    // Record mergeCommit on the execution (commitHash is the squash commit just created)
+    // Record mergeCommit and branchTipCommit on the execution
     if (latestExecution && commitHash) {
       try {
         await db.taskExecution.update({
           where: { id: latestExecution.id },
-          data: { mergeCommit: commitHash },
+          data: {
+            mergeCommit: commitHash,
+            ...(branchTipCommit ? { branchTipCommit } : {}),
+          },
         });
       } catch {
         // Best effort — diff will fallback gracefully
@@ -132,9 +149,10 @@ export async function POST(
 
     return NextResponse.json({ success: true, message: "Squash merge completed" });
   } catch (error) {
-    console.error("[merge] Merge failed:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[merge] Merge failed:", message);
     return NextResponse.json(
-      { error: "Merge failed" },
+      { error: `Merge failed: ${message}` },
       { status: 500 }
     );
   }

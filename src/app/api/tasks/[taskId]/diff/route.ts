@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { execFileSync } from "child_process";
-import { existsSync } from "fs";
-import { parseDiffOutput, checkConflicts } from "@/lib/diff-parser";
+import { existsSync, readFileSync } from "fs";
+import path from "path";
+import { parseDiffOutput, checkConflicts, type DiffFile } from "@/lib/diff-parser";
 
 export async function GET(
   _request: NextRequest,
@@ -49,6 +50,7 @@ export async function GET(
 
     const forkCommit = latestExecution.forkCommit;
     const mergeCommit = latestExecution.mergeCommit;
+    const branchTipCommit = latestExecution.branchTipCommit;
     const worktreeBranch = latestExecution.worktreeBranch;
     const worktreePath = latestExecution.worktreePath;
 
@@ -56,9 +58,11 @@ export async function GET(
     let diffTarget: string;
 
     if (mergeCommit && forkCommit) {
-      // DONE state — task branch may be deleted, use saved commits on main repo
+      // DONE state — use branchTipCommit to show only task's own changes,
+      // falling back to mergeCommit for backward compatibility
       diffCwd = localPath;
-      diffTarget = `${forkCommit}..${mergeCommit}`;
+      const endCommit = branchTipCommit || mergeCommit;
+      diffTarget = `${forkCommit}..${endCommit}`;
     } else if (forkCommit && worktreePath && existsSync(worktreePath)) {
       // IN_PROGRESS/IN_REVIEW — diff from fork point in worktree (includes uncommitted)
       diffCwd = worktreePath;
@@ -99,6 +103,50 @@ export async function GET(
 
     const parsedDiff = parseDiffOutput(numstat, unified);
 
+    // Include untracked files for live worktree diffs (not DONE state)
+    if (!mergeCommit && worktreePath && existsSync(worktreePath)) {
+      try {
+        const untrackedOutput = execFileSync(
+          "git", ["ls-files", "--others", "--exclude-standard"],
+          { cwd: diffCwd, encoding: "utf-8", timeout: 5000 }
+        ).trim();
+        if (untrackedOutput) {
+          for (const filename of untrackedOutput.split("\n")) {
+            if (!filename) continue;
+            try {
+              const filePath = path.join(diffCwd, filename);
+              const content = readFileSync(filePath, "utf-8");
+              const lines = content.split("\n");
+              // Remove trailing empty line from split
+              if (lines[lines.length - 1] === "") lines.pop();
+              const lineCount = lines.length;
+              const patchLines = [
+                `diff --git a/${filename} b/${filename}`,
+                "new file mode 100644",
+                "--- /dev/null",
+                `+++ b/${filename}`,
+                `@@ -0,0 +1,${lineCount} @@`,
+                ...lines.map((l) => `+${l}`),
+              ];
+              const entry: DiffFile = {
+                filename,
+                added: lineCount,
+                removed: 0,
+                isBinary: false,
+                patch: patchLines.join("\n"),
+              };
+              parsedDiff.files.push(entry);
+              parsedDiff.totalAdded += lineCount;
+            } catch {
+              // Skip binary or unreadable files
+            }
+          }
+        }
+      } catch {
+        // ignore — best effort
+      }
+    }
+
     // Conflict check only relevant before merge
     let hasConflicts = false;
     let conflictFiles: string[] = [];
@@ -110,8 +158,9 @@ export async function GET(
     let commitCount = 0;
     if (mergeCommit && forkCommit) {
       try {
+        const endCommit = branchTipCommit || mergeCommit;
         const str = execFileSync(
-          "git", ["rev-list", "--count", `${forkCommit}..${mergeCommit}`],
+          "git", ["rev-list", "--count", `${forkCommit}..${endCommit}`],
           { cwd: diffCwd, encoding: "utf-8", timeout: 5000 }
         ).trim();
         commitCount = parseInt(str, 10) || 0;
