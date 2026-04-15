@@ -260,7 +260,7 @@ export function CreateTaskDialog({
                     className="flex w-full items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <span className="flex-1 truncate text-left font-mono text-xs">{selectedBranch || t("task.branchNone")}</span>
+                    <span className={`flex-1 truncate text-left text-xs ${selectedBranch ? "font-mono" : "text-muted-foreground"}`}>{selectedBranch || t("task.branchDirect")}</span>
                     <svg className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${branchDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                   </button>
                   {/* Dropdown */}
@@ -279,6 +279,17 @@ export function CreateTaskDialog({
                       </div>
                       {/* Branch list */}
                       <div className="max-h-48 overflow-y-auto p-1">
+                        {/* Direct mode option */}
+                        {!branchFilter && (
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedBranch(""); setBranchDropdownOpen(false); }}
+                            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent text-muted-foreground"
+                          >
+                            <span className="flex-1 truncate">{t("task.branchDirect")}</span>
+                            {selectedBranch === "" && <Check className="h-3 w-3 text-primary shrink-0" />}
+                          </button>
+                        )}
                         {branches
                           .filter((b) => b.toLowerCase().includes(branchFilter.toLowerCase()))
                           .map((branch) => (

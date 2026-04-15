@@ -84,6 +84,7 @@ const translations = {
     "task.branchLoading": "加载分支...",
     "task.branchNone": "未找到分支",
     "task.branchSearch": "搜索分支...",
+    "task.branchDirect": "不使用分支隔离（直接在主仓库工作）",
     "task.subPath": "子路径",
     "task.subPathPlaceholder": "例如: web、packages/api",
     "task.subPathHint": "Mono-repo 子目录，任务将在此目录下执行",
@@ -286,6 +287,7 @@ const translations = {
     "archive.lastExecution": "最近执行",
     "archive.status.done": "已完成",
     "archive.status.cancelled": "已取消",
+    "archive.tasksCount": "条归档",
     // Sidebar notes/assets
     "sidebar.notes": "笔记",
     "sidebar.assets": "资源",
@@ -595,6 +597,7 @@ const translations = {
     "task.branchLoading": "Loading branches...",
     "task.branchNone": "No branches found",
     "task.branchSearch": "Search branches...",
+    "task.branchDirect": "No branch isolation (work directly in main repo)",
     "task.subPath": "Sub Path",
     "task.subPathPlaceholder": "e.g., web, packages/api",
     "task.subPathHint": "Mono-repo subdirectory, task executes in this directory",
@@ -788,6 +791,7 @@ const translations = {
     "archive.lastExecution": "Last execution",
     "archive.status.done": "Done",
     "archive.status.cancelled": "Cancelled",
+    "archive.tasksCount": "archived",
     // Sidebar notes/assets
     "sidebar.notes": "Notes",
     "sidebar.assets": "Assets",
