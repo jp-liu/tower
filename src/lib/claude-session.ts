@@ -15,30 +15,44 @@ function findSessionDir(cwd: string): string | null {
   try {
     const dirs = readdirSync(PROJECTS_DIR);
 
-    // Extract key path segments from cwd (last 2-3 meaningful directory names)
+    // Extract ASCII-only path segments for matching (skip non-ASCII segments like Chinese)
     const segments = cwd.split("/").filter(Boolean);
-    // Use the last few unique segments for matching
-    const matchSegments = segments.slice(-3).map((s) => s.replace(/[/.]/g, "-"));
+    const asciiSegments = segments
+      .map((s) => s.replace(/[/.]/g, "-"))
+      .filter((s) => /^[a-zA-Z0-9_-]+$/.test(s));
+    // Use the last few ASCII segments for matching
+    const matchSegments = asciiSegments.slice(-3);
 
-    // Find directories that match all segments
+    if (matchSegments.length === 0) return null;
+
+    // Find directories that match all ASCII segments
     const matches = dirs.filter((dir) => {
       return matchSegments.every((seg) => dir.includes(seg));
     });
 
     if (matches.length === 0) return null;
 
-    // If multiple matches, prefer exact cwd match, then most recently modified
+    // If multiple matches, prefer the one with most segments matched, then most recently modified
     const withStats = matches.map((dir) => {
       const fullPath = join(PROJECTS_DIR, dir);
       try {
-        return { dir, path: fullPath, mtime: statSync(fullPath).mtimeMs };
+        // Score: count how many total path segments appear in the dir name
+        const score = segments
+          .map((s) => s.replace(/[/.]/g, "-"))
+          .filter((s) => /^[a-zA-Z0-9_-]+$/.test(s) && dir.includes(s))
+          .length;
+        return { dir, path: fullPath, score, mtime: statSync(fullPath).mtimeMs };
       } catch {
         return null;
       }
-    }).filter(Boolean) as { dir: string; path: string; mtime: number }[];
+    }).filter(Boolean) as { dir: string; path: string; score: number; mtime: number }[];
 
-    withStats.sort((a, b) => b.mtime - a.mtime);
-    return withStats[0]?.path ?? null;
+    // Sort by score descending, then mtime descending
+    withStats.sort((a, b) => b.score - a.score || b.mtime - a.mtime);
+
+    // Exclude worktree directories (they contain .worktrees in the name)
+    const nonWorktree = withStats.filter((w) => !w.dir.includes("-worktrees-"));
+    return (nonWorktree[0] || withStats[0])?.path ?? null;
   } catch {
     return null;
   }
