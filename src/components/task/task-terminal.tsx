@@ -248,7 +248,7 @@ export function TaskTerminal({
         <span className={`h-2 w-2 rounded-full ${statusColor}`} />
         <span className="text-neutral-300">{statusLabel}</span>
       </div>
-      <div ref={containerRef} className="h-full w-full" />
+      <div ref={containerRef} className="h-full w-full overflow-hidden" />
     </div>
   );
 }
