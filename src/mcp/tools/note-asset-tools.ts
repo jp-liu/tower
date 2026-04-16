@@ -98,14 +98,32 @@ async function handleManageNotes(args: ManageNotesArgs) {
 // ─── manage_assets ───────────────────────────────────────────────────────────
 
 const manageAssetsSchema = z.object({
-  action: z.enum(["add", "delete", "list", "get"]),
+  action: z.enum(["add", "upload", "delete", "list", "get", "link_task"]),
   projectId: z.string().optional(),
   assetId: z.string().optional(),
+  assetIds: z.array(z.string()).optional(),
+  taskId: z.string().optional(),
   sourcePath: z.string().optional(),
   filename: z.string().optional(),
+  base64: z.string().optional().describe("Base64-encoded file content (for action=upload)"),
+  mimeType: z.string().optional().describe("MIME type of the uploaded file (e.g. image/png)"),
+  description: z.string().optional(),
 });
 
 type ManageAssetsArgs = z.infer<typeof manageAssetsSchema>;
+
+// Map common MIME types to file extensions
+const MIME_EXT: Record<string, string> = {
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/gif": ".gif",
+  "image/webp": ".webp",
+  "image/svg+xml": ".svg",
+  "application/pdf": ".pdf",
+  "text/plain": ".txt",
+  "text/markdown": ".md",
+  "application/json": ".json",
+};
 
 async function handleManageAssets(args: ManageAssetsArgs) {
   switch (args.action) {
@@ -136,15 +154,76 @@ async function handleManageAssets(args: ManageAssetsArgs) {
           filename,
           path: destPath,
           size: stats.size,
+          mimeType: args.mimeType,
           projectId: args.projectId,
+          taskId: args.taskId,
+          description: args.description,
         },
       });
       return asset;
     }
 
+    case "upload": {
+      if (!args.projectId || !args.base64) {
+        throw new Error("projectId and base64 required");
+      }
+      const buffer = Buffer.from(args.base64, "base64");
+      const assetsDir = ensureAssetsDir(args.projectId);
+
+      // Determine filename
+      let filename = args.filename;
+      if (!filename) {
+        const ext = (args.mimeType && MIME_EXT[args.mimeType]) || ".bin";
+        filename = `upload-${Date.now()}${ext}`;
+      }
+
+      // Avoid overwriting
+      let destPath = path.join(assetsDir, filename);
+      if (fs.existsSync(destPath)) {
+        const ext = path.extname(filename);
+        const base = path.basename(filename, ext);
+        filename = `${base}-${Date.now()}${ext}`;
+        destPath = path.join(assetsDir, filename);
+      }
+
+      fs.writeFileSync(destPath, buffer);
+
+      const asset = await db.projectAsset.create({
+        data: {
+          filename,
+          path: destPath,
+          size: buffer.length,
+          mimeType: args.mimeType,
+          projectId: args.projectId,
+          taskId: args.taskId,
+          description: args.description,
+        },
+      });
+      return asset;
+    }
+
+    case "link_task": {
+      if (!args.taskId) {
+        throw new Error("taskId required");
+      }
+      if (!args.assetIds || args.assetIds.length === 0) {
+        throw new Error("assetIds required (array of asset IDs to link)");
+      }
+      const updated = await db.projectAsset.updateMany({
+        where: { id: { in: args.assetIds } },
+        data: { taskId: args.taskId },
+      });
+      return { linked: updated.count, taskId: args.taskId, assetIds: args.assetIds };
+    }
+
     case "delete": {
       if (!args.assetId) {
         throw new Error("assetId required");
+      }
+      // Also delete the file from disk
+      const asset = await db.projectAsset.findUnique({ where: { id: args.assetId } });
+      if (asset?.path && fs.existsSync(asset.path)) {
+        fs.unlinkSync(asset.path);
       }
       await db.projectAsset.delete({ where: { id: args.assetId } });
       return { deleted: true, assetId: args.assetId };
@@ -154,8 +233,10 @@ async function handleManageAssets(args: ManageAssetsArgs) {
       if (!args.projectId) {
         throw new Error("projectId required");
       }
+      const where: { projectId: string; taskId?: string } = { projectId: args.projectId };
+      if (args.taskId) where.taskId = args.taskId;
       return db.projectAsset.findMany({
-        where: { projectId: args.projectId },
+        where,
         orderBy: { createdAt: "desc" },
       });
     }
@@ -183,7 +264,7 @@ export const noteAssetTools = {
   },
   manage_assets: {
     description:
-      "Add, delete, list, or get project assets. action=add moves a file from sourcePath into managed storage.",
+      "Manage project assets (files, images, screenshots). Actions: add (move file from sourcePath), upload (save base64 content — use this for pasted screenshots/images), link_task (associate uploaded assets with a task after creation), delete, list, get. Upload flow: 1) upload with projectId+base64 → get assetId+path, 2) use path in task description, 3) after create_task, call link_task with taskId+assetIds.",
     schema: manageAssetsSchema,
     handler: handleManageAssets,
   },
