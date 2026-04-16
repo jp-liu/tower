@@ -57,14 +57,12 @@ Use Tower tools when the user wants to:
 3. Ask user to confirm the project (or infer from context)
 4. **Worktree mode**: default is direct mode (no branch isolation). If user says "use worktree", "-w", or "branch isolation", set `useWorktree: true`. The baseBranch will be auto-detected from the project's current git branch.
 5. **SubPath detection**: check the project description for directory structure hints (e.g. "monorepo: packages/web, packages/api"). If the task clearly belongs to a subdirectory, set `subPath` (e.g. "packages/web"). If unclear, omit it — it's optional.
-6. **References (file paths)**: if user provides file paths, pass them as `references: ["/path/to/file.md"]`. Files are copied to the project asset library and linked to the task.
-7. **References (pasted images/screenshots)**: if user pastes an image or provides base64 data, upload it BEFORE creating the task:
-   - Call `manage_assets` with `action: "upload"`, `projectId`, `base64`, `mimeType` (e.g. "image/png"), optional `filename`
-   - Get back `{ id: assetId, path: "/path/in/assets/..." }`
-   - Use the returned `path` in the task description (参考 section)
-   - After `create_task` returns the `taskId`, call `manage_assets` with `action: "link_task"`, `taskId`, `assetIds: [assetId]` to associate the assets
-8. Call `create_task` with projectId, title, and optional description/priority/labelIds/subPath/useWorktree/references
-9. `autoStart` defaults to true — task will be created and immediately started. If user says "don't start", "just create", or "-nostart", set `autoStart: false`
+6. **References (any files/images)**: ALL user-provided files — including pasted screenshots, uploaded images, and local file paths — should be passed as `references: ["/path/to/file"]` on `create_task`. The tool copies files into the project asset library automatically.
+   - **Local file paths**: pass directly (e.g. `references: ["/path/to/doc.md", "/path/to/design.png"]`)
+   - **Pasted images with known paths**: if the platform provides file paths for pasted media (e.g. OpenClaw's `{{MediaPaths}}`, Claude Code temp files), pass those paths directly — they are local files
+   - **Base64 only (no file path)**: if you only have base64 data with no local path, upload first via `manage_assets` with `action: "upload"`, `projectId`, `base64`, `mimeType`. Get back `{ id: assetId, path }`. Then pass the returned `path` in `references` and after task creation call `manage_assets` with `action: "link_task"`, `taskId`, `assetIds: [assetId]`
+7. Call `create_task` with projectId, title, and optional description/priority/labelIds/subPath/useWorktree/references
+8. `autoStart` defaults to true — task will be created and immediately started. If user says "don't start", "just create", or "-nostart", set `autoStart: false`
 
 ### "Start a task" / "Run this task" / "Execute task ..."
 
