@@ -13,6 +13,8 @@ export interface TaskTerminalProps {
   taskId: string;
   worktreePath?: string | null;
   onSessionEnd?: (exitCode: number) => void;
+  /** Force canvas renderer instead of WebGL. Use when many terminals coexist (portal system). */
+  useCanvasRenderer?: boolean;
 }
 
 type WsStatus = "connecting" | "connected" | "disconnected";
@@ -30,6 +32,7 @@ export function TaskTerminal({
   taskId,
   worktreePath,
   onSessionEnd,
+  useCanvasRenderer = false,
 }: TaskTerminalProps) {
   const { t } = useI18n();
   const { resolvedTheme } = useTheme();
@@ -69,13 +72,21 @@ export function TaskTerminal({
     terminal.open(containerRef.current);
 
     // Attempt WebGL addon (GPU-accelerated renderer)
+    // Skip WebGL when many terminals may coexist (portal system) —
+    // browsers limit WebGL contexts (~8-16), excess causes context loss and blank terminals.
+    // Canvas renderer is reliable for any number of terminals.
     let webglAddon: WebglAddon | null = null;
-    try {
-      webglAddon = new WebglAddon();
-      webglAddon.onContextLoss(() => { webglAddon?.dispose(); });
-      terminal.loadAddon(webglAddon);
-    } catch {
-      // WebGL not available — fall back to canvas renderer
+    if (!useCanvasRenderer) {
+      try {
+        webglAddon = new WebglAddon();
+        webglAddon.onContextLoss(() => {
+          webglAddon?.dispose();
+          webglAddon = null;
+        });
+        terminal.loadAddon(webglAddon);
+      } catch {
+        // WebGL not available — fall back to canvas renderer
+      }
     }
 
     fitAddon.fit();
@@ -154,22 +165,36 @@ export function TaskTerminal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId, worktreePath]);
 
-  // Resize effect
+  // Resize effect — re-runs when taskId changes (portal re-mount to different container)
   useEffect(() => {
     if (!worktreePath || !containerRef.current) return;
+
+    // Initial fit after portal re-mount (e.g. drawer → detail page)
+    const fit = fitAddonRef.current;
+    const ws = wsRef.current;
+    const term = terminalRef.current;
+    if (fit && term) {
+      // Use rAF to ensure container has its final layout dimensions
+      requestAnimationFrame(() => {
+        fit.fit();
+        if (ws?.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
+        }
+      });
+    }
 
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
     const el = containerRef.current;
     const resizeObserver = new ResizeObserver(() => {
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
-        const fit = fitAddonRef.current;
-        const ws = wsRef.current;
-        const term = terminalRef.current;
-        if (!fit || !term) return;
-        fit.fit();
-        if (ws?.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
+        const f = fitAddonRef.current;
+        const w = wsRef.current;
+        const t = terminalRef.current;
+        if (!f || !t) return;
+        f.fit();
+        if (w?.readyState === WebSocket.OPEN) {
+          w.send(JSON.stringify({ type: "resize", cols: t.cols, rows: t.rows }));
         }
       }, 100);
     });
@@ -179,7 +204,7 @@ export function TaskTerminal({
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeObserver.disconnect();
     };
-  }, [worktreePath]);
+  }, [taskId, worktreePath]);
 
   // Theme effect
   useEffect(() => {

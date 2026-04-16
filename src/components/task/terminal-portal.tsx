@@ -92,6 +92,7 @@ export function TerminalPortalProvider({ children }: { children: ReactNode }) {
         taskId={inst.taskId}
         worktreePath={inst.worktreePath}
         onSessionEnd={(code) => inst.onSessionEnd.current?.(code)}
+        useCanvasRenderer
       />
     </InPortal>
   ));
