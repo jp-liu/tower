@@ -5,10 +5,10 @@
 
 ## UI
 
-- [ ] **UI-01**: User can see an assistant icon in the top bar next to the search box
+- [x] **UI-01**: User can see an assistant icon in the top bar next to the search box
 - [x] **UI-02**: User can open the chat assistant via clicking the icon or pressing Cmd+L (Ctrl+L)
-- [ ] **UI-03**: User can use the assistant in sidebar mode (left side panel, does not block other operations)
-- [ ] **UI-04**: User can use the assistant in dialog mode (centered modal)
+- [x] **UI-03**: User can use the assistant in sidebar mode (left side panel, does not block other operations)
+- [x] **UI-04**: User can use the assistant in dialog mode (centered modal)
 - [ ] **UI-05**: User can switch between sidebar and dialog mode in Settings
 - [x] **UI-06**: User can close the assistant via Escape, close button, or Cmd+L toggle
 - [ ] **UI-07**: User can see all UI text in Chinese or English (i18n)
@@ -38,7 +38,7 @@
 ## UX
 
 - [x] **UX-01**: Each assistant open starts a fresh session with no prior history
-- [ ] **UX-02**: Sidebar mode does not obstruct the main content area (push layout or overlay)
+- [x] **UX-02**: Sidebar mode does not obstruct the main content area (push layout or overlay)
 - [ ] **UX-03**: Responsive sizing for both modes
 
 ## Future Requirements
@@ -59,10 +59,10 @@
 
 | REQ | Phase | Status |
 |-----|-------|--------|
-| UI-01 | Phase 37 | Pending |
+| UI-01 | Phase 37 | Complete |
 | UI-02 | Phase 37 | Complete |
-| UI-03 | Phase 37 | Pending |
-| UI-04 | Phase 37 | Pending |
+| UI-03 | Phase 37 | Complete |
+| UI-04 | Phase 37 | Complete |
 | UI-05 | Phase 39 | Pending |
 | UI-06 | Phase 37 | Complete |
 | UI-07 | Phase 39 | Pending |
@@ -80,5 +80,5 @@
 | BE-05 | Phase 36 | Complete |
 | BE-06 | Phase 36 | Complete |
 | UX-01 | Phase 36 | Complete |
-| UX-02 | Phase 37 | Pending |
+| UX-02 | Phase 37 | Complete |
 | UX-03 | Phase 39 | Pending |

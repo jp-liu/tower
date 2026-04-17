@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.92
 milestone_name: Global Chat Assistant
-status: executing
-stopped_at: Completed 37-terminal-mode-ui 37-01-PLAN.md
-last_updated: "2026-04-17T11:06:13.025Z"
+status: verifying
+stopped_at: Completed 37-terminal-mode-ui 37-02-PLAN.md
+last_updated: "2026-04-17T11:10:19.894Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 
 Phase: 37 (terminal-mode-ui) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-17
 
 Progress: [░░░░░░░░░░] 0%
@@ -58,6 +58,7 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 36-assistant-backend]: Internal assistant API does not call validateTaskId — __assistant__ is not CUID format
 - [Phase 37-terminal-mode-ui]: toggleAssistant checks both isOpen and isStarting to prevent double-start during loading
 - [Phase 37-terminal-mode-ui]: openAssistant sets worktreePath before isOpen=true to ensure terminal mounts after path is available
+- [Phase 37-terminal-mode-ui]: LayoutInner inner component pattern used to call useAssistant() inside AssistantProvider boundary
 
 ### Pending Todos
 
@@ -69,6 +70,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-17T11:06:13.022Z
-Stopped at: Completed 37-terminal-mode-ui 37-01-PLAN.md
+Last session: 2026-04-17T11:10:19.891Z
+Stopped at: Completed 37-terminal-mode-ui 37-02-PLAN.md
 Resume file: None

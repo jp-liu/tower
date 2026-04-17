@@ -119,7 +119,7 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
 **Milestone Goal:** Add a global chat assistant accessible from any page, enabling users to manage tasks via natural language through Claude CLI with Tower MCP tools.
 
 - [x] **Phase 36: Assistant Backend** - PTY session for assistant (no taskId), system prompt injection, tool restrictions, WebSocket bridge (completed 2026-04-17)
-- [ ] **Phase 37: Terminal Mode UI** - Sidebar + dialog layouts with embedded xterm terminal, open/close lifecycle
+- [x] **Phase 37: Terminal Mode UI** - Sidebar + dialog layouts with embedded xterm terminal, open/close lifecycle (completed 2026-04-17)
 - [ ] **Phase 38: Chat Mode** - Output stream parsing into structured messages, Markdown bubble rendering, input box
 - [ ] **Phase 39: Polish & Settings** - Display mode switch in settings, keyboard shortcuts, i18n, responsive sizing
 
@@ -151,11 +151,11 @@ Plans:
   3. The panel contains a title bar and an embedded xterm.js terminal where Claude CLI output streams with full ANSI formatting
   4. User can type directly in the terminal to interact with the assistant (no separate input box needed in terminal mode)
   5. Pressing Escape, clicking the close button, or pressing Cmd+L again closes the panel and destroys the session
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 37-01-PLAN.md — AssistantProvider context + AssistantPanel component + i18n keys + API route worktreePath fix
-- [ ] 37-02-PLAN.md — Layout integration (top-bar icon + push sidebar + dialog mode) + visual verification
+- [x] 37-02-PLAN.md — Layout integration (top-bar icon + push sidebar + dialog mode) + visual verification
 
 ### Phase 38: Chat Mode
 **Goal**: Users can interact with the assistant via a chat bubble interface with Markdown-rendered responses instead of raw terminal output
@@ -222,6 +222,6 @@ Phases execute in numeric order: 36 -> 37 -> 38 -> 39
 | 35. Settings UI for CLI Profile | v0.9 | 1/1 | Complete | 2026-04-11 |
 | 35.1. Mission Control Dashboard | v0.9 | 3/3 | Complete | 2026-04-13 |
 | 36. Assistant Backend | v0.92 | 2/2 | Complete    | 2026-04-17 |
-| 37. Terminal Mode UI | v0.92 | 1/2 | In Progress|  |
+| 37. Terminal Mode UI | v0.92 | 2/2 | Complete   | 2026-04-17 |
 | 38. Chat Mode | v0.92 | 0/TBD | Not started | - |
 | 39. Polish & Settings | v0.92 | 0/TBD | Not started | - |
