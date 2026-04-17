@@ -22,9 +22,9 @@
 ## Chat Mode (message bubbles)
 
 - [x] **CM-01**: System parses CC output stream into structured messages (user / assistant / thinking / tool-call)
-- [ ] **CM-02**: User can see AI responses rendered as Markdown bubbles (tables, lists, code blocks)
-- [ ] **CM-03**: User can type in an input box and send via Enter (Shift+Enter for newline)
-- [ ] **CM-04**: User can see a thinking/loading indicator while AI is responding
+- [x] **CM-02**: User can see AI responses rendered as Markdown bubbles (tables, lists, code blocks)
+- [x] **CM-03**: User can type in an input box and send via Enter (Shift+Enter for newline)
+- [x] **CM-04**: User can see a thinking/loading indicator while AI is responding
 
 ## Backend
 
@@ -70,9 +70,9 @@
 | TM-02 | Phase 37 | Complete |
 | TM-03 | Phase 37 | Complete |
 | CM-01 | Phase 38 | Complete |
-| CM-02 | Phase 38 | Pending |
-| CM-03 | Phase 38 | Pending |
-| CM-04 | Phase 38 | Pending |
+| CM-02 | Phase 38 | Complete |
+| CM-03 | Phase 38 | Complete |
+| CM-04 | Phase 38 | Complete |
 | BE-01 | Phase 36 | Complete |
 | BE-02 | Phase 36 | Complete |
 | BE-03 | Phase 36 | Complete |

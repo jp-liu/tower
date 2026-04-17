@@ -120,7 +120,7 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
 
 - [x] **Phase 36: Assistant Backend** - PTY session for assistant (no taskId), system prompt injection, tool restrictions, WebSocket bridge (completed 2026-04-17)
 - [x] **Phase 37: Terminal Mode UI** - Sidebar + dialog layouts with embedded xterm terminal, open/close lifecycle (completed 2026-04-17)
-- [ ] **Phase 38: Chat Mode** - Output stream parsing into structured messages, Markdown bubble rendering, input box
+- [x] **Phase 38: Chat Mode** - Output stream parsing into structured messages, Markdown bubble rendering, input box (completed 2026-04-17)
 - [ ] **Phase 39: Polish & Settings** - Display mode switch in settings, keyboard shortcuts, i18n, responsive sizing
 
 ## Phase Details
@@ -166,11 +166,11 @@ Plans:
   2. Assistant responses render as Markdown bubbles with proper tables, lists, code blocks, and inline formatting
   3. User can type in a text input box at the bottom and send via Enter (Shift+Enter for newline); the input is forwarded to the PTY
   4. While the assistant is processing, a thinking/loading indicator is visible; it disappears when the response completes
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 38-01-PLAN.md — useAssistantChat hook with state-machine parser + communicationMode config key
-- [ ] 38-02-PLAN.md — AssistantChat + AssistantChatBubble components + AssistantPanel wiring
+- [x] 38-02-PLAN.md — AssistantChat + AssistantChatBubble components + AssistantPanel wiring
 
 ### Phase 39: Polish & Settings
 **Goal**: The assistant experience is configurable, fully bilingual, and works well at all viewport sizes
@@ -227,5 +227,5 @@ Phases execute in numeric order: 36 -> 37 -> 38 -> 39
 | 35.1. Mission Control Dashboard | v0.9 | 3/3 | Complete | 2026-04-13 |
 | 36. Assistant Backend | v0.92 | 2/2 | Complete    | 2026-04-17 |
 | 37. Terminal Mode UI | v0.92 | 2/2 | Complete    | 2026-04-17 |
-| 38. Chat Mode | v0.92 | 1/2 | In Progress|  |
+| 38. Chat Mode | v0.92 | 2/2 | Complete   | 2026-04-17 |
 | 39. Polish & Settings | v0.92 | 0/TBD | Not started | - |
