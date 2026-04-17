@@ -1,5 +1,19 @@
 # Milestones
 
+## v0.92 Global Chat Assistant (Shipped: 2026-04-17)
+
+**Phases completed:** 4 phases, 8 plans, 9 tasks
+
+**Key accomplishments:**
+
+- 1. [Rule 3 - Blocking] Extended vitest include pattern to discover src/__tests__ files
+- WebSocket immediate-destroy for __assistant__ sessions and POST/DELETE/GET internal API at /api/internal/assistant, all localhost-guarded
+- 1. [Rule 1 - Bug] Fixed OSC regex pattern for ANSI stripping
+- One-liner:
+- Assistant panel sidebar and dialog use viewport-relative widths (30vw clamped 320-480px sidebar; 90vw capped at 600px dialog) replacing hardcoded fixed pixel values
+
+---
+
 ## v0.6 任务开发工作台 (Shipped: 2026-04-01)
 
 **Phases completed:** 5 phases, 11 plans, 15 tasks
