@@ -145,9 +145,17 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 ---
 
-## Current: 日常使用 & Bug 修复
+## Current Milestone: v0.92 Global Chat Assistant — 全局悬浮聊天助手
 
-**Goal:** 基于日常使用发现问题并修复，待稳定后再决定是否发布 v1.0。
+**Goal:** 在页面右下角添加全局悬浮聊天助手，用于通过自然语言操作任务（创建、查询、搜索、移动等）。
+
+**Target features:**
+- 右下角 fixed 悬浮图标 + 展开聊天面板
+- Claude CLI PTY 后端（cwd = Tower 项目目录）
+- 预制系统提示词（--append-system-prompt）定义身份和能力
+- 工具限制（--allowedTools "mcp__tower__*"）仅允许 Tower MCP 工具
+- 无状态设计：每次打开新 session，关闭即销毁
+- 消息渲染：支持 Markdown 表格/列表展示
 
 ### Out of Scope
 
