@@ -15,6 +15,7 @@ interface AssistantContextValue {
   isOpen: boolean;
   isStarting: boolean;
   displayMode: "sidebar" | "dialog";
+  communicationMode: "terminal" | "chat";
   worktreePath: string | null;
   toggleAssistant: () => void;
   closeAssistant: () => void;
@@ -26,12 +27,16 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [displayMode, setDisplayMode] = useState<"sidebar" | "dialog">("sidebar");
+  const [communicationMode, setCommunicationMode] = useState<"terminal" | "chat">("terminal");
   const [worktreePath, setWorktreePath] = useState<string | null>(null);
 
-  // Read display mode from config on mount
+  // Read display mode and communication mode from config on mount
   useEffect(() => {
     getConfigValue<string>("assistant.displayMode", "sidebar").then((mode) => {
       setDisplayMode(mode === "dialog" ? "dialog" : "sidebar");
+    });
+    getConfigValue<string>("assistant.communicationMode", "terminal").then((mode) => {
+      setCommunicationMode(mode === "chat" ? "chat" : "terminal");
     });
   }, []);
 
@@ -83,7 +88,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   return (
     <AssistantContext.Provider
-      value={{ isOpen, isStarting, displayMode, worktreePath, toggleAssistant, closeAssistant }}
+      value={{ isOpen, isStarting, displayMode, communicationMode, worktreePath, toggleAssistant, closeAssistant }}
     >
       {children}
     </AssistantContext.Provider>

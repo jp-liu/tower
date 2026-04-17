@@ -91,4 +91,9 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "string",
     label: "Assistant Display Mode",
   },
+  "assistant.communicationMode": {
+    defaultValue: "terminal",
+    type: "string",
+    label: "Assistant Communication Mode",
+  },
 };
