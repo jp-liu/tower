@@ -180,7 +180,7 @@ export function BoardPageClient({
         />
 
         {/* Kanban Board */}
-        <div className="flex-1 min-h-0 overflow-auto p-4">
+        <div className="flex-1 min-h-0 overflow-hidden p-4">
           <KanbanBoard
             initialTasks={filteredTasks}
             onTaskMove={handleTaskMove}
