@@ -121,7 +121,7 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
 - [x] **Phase 36: Assistant Backend** - PTY session for assistant (no taskId), system prompt injection, tool restrictions, WebSocket bridge (completed 2026-04-17)
 - [x] **Phase 37: Terminal Mode UI** - Sidebar + dialog layouts with embedded xterm terminal, open/close lifecycle (completed 2026-04-17)
 - [x] **Phase 38: Chat Mode** - Output stream parsing into structured messages, Markdown bubble rendering, input box (completed 2026-04-17)
-- [ ] **Phase 39: Polish & Settings** - Display mode switch in settings, keyboard shortcuts, i18n, responsive sizing
+- [x] **Phase 39: Polish & Settings** - Display mode switch in settings, keyboard shortcuts, i18n, responsive sizing (completed 2026-04-17)
 
 ## Phase Details
 
@@ -180,11 +180,11 @@ Plans:
   1. Users can switch between terminal mode and chat mode via a setting in Settings > General (persisted in SystemConfig)
   2. All assistant UI text (title bar, placeholders, tooltips, settings labels) is available in both Chinese and English
   3. Both sidebar and dialog modes render correctly on viewports from 1024px to 2560px wide without overflow or truncation
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 39-01-PLAN.md — Communication mode setting + assistant i18n keys
-- [ ] 39-02-PLAN.md — Responsive sizing for sidebar and dialog modes
+- [x] 39-02-PLAN.md — Responsive sizing for sidebar and dialog modes
 
 ## Progress
 
@@ -232,4 +232,4 @@ Phases execute in numeric order: 36 -> 37 -> 38 -> 39
 | 36. Assistant Backend | v0.92 | 2/2 | Complete    | 2026-04-17 |
 | 37. Terminal Mode UI | v0.92 | 2/2 | Complete    | 2026-04-17 |
 | 38. Chat Mode | v0.92 | 2/2 | Complete    | 2026-04-17 |
-| 39. Polish & Settings | v0.92 | 1/2 | In Progress|  |
+| 39. Polish & Settings | v0.92 | 2/2 | Complete   | 2026-04-17 |

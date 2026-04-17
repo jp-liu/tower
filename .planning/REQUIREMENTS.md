@@ -39,7 +39,7 @@
 
 - [x] **UX-01**: Each assistant open starts a fresh session with no prior history
 - [x] **UX-02**: Sidebar mode does not obstruct the main content area (push layout or overlay)
-- [ ] **UX-03**: Responsive sizing for both modes
+- [x] **UX-03**: Responsive sizing for both modes
 
 ## Future Requirements
 
@@ -81,4 +81,4 @@
 | BE-06 | Phase 36 | Complete |
 | UX-01 | Phase 36 | Complete |
 | UX-02 | Phase 37 | Complete |
-| UX-03 | Phase 39 | Pending |
+| UX-03 | Phase 39 | Complete |
