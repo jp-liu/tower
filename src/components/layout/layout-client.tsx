@@ -55,6 +55,8 @@ function LayoutInner({
         <DialogContent
           showCloseButton={false}
           style={{
+            width: "90vw",
+            minWidth: "360px",
             maxWidth: "600px",
             height: "70vh",
             minHeight: "480px",

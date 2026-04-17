@@ -30,7 +30,7 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
 
   const containerClass =
     mode === "sidebar"
-      ? "w-[420px] shrink-0 border-r border-border flex flex-col bg-popover overflow-hidden"
+      ? "min-w-[320px] max-w-[480px] w-[30vw] shrink-0 border-r border-border flex flex-col bg-popover overflow-hidden"
       : "flex flex-col h-full overflow-hidden";
 
   return (
