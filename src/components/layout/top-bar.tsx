@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Search, Settings, Plus, Command, Globe, Sun, Moon, GitBranch, Loader2, Check, AlertCircle } from "lucide-react";
+import { Search, Settings, Plus, Command, Globe, Sun, Moon, GitBranch, Loader2, Check, AlertCircle, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { SearchDialog } from "./search-dialog";
 import { FolderBrowserDialog } from "./folder-browser-dialog";
 import { useI18n } from "@/lib/i18n";
+import { useAssistant } from "@/components/assistant/assistant-provider";
 import { toCloneUrl } from "@/lib/git-url";
 import { resolveGitLocalPath } from "@/actions/config-actions";
 
@@ -35,6 +36,7 @@ interface TopBarProps {
 
 export function TopBar({ onCreateProject }: TopBarProps) {
   const { t, locale, setLocale } = useI18n();
+  const { isOpen: assistantOpen, toggleAssistant } = useAssistant();
   const [showSearch, setShowSearch] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
   const [projectName, setProjectName] = useState("");
@@ -159,6 +161,18 @@ export function TopBar({ onCreateProject }: TopBarProps) {
 
         {/* Right Actions */}
         <div className="flex items-center gap-1.5">
+          {/* Assistant */}
+          <button
+            onClick={toggleAssistant}
+            aria-label="Assistant ⌘L"
+            className={[
+              "rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+              assistantOpen ? "bg-accent text-foreground" : "",
+            ].join(" ")}
+          >
+            <Bot className="h-4 w-4" />
+          </button>
+
           {/* Language Toggle */}
           <button
             onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
