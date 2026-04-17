@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useAssistantChat } from "@/hooks/use-assistant-chat";
+import { useI18n } from "@/lib/i18n";
 import { AssistantChatBubble } from "./assistant-chat-bubble";
 
 // ---------------------------------------------------------------------------
@@ -21,13 +22,12 @@ interface AssistantChatProps {
 // ---------------------------------------------------------------------------
 
 function EmptyState() {
+  const { t } = useI18n();
   return (
     <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
       <Bot className="size-8 text-muted-foreground/40" />
-      {/* TODO Phase 39: i18n */}
-      <h3 className="text-sm font-semibold text-foreground">Chat with Assistant</h3>
-      {/* TODO Phase 39: i18n */}
-      <p className="text-xs text-muted-foreground">Type a message to start</p>
+      <h3 className="text-sm font-semibold text-foreground">{t("assistant.emptyTitle")}</h3>
+      <p className="text-xs text-muted-foreground">{t("assistant.emptyBody")}</p>
     </div>
   );
 }
@@ -40,6 +40,7 @@ export function AssistantChat({ worktreePath }: AssistantChatProps) {
   const [inputValue, setInputValue] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { t } = useI18n();
 
   const { messages, isThinking, sendMessage } = useAssistantChat({
     enabled: true,
@@ -102,8 +103,7 @@ export function AssistantChat({ worktreePath }: AssistantChatProps) {
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            // TODO Phase 39: i18n — placeholder="Type a message..."
-            placeholder="Type a message..."
+            placeholder={t("assistant.inputPlaceholder")}
             className="flex-1 min-h-[40px] max-h-[120px] resize-none text-sm"
             rows={1}
           />
@@ -113,8 +113,7 @@ export function AssistantChat({ worktreePath }: AssistantChatProps) {
             className="h-8 w-8 shrink-0"
             onClick={handleSend}
             disabled={isSendDisabled}
-            // TODO Phase 39: i18n — aria-label="Send message"
-            aria-label="Send message"
+            aria-label={t("assistant.sendLabel")}
           >
             <SendHorizonal className="h-4 w-4" />
           </Button>

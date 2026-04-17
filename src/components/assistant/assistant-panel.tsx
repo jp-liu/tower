@@ -5,6 +5,7 @@ import { Bot, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
 import { useAssistant } from "./assistant-provider";
+import { useI18n } from "@/lib/i18n";
 
 interface AssistantPanelProps {
   mode: "sidebar" | "dialog";
@@ -25,6 +26,7 @@ const DynamicChat = dynamic(
 
 export function AssistantPanel({ mode }: AssistantPanelProps) {
   const { isOpen, isStarting, worktreePath, communicationMode, closeAssistant } = useAssistant();
+  const { t } = useI18n();
 
   const containerClass =
     mode === "sidebar"
@@ -36,13 +38,13 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
       {/* Title bar */}
       <div className="h-[44px] border-b border-border flex items-center px-4 gap-2 bg-popover">
         <Bot className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-semibold text-foreground">Tower Assistant</span>
+        <span className="text-sm font-semibold text-foreground">{t("assistant.title")}</span>
         <div className="flex-1" />
         <Button
           variant="ghost"
           className="h-8 w-8 p-0"
           onClick={closeAssistant}
-          aria-label="Close assistant"
+          aria-label={t("assistant.closeLabel")}
         >
           <X className="h-4 w-4" />
         </Button>
@@ -54,7 +56,7 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
           <div className="flex h-full items-center justify-center bg-popover">
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Starting...</span>
+              <span className="text-sm text-muted-foreground">{t("assistant.starting")}</span>
             </div>
           </div>
         ) : isOpen && !isStarting && worktreePath ? (

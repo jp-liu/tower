@@ -4,6 +4,7 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChevronRight } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 import type { ChatMessage } from "@/hooks/use-assistant-chat";
 
 // ---------------------------------------------------------------------------
@@ -82,13 +83,13 @@ function AssistantBubble({ content }: { content: string }) {
 // ---------------------------------------------------------------------------
 
 function ThinkingBubble() {
+  const { t } = useI18n();
   return (
     <div
       className="flex justify-start animate-in fade-in slide-in-from-bottom-2 duration-200"
       role="status"
       aria-live="polite"
-      // TODO Phase 39: i18n — aria-label="Thinking"
-      aria-label="Thinking"
+      aria-label={t("assistant.thinking")}
     >
       <div className="bg-muted/50 text-muted-foreground max-w-[200px] rounded-2xl rounded-bl-sm px-3 py-2">
         <div className="flex items-center gap-1">
@@ -116,7 +117,8 @@ function ThinkingBubble() {
 
 function ToolBubble({ content, toolName }: { content: string; toolName?: string }) {
   const [expanded, setExpanded] = useState(false);
-  const displayName = toolName ?? "Tool";
+  const { t } = useI18n();
+  const displayName = toolName ?? t("assistant.toolLabel");
 
   return (
     <div className="flex justify-start animate-in fade-in slide-in-from-bottom-2 duration-200">
@@ -126,8 +128,7 @@ function ToolBubble({ content, toolName }: { content: string; toolName?: string 
           className="flex items-center gap-1.5 w-full text-left py-0.5"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          // TODO Phase 39: i18n — aria-label="Expand tool call details"
-          aria-label="Expand tool call details"
+          aria-label={t("assistant.expandTool")}
         >
           <ChevronRight
             className={`h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-150 ${
@@ -135,9 +136,8 @@ function ToolBubble({ content, toolName }: { content: string; toolName?: string 
             }`}
           />
           <span className="text-xs font-semibold text-foreground truncate">{displayName}</span>
-          {/* TODO Phase 39: i18n — "Tool" badge */}
           <span className="ml-auto bg-muted text-muted-foreground text-[10px] px-1.5 rounded shrink-0">
-            Tool
+            {t("assistant.toolLabel")}
           </span>
         </button>
 
