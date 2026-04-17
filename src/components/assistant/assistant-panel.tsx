@@ -18,8 +18,13 @@ const DynamicTerminal = dynamic(
   { ssr: false }
 );
 
+const DynamicChat = dynamic(
+  () => import("./assistant-chat").then((m) => ({ default: m.AssistantChat })),
+  { ssr: false }
+);
+
 export function AssistantPanel({ mode }: AssistantPanelProps) {
-  const { isOpen, isStarting, worktreePath, closeAssistant } = useAssistant();
+  const { isOpen, isStarting, worktreePath, communicationMode, closeAssistant } = useAssistant();
 
   const containerClass =
     mode === "sidebar"
@@ -43,7 +48,7 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
         </Button>
       </div>
 
-      {/* Terminal body */}
+      {/* Body */}
       <div className="flex-1 overflow-hidden">
         {isStarting ? (
           <div className="flex h-full items-center justify-center bg-popover">
@@ -53,10 +58,14 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
             </div>
           </div>
         ) : isOpen && !isStarting && worktreePath ? (
-          <DynamicTerminal
-            taskId={ASSISTANT_SESSION_KEY}
-            worktreePath={worktreePath}
-          />
+          communicationMode === "chat" ? (
+            <DynamicChat worktreePath={worktreePath} />
+          ) : (
+            <DynamicTerminal
+              taskId={ASSISTANT_SESSION_KEY}
+              worktreePath={worktreePath}
+            />
+          )
         ) : null}
       </div>
     </div>
