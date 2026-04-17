@@ -232,7 +232,7 @@ Phases execute in numeric order: 36 -> 37 -> 38 -> 39
 | 34. MCP Terminal Tools | v0.9 | 1/1 | Complete | 2026-04-11 |
 | 35. Settings UI for CLI Profile | v0.9 | 1/1 | Complete | 2026-04-11 |
 | 35.1. Mission Control Dashboard | v0.9 | 3/3 | Complete | 2026-04-13 |
-| 36. Assistant Backend | v0.92 | 2/2 | Complete   | 2026-04-17 |
+| 36. Assistant Backend | v0.92 | 2/2 | Complete    | 2026-04-17 |
 | 37. Terminal Mode UI | v0.92 | 0/TBD | Not started | - |
 | 38. Chat Mode | v0.92 | 0/TBD | Not started | - |
 | 39. Polish & Settings | v0.92 | 0/TBD | Not started | - |
