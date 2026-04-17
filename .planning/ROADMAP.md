@@ -135,7 +135,11 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
   3. The spawned process includes `--allowedTools "mcp__tower__*"` so it can only call Tower MCP tools (no Read/Edit/Bash)
   4. The assistant PTY session connects to the browser via WebSocket and streams output in real time
   5. Closing the assistant destroys the PTY session completely; reopening starts a fresh session with no prior context
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 36-01-PLAN.md — Server actions + config defaults (startAssistantSession, stopAssistantSession, config keys)
+- [ ] 36-02-PLAN.md — WS keepalive bypass + internal API route (/api/internal/assistant)
 
 ### Phase 37: Terminal Mode UI
 **Goal**: Users can open a global assistant panel from any page and interact with Claude CLI via an embedded xterm terminal
@@ -147,7 +151,11 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
   3. The panel contains a title bar and an embedded xterm.js terminal where Claude CLI output streams with full ANSI formatting
   4. User can type directly in the terminal to interact with the assistant (no separate input box needed in terminal mode)
   5. Pressing Escape, clicking the close button, or pressing Cmd+L again closes the panel and destroys the session
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 36-01-PLAN.md — Server actions + config defaults (startAssistantSession, stopAssistantSession, config keys)
+- [ ] 36-02-PLAN.md — WS keepalive bypass + internal API route (/api/internal/assistant)
 **UI hint**: yes
 
 ### Phase 38: Chat Mode
@@ -159,7 +167,11 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
   2. Assistant responses render as Markdown bubbles with proper tables, lists, code blocks, and inline formatting
   3. User can type in a text input box at the bottom and send via Enter (Shift+Enter for newline); the input is forwarded to the PTY
   4. While the assistant is processing, a thinking/loading indicator is visible; it disappears when the response completes
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 36-01-PLAN.md — Server actions + config defaults (startAssistantSession, stopAssistantSession, config keys)
+- [ ] 36-02-PLAN.md — WS keepalive bypass + internal API route (/api/internal/assistant)
 **UI hint**: yes
 
 ### Phase 39: Polish & Settings
@@ -170,7 +182,11 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
   1. Users can switch between terminal mode and chat mode via a setting in Settings > General (persisted in SystemConfig)
   2. All assistant UI text (title bar, placeholders, tooltips, settings labels) is available in both Chinese and English
   3. Both sidebar and dialog modes render correctly on viewports from 1024px to 2560px wide without overflow or truncation
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 36-01-PLAN.md — Server actions + config defaults (startAssistantSession, stopAssistantSession, config keys)
+- [ ] 36-02-PLAN.md — WS keepalive bypass + internal API route (/api/internal/assistant)
 **UI hint**: yes
 
 ## Progress
