@@ -78,6 +78,10 @@ export function TaskDetailPanel({
 
   // Load executions: check for active terminal + build history
   useEffect(() => {
+    // Reset terminal state immediately to prevent showing previous task's terminal
+    setActiveWorktreePath(null);
+    setExecutionLoaded(false);
+
     let cancelled = false;
     getTaskExecutions(task.id).then((executions) => {
       if (cancelled) return;

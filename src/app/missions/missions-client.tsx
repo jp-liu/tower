@@ -140,7 +140,7 @@ export function MissionsClient({
           return next;
         });
         fadeTimers.current.delete(executionId);
-      }, 3000);
+      }, 500);
       fadeTimers.current.set(executionId, timer);
     },
     [] // No removingIds dependency — uses ref instead

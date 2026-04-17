@@ -121,9 +121,10 @@ export function TerminalOutlet({
   const { getPortal, setOnSessionEnd } = useTerminalPortal();
   const [instance, setInstance] = useState<TerminalInstance | null>(null);
 
-  // Create/get portal instance in effect to avoid setState during render
+  // Create/get portal instance — clear stale instance immediately when taskId changes
   useEffect(() => {
     setInstance(getPortal(taskId, worktreePath));
+    return () => setInstance(null);
   }, [taskId, worktreePath, getPortal]);
 
   // Register session-end callback
