@@ -150,7 +150,8 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 **Goal:** 在页面右下角添加全局悬浮聊天助手，用于通过自然语言操作任务（创建、查询、搜索、移动等）。
 
 **Target features:**
-- 右下角 fixed 悬浮图标 + 展开聊天面板
+- 顶栏搜索框旁边的助手图标 + 快捷键触发（Cmd+L 或类似）
+- 点击/快捷键展开聊天面板（Dialog 或侧边抽屉）
 - Claude CLI PTY 后端（cwd = Tower 项目目录）
 - 预制系统提示词（--append-system-prompt）定义身份和能力
 - 工具限制（--allowedTools "mcp__tower__*"）仅允许 Tower MCP 工具

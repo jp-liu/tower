@@ -9,7 +9,8 @@
 - ✅ **v0.5 Git Worktree 任务隔离** — Phases 15-18 (shipped 2026-03-31)
 - ✅ **v0.6 任务开发工作台** — Phases 19-23 (shipped 2026-04-01)
 - ✅ **v0.7 终端交互体验** — Phases 24-28 (shipped 2026-04-10)
-- 🚧 **v0.9 架构清理 + 外部调度闭环** — Phases 29-35 (in progress)
+- ✅ **v0.9 架构清理 + 外部调度闭环** — Phases 29-35.1 (shipped 2026-04-13)
+- 🚧 **v0.92 Global Chat Assistant** — Phases 36-39 (in progress)
 
 ## Phases
 
@@ -51,7 +52,7 @@ See: [milestones/v0.3-ROADMAP.md](./milestones/v0.3-ROADMAP.md) for full details
 <summary>✅ v0.4 系统配置化 (Phases 11-14) — SHIPPED 2026-03-30</summary>
 
 - [x] **Phase 11: SystemConfig Foundation** - SystemConfig model, key-value read/write API, and settings page infrastructure (completed 2026-03-30)
-- [x] **Phase 12: Git Path Mapping Rules** - Settings UI for adding/editing/deleting host+owner→localPath rules and auto-match on project creation (completed 2026-03-30)
+- [x] **Phase 12: Git Path Mapping Rules** - Settings UI for adding/editing/deleting host+owner->localPath rules and auto-match on project creation (completed 2026-03-30)
 - [x] **Phase 13: Configurable System Parameters** - Wire upload limit, concurrency cap, git timeout, branch template, and search parameters to SystemConfig (completed 2026-03-30)
 - [x] **Phase 14: Search Quality & Realtime Config** - Extract shared search logic, fix race condition, verify realtime config takes effect without restart (completed 2026-03-30)
 
@@ -97,286 +98,85 @@ See: [milestones/v0.7-ROADMAP.md](./milestones/v0.7-ROADMAP.md) for full details
 
 </details>
 
-### v0.9 架构清理 + 外部调度闭环 (In Progress)
+<details>
+<summary>✅ v0.9 架构清理 + 外部调度闭环 (Phases 29-35.1) — SHIPPED 2026-04-13</summary>
 
-**Milestone Goal:** 清理废弃 adapter 架构，建立 CLI Profile 配置表，实现龙虾（Paperclip/OpenClaw）外部调度的完整闭环（派活 → 查进度 → 追加指令 → 完成通知）。
+- [x] **Phase 29: Adapter Dead Code Removal** - 删除废弃 SSE/adapter 文件，迁移有用模块到 lib/ 目录 (completed 2026-04-10)
+- [x] **Phase 30: Schema Foundation** - CliProfile 数据模型 + TaskExecution.callbackUrl 字段 + seed (completed 2026-04-11)
+- [x] **Phase 31: PTY Primitives & Env Injection** - CliProfile 驱动 PTY 参数 + envOverrides + idle 检测 (completed 2026-04-11)
+- [x] **Phase 32: Agent Actions & Feishu Wiring** - notify-agi.sh 结构化模板 + Stop hook + 环境变量门控 (completed 2026-04-11)
+- [x] **Phase 33: Internal HTTP Bridge** - /api/internal/terminal 路由供 MCP 跨进程读写 PTY (completed 2026-04-11)
+- [x] **Phase 34: MCP Terminal Tools** - 3 个终端 MCP 工具 (completed 2026-04-11)
+- [x] **Phase 35: Settings UI for CLI Profile** - CLI Profile 设置卡片 (completed 2026-04-11)
+- [x] **Phase 35.1: Mission Control Dashboard** - 多任务监控面板 /missions (INSERTED) (completed 2026-04-13)
 
-- [x] **Phase 29: Adapter Dead Code Removal** - 删除废弃 SSE/adapter 文件，迁移有用模块到 lib/ 目录，修复路由引用，通过 tsc 检查 (completed 2026-04-10)
-- [x] **Phase 30: Schema Foundation** - CliProfile 数据模型 + TaskExecution.callbackUrl 字段 + Prisma 迁移 + 默认行种子 (completed 2026-04-11)
-- [x] **Phase 31: PTY Primitives & Env Injection** - startPtyExecution/resumePtyExecution 读 CliProfile 构建参数 + envOverrides 传参 + idle 检测 (completed 2026-04-11)
-- [x] **Phase 32: Agent Actions & Feishu Wiring** - notify-agi.sh 更新（任务 ID 检查 + 结构化模板）+ Stop hook 挂接 + callbackUrl 注入 (completed 2026-04-11)
-- [x] **Phase 33: Internal HTTP Bridge** - /api/internal/terminal/[taskId]/buffer 和 /input 路由，供 MCP 进程跨进程读写 PTY (completed 2026-04-11)
-- [x] **Phase 34: MCP Terminal Tools** - get_task_terminal_output + send_task_terminal_input + get_task_execution_status 三个 MCP 工具 (completed 2026-04-11)
-- [x] **Phase 35: Settings UI for CLI Profile** - Settings 页面 CLI Profile 查看/编辑卡片 (completed 2026-04-11)
-- [x] **Phase 35.1: Mission Control Dashboard** - 多任务监控面板：跨工作区聚合所有运行中任务终端，Grid Layout Presets，Task Picker 启动任务 (INSERTED) (completed 2026-04-13)
+See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) for full details.
+
+</details>
+
+### v0.92 Global Chat Assistant (In Progress)
+
+**Milestone Goal:** Add a global chat assistant accessible from any page, enabling users to manage tasks via natural language through Claude CLI with Tower MCP tools.
+
+- [ ] **Phase 36: Assistant Backend** - PTY session for assistant (no taskId), system prompt injection, tool restrictions, WebSocket bridge
+- [ ] **Phase 37: Terminal Mode UI** - Sidebar + dialog layouts with embedded xterm terminal, open/close lifecycle
+- [ ] **Phase 38: Chat Mode** - Output stream parsing into structured messages, Markdown bubble rendering, input box
+- [ ] **Phase 39: Polish & Settings** - Display mode switch in settings, keyboard shortcuts, i18n, responsive sizing
 
 ## Phase Details
 
-### Phase 19: Workbench Entry & Layout
-**Goal**: Users can navigate from the task drawer to a dedicated full-page workbench for any task
-**Depends on**: Phase 18 (existing task page infrastructure)
-**Requirements**: WB-01, WB-02
+### Phase 36: Assistant Backend
+**Goal**: The system can spawn a dedicated Claude CLI PTY session for the global assistant with restricted tools and a predefined identity, independent of any task
+**Depends on**: Phase 35.1 (existing PTY + WebSocket infrastructure)
+**Requirements**: BE-01, BE-02, BE-03, BE-04, BE-05, BE-06, UX-01
 **Success Criteria** (what must be TRUE):
-  1. User can click "查看详情" in the task drawer and navigate to `/workspaces/[id]/tasks/[taskId]`
-  2. The task workbench page shows a left AI chat panel and a right panel with three tabs: Files, Changes, Preview
-  3. Switching between the three tabs does not lose AI chat state or scroll position
-  4. The three right-panel tabs render placeholder content (not blank or crashing) before later phases fill them
-**Plans**: 2 plans
-Plans:
-- [x] 19-01-PLAN.md — Install react-resizable-panels, add i18n keys, verify 查看详情 button (WB-01)
-- [x] 19-02-PLAN.md — Refactor task-page-client.tsx: resizable panels + three-tab layout (WB-02)
+  1. Opening the assistant spawns a new Claude CLI process with cwd set to the Tower project directory, not tied to any taskId
+  2. The spawned process includes `--append-system-prompt` with a prompt defining the assistant as a Tower operator that can create/query/move tasks
+  3. The spawned process includes `--allowedTools "mcp__tower__*"` so it can only call Tower MCP tools (no Read/Edit/Bash)
+  4. The assistant PTY session connects to the browser via WebSocket and streams output in real time
+  5. Closing the assistant destroys the PTY session completely; reopening starts a fresh session with no prior context
+**Plans**: TBD
+
+### Phase 37: Terminal Mode UI
+**Goal**: Users can open a global assistant panel from any page and interact with Claude CLI via an embedded xterm terminal
+**Depends on**: Phase 36
+**Requirements**: UI-01, UI-02, UI-03, UI-04, UI-06, TM-01, TM-02, TM-03, UX-02
+**Success Criteria** (what must be TRUE):
+  1. An assistant icon appears in the top bar next to the search box; clicking it or pressing Cmd+L (Ctrl+L) opens the assistant panel
+  2. The assistant panel can render as a left sidebar (push layout, does not block main content) or as a centered dialog modal
+  3. The panel contains a title bar and an embedded xterm.js terminal where Claude CLI output streams with full ANSI formatting
+  4. User can type directly in the terminal to interact with the assistant (no separate input box needed in terminal mode)
+  5. Pressing Escape, clicking the close button, or pressing Cmd+L again closes the panel and destroys the session
+**Plans**: TBD
 **UI hint**: yes
 
-### Phase 20: File Tree Browser
-**Goal**: Users can browse and operate on the task worktree's directory structure from the workbench
-**Depends on**: Phase 19
-**Requirements**: FT-01, FT-02, FT-03, FT-04, FT-05, FT-06
+### Phase 38: Chat Mode
+**Goal**: Users can interact with the assistant via a chat bubble interface with Markdown-rendered responses instead of raw terminal output
+**Depends on**: Phase 37 (panel shell and session lifecycle already working)
+**Requirements**: CM-01, CM-02, CM-03, CM-04
 **Success Criteria** (what must be TRUE):
-  1. User can expand and collapse directories in the file tree; folders and files show appropriate icons
-  2. Clicking a file in the tree opens it in the editor panel (or passes selection to Phase 21)
-  3. Files and directories matching `.gitignore` patterns are hidden from the tree
-  4. While Claude is executing, the file tree automatically refreshes every 2 seconds to reflect new or modified files
-  5. User can right-click a node to create a file/folder, rename, or delete; changes take effect immediately on disk
-  6. File tree nodes display M/A/D badges indicating their git change status relative to the base branch
-**Plans**: 3 plans
-Plans:
-- [x] 20-01-PLAN.md — Install ignore dep, safeResolvePath utility, test scaffolds (FT-01, FT-02, FT-03, FT-05)
-- [x] 20-02-PLAN.md — File CRUD server actions + getGitStatus (FT-01, FT-03, FT-05, FT-06)
-- [x] 20-03-PLAN.md — FileTree/FileTreeNode/FileTreeContextMenu components + task page integration (FT-01-06)
+  1. The system parses the Claude CLI output stream into structured segments: user messages, assistant responses, thinking indicators, and tool-call blocks
+  2. Assistant responses render as Markdown bubbles with proper tables, lists, code blocks, and inline formatting
+  3. User can type in a text input box at the bottom and send via Enter (Shift+Enter for newline); the input is forwarded to the PTY
+  4. While the assistant is processing, a thinking/loading indicator is visible; it disappears when the response completes
+**Plans**: TBD
 **UI hint**: yes
 
-### Phase 21: Code Editor
-**Goal**: Users can view and edit any file in the worktree with a full-featured code editor
-**Depends on**: Phase 20
-**Requirements**: ED-01, ED-02, ED-03, ED-04, ED-05
+### Phase 39: Polish & Settings
+**Goal**: The assistant experience is configurable, fully bilingual, and works well at all viewport sizes
+**Depends on**: Phase 38
+**Requirements**: UI-05, UI-07, UX-03
 **Success Criteria** (what must be TRUE):
-  1. Clicking a file in the tree opens it in Monaco Editor with correct syntax highlighting for its language
-  2. User can press Ctrl+S to save the file; a toast confirms the save and the file is written to disk
-  3. Unsaved files display a dot indicator on their editor tab
-  4. User can have multiple files open simultaneously as tabs and switch between them without losing edits
-  5. The editor color scheme switches automatically when the user toggles between dark and light mode in ai-manager
-**Plans**: 3 plans
-Plans:
-- [x] 21-01-PLAN.md — Install Monaco packages, readFileContent/writeFileContent server actions, editor i18n keys (ED-01, ED-02)
-- [x] 21-02-PLAN.md — EditorTabs component + CodeEditor (Monaco, multi-tab, dirty dot, Ctrl+S, theme sync) (ED-01-05)
-- [x] 21-03-PLAN.md — Wire CodeEditor into task-page-client.tsx Files tab split layout (ED-01-05)
-**UI hint**: yes
-
-### Phase 22: Diff View Integration
-**Goal**: Users can review code changes for the current task in the workbench Changes tab
-**Depends on**: Phase 19
-**Requirements**: DF-01
-**Success Criteria** (what must be TRUE):
-  1. The "Changes" tab in the workbench right panel renders a diff of the task branch against its base branch
-  2. The diff view is the same component used in the v0.5 task drawer (no duplication of diff logic)
-  3. User can reload the diff to see the latest changes after Claude modifies files
-**Plans**: 1 plan
-Plans:
-- [x] 22-01-PLAN.md — Wire TaskDiffView into workbench Changes tab (DF-01)
-**UI hint**: yes
-
-### Phase 23: Preview Panel
-**Goal**: Users can run and preview their frontend project directly inside the workbench
-**Depends on**: Phase 21
-**Requirements**: PV-01, PV-02, PV-03, PV-04, PV-05, PV-06
-**Success Criteria** (what must be TRUE):
-  1. When creating or editing a project, user can select project type (Frontend/Backend); frontend projects show the Preview tab in the workbench
-  2. User can configure a preview start command per project and click "Run" to launch the dev server; the iframe loads the local URL once the server is ready
-  3. User can type a local URL into the preview address bar to navigate the embedded iframe to a different path
-  4. User can click "Open in Terminal" to open the worktree directory in their configured terminal app (iTerm2/Terminal.app/Warp)
-  5. User can configure the default terminal application in Settings
-  6. After saving a file with Ctrl+S, the preview iframe automatically refreshes to reflect the change
-**Plans**: 3 plans
-Plans:
-- [x] 23-01-PLAN.md — Schema migration (projectType/previewCommand), preview process manager, server actions, config defaults, i18n (PV-01, PV-03, PV-04, PV-05)
-- [x] 23-02-PLAN.md — PreviewPanel component, project type selector in TopBar dialog, Settings terminal input (PV-01, PV-02, PV-03, PV-04, PV-05)
-- [x] 23-03-PLAN.md — CodeEditor onSave prop, task-page-client wiring, human-verify checkpoint (PV-01, PV-02, PV-03, PV-04, PV-06)
-**UI hint**: yes
-
-### Phase 24: PTY Backend & WebSocket Server
-**Goal**: A working, leak-proof WebSocket server that spawns Claude CLI in a PTY, streams output, handles input and resize, and cleans up correctly
-**Depends on**: Phase 23 (instrumentation.ts already exists for worktree pruning)
-**Requirements**: PTY-01, PTY-02, PTY-03, WS-01, WS-02, WS-03, WS-04
-**Success Criteria** (what must be TRUE):
-  1. `wscat -c ws://localhost:3001` can connect and receive raw Claude CLI output including ANSI escape sequences
-  2. Typing input through the WebSocket connection is forwarded to the PTY and accepted by Claude CLI interactively
-  3. A cross-origin connection attempt (non-localhost origin) is rejected with 403
-  4. Closing the WebSocket does not kill the PTY session; reconnecting within 30 seconds reattaches to the same running process
-  5. Running 5 open/close cycles produces zero zombie processes (verified via `ps aux | grep pty`)
-**Plans**: 2 plans
-Plans:
-- [x] 24-01-PLAN.md — Install node-pty + ws, switch to --webpack, PTY session registry (PTY-01, PTY-02, PTY-03)
-- [x] 24-02-PLAN.md — WebSocket server with bidirectional I/O, origin validation, keepalive (WS-01, WS-02, WS-03, WS-04)
-
-### Phase 25: xterm.js Terminal Component
-**Goal**: Users see a fully functional browser terminal that renders PTY output with ANSI colors, accepts keyboard input, and resizes with the panel
-**Depends on**: Phase 24
-**Requirements**: TERM-01, TERM-02, TERM-03, TERM-04
-**Success Criteria** (what must be TRUE):
-  1. The terminal renders ANSI color sequences from Claude CLI output (progress bars, colored text, cursor movement)
-  2. User can type in the terminal and the input is forwarded to Claude CLI (interactive prompts work)
-  3. Resizing the workbench panel causes the terminal to refit and PTY columns/rows to update within 100ms
-  4. The terminal background and text colors switch automatically when user toggles dark/light mode
-**Plans**: 2 plans
-Plans:
-- [x] 25-01-PLAN.md — Install xterm addons + i18n keys (TERM-01, TERM-02, TERM-03, TERM-04)
-- [x] 25-02-PLAN.md — TaskTerminal component (TERM-01, TERM-02, TERM-03, TERM-04)
-**UI hint**: yes
-
-### Phase 26: Workbench Integration
-**Goal**: Users can start task execution and see Claude CLI running live in the workbench terminal, with task status updating when done
-**Depends on**: Phase 25
-**Requirements**: INT-01, INT-02, INT-03
-**Success Criteria** (what must be TRUE):
-  1. Clicking "Execute" on a task opens a PTY session and the workbench left panel shows the live terminal output
-  2. Claude CLI output appears with full ANSI formatting — no JSON parsing, no chat bubbles
-  3. When Claude CLI exits successfully, the task status automatically transitions to IN_REVIEW; on failure the status stays unchanged
-**Plans**: 2 plans
-Plans:
-- [x] 26-01-PLAN.md — Server action startPtyExecution + PtySession.setDataListener + ws-server onExit DB update (INT-01, INT-02, INT-03)
-- [x] 26-02-PLAN.md — Replace left panel chat UI with TaskTerminal + Execute button; wire onSessionEnd (INT-01, INT-02, INT-03)
-**UI hint**: yes
-
-### Phase 27: Task Card Context Menu
-**Goal**: Users can right-click any task card on the Kanban board to change status, launch execution, or navigate to the workbench
-**Depends on**: Phase 23 (workbench page exists), Phase 26 (execution integrated)
-**Requirements**: TASK-01, TASK-02, TASK-03
-**Success Criteria** (what must be TRUE):
-  1. Right-clicking a task card opens a context menu with options: change status, launch task, go to detail page
-  2. "Launch task" in the context menu starts Claude CLI execution; the option is greyed out for tasks that have already been executed
-  3. "Go to detail page" in the context menu navigates to `/workspaces/[id]/tasks/[taskId]`
-**Plans**: 2 plans
-Plans:
-- [x] 27-01-PLAN.md — TaskCardContextMenu component + i18n keys (TASK-01, TASK-02, TASK-03)
-- [x] 27-02-PLAN.md — Wire context menu into board stack + execution disable guard (TASK-01, TASK-02, TASK-03)
-**UI hint**: yes
-
-### Phase 28: v0.6 Bug Fixes
-**Goal**: The Monaco editor loads reliably and the Diff tab works for all project types including NORMAL projects
-**Depends on**: Phase 23 (v0.6 code exists to fix)
-**Requirements**: FIX-01, FIX-02
-**Success Criteria** (what must be TRUE):
-  1. The Monaco editor initializes successfully on first load without requiring a page refresh
-  2. The Changes tab displays a diff for NORMAL type projects (not just GIT type projects)
-**Plans**: 1 plan
-Plans:
-- [x] 34-01-PLAN.md — Create 3 MCP terminal tools + register in server (TERM-03, TERM-04, TERM-05)
-
-### Phase 29: Adapter Dead Code Removal
-**Goal**: The codebase contains no dead SSE/adapter execution files; all live modules are relocated to their correct paths and the build passes with zero new type errors
-**Depends on**: Phase 28 (v0.8 shipped, clean starting point)
-**Requirements**: CLEAN-01, CLEAN-02, CLEAN-03, CLEAN-04, CLEAN-05
-**Success Criteria** (what must be TRUE):
-  1. `src/lib/adapters/execute.ts`, `parse.ts`, `process-utils.ts`, `registry.ts`, and `types.ts` no longer exist in the repository
-  2. The Settings > AI Tools verify button still works — CLI verification now comes from `src/lib/cli-test.ts` via the updated `/api/adapters/test` route
-  3. Preview process management now lives at `src/lib/preview-process.ts` with no broken imports in existing consumers
-  4. The deprecated `/api/tasks/[taskId]/execute` route no longer exists and hitting it returns 404
-  5. `tsc --noEmit` exits with code 0 (no new type errors introduced by the reorganization)
-**Plans**: 2 plans
-Plans:
-- [x] 29-01-PLAN.md — Relocate cli-test.ts + preview-process.ts, update consumer imports (CLEAN-02, CLEAN-03)
-- [x] 29-02-PLAN.md — Delete adapters/ directory + deprecated execute route, verify tsc (CLEAN-01, CLEAN-04, CLEAN-05)
-
-### Phase 30: Schema Foundation
-**Goal**: The database has a `CliProfile` table with a seeded default row and `TaskExecution` has a `callbackUrl` field; the Prisma client is regenerated and ready for application code
-**Depends on**: Phase 29 (clean codebase before schema changes)
-**Requirements**: DATA-01, DATA-02, CLIP-01
-**Success Criteria** (what must be TRUE):
-  1. `prisma studio` shows a `CliProfile` table with at least one row: `command: "claude"`, `baseArgs: ["--dangerously-skip-permissions"]`
-  2. `TaskExecution` rows have an optional `callbackUrl` column visible in prisma studio
-  3. `prisma db push` (or `prisma migrate deploy`) runs without errors on a fresh database
-  4. TypeScript code can import `CliProfile` and `TaskExecution.callbackUrl` from `@prisma/client` without type errors
-**Plans**: 1 plan
-Plans:
-- [x] 30-01-PLAN.md — CliProfile model + TaskExecution.callbackUrl + seed default row (DATA-01, DATA-02, CLIP-01)
-
-### Phase 31: PTY Primitives & Env Injection
-**Goal**: PTY sessions accept per-session environment overrides and detect idle state; `startPtyExecution` and `resumePtyExecution` read from `CliProfile` instead of hardcoded strings
-**Depends on**: Phase 30 (CliProfile schema exists)
-**Requirements**: CLIP-02, CLIP-03, NTFY-01, NTFY-02, NTFY-06, NTFY-07
-**Success Criteria** (what must be TRUE):
-  1. Starting a task execution reads `command` and `baseArgs` from the `CliProfile` default row — changing the DB row changes what CLI is spawned without any code change
-  2. A `callbackUrl` passed to `startPtyExecution` appears as `CALLBACK_URL` in the spawned process's environment (verified via `env` command in terminal)
-  3. `AI_MANAGER_TASK_ID` is injected into every PTY session environment automatically
-  4. After 180 seconds of zero PTY output, the configured `onIdle` callback fires
-  5. User typing in the terminal (via WebSocket) resets the idle timer; the callback does not fire if the user is actively interacting
-**Plans**: 2 plans
-Plans:
-- [x] 31-01-PLAN.md — PtySession envOverrides support + idle detection timer (NTFY-01, NTFY-06, NTFY-07)
-- [x] 31-02-PLAN.md — startPtyExecution/resumePtyExecution read CliProfile + inject env vars (CLIP-02, CLIP-03, NTFY-02)
-
-### Phase 32: Agent Actions & Feishu Wiring
-**Goal**: Claude completions trigger a Feishu notification with structured task metadata; the notification only fires for ai-manager-dispatched sessions, not manual Claude runs
-**Depends on**: Phase 31 (PTY primitives + env injection in place)
-**Requirements**: NTFY-03, NTFY-04, NTFY-05
-**Success Criteria** (what must be TRUE):
-  1. When a task execution completes (Claude exits 0), a Feishu message arrives containing: task title, final status, elapsed time, and a brief summary
-  2. Running Claude manually (outside ai-manager) does not produce a Feishu notification — the `AI_MANAGER_TASK_ID` environment variable controls the gate
-  3. The `~/.claude/settings.json` Stop hook entry points to `notify-agi.sh` and is present after setup
-  4. A failed execution (exit code non-zero) sends a Feishu notification tagged as failed, not completed
-**Plans**: 1 plan
-Plans:
-- [x] 32-01-PLAN.md — notify-agi.sh gate + structured Feishu template + settings.json Stop hook + env var injection (NTFY-03, NTFY-04, NTFY-05)
-
-### Phase 33: Internal HTTP Bridge
-**Goal**: The Next.js server exposes two localhost-only HTTP routes that allow any process (including the MCP stdio process) to read PTY buffer contents and send input to a running PTY session
-**Depends on**: Phase 31 (PTY sessions have buffer and write APIs)
-**Requirements**: TERM-01, TERM-02
-**Success Criteria** (what must be TRUE):
-  1. `curl http://localhost:3000/api/internal/terminal/{taskId}/buffer` returns the last N lines of PTY output as JSON for a running session
-  2. `curl -X POST http://localhost:3000/api/internal/terminal/{taskId}/input -d '{"text":"y\n"}'` sends the text to the running PTY and it appears in the terminal
-  3. Both routes return 404 when no active PTY session exists for the given taskId
-  4. Both routes reject requests from non-localhost origins (loopback-only guard enforced)
-**Plans**: 1 plan
-Plans:
-- [x] 33-01-PLAN.md — Localhost guard utility + buffer GET route + input POST route (TERM-01, TERM-02)
-
-### Phase 34: MCP Terminal Tools
-**Goal**: External orchestrators (Paperclip/OpenClaw) can poll PTY terminal output and inject input into running task sessions via MCP tools
-**Depends on**: Phase 33 (HTTP bridge routes exist and are tested)
-**Requirements**: TERM-03, TERM-04, TERM-05
-**Success Criteria** (what must be TRUE):
-  1. Calling `get_task_terminal_output` from an MCP client returns recent terminal output lines for a running task
-  2. Calling `send_task_terminal_input` from an MCP client sends text to the running PTY — Claude receives and acts on it
-  3. Calling `get_task_execution_status` returns whether the execution is running, idle, or exited, plus the last output snippet
-  4. MCP tool count does not exceed 30 (currently 21 → target 24 after adding 3 new tools)
-**Plans**: 1 plan
-Plans:
-- [x] 35-01-PLAN.md — CLI Profile server actions + i18n + settings card component (CLIP-04)
-
-### Phase 35: Settings UI for CLI Profile
-**Goal**: Users can view and edit the active CLI Profile directly in the Settings UI without touching the database
-**Depends on**: Phase 30 (CliProfile schema), Phase 31 (server actions for profile CRUD)
-**Requirements**: CLIP-04
-**Success Criteria** (what must be TRUE):
-  1. Settings page has a CLI Profile card showing the current command, base args, and any env vars
-  2. User can edit the command and base args inline and save; the next task execution uses the updated values
-  3. The CLI Profile card is bilingual (zh/en) and follows existing settings card visual patterns
-**Plans**: 1 plan
-Plans:
-- [ ] 35-01-PLAN.md — CLI Profile server actions + i18n + settings card component (CLIP-04)
-**UI hint**: yes
-
-### Phase 35.1: Mission Control Dashboard (INSERTED)
-**Goal**: Users can view and interact with all running task terminals in a single page across all workspaces, without switching between projects
-**Depends on**: Phase 26 (Workbench Integration — terminal portal + PTY execution), Phase 33 (Internal HTTP Bridge)
-**Requirements**: MC-01, MC-02, MC-03, MC-04, MC-05
-**Success Criteria** (what must be TRUE):
-  1. A new `/missions` route exists and is accessible from the sidebar navigation
-  2. The page displays all tasks with RUNNING executions across all workspaces, each in its own card with a real xterm.js terminal
-  3. Users can select a grid layout preset (1x1, 2x1, 3x2, 2x2, 4x2, 3x3) from a dropdown; the choice persists in localStorage
-  4. Users can click "Launch Task" to pick an existing task from any workspace/project and start its execution; the task appears as a new card
-  5. Stopping a task execution removes its card from the grid; tasks that complete (exit 0) auto-remove
-  6. Each card shows workspace/project breadcrumb, task title, running time, and a drag handle for reordering
-  7. Clicking "Open full view" navigates to the existing task detail page (`/workspaces/[wsId]/tasks/[taskId]`)
-**Plans**: 3 plans
-Plans:
-- [x] 35.1-01-PLAN.md — Server action getActiveExecutionsAcrossWorkspaces + /missions route + page skeleton + sidebar nav + i18n
-- [x] 35.1-02-PLAN.md — GridLayoutPresets + TaskPicker + MissionCard components + page integration
-- [x] 35.1-03-PLAN.md — MissionTerminal (xterm.js) + real-time refresh + stop/auto-remove lifecycle
+  1. Users can switch between terminal mode and chat mode via a setting in Settings > General (persisted in SystemConfig)
+  2. All assistant UI text (title bar, placeholders, tooltips, settings labels) is available in both Chinese and English
+  3. Both sidebar and dialog modes render correctly on viewports from 1024px to 2560px wide without overflow or truncation
+**Plans**: TBD
 **UI hint**: yes
 
 ## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 36 -> 37 -> 38 -> 39
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -408,11 +208,15 @@ Plans:
 | 26. Workbench Integration | v0.7 | 2/2 | Complete | 2026-04-03 |
 | 27. Task Card Context Menu | v0.7 | 2/2 | Complete | 2026-04-03 |
 | 28. v0.6 Bug Fixes | v0.7 | 0/TBD | Complete | 2026-04-10 |
-| 29. Adapter Dead Code Removal | v0.9 | 2/2 | Complete    | 2026-04-10 |
-| 30. Schema Foundation | v0.9 | 1/1 | Complete    | 2026-04-11 |
-| 31. PTY Primitives & Env Injection | v0.9 | 2/2 | Complete    | 2026-04-11 |
-| 32. Agent Actions & Feishu Wiring | v0.9 | 1/1 | Complete    | 2026-04-11 |
-| 33. Internal HTTP Bridge | v0.9 | 1/1 | Complete    | 2026-04-11 |
-| 34. MCP Terminal Tools | v0.9 | 1/1 | Complete    | 2026-04-11 |
-| 35. Settings UI for CLI Profile | v0.9 | 1/1 | Complete    | 2026-04-11 |
-| 35.1. Mission Control Dashboard | v0.9 | 3/3 | Complete    | 2026-04-13 |
+| 29. Adapter Dead Code Removal | v0.9 | 2/2 | Complete | 2026-04-10 |
+| 30. Schema Foundation | v0.9 | 1/1 | Complete | 2026-04-11 |
+| 31. PTY Primitives & Env Injection | v0.9 | 2/2 | Complete | 2026-04-11 |
+| 32. Agent Actions & Feishu Wiring | v0.9 | 1/1 | Complete | 2026-04-11 |
+| 33. Internal HTTP Bridge | v0.9 | 1/1 | Complete | 2026-04-11 |
+| 34. MCP Terminal Tools | v0.9 | 1/1 | Complete | 2026-04-11 |
+| 35. Settings UI for CLI Profile | v0.9 | 1/1 | Complete | 2026-04-11 |
+| 35.1. Mission Control Dashboard | v0.9 | 3/3 | Complete | 2026-04-13 |
+| 36. Assistant Backend | v0.92 | 0/TBD | Not started | - |
+| 37. Terminal Mode UI | v0.92 | 0/TBD | Not started | - |
+| 38. Chat Mode | v0.92 | 0/TBD | Not started | - |
+| 39. Polish & Settings | v0.92 | 0/TBD | Not started | - |

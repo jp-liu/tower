@@ -57,6 +57,28 @@
 
 ## Traceability
 
-| REQ | Phase |
-|-----|-------|
-| (filled by roadmap) | |
+| REQ | Phase | Status |
+|-----|-------|--------|
+| UI-01 | Phase 37 | Pending |
+| UI-02 | Phase 37 | Pending |
+| UI-03 | Phase 37 | Pending |
+| UI-04 | Phase 37 | Pending |
+| UI-05 | Phase 39 | Pending |
+| UI-06 | Phase 37 | Pending |
+| UI-07 | Phase 39 | Pending |
+| TM-01 | Phase 37 | Pending |
+| TM-02 | Phase 37 | Pending |
+| TM-03 | Phase 37 | Pending |
+| CM-01 | Phase 38 | Pending |
+| CM-02 | Phase 38 | Pending |
+| CM-03 | Phase 38 | Pending |
+| CM-04 | Phase 38 | Pending |
+| BE-01 | Phase 36 | Pending |
+| BE-02 | Phase 36 | Pending |
+| BE-03 | Phase 36 | Pending |
+| BE-04 | Phase 36 | Pending |
+| BE-05 | Phase 36 | Pending |
+| BE-06 | Phase 36 | Pending |
+| UX-01 | Phase 36 | Pending |
+| UX-02 | Phase 37 | Pending |
+| UX-03 | Phase 39 | Pending |
