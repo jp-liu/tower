@@ -103,10 +103,16 @@ export function SystemConfig() {
   };
 
   const handleSaveMissionsGrid = async () => {
-    await setConfigValue("missions.grid.minCols", missionsGridForm.minCols);
-    await setConfigValue("missions.grid.maxCols", missionsGridForm.maxCols);
-    await setConfigValue("missions.grid.minRows", missionsGridForm.minRows);
-    await setConfigValue("missions.grid.maxRows", missionsGridForm.maxRows);
+    // Ensure min <= max; auto-swap if inverted
+    const minCols = Math.min(missionsGridForm.minCols, missionsGridForm.maxCols);
+    const maxCols = Math.max(missionsGridForm.minCols, missionsGridForm.maxCols);
+    const minRows = Math.min(missionsGridForm.minRows, missionsGridForm.maxRows);
+    const maxRows = Math.max(missionsGridForm.minRows, missionsGridForm.maxRows);
+    setMissionsGridForm({ minCols, maxCols, minRows, maxRows });
+    await setConfigValue("missions.grid.minCols", minCols);
+    await setConfigValue("missions.grid.maxCols", maxCols);
+    await setConfigValue("missions.grid.minRows", minRows);
+    await setConfigValue("missions.grid.maxRows", maxRows);
   };
 
   const handleAddRule = async () => {

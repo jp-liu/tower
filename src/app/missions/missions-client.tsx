@@ -55,7 +55,12 @@ export function MissionsClient({
     if (typeof window !== "undefined") {
       try {
         const saved = localStorage.getItem("missions-grid-custom");
-        if (saved) return JSON.parse(saved);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (typeof parsed?.cols === "number" && typeof parsed?.rows === "number") {
+            return { cols: Math.max(1, Math.min(10, parsed.cols)), rows: Math.max(1, Math.min(10, parsed.rows)) };
+          }
+        }
       } catch { /* ignore */ }
     }
     return { cols: 2, rows: 2 };

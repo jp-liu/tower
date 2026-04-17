@@ -57,6 +57,8 @@ export async function listDirectory(
 }
 
 // ---- getGitStatus ----
+// In direct mode (no baseBranch/taskBranch), falls back to `git status --porcelain`.
+// If cwd is not a git repo, execFileSync throws and the catch returns {} — this is expected.
 export async function getGitStatus(
   worktreePath: string,
   baseBranch: string | null,

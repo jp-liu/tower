@@ -290,6 +290,10 @@ export async function continueLatestPtyExecution(
     orderBy: { createdAt: "desc" },
   });
 
+  // Destroy any live PTY session for this task before spawning a new one
+  const { destroySession: destroyExisting } = await import("@/lib/pty/session-store");
+  destroyExisting(taskId);
+
   // Clean up stale RUNNING executions
   await db.taskExecution.updateMany({
     where: { taskId, status: "RUNNING" },

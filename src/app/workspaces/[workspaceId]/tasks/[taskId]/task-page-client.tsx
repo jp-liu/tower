@@ -194,6 +194,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     }
   }, [task.id]);
 
+  // isExecuting is cleared by handleSessionEnd (via TerminalOutlet onSessionEnd callback)
   const handleContinueLatest = useCallback(async () => {
     setIsExecuting(true);
     try {
