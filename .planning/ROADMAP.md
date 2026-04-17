@@ -118,7 +118,7 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
 
 **Milestone Goal:** Add a global chat assistant accessible from any page, enabling users to manage tasks via natural language through Claude CLI with Tower MCP tools.
 
-- [ ] **Phase 36: Assistant Backend** - PTY session for assistant (no taskId), system prompt injection, tool restrictions, WebSocket bridge
+- [x] **Phase 36: Assistant Backend** - PTY session for assistant (no taskId), system prompt injection, tool restrictions, WebSocket bridge (completed 2026-04-17)
 - [ ] **Phase 37: Terminal Mode UI** - Sidebar + dialog layouts with embedded xterm terminal, open/close lifecycle
 - [ ] **Phase 38: Chat Mode** - Output stream parsing into structured messages, Markdown bubble rendering, input box
 - [ ] **Phase 39: Polish & Settings** - Display mode switch in settings, keyboard shortcuts, i18n, responsive sizing
@@ -135,11 +135,11 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
   3. The spawned process includes `--allowedTools "mcp__tower__*"` so it can only call Tower MCP tools (no Read/Edit/Bash)
   4. The assistant PTY session connects to the browser via WebSocket and streams output in real time
   5. Closing the assistant destroys the PTY session completely; reopening starts a fresh session with no prior context
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 36-01-PLAN.md — Server actions + config defaults (startAssistantSession, stopAssistantSession, config keys)
-- [ ] 36-02-PLAN.md — WS keepalive bypass + internal API route (/api/internal/assistant)
+- [x] 36-02-PLAN.md — WS keepalive bypass + internal API route (/api/internal/assistant)
 
 ### Phase 37: Terminal Mode UI
 **Goal**: Users can open a global assistant panel from any page and interact with Claude CLI via an embedded xterm terminal
@@ -154,7 +154,7 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 36-01-PLAN.md — Server actions + config defaults (startAssistantSession, stopAssistantSession, config keys)
+- [x] 36-01-PLAN.md — Server actions + config defaults (startAssistantSession, stopAssistantSession, config keys)
 - [ ] 36-02-PLAN.md — WS keepalive bypass + internal API route (/api/internal/assistant)
 **UI hint**: yes
 
@@ -232,7 +232,7 @@ Phases execute in numeric order: 36 -> 37 -> 38 -> 39
 | 34. MCP Terminal Tools | v0.9 | 1/1 | Complete | 2026-04-11 |
 | 35. Settings UI for CLI Profile | v0.9 | 1/1 | Complete | 2026-04-11 |
 | 35.1. Mission Control Dashboard | v0.9 | 3/3 | Complete | 2026-04-13 |
-| 36. Assistant Backend | v0.92 | 1/2 | In Progress|  |
+| 36. Assistant Backend | v0.92 | 2/2 | Complete   | 2026-04-17 |
 | 37. Terminal Mode UI | v0.92 | 0/TBD | Not started | - |
 | 38. Chat Mode | v0.92 | 0/TBD | Not started | - |
 | 39. Polish & Settings | v0.92 | 0/TBD | Not started | - |

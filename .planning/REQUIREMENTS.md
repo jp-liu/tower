@@ -31,7 +31,7 @@
 - [x] **BE-01**: System creates a new Claude CLI PTY session when user opens the assistant
 - [x] **BE-02**: System injects a system prompt defining the assistant's identity and capabilities via --append-system-prompt
 - [x] **BE-03**: System restricts tools to Tower MCP only via --allowedTools "mcp__tower__*"
-- [ ] **BE-04**: System connects the assistant to the PTY session via WebSocket for real-time streaming
+- [x] **BE-04**: System connects the assistant to the PTY session via WebSocket for real-time streaming
 - [x] **BE-05**: System destroys the PTY session when the assistant is closed (stateless)
 - [x] **BE-06**: System supports a config key to switch between terminal mode and chat mode
 
@@ -76,7 +76,7 @@
 | BE-01 | Phase 36 | Complete |
 | BE-02 | Phase 36 | Complete |
 | BE-03 | Phase 36 | Complete |
-| BE-04 | Phase 36 | Pending |
+| BE-04 | Phase 36 | Complete |
 | BE-05 | Phase 36 | Complete |
 | BE-06 | Phase 36 | Complete |
 | UX-01 | Phase 36 | Complete |
