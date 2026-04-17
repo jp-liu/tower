@@ -45,9 +45,9 @@ Declared values (must be multiples of 4):
 
 Exceptions:
 - Title bar height: 44px — inherits from Phase 37 `assistant-panel.tsx`
-- Chat bubble vertical padding: 10px — splits the difference between sm (8px) and md (16px) for comfortable reading density; declared as `py-[10px]`
+- Chat bubble vertical padding: 8px (`py-2`) — compact reading density matching sm token
 - User bubble horizontal padding: 12px (`px-3`) — tighter than md to preserve bubble width budget
-- Tool-call block vertical padding: 6px (`py-1.5`) — compact to keep tool calls visually subordinate
+- Tool-call block vertical padding: 4px (`py-1`) — compact to keep tool calls visually subordinate
 - Input textarea min-height: 40px — matches `h-10` for single-line state
 - Send button: 32px (`h-8 w-8`) — matches existing button convention per `.claude/rules/ui.md`
 
