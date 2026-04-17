@@ -4,6 +4,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Plus } from "lucide-react";
 import { TaskCard } from "./task-card";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import type { TaskWithLabels } from "@/types";
 
 interface BoardColumnProps {
@@ -56,26 +57,28 @@ export function BoardColumn({
       </div>
 
       {/* Task List */}
-      <div
-        ref={setNodeRef}
-        className="flex flex-1 flex-col gap-2 overflow-y-auto p-2 min-h-0"
-      >
-        <SortableContext
-          items={tasks.map((t) => t.id)}
-          strategy={verticalListSortingStrategy}
+      <ScrollArea className="flex-1 min-h-0">
+        <div
+          ref={setNodeRef}
+          className="flex flex-col gap-2 p-2"
         >
-          {tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              onClick={() => onTaskClick?.(task)}
-              onEdit={onEditTask}
-              onDelete={onDeleteTask}
-              onContextMenu={onContextMenu}
-            />
-          ))}
-        </SortableContext>
-      </div>
+          <SortableContext
+            items={tasks.map((t) => t.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {tasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onClick={() => onTaskClick?.(task)}
+                onEdit={onEditTask}
+                onDelete={onDeleteTask}
+                onContextMenu={onContextMenu}
+              />
+            ))}
+          </SortableContext>
+        </div>
+      </ScrollArea>
     </div>
   );
 }

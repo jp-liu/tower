@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { createNote, getTaskNotes, deleteNote } from "@/actions/note-actions";
 import { getTaskAssets, uploadAsset, deleteAsset } from "@/actions/asset-actions";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface TaskNotesPanelProps {
   taskId: string;
@@ -91,7 +92,7 @@ export function TaskNotesPanel({ taskId, projectId }: TaskNotesPanelProps) {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto">
+    <ScrollArea className="h-full"><div className="flex flex-col">
       {/* Notes section */}
       <div className="border-b border-border px-4 py-3">
         <div className="flex items-center justify-between">
@@ -209,6 +210,6 @@ export function TaskNotesPanel({ taskId, projectId }: TaskNotesPanelProps) {
           ))}
         </div>
       </div>
-    </div>
+    </div></ScrollArea>
   );
 }

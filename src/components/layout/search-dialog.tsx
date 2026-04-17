@@ -8,6 +8,7 @@ import { globalSearch } from "@/actions/search-actions";
 import type { SearchResult, SearchResultType, SearchCategory } from "@/lib/search";
 import { getConfigValue } from "@/actions/config-actions";
 import { useI18n } from "@/lib/i18n";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 type CategoryKey =
   | "search.all"
@@ -152,7 +153,7 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
         </div>
 
         {/* Results */}
-        <div className="max-h-80 overflow-auto">
+        <ScrollArea className="max-h-80">
           {!query.trim() && (
             <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
               {t("search.typeToSearch")}
@@ -187,7 +188,7 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
           {category !== "all" && results.map((result) => (
             <ResultRow key={`${result.type}-${result.id}`} result={result} onSelect={handleSelect} />
           ))}
-        </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   );

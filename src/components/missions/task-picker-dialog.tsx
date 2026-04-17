@@ -20,6 +20,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { Play, RotateCcw } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 type TaskStatus = "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED";
 type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -226,7 +227,7 @@ function FullTaskDialog({
             </SelectContent>
           </Select>
         </div>
-        <div className="flex-1 overflow-y-auto min-h-0 -mx-2">
+        <ScrollArea className="flex-1 min-h-0 -mx-2">
           {tasks.length === 0 && selectedProjectId ? (
             <p className="text-sm text-muted-foreground text-center py-8">{t("missions.launcher.noTasks")}</p>
           ) : tasks.length === 0 ? (
@@ -244,7 +245,7 @@ function FullTaskDialog({
               />
             ))
           )}
-        </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   );
@@ -340,7 +341,7 @@ export function TaskPickerDialog({
           </div>
 
           {/* Tree list */}
-          <div className="flex-1 overflow-y-auto">
+          <ScrollArea className="flex-1 min-h-0">
             {loading ? (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                 Loading...
@@ -385,7 +386,7 @@ export function TaskPickerDialog({
                 </div>
               ))
             )}
-          </div>
+          </ScrollArea>
 
           {/* Footer — clickable to open full dialog */}
           <button

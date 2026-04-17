@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "./execution-timeline";
 import { TaskNotesPanel } from "./task-notes-panel";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Task, TaskExecution } from "@prisma/client";
 import { useI18n } from "@/lib/i18n";
 
@@ -349,9 +350,9 @@ export function TaskDetailPanel({
           ) : taskStatus === "DONE" || taskStatus === "CANCELLED" ? (
             <div className="flex h-full flex-col overflow-hidden">
               {/* History only — no launch/resume for completed/cancelled tasks */}
-              <div className="flex-1 min-h-0 overflow-y-auto">
+              <ScrollArea className="flex-1 min-h-0">
                 <ExecutionTimeline executions={pastExecutions} />
-              </div>
+              </ScrollArea>
             </div>
           ) : (
             <div className="flex h-full flex-col overflow-hidden">
@@ -390,9 +391,9 @@ export function TaskDetailPanel({
                 </button>
               </div>
               {/* Execution history */}
-              <div className="flex-1 min-h-0 overflow-y-auto">
+              <ScrollArea className="flex-1 min-h-0">
                 <ExecutionTimeline executions={pastExecutions} onResume={handleResume} onContinueLatest={handleContinueLatest} />
-              </div>
+              </ScrollArea>
             </div>
           )}
         </div>

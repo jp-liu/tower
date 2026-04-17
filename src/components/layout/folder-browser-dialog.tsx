@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/lib/i18n";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface FolderEntry {
   name: string;
@@ -171,7 +172,7 @@ export function FolderBrowserDialog({
           </div>
 
           {/* Folder list */}
-          <div className="min-h-0 flex-1 overflow-auto">
+          <ScrollArea className="min-h-0 flex-1">
             {loading && (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                 Loading...
@@ -207,7 +208,7 @@ export function FolderBrowserDialog({
                 )}
               </button>
             ))}
-          </div>
+          </ScrollArea>
 
           {/* Footer */}
           <div className="flex justify-end gap-2 px-5 py-3 shrink-0 border-t border-border">
