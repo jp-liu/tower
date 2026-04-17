@@ -180,10 +180,10 @@ Plans:
   1. Users can switch between terminal mode and chat mode via a setting in Settings > General (persisted in SystemConfig)
   2. All assistant UI text (title bar, placeholders, tooltips, settings labels) is available in both Chinese and English
   3. Both sidebar and dialog modes render correctly on viewports from 1024px to 2560px wide without overflow or truncation
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 39-01-PLAN.md — Communication mode setting + assistant i18n keys
+- [x] 39-01-PLAN.md — Communication mode setting + assistant i18n keys
 - [ ] 39-02-PLAN.md — Responsive sizing for sidebar and dialog modes
 
 ## Progress
@@ -232,4 +232,4 @@ Phases execute in numeric order: 36 -> 37 -> 38 -> 39
 | 36. Assistant Backend | v0.92 | 2/2 | Complete    | 2026-04-17 |
 | 37. Terminal Mode UI | v0.92 | 2/2 | Complete    | 2026-04-17 |
 | 38. Chat Mode | v0.92 | 2/2 | Complete    | 2026-04-17 |
-| 39. Polish & Settings | v0.92 | 0/2 | Not started | - |
+| 39. Polish & Settings | v0.92 | 1/2 | In Progress|  |

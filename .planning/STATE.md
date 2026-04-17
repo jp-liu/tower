@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.92
 milestone_name: Global Chat Assistant
-status: verifying
-stopped_at: Completed 38-chat-mode 38-02-PLAN.md
-last_updated: "2026-04-17T11:49:41.827Z"
+status: executing
+stopped_at: Completed 39-polish-settings 39-01-PLAN.md
+last_updated: "2026-04-17T12:04:53.458Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 8
+  completed_plans: 7
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 38 — chat-mode
+**Current focus:** Phase 39 — polish-settings
 
 ## Current Position
 
-Phase: 39
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 39 (polish-settings) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-04-17
 
 Progress: [░░░░░░░░░░] 0%
@@ -62,6 +62,7 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 38-chat-mode]: parseLines exported as pure function for testing without WS mock
 - [Phase 38-chat-mode]: communicationMode separates layout mode (displayMode) from terminal/chat communication mode
 - [Phase 38-chat-mode]: Thinking bubble renders pulsing dots unconditionally — role=thinking in messages array handles visibility
+- [Phase 39-polish-settings]: Call useI18n() directly in ThinkingBubble and ToolBubble sub-components rather than prop-drilling t() from parent
 
 ### Pending Todos
 
@@ -73,6 +74,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-17T11:46:50.787Z
-Stopped at: Completed 38-chat-mode 38-02-PLAN.md
+Last session: 2026-04-17T12:04:53.455Z
+Stopped at: Completed 39-polish-settings 39-01-PLAN.md
 Resume file: None
