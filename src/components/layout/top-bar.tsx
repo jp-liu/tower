@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Search, Settings, Plus, Command, Globe, Sun, Moon, GitBranch, Loader2, Check, AlertCircle, Bot } from "lucide-react";
+import { Search, Settings, Plus, Command, Globe, GitBranch, Loader2, Check, AlertCircle, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { SegmentedControl } from "@/components/ui/segmented-control";
