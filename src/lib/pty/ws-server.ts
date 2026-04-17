@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { IncomingMessage } from "http";
 import { getSession, destroySession } from "./session-store";
 import { readConfigValue } from "@/lib/config-reader";
+import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
 
 const ALLOWED_ORIGINS = new Set([
   "http://localhost:3000",
@@ -100,6 +101,14 @@ export async function startWsServer(): Promise<void> {
       const s = getSession(taskId);
       if (!s) return;
       s.setDataListener(() => {});
+
+      // Assistant sessions: stateless — destroy immediately on disconnect (BE-05)
+      if (taskId === ASSISTANT_SESSION_KEY) {
+        console.error(`[ws-server] Assistant session disconnected — destroying immediately`);
+        destroySession(taskId);
+        return;
+      }
+
       const timeout = s.killed ? KEEPALIVE_EXITED_MS : KEEPALIVE_RUNNING_MS;
       s.disconnectTimer = setTimeout(() => {
         console.error(`[ws-server] Keepalive expired for task ${taskId}`);
