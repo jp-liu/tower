@@ -7,8 +7,7 @@ import {
 } from "@/lib/pty/session-store";
 import { readConfigValue } from "@/lib/config-reader";
 import { db } from "@/lib/db";
-
-export const ASSISTANT_SESSION_KEY = "__assistant__";
+import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
 
 const DEFAULT_SYSTEM_PROMPT =
   "You are Tower Assistant, an AI operator for the Tower task management platform. You help users create, organize, query, and track tasks and projects using Tower MCP tools. You do NOT write or edit code — you are an operator, not a developer. Always respond in the same language the user uses.";
