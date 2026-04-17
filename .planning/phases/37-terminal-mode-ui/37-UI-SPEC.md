@@ -57,7 +57,7 @@ Source: `top-bar.tsx` uses `h-12` (48px) header, buttons use `h-8` (32px) per `.
 | Role | Size | Weight | Line Height | Usage |
 |------|------|--------|-------------|-------|
 | Body | 14px | 400 (regular) | 1.5 | Terminal status messages, general UI labels |
-| Label | 12px | 500 (medium) | 1.4 | Title bar caption, keyboard shortcut hints, small annotations |
+| Label | 12px | 400 (regular) | 1.4 | Title bar caption, keyboard shortcut hints, small annotations |
 | Heading | 14px | 600 (semibold) | 1.2 | Panel title "Tower Assistant" in title bar |
 | Mono | 13px | 400 (regular) | 1.5 | xterm.js terminal output (JetBrains Mono) |
 
