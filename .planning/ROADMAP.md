@@ -135,10 +135,10 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
   3. The spawned process includes `--allowedTools "mcp__tower__*"` so it can only call Tower MCP tools (no Read/Edit/Bash)
   4. The assistant PTY session connects to the browser via WebSocket and streams output in real time
   5. Closing the assistant destroys the PTY session completely; reopening starts a fresh session with no prior context
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 36-01-PLAN.md — Server actions + config defaults (startAssistantSession, stopAssistantSession, config keys)
+- [x] 36-01-PLAN.md — Server actions + config defaults (startAssistantSession, stopAssistantSession, config keys)
 - [ ] 36-02-PLAN.md — WS keepalive bypass + internal API route (/api/internal/assistant)
 
 ### Phase 37: Terminal Mode UI
@@ -232,7 +232,7 @@ Phases execute in numeric order: 36 -> 37 -> 38 -> 39
 | 34. MCP Terminal Tools | v0.9 | 1/1 | Complete | 2026-04-11 |
 | 35. Settings UI for CLI Profile | v0.9 | 1/1 | Complete | 2026-04-11 |
 | 35.1. Mission Control Dashboard | v0.9 | 3/3 | Complete | 2026-04-13 |
-| 36. Assistant Backend | v0.92 | 0/TBD | Not started | - |
+| 36. Assistant Backend | v0.92 | 1/2 | In Progress|  |
 | 37. Terminal Mode UI | v0.92 | 0/TBD | Not started | - |
 | 38. Chat Mode | v0.92 | 0/TBD | Not started | - |
 | 39. Polish & Settings | v0.92 | 0/TBD | Not started | - |

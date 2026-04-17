@@ -28,16 +28,16 @@
 
 ## Backend
 
-- [ ] **BE-01**: System creates a new Claude CLI PTY session when user opens the assistant
-- [ ] **BE-02**: System injects a system prompt defining the assistant's identity and capabilities via --append-system-prompt
-- [ ] **BE-03**: System restricts tools to Tower MCP only via --allowedTools "mcp__tower__*"
+- [x] **BE-01**: System creates a new Claude CLI PTY session when user opens the assistant
+- [x] **BE-02**: System injects a system prompt defining the assistant's identity and capabilities via --append-system-prompt
+- [x] **BE-03**: System restricts tools to Tower MCP only via --allowedTools "mcp__tower__*"
 - [ ] **BE-04**: System connects the assistant to the PTY session via WebSocket for real-time streaming
-- [ ] **BE-05**: System destroys the PTY session when the assistant is closed (stateless)
-- [ ] **BE-06**: System supports a config key to switch between terminal mode and chat mode
+- [x] **BE-05**: System destroys the PTY session when the assistant is closed (stateless)
+- [x] **BE-06**: System supports a config key to switch between terminal mode and chat mode
 
 ## UX
 
-- [ ] **UX-01**: Each assistant open starts a fresh session with no prior history
+- [x] **UX-01**: Each assistant open starts a fresh session with no prior history
 - [ ] **UX-02**: Sidebar mode does not obstruct the main content area (push layout or overlay)
 - [ ] **UX-03**: Responsive sizing for both modes
 
@@ -73,12 +73,12 @@
 | CM-02 | Phase 38 | Pending |
 | CM-03 | Phase 38 | Pending |
 | CM-04 | Phase 38 | Pending |
-| BE-01 | Phase 36 | Pending |
-| BE-02 | Phase 36 | Pending |
-| BE-03 | Phase 36 | Pending |
+| BE-01 | Phase 36 | Complete |
+| BE-02 | Phase 36 | Complete |
+| BE-03 | Phase 36 | Complete |
 | BE-04 | Phase 36 | Pending |
-| BE-05 | Phase 36 | Pending |
-| BE-06 | Phase 36 | Pending |
-| UX-01 | Phase 36 | Pending |
+| BE-05 | Phase 36 | Complete |
+| BE-06 | Phase 36 | Complete |
+| UX-01 | Phase 36 | Complete |
 | UX-02 | Phase 37 | Pending |
 | UX-03 | Phase 39 | Pending |
