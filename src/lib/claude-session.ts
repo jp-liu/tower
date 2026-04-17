@@ -6,53 +6,50 @@ import { homedir } from "os";
 const PROJECTS_DIR = join(homedir(), ".claude", "projects");
 
 /**
- * Find Claude session directory by scanning ~/.claude/projects/ for directories
- * that match the given cwd path. Claude CLI encodes paths by replacing various
- * characters (including non-ASCII) with dashes, so exact key computation is unreliable.
- * Instead, we look for directories whose name contains recognizable path segments.
+ * Encode a filesystem path the same way Claude CLI does for ~/.claude/projects/ directory names.
+ * Algorithm: strip leading "/", replace "/" with "-", replace each non-ASCII char with "-", prepend "-".
+ */
+function encodePathForClaude(path: string): string {
+  const stripped = path.startsWith("/") ? path.slice(1) : path;
+  let result = "";
+  for (const ch of stripped) {
+    if (ch === "/") {
+      result += "-";
+    } else if (ch.charCodeAt(0) > 127) {
+      result += "-";
+    } else {
+      result += ch;
+    }
+  }
+  return "-" + result;
+}
+
+/**
+ * Find Claude session directory for a given cwd path.
+ * Uses exact path encoding (matching Claude CLI's algorithm) with fallback to fuzzy matching.
  */
 function findSessionDir(cwd: string): string | null {
   try {
     const dirs = readdirSync(PROJECTS_DIR);
+    const encoded = encodePathForClaude(cwd);
 
-    // Extract ASCII-only path segments for matching (skip non-ASCII segments like Chinese)
-    const segments = cwd.split("/").filter(Boolean);
-    const asciiSegments = segments
-      .map((s) => s.replace(/[/.]/g, "-"))
-      .filter((s) => /^[a-zA-Z0-9_-]+$/.test(s));
-    // Use the last few ASCII segments for matching
-    const matchSegments = asciiSegments.slice(-3);
+    // 1. Exact match
+    if (dirs.includes(encoded)) {
+      return join(PROJECTS_DIR, encoded);
+    }
 
-    if (matchSegments.length === 0) return null;
+    // 2. Fuzzy fallback — find dirs that start with the encoded path
+    //    (handles edge cases where Claude CLI encoding differs slightly)
+    const fuzzy = dirs.filter((dir) => dir === encoded || dir.startsWith(encoded + "-"));
+    if (fuzzy.length > 0) {
+      // Exclude worktree directories, prefer exact or shortest match
+      const nonWorktree = fuzzy.filter((d) => !d.includes("-worktrees-"));
+      const best = (nonWorktree.length > 0 ? nonWorktree : fuzzy)
+        .sort((a, b) => a.length - b.length)[0];
+      return join(PROJECTS_DIR, best);
+    }
 
-    // Find directories that match all ASCII segments
-    const matches = dirs.filter((dir) => {
-      return matchSegments.every((seg) => dir.includes(seg));
-    });
-
-    if (matches.length === 0) return null;
-
-    // If multiple matches, prefer the one with most segments matched, then most recently modified
-    const withStats = matches.map((dir) => {
-      const fullPath = join(PROJECTS_DIR, dir);
-      try {
-        // Score: count how many total path segments appear in the dir name
-        const score = segments
-          .map((s) => s.replace(/[/.]/g, "-"))
-          .filter((s) => /^[a-zA-Z0-9_-]+$/.test(s) && dir.includes(s))
-          .length;
-        return { dir, path: fullPath, score, mtime: statSync(fullPath).mtimeMs };
-      } catch {
-        return null;
-      }
-    }).filter(Boolean) as { dir: string; path: string; score: number; mtime: number }[];
-
-    // Sort by score descending, then mtime descending
-    withStats.sort((a, b) => b.score - a.score || b.mtime - a.mtime);
-
-    // Exclude worktree directories (they contain .worktrees in the name)
-    const nonWorktree = withStats.filter((w) => !w.dir.includes("-worktrees-"));
-    return (nonWorktree[0] || withStats[0])?.path ?? null;
+    return null;
   } catch {
     return null;
   }
