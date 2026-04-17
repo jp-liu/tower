@@ -168,6 +168,10 @@ Plans:
   4. While the assistant is processing, a thinking/loading indicator is visible; it disappears when the response completes
 **Plans:** 2 plans
 
+Plans:
+- [ ] 38-01-PLAN.md — useAssistantChat hook with state-machine parser + communicationMode config key
+- [ ] 38-02-PLAN.md — AssistantChat + AssistantChatBubble components + AssistantPanel wiring
+
 ### Phase 39: Polish & Settings
 **Goal**: The assistant experience is configurable, fully bilingual, and works well at all viewport sizes
 **Depends on**: Phase 38
@@ -223,5 +227,5 @@ Phases execute in numeric order: 36 -> 37 -> 38 -> 39
 | 35.1. Mission Control Dashboard | v0.9 | 3/3 | Complete | 2026-04-13 |
 | 36. Assistant Backend | v0.92 | 2/2 | Complete    | 2026-04-17 |
 | 37. Terminal Mode UI | v0.92 | 2/2 | Complete    | 2026-04-17 |
-| 38. Chat Mode | v0.92 | 0/TBD | Not started | - |
+| 38. Chat Mode | v0.92 | 0/2 | Not started | - |
 | 39. Polish & Settings | v0.92 | 0/TBD | Not started | - |
