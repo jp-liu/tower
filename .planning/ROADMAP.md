@@ -154,9 +154,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [x] 36-01-PLAN.md — Server actions + config defaults (startAssistantSession, stopAssistantSession, config keys)
-- [ ] 36-02-PLAN.md — WS keepalive bypass + internal API route (/api/internal/assistant)
-**UI hint**: yes
+- [ ] 37-01-PLAN.md — AssistantProvider context + AssistantPanel component + i18n keys + API route worktreePath fix
+- [ ] 37-02-PLAN.md — Layout integration (top-bar icon + push sidebar + dialog mode) + visual verification
 
 ### Phase 38: Chat Mode
 **Goal**: Users can interact with the assistant via a chat bubble interface with Markdown-rendered responses instead of raw terminal output
@@ -169,11 +168,6 @@ Plans:
   4. While the assistant is processing, a thinking/loading indicator is visible; it disappears when the response completes
 **Plans:** 2 plans
 
-Plans:
-- [ ] 36-01-PLAN.md — Server actions + config defaults (startAssistantSession, stopAssistantSession, config keys)
-- [ ] 36-02-PLAN.md — WS keepalive bypass + internal API route (/api/internal/assistant)
-**UI hint**: yes
-
 ### Phase 39: Polish & Settings
 **Goal**: The assistant experience is configurable, fully bilingual, and works well at all viewport sizes
 **Depends on**: Phase 38
@@ -183,11 +177,6 @@ Plans:
   2. All assistant UI text (title bar, placeholders, tooltips, settings labels) is available in both Chinese and English
   3. Both sidebar and dialog modes render correctly on viewports from 1024px to 2560px wide without overflow or truncation
 **Plans:** 2 plans
-
-Plans:
-- [ ] 36-01-PLAN.md — Server actions + config defaults (startAssistantSession, stopAssistantSession, config keys)
-- [ ] 36-02-PLAN.md — WS keepalive bypass + internal API route (/api/internal/assistant)
-**UI hint**: yes
 
 ## Progress
 
@@ -233,6 +222,6 @@ Phases execute in numeric order: 36 -> 37 -> 38 -> 39
 | 35. Settings UI for CLI Profile | v0.9 | 1/1 | Complete | 2026-04-11 |
 | 35.1. Mission Control Dashboard | v0.9 | 3/3 | Complete | 2026-04-13 |
 | 36. Assistant Backend | v0.92 | 2/2 | Complete    | 2026-04-17 |
-| 37. Terminal Mode UI | v0.92 | 0/TBD | Not started | - |
+| 37. Terminal Mode UI | v0.92 | 0/2 | Not started | - |
 | 38. Chat Mode | v0.92 | 0/TBD | Not started | - |
 | 39. Polish & Settings | v0.92 | 0/TBD | Not started | - |
