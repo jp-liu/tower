@@ -87,7 +87,7 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     label: "Assistant System Prompt",
   },
   "assistant.displayMode": {
-    defaultValue: "terminal",
+    defaultValue: "sidebar",
     type: "string",
     label: "Assistant Display Mode",
   },

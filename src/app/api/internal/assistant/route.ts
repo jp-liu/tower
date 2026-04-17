@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
   try {
     await startAssistantSession();
-    return NextResponse.json({ ok: true, sessionKey: ASSISTANT_SESSION_KEY, worktreePath: process.cwd() });
+    return NextResponse.json({ ok: true, sessionKey: ASSISTANT_SESSION_KEY });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status: 500 });

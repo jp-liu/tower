@@ -164,7 +164,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
           {/* Assistant */}
           <button
             onClick={toggleAssistant}
-            aria-label="Assistant ⌘L"
+            aria-label={t("assistant.iconLabel")}
             className={[
               "rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
               assistantOpen ? "bg-accent text-foreground" : "",

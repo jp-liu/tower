@@ -9,9 +9,6 @@ import { readConfigValue } from "@/lib/config-reader";
 import { db } from "@/lib/db";
 import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
 
-const DEFAULT_SYSTEM_PROMPT =
-  "You are Tower Assistant, an AI operator for the Tower task management platform. You help users create, organize, query, and track tasks and projects using Tower MCP tools. You do NOT write or edit code — you are an operator, not a developer. Always respond in the same language the user uses.";
-
 /**
  * Spawn a fresh Claude CLI PTY session for the global assistant (BE-01).
  * Destroys any existing assistant session first (UX-01).
@@ -35,20 +32,20 @@ export async function startAssistantSession(): Promise<void> {
   try {
     profileBaseArgs = JSON.parse(profile.baseArgs) as string[];
   } catch {
-    throw new Error("CLI Profile baseArgs 格式损坏，请在 Settings 中修复");
+    throw new Error("CLI Profile baseArgs is malformed — fix in Settings");
   }
 
   let profileEnvVars: Record<string, string>;
   try {
     profileEnvVars = JSON.parse(profile.envVars) as Record<string, string>;
   } catch {
-    throw new Error("CLI Profile envVars 格式损坏，请在 Settings 中修复");
+    throw new Error("CLI Profile envVars is malformed — fix in Settings");
   }
 
-  // BE-02: Read the configured system prompt
+  // BE-02: Read the configured system prompt (default defined in config-defaults.ts)
   const systemPrompt = await readConfigValue<string>(
     "assistant.systemPrompt",
-    DEFAULT_SYSTEM_PROMPT
+    "You are Tower Assistant, an AI operator for the Tower task management platform."
   );
 
   // Tower project root is the cwd for the assistant session

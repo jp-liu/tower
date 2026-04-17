@@ -61,7 +61,7 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
           </div>
         ) : isOpen && !isStarting && worktreePath ? (
           communicationMode === "chat" ? (
-            <DynamicChat worktreePath={worktreePath} />
+            <DynamicChat />
           ) : (
             <DynamicTerminal
               taskId={ASSISTANT_SESSION_KEY}

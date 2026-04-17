@@ -10,6 +10,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { getConfigValue } from "@/actions/config-actions";
+import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
 
 interface AssistantContextValue {
   isOpen: boolean;
@@ -30,32 +31,38 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [communicationMode, setCommunicationMode] = useState<"terminal" | "chat">("terminal");
   const [worktreePath, setWorktreePath] = useState<string | null>(null);
 
-  // Read display mode and communication mode from config on mount
-  useEffect(() => {
-    getConfigValue<string>("assistant.displayMode", "sidebar").then((mode) => {
-      setDisplayMode(mode === "dialog" ? "dialog" : "sidebar");
-    });
-    getConfigValue<string>("assistant.communicationMode", "terminal").then((mode) => {
-      setCommunicationMode(mode === "chat" ? "chat" : "terminal");
-    });
+  // Read display mode and communication mode from config
+  const refreshConfig = useCallback(async () => {
+    const [dm, cm] = await Promise.all([
+      getConfigValue<string>("assistant.displayMode", "sidebar"),
+      getConfigValue<string>("assistant.communicationMode", "terminal"),
+    ]);
+    setDisplayMode(dm === "dialog" ? "dialog" : "sidebar");
+    setCommunicationMode(cm === "chat" ? "chat" : "terminal");
   }, []);
+
+  // Initial config load
+  useEffect(() => { refreshConfig(); }, [refreshConfig]);
 
   const openAssistant = useCallback(async () => {
     setIsStarting(true);
     try {
+      // Re-read config before opening so Settings changes take effect immediately
+      await refreshConfig();
       const res = await fetch("/api/internal/assistant", { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error ?? "Unknown error");
       }
-      setWorktreePath(data.worktreePath ?? null);
+      // Use session key as sentinel — TaskTerminal guards on non-null worktreePath
+      setWorktreePath(ASSISTANT_SESSION_KEY);
       setIsOpen(true);
     } catch {
       toast.error("Session failed to start. Try again.");
     } finally {
       setIsStarting(false);
     }
-  }, []);
+  }, [refreshConfig]);
 
   const closeAssistant = useCallback(() => {
     setIsOpen(false);

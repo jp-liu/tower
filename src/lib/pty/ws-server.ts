@@ -49,6 +49,11 @@ export async function startWsServer(): Promise<void> {
       return;
     }
 
+    // Security: __assistant__ is a deliberate exception to the CUID taskId convention.
+    // The assistant session uses a fixed key (not a CUID) because it has no TaskExecution
+    // DB row. Origin checking (ALLOWED_ORIGINS above) mitigates cross-origin access.
+    // Non-existent session keys simply time out after 30s (poll loop below).
+
     console.error(`[ws-server] Connection for task ${taskId}`);
 
     let session = getSession(taskId);

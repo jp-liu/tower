@@ -23,7 +23,7 @@ function UserBubble({ content }: { content: string }) {
   return (
     <div
       className="flex justify-end animate-in fade-in slide-in-from-bottom-2 duration-200"
-      aria-label={`You: ${content.slice(0, 60)}`}
+      aria-label="You"
     >
       <div className="bg-primary text-primary-foreground max-w-[80%] rounded-2xl rounded-br-sm px-3 py-2 text-sm whitespace-pre-wrap break-words">
         {content}
@@ -40,7 +40,7 @@ function AssistantBubble({ content }: { content: string }) {
   return (
     <div
       className="flex justify-start animate-in fade-in slide-in-from-bottom-2 duration-200"
-      aria-label={`Assistant: ${content.slice(0, 60)}`}
+      aria-label="Assistant"
     >
       <div className="bg-muted text-foreground max-w-[85%] rounded-2xl rounded-bl-sm px-3 py-2">
         <div className="prose prose-sm dark:prose-invert max-w-none">

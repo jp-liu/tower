@@ -13,9 +13,7 @@ import { AssistantChatBubble } from "./assistant-chat-bubble";
 // Props
 // ---------------------------------------------------------------------------
 
-interface AssistantChatProps {
-  worktreePath: string | null;
-}
+interface AssistantChatProps {}
 
 // ---------------------------------------------------------------------------
 // Empty state
@@ -36,7 +34,7 @@ function EmptyState() {
 // Main component
 // ---------------------------------------------------------------------------
 
-export function AssistantChat({ worktreePath }: AssistantChatProps) {
+export function AssistantChat(_props: AssistantChatProps) {
   const [inputValue, setInputValue] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -44,7 +42,6 @@ export function AssistantChat({ worktreePath }: AssistantChatProps) {
 
   const { messages, isThinking, sendMessage } = useAssistantChat({
     enabled: true,
-    worktreePath,
   });
 
   // Auto-focus input on mount
@@ -52,10 +49,11 @@ export function AssistantChat({ worktreePath }: AssistantChatProps) {
     inputRef.current?.focus();
   }, []);
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom on new messages or content growth
+  const lastContentLen = messages[messages.length - 1]?.content.length ?? 0;
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+  }, [messages.length, lastContentLen]);
 
   const handleSend = () => {
     const text = inputValue.trim();

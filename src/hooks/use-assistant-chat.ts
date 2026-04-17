@@ -53,13 +53,13 @@ const BOX_TOP = /^[╭┌]/;
 const BOX_BOT = /^[╰└]/;
 
 // ---------------------------------------------------------------------------
-// ID counter (module-level — stable across re-renders in tests)
+// Message ID generator
 // ---------------------------------------------------------------------------
 
-let _idCounter = 0;
-
 function nextId(): string {
-  return `msg-${++_idCounter}-${Date.now()}`;
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +99,7 @@ export function parseLines(
   function appendAssistant(line: string): void {
     const last = lastAssistant();
     if (last) {
-      last.content = last.content ? last.content + "\n" + line : line;
+      msgs[msgs.length - 1] = { ...last, content: last.content ? last.content + "\n" + line : line };
     } else {
       msgs.push({ id: nextId(), role: "assistant", content: line });
     }
@@ -136,7 +136,7 @@ export function parseLines(
       // Update or create a streaming thinking message
       const last = msgs[msgs.length - 1];
       if (last && last.role === "thinking" && last.isStreaming) {
-        last.content = line;
+        msgs[msgs.length - 1] = { ...last, content: line };
       } else {
         msgs.push({ id: nextId(), role: "thinking", content: line, isStreaming: true });
       }
@@ -163,7 +163,6 @@ export function parseLines(
 
 export function useAssistantChat(opts: {
   enabled: boolean;
-  worktreePath: string | null;
 }): UseAssistantChatReturn {
   const { enabled } = opts;
 
