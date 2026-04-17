@@ -151,10 +151,10 @@ Plans:
   3. The panel contains a title bar and an embedded xterm.js terminal where Claude CLI output streams with full ANSI formatting
   4. User can type directly in the terminal to interact with the assistant (no separate input box needed in terminal mode)
   5. Pressing Escape, clicking the close button, or pressing Cmd+L again closes the panel and destroys the session
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 37-01-PLAN.md — AssistantProvider context + AssistantPanel component + i18n keys + API route worktreePath fix
+- [x] 37-01-PLAN.md — AssistantProvider context + AssistantPanel component + i18n keys + API route worktreePath fix
 - [ ] 37-02-PLAN.md — Layout integration (top-bar icon + push sidebar + dialog mode) + visual verification
 
 ### Phase 38: Chat Mode
@@ -222,6 +222,6 @@ Phases execute in numeric order: 36 -> 37 -> 38 -> 39
 | 35. Settings UI for CLI Profile | v0.9 | 1/1 | Complete | 2026-04-11 |
 | 35.1. Mission Control Dashboard | v0.9 | 3/3 | Complete | 2026-04-13 |
 | 36. Assistant Backend | v0.92 | 2/2 | Complete    | 2026-04-17 |
-| 37. Terminal Mode UI | v0.92 | 0/2 | Not started | - |
+| 37. Terminal Mode UI | v0.92 | 1/2 | In Progress|  |
 | 38. Chat Mode | v0.92 | 0/TBD | Not started | - |
 | 39. Polish & Settings | v0.92 | 0/TBD | Not started | - |

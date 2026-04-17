@@ -6,18 +6,18 @@
 ## UI
 
 - [ ] **UI-01**: User can see an assistant icon in the top bar next to the search box
-- [ ] **UI-02**: User can open the chat assistant via clicking the icon or pressing Cmd+L (Ctrl+L)
+- [x] **UI-02**: User can open the chat assistant via clicking the icon or pressing Cmd+L (Ctrl+L)
 - [ ] **UI-03**: User can use the assistant in sidebar mode (left side panel, does not block other operations)
 - [ ] **UI-04**: User can use the assistant in dialog mode (centered modal)
 - [ ] **UI-05**: User can switch between sidebar and dialog mode in Settings
-- [ ] **UI-06**: User can close the assistant via Escape, close button, or Cmd+L toggle
+- [x] **UI-06**: User can close the assistant via Escape, close button, or Cmd+L toggle
 - [ ] **UI-07**: User can see all UI text in Chinese or English (i18n)
 
 ## Terminal Mode (xterm)
 
-- [ ] **TM-01**: Assistant embeds an xterm.js terminal in a chat-panel wrapper (title bar + terminal body)
-- [ ] **TM-02**: User can type directly in the terminal (xterm handles input, no separate input box)
-- [ ] **TM-03**: CC output is displayed as-is in the terminal (Markdown tables/lists rendered by CC itself)
+- [x] **TM-01**: Assistant embeds an xterm.js terminal in a chat-panel wrapper (title bar + terminal body)
+- [x] **TM-02**: User can type directly in the terminal (xterm handles input, no separate input box)
+- [x] **TM-03**: CC output is displayed as-is in the terminal (Markdown tables/lists rendered by CC itself)
 
 ## Chat Mode (message bubbles)
 
@@ -60,15 +60,15 @@
 | REQ | Phase | Status |
 |-----|-------|--------|
 | UI-01 | Phase 37 | Pending |
-| UI-02 | Phase 37 | Pending |
+| UI-02 | Phase 37 | Complete |
 | UI-03 | Phase 37 | Pending |
 | UI-04 | Phase 37 | Pending |
 | UI-05 | Phase 39 | Pending |
-| UI-06 | Phase 37 | Pending |
+| UI-06 | Phase 37 | Complete |
 | UI-07 | Phase 39 | Pending |
-| TM-01 | Phase 37 | Pending |
-| TM-02 | Phase 37 | Pending |
-| TM-03 | Phase 37 | Pending |
+| TM-01 | Phase 37 | Complete |
+| TM-02 | Phase 37 | Complete |
+| TM-03 | Phase 37 | Complete |
 | CM-01 | Phase 38 | Pending |
 | CM-02 | Phase 38 | Pending |
 | CM-03 | Phase 38 | Pending |
