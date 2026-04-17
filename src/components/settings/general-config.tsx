@@ -28,7 +28,7 @@ export function GeneralConfig() {
     );
   }, []);
 
-  async function handleSaveCommMode(value: string) {
+  async function handleSaveCommMode(value: string | null, _eventDetails?: unknown) {
     const mode = value === "chat" ? "chat" : "terminal";
     setCommMode(mode);
     await setConfigValue("assistant.communicationMode", mode);
