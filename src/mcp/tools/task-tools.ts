@@ -44,6 +44,7 @@ export const taskTools = {
       labelIds: z.array(z.string()).optional(),
       subPath: z.string().optional(),
       useWorktree: z.boolean().optional().default(false),
+      baseBranch: z.string().optional().describe("Base branch for worktree checkout. Only used when useWorktree=true. If omitted, auto-detects the project's current branch."),
       autoStart: z.boolean().optional().default(true),
       references: z.array(z.string()).optional(),
     }),
@@ -56,20 +57,25 @@ export const taskTools = {
       labelIds?: string[];
       subPath?: string;
       useWorktree?: boolean;
+      baseBranch?: string;
       autoStart?: boolean;
       references?: string[];
     }) => {
-      // Auto-detect baseBranch from project's current git branch
+      // Determine baseBranch: explicit param > auto-detect from project's current git branch
       let baseBranch: string | null = null;
       if (args.useWorktree) {
-        const project = await db.project.findUnique({ where: { id: args.projectId }, select: { localPath: true } });
-        if (project?.localPath) {
-          try {
-            baseBranch = execFileSync("git", ["branch", "--show-current"], {
-              cwd: project.localPath, encoding: "utf-8", timeout: 5000,
-            }).trim() || null;
-          } catch {
-            // fallback: no baseBranch, task runs in direct mode
+        if (args.baseBranch) {
+          baseBranch = args.baseBranch;
+        } else {
+          const project = await db.project.findUnique({ where: { id: args.projectId }, select: { localPath: true } });
+          if (project?.localPath) {
+            try {
+              baseBranch = execFileSync("git", ["branch", "--show-current"], {
+                cwd: project.localPath, encoding: "utf-8", timeout: 5000,
+              }).trim() || null;
+            } catch {
+              // fallback: no baseBranch, task runs in direct mode
+            }
           }
         }
       }

@@ -137,7 +137,7 @@ Replace `<project-root>` with the absolute path to this repository.
 | Tool | Description | Key Params |
 |------|-------------|------------|
 | `list_tasks` | List tasks in a project, ordered by `order` then `createdAt`; includes labels | `projectId`, `status?` |
-| `create_task` | Create a task with optional labels | `projectId`, `title`, `description?`, `priority?`, `status?`, `labelIds?` |
+| `create_task` | Create a task with optional labels | `projectId`, `title`, `description?`, `priority?`, `status?`, `labelIds?`, `useWorktree?`, `baseBranch?`, `autoStart?`, `references?` |
 | `update_task` | Update title, description, priority, and/or labels (replaces all labels) | `taskId`, `title?`, `description?`, `priority?`, `labelIds?` |
 | `move_task` | Move task to a different status column | `taskId`, `status` |
 | `delete_task` | Delete a task | `taskId` |
