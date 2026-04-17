@@ -9,7 +9,7 @@ import { TaskMetadata } from "./task-metadata";
 import { TaskDiffView } from "./task-diff-view";
 import { TaskMergeConfirmDialog } from "./task-merge-confirm-dialog";
 import { TerminalOutlet, useTerminalPortal } from "./terminal-portal";
-import { getTaskExecutions, startPtyExecution, stopPtyExecution, resumePtyExecution } from "@/actions/agent-actions";
+import { getTaskExecutions, startPtyExecution, stopPtyExecution, resumePtyExecution, continueLatestPtyExecution } from "@/actions/agent-actions";
 import { updateTaskStatus, checkWorktreeClean, commitWorktreeChanges } from "@/actions/task-actions";
 import { toast } from "sonner";
 import { getPrompts } from "@/actions/prompt-actions";
@@ -160,6 +160,18 @@ export function TaskDetailPanel({
       setTaskStatus("IN_PROGRESS");
     } catch {
       setIsExecuting(false);
+    }
+  }, [task.id]);
+
+  const handleContinueLatest = useCallback(async () => {
+    setIsExecuting(true);
+    try {
+      const { worktreePath } = await continueLatestPtyExecution(task.id);
+      setActiveWorktreePath(worktreePath);
+      setTaskStatus("IN_PROGRESS");
+    } catch (err) {
+      setIsExecuting(false);
+      toast.error(err instanceof Error ? err.message : String(err));
     }
   }, [task.id]);
 
@@ -375,7 +387,7 @@ export function TaskDetailPanel({
               </div>
               {/* Execution history */}
               <div className="flex-1 min-h-0 overflow-y-auto">
-                <ExecutionTimeline executions={pastExecutions} onResume={handleResume} />
+                <ExecutionTimeline executions={pastExecutions} onResume={handleResume} onContinueLatest={handleContinueLatest} />
               </div>
             </div>
           )}

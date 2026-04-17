@@ -118,12 +118,10 @@ export function FileTree({
 
     loadRoot().finally(() => setIsLoading(false));
 
-    // Load git status if branches provided
-    if (baseBranch && worktreeBranch) {
-      getGitStatus(worktreePath, baseBranch, worktreeBranch)
-        .then(setGitStatusMap)
-        .catch(() => setGitStatusMap({}));
-    }
+    // Load git status — branch diff (worktree mode) or working tree status (direct mode)
+    getGitStatus(worktreePath, baseBranch, worktreeBranch)
+      .then(setGitStatusMap)
+      .catch(() => setGitStatusMap({}));
   }, [worktreePath, baseBranch, worktreeBranch, loadRoot]);
 
   // Auto-refresh while RUNNING

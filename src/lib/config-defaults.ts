@@ -45,6 +45,26 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "number",
     label: "Snippet Length (characters)",
   },
+  "missions.grid.minCols": {
+    defaultValue: 1,
+    type: "number",
+    label: "Grid Min Columns",
+  },
+  "missions.grid.maxCols": {
+    defaultValue: 5,
+    type: "number",
+    label: "Grid Max Columns",
+  },
+  "missions.grid.minRows": {
+    defaultValue: 1,
+    type: "number",
+    label: "Grid Min Rows",
+  },
+  "missions.grid.maxRows": {
+    defaultValue: 5,
+    type: "number",
+    label: "Grid Max Rows",
+  },
   "terminal.app": {
     defaultValue: "Terminal",
     type: "string",

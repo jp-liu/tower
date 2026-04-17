@@ -59,22 +59,49 @@ export async function listDirectory(
 // ---- getGitStatus ----
 export async function getGitStatus(
   worktreePath: string,
-  baseBranch: string,
-  taskBranch: string
+  baseBranch: string | null,
+  taskBranch: string | null
 ): Promise<Record<string, "M" | "A" | "D">> {
   try {
-    const output = execFileSync(
-      "git",
-      ["diff", "--name-status", `${baseBranch}...${taskBranch}`],
-      { cwd: worktreePath, encoding: "utf-8", timeout: 10000 }
-    );
+    let output: string;
+    if (baseBranch && taskBranch) {
+      // Worktree mode: diff between branches
+      output = execFileSync(
+        "git",
+        ["diff", "--name-status", `${baseBranch}...${taskBranch}`],
+        { cwd: worktreePath, encoding: "utf-8", timeout: 10000 }
+      );
+    } else {
+      // Direct mode: working tree status via git status
+      output = execFileSync(
+        "git",
+        ["status", "--porcelain", "-uall"],
+        { cwd: worktreePath, encoding: "utf-8", timeout: 10000 }
+      );
+    }
     const result: Record<string, "M" | "A" | "D"> = {};
-    for (const line of output.split("\n").filter(Boolean)) {
-      const parts = line.split("\t");
-      const status = parts[0];
-      const filePath = parts[1];
-      if ((status === "M" || status === "A" || status === "D") && filePath) {
-        result[filePath] = status as "M" | "A" | "D";
+    if (baseBranch && taskBranch) {
+      for (const line of output.split("\n").filter(Boolean)) {
+        const parts = line.split("\t");
+        const status = parts[0];
+        const filePath = parts[1];
+        if ((status === "M" || status === "A" || status === "D") && filePath) {
+          result[filePath] = status as "M" | "A" | "D";
+        }
+      }
+    } else {
+      // Parse porcelain format: "XY filename"
+      for (const line of output.split("\n").filter(Boolean)) {
+        const xy = line.substring(0, 2);
+        const filePath = line.substring(3);
+        if (!filePath) continue;
+        if (xy.includes("D")) {
+          result[filePath] = "D";
+        } else if (xy === "??" || xy.includes("A")) {
+          result[filePath] = "A";
+        } else {
+          result[filePath] = "M";
+        }
       }
     }
     return result;

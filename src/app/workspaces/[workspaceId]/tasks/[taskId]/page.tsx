@@ -16,6 +16,7 @@ function serializeTask(task: Awaited<ReturnType<typeof fetchTask>>) {
     status: task.status,
     priority: task.priority,
     baseBranch: task.baseBranch,
+    subPath: task.subPath,
     projectId: task.projectId,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),

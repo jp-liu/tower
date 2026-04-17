@@ -14,7 +14,7 @@ import { CodeEditor } from "@/components/task/code-editor";
 import { PreviewPanel } from "@/components/task/preview-panel";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
-import { startPtyExecution, stopPtyExecution, resumePtyExecution } from "@/actions/agent-actions";
+import { startPtyExecution, stopPtyExecution, resumePtyExecution, continueLatestPtyExecution, getTaskExecutions } from "@/actions/agent-actions";
 import { updateTaskStatus, checkWorktreeClean, commitWorktreeChanges } from "@/actions/task-actions";
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "@/components/task/execution-timeline";
@@ -32,6 +32,7 @@ interface TaskPageClientProps {
     status: string;
     priority: string;
     baseBranch: string | null;
+    subPath: string | null;
     projectId: string;
     createdAt: string;
     updatedAt: string;
@@ -94,6 +95,12 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     latestExecution?.status === "RUNNING" ? (latestExecution?.worktreePath ?? null) : null
   );
 
+  // Effective file root: worktreePath (worktree mode) or localPath+subPath (direct mode)
+  const directCwd = task.project?.localPath
+    ? (task.subPath ? `${task.project.localPath}/${task.subPath}` : task.project.localPath)
+    : null;
+  const fileRootPath = latestExecution?.worktreePath ?? directCwd;
+
   // Load available prompts
   useEffect(() => {
     let cancelled = false;
@@ -105,6 +112,20 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     });
     return () => { cancelled = true; };
   }, []);
+
+  // Refresh execution status client-side (server props may be stale)
+  useEffect(() => {
+    let cancelled = false;
+    getTaskExecutions(task.id).then((executions) => {
+      if (cancelled) return;
+      const latest = executions[0];
+      if (latest?.status === "RUNNING") {
+        const cwdPath = latest.worktreePath || task.project?.localPath || null;
+        if (cwdPath) setActiveWorktreePath(cwdPath);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [task.id, task.project?.localPath]);
 
   // Auto-fetch diff when task has an execution (IN_PROGRESS, IN_REVIEW, DONE)
   useEffect(() => {
@@ -170,6 +191,18 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
       setTaskStatus("IN_PROGRESS");
     } catch {
       setIsExecuting(false);
+    }
+  }, [task.id]);
+
+  const handleContinueLatest = useCallback(async () => {
+    setIsExecuting(true);
+    try {
+      const { worktreePath } = await continueLatestPtyExecution(task.id);
+      setActiveWorktreePath(worktreePath);
+      setTaskStatus("IN_PROGRESS");
+    } catch (err) {
+      setIsExecuting(false);
+      toast.error(err instanceof Error ? err.message : String(err));
     }
   }, [task.id]);
 
@@ -364,7 +397,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
               </div>
               {/* Execution history */}
               <div className="flex-1 min-h-0 overflow-y-auto">
-                <ExecutionTimeline executions={executions} onResume={handleResume} />
+                <ExecutionTimeline executions={executions} onResume={handleResume} onContinueLatest={handleContinueLatest} />
               </div>
             </div>
           )}
@@ -410,7 +443,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
               {/* Left: file tree, fixed 240px */}
               <div className="w-60 flex-none border-r border-border overflow-hidden">
                 <FileTree
-                  worktreePath={latestExecution?.worktreePath ?? null}
+                  worktreePath={fileRootPath ?? null}
                   baseBranch={task.baseBranch ?? null}
                   worktreeBranch={latestExecution?.worktreeBranch ?? null}
                   executionStatus={latestExecution?.status ?? "COMPLETED"}
@@ -421,9 +454,9 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
               </div>
               {/* Right: Monaco editor, fills remaining width */}
               <div className="flex-1 min-w-0 overflow-hidden">
-                {latestExecution?.worktreePath ? (
+                {fileRootPath ? (
                   <CodeEditor
-                    worktreePath={latestExecution.worktreePath}
+                    worktreePath={fileRootPath}
                     selectedFilePath={selectedFilePath}
                     onFilePathChange={setSelectedFilePath}
                     onSave={() => setPreviewRefreshKey((k) => k + 1)}

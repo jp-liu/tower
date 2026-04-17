@@ -269,6 +269,116 @@ export async function resumePtyExecution(
 }
 
 /**
+ * Continue the most recent Claude CLI session for a task (no sessionId needed).
+ * Uses `claude --continue` to resume the latest conversation in the cwd.
+ * Useful when a session was interrupted (crash, power loss) and sessionId was not captured.
+ */
+export async function continueLatestPtyExecution(
+  taskId: string
+): Promise<{ executionId: string; worktreePath: string | null }> {
+  const task = await db.task.findUnique({
+    where: { id: taskId },
+    include: { project: true },
+  });
+
+  if (!task) throw new Error("Task not found");
+  if (!task.project?.localPath) throw new Error("Project has no local path configured");
+
+  // Find the latest execution to reuse its worktree path
+  const latestExec = await db.taskExecution.findFirst({
+    where: { taskId },
+    orderBy: { createdAt: "desc" },
+  });
+
+  // Clean up stale RUNNING executions
+  await db.taskExecution.updateMany({
+    where: { taskId, status: "RUNNING" },
+    data: { status: "FAILED", endedAt: new Date() },
+  });
+
+  const baseCwd = latestExec?.worktreePath ?? task.project.localPath;
+  const cwd = task.subPath ? join(baseCwd, task.subPath) : baseCwd;
+
+  // Read CliProfile
+  const profile = await db.cliProfile.findFirst({ where: { isDefault: true } });
+  if (!profile) throw new Error("No default CLI profile found — run seed first");
+  const profileCommand = profile.command;
+  const profileBaseArgs = parseProfileJson<string[]>(profile.baseArgs, "baseArgs");
+  const profileEnvVars = parseProfileJson<Record<string, string>>(profile.envVars, "envVars");
+  const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
+
+  const envOverrides: Record<string, string> = {
+    ...profileEnvVars,
+    AI_MANAGER_TASK_ID: taskId,
+    AI_MANAGER_TASK_TITLE: task.title,
+    AI_MANAGER_STARTED_AT: new Date().toISOString(),
+  };
+
+  // Create a new execution record
+  const execution = await db.taskExecution.create({
+    data: {
+      taskId,
+      agent: "CLAUDE_CODE",
+      status: "RUNNING",
+      startedAt: new Date(),
+      worktreePath: latestExec?.worktreePath ?? null,
+      worktreeBranch: latestExec?.worktreeBranch ?? null,
+    },
+  });
+
+  await db.task.update({
+    where: { id: taskId },
+    data: { status: "IN_PROGRESS" },
+  });
+  revalidatePath("/workspaces");
+
+  // Use --continue flag (no sessionId needed)
+  const claudeArgs: string[] = [
+    "--continue",
+    ...profileBaseArgs,
+  ];
+
+  createSession(
+    taskId,
+    profileCommand,
+    claudeArgs,
+    cwd,
+    () => {},
+    async (exitCode) => {
+      await writeExitSignal(taskId, exitCode);
+
+      const currentExec = await db.taskExecution.findUnique({ where: { id: execution.id } });
+      if (currentExec?.status !== "RUNNING") return;
+
+      const { getSession } = await import("@/lib/pty/session-store");
+      const session = getSession(taskId);
+      const terminalBuffer = session?.getBuffer() ?? "";
+
+      await db.taskExecution.update({
+        where: { id: execution.id },
+        data: {
+          status: exitCode === 0 ? "COMPLETED" : "FAILED",
+          endedAt: new Date(),
+        },
+      }).catch(() => {});
+
+      const summaryPath = latestExec?.worktreePath || task.project!.localPath;
+      const { captureExecutionSummary } = await import("@/lib/execution-summary");
+      await captureExecutionSummary(execution.id, taskId, exitCode, terminalBuffer, summaryPath);
+
+      if (exitCode === 0) {
+        await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW" } }).catch(() => {});
+      }
+    },
+    envOverrides,
+    undefined,
+    idleTimeoutSec * 1000
+  );
+
+  return { executionId: execution.id, worktreePath: latestExec?.worktreePath ?? baseCwd ?? null };
+}
+
+/**
  * INT-01: Create a TaskExecution row and spawn Claude CLI in PTY mode.
  *
  * This replaces the SSE stream route for terminal-based execution (Phase 26).

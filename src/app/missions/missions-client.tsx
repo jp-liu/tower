@@ -51,6 +51,15 @@ export function MissionsClient({
     }
     return DEFAULT_PRESET_ID;
   });
+  const [customGrid, setCustomGrid] = useState<{ cols: number; rows: number }>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("missions-grid-custom");
+        if (saved) return JSON.parse(saved);
+      } catch { /* ignore */ }
+    }
+    return { cols: 2, rows: 2 };
+  });
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [filterWsId, setFilterWsId] = useState<string>("");
   const launchBtnRef = useRef<HTMLButtonElement>(null);
@@ -70,11 +79,36 @@ export function MissionsClient({
   const fadeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const preset = GRID_PRESETS.find((p) => p.id === presetId) ?? GRID_PRESETS[2];
+  const gridCols = presetId === "custom" ? customGrid.cols : preset.cols;
+  const gridRows = presetId === "custom" ? customGrid.rows : preset.rows;
 
-  const handlePresetChange = useCallback((newId: string | null) => {
+  // Measure container to compute row height so each "page" of rows fills exactly one viewport
+  const gridContainerRef = useRef<HTMLDivElement>(null);
+  const [rowHeight, setRowHeight] = useState("480px");
+  useEffect(() => {
+    const el = gridContainerRef.current;
+    if (!el) return;
+    const gap = 16; // gap-4 = 16px
+    const padding = 32; // p-4 = 16px * 2
+    const compute = () => {
+      const available = el.clientHeight - padding;
+      const h = (available - gap * (gridRows - 1)) / gridRows;
+      setRowHeight(`${Math.max(h, 200)}px`);
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [gridRows]);
+
+  const handlePresetChange = useCallback((newId: string | null, custom?: { cols: number; rows: number }) => {
     if (!newId) return;
     setPresetId(newId);
     localStorage.setItem("missions-grid-preset", newId);
+    if (newId === "custom" && custom) {
+      setCustomGrid(custom);
+      localStorage.setItem("missions-grid-custom", JSON.stringify(custom));
+    }
   }, []);
 
   // dnd-kit sensors — same config as kanban-board.tsx
@@ -226,7 +260,7 @@ export function MissionsClient({
         <div className="flex-1" />
 
         {/* Grid preset picker — visual grid icons */}
-        <GridPresetPicker value={presetId} onChange={handlePresetChange} />
+        <GridPresetPicker value={presetId} customValue={customGrid} onChange={handlePresetChange} />
 
         {/* Launch task button — click to toggle popover */}
         <div className="relative">
@@ -247,7 +281,7 @@ export function MissionsClient({
       </div>
 
       {/* Grid area */}
-      <div className="flex-1 overflow-auto min-h-0 p-4">
+      <div ref={gridContainerRef} className="flex-1 overflow-auto min-h-0 p-4">
         {visibleCards.length === 0 && removingIds.size === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-4">
             <Rocket className="h-12 w-12 text-muted-foreground" />
@@ -271,8 +305,8 @@ export function MissionsClient({
               <div
                 className="grid gap-4"
                 style={{
-                  gridTemplateColumns: `repeat(${preset.cols}, 1fr)`,
-                  gridAutoRows: `minmax(${preset.minHeight}, 1fr)`,
+                  gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
+                  gridAutoRows: rowHeight,
                 }}
               >
                 {visibleCards.map((c) => (

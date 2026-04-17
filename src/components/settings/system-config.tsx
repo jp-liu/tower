@@ -33,6 +33,7 @@ const EMPTY_FORM: RuleEditState = {
 type SystemForm = { maxUploadMb: number; maxConcurrent: number };
 type GitParamsForm = { timeoutSec: number };
 type SearchForm = { resultLimit: number; allModeCap: number; debounceMs: number; snippetLength: number };
+type MissionsGridForm = { minCols: number; maxCols: number; minRows: number; maxRows: number };
 
 export function SystemConfig() {
   const { t } = useI18n();
@@ -45,6 +46,7 @@ export function SystemConfig() {
   const [systemForm, setSystemForm] = useState<SystemForm>({ maxUploadMb: 50, maxConcurrent: 3 });
   const [gitParamsForm, setGitParamsForm] = useState<GitParamsForm>({ timeoutSec: 30 });
   const [searchForm, setSearchForm] = useState<SearchForm>({ resultLimit: 20, allModeCap: 5, debounceMs: 250, snippetLength: 80 });
+  const [missionsGridForm, setMissionsGridForm] = useState<MissionsGridForm>({ minCols: 1, maxCols: 5, minRows: 1, maxRows: 5 });
 
   useEffect(() => {
     getConfigValue<GitPathRule[]>("git.pathMappingRules", []).then(setRules);
@@ -56,6 +58,10 @@ export function SystemConfig() {
       "search.allModeCap",
       "search.debounceMs",
       "search.snippetLength",
+      "missions.grid.minCols",
+      "missions.grid.maxCols",
+      "missions.grid.minRows",
+      "missions.grid.maxRows",
     ]).then((cfg) => {
       const maxBytes = (cfg["system.maxUploadBytes"] as number) ?? 52428800;
       setSystemForm({
@@ -70,6 +76,12 @@ export function SystemConfig() {
         allModeCap: (cfg["search.allModeCap"] as number) ?? 5,
         debounceMs: (cfg["search.debounceMs"] as number) ?? 250,
         snippetLength: (cfg["search.snippetLength"] as number) ?? 80,
+      });
+      setMissionsGridForm({
+        minCols: (cfg["missions.grid.minCols"] as number) ?? 1,
+        maxCols: (cfg["missions.grid.maxCols"] as number) ?? 5,
+        minRows: (cfg["missions.grid.minRows"] as number) ?? 1,
+        maxRows: (cfg["missions.grid.maxRows"] as number) ?? 5,
       });
     });
   }, []);
@@ -88,6 +100,13 @@ export function SystemConfig() {
     await setConfigValue("search.allModeCap", searchForm.allModeCap);
     await setConfigValue("search.debounceMs", searchForm.debounceMs);
     await setConfigValue("search.snippetLength", searchForm.snippetLength);
+  };
+
+  const handleSaveMissionsGrid = async () => {
+    await setConfigValue("missions.grid.minCols", missionsGridForm.minCols);
+    await setConfigValue("missions.grid.maxCols", missionsGridForm.maxCols);
+    await setConfigValue("missions.grid.minRows", missionsGridForm.minRows);
+    await setConfigValue("missions.grid.maxRows", missionsGridForm.maxRows);
   };
 
   const handleAddRule = async () => {
@@ -517,6 +536,45 @@ export function SystemConfig() {
               className="w-24 text-right" />
           </div>
           <Button onClick={handleSaveSearch}>{t("common.save")}</Button>
+        </div>
+      </div>
+
+      {/* Missions Grid Layout section */}
+      <div className="mt-8">
+        <h3 className="text-lg font-semibold">{t("settings.config.missions.title")}</h3>
+        <p className="mt-0.5 text-sm text-muted-foreground">{t("settings.config.missions.desc")}</p>
+        <div className="mt-4 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium flex-1">{t("settings.config.missions.minCols")}</label>
+              <Input type="number" min={1} max={10}
+                value={missionsGridForm.minCols}
+                onChange={(e) => setMissionsGridForm((f) => ({ ...f, minCols: Number(e.target.value) }))}
+                className="w-20 text-right" />
+            </div>
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium flex-1">{t("settings.config.missions.maxCols")}</label>
+              <Input type="number" min={1} max={10}
+                value={missionsGridForm.maxCols}
+                onChange={(e) => setMissionsGridForm((f) => ({ ...f, maxCols: Number(e.target.value) }))}
+                className="w-20 text-right" />
+            </div>
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium flex-1">{t("settings.config.missions.minRows")}</label>
+              <Input type="number" min={1} max={10}
+                value={missionsGridForm.minRows}
+                onChange={(e) => setMissionsGridForm((f) => ({ ...f, minRows: Number(e.target.value) }))}
+                className="w-20 text-right" />
+            </div>
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium flex-1">{t("settings.config.missions.maxRows")}</label>
+              <Input type="number" min={1} max={10}
+                value={missionsGridForm.maxRows}
+                onChange={(e) => setMissionsGridForm((f) => ({ ...f, maxRows: Number(e.target.value) }))}
+                className="w-20 text-right" />
+            </div>
+          </div>
+          <Button onClick={handleSaveMissionsGrid}>{t("common.save")}</Button>
         </div>
       </div>
 

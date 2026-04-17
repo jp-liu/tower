@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, CheckCircle2, XCircle, Loader2, Clock, PlayCircle } from "lucide-react";
+import { ChevronDown, ChevronUp, CheckCircle2, XCircle, Loader2, Clock, PlayCircle, RotateCcw } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 interface Execution {
@@ -20,6 +20,7 @@ interface Execution {
 interface ExecutionTimelineProps {
   executions: Execution[];
   onResume?: (sessionId: string) => void;
+  onContinueLatest?: () => void;
 }
 
 interface GitStats {
@@ -98,7 +99,7 @@ function statusColor(status: string): string {
   }
 }
 
-export function ExecutionTimeline({ executions, onResume }: ExecutionTimelineProps) {
+export function ExecutionTimeline({ executions, onResume, onContinueLatest }: ExecutionTimelineProps) {
   const { t, locale } = useI18n();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -163,7 +164,7 @@ export function ExecutionTimeline({ executions, onResume }: ExecutionTimelinePro
               )}
               {/* Action buttons */}
               <div className="mt-2.5 flex items-center gap-2">
-                {exec.sessionId && onResume && (
+                {exec.sessionId && onResume ? (
                   <button
                     onClick={() => onResume(exec.sessionId!)}
                     className="flex items-center gap-1.5 rounded-md bg-amber-500/15 px-3 py-1.5 text-xs font-medium text-amber-300 ring-1 ring-amber-500/20 hover:bg-amber-500/25 transition-colors"
@@ -171,7 +172,15 @@ export function ExecutionTimeline({ executions, onResume }: ExecutionTimelinePro
                     <PlayCircle className="h-3.5 w-3.5" />
                     {t("execution.resume")}
                   </button>
-                )}
+                ) : !exec.sessionId && exec.status === "FAILED" && exec.id === executions[0]?.id && onContinueLatest ? (
+                  <button
+                    onClick={onContinueLatest}
+                    className="flex items-center gap-1.5 rounded-md bg-blue-500/15 px-3 py-1.5 text-xs font-medium text-blue-300 ring-1 ring-blue-500/20 hover:bg-blue-500/25 transition-colors"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    {t("execution.tryRecover")}
+                  </button>
+                ) : null}
                 <button
                   onClick={() => setExpandedId(isExpanded ? null : exec.id)}
                   className="flex items-center gap-1.5 rounded-md bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"

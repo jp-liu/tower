@@ -172,11 +172,203 @@ Rules:
 
 ---
 
+## Display Templates
+
+All query results MUST follow these templates. Do NOT invent your own format. When results are empty, output "No {items} found." (e.g. "No tasks found.", "No workspaces found.").
+
+### Priority Markers
+
+Use consistently across all templates: 🔴 CRITICAL · 🟠 HIGH · 🟡 MEDIUM · ⚪ LOW
+
+### Labels Format
+
+Always render labels as comma-separated names (e.g. `bug, frontend`). Omit the column if no task has labels.
+
+---
+
+### Workspaces (`list_workspaces`)
+
+```
+| Workspace | Projects | Description |
+|-----------|----------|-------------|
+| {name}    | {projectCount} | {description ?? "—"} |
+```
+
+### Projects (`list_projects`)
+
+Note: the response does not include workspace name. Use the workspace name from the prior `list_workspaces` call or the user's context.
+
+```
+📂 {workspaceName}
+
+| Project | Type | Tasks | Path |
+|---------|------|-------|------|
+| {name} ({alias}) | {type} | {taskCount} | {localPath ?? "—"} |
+```
+
+### Tasks (`list_tasks`)
+
+```
+📋 {projectName}
+
+| ID | Task | Status | Priority | Labels |
+|----|------|--------|----------|--------|
+| {id (first 8 chars)} | {title} | {status} | {priority} | {labels} |
+```
+
+### Task Creation Confirmation
+
+After `create_task` succeeds:
+
+```
+✅ Task created: **{title}**
+- Project: {projectName}
+- Priority: {priority}
+- Status: {status}
+- Worktree: {yes/no}
+{autoStart ? "⚡ Execution started" : ""}
+```
+
+### Daily Summary (`daily_summary`)
+
+Fields: `stats.totalCompleted`, `stats.totalInProgress`, grouped `workspaces[].projects[].completed[]` and `inProgress[]`.
+
+```
+# 📊 Daily Summary — {date}
+
+**Stats**: ✅ {stats.totalCompleted} completed · 🔄 {stats.totalInProgress} in progress
+
+## {workspace.name}
+
+### {project.name}
+
+**Completed**:
+| Task | Priority | Completed At |
+|------|----------|-------------|
+| ✅ {title} | {priority} | {completedAt (HH:mm)} |
+
+**In Progress**:
+| Task | Status | Priority | Progress |
+|------|--------|----------|----------|
+| 🔄 {title} | {status} | {priority} | {progressSummary ?? "—"} |
+```
+
+If no activity: "No activity recorded for {date}."
+
+### Daily Todo (`daily_todo`)
+
+Fields: `stats.total`, `stats.byPriority.{CRITICAL,HIGH,MEDIUM,LOW}`, `stats.byStatus.{TODO,IN_PROGRESS,IN_REVIEW}`.
+
+```
+# 📝 Pending Tasks
+
+**Stats**: {stats.total} tasks · 🔴 {stats.byPriority.CRITICAL} · 🟠 {stats.byPriority.HIGH} · 🟡 {stats.byPriority.MEDIUM} · ⚪ {stats.byPriority.LOW}
+
+## {workspace.name}
+
+### {project.name}
+
+| # | Task | Status | Priority | Labels |
+|---|------|--------|----------|--------|
+| 1 | {title} {lastSessionId ? "🔁" : ""} | {status} | {priority} | {labels} |
+```
+
+Sorted by priority (CRITICAL first). 🔁 = resumable session.
+
+### Search Results (`search`)
+
+Categories: `task`, `project`, `repository`, `note`, `asset`, `all`. Result count = `results.length`.
+
+```
+🔍 Results for "{query}" ({results.length} found)
+
+| Type | Name | Location | Snippet |
+|------|------|----------|---------|
+| {type} | {title} | {subtitle} | {snippet ?? "—"} |
+```
+
+### Execution Status (`get_task_execution_status`)
+
+```
+⚙️ **{taskTitle}**
+- Execution: {executionStatus} · Terminal: {terminalStatus}
+- Started: {startedAt} {endedAt ? "· Ended: " + endedAt : ""}
+- ID: {executionId}
+- Output (last lines):
+\`\`\`
+{outputSnippet ?? "No output"}
+\`\`\`
+```
+
+### Start Execution Confirmation (`start_task_execution`)
+
+```
+⚡ Execution started
+- Task: {taskId}
+- Execution ID: {executionId}
+- Worktree: {worktreePath ?? "direct mode"}
+```
+
+### Terminal Output (`get_task_terminal_output`)
+
+```
+📺 Terminal — {taskId} ({total} total lines, showing last {lines.length})
+
+\`\`\`
+{lines.join("\n")}
+\`\`\`
+```
+
+### Labels (`list_labels`)
+
+```
+🏷️ Labels for {workspaceName}
+
+| Label | Color | Type |
+|-------|-------|------|
+| {name} | {color} | {isBuiltin ? "Builtin" : "Custom"} |
+```
+
+### Project Identification (`identify_project`)
+
+```
+🔎 Project matches for "{query}"
+
+| Project | Alias | Workspace | Confidence |
+|---------|-------|-----------|------------|
+| {name} | {alias ?? "—"} | {workspaceName} | {(confidence * 100).toFixed(0)}% |
+```
+
+### Notes (`manage_notes` — list/get)
+
+```
+📝 Notes for {projectName}
+
+| Title | Updated | Preview |
+|-------|---------|---------|
+| {title} | {updatedAt (MM-DD HH:mm)} | {content (first 60 chars)}... |
+```
+
+### Assets (`manage_assets` — list)
+
+```
+📎 Assets for {projectName}
+
+| Name | Type | Size | Linked Tasks |
+|------|------|------|-------------|
+| {originalName} | {mimeType} | {size} | {taskCount} |
+```
+
+---
+
 ## Important Rules
 
+- **Display format is mandatory**: always use the templates above, never output raw JSON or invent custom formats
+- **Empty results**: always output "No {items} found." — never silently return nothing
 - **SubPath**: for monorepo or multi-folder projects, use `subPath` on task creation to specify the working directory (e.g. "packages/web"). The project description should document the directory structure. If not sure, omit subPath.
 - **Cascade deletes**: deleting a workspace removes all its projects and tasks
 - **Label replacement**: `set_task_labels` and `update_task` with labelIds do a full replace, not merge
 - **Builtin labels**: cannot be deleted (isBuiltin: true)
 - **One terminal per task**: each task can have at most one active PTY session
 - **Search limit**: returns at most 20 results per query
+- **Search categories**: `task`, `project`, `repository`, `note`, `asset`, `all`

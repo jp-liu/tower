@@ -493,6 +493,7 @@ const translations = {
     "execution.gitLog": "Git 提交记录",
     "execution.noHistory": "暂无执行记录",
     "execution.resume": "继续工作",
+    "execution.tryRecover": "尝试恢复",
     "execution.details": "详情",
     "execution.collapse": "收起",
     // Missions
@@ -533,6 +534,15 @@ const translations = {
     "missions.launchNewLabel": "新建",
     "missions.fullPickerTitle": "选择任务",
     "missions.fullPickerHint": "选择工作区和项目查看任务",
+    "missions.gridCustom": "自定义",
+    "missions.gridCols": "列",
+    "missions.gridRows": "行",
+    "settings.config.missions.title": "任务控制台布局",
+    "settings.config.missions.desc": "自定义网格布局的列数和行数范围",
+    "settings.config.missions.minCols": "最小列数",
+    "settings.config.missions.maxCols": "最大列数",
+    "settings.config.missions.minRows": "最小行数",
+    "settings.config.missions.maxRows": "最大行数",
   },
   en: {
     "sidebar.workspace": "Workspaces",
@@ -1004,6 +1014,7 @@ const translations = {
     "execution.gitLog": "Git Log",
     "execution.noHistory": "No execution history",
     "execution.resume": "Continue",
+    "execution.tryRecover": "Try Recover",
     "execution.details": "Details",
     "execution.collapse": "Collapse",
     // Missions
@@ -1044,6 +1055,15 @@ const translations = {
     "missions.launchNewLabel": "New",
     "missions.fullPickerTitle": "Select Task",
     "missions.fullPickerHint": "Select a workspace and project to see tasks",
+    "missions.gridCustom": "Custom",
+    "missions.gridCols": "Cols",
+    "missions.gridRows": "Rows",
+    "settings.config.missions.title": "Mission Control Layout",
+    "settings.config.missions.desc": "Configure min/max range for custom grid columns and rows",
+    "settings.config.missions.minCols": "Min Columns",
+    "settings.config.missions.maxCols": "Max Columns",
+    "settings.config.missions.minRows": "Min Rows",
+    "settings.config.missions.maxRows": "Max Rows",
   },
 } as const;
 
