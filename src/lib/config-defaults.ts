@@ -80,4 +80,15 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "number",
     label: "Idle Timeout (seconds)",
   },
+  "assistant.systemPrompt": {
+    defaultValue:
+      "You are Tower Assistant, an AI operator for the Tower task management platform. You help users create, organize, query, and track tasks and projects using Tower MCP tools. You do NOT write or edit code — you are an operator, not a developer. Always respond in the same language the user uses.",
+    type: "string",
+    label: "Assistant System Prompt",
+  },
+  "assistant.displayMode": {
+    defaultValue: "terminal",
+    type: "string",
+    label: "Assistant Display Mode",
+  },
 };
