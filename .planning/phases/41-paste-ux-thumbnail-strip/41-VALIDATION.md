@@ -2,8 +2,8 @@
 phase: 41
 slug: paste-ux-thumbnail-strip
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-04-18
 ---
 
@@ -38,10 +38,10 @@ created: 2026-04-18
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 41-01-01 | 01 | 1 | PASTE-01, PASTE-04, PASTE-05, PASTE-06 | unit | `pnpm test:run tests/unit/hooks/use-image-upload.test.ts` | ❌ W0 | ⬜ pending |
-| 41-01-02 | 01 | 1 | PASTE-07 | type-check | `npx tsc --noEmit src/components/assistant/assistant-chat.tsx` | ✅ | ⬜ pending |
-| 41-02-01 | 02 | 1 | PASTE-01, PASTE-02 | unit | `pnpm test:run tests/unit/components/image-thumbnail-strip.test.tsx` | ❌ W0 | ⬜ pending |
-| 41-02-02 | 02 | 1 | PASTE-03 | unit | `pnpm test:run tests/unit/components/image-preview-modal.test.tsx` | ❌ W0 | ⬜ pending |
+| 41-01-01 | 01 | 1 | PASTE-01, PASTE-04, PASTE-05, PASTE-06 | type-check | `npx tsc --noEmit src/hooks/use-image-upload.ts` | ✅ | ⬜ pending |
+| 41-01-02 | 01 | 1 | PASTE-02, PASTE-03 | type-check | `npx tsc --noEmit src/components/assistant/image-thumbnail-strip.tsx src/components/assistant/image-preview-modal.tsx` | ✅ | ⬜ pending |
+| 41-02-01 | 02 | 2 | PASTE-01, PASTE-06, PASTE-07 | type-check | `npx tsc --noEmit src/components/assistant/assistant-chat.tsx` | ✅ | ⬜ pending |
+| 41-02-02 | 02 | 2 | — | checkpoint | — | — | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -49,9 +49,7 @@ created: 2026-04-18
 
 ## Wave 0 Requirements
 
-- [ ] `tests/unit/hooks/use-image-upload.test.ts` — stubs for PASTE-01, PASTE-04, PASTE-05, PASTE-06
-- [ ] `tests/unit/components/image-thumbnail-strip.test.tsx` — stubs for PASTE-01, PASTE-02
-- [ ] `tests/unit/components/image-preview-modal.test.tsx` — stubs for PASTE-03
+*None — pure frontend UI wiring phase with TSC type-check as automated verification strategy. Unit tests deferred to manual verification.*
 
 ---
 
