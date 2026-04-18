@@ -10,7 +10,8 @@
 - ✅ **v0.6 任务开发工作台** — Phases 19-23 (shipped 2026-04-01)
 - ✅ **v0.7 终端交互体验** — Phases 24-28 (shipped 2026-04-10)
 - ✅ **v0.9 架构清理 + 外部调度闭环** — Phases 29-35.1 (shipped 2026-04-13)
-- 🚧 **v0.92 Global Chat Assistant** — Phases 36-39 (in progress)
+- ✅ **v0.92 Global Chat Assistant** — Phases 36-39 (shipped 2026-04-17)
+- 🚧 **v0.93 Chat Media Support** — Phases 40-43 (in progress)
 
 ## Phases
 
@@ -114,82 +115,83 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
 
 </details>
 
-### v0.92 Global Chat Assistant (In Progress)
-
-**Milestone Goal:** Add a global chat assistant accessible from any page, enabling users to manage tasks via natural language through Claude CLI with Tower MCP tools.
+<details>
+<summary>✅ v0.92 Global Chat Assistant (Phases 36-39) — SHIPPED 2026-04-17</summary>
 
 - [x] **Phase 36: Assistant Backend** - PTY session for assistant (no taskId), system prompt injection, tool restrictions, WebSocket bridge (completed 2026-04-17)
 - [x] **Phase 37: Terminal Mode UI** - Sidebar + dialog layouts with embedded xterm terminal, open/close lifecycle (completed 2026-04-17)
 - [x] **Phase 38: Chat Mode** - Output stream parsing into structured messages, Markdown bubble rendering, input box (completed 2026-04-17)
 - [x] **Phase 39: Polish & Settings** - Display mode switch in settings, keyboard shortcuts, i18n, responsive sizing (completed 2026-04-17)
 
+</details>
+
+### v0.93 Chat Media Support (In Progress)
+
+**Milestone Goal:** 助手聊天输入框支持粘贴图片，存储到缓存目录，预览并作为上下文发送给 AI。
+
+- [ ] **Phase 40: Image Upload API** - Server-side cache endpoint, MIME validation, path traversal protection, and static serving for cached and asset images
+- [ ] **Phase 41: Paste UX & Thumbnail Strip** - Paste intercept, immediate thumbnail preview, upload progress, per-image removal, multi-image accumulation
+- [ ] **Phase 42: Message Image Display** - User message bubbles show images, click to preview, broken-image placeholder, session reload restores references
+- [ ] **Phase 43: Claude SDK Multimodal Integration** - Images passed to Claude as base64 content blocks via AsyncIterable SDKUserMessage path
+
 ## Phase Details
 
-### Phase 36: Assistant Backend
-**Goal**: The system can spawn a dedicated Claude CLI PTY session for the global assistant with restricted tools and a predefined identity, independent of any task
-**Depends on**: Phase 35.1 (existing PTY + WebSocket infrastructure)
-**Requirements**: BE-01, BE-02, BE-03, BE-04, BE-05, BE-06, UX-01
+### Phase 40: Image Upload API
+**Goal**: A secure server-side endpoint accepts image uploads from paste events, stores them in the assistant cache directory, and serves them via short paths
+**Depends on**: Phase 39 (existing assistant infrastructure)
+**Requirements**: CACHE-01, CACHE-02, CACHE-03, CACHE-04, CACHE-05
 **Success Criteria** (what must be TRUE):
-  1. Opening the assistant spawns a new Claude CLI process with cwd set to the Tower project directory, not tied to any taskId
-  2. The spawned process includes `--append-system-prompt` with a prompt defining the assistant as a Tower operator that can create/query/move tasks
-  3. The spawned process includes `--allowedTools "mcp__tower__*"` so it can only call Tower MCP tools (no Read/Edit/Bash)
-  4. The assistant PTY session connects to the browser via WebSocket and streams output in real time
-  5. Closing the assistant destroys the PTY session completely; reopening starts a fresh session with no prior context
-**Plans:** 2/2 plans complete
+  1. POSTing a valid image file to `/api/internal/assistant/images` returns `{ filename, mimeType }` and the file is written to `data/cache/assistant/<uuid>.<ext>`
+  2. Uploading a non-image file (e.g. PDF, SVG) is rejected with a 400 error; MIME type is verified via magic bytes, not browser metadata
+  3. A crafted filename containing `../` traversal sequences is rejected; the uploaded file is always confined to the cache directory
+  4. A cached image is accessible at `/cache/<filename>` and returns the correct image bytes
+  5. A project asset is accessible at `/assets/<filename>` using the same unified static serving pattern
+**Plans**: TBD
+**UI hint**: no
 
-Plans:
-- [x] 36-01-PLAN.md — Server actions + config defaults (startAssistantSession, stopAssistantSession, config keys)
-- [x] 36-02-PLAN.md — WS keepalive bypass + internal API route (/api/internal/assistant)
-
-### Phase 37: Terminal Mode UI
-**Goal**: Users can open a global assistant panel from any page and interact with Claude CLI via an embedded xterm terminal
-**Depends on**: Phase 36
-**Requirements**: UI-01, UI-02, UI-03, UI-04, UI-06, TM-01, TM-02, TM-03, UX-02
+### Phase 41: Paste UX & Thumbnail Strip
+**Goal**: Users can paste one or more images into the chat input and see thumbnails with progress indicators before sending
+**Depends on**: Phase 40
+**Requirements**: PASTE-01, PASTE-02, PASTE-03, PASTE-04, PASTE-05, PASTE-06, PASTE-07
 **Success Criteria** (what must be TRUE):
-  1. An assistant icon appears in the top bar next to the search box; clicking it or pressing Cmd+L (Ctrl+L) opens the assistant panel
-  2. The assistant panel can render as a left sidebar (push layout, does not block main content) or as a centered dialog modal
-  3. The panel contains a title bar and an embedded xterm.js terminal where Claude CLI output streams with full ANSI formatting
-  4. User can type directly in the terminal to interact with the assistant (no separate input box needed in terminal mode)
-  5. Pressing Escape, clicking the close button, or pressing Cmd+L again closes the panel and destroys the session
-**Plans:** 2/2 plans complete
+  1. Pasting an image (Ctrl+V / Cmd+V) in the chat textarea triggers an upload and displays a 48px thumbnail above the input box; text paste is unaffected
+  2. Each thumbnail shows an upload progress bar with percentage until the upload completes
+  3. User can click a thumbnail to open a fullscreen preview modal with zoom support
+  4. User can click the X button on a thumbnail to remove that image before sending; the upload is abandoned and the blob URL is revoked
+  5. Pasting multiple times accumulates images as separate thumbnails; all thumbnails clear automatically after send
+  6. Paste behavior uses `clipboardData.items` (not `.files`) so it works correctly in Firefox
+  7. The chat textarea defaults to 3 rows and grows to a maximum of 5 rows with a scrollbar beyond that
+**Plans**: TBD
+**UI hint**: yes
 
-Plans:
-- [x] 37-01-PLAN.md — AssistantProvider context + AssistantPanel component + i18n keys + API route worktreePath fix
-- [x] 37-02-PLAN.md — Layout integration (top-bar icon + push sidebar + dialog mode) + visual verification
-
-### Phase 38: Chat Mode
-**Goal**: Users can interact with the assistant via a chat bubble interface with Markdown-rendered responses instead of raw terminal output
-**Depends on**: Phase 37 (panel shell and session lifecycle already working)
-**Requirements**: CM-01, CM-02, CM-03, CM-04
+### Phase 42: Message Image Display
+**Goal**: Sent messages containing images render the images inline in the chat bubble, with graceful handling of missing images and session reload
+**Depends on**: Phase 41
+**Requirements**: MSG-01, MSG-02, MSG-03, MSG-04
 **Success Criteria** (what must be TRUE):
-  1. The system parses the Claude CLI output stream into structured segments: user messages, assistant responses, thinking indicators, and tool-call blocks
-  2. Assistant responses render as Markdown bubbles with proper tables, lists, code blocks, and inline formatting
-  3. User can type in a text input box at the bottom and send via Enter (Shift+Enter for newline); the input is forwarded to the PTY
-  4. While the assistant is processing, a thinking/loading indicator is visible; it disappears when the response completes
-**Plans:** 2/2 plans complete
+  1. After sending, the user message bubble shows all attached images at the top in fixed size using the `/cache/` short path
+  2. User can click any image in a sent message bubble to open the same preview modal (zoom in/out)
+  3. When a cached image has been cleaned up or is missing, the bubble shows a broken-image placeholder rather than a broken img tag
+  4. Reloading the page or switching sessions restores the chat history with image references rendering correctly (no blank slots)
+**Plans**: TBD
+**UI hint**: yes
 
-Plans:
-- [x] 38-01-PLAN.md — useAssistantChat hook with state-machine parser + communicationMode config key
-- [x] 38-02-PLAN.md — AssistantChat + AssistantChatBubble components + AssistantPanel wiring
-
-### Phase 39: Polish & Settings
-**Goal**: The assistant experience is configurable, fully bilingual, and works well at all viewport sizes
-**Depends on**: Phase 38
-**Requirements**: UI-05, UI-07, UX-03
+### Phase 43: Claude SDK Multimodal Integration
+**Goal**: Images attached to a chat message are passed to Claude as base64 content blocks so the AI can actually see and reason about them
+**Depends on**: Phase 42
+**Requirements**: AI-01, AI-02, AI-03
 **Success Criteria** (what must be TRUE):
-  1. Users can switch between terminal mode and chat mode via a setting in Settings > General (persisted in SystemConfig)
-  2. All assistant UI text (title bar, placeholders, tooltips, settings labels) is available in both Chinese and English
-  3. Both sidebar and dialog modes render correctly on viewports from 1024px to 2560px wide without overflow or truncation
-**Plans:** 2/2 plans complete
-
-Plans:
-- [x] 39-01-PLAN.md — Communication mode setting + assistant i18n keys
-- [x] 39-02-PLAN.md — Responsive sizing for sidebar and dialog modes
+  1. Sending a message with images causes Claude to receive and correctly describe the image content in its response (end-to-end smoke test passes)
+  2. Image bytes are base64-encoded server-side from disk using `buffer.toString("base64")` with no `data:` prefix; the Claude API accepts the request without error
+  3. Text-only messages continue to work exactly as before; the existing string-prompt code path is not modified
+  4. The architecture accepts future MIME types by extending the whitelist in one place (the upload route validation)
+**Plans**: TBD
+**UI hint**: no
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 36 -> 37 -> 38 -> 39
+Phases execute in numeric order: 40 -> 41 -> 42 -> 43
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -229,7 +231,11 @@ Phases execute in numeric order: 36 -> 37 -> 38 -> 39
 | 34. MCP Terminal Tools | v0.9 | 1/1 | Complete | 2026-04-11 |
 | 35. Settings UI for CLI Profile | v0.9 | 1/1 | Complete | 2026-04-11 |
 | 35.1. Mission Control Dashboard | v0.9 | 3/3 | Complete | 2026-04-13 |
-| 36. Assistant Backend | v0.92 | 2/2 | Complete    | 2026-04-17 |
-| 37. Terminal Mode UI | v0.92 | 2/2 | Complete    | 2026-04-17 |
-| 38. Chat Mode | v0.92 | 2/2 | Complete    | 2026-04-17 |
-| 39. Polish & Settings | v0.92 | 2/2 | Complete    | 2026-04-17 |
+| 36. Assistant Backend | v0.92 | 2/2 | Complete | 2026-04-17 |
+| 37. Terminal Mode UI | v0.92 | 2/2 | Complete | 2026-04-17 |
+| 38. Chat Mode | v0.92 | 2/2 | Complete | 2026-04-17 |
+| 39. Polish & Settings | v0.92 | 2/2 | Complete | 2026-04-17 |
+| 40. Image Upload API | v0.93 | 0/TBD | Not started | - |
+| 41. Paste UX & Thumbnail Strip | v0.93 | 0/TBD | Not started | - |
+| 42. Message Image Display | v0.93 | 0/TBD | Not started | - |
+| 43. Claude SDK Multimodal Integration | v0.93 | 0/TBD | Not started | - |

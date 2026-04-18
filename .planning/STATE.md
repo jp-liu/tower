@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v0.93
 milestone_name: Chat Media Support
-status: defining_requirements
+status: roadmap_ready
 stopped_at: null
-last_updated: "2026-04-18T17:30:00.000Z"
+last_updated: "2026-04-18T18:00:00.000Z"
 last_activity: 2026-04-18
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,23 +21,41 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-18)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Defining requirements for v0.93
+**Current focus:** v0.93 Chat Media Support — Phase 40 ready to plan
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 40 of 43 (Image Upload API)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-04-18 — Milestone v0.93 started
+Status: Ready to plan
+Last activity: 2026-04-18 — Roadmap created for v0.93 (4 phases, 19 requirements)
+
+Progress: [░░░░░░░░░░] 0%
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed: 0 (this milestone)
+- Average duration: —
+- Total execution time: —
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
+
+*Updated after each plan completion*
 
 ## Accumulated Context
 
 ### Decisions
 
-- 图片粘贴存到 .cache/images/uuid.ext，发送时作为 reference 传给 SDK
-- 非图片文件不做特殊处理，粘贴文件名即可（浏览器拿不到完整路径）
-- 与现有 MCP manage_assets + create_task references 机制对接
-- 先做好图片支持的设计，后续扩展其他文件类型
+- Images stored server-side at `data/cache/assistant/<uuid>.<ext>` immediately on paste; browser keeps only blob URL for thumbnail
+- MIME validation uses magic bytes server-side (not browser `file.type`) to prevent SVG-as-PNG XSS
+- Claude SDK receives images as `ImageBlockParam` base64 blocks built server-side via `buffer.toString("base64")` — no `data:` prefix
+- Browser sends only `string[]` of server filenames in chat request body; no inline base64 in POST payload
+- Phase 4 (SDK integration) is highest-risk: requires end-to-end smoke test with real Claude response before declaring complete
 
 ### Pending Todos
 
@@ -45,4 +63,10 @@ None.
 
 ### Blockers/Concerns
 
-None.
+- Phase 43 (SDK multimodal): `SDKUserMessage` + `AsyncIterable` path confirmed in type definitions but not yet exercised in this codebase. Smoke test required early in planning.
+
+## Session Continuity
+
+Last session: 2026-04-18
+Stopped at: Roadmap written — 4 phases defined, 19/19 requirements mapped
+Resume file: None

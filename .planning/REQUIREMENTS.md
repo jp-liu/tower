@@ -58,31 +58,31 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CACHE-01 | — | Pending |
-| CACHE-02 | — | Pending |
-| CACHE-03 | — | Pending |
-| CACHE-04 | — | Pending |
-| CACHE-05 | — | Pending |
-| PASTE-01 | — | Pending |
-| PASTE-02 | — | Pending |
-| PASTE-03 | — | Pending |
-| PASTE-04 | — | Pending |
-| PASTE-05 | — | Pending |
-| PASTE-06 | — | Pending |
-| PASTE-07 | — | Pending |
-| MSG-01 | — | Pending |
-| MSG-02 | — | Pending |
-| MSG-03 | — | Pending |
-| MSG-04 | — | Pending |
-| AI-01 | — | Pending |
-| AI-02 | — | Pending |
-| AI-03 | — | Pending |
+| CACHE-01 | Phase 40 | Pending |
+| CACHE-02 | Phase 40 | Pending |
+| CACHE-03 | Phase 40 | Pending |
+| CACHE-04 | Phase 40 | Pending |
+| CACHE-05 | Phase 40 | Pending |
+| PASTE-01 | Phase 41 | Pending |
+| PASTE-02 | Phase 41 | Pending |
+| PASTE-03 | Phase 41 | Pending |
+| PASTE-04 | Phase 41 | Pending |
+| PASTE-05 | Phase 41 | Pending |
+| PASTE-06 | Phase 41 | Pending |
+| PASTE-07 | Phase 41 | Pending |
+| MSG-01 | Phase 42 | Pending |
+| MSG-02 | Phase 42 | Pending |
+| MSG-03 | Phase 42 | Pending |
+| MSG-04 | Phase 42 | Pending |
+| AI-01 | Phase 43 | Pending |
+| AI-02 | Phase 43 | Pending |
+| AI-03 | Phase 43 | Pending |
 
 **Coverage:**
 - v0.93 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19 ⚠️
+- Mapped to phases: 19
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-18*
-*Last updated: 2026-04-18 after initial definition*
+*Last updated: 2026-04-18 — Traceability updated after roadmap creation*
