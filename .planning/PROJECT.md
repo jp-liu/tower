@@ -23,6 +23,13 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 ## Current State
 
+**Shipped:** v0.93 Chat Media Support (2026-04-18)
+- Phase 40-43: Image upload API (magic-byte MIME validation, path traversal protection), paste-to-upload UX with thumbnail strip and progress bars, message image display with broken-image fallback, Claude SDK multimodal integration (Read tool for image vision)
+- 19 requirements delivered (CACHE-01~05, PASTE-01~07, MSG-01~04, AI-01~03)
+
+**Shipped:** v0.92 Assistant Chat System (2026-04-17)
+- Phase 36-39: Assistant backend with Claude Agent SDK, terminal mode UI, SSE chat mode, polish & settings
+
 **Shipped:** v0.91 工作流优化 + 子页面重构 (2026-04-15)
 - Diff 精确化 (branchTipCommit + untracked)、看板自动归档、子页面独立布局、可选 worktree
 
@@ -151,23 +158,9 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 ---
 
-## Current Milestone: v0.93 Chat Media Support — 聊天媒体支持
+## Completed Milestone: v0.93 Chat Media Support (2026-04-18)
 
-**Goal:** 助手聊天输入框支持粘贴图片，存储到缓存目录，预览并作为上下文发送给 AI。
-
-**Target features:**
-- 聊天输入框粘贴图片 → 存到 `.cache/images/uuid.ext` → 显示缩略图预览
-- 发送消息时将图片作为 reference 传递给 Claude SDK `query()`
-- 缓存目录管理 API（存储、清理）
-- 输入框多图预览条 + 删除单张图片
-- 任务创建场景下，MCP 自动将 cache 文件移入项目资源库（对接已有 `manage_assets` + `create_task` references 机制）
-
-### Out of Scope
-
-- 非图片文件特殊处理 — 粘贴文件名即可，不存缓存不做预览
-- 拖拽上传 — 后续扩展
-- 视频/音频媒体 — 后续扩展
-- 自动 cache 清理 — 用户手动清理
+**Shipped:** 聊天图片支持全链路 — magic-byte MIME 验证上传 API、粘贴自动上传+缩略图预览条（XHR 进度条）、消息气泡内图片展示（缺失图片占位符）、Claude SDK Read 工具多模态集成（AI 可看图理解内容）。19 个需求全部交付。
 
 ## Context
 

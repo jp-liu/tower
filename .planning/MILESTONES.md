@@ -1,5 +1,21 @@
 # Milestones
 
+## v0.93 Chat Media Support (Shipped: 2026-04-18)
+
+**Phases completed:** 4 phases, 7 plans, 5 tasks
+
+**Key accomplishments:**
+
+- `src/lib/mime-magic.ts`
+- 1. [Rule 3 - Blocking] Added getAssistantCacheDir/ensureAssistantCacheDir to file-utils.ts
+- One-liner:
+- AssistantChat wired with paste-to-thumbnail flow: clipboardData.items → XHR upload → 48px strip → ImagePreviewModal → send with filenames; provider and API route extended for imageFilenames
+- One-liner:
+- imageFilenames wired through provider message creation and sessionStorage cache for reload persistence; click-to-preview modal connected for sent message images
+- One-liner:
+
+---
+
 ## v0.92 Global Chat Assistant (Shipped: 2026-04-17)
 
 **Phases completed:** 4 phases, 8 plans, 9 tasks
