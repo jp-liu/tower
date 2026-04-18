@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { execFileSync } from "child_process";
 import { requireLocalhost } from "@/lib/internal-api-guard";
-import { readConfigValue } from "@/lib/config-reader";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -49,11 +48,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const systemPrompt = await readConfigValue<string>(
-    "assistant.systemPrompt",
-    "You are Tower Assistant — the built-in AI operator for the Tower task management platform. Your ONLY capabilities are Tower MCP tools. You CANNOT read files, edit code, run commands, or do anything outside Tower task management. Always respond in the same language the user uses."
-  );
-
+  // System prompt is defined in .tower/CLAUDE.md — CLI auto-discovers it from cwd
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
@@ -70,21 +65,20 @@ export async function POST(request: NextRequest) {
         const claudePath = findClaudeBinary();
         console.error("[assistant-chat] Claude binary:", claudePath);
 
-        // Use home dir as cwd to avoid loading CLAUDE.md from project directory.
-        // CLAUDE.md gives the CLI full coding-assistant identity which overrides our systemPrompt.
-        // Tower MCP is configured globally, not per-cwd, so tools still work.
-        const homedir = require("os").homedir() as string;
+        // Use .tower/ as cwd — it has its own CLAUDE.md defining the assistant persona.
+        // This prevents the project's CLAUDE.md (coding-assistant identity) from being loaded.
+        const { join } = require("path");
+        const towerDir = join(process.cwd(), ".tower");
 
         const options: Record<string, unknown> = {
-          systemPrompt,
           // No built-in tools — assistant is an operator, not a developer
           tools: [],
           // Auto-approve Tower MCP tools (the only tools available)
           allowedTools: ["mcp__tower__*"],
           // Streaming — receive text_delta chunks as they arrive
           includePartialMessages: true,
-          // Home dir — no CLAUDE.md here
-          cwd: homedir,
+          // .tower/ directory has its own CLAUDE.md with assistant persona
+          cwd: towerDir,
           pathToClaudeCodeExecutable: claudePath,
         };
 
