@@ -249,4 +249,4 @@ Phases execute in numeric order: 40 -> 41 -> 42 -> 43
 | 40. Image Upload API | v0.93 | 1/2 | Complete    | 2026-04-18 |
 | 41. Paste UX & Thumbnail Strip | v0.93 | 2/2 | Complete    | 2026-04-18 |
 | 42. Message Image Display | v0.93 | 2/2 | Complete    | 2026-04-18 |
-| 43. Claude SDK Multimodal Integration | v0.93 | 0/1 | Not started | - |
+| 43. Claude SDK Multimodal Integration | v0.93 | 0/1 | Planned    |  |

@@ -32,9 +32,9 @@
 
 ### AI Integration
 
-- [ ] **AI-01**: Send message appends image absolute paths to prompt text
-- [ ] **AI-02**: query() options enable Read tool permission for Claude to read images
-- [ ] **AI-03**: Architecture supports future file type extension (MIME whitelist expandable)
+- [x] **AI-01**: Send message appends image absolute paths to prompt text
+- [x] **AI-02**: query() options enable Read tool permission for Claude to read images
+- [x] **AI-03**: Architecture supports future file type extension (MIME whitelist expandable)
 
 ## Future Requirements
 
@@ -74,9 +74,9 @@
 | MSG-02 | Phase 42 | Complete |
 | MSG-03 | Phase 42 | Complete |
 | MSG-04 | Phase 42 | Complete |
-| AI-01 | Phase 43 | Pending |
-| AI-02 | Phase 43 | Pending |
-| AI-03 | Phase 43 | Pending |
+| AI-01 | Phase 43 | Complete |
+| AI-02 | Phase 43 | Complete |
+| AI-03 | Phase 43 | Complete |
 
 **Coverage:**
 - v0.93 requirements: 19 total
