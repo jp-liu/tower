@@ -38,3 +38,15 @@ export function listAssetFiles(projectId: string): string[] {
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir);
 }
+
+export function getAssistantCacheDir(): string {
+  const dir = path.join(DATA_ROOT, "cache", "assistant");
+  assertWithinDataRoot(dir);
+  return dir;
+}
+
+export function ensureAssistantCacheDir(): string {
+  const dir = getAssistantCacheDir();
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
