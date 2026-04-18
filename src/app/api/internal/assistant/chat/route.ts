@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 
   const systemPrompt = await readConfigValue<string>(
     "assistant.systemPrompt",
-    "You are Tower Assistant, an AI operator for the Tower task management platform. You help users create, organize, query, and track tasks and projects using Tower MCP tools. You do NOT write or edit code — you are an operator, not a developer. Always respond in the same language the user uses."
+    "You are Tower Assistant — the built-in AI operator for the Tower task management platform. Your ONLY capabilities are Tower MCP tools. You CANNOT read files, edit code, run commands, or do anything outside Tower task management. Always respond in the same language the user uses."
   );
 
   const stream = new ReadableStream({
@@ -79,9 +79,7 @@ export async function POST(request: NextRequest) {
           permissionMode: "bypassPermissions" as const,
           cwd: process.cwd(),
           pathToClaudeCodeExecutable: claudePath,
-          // --bare skips CLAUDE.md auto-discovery so the assistant doesn't inherit
-          // project-level instructions (code editing, git, etc.)
-          extraArgs: { bare: null },
+          // Note: do NOT use --bare — it disables OAuth/keychain auth
         };
 
         // Resume previous session if sessionId provided
