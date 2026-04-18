@@ -3,7 +3,7 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Bot, ChevronRight, User } from "lucide-react";
+import { Bot, ChevronRight, ImageOff, User } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import type { ChatMessage } from "@/hooks/use-assistant-chat";
 
@@ -13,19 +13,85 @@ import type { ChatMessage } from "@/hooks/use-assistant-chat";
 
 interface AssistantChatBubbleProps {
   message: ChatMessage;
+  onImagePreview?: (url: string) => void;
+}
+
+// ---------------------------------------------------------------------------
+// MessageImage sub-component
+// ---------------------------------------------------------------------------
+
+function MessageImage({
+  filename,
+  onPreview,
+}: {
+  filename: string;
+  onPreview?: (url: string) => void;
+}) {
+  const { t } = useI18n();
+  const [broken, setBroken] = useState(false);
+  const url = `/api/internal/cache/${filename}`;
+
+  if (broken) {
+    return (
+      <div
+        className="size-16 rounded-md bg-muted flex items-center justify-center"
+        title={t("assistant.brokenImage")}
+      >
+        <ImageOff className="size-4 text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="relative size-16 rounded-md overflow-hidden bg-muted shrink-0"
+      onClick={() => onPreview?.(url)}
+    >
+      <img
+        src={url}
+        alt=""
+        loading="lazy"
+        className="size-16 rounded-md object-cover cursor-pointer hover:opacity-80 transition-opacity"
+        onError={() => setBroken(true)}
+      />
+    </button>
+  );
 }
 
 // ---------------------------------------------------------------------------
 // User bubble
 // ---------------------------------------------------------------------------
 
-function UserBubble({ content }: { content: string }) {
+function UserBubble({
+  content,
+  imageFilenames,
+  onImagePreview,
+}: {
+  content: string;
+  imageFilenames?: string[];
+  onImagePreview?: (url: string) => void;
+}) {
   return (
     <div
       className="flex justify-end gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200"
       aria-label="You"
     >
       <div className="bg-primary text-primary-foreground max-w-[80%] rounded-2xl rounded-br-sm px-3 py-2 text-sm whitespace-pre-wrap break-words">
+        {imageFilenames && imageFilenames.length > 0 && (
+          <div
+            className="flex flex-wrap gap-1.5 mb-2"
+            style={{ maxWidth: "calc(4 * 64px + 3 * 6px)" }}
+          >
+            {imageFilenames.map((filename) => (
+              <MessageImage
+                key={filename}
+                filename={filename}
+                onPreview={onImagePreview}
+              />
+            ))}
+          </div>
+        )}
         {content}
       </div>
       <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted mt-1">
@@ -169,10 +235,16 @@ function ToolBubble({ content, toolName }: { content: string; toolName?: string 
 // Main export
 // ---------------------------------------------------------------------------
 
-export function AssistantChatBubble({ message }: AssistantChatBubbleProps) {
+export function AssistantChatBubble({ message, onImagePreview }: AssistantChatBubbleProps) {
   switch (message.role) {
     case "user":
-      return <UserBubble content={message.content} />;
+      return (
+        <UserBubble
+          content={message.content}
+          imageFilenames={message.imageFilenames}
+          onImagePreview={onImagePreview}
+        />
+      );
     case "assistant":
       return <AssistantBubble content={message.content} />;
     case "thinking":
