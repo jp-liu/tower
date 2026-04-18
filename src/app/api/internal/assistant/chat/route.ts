@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { execFileSync } from "child_process";
 import { requireLocalhost } from "@/lib/internal-api-guard";
+import { buildMultimodalPrompt } from "@/lib/build-multimodal-prompt";
+import { getAssistantCacheDir } from "@/lib/file-utils";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -70,10 +72,12 @@ export async function POST(request: NextRequest) {
         const towerDir = ensureTowerDir();
 
         const options: Record<string, unknown> = {
-          // No built-in tools — assistant is an operator, not a developer
-          tools: [],
-          // Auto-approve Tower MCP tools (the only tools available)
-          allowedTools: ["mcp__tower__*"],
+          // No built-in tools for text-only — add Read tool when images are attached (AI-02)
+          tools: body.imageFilenames?.length ? ["Read"] : [],
+          // Auto-approve Tower MCP tools; also auto-approve Read when images attached
+          allowedTools: body.imageFilenames?.length
+            ? ["mcp__tower__*", "Read"]
+            : ["mcp__tower__*"],
           // Streaming — receive text_delta chunks as they arrive
           includePartialMessages: true,
           // .tower/ directory has its own CLAUDE.md with assistant persona
@@ -89,8 +93,13 @@ export async function POST(request: NextRequest) {
         // Prepend /tower to every message to load the Tower skill into context.
         const prompt = `/tower ${body.message}`;
 
+        // Build multimodal prompt with image paths if images attached (AI-01)
+        const finalPrompt = body.imageFilenames?.length
+          ? buildMultimodalPrompt(prompt, body.imageFilenames, getAssistantCacheDir())
+          : prompt;
+
         const q = query({
-          prompt,
+          prompt: finalPrompt,
           options: options as Parameters<typeof query>[0]["options"],
         });
 
