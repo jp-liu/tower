@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Bot, Loader2, SendHorizonal, Square } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { useAssistant } from "./assistant-provider";
 import { AssistantChatBubble } from "./assistant-chat-bubble";
+import { useImageUpload, type PendingImage } from "@/hooks/use-image-upload";
+import { ImageThumbnailStrip } from "./image-thumbnail-strip";
+import { ImagePreviewModal } from "./image-preview-modal";
 
 // ---------------------------------------------------------------------------
 // Empty state
@@ -43,6 +46,9 @@ export function AssistantChat() {
     cancelChat,
   } = useAssistant();
 
+  const { pendingImages, addImages, removeImage, clearAll, hasUploading } = useImageUpload();
+  const [previewImage, setPreviewImage] = useState<PendingImage | null>(null);
+
   // Auto-focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
@@ -54,11 +60,33 @@ export function AssistantChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length, lastContentLen]);
 
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const imageFiles: File[] = [];
+    const items = Array.from(e.clipboardData.items);
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) imageFiles.push(file);
+      }
+    }
+    if (imageFiles.length > 0) {
+      addImages(imageFiles);
+    }
+    // Do NOT call e.preventDefault() — text items still paste normally
+  }, [addImages]);
+
   const handleSend = () => {
     const text = inputValue.trim();
-    if (!text || isThinking) return;
-    sendMessage(text);
+    const doneFilenames = pendingImages
+      .filter((i) => i.status === "done")
+      .map((i) => i.filename!);
+
+    if (!text && doneFilenames.length === 0) return;
+    if (isThinking || hasUploading) return;
+
+    sendMessage(text, { imageFilenames: doneFilenames });
     setInputValue("");
+    clearAll();
     inputRef.current?.focus();
   };
 
@@ -84,7 +112,11 @@ export function AssistantChat() {
     }
   };
 
-  const isSendDisabled = !inputValue.trim() || isThinking;
+  const hasDoneImages = pendingImages.some((i) => i.status === "done");
+  const isSendDisabled =
+    (!inputValue.trim() && !hasDoneImages)
+    || isThinking
+    || hasUploading;
 
   return (
     <div className="flex flex-col h-full">
@@ -110,15 +142,21 @@ export function AssistantChat() {
 
       {/* Input area */}
       <div className="border-t border-border bg-popover p-4">
-        <div className="flex items-end gap-2">
+        <ImageThumbnailStrip
+          pendingImages={pendingImages}
+          onRemove={removeImage}
+          onPreview={(img) => setPreviewImage(img)}
+        />
+        <div className={`flex items-end gap-2 ${pendingImages.length > 0 ? "mt-2" : ""}`}>
           <Textarea
             ref={inputRef}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={t("assistant.inputPlaceholder")}
-            className="flex-1 min-h-[40px] max-h-[120px] resize-none text-sm"
-            rows={1}
+            onPaste={handlePaste}
+            placeholder={pendingImages.length === 0 ? t("assistant.inputPlaceholderWithImages") : t("assistant.inputPlaceholder")}
+            className="flex-1 min-h-[72px] max-h-[120px] resize-none text-sm"
+            rows={3}
           />
           {isThinking ? (
             <Button
@@ -144,6 +182,11 @@ export function AssistantChat() {
           )}
         </div>
       </div>
+      <ImagePreviewModal
+        imageUrl={previewImage?.blobUrl ?? null}
+        open={previewImage !== null}
+        onOpenChange={(open) => { if (!open) setPreviewImage(null); }}
+      />
     </div>
   );
 }

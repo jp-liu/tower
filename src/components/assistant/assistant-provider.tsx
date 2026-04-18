@@ -40,7 +40,7 @@ interface AssistantContextValue {
   chatStatus: "idle" | "connecting" | "streaming" | "error";
   isChatThinking: boolean;
   isLoadingHistory: boolean;
-  sendChatMessage: (text: string) => void;
+  sendChatMessage: (text: string, options?: { imageFilenames?: string[] }) => void;
   cancelChat: () => string | null;
   // Session management
   sessions: AssistantSession[];
@@ -257,8 +257,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   // -------------------------------------------------------------------------
   // Chat message sender — lives at provider level for persistence
   // -------------------------------------------------------------------------
-  const sendChatMessage = useCallback(async (text: string) => {
-    if (!text.trim()) return;
+  const sendChatMessage = useCallback(async (text: string, options?: { imageFilenames?: string[] }) => {
+    if (!text.trim() && !(options?.imageFilenames?.length)) return;
 
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -283,7 +283,11 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       const res = await fetch("/api/internal/assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, sessionId: sessionIdRef.current }),
+        body: JSON.stringify({
+          message: text,
+          sessionId: sessionIdRef.current,
+          imageFilenames: options?.imageFilenames ?? [],
+        }),
         signal: controller.signal,
       });
 

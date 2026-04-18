@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   const blocked = requireLocalhost(request);
   if (blocked) return blocked;
 
-  let body: { message: string; sessionId?: string };
+  let body: { message: string; sessionId?: string; imageFilenames?: string[] };
   try {
     body = await request.json();
   } catch {
@@ -41,8 +41,8 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  if (!body.message?.trim()) {
-    return new Response(JSON.stringify({ error: "Message is required" }), {
+  if (!body.message?.trim() && !(body.imageFilenames?.length)) {
+    return new Response(JSON.stringify({ error: "Message or images required" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
