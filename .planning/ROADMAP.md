@@ -131,7 +131,7 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
 
 - [x] **Phase 40: Image Upload API** - Server-side cache endpoint, MIME validation, path traversal protection, and static serving for cached and asset images (completed 2026-04-18)
 - [x] **Phase 41: Paste UX & Thumbnail Strip** - Paste intercept, immediate thumbnail preview, upload progress, per-image removal, multi-image accumulation (completed 2026-04-18)
-- [ ] **Phase 42: Message Image Display** - User message bubbles show images, click to preview, broken-image placeholder, session reload restores references
+- [x] **Phase 42: Message Image Display** - User message bubbles show images, click to preview, broken-image placeholder, session reload restores references (completed 2026-04-18)
 - [ ] **Phase 43: Claude SDK Multimodal Integration** - Images passed to Claude as base64 content blocks via AsyncIterable SDKUserMessage path
 
 ## Phase Details
@@ -181,8 +181,8 @@ Plans:
   4. Reloading the page or switching sessions restores the chat history with image references rendering correctly (no blank slots)
 **Plans**: 2 plans
 Plans:
-- [ ] 42-01-PLAN.md — ChatMessage type extension + UserBubble image rendering + broken-image fallback + i18n
-- [ ] 42-02-PLAN.md — Wire imageFilenames through provider + session history cache + preview modal
+- [x] 42-01-PLAN.md — ChatMessage type extension + UserBubble image rendering + broken-image fallback + i18n
+- [x] 42-02-PLAN.md — Wire imageFilenames through provider + session history cache + preview modal
 **UI hint**: yes
 
 ### Phase 43: Claude SDK Multimodal Integration
@@ -249,5 +249,5 @@ Phases execute in numeric order: 40 -> 41 -> 42 -> 43
 | 39. Polish & Settings | v0.92 | 2/2 | Complete | 2026-04-17 |
 | 40. Image Upload API | v0.93 | 1/2 | Complete    | 2026-04-18 |
 | 41. Paste UX & Thumbnail Strip | v0.93 | 2/2 | Complete    | 2026-04-18 |
-| 42. Message Image Display | v0.93 | 1/2 | In Progress|  |
+| 42. Message Image Display | v0.93 | 2/2 | Complete   | 2026-04-18 |
 | 43. Claude SDK Multimodal Integration | v0.93 | 0/TBD | Not started | - |

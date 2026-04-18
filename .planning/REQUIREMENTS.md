@@ -26,9 +26,9 @@
 ### Message Display
 
 - [x] **MSG-01**: Sent user message bubble shows images at top in fixed size (using `/cache/` short path)
-- [ ] **MSG-02**: User can click images in message bubble to open preview modal (zoom)
+- [x] **MSG-02**: User can click images in message bubble to open preview modal (zoom)
 - [x] **MSG-03**: Missing/cleaned images show broken-image placeholder
-- [ ] **MSG-04**: Session history reload restores image references in messages
+- [x] **MSG-04**: Session history reload restores image references in messages
 
 ### AI Integration
 
@@ -71,9 +71,9 @@
 | PASTE-06 | Phase 41 | Complete |
 | PASTE-07 | Phase 41 | Complete |
 | MSG-01 | Phase 42 | Complete |
-| MSG-02 | Phase 42 | Pending |
+| MSG-02 | Phase 42 | Complete |
 | MSG-03 | Phase 42 | Complete |
-| MSG-04 | Phase 42 | Pending |
+| MSG-04 | Phase 42 | Complete |
 | AI-01 | Phase 43 | Pending |
 | AI-02 | Phase 43 | Pending |
 | AI-03 | Phase 43 | Pending |
