@@ -14,6 +14,7 @@ export interface ChatMessage {
   content: string;
   toolName?: string;
   isStreaming?: boolean;
+  imageFilenames?: string[];
 }
 
 export interface UseAssistantChatReturn {
