@@ -65,10 +65,9 @@ export async function POST(request: NextRequest) {
         const claudePath = findClaudeBinary();
         console.error("[assistant-chat] Claude binary:", claudePath);
 
-        // Use .tower/ as cwd — it has its own CLAUDE.md defining the assistant persona.
-        // This prevents the project's CLAUDE.md (coding-assistant identity) from being loaded.
-        const { join } = require("path");
-        const towerDir = join(process.cwd(), ".tower");
+        // Ensure .tower/ exists (runtime guard — handles deletion while server is running)
+        const { ensureTowerDir } = await import("@/lib/init-tower");
+        const towerDir = ensureTowerDir();
 
         const options: Record<string, unknown> = {
           // No built-in tools — assistant is an operator, not a developer

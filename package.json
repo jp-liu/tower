@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "tsx scripts/init-tower.ts && next dev --webpack",
+    "dev": "next dev --webpack",
     "tower:init": "tsx scripts/init-tower.ts",
     "build": "next build",
     "start": "next start",
