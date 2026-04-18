@@ -15,11 +15,11 @@
 
 ### Paste UX
 
-- [ ] **PASTE-01**: User pastes image in chat input → uploads and shows thumbnail above input box
-- [ ] **PASTE-02**: Upload shows progress bar with percentage
-- [ ] **PASTE-03**: User can click thumbnail to open preview modal (zoom in/out)
-- [ ] **PASTE-04**: User can click to remove a single pending image
-- [ ] **PASTE-05**: User can paste multiple times to accumulate images
+- [x] **PASTE-01**: User pastes image in chat input → uploads and shows thumbnail above input box
+- [x] **PASTE-02**: Upload shows progress bar with percentage
+- [x] **PASTE-03**: User can click thumbnail to open preview modal (zoom in/out)
+- [x] **PASTE-04**: User can click to remove a single pending image
+- [x] **PASTE-05**: User can paste multiple times to accumulate images
 - [ ] **PASTE-06**: Paste uses `clipboardData.items` (not `.files`) for Firefox compatibility
 - [ ] **PASTE-07**: Input textarea defaults to 3 rows height, max 5 rows then scrollbar
 
@@ -63,11 +63,11 @@
 | CACHE-03 | Phase 40 | Pending |
 | CACHE-04 | Phase 40 | Complete |
 | CACHE-05 | Phase 40 | Complete |
-| PASTE-01 | Phase 41 | Pending |
-| PASTE-02 | Phase 41 | Pending |
-| PASTE-03 | Phase 41 | Pending |
-| PASTE-04 | Phase 41 | Pending |
-| PASTE-05 | Phase 41 | Pending |
+| PASTE-01 | Phase 41 | Complete |
+| PASTE-02 | Phase 41 | Complete |
+| PASTE-03 | Phase 41 | Complete |
+| PASTE-04 | Phase 41 | Complete |
+| PASTE-05 | Phase 41 | Complete |
 | PASTE-06 | Phase 41 | Pending |
 | PASTE-07 | Phase 41 | Pending |
 | MSG-01 | Phase 42 | Pending |

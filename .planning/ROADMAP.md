@@ -166,7 +166,7 @@ Plans:
   7. The chat textarea defaults to 3 rows and grows to a maximum of 5 rows with a scrollbar beyond that
 **Plans**: 2 plans
 Plans:
-- [ ] 41-01-PLAN.md — useImageUpload hook + ImageThumbnailStrip + ImagePreviewModal + i18n keys
+- [x] 41-01-PLAN.md — useImageUpload hook + ImageThumbnailStrip + ImagePreviewModal + i18n keys
 - [ ] 41-02-PLAN.md — Wire into AssistantChat + update provider + API route + textarea height
 **UI hint**: yes
 
@@ -248,6 +248,6 @@ Phases execute in numeric order: 40 -> 41 -> 42 -> 43
 | 38. Chat Mode | v0.92 | 2/2 | Complete | 2026-04-17 |
 | 39. Polish & Settings | v0.92 | 2/2 | Complete | 2026-04-17 |
 | 40. Image Upload API | v0.93 | 1/2 | Complete    | 2026-04-18 |
-| 41. Paste UX & Thumbnail Strip | v0.93 | 0/2 | Not started | - |
+| 41. Paste UX & Thumbnail Strip | v0.93 | 1/2 | In Progress|  |
 | 42. Message Image Display | v0.93 | 0/TBD | Not started | - |
 | 43. Claude SDK Multimodal Integration | v0.93 | 0/TBD | Not started | - |

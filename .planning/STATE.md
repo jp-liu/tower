@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.93
 milestone_name: Chat Media Support
 status: executing
-stopped_at: Roadmap written — 4 phases defined, 19/19 requirements mapped
-last_updated: "2026-04-18T11:52:57.861Z"
-last_activity: 2026-04-18 -- Phase 40 execution started
+stopped_at: Completed 41-paste-ux-thumbnail-strip 41-01-PLAN.md
+last_updated: "2026-04-18T12:31:46.987Z"
+last_activity: 2026-04-18
 progress:
   total_phases: 4
-  completed_phases: 0
-  total_plans: 2
-  completed_plans: 0
+  completed_phases: 1
+  total_plans: 4
+  completed_plans: 3
   percent: 0
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 ## Current Position
 
 Phase: 40 (image-upload-api) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 40
-Last activity: 2026-04-18 -- Phase 40 execution started
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-04-18
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -47,6 +47,7 @@ Progress: [░░░░░░░░░░] 0%
 | - | - | - | - |
 
 *Updated after each plan completion*
+| Phase 41-paste-ux-thumbnail-strip P01 | 2m | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -57,6 +58,7 @@ Progress: [░░░░░░░░░░] 0%
 - Claude SDK receives images as `ImageBlockParam` base64 blocks built server-side via `buffer.toString("base64")` — no `data:` prefix
 - Browser sends only `string[]` of server filenames in chat request body; no inline base64 in POST payload
 - Phase 4 (SDK integration) is highest-risk: requires end-to-end smoke test with real Claude response before declaring complete
+- [Phase 41-paste-ux-thumbnail-strip]: Use XMLHttpRequest (not fetch) for upload progress tracking via xhr.upload.onprogress; DialogClose uses render= prop (base-ui pattern) not asChild (Radix pattern)
 
 ### Pending Todos
 
@@ -68,6 +70,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-18
-Stopped at: Roadmap written — 4 phases defined, 19/19 requirements mapped
+Last session: 2026-04-18T12:31:46.984Z
+Stopped at: Completed 41-paste-ux-thumbnail-strip 41-01-PLAN.md
 Resume file: None
