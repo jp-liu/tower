@@ -146,7 +146,10 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
   3. A crafted filename containing `../` traversal sequences is rejected; the uploaded file is always confined to the cache directory
   4. A cached image is accessible at `/cache/<filename>` and returns the correct image bytes
   5. A project asset is accessible at `/assets/<filename>` using the same unified static serving pattern
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 40-01-PLAN.md — Magic-byte MIME utility + file-utils helpers + upload POST endpoint
+- [ ] 40-02-PLAN.md — Static file serving GET routes for cache and assets
 **UI hint**: no
 
 ### Phase 41: Paste UX & Thumbnail Strip
@@ -161,7 +164,10 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
   5. Pasting multiple times accumulates images as separate thumbnails; all thumbnails clear automatically after send
   6. Paste behavior uses `clipboardData.items` (not `.files`) so it works correctly in Firefox
   7. The chat textarea defaults to 3 rows and grows to a maximum of 5 rows with a scrollbar beyond that
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 40-01-PLAN.md — Magic-byte MIME utility + file-utils helpers + upload POST endpoint
+- [ ] 40-02-PLAN.md — Static file serving GET routes for cache and assets
 **UI hint**: yes
 
 ### Phase 42: Message Image Display
@@ -173,7 +179,10 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
   2. User can click any image in a sent message bubble to open the same preview modal (zoom in/out)
   3. When a cached image has been cleaned up or is missing, the bubble shows a broken-image placeholder rather than a broken img tag
   4. Reloading the page or switching sessions restores the chat history with image references rendering correctly (no blank slots)
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 40-01-PLAN.md — Magic-byte MIME utility + file-utils helpers + upload POST endpoint
+- [ ] 40-02-PLAN.md — Static file serving GET routes for cache and assets
 **UI hint**: yes
 
 ### Phase 43: Claude SDK Multimodal Integration
@@ -185,7 +194,10 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
   2. Image bytes are base64-encoded server-side from disk using `buffer.toString("base64")` with no `data:` prefix; the Claude API accepts the request without error
   3. Text-only messages continue to work exactly as before; the existing string-prompt code path is not modified
   4. The architecture accepts future MIME types by extending the whitelist in one place (the upload route validation)
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 40-01-PLAN.md — Magic-byte MIME utility + file-utils helpers + upload POST endpoint
+- [ ] 40-02-PLAN.md — Static file serving GET routes for cache and assets
 **UI hint**: no
 
 ## Progress
@@ -235,7 +247,7 @@ Phases execute in numeric order: 40 -> 41 -> 42 -> 43
 | 37. Terminal Mode UI | v0.92 | 2/2 | Complete | 2026-04-17 |
 | 38. Chat Mode | v0.92 | 2/2 | Complete | 2026-04-17 |
 | 39. Polish & Settings | v0.92 | 2/2 | Complete | 2026-04-17 |
-| 40. Image Upload API | v0.93 | 0/TBD | Not started | - |
+| 40. Image Upload API | v0.93 | 0/2 | Not started | - |
 | 41. Paste UX & Thumbnail Strip | v0.93 | 0/TBD | Not started | - |
 | 42. Message Image Display | v0.93 | 0/TBD | Not started | - |
 | 43. Claude SDK Multimodal Integration | v0.93 | 0/TBD | Not started | - |
