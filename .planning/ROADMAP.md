@@ -132,7 +132,7 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
 - [x] **Phase 40: Image Upload API** - Server-side cache endpoint, MIME validation, path traversal protection, and static serving for cached and asset images (completed 2026-04-18)
 - [x] **Phase 41: Paste UX & Thumbnail Strip** - Paste intercept, immediate thumbnail preview, upload progress, per-image removal, multi-image accumulation (completed 2026-04-18)
 - [x] **Phase 42: Message Image Display** - User message bubbles show images, click to preview, broken-image placeholder, session reload restores references (completed 2026-04-18)
-- [ ] **Phase 43: Claude SDK Multimodal Integration** - Images passed to Claude as base64 content blocks via AsyncIterable SDKUserMessage path
+- [ ] **Phase 43: Claude SDK Multimodal Integration** - Images passed to Claude as absolute file paths in prompt with Read tool enabled
 
 ## Phase Details
 
@@ -186,18 +186,17 @@ Plans:
 **UI hint**: yes
 
 ### Phase 43: Claude SDK Multimodal Integration
-**Goal**: Images attached to a chat message are passed to Claude as base64 content blocks so the AI can actually see and reason about them
+**Goal**: Images attached to a chat message are passed to Claude as absolute file paths in the prompt with Read tool enabled so the AI can view and reason about them
 **Depends on**: Phase 42
 **Requirements**: AI-01, AI-02, AI-03
 **Success Criteria** (what must be TRUE):
   1. Sending a message with images causes Claude to receive and correctly describe the image content in its response (end-to-end smoke test passes)
-  2. Image bytes are base64-encoded server-side from disk using `buffer.toString("base64")` with no `data:` prefix; the Claude API accepts the request without error
+  2. Image absolute paths are appended to the prompt text; Read tool is enabled so Claude can view the files
   3. Text-only messages continue to work exactly as before; the existing string-prompt code path is not modified
   4. The architecture accepts future MIME types by extending the whitelist in one place (the upload route validation)
-**Plans**: 2 plans
+**Plans**: 1 plan
 Plans:
-- [ ] 42-01-PLAN.md — ChatMessage type extension + UserBubble image rendering + broken-image fallback + i18n
-- [ ] 42-02-PLAN.md — Wire imageFilenames through provider + session history cache + preview modal
+- [ ] 43-01-PLAN.md — buildMultimodalPrompt helper + wire into chat route with Read tool
 **UI hint**: no
 
 ## Progress
@@ -250,4 +249,4 @@ Phases execute in numeric order: 40 -> 41 -> 42 -> 43
 | 40. Image Upload API | v0.93 | 1/2 | Complete    | 2026-04-18 |
 | 41. Paste UX & Thumbnail Strip | v0.93 | 2/2 | Complete    | 2026-04-18 |
 | 42. Message Image Display | v0.93 | 2/2 | Complete    | 2026-04-18 |
-| 43. Claude SDK Multimodal Integration | v0.93 | 0/TBD | Not started | - |
+| 43. Claude SDK Multimodal Integration | v0.93 | 0/1 | Not started | - |
