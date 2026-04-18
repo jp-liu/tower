@@ -155,6 +155,18 @@ export async function POST(request: NextRequest) {
               break;
             }
 
+            case "stream_event": {
+              // SDKPartialAssistantMessage — incremental text chunks
+              const streamMsg = msg as { event?: { type?: string }; data?: unknown };
+              if (streamMsg.event?.type === "content_block_delta") {
+                const delta = streamMsg.data as { delta?: { type?: string; text?: string } };
+                if (delta?.delta?.type === "text_delta" && delta.delta.text) {
+                  send({ type: "text_delta", content: delta.delta.text, sessionId: (msg as { session_id?: string }).session_id });
+                }
+              }
+              break;
+            }
+
             default:
               // Ignore other message types (status, auth, hooks, etc.)
               break;

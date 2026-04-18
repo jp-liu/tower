@@ -13,6 +13,15 @@ import { toast } from "sonner";
 import { getConfigValue } from "@/actions/config-actions";
 import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
 import type { ChatMessage, MessageRole } from "@/hooks/use-assistant-chat";
+import {
+  type AssistantSession,
+  getSessions,
+  addSession,
+  deleteSession,
+  getActiveSessionId,
+  setActiveSessionId,
+  buildSessionTitle,
+} from "@/lib/assistant-sessions";
 
 // ---------------------------------------------------------------------------
 // Context types
@@ -31,6 +40,12 @@ interface AssistantContextValue {
   chatStatus: "idle" | "connecting" | "streaming" | "error";
   isChatThinking: boolean;
   sendChatMessage: (text: string) => void;
+  // Session management
+  sessions: AssistantSession[];
+  activeSessionId: string | null;
+  createNewSession: () => void;
+  switchSession: (sessionId: string) => void;
+  removeSession: (sessionId: string) => void;
 }
 
 const AssistantContext = createContext<AssistantContextValue | null>(null);
@@ -50,7 +65,7 @@ function nextId(): string {
 // ---------------------------------------------------------------------------
 
 interface SSEEvent {
-  type: "text" | "tool_use" | "tool_result" | "error" | "done";
+  type: "text" | "text_delta" | "tool_use" | "tool_result" | "error" | "done";
   content?: string;
   sessionId?: string;
   toolInput?: unknown;
@@ -75,6 +90,12 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const sessionIdRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Session management state
+  const [sessions, setSessions] = useState<AssistantSession[]>([]);
+  const [activeSessionId, setActiveSessionIdState] = useState<string | null>(null);
+  // Track whether the current session record has been created
+  const sessionCreatedRef = useRef(false);
+
   const flushChat = useCallback(() => {
     setChatMessages([...msgsRef.current]);
   }, []);
@@ -90,6 +111,48 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => { refreshConfig(); }, [refreshConfig]);
+
+  // Load sessions from localStorage on mount
+  useEffect(() => {
+    const stored = getSessions();
+    setSessions(stored);
+    const activeId = getActiveSessionId();
+    if (activeId) {
+      setActiveSessionIdState(activeId);
+      sessionIdRef.current = activeId;
+    }
+  }, []);
+
+  const createNewSession = useCallback(() => {
+    abortRef.current?.abort();
+    sessionIdRef.current = null;
+    sessionCreatedRef.current = false;
+    setActiveSessionIdState(null);
+    setActiveSessionId(null);
+    msgsRef.current = [];
+    setChatMessages([]);
+    setChatStatus("idle");
+  }, []);
+
+  const switchSession = useCallback((sessionId: string) => {
+    abortRef.current?.abort();
+    sessionIdRef.current = sessionId;
+    sessionCreatedRef.current = true;
+    setActiveSessionIdState(sessionId);
+    setActiveSessionId(sessionId);
+    // Clear messages — they will be re-populated when user sends next message (resume)
+    msgsRef.current = [];
+    setChatMessages([]);
+    setChatStatus("idle");
+  }, []);
+
+  const removeSession = useCallback((sessionId: string) => {
+    deleteSession(sessionId);
+    setSessions(getSessions());
+    if (activeSessionId === sessionId) {
+      createNewSession();
+    }
+  }, [activeSessionId, createNewSession]);
 
   const openAssistant = useCallback(async () => {
     setIsStarting(true);
@@ -153,6 +216,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     const controller = new AbortController();
     abortRef.current = controller;
 
+    // Capture the first message text for session title
+    const isFirstMessage = msgsRef.current.length === 0 && !sessionCreatedRef.current;
+    const firstMessageText = isFirstMessage ? text : null;
+
     const thinkingId = nextId();
     msgsRef.current = [
       ...msgsRef.current,
@@ -190,15 +257,54 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           if (!line.startsWith("data: ")) continue;
           let event: SSEEvent;
           try { event = JSON.parse(line.slice(6).trim()); } catch { continue; }
-          if (event.sessionId) sessionIdRef.current = event.sessionId;
+          if (event.sessionId) {
+            const prevSessionId = sessionIdRef.current;
+            sessionIdRef.current = event.sessionId;
+            // Create session record on first sessionId received
+            if (firstMessageText && !sessionCreatedRef.current && event.sessionId !== prevSessionId) {
+              sessionCreatedRef.current = true;
+              const now = new Date().toISOString();
+              const newSession: AssistantSession = {
+                id: event.sessionId,
+                title: buildSessionTitle(firstMessageText),
+                createdAt: now,
+                updatedAt: now,
+              };
+              addSession(newSession);
+              setSessions(getSessions());
+              setActiveSessionIdState(event.sessionId);
+              setActiveSessionId(event.sessionId);
+            }
+          }
 
           switch (event.type) {
-            case "text": {
+            case "text_delta": {
+              // Incremental streaming chunk — append to current assistant message
               const filtered = msgsRef.current.filter((m) => m.id !== thinkingId);
               if (assistantMsgId) {
                 msgsRef.current = filtered.map((m) =>
                   m.id === assistantMsgId
                     ? { ...m, content: m.content + (event.content ?? ""), isStreaming: true }
+                    : m
+                );
+              } else {
+                assistantMsgId = nextId();
+                msgsRef.current = [...filtered, {
+                  id: assistantMsgId, role: "assistant" as MessageRole,
+                  content: event.content ?? "", isStreaming: true,
+                }];
+              }
+              flushChat();
+              break;
+            }
+            case "text": {
+              // Complete message block — replace/finalize the assistant message
+              const filtered = msgsRef.current.filter((m) => m.id !== thinkingId);
+              if (assistantMsgId) {
+                // If we already have streaming content, finalize it rather than replace
+                msgsRef.current = filtered.map((m) =>
+                  m.id === assistantMsgId
+                    ? { ...m, content: event.content ?? m.content, isStreaming: true }
                     : m
                 );
               } else {
@@ -284,6 +390,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         isOpen, isStarting, displayMode, communicationMode, worktreePath,
         toggleAssistant, closeAssistant,
         chatMessages, chatStatus, isChatThinking, sendChatMessage,
+        sessions, activeSessionId, createNewSession, switchSession, removeSession,
       }}
     >
       {children}
