@@ -80,6 +80,8 @@ export async function POST(request: NextRequest) {
           // .tower/ directory has its own CLAUDE.md with assistant persona
           cwd: towerDir,
           pathToClaudeCodeExecutable: claudePath,
+          // Don't load user/project settings — prevents global skills from polluting context
+          settingSources: [],
         };
 
         // Resume previous session if sessionId provided
