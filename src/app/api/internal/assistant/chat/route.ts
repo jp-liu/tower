@@ -72,18 +72,12 @@ export async function POST(request: NextRequest) {
 
         const options: Record<string, unknown> = {
           systemPrompt,
-          // tools: [] disables ALL built-in tools (Read, Edit, Bash, etc.)
+          // No built-in tools — assistant is an operator, not a developer
           tools: [],
-          // Auto-approve Tower MCP tools without permission prompts
+          // Auto-approve Tower MCP tools (the only tools available)
           allowedTools: ["mcp__tower__*"],
-          // Block everything else — disallowedTools is checked FIRST, overrides all
-          // Built-in tools already disabled by tools:[], this catches non-Tower MCP tools
-          disallowedTools: ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebSearch", "WebFetch"],
-          // Enable streaming — receive text_delta chunks as they arrive
+          // Streaming — receive text_delta chunks as they arrive
           includePartialMessages: true,
-          // Bypass permission prompts (requires allowDangerouslySkipPermissions)
-          permissionMode: "bypassPermissions" as const,
-          allowDangerouslySkipPermissions: true,
           cwd: process.cwd(),
           pathToClaudeCodeExecutable: claudePath,
         };
