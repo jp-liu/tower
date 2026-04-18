@@ -132,7 +132,7 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
 - [x] **Phase 40: Image Upload API** - Server-side cache endpoint, MIME validation, path traversal protection, and static serving for cached and asset images (completed 2026-04-18)
 - [x] **Phase 41: Paste UX & Thumbnail Strip** - Paste intercept, immediate thumbnail preview, upload progress, per-image removal, multi-image accumulation (completed 2026-04-18)
 - [x] **Phase 42: Message Image Display** - User message bubbles show images, click to preview, broken-image placeholder, session reload restores references (completed 2026-04-18)
-- [ ] **Phase 43: Claude SDK Multimodal Integration** - Images passed to Claude as absolute file paths in prompt with Read tool enabled
+- [x] **Phase 43: Claude SDK Multimodal Integration** - Images passed to Claude as absolute file paths in prompt with Read tool enabled (completed 2026-04-18)
 
 ## Phase Details
 
@@ -249,4 +249,4 @@ Phases execute in numeric order: 40 -> 41 -> 42 -> 43
 | 40. Image Upload API | v0.93 | 1/2 | Complete    | 2026-04-18 |
 | 41. Paste UX & Thumbnail Strip | v0.93 | 2/2 | Complete    | 2026-04-18 |
 | 42. Message Image Display | v0.93 | 2/2 | Complete    | 2026-04-18 |
-| 43. Claude SDK Multimodal Integration | v0.93 | 0/1 | Planned    |  |
+| 43. Claude SDK Multimodal Integration | v0.93 | 0/1 | Complete    | 2026-04-18 |
