@@ -5,6 +5,7 @@ status: draft
 shadcn_initialized: true
 preset: base-nova
 created: 2026-04-18
+revised: 2026-04-18
 ---
 
 # Phase 41 — UI Design Contract: Paste UX & Thumbnail Strip
@@ -33,8 +34,8 @@ Declared values (multiples of 4 only):
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| xs | 4px | Icon gaps, thumbnail strip internal padding |
-| sm | 8px | Thumbnail-to-thumbnail gap, X button offset |
+| xs | 4px | Icon gaps, thumbnail strip internal padding, X button offset |
+| sm | 8px | Thumbnail-to-thumbnail gap |
 | md | 16px | Input area horizontal padding (matches existing `p-4`) |
 | lg | 24px | Input area vertical padding (matches existing `p-4`) |
 | xl | 32px | — |
@@ -43,7 +44,7 @@ Declared values (multiples of 4 only):
 
 Exceptions:
 - Thumbnail container: exactly 48px × 48px (`h-12 w-12`)
-- X button on thumbnail: 16px × 16px (`h-4 w-4`) — absolute positioned top-right at `top-0.5 right-0.5`
+- X button on thumbnail: 16px × 16px (`h-4 w-4`) — absolute positioned top-right at `top-1 right-1` (4px each)
 - Progress bar height: 4px thin bar at bottom of thumbnail
 - Textarea min-height: 72px (3 rows × ~24px line-height) — per PASTE-07
 - Textarea max-height: 120px (5 rows × ~24px line-height) — per PASTE-07
@@ -55,14 +56,17 @@ Source: CONTEXT.md decisions + PASTE-07 success criteria + existing `assistant-c
 
 ## Typography
 
-| Role | Size | Weight | Line Height |
-|------|------|--------|-------------|
-| Body (chat input) | 14px (`text-sm`) | 400 (regular) | 1.5 |
-| Label (progress %) | 10px (`text-[10px]`) | 600 (semibold) | 1.2 |
-| UI label (upload hint) | 12px (`text-xs`) | 400 (regular) | 1.5 |
-| Caption (error text) | 12px (`text-xs`) | 400 (regular) | 1.5 |
+| Role | Size | Weight | Line Height | Distinction |
+|------|------|--------|-------------|-------------|
+| Body (chat input) | 14px (`text-sm`) | 400 (regular) | 1.5 | Primary text entry |
+| UI label (upload hint, captions) | 12px (`text-xs`) | 400 (regular) | 1.5 | 2px smaller than body — secondary labels |
+| Label (progress %) | 10px (`text-[10px]`) | 600 (semibold) | 1.2 | 2px smaller than caption — compact overlay only |
 
-Source: Existing `assistant-chat.tsx` uses `text-sm` for textarea; `assistant-chat-bubble.tsx` uses `text-[10px]` for small labels (tool badge). Weights follow project-wide 2-weight constraint (400 + 600 only).
+Visual distinction rationale: 14px body → 12px caption is a 2px (14%) step. 12px caption → 10px progress is a 2px (17%) step. Both are perceptibly distinct at the thumbnail scale (48px container). The 10px size is used exclusively inside thumbnail overlays where layout space is critically constrained; all other text uses 12px or 14px.
+
+Weights: exactly 2 — regular (400) for all prose/labels; semibold (600) for progress percentage overlay only.
+
+Source: Existing `assistant-chat.tsx` uses `text-sm` for textarea; `assistant-chat-bubble.tsx` uses `text-[10px]` for tool badge overlays. Project-wide 2-weight constraint (400 + 600).
 
 ---
 
@@ -85,6 +89,12 @@ Secondary semantic colors:
 - `var(--destructive)` — thumbnail ring when upload fails (`ring-1 ring-destructive`)
 
 Source: `globals.css` CSS variables; existing `assistant-chat.tsx` input area uses `bg-popover`; `assistant-chat-bubble.tsx` user bubble uses `bg-primary`
+
+---
+
+## Focal Point
+
+Primary screen focal point: the chat textarea. The thumbnail strip sits between the `border-t` divider and the textarea — visually subordinate, never taller than 48px + 8px padding. The thumbnail strip must not draw more visual weight than the textarea itself. The send button remains the primary action target.
 
 ---
 
@@ -139,10 +149,11 @@ Each thumbnail:
 
   {/* X remove button — always visible */}
   <button
-    className="absolute top-0.5 right-0.5 h-4 w-4 rounded-full
+    className="absolute top-1 right-1 h-4 w-4 rounded-full
                bg-black/60 text-white flex items-center justify-center
                hover:bg-black/80 transition-colors"
     aria-label={t("assistant.removeImage")}
+    title={status === "error" ? t("assistant.uploadFailedRemoveHint") : undefined}
     onClick={() => removeImage(id)}
   >
     <X className="h-2.5 w-2.5" />
@@ -150,7 +161,11 @@ Each thumbnail:
 </div>
 ```
 
-Error state (status === "error"): replace `ring-border` with `ring-destructive`; hide progress overlay; show error icon overlay (`AlertCircle h-4 w-4 text-destructive-foreground`).
+Error state (status === "error"):
+- Replace `ring-border` with `ring-destructive`
+- Hide progress overlay
+- Show error icon overlay (`AlertCircle h-4 w-4 text-destructive-foreground`) centered over the image
+- X button `title` attribute set to `t("assistant.uploadFailedRemoveHint")` — tooltip text: "Upload failed — click × to remove" (zh: "上传失败 — 点击 × 移除")
 
 Completion animation: progress bar width transitions to 100% then fades out (`opacity-0 transition-opacity duration-300 delay-200`) when status changes to "done".
 
@@ -205,7 +220,7 @@ Trigger: clicking any thumbnail (when `status === "done"` or `status === "error"
 | uploading (0–99%) | Progress bar at bottom, percentage overlay, X button visible |
 | uploading (100%) | Bar full, animating to done |
 | done | Progress overlay fades out, image shows cleanly, ring-border |
-| error | ring-destructive, AlertCircle icon overlay, no progress bar |
+| error | ring-destructive, AlertCircle icon overlay, no progress bar, X button tooltip: "Upload failed — click × to remove" |
 
 ### Send disabled conditions
 
@@ -237,6 +252,7 @@ Trigger: clicking any thumbnail (when `status === "done"` or `status === "error"
 | Primary CTA (send with images) | 发送 | Send | `assistant.sendLabel` (existing) |
 | Remove image button aria-label | 移除图片 | Remove image | `assistant.removeImage` |
 | Upload error thumbnail aria | 上传失败 | Upload failed | `assistant.uploadFailed` |
+| Upload error X button tooltip | 上传失败 — 点击 × 移除 | Upload failed — click × to remove | `assistant.uploadFailedRemoveHint` |
 | Preview modal close aria-label | 关闭预览 | Close preview | `assistant.closePreview` |
 | Zoom in cursor hint (alt) | (no copy — CSS cursor only) | (no copy — CSS cursor only) | — |
 | Paste hint placeholder (optional) | 输入消息或粘贴图片... | Type a message or paste an image... | `assistant.inputPlaceholderWithImages` |
@@ -246,7 +262,7 @@ Note on placeholder: The "paste image" hint in the placeholder is listed under C
 
 Empty state: Phase 41 adds no new empty state UI — the thumbnail strip simply does not render when `pendingImages.length === 0`.
 
-Error state copy: Upload errors show `ring-destructive` on the thumbnail with an icon only — no text banner. Rationale: thumbnail strip is compact (48px); text error message would require layout expansion. The X button remains available to dismiss and retry by pasting again.
+Error state copy: Upload errors show `ring-destructive` on the thumbnail with an icon overlay and a tooltip on the X button ("Upload failed — click × to remove"). No text banner is rendered. Rationale: thumbnail strip is compact (48px); a text error banner would require layout expansion. The X button tooltip provides sufficient affordance to inform and remediate.
 
 Destructive actions in this phase:
 - "Remove image" (X button on thumbnail) — no confirmation dialog required. The action is immediately reversible by pasting again. Inline single-click removal follows established patterns for draft attachments.
@@ -270,6 +286,7 @@ No new shadcn components need to be installed. `Dialog` is already present at `s
 
 - Thumbnail `<img>` uses `alt=""` and `aria-hidden="true"` — decorative, not content (user sees it, screen reader skips)
 - Remove X button has `aria-label={t("assistant.removeImage")}` with image index context
+- Error X button has `title={t("assistant.uploadFailedRemoveHint")}` for mouse users; screen readers rely on `aria-label`
 - Preview modal is a `Dialog` — receives focus on open, returns focus on close, Escape closes it
 - Progress bar uses `role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}`
 - Textarea `onPaste` does not call `e.preventDefault()` on text items — only suppresses default for image items
