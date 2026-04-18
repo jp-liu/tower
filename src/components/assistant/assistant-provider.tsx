@@ -39,13 +39,16 @@ interface AssistantContextValue {
   chatMessages: ChatMessage[];
   chatStatus: "idle" | "connecting" | "streaming" | "error";
   isChatThinking: boolean;
+  isLoadingHistory: boolean;
   sendChatMessage: (text: string) => void;
+  cancelChat: () => string | null;
   // Session management
   sessions: AssistantSession[];
   activeSessionId: string | null;
   createNewSession: () => void;
   switchSession: (sessionId: string) => void;
   removeSession: (sessionId: string) => void;
+  refreshSessions: () => Promise<void>;
 }
 
 const AssistantContext = createContext<AssistantContextValue | null>(null);
@@ -86,6 +89,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   // Chat state — lives here so it persists across route changes
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatStatus, setChatStatus] = useState<"idle" | "connecting" | "streaming" | "error">("idle");
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const msgsRef = useRef<ChatMessage[]>([]);
   const sessionIdRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -112,16 +116,59 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { refreshConfig(); }, [refreshConfig]);
 
-  // Load sessions from localStorage on mount
+  // Fetch session list from SDK via API
+  const refreshSessions = useCallback(async () => {
+    try {
+      const res = await fetch("/api/internal/assistant/sessions");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data.sessions)) {
+        const mapped: AssistantSession[] = data.sessions.map(
+          (s: { id: string; title: string; lastModified: number }) => ({
+            id: s.id,
+            title: s.title,
+            createdAt: new Date(s.lastModified).toISOString(),
+            updatedAt: new Date(s.lastModified).toISOString(),
+          })
+        );
+        setSessions(mapped);
+      }
+    } catch {
+      // Fallback to localStorage if API fails
+      setSessions(getSessions());
+    }
+  }, []);
+
+  // Fetch history messages for a session from SDK via API
+  const loadSessionHistory = useCallback(async (sessionId: string) => {
+    setIsLoadingHistory(true);
+    try {
+      const res = await fetch(
+        `/api/internal/assistant/sessions?sessionId=${encodeURIComponent(sessionId)}`
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data.messages)) {
+        msgsRef.current = data.messages;
+        setChatMessages(data.messages);
+      }
+    } catch {
+      // Silently fail — user can still send new messages
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, []);
+
+  // Load sessions on mount
   useEffect(() => {
-    const stored = getSessions();
-    setSessions(stored);
+    refreshSessions();
     const activeId = getActiveSessionId();
     if (activeId) {
       setActiveSessionIdState(activeId);
       sessionIdRef.current = activeId;
+      loadSessionHistory(activeId);
     }
-  }, []);
+  }, [refreshSessions, loadSessionHistory]);
 
   const createNewSession = useCallback(() => {
     abortRef.current?.abort();
@@ -140,11 +187,12 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     sessionCreatedRef.current = true;
     setActiveSessionIdState(sessionId);
     setActiveSessionId(sessionId);
-    // Clear messages — they will be re-populated when user sends next message (resume)
+    // Clear then load history from SDK
     msgsRef.current = [];
     setChatMessages([]);
     setChatStatus("idle");
-  }, []);
+    loadSessionHistory(sessionId);
+  }, [loadSessionHistory]);
 
   const removeSession = useCallback((sessionId: string) => {
     deleteSession(sessionId);
@@ -388,6 +436,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       msgsRef.current = msgsRef.current.filter((m) => m.id !== thinkingId);
       flushChat();
       setChatStatus((s) => (s === "streaming" ? "idle" : s));
+      // Refresh session list from SDK (picks up newly created sessions)
+      refreshSessions();
     } catch (err: unknown) {
       if ((err as Error).name === "AbortError") return;
       msgsRef.current = [...msgsRef.current.filter((m) => m.id !== thinkingId), {
@@ -397,7 +447,28 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       flushChat();
       setChatStatus("error");
     }
-  }, [flushChat]);
+  }, [flushChat, refreshSessions]);
+
+  // Cancel in-flight request, remove the last user message + assistant response,
+  // and return the user message text so the UI can restore it to the input box.
+  const cancelChat = useCallback((): string | null => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+
+    // Find the last user message to restore
+    const lastUserMsg = [...msgsRef.current].reverse().find((m) => m.role === "user");
+    const restoredText = lastUserMsg?.content ?? null;
+
+    if (lastUserMsg) {
+      // Remove everything from the last user message onward (user + thinking + assistant partial)
+      const lastUserIdx = msgsRef.current.lastIndexOf(lastUserMsg);
+      msgsRef.current = msgsRef.current.slice(0, lastUserIdx);
+      setChatMessages([...msgsRef.current]);
+    }
+
+    setChatStatus("idle");
+    return restoredText;
+  }, []);
 
   const lastMsg = chatMessages[chatMessages.length - 1];
   const isChatThinking =
@@ -409,8 +480,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       value={{
         isOpen, isStarting, displayMode, communicationMode, worktreePath,
         toggleAssistant, closeAssistant,
-        chatMessages, chatStatus, isChatThinking, sendChatMessage,
-        sessions, activeSessionId, createNewSession, switchSession, removeSession,
+        chatMessages, chatStatus, isChatThinking, isLoadingHistory, sendChatMessage, cancelChat,
+        sessions, activeSessionId, createNewSession, switchSession, removeSession, refreshSessions,
       }}
     >
       {children}

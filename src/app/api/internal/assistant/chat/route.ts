@@ -86,8 +86,11 @@ export async function POST(request: NextRequest) {
           (options as Record<string, unknown>).resume = body.sessionId;
         }
 
+        // Prepend /tower to every message to load the Tower skill into context.
+        const prompt = `/tower ${body.message}`;
+
         const q = query({
-          prompt: body.message,
+          prompt,
           options: options as Parameters<typeof query>[0]["options"],
         });
 

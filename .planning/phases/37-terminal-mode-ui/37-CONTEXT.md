@@ -15,7 +15,7 @@ Users can open a global assistant panel from any page and interact with Claude C
 ## Implementation Decisions
 
 ### Panel Layout & Rendering
-- Use the existing `Sheet` component (side="left") for sidebar mode — consistent with shadcn component library already in the project
+- Use a plain flex `div` for sidebar mode (NOT Sheet) — Sheet uses `fixed z-50` overlay positioning which violates UX-02 push layout requirement. The sidebar must be a flex sibling of `<main>` to achieve push layout.
 - Use the existing `Dialog` component for dialog/modal mode — already used in top-bar.tsx and elsewhere
 - Sidebar width: 420px fixed — wide enough for terminal output, not too wide to block main content
 - Push layout for sidebar (UX-02): main content area shrinks when sidebar is open, not an overlay that blocks interaction

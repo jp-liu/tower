@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bot, SendHorizonal } from "lucide-react";
+import { Bot, Loader2, SendHorizonal, Square } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,13 @@ export function AssistantChat() {
   const { t } = useI18n();
 
   // Chat state lives in the provider — survives route changes
-  const { chatMessages: messages, isChatThinking: isThinking, sendChatMessage: sendMessage } = useAssistant();
+  const {
+    chatMessages: messages,
+    isChatThinking: isThinking,
+    isLoadingHistory,
+    sendChatMessage: sendMessage,
+    cancelChat,
+  } = useAssistant();
 
   // Auto-focus input on mount
   useEffect(() => {
@@ -56,10 +62,25 @@ export function AssistantChat() {
     inputRef.current?.focus();
   };
 
+  const handleCancel = () => {
+    const restored = cancelChat();
+    if (restored) {
+      setInputValue(restored);
+    }
+    inputRef.current?.focus();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Ignore Enter during IME composition (e.g. Chinese input)
+    if (e.nativeEvent.isComposing) return;
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+    if (e.key === "Escape" && isThinking) {
+      e.preventDefault();
+      handleCancel();
     }
   };
 
@@ -74,7 +95,11 @@ export function AssistantChat() {
           role="log"
           aria-live="polite"
         >
-          {messages.length === 0 ? (
+          {isLoadingHistory ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : messages.length === 0 ? (
             <EmptyState />
           ) : (
             messages.map((m) => <AssistantChatBubble key={m.id} message={m} />)
@@ -95,16 +120,28 @@ export function AssistantChat() {
             className="flex-1 min-h-[40px] max-h-[120px] resize-none text-sm"
             rows={1}
           />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 shrink-0"
-            onClick={handleSend}
-            disabled={isSendDisabled}
-            aria-label={t("assistant.sendLabel")}
-          >
-            <SendHorizonal className="h-4 w-4" />
-          </Button>
+          {isThinking ? (
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 shrink-0 border-destructive/50 text-destructive transition-colors hover:bg-destructive hover:text-destructive-foreground"
+              onClick={handleCancel}
+              aria-label={t("assistant.cancelLabel")}
+            >
+              <Square className="h-3 w-3 fill-current" />
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              onClick={handleSend}
+              disabled={isSendDisabled}
+              aria-label={t("assistant.sendLabel")}
+            >
+              <SendHorizonal className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

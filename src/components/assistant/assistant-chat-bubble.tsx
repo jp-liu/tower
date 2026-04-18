@@ -3,7 +3,7 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ChevronRight } from "lucide-react";
+import { Bot, ChevronRight, User } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import type { ChatMessage } from "@/hooks/use-assistant-chat";
 
@@ -22,11 +22,14 @@ interface AssistantChatBubbleProps {
 function UserBubble({ content }: { content: string }) {
   return (
     <div
-      className="flex justify-end animate-in fade-in slide-in-from-bottom-2 duration-200"
+      className="flex justify-end gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200"
       aria-label="You"
     >
       <div className="bg-primary text-primary-foreground max-w-[80%] rounded-2xl rounded-br-sm px-3 py-2 text-sm whitespace-pre-wrap break-words">
         {content}
+      </div>
+      <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted mt-1">
+        <User className="size-3.5 text-muted-foreground" />
       </div>
     </div>
   );
@@ -39,9 +42,12 @@ function UserBubble({ content }: { content: string }) {
 function AssistantBubble({ content }: { content: string }) {
   return (
     <div
-      className="flex justify-start animate-in fade-in slide-in-from-bottom-2 duration-200"
+      className="flex justify-start gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200"
       aria-label="Assistant"
     >
+      <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 mt-1">
+        <Bot className="size-3.5 text-primary" />
+      </div>
       <div className="bg-muted text-foreground max-w-[85%] rounded-2xl rounded-bl-sm px-3 py-2">
         <div className="prose prose-sm dark:prose-invert max-w-none">
           <ReactMarkdown
@@ -86,11 +92,14 @@ function ThinkingBubble() {
   const { t } = useI18n();
   return (
     <div
-      className="flex justify-start animate-in fade-in slide-in-from-bottom-2 duration-200"
+      className="flex justify-start gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200"
       role="status"
       aria-live="polite"
       aria-label={t("assistant.thinking")}
     >
+      <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 mt-1">
+        <Bot className="size-3.5 text-primary" />
+      </div>
       <div className="bg-muted/50 text-muted-foreground max-w-[200px] rounded-2xl rounded-bl-sm px-3 py-2">
         <div className="flex items-center gap-1">
           <span
@@ -121,7 +130,9 @@ function ToolBubble({ content, toolName }: { content: string; toolName?: string 
   const displayName = toolName ?? t("assistant.toolLabel");
 
   return (
-    <div className="flex justify-start animate-in fade-in slide-in-from-bottom-2 duration-200">
+    <div className="flex justify-start gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+      {/* Spacer to align with assistant avatar */}
+      <div className="size-7 shrink-0" />
       <div className="bg-muted/60 border border-border max-w-[90%] rounded-lg px-3 py-1">
         {/* Header */}
         <button

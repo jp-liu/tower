@@ -46,6 +46,24 @@ paths:
 - Locale is read from localStorage in `useEffect` after mount.
 - All user-facing strings must use `t("key")` from `useI18n()`.
 
+## Icon Buttons (Toolbar / Header)
+
+All ghost icon buttons in toolbars, headers, and panels must use the same hover pattern:
+
+```tsx
+<Button
+  variant="ghost"
+  className="h-8 w-8 p-0 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+>
+  <Icon className="h-4 w-4" />
+</Button>
+```
+
+- Default: `text-muted-foreground` (subtle, not invisible)
+- Hover: `hover:bg-accent hover:text-foreground` (matches top-bar, sidebar, and settings buttons)
+- Always include `transition-colors` for smooth state change
+- Never use `hover:text-accent-foreground` — use `hover:text-foreground` for consistency
+
 ## DnD Kit
 
 - Always pass a stable `id` prop to `<DndContext>` to prevent hydration mismatch.
