@@ -1,1 +1,0 @@
-../../../../skills/tower/SKILL.md

@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "tsx scripts/init-tower.ts && next dev --webpack",
+    "tower:init": "tsx scripts/init-tower.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
