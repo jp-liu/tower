@@ -70,6 +70,11 @@ export async function POST(request: NextRequest) {
         const claudePath = findClaudeBinary();
         console.error("[assistant-chat] Claude binary:", claudePath);
 
+        // Use home dir as cwd to avoid loading CLAUDE.md from project directory.
+        // CLAUDE.md gives the CLI full coding-assistant identity which overrides our systemPrompt.
+        // Tower MCP is configured globally, not per-cwd, so tools still work.
+        const homedir = require("os").homedir() as string;
+
         const options: Record<string, unknown> = {
           systemPrompt,
           // No built-in tools — assistant is an operator, not a developer
@@ -78,7 +83,8 @@ export async function POST(request: NextRequest) {
           allowedTools: ["mcp__tower__*"],
           // Streaming — receive text_delta chunks as they arrive
           includePartialMessages: true,
-          cwd: process.cwd(),
+          // Home dir — no CLAUDE.md here
+          cwd: homedir,
           pathToClaudeCodeExecutable: claudePath,
         };
 
