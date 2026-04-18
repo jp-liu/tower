@@ -48,6 +48,7 @@ export function AssistantChat() {
 
   const { pendingImages, addImages, removeImage, clearAll, hasUploading } = useImageUpload();
   const [previewImage, setPreviewImage] = useState<PendingImage | null>(null);
+  const [messagePreviewUrl, setMessagePreviewUrl] = useState<string | null>(null);
 
   // Auto-focus input on mount
   useEffect(() => {
@@ -134,7 +135,13 @@ export function AssistantChat() {
           ) : messages.length === 0 ? (
             <EmptyState />
           ) : (
-            messages.map((m) => <AssistantChatBubble key={m.id} message={m} />)
+            messages.map((m) => (
+              <AssistantChatBubble
+                key={m.id}
+                message={m}
+                onImagePreview={(url) => setMessagePreviewUrl(url)}
+              />
+            ))
           )}
           <div ref={messagesEndRef} />
         </div>
@@ -186,6 +193,11 @@ export function AssistantChat() {
         imageUrl={previewImage?.blobUrl ?? null}
         open={previewImage !== null}
         onOpenChange={(open) => { if (!open) setPreviewImage(null); }}
+      />
+      <ImagePreviewModal
+        imageUrl={messagePreviewUrl}
+        open={messagePreviewUrl !== null}
+        onOpenChange={(open) => { if (!open) setMessagePreviewUrl(null); }}
       />
     </div>
   );
