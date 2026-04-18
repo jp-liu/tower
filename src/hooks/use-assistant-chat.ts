@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { getConfigValue } from "@/actions/config-actions";
-import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
+import { useCallback, useRef, useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -22,38 +20,11 @@ export interface UseAssistantChatReturn {
   messages: ChatMessage[];
   isThinking: boolean;
   sendMessage: (text: string) => void;
-  wsStatus: "connecting" | "connected" | "disconnected";
+  status: "idle" | "connecting" | "streaming" | "error";
 }
 
 // ---------------------------------------------------------------------------
-// ANSI stripping
-// ---------------------------------------------------------------------------
-
-const ANSI_REGEX =
-  /\x1B(?:[@-Z\\_]|\[[0-?]*[ -/]*[@-~]|\][^\x07\x1B]*(?:\x07|\x1B\\))/g;
-
-/**
- * Strip ANSI/VT escape sequences from a string.
- * Handles: CSI (color, cursor movement), OSC (title), two-character ESC forms.
- */
-export function stripAnsi(text: string): string {
-  return text.replace(ANSI_REGEX, "");
-}
-
-// ---------------------------------------------------------------------------
-// Spinner/thinking pattern matchers
-// ---------------------------------------------------------------------------
-
-// Braille spinner characters used by Claude CLI
-const SPINNER_CHARS = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/;
-// Hourglass / thinking indicators
-const THINKING_CHARS = /[⏳⌛]/;
-// Box-drawing characters that Claude CLI uses as message boundaries
-const BOX_TOP = /^[╭┌]/;
-const BOX_BOT = /^[╰└]/;
-
-// ---------------------------------------------------------------------------
-// Message ID generator
+// ID generator
 // ---------------------------------------------------------------------------
 
 function nextId(): string {
@@ -63,98 +34,15 @@ function nextId(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Parser result type (used by parseLines)
+// SSE event parser — from "data: {...}\n\n" lines
 // ---------------------------------------------------------------------------
 
-interface ParseResult {
-  messages: ChatMessage[];
-  buffer: string;
-}
-
-/**
- * Pure incremental state-machine parser.
- * Exported for unit testing — production code calls it inside the WS message handler.
- *
- * @param existingMessages  Previously accumulated messages (mutated immutably via spread)
- * @param lineBuffer        Partial line buffer from previous chunk
- * @param newLines          Complete lines to process (already split, ANSI stripped)
- * @returns                 Updated messages array + new buffer (always "" here, caller manages)
- */
-export function parseLines(
-  existingMessages: ChatMessage[],
-  lineBuffer: string,
-  newLines: string[]
-): ParseResult {
-  // Work on a mutable local copy
-  const msgs: ChatMessage[] = existingMessages.map((m) => ({ ...m }));
-
-  // Helper: get or create current trailing assistant message
-  function lastAssistant(): ChatMessage | undefined {
-    if (msgs.length > 0 && msgs[msgs.length - 1].role === "assistant") {
-      return msgs[msgs.length - 1];
-    }
-    return undefined;
-  }
-
-  function appendAssistant(line: string): void {
-    const last = lastAssistant();
-    if (last) {
-      msgs[msgs.length - 1] = { ...last, content: last.content ? last.content + "\n" + line : line };
-    } else {
-      msgs.push({ id: nextId(), role: "assistant", content: line });
-    }
-  }
-
-  for (const rawLine of newLines) {
-    const line = rawLine.trim();
-    if (line === "") continue;
-
-    // --- Box-drawing top boundary: finalize current block, start fresh ---
-    if (BOX_TOP.test(line)) {
-      // Just mark a boundary — subsequent lines start a new assistant block
-      // Push a sentinel so next assistant line doesn't merge with previous
-      // We don't actually create a message for the box char itself.
-      continue;
-    }
-
-    // --- Box-drawing bottom boundary: end of current block ---
-    if (BOX_BOT.test(line)) {
-      continue;
-    }
-
-    // --- User prompt ---
-    if (line.startsWith(">") || line.startsWith("❯")) {
-      const content = line.replace(/^[>❯]\s*/, "").trim();
-      if (content) {
-        msgs.push({ id: nextId(), role: "user", content });
-      }
-      continue;
-    }
-
-    // --- Thinking/spinner ---
-    if (SPINNER_CHARS.test(line) || THINKING_CHARS.test(line)) {
-      // Update or create a streaming thinking message
-      const last = msgs[msgs.length - 1];
-      if (last && last.role === "thinking" && last.isStreaming) {
-        msgs[msgs.length - 1] = { ...last, content: line };
-      } else {
-        msgs.push({ id: nextId(), role: "thinking", content: line, isStreaming: true });
-      }
-      continue;
-    }
-
-    // --- Tool call ---
-    if (line.startsWith("Tool:")) {
-      const toolName = line.replace(/^Tool:\s*/, "").split(/\s/)[0];
-      msgs.push({ id: nextId(), role: "tool", content: line, toolName });
-      continue;
-    }
-
-    // --- Default: accumulate as assistant content ---
-    appendAssistant(line);
-  }
-
-  return { messages: msgs, buffer: lineBuffer };
+interface SSEEvent {
+  type: "text" | "tool_use" | "tool_result" | "error" | "done";
+  content?: string;
+  sessionId?: string;
+  toolInput?: unknown;
+  toolOutput?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -167,92 +55,210 @@ export function useAssistantChat(opts: {
   const { enabled } = opts;
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [wsStatus, setWsStatus] = useState<"connecting" | "connected" | "disconnected">(
-    "disconnected"
+  const [status, setStatus] = useState<"idle" | "connecting" | "streaming" | "error">("idle");
+
+  // Track session ID for multi-turn (resume support)
+  const sessionIdRef = useRef<string | null>(null);
+  // AbortController for cancelling in-flight requests
+  const abortRef = useRef<AbortController | null>(null);
+
+  const sendMessage = useCallback(
+    async (text: string) => {
+      if (!enabled || !text.trim()) return;
+
+      // Abort any previous in-flight request
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      // Add user message immediately (optimistic)
+      const userMsg: ChatMessage = { id: nextId(), role: "user", content: text };
+      setMessages((prev) => [...prev, userMsg]);
+
+      // Add thinking indicator
+      const thinkingId = nextId();
+      setMessages((prev) => [
+        ...prev,
+        { id: thinkingId, role: "thinking", content: "", isStreaming: true },
+      ]);
+      setStatus("connecting");
+
+      try {
+        const res = await fetch("/api/internal/assistant/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: text,
+            sessionId: sessionIdRef.current,
+          }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok || !res.body) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        setStatus("streaming");
+
+        // Remove thinking indicator, prepare for assistant message
+        let assistantMsgId: string | null = null;
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Parse SSE events from buffer
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? ""; // Keep incomplete line in buffer
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const jsonStr = line.slice(6);
+            if (!jsonStr) continue;
+
+            let event: SSEEvent;
+            try {
+              event = JSON.parse(jsonStr) as SSEEvent;
+            } catch {
+              continue;
+            }
+
+            // Capture session ID for multi-turn
+            if (event.sessionId) {
+              sessionIdRef.current = event.sessionId;
+            }
+
+            switch (event.type) {
+              case "text": {
+                setMessages((prev) => {
+                  // Remove thinking indicator if still present
+                  const filtered = prev.filter((m) => m.id !== thinkingId);
+
+                  if (assistantMsgId) {
+                    // Append to existing assistant message
+                    return filtered.map((m) =>
+                      m.id === assistantMsgId
+                        ? { ...m, content: m.content + (event.content ?? ""), isStreaming: true }
+                        : m
+                    );
+                  } else {
+                    // Create new assistant message
+                    assistantMsgId = nextId();
+                    return [
+                      ...filtered,
+                      {
+                        id: assistantMsgId,
+                        role: "assistant" as MessageRole,
+                        content: event.content ?? "",
+                        isStreaming: true,
+                      },
+                    ];
+                  }
+                });
+                break;
+              }
+
+              case "tool_use": {
+                setMessages((prev) => {
+                  const filtered = prev.filter((m) => m.id !== thinkingId);
+                  // Finalize current assistant message if any
+                  const updated = assistantMsgId
+                    ? filtered.map((m) =>
+                        m.id === assistantMsgId ? { ...m, isStreaming: false } : m
+                      )
+                    : filtered;
+                  assistantMsgId = null; // Next text block starts fresh
+                  return [
+                    ...updated,
+                    {
+                      id: nextId(),
+                      role: "tool" as MessageRole,
+                      content: JSON.stringify(event.toolInput ?? {}, null, 2),
+                      toolName: event.content,
+                    },
+                  ];
+                });
+                break;
+              }
+
+              case "tool_result": {
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    id: nextId(),
+                    role: "tool" as MessageRole,
+                    content: String(event.toolOutput ?? ""),
+                    toolName: `${event.content ?? "tool"} (result)`,
+                  },
+                ]);
+                break;
+              }
+
+              case "error": {
+                setMessages((prev) => {
+                  const filtered = prev.filter((m) => m.id !== thinkingId);
+                  return [
+                    ...filtered,
+                    {
+                      id: nextId(),
+                      role: "assistant" as MessageRole,
+                      content: `Error: ${event.content ?? "Unknown error"}`,
+                    },
+                  ];
+                });
+                setStatus("error");
+                break;
+              }
+
+              case "done": {
+                // Finalize streaming assistant message
+                if (assistantMsgId) {
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === assistantMsgId ? { ...m, isStreaming: false } : m
+                    )
+                  );
+                }
+                // Remove any remaining thinking indicator
+                setMessages((prev) => prev.filter((m) => m.id !== thinkingId));
+                setStatus("idle");
+                break;
+              }
+            }
+          }
+        }
+
+        // Ensure status is idle after stream ends
+        setStatus("idle");
+      } catch (err: unknown) {
+        if ((err as Error).name === "AbortError") return;
+        setMessages((prev) => {
+          const filtered = prev.filter((m) => m.id !== thinkingId);
+          return [
+            ...filtered,
+            {
+              id: nextId(),
+              role: "assistant" as MessageRole,
+              content: `Connection error: ${(err as Error).message ?? "Unknown error"}`,
+            },
+          ];
+        });
+        setStatus("error");
+      }
+    },
+    [enabled]
   );
 
-  // Refs for stable access inside WS callbacks
-  const wsRef = useRef<WebSocket | null>(null);
-  const lineBufferRef = useRef<string>("");
-  const messagesRef = useRef<ChatMessage[]>([]);
-  messagesRef.current = messages;
-
-  useEffect(() => {
-    if (!enabled) {
-      // Close any existing connection
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-      setWsStatus("disconnected");
-      return;
-    }
-
-    let cancelled = false;
-    let socket: WebSocket | null = null;
-
-    getConfigValue<number>("terminal.wsPort", 3001).then((wsPort) => {
-      if (cancelled) return;
-
-      const url = `ws://localhost:${wsPort}/terminal?taskId=${encodeURIComponent(ASSISTANT_SESSION_KEY)}`;
-      socket = new WebSocket(url);
-      wsRef.current = socket;
-      setWsStatus("connecting");
-
-      socket.addEventListener("open", () => {
-        if (!cancelled) setWsStatus("connected");
-      });
-
-      socket.addEventListener("close", () => {
-        if (!cancelled) setWsStatus("disconnected");
-      });
-
-      socket.addEventListener("error", () => {
-        if (!cancelled) setWsStatus("disconnected");
-      });
-
-      socket.addEventListener("message", (event) => {
-        if (cancelled) return;
-        const raw: string = typeof event.data === "string" ? event.data : "";
-        if (!raw) return;
-
-        // Append to line buffer, split on newlines
-        const combined = lineBufferRef.current + raw;
-        const parts = combined.split("\n");
-        // Last element is incomplete (or empty if ends with \n)
-        lineBufferRef.current = parts.pop() ?? "";
-
-        // Strip ANSI from each complete line
-        const cleanLines = parts.map((l) => stripAnsi(l));
-
-        setMessages((prev) => {
-          const result = parseLines(prev, "", cleanLines);
-          return result.messages;
-        });
-      });
-    });
-
-    return () => {
-      cancelled = true;
-      if (socket) {
-        socket.close();
-        socket = null;
-      }
-      wsRef.current = null;
-      lineBufferRef.current = "";
-      setWsStatus("disconnected");
-    };
-  }, [enabled]);
-
-  const sendMessage = (text: string): void => {
-    const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(text + "\n");
-    }
-  };
-
   const lastMsg = messages[messages.length - 1];
-  const isThinking = lastMsg?.role === "thinking" && lastMsg.isStreaming === true;
+  const isThinking =
+    status === "connecting" ||
+    (lastMsg?.role === "thinking" && lastMsg.isStreaming === true);
 
-  return { messages, isThinking, sendMessage, wsStatus };
+  return { messages, isThinking, sendMessage, status };
 }

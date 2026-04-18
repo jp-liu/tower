@@ -49,6 +49,15 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     try {
       // Re-read config before opening so Settings changes take effect immediately
       await refreshConfig();
+
+      // Chat mode uses Agent SDK (no PTY needed) — just open the panel
+      const latestCommMode = await getConfigValue<string>("assistant.communicationMode", "terminal");
+      if (latestCommMode === "chat") {
+        setIsOpen(true);
+        return;
+      }
+
+      // Terminal mode: create PTY session
       const res = await fetch("/api/internal/assistant", { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
@@ -66,10 +75,12 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const closeAssistant = useCallback(() => {
     setIsOpen(false);
-    setWorktreePath(null);
-    // Fire-and-forget
-    fetch("/api/internal/assistant", { method: "DELETE" }).catch(() => {});
-  }, []);
+    // Only destroy PTY session for terminal mode
+    if (worktreePath) {
+      setWorktreePath(null);
+      fetch("/api/internal/assistant", { method: "DELETE" }).catch(() => {});
+    }
+  }, [worktreePath]);
 
   const toggleAssistant = useCallback(() => {
     if (isOpen || isStarting) {

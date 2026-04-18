@@ -52,7 +52,10 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
 
       {/* Body */}
       <div className="flex-1 overflow-hidden">
-        {isStarting ? (
+        {communicationMode === "chat" ? (
+          /* Chat mode: uses Agent SDK via SSE — no PTY session needed */
+          isOpen ? <DynamicChat /> : null
+        ) : isStarting ? (
           <div className="flex h-full items-center justify-center bg-popover">
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -60,14 +63,11 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
             </div>
           </div>
         ) : isOpen && !isStarting && worktreePath ? (
-          communicationMode === "chat" ? (
-            <DynamicChat />
-          ) : (
-            <DynamicTerminal
-              taskId={ASSISTANT_SESSION_KEY}
-              worktreePath={worktreePath}
-            />
-          )
+          /* Terminal mode: uses PTY session via WebSocket */
+          <DynamicTerminal
+            taskId={ASSISTANT_SESSION_KEY}
+            worktreePath={worktreePath}
+          />
         ) : null}
       </div>
     </div>
