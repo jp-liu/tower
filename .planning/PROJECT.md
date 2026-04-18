@@ -145,29 +145,29 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 ---
 
-## Current Milestone: v0.92 Global Chat Assistant — 全局悬浮聊天助手
+## Completed Milestone: v0.92 Global Chat Assistant (2026-04-18)
 
-**Goal:** 在页面右下角添加全局悬浮聊天助手，用于通过自然语言操作任务（创建、查询、搜索、移动等）。
+**Shipped:** 全局聊天助手（sidebar/dialog 双模式）、终端/chat 双通信模式、session 管理与历史回显、/tower skill 自动注入、IME 兼容、取消发送、聊天头像、UI 一致性规范。
+
+---
+
+## Current Milestone: v0.93 Chat Media Support — 聊天媒体支持
+
+**Goal:** 助手聊天输入框支持粘贴图片，存储到缓存目录，预览并作为上下文发送给 AI。
 
 **Target features:**
-- 顶栏搜索框旁边的助手图标 + 快捷键触发（Cmd+L 或类似）
-- 点击/快捷键展开聊天面板（Dialog 或侧边抽屉）
-- Claude CLI PTY 后端（cwd = Tower 项目目录）
-- 预制系统提示词（--append-system-prompt）定义身份和能力
-- 工具限制（--allowedTools "mcp__tower__*"）仅允许 Tower MCP 工具
-- 无状态设计：每次打开新 session，关闭即销毁
-- 消息渲染：支持 Markdown 表格/列表展示
+- 聊天输入框粘贴图片 → 存到 `.cache/images/uuid.ext` → 显示缩略图预览
+- 发送消息时将图片作为 reference 传递给 Claude SDK `query()`
+- 缓存目录管理 API（存储、清理）
+- 输入框多图预览条 + 删除单张图片
+- 任务创建场景下，MCP 自动将 cache 文件移入项目资源库（对接已有 `manage_assets` + `create_task` references 机制）
 
 ### Out of Scope
 
-- Authentication/authorization — localhost-only tool, not needed
-- Real-time collaboration — single-user tool
-- Mobile app — web-first
-- Offline mode — real-time agent execution is core value
-- 笔记内容加密/脱敏 — 本地工具，单用户
-- 语义搜索 (embeddings) — FTS5 足够满足当前需求
-- 笔记文件夹嵌套 — 分类已足够
-- 自动 cache 清理 — 用户要求手动清理
+- 非图片文件特殊处理 — 粘贴文件名即可，不存缓存不做预览
+- 拖拽上传 — 后续扩展
+- 视频/音频媒体 — 后续扩展
+- 自动 cache 清理 — 用户手动清理
 
 ## Context
 
