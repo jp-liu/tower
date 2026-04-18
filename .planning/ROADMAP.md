@@ -148,8 +148,8 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
   5. A project asset is accessible at `/assets/<filename>` using the same unified static serving pattern
 **Plans**: 2 plans
 Plans:
-- [x] 40-01-PLAN.md — Magic-byte MIME utility + file-utils helpers + upload POST endpoint
-- [ ] 40-02-PLAN.md — Static file serving GET routes for cache and assets
+- [ ] 40-01-PLAN.md — Magic-byte MIME utility + file-utils helpers + upload POST endpoint
+- [x] 40-02-PLAN.md — Static file serving GET routes for cache and assets
 **UI hint**: no
 
 ### Phase 41: Paste UX & Thumbnail Strip

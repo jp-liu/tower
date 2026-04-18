@@ -7,11 +7,11 @@
 
 ### Cache Infrastructure
 
-- [x] **CACHE-01**: User can paste image in chat input, image uploads to `data/cache/assistant/<uuid>.<ext>`
-- [x] **CACHE-02**: Upload API validates MIME type (image/jpeg, image/png, image/gif, image/webp only)
-- [x] **CACHE-03**: Upload API includes path traversal protection
-- [ ] **CACHE-04**: Cached images accessible via short path `/cache/<filename>` (relative URL)
-- [ ] **CACHE-05**: Project assets accessible via short path `/assets/<filename>` (unified static resource pattern)
+- [ ] **CACHE-01**: User can paste image in chat input, image uploads to `data/cache/assistant/<uuid>.<ext>`
+- [ ] **CACHE-02**: Upload API validates MIME type (image/jpeg, image/png, image/gif, image/webp only)
+- [ ] **CACHE-03**: Upload API includes path traversal protection
+- [x] **CACHE-04**: Cached images accessible via short path `/cache/<filename>` (relative URL)
+- [x] **CACHE-05**: Project assets accessible via short path `/assets/<filename>` (unified static resource pattern)
 
 ### Paste UX
 
@@ -58,11 +58,11 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CACHE-01 | Phase 40 | Complete |
-| CACHE-02 | Phase 40 | Complete |
-| CACHE-03 | Phase 40 | Complete |
-| CACHE-04 | Phase 40 | Pending |
-| CACHE-05 | Phase 40 | Pending |
+| CACHE-01 | Phase 40 | Pending |
+| CACHE-02 | Phase 40 | Pending |
+| CACHE-03 | Phase 40 | Pending |
+| CACHE-04 | Phase 40 | Complete |
+| CACHE-05 | Phase 40 | Complete |
 | PASTE-01 | Phase 41 | Pending |
 | PASTE-02 | Phase 41 | Pending |
 | PASTE-03 | Phase 41 | Pending |

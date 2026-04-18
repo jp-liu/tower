@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.93
 milestone_name: Chat Media Support
 status: planning
-stopped_at: Completed 40-01-PLAN.md
-last_updated: "2026-04-18T11:57:15.594Z"
+stopped_at: Completed 40-02-PLAN.md
+last_updated: "2026-04-18T11:55:44.518Z"
 last_activity: 2026-04-18 — Roadmap created for v0.93 (4 phases, 19 requirements)
 progress:
   total_phases: 4
@@ -47,7 +47,7 @@ Progress: [░░░░░░░░░░] 0%
 | - | - | - | - |
 
 *Updated after each plan completion*
-| Phase 40-image-upload-api P01 | 165s | 2 tasks | 4 files |
+| Phase 40 P02 | 66s | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -58,8 +58,8 @@ Progress: [░░░░░░░░░░] 0%
 - Claude SDK receives images as `ImageBlockParam` base64 blocks built server-side via `buffer.toString("base64")` — no `data:` prefix
 - Browser sends only `string[]` of server filenames in chat request body; no inline base64 in POST payload
 - Phase 4 (SDK integration) is highest-risk: requires end-to-end smoke test with real Claude response before declaring complete
-- [Phase 40-image-upload-api]: Magic bytes over file.type — prevents SVG-as-PNG XSS and content-type spoofing
-- [Phase 40-image-upload-api]: UUID filename server-side — original filename never used, path traversal impossible
+- [Phase 40]: Plan 01 getAssistantCacheDir dependency added inline — Plan 02 executes standalone without requiring Plan 01 to run first
+- [Phase 40]: Internal assets route is a parallel path to public assets route, differing only by requireLocalhost() guard and Cache-Control header
 
 ### Pending Todos
 
@@ -71,6 +71,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-18T11:57:15.590Z
-Stopped at: Completed 40-01-PLAN.md
+Last session: 2026-04-18T11:55:44.515Z
+Stopped at: Completed 40-02-PLAN.md
 Resume file: None
