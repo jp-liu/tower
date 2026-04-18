@@ -72,14 +72,14 @@ export async function POST(request: NextRequest) {
 
         const options: Record<string, unknown> = {
           systemPrompt,
-          // tools: [] disables ALL built-in tools (Read, Edit, Bash, etc.)
-          // allowedTools auto-approves Tower MCP tools without permission prompts
+          // tools: [] disables built-in tools (Read, Edit, Bash) at SDK level
           tools: [],
-          allowedTools: ["mcp__tower__*"],
+          // CLI-level hard whitelist — only Tower MCP tools can be called
+          // This is the same --allowedTools flag used in terminal mode
+          extraArgs: { allowedTools: "mcp__tower__*" },
           permissionMode: "bypassPermissions" as const,
           cwd: process.cwd(),
           pathToClaudeCodeExecutable: claudePath,
-          // Note: do NOT use --bare — it disables OAuth/keychain auth
         };
 
         // Resume previous session if sessionId provided
