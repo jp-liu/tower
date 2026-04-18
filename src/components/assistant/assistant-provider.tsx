@@ -64,6 +64,31 @@ function nextId(): string {
 }
 
 // ---------------------------------------------------------------------------
+// sessionStorage image cache — preserves imageFilenames across page reload
+// ---------------------------------------------------------------------------
+
+const IMAGE_CACHE_KEY = "assistant-image-cache";
+
+function cacheMessageImages(sessionId: string, userMsgIndex: number, filenames: string[]): void {
+  try {
+    const raw = sessionStorage.getItem(IMAGE_CACHE_KEY);
+    const cache: Record<string, Record<number, string[]>> = raw ? JSON.parse(raw) : {};
+    if (!cache[sessionId]) cache[sessionId] = {};
+    cache[sessionId][userMsgIndex] = filenames;
+    sessionStorage.setItem(IMAGE_CACHE_KEY, JSON.stringify(cache));
+  } catch { /* sessionStorage unavailable */ }
+}
+
+function getCachedImages(sessionId: string): Record<number, string[]> {
+  try {
+    const raw = sessionStorage.getItem(IMAGE_CACHE_KEY);
+    if (!raw) return {};
+    const cache = JSON.parse(raw) as Record<string, Record<number, string[]>>;
+    return cache[sessionId] ?? {};
+  } catch { return {}; }
+}
+
+// ---------------------------------------------------------------------------
 // SSE event type
 // ---------------------------------------------------------------------------
 
@@ -150,7 +175,20 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       if (Array.isArray(data.messages)) {
         msgsRef.current = data.messages;
-        setChatMessages(data.messages);
+        // Restore imageFilenames from sessionStorage cache
+        const imgCache = getCachedImages(sessionId);
+        if (Object.keys(imgCache).length > 0) {
+          let userIdx = 0;
+          msgsRef.current = msgsRef.current.map((m) => {
+            if (m.role === "user") {
+              const filenames = imgCache[userIdx];
+              userIdx++;
+              if (filenames?.length) return { ...m, imageFilenames: filenames };
+            }
+            return m;
+          });
+        }
+        setChatMessages([...msgsRef.current]);
       }
     } catch {
       // Silently fail — user can still send new messages
@@ -271,10 +309,20 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     const thinkingId = nextId();
     msgsRef.current = [
       ...msgsRef.current,
-      { id: nextId(), role: "user" as MessageRole, content: text },
+      {
+        id: nextId(),
+        role: "user" as MessageRole,
+        content: text,
+        imageFilenames: options?.imageFilenames?.length ? options.imageFilenames : undefined,
+      },
       { id: thinkingId, role: "thinking" as MessageRole, content: "", isStreaming: true },
     ];
     flushChat();
+    // Cache imageFilenames so they survive session reload
+    if (options?.imageFilenames?.length && sessionIdRef.current) {
+      const userMsgCount = msgsRef.current.filter((m) => m.role === "user").length - 1;
+      cacheMessageImages(sessionIdRef.current, userMsgCount, options.imageFilenames);
+    }
     setChatStatus("connecting");
 
     let assistantMsgId: string | null = null;
@@ -326,6 +374,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
               setSessions(getSessions());
               setActiveSessionIdState(event.sessionId);
               setActiveSessionId(event.sessionId);
+              // Migrate cached images from the pre-session (null) key to the real sessionId
+              if (options?.imageFilenames?.length) {
+                cacheMessageImages(event.sessionId, 0, options.imageFilenames);
+              }
             }
           }
 
