@@ -1,178 +1,169 @@
 # Project Research Summary
 
-**Project:** ai-manager v0.9 — 架构清理 + 外部调度闭环
-**Domain:** AI task execution platform — adapter cleanup, CLI Profile config, MCP terminal tools, PTY idle detection, external dispatch via Feishu
-**Researched:** 2026-04-10
+**Project:** Tower — Chat Media Support (v0.93)
+**Domain:** Multimodal input integration for an existing SSE-streaming chat with Claude Agent SDK backend
+**Researched:** 2026-04-18
 **Confidence:** HIGH
 
 ## Executive Summary
 
-ai-manager v0.9 is a focused architectural cleanup and external-dispatch milestone. The codebase already has a fully functional PTY execution engine (v0.7–v0.8): node-pty spawns CLI processes, a 50 KB ring buffer stores output, WebSocket streams it to xterm.js, and an onExit callback persists the result to SQLite. v0.9's job is to (1) remove the dead SSE/adapter execution path that predates PTY, (2) lift hardcoded CLI invocation parameters into a DB-backed `CliProfile` table, (3) expose the PTY session to the external MCP orchestrator (Paperclip/OpenClaw) via two new MCP tools backed by a localhost HTTP bridge, and (4) wire idle detection plus Feishu notifications to close the human-in-the-loop feedback loop. No new npm packages are required — every capability is achievable with existing installed libraries.
+Tower v0.93 adds image paste support to the existing assistant chat. The feature is deliberately narrow: clipboard paste only (no drag-and-drop), images only (no other file types), with temporary cache storage in `data/cache/assistant/` and no persistent DB records. All required infrastructure already exists in the codebase — browser Clipboard API, the `data/cache/` directory convention, and the Claude Agent SDK's `AsyncIterable<SDKUserMessage>` multimodal prompt path. Zero new npm dependencies are required.
 
-The recommended approach is strict phase sequencing driven by dependency order: adapter dead code removal first (zero risk, clears confusion), then schema additions, then PTY primitives, then the agent-actions wiring, and finally the MCP surface. This order ensures each phase is independently testable and no phase has untested predecessors. The single most important architectural decision is the internal HTTP bridge (`/api/internal/pty/[taskId]/...`) as the IPC channel between the MCP process and the Next.js process — this is the only safe solution given the separate-process constraint validated in v0.2 that must not be reversed.
+The recommended implementation strategy is a strict server-first architecture: images are uploaded to the server cache immediately on paste (not at send time), assigned UUID-based filenames, and passed to the Claude Agent SDK as base64-encoded content blocks built server-side from the cached files. The browser never holds image bytes after the initial upload — it keeps only a blob URL for thumbnail preview and the filename reference. This avoids the three most serious pitfalls: inline base64 bloat in the chat request body, path traversal via browser-supplied filenames, and conversation history inflation from embedding raw image bytes across multiple turns.
 
-The main risks are: (a) severing live references during adapter cleanup — specifically `registry.ts` is still imported by the Settings verification route, and removing it without migrating `testEnvironment` breaks the UI silently; (b) PTY idle detection false-positives during Claude's silent reasoning phases (30–120 s of zero output is normal), which requires a 180 s minimum threshold and two-phase verification; and (c) Feishu notifications firing for manual Claude sessions because `notify-agi.sh` uses a shared `task-meta.json` that must be cleaned up after each send.
+The single highest-risk element is the Claude Agent SDK multimodal call path. The SDK's `query()` function must receive images as `AsyncIterable<SDKUserMessage>` with image content blocks, and base64 encoding must be done server-side from disk — not from browser `FileReader.readAsDataURL()`, which returns a `data:...;base64,` prefixed string that the Claude API rejects. This contract must be validated end-to-end in Phase 4 before the feature is considered complete. Every other element of the implementation follows well-established patterns already present in the codebase.
+
+---
 
 ## Key Findings
 
 ### Recommended Stack
 
-All v0.9 features are implementable with the existing stack — no `pnpm add` commands are needed. The base stack (Next.js 16.2.1, React 19, Prisma 6 + SQLite, node-pty 1.1.0, ws 8.x, @modelcontextprotocol/sdk 1.28.0, zod 4.x) provides everything required. New capabilities map directly to existing packages: the `CliProfile` table uses Prisma + `prisma db push`, the internal HTTP bridge uses native Node.js 18 `fetch()`, idle detection uses `setTimeout` in TypeScript, env injection uses object spread in the existing `pty.spawn` env parameter, and Feishu notification uses `child_process.execFile` to call the existing `notify-agi.sh` shell script.
+No new packages. All work is plumbing within the existing stack: Next.js App Router API routes, the `@anthropic-ai/claude-agent-sdk@0.2.114` + `@anthropic-ai/sdk@0.81.0` type system, browser-native Clipboard API and File API, and the existing `src/lib/file-utils.ts` cache directory helpers.
 
-**Core technologies:**
-- `@prisma/client` (v6): new `CliProfile` model — stores CLI command and base args as JSON string, consistent with existing `AgentConfig.settings` pattern; no migration tool change needed
-- `node-pty` (v1.1.0): extended with `envOverrides` constructor param and idle detection via `setTimeout` polling — purely additive, no behavior change for existing call sites
-- Native Node.js `fetch()` (Node 18+): MCP-to-Next.js HTTP bridge — eliminates need for `node-fetch` or `axios`
-- `ws` (v8.x): unchanged — WebSocket server at port 3001 is fully decoupled from the new idle/MCP features
-- `child_process.execFile` (Node built-in): programmatic Feishu notification from `onExit` and idle callbacks via `notify-agi.sh`
+**Core technologies in use:**
+- **Browser Clipboard API (`ClipboardEvent.clipboardData.items`)** — paste interception on the `<Textarea>` `onPaste` handler; filters by `item.kind === "file" && item.type.startsWith("image/")`; iterate `items`, never `files`, to avoid Firefox double-file bug
+- **`URL.createObjectURL(file)`** — zero-roundtrip thumbnail preview; must be revoked on remove, send, and component unmount to prevent progressive memory leaks in the long-lived `AssistantProvider` context
+- **`POST /api/internal/assistant/images` (new route)** — accepts `FormData { file }`, writes `data/cache/assistant/<uuid>.<ext>`, returns `{ filename, mimeType }`; follows existing `requireLocalhost` + UUID + containment-check patterns from `asset-actions.ts`; enforces magic-byte MIME verification and 8 MB hard cap
+- **`@anthropic-ai/sdk` `ImageBlockParam` (base64 variant)** — `{ type: "image", source: { type: "base64", media_type, data } }` where `data` is raw base64 with no `data:...` prefix; constructed server-side by `fs.readFile()` + `buffer.toString("base64")`
+- **`AsyncIterable<SDKUserMessage>`** — the multimodal prompt path for `query()`; activated only when images are present; existing string prompt path is preserved unchanged for text-only messages
 
 ### Expected Features
 
 **Must have (table stakes):**
-- Adapter dead code removal (`execute.ts`, `parse.ts`, `registry.ts`, `process-manager.ts`) — clears architectural confusion before new features land
-- CLI Profile DB table (`CliProfile` model) with seeded default row — replaces hardcoded `"claude"` command and `["--dangerously-skip-permissions"]` args in `startPtyExecution` and `resumePtyExecution`
-- Internal HTTP bridge (`GET /api/internal/pty/[taskId]/buffer`, `POST /api/internal/pty/[taskId]/write`) — shared IPC foundation for both MCP terminal tools, loopback-only
-- MCP tool: `get_task_terminal_output` — enables Paperclip to poll PTY ring buffer without a browser terminal open
-- MCP tool: `send_task_terminal_input` — enables Paperclip to inject input mid-execution (e.g., answer Claude confirmation prompts)
-- PTY idle detection with configurable callback — detects Claude's "waiting for input" state after configurable silence threshold
-- Feishu completion notification from `onExit` — gated on `FEISHU_NOTIFY_GROUP` env var; calls `notify-agi.sh` with task metadata
+- Ctrl+V / Cmd+V paste intercept on the chat textarea — baseline expectation for any AI chat in 2025+
+- Thumbnail preview strip above the textarea with per-image remove button
+- Images cleared automatically after send (blob URLs revoked)
+- Server-side cache storage before send (blob URLs cannot be passed to the SDK)
+- Pass images to Claude as base64 content blocks alongside the text message
+- Accept only `image/jpeg`, `image/png`, `image/gif`, `image/webp` — reject all other MIME types silently for text content, with toast for non-image files pasted
 
 **Should have (differentiators):**
-- Structured Feishu message templates (task.completed, task.idle, task.failed) — parameterized shell `case` blocks in `notify-agi.sh`
-- MCP tool: `get_task_execution_status` — execution-level granularity (RUNNING vs task's IN_PROGRESS); direct DB query, no bridge needed
-- Settings UI for CLI Profile CRUD — view/edit profile without touching DB directly; medium complexity
-- Idle threshold configurable via `SystemConfig` key `pty.idleThresholdSec`
+- Multiple images per message (zero extra effort — state is already an array)
+- Send with images and no text ("what do you see?") — change `isSendDisabled` guard
+- File size validation with clear user-facing toast error (check before upload, not after API rejects)
+- Keyboard shortcut hint in textarea placeholder via i18n string change only
 
 **Defer (v2+):**
-- Full multi-CLI adapter with UI switcher — only Claude is in use; one-row CliProfile table is sufficient for now
-- Generic webhook push to external URLs — network egress and auth complexity; `openclaw` CLI call covers all current needs
-- Continuous PTY output flush to DB — SQLite write volume at 8 ms batch rate is prohibitive; flush summary at execution end only
-- Multi-target notification (Telegram, Slack) — single Feishu target via `openclaw` covers all current needs
-- Inbound Paperclip API endpoint — external auth complexity; MCP tool calls from Paperclip side suffice
+- Drag-and-drop upload (explicitly out of scope per PROJECT.md)
+- Non-image file attachments
+- Image resize/crop before send
+- Inline image rendering in the sent user message bubble (separate rendering concern)
+- Automatic cache cleanup (deferred per PROJECT.md — manual cleanup only)
+- View pasted image history across sessions
 
 ### Architecture Approach
 
-v0.9 makes targeted, additive modifications to four existing files (`pty-session.ts`, `session-store.ts`, `agent-actions.ts`, `mcp/server.ts`) and adds three new files (two Next.js route handlers, one MCP tool module), while deleting four dead adapter files and migrating four live ones. The process boundary between the MCP stdio process and the Next.js HTTP server is bridged via localhost HTTP — a clean, zero-new-dependency solution consistent with the existing WebSocket origin-check pattern. All PTY-session mutations are confined to `agent-actions.ts`; the WebSocket layer (`ws-server.ts`) requires no changes.
+The implementation follows a 5-stage data flow: paste event (browser) → immediate upload to server cache → blob URL thumbnail preview (local only) → send chat request with `images: string[]` array of server-absolute paths → server reads files, base64-encodes, builds `SDKUserMessage`, calls `query()`. The key architectural decision is that the browser sends only filename references, not image bytes, in the chat request — the server is the single source of truth for image data.
 
 **Major components:**
-1. `prisma/schema.prisma` + migration — adds `CliProfile` model with seeded default row (`command: "claude"`, `baseArgs: ["--dangerously-skip-permissions"]`)
-2. `src/lib/pty/pty-session.ts` — extended with optional `envOverrides` constructor param + idle detection API (`setIdleTimeout`, `addIdleCallback`, `clearIdleCallbacks`, `_resetIdleTimer`)
-3. `src/lib/pty/session-store.ts` — forwards `envOverrides` optional param to `PtySession` constructor
-4. `src/actions/agent-actions.ts` — reads `CliProfile` from DB; uses profile command+args; passes `envOverrides`; registers idle callback; wires Feishu completion notification in `onExit`
-5. `src/app/api/internal/pty/[taskId]/buffer/route.ts` (new) — GET: returns ring buffer for MCP process; loopback-only guard
-6. `src/app/api/internal/pty/[taskId]/write/route.ts` (new) — POST: writes to PTY stdin for MCP process; guards against dead sessions
-7. `src/mcp/tools/terminal-tools.ts` (new) — `get_task_terminal_output` + `send_task_terminal_input` calling bridge via `fetch()`
-8. `src/lib/adapters/` — 4 files deleted, 4 files migrated to `src/lib/cli-verify.ts`, `src/lib/process-utils.ts`, `src/lib/preview-process-manager.ts`, `src/lib/claude-stream-parse.ts`
+1. **`src/app/api/internal/assistant/images/route.ts` (NEW)** — upload endpoint; writes to `data/cache/assistant/`; returns `{ filename, mimeType }`; enforces localhost-only, UUID filename, magic-byte MIME verification, 8 MB hard cap, and path containment check
+2. **`src/components/assistant/image-paste-bar.tsx` (NEW)** — stateless display-only component; renders horizontal thumbnail strip with per-image X button; 48×48px fixed thumbnails with `object-cover`; mounts only when `pendingImages.length > 0`
+3. **`src/components/assistant/assistant-chat.tsx` (MODIFIED)** — adds `onPaste` handler, `pendingImages` state, `uploadPromise` tracking per image, `handleSend` awaits all upload promises before dispatching
+4. **`src/components/assistant/assistant-provider.tsx` (MODIFIED)** — `sendChatMessage(text, images?: string[])` signature extension; passes `images` in POST body only when non-empty
+5. **`src/app/api/internal/assistant/chat/route.ts` (MODIFIED)** — reads image files from disk by path, builds `ImageBlockParam[]`, constructs `SDKUserMessage`, calls `query()` via `AsyncIterable` path when images present; existing string-prompt path untouched
+6. **`src/lib/file-utils.ts` (UNCHANGED)** — `getCacheDir("assistant")` already works with "assistant" as the directory key; no modifications needed
 
 ### Critical Pitfalls
 
-1. **Dead code removal severs live Settings verification** — `registry.ts` is actively imported by `src/app/api/adapters/test/route.ts` (the Settings > AI Tools verify button) and has an unused import in `execute/route.ts`. Run `grep -r "from.*adapters" src/ --include="*.ts"` to enumerate all import sites; migrate `testEnvironment` to `src/lib/cli-verify.ts` before deleting the registry; run `tsc --noEmit` after each deletion step, not just at the end.
+1. **base64 `data:` prefix sent to Claude API** — `FileReader.readAsDataURL()` returns `data:image/png;base64,...`; the Claude API requires raw base64 only and returns a misleading 400 error (confirmed bugs #7088, #11936). Prevention: use server-side `buffer.toString("base64")` after `fs.readFile()` — never use `readAsDataURL` in this flow.
 
-2. **PTY idle detection false positives during Claude reasoning** — Claude emits zero output for 30–120 s during extended thinking; a naive timer misclassifies this as idle. Use 180 s minimum threshold, implement two-phase verification (check PTY PID is still alive via `process.kill(pid, 0)` before acting), and expose `resetIdleTimer()` so WebSocket user keystrokes reset the timer independently.
+2. **MIME type spoofed via browser `file.type`** — clipboard metadata can lie about MIME type; SVG disguised as PNG enables stored XSS. Prevention: verify magic bytes (first 12 bytes) server-side before saving; use server-verified MIME as `media_type` in the content block; explicitly reject SVG.
 
-3. **MCP process cannot access in-memory PTY sessions** — `globalThis.__ptySessions` is a Next.js-process singleton; the MCP stdio process has a separate `globalThis` that is always empty. This is the only correct solution: build and test the HTTP bridge routes with `curl` before writing any MCP tool code. Option B (shared file buffer) is one-way only and insufficient.
+3. **Blob URL memory leak** — `URL.createObjectURL()` leaks if never revoked; `AssistantProvider` persists across routes, making accumulation invisible in short dev sessions. Prevention: revoke on image removal, on send completion, and in `useEffect` cleanup on unmount. Revoke only after `<img>` `onLoad` fires.
 
-4. **Environment variable leakage between concurrent PTY sessions** — if CLI Profile env vars are written into `process.env` (global to the Node.js process) instead of passed directly to `pty.spawn()`'s `env` argument, concurrent sessions share state. Always pass per-session vars as the `envOverrides` constructor parameter; never mutate `process.env`.
+4. **Inline base64 in chat request body** — embedding image bytes in the JSON body inflates each turn by ~33% (base64 overhead) and re-sends all images in conversation history on every subsequent turn, hitting Claude's 32 MB total request limit. Prevention: pass only `string[]` paths in the request body; server reads and encodes from disk.
 
-5. **Feishu hook fires for manual Claude sessions** — `notify-agi.sh` reads a shared `task-meta.json` that persists across sessions. Add an `ai_manager_dispatched: true` field; verify `session_id` in the file matches the hook's `SESSION_ID`; delete or mark the file as processed after each send to prevent stale-meta cross-contamination between dispatched and manual sessions.
+5. **Path traversal via browser-supplied filename** — `file.name` from a paste event can be `../../etc/passwd`. Prevention: generate `randomUUID() + verifiedExtension` server-side; never use `file.name` for the cache path; always assert `dest.startsWith(cacheDir + path.sep)` after resolving.
+
+---
 
 ## Implications for Roadmap
 
-Based on research, dependency order unambiguously determines phase sequence. Phases 1–3 are foundational (no user-visible features), Phases 4–6 deliver the external dispatch capabilities, and Phase 7 adds the optional Settings UI polish.
+Based on the architecture's dependency chain (upload API → display component → paste wiring → SDK integration), a 4-phase build order is strongly recommended. Each phase is independently testable before the next begins, with Phase 4 being the sole high-risk stage.
 
-### Phase 1: Adapter Dead Code Removal
-**Rationale:** Zero functional risk; clears architectural confusion that would otherwise make CLI Profile work harder to reason about. Must land before any new adapter-adjacent code is written. Has the highest leverage-per-line-of-code of any phase.
-**Delivers:** Smaller, clearer codebase — only live adapter code remains, migrated to non-adapter paths; dead SSE/registry code gone
-**Addresses:** Table stake: "Adapter dead code removal"
-**Avoids:** Pitfall 1 (severing live Settings verification) — audit imports first, migrate `testEnvironment` to `src/lib/cli-verify.ts`, remove unused `listAdapters` import from `execute/route.ts` as the very first step, run `tsc --noEmit` after each file deletion
+### Phase 1: Upload API Route
+**Rationale:** No UI dependency; can be built and tested in isolation with `curl`. Establishes the cache directory contract (`data/cache/assistant/`) that all other phases depend on.
+**Delivers:** `POST /api/internal/assistant/images` endpoint; `data/cache/assistant/` directory; `{ filename, mimeType }` response contract
+**Addresses:** Table stakes — server-side image storage before send
+**Avoids:** Pitfall 5 (path traversal — UUID filename, containment check), Pitfall 2 (MIME spoofing/SVG XSS — magic byte verification), Pitfall 9 (8 MB hard cap enforcement)
 
-### Phase 2: Schema — CliProfile Table
-**Rationale:** Schema must exist before any application code reads from it. Seeding the default row in the migration ensures `loadDefaultCliProfile()` never returns null, eliminating null-guard branches in the hot execution path.
-**Delivers:** New `CliProfile` Prisma model, migration with seeded default row, regenerated Prisma client
-**Uses:** `@prisma/client` v6, `prisma db push` / `prisma migrate`
-**Avoids:** Pitfall 4 (env leakage) — schema design establishes that `envVars` is a per-profile JSON field, not a mutation of `process.env`
+### Phase 2: Thumbnail Strip UI
+**Rationale:** Pure display component with no live API dependency; develops with mock data. Validates layout in the 320px sidebar width before paste wiring adds complexity.
+**Delivers:** `ImagePasteBar` component; i18n keys for all new strings in both zh/en locales; layout verified at narrow sidebar width
+**Addresses:** Table stakes — visual preview before send, remove button per image
+**Avoids:** Pitfall 12 (layout overflow in narrow sidebar — fixed 56px height, horizontal scroll, 5-image cap), Pitfall 13 (missing i18n keys — add zh/en before writing JSX), Pitfall 14 (thumbnail flash — fixed container dimensions `w-14 h-14`)
 
-### Phase 3: PTY Primitives — envOverrides + Idle Detection
-**Rationale:** Purely additive changes to `pty-session.ts` and `session-store.ts`; no existing call sites break (default `envOverrides = {}` is identity). Must land before agent-actions reads the profile and passes env vars. Design the idle API contract before coding.
-**Delivers:** `PtySession` with `envOverrides` param; idle detection API (`setIdleTimeout`, `addIdleCallback`, `clearIdleCallbacks`, `_resetIdleTimer`); timer cleanup in `kill()`
-**Uses:** `node-pty` v1.1.0 (existing), native `setTimeout`
-**Avoids:** Pitfall 2 (idle false positives) — 180 s minimum threshold, two-phase verify, `resetIdleTimer` exposed for user keystroke resets
-**Avoids:** Pitfall 4 (env leakage) — `envOverrides` is merged inside the constructor at `pty.spawn()` call time
+### Phase 3: Paste Handling + Preview Wiring
+**Rationale:** Depends on Phase 1 (upload API) and Phase 2 (bar component). Wires the full paste → upload → preview → remove → send flow end-to-end, stopping before the SDK call. All visible UX is complete and testable without touching the Claude integration.
+**Delivers:** Working paste intercept; thumbnails appear immediately via blob URL; upload happens in background with loading indicator; send awaits all upload promises before dispatching; text paste unbroken; blob URLs revoked correctly; `tsc --noEmit` clean after signature extension
+**Addresses:** All table stakes except Claude receiving the images
+**Avoids:** Pitfall 6 (text paste broken — `e.preventDefault()` only when image items found), Pitfall 7 (Firefox double-file — iterate `clipboardData.items` not `files`), Pitfall 3 (blob URL leak — revoke on remove, send, and unmount), Pitfall 8 (race condition — `sendMessage` awaits all `uploadPromise` before dispatching), Pitfall 11 (signature mismatch — run `tsc --noEmit` after extending `sendChatMessage`)
 
-### Phase 4: Agent Actions — CLI Profile Loading + Feishu Wiring
-**Rationale:** With schema (Phase 2) and PTY primitives (Phase 3) in place, `agent-actions.ts` can be updated in one coherent pass: load profile, build args, pass `envOverrides`, register idle callback, wire Feishu completion notification from `onExit`.
-**Delivers:** `startPtyExecution` and `resumePtyExecution` read from `CliProfile`; `DISPATCH_SOURCE` env var injected; idle callback registered; `onExit` triggers Feishu if `FEISHU_NOTIFY_GROUP` is set; server actions for profile CRUD
-**Uses:** `@prisma/client`, `child_process.execFile` (Node built-in), `notify-agi.sh`
-**Avoids:** Pitfall 5 (notify-agi.sh fires for manual sessions) — `DISPATCH_SOURCE` env var distinguishes automated vs manual; `notify-agi.sh` updated with `ai_manager_dispatched` check and meta-file cleanup after send
-
-### Phase 5: Internal HTTP Bridge
-**Rationale:** Shared foundation for both MCP terminal tools. Build once, test independently with `curl` before any MCP code is written. Both routes are stateless wrappers over existing `getSession()` and `write()` APIs.
-**Delivers:** `GET /api/internal/pty/[taskId]/buffer` and `POST /api/internal/pty/[taskId]/write` — loopback-only, consistent with existing ws-server origin-check pattern
-**Uses:** Next.js App Router route handlers, `globalThis.__ptySessions`, `getSession()` from `session-store.ts`
-**Avoids:** Pitfall 3 (MCP cannot access PTY sessions) — HTTP is the only correct cross-process solution; validate routes with `curl` before MCP integration begins
-
-### Phase 6: MCP Terminal Tools
-**Rationale:** Can only land after the HTTP bridge (Phase 5) exists and is independently tested. Both tools are thin wrappers over `fetch()` calls — low implementation risk, high leverage for Paperclip integration.
-**Delivers:** `get_task_terminal_output` and `send_task_terminal_input` registered in `mcp/server.ts`; MCP tool count: 21 → 23 (ceiling 30, headroom 7)
-**Uses:** Native Node.js `fetch()`, `zod` v4 for input validation
-**Avoids:** Pitfall 8 (MCP tool ceiling) — 23 tools is well within the 30-tool ceiling; no need for action-dispatch pattern consolidation
-
-### Phase 7: Settings UI — CLI Profile CRUD (Optional)
-**Rationale:** Developer convenience; the primary user can edit the profile via DB directly. Ship if time permits after Phases 1–6 are complete and validated.
-**Delivers:** Settings card for viewing/editing `CliProfile` (label, command, baseArgs, default toggle)
-**Uses:** Server actions from Phase 4, existing settings UI pattern
-**Addresses:** Differentiator: "Settings UI for CLI Profile"
+### Phase 4: Claude SDK Multimodal Integration
+**Rationale:** The highest-risk phase; depends on Phases 1-3 (files must be on disk with valid paths). Modifies the chat route to read files, build `ImageBlockParam[]`, and call `query()` via `AsyncIterable<SDKUserMessage>`. Existing text-only path must remain untouched. Must be verified end-to-end with a real Claude response that describes the image before the feature is declared complete.
+**Delivers:** Claude receives and correctly responds to pasted images; base64 blocks built server-side with no `data:` prefix; session resume (`sessionId`) compatible with multimodal messages; no regression on text-only messages
+**Addresses:** Table stakes — images passed to AI as actual Claude vision context
+**Avoids:** Pitfall 1 (base64 prefix — server-side `buffer.toString("base64")`), Pitfall 4 (inline base64 body bloat — file paths only in request), Pitfall 10 (SDK doesn't accept file paths directly — use `ImageBlockParam` in `SDKUserMessage.message.content`)
 
 ### Phase Ordering Rationale
 
-- **Adapter cleanup first** because it has zero risk and maximum clarity benefit — every subsequent phase is easier to reason about in a clean codebase with no dead code misleading the reader.
-- **Schema before application code** because Prisma generates the typed client that `agent-actions.ts` imports; skipping this order causes TypeScript errors at the first build.
-- **PTY primitives before agent-actions** because `startPtyExecution` will call `createSession()` with the new `envOverrides` parameter — the callee signature must exist before the caller is updated.
-- **HTTP bridge before MCP tools** because the bridge is the only dependency of the MCP tools; building the tools against a not-yet-existing endpoint guarantees integration failures.
-- **All table-stakes phases (1–6) before optional UI (7)** because the UI is a convenience layer, not a blocker for the external dispatch close-loop functionality that defines the milestone.
+- Phase 1 before everything else because all phases depend on the cache directory contract and the upload API response shape
+- Phase 2 independently testable with mock data — UI layout validated before async upload wiring is added
+- Phase 3 before Phase 4 because paste flow must be confirmed working (files genuinely on disk with valid UUIDs) before the SDK call is modified; the SDK integration failure mode (silent image drop) is only detectable when files exist on disk
+- Phase 4 last because it is the only phase requiring a live SDK call for validation; all prerequisite plumbing must be stable first
 
 ### Research Flags
 
-Phases with well-documented patterns (skip research-phase):
-- **Phase 1 (Adapter cleanup):** Standard import audit and file deletion — no research needed; direct codebase inspection is sufficient
-- **Phase 2 (Schema):** Standard Prisma migration with seed SQL — well-documented pattern; existing `AgentConfig` migration is the template
-- **Phase 3 (PTY primitives):** Additive TypeScript with no external dependencies — all patterns are documented in ARCHITECTURE.md
-- **Phase 6 (MCP tools):** Standard MCP tool registration — established pattern in existing `src/mcp/tools/` modules
+Needs deeper validation during planning:
+- **Phase 4 (SDK integration):** The `SDKUserMessage` + `AsyncIterable` path for multimodal is confirmed in type definitions but has not been exercised in this specific codebase. Validate with a single-image smoke test before full Phase 4 implementation. The `parent_tool_use_id: null` field requirement on `SDKUserMessage` must be respected. If the Claude subprocess silently drops image blocks, investigate the `--add-image` CLI flag as a fallback.
 
-Phases that may need targeted micro-research during planning:
-- **Phase 4 (Agent actions / Feishu wiring):** `notify-agi.sh` integration requires understanding the exact `openclaw message send` argument interface and Claude Stop hook `SESSION_ID` availability — read the script and hook docs before finalizing the implementation plan
-- **Phase 5 (HTTP bridge):** Confirm Next.js App Router route handlers can import `globalThis.__ptySessions` from `session-store.ts` without triggering a new module evaluation. The `globalThis` singleton pattern should handle this, but worth a quick stub-route smoke test before Phase 5 proper begins.
+Phases with standard patterns (skip additional research):
+- **Phase 1 (Upload API):** Directly mirrors `asset-actions.ts` upload pattern with `requireLocalhost`, UUID filename, and containment check — template exists in the codebase
+- **Phase 2 (UI component):** Standard React state + Tailwind flex row — well-established patterns with clear constraints
+- **Phase 3 (Paste wiring):** Standard browser Clipboard API — MDN documentation is authoritative; `clipboardData.items` behavior is fully specified
+
+---
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All findings from direct `package.json` and source inspection — the "no new packages required" conclusion is strongly verifiable; no inference involved |
-| Features | HIGH | Features derived from `.planning/PROJECT.md` milestone definition plus direct codebase inspection; scope is tightly bounded with explicit anti-features listed |
-| Architecture | HIGH | All architectural decisions derived from reading the running v0.8 code — execution flow, process boundaries, and globalThis singletons are directly observed facts, not inference |
-| Pitfalls | HIGH | Critical pitfalls 1–3 are grounded in specific file/line references from live import graph analysis; pitfalls 4–5 are grounded in directly observable code patterns |
+| Stack | HIGH | All API types verified from installed `node_modules` type definitions; no guesswork; zero new dependencies confirmed |
+| Features | HIGH | Scope derived from PROJECT.md + direct codebase inspection + confirmed behavior across ChatGPT, Claude.ai, Gemini (direct observation) |
+| Architecture | HIGH | All patterns validated against existing codebase; SDK type contracts read from disk; `getCacheDir("assistant")` confirmed to work without code changes |
+| Pitfalls | HIGH | 5 critical pitfalls sourced from confirmed GitHub bug reports (#7088, #11936, Firefox #1290688) and official MDN/Anthropic docs |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **notify-agi.sh argument interface:** The script currently reads from flat files. Phase 4 requires it to also accept arguments directly from Node.js `execFile`. The exact refactoring (argument order, env var names, backward compatibility with the Claude Stop hook path) should be validated by reading the script before implementing Phase 4 — do not assume.
+- **SDK `AsyncIterable<SDKUserMessage>` live behavior:** Type signatures confirm the call is structurally valid; whether the spawned Claude CLI subprocess correctly receives and processes base64 image blocks in practice must be verified with a Phase 4 smoke test. If image data is silently dropped, the fallback is to investigate the `--add-image` CLI flag or a file-path-based alternative if the SDK exposes one.
 
-- **App Router + globalThis import boundary:** Next.js App Router route handlers run in a different module evaluation context than `instrumentation.ts`. Confirm that importing `getSession` from `session-store.ts` inside a route handler correctly references the `globalThis.__ptySessions` Map populated by the instrumentation hook — not a fresh empty Map. A one-line smoke test before Phase 5 proper will resolve this.
+- **Conversation history + image token cost:** Base64 images are re-sent in conversation history on every turn (per Claude API design). This is acceptable for a localhost tool with typical conversation lengths but should be monitored. The cache cleanup strategy (currently deferred) may need to be accelerated in a follow-up if users report degraded performance in long image-heavy sessions.
 
-- **CliProfile field naming inconsistency:** STACK.md uses `buildArgs`/`envVars` while ARCHITECTURE.md uses `baseArgs`. Align on a single field name before writing the migration to avoid a follow-up rename migration. Recommendation: use `baseArgs` (ARCHITECTURE.md is closer to the actual call site semantics in `agent-actions.ts`).
+- **`data/cache/assistant/` accumulation:** Files accumulate indefinitely — explicitly out of scope for this milestone per PROJECT.md. A follow-up ticket should track this for v0.94+.
+
+---
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Direct codebase inspection: `src/lib/pty/pty-session.ts`, `src/lib/pty/session-store.ts`, `src/lib/pty/ws-server.ts`, `src/actions/agent-actions.ts`, `src/lib/adapters/` (full tree), `src/mcp/index.ts`, `src/mcp/server.ts`, `prisma/schema.prisma`, `package.json`
-- `.planning/PROJECT.md` — v0.9 milestone definition, MCP tool ceiling (30), architectural decisions from v0.2
-- `/Users/liujunping/.claude/hooks/notify-agi.sh` — hook dedup logic, meta file handling, Feishu send path via `openclaw`
+- `node_modules/.pnpm/@anthropic-ai+sdk@0.81.0.../resources/messages/messages.d.ts` — `ImageBlockParam`, `Base64ImageSource`, `MessageParam` type contracts (read from disk)
+- `node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts` — `SDKUserMessage`, `query()` prompt signature (read from disk)
+- `src/app/api/internal/assistant/chat/route.ts` — existing SSE streaming pattern and `query()` call site (direct inspection)
+- `src/components/assistant/assistant-provider.tsx` + `assistant-chat.tsx` — current `sendChatMessage` signature and textarea IME guard (direct inspection)
+- `src/lib/file-utils.ts` + `src/actions/asset-actions.ts` — existing cache dir helpers and upload security patterns (direct inspection)
+- [Anthropic Vision API Docs](https://platform.claude.com/docs/en/build-with-claude/vision) — image size limits, supported MIME types, base64 format requirements
+- [MDN Clipboard API](https://developer.mozilla.org/en-US/docs/Web/API/ClipboardEvent/clipboardData) — `clipboardData.items` vs `files` semantics
+- [MDN URL.revokeObjectURL](https://developer.mozilla.org/en-US/docs/Web/API/URL/revokeObjectURL_static) — blob URL lifecycle
 
 ### Secondary (MEDIUM confidence)
-- Node.js 18 documentation: native `fetch()` available globally since Node 18.0.0 (project constraint: Node 18.18+)
-- `.planning/research/` v0.7 STACK.md — validated baseline stack decisions for node-pty, ws, MCP SDK versions; referenced but not repeated
+- [GitHub: Image media type mismatch #11936](https://github.com/anthropics/claude-code/issues/11936) — base64 prefix bug confirmed in production
+- [GitHub: Invalid image media type #7088](https://github.com/anthropics/claude-code/issues/7088) — same error class confirmed in production
+- [Firefox bug #1290688](https://bugzilla.mozilla.org/show_bug.cgi?id=1290688) — double-file on clipboard paste in Firefox confirmed
+- [react-dropzone memory leak #398](https://github.com/react-dropzone/react-dropzone/issues/398) — blob URL accumulation in long React sessions confirmed
 
 ---
-*Research completed: 2026-04-10*
+*Research completed: 2026-04-18*
 *Ready for roadmap: yes*

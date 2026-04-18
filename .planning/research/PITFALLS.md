@@ -1,237 +1,435 @@
-# Pitfalls Research — v0.9: Adapter Cleanup + External Dispatch
+# Domain Pitfalls: Image Paste in Existing Chat System
 
-**Domain:** Adding adapter cleanup, CLI Profile config, external dispatch via MCP terminal tools, PTY idle detection, and Feishu hook notification to an existing Next.js 16 + node-pty system.
-**Researched:** 2026-04-10
-**Confidence:** HIGH — findings derived directly from reading the current codebase (`src/lib/adapters/`, `src/lib/pty/`, `src/mcp/`, `notify-agi.sh`) plus verified architectural principles.
+**Domain:** Adding image paste to an existing SSE-streaming chat with Claude Agent SDK backend
+**Researched:** 2026-04-18
+**Project:** Tower v0.93 Chat Media Support
 
-> This file supersedes the v0.7 PITFALLS.md (browser terminal integration). v0.7 pitfalls remain valid and are not repeated here. This document covers only the net-new risks introduced by v0.9 changes.
+> This file supersedes the v0.9 PITFALLS.md (adapter cleanup + external dispatch). v0.9 pitfalls remain valid for that milestone but are not repeated here. This document covers only the net-new risks introduced by v0.93's image paste feature.
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Dead Code Removal Severs Live References
-
-**What goes wrong:**
-`src/lib/adapters/registry.ts` exports `getAdapter` and `listAdapters`. Both are imported by active route handlers:
-
-- `src/app/api/adapters/test/route.ts` — imports both. The `GET` handler calls `listAdapters()`. The `POST` handler calls `getAdapter(adapterType)` to dispatch `testEnvironment`.
-- `src/app/api/tasks/[taskId]/execute/route.ts` — imports `listAdapters` (currently unused in the function body, but the import exists at line 5).
-
-If `registry.ts` is deleted or emptied without auditing all import sites, the build will break silently in development (TypeScript module resolution errors are sometimes suppressed by `@ts-nocheck` or missed if the developer only runs `next dev` rather than `tsc`). In production, the route will throw a module-not-found error at request time, not at startup.
-
-The `src/lib/adapters/claude-local/test.ts` file is the real implementation of CLI verification. The Settings page's "AI Tools" tab calls the test route, which calls `adapter.testEnvironment()` from the registry. Delete the registry without migrating the test route and the Settings verification UI goes dark with no runtime error until a user clicks the verify button.
-
-**Why it happens:**
-The adapter pattern wraps `testEnvironment` behind a registry indirection. The test route does not call `testEnvironment` directly — it goes through `getAdapter(type)`. When the registry is removed, the Settings UI feature disappears even though the underlying `test.ts` implementation still exists and is valuable.
-
-The `execute/route.ts` import of `listAdapters` is unused in the route body today, but it proves the pattern: imports that are "just for validation" are easy to miss during cleanup.
-
-**Consequences:**
-- Settings > AI Tools verification breaks silently (returns 500, no helpful error).
-- `listAdapters` call in `GET /api/adapters` returns empty array or 500, breaking any client that reads it.
-- Build may pass (TypeScript resolves the deleted module path until `tsc` runs cleanly) but runtime explodes.
-
-**Prevention:**
-Before deleting any file in `src/lib/adapters/`:
-1. Run `grep -r "from.*adapters" src/ --include="*.ts"` to enumerate all import sites.
-2. For each import site, identify which exported symbols are live vs dead.
-3. Migrate live functionality (`testEnvironment` logic, `process-manager.ts`, `process-utils.ts`, `preview-process-manager.ts`) to new homes before deleting the source.
-4. Delete the registry last, after the test route has been rewritten to call `testEnvironment` directly.
-5. Run `tsc --noEmit` after each deletion step, not just at the end.
-
-**Detection:**
-- POST `/api/adapters/test` returns 500 with "Unknown adapter type" or module-not-found.
-- Settings > AI Tools tab shows permanent spinner or error state.
-- `tsc --noEmit` reports "Cannot find module '@/lib/adapters/registry'".
-
-**Phase:** Adapter cleanup phase (first phase of v0.9). Complete migration of live symbols before any deletion.
+Mistakes that cause API errors, data loss, security vulnerabilities, or regressions in the existing chat.
 
 ---
 
-### Pitfall 2: PTY Idle Detection False Positives During AI Thinking
+### Pitfall 1: base64 Data URI Prefix Sent to Claude API
+
+**Severity:** CRITICAL
+**Phase:** SDK integration (constructing the image content block)
 
 **What goes wrong:**
-Claude Code emits no terminal output during long reasoning / "thinking" phases. A naive idle timer that measures "time since last PTY data event" will fire during normal AI operation and incorrectly classify the session as idle. This causes premature timeout callbacks, spurious Feishu notifications ("task complete" when the task is still running), or unwanted session kills.
-
-The current `PtySession` has no idle timer — it only has `disconnectTimer` (for WebSocket keepalive). When v0.9 adds a "PTY idle callback" feature, the timer will be wired to `_pty.onData`. The problem is that Claude Code's thinking phase can last 30–120 seconds of zero output before resuming. A 30-second idle threshold, which sounds reasonable, fires during every non-trivial AI reasoning step.
+`FileReader.readAsDataURL()` — the most discoverable way to convert a File to base64 — returns a string like `data:image/png;base64,iVBOR...`. If this full string is passed as the `data` field in a Claude API image content block, the API returns a 400 error. The `data` field must be the raw base64 payload only; the `data:...;base64,` prefix must be stripped.
 
 **Why it happens:**
-Claude's `--output-format stream-json` mode emits structured JSON events. During extended thinking the process is CPU/network-bound but emits no partial output — output appears as a burst when the response is ready. A timer measuring data-silence cannot distinguish "Claude is thinking" from "Claude has exited".
+Developers reach for `readAsDataURL` because it is the standard browser API. The prefix is visually obvious in the console but easy to miss when base64 data is logged truncated. Two confirmed bugs in the anthropics/claude-code repository (#7088, #11936) show this exact mistake.
 
 **Consequences:**
-- Feishu notification fires mid-task ("task complete") when Claude is just thinking.
-- `notify-agi.sh` is triggered with partial output, writing a misleading `latest.json` and `pending-wake.json`.
-- If the idle callback kills the PTY, the task is aborted mid-reasoning.
-- If the idle callback triggers session cleanup, the WebSocket keepalive is cancelled and the browser terminal disconnects.
+Every message with an attached image fails with a misleading 400 error that says "Invalid image media type" or "image cannot be empty" — the actual cause (the prefix) is not surfaced in the error message.
 
 **Prevention:**
-1. Set idle threshold to no less than 180 seconds (3 minutes). Claude's thinking rarely exceeds 2 minutes of silence.
-2. Idle detection must check `session.killed` before acting — if the process is already dead, the exit handler already fired. Firing the idle callback on a dead-but-not-yet-cleaned session causes duplicate notifications.
-3. Implement two-phase idle detection: "suspected idle" at T=180s → verify by checking whether the PTY child process PID is still alive (`process.kill(pid, 0)`) before acting.
-4. The idle callback signature should carry a `reason: 'suspected_idle' | 'process_exit'` discriminant so callers can decide whether to notify or just log.
-5. Expose `resetIdleTimer()` on `PtySession` so `ws-server.ts` can call it on every incoming WebSocket message (user keystrokes reset the timer).
+```typescript
+// WRONG
+const dataUrl = await readAsDataURL(file); // "data:image/png;base64,iVBOR..."
+const data = dataUrl; // includes prefix — API rejects this
+
+// CORRECT
+const dataUrl = await readAsDataURL(file);
+const data = dataUrl.split(",")[1]; // raw base64 only
+```
+
+When saving to disk first (the preferred pattern for this project), skip `readAsDataURL` entirely and use `file.arrayBuffer()` → `Buffer.from(...).toString("base64")` server-side.
 
 **Detection:**
-- Feishu notification arrives while the terminal is still showing Claude's progress.
-- `hook.log` shows multiple "Hook fired" entries for the same session within seconds.
-- Terminal session disappears from the browser mid-task.
-
-**Phase:** PTY idle detection phase. Design the API contract (callback signature, reset mechanism) before implementation.
+API 400 response body mentions "invalid" or "empty". Log the first 20 chars of the data field: if it starts with `"data:"` rather than `"iVBOR"` (PNG) or `"/9j/"` (JPEG), the prefix is present.
 
 ---
 
-### Pitfall 3: MCP Process Cannot Access In-Memory PTY Sessions
+### Pitfall 2: MIME Type Taken from Browser's `file.type` (Not Actual File Bytes)
+
+**Severity:** CRITICAL
+**Phase:** Upload/save phase AND SDK integration phase
 
 **What goes wrong:**
-The MCP server runs as a separate stdio process (`npx tsx src/mcp/index.ts`). It has its own Node.js runtime with its own memory space. The PTY session store (`src/lib/pty/session-store.ts`) uses `globalThis.__ptySessions` — a singleton that only exists within the Next.js server process (port 3000 / instrumentation). The MCP process has a completely different `globalThis`.
+`File.type` in a paste event comes from the browser's clipboard metadata — not from reading the file's actual bytes. An attacker (or a buggy clipboard source) can produce a File object claiming `type = "image/png"` whose bytes are actually JPEG, SVG, or something else entirely. Two failure modes:
 
-When `get_task_terminal_output` and `send_task_terminal_input` MCP tools try to read/write PTY sessions, they will get `undefined` for every session lookup because the `__ptySessions` Map in the MCP process is always empty.
+1. Claude API 400: "Image media type mismatch" — the API validates that the declared `media_type` matches the actual image bytes. GitHub issue #11936 is this exact bug.
+2. Security: An SVG file disguised as a PNG can contain embedded JavaScript. If stored to `.cache/images/` and served from a route without `Content-Type: image/svg+xml`, the browser may execute the scripts.
 
 **Why it happens:**
-The comment in `session-store.ts` explicitly documents this pattern:
-> "D-04: globalThis singleton — survives HMR/module re-evaluation in Next.js dev mode. Without this, ws-server.ts (loaded once via instrumentation) and agent-actions.ts (re-bundled on HMR) would get different Map instances."
-
-This globalThis trick solves HMR within one process. It does nothing across process boundaries. The MCP server is a different process. When the MCP server imports `session-store.ts`, TypeScript resolves the file path and a new, empty `__ptySessions` Map is initialized for the MCP process's `globalThis`.
+MIME type on clipboard File objects is set by the OS/browser from the clipboard format declaration, not from reading file content. On macOS, screenshots paste as genuine PNG. But "paste from URL" or "paste from another app" can produce mismatches.
 
 **Consequences:**
-- `get_task_terminal_output` always returns empty string or "session not found".
-- `send_task_terminal_input` silently discards input (no PTY to write to).
-- No error is thrown — the Map lookup returns `undefined`, which is a valid "not found" result. The MCP tool returns success with empty content.
+API rejections with misleading error messages. SVG-based stored XSS if SVG is not explicitly blocked.
 
 **Prevention:**
-The only correct solution is inter-process communication. Two viable approaches:
-
-**Option A — HTTP API (recommended):** Add new Next.js API routes:
-- `GET /api/tasks/[taskId]/terminal/output` — reads the ring buffer from the in-process session store.
-- `POST /api/tasks/[taskId]/terminal/input` — writes to the PTY via the in-process session store.
-
-The MCP tools call these routes via `fetch('http://localhost:3000/api/...')`. The Next.js server owns the PTY sessions and exposes them through HTTP. This keeps the PTY session store as the single source of truth.
-
-**Option B — Shared file buffer:** Write PTY output to a temp file (append-only) in addition to the in-memory ring buffer. The MCP process reads the file. This is one-way only (output, not input) and adds I/O overhead.
-
-Option A is strongly preferred. The existing WebSocket server already validates via `localhost:3000` origin checks, establishing the localhost-API pattern.
-
-**Configuration note for the MCP tools:** The tools must know the base URL (`http://localhost:3000`). Hard-code as a constant for now; make configurable via env var `AI_MANAGER_BASE_URL` as a future improvement.
+1. Server-side: read the first 12 bytes (magic bytes) to verify the actual format before saving.
+   - PNG: `\x89PNG\r\n\x1a\n`
+   - JPEG: `\xFF\xD8\xFF`
+   - GIF: `GIF87a` or `GIF89a`
+   - WebP: `RIFF....WEBP`
+2. Allowlist: only accept `image/jpeg`, `image/png`, `image/gif`, `image/webp` — the four formats Claude supports. Reject everything else (especially SVG).
+3. Use the server-verified MIME type (not `file.type`) when constructing the `media_type` field in the Claude API content block.
 
 **Detection:**
-- `get_task_terminal_output` MCP tool always returns `""` or `null` even for a running task.
-- Adding a `console.error` to `getSession()` in the MCP process shows the Map is always empty.
-- The MCP tool test in Claude Code shows "session not found" for a task that has an active terminal in the browser.
+API 400 with "media_type" in the error body. Test by renaming a JPEG to `.png` and pasting it — should be caught and corrected at the server.
 
-**Phase:** MCP terminal tools phase. Design the HTTP API bridge first, before writing any MCP tool code. Mock the HTTP API endpoints before wiring the MCP tools to them.
+---
+
+### Pitfall 3: Blob URL Memory Leak — Never Revoked Preview URLs
+
+**Severity:** CRITICAL
+**Phase:** UI preview phase (thumbnail strip)
+
+**What goes wrong:**
+`URL.createObjectURL(file)` allocates a reference-counted memory object that persists until either `URL.revokeObjectURL()` is called or the document unloads. Tower's `AssistantProvider` context persists across route changes (by design — chat history survives navigation). Every image paste adds a blob URL to memory. In a long session with many pastes (screenshots during AI debugging, diagrams, etc.), blob URLs accumulate without bound.
+
+A confirmed real-world consequence is documented in react-dropzone issue #398 (accumulates on every file drop without revoke), and `ERR_OUT_OF_MEMORY` is the eventual result in long SPA sessions.
+
+**Why it happens:**
+The natural pattern is: create blob URL → set as `<img src>` → move on. Cleanup requires explicit bookkeeping across React state updates and component unmounts, which is easy to overlook when the state lives in a context provider rather than a local component.
+
+**Consequences:**
+Progressive memory growth. On machines with 8–16 GB RAM it manifests as tab slowdown after 30+ minutes. On resource-constrained systems, the tab crashes. The leak is invisible during development (short sessions, Chrome DevTools forces GC on page reload).
+
+**Prevention:**
+```typescript
+// When adding an image to the pending list:
+const previewUrl = URL.createObjectURL(file);
+setPendingImages(prev => [...prev, { file, previewUrl, cachePath: null }]);
+
+// When removing an image:
+function removeImage(index: number) {
+  setPendingImages(prev => {
+    URL.revokeObjectURL(prev[index].previewUrl); // revoke on removal
+    return prev.filter((_, i) => i !== index);
+  });
+}
+
+// After send completes — revoke ALL remaining preview URLs:
+function clearAfterSend(images: PendingImage[]) {
+  images.forEach(img => URL.revokeObjectURL(img.previewUrl));
+}
+
+// useEffect cleanup — handles unmount:
+useEffect(() => {
+  return () => {
+    pendingImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
+  };
+}, []); // run only on unmount
+```
+
+Revoke AFTER the `<img>` element's `onLoad` fires, not before — revoking too early breaks the image render.
+
+**Detection:**
+Chrome DevTools Memory tab → "Take Heap Snapshot" before and after multiple paste+send cycles. Compare `Blob` object count. A properly implemented version shows 0 Blobs after send; a leaking implementation shows N * pastes.
+
+---
+
+### Pitfall 4: Sending Inline base64 in the Chat API Request Body
+
+**Severity:** CRITICAL
+**Phase:** API design phase (how images travel from browser to SDK)
+
+**What goes wrong:**
+The tempting shortcut is to base64-encode the image client-side and embed it directly in the existing `POST /api/internal/assistant/chat` JSON body alongside the text message. This approach has three compounding problems:
+
+1. **Request size**: A 2 MB screenshot becomes ~2.7 MB of JSON (base64 inflates by ~33%). The Next.js App Router has a default body size limit; large images hit it immediately.
+2. **Multi-turn history bloat**: The Claude Agent SDK maintains conversation context across turns. If the image bytes are embedded in the user message, they are re-sent in the conversation history on every subsequent message. A 3-image session sends 3x the image bytes on every subsequent turn.
+3. **Payload cap**: The Claude API enforces a 32 MB total request size limit for standard endpoints. With multiple large images in history, this limit is reached faster than expected.
+
+**Why it happens:**
+The chat route already accepts JSON body. Adding a `{ message, sessionId, images: [{ data, mimeType }] }` field feels like the minimal diff. The cumulative history cost is invisible until the conversation is several turns deep.
+
+**Consequences:**
+HTTP 413 (Next.js body limit) or Claude API 400 (payload too large) after a few turns in image-heavy sessions. Silent quality degradation as the model receives less context because image tokens dominate the window.
+
+**Prevention:**
+Save the image to `.cache/images/uuid.ext` server-side first. Pass only the absolute filesystem path to the SDK's `query()` call. The Claude Agent SDK subprocess has filesystem access and can read the file directly. This is consistent with the existing Tower pattern of passing file paths for assets (see `asset-actions.ts`).
+
+The chat route API contract becomes:
+```
+POST /api/internal/assistant/chat
+{ message: string, sessionId?: string, imagePaths?: string[] }
+```
+
+The server reads the files by path, constructs the image content blocks (reading bytes, base64-encoding, applying magic byte verification), and passes them to the SDK. Image bytes never travel over HTTP.
+
+**Detection:**
+Network tab shows chat requests > 500 KB. Subsequent turns in multi-image conversations become progressively larger. API error after the 3rd or 4th turn in an image session.
+
+---
+
+### Pitfall 5: Path Traversal via Paste-Supplied Filename Used as Cache Filename
+
+**Severity:** CRITICAL (security)
+**Phase:** Upload/save phase
+
+**What goes wrong:**
+When saving a pasted image to `.cache/images/`, if any part of the filename is derived from the browser-supplied `file.name`, an attacker can craft a paste that writes files outside the cache directory. For example, `file.name = "../../config/settings.json"` would resolve outside the intended directory. This exact vulnerability class is already mitigated in `asset-actions.ts` using `path.basename()` + containment check — but that guard only exists there. A new cache-save function starts without it.
+
+**Why it happens:**
+Browser File objects from paste events have a `name` property. For screenshots, macOS sets this to `"image.png"`, which looks safe. But the File API does not guarantee this value; any clipboard source can set it to an arbitrary string.
+
+**Consequences:**
+Server-side arbitrary file write to any path the Next.js process user has write access to. In a local dev tool running as the developer's user, this means the entire home directory.
+
+**Prevention:**
+Generate a UUID-based filename server-side. Never use the browser-supplied `file.name` for the cache path. The extension is derived from the server-verified MIME type (not from the name).
+
+```typescript
+import { randomUUID } from "crypto";
+
+const EXT_MAP: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/gif": "gif",
+  "image/webp": "webp",
+};
+
+function safeCacheFilename(verifiedMimeType: string): string {
+  const ext = EXT_MAP[verifiedMimeType] ?? "bin";
+  return `${randomUUID()}.${ext}`;
+}
+
+// Always verify containment:
+const dest = path.join(cacheDir, safeCacheFilename(mimeType));
+if (!dest.startsWith(cacheDir + path.sep)) throw new Error("Path escape");
+```
+
+This same pattern is used in `asset-actions.ts` and must be applied identically to the new cache route.
+
+**Detection:**
+Pass `"../../etc/passwd"` as the file name in a test. Verify the file is written inside `cacheDir`, not at the traversed path.
 
 ---
 
 ## Moderate Pitfalls
 
-### Pitfall 4: Environment Variable Leakage Between Concurrent PTY Sessions
+---
+
+### Pitfall 6: Paste Event Handler Swallows Text Paste
+
+**Severity:** MODERATE
+**Phase:** UI paste handler phase
 
 **What goes wrong:**
-`PtySession` constructor (line 31–39 of `pty-session.ts`) explicitly whitelists the env vars passed to the PTY child:
-
-```typescript
-env: {
-  PATH: process.env.PATH ?? "",
-  HOME: process.env.HOME ?? "",
-  SHELL: process.env.SHELL ?? "/bin/zsh",
-  TERM: "xterm-color",
-  LANG: process.env.LANG ?? "en_US.UTF-8",
-  USER: process.env.USER ?? "",
-  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? "",
-},
-```
-
-This is safer than `{ ...process.env }` but creates a specific risk for v0.9: if CLI Profile configuration adds task-specific env vars (e.g., `CLAUDE_PROFILE`, `CLAUDE_SKIP_PERMISSIONS`, per-task API keys), and those vars are passed by merging into the PTY env object, concurrent sessions will see each other's vars if the merge is done at the `process.env` level rather than per-session.
-
-The risk materializes if the implementation reads profile env vars into `process.env` (e.g., `process.env.CLAUDE_PROFILE = profile.name`) before spawning the PTY, rather than passing them directly in the `env` object to `pty.spawn()`. Since `process.env` is global to the Node.js process, all concurrent PTY spawns share it.
+Adding `onPaste` to the existing `<Textarea>` and calling `e.preventDefault()` unconditionally breaks ordinary text paste. The textarea no longer accepts Ctrl+V for text after the handler is added.
 
 **Why it happens:**
-Node.js `process.env` is a global mutable object. Any code that writes `process.env.X = value` affects all subsequent reads of `process.env.X` in the same process, including other concurrent request handlers. With multiple tasks running simultaneously, a profile-A env set for task-1 can leak into task-2's PTY spawn if the spawn is slightly delayed.
+`e.preventDefault()` on a paste event suppresses the browser's default paste behavior entirely, including inserting pasted text. If the handler intercepts the event regardless of whether an image is present, text paste is broken.
 
 **Prevention:**
-- Never write to `process.env` to pass per-session configuration.
-- Pass CLI Profile env vars directly in the `env` argument to `pty.spawn()` (inside the `PtySession` constructor).
-- The `PtySession` constructor should accept an optional `extraEnv: Record<string, string>` parameter that is merged into the whitelist object at spawn time.
-- If CLI Profile config is read from the database, fetch it before constructing `PtySession`, then pass the result as `extraEnv`.
+Call `e.preventDefault()` only when image items are found. Let text pastes fall through to default browser behavior.
+
+```typescript
+function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+  const items = Array.from(e.clipboardData.items);
+  const imageItems = items.filter(
+    item => item.kind === "file" && item.type.startsWith("image/")
+  );
+
+  if (imageItems.length === 0) return; // text paste — do nothing, let default proceed
+
+  e.preventDefault(); // only intercept when images are present
+  imageItems.forEach(item => {
+    const file = item.getAsFile();
+    if (file) addPendingImage(file);
+  });
+}
+```
 
 **Detection:**
-- Task-1 (using profile A with `CLAUDE_PROFILE=fast`) causes task-2 (no profile) to also use `fast` mode.
-- Race condition: only reproducible when two tasks start within milliseconds of each other.
-- Unit test: spawn two PTY sessions with different `extraEnv`, verify env isolation via a shell command that prints env vars.
-
-**Phase:** CLI Profile + PTY session phases. Add `extraEnv` to `PtySession` constructor signature when introducing CLI Profile support.
+After adding the handler, verify that Ctrl+V for text still works. Test: copy a word, paste into the textarea — it must appear in the input.
 
 ---
 
-### Pitfall 5: notify-agi.sh Fires for Both Manual and Automated Sessions
+### Pitfall 7: Firefox Double-File Bug on Clipboard Image Paste
+
+**Severity:** MODERATE
+**Phase:** UI paste handler phase
 
 **What goes wrong:**
-`notify-agi.sh` is a Claude Code Stop hook that fires whenever any Claude session ends — including interactive sessions the user starts manually from the terminal, not just sessions dispatched by ai-manager. If v0.9 adds Feishu notifications to the hook for "龙虾 (Paperclip) dispatched sessions", but the hook lacks a reliable way to distinguish "ai-manager dispatched" from "user's own manual session", every manual Claude Code invocation generates a Feishu notification. This is notification spam.
-
-Currently, the hook reads `task-meta.json` to get `task_name` and `telegram_group`. If the file doesn't exist, `TASK_NAME` defaults to `"unknown"` and `TELEGRAM_GROUP` is empty — so the Feishu send is skipped. This implicit "no meta file = no notification" guard works today.
-
-The risk emerges in v0.9 if:
-1. The dispatch script writes `task-meta.json` but a previous manual session's stale file is not cleaned up.
-2. The meta file path is shared globally (it is: `${RESULT_DIR}/task-meta.json` is a single file, not per-session).
-3. A new dispatch writes `task-meta.json`, the AI session runs, the hook fires and notifies — but then the file persists. The next manual session triggers the hook with the stale meta, sending a spurious notification for the previous task.
+Firefox bug #1290688: pasting an image from clipboard produces two entries in `clipboardData.files` and three entries in `clipboardData.types`. Iterating `clipboardData.files` instead of filtering `clipboardData.items` causes a single paste to add two thumbnail entries in Firefox.
 
 **Why it happens:**
-The lock file mechanism (`hook-lock`) uses a 30-second window to deduplicate events within the same session. But it does not prevent different sessions from reusing stale `task-meta.json`. The meta file is written once by the dispatch script and never deleted. `hook.log` shows this risk: the file is only written, never cleaned up on success.
+Firefox represents the clipboard image as both a `File` in the `files` list and as an `item` in the `items` list. Reading `files` directly doubles the image.
 
 **Prevention:**
-1. The dispatch script must write `task-meta.json` with a `session_id` field matching the Claude session that was started.
-2. The hook must verify `session_id` in `task-meta.json` matches the `SESSION_ID` from stdin before sending.
-3. After sending the notification, the hook must either delete `task-meta.json` or write a `processed: true` marker.
-4. Add an `ai_manager_dispatched: true` boolean field to `task-meta.json`. The hook checks this field; if absent or false, skip Feishu send. Manual sessions never write `task-meta.json`, so the file won't exist for them.
-5. Per-session meta files (e.g., `task-meta-${SESSION_ID}.json`) are safer than a single shared file, but require the dispatch script to know the Claude session ID before it starts — which is only available after Claude exits. Use a temp path with `session_id` verification instead.
+Always iterate `clipboardData.items`, filtering by `kind === "file"` and `type.startsWith("image/")`. Never iterate `clipboardData.files` for paste handling.
 
 **Detection:**
-- Feishu notification arrives for a manual `claude` session that was not dispatched by ai-manager.
-- `hook.log` shows `TASK_NAME=some-previous-task` for a session that should have no task.
-- Two back-to-back dispatched tasks send notifications for each other (second uses first's meta).
+In Firefox, a single Ctrl+V paste shows two identical thumbnails in the preview strip.
 
-**Phase:** Feishu notification integration phase. Update `notify-agi.sh` template and dispatch script atomically — they must agree on the session identification protocol.
+---
+
+### Pitfall 8: Race Condition — Send Before File Write Completes
+
+**Severity:** MODERATE
+**Phase:** UI state + save phase
+
+**What goes wrong:**
+The user pastes an image (which triggers an async server-side save to `.cache/images/`) then immediately presses Enter. The `sendMessage` call fires before the write promise resolves. The image path passed to the SDK points to a file that does not yet exist on disk. The Claude subprocess reads nothing and either errors or processes the message without the image.
+
+**Why it happens:**
+The thumbnail preview is available instantly (blob URL from browser memory). The user sees the image in the strip and assumes it is ready. The async write is invisible. There is no spinner on the thumbnail to indicate in-flight upload.
+
+**Consequences:**
+The AI receives the text message but not the image. The user receives a response that ignores the image they clearly attached. Confusing UX, no error shown.
+
+**Prevention:**
+Track upload state per pending image. The Send button remains enabled (for UX), but `sendMessage` awaits all in-flight write promises before dispatching to the SDK.
+
+```typescript
+interface PendingImage {
+  previewUrl: string;       // blob URL — available immediately
+  uploadPromise: Promise<string>; // resolves to absolute cache path
+  cachePath: string | null; // null until resolved
+}
+
+async function handleSend() {
+  const text = inputValue.trim();
+  if (!text && pendingImages.length === 0) return;
+
+  // Await all in-flight writes first
+  const resolvedPaths = await Promise.all(
+    pendingImages.map(img => img.uploadPromise)
+  );
+
+  sendMessage(text, resolvedPaths);
+  clearPendingImages(); // also revokes blob URLs
+  setInputValue("");
+}
+```
+
+Show a subtle upload indicator (e.g., spinner overlay on thumbnail) while `uploadPromise` is pending.
+
+**Detection:**
+Paste a large image and immediately send. The AI response must reference the image content. If it says "I don't see an image", the race condition is present.
+
+---
+
+### Pitfall 9: Image File Size Not Validated — API Limit Exceeded
+
+**Severity:** MODERATE
+**Phase:** Upload/save phase
+
+**What goes wrong:**
+A 4K screenshot (3840x2160 PNG) can be 10–20 MB. The Claude API enforces an 8 MB per-image limit for base64-encoded images in the standard messages endpoint. Larger images cause a 400 error. The existing `uploadAsset` uses a configurable `system.maxUploadBytes` limit (default 50 MB) — too large for chat image use.
+
+**Why it happens:**
+The existing upload limit is designed for project assets (documents, large files). Chat images have a different constraint set by the downstream API.
+
+**Consequences:**
+API 400 "Image exceeds size limit" when the user pastes a large screenshot. The error surfaces as a chat error message after the user has already waited for the response.
+
+**Prevention:**
+1. Client-side: check `file.size > 8_000_000` before uploading and show an inline warning: "Image too large (max 8 MB). It will be resized." Consider canvas-based client-side resize to cap the long edge at 1568px (the maximum Claude processes anyway).
+2. Server-side: enforce a hard 10 MB limit in the cache image write route as a backstop.
+3. Optional optimization: downscale to ≤1568px long edge before sending to Claude — images larger than this are silently downscaled by the API with no quality benefit and wasted token cost.
+
+**Detection:**
+Paste a screenshot > 8 MB. The expected behavior is a clear user-facing warning before or during upload, not a confusing API error after sending.
+
+---
+
+### Pitfall 10: Claude Agent SDK `query()` Does Not Accept File Path References Directly
+
+**Severity:** MODERATE
+**Phase:** SDK integration phase
+
+**What goes wrong:**
+The existing `query()` call in `assistant/chat/route.ts` accepts a `prompt` string. The Claude Agent SDK's `query()` function signature may not have a built-in `images` parameter accepting filesystem paths — the image content must be constructed as part of the message content array. If the integration blindly passes `imagePaths` as a top-level `query()` option, it will be silently ignored.
+
+**Why it happens:**
+The Claude Agent SDK is different from the Anthropic Messages API client. The `query()` function in `@anthropic-ai/claude-agent-sdk` spawns a Claude CLI subprocess. Image injection may need to happen at the prompt level (by including image content in the `prompt` parameter as a structured format) or through a CLI-specific mechanism.
+
+**Consequences:**
+Images are silently dropped — the AI responds to the text only, with no indication that images were not received.
+
+**Prevention:**
+Verify the exact `query()` API signature for image support before implementing. Check `node_modules/@anthropic-ai/claude-agent-sdk` for the `QueryOptions` type definition. If the SDK does not have native image support, fall back to writing image data as a formatted system prompt reference or use the `--add-image` CLI flag if the underlying `claude` binary supports it.
+
+This is a HIGH-priority investigation item that should be validated before committing to any architecture. If the SDK path reference approach does not work, the implementation strategy changes significantly.
+
+**Detection:**
+Add a test: send a message with one attached image (known path), verify the assistant's response describes the image content. If the response is image-agnostic ("I don't see any image attached"), the SDK integration is not passing images correctly.
+
+---
+
+### Pitfall 11: Existing `sendMessage(text)` Signature Must Be Extended Without Breaking Callers
+
+**Severity:** MODERATE
+**Phase:** Hook and API extension phase
+
+**What goes wrong:**
+`useAssistantChat.sendMessage` currently has the signature `(text: string) => void`. Extending it to `(text: string, imagePaths?: string[]) => void` is safe if no external callers rely on the exact type. However, `AssistantProvider` wraps this hook and exposes `sendChatMessage` to the rest of the app. If the signature change is not propagated consistently (hook → provider → consumer components), TypeScript will error, but only at build time — not at runtime if callers are in `.tsx` files without strict checking.
+
+**Why it happens:**
+The chat state lives in `AssistantProvider` which re-exports `sendChatMessage`. Any component calling `sendChatMessage` must be updated when the signature changes. The call site in `assistant-chat.tsx` is the primary one, but future features may add more.
+
+**Prevention:**
+When extending `sendMessage`, update the type in `UseAssistantChatReturn`, propagate to `AssistantProvider`'s context type, and run `tsc --noEmit` to surface all out-of-date call sites before the PR.
+
+**Detection:**
+`tsc --noEmit` errors mentioning "Expected 1 arguments, but got 2" at call sites that have not been updated.
 
 ---
 
 ## Minor Pitfalls
 
-### Pitfall 6: listAdapters in execute/route.ts Is an Unused Import
+---
+
+### Pitfall 12: Preview Strip Causes Layout Overflow in Narrow Sidebar
+
+**Severity:** MINOR
+**Phase:** UI preview phase
 
 **What goes wrong:**
-`src/app/api/tasks/[taskId]/execute/route.ts` imports `listAdapters` from the registry but never calls it in the route body. This import exists from an earlier version of the route. When the registry is deleted, this breaks the build even though the import serves no runtime purpose.
+The chat input area in the sidebar panel has `max-h-[120px]` on the textarea. Adding a horizontal thumbnail strip above or below the textarea with multiple images (each 56px tall) may push the send button off-screen or cause the input area to overflow the panel boundaries in the sidebar (320px wide mode).
 
 **Prevention:**
-Remove the `listAdapters` import from `execute/route.ts` as part of the adapter cleanup phase before deleting `registry.ts`. Run `tsc --noEmit` to confirm.
+Design the thumbnail strip as a fixed-height row (56–64px) that appears above the textarea only when `pendingImages.length > 0`. Thumbnails use horizontal scroll if there are many images. Cap at 5 images with an inline "max images reached" message to prevent overflow. Test in the 320px sidebar width.
 
-**Phase:** Adapter cleanup phase (day 1).
+**Detection:**
+With 3+ images pasted, the send button is no longer visible without scrolling the input area.
 
 ---
 
-### Pitfall 7: preview-process-manager.ts Uses Module-Level Singleton, Not globalThis
+### Pitfall 13: i18n Keys Missing for New Image UI Strings
+
+**Severity:** MINOR
+**Phase:** UI preview phase
 
 **What goes wrong:**
-`preview-process-manager.ts` uses a plain `const previewProcesses = new Map<string, ChildProcess>()` at module scope. Unlike `session-store.ts`, it does not use the `globalThis` singleton pattern. In Next.js dev mode with HMR, this Map is re-initialized on every hot reload, causing `isPreviewRunning()` to return false for processes that are actually still running.
-
-This is a pre-existing bug, but v0.9's adapter cleanup phase will touch this file (it lives in `src/lib/adapters/`). If the file is moved without fixing the singleton, the bug travels to the new location.
+Tower requires all user-facing strings to use `t("key")` with both `zh` and `en` translations. New UI elements added for image paste — remove button tooltip, max images warning, file too large warning, paste hint in the empty input placeholder — will show raw English strings in Chinese locale if translation keys are omitted.
 
 **Prevention:**
-When migrating `preview-process-manager.ts` out of the adapters directory, apply the same `globalThis` singleton pattern used by `session-store.ts`. This is a one-line fix that prevents preview processes from becoming orphaned on HMR.
+Add all new keys to both locale files before writing the JSX. Keys needed at minimum:
+- `assistant.imageTooLarge`
+- `assistant.maxImagesReached`
+- `assistant.removeImage` (aria-label)
+- `assistant.imageUploading`
 
-**Phase:** Adapter cleanup migration phase.
+**Detection:**
+Switch locale to Chinese. Any untranslated English strings in the chat input area indicate missing keys.
 
 ---
 
-### Pitfall 8: MCP Tool Count Ceiling
+### Pitfall 14: Thumbnail `<img>` Flashes Broken-Image Icon Before Load
+
+**Severity:** MINOR
+**Phase:** UI preview phase
 
 **What goes wrong:**
-The project has a documented constraint of at most 30 MCP tools (currently 21). v0.9 adds `get_task_terminal_output` and `send_task_terminal_input` — bringing the total to 23. If the external dispatch features add additional tools (e.g., `dispatch_task`, `get_dispatch_status`), the ceiling will be approached.
+Without explicit dimensions on the thumbnail container, the `<img src={blobUrl}>` renders at 0 height and flashes the broken-image icon until the blob URL resolves. This is jarring for large images where the blob URL is created asynchronously.
 
 **Prevention:**
-Use the action-dispatch pattern already established for `manage_notes` and `manage_assets`: one tool with an `action` parameter rather than separate tools for each operation. For terminal interaction, `terminal_tool` with `action: 'read' | 'write'` keeps the count at 22 instead of 23.
+Blob URLs are synchronous — `URL.createObjectURL()` returns immediately. The image render is instant. Use fixed container dimensions (`w-14 h-14` with `object-cover`) to avoid the flash from unsized containers.
 
-**Phase:** MCP terminal tools phase. Decide on tool shape before implementation.
+**Detection:**
+Paste a large image and observe the thumbnail strip for a size jump after the image loads.
 
 ---
 
@@ -239,22 +437,57 @@ Use the action-dispatch pattern already established for `manage_notes` and `mana
 
 | Phase Topic | Likely Pitfall | Mitigation |
 |-------------|---------------|------------|
-| Adapter dead code removal | Breaks Settings AI verification silently | Audit all imports first; migrate `testEnvironment` before deleting registry |
-| Adapter dead code removal | `listAdapters` dead import in execute/route.ts | Remove import as first step, run `tsc --noEmit` |
-| Adapter migration | `preview-process-manager.ts` HMR bug travels | Apply `globalThis` singleton pattern on migration |
-| CLI Profile + PTY | Per-session env vars leak via `process.env` | Add `extraEnv` to `PtySession` constructor; never mutate `process.env` |
-| PTY idle detection | False positives during Claude thinking (30–120s silence) | 180s minimum threshold; two-phase verify; `resetIdleTimer()` on user input |
-| MCP terminal tools | Sessions not accessible from MCP process | Build HTTP API bridge first; test with `curl` before writing MCP tool code |
-| Feishu notification | Hook fires for manual and automated sessions alike | `session_id` verification + `ai_manager_dispatched` field in meta; clean up meta after send |
-| External dispatch | Stale `task-meta.json` cross-contaminates notifications | Per-send cleanup or `processed` flag; never reuse meta across sessions |
+| Textarea `onPaste` handler | Pitfall 6: text paste broken | Only call `e.preventDefault()` when image items are found |
+| Textarea `onPaste` handler | Pitfall 7: Firefox double-file | Iterate `clipboardData.items`, not `clipboardData.files` |
+| Blob URL thumbnail preview | Pitfall 3: memory leak | `useEffect` cleanup revokes all blob URLs; revoke on removal and after send |
+| Thumbnail strip layout | Pitfall 12: overflow in sidebar | Fixed-height strip, horizontal scroll, 5-image cap |
+| i18n compliance | Pitfall 13: missing keys | Add zh/en keys before writing JSX |
+| Cache file save route | Pitfall 5: path traversal | UUID filename server-side; containment check; never use browser `file.name` |
+| Cache file save route | Pitfall 2: MIME spoofing + SVG XSS | Magic byte verification; reject SVG; use verified MIME as `media_type` |
+| Cache file save route | Pitfall 9: image too large | Client warn + server enforce 8 MB limit; optionally resize to ≤1568px |
+| Async save + send ordering | Pitfall 8: race condition | `sendMessage` awaits all `uploadPromise` before dispatching |
+| Claude SDK integration | Pitfall 10: SDK doesn't accept file paths natively | Verify `query()` type signature before implementing; test end-to-end early |
+| Claude SDK integration | Pitfall 1: base64 prefix | Strip `data:...;base64,` prefix if base64 path used; prefer server-side read |
+| Claude SDK integration | Pitfall 4: inline base64 bloat | Pass file path to subprocess, not base64; keep JSON body < 100 KB |
+| Hook/provider extension | Pitfall 11: signature mismatch | Run `tsc --noEmit` after extending `sendMessage` signature |
+
+---
+
+## Quick-Reference Checklist
+
+### Phase: UI paste handler
+- [ ] `e.preventDefault()` only when `imageItems.length > 0`
+- [ ] Iterate `clipboardData.items`, not `clipboardData.files`
+- [ ] Blob URL revoked on: image removed, send completed, component unmounted
+- [ ] Text paste still works after handler is added
+
+### Phase: File save to cache
+- [ ] Filename is `randomUUID().ext` — never browser `file.name`
+- [ ] Extension from server-verified MIME map (4 allowed types only)
+- [ ] Magic bytes verified before saving
+- [ ] `dest.startsWith(cacheDir + path.sep)` containment check
+- [ ] File size ≤ 8 MB enforced server-side
+
+### Phase: SDK integration
+- [ ] Verify `query()` accepts image content before committing to architecture
+- [ ] base64 prefix stripped if base64 path used
+- [ ] `media_type` from server-verified MIME, not `file.type`
+- [ ] Image bytes not embedded in JSON body (use file path)
+- [ ] `sendMessage` awaits all upload promises before dispatching
 
 ---
 
 ## Sources
 
-- Codebase: `src/lib/adapters/registry.ts`, `src/app/api/adapters/test/route.ts`, `src/app/api/tasks/[taskId]/execute/route.ts` — live import graph analysis
-- Codebase: `src/lib/pty/pty-session.ts`, `src/lib/pty/session-store.ts`, `src/lib/pty/ws-server.ts` — PTY session lifecycle and globalThis singleton pattern
-- Codebase: `src/lib/adapters/preview-process-manager.ts` — missing globalThis pattern
-- Codebase: `src/mcp/index.ts` — stdio transport confirms separate process boundary
-- Shell script: `/Users/liujunping/.claude/hooks/notify-agi.sh` — hook dedup logic, meta file handling, Feishu send path
-- Project context: `.planning/PROJECT.md` — MCP tool ceiling (≤30), v0.9 goals, architectural decisions
+- [Anthropic Vision API Docs](https://platform.claude.com/docs/en/build-with-claude/vision) — HIGH confidence (official docs, verified 2026-04-18); image size limits, supported MIME types, base64 format requirements
+- [GitHub: Image media type mismatch #11936](https://github.com/anthropics/claude-code/issues/11936) — HIGH confidence (confirmed bug report: media_type mismatch from base64 prefix)
+- [GitHub: Invalid image media type #7088](https://github.com/anthropics/claude-code/issues/7088) — HIGH confidence (confirmed bug report: same class of error)
+- [MDN: Element paste event](https://developer.mozilla.org/en-US/docs/Web/API/Element/paste_event) — HIGH confidence (official); `clipboardData.items` vs `files` semantics
+- [MDN: URL.revokeObjectURL](https://developer.mozilla.org/en-US/docs/Web/API/URL/revokeObjectURL_static) — HIGH confidence (official); blob URL lifecycle
+- [Firefox bug #1290688: Double clipboardData.files on image paste](https://bugzilla.mozilla.org/show_bug.cgi?id=1290688) — HIGH confidence (confirmed browser bug; affects clipboard.files iteration)
+- [react-dropzone memory leak #398](https://github.com/react-dropzone/react-dropzone/issues/398) — MEDIUM confidence (community issue confirming blob URL accumulation in React)
+- [File Uploads in Node.js the Safe Way](https://dev.to/prateekshaweb/file-uploads-in-nodejs-the-safe-way-validation-limits-and-storing-to-s3-4a86) — MEDIUM confidence (community; verified against project's existing `uploadAsset` patterns)
+- [React IME composition issue #8683](https://github.com/facebook/react/issues/8683) — HIGH confidence (confirmed React issue; matches existing `isComposing` guard in `assistant-chat.tsx`)
+- Codebase: `src/app/api/internal/assistant/chat/route.ts` — direct inspection of existing `query()` call signature and SSE streaming pattern
+- Codebase: `src/actions/asset-actions.ts` — direct inspection of existing path traversal mitigations (`path.basename`, containment check, UUID not used but timestamp-dedup pattern present)
+- Codebase: `src/hooks/use-assistant-chat.ts`, `src/components/assistant/assistant-chat.tsx` — direct inspection of current `sendMessage(text: string)` signature and textarea IME guard

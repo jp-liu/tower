@@ -1,298 +1,336 @@
-# Technology Stack
+# Technology Stack — v0.93 Chat Media Support
 
-**Project:** ai-manager v0.9 — 架构清理 + 外部调度闭环
-**Researched:** 2026-04-10
-**Confidence:** HIGH — all claims based on direct codebase inspection and existing installed packages. No new libraries are required; all v0.9 features are implementable with what is already installed.
-
----
-
-## Scope
-
-This is a **delta research document** for the v0.9 milestone. It covers only what is new or changed relative to the validated base stack (Next.js 16, React 19, Prisma 6, SQLite, node-pty 1.1.0, ws 8.x, @modelcontextprotocol/sdk 1.28.0, zod 4.x).
-
-The four v0.9 feature areas are:
-
-1. CLI Profile abstraction (replacing adapter layer)
-2. MCP tools for terminal interaction (get_task_terminal_output, send_task_terminal_input)
-3. PTY idle/activity detection for callback triggering
-4. Environment variable injection into PTY child processes
+**Project:** Tower — Chat Image Paste (v0.93)
+**Researched:** 2026-04-18
+**Confidence:** HIGH — all claims based on direct inspection of installed type definitions and existing codebase. No guesswork.
 
 ---
 
-## Recommended Stack
+## Summary: No New Dependencies Required
 
-### No New npm Dependencies Required
-
-All four v0.9 features are implementable with the existing installed packages. The table below documents which existing packages serve each new capability.
-
-| Capability | Existing Package | Version | How It Serves v0.9 |
-|-----------|-----------------|---------|---------------------|
-| CLI Profile DB model | `@prisma/client` | `^6.19.2` | New `CliProfile` model added to schema.prisma, generated via `prisma db push` |
-| CLI Profile CRUD API | Next.js `Server Actions` | 16.2.1 | Server actions pattern already used everywhere, no library change |
-| CLI argument assembly | Node.js built-ins | — | `buildArgs` logic moves from `execute.ts` into a pure function that reads from `CliProfile` record |
-| CLI environment validation | Existing `process-utils.ts` (`ensureCommandResolvable`, `runChildProcess`) | — | `testEnvironment()` from `claude-local/test.ts` is preserved as-is, just called via a direct import instead of through the adapter registry |
-| MCP terminal tools — live buffer | `ws` (HTTP call to Next.js internal API) | `^8.20.0` | MCP process is isolated from Next.js in-memory state; live buffer must be fetched via HTTP to `127.0.0.1:3000/api/internal/terminal/[taskId]/buffer` (new route, no new library) |
-| MCP terminal tools — send input | Same HTTP approach | — | POST to `127.0.0.1:3000/api/internal/terminal/[taskId]/input` which calls `session.write()` |
-| MCP terminal tools — completed log | `@prisma/client` | — | For completed/exited sessions, `TaskExecution.terminalLog` is already persisted to SQLite; MCP reads directly from DB |
-| PTY idle detection | `node-pty` + Node.js `setTimeout` | `^1.1.0` | Pure TypeScript addition to `pty-session.ts` — a `lastActivityAt` timestamp updated on every `onData` event, with a polling `setTimeout` that fires the idle callback |
-| Env var injection | `node-pty` (`pty.spawn` env option) | `^1.1.0` | `PtySession` constructor already accepts env via the `env` object passed to `pty.spawn`; extend the env object with profile-specific variables |
-| Feishu notification | Shell exec of `notify-agi.sh` (existing hook script) | — | The Stop hook already calls `notify-agi.sh` via Claude's hook mechanism; for programmatic dispatch from PTY idle callback, use `child_process.execFile` to call `notify-agi.sh` — no new library |
-| Input validation for new routes/tools | `zod` | `^4.3.6` | Already installed and used throughout |
+All required APIs are available in the current stack. This milestone requires zero new npm packages. The work is plumbing between existing browser APIs, existing cache infrastructure (`data/cache/`), and the Claude Agent SDK's `MessageParam` type already present in the installed `@anthropic-ai/sdk@0.81.0`.
 
 ---
 
-## New Prisma Model: CliProfile
+## Browser APIs (No New Dependencies)
 
-Add to `prisma/schema.prisma`. No new library required — generates via the existing `prisma db push` workflow.
+### Clipboard API — paste event interception
 
-```prisma
-model CliProfile {
-  id          String   @id @default(cuid())
-  name        String   @unique      // e.g. "claude-code-default"
-  command     String                // e.g. "claude"
-  buildArgs   String                // JSON array stored as string — e.g. ["--print","-","--output-format","stream-json"]
-  envVars     String?               // JSON object stored as string — e.g. {"CLAUDE_SKIP_PERMISSIONS":"true"}
-  isDefault   Boolean  @default(false)
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-```
-
-**Why `buildArgs` as JSON string, not a relational table:** SQLite is already used for all config. A JSON-encoded string in a TEXT column (`String`) is consistent with how `AgentConfig.settings` is stored today. Avoids a new relational table for what is essentially a config blob. Parsed via `JSON.parse()` at read time.
-
----
-
-## MCP Terminal Tools: IPC Architecture
-
-### The Problem
-
-The MCP server runs as a separate `tsx` process (`npx tsx src/mcp/index.ts`). It has its own Node.js runtime. The in-memory `globalThis.__ptySessions` Map lives exclusively in the Next.js server process. There is no shared memory between them.
-
-### The Solution: Internal HTTP Bridge (no new library)
-
-Add two internal API routes to the Next.js app:
-
-| Route | Method | Purpose |
-|-------|--------|---------|
-| `/api/internal/terminal/[taskId]/buffer` | GET | Returns `session.getBuffer()` for live sessions; falls back to `TaskExecution.terminalLog` from DB for completed sessions |
-| `/api/internal/terminal/[taskId]/input` | POST | Calls `session.write(data)` for live sessions; returns 409 if session is not running |
-
-These routes are bound to `127.0.0.1:3000` (localhost only — same security boundary as the rest of the app). The MCP tool handlers call these routes using Node.js `fetch()` (built-in since Node 18).
-
-**Why HTTP over alternative IPC methods:**
-
-| Alternative | Why Rejected |
-|-------------|-------------|
-| Unix socket / named pipe | More complex setup; would require coordinating a socket path between two processes; HTTP already exists at `127.0.0.1:3000` |
-| Shared SQLite table for live buffer | SQLite writes from Next.js to a "buffer" table on every PTY data event would be extremely high frequency and degrade performance; the ring buffer is designed for in-memory use |
-| Redis / external cache | Out of scope — no external infrastructure dependency; the app is localhost-only |
-| Making MCP a Next.js route (not separate process) | Project decision from v0.2: "MCP server as separate process — Avoid coupling with Next.js lifecycle" — this decision is validated and should not be reversed |
-
-**Implementation in MCP tool handlers:**
+**Source:** MDN Web Docs (built-in browser API)
+**Confidence:** HIGH
 
 ```typescript
-// src/mcp/tools/terminal-tools.ts
-import { z } from "zod";
-
-const BASE = "http://127.0.0.1:3000";
-
-export const terminalTools = {
-  get_task_terminal_output: {
-    description: "Get the current terminal output buffer for a running task, or the stored terminal log for a completed task.",
-    schema: z.object({ taskId: z.string() }),
-    handler: async ({ taskId }: { taskId: string }) => {
-      const res = await fetch(`${BASE}/api/internal/terminal/${taskId}/buffer`);
-      if (!res.ok) throw new Error(`Failed to get terminal output: ${res.status}`);
-      return res.json();
-    },
-  },
-  send_task_terminal_input: {
-    description: "Send keyboard input to a running task's terminal. Use for answering prompts or sending commands.",
-    schema: z.object({ taskId: z.string(), input: z.string() }),
-    handler: async ({ taskId, input }: { taskId: string; input: string }) => {
-      const res = await fetch(`${BASE}/api/internal/terminal/${taskId}/input`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input }),
-      });
-      if (!res.ok) throw new Error(`Failed to send input: ${res.status}`);
-      return res.json();
-    },
-  },
+// Attach to the <Textarea> element's onPaste handler
+const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  const items = Array.from(e.clipboardData.items);
+  for (const item of items) {
+    if (item.type.startsWith("image/")) {
+      const file = item.getAsFile();
+      if (file) void handleImageFile(file);
+    }
+  }
 };
 ```
 
-Node.js `fetch()` is available natively since Node 18 (project constraint: Node.js 18.18+). No `node-fetch` or `axios` needed.
+- `ClipboardEvent.clipboardData.items` — `DataTransferItemList`
+- `DataTransferItem.type` — MIME string, e.g. `"image/png"`
+- `DataTransferItem.getAsFile()` — returns `File | null`
+- Works in all modern browsers; no polyfill needed
+
+### File API — thumbnail preview
+
+**Source:** Built-in browser API
+**Confidence:** HIGH
+
+```typescript
+// Immediate local preview (no upload needed)
+const previewUrl = URL.createObjectURL(file); // revoke after unmount/send
+
+// Read bytes for upload
+const buffer = await file.arrayBuffer();
+```
+
+`URL.createObjectURL` produces a `blob:` URL for `<img src>` previews without any server round-trip. Must call `URL.revokeObjectURL(url)` when the preview is removed or the message is sent.
+
+### Accepted MIME types
+
+Constrained to what Claude API accepts for image blocks:
+
+| Extension | MIME Type | Claude Accepts |
+|-----------|-----------|---------------|
+| .png | image/png | YES |
+| .jpg/.jpeg | image/jpeg | YES |
+| .gif | image/gif | YES |
+| .webp | image/webp | YES |
+
+Reject other MIME types at paste time with a toast. Do not attempt to handle SVG (not accepted by Claude API image blocks).
 
 ---
 
-## PTY Idle Detection: Implementation Pattern
+## Server-Side: Image Cache Storage
 
-Pure TypeScript addition to `pty-session.ts`. No new library.
+### New utility functions in `src/lib/file-utils.ts`
 
-**Mechanism:** Track `lastActivityAt: number` (epoch ms) updated on every `onData` event. A periodic `setTimeout` chain checks whether `Date.now() - lastActivityAt >= idleThresholdMs`. When the threshold is crossed, fire the registered idle callback once and reset (or stop, depending on use case).
+The existing `ensureCacheDir(taskId)` is task-scoped. Add a shared image cache directory:
 
 ```typescript
-// Addition to PtySession class
-private _lastActivityAt = Date.now();
-private _idleCallback: (() => void) | null = null;
-private _idleThresholdMs = 0;
-private _idleTimer: ReturnType<typeof setTimeout> | null = null;
-
-setIdleCallback(thresholdMs: number, fn: () => void): void {
-  this._idleThresholdMs = thresholdMs;
-  this._idleCallback = fn;
-  this._scheduleIdleCheck();
+// Add to src/lib/file-utils.ts:
+export function getImageCacheDir(): string {
+  const dir = path.join(DATA_ROOT, "cache", "images");
+  assertWithinDataRoot(dir);
+  return dir;
 }
 
-clearIdleCallback(): void {
-  this._idleCallback = null;
-  if (this._idleTimer) {
-    clearTimeout(this._idleTimer);
-    this._idleTimer = null;
-  }
-}
-
-private _scheduleIdleCheck(): void {
-  if (!this._idleCallback || this.killed) return;
-  const checkInterval = Math.min(this._idleThresholdMs, 5_000); // check at most every 5s
-  this._idleTimer = setTimeout(() => {
-    this._idleTimer = null;
-    if (!this._idleCallback || this.killed) return;
-    if (Date.now() - this._lastActivityAt >= this._idleThresholdMs) {
-      this._idleCallback(); // fire once
-    } else {
-      this._scheduleIdleCheck(); // reschedule
-    }
-  }, checkInterval);
+export function ensureImageCacheDir(): string {
+  const dir = getImageCacheDir();
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
 }
 ```
 
-`_lastActivityAt` is updated inside the existing `this._pty.onData(...)` handler — a one-line addition.
+Storage path: `data/cache/images/<uuid>.<ext>`
 
-**Cleanup:** `clearIdleCallback()` must be called in `kill()` to prevent timer leak after session destruction.
+File naming: `crypto.randomUUID()` + extension derived from MIME type. No DB record — these are ephemeral assistant-session artifacts.
+
+### New API route: `POST /api/internal/assistant/upload-image`
+
+Accepts `multipart/form-data` with a `file` field. Returns `{ filename, mimeType }`.
+
+```
+src/app/api/internal/assistant/upload-image/route.ts
+```
+
+Security requirements (follow existing internal route conventions):
+- Call `requireLocalhost(request)` from `src/lib/internal-api-guard.ts`
+- Enforce max file size (5 MB per image) — read from `getConfigValue("system.maxUploadBytes", 5242880)`
+- Validate MIME type against allowlist before writing
+- Containment check: `path.resolve(dest).startsWith(cacheDir + path.sep)`
+- Sanitize filename: use UUID, not the original filename, to eliminate path traversal
+
+### New API route: `GET /api/files/cache/images/[filename]`
+
+Serves cached images to the browser (for the preview strip thumbnail).
+
+```
+src/app/api/files/cache/images/[filename]/route.ts
+```
+
+Pattern: mirrors `src/app/api/files/assets/[projectId]/[filename]/route.ts`. Read file, return with correct `Content-Type` from `MIME_MAP` in `src/lib/file-serve.ts`. Containment check required.
 
 ---
 
-## Environment Variable Injection
+## Claude Agent SDK — Image Parameter Format
 
-The `PtySession` constructor already passes an `env` object to `pty.spawn`. The only change needed is to make the caller (`startPtyExecution` in `agent-actions.ts`) pass additional env vars sourced from the `CliProfile.envVars` JSON field.
+**Source:** Directly read from installed type definitions at:
+- `node_modules/.pnpm/@anthropic-ai+sdk@0.81.0_zod@4.3.6/node_modules/@anthropic-ai/sdk/resources/messages/messages.d.ts`
+- `node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts`
+
+**Confidence:** HIGH
+
+### Type hierarchy
 
 ```typescript
-// In startPtyExecution — parse CliProfile.envVars and merge
-const profileEnv: Record<string, string> = profile.envVars
-  ? JSON.parse(profile.envVars)
-  : {};
+// From @anthropic-ai/sdk@0.81.0
+interface MessageParam {
+  content: string | Array<ContentBlockParam>;
+  role: "user" | "assistant";
+}
 
-createSession(taskId, command, args, cwd, onData, onExit, {
-  ...baseEnv,
-  ...profileEnv,  // Profile env vars override base env
+interface ImageBlockParam {
+  type: "image";
+  source: Base64ImageSource | URLImageSource;
+  cache_control?: CacheControlEphemeral | null;
+}
+
+interface Base64ImageSource {
+  type: "base64";
+  data: string;                 // base64 string, NO "data:..." prefix
+  media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+}
+
+interface URLImageSource {
+  type: "url";
+  url: string;
+}
+```
+
+### Use Base64, not URL
+
+`URLImageSource` is also valid, but requires the Claude subprocess to fetch the URL. Since Tower is localhost-only and the Claude subprocess may run in a sandboxed network context, fetching `http://localhost:3000/api/files/...` from within the subprocess is unreliable. **Use `Base64ImageSource` exclusively.**
+
+### How to pass images to `query()`
+
+Current `chat/route.ts` passes `prompt` as a plain string. When images are present, switch to `AsyncIterable<SDKUserMessage>`:
+
+```typescript
+import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { MessageParam } from "@anthropic-ai/sdk/resources";
+
+// Build multi-block content
+const content: MessageParam["content"] = [
+  { type: "text", text: `/tower ${body.message}` },
+  ...imageBlocks, // ImageBlockParam[]
+];
+
+const sdkMessage: SDKUserMessage = {
+  type: "user",
+  parent_tool_use_id: null,
+  message: { role: "user", content },
+};
+
+async function* promptStream(): AsyncGenerator<SDKUserMessage> {
+  yield sdkMessage;
+}
+
+const q = query({
+  prompt: promptStream(),
+  options: options as Parameters<typeof query>[0]["options"],
 });
 ```
 
-The `PtySession` constructor's existing `env` block already includes `ANTHROPIC_API_KEY`, `PATH`, `HOME`, `SHELL`, `TERM`, `LANG`, `USER`. Profile env vars are merged on top, so a profile can override any of these or add new ones (e.g., `CLAUDE_SKIP_PERMISSIONS`, custom model env vars).
+When no images are attached, keep the existing `prompt: \`/tower ${body.message}\`` string path unchanged.
 
-**No new library required.** The merge is plain object spread.
-
----
-
-## Adapter Cleanup: What to Delete vs Preserve
-
-### Delete (dead code after v0.9)
-
-| File/Module | Reason |
-|-------------|--------|
-| `src/lib/adapters/registry.ts` | Adapter pattern replaced by CliProfile DB model |
-| `src/lib/adapters/types.ts` | `AdapterModule`, `ExecutionContext`, `ExecutionResult` interfaces replaced by CliProfile-driven execution |
-| `src/lib/adapters/claude-local/index.ts` | Adapter wrapper, no longer needed |
-| `src/lib/adapters/claude-local/execute.ts` | PTY-based execution makes `runChildProcess`-based execute obsolete |
-| `src/lib/adapters/process-manager.ts` | `executionToRunId` map and `killProcess` function are for the old SSE/child_process execution; PTY sessions have their own lifecycle in `session-store.ts` |
-
-### Preserve and Relocate
-
-| File/Module | What to Keep | Where |
-|-------------|-------------|-------|
-| `src/lib/adapters/claude-local/test.ts` | `testEnvironment()` — CLI verification with 4 checks | Move to `src/lib/cli-verify.ts` (standalone, no adapter dependency) |
-| `src/lib/adapters/process-utils.ts` | `runChildProcess`, `ensureCommandResolvable`, `runningProcesses` | Move to `src/lib/process-utils.ts` (used by `cli-verify.ts` and `preview-actions.ts`) |
-| `src/lib/adapters/preview-process-manager.ts` | Preview process lifecycle management | Move to `src/lib/preview-process-manager.ts` |
-| `src/lib/adapters/claude-local/parse.ts` | Stream JSON parsing, login detection, failure description | Move to `src/lib/claude-stream-parse.ts` (still needed by `cli-verify.ts`) |
-
-### Update Call Sites
-
-| Current Import | Updated Import |
-|---------------|----------------|
-| `import { getAdapter } from "@/lib/adapters/registry"` | Remove (replaced by CliProfile lookup from DB) |
-| `import { canStartExecution } from "@/lib/adapters/process-manager"` | Replace with PTY session count check from `session-store.ts` |
-| `import { testEnvironment } from "..."` via adapter | Import directly from `@/lib/cli-verify` |
-
----
-
-## Feishu Notification: No New Library
-
-The existing `notify-agi.sh` hook script (called via Claude Code's Stop hook mechanism) handles Feishu notifications via `openclaw` CLI. For the new PTY idle callback triggering a notification (e.g., "task is waiting for your input"), call the script programmatically from the idle callback:
+### Building `imageBlocks` on the server
 
 ```typescript
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import { getImageCacheDir } from "@/lib/file-utils";
 
-const execFileAsync = promisify(execFile);
+interface ImageRef {
+  filename: string;
+  mimeType: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+}
 
-async function notifyFeishu(taskTitle: string, message: string) {
-  // notify-agi.sh path: locate via env var or well-known path
-  const scriptPath = process.env.NOTIFY_AGI_SCRIPT ?? `${process.env.HOME}/.claude/notify-agi.sh`;
-  await execFileAsync("bash", [scriptPath, taskTitle, message], {
-    timeout: 10_000,
-  });
+async function buildImageBlocks(images: ImageRef[]) {
+  const cacheDir = getImageCacheDir();
+  return Promise.all(
+    images.map(async ({ filename, mimeType }) => {
+      // Containment check
+      const resolved = path.resolve(cacheDir, filename);
+      if (!resolved.startsWith(cacheDir + path.sep)) throw new Error("Invalid image ref");
+      const buf = await fs.readFile(resolved);
+      return {
+        type: "image" as const,
+        source: {
+          type: "base64" as const,
+          media_type: mimeType,
+          data: buf.toString("base64"),
+        },
+      };
+    })
+  );
 }
 ```
 
-`execFile` / `promisify` are Node.js built-ins. No new library.
+---
+
+## API Contract Changes
+
+### `POST /api/internal/assistant/chat` — extended body
+
+Current: `{ message: string, sessionId?: string }`
+New: `{ message: string, sessionId?: string, images?: ImageRef[] }`
+
+```typescript
+interface ImageRef {
+  filename: string;  // UUID-named file in data/cache/images/
+  mimeType: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+}
+```
+
+Keeping filenames in the body (rather than base64) keeps the request body small. Server reads files from disk when building the SDK message.
+
+### Upload flow
+
+```
+User pastes image in browser
+  → onPaste: extract File from ClipboardData
+  → URL.createObjectURL(file) → local previewUrl for thumbnail
+  → POST /api/internal/assistant/upload-image (FormData with file)
+  → server writes data/cache/images/<uuid>.png
+  → returns { filename: "abc.png", mimeType: "image/png" }
+  → browser stores PendingImage { filename, mimeType, previewUrl }
+
+User clicks Send
+  → POST /api/internal/assistant/chat { message, images: [{ filename, mimeType }] }
+  → server reads files, base64 encodes, builds AsyncIterable<SDKUserMessage>
+  → query() streams normally
+  → browser clears pendingImages, revokes previewUrls
+```
 
 ---
 
-## Summary: No New npm Installs Required
+## React Component Changes (No New Libraries)
 
-| Feature | Implementation Approach | New Library? |
-|---------|------------------------|--------------|
-| CLI Profile abstraction | New Prisma model + server actions | No — Prisma already installed |
-| MCP terminal tools | Internal HTTP API routes + `fetch()` | No — native Node.js fetch |
-| PTY idle detection | `setTimeout` polling in `pty-session.ts` | No — pure TypeScript |
-| Env var injection | Object spread in `startPtyExecution` | No |
-| Feishu notification from idle | `child_process.execFile` to `notify-agi.sh` | No — Node.js built-in |
+### State shape for pending images
 
-All v0.9 work is pure TypeScript logic, schema changes, and code reorganization. No `pnpm add` commands are needed.
+```typescript
+interface PendingImage {
+  filename: string;   // returned from upload API
+  mimeType: string;
+  previewUrl: string; // blob: URL from createObjectURL
+}
+```
+
+### `AssistantChat` component
+
+- Add `onPaste` to `<Textarea>` element
+- Add horizontal-scrolling preview strip above the textarea when `pendingImages.length > 0`
+- Each preview: small `<img>` (thumbnail) + X button to remove
+- On remove: `URL.revokeObjectURL(previewUrl)`
+- On send: pass `images` to `sendMessage`, then revoke all preview URLs and clear state
+
+No new UI libraries needed. Plain `<img>` tags + existing `Button` + Tailwind.
+
+### `useAssistantChat` hook
+
+- `sendMessage(text: string)` → `sendMessage(text: string, images?: ImageRef[])`
+- Pass `images` in the JSON body to the chat API
+- No other structural changes
 
 ---
 
-## MCP Tool Count Check
+## Constraints
 
-Current: 21 tools. v0.9 adds 2 terminal tools (`get_task_terminal_output`, `send_task_terminal_input`). New total: 23. Ceiling is 30. No concern.
+- Max 5 images per message (enforce in UI before upload)
+- Max 5 MB per image (enforce on server, aligned with `system.maxUploadBytes`)
+- Only `image/jpeg`, `image/png`, `image/gif`, `image/webp` (Claude API hard limit)
+- No auto-cleanup of `data/cache/images/` — out of scope per PROJECT.md
 
 ---
 
-## What NOT to Add
+## Integration Points with Existing Code
 
-| Avoid | Why |
-|-------|-----|
-| `node-fetch` or `axios` for MCP→Next.js HTTP | Node.js 18+ has native `fetch()` — no library needed |
-| Redis or any external cache for live PTY buffer | App is localhost-only, single-user; HTTP bridge to Next.js is sufficient |
-| A new `IPC` library (e.g., `electron-ipc`, `worker_threads`) | HTTP is the existing boundary between MCP process and Next.js; introducing a new IPC mechanism adds complexity for zero benefit |
-| Reverting MCP to in-process (Next.js route) | Validated architectural decision from v0.2 — separation avoids Next.js lifecycle coupling |
-| `stream-json` or `readline` for new terminal parsing | The existing `parse.ts` (to be preserved as `claude-stream-parse.ts`) handles all CLI output parsing needed |
-| A new adapter for a different CLI | CliProfile table is designed to support future CLIs; do not create a new adapter module — the profile-driven approach is the replacement |
-| `socket.io` | Already avoided in v0.7 for the same reasons; still irrelevant |
+| File | Change |
+|------|--------|
+| `src/lib/file-utils.ts` | Add `getImageCacheDir()` + `ensureImageCacheDir()` |
+| `src/hooks/use-assistant-chat.ts` | Extend `sendMessage` to accept optional `images?: ImageRef[]` |
+| `src/components/assistant/assistant-chat.tsx` | Add paste handler + image preview strip |
+| `src/app/api/internal/assistant/chat/route.ts` | Accept `images?` in body; build `AsyncIterable<SDKUserMessage>` when images present |
+| `src/app/api/internal/assistant/upload-image/route.ts` | **New** — upload handler |
+| `src/app/api/files/cache/images/[filename]/route.ts` | **New** — serve cached images |
+
+---
+
+## Alternatives Considered
+
+| Approach | Why Not |
+|----------|---------|
+| Send base64 directly in chat body | Bloats the POST body (up to 20 MB for 5 images); file-first decouples upload latency |
+| `URLImageSource` | Claude subprocess may be network-sandboxed; localhost fetch unreliable |
+| Store images in DB as blobs | Unnecessary; ephemeral on-disk cache consistent with existing `data/cache/` pattern |
+| `react-dropzone` / paste library | Native `ClipboardEvent` on `<textarea>` covers 100% of the use case |
+| `sharp` for server-side resizing | Native dependency; Claude handles large images; skip for now |
+| Inline images in SSE stream (data URLs) | Inflates streamed response size; separate serve route is cleaner |
 
 ---
 
 ## Sources
 
-- Direct codebase inspection: `src/lib/pty/pty-session.ts`, `src/lib/pty/session-store.ts`, `src/lib/pty/ws-server.ts`, `src/lib/adapters/`, `src/mcp/index.ts`, `src/mcp/server.ts`, `prisma/schema.prisma`, `package.json` — HIGH confidence
-- `.planning/PROJECT.md` v0.9 milestone definition — HIGH confidence (project source of truth)
-- Node.js 18 documentation: `fetch()` available globally since Node 18.0.0 (project constraint: 18.18+) — HIGH confidence
-- Existing `.planning/research/STACK.md` v0.7 research (validated node-pty, ws, MCP SDK versions) — HIGH confidence
-
----
-
-*Stack research for: ai-manager v0.9 — adapter cleanup, CLI Profile, MCP terminal tools, PTY idle detection*
-*Researched: 2026-04-10*
+- `@anthropic-ai/sdk@0.81.0` type definitions (read from disk): `node_modules/.pnpm/@anthropic-ai+sdk@0.81.0_zod@4.3.6/.../resources/messages/messages.d.ts` — **HIGH**
+- `@anthropic-ai/claude-agent-sdk@0.2.114` type definitions (read from disk): `node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts` — **HIGH**
+- Existing codebase: `src/lib/file-utils.ts`, `src/actions/asset-actions.ts`, `src/app/api/internal/assistant/chat/route.ts`, `src/lib/file-serve.ts` — **HIGH**
+- MDN Clipboard API: https://developer.mozilla.org/en-US/docs/Web/API/ClipboardEvent/clipboardData — **HIGH**
+- MDN File API / FileReader: https://developer.mozilla.org/en-US/docs/Web/API/FileReader — **HIGH**
+- MDN URL.createObjectURL: https://developer.mozilla.org/en-US/docs/Web/API/URL/createObjectURL — **HIGH**

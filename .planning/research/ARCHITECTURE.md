@@ -1,489 +1,322 @@
-# Architecture Patterns — v0.9 Integration
+# Architecture: Chat Image Paste Integration (v0.93)
 
-**Domain:** AI task management platform — adapter cleanup + external dispatch integration
-**Researched:** 2026-04-10
-**Confidence:** HIGH (all findings derived from direct source-code inspection of the running v0.8 codebase)
+**Domain:** Multimodal input for existing SSE-based assistant chat
+**Researched:** 2026-04-18
+**Confidence:** HIGH — all findings from direct source inspection + SDK type verification
 
 ---
 
-## Existing Architecture (v0.8 baseline)
+## Existing Chat Architecture (v0.92 baseline)
 
-### Execution Flow
-
-```
-User (browser)
-  └── Server Action: startPtyExecution()           [agent-actions.ts]
-        ├── db.taskExecution.create (RUNNING)
-        ├── createWorktree (if baseBranch set)
-        ├── writeFile: instructions.md (if promptId)
-        └── createSession(taskId, "claude", claudeArgs, cwd, noopOnData, onExit)
-              └── session-store.ts: Map<taskId, PtySession>   [globalThis.__ptySessions]
-                    └── PtySession: node-pty.spawn("claude", args, { hardcoded env })
-
-WebSocket client (xterm.js) → ws://127.0.0.1:3001?taskId=X
-  └── ws-server.ts: wireSession(session, ws, taskId)
-        ├── session.setDataListener(batchedSender)   [live streaming]
-        ├── ws.send(session.getBuffer())              [replay on reconnect]
-        └── session.setExitListener(sendSessionEnd)  [close WS on PTY exit]
-
-PTY onExit callback (closure in agent-actions.ts):
-  ├── db.taskExecution.update(COMPLETED/FAILED)
-  ├── captureExecutionSummary()                      [git log, stats, terminal log]
-  └── db.task.update(IN_REVIEW)                      [if exit 0]
-```
-
-### MCP Process Boundary
+The assistant chat is a three-layer stack:
 
 ```
-MCP process (stdio, separate Node.js)
-  └── src/mcp/index.ts
-        ├── PrismaClient (own instance, WAL mode)
-        └── tool handlers: direct DB reads/writes only
-
-Next.js process
-  ├── globalThis.__ptySessions  (Map<taskId, PtySession>)
-  ├── globalThis.__wss          (WebSocketServer on :3001)
-  └── Server Actions + ws-server share the same globalThis
+Browser (AssistantChat.tsx)
+  └── AssistantProvider (React context — chat state persists across routes)
+        └── sendChatMessage(text: string)
+              └── POST /api/internal/assistant/chat
+                    └── Claude Agent SDK: query({ prompt: `/tower ${text}`, options })
+                          └── SSE stream → browser
 ```
 
-**Critical constraint:** MCP process has NO access to `globalThis.__ptySessions`. The session Map lives exclusively in the Next.js process. Any MCP tool that needs live PTY data must cross this process boundary via HTTP — there is no shared memory or IPC channel.
+### Key Contracts That Must Be Preserved
 
-### Current Env Injection (hardcoded in PtySession constructor)
+1. `sendChatMessage(text: string)` — provider API consumed by AssistantChat
+2. `POST /api/internal/assistant/chat` — body `{ message: string, sessionId?: string }`
+3. SSE event types: `text`, `text_delta`, `tool_use`, `tool_start`, `tool_result`, `error`, `done`
+4. `query()` prompt type: `string | AsyncIterable<SDKUserMessage>`
 
-```typescript
-// pty-session.ts line 32-39
-env: {
-  PATH: process.env.PATH ?? "",
-  HOME: process.env.HOME ?? "",
-  SHELL: process.env.SHELL ?? "/bin/zsh",
-  TERM: "xterm-color",
-  LANG: process.env.LANG ?? "en_US.UTF-8",
-  USER: process.env.USER ?? "",
-  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? "",
+---
+
+## Data Flow: paste → cache → preview → send → SDK
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ 1. PASTE EVENT (browser)                                         │
+│    onPaste handler in AssistantChat.tsx                          │
+│    ClipboardEvent.clipboardData.items                            │
+│    → filter item.kind === "file" && item.type.startsWith("image")│
+│    → item.getAsFile() → File object                              │
+└────────────────────────┬─────────────────────────────────────────┘
+                         │ File (in-memory)
+┌────────────────────────▼─────────────────────────────────────────┐
+│ 2. UPLOAD TO CACHE (browser → server)                            │
+│    POST /api/internal/assistant/images                           │
+│    Body: FormData { file: File }                                 │
+│    → Route handler writes to data/cache/assistant/uuid.ext       │
+│    → Returns { id: uuid, url: "/api/serve/cache/uuid.ext",       │
+│                filename: "uuid.ext", size: N }                   │
+│    (uses existing getCacheDir + ensureCacheDir from file-utils)  │
+└────────────────────────┬─────────────────────────────────────────┘
+                         │ { id, url, filename }
+┌────────────────────────▼─────────────────────────────────────────┐
+│ 3. PREVIEW (browser — local state)                               │
+│    pendingImages: PendingImage[]                                 │
+│    Each: { id, url, filename, localPreview: ObjectURL }          │
+│    Rendered as thumbnail strip above the Textarea                │
+│    × button removes from pendingImages                           │
+└────────────────────────┬─────────────────────────────────────────┘
+                         │ pendingImages passed to send
+┌────────────────────────▼─────────────────────────────────────────┐
+│ 4. SEND (browser → server)                                       │
+│    POST /api/internal/assistant/chat                             │
+│    Body: { message: string, sessionId?: string,                  │
+│            images?: string[] }   ← NEW: absolute file paths      │
+│    (URL paths resolved server-side to absolute paths)            │
+└────────────────────────┬─────────────────────────────────────────┘
+                         │ images as absolute paths
+┌────────────────────────▼─────────────────────────────────────────┐
+│ 5. SDK CALL (server — /api/internal/assistant/chat route)        │
+│    If images present:                                            │
+│      Read each file → Buffer → base64                            │
+│      Build SDKUserMessage with MessageParam.content as array:    │
+│        [{ type: "text", text: "/tower <message>" },              │
+│         { type: "image", source: { type: "base64",               │
+│           media_type: "image/jpeg", data: "..." } }, ...]        │
+│      query({ prompt: asyncIterableOfOneSDKUserMessage, options })│
+│    Else (no images — current behavior):                          │
+│      query({ prompt: `/tower ${message}`, options })             │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## New Components
+
+### 1. `POST /api/internal/assistant/images` (new route)
+
+Location: `src/app/api/internal/assistant/images/route.ts`
+
+Purpose: Accept FormData upload, write to cache, return metadata.
+
+```
+Input:  FormData { file: File }
+Output: { id: string, path: string, filename: string, size: number }
+Security:
+  - requireLocalhost(request) — same as all internal routes
+  - path.basename(file.name) sanitization — same as uploadAsset()
+  - Contain within getCacheDir("assistant") via assertWithinDataRoot
+  - Max size: read from getConfigValue("system.maxUploadBytes", 52428800)
+Storage: data/cache/assistant/<uuid>.<ext>
+```
+
+The route does NOT create a DB record. Cache images are ephemeral — no ProjectAsset row needed for the assistant use case.
+
+### 2. `ImagePasteBar` component (new component)
+
+Location: `src/components/assistant/image-paste-bar.tsx`
+
+Purpose: Render the thumbnail strip with delete affordance.
+
+```tsx
+interface PendingImage {
+  id: string;          // uuid returned by upload API
+  filename: string;    // uuid.ext
+  localPreview: string; // object URL for <img src>
+  absolutePath: string; // server-side absolute path for SDK
+}
+
+interface ImagePasteBarProps {
+  images: PendingImage[];
+  onRemove: (id: string) => void;
 }
 ```
 
-The env is captured at `PtySession` construction time. Any additional env vars must be passed to the constructor before `node-pty.spawn()` is called — they cannot be injected after spawning.
-
-### Current CLI Args (hardcoded in agent-actions.ts)
-
-```typescript
-// agent-actions.ts line ~304
-const claudeArgs: string[] = ["--dangerously-skip-permissions"];
-if (instructionsFile) claudeArgs.push("--system-prompt", instructionsFile);
-claudeArgs.push(fullPrompt);
-createSession(taskId, "claude", claudeArgs, cwd, () => {}, onExitFn);
-```
-
-Both the command (`"claude"`) and base flags (`["--dangerously-skip-permissions"]`) are hardcoded strings. There is no indirection layer.
-
-### Adapter Dead Code
-
-`src/lib/adapters/` contains two distinct concerns — one live, one dead:
-
-| File | Status | Reason |
-|------|--------|--------|
-| `claude-local/execute.ts` | Dead | SSE streaming path; PTY execution no longer uses it |
-| `claude-local/parse.ts` | Dead | stream-json parsing; only used by execute.ts and test.ts |
-| `claude-local/test.ts` | **Live** | `testEnvironment()` used by Settings > AI Tools verification |
-| `claude-local/index.ts` | **Live** | Re-exports testEnvironment |
-| `types.ts` | **Live** | `TestResult`, `TestCheck` interfaces used by test.ts |
-| `process-utils.ts` | **Live** | `runChildProcess`, `ensureCommandResolvable` used by test.ts |
-| `registry.ts` | Likely dead | Verify callers before deleting |
-| `process-manager.ts` | Likely dead | Verify callers before deleting |
-| `preview-process-manager.ts` | **Live** | Manages preview child processes (workbench preview panel) |
+Renders a horizontal flex strip. Each thumbnail is a 48x48px `<img>` with an overlay `×` button. Strip only mounts when `images.length > 0` (no layout shift on empty state).
 
 ---
 
-## Integration Points for v0.9 New Features
+## Modified Components
 
-### 1. CLI Profile — Position in Execution Flow
+### 3. `AssistantChat.tsx` — modified
 
-**What it is:** A `CliProfile` DB table that replaces the hardcoded `"claude"` command and `["--dangerously-skip-permissions"]` base flags. Supports future switching to different CLI binaries or flag combinations.
-
-**Where it integrates:** `startPtyExecution()` in `agent-actions.ts`, between step 6 (worktree creation) and step 9 (createSession call). Specifically, step 8 which currently hardcodes the args.
-
-**Current hardcode → new indirection:**
+The chat input section gains paste handling and preview strip:
 
 ```
-Before:
-  createSession(taskId, "claude", ["--dangerously-skip-permissions", ...promptArgs], cwd, ...)
+New state:
+  pendingImages: PendingImage[] (local to AssistantChat)
+  isUploading: boolean (debounce send during upload)
 
-After:
-  profile = await loadDefaultCliProfile()   // DB read
-  buildArgs = [...JSON.parse(profile.baseArgs), ...promptArgs]
-  createSession(taskId, profile.command, buildArgs, cwd, ...)
+New paste handler:
+  onPaste → extract image files → upload each via fetch → add to pendingImages
+  createObjectURL for local preview (revoke on remove)
+
+handleSend modification:
+  pass { images: pendingImages.map(i => i.absolutePath) } alongside text
+  clear pendingImages after send
+
+Layout change:
+  <ImagePasteBar /> inserted between ScrollArea and border-t input area
 ```
 
-**Schema addition:**
+### 4. `AssistantProvider.tsx` — modified
 
-```prisma
-model CliProfile {
-  id        String   @id @default(cuid())
-  name      String
-  command   String   @default("claude")
-  baseArgs  String   @default("[\"--dangerously-skip-permissions\"]")
-  isDefault Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-```
+`sendChatMessage` signature change: `(text: string, images?: string[]) => void`
 
-`baseArgs` is stored as a JSON string because SQLite has no array type — consistent with the existing `settings` field on `AgentConfig`. A default row must be seeded in the migration so `loadDefaultCliProfile()` never returns null.
-
-The profile stores only fixed base flags — not the prompt text, not `--system-prompt` (those are always appended at call time). The profile controls what varies across CLI modes (binary path, auth method flags, model selection flags).
-
-**`resumePtyExecution` also contains hardcoded `"claude"` and must be updated in the same pass.**
-
-**No changes to `PtySession`, `session-store`, or `ws-server`.** The profile abstraction is confined to `agent-actions.ts` and the new server actions for profile CRUD.
-
----
-
-### 2. PTY Idle Detection — Wiring Without Breaking WebSocket
-
-**What it is:** A general-purpose callback that fires after N seconds of PTY silence (no output). Used to trigger Feishu notifications or other automation.
-
-**The constraint:** `PtySession` currently has one mutable `_onData` slot that `ws-server.ts` replaces on connect via `setDataListener()`. Idle detection must NOT replace or conflict with this mechanism.
-
-**Solution: side-channel, not a replacement.**
-
-The `_onData` handler already flows: `ring buffer update → this._onData(data)`. Insert idle timer reset between those two steps:
+Modification to the fetch call body:
 
 ```typescript
-// Inside the pty.onData handler — new code injected at existing callsite
-this._buffer += data;
-// ... trim buffer ... (existing)
-this._resetIdleTimer();   // NEW — fires before dispatching to ws-server
-this._onData(data);       // existing — replaced by ws-server on connect
-```
-
-New fields and methods on `PtySession`:
-
-```typescript
-private _idleTimeoutMs = 0;
-private _idleTimer: ReturnType<typeof setTimeout> | null = null;
-private _idleCallbacks: Array<() => void> = [];
-
-private _resetIdleTimer(): void {
-  if (this._idleTimer) clearTimeout(this._idleTimer);
-  if (this._idleCallbacks.length === 0 || this._idleTimeoutMs <= 0) return;
-  this._idleTimer = setTimeout(() => {
-    this._idleTimer = null;
-    for (const cb of this._idleCallbacks) cb();
-  }, this._idleTimeoutMs);
-}
-
-setIdleTimeout(ms: number): void { this._idleTimeoutMs = ms; }
-addIdleCallback(fn: () => void): void { this._idleCallbacks.push(fn); }
-clearIdleCallbacks(): void { this._idleCallbacks = []; }
-```
-
-Clear the idle timer in `kill()` to prevent spurious callbacks after PTY exit.
-
-**Registration:** After `createSession()` returns in `agent-actions.ts`, the caller sets the timeout and callback:
-
-```typescript
-const session = createSession(taskId, command, args, cwd, () => {}, onExitFn);
-session.setIdleTimeout(5 * 60 * 1000);  // 5 min
-session.addIdleCallback(() => triggerFeishuNotification(taskId));
-```
-
-`session-store.createSession()` does not need changes. `ws-server.ts` does not need changes.
-
-**Why this is safe for the WebSocket path:**
-- `setDataListener()` still replaces `_onData` as before
-- Idle timer resets on every PTY character, regardless of whether a WebSocket is connected
-- The idle timer and the WebSocket broadcaster are independent; one does not block the other
-
----
-
-### 3. MCP Tools Accessing PTY Sessions (Cross-Process Boundary)
-
-**The fundamental problem:** MCP is a separate `stdio` Node.js process. `globalThis.__ptySessions` lives only in the Next.js process. No shared memory exists between them.
-
-**Recommended solution: internal HTTP bridge.**
-
-Add two Next.js route handlers that the MCP process calls via `fetch`:
-
-```
-MCP: get_task_terminal_output
-  └── fetch("http://127.0.0.1:3000/api/internal/pty/[taskId]/buffer")
-        └── Next.js handler: getSession(taskId)?.getBuffer()
-
-MCP: send_task_terminal_input
-  └── fetch("http://127.0.0.1:3000/api/internal/pty/[taskId]/write", POST body: input)
-        └── Next.js handler: getSession(taskId)?.write(input)
-```
-
-The internal routes must reject non-loopback requests (check `req.headers.host` or `x-forwarded-for`; reject if not `127.0.0.1` or `localhost`). The ws-server already does origin checks — use the same pattern.
-
-**Why not DB polling for the read tool:** `terminalLog` in `TaskExecution` is only written at session end. It is useless for progress queries on a running session. The ring buffer in `getBuffer()` is the only source of live output.
-
-**MCP tool schemas:**
-
-```typescript
-// get_task_terminal_output
-schema: z.object({
-  taskId: z.string(),
-  lastNBytes: z.number().int().min(0).max(50000).optional().default(5000),
+body: JSON.stringify({
+  message: text,
+  sessionId: sessionIdRef.current,
+  ...(images && images.length > 0 ? { images } : {}),
 })
-// Returns: { running: boolean, output: string }
-
-// send_task_terminal_input
-schema: z.object({
-  taskId: z.string(),
-  input: z.string().max(4096),
-})
-// Returns: { sent: boolean, error?: string }
 ```
 
-**Security note on `send_task_terminal_input`:** Writing to PTY stdin is effectively running arbitrary shell commands. Document that this tool is for agent-to-agent automation on a localhost trust model. The HTTP handler must verify the session exists and `!session.killed` before calling `session.write()`.
+No other changes to provider. SSE parsing loop untouched — the server sends the same event types.
 
-**MCP tool count impact:** +2 new tools = 23 total (ceiling is 30).
+### 5. `/api/internal/assistant/chat/route.ts` — modified
 
----
-
-### 4. Env Injection with node-pty Spawn
-
-**What needs to change:** `PtySession` constructor currently closes over a hardcoded env object. To support:
-- CLI Profile-specific env vars (e.g., different `ANTHROPIC_API_KEY` per profile)
-- External dispatch context (`DISPATCH_SOURCE=paperclip`, `TASK_ID=xyz`) for `notify-agi.sh`
-
-The constructor must accept an `envOverrides` parameter.
-
-**Change: one optional parameter added to `PtySession` constructor:**
+Body parsing adds optional `images` field:
 
 ```typescript
-constructor(
-  taskId: string,
-  command: string,
-  args: string[],
-  cwd: string,
-  onData: (data: string) => void,
-  onExit: (exitCode: number, signal?: number) => void,
-  envOverrides: Record<string, string> = {}   // NEW — merged last, wins over defaults
-) {
-  // ...
-  this._pty = pty.spawn(command, args, {
-    env: {
-      PATH: process.env.PATH ?? "",
-      HOME: process.env.HOME ?? "",
-      SHELL: process.env.SHELL ?? "/bin/zsh",
-      TERM: "xterm-color",
-      LANG: process.env.LANG ?? "en_US.UTF-8",
-      USER: process.env.USER ?? "",
-      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? "",
-      ...envOverrides,  // caller overrides win
+body: { message: string; sessionId?: string; images?: string[] }
+```
+
+SDK call branches:
+
+```typescript
+if (body.images && body.images.length > 0) {
+  // Build multimodal SDKUserMessage
+  const imageBlocks = await Promise.all(
+    body.images.map(async (absPath) => {
+      // Validate path stays within data/cache/assistant/
+      const data = await fs.readFile(absPath);
+      const ext = path.extname(absPath).slice(1).toLowerCase();
+      const mediaType = ext === "png" ? "image/png"
+        : ext === "gif" ? "image/gif"
+        : ext === "webp" ? "image/webp"
+        : "image/jpeg";
+      return {
+        type: "image" as const,
+        source: { type: "base64" as const, media_type: mediaType, data: data.toString("base64") }
+      };
+    })
+  );
+
+  const userMessage: SDKUserMessage = {
+    type: "user",
+    message: {
+      role: "user",
+      content: [{ type: "text", text: prompt }, ...imageBlocks]
     },
+    parent_tool_use_id: null,
+  };
+
+  const q = query({
+    prompt: (async function* () { yield userMessage; })(),
+    options: options as Parameters<typeof query>[0]["options"],
   });
+  // ... same for-await loop
+} else {
+  // existing path — unchanged
+  const q = query({ prompt, options });
+}
 ```
 
-**Propagate through `session-store.createSession()`:**
-
-```typescript
-export function createSession(
-  taskId: string,
-  command: string,
-  args: string[],
-  cwd: string,
-  onData: (data: string) => void,
-  onExit: (exitCode: number, signal?: number) => void,
-  envOverrides?: Record<string, string>   // NEW — optional, defaults to {}
-): PtySession
-```
-
-**Usage in `startPtyExecution` for Paperclip dispatch context:**
-
-```typescript
-const envOverrides: Record<string, string> = {
-  DISPATCH_SOURCE: isExternalDispatch ? "paperclip" : "manual",
-  TASK_ID: taskId,
-};
-createSession(taskId, profile.command, buildArgs, cwd, () => {}, onExitFn, envOverrides);
-```
-
-**Backward compatibility:** All existing call sites pass no `envOverrides` parameter. The default `{}` means behavior is identical to current. No existing code breaks.
+Path validation: before `fs.readFile`, resolve and assert the path starts with `path.join(process.cwd(), "data/cache/assistant/")`. Prevents path traversal if `images` array is tampered.
 
 ---
 
-### 5. Feishu Notification — notify-agi.sh Integration Pattern
+## File Serving for Thumbnails
 
-**Existing mechanism:** `notify-agi.sh` is invoked by the Claude CLI Stop hook defined in `~/.claude/settings.json`. This hook fires inside the Claude CLI process after Claude finishes responding. The hook's environment is the PTY process environment — so env vars set at `node-pty.spawn()` time are available to the hook.
+Browser-side previews use `createObjectURL(file)` — no server round-trip needed for the thumbnail display. The `localPreview` ObjectURL is revoked when the image is removed or after send (call `URL.revokeObjectURL`).
 
-**v0.9 pattern:** Set `DISPATCH_SOURCE` in `envOverrides` (from Section 4 above). The Stop hook reads `DISPATCH_SOURCE` and decides whether to send a Feishu notification. No changes needed to `agent-actions.ts` beyond the env injection.
-
-This means:
-- No Feishu logic enters the Next.js codebase
-- Notification logic stays in `notify-agi.sh` (shell, not TypeScript)
-- env injection via `envOverrides` is the only code change needed on the Node side
+The `/api/serve/cache/...` route mentioned in PROJECT.md (file serving for assets) may already exist. Verify before adding a new route. If the cache directory is not yet served, add a minimal GET handler at `/api/internal/assistant/images/[filename]/route.ts` for serving uploaded images if needed by external consumers — but for the thumbnail strip itself, ObjectURLs are sufficient and preferred (no server roundtrip).
 
 ---
 
-## Component Map: New vs Modified
-
-| Component | Status | Change |
-|-----------|--------|--------|
-| `prisma/schema.prisma` | **Modified** | Add `CliProfile` model with default row seed |
-| `src/lib/pty/pty-session.ts` | **Modified** | Add `envOverrides` param; add idle detection fields + 3 methods |
-| `src/lib/pty/session-store.ts` | **Modified** | Forward `envOverrides` optional param to `PtySession` |
-| `src/actions/agent-actions.ts` | **Modified** | Load CLI Profile; use profile command+args; pass `envOverrides`; update `resumePtyExecution` |
-| `src/lib/adapters/claude-local/execute.ts` | **Deleted** | Dead code — SSE streaming path |
-| `src/lib/adapters/claude-local/parse.ts` | **Deleted** | Dead code — stream-json parsing |
-| `src/lib/adapters/registry.ts` | **Deleted** (verify) | Verify no callers before deleting |
-| `src/lib/adapters/process-manager.ts` | **Deleted** (verify) | Verify no callers before deleting |
-| `src/app/api/internal/pty/[taskId]/buffer/route.ts` | **New** | GET: return ring buffer for MCP |
-| `src/app/api/internal/pty/[taskId]/write/route.ts` | **New** | POST: write to PTY stdin for MCP |
-| `src/mcp/tools/terminal-tools.ts` | **New** | `get_task_terminal_output`, `send_task_terminal_input` |
-| `src/mcp/server.ts` | **Modified** | Import and register `terminalTools` |
-| Settings UI — CLI Profile CRUD | **New** | Create/edit/delete profiles; mark default |
-
-**Unchanged:** `src/lib/pty/ws-server.ts`, `src/mcp/db.ts`, all existing MCP tools.
-
----
-
-## Suggested Build Order
-
-Dependencies flow: schema → PTY changes → action changes → internal HTTP → MCP tools. Each phase below is a fully releasable increment.
-
-### Phase 1: Adapter Cleanup (no dependencies)
-
-Delete dead code from `src/lib/adapters/`:
-- Remove `execute.ts`, `parse.ts`
-- Audit and remove `registry.ts`, `process-manager.ts` if no callers
-- Keep: `types.ts`, `process-utils.ts`, `claude-local/test.ts`, `preview-process-manager.ts`
-
-Run `tsc --noEmit` after deletion to confirm no broken imports. This phase has zero functional risk and reduces noise for all subsequent changes.
-
-### Phase 2: Schema — CliProfile table
-
-Add `CliProfile` model to `schema.prisma`. Write a Prisma migration that also inserts the default row:
-
-```sql
-INSERT INTO "CliProfile" (id, name, command, "baseArgs", "isDefault", "createdAt", "updatedAt")
-VALUES (lower(hex(randomblob(9))), 'Default', 'claude',
-        '["--dangerously-skip-permissions"]', 1,
-        datetime('now'), datetime('now'));
-```
-
-Regenerate Prisma client. No application code changes yet.
-
-### Phase 3: PTY Primitives — envOverrides + idle detection
-
-Modify `pty-session.ts`: add `envOverrides` param, add `_resetIdleTimer` and public idle API. Modify `session-store.ts`: forward `envOverrides` param. All additive — no behavior change for existing call sites.
-
-**Depends on:** nothing (pure addition)
-
-### Phase 4: Agent Actions — CLI Profile loading
-
-Modify `startPtyExecution` and `resumePtyExecution` in `agent-actions.ts`:
-1. Call `loadDefaultCliProfile()` from DB
-2. Build command and args from profile
-3. Pass `envOverrides` to `createSession`
-
-Add `getDefaultCliProfile()`, `createCliProfile()`, `updateCliProfile()`, `deleteCliProfile()` server actions for the Settings UI.
-
-**Depends on:** Phase 2 (schema), Phase 3 (session-store signature)
-
-### Phase 5: Internal HTTP API for PTY access
-
-Add Next.js route handlers at:
-- `GET /api/internal/pty/[taskId]/buffer` — returns `{ running, output }` JSON
-- `POST /api/internal/pty/[taskId]/write` — body `{ input: string }`, returns `{ sent }`
-
-Both handlers validate loopback origin, resolve session from `globalThis.__ptySessions`.
-
-**Depends on:** Phase 3 (PtySession has getBuffer and write)
-
-### Phase 6: MCP Terminal Tools
-
-Add `src/mcp/tools/terminal-tools.ts` implementing `get_task_terminal_output` and `send_task_terminal_input`. Both call the internal HTTP endpoints via `fetch("http://127.0.0.1:3000/api/internal/pty/...")`.
-
-Register in `src/mcp/server.ts`.
-
-**Depends on:** Phase 5 (HTTP endpoints must exist and be testable independently)
-
-### Phase 7: Settings UI — CLI Profile CRUD
-
-Add a CLI Profile section to Settings. Uses server actions from Phase 4. Allows users to name profiles, edit `command` and `baseArgs`, and set the default.
-
-**Depends on:** Phase 2 (schema), Phase 4 (server actions)
-
-### Phase 8: Feishu Notification Wiring
-
-Refine `notify-agi.sh` templates. Verify `DISPATCH_SOURCE` env var (injected in Phase 4) reaches the Stop hook. Test end-to-end with a Paperclip-dispatched task.
-
-**Depends on:** Phase 4 (env injection must land first)
-
----
-
-## Full v0.9 Data Flow (Target)
+## Cache Directory Layout
 
 ```
-External agent (Paperclip/OpenClaw)
-  └── MCP: create_task → DB                          [existing]
-  └── MCP: move_task (→ IN_PROGRESS) OR
-      HTTP trigger → startPtyExecution()
-            └── loadDefaultCliProfile()              [DB: CliProfile]
-            └── createSession(profile.command,
-                              profile.baseArgs + promptArgs,
-                              cwd,
-                              { DISPATCH_SOURCE: "paperclip", TASK_ID: taskId })
-                  └── PtySession: node-pty.spawn
-                        ├── idle timer (side-channel)
-                        └── _onData → ws-server batchedSender
-
-External agent (polling progress)
-  └── MCP: get_task_terminal_output
-        └── fetch http://127.0.0.1:3000/api/internal/pty/[taskId]/buffer
-              └── getSession(taskId)?.getBuffer()
-
-External agent (sending instructions)
-  └── MCP: send_task_terminal_input
-        └── fetch http://127.0.0.1:3000/api/internal/pty/[taskId]/write
-              └── getSession(taskId)?.write(input)
-
-PTY exits
-  └── onExit closure in agent-actions.ts:
-        ├── db.taskExecution.update (COMPLETED/FAILED)
-        ├── captureExecutionSummary()
-        ├── db.task.update (IN_REVIEW if exit 0)
-        └── Stop hook fires in Claude CLI env:
-              └── notify-agi.sh checks DISPATCH_SOURCE → Feishu if "paperclip"
-
-Idle detection (if PTY silent > N minutes)
-  └── idleCallback in agent-actions.ts → triggerFeishuNotification()
+data/
+  cache/
+    assistant/         ← NEW: flat directory for chat image cache
+      <uuid>.jpg
+      <uuid>.png
+      <uuid>.webp
+    <taskId>/          ← EXISTING: per-task cache directories
+      ...
 ```
+
+The `assistant` subdirectory uses a fixed key instead of a taskId because chat sessions are not task-bound. `getCacheDir("assistant")` reuses the existing helper — "assistant" is just the directory name string.
 
 ---
 
-## Key Architecture Decisions for v0.9
+## Component Boundary Summary
+
+| Component | Status | Description |
+|-----------|--------|-------------|
+| `src/app/api/internal/assistant/images/route.ts` | **NEW** | Upload image to cache, return metadata |
+| `src/components/assistant/image-paste-bar.tsx` | **NEW** | Thumbnail strip with delete affordance |
+| `src/components/assistant/assistant-chat.tsx` | **MODIFIED** | Add onPaste, pendingImages state, ImagePasteBar |
+| `src/components/assistant/assistant-provider.tsx` | **MODIFIED** | sendChatMessage gains optional images param |
+| `src/app/api/internal/assistant/chat/route.ts` | **MODIFIED** | Parse images[], build SDKUserMessage for multimodal |
+| `src/lib/file-utils.ts` | **UNCHANGED** | getCacheDir/ensureCacheDir already support arbitrary keys |
+
+---
+
+## Build Order (dependency chain)
+
+```
+Phase 1: New upload API route
+  → Standalone — no dependencies on other new code
+  → Establishes the cache directory and upload contract
+
+Phase 2: ImagePasteBar component
+  → Pure display — no API dependency yet (uses ObjectURLs)
+  → Can be built with mock data
+
+Phase 3: Paste handling in AssistantChat
+  → Depends on Phase 1 (upload API) + Phase 2 (bar component)
+  → Wire onPaste → upload → pendingImages → render bar
+  → Verify thumbnail display end-to-end before touching SDK layer
+
+Phase 4: Provider + API route: multimodal SDK call
+  → Depends on Phase 1 (file paths must be valid on disk)
+  → Modify sendChatMessage signature
+  → Modify chat route to read files and build SDKUserMessage
+  → Test with single image first
+```
+
+Phases 1-3 are independently testable without touching the SDK call. Phase 4 is the only risky change (SDK API contract). This ordering lets the UI be validated before the backend multimodal wiring is touched.
+
+---
+
+## SDK Multimodal Contract
+
+The Claude Agent SDK `query()` accepts `prompt: string | AsyncIterable<SDKUserMessage>`. For multimodal input, use the `AsyncIterable<SDKUserMessage>` path. `SDKUserMessage.message` is a `MessageParam` from `@anthropic-ai/sdk/resources`, which supports the standard Anthropic content block format.
+
+Image blocks use base64 encoding with explicit `media_type`. Supported media types: `image/jpeg`, `image/png`, `image/gif`, `image/webp`. File size constraint: Claude API limits individual image size — read image to buffer and check size before encoding; emit an error SSE event if over limit rather than letting the SDK throw.
+
+The session resume path (`options.resume = sessionId`) is compatible with multimodal — sessions store the full message history including image references. No session-management changes needed.
+
+---
+
+## Key Architecture Decisions
 
 | Decision | Rationale |
 |----------|-----------|
-| HTTP bridge for MCP→PTY access | No IPC plumbing needed; localhost HTTP is zero-config; same origin model as ws-server |
-| `envOverrides` as optional last param | Additive — zero existing call sites break; default `{}` is identity |
-| Idle detection as side-channel in PtySession | Preserves `setDataListener` contract; ws-server requires no changes |
-| `CliProfile.baseArgs` as JSON string | SQLite has no array type; consistent with `AgentConfig.settings` field |
-| Seed default CliProfile row in migration | `loadDefaultCliProfile()` never returns null; no null-guard branches in hot path |
-| Internal routes under `/api/internal/` | Clear namespace; loopback-only guard prevents external access |
-| Feishu notification via Stop hook env, not Next.js code | Keeps notification logic in shell; Node.js side only injects env vars |
-| Adapter cleanup before new feature work | Smaller diff surface; dead code removal has zero functional risk |
+| Upload to server cache before send | Keeps browser side stateless; absolutePath on server avoids base64 re-encoding in browser |
+| ObjectURL for thumbnail preview | Zero server roundtrip; revoked after use — no memory leak |
+| Flat `data/cache/assistant/` directory | Reuses getCacheDir("assistant") — no new helpers needed |
+| AsyncIterable path only when images present | Existing string prompt path is faster and tested; multimodal path is additive |
+| Path validation before fs.readFile in route | Defense-in-depth: images array comes from HTTP body which could be tampered |
+| images as absolute server paths in request body | Avoids double-upload (file already on server); route handler does the fs.readFile |
+| PendingImage state local to AssistantChat | Provider doesn't need to know about pending images — only sent images matter |
+| No DB record for cache images | Chat images are ephemeral; ProjectAsset is for persistent project assets only |
 
 ---
 
 ## Sources
 
-All findings from direct source-code inspection (no web search required — confidence HIGH):
+All findings from direct source inspection (confidence HIGH):
 
-- `/Users/liujunping/project/i/ai-manager/src/lib/pty/pty-session.ts`
-- `/Users/liujunping/project/i/ai-manager/src/lib/pty/session-store.ts`
-- `/Users/liujunping/project/i/ai-manager/src/lib/pty/ws-server.ts`
-- `/Users/liujunping/project/i/ai-manager/src/actions/agent-actions.ts`
-- `/Users/liujunping/project/i/ai-manager/src/mcp/server.ts`
-- `/Users/liujunping/project/i/ai-manager/src/mcp/index.ts`
-- `/Users/liujunping/project/i/ai-manager/src/mcp/db.ts`
-- `/Users/liujunping/project/i/ai-manager/src/mcp/tools/task-tools.ts`
-- `/Users/liujunping/project/i/ai-manager/prisma/schema.prisma`
-- `/Users/liujunping/project/i/ai-manager/src/lib/adapters/` (full tree)
-- `/Users/liujunping/project/i/ai-manager/src/lib/execution-summary.ts`
+- `/Users/liujunping/project/i/ai-manager/src/app/api/internal/assistant/chat/route.ts`
+- `/Users/liujunping/project/i/ai-manager/src/components/assistant/assistant-provider.tsx`
+- `/Users/liujunping/project/i/ai-manager/src/components/assistant/assistant-chat.tsx`
+- `/Users/liujunping/project/i/ai-manager/src/lib/file-utils.ts`
+- `/Users/liujunping/project/i/ai-manager/src/actions/asset-actions.ts`
+- `/Users/liujunping/project/i/ai-manager/node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts` — SDKUserMessage type
+- Claude Agent SDK docs: https://code.claude.com/docs/en/agent-sdk/overview (SDKUserMessage + AsyncIterable prompt mode verified)
 - `/Users/liujunping/project/i/ai-manager/.planning/PROJECT.md`
