@@ -72,11 +72,16 @@ export async function POST(request: NextRequest) {
 
         const options: Record<string, unknown> = {
           systemPrompt,
+          // tools: [] disables ALL built-in tools (Read, Edit, Bash, etc.)
+          // allowedTools auto-approves Tower MCP tools without permission prompts
+          tools: [],
           allowedTools: ["mcp__tower__*"],
           permissionMode: "bypassPermissions" as const,
           cwd: process.cwd(),
-          // Use globally installed claude CLI (SDK bundles its own but optional deps may be skipped)
-          pathToClaudeCodeExecutable: findClaudeBinary(),
+          pathToClaudeCodeExecutable: claudePath,
+          // --bare skips CLAUDE.md auto-discovery so the assistant doesn't inherit
+          // project-level instructions (code editing, git, etc.)
+          extraArgs: { bare: null },
         };
 
         // Resume previous session if sessionId provided

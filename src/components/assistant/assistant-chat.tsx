@@ -5,15 +5,9 @@ import { Bot, SendHorizonal } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { useAssistantChat } from "@/hooks/use-assistant-chat";
 import { useI18n } from "@/lib/i18n";
+import { useAssistant } from "./assistant-provider";
 import { AssistantChatBubble } from "./assistant-chat-bubble";
-
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
-
-interface AssistantChatProps {}
 
 // ---------------------------------------------------------------------------
 // Empty state
@@ -31,25 +25,24 @@ function EmptyState() {
 }
 
 // ---------------------------------------------------------------------------
-// Main component
+// Main component — uses chat state from AssistantProvider (persists across routes)
 // ---------------------------------------------------------------------------
 
-export function AssistantChat(_props: AssistantChatProps) {
+export function AssistantChat() {
   const [inputValue, setInputValue] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { t } = useI18n();
 
-  const { messages, isThinking, sendMessage } = useAssistantChat({
-    enabled: true,
-  });
+  // Chat state lives in the provider — survives route changes
+  const { chatMessages: messages, isChatThinking: isThinking, sendChatMessage: sendMessage } = useAssistant();
 
   // Auto-focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  // Auto-scroll to bottom on new messages or content growth
+  // Auto-scroll on new messages or content growth
   const lastContentLen = messages[messages.length - 1]?.content.length ?? 0;
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -60,7 +53,6 @@ export function AssistantChat(_props: AssistantChatProps) {
     if (!text || isThinking) return;
     sendMessage(text);
     setInputValue("");
-    // Return focus to input after send
     inputRef.current?.focus();
   };
 
@@ -69,7 +61,6 @@ export function AssistantChat(_props: AssistantChatProps) {
       e.preventDefault();
       handleSend();
     }
-    // Shift+Enter inserts newline naturally — no handler needed
   };
 
   const isSendDisabled = !inputValue.trim() || isThinking;
@@ -88,7 +79,6 @@ export function AssistantChat(_props: AssistantChatProps) {
           ) : (
             messages.map((m) => <AssistantChatBubble key={m.id} message={m} />)
           )}
-          {/* Sentinel for auto-scroll */}
           <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
