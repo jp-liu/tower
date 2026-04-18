@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import {
   createSession,
   destroySession,
@@ -14,8 +15,11 @@ import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
  * Destroys any existing assistant session first (UX-01).
  * Uses --allowedTools mcp__tower__* (BE-03) and --append-system-prompt (BE-02).
  * Does NOT inject AI_MANAGER_TASK_ID — assistant has no associated task.
+ *
+ * @param sessionId - When provided, resumes an existing Claude CLI session via --resume.
+ *                    When omitted, starts a new session with a generated --session-id.
  */
-export async function startAssistantSession(): Promise<void> {
+export async function startAssistantSession(sessionId?: string): Promise<void> {
   // UX-01: Ensure a clean slate — destroy any existing assistant session
   destroySession(ASSISTANT_SESSION_KEY);
 
@@ -61,6 +65,13 @@ export async function startAssistantSession(): Promise<void> {
     "--append-system-prompt",
     systemPrompt,
   ];
+
+  // Session management: resume existing or start new with a generated ID
+  if (sessionId) {
+    claudeArgs.push("--resume", sessionId);
+  } else {
+    claudeArgs.push("--session-id", randomUUID());
+  }
 
   // Build env overrides — only profile vars, no AI_MANAGER_TASK_ID (assistant has no task)
   const envOverrides: Record<string, string> = { ...profileEnvVars };

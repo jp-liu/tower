@@ -14,9 +14,19 @@ export async function POST(request: NextRequest) {
   const blocked = requireLocalhost(request);
   if (blocked) return blocked;
 
+  let sessionId: string | undefined;
   try {
-    await startAssistantSession();
-    return NextResponse.json({ ok: true, sessionKey: ASSISTANT_SESSION_KEY });
+    const body = await request.json().catch(() => ({})) as { sessionId?: string };
+    if (body.sessionId && typeof body.sessionId === "string") {
+      sessionId = body.sessionId;
+    }
+  } catch {
+    // No body or invalid JSON — treat as new session
+  }
+
+  try {
+    await startAssistantSession(sessionId);
+    return NextResponse.json({ ok: true, sessionKey: ASSISTANT_SESSION_KEY, sessionId: sessionId ?? null });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status: 500 });
