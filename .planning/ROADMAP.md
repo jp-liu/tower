@@ -129,7 +129,7 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
 
 **Milestone Goal:** 助手聊天输入框支持粘贴图片，存储到缓存目录，预览并作为上下文发送给 AI。
 
-- [ ] **Phase 40: Image Upload API** - Server-side cache endpoint, MIME validation, path traversal protection, and static serving for cached and asset images
+- [x] **Phase 40: Image Upload API** - Server-side cache endpoint, MIME validation, path traversal protection, and static serving for cached and asset images (completed 2026-04-18)
 - [ ] **Phase 41: Paste UX & Thumbnail Strip** - Paste intercept, immediate thumbnail preview, upload progress, per-image removal, multi-image accumulation
 - [ ] **Phase 42: Message Image Display** - User message bubbles show images, click to preview, broken-image placeholder, session reload restores references
 - [ ] **Phase 43: Claude SDK Multimodal Integration** - Images passed to Claude as base64 content blocks via AsyncIterable SDKUserMessage path
@@ -166,8 +166,8 @@ Plans:
   7. The chat textarea defaults to 3 rows and grows to a maximum of 5 rows with a scrollbar beyond that
 **Plans**: 2 plans
 Plans:
-- [ ] 40-01-PLAN.md — Magic-byte MIME utility + file-utils helpers + upload POST endpoint
-- [ ] 40-02-PLAN.md — Static file serving GET routes for cache and assets
+- [ ] 41-01-PLAN.md — useImageUpload hook + ImageThumbnailStrip + ImagePreviewModal + i18n keys
+- [ ] 41-02-PLAN.md — Wire into AssistantChat + update provider + API route + textarea height
 **UI hint**: yes
 
 ### Phase 42: Message Image Display
@@ -247,7 +247,7 @@ Phases execute in numeric order: 40 -> 41 -> 42 -> 43
 | 37. Terminal Mode UI | v0.92 | 2/2 | Complete | 2026-04-17 |
 | 38. Chat Mode | v0.92 | 2/2 | Complete | 2026-04-17 |
 | 39. Polish & Settings | v0.92 | 2/2 | Complete | 2026-04-17 |
-| 40. Image Upload API | v0.93 | 1/2 | In Progress|  |
-| 41. Paste UX & Thumbnail Strip | v0.93 | 0/TBD | Not started | - |
+| 40. Image Upload API | v0.93 | 1/2 | Complete    | 2026-04-18 |
+| 41. Paste UX & Thumbnail Strip | v0.93 | 0/2 | Not started | - |
 | 42. Message Image Display | v0.93 | 0/TBD | Not started | - |
 | 43. Claude SDK Multimodal Integration | v0.93 | 0/TBD | Not started | - |
