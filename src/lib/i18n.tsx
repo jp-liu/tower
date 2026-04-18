@@ -565,6 +565,10 @@ const translations = {
     "settings.assistant.communicationModeDesc": "选择与助手交互的方式",
     "settings.assistant.modeTerminal": "终端模式",
     "settings.assistant.modeChat": "聊天模式",
+    "assistant.newSession": "新会话",
+    "assistant.sessionList": "会话列表",
+    "assistant.deleteSession": "删除",
+    "assistant.noSessions": "暂无历史会话",
   },
   en: {
     "sidebar.workspace": "Workspaces",
@@ -1108,6 +1112,10 @@ const translations = {
     "settings.assistant.communicationModeDesc": "Choose how to interact with the assistant",
     "settings.assistant.modeTerminal": "Terminal",
     "settings.assistant.modeChat": "Chat",
+    "assistant.newSession": "New Session",
+    "assistant.sessionList": "Sessions",
+    "assistant.deleteSession": "Delete",
+    "assistant.noSessions": "No previous sessions",
   },
 } as const;
 
