@@ -148,7 +148,7 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
   5. A project asset is accessible at `/assets/<filename>` using the same unified static serving pattern
 **Plans**: 2 plans
 Plans:
-- [ ] 40-01-PLAN.md — Magic-byte MIME utility + file-utils helpers + upload POST endpoint
+- [ ] 42-01-PLAN.md — ChatMessage type extension + UserBubble image rendering + broken-image fallback + i18n
 - [x] 40-02-PLAN.md — Static file serving GET routes for cache and assets
 **UI hint**: no
 
@@ -181,8 +181,8 @@ Plans:
   4. Reloading the page or switching sessions restores the chat history with image references rendering correctly (no blank slots)
 **Plans**: 2 plans
 Plans:
-- [ ] 40-01-PLAN.md — Magic-byte MIME utility + file-utils helpers + upload POST endpoint
-- [ ] 40-02-PLAN.md — Static file serving GET routes for cache and assets
+- [ ] 42-01-PLAN.md — ChatMessage type extension + UserBubble image rendering + broken-image fallback + i18n
+- [ ] 42-02-PLAN.md — Wire imageFilenames through provider + session history cache + preview modal
 **UI hint**: yes
 
 ### Phase 43: Claude SDK Multimodal Integration
@@ -196,8 +196,8 @@ Plans:
   4. The architecture accepts future MIME types by extending the whitelist in one place (the upload route validation)
 **Plans**: 2 plans
 Plans:
-- [ ] 40-01-PLAN.md — Magic-byte MIME utility + file-utils helpers + upload POST endpoint
-- [ ] 40-02-PLAN.md — Static file serving GET routes for cache and assets
+- [ ] 42-01-PLAN.md — ChatMessage type extension + UserBubble image rendering + broken-image fallback + i18n
+- [ ] 42-02-PLAN.md — Wire imageFilenames through provider + session history cache + preview modal
 **UI hint**: no
 
 ## Progress
