@@ -1,9 +1,20 @@
 import { NextRequest } from "next/server";
+import { execFileSync } from "child_process";
 import { requireLocalhost } from "@/lib/internal-api-guard";
 import { readConfigValue } from "@/lib/config-reader";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+/** Resolve the claude CLI binary path — env var > `which claude` */
+function findClaudeBinary(): string {
+  if (process.env.CLAUDE_CODE_PATH) return process.env.CLAUDE_CODE_PATH;
+  try {
+    return execFileSync("which", ["claude"], { encoding: "utf-8", timeout: 3000 }).trim();
+  } catch {
+    return "claude"; // fallback — let SDK try PATH
+  }
+}
 
 /**
  * POST /api/internal/assistant/chat
@@ -60,6 +71,8 @@ export async function POST(request: NextRequest) {
           allowedTools: ["mcp__tower__*"],
           permissionMode: "bypassPermissions" as const,
           cwd: process.cwd(),
+          // Use globally installed claude CLI (SDK bundles its own but optional deps may be skipped)
+          pathToClaudeCodeExecutable: findClaudeBinary(),
         };
 
         // Resume previous session if sessionId provided
