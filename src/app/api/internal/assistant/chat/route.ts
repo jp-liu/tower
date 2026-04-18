@@ -63,8 +63,12 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        // Dynamic import — SDK is heavy, only load when needed
+        console.error("[assistant-chat] Starting SDK query...");
         const { query } = await import("@anthropic-ai/claude-agent-sdk");
+        console.error("[assistant-chat] SDK imported, building options...");
+
+        const claudePath = findClaudeBinary();
+        console.error("[assistant-chat] Claude binary:", claudePath);
 
         const options: Record<string, unknown> = {
           systemPrompt,
@@ -85,7 +89,10 @@ export async function POST(request: NextRequest) {
           options: options as Parameters<typeof query>[0]["options"],
         });
 
+        console.error("[assistant-chat] Query created, iterating messages...");
+
         for await (const msg of q) {
+          console.error("[assistant-chat] Message received:", msg.type, "subtype" in msg ? (msg as { subtype?: string }).subtype : "");
           switch (msg.type) {
             case "assistant": {
               // Extract text content from message blocks
@@ -150,8 +157,11 @@ export async function POST(request: NextRequest) {
         }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
+        console.error("[assistant-chat] ERROR:", message);
+        if (err instanceof Error && err.stack) console.error(err.stack);
         send({ type: "error", content: message });
       } finally {
+        console.error("[assistant-chat] Stream complete");
         send({ type: "done" });
         controller.close();
       }
