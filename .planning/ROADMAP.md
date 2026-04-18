@@ -148,7 +148,7 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
   5. A project asset is accessible at `/assets/<filename>` using the same unified static serving pattern
 **Plans**: 2 plans
 Plans:
-- [ ] 42-01-PLAN.md — ChatMessage type extension + UserBubble image rendering + broken-image fallback + i18n
+- [x] 42-01-PLAN.md — ChatMessage type extension + UserBubble image rendering + broken-image fallback + i18n
 - [x] 40-02-PLAN.md — Static file serving GET routes for cache and assets
 **UI hint**: no
 
@@ -249,5 +249,5 @@ Phases execute in numeric order: 40 -> 41 -> 42 -> 43
 | 39. Polish & Settings | v0.92 | 2/2 | Complete | 2026-04-17 |
 | 40. Image Upload API | v0.93 | 1/2 | Complete    | 2026-04-18 |
 | 41. Paste UX & Thumbnail Strip | v0.93 | 2/2 | Complete    | 2026-04-18 |
-| 42. Message Image Display | v0.93 | 0/TBD | Not started | - |
+| 42. Message Image Display | v0.93 | 1/2 | In Progress|  |
 | 43. Claude SDK Multimodal Integration | v0.93 | 0/TBD | Not started | - |
