@@ -206,6 +206,7 @@ export function useAssistantChat(opts: {
       }
 
       try {
+        console.log("[chat] Sending to /api/internal/assistant/chat...");
         const res = await fetch("/api/internal/assistant/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -216,8 +217,12 @@ export function useAssistantChat(opts: {
           signal: controller.signal,
         });
 
+        console.log("[chat] Response status:", res.status, "has body:", !!res.body);
+
         if (!res.ok || !res.body) {
-          throw new Error(`HTTP ${res.status}`);
+          const errorText = await res.text().catch(() => "");
+          console.error("[chat] Error response:", errorText);
+          throw new Error(`HTTP ${res.status}: ${errorText}`);
         }
 
         setStatus("streaming");
@@ -228,28 +233,34 @@ export function useAssistantChat(opts: {
 
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            console.log("[chat] Stream done. Remaining buffer:", buffer.length, "chars");
+            break;
+          }
 
-          buffer += decoder.decode(value, { stream: true });
+          const chunk = decoder.decode(value, { stream: true });
+          console.log("[chat] Chunk received:", chunk.length, "chars");
+          buffer += chunk;
           const { events, remaining } = parseSSEBuffer(buffer);
           buffer = remaining;
 
+          console.log("[chat] Parsed", events.length, "events from chunk");
           for (const event of events) {
+            console.log("[chat] Event:", event.type, event.content?.slice(0, 50));
             applyEvent(event);
           }
         }
 
         // Process any remaining data in buffer after stream ends
         if (buffer.trim()) {
+          console.log("[chat] Processing remaining buffer:", buffer.length);
           const { events } = parseSSEBuffer(buffer + "\n");
           for (const event of events) {
             applyEvent(event);
           }
         }
 
-        // Ensure we're in idle state
         setStatus((s) => (s === "streaming" ? "idle" : s));
-        // Clean up thinking indicator if still present
         setMessages((prev) => prev.filter((m) => m.id !== thinkingId));
       } catch (err: unknown) {
         if ((err as Error).name === "AbortError") return;
