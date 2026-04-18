@@ -130,7 +130,7 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
 **Milestone Goal:** 助手聊天输入框支持粘贴图片，存储到缓存目录，预览并作为上下文发送给 AI。
 
 - [x] **Phase 40: Image Upload API** - Server-side cache endpoint, MIME validation, path traversal protection, and static serving for cached and asset images (completed 2026-04-18)
-- [ ] **Phase 41: Paste UX & Thumbnail Strip** - Paste intercept, immediate thumbnail preview, upload progress, per-image removal, multi-image accumulation
+- [x] **Phase 41: Paste UX & Thumbnail Strip** - Paste intercept, immediate thumbnail preview, upload progress, per-image removal, multi-image accumulation (completed 2026-04-18)
 - [ ] **Phase 42: Message Image Display** - User message bubbles show images, click to preview, broken-image placeholder, session reload restores references
 - [ ] **Phase 43: Claude SDK Multimodal Integration** - Images passed to Claude as base64 content blocks via AsyncIterable SDKUserMessage path
 
@@ -167,7 +167,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 41-01-PLAN.md — useImageUpload hook + ImageThumbnailStrip + ImagePreviewModal + i18n keys
-- [ ] 41-02-PLAN.md — Wire into AssistantChat + update provider + API route + textarea height
+- [x] 41-02-PLAN.md — Wire into AssistantChat + update provider + API route + textarea height
 **UI hint**: yes
 
 ### Phase 42: Message Image Display
@@ -248,6 +248,6 @@ Phases execute in numeric order: 40 -> 41 -> 42 -> 43
 | 38. Chat Mode | v0.92 | 2/2 | Complete | 2026-04-17 |
 | 39. Polish & Settings | v0.92 | 2/2 | Complete | 2026-04-17 |
 | 40. Image Upload API | v0.93 | 1/2 | Complete    | 2026-04-18 |
-| 41. Paste UX & Thumbnail Strip | v0.93 | 1/2 | In Progress|  |
+| 41. Paste UX & Thumbnail Strip | v0.93 | 2/2 | Complete   | 2026-04-18 |
 | 42. Message Image Display | v0.93 | 0/TBD | Not started | - |
 | 43. Claude SDK Multimodal Integration | v0.93 | 0/TBD | Not started | - |

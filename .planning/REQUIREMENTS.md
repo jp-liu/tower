@@ -20,8 +20,8 @@
 - [x] **PASTE-03**: User can click thumbnail to open preview modal (zoom in/out)
 - [x] **PASTE-04**: User can click to remove a single pending image
 - [x] **PASTE-05**: User can paste multiple times to accumulate images
-- [ ] **PASTE-06**: Paste uses `clipboardData.items` (not `.files`) for Firefox compatibility
-- [ ] **PASTE-07**: Input textarea defaults to 3 rows height, max 5 rows then scrollbar
+- [x] **PASTE-06**: Paste uses `clipboardData.items` (not `.files`) for Firefox compatibility
+- [x] **PASTE-07**: Input textarea defaults to 3 rows height, max 5 rows then scrollbar
 
 ### Message Display
 
@@ -68,8 +68,8 @@
 | PASTE-03 | Phase 41 | Complete |
 | PASTE-04 | Phase 41 | Complete |
 | PASTE-05 | Phase 41 | Complete |
-| PASTE-06 | Phase 41 | Pending |
-| PASTE-07 | Phase 41 | Pending |
+| PASTE-06 | Phase 41 | Complete |
+| PASTE-07 | Phase 41 | Complete |
 | MSG-01 | Phase 42 | Pending |
 | MSG-02 | Phase 42 | Pending |
 | MSG-03 | Phase 42 | Pending |
