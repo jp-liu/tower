@@ -72,12 +72,18 @@ export async function POST(request: NextRequest) {
 
         const options: Record<string, unknown> = {
           systemPrompt,
-          // tools: [] disables built-in tools (Read, Edit, Bash) at SDK level
+          // tools: [] disables ALL built-in tools (Read, Edit, Bash, etc.)
           tools: [],
-          // CLI-level hard whitelist — only Tower MCP tools can be called
-          // This is the same --allowedTools flag used in terminal mode
-          extraArgs: { allowedTools: "mcp__tower__*" },
+          // Auto-approve Tower MCP tools without permission prompts
+          allowedTools: ["mcp__tower__*"],
+          // Block everything else — disallowedTools is checked FIRST, overrides all
+          // Built-in tools already disabled by tools:[], this catches non-Tower MCP tools
+          disallowedTools: ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebSearch", "WebFetch"],
+          // Enable streaming — receive text_delta chunks as they arrive
+          includePartialMessages: true,
+          // Bypass permission prompts (requires allowDangerouslySkipPermissions)
           permissionMode: "bypassPermissions" as const,
+          allowDangerouslySkipPermissions: true,
           cwd: process.cwd(),
           pathToClaudeCodeExecutable: claudePath,
         };
@@ -154,13 +160,16 @@ export async function POST(request: NextRequest) {
             }
 
             case "stream_event": {
-              // SDKPartialAssistantMessage — incremental text chunks
-              const streamMsg = msg as { event?: { type?: string }; data?: unknown };
-              if (streamMsg.event?.type === "content_block_delta") {
-                const delta = streamMsg.data as { delta?: { type?: string; text?: string } };
-                if (delta?.delta?.type === "text_delta" && delta.delta.text) {
-                  send({ type: "text_delta", content: delta.delta.text, sessionId: (msg as { session_id?: string }).session_id });
-                }
+              // SDKPartialAssistantMessage — per official docs:
+              // msg.event is a RawMessageStreamEvent from the Claude API
+              // msg.event.type === "content_block_delta" && msg.event.delta.type === "text_delta"
+              const streamEvent = (msg as { event: { type: string; delta?: { type: string; text?: string }; content_block?: { type: string; name?: string } }; session_id: string });
+              const evt = streamEvent.event;
+
+              if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta" && evt.delta.text) {
+                send({ type: "text_delta", content: evt.delta.text, sessionId: streamEvent.session_id });
+              } else if (evt.type === "content_block_start" && evt.content_block?.type === "tool_use") {
+                send({ type: "tool_start", content: evt.content_block.name ?? "tool", sessionId: streamEvent.session_id });
               }
               break;
             }

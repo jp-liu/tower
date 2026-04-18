@@ -65,7 +65,7 @@ function nextId(): string {
 // ---------------------------------------------------------------------------
 
 interface SSEEvent {
-  type: "text" | "text_delta" | "tool_use" | "tool_result" | "error" | "done";
+  type: "text" | "text_delta" | "tool_use" | "tool_start" | "tool_result" | "error" | "done";
   content?: string;
   sessionId?: string;
   toolInput?: unknown;
@@ -314,6 +314,26 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
                   content: event.content ?? "", isStreaming: true,
                 }];
               }
+              flushChat();
+              break;
+            }
+            case "tool_start": {
+              // Tool call starting — show indicator (streaming)
+              const filtered = msgsRef.current.filter((m) => m.id !== thinkingId);
+              if (assistantMsgId) {
+                msgsRef.current = filtered.map((m) =>
+                  m.id === assistantMsgId ? { ...m, isStreaming: false } : m
+                );
+                assistantMsgId = null;
+              } else {
+                msgsRef.current = filtered;
+              }
+              msgsRef.current = [...msgsRef.current, {
+                id: nextId(), role: "tool" as MessageRole,
+                content: `Calling ${event.content ?? "tool"}...`,
+                toolName: event.content,
+                isStreaming: true,
+              }];
               flushChat();
               break;
             }
