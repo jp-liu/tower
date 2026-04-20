@@ -343,7 +343,11 @@ Plans:
   4. config-reader.ts tests cover missing keys, type coercion, and default fallback behavior
   5. assistant-sessions.ts and execution-summary.ts tests cover their core data transformation logic
   6. logger.ts tests verify log levels, structured output format, and that sensitive fields are not leaked
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 51-01-PLAN.md — schemas.ts + diff-parser.ts + file-serve.ts tests (boundary values, edge cases, traversal)
+- [ ] 51-02-PLAN.md — config-reader.ts + logger.ts tests (DB mock, log levels, format)
+- [ ] 51-03-PLAN.md — assistant-sessions.ts + execution-summary.ts tests (localStorage CRUD, git stats, ANSI stripping)
 
 ### Phase 52: Hooks & Logic Extraction
 **Goal**: Business logic embedded in components is extracted into testable hooks or utility functions, and the extracted code has unit tests
@@ -436,8 +440,8 @@ Phases execute in numeric order: 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54
 | 47. Failing Test Fixes | v0.95 | 2/2 | Complete    | 2026-04-20 |
 | 48. Security Hardening & Guard Tests | v0.95 | 1/1 | Complete   | 2026-04-20 |
 | 49. Server Actions Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
-| 50. MCP Tools Test Coverage | v0.95 | 3/3 | Complete   | 2026-04-20 |
-| 51. Core Lib Test Coverage | v0.95 | 0/TBD | Not started | - |
+| 50. MCP Tools Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
+| 51. Core Lib Test Coverage | v0.95 | 0/3 | Not started | - |
 | 52. Hooks & Logic Extraction | v0.95 | 0/TBD | Not started | - |
 | 53. E2E Tests | v0.95 | 0/TBD | Not started | - |
 | 54. Error Handling & Refactoring | v0.95 | 0/TBD | Not started | - |
