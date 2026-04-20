@@ -230,7 +230,7 @@ Plans:
   1. A GET request to `/api/internal/cache/2026-04/images/设计稿-a1b2c3d4.png` returns the correct image bytes (catch-all route resolves the subpath)
   2. Chat message bubbles display images using the full subpath URL (e.g. `/cache/2026-04/images/xxx.png`), not a flat filename
   3. Sending a message with images causes `buildMultimodalPrompt` to resolve the correct absolute filesystem path including the year-month/type subdirectory
-  4. The old flat `/cache/<filename>` route still serves files stored before this migration (backward compatibility)
+  4. Old flat-path cache files in `data/cache/assistant/` root are deleted during migration (no backward compatibility needed — dev stage, no users)
 **Plans**: TBD
 **UI hint**: yes
 
