@@ -148,7 +148,7 @@ See: [milestones/v0.94-ROADMAP.md](./milestones/v0.94-ROADMAP.md) for full detai
 
 </details>
 
-### 🚧 v0.95 Pre-Release Hardening (In Progress)
+### v0.95 Pre-Release Hardening (In Progress)
 
 **Milestone Goal:** 修复失败测试、补齐关键模块测试覆盖、安全加固、错误处理优化、代码重构，为 v1.0 同事试用做准备
 
@@ -326,7 +326,11 @@ Plans:
   4. terminal-tools.ts tests confirm get_output, send_input, and get_status call the correct HTTP bridge endpoints
   5. label-tools.ts tests verify set_task_labels performs a full replacement, not a merge
   6. report-tools.ts tests confirm daily_summary and daily_todo respect their filter parameters
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 50-01-PLAN.md — task-tools + project-tools tests (create/update/move/delete, references, worktree, type derivation)
+- [ ] 50-02-PLAN.md — workspace-tools + label-tools + terminal-tools tests (CRUD, label replacement, HTTP bridge)
+- [ ] 50-03-PLAN.md — report-tools tests (daily_summary/daily_todo filtering and grouping)
 
 ### Phase 51: Core Lib Test Coverage
 **Goal**: Six core library modules have unit tests covering their primary logic, boundary conditions, and error paths
@@ -431,8 +435,8 @@ Phases execute in numeric order: 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54
 | 46. Asset Name Restoration | v0.94 | 1/1 | Complete | 2026-04-20 |
 | 47. Failing Test Fixes | v0.95 | 2/2 | Complete    | 2026-04-20 |
 | 48. Security Hardening & Guard Tests | v0.95 | 1/1 | Complete   | 2026-04-20 |
-| 49. Server Actions Test Coverage | v0.95 | 3/3 | Complete   | 2026-04-20 |
-| 50. MCP Tools Test Coverage | v0.95 | 0/TBD | Not started | - |
+| 49. Server Actions Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
+| 50. MCP Tools Test Coverage | v0.95 | 0/3 | Not started | - |
 | 51. Core Lib Test Coverage | v0.95 | 0/TBD | Not started | - |
 | 52. Hooks & Logic Extraction | v0.95 | 0/TBD | Not started | - |
 | 53. E2E Tests | v0.95 | 0/TBD | Not started | - |
