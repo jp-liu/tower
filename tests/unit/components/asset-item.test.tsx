@@ -4,8 +4,11 @@ import { I18nProvider } from "@/lib/i18n";
 import { AssetItem } from "@/components/assets/asset-item";
 import type { AssetItemType } from "@/components/assets/asset-item";
 
-vi.mock("@/lib/file-serve", () => ({
-  localPathToApiUrl: (p: string) => `/api/files/${p}`,
+vi.mock("@/lib/file-serve-client", () => ({
+  localPathToApiUrl: (p: string) => {
+    const m = p.match(/data\/assets\/([^/]+)\/([^/]+)$/);
+    return m ? `/api/files/assets/${m[1]}/${m[2]}` : p;
+  },
 }));
 
 afterEach(() => {
@@ -60,7 +63,7 @@ describe("AssetItem", () => {
   it("renders download link with correct href and download attribute", () => {
     renderWithI18n(<AssetItem asset={mockAsset} onDelete={vi.fn()} />);
     const downloadLink = screen.getByRole("link", { name: "下载" });
-    expect(downloadLink).toHaveAttribute("href", "/api/files/data/assets/proj-1/photo.png");
+    expect(downloadLink).toHaveAttribute("href", "/api/files/assets/proj-1/photo.png");
     expect(downloadLink).toHaveAttribute("download", "photo.png");
   });
 
