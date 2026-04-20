@@ -156,7 +156,7 @@ See: [milestones/v0.94-ROADMAP.md](./milestones/v0.94-ROADMAP.md) for full detai
 - [x] **Phase 48: Security Hardening & Guard Tests** - CUID validation on public asset route + internal-api-guard unit tests (completed 2026-04-20)
 - [x] **Phase 49: Server Actions Test Coverage** - Unit tests for 7 server action modules (completed 2026-04-20)
 - [x] **Phase 50: MCP Tools Test Coverage** - Unit tests for 6 MCP tool modules (completed 2026-04-20)
-- [ ] **Phase 51: Core Lib Test Coverage** - Unit tests for 6 core library modules
+- [x] **Phase 51: Core Lib Test Coverage** - Unit tests for 6 core library modules (completed 2026-04-20)
 - [ ] **Phase 52: Hooks & Logic Extraction** - Extract business logic from components into hooks/utils and add tests
 - [ ] **Phase 53: E2E Tests** - Playwright setup + 3 critical user flow tests
 - [ ] **Phase 54: Error Handling & Refactoring** - Replace silent catches with user-visible errors, split i18n.tsx, clean as-any casts
@@ -345,9 +345,9 @@ Plans:
   6. logger.ts tests verify log levels, structured output format, and that sensitive fields are not leaked
 **Plans**: 3 plans
 Plans:
-- [ ] 51-01-PLAN.md — schemas.ts + diff-parser.ts + file-serve.ts tests (boundary values, edge cases, traversal)
-- [ ] 51-02-PLAN.md — config-reader.ts + logger.ts tests (DB mock, log levels, format)
-- [ ] 51-03-PLAN.md — assistant-sessions.ts + execution-summary.ts tests (localStorage CRUD, git stats, ANSI stripping)
+- [x] 51-01-PLAN.md — schemas.ts + diff-parser.ts + file-serve.ts tests (boundary values, edge cases, traversal)
+- [x] 51-02-PLAN.md — config-reader.ts + logger.ts tests (DB mock, log levels, format)
+- [x] 51-03-PLAN.md — assistant-sessions.ts + execution-summary.ts tests (localStorage CRUD, git stats, ANSI stripping)
 
 ### Phase 52: Hooks & Logic Extraction
 **Goal**: Business logic embedded in components is extracted into testable hooks or utility functions, and the extracted code has unit tests
@@ -441,7 +441,7 @@ Phases execute in numeric order: 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54
 | 48. Security Hardening & Guard Tests | v0.95 | 1/1 | Complete   | 2026-04-20 |
 | 49. Server Actions Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
 | 50. MCP Tools Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
-| 51. Core Lib Test Coverage | v0.95 | 0/3 | Not started | - |
+| 51. Core Lib Test Coverage | v0.95 | 3/3 | Complete   | 2026-04-20 |
 | 52. Hooks & Logic Extraction | v0.95 | 0/TBD | Not started | - |
 | 53. E2E Tests | v0.95 | 0/TBD | Not started | - |
 | 54. Error Handling & Refactoring | v0.95 | 0/TBD | Not started | - |

@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.95
 milestone_name: Pre-Release Hardening
-status: verifying
-stopped_at: Completed 50-01-PLAN.md
-last_updated: "2026-04-20T07:22:12.245Z"
+status: executing
+stopped_at: Completed 51-02-PLAN.md
+last_updated: "2026-04-20T07:37:26.112Z"
 last_activity: 2026-04-20
 progress:
   total_phases: 15
-  completed_phases: 4
-  total_plans: 9
-  completed_plans: 9
+  completed_phases: 5
+  total_plans: 12
+  completed_plans: 12
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-20)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 50 — mcp-tools-test-coverage
+**Current focus:** Phase 51 — core-lib-test-coverage
 
 ## Current Position
 
-Phase: 50 (mcp-tools-test-coverage) — EXECUTING
+Phase: 51 (core-lib-test-coverage) — EXECUTING
 Plan: 3 of 3
-Status: Phase complete — ready for verification
+Status: Ready to execute
 Last activity: 2026-04-20
 
 Progress: [░░░░░░░░░░] 0%
@@ -76,6 +76,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 50]: global.fetch must be assigned before imports to intercept bridgeFetch in terminal-tools MCP handler tests
 - [Phase 50-mcp-tools-test-coverage]: // @vitest-environment node required for MCP tool tests mocking Node.js built-ins (fs, child_process) — jsdom prevents mock interception
 - [Phase 50-mcp-tools-test-coverage]: vi.mock path from tools/__tests__/ must be ../../db (not ../db) to resolve to src/mcp/db.ts
+- [Phase 51-core-lib-test-coverage]: vi.hoisted() used for mockFindUnique in config-reader tests — avoids Cannot access before initialization from vi.mock hoisting
+- [Phase 51-core-lib-test-coverage]: Logger does NOT scrub sensitive fields — COV-23 documents current behavior via assertions, scrubbing is a future enhancement
 
 ### Pending Todos
 
@@ -87,6 +89,6 @@ None at roadmap stage.
 
 ## Session Continuity
 
-Last session: 2026-04-20T07:22:12.241Z
-Stopped at: Completed 50-01-PLAN.md
+Last session: 2026-04-20T07:37:10.112Z
+Stopped at: Completed 51-02-PLAN.md
 Resume file: None

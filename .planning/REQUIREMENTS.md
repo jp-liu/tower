@@ -51,10 +51,10 @@
 
 ### 测试覆盖 — Lib 补充
 
-- [ ] **COV-20**: config-reader.ts 单元测试
+- [x] **COV-20**: config-reader.ts 单元测试
 - [ ] **COV-21**: assistant-sessions.ts 单元测试
 - [ ] **COV-22**: execution-summary.ts 单元测试
-- [ ] **COV-23**: logger.ts 单元测试
+- [x] **COV-23**: logger.ts 单元测试
 
 ### E2E 测试
 
