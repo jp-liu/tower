@@ -280,7 +280,10 @@ Plans:
   3. preview-process-manager.test.ts passes after the mock ChildProcess includes a working `.on()` method
   4. Component tests (board-stats, prompts-config, create-task-dialog) pass with required React context providers (I18nProvider, Router) in place
   5. asset-item.test.tsx and manage-notes.test.ts pass with corrected URL assertions and sort order expectations
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 47-01-PLAN.md — Fix backend/lib tests (pty-session, preview-process-manager, preview-actions, instrumentation)
+- [ ] 47-02-PLAN.md — Fix component tests (board-stats, create-task-dialog, prompts-config, asset-item)
 
 ### Phase 48: Security Hardening & Guard Tests
 **Goal**: The public asset route rejects non-CUID projectIds, and the internal API guard is fully tested for localhost and forwarded-IP edge cases
@@ -420,7 +423,7 @@ Phases execute in numeric order: 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54
 | 44. Cache Storage Refactor | v0.94 | 2/2 | Complete | 2026-04-20 |
 | 45. Route & Frontend Adaptation | v0.94 | 1/1 | Complete | 2026-04-20 |
 | 46. Asset Name Restoration | v0.94 | 1/1 | Complete | 2026-04-20 |
-| 47. Failing Test Fixes | v0.95 | 0/TBD | Not started | - |
+| 47. Failing Test Fixes | v0.95 | 0/2 | Not started | - |
 | 48. Security Hardening & Guard Tests | v0.95 | 0/TBD | Not started | - |
 | 49. Server Actions Test Coverage | v0.95 | 0/TBD | Not started | - |
 | 50. MCP Tools Test Coverage | v0.95 | 0/TBD | Not started | - |
