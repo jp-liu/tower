@@ -235,7 +235,10 @@ Plans:
   2. When shouldCreateNote is true, a ProjectNote with category "session-insight" is created and linked to the execution via insightNoteId
   3. The execution timeline card shows a "归纳" row with the note title when an insight note exists; clicking it expands the note content inline with a link to the full notes tab
   4. The daily_summary MCP report includes an "insights" array listing all session-insight notes created that day with workspace/project/task context
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 58-01-PLAN.md — Schema + dreaming logic + note creation
+- [ ] 58-02-PLAN.md — Timeline UI + daily report integration
 
 #### Phase 59: Auto-Upload Hook
 **Goal**: Files produced by Claude Code during task execution are automatically captured as task assets without any manual action from the user
@@ -247,7 +250,10 @@ Plans:
   3. The allowed file types are configurable in Settings and stored in SystemConfig under hooks.autoUploadTypes
   4. The Settings page has an "安装 Hook" button that writes the PostToolUse hook entry into ~/.claude/settings.json; the button reflects installation state
   5. All code references to AI_MANAGER_TASK_ID are replaced with TOWER_TASK_ID; the PTY spawn environment injects TOWER_TASK_ID and TOWER_API_URL
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 58-01-PLAN.md — Schema + dreaming logic + note creation
+- [ ] 58-02-PLAN.md — Timeline UI + daily report integration
 
 #### Phase 60: Resource Attribution & Task Drawer
 **Goal**: Users can see all assets associated with a project (including those created by task executions) and quickly preview any task from wherever its assets or completions are referenced
@@ -258,7 +264,10 @@ Plans:
   2. Task-bound assets display a "[任务: <title>]" label (truncated to 20 characters) beside the asset name
   3. Clicking a task label badge in the asset list opens the TaskOverviewDrawer showing that task's title, status, priority, description, labels, last execution summary, resource count, and creation date
   4. Clicking a completed or archived task in the task list opens the TaskOverviewDrawer instead of navigating away
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 58-01-PLAN.md — Schema + dreaming logic + note creation
+- [ ] 58-02-PLAN.md — Timeline UI + daily report integration
 **UI hint**: yes
 
 ### Progress Table
