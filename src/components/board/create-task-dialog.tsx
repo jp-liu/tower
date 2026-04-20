@@ -86,7 +86,7 @@ export function CreateTaskDialog({
       setTitle(editTask.title);
       setDescription(editTask.description ?? "");
       setPriority(editTask.priority);
-      setSubPath((editTask as any).subPath ?? "");
+      setSubPath(editTask.subPath ?? "");
       setSelectedLabelIds(editTaskLabelIds ?? []);
     } else {
       setTitle("");

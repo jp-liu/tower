@@ -436,7 +436,7 @@ export function TaskDetailPanel({
         onOpenChange={setShowMergeDialog}
         taskId={task.id}
         taskTitle={task.title}
-        baseBranch={(task as any).baseBranch ?? "main"}
+        baseBranch={task.baseBranch ?? "main"}
         fileCount={diffData?.files?.length ?? 0}
         commitCount={diffData?.commitCount ?? 0}
         commitLog={mergeCommitLog}

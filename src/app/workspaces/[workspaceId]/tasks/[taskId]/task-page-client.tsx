@@ -482,7 +482,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
               <div className="flex h-full items-center justify-center">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : (diffData as any)?.branchDeleted ? (
+            ) : diffData?.branchDeleted ? (
               <div className="flex h-full items-center justify-center">
                 <p className="text-sm text-muted-foreground">{t("taskPage.branchDeleted")}</p>
               </div>
