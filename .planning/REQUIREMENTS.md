@@ -68,12 +68,34 @@
 
 | Requirement | Phase | Plan | Status |
 |-------------|-------|------|--------|
-| UI-01~03 | TBD | — | — |
-| ASSET-01~04 | TBD | — | — |
-| PROJ-01~06 | TBD | — | — |
-| DREAM-01~04 | TBD | — | — |
-| HOOK-01~06 | TBD | — | — |
-| RES-01~05 | TBD | — | — |
+| UI-01 | Phase 55 | — | Pending |
+| UI-02 | Phase 55 | — | Pending |
+| UI-03 | Phase 55 | — | Pending |
+| ASSET-01 | Phase 56 | — | Pending |
+| ASSET-02 | Phase 56 | — | Pending |
+| ASSET-03 | Phase 56 | — | Pending |
+| ASSET-04 | Phase 56 | — | Pending |
+| PROJ-01 | Phase 57 | — | Pending |
+| PROJ-02 | Phase 57 | — | Pending |
+| PROJ-03 | Phase 57 | — | Pending |
+| PROJ-04 | Phase 57 | — | Pending |
+| PROJ-05 | Phase 57 | — | Pending |
+| PROJ-06 | Phase 57 | — | Pending |
+| DREAM-01 | Phase 58 | — | Pending |
+| DREAM-02 | Phase 58 | — | Pending |
+| DREAM-03 | Phase 58 | — | Pending |
+| DREAM-04 | Phase 58 | — | Pending |
+| HOOK-01 | Phase 59 | — | Pending |
+| HOOK-02 | Phase 59 | — | Pending |
+| HOOK-03 | Phase 59 | — | Pending |
+| HOOK-04 | Phase 59 | — | Pending |
+| HOOK-05 | Phase 59 | — | Pending |
+| HOOK-06 | Phase 59 | — | Pending |
+| RES-01 | Phase 60 | — | Pending |
+| RES-02 | Phase 60 | — | Pending |
+| RES-03 | Phase 60 | — | Pending |
+| RES-04 | Phase 60 | — | Pending |
+| RES-05 | Phase 60 | — | Pending |
 
 ---
 

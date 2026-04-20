@@ -14,6 +14,7 @@
 - ✅ **v0.93 Chat Media Support** — Phases 40-43 (shipped 2026-04-18)
 - ✅ **v0.94 Cache & File Management** — Phases 44-46 (shipped 2026-04-20)
 - ✅ **v0.95 Pre-Release Hardening** — Phases 47-54 (shipped 2026-04-20)
+- **v0.96 UX Polish & Knowledge Capture** — Phases 55-60 (in progress)
 
 ## Phases
 
@@ -164,3 +165,100 @@ See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full detai
 
 </details>
 
+---
+
+## v0.96 UX Polish & Knowledge Capture (Phases 55-60)
+
+### Summary Checklist
+
+- [ ] **Phase 55: UI Fixes** - Delete task stops propagation, shared EmptyState component, icon button hover consistency
+- [ ] **Phase 56: Asset Preview** - Image lightbox, text/md preview dialog, reveal in Finder, reorganized action buttons
+- [ ] **Phase 57: Project Import & Migration** - Separate create vs import flows, optional fs.rename migration with pre-checks
+- [ ] **Phase 58: Session Dreaming** - Deep AI analysis on session end, auto-create insight notes, timeline UI, daily summary integration
+- [ ] **Phase 59: Auto-Upload Hook** - PostToolUse hook script, file type config, upload API, env var rename, settings install button
+- [ ] **Phase 60: Resource Attribution & Task Drawer** - Show task-bound assets in project view, TaskOverviewDrawer shared component
+
+### Phase Details
+
+#### Phase 55: UI Fixes
+**Goal**: Users interact with the Kanban board and chat UI without friction from inconsistent interaction patterns
+**Depends on**: Nothing (self-contained UI fixes)
+**Requirements**: UI-01, UI-02, UI-03
+**Success Criteria** (what must be TRUE):
+  1. Clicking the delete button on a task card deletes the task without opening the detail drawer
+  2. Empty states across asset list and assistant chat use the same visual component and copy pattern
+  3. All clickable icon buttons show a background highlight on hover with consistent transition (no bare text highlight)
+**Plans**: TBD
+**UI hint**: yes
+
+#### Phase 56: Asset Preview
+**Goal**: Users can inspect any asset directly in the browser without downloading it first
+**Depends on**: Phase 55
+**Requirements**: ASSET-01, ASSET-02, ASSET-03, ASSET-04
+**Success Criteria** (what must be TRUE):
+  1. Clicking an image asset opens a fullscreen lightbox with zoom/pan controls; Escape closes it
+  2. Clicking a .txt, .md, or .json asset opens a preview dialog — .md renders as Markdown, others as monospace text
+  3. The "在文件夹中显示" button opens the system file manager with the file highlighted
+  4. Each asset row shows exactly three action buttons in order: Preview, Reveal in Finder, Delete
+**Plans**: TBD
+**UI hint**: yes
+
+#### Phase 57: Project Import & Migration
+**Goal**: Users can onboard projects cleanly — creating from git URL or importing an existing folder — with an optional atomic migration to a canonical path
+**Depends on**: Phase 55
+**Requirements**: PROJ-01, PROJ-02, PROJ-03, PROJ-04, PROJ-05, PROJ-06
+**Success Criteria** (what must be TRUE):
+  1. "新建项目" accepts a git URL, auto-resolves the local path via git rules, and clones if the path does not exist
+  2. "导入项目" lets the user browse to an existing folder, auto-detects git remote, and auto-fills project name
+  3. When the migration toggle is on, the target path is derived from git URL rules and is editable before confirming
+  4. Confirmation is blocked (with a clear error message) if there are running executions, active PTY sessions, or existing worktrees
+  5. A successful migration atomically moves the project directory and updates `localPath` in the database; the source path is gone and the target contains the `.git` directory
+  6. A failed migration leaves the source directory intact and displays the specific error to the user
+**Plans**: TBD
+**UI hint**: yes
+
+#### Phase 58: Session Dreaming
+**Goal**: When a task session ends, the system automatically extracts and persists reusable insights as project notes, visible in the execution timeline and daily reports
+**Depends on**: Phase 57
+**Requirements**: DREAM-01, DREAM-02, DREAM-03, DREAM-04
+**Success Criteria** (what must be TRUE):
+  1. After a task execution ends, a second AI analysis runs in the background and produces structured JSON with summary, typed insights, and a shouldCreateNote decision
+  2. When shouldCreateNote is true, a ProjectNote with category "session-insight" is created and linked to the execution via insightNoteId
+  3. The execution timeline card shows a "归纳" row with the note title when an insight note exists; clicking it expands the note content inline with a link to the full notes tab
+  4. The daily_summary MCP report includes an "insights" array listing all session-insight notes created that day with workspace/project/task context
+**Plans**: TBD
+
+#### Phase 59: Auto-Upload Hook
+**Goal**: Files produced by Claude Code during task execution are automatically captured as task assets without any manual action from the user
+**Depends on**: Phase 57
+**Requirements**: HOOK-01, HOOK-02, HOOK-03, HOOK-04, HOOK-05, HOOK-06
+**Success Criteria** (what must be TRUE):
+  1. When running outside a Tower session (no TOWER_TASK_ID), the hook exits immediately with no side effects
+  2. When Claude Code writes a file matching the configured type whitelist during a Tower session, the file appears in the task's asset list within seconds
+  3. The allowed file types are configurable in Settings and stored in SystemConfig under hooks.autoUploadTypes
+  4. The Settings page has an "安装 Hook" button that writes the PostToolUse hook entry into ~/.claude/settings.json; the button reflects installation state
+  5. All code references to AI_MANAGER_TASK_ID are replaced with TOWER_TASK_ID; the PTY spawn environment injects TOWER_TASK_ID and TOWER_API_URL
+**Plans**: TBD
+
+#### Phase 60: Resource Attribution & Task Drawer
+**Goal**: Users can see all assets associated with a project (including those created by task executions) and quickly preview any task from wherever its assets or completions are referenced
+**Depends on**: Phase 56, Phase 58
+**Requirements**: RES-01, RES-02, RES-03, RES-04, RES-05
+**Success Criteria** (what must be TRUE):
+  1. The project assets page shows all assets for the project regardless of whether they are task-bound or project-level
+  2. Task-bound assets display a "[任务: <title>]" label (truncated to 20 characters) beside the asset name
+  3. Clicking a task label badge in the asset list opens the TaskOverviewDrawer showing that task's title, status, priority, description, labels, last execution summary, resource count, and creation date
+  4. Clicking a completed or archived task in the task list opens the TaskOverviewDrawer instead of navigating away
+**Plans**: TBD
+**UI hint**: yes
+
+### Progress Table
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 55. UI Fixes | 0/? | Not started | - |
+| 56. Asset Preview | 0/? | Not started | - |
+| 57. Project Import & Migration | 0/? | Not started | - |
+| 58. Session Dreaming | 0/? | Not started | - |
+| 59. Auto-Upload Hook | 0/? | Not started | - |
+| 60. Resource Attribution & Task Drawer | 0/? | Not started | - |
