@@ -13,6 +13,7 @@
 - ✅ **v0.92 Global Chat Assistant** — Phases 36-39 (shipped 2026-04-17)
 - ✅ **v0.93 Chat Media Support** — Phases 40-43 (shipped 2026-04-18)
 - ✅ **v0.94 Cache & File Management** — Phases 44-46 (shipped 2026-04-20)
+- 🚧 **v0.95 Pre-Release Hardening** — Phases 47-54 (in progress)
 
 ## Phases
 
@@ -147,6 +148,19 @@ See: [milestones/v0.94-ROADMAP.md](./milestones/v0.94-ROADMAP.md) for full detai
 
 </details>
 
+### 🚧 v0.95 Pre-Release Hardening (In Progress)
+
+**Milestone Goal:** 修复失败测试、补齐关键模块测试覆盖、安全加固、错误处理优化、代码重构，为 v1.0 同事试用做准备
+
+- [ ] **Phase 47: Failing Test Fixes** - Fix all 27 failing tests across 8 test files (mock/API/context issues)
+- [ ] **Phase 48: Security Hardening & Guard Tests** - CUID validation on public asset route + internal-api-guard unit tests
+- [ ] **Phase 49: Server Actions Test Coverage** - Unit tests for 7 server action modules
+- [ ] **Phase 50: MCP Tools Test Coverage** - Unit tests for 6 MCP tool modules
+- [ ] **Phase 51: Core Lib Test Coverage** - Unit tests for 6 core library modules
+- [ ] **Phase 52: Hooks & Logic Extraction** - Extract business logic from components into hooks/utils and add tests
+- [ ] **Phase 53: E2E Tests** - Playwright setup + 3 critical user flow tests
+- [ ] **Phase 54: Error Handling & Refactoring** - Replace silent catches with user-visible errors, split i18n.tsx, clean as-any casts
+
 ## Phase Details
 
 ### Phase 40: Image Upload API
@@ -256,10 +270,106 @@ Plans:
 - [x] 46-01-PLAN.md — TDD: stripCacheUuidSuffix + isAssistantCachePath helpers + wire into task-tools copy loop
 **UI hint**: no
 
+### Phase 47: Failing Test Fixes
+**Goal**: All previously failing tests pass with correct mocks, proper provider wrappers, and up-to-date API signatures
+**Depends on**: Phase 46
+**Requirements**: TEST-01, TEST-02, TEST-03, TEST-04, TEST-05, TEST-06
+**Success Criteria** (what must be TRUE):
+  1. `pnpm test:run` completes with 0 failing tests across all 8 previously-broken test files
+  2. pty-session.test.ts passes with the correct `setExitListener` API (not the removed `addExitListener`)
+  3. preview-process-manager.test.ts passes after the mock ChildProcess includes a working `.on()` method
+  4. Component tests (board-stats, prompts-config, create-task-dialog) pass with required React context providers (I18nProvider, Router) in place
+  5. asset-item.test.tsx and manage-notes.test.ts pass with corrected URL assertions and sort order expectations
+**Plans**: TBD
+
+### Phase 48: Security Hardening & Guard Tests
+**Goal**: The public asset route rejects non-CUID projectIds, and the internal API guard is fully tested for localhost and forwarded-IP edge cases
+**Depends on**: Phase 47
+**Requirements**: SEC-01, COV-14
+**Success Criteria** (what must be TRUE):
+  1. A request to `/api/files/assets/not-a-cuid/file.png` returns 400 with a clear rejection message
+  2. A valid CUID projectId passes validation and the file is served normally
+  3. internal-api-guard unit tests confirm that requests from non-localhost origins are blocked, including spoofed `x-forwarded-for` headers
+  4. All new tests pass in CI with no regressions
+**Plans**: TBD
+
+### Phase 49: Server Actions Test Coverage
+**Goal**: The seven server action modules each have unit tests covering their CRUD operations and business-rule enforcement
+**Depends on**: Phase 48
+**Requirements**: COV-01, COV-02, COV-03, COV-04, COV-05, COV-06, COV-07
+**Success Criteria** (what must be TRUE):
+  1. workspace-actions.ts tests cover create/read/update/delete and `getWorkspacesWithProjects` return shape
+  2. label-actions.ts tests confirm builtin labels cannot be deleted and `setTaskLabels` performs a full replace
+  3. note-actions.ts tests cover CRUD and FTS search returning ranked results
+  4. prompt-actions.ts tests verify that setting a new default unsets the previous default
+  5. asset-actions.ts, cli-profile-actions.ts, and report-actions.ts each have tests covering their primary operations and guard conditions
+  6. All 7 modules reach meaningful branch coverage (happy path + at least one error/edge case per operation)
+**Plans**: TBD
+
+### Phase 50: MCP Tools Test Coverage
+**Goal**: The six MCP tool modules each have unit tests confirming they delegate correctly to underlying actions and enforce their documented constraints
+**Depends on**: Phase 49
+**Requirements**: COV-08, COV-09, COV-10, COV-11, COV-12, COV-13
+**Success Criteria** (what must be TRUE):
+  1. task-tools.ts tests cover create (with references and worktree options), update, move, and delete
+  2. project-tools.ts tests confirm project type is derived from `gitUrl` presence (never set independently)
+  3. workspace-tools.ts tests verify cascade delete propagates to projects and tasks
+  4. terminal-tools.ts tests confirm get_output, send_input, and get_status call the correct HTTP bridge endpoints
+  5. label-tools.ts tests verify set_task_labels performs a full replacement, not a merge
+  6. report-tools.ts tests confirm daily_summary and daily_todo respect their filter parameters
+**Plans**: TBD
+
+### Phase 51: Core Lib Test Coverage
+**Goal**: Six core library modules have unit tests covering their primary logic, boundary conditions, and error paths
+**Depends on**: Phase 50
+**Requirements**: COV-15, COV-16, COV-17, COV-20, COV-21, COV-22, COV-23
+**Success Criteria** (what must be TRUE):
+  1. schemas.ts tests exercise boundary values for each Zod schema (empty strings, max lengths, invalid enums)
+  2. diff-parser.ts tests cover standard diffs, added/removed-only hunks, and empty diff input
+  3. file-serve.ts tests confirm path containment check blocks traversal attempts and correct MIME type is returned per extension
+  4. config-reader.ts tests cover missing keys, type coercion, and default fallback behavior
+  5. assistant-sessions.ts and execution-summary.ts tests cover their core data transformation logic
+  6. logger.ts tests verify log levels, structured output format, and that sensitive fields are not leaked
+**Plans**: TBD
+
+### Phase 52: Hooks & Logic Extraction
+**Goal**: Business logic embedded in components is extracted into testable hooks or utility functions, and the extracted code has unit tests
+**Depends on**: Phase 51
+**Requirements**: COV-18, COV-19
+**Success Criteria** (what must be TRUE):
+  1. At least one component has measurable business logic extracted into a standalone hook or utility (not inlined in JSX)
+  2. use-image-upload.ts hook has unit tests covering upload initiation, progress tracking, error handling, and cleanup on unmount
+  3. Extracted hooks/utils have tests that run without a DOM (pure logic, no React Testing Library required)
+  4. The originating component still passes all existing tests after the extraction refactor
+**Plans**: TBD
+
+### Phase 53: E2E Tests
+**Goal**: Three Playwright test suites cover the critical user flows end-to-end against a running local instance
+**Depends on**: Phase 52
+**Requirements**: E2E-01, E2E-02, E2E-03
+**Success Criteria** (what must be TRUE):
+  1. Playwright is configured in the project and `pnpm test:e2e` runs against `localhost:3000`
+  2. The task flow test creates a task, starts execution, verifies status changes to IN_PROGRESS, and verifies it can be marked DONE
+  3. The chat flow test opens the assistant, sends a text message, and verifies a response bubble appears; paste-image upload path is tested to the upload confirmation
+  4. The settings flow test changes a configuration value, saves, and verifies the new value persists on page reload
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 54: Error Handling & Refactoring
+**Goal**: Silent errors become visible to users, the i18n file is split into maintainable language modules, and TypeScript any-casts are replaced with correct types
+**Depends on**: Phase 53
+**Requirements**: ERR-01, REF-01, REF-02
+**Success Criteria** (what must be TRUE):
+  1. Every `.catch(() => {})` in task-page-client.tsx is replaced with a handler that calls `toast.error(...)` with a user-readable message
+  2. i18n.tsx (1192 lines) is split into `zh.ts` and `en.ts` language modules; the main i18n entry point imports and re-exports them
+  3. Each of the 5 identified `as any` casts is replaced with a correctly narrowed TypeScript type; `tsc --noEmit` passes with zero new errors
+  4. No new silent catches are introduced anywhere in the codebase during this phase
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 44 -> 45 -> 46
+Phases execute in numeric order: 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -307,6 +417,14 @@ Phases execute in numeric order: 44 -> 45 -> 46
 | 41. Paste UX & Thumbnail Strip | v0.93 | 2/2 | Complete | 2026-04-18 |
 | 42. Message Image Display | v0.93 | 2/2 | Complete | 2026-04-18 |
 | 43. Claude SDK Multimodal Integration | v0.93 | 0/1 | Complete | 2026-04-18 |
-| 44. Cache Storage Refactor | v0.94 | 2/2 | Complete    | 2026-04-20 |
-| 45. Route & Frontend Adaptation | v0.94 | 1/1 | Complete    | 2026-04-20 |
-| 46. Asset Name Restoration | v0.94 | 1/1 | Complete    | 2026-04-20 |
+| 44. Cache Storage Refactor | v0.94 | 2/2 | Complete | 2026-04-20 |
+| 45. Route & Frontend Adaptation | v0.94 | 1/1 | Complete | 2026-04-20 |
+| 46. Asset Name Restoration | v0.94 | 1/1 | Complete | 2026-04-20 |
+| 47. Failing Test Fixes | v0.95 | 0/TBD | Not started | - |
+| 48. Security Hardening & Guard Tests | v0.95 | 0/TBD | Not started | - |
+| 49. Server Actions Test Coverage | v0.95 | 0/TBD | Not started | - |
+| 50. MCP Tools Test Coverage | v0.95 | 0/TBD | Not started | - |
+| 51. Core Lib Test Coverage | v0.95 | 0/TBD | Not started | - |
+| 52. Hooks & Logic Extraction | v0.95 | 0/TBD | Not started | - |
+| 53. E2E Tests | v0.95 | 0/TBD | Not started | - |
+| 54. Error Handling & Refactoring | v0.95 | 0/TBD | Not started | - |

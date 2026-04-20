@@ -94,39 +94,39 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TEST-01 | TBD | Planned |
-| TEST-02 | TBD | Planned |
-| TEST-03 | TBD | Planned |
-| TEST-04 | TBD | Planned |
-| TEST-05 | TBD | Planned |
-| TEST-06 | TBD | Planned |
-| SEC-01 | TBD | Planned |
-| COV-01 | TBD | Planned |
-| COV-02 | TBD | Planned |
-| COV-03 | TBD | Planned |
-| COV-04 | TBD | Planned |
-| COV-05 | TBD | Planned |
-| COV-06 | TBD | Planned |
-| COV-07 | TBD | Planned |
-| COV-08 | TBD | Planned |
-| COV-09 | TBD | Planned |
-| COV-10 | TBD | Planned |
-| COV-11 | TBD | Planned |
-| COV-12 | TBD | Planned |
-| COV-13 | TBD | Planned |
-| COV-14 | TBD | Planned |
-| COV-15 | TBD | Planned |
-| COV-16 | TBD | Planned |
-| COV-17 | TBD | Planned |
-| COV-18 | TBD | Planned |
-| COV-19 | TBD | Planned |
-| COV-20 | TBD | Planned |
-| COV-21 | TBD | Planned |
-| COV-22 | TBD | Planned |
-| COV-23 | TBD | Planned |
-| E2E-01 | TBD | Planned |
-| E2E-02 | TBD | Planned |
-| E2E-03 | TBD | Planned |
-| ERR-01 | TBD | Planned |
-| REF-01 | TBD | Planned |
-| REF-02 | TBD | Planned |
+| TEST-01 | Phase 47 | Planned |
+| TEST-02 | Phase 47 | Planned |
+| TEST-03 | Phase 47 | Planned |
+| TEST-04 | Phase 47 | Planned |
+| TEST-05 | Phase 47 | Planned |
+| TEST-06 | Phase 47 | Planned |
+| SEC-01 | Phase 48 | Planned |
+| COV-14 | Phase 48 | Planned |
+| COV-01 | Phase 49 | Planned |
+| COV-02 | Phase 49 | Planned |
+| COV-03 | Phase 49 | Planned |
+| COV-04 | Phase 49 | Planned |
+| COV-05 | Phase 49 | Planned |
+| COV-06 | Phase 49 | Planned |
+| COV-07 | Phase 49 | Planned |
+| COV-08 | Phase 50 | Planned |
+| COV-09 | Phase 50 | Planned |
+| COV-10 | Phase 50 | Planned |
+| COV-11 | Phase 50 | Planned |
+| COV-12 | Phase 50 | Planned |
+| COV-13 | Phase 50 | Planned |
+| COV-15 | Phase 51 | Planned |
+| COV-16 | Phase 51 | Planned |
+| COV-17 | Phase 51 | Planned |
+| COV-20 | Phase 51 | Planned |
+| COV-21 | Phase 51 | Planned |
+| COV-22 | Phase 51 | Planned |
+| COV-23 | Phase 51 | Planned |
+| COV-18 | Phase 52 | Planned |
+| COV-19 | Phase 52 | Planned |
+| E2E-01 | Phase 53 | Planned |
+| E2E-02 | Phase 53 | Planned |
+| E2E-03 | Phase 53 | Planned |
+| ERR-01 | Phase 54 | Planned |
+| REF-01 | Phase 54 | Planned |
+| REF-02 | Phase 54 | Planned |
