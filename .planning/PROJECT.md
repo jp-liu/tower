@@ -21,6 +21,18 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - @ts-nocheck 清理 + TaskWithLabels 类型安全
 - 结构化日志 + Error Boundary + stale execution 清理
 
+## Current Milestone: v0.95 Pre-Release Hardening
+
+**Goal:** 修复失败测试、补齐关键模块测试覆盖、安全加固、错误处理优化、代码重构，为 v1.0 同事试用做准备
+
+**Target features:**
+- 修复 27 个失败测试（过时 mock、缺少 Provider 包装、API 变更）
+- 公开资产路由安全加固（projectId CUID 校验）
+- Server Actions 测试覆盖（workspace、label、note、prompt）
+- 静默 catch 改为用户可见错误提示
+- 大文件拆分（i18n.tsx 1192 行 → 按语言模块拆分）
+- `as any` 类型强转清理为正确类型
+
 ## Current State
 
 **Shipped:** v0.94 Cache & File Management (2026-04-20)
@@ -251,4 +263,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-20 after v0.94 milestone*
+*Last updated: 2026-04-20 — v0.95 Pre-Release Hardening started*
