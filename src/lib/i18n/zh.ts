@@ -335,6 +335,11 @@ export const zh = {
   "assets.selectFile": "点击选择文件...",
   "assets.description": "描述",
   "assets.descriptionPlaceholder": "输入资源描述（可搜索）",
+  "assets.revealInFinder": "在文件夹中显示",
+  "assets.previewNotSupported": "不支持预览此文件类型",
+  "assets.loadingPreview": "加载中...",
+  "assets.previewError": "加载预览失败",
+  "assets.fileTooLarge": "文件过大，无法预览（超过 1MB）",
   // Task page (Phase 17)
   "taskPage.title": "任务详情",
   "taskPage.back": "返回",

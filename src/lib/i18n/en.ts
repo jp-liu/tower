@@ -320,6 +320,11 @@ export const en: Translations = {
   "assets.selectFile": "Click to select file...",
   "assets.description": "Description",
   "assets.descriptionPlaceholder": "Enter asset description (searchable)",
+  "assets.revealInFinder": "Reveal in Finder",
+  "assets.previewNotSupported": "Preview not supported for this file type",
+  "assets.loadingPreview": "Loading...",
+  "assets.previewError": "Failed to load preview",
+  "assets.fileTooLarge": "File too large to preview (over 1MB)",
   // Task page (Phase 17)
   "taskPage.title": "Task Details",
   "taskPage.back": "Back",
