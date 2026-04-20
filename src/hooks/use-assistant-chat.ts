@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { applySSEEvent } from "./sse-event-reducer";
+import type { SSEEvent } from "./sse-event-reducer";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -32,18 +34,6 @@ function nextId(): string {
   return typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID()
     : `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-// ---------------------------------------------------------------------------
-// SSE event type
-// ---------------------------------------------------------------------------
-
-interface SSEEvent {
-  type: "text" | "tool_use" | "tool_result" | "error" | "done";
-  content?: string;
-  sessionId?: string;
-  toolInput?: unknown;
-  toolOutput?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,94 +127,19 @@ export function useAssistantChat(opts: {
               sessionIdRef.current = event.sessionId;
             }
 
-            // Apply event directly to ref — no React batching issues
-            switch (event.type) {
-              case "text": {
-                // Remove thinking, add/append assistant message
-                const filtered = msgsRef.current.filter((m) => m.id !== thinkingId);
-                if (assistantMsgId) {
-                  msgsRef.current = filtered.map((m) =>
-                    m.id === assistantMsgId
-                      ? { ...m, content: m.content + (event.content ?? ""), isStreaming: true }
-                      : m
-                  );
-                } else {
-                  assistantMsgId = nextId();
-                  msgsRef.current = [
-                    ...filtered,
-                    {
-                      id: assistantMsgId,
-                      role: "assistant" as MessageRole,
-                      content: event.content ?? "",
-                      isStreaming: true,
-                    },
-                  ];
-                }
-                flush();
-                break;
-              }
-
-              case "tool_use": {
-                const filtered = msgsRef.current.filter((m) => m.id !== thinkingId);
-                const updated = assistantMsgId
-                  ? filtered.map((m) =>
-                      m.id === assistantMsgId ? { ...m, isStreaming: false } : m
-                    )
-                  : filtered;
-                assistantMsgId = null;
-                msgsRef.current = [
-                  ...updated,
-                  {
-                    id: nextId(),
-                    role: "tool" as MessageRole,
-                    content: JSON.stringify(event.toolInput ?? {}, null, 2),
-                    toolName: event.content,
-                  },
-                ];
-                flush();
-                break;
-              }
-
-              case "tool_result": {
-                msgsRef.current = [
-                  ...msgsRef.current,
-                  {
-                    id: nextId(),
-                    role: "tool" as MessageRole,
-                    content: String(event.toolOutput ?? ""),
-                    toolName: `${event.content ?? "tool"} (result)`,
-                  },
-                ];
-                flush();
-                break;
-              }
-
-              case "error": {
-                msgsRef.current = [
-                  ...msgsRef.current.filter((m) => m.id !== thinkingId),
-                  {
-                    id: nextId(),
-                    role: "assistant" as MessageRole,
-                    content: `Error: ${event.content ?? "Unknown error"}`,
-                  },
-                ];
-                flush();
-                setStatus("error");
-                break;
-              }
-
-              case "done": {
-                if (assistantMsgId) {
-                  msgsRef.current = msgsRef.current.map((m) =>
-                    m.id === assistantMsgId ? { ...m, isStreaming: false } : m
-                  );
-                }
-                msgsRef.current = msgsRef.current.filter((m) => m.id !== thinkingId);
-                flush();
-                setStatus("idle");
-                break;
-              }
+            // Apply event via pure reducer — delegates state transformation out of the hook
+            const next = applySSEEvent(
+              { messages: msgsRef.current, assistantMsgId, status: "streaming" },
+              event,
+              thinkingId,
+              nextId
+            );
+            msgsRef.current = next.messages;
+            assistantMsgId = next.assistantMsgId;
+            if (next.status === "error" || next.status === "idle") {
+              setStatus(next.status);
             }
+            flush();
           }
         }
 
