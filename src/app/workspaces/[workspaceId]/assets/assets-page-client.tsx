@@ -3,13 +3,14 @@
 import { useState, useTransition, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import { SubPageNav } from "@/components/layout/sub-page-nav";
-import type { ProjectAsset } from "@prisma/client";
 import { useI18n } from "@/lib/i18n";
 import { deleteAsset, getProjectAssets } from "@/actions/asset-actions";
+import type { ProjectAssetWithTask } from "@/actions/asset-actions";
 import { AssetList } from "@/components/assets/asset-list";
 import { AssetUpload } from "@/components/assets/asset-upload";
 import { ImageLightbox } from "@/components/assets/image-lightbox";
 import { TextPreviewDialog } from "@/components/assets/text-preview-dialog";
+import { TaskOverviewDrawer } from "@/components/task/task-overview-drawer";
 import { localPathToApiUrl } from "@/lib/file-serve-client";
 import { toast } from "sonner";
 import type { AssetItemType } from "@/components/assets/asset-item";
@@ -31,7 +32,7 @@ interface AssetsPageClientProps {
   allWorkspaces: SimpleWorkspace[];
   initialWorkspaceId: string;
   initialProjectId: string | null;
-  initialAssets: ProjectAsset[];
+  initialAssets: ProjectAssetWithTask[];
 }
 
 export function AssetsPageClient({
@@ -48,7 +49,10 @@ export function AssetsPageClient({
   const [listProjectId, setListProjectId] = useState<string | null>(initialProjectId);
 
   // Data state
-  const [assets, setAssets] = useState<ProjectAsset[]>(initialAssets);
+  const [assets, setAssets] = useState<ProjectAssetWithTask[]>(initialAssets);
+
+  // Task drawer state
+  const [drawerTaskId, setDrawerTaskId] = useState<string | null>(null);
 
   // Derived
   const listWs = allWorkspaces.find((ws) => ws.id === listWsId);
@@ -191,7 +195,17 @@ export function AssetsPageClient({
                 <p className="text-xs text-muted-foreground/60">{t("assets.noProjectHint")}</p>
               </div>
             ) : (
-              <AssetList assets={assets} onPreview={handlePreview} onReveal={handleReveal} onDelete={handleDelete} />
+              <AssetList
+                assets={assets.map((a) => ({
+                  ...a,
+                  taskId: a.task?.id ?? null,
+                  taskTitle: a.task?.title ?? null,
+                }))}
+                onPreview={handlePreview}
+                onReveal={handleReveal}
+                onDelete={handleDelete}
+                onTaskClick={setDrawerTaskId}
+              />
             )}
           </div>
       </div>
@@ -207,6 +221,11 @@ export function AssetsPageClient({
         filename={previewAsset?.filename ?? ""}
         open={previewType === "text"}
         onOpenChange={(open) => { if (!open) setPreviewAsset(null); }}
+      />
+      <TaskOverviewDrawer
+        open={!!drawerTaskId}
+        onOpenChange={(o) => { if (!o) setDrawerTaskId(null); }}
+        taskId={drawerTaskId}
       />
     </div>
   );

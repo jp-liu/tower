@@ -12,6 +12,8 @@ export interface AssetItemType {
   size: number | null;
   description: string | null;
   createdAt: Date;
+  taskId?: string | null;
+  taskTitle?: string | null;
 }
 
 interface AssetItemProps {
@@ -19,6 +21,7 @@ interface AssetItemProps {
   onPreview: (asset: AssetItemType) => void;
   onReveal: (asset: AssetItemType) => void;
   onDelete: (assetId: string) => void;
+  onTaskClick?: (taskId: string) => void;
 }
 
 function formatFileSize(bytes: number | null): string {
@@ -37,7 +40,7 @@ function formatDate(date: Date): string {
   });
 }
 
-export function AssetItem({ asset, onPreview, onReveal, onDelete }: AssetItemProps) {
+export function AssetItem({ asset, onPreview, onReveal, onDelete, onTaskClick }: AssetItemProps) {
   const { t } = useI18n();
   const url = localPathToApiUrl(asset.path);
   const isImage = asset.mimeType?.startsWith("image/");
@@ -61,7 +64,22 @@ export function AssetItem({ asset, onPreview, onReveal, onDelete }: AssetItemPro
 
       {/* Info */}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-foreground">{asset.filename}</p>
+        <div className="flex items-center gap-2">
+          <p className="truncate text-sm font-medium text-foreground">{asset.filename}</p>
+          {asset.taskTitle && asset.taskId && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onTaskClick?.(asset.taskId!);
+              }}
+              className="flex-shrink-0 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs px-1.5 py-0.5 rounded cursor-pointer hover:bg-blue-500/20 transition-colors"
+            >
+              {asset.taskTitle.length > 20
+                ? `${asset.taskTitle.slice(0, 20)}...`
+                : asset.taskTitle}
+            </button>
+          )}
+        </div>
         {asset.description && (
           <p className="mt-0.5 text-xs text-muted-foreground truncate">
             {asset.description}

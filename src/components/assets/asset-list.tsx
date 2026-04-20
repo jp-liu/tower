@@ -11,9 +11,10 @@ interface AssetListProps {
   onPreview: (asset: AssetItemType) => void;
   onReveal: (asset: AssetItemType) => void;
   onDelete: (assetId: string) => void;
+  onTaskClick?: (taskId: string) => void;
 }
 
-export function AssetList({ assets, onPreview, onReveal, onDelete }: AssetListProps) {
+export function AssetList({ assets, onPreview, onReveal, onDelete, onTaskClick }: AssetListProps) {
   const { t } = useI18n();
 
   if (assets.length === 0) {
@@ -23,7 +24,7 @@ export function AssetList({ assets, onPreview, onReveal, onDelete }: AssetListPr
   return (
     <div className="flex flex-col gap-3">
       {assets.map((asset) => (
-        <AssetItem key={asset.id} asset={asset} onPreview={onPreview} onReveal={onReveal} onDelete={onDelete} />
+        <AssetItem key={asset.id} asset={asset} onPreview={onPreview} onReveal={onReveal} onDelete={onDelete} onTaskClick={onTaskClick} />
       ))}
     </div>
   );
