@@ -26,6 +26,7 @@ export const zh = {
   "common.search": "搜索",
   // Top bar
   "topbar.newProject": "新建项目",
+  "topbar.importProject": "导入项目",
   "topbar.searchPlaceholder": "搜索任务、项目、仓库、笔记、资源...",
   // Project creation
   "project.name": "项目名称",
@@ -40,6 +41,8 @@ export const zh = {
   "project.localPath": "本地路径",
   "project.localPathPlaceholder": "/Users/you/projects/my-app",
   "project.localPathHint": "项目在本地磁盘的文件夹路径，输入 Git 地址后自动填充",
+  "project.importHint": "选择本地已有项目文件夹",
+  "project.autoDetected": "已自动检测 Git 远程",
   "project.edit": "编辑项目",
   // Git clone
   "git.clone": "克隆到本地",
