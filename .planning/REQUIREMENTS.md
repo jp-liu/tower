@@ -16,7 +16,7 @@
 
 ### 安全加固
 
-- [ ] **SEC-01**: `/api/files/assets/[projectId]/[filename]` 路由添加 projectId CUID 格式校验，拒绝非法 ID
+- [x] **SEC-01**: `/api/files/assets/[projectId]/[filename]` 路由添加 projectId CUID 格式校验，拒绝非法 ID
 
 ### 测试覆盖 — Server Actions
 
@@ -39,7 +39,7 @@
 
 ### 测试覆盖 — Core Lib
 
-- [ ] **COV-14**: internal-api-guard.ts 单元测试（localhost 校验 + x-forwarded-for 检测）
+- [x] **COV-14**: internal-api-guard.ts 单元测试（localhost 校验 + x-forwarded-for 检测）
 - [ ] **COV-15**: schemas.ts 单元测试（Zod schema 边界值）
 - [ ] **COV-16**: diff-parser.ts 单元测试（diff 解析 + 边界情况）
 - [ ] **COV-17**: file-serve.ts 单元测试（路径解析 + 遏制检查 + MIME 类型）

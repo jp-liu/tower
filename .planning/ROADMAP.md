@@ -153,7 +153,7 @@ See: [milestones/v0.94-ROADMAP.md](./milestones/v0.94-ROADMAP.md) for full detai
 **Milestone Goal:** 修复失败测试、补齐关键模块测试覆盖、安全加固、错误处理优化、代码重构，为 v1.0 同事试用做准备
 
 - [x] **Phase 47: Failing Test Fixes** - Fix all 27 failing tests across 8 test files (mock/API/context issues) (completed 2026-04-20)
-- [ ] **Phase 48: Security Hardening & Guard Tests** - CUID validation on public asset route + internal-api-guard unit tests
+- [x] **Phase 48: Security Hardening & Guard Tests** - CUID validation on public asset route + internal-api-guard unit tests (completed 2026-04-20)
 - [ ] **Phase 49: Server Actions Test Coverage** - Unit tests for 7 server action modules
 - [ ] **Phase 50: MCP Tools Test Coverage** - Unit tests for 6 MCP tool modules
 - [ ] **Phase 51: Core Lib Test Coverage** - Unit tests for 6 core library modules
@@ -296,7 +296,7 @@ Plans:
   4. All new tests pass in CI with no regressions
 **Plans**: 1 plan
 Plans:
-- [ ] 48-01-PLAN.md — CUID validation on asset route + internal-api-guard unit tests
+- [x] 48-01-PLAN.md — CUID validation on asset route + internal-api-guard unit tests
 
 ### Phase 49: Server Actions Test Coverage
 **Goal**: The seven server action modules each have unit tests covering their CRUD operations and business-rule enforcement
@@ -426,7 +426,7 @@ Phases execute in numeric order: 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54
 | 45. Route & Frontend Adaptation | v0.94 | 1/1 | Complete | 2026-04-20 |
 | 46. Asset Name Restoration | v0.94 | 1/1 | Complete | 2026-04-20 |
 | 47. Failing Test Fixes | v0.95 | 2/2 | Complete    | 2026-04-20 |
-| 48. Security Hardening & Guard Tests | v0.95 | 0/1 | Not started | - |
+| 48. Security Hardening & Guard Tests | v0.95 | 1/1 | Complete   | 2026-04-20 |
 | 49. Server Actions Test Coverage | v0.95 | 0/TBD | Not started | - |
 | 50. MCP Tools Test Coverage | v0.95 | 0/TBD | Not started | - |
 | 51. Core Lib Test Coverage | v0.95 | 0/TBD | Not started | - |
