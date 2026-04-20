@@ -7,9 +7,9 @@
 
 ### 测试修复
 
-- [ ] **TEST-01**: 修复 pty-session.test.ts 失败测试（addExitListener → setExitListener API 变更）
-- [ ] **TEST-02**: 修复 preview-process-manager.test.ts 失败测试（mock ChildProcess 缺少 .on() 方法）
-- [ ] **TEST-03**: 修复 instrumentation.test.ts 失败测试（Prisma mock db 未初始化）
+- [x] **TEST-01**: 修复 pty-session.test.ts 失败测试（addExitListener → setExitListener API 变更）
+- [x] **TEST-02**: 修复 preview-process-manager.test.ts 失败测试（mock ChildProcess 缺少 .on() 方法）
+- [x] **TEST-03**: 修复 instrumentation.test.ts 失败测试（Prisma mock db 未初始化）
 - [ ] **TEST-04**: 修复组件测试（board-stats 缺 I18nProvider、prompts-config 缺 Router context）
 - [ ] **TEST-05**: 修复 create-task-dialog.test.tsx（git-actions mock 缺少 getCurrentBranch 导出）
 - [ ] **TEST-06**: 修复 asset-item.test.tsx URL 断言不匹配 和 manage-notes.test.ts 排序断言错误

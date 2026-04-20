@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.95
 milestone_name: Pre-Release Hardening
-status: roadmap
-stopped_at: Phase 47
-last_updated: "2026-04-20T00:00:00.000Z"
+status: executing
+stopped_at: Completed 47-01-PLAN.md
+last_updated: "2026-04-20T06:31:38.394Z"
 last_activity: 2026-04-20
 progress:
-  total_phases: 8
+  total_phases: 15
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-20)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** v0.95 Pre-Release Hardening — Phase 47: Failing Test Fixes
+**Current focus:** Phase 47 — failing-test-fixes
 
 ## Current Position
 
-Phase: 47 of 54 (Failing Test Fixes)
-Plan: — (not yet planned)
-Status: Ready to plan
-Last activity: 2026-04-20 — Roadmap created for v0.95, 8 phases defined (47-54)
+Phase: 47 (failing-test-fixes) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-04-20
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -48,6 +48,7 @@ Progress: [░░░░░░░░░░] 0%
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 0 (this milestone)
 - Average duration: —
 - Total execution time: —
@@ -61,6 +62,8 @@ Progress: [░░░░░░░░░░] 0%
 - SEC-01 grouped with COV-14 (internal-api-guard) in Phase 48 — security fix + its test coverage together
 - COV-15~17 and COV-20~23 batched into Phase 51 (7 requirements, all core lib modules)
 - i18n.tsx split (REF-01) deferred to final phase to avoid merge conflicts during test phases
+- [Phase 47-failing-test-fixes]: Use setExitListener (not addExitListener) in pty-session test — API changed to replace semantics
+- [Phase 47-failing-test-fixes]: instrumentation.test.ts mocks @/lib/instrumentation-tasks module boundary directly, not child_process/db
 
 ### Pending Todos
 
@@ -72,6 +75,6 @@ None at roadmap stage.
 
 ## Session Continuity
 
-Last session: 2026-04-20
-Stopped at: Roadmap created, ready to plan Phase 47
+Last session: 2026-04-20T06:31:38.391Z
+Stopped at: Completed 47-01-PLAN.md
 Resume file: None
