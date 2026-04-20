@@ -8,6 +8,11 @@ import { useI18n } from "@/lib/i18n";
 import { deleteAsset, getProjectAssets } from "@/actions/asset-actions";
 import { AssetList } from "@/components/assets/asset-list";
 import { AssetUpload } from "@/components/assets/asset-upload";
+import { ImageLightbox } from "@/components/assets/image-lightbox";
+import { TextPreviewDialog } from "@/components/assets/text-preview-dialog";
+import { localPathToApiUrl } from "@/lib/file-serve-client";
+import { toast } from "sonner";
+import type { AssetItemType } from "@/components/assets/asset-item";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 
 interface SimpleProject {
@@ -63,6 +68,41 @@ export function AssetsPageClient({
     },
     [startTransition]
   );
+
+  // Preview modal state
+  const [previewAsset, setPreviewAsset] = useState<AssetItemType | null>(null);
+
+  const previewType = previewAsset
+    ? previewAsset.mimeType?.startsWith("image/")
+      ? "image"
+      : /\.(txt|md|json)$/i.test(previewAsset.filename)
+        ? "text"
+        : null
+    : null;
+
+  const handlePreview = (asset: AssetItemType) => {
+    const isImage = asset.mimeType?.startsWith("image/");
+    const isText = /\.(txt|md|json)$/i.test(asset.filename);
+    if (isImage || isText) {
+      setPreviewAsset(asset);
+    }
+  };
+
+  const handleReveal = async (asset: AssetItemType) => {
+    try {
+      const res = await fetch("/api/internal/assets/reveal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: asset.path }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Failed to reveal file");
+      }
+    } catch {
+      toast.error("Failed to reveal file");
+    }
+  };
 
   // List view handlers
   const handleListWsChange = (wsId: string) => {
@@ -151,10 +191,23 @@ export function AssetsPageClient({
                 <p className="text-xs text-muted-foreground/60">{t("assets.noProjectHint")}</p>
               </div>
             ) : (
-              <AssetList assets={assets} onDelete={handleDelete} />
+              <AssetList assets={assets} onPreview={handlePreview} onReveal={handleReveal} onDelete={handleDelete} />
             )}
           </div>
       </div>
+
+      <ImageLightbox
+        imageUrl={previewType === "image" && previewAsset ? localPathToApiUrl(previewAsset.path) : null}
+        filename={previewAsset?.filename ?? ""}
+        open={previewType === "image"}
+        onOpenChange={(open) => { if (!open) setPreviewAsset(null); }}
+      />
+      <TextPreviewDialog
+        url={previewType === "text" && previewAsset ? localPathToApiUrl(previewAsset.path) : null}
+        filename={previewAsset?.filename ?? ""}
+        open={previewType === "text"}
+        onOpenChange={(open) => { if (!open) setPreviewAsset(null); }}
+      />
     </div>
   );
 }

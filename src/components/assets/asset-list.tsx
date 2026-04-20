@@ -8,10 +8,12 @@ import type { AssetItemType } from "./asset-item";
 
 interface AssetListProps {
   assets: AssetItemType[];
+  onPreview: (asset: AssetItemType) => void;
+  onReveal: (asset: AssetItemType) => void;
   onDelete: (assetId: string) => void;
 }
 
-export function AssetList({ assets, onDelete }: AssetListProps) {
+export function AssetList({ assets, onPreview, onReveal, onDelete }: AssetListProps) {
   const { t } = useI18n();
 
   if (assets.length === 0) {
@@ -21,7 +23,7 @@ export function AssetList({ assets, onDelete }: AssetListProps) {
   return (
     <div className="flex flex-col gap-3">
       {assets.map((asset) => (
-        <AssetItem key={asset.id} asset={asset} onDelete={onDelete} />
+        <AssetItem key={asset.id} asset={asset} onPreview={onPreview} onReveal={onReveal} onDelete={onDelete} />
       ))}
     </div>
   );

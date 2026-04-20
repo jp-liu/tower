@@ -27,25 +27,25 @@ const makeAsset = (id: string, filename: string) => ({
 
 describe("AssetList", () => {
   it("renders empty state text when assets array is empty", () => {
-    renderWithI18n(<AssetList assets={[]} onDelete={vi.fn()} />);
+    renderWithI18n(<AssetList assets={[]} onPreview={vi.fn()} onReveal={vi.fn()} onDelete={vi.fn()} />);
     expect(screen.getByText("暂无资源")).toBeInTheDocument();
   });
 
   it("renders empty state hint text when assets array is empty", () => {
-    renderWithI18n(<AssetList assets={[]} onDelete={vi.fn()} />);
+    renderWithI18n(<AssetList assets={[]} onPreview={vi.fn()} onReveal={vi.fn()} onDelete={vi.fn()} />);
     expect(screen.getByText("上传文件作为项目资源")).toBeInTheDocument();
   });
 
   it("renders multiple asset items when assets array has entries", () => {
     const assets = [makeAsset("a1", "file-one.txt"), makeAsset("a2", "file-two.txt")];
-    renderWithI18n(<AssetList assets={assets} onDelete={vi.fn()} />);
+    renderWithI18n(<AssetList assets={assets} onPreview={vi.fn()} onReveal={vi.fn()} onDelete={vi.fn()} />);
     expect(screen.getByText("file-one.txt")).toBeInTheDocument();
     expect(screen.getByText("file-two.txt")).toBeInTheDocument();
   });
 
   it("does not render empty state when assets are present", () => {
     const assets = [makeAsset("a1", "file-one.txt")];
-    renderWithI18n(<AssetList assets={assets} onDelete={vi.fn()} />);
+    renderWithI18n(<AssetList assets={assets} onPreview={vi.fn()} onReveal={vi.fn()} onDelete={vi.fn()} />);
     expect(screen.queryByText("暂无资源")).not.toBeInTheDocument();
   });
 });
