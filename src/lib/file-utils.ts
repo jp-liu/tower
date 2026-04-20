@@ -1,3 +1,4 @@
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -39,14 +40,41 @@ export function listAssetFiles(projectId: string): string[] {
   return fs.readdirSync(dir);
 }
 
-export function getAssistantCacheDir(): string {
-  const dir = path.join(DATA_ROOT, "cache", "assistant");
+export type CacheFileType = "images" | "files";
+
+export function getAssistantCacheDir(type: CacheFileType = "images"): string {
+  const now = new Date();
+  const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const dir = path.join(DATA_ROOT, "cache", "assistant", ym, type);
   assertWithinDataRoot(dir);
+  fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
 
-export function ensureAssistantCacheDir(): string {
-  const dir = getAssistantCacheDir();
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
+const MEANINGLESS_STEMS = new Set([
+  "image", "screenshot", "img", "photo", "picture",
+  "clipboard", "paste", "untitled",
+]);
+
+export function buildCacheFilename(originalName: string, ext: string): string {
+  const stem = path.basename(originalName, path.extname(originalName));
+  const uuid8 = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+
+  const stemLower = stem.toLowerCase();
+  const isMeaningless =
+    !stem ||
+    MEANINGLESS_STEMS.has(stemLower) ||
+    /^screenshot[\s_\-]/i.test(stem);
+
+  if (isMeaningless) {
+    return `tower_image-${uuid8}${ext}`;
+  }
+
+  const sanitized = stem
+    .replace(/[^\p{L}\p{N}]/gu, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  const safeStem = sanitized || "file";
+  return `${safeStem}-${uuid8}${ext}`;
 }
