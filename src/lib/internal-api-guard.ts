@@ -49,3 +49,15 @@ export function validateTaskId(taskId: string): NextResponse | null {
   }
   return null;
 }
+
+/**
+ * Validate that a projectId matches CUID format.
+ * Prevents path-traversal and injection attacks via malformed projectIds.
+ * Returns a 400 NextResponse if invalid, null if valid.
+ */
+export function validateProjectId(projectId: string): NextResponse | null {
+  if (!CUID_RE.test(projectId)) {
+    return NextResponse.json({ error: "Invalid projectId format" }, { status: 400 });
+  }
+  return null;
+}

@@ -2,12 +2,16 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAssetPath, MIME_MAP } from "@/lib/file-serve";
+import { validateProjectId } from "@/lib/internal-api-guard";
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ projectId: string; filename: string }> }
 ) {
   const { projectId, filename } = await params;
+
+  const invalidProjectId = validateProjectId(projectId);
+  if (invalidProjectId) return invalidProjectId;
 
   const { resolved, error } = resolveAssetPath(projectId, filename);
   if (error || !resolved) {
