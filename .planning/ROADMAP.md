@@ -141,7 +141,7 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
 **Milestone Goal:** 重构缓存目录体系，文件名保留原始名，支持按时间清理和未来多文件类型扩展。
 
 - [x] **Phase 44: Cache Storage Refactor** - Year-month directory grouping, type subdirectories, original filename preservation with UUID suffix, filename sanitization (completed 2026-04-20)
-- [ ] **Phase 45: Route & Frontend Adaptation** - Catch-all cache serving route, frontend src path updates, multimodal prompt path updates
+- [x] **Phase 45: Route & Frontend Adaptation** - Catch-all cache serving route, frontend src path updates, multimodal prompt path updates (completed 2026-04-20)
 - [ ] **Phase 46: Asset Name Restoration** - Strip UUID suffix when copying cache files to project assets
 
 ## Phase Details
@@ -236,7 +236,7 @@ Plans:
   4. Old flat-path cache files in `data/cache/assistant/` root are deleted during migration (no backward compatibility needed — dev stage, no users)
 **Plans**: 1 plan
 Plans:
-- [ ] 45-01-PLAN.md — Catch-all route + regex updates + test fixes + old file cleanup
+- [x] 45-01-PLAN.md — Catch-all route + regex updates + test fixes + old file cleanup
 **UI hint**: yes
 
 ### Phase 46: Asset Name Restoration
@@ -303,5 +303,5 @@ Phases execute in numeric order: 44 -> 45 -> 46
 | 42. Message Image Display | v0.93 | 2/2 | Complete | 2026-04-18 |
 | 43. Claude SDK Multimodal Integration | v0.93 | 0/1 | Complete | 2026-04-18 |
 | 44. Cache Storage Refactor | v0.94 | 2/2 | Complete    | 2026-04-20 |
-| 45. Route & Frontend Adaptation | v0.94 | 0/1 | Not started | - |
+| 45. Route & Frontend Adaptation | v0.94 | 1/1 | Complete   | 2026-04-20 |
 | 46. Asset Name Restoration | v0.94 | 0/TBD | Not started | - |

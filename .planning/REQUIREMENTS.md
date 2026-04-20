@@ -19,9 +19,9 @@
 
 ### 路由适配
 
-- [ ] **ROUTE-01**: cache 服务路由改为 catch-all，支持子路径（`/api/internal/cache/2026-04/images/xxx.png`）
-- [ ] **ROUTE-02**: 前端 `<img src>` 使用完整子路径（含年月和类型目录）
-- [ ] **ROUTE-03**: `buildMultimodalPrompt` 使用完整子路径拼接绝对路径
+- [x] **ROUTE-01**: cache 服务路由改为 catch-all，支持子路径（`/api/internal/cache/2026-04/images/xxx.png`）
+- [x] **ROUTE-02**: 前端 `<img src>` 使用完整子路径（含年月和类型目录）
+- [x] **ROUTE-03**: `buildMultimodalPrompt` 使用完整子路径拼接绝对路径
 
 ### 资产关联
 
@@ -54,7 +54,7 @@
 | NAME-01 | Phase 44 | Complete |
 | NAME-02 | Phase 44 | Complete |
 | NAME-03 | Phase 44 | Complete |
-| ROUTE-01 | Phase 45 | Pending |
-| ROUTE-02 | Phase 45 | Pending |
-| ROUTE-03 | Phase 45 | Pending |
+| ROUTE-01 | Phase 45 | Complete |
+| ROUTE-02 | Phase 45 | Complete |
+| ROUTE-03 | Phase 45 | Complete |
 | ASSET-01 | Phase 46 | Pending |
