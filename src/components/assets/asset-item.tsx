@@ -75,8 +75,8 @@ export function AssetItem({ asset, onPreview, onReveal, onDelete, onTaskClick }:
               className="flex-shrink-0 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs px-1.5 py-0.5 rounded cursor-pointer hover:bg-blue-500/20 transition-colors"
             >
               {asset.taskTitle.length > 20
-                ? `${asset.taskTitle.slice(0, 20)}...`
-                : asset.taskTitle}
+                ? `[任务: ${asset.taskTitle.slice(0, 20)}...]`
+                : `[任务: ${asset.taskTitle}]`}
             </button>
           )}
         </div>
