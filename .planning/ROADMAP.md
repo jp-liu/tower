@@ -275,5 +275,5 @@ Plans:
 | 56. Asset Preview | 2/2 | Complete    | 2026-04-20 |
 | 57. Project Import & Migration | 2/2 | Complete    | 2026-04-20 |
 | 58. Session Dreaming | 2/2 | Complete    | 2026-04-20 |
-| 59. Auto-Upload Hook | 2/2 | Complete   | 2026-04-20 |
+| 59. Auto-Upload Hook | 2/2 | Complete    | 2026-04-20 |
 | 60. Resource Attribution & Task Drawer | 0/? | Not started | - |
