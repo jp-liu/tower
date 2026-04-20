@@ -51,6 +51,12 @@ export function getAssistantCacheDir(type: CacheFileType = "images"): string {
   return dir;
 }
 
+export function getAssistantCacheRoot(): string {
+  const dir = path.join(DATA_ROOT, "cache", "assistant");
+  assertWithinDataRoot(dir);
+  return dir;
+}
+
 const MEANINGLESS_STEMS = new Set([
   "image", "screenshot", "img", "photo", "picture",
   "clipboard", "paste", "untitled",

@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { execFileSync } from "child_process";
 import { requireLocalhost } from "@/lib/internal-api-guard";
 import { buildMultimodalPrompt } from "@/lib/build-multimodal-prompt";
-import { getAssistantCacheDir } from "@/lib/file-utils";
+import { getAssistantCacheRoot } from "@/lib/file-utils";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
 
         // Build multimodal prompt with image paths if images attached (AI-01)
         const finalPrompt = hasImages
-          ? buildMultimodalPrompt(prompt, safeImageFilenames, getAssistantCacheDir())
+          ? buildMultimodalPrompt(prompt, safeImageFilenames, getAssistantCacheRoot())
           : prompt;
 
         const q = query({
