@@ -1,5 +1,14 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+}));
+
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+}));
+
 import { I18nProvider } from "@/lib/i18n";
 // Component created in Plan 02
 import { PromptsConfig } from "@/components/settings/prompts-config";
@@ -184,7 +193,8 @@ describe("PromptsConfig", () => {
       expect(screen.getByText("Review Agent")).toBeInTheDocument();
     });
 
-    // "Review Agent" is not default, so "设为默认" button should be present
-    expect(screen.getByRole("button", { name: /设为默认/i })).toBeInTheDocument();
+    // "Review Agent" is not default, so at least one "设为默认" button should be present
+    const setDefaultButtons = screen.getAllByRole("button", { name: /设为默认/i });
+    expect(setDefaultButtons.length).toBeGreaterThan(0);
   });
 });

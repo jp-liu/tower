@@ -8,6 +8,8 @@ import type { Task } from "@prisma/client";
 // Mock server actions
 vi.mock("@/actions/git-actions", () => ({
   getProjectBranches: vi.fn().mockResolvedValue(["main", "develop"]),
+  getCurrentBranch: vi.fn().mockResolvedValue("main"),
+  fetchRemoteBranches: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/actions/label-actions", () => ({
@@ -76,12 +78,18 @@ describe("CreateTaskDialog - branch selector", () => {
       projectLocalPath: "/some/path",
     });
 
-    // Wait for branches to load
+    // Wait for branches to load — selected branch "main" appears in trigger button
     await waitFor(() => {
       expect(screen.getByText("main")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("develop")).toBeInTheDocument();
+    // Open the dropdown to see all branch options
+    const branchTrigger = screen.getByTestId("branch-selector").querySelector("button")!;
+    fireEvent.click(branchTrigger);
+
+    await waitFor(() => {
+      expect(screen.getByText("develop")).toBeInTheDocument();
+    });
     expect(mockedGetProjectBranches).toHaveBeenCalledWith("/some/path");
   });
 

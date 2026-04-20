@@ -196,6 +196,7 @@ export function PromptsConfig() {
                       variant="ghost"
                       size="icon-sm"
                       onClick={() => openEditDialog(prompt)}
+                      title={t("settings.prompts.editPrompt")}
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -204,6 +205,7 @@ export function PromptsConfig() {
                       size="icon-sm"
                       onClick={() => openDeleteConfirm(prompt.id)}
                       className="text-destructive"
+                      title={t("settings.prompts.delete")}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
