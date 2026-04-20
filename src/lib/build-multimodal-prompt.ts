@@ -3,6 +3,10 @@ import * as path from "node:path";
 
 const MAX_IMAGES = 10;
 
+/** UUID v4 + allowed image extensions — prevents traversal and arbitrary filenames */
+const SAFE_FILENAME_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|jpeg|png|gif|webp)$/i;
+
 /**
  * Builds a multimodal prompt by appending image file paths to the prompt text.
  *
@@ -27,13 +31,17 @@ export function buildMultimodalPrompt(
     return prompt;
   }
 
-  // Cap at MAX_IMAGES (10) — excess silently dropped
-  const filenames = imageFilenames.slice(0, 10);
+  const filenames = imageFilenames.slice(0, MAX_IMAGES);
+  const cacheDirNorm = path.resolve(cacheDir);
 
-  // Resolve absolute paths and filter out files that don't exist on disk
+  // Validate filename format, resolve path, and enforce containment
   const validPaths = filenames
-    .map((filename) => path.join(cacheDir, filename))
-    .filter((absPath) => fs.existsSync(absPath));
+    .filter((filename) => SAFE_FILENAME_RE.test(filename))
+    .map((filename) => path.resolve(cacheDir, filename))
+    .filter((absPath) => {
+      if (!absPath.startsWith(cacheDirNorm + path.sep)) return false;
+      return fs.existsSync(absPath);
+    });
 
   if (validPaths.length === 0) {
     return prompt;

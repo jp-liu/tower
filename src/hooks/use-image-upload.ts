@@ -39,6 +39,8 @@ export function useImageUpload() {
       progress: 0,
     }));
 
+    // Sync ref immediately so unmount cleanup can revoke these blob URLs
+    imagesRef.current = [...imagesRef.current, ...newImages];
     setPendingImages((prev) => [...prev, ...newImages]);
 
     for (const image of newImages) {
@@ -59,14 +61,24 @@ export function useImageUpload() {
       xhr.onload = () => {
         xhrMap.current.delete(image.id);
         if (xhr.status === 200) {
-          const data = JSON.parse(xhr.responseText) as { filename: string };
-          setPendingImages((prev) =>
-            prev.map((img) =>
-              img.id === image.id
-                ? { ...img, status: "done", progress: 100, filename: data.filename }
-                : img
-            )
-          );
+          try {
+            const data = JSON.parse(xhr.responseText) as { filename?: unknown };
+            const filename = typeof data.filename === "string" && data.filename ? data.filename : null;
+            if (!filename) throw new Error("Invalid upload response");
+            setPendingImages((prev) =>
+              prev.map((img) =>
+                img.id === image.id
+                  ? { ...img, status: "done", progress: 100, filename }
+                  : img
+              )
+            );
+          } catch {
+            setPendingImages((prev) =>
+              prev.map((img) =>
+                img.id === image.id ? { ...img, status: "error" } : img
+              )
+            );
+          }
         } else {
           setPendingImages((prev) =>
             prev.map((img) =>

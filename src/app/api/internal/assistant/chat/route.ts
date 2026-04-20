@@ -43,7 +43,16 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  if (!body.message?.trim() && !(body.imageFilenames?.length)) {
+  // Validate imageFilenames: must be array of strings matching UUID filename format
+  const IMAGE_FILENAME_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|jpeg|png|gif|webp)$/i;
+  const safeImageFilenames = Array.isArray(body.imageFilenames)
+    ? body.imageFilenames.filter(
+        (f): f is string => typeof f === "string" && IMAGE_FILENAME_RE.test(f)
+      )
+    : [];
+
+  if (!body.message?.trim() && safeImageFilenames.length === 0) {
     return new Response(JSON.stringify({ error: "Message or images required" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
@@ -60,22 +69,21 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        console.error("[assistant-chat] Starting SDK query...");
         const { query } = await import("@anthropic-ai/claude-agent-sdk");
-        console.error("[assistant-chat] SDK imported, building options...");
 
         const claudePath = findClaudeBinary();
-        console.error("[assistant-chat] Claude binary:", claudePath);
 
         // Ensure .tower/ exists (runtime guard — handles deletion while server is running)
         const { ensureTowerDir } = await import("@/lib/init-tower");
         const towerDir = ensureTowerDir();
 
+        const hasImages = safeImageFilenames.length > 0;
+
         const options: Record<string, unknown> = {
           // No built-in tools for text-only — add Read tool when images are attached (AI-02)
-          tools: body.imageFilenames?.length ? ["Read"] : [],
+          tools: hasImages ? ["Read"] : [],
           // Auto-approve Tower MCP tools; also auto-approve Read when images attached
-          allowedTools: body.imageFilenames?.length
+          allowedTools: hasImages
             ? ["mcp__tower__*", "Read"]
             : ["mcp__tower__*"],
           // Streaming — receive text_delta chunks as they arrive
@@ -94,8 +102,8 @@ export async function POST(request: NextRequest) {
         const prompt = `/tower ${body.message}`;
 
         // Build multimodal prompt with image paths if images attached (AI-01)
-        const finalPrompt = body.imageFilenames?.length
-          ? buildMultimodalPrompt(prompt, body.imageFilenames, getAssistantCacheDir())
+        const finalPrompt = hasImages
+          ? buildMultimodalPrompt(prompt, safeImageFilenames, getAssistantCacheDir())
           : prompt;
 
         const q = query({
@@ -103,10 +111,7 @@ export async function POST(request: NextRequest) {
           options: options as Parameters<typeof query>[0]["options"],
         });
 
-        console.error("[assistant-chat] Query created, iterating messages...");
-
         for await (const msg of q) {
-          console.error("[assistant-chat] Message received:", msg.type, "subtype" in msg ? (msg as { subtype?: string }).subtype : "");
           switch (msg.type) {
             case "assistant": {
               // Extract text content from message blocks
@@ -185,12 +190,12 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error("[assistant-chat] ERROR:", message);
-        if (err instanceof Error && err.stack) console.error(err.stack);
-        send({ type: "error", content: message });
+        if (process.env.NODE_ENV !== "production") {
+          const detail = err instanceof Error ? err.message : String(err);
+          console.error("[assistant-chat] ERROR:", detail);
+        }
+        send({ type: "error", content: "Assistant encountered an error. Please try again." });
       } finally {
-        console.error("[assistant-chat] Stream complete");
         send({ type: "done" });
         controller.close();
       }

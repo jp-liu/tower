@@ -161,7 +161,7 @@ export function AssistantChat() {
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={pendingImages.length === 0 ? t("assistant.inputPlaceholderWithImages") : t("assistant.inputPlaceholder")}
+            placeholder={t("assistant.inputPlaceholder")}
             className="flex-1 min-h-[72px] max-h-[120px] resize-none text-sm"
             rows={3}
           />

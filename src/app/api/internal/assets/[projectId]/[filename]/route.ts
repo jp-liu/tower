@@ -7,6 +7,9 @@ import { resolveAssetPath, MIME_MAP } from "@/lib/file-serve";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+const CUID_RE = /^c[a-z0-9]{20,30}$/;
+const SAFE_FILENAME_RE = /^[a-zA-Z0-9_\-\.]{1,128}\.(png|jpg|jpeg|gif|webp|pdf|txt|md|json|svg)$/i;
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string; filename: string }> }
@@ -15,6 +18,10 @@ export async function GET(
   if (blocked) return blocked;
 
   const { projectId, filename } = await params;
+
+  if (!CUID_RE.test(projectId) || !SAFE_FILENAME_RE.test(filename)) {
+    return NextResponse.json({ error: "Invalid path" }, { status: 400 });
+  }
 
   const { resolved, error } = resolveAssetPath(projectId, filename);
   if (error || !resolved) {

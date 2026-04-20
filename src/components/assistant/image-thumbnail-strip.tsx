@@ -30,20 +30,22 @@ export function ImageThumbnailStrip({
             image.status === "error" ? "ring-destructive" : "ring-border"
           }`}
         >
-          {/* Thumbnail image */}
-          <img
-            src={image.blobUrl}
-            className={`h-full w-full object-cover ${
+          {/* Thumbnail image — clickable for preview */}
+          <button
+            type="button"
+            className={`h-full w-full p-0 border-0 bg-transparent ${
               image.status === "uploading" ? "cursor-wait" : "cursor-pointer"
             }`}
-            alt=""
-            aria-hidden="true"
-            onClick={() => {
-              if (image.status !== "uploading") {
-                onPreview(image);
-              }
-            }}
-          />
+            disabled={image.status === "uploading"}
+            aria-label={t("assistant.previewImage")}
+            onClick={() => onPreview(image)}
+          >
+            <img
+              src={image.blobUrl}
+              className="h-full w-full object-cover"
+              alt=""
+            />
+          </button>
 
           {/* Progress overlay — visible while status === "uploading" */}
           {image.status === "uploading" && (

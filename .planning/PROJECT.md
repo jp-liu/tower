@@ -162,6 +162,32 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 **Shipped:** 聊天图片支持全链路 — magic-byte MIME 验证上传 API、粘贴自动上传+缩略图预览条（XHR 进度条）、消息气泡内图片展示（缺失图片占位符）、Claude SDK Read 工具多模态集成（AI 可看图理解内容）。19 个需求全部交付。
 
+## Next Milestone Ideas
+
+### 缓存目录体系重构
+当前 `data/cache/assistant/` 是扁平 UUID 文件名，不支持多类型、不方便按时间清理。需要重构为结构化的缓存系统：
+
+```
+data/cache/assistant/{year-month}/{type}/{name}-{8位uuid}.{ext}
+```
+
+**需求清单：**
+- 年月分组（`2026-04/`），便于按月清理
+- 类型子目录（`images/`、`files/`），不同保留策略
+- 文件名保留原始名（`设计稿-a1b2c3d4.png`），截图无名时用 `tower_image-{uuid}.png`
+- 文件名清洗：保留中文，替换空格/特殊字符为 `_`
+- cache 路由改 catch-all 支持子路径
+- `create_task` references 复制到 asset 时自动 strip UUID 后缀还原可读名
+- 前端 `<img src>` 拼完整子路径
+- 支持未来扩展非图片文件（pdf、md、txt）
+
+**改动范围：** `file-utils.ts`、`images/route.ts`、`cache/route.ts`、`build-multimodal-prompt.ts`、`chat/route.ts`、`task-tools.ts`、前端 src 拼接
+
+### 其他待规划
+- 非图片文件粘贴支持（FILE-01）
+- 拖拽上传（FILE-02）
+- 缓存自动清理策略（FILE-03）
+
 ## Context
 
 - Next.js 16 App Router monolith with Server Components + Server Actions

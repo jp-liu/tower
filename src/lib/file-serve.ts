@@ -20,7 +20,7 @@ export function resolveAssetPath(
   filename: string
 ): { resolved: string | null; error: string | null } {
   const resolved = path.resolve(DATA_ROOT, "assets", projectId, filename);
-  const safePrefix = path.resolve(DATA_ROOT) + path.sep;
+  const safePrefix = path.resolve(DATA_ROOT, "assets") + path.sep;
   if (!resolved.startsWith(safePrefix)) {
     return { resolved: null, error: "Invalid path" };
   }
