@@ -152,7 +152,7 @@ See: [milestones/v0.94-ROADMAP.md](./milestones/v0.94-ROADMAP.md) for full detai
 
 **Milestone Goal:** 修复失败测试、补齐关键模块测试覆盖、安全加固、错误处理优化、代码重构，为 v1.0 同事试用做准备
 
-- [ ] **Phase 47: Failing Test Fixes** - Fix all 27 failing tests across 8 test files (mock/API/context issues)
+- [x] **Phase 47: Failing Test Fixes** - Fix all 27 failing tests across 8 test files (mock/API/context issues) (completed 2026-04-20)
 - [ ] **Phase 48: Security Hardening & Guard Tests** - CUID validation on public asset route + internal-api-guard unit tests
 - [ ] **Phase 49: Server Actions Test Coverage** - Unit tests for 7 server action modules
 - [ ] **Phase 50: MCP Tools Test Coverage** - Unit tests for 6 MCP tool modules
@@ -283,7 +283,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 47-01-PLAN.md — Fix backend/lib tests (pty-session, preview-process-manager, preview-actions, instrumentation)
-- [ ] 47-02-PLAN.md — Fix component tests (board-stats, create-task-dialog, prompts-config, asset-item)
+- [x] 47-02-PLAN.md — Fix component tests (board-stats, create-task-dialog, prompts-config, asset-item)
 
 ### Phase 48: Security Hardening & Guard Tests
 **Goal**: The public asset route rejects non-CUID projectIds, and the internal API guard is fully tested for localhost and forwarded-IP edge cases
@@ -423,7 +423,7 @@ Phases execute in numeric order: 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54
 | 44. Cache Storage Refactor | v0.94 | 2/2 | Complete | 2026-04-20 |
 | 45. Route & Frontend Adaptation | v0.94 | 1/1 | Complete | 2026-04-20 |
 | 46. Asset Name Restoration | v0.94 | 1/1 | Complete | 2026-04-20 |
-| 47. Failing Test Fixes | v0.95 | 1/2 | In Progress|  |
+| 47. Failing Test Fixes | v0.95 | 2/2 | Complete   | 2026-04-20 |
 | 48. Security Hardening & Guard Tests | v0.95 | 0/TBD | Not started | - |
 | 49. Server Actions Test Coverage | v0.95 | 0/TBD | Not started | - |
 | 50. MCP Tools Test Coverage | v0.95 | 0/TBD | Not started | - |
