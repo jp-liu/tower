@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import { NextRequest, NextResponse } from "next/server";
 import { requireLocalhost } from "@/lib/internal-api-guard";
 import { detectImageMime, MIME_TO_EXT } from "@/lib/mime-magic";
-import { getAssistantCacheDir, buildCacheFilename } from "@/lib/file-utils";
+import { getAssistantCacheDir, buildCacheFilename, getAssistantCacheRoot } from "@/lib/file-utils";
 import { getConfigValue } from "@/actions/config-actions";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +46,6 @@ export async function POST(request: NextRequest) {
   await fs.promises.writeFile(dest, buffer);
 
   // Return sub-path relative to assistant cache root (e.g., "2026-04/images/设计稿-a1b2c3d4.png")
-  const assistantRoot = path.join(process.cwd(), "data", "cache", "assistant");
-  const cachePath = path.relative(assistantRoot, dest);
+  const cachePath = path.relative(getAssistantCacheRoot(), dest);
   return NextResponse.json({ filename: cachePath, mimeType });
 }

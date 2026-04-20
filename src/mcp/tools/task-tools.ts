@@ -47,7 +47,7 @@ export const taskTools = {
       useWorktree: z.boolean().optional().default(false),
       baseBranch: z.string().optional().describe("Base branch for worktree checkout. Only used when useWorktree=true. If omitted, auto-detects the project's current branch."),
       autoStart: z.boolean().optional().default(true),
-      references: z.array(z.string()).optional(),
+      references: z.array(z.string()).max(20).optional(),
     }),
     handler: async (args: {
       projectId: string;
