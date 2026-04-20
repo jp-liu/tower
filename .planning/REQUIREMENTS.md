@@ -69,7 +69,7 @@
 ### 代码重构
 
 - [ ] **REF-01**: i18n.tsx（1192 行）拆分为语言模块（zh.ts / en.ts）按需加载
-- [ ] **REF-02**: 清理 5 处 `as any` 类型强转，使用正确的 TypeScript 类型窄化
+- [x] **REF-02**: 清理 5 处 `as any` 类型强转，使用正确的 TypeScript 类型窄化
 
 ## Future Requirements
 

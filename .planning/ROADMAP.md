@@ -390,7 +390,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [ ] 54-01-PLAN.md — toast.error for silent catches + i18n split
-- [ ] 54-02-PLAN.md — Replace as-any casts with correct TypeScript types
+- [x] 54-02-PLAN.md — Replace as-any casts with correct TypeScript types
 
 
 ## Progress
@@ -453,5 +453,5 @@ Phases execute in numeric order: 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54
 | 50. MCP Tools Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
 | 51. Core Lib Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
 | 52. Hooks & Logic Extraction | v0.95 | 2/2 | Complete    | 2026-04-20 |
-| 53. E2E Tests | v0.95 | 2/2 | Complete   | 2026-04-20 |
-| 54. Error Handling & Refactoring | v0.95 | 0/TBD | Not started | - |
+| 53. E2E Tests | v0.95 | 2/2 | Complete    | 2026-04-20 |
+| 54. Error Handling & Refactoring | v0.95 | 1/2 | In Progress|  |

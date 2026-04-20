@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.95
 milestone_name: Pre-Release Hardening
-status: verifying
-stopped_at: Completed 53-02-PLAN.md
-last_updated: "2026-04-20T09:42:56.552Z"
+status: executing
+stopped_at: Completed 54-02-PLAN.md
+last_updated: "2026-04-20T09:53:25.084Z"
 last_activity: 2026-04-20
 progress:
   total_phases: 15
   completed_phases: 7
-  total_plans: 16
-  completed_plans: 16
+  total_plans: 18
+  completed_plans: 17
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-20)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 53 — e2e-tests
+**Current focus:** Phase 54 — error-handling-refactoring
 
 ## Current Position
 
-Phase: 53 (e2e-tests) — EXECUTING
+Phase: 54 (error-handling-refactoring) — EXECUTING
 Plan: 2 of 2
-Status: Phase complete — ready for verification
+Status: Ready to execute
 Last activity: 2026-04-20
 
 Progress: [░░░░░░░░░░] 0%
@@ -87,6 +87,7 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 53-e2e-tests]: Context menu uses plain button elements in createPortal at z-index 9999; NO_PROXY required to bypass http_proxy for localhost in Playwright tests
 - [Phase 53]: Test 0 setup pattern: switches assistant to chat mode via settings UI before flow tests — avoids hard-coding config state
 - [Phase 53]: Response test uses test.slow() + 120s timeout accepting either assistant bubble or thinking indicator — graceful handling of missing Claude SDK credentials
+- [Phase 54]: as-any casts were stale artifacts: Prisma Task type already includes baseBranch/subPath since Phase 15; DiffData type already declared branchDeleted — all three casts unnecessary
 
 ### Pending Todos
 
@@ -98,6 +99,6 @@ None at roadmap stage.
 
 ## Session Continuity
 
-Last session: 2026-04-20T09:42:56.549Z
-Stopped at: Completed 53-02-PLAN.md
+Last session: 2026-04-20T09:53:25.080Z
+Stopped at: Completed 54-02-PLAN.md
 Resume file: None
