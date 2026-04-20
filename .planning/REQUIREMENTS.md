@@ -20,9 +20,9 @@
 
 ### 测试覆盖 — Server Actions
 
-- [ ] **COV-01**: workspace-actions.ts 单元测试（CRUD + getWorkspacesWithProjects）
-- [ ] **COV-02**: label-actions.ts 单元测试（CRUD + builtin 保护 + setTaskLabels）
-- [ ] **COV-03**: note-actions.ts 单元测试（CRUD + FTS 搜索）
+- [x] **COV-01**: workspace-actions.ts 单元测试（CRUD + getWorkspacesWithProjects）
+- [x] **COV-02**: label-actions.ts 单元测试（CRUD + builtin 保护 + setTaskLabels）
+- [x] **COV-03**: note-actions.ts 单元测试（CRUD + FTS 搜索）
 - [x] **COV-04**: prompt-actions.ts 单元测试（CRUD + default 管理）
 - [x] **COV-05**: asset-actions.ts 单元测试（上传 + 下载 + 删除）
 - [x] **COV-06**: cli-profile-actions.ts 单元测试（CRUD + default 唯一性）

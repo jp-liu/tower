@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.95
 milestone_name: Pre-Release Hardening
 status: verifying
-stopped_at: Completed 49-03-PLAN.md
-last_updated: "2026-04-20T07:05:05.665Z"
+stopped_at: Completed 49-01-PLAN.md
+last_updated: "2026-04-20T07:05:18.374Z"
 last_activity: 2026-04-20
 progress:
   total_phases: 15
@@ -69,6 +69,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 49]: mockTx defined before vi.mock to avoid hoisting order issues in vitest
 - [Phase 49]: callOrder array used to verify updateMany executes before update in setDefaultPrompt transaction
 - [Phase 49-server-actions-test-coverage]: Date range filter tests: use getTime() diff (24h) instead of ISO string prefix to avoid TZ-dependent failures
+- [Phase 49-server-actions-test-coverage]: vi.mock hoisting before imports ensures db mock is in scope when action modules load
+- [Phase 49-server-actions-test-coverage]: deleteNote call-order verified via array push in mockImplementation — FTS cleanup before DB delete
 
 ### Pending Todos
 
@@ -80,6 +82,6 @@ None at roadmap stage.
 
 ## Session Continuity
 
-Last session: 2026-04-20T07:04:56.850Z
-Stopped at: Completed 49-03-PLAN.md
+Last session: 2026-04-20T07:05:18.371Z
+Stopped at: Completed 49-01-PLAN.md
 Resume file: None
