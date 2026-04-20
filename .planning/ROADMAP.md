@@ -309,7 +309,11 @@ Plans:
   4. prompt-actions.ts tests verify that setting a new default unsets the previous default
   5. asset-actions.ts, cli-profile-actions.ts, and report-actions.ts each have tests covering their primary operations and guard conditions
   6. All 7 modules reach meaningful branch coverage (happy path + at least one error/edge case per operation)
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 49-01-PLAN.md — workspace-actions + label-actions + note-actions tests
+- [ ] 49-02-PLAN.md — prompt-actions + cli-profile-actions tests
+- [ ] 49-03-PLAN.md — asset-actions + report-actions tests
 
 ### Phase 50: MCP Tools Test Coverage
 **Goal**: The six MCP tool modules each have unit tests confirming they delegate correctly to underlying actions and enforce their documented constraints
@@ -427,7 +431,7 @@ Phases execute in numeric order: 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54
 | 46. Asset Name Restoration | v0.94 | 1/1 | Complete | 2026-04-20 |
 | 47. Failing Test Fixes | v0.95 | 2/2 | Complete    | 2026-04-20 |
 | 48. Security Hardening & Guard Tests | v0.95 | 1/1 | Complete   | 2026-04-20 |
-| 49. Server Actions Test Coverage | v0.95 | 0/TBD | Not started | - |
+| 49. Server Actions Test Coverage | v0.95 | 0/3 | Not started | - |
 | 50. MCP Tools Test Coverage | v0.95 | 0/TBD | Not started | - |
 | 51. Core Lib Test Coverage | v0.95 | 0/TBD | Not started | - |
 | 52. Hooks & Logic Extraction | v0.95 | 0/TBD | Not started | - |
