@@ -3,6 +3,7 @@ import { execFileSync } from "child_process";
 import { copyFileSync, existsSync, statSync, mkdirSync } from "fs";
 import { basename, extname, join } from "path";
 import { db } from "../db";
+import { stripCacheUuidSuffix, isAssistantCachePath } from "@/lib/file-utils";
 
 const TaskStatus = z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"]);
 const Priority = z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
@@ -109,13 +110,24 @@ export const taskTools = {
             const stat = statSync(filePath);
             if (!stat.isFile()) continue;
 
-            let filename = basename(filePath);
-            // Avoid overwriting: append timestamp if file exists
-            const destCheck = join(assetsDir, filename);
-            if (existsSync(destCheck)) {
+            const isCache = isAssistantCachePath(filePath);
+            let filename = isCache
+              ? stripCacheUuidSuffix(basename(filePath))
+              : basename(filePath);
+            // Avoid overwriting existing assets
+            if (existsSync(join(assetsDir, filename))) {
               const ext = extname(filename);
               const base = basename(filename, ext);
-              filename = `${base}-${Date.now()}${ext}`;
+              if (isCache) {
+                // Use counter suffix for readable cache asset names: "设计稿 (1).png"
+                let counter = 1;
+                while (existsSync(join(assetsDir, `${base} (${counter})${ext}`))) {
+                  counter++;
+                }
+                filename = `${base} (${counter})${ext}`;
+              } else {
+                filename = `${base}-${Date.now()}${ext}`;
+              }
             }
             const dest = join(assetsDir, filename);
             copyFileSync(filePath, dest);
