@@ -263,7 +263,7 @@ Plans:
   4. Clicking a completed or archived task in the task list opens the TaskOverviewDrawer instead of navigating away
 **Plans**: 2 plans
 Plans:
-- [ ] 60-01-PLAN.md — Asset query with task inclusion + TaskOverviewDrawer + task badges
+- [x] 60-01-PLAN.md — Asset query with task inclusion + TaskOverviewDrawer + task badges
 - [ ] 60-02-PLAN.md — Route completed/cancelled task clicks to drawer
 **UI hint**: yes
 
@@ -276,4 +276,4 @@ Plans:
 | 57. Project Import & Migration | 2/2 | Complete    | 2026-04-20 |
 | 58. Session Dreaming | 2/2 | Complete    | 2026-04-20 |
 | 59. Auto-Upload Hook | 2/2 | Complete    | 2026-04-20 |
-| 60. Resource Attribution & Task Drawer | 0/2 | Not started | - |
+| 60. Resource Attribution & Task Drawer | 1/2 | In Progress|  |

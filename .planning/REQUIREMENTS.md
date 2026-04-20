@@ -40,10 +40,10 @@
 
 ## Resource Attribution & Task Drawer
 
-- [ ] **RES-01**: Project assets page shows all assets including task-bound ones (remove `taskId: null` filter)
-- [ ] **RES-02**: Task-bound assets display `[任务: xxx]` label with task title
-- [ ] **RES-03**: `TaskOverviewDrawer` component — shows task title, status, priority, description, labels, last execution summary, resource count, created date
-- [ ] **RES-04**: Clicking task label in asset list opens TaskOverviewDrawer
+- [x] **RES-01**: Project assets page shows all assets including task-bound ones (remove `taskId: null` filter)
+- [x] **RES-02**: Task-bound assets display `[任务: xxx]` label with task title
+- [x] **RES-03**: `TaskOverviewDrawer` component — shows task title, status, priority, description, labels, last execution summary, resource count, created date
+- [x] **RES-04**: Clicking task label in asset list opens TaskOverviewDrawer
 - [ ] **RES-05**: Archive/completed task list items open TaskOverviewDrawer on click
 
 ---

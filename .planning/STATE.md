@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.96
 milestone_name: UX Polish & Knowledge Capture
-status: verifying
-stopped_at: Completed 59-02-PLAN.md
-last_updated: "2026-04-20T17:10:20.065Z"
+status: executing
+stopped_at: Completed 60-01-PLAN.md
+last_updated: "2026-04-20T17:22:39.877Z"
 last_activity: 2026-04-20
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 11
+  completed_plans: 10
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-20)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 59 — auto-upload-hook
+**Current focus:** Phase 60 — resource-attribution-task-drawer
 
 ## Current Position
 
-Phase: 60
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 60 (resource-attribution-task-drawer) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-04-20
 
 Progress: [░░░░░░░░░░] 0%
@@ -68,6 +68,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 58]: Insight content shown inline with expand/collapse, amber styling for dreaming UI
 - [Phase 59]: Hook uses Node.js builtins only (http, fs, path) for Node 16+ compat
 - [Phase 59]: Hook status checked via GET on mount, toggled via POST/DELETE
+- [Phase 60]: TaskOverviewDrawer fetches data on open via getTaskOverview server action
+- [Phase 60]: Asset query includes full task relation for badge rendering without extra requests
 
 ### Pending Todos
 
@@ -79,6 +81,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-20T17:06:43.223Z
-Stopped at: Completed 59-02-PLAN.md
+Last session: 2026-04-20T17:22:39.874Z
+Stopped at: Completed 60-01-PLAN.md
 Resume file: None
