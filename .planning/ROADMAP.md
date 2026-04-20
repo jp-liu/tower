@@ -374,8 +374,8 @@ Plans:
   4. The settings flow test changes a configuration value, saves, and verifies the new value persists on page reload
 **Plans**: 2 plans
 Plans:
-- [x] 52-01-PLAN.md — Extract SSE event reducer from use-assistant-chat into pure utility + unit tests
-- [x] 52-02-PLAN.md — Unit tests for use-image-upload hook (upload lifecycle, progress, errors, cleanup)
+- [ ] 53-01-PLAN.md — Playwright config + task flow test + settings flow test
+- [ ] 53-02-PLAN.md — Chat assistant flow test (text messaging + image paste upload)
 **UI hint**: yes
 
 ### Phase 54: Error Handling & Refactoring
@@ -389,8 +389,9 @@ Plans:
   4. No new silent catches are introduced anywhere in the codebase during this phase
 **Plans**: 2 plans
 Plans:
-- [ ] 52-01-PLAN.md — Extract SSE event reducer from use-assistant-chat into pure utility + unit tests
-- [ ] 52-02-PLAN.md — Unit tests for use-image-upload hook (upload lifecycle, progress, errors, cleanup)
+- [ ] 54-01-PLAN.md — toast.error for silent catches + i18n split
+- [ ] 54-02-PLAN.md — Replace as-any casts with correct TypeScript types
+
 
 ## Progress
 
@@ -451,6 +452,6 @@ Phases execute in numeric order: 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54
 | 49. Server Actions Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
 | 50. MCP Tools Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
 | 51. Core Lib Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
-| 52. Hooks & Logic Extraction | v0.95 | 2/2 | Complete   | 2026-04-20 |
-| 53. E2E Tests | v0.95 | 0/TBD | Not started | - |
+| 52. Hooks & Logic Extraction | v0.95 | 2/2 | Complete    | 2026-04-20 |
+| 53. E2E Tests | v0.95 | 0/2 | Not started | - |
 | 54. Error Handling & Refactoring | v0.95 | 0/TBD | Not started | - |
