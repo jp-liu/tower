@@ -46,7 +46,7 @@
 
 ### 测试覆盖 — Hooks & 逻辑抽离
 
-- [ ] **COV-18**: 抽离组件内业务逻辑到 hooks/utils 并补充测试
+- [x] **COV-18**: 抽离组件内业务逻辑到 hooks/utils 并补充测试
 - [x] **COV-19**: use-image-upload.ts hook 单元测试
 
 ### 测试覆盖 — Lib 补充

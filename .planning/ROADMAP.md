@@ -374,8 +374,8 @@ Plans:
   4. The settings flow test changes a configuration value, saves, and verifies the new value persists on page reload
 **Plans**: 2 plans
 Plans:
-- [ ] 52-01-PLAN.md — Extract SSE event reducer from use-assistant-chat into pure utility + unit tests
-- [ ] 52-02-PLAN.md — Unit tests for use-image-upload hook (upload lifecycle, progress, errors, cleanup)
+- [x] 52-01-PLAN.md — Extract SSE event reducer from use-assistant-chat into pure utility + unit tests
+- [x] 52-02-PLAN.md — Unit tests for use-image-upload hook (upload lifecycle, progress, errors, cleanup)
 **UI hint**: yes
 
 ### Phase 54: Error Handling & Refactoring

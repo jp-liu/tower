@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.95
 milestone_name: Pre-Release Hardening
 status: verifying
-stopped_at: Completed 52-02-PLAN.md
-last_updated: "2026-04-20T07:52:20.336Z"
+stopped_at: Completed 52-01-PLAN.md
+last_updated: "2026-04-20T07:52:44.205Z"
 last_activity: 2026-04-20
 progress:
   total_phases: 15
@@ -83,6 +83,7 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 51-core-lib-test-coverage]: checkConflicts (git binary) excluded from tests — only pure parseDiffOutput tested
 - [Phase 51-core-lib-test-coverage]: resolveAssetPath allows single-level traversal within data/assets/ — guard only blocks escape outside data/assets/
 - [Phase 52-hooks-logic-extraction]: URL.createObjectURL patched as property on URL class (not vi.stubGlobal) to preserve jsdom constructor behavior
+- [Phase 52-hooks-logic-extraction]: idGenerator injected into applySSEEvent for deterministic IDs in tests; sessionId handling kept in hook as React ref side effect
 
 ### Pending Todos
 
@@ -94,6 +95,6 @@ None at roadmap stage.
 
 ## Session Continuity
 
-Last session: 2026-04-20T07:52:09.772Z
-Stopped at: Completed 52-02-PLAN.md
+Last session: 2026-04-20T07:52:44.202Z
+Stopped at: Completed 52-01-PLAN.md
 Resume file: None
