@@ -154,7 +154,7 @@ See: [milestones/v0.94-ROADMAP.md](./milestones/v0.94-ROADMAP.md) for full detai
 
 - [x] **Phase 47: Failing Test Fixes** - Fix all 27 failing tests across 8 test files (mock/API/context issues) (completed 2026-04-20)
 - [x] **Phase 48: Security Hardening & Guard Tests** - CUID validation on public asset route + internal-api-guard unit tests (completed 2026-04-20)
-- [ ] **Phase 49: Server Actions Test Coverage** - Unit tests for 7 server action modules
+- [x] **Phase 49: Server Actions Test Coverage** - Unit tests for 7 server action modules (completed 2026-04-20)
 - [ ] **Phase 50: MCP Tools Test Coverage** - Unit tests for 6 MCP tool modules
 - [ ] **Phase 51: Core Lib Test Coverage** - Unit tests for 6 core library modules
 - [ ] **Phase 52: Hooks & Logic Extraction** - Extract business logic from components into hooks/utils and add tests
@@ -311,9 +311,9 @@ Plans:
   6. All 7 modules reach meaningful branch coverage (happy path + at least one error/edge case per operation)
 **Plans**: 3 plans
 Plans:
-- [ ] 49-01-PLAN.md — workspace-actions + label-actions + note-actions tests
+- [x] 49-01-PLAN.md — workspace-actions + label-actions + note-actions tests
 - [x] 49-02-PLAN.md — prompt-actions + cli-profile-actions tests
-- [ ] 49-03-PLAN.md — asset-actions + report-actions tests
+- [x] 49-03-PLAN.md — asset-actions + report-actions tests
 
 ### Phase 50: MCP Tools Test Coverage
 **Goal**: The six MCP tool modules each have unit tests confirming they delegate correctly to underlying actions and enforce their documented constraints
@@ -431,7 +431,7 @@ Phases execute in numeric order: 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54
 | 46. Asset Name Restoration | v0.94 | 1/1 | Complete | 2026-04-20 |
 | 47. Failing Test Fixes | v0.95 | 2/2 | Complete    | 2026-04-20 |
 | 48. Security Hardening & Guard Tests | v0.95 | 1/1 | Complete   | 2026-04-20 |
-| 49. Server Actions Test Coverage | v0.95 | 1/3 | In Progress|  |
+| 49. Server Actions Test Coverage | v0.95 | 3/3 | Complete   | 2026-04-20 |
 | 50. MCP Tools Test Coverage | v0.95 | 0/TBD | Not started | - |
 | 51. Core Lib Test Coverage | v0.95 | 0/TBD | Not started | - |
 | 52. Hooks & Logic Extraction | v0.95 | 0/TBD | Not started | - |
