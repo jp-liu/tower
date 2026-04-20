@@ -588,4 +588,5 @@ export const zh = {
   "project.migrateError": "迁移失败",
   "project.samePathInfo": "路径已是规范路径",
   "project.migrateSafetyWarning": "迁移前请确保没有运行中的任务",
+  "project.worktreeWarning": "该项目有活跃的 Git Worktree，迁移将被阻止",
 } as const;

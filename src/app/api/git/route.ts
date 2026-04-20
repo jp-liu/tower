@@ -73,6 +73,19 @@ export async function GET(request: NextRequest) {
       // no remote configured
     }
 
+    // Worktree check (optional)
+    let hasWorktrees = false;
+    if (request.nextUrl.searchParams.get("checkWorktrees") === "true") {
+      try {
+        const raw = execFileSync("git", ["worktree", "list", "--porcelain"], opts).trim();
+        // More than one worktree entry means linked worktrees exist
+        const worktreeEntries = raw.split("\n\n").filter(Boolean);
+        hasWorktrees = worktreeEntries.length > 1;
+      } catch {
+        // git worktree not supported or error — treat as no worktrees
+      }
+    }
+
     return NextResponse.json({
       isGit: true,
       path: resolved,
@@ -81,6 +94,7 @@ export async function GET(request: NextRequest) {
       remoteBranches,
       remoteUrl,
       statusSummary,
+      hasWorktrees,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });

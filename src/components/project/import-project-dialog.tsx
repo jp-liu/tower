@@ -130,6 +130,21 @@ export function ImportProjectDialog({
         // Failed to resolve — leave empty for user to fill
       }
     }
+
+    // Pre-flight safety check: check worktrees in source path via git API
+    if (localPath) {
+      try {
+        const checkRes = await fetch(`/api/git?path=${encodeURIComponent(localPath)}&checkWorktrees=true`);
+        if (checkRes.ok) {
+          const data = await checkRes.json();
+          if (data.hasWorktrees) {
+            setSafetyWarning(t("project.worktreeWarning"));
+          }
+        }
+      } catch {
+        // Safety check failed — full check runs again at migration time
+      }
+    }
   }, [gitUrl, localPath]);
 
   const handleCreate = async () => {
@@ -157,21 +172,18 @@ export function ImportProjectDialog({
       if (!safetyResult.safe) {
         setMigrateError(safetyResult.reason);
         setMigrating(false);
-        // Project created but migration blocked — still close dialog
-        toast.error(`${t("project.migrateError")}: ${safetyResult.reason}`);
-        resetForm();
-        onOpenChange(false);
-        return;
+        return; // Keep dialog open so user sees the error
       }
 
       const migrateResult = await migrateProjectPath(result.id, targetPath);
       setMigrating(false);
 
-      if (migrateResult.success) {
-        toast.success(t("project.migrateSuccess"));
-      } else {
-        toast.error(`${t("project.migrateError")}: ${migrateResult.error}`);
+      if (!migrateResult.success) {
+        setMigrateError(migrateResult.error ?? t("project.migrateError"));
+        return; // Keep dialog open — source is intact, show specific error
       }
+
+      toast.success(t("project.migrateSuccess"));
     }
 
     resetForm();
@@ -179,7 +191,7 @@ export function ImportProjectDialog({
   };
 
   const canMigrate = migrateEnabled && targetPath && !isSamePath && !migrating;
-  const isConfirmDisabled = !projectName.trim() || !localPath.trim() || migrating;
+  const isConfirmDisabled = !projectName.trim() || !localPath.trim() || migrating || (migrateEnabled && !!safetyWarning);
 
   return (
     <>
