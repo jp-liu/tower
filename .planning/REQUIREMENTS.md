@@ -1,0 +1,80 @@
+# Requirements: v0.96 UX Polish & Knowledge Capture
+
+## UI Fixes
+
+- [ ] **UI-01**: Delete task button must not trigger task detail drawer/panel opening
+- [ ] **UI-02**: Shared `<EmptyState />` component extracted and used across asset-list, assistant-chat, and other empty states
+- [ ] **UI-03**: All icon buttons follow unified hover pattern (`hover:bg-accent hover:text-foreground transition-colors`) — audit and fix chat input area, thumbnail strip, etc.
+
+## Asset Preview
+
+- [ ] **ASSET-01**: Clicking image asset opens fullscreen lightbox with zoom/pan and Escape to close
+- [ ] **ASSET-02**: Clicking text/md/json asset opens preview dialog with markdown rendering or monospace display
+- [ ] **ASSET-03**: "在文件夹中显示" button opens containing folder in system file manager (`open -R` on macOS)
+- [ ] **ASSET-04**: Asset action buttons reorganized to: [预览] [在文件夹中显示] [删除]
+
+## Project Import & Migration
+
+- [ ] **PROJ-01**: "新建项目" flow accepts git URL, auto-resolves local path, clones if not exist
+- [ ] **PROJ-02**: "导入项目" flow with folder browser, auto-detect git remote, auto-fill project name
+- [ ] **PROJ-03**: Migration toggle on import — shows target path derived from git rules, editable
+- [ ] **PROJ-04**: Migration pre-checks block if RUNNING executions, active PTY sessions, or existing worktrees
+- [ ] **PROJ-05**: Migration executes `fs.rename` (atomic, same-filesystem) with mkdir -p for parent dir
+- [ ] **PROJ-06**: Migration error handling — rename failure leaves source intact, clear error messages
+
+## Session Dreaming
+
+- [ ] **DREAM-01**: Phase 2+ AI analysis after session ends — structured JSON output (summary, insights, shouldCreateNote)
+- [ ] **DREAM-02**: Auto-create `ProjectNote` (category: `session-insight`) when AI determines significance
+- [ ] **DREAM-03**: Execution timeline shows "归纳" row linking to insight note (inline expand + navigate)
+- [ ] **DREAM-04**: `daily_summary` report includes `insights` section listing session-insight notes created that day
+
+## Auto-Upload Hook
+
+- [ ] **HOOK-01**: Global PostToolUse hook script gated by `TOWER_TASK_ID` env var (no-op when absent)
+- [ ] **HOOK-02**: Hook detects file creation/reference matching configured types and uploads to Tower API
+- [ ] **HOOK-03**: File type whitelist configurable via SystemConfig `hooks.autoUploadTypes`
+- [ ] **HOOK-04**: Internal upload API endpoint accepts taskId + filePath, copies to `data/assets/{projectId}/`
+- [ ] **HOOK-05**: Environment variable rename: `AI_MANAGER_TASK_ID` → `TOWER_TASK_ID`, add `TOWER_API_URL`
+- [ ] **HOOK-06**: Settings page "安装 Hook" button to register global hook in `~/.claude/settings.json`
+
+## Resource Attribution & Task Drawer
+
+- [ ] **RES-01**: Project assets page shows all assets including task-bound ones (remove `taskId: null` filter)
+- [ ] **RES-02**: Task-bound assets display `[任务: xxx]` label with task title
+- [ ] **RES-03**: `TaskOverviewDrawer` component — shows task title, status, priority, description, labels, last execution summary, resource count, created date
+- [ ] **RES-04**: Clicking task label in asset list opens TaskOverviewDrawer
+- [ ] **RES-05**: Archive/completed task list items open TaskOverviewDrawer on click
+
+---
+
+## Future Requirements (deferred)
+
+- 非图片文件粘贴支持
+- 拖拽上传
+- 缓存自动清理策略
+- 任务抽屉内跳转到终端/详情操作
+- 多用户/账号体系下的缓存隔离
+
+## Out of Scope
+
+- Keyboard shortcut system expansion — only 2 shortcuts, already Windows-compatible
+- Electron/desktop features — pure web, local deploy only
+- Cross-device migration (cp fallback) — local tool, same filesystem guaranteed
+
+---
+
+## Traceability
+
+| Requirement | Phase | Plan | Status |
+|-------------|-------|------|--------|
+| UI-01~03 | TBD | — | — |
+| ASSET-01~04 | TBD | — | — |
+| PROJ-01~06 | TBD | — | — |
+| DREAM-01~04 | TBD | — | — |
+| HOOK-01~06 | TBD | — | — |
+| RES-01~05 | TBD | — | — |
+
+---
+
+*Full design details: `.planning/v0.96-REQUIREMENTS.md`*
