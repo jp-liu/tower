@@ -11,7 +11,7 @@
 - [x] **ASSET-01**: Clicking image asset opens fullscreen lightbox with zoom/pan and Escape to close
 - [x] **ASSET-02**: Clicking text/md/json asset opens preview dialog with markdown rendering or monospace display
 - [x] **ASSET-03**: "在文件夹中显示" button opens containing folder in system file manager (`open -R` on macOS)
-- [ ] **ASSET-04**: Asset action buttons reorganized to: [预览] [在文件夹中显示] [删除]
+- [x] **ASSET-04**: Asset action buttons reorganized to: [预览] [在文件夹中显示] [删除]
 
 ## Project Import & Migration
 
