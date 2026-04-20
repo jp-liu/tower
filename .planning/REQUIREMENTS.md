@@ -40,9 +40,9 @@
 ### 测试覆盖 — Core Lib
 
 - [x] **COV-14**: internal-api-guard.ts 单元测试（localhost 校验 + x-forwarded-for 检测）
-- [ ] **COV-15**: schemas.ts 单元测试（Zod schema 边界值）
-- [ ] **COV-16**: diff-parser.ts 单元测试（diff 解析 + 边界情况）
-- [ ] **COV-17**: file-serve.ts 单元测试（路径解析 + 遏制检查 + MIME 类型）
+- [x] **COV-15**: schemas.ts 单元测试（Zod schema 边界值）
+- [x] **COV-16**: diff-parser.ts 单元测试（diff 解析 + 边界情况）
+- [x] **COV-17**: file-serve.ts 单元测试（路径解析 + 遏制检查 + MIME 类型）
 
 ### 测试覆盖 — Hooks & 逻辑抽离
 
@@ -52,8 +52,8 @@
 ### 测试覆盖 — Lib 补充
 
 - [x] **COV-20**: config-reader.ts 单元测试
-- [ ] **COV-21**: assistant-sessions.ts 单元测试
-- [ ] **COV-22**: execution-summary.ts 单元测试
+- [x] **COV-21**: assistant-sessions.ts 单元测试
+- [x] **COV-22**: execution-summary.ts 单元测试
 - [x] **COV-23**: logger.ts 单元测试
 
 ### E2E 测试

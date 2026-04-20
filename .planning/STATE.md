@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v0.95
 milestone_name: Pre-Release Hardening
-status: executing
-stopped_at: Completed 51-02-PLAN.md
-last_updated: "2026-04-20T07:37:26.112Z"
+status: verifying
+stopped_at: Completed 51-01-PLAN.md
+last_updated: "2026-04-20T07:37:46.473Z"
 last_activity: 2026-04-20
 progress:
   total_phases: 15
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 
 Phase: 51 (core-lib-test-coverage) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-20
 
 Progress: [░░░░░░░░░░] 0%
@@ -78,6 +78,10 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 50-mcp-tools-test-coverage]: vi.mock path from tools/__tests__/ must be ../../db (not ../db) to resolve to src/mcp/db.ts
 - [Phase 51-core-lib-test-coverage]: vi.hoisted() used for mockFindUnique in config-reader tests — avoids Cannot access before initialization from vi.mock hoisting
 - [Phase 51-core-lib-test-coverage]: Logger does NOT scrub sensitive fields — COV-23 documents current behavior via assertions, scrubbing is a future enhancement
+- [Phase 51-core-lib-test-coverage]: Test captureExecutionSummary end-to-end with mocked dependencies rather than extracting private functions — avoids refactoring and exercises all internal logic indirectly
+- [Phase 51-core-lib-test-coverage]: [Phase 51-core-lib]: jsdom environment for localStorage tests, node environment for Node.js built-in mocking — set per test file via // @vitest-environment directive
+- [Phase 51-core-lib-test-coverage]: checkConflicts (git binary) excluded from tests — only pure parseDiffOutput tested
+- [Phase 51-core-lib-test-coverage]: resolveAssetPath allows single-level traversal within data/assets/ — guard only blocks escape outside data/assets/
 
 ### Pending Todos
 
@@ -89,6 +93,6 @@ None at roadmap stage.
 
 ## Session Continuity
 
-Last session: 2026-04-20T07:37:10.112Z
-Stopped at: Completed 51-02-PLAN.md
+Last session: 2026-04-20T07:37:46.470Z
+Stopped at: Completed 51-01-PLAN.md
 Resume file: None
