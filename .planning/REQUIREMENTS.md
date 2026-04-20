@@ -1,88 +1,60 @@
-# Requirements — v0.93 Chat Media Support
+# Requirements — v0.94 Cache & File Management
 
-**Defined:** 2026-04-18
+**Defined:** 2026-04-20
 **Core Value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
 
-## v0.93 Requirements
+## v0.94 Requirements
 
-### Cache Infrastructure
+### 缓存目录结构
 
-- [ ] **CACHE-01**: User can paste image in chat input, image uploads to `data/cache/assistant/<uuid>.<ext>`
-- [ ] **CACHE-02**: Upload API validates MIME type (image/jpeg, image/png, image/gif, image/webp only)
-- [ ] **CACHE-03**: Upload API includes path traversal protection
-- [x] **CACHE-04**: Cached images accessible via short path `/cache/<filename>` (relative URL)
-- [x] **CACHE-05**: Project assets accessible via short path `/assets/<filename>` (unified static resource pattern)
+- [ ] **DIR-01**: 上传图片存储到 `data/cache/assistant/{year-month}/images/` 年月分组目录
+- [ ] **DIR-02**: 缓存目录支持类型子目录（`images/`），为未来文件类型扩展预留 `files/` 结构
+- [ ] **DIR-03**: `getAssistantCacheDir()` 自动生成当前年月 + 类型的完整路径
 
-### Paste UX
+### 文件命名
 
-- [x] **PASTE-01**: User pastes image in chat input → uploads and shows thumbnail above input box
-- [x] **PASTE-02**: Upload shows progress bar with percentage
-- [x] **PASTE-03**: User can click thumbnail to open preview modal (zoom in/out)
-- [x] **PASTE-04**: User can click to remove a single pending image
-- [x] **PASTE-05**: User can paste multiple times to accumulate images
-- [x] **PASTE-06**: Paste uses `clipboardData.items` (not `.files`) for Firefox compatibility
-- [x] **PASTE-07**: Input textarea defaults to 3 rows height, max 5 rows then scrollbar
+- [ ] **NAME-01**: 复制系统文件粘贴时，保留原始文件名，格式为 `{原始名}-{8位uuid}.{ext}`
+- [ ] **NAME-02**: 截图或无意义文件名（如 `image.png`）时，使用 `tower_image-{8位uuid}.{ext}`
+- [ ] **NAME-03**: 文件名清洗：保留中文和英文字母数字，空格和特殊字符替换为 `_`
 
-### Message Display
+### 路由适配
 
-- [x] **MSG-01**: Sent user message bubble shows images at top in fixed size (using `/cache/` short path)
-- [x] **MSG-02**: User can click images in message bubble to open preview modal (zoom)
-- [x] **MSG-03**: Missing/cleaned images show broken-image placeholder
-- [x] **MSG-04**: Session history reload restores image references in messages
+- [ ] **ROUTE-01**: cache 服务路由改为 catch-all，支持子路径（`/api/internal/cache/2026-04/images/xxx.png`）
+- [ ] **ROUTE-02**: 前端 `<img src>` 使用完整子路径（含年月和类型目录）
+- [ ] **ROUTE-03**: `buildMultimodalPrompt` 使用完整子路径拼接绝对路径
 
-### AI Integration
+### 资产关联
 
-- [x] **AI-01**: Send message appends image absolute paths to prompt text
-- [x] **AI-02**: query() options enable Read tool permission for Claude to read images
-- [x] **AI-03**: Architecture supports future file type extension (MIME whitelist expandable)
+- [ ] **ASSET-01**: `create_task` references 从 cache 复制到 asset 时，自动 strip UUID 后缀还原可读文件名
 
 ## Future Requirements
 
 ### File Support
-
-- **FILE-01**: User can paste non-image files (md, txt, pdf) with same cache + preview flow
-- **FILE-02**: User can drag-and-drop files into chat input
-- **FILE-03**: Automatic cache cleanup strategy
+- **FILE-01**: 非图片文件粘贴支持（md, txt, pdf）
+- **FILE-02**: 拖拽上传
+- **FILE-03**: 缓存自动清理策略
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Video/audio media | High complexity, defer to future |
-| Drag-and-drop upload | Phase 2 enhancement |
-| Auto cache cleanup | User preference is manual cleanup |
-| Base64 in browser→server payload | Use file path references instead |
-| Inline markdown image positioning | Images fixed at bubble top for consistent UX |
+| 非图片文件粘贴 | 后续 milestone |
+| 拖拽上传 | 后续 milestone |
+| 缓存自动清理 | 用户手动清理 |
+| 视频/音频媒体 | 高复杂度，远期规划 |
+| 旧 cache 数据迁移 | 旧文件仍可通过旧路径访问，自然过渡 |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CACHE-01 | Phase 40 | Pending |
-| CACHE-02 | Phase 40 | Pending |
-| CACHE-03 | Phase 40 | Pending |
-| CACHE-04 | Phase 40 | Complete |
-| CACHE-05 | Phase 40 | Complete |
-| PASTE-01 | Phase 41 | Complete |
-| PASTE-02 | Phase 41 | Complete |
-| PASTE-03 | Phase 41 | Complete |
-| PASTE-04 | Phase 41 | Complete |
-| PASTE-05 | Phase 41 | Complete |
-| PASTE-06 | Phase 41 | Complete |
-| PASTE-07 | Phase 41 | Complete |
-| MSG-01 | Phase 42 | Complete |
-| MSG-02 | Phase 42 | Complete |
-| MSG-03 | Phase 42 | Complete |
-| MSG-04 | Phase 42 | Complete |
-| AI-01 | Phase 43 | Complete |
-| AI-02 | Phase 43 | Complete |
-| AI-03 | Phase 43 | Complete |
-
-**Coverage:**
-- v0.93 requirements: 19 total
-- Mapped to phases: 19
-- Unmapped: 0 ✓
-
----
-*Requirements defined: 2026-04-18*
-*Last updated: 2026-04-18 — Traceability updated after roadmap creation*
+| DIR-01 | TBD | Pending |
+| DIR-02 | TBD | Pending |
+| DIR-03 | TBD | Pending |
+| NAME-01 | TBD | Pending |
+| NAME-02 | TBD | Pending |
+| NAME-03 | TBD | Pending |
+| ROUTE-01 | TBD | Pending |
+| ROUTE-02 | TBD | Pending |
+| ROUTE-03 | TBD | Pending |
+| ASSET-01 | TBD | Pending |
