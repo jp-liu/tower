@@ -172,7 +172,7 @@ See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full detai
 
 ### Summary Checklist
 
-- [ ] **Phase 55: UI Fixes** - Delete task stops propagation, shared EmptyState component, icon button hover consistency
+- [x] **Phase 55: UI Fixes** - Delete task stops propagation, shared EmptyState component, icon button hover consistency (completed 2026-04-20)
 - [ ] **Phase 56: Asset Preview** - Image lightbox, text/md preview dialog, reveal in Finder, reorganized action buttons
 - [ ] **Phase 57: Project Import & Migration** - Separate create vs import flows, optional fs.rename migration with pre-checks
 - [ ] **Phase 58: Session Dreaming** - Deep AI analysis on session end, auto-create insight notes, timeline UI, daily summary integration
@@ -191,7 +191,7 @@ See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full detai
   3. All clickable icon buttons show a background highlight on hover with consistent transition (no bare text highlight)
 **Plans**: 1 plan
 Plans:
-- [ ] 55-01-PLAN.md — Fix delete propagation, shared EmptyState, icon button hover
+- [x] 55-01-PLAN.md — Fix delete propagation, shared EmptyState, icon button hover
 **UI hint**: yes
 
 #### Phase 56: Asset Preview
@@ -259,7 +259,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 55. UI Fixes | 0/1 | Not started | - |
+| 55. UI Fixes | 1/1 | Complete    | 2026-04-20 |
 | 56. Asset Preview | 0/? | Not started | - |
 | 57. Project Import & Migration | 0/? | Not started | - |
 | 58. Session Dreaming | 0/? | Not started | - |
