@@ -1,5 +1,32 @@
 # Milestones
 
+## v0.95 Pre-Release Hardening (Shipped: 2026-04-20)
+
+**Phases completed:** 8 phases, 18 plans, 29 tasks
+
+**Key accomplishments:**
+
+- Fixed 11 test failures across 4 files by aligning tests with API changes: setExitListener, .on() mock, unref removal, and instrumentation module refactoring
+- board-stats.test.tsx
+- CUID format validation added to asset route rejecting path-traversal attacks, plus 20-test suite covering requireLocalhost (x-forwarded-for spoofing), validateTaskId, and new validateProjectId
+- 37 unit tests across 3 server action modules — CRUD, builtin label protection, setTaskLabels full-replace, FTS sync order verification
+- File:
+- 25 unit tests across asset-actions (CRUD + uploadAsset path traversal/size/projectId validation) and report-actions (getDailySummary workspace grouping, getDailyTodo priority sorting + filter params)
+- Unit tests for task-tools and project-tools MCP handlers: 20 tests covering CRUD, reference file copy with UUID stripping, worktree git detection, autoStart fetch, label transactions, and type derivation from gitUrl
+- 28 unit tests covering workspace-tools CRUD with projectCount, label-tools set_task_labels full replacement via Prisma $transaction, and terminal-tools HTTP bridge endpoints with CUID validation and all terminalStatus branches
+- 9 passing unit tests for daily_summary and daily_todo MCP handlers covering date filters, workspace/project grouping, filter parameters, and stats computation
+- 102 unit tests across 3 pure-function modules: Zod schema boundary values, parseDiffOutput edge cases (binary/truncation/empty), and resolveAssetPath traversal blocking + MIME_MAP spot checks
+- 27 unit tests across config-reader (8 tests) and logger (19 tests) — DB mock via vi.hoisted, console spy output verification, sensitive field behavior documented
+- 42 unit tests covering localStorage session CRUD with MAX_SESSIONS cap, buildSessionTitle truncation, git data capture via mocked execFileSync, ANSI/OSC stripping, 10KB buffer trimming, and error resilience
+- Pure SSE event reducer extracted from use-assistant-chat.ts into sse-event-reducer.ts with 13 unit tests covering all event types via `// @vitest-environment node`
+- 22 unit tests for XHR-based image upload hook: upload initiation, progress tracking, 3 error paths, removeImage with abort+revoke, clearAll, hasUploading, and unmount cleanup
+- 1. [Rule 1 - Bug] http_proxy blocks localhost — 502 on all Playwright requests
+- Playwright serial test suite covering the global chat assistant: settings switch to chat mode, panel open via Bot button, message send + user bubble verification, response/thinking indicator wait, and image paste-to-thumbnail flow — all 5 tests pass
+- i18n.tsx split from 1192 lines to 64 lines via zh.ts/en.ts language modules; silent diff-load catches replaced with user-visible toast.error notifications
+- Removed 3 unnecessary `as any` casts in production UI components by using already-available Prisma and local type definitions directly
+
+---
+
 ## v0.94 Cache & File Management (Shipped: 2026-04-20)
 
 **Phases completed:** 7 phases, 11 plans, 11 tasks
