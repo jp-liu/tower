@@ -159,7 +159,7 @@ See: [milestones/v0.94-ROADMAP.md](./milestones/v0.94-ROADMAP.md) for full detai
 - [x] **Phase 51: Core Lib Test Coverage** - Unit tests for 6 core library modules (completed 2026-04-20)
 - [x] **Phase 52: Hooks & Logic Extraction** - Extract business logic from components into hooks/utils and add tests (completed 2026-04-20)
 - [x] **Phase 53: E2E Tests** - Playwright setup + 3 critical user flow tests (completed 2026-04-20)
-- [ ] **Phase 54: Error Handling & Refactoring** - Replace silent catches with user-visible errors, split i18n.tsx, clean as-any casts
+- [x] **Phase 54: Error Handling & Refactoring** - Replace silent catches with user-visible errors, split i18n.tsx, clean as-any casts (completed 2026-04-20)
 
 ## Phase Details
 
@@ -389,7 +389,7 @@ Plans:
   4. No new silent catches are introduced anywhere in the codebase during this phase
 **Plans**: 2 plans
 Plans:
-- [ ] 54-01-PLAN.md — toast.error for silent catches + i18n split
+- [x] 54-01-PLAN.md — toast.error for silent catches + i18n split
 - [x] 54-02-PLAN.md — Replace as-any casts with correct TypeScript types
 
 
@@ -454,4 +454,4 @@ Phases execute in numeric order: 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54
 | 51. Core Lib Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
 | 52. Hooks & Logic Extraction | v0.95 | 2/2 | Complete    | 2026-04-20 |
 | 53. E2E Tests | v0.95 | 2/2 | Complete    | 2026-04-20 |
-| 54. Error Handling & Refactoring | v0.95 | 1/2 | In Progress|  |
+| 54. Error Handling & Refactoring | v0.95 | 2/2 | Complete   | 2026-04-20 |
