@@ -31,7 +31,7 @@ function LayoutInner({
 }: {
   workspaces: LayoutClientProps["workspaces"];
   children: React.ReactNode;
-  handleCreateProject: (data: CreateProjectData) => Promise<void>;
+  handleCreateProject: (data: CreateProjectData) => Promise<{ id: string } | void>;
 }) {
   const pathname = usePathname();
   const { isOpen, displayMode, closeAssistant } = useAssistant();
@@ -114,18 +114,19 @@ export function LayoutClient({ workspaces, children }: LayoutClientProps) {
   const pathname = usePathname();
   const activeWorkspaceId = pathname.split("/workspaces/")[1]?.split("/")[0];
 
-  const handleCreateProject = async (data: CreateProjectData) => {
+  const handleCreateProject = async (data: CreateProjectData): Promise<{ id: string } | void> => {
     const workspaceId = activeWorkspaceId || (workspaces.length > 0 ? workspaces[0].id : null);
     if (!workspaceId) {
       const ws = await createWorkspace({ name: "Default Workspace" });
-      await createProject({ ...data, workspaceId: ws.id });
+      const project = await createProject({ ...data, workspaceId: ws.id });
       router.refresh();
       router.push(`/workspaces/${ws.id}`);
-      return;
+      return { id: project.id };
     }
-    await createProject({ ...data, workspaceId });
+    const project = await createProject({ ...data, workspaceId });
     router.refresh();
     router.push(`/workspaces/${workspaceId}`);
+    return { id: project.id };
   };
 
   return (

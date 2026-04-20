@@ -21,7 +21,7 @@ interface CreateProjectData {
 }
 
 interface TopBarProps {
-  onCreateProject?: (data: CreateProjectData) => Promise<void> | void;
+  onCreateProject?: (data: CreateProjectData) => Promise<{ id: string } | void> | { id: string } | void;
 }
 
 export function TopBar({ onCreateProject }: TopBarProps) {

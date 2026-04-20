@@ -564,4 +564,13 @@ export const en: Translations = {
   "assistant.sessionList": "Sessions",
   "assistant.deleteSession": "Delete",
   "assistant.noSessions": "No previous sessions",
+  // Project migration (Phase 57)
+  "project.migrate": "Migrate to canonical path",
+  "project.migrateHint": "Move project folder to the location derived from Git path rules",
+  "project.targetPath": "Target Path",
+  "project.migrating": "Migrating...",
+  "project.migrateSuccess": "Project migrated to canonical path",
+  "project.migrateError": "Migration failed",
+  "project.samePathInfo": "Path is already canonical",
+  "project.migrateSafetyWarning": "Ensure no tasks are running before migration",
 };

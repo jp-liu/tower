@@ -579,4 +579,13 @@ export const zh = {
   "assistant.sessionList": "会话列表",
   "assistant.deleteSession": "删除",
   "assistant.noSessions": "暂无历史会话",
+  // Project migration (Phase 57)
+  "project.migrate": "迁移到规范路径",
+  "project.migrateHint": "将项目文件夹移动到 Git 路径规则推导的位置",
+  "project.targetPath": "目标路径",
+  "project.migrating": "迁移中...",
+  "project.migrateSuccess": "项目已迁移到规范路径",
+  "project.migrateError": "迁移失败",
+  "project.samePathInfo": "路径已是规范路径",
+  "project.migrateSafetyWarning": "迁移前请确保没有运行中的任务",
 } as const;

@@ -29,7 +29,7 @@ interface CreateProjectData {
 interface CreateProjectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreateProject?: (data: CreateProjectData) => Promise<void> | void;
+  onCreateProject?: (data: CreateProjectData) => Promise<{ id: string } | void> | { id: string } | void;
 }
 
 export function CreateProjectDialog({

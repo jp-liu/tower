@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { FolderOpen } from "lucide-react";
+import { useState, useCallback } from "react";
+import { FolderOpen, AlertCircle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
@@ -14,8 +14,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import { useI18n } from "@/lib/i18n";
+import { toast } from "sonner";
+import { resolveGitLocalPath } from "@/actions/config-actions";
+import { migrateProjectPath, checkMigrationSafety } from "@/actions/project-actions";
 
-interface CreateProjectData {
+export interface CreateProjectData {
   name: string;
   alias?: string;
   description?: string;
@@ -27,7 +30,7 @@ interface CreateProjectData {
 interface ImportProjectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreateProject?: (data: CreateProjectData) => Promise<void> | void;
+  onCreateProject?: (data: CreateProjectData) => Promise<{ id: string } | void> | { id: string } | void;
 }
 
 export function ImportProjectDialog({
@@ -45,6 +48,14 @@ export function ImportProjectDialog({
   const [projectType, setProjectType] = useState<"FRONTEND" | "BACKEND">("FRONTEND");
   const [gitDetected, setGitDetected] = useState(false);
 
+  // Migration state
+  const [migrateEnabled, setMigrateEnabled] = useState(false);
+  const [targetPath, setTargetPath] = useState("");
+  const [migrating, setMigrating] = useState(false);
+  const [migrateError, setMigrateError] = useState("");
+  const [safetyWarning, setSafetyWarning] = useState("");
+  const [isSamePath, setIsSamePath] = useState(false);
+
   const resetForm = () => {
     setProjectName("");
     setProjectAlias("");
@@ -53,11 +64,22 @@ export function ImportProjectDialog({
     setLocalPath("");
     setProjectType("FRONTEND");
     setGitDetected(false);
+    setMigrateEnabled(false);
+    setTargetPath("");
+    setMigrating(false);
+    setMigrateError("");
+    setSafetyWarning("");
+    setIsSamePath(false);
   };
 
   const handleFolderSelect = async (selectedPath: string) => {
     setLocalPath(selectedPath);
     setGitDetected(false);
+    setMigrateEnabled(false);
+    setTargetPath("");
+    setMigrateError("");
+    setSafetyWarning("");
+    setIsSamePath(false);
 
     // Derive default project name from folder basename
     const basename = selectedPath.split("/").filter(Boolean).pop() ?? "";
@@ -83,20 +105,81 @@ export function ImportProjectDialog({
     }
   };
 
-  const handleCreate = async () => {
-    if (projectName.trim()) {
-      await onCreateProject?.({
-        name: projectName.trim(),
-        alias: projectAlias.trim() || undefined,
-        description: projectDesc.trim() || undefined,
-        gitUrl: gitUrl.trim() || undefined,
-        localPath: localPath.trim() || undefined,
-        projectType,
-      });
-      resetForm();
-      onOpenChange(false);
+  const handleMigrateToggle = useCallback(async (enabled: boolean) => {
+    setMigrateEnabled(enabled);
+    setMigrateError("");
+    setSafetyWarning("");
+    setIsSamePath(false);
+
+    if (!enabled) {
+      setTargetPath("");
+      return;
     }
+
+    // Derive target path from git URL rules
+    if (gitUrl) {
+      try {
+        const resolved = await resolveGitLocalPath(gitUrl);
+        if (resolved) {
+          setTargetPath(resolved);
+          if (resolved === localPath) {
+            setIsSamePath(true);
+          }
+        }
+      } catch {
+        // Failed to resolve — leave empty for user to fill
+      }
+    }
+  }, [gitUrl, localPath]);
+
+  const handleCreate = async () => {
+    if (!projectName.trim()) return;
+
+    const createData: CreateProjectData = {
+      name: projectName.trim(),
+      alias: projectAlias.trim() || undefined,
+      description: projectDesc.trim() || undefined,
+      gitUrl: gitUrl.trim() || undefined,
+      localPath: localPath.trim() || undefined,
+      projectType,
+    };
+
+    // Create project first
+    const result = await onCreateProject?.(createData);
+
+    // If migration is enabled and we have a project ID
+    if (migrateEnabled && targetPath && targetPath !== localPath && result && "id" in result) {
+      setMigrating(true);
+      setMigrateError("");
+
+      // Run safety check
+      const safetyResult = await checkMigrationSafety(result.id);
+      if (!safetyResult.safe) {
+        setMigrateError(safetyResult.reason);
+        setMigrating(false);
+        // Project created but migration blocked — still close dialog
+        toast.error(`${t("project.migrateError")}: ${safetyResult.reason}`);
+        resetForm();
+        onOpenChange(false);
+        return;
+      }
+
+      const migrateResult = await migrateProjectPath(result.id, targetPath);
+      setMigrating(false);
+
+      if (migrateResult.success) {
+        toast.success(t("project.migrateSuccess"));
+      } else {
+        toast.error(`${t("project.migrateError")}: ${migrateResult.error}`);
+      }
+    }
+
+    resetForm();
+    onOpenChange(false);
   };
+
+  const canMigrate = migrateEnabled && targetPath && !isSamePath && !migrating;
+  const isConfirmDisabled = !projectName.trim() || !localPath.trim() || migrating;
 
   return (
     <>
@@ -145,6 +228,60 @@ export function ImportProjectDialog({
                   onChange={(e) => setGitUrl(e.target.value)}
                   className="mt-1.5 font-mono text-xs"
                 />
+              </div>
+            )}
+
+            {/* Migration toggle — only when git detected */}
+            {gitDetected && localPath && (
+              <div className="rounded-md border border-border p-3 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={migrateEnabled}
+                    onChange={(e) => handleMigrateToggle(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  <span className="text-xs font-medium">{t("project.migrate")}</span>
+                </label>
+                <p className="text-[10px] text-muted-foreground">{t("project.migrateHint")}</p>
+
+                {migrateEnabled && (
+                  <div className="space-y-2 pt-1">
+                    <div>
+                      <label className="text-[10px] font-medium text-muted-foreground">{t("project.targetPath")}</label>
+                      <Input
+                        value={targetPath}
+                        onChange={(e) => {
+                          setTargetPath(e.target.value);
+                          setIsSamePath(e.target.value === localPath);
+                        }}
+                        placeholder="/path/to/canonical/location"
+                        className="mt-1 font-mono text-xs"
+                      />
+                    </div>
+
+                    {isSamePath && (
+                      <p className="flex items-center gap-1 text-[11px] text-sky-400">
+                        <Info className="h-3 w-3" />
+                        {t("project.samePathInfo")}
+                      </p>
+                    )}
+
+                    {safetyWarning && (
+                      <p className="flex items-center gap-1 text-[11px] text-amber-400">
+                        <AlertCircle className="h-3 w-3" />
+                        {safetyWarning}
+                      </p>
+                    )}
+
+                    {migrateError && (
+                      <p className="flex items-center gap-1 text-[11px] text-rose-400">
+                        <AlertCircle className="h-3 w-3" />
+                        {migrateError}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -203,10 +340,10 @@ export function ImportProjectDialog({
             </Button>
             <Button
               onClick={handleCreate}
-              disabled={!projectName.trim() || !localPath.trim()}
+              disabled={isConfirmDisabled}
               className="bg-primary/10 text-primary ring-1 ring-primary/25 hover:bg-primary/20"
             >
-              {t("common.create")}
+              {migrating ? t("project.migrating") : t("common.create")}
             </Button>
           </DialogFooter>
         </DialogContent>
