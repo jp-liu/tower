@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.95
 milestone_name: Pre-Release Hardening
 status: executing
-stopped_at: Completed 50-03-PLAN.md
-last_updated: "2026-04-20T07:18:21.830Z"
+stopped_at: Completed 50-02-PLAN.md
+last_updated: "2026-04-20T07:20:15.948Z"
 last_activity: 2026-04-20
 progress:
   total_phases: 15
   completed_phases: 3
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 8
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 ## Current Position
 
 Phase: 50 (mcp-tools-test-coverage) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-20
 
@@ -72,6 +72,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 49-server-actions-test-coverage]: vi.mock hoisting before imports ensures db mock is in scope when action modules load
 - [Phase 49-server-actions-test-coverage]: deleteNote call-order verified via array push in mockImplementation — FTS cleanup before DB delete
 - [Phase 50]: Mock path for MCP db is ../../db (not ../db) since test is in tools/__tests__/ subdir
+- [Phase 50]: Mock path from __tests__/ is ../../db (not ../db) — __tests__ is a subdirectory of tools/, so db.ts is two levels up
+- [Phase 50]: global.fetch must be assigned before imports to intercept bridgeFetch in terminal-tools MCP handler tests
 
 ### Pending Todos
 
@@ -83,6 +85,6 @@ None at roadmap stage.
 
 ## Session Continuity
 
-Last session: 2026-04-20T07:18:21.827Z
-Stopped at: Completed 50-03-PLAN.md
+Last session: 2026-04-20T07:20:15.945Z
+Stopped at: Completed 50-02-PLAN.md
 Resume file: None

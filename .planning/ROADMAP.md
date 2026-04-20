@@ -329,7 +329,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [ ] 50-01-PLAN.md — task-tools + project-tools tests (create/update/move/delete, references, worktree, type derivation)
-- [ ] 50-02-PLAN.md — workspace-tools + label-tools + terminal-tools tests (CRUD, label replacement, HTTP bridge)
+- [x] 50-02-PLAN.md — workspace-tools + label-tools + terminal-tools tests (CRUD, label replacement, HTTP bridge)
 - [x] 50-03-PLAN.md — report-tools tests (daily_summary/daily_todo filtering and grouping)
 
 ### Phase 51: Core Lib Test Coverage
@@ -436,7 +436,7 @@ Phases execute in numeric order: 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54
 | 47. Failing Test Fixes | v0.95 | 2/2 | Complete    | 2026-04-20 |
 | 48. Security Hardening & Guard Tests | v0.95 | 1/1 | Complete   | 2026-04-20 |
 | 49. Server Actions Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
-| 50. MCP Tools Test Coverage | v0.95 | 1/3 | In Progress|  |
+| 50. MCP Tools Test Coverage | v0.95 | 2/3 | In Progress|  |
 | 51. Core Lib Test Coverage | v0.95 | 0/TBD | Not started | - |
 | 52. Hooks & Logic Extraction | v0.95 | 0/TBD | Not started | - |
 | 53. E2E Tests | v0.95 | 0/TBD | Not started | - |
