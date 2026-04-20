@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.93
-milestone_name: Chat Media Support
-status: executing
-stopped_at: Completed 42-02-PLAN.md
-last_updated: "2026-04-18T13:19:28.394Z"
-last_activity: 2026-04-18
+milestone: v0.94
+milestone_name: Cache & File Management
+status: requirements
+stopped_at: null
+last_updated: "2026-04-20T00:00:00.000Z"
+last_activity: 2026-04-20
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 7
-  completed_plans: 7
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
   percent: 0
 ---
 
@@ -18,16 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-18)
+See: .planning/PROJECT.md (updated 2026-04-20)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 43 — claude-sdk-multimodal-integration
+**Current focus:** v0.94 Cache & File Management — Defining requirements
 
 ## Current Position
 
-Phase: 43
-Plan: Not started
-Status: Executing Phase 43
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-20 — Milestone v0.94 started
 Last activity: 2026-04-18
 
 Progress: [░░░░░░░░░░] 0%
