@@ -147,6 +147,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
       .catch(() => {
         if (cancelled) return;
         setDiffData(null);
+        toast.error(t("taskPage.loadDiffFailed"));
       })
       .finally(() => {
         if (!cancelled) setIsLoadingDiff(false);
@@ -217,7 +218,9 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
       if (res.ok) return res.json();
     }).then((data) => {
       if (data?.files) setDiffData(data);
-    }).catch(() => {});
+    }).catch(() => {
+      toast.error(t("taskPage.loadDiffFailed"));
+    });
     router.refresh();
   }, [router, t, task.id]);
 
