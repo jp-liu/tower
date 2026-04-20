@@ -1,10 +1,9 @@
 import * as path from "node:path";
 import * as fs from "node:fs";
-import * as crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { requireLocalhost } from "@/lib/internal-api-guard";
 import { detectImageMime, MIME_TO_EXT } from "@/lib/mime-magic";
-import { ensureAssistantCacheDir } from "@/lib/file-utils";
+import { getAssistantCacheDir, buildCacheFilename } from "@/lib/file-utils";
 import { getConfigValue } from "@/actions/config-actions";
 
 export const dynamic = "force-dynamic";
@@ -35,15 +34,19 @@ export async function POST(request: NextRequest) {
   }
 
   const ext = MIME_TO_EXT[mimeType];
-  const filename = `${crypto.randomUUID()}${ext}`;
-
-  const dir = ensureAssistantCacheDir();
+  const dir = getAssistantCacheDir("images");
+  const filename = buildCacheFilename(file.name, ext);
   const dest = path.join(dir, filename);
-  // Belt-and-suspenders containment check (UUID prevents traversal but verify anyway)
+
+  // Belt-and-suspenders containment check
   if (!dest.startsWith(dir + path.sep) && dest !== dir) {
     return NextResponse.json({ error: "Invalid path" }, { status: 400 });
   }
 
   await fs.promises.writeFile(dest, buffer);
-  return NextResponse.json({ filename, mimeType });
+
+  // Return sub-path relative to assistant cache root (e.g., "2026-04/images/设计稿-a1b2c3d4.png")
+  const assistantRoot = path.join(process.cwd(), "data", "cache", "assistant");
+  const cachePath = path.relative(assistantRoot, dest);
+  return NextResponse.json({ filename: cachePath, mimeType });
 }
