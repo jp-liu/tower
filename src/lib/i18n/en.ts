@@ -585,4 +585,13 @@ export const en: Translations = {
   "project.samePathInfo": "Path is already canonical",
   "project.migrateSafetyWarning": "Ensure no tasks are running before migration",
   "project.worktreeWarning": "This project has active Git worktrees — migration will be blocked",
+  // Task overview drawer (Phase 60)
+  "taskDrawer.title": "Task Overview",
+  "taskDrawer.description": "Description",
+  "taskDrawer.labels": "Labels",
+  "taskDrawer.createdAt": "Created",
+  "taskDrawer.resources": "Resources",
+  "taskDrawer.lastExecution": "Last Execution",
+  "taskDrawer.noDescription": "No description",
+  "taskDrawer.noExecution": "No execution history",
 };

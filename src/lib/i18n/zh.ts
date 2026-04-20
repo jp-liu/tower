@@ -600,4 +600,13 @@ export const zh = {
   "project.samePathInfo": "路径已是规范路径",
   "project.migrateSafetyWarning": "迁移前请确保没有运行中的任务",
   "project.worktreeWarning": "该项目有活跃的 Git Worktree，迁移将被阻止",
+  // Task overview drawer (Phase 60)
+  "taskDrawer.title": "任务概览",
+  "taskDrawer.description": "描述",
+  "taskDrawer.labels": "标签",
+  "taskDrawer.createdAt": "创建时间",
+  "taskDrawer.resources": "关联资源",
+  "taskDrawer.lastExecution": "最近执行",
+  "taskDrawer.noDescription": "暂无描述",
+  "taskDrawer.noExecution": "暂无执行记录",
 } as const;

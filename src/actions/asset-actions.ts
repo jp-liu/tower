@@ -45,10 +45,31 @@ export async function deleteAsset(assetId: string) {
 
 export async function getProjectAssets(projectId: string) {
   return db.projectAsset.findMany({
-    where: { projectId, taskId: null },
+    where: { projectId },
     orderBy: { createdAt: "desc" },
+    include: {
+      task: {
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          priority: true,
+          description: true,
+          createdAt: true,
+          labels: { include: { label: true } },
+          executions: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { summary: true, status: true, endedAt: true },
+          },
+          _count: { select: { assets: true } },
+        },
+      },
+    },
   });
 }
+
+export type ProjectAssetWithTask = Awaited<ReturnType<typeof getProjectAssets>>[number];
 
 export async function getTaskAssets(taskId: string) {
   return db.projectAsset.findMany({

@@ -296,6 +296,23 @@ export async function commitWorktreeChanges(taskId: string, message: string): Pr
   return { hash };
 }
 
+export async function getTaskOverview(taskId: string) {
+  return db.task.findUnique({
+    where: { id: taskId },
+    include: {
+      labels: { include: { label: true } },
+      executions: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { summary: true, status: true, endedAt: true },
+      },
+      _count: { select: { assets: true } },
+    },
+  });
+}
+
+export type TaskOverviewData = NonNullable<Awaited<ReturnType<typeof getTaskOverview>>>;
+
 export async function getArchivedTaskCount(projectId: string) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
