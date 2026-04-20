@@ -220,7 +220,10 @@ Plans:
   4. Confirmation is blocked (with a clear error message) if there are running executions, active PTY sessions, or existing worktrees
   5. A successful migration atomically moves the project directory and updates `localPath` in the database; the source path is gone and the target contains the `.git` directory
   6. A failed migration leaves the source directory intact and displays the specific error to the user
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 57-01-PLAN.md — Split create/import dialogs with auto-fill logic
+- [ ] 57-02-PLAN.md — Migration toggle with pre-checks and atomic rename
 **UI hint**: yes
 
 #### Phase 58: Session Dreaming
@@ -264,7 +267,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 55. UI Fixes | 1/1 | Complete    | 2026-04-20 |
 | 56. Asset Preview | 2/2 | Complete    | 2026-04-20 |
-| 57. Project Import & Migration | 0/? | Not started | - |
+| 57. Project Import & Migration | 0/2 | Not started | - |
 | 58. Session Dreaming | 0/? | Not started | - |
 | 59. Auto-Upload Hook | 0/? | Not started | - |
 | 60. Resource Attribution & Task Drawer | 0/? | Not started | - |
