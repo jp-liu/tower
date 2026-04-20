@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.95
 milestone_name: Pre-Release Hardening
 status: verifying
-stopped_at: Completed 51-01-PLAN.md
-last_updated: "2026-04-20T07:37:46.473Z"
+stopped_at: Completed 52-02-PLAN.md
+last_updated: "2026-04-20T07:52:20.336Z"
 last_activity: 2026-04-20
 progress:
   total_phases: 15
-  completed_phases: 5
-  total_plans: 12
-  completed_plans: 12
+  completed_phases: 6
+  total_plans: 14
+  completed_plans: 14
   percent: 0
 ---
 
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-20)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 51 — core-lib-test-coverage
+**Current focus:** Phase 52 — hooks-logic-extraction
 
 ## Current Position
 
-Phase: 51 (core-lib-test-coverage) — EXECUTING
-Plan: 3 of 3
+Phase: 52 (hooks-logic-extraction) — EXECUTING
+Plan: 2 of 2
 Status: Phase complete — ready for verification
 Last activity: 2026-04-20
 
@@ -82,6 +82,7 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 51-core-lib-test-coverage]: [Phase 51-core-lib]: jsdom environment for localStorage tests, node environment for Node.js built-in mocking — set per test file via // @vitest-environment directive
 - [Phase 51-core-lib-test-coverage]: checkConflicts (git binary) excluded from tests — only pure parseDiffOutput tested
 - [Phase 51-core-lib-test-coverage]: resolveAssetPath allows single-level traversal within data/assets/ — guard only blocks escape outside data/assets/
+- [Phase 52-hooks-logic-extraction]: URL.createObjectURL patched as property on URL class (not vi.stubGlobal) to preserve jsdom constructor behavior
 
 ### Pending Todos
 
@@ -93,6 +94,6 @@ None at roadmap stage.
 
 ## Session Continuity
 
-Last session: 2026-04-20T07:37:46.470Z
-Stopped at: Completed 51-01-PLAN.md
+Last session: 2026-04-20T07:52:09.772Z
+Stopped at: Completed 52-02-PLAN.md
 Resume file: None

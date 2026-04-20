@@ -157,7 +157,7 @@ See: [milestones/v0.94-ROADMAP.md](./milestones/v0.94-ROADMAP.md) for full detai
 - [x] **Phase 49: Server Actions Test Coverage** - Unit tests for 7 server action modules (completed 2026-04-20)
 - [x] **Phase 50: MCP Tools Test Coverage** - Unit tests for 6 MCP tool modules (completed 2026-04-20)
 - [x] **Phase 51: Core Lib Test Coverage** - Unit tests for 6 core library modules (completed 2026-04-20)
-- [ ] **Phase 52: Hooks & Logic Extraction** - Extract business logic from components into hooks/utils and add tests
+- [x] **Phase 52: Hooks & Logic Extraction** - Extract business logic from components into hooks/utils and add tests (completed 2026-04-20)
 - [ ] **Phase 53: E2E Tests** - Playwright setup + 3 critical user flow tests
 - [ ] **Phase 54: Error Handling & Refactoring** - Replace silent catches with user-visible errors, split i18n.tsx, clean as-any casts
 
@@ -360,8 +360,8 @@ Plans:
   4. The originating component still passes all existing tests after the extraction refactor
 **Plans**: 2 plans
 Plans:
-- [ ] 52-01-PLAN.md — Extract SSE event reducer from use-assistant-chat into pure utility + unit tests
-- [ ] 52-02-PLAN.md — Unit tests for use-image-upload hook (upload lifecycle, progress, errors, cleanup)
+- [x] 52-01-PLAN.md — Extract SSE event reducer from use-assistant-chat into pure utility + unit tests
+- [x] 52-02-PLAN.md — Unit tests for use-image-upload hook (upload lifecycle, progress, errors, cleanup)
 
 ### Phase 53: E2E Tests
 **Goal**: Three Playwright test suites cover the critical user flows end-to-end against a running local instance
@@ -451,6 +451,6 @@ Phases execute in numeric order: 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54
 | 49. Server Actions Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
 | 50. MCP Tools Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
 | 51. Core Lib Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
-| 52. Hooks & Logic Extraction | v0.95 | 0/2 | Not started | - |
+| 52. Hooks & Logic Extraction | v0.95 | 2/2 | Complete   | 2026-04-20 |
 | 53. E2E Tests | v0.95 | 0/TBD | Not started | - |
 | 54. Error Handling & Refactoring | v0.95 | 0/TBD | Not started | - |
