@@ -35,7 +35,7 @@
 - [ ] **COV-10**: workspace-tools.ts 单元测试（CRUD + 级联删除验证）
 - [ ] **COV-11**: terminal-tools.ts 单元测试（get_output/send_input/get_status）
 - [ ] **COV-12**: label-tools.ts 单元测试（CRUD + set_task_labels 全量替换）
-- [ ] **COV-13**: report-tools.ts 单元测试（daily_summary + daily_todo 过滤）
+- [x] **COV-13**: report-tools.ts 单元测试（daily_summary + daily_todo 过滤）
 
 ### 测试覆盖 — Core Lib
 

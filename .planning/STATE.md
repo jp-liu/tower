@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.95
 milestone_name: Pre-Release Hardening
-status: verifying
-stopped_at: Completed 49-01-PLAN.md
-last_updated: "2026-04-20T07:05:18.374Z"
+status: executing
+stopped_at: Completed 50-03-PLAN.md
+last_updated: "2026-04-20T07:18:21.830Z"
 last_activity: 2026-04-20
 progress:
   total_phases: 15
   completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 9
+  completed_plans: 7
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-20)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 49 — server-actions-test-coverage
+**Current focus:** Phase 50 — mcp-tools-test-coverage
 
 ## Current Position
 
-Phase: 49 (server-actions-test-coverage) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
+Phase: 50 (mcp-tools-test-coverage) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
 Last activity: 2026-04-20
 
 Progress: [░░░░░░░░░░] 0%
@@ -71,6 +71,7 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 49-server-actions-test-coverage]: Date range filter tests: use getTime() diff (24h) instead of ISO string prefix to avoid TZ-dependent failures
 - [Phase 49-server-actions-test-coverage]: vi.mock hoisting before imports ensures db mock is in scope when action modules load
 - [Phase 49-server-actions-test-coverage]: deleteNote call-order verified via array push in mockImplementation — FTS cleanup before DB delete
+- [Phase 50]: Mock path for MCP db is ../../db (not ../db) since test is in tools/__tests__/ subdir
 
 ### Pending Todos
 
@@ -82,6 +83,6 @@ None at roadmap stage.
 
 ## Session Continuity
 
-Last session: 2026-04-20T07:05:18.371Z
-Stopped at: Completed 49-01-PLAN.md
+Last session: 2026-04-20T07:18:21.827Z
+Stopped at: Completed 50-03-PLAN.md
 Resume file: None
