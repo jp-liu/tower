@@ -48,13 +48,13 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DIR-01 | TBD | Pending |
-| DIR-02 | TBD | Pending |
-| DIR-03 | TBD | Pending |
-| NAME-01 | TBD | Pending |
-| NAME-02 | TBD | Pending |
-| NAME-03 | TBD | Pending |
-| ROUTE-01 | TBD | Pending |
-| ROUTE-02 | TBD | Pending |
-| ROUTE-03 | TBD | Pending |
-| ASSET-01 | TBD | Pending |
+| DIR-01 | Phase 44 | Pending |
+| DIR-02 | Phase 44 | Pending |
+| DIR-03 | Phase 44 | Pending |
+| NAME-01 | Phase 44 | Pending |
+| NAME-02 | Phase 44 | Pending |
+| NAME-03 | Phase 44 | Pending |
+| ROUTE-01 | Phase 45 | Pending |
+| ROUTE-02 | Phase 45 | Pending |
+| ROUTE-03 | Phase 45 | Pending |
+| ASSET-01 | Phase 46 | Pending |

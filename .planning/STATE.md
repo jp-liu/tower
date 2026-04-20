@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v0.94
 milestone_name: Cache & File Management
-status: requirements
+status: roadmap
 stopped_at: null
 last_updated: "2026-04-20T00:00:00.000Z"
 last_activity: 2026-04-20
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,17 +21,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-20)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** v0.94 Cache & File Management — Defining requirements
+**Current focus:** v0.94 Cache & File Management — Roadmap defined, ready for Phase 44
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 44 (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-04-20 — Milestone v0.94 started
-Last activity: 2026-04-18
+Status: Roadmap complete, ready to plan Phase 44
+Last activity: 2026-04-20 — Milestone v0.94 roadmap created (3 phases)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [░░░░░░░░░░] 0% (0/3 phases)
+
+## Phase Overview
+
+| Phase | Name | Requirements | Status |
+|-------|------|--------------|--------|
+| 44 | Cache Storage Refactor | DIR-01~03, NAME-01~03 | Not started |
+| 45 | Route & Frontend Adaptation | ROUTE-01~03 | Not started |
+| 46 | Asset Name Restoration | ASSET-01 | Not started |
 
 ## Performance Metrics
 
@@ -48,32 +55,28 @@ Progress: [░░░░░░░░░░] 0%
 | - | - | - | - |
 
 *Updated after each plan completion*
-| Phase 42 P01 | 1 | 2 tasks | 3 files |
-| Phase 42 P02 | 8 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
 ### Decisions
 
-- Images stored server-side at `data/cache/assistant/<uuid>.<ext>` immediately on paste; browser keeps only blob URL for thumbnail
-- MIME validation uses magic bytes server-side (not browser `file.type`) to prevent SVG-as-PNG XSS
-- Claude SDK receives images as `ImageBlockParam` base64 blocks built server-side via `buffer.toString("base64")` — no `data:` prefix
-- Browser sends only `string[]` of server filenames in chat request body; no inline base64 in POST payload
-- Phase 4 (SDK integration) is highest-risk: requires end-to-end smoke test with real Claude response before declaring complete
-- [Phase 42]: MessageImage as self-contained sub-component managing its own broken state
-- [Phase 42]: imageFilenames stored in sessionStorage under IMAGE_CACHE_KEY with sessionId+userMsgIndex key to survive page reload without backend changes
-- [Phase 42]: Two separate ImagePreviewModal instances in AssistantChat: one for pending upload blob URLs, one for sent message server URLs
+- v0.93 shipped: images stored at `data/cache/assistant/<uuid>.<ext>` (flat structure)
+- v0.94 goal: restructure to `data/cache/assistant/{year-month}/images/` with original filename + UUID suffix
+- Backward compatibility required: old flat-path files must still be served via the existing route
+- Chinese filenames must be preserved (not encoded away); only special chars and spaces get replaced with `_`
+- `tower_image-{uuid}` sentinel prefix used for screenshots and unnamed pastes
+- UUID strip on asset copy is purely cosmetic — collision avoidance required when stripping produces duplicate names
 
 ### Pending Todos
 
-None.
+- Plan Phase 44 (Cache Storage Refactor)
 
 ### Blockers/Concerns
 
-- Phase 43 (SDK multimodal): `SDKUserMessage` + `AsyncIterable` path confirmed in type definitions but not yet exercised in this codebase. Smoke test required early in planning.
+None at roadmap stage.
 
 ## Session Continuity
 
-Last session: 2026-04-18T12:55:00.451Z
-Stopped at: Completed 42-02-PLAN.md
+Last session: 2026-04-20
+Stopped at: Roadmap created
 Resume file: None

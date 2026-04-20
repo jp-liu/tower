@@ -11,7 +11,8 @@
 - ✅ **v0.7 终端交互体验** — Phases 24-28 (shipped 2026-04-10)
 - ✅ **v0.9 架构清理 + 外部调度闭环** — Phases 29-35.1 (shipped 2026-04-13)
 - ✅ **v0.92 Global Chat Assistant** — Phases 36-39 (shipped 2026-04-17)
-- 🚧 **v0.93 Chat Media Support** — Phases 40-43 (in progress)
+- ✅ **v0.93 Chat Media Support** — Phases 40-43 (shipped 2026-04-18)
+- 🚧 **v0.94 Cache & File Management** — Phases 44-46 (in progress)
 
 ## Phases
 
@@ -125,14 +126,23 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
 
 </details>
 
-### v0.93 Chat Media Support (In Progress)
-
-**Milestone Goal:** 助手聊天输入框支持粘贴图片，存储到缓存目录，预览并作为上下文发送给 AI。
+<details>
+<summary>✅ v0.93 Chat Media Support (Phases 40-43) — SHIPPED 2026-04-18</summary>
 
 - [x] **Phase 40: Image Upload API** - Server-side cache endpoint, MIME validation, path traversal protection, and static serving for cached and asset images (completed 2026-04-18)
 - [x] **Phase 41: Paste UX & Thumbnail Strip** - Paste intercept, immediate thumbnail preview, upload progress, per-image removal, multi-image accumulation (completed 2026-04-18)
-- [x] **Phase 42: Message Image Display** - User message bubbles show images, click to preview, broken-image placeholder, session reload restores references (completed 2026-04-18)
+- [x] **Phase 42: Message Image Display** - Sent message bubbles show images inline with broken-image fallback and session reload persistence (completed 2026-04-18)
 - [x] **Phase 43: Claude SDK Multimodal Integration** - Images passed to Claude as absolute file paths in prompt with Read tool enabled (completed 2026-04-18)
+
+</details>
+
+### v0.94 Cache & File Management (In Progress)
+
+**Milestone Goal:** 重构缓存目录体系，文件名保留原始名，支持按时间清理和未来多文件类型扩展。
+
+- [ ] **Phase 44: Cache Storage Refactor** - Year-month directory grouping, type subdirectories, original filename preservation with UUID suffix, filename sanitization
+- [ ] **Phase 45: Route & Frontend Adaptation** - Catch-all cache serving route, frontend src path updates, multimodal prompt path updates
+- [ ] **Phase 46: Asset Name Restoration** - Strip UUID suffix when copying cache files to project assets
 
 ## Phase Details
 
@@ -196,13 +206,50 @@ Plans:
   4. The architecture accepts future MIME types by extending the whitelist in one place (the upload route validation)
 **Plans**: 1 plan
 Plans:
-- [ ] 43-01-PLAN.md — buildMultimodalPrompt helper + wire into chat route with Read tool
+- [x] 43-01-PLAN.md — buildMultimodalPrompt helper + wire into chat route with Read tool
+**UI hint**: no
+
+### Phase 44: Cache Storage Refactor
+**Goal**: Uploaded files are stored in structured year-month/type subdirectories with readable filenames that preserve the original name and include a UUID suffix for uniqueness
+**Depends on**: Phase 43
+**Requirements**: DIR-01, DIR-02, DIR-03, NAME-01, NAME-02, NAME-03
+**Success Criteria** (what must be TRUE):
+  1. Pasting an image named `设计稿.png` stores the file at `data/cache/assistant/2026-04/images/设计稿-a1b2c3d4.png` (original name retained, UUID appended)
+  2. Pasting a screenshot with no meaningful name (e.g. `image.png` or `Screenshot 2026-04-20`) stores the file as `tower_image-{8-char-uuid}.png`
+  3. Special characters and spaces in filenames are replaced with `_`; Chinese characters are preserved as-is
+  4. `getAssistantCacheDir()` returns a path including the current year-month and type (e.g. `.../assistant/2026-04/images/`) and creates the directory if absent
+  5. The directory structure reserves a `files/` sibling next to `images/` for future non-image file type support without code changes
+**Plans**: TBD
+**UI hint**: no
+
+### Phase 45: Route & Frontend Adaptation
+**Goal**: The cache file serving route supports subpath access so the new year-month/type directory structure is reachable, and all frontend references use the correct full subpath
+**Depends on**: Phase 44
+**Requirements**: ROUTE-01, ROUTE-02, ROUTE-03
+**Success Criteria** (what must be TRUE):
+  1. A GET request to `/api/internal/cache/2026-04/images/设计稿-a1b2c3d4.png` returns the correct image bytes (catch-all route resolves the subpath)
+  2. Chat message bubbles display images using the full subpath URL (e.g. `/cache/2026-04/images/xxx.png`), not a flat filename
+  3. Sending a message with images causes `buildMultimodalPrompt` to resolve the correct absolute filesystem path including the year-month/type subdirectory
+  4. The old flat `/cache/<filename>` route still serves files stored before this migration (backward compatibility)
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 46: Asset Name Restoration
+**Goal**: When a task's reference files are copied from the cache into permanent project assets, the UUID suffix is stripped so the stored asset has a human-readable filename
+**Depends on**: Phase 45
+**Requirements**: ASSET-01
+**Success Criteria** (what must be TRUE):
+  1. Calling `create_task` with a reference pointing to `data/cache/assistant/2026-04/images/设计稿-a1b2c3d4.png` copies the file to assets with filename `设计稿.png` (UUID stripped)
+  2. Calling `create_task` with a reference pointing to `tower_image-a1b2c3d4.png` copies the file with filename `tower_image.png` (UUID stripped, base prefix preserved)
+  3. If two cache files would produce the same stripped name, the copy uses a safe non-colliding name (does not overwrite existing asset)
+  4. Reference files that are not in the cache directory (e.g. already in assets) are copied unchanged
+**Plans**: TBD
 **UI hint**: no
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 40 -> 41 -> 42 -> 43
+Phases execute in numeric order: 44 -> 45 -> 46
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -246,7 +293,10 @@ Phases execute in numeric order: 40 -> 41 -> 42 -> 43
 | 37. Terminal Mode UI | v0.92 | 2/2 | Complete | 2026-04-17 |
 | 38. Chat Mode | v0.92 | 2/2 | Complete | 2026-04-17 |
 | 39. Polish & Settings | v0.92 | 2/2 | Complete | 2026-04-17 |
-| 40. Image Upload API | v0.93 | 1/2 | Complete    | 2026-04-18 |
-| 41. Paste UX & Thumbnail Strip | v0.93 | 2/2 | Complete    | 2026-04-18 |
-| 42. Message Image Display | v0.93 | 2/2 | Complete    | 2026-04-18 |
-| 43. Claude SDK Multimodal Integration | v0.93 | 0/1 | Complete    | 2026-04-18 |
+| 40. Image Upload API | v0.93 | 1/2 | Complete | 2026-04-18 |
+| 41. Paste UX & Thumbnail Strip | v0.93 | 2/2 | Complete | 2026-04-18 |
+| 42. Message Image Display | v0.93 | 2/2 | Complete | 2026-04-18 |
+| 43. Claude SDK Multimodal Integration | v0.93 | 0/1 | Complete | 2026-04-18 |
+| 44. Cache Storage Refactor | v0.94 | 0/TBD | Not started | - |
+| 45. Route & Frontend Adaptation | v0.94 | 0/TBD | Not started | - |
+| 46. Asset Name Restoration | v0.94 | 0/TBD | Not started | - |
