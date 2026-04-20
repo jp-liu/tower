@@ -10,7 +10,12 @@ vi.mock("node:fs", async (importOriginal) => {
 });
 
 import * as fs from "node:fs";
-import { getAssistantCacheDir, buildCacheFilename } from "../file-utils";
+import {
+  getAssistantCacheDir,
+  buildCacheFilename,
+  stripCacheUuidSuffix,
+  isAssistantCachePath,
+} from "../file-utils";
 
 describe("getAssistantCacheDir", () => {
   beforeEach(() => {
@@ -113,5 +118,48 @@ describe("buildCacheFilename", () => {
   it("NAME-02: 'photo' is also a meaningless name", () => {
     const result = buildCacheFilename("photo.jpg", ".jpg");
     expect(result).toMatch(/^tower_image-[0-9a-f]{8}\.jpg$/);
+  });
+});
+
+describe("stripCacheUuidSuffix", () => {
+  it("ASSET-01: strips 8-hex UUID suffix from Chinese filename", () => {
+    expect(stripCacheUuidSuffix("设计稿-a1b2c3d4.png")).toBe("设计稿.png");
+  });
+
+  it("ASSET-01: strips 8-hex UUID suffix from tower_image filename", () => {
+    expect(stripCacheUuidSuffix("tower_image-a1b2c3d4.png")).toBe("tower_image.png");
+  });
+
+  it("ASSET-01: returns filename unchanged when no 8-hex suffix present", () => {
+    expect(stripCacheUuidSuffix("already-clean.png")).toBe("already-clean.png");
+  });
+
+  it("ASSET-01: does not strip when hex part is 12 chars (not 8)", () => {
+    expect(stripCacheUuidSuffix("report-a1b2c3d4e5f6.png")).toBe("report-a1b2c3d4e5f6.png");
+  });
+
+  it("ASSET-01: strips case-insensitive hex suffix (uppercase)", () => {
+    expect(stripCacheUuidSuffix("my_doc-AABB1122.pdf")).toBe("my_doc.pdf");
+  });
+
+  it("ASSET-01: handles different file extensions correctly", () => {
+    expect(stripCacheUuidSuffix("document-deadbeef.pdf")).toBe("document.pdf");
+  });
+});
+
+describe("isAssistantCachePath", () => {
+  it("ASSET-01: returns true for path inside assistant cache root", () => {
+    const cacheRoot = require("path").join(process.cwd(), "data", "cache", "assistant");
+    const filePath = require("path").join(cacheRoot, "2026-04", "images", "foo.png");
+    expect(isAssistantCachePath(filePath)).toBe(true);
+  });
+
+  it("ASSET-01: returns false for path outside assistant cache (in assets)", () => {
+    const assetsPath = require("path").join(process.cwd(), "data", "assets", "proj123", "foo.png");
+    expect(isAssistantCachePath(assetsPath)).toBe(false);
+  });
+
+  it("ASSET-01: returns false for arbitrary non-cache path", () => {
+    expect(isAssistantCachePath("/tmp/some/random/file.png")).toBe(false);
   });
 });

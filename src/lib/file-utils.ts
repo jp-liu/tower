@@ -84,3 +84,24 @@ export function buildCacheFilename(originalName: string, ext: string): string {
   const safeStem = sanitized || "file";
   return `${safeStem}-${uuid8}${ext}`;
 }
+
+const CACHE_UUID_SUFFIX_RE = /-([0-9a-f]{8})(\.[^.]+)$/i;
+
+/**
+ * Strip the 8-hex UUID suffix added by buildCacheFilename.
+ * e.g. "设计稿-a1b2c3d4.png" → "设计稿.png"
+ *      "tower_image-a1b2c3d4.png" → "tower_image.png"
+ *      "already-clean.png" → "already-clean.png" (no change)
+ */
+export function stripCacheUuidSuffix(filename: string): string {
+  return filename.replace(CACHE_UUID_SUFFIX_RE, "$2");
+}
+
+/**
+ * Returns true if the absolute filePath is inside the assistant cache root.
+ * Used to gate UUID stripping — only strip for cache files.
+ */
+export function isAssistantCachePath(filePath: string): boolean {
+  const root = getAssistantCacheRoot();
+  return filePath.startsWith(root + path.sep);
+}
