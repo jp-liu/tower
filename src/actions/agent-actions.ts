@@ -26,7 +26,7 @@ export interface ActiveExecutionInfo {
 
 const log = logger.create("agent-actions");
 
-const SIGNAL_DIR = join(tmpdir(), "ai-manager-signals");
+const SIGNAL_DIR = join(tmpdir(), "tower-signals");
 
 async function writeExitSignal(taskId: string, exitCode: number): Promise<void> {
   try {
@@ -203,9 +203,10 @@ export async function resumePtyExecution(
   // Build env overrides — inherit callbackUrl from previous execution if it had one
   const envOverrides: Record<string, string> = {
     ...profileEnvVars,
-    AI_MANAGER_TASK_ID: taskId,
-    AI_MANAGER_TASK_TITLE: task.title,
-    AI_MANAGER_STARTED_AT: new Date().toISOString(),
+    TOWER_TASK_ID: taskId,
+    TOWER_TASK_TITLE: task.title,
+    TOWER_STARTED_AT: new Date().toISOString(),
+    TOWER_API_URL: `http://localhost:${process.env.PORT || "3000"}`,
   };
   if (prevExec.callbackUrl) {
     envOverrides.CALLBACK_URL = prevExec.callbackUrl;
@@ -316,9 +317,10 @@ export async function continueLatestPtyExecution(
 
   const envOverrides: Record<string, string> = {
     ...profileEnvVars,
-    AI_MANAGER_TASK_ID: taskId,
-    AI_MANAGER_TASK_TITLE: task.title,
-    AI_MANAGER_STARTED_AT: new Date().toISOString(),
+    TOWER_TASK_ID: taskId,
+    TOWER_TASK_TITLE: task.title,
+    TOWER_STARTED_AT: new Date().toISOString(),
+    TOWER_API_URL: `http://localhost:${process.env.PORT || "3000"}`,
   };
 
   // Create a new execution record
@@ -543,12 +545,13 @@ export async function startPtyExecution(
     }
   }
 
-  // 7c. Build env overrides — AI_MANAGER_TASK_ID always injected; CALLBACK_URL when provided
+  // 7c. Build env overrides — TOWER_TASK_ID always injected; CALLBACK_URL when provided
   const envOverrides: Record<string, string> = {
     ...profileEnvVars,
-    AI_MANAGER_TASK_ID: taskId,
-    AI_MANAGER_TASK_TITLE: task.title,
-    AI_MANAGER_STARTED_AT: new Date().toISOString(),
+    TOWER_TASK_ID: taskId,
+    TOWER_TASK_TITLE: task.title,
+    TOWER_STARTED_AT: new Date().toISOString(),
+    TOWER_API_URL: `http://localhost:${process.env.PORT || "3000"}`,
   };
   if (callbackUrl) {
     envOverrides.CALLBACK_URL = callbackUrl;

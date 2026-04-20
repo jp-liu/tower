@@ -16,7 +16,7 @@ paths:
 ## Environment Injection
 
 - Never mutate `process.env` for per-session vars — pass via `envOverrides` to `pty.spawn()`.
-- Signal files use `$TMPDIR/ai-manager-signals/` with 0700 dir + 0600 file permissions.
+- Signal files use `$TMPDIR/tower-signals/` with 0700 dir + 0600 file permissions.
 
 ## Internal API Routes
 
