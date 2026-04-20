@@ -34,6 +34,7 @@ type SystemForm = { maxUploadMb: number; maxConcurrent: number };
 type GitParamsForm = { timeoutSec: number };
 type SearchForm = { resultLimit: number; allModeCap: number; debounceMs: number; snippetLength: number };
 type MissionsGridForm = { minCols: number; maxCols: number; minRows: number; maxRows: number };
+type HookStatus = { installed: boolean; hookPath: string };
 
 export function SystemConfig() {
   const { t } = useI18n();
@@ -47,9 +48,28 @@ export function SystemConfig() {
   const [gitParamsForm, setGitParamsForm] = useState<GitParamsForm>({ timeoutSec: 30 });
   const [searchForm, setSearchForm] = useState<SearchForm>({ resultLimit: 20, allModeCap: 5, debounceMs: 250, snippetLength: 80 });
   const [missionsGridForm, setMissionsGridForm] = useState<MissionsGridForm>({ minCols: 1, maxCols: 5, minRows: 1, maxRows: 5 });
+  const [hookStatus, setHookStatus] = useState<HookStatus | null>(null);
+  const [hookLoading, setHookLoading] = useState(false);
+  const [autoUploadTypes, setAutoUploadTypes] = useState("");
+
+  const fetchHookStatus = async () => {
+    try {
+      const res = await fetch("/api/internal/hooks/install");
+      if (res.ok) {
+        const data = await res.json() as HookStatus;
+        setHookStatus(data);
+      }
+    } catch {
+      // ignore — status stays null
+    }
+  };
 
   useEffect(() => {
     getConfigValue<GitPathRule[]>("git.pathMappingRules", []).then(setRules);
+    getConfigValue<string[]>("hooks.autoUploadTypes", ["png","jpg","jpeg","gif","webp","svg","pdf","md","txt","json"]).then((types) => {
+      setAutoUploadTypes(types.join(", "));
+    });
+    fetchHookStatus();
     getConfigValues([
       "system.maxUploadBytes",
       "system.maxConcurrentExecutions",
@@ -113,6 +133,23 @@ export function SystemConfig() {
     await setConfigValue("missions.grid.maxCols", maxCols);
     await setConfigValue("missions.grid.minRows", minRows);
     await setConfigValue("missions.grid.maxRows", maxRows);
+  };
+
+  const handleSaveAutoUploadTypes = async () => {
+    const types = autoUploadTypes.split(",").map((s) => s.trim()).filter(Boolean);
+    await setConfigValue("hooks.autoUploadTypes", types);
+  };
+
+  const handleToggleHook = async () => {
+    if (!hookStatus) return;
+    setHookLoading(true);
+    try {
+      const method = hookStatus.installed ? "DELETE" : "POST";
+      await fetch("/api/internal/hooks/install", { method });
+      await fetchHookStatus();
+    } finally {
+      setHookLoading(false);
+    }
   };
 
   const handleAddRule = async () => {
@@ -581,6 +618,45 @@ export function SystemConfig() {
             </div>
           </div>
           <Button onClick={handleSaveMissionsGrid}>{t("common.save")}</Button>
+        </div>
+      </div>
+
+      {/* Hooks Configuration section */}
+      <div className="mt-8">
+        <h3 className="text-lg font-semibold">{t("settings.config.hooks.title")}</h3>
+        <p className="mt-0.5 text-sm text-muted-foreground">{t("settings.config.hooks.desc")}</p>
+        <div className="mt-4 space-y-4">
+          {/* Auto-upload file types */}
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-sm font-medium">{t("settings.config.hooks.autoUploadTypes")}</label>
+              <p className="text-xs text-muted-foreground">{t("settings.config.hooks.autoUploadTypesHint")}</p>
+            </div>
+            <Input
+              value={autoUploadTypes}
+              onChange={(e) => setAutoUploadTypes(e.target.value)}
+              placeholder="png, jpg, jpeg, gif, webp, svg, pdf"
+              className="w-80"
+            />
+          </div>
+          <Button onClick={handleSaveAutoUploadTypes}>{t("common.save")}</Button>
+
+          {/* Install/Uninstall hook */}
+          <div className="flex items-center gap-4 pt-4 border-t">
+            <div className="flex-1">
+              <label className="text-sm font-medium">
+                {hookStatus?.installed ? t("settings.config.hooks.installed") : t("settings.config.hooks.notInstalled")}
+              </label>
+              <p className="text-xs text-muted-foreground">{t("settings.config.hooks.installHint")}</p>
+            </div>
+            <Button
+              variant={hookStatus?.installed ? "destructive" : "default"}
+              onClick={handleToggleHook}
+              disabled={hookLoading || !hookStatus}
+            >
+              {hookStatus?.installed ? t("settings.config.hooks.uninstall") : t("settings.config.hooks.install")}
+            </Button>
+          </div>
         </div>
       </div>
 

@@ -545,6 +545,16 @@ export const zh = {
   "settings.config.missions.maxCols": "最大列数",
   "settings.config.missions.minRows": "最小行数",
   "settings.config.missions.maxRows": "最大行数",
+  // Hooks
+  "settings.config.hooks.title": "Hooks 配置",
+  "settings.config.hooks.desc": "管理 Claude Code 的 PostToolUse 钩子",
+  "settings.config.hooks.autoUploadTypes": "自动上传文件类型",
+  "settings.config.hooks.autoUploadTypesHint": "逗号分隔的文件扩展名",
+  "settings.config.hooks.install": "安装 Hook",
+  "settings.config.hooks.uninstall": "卸载 Hook",
+  "settings.config.hooks.installed": "Hook 已安装",
+  "settings.config.hooks.notInstalled": "Hook 未安装",
+  "settings.config.hooks.installHint": "安装后，Claude Code 写入匹配类型的文件时会自动上传为任务资产",
   // Assistant
   "assistant.title": "Tower 助手",
   "assistant.iconLabel": "助手",

@@ -530,6 +530,16 @@ export const en: Translations = {
   "settings.config.missions.maxCols": "Max Columns",
   "settings.config.missions.minRows": "Min Rows",
   "settings.config.missions.maxRows": "Max Rows",
+  // Hooks
+  "settings.config.hooks.title": "Hook Configuration",
+  "settings.config.hooks.desc": "Manage Claude Code PostToolUse hooks",
+  "settings.config.hooks.autoUploadTypes": "Auto-upload File Types",
+  "settings.config.hooks.autoUploadTypesHint": "Comma-separated file extensions",
+  "settings.config.hooks.install": "Install Hook",
+  "settings.config.hooks.uninstall": "Uninstall Hook",
+  "settings.config.hooks.installed": "Hook installed",
+  "settings.config.hooks.notInstalled": "Hook not installed",
+  "settings.config.hooks.installHint": "Once installed, files matching the configured types written by Claude Code will be auto-uploaded as task assets",
   // Assistant
   "assistant.title": "Tower Assistant",
   "assistant.iconLabel": "Assistant",
