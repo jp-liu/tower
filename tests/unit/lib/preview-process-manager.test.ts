@@ -16,6 +16,7 @@ function makeFakeChild(killed = false): ChildProcess {
     killed,
     kill: vi.fn(),
     pid: Math.floor(Math.random() * 10000),
+    on: vi.fn(),
   } as unknown as ChildProcess;
 }
 

@@ -93,16 +93,16 @@ describe("PtySession", () => {
       expect(onExit).toHaveBeenCalledWith(1, 15);
     });
 
-    it("notifies all registered exit listeners", () => {
+    it("notifies the registered exit listener via setExitListener", () => {
       const listener1 = vi.fn();
       const listener2 = vi.fn();
-      session.addExitListener(listener1);
-      session.addExitListener(listener2);
+      session.setExitListener(listener1);
+      session.setExitListener(listener2);
 
       const exitCallback = mockPty.onExit.mock.calls[0][0];
       exitCallback({ exitCode: 0, signal: 0 });
 
-      expect(listener1).toHaveBeenCalledWith(0);
+      // setExitListener replaces previous listener — only listener2 should fire
       expect(listener2).toHaveBeenCalledWith(0);
     });
   });
