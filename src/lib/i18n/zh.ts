@@ -497,6 +497,7 @@ export const zh = {
   "execution.tryRecover": "尝试恢复",
   "execution.details": "详情",
   "execution.collapse": "收起",
+  "execution.insight": "归纳",
   // Missions
   "missions.navLabel": "任务控制台",
   "missions.pageTitle": "任务控制台",

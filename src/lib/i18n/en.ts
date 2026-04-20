@@ -482,6 +482,7 @@ export const en: Translations = {
   "execution.tryRecover": "Try Recover",
   "execution.details": "Details",
   "execution.collapse": "Collapse",
+  "execution.insight": "Insight",
   // Missions
   "missions.navLabel": "Missions",
   "missions.pageTitle": "Mission Control",

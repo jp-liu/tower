@@ -151,6 +151,9 @@ export async function getTaskExecutions(taskId: string) {
   return db.taskExecution.findMany({
     where: { taskId },
     orderBy: { createdAt: "desc" },
+    include: {
+      insightNote: { select: { id: true, title: true, content: true } },
+    },
   });
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, CheckCircle2, XCircle, Loader2, Clock, PlayCircle, RotateCcw } from "lucide-react";
+import { ChevronDown, ChevronUp, CheckCircle2, XCircle, Loader2, Clock, PlayCircle, RotateCcw, Lightbulb } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 interface Execution {
@@ -15,6 +15,11 @@ interface Execution {
   terminalLog?: string | null;
   startedAt?: Date | string | null;
   endedAt?: Date | string | null;
+  insightNote?: {
+    id: string;
+    title: string;
+    content: string;
+  } | null;
 }
 
 interface ExecutionTimelineProps {
@@ -102,6 +107,7 @@ function statusColor(status: string): string {
 export function ExecutionTimeline({ executions, onResume, onContinueLatest }: ExecutionTimelineProps) {
   const { t, locale } = useI18n();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [insightExpandedId, setInsightExpandedId] = useState<string | null>(null);
 
   if (executions.length === 0) {
     return (
@@ -160,6 +166,25 @@ export function ExecutionTimeline({ executions, onResume, onContinueLatest }: Ex
                       {stats.deletions ? <span className="text-red-400">-{stats.deletions}</span> : null}
                     </>
                   ) : null}
+                </div>
+              )}
+              {/* Insight row */}
+              {exec.insightNote && (
+                <div className="mt-2">
+                  <button
+                    onClick={() => setInsightExpandedId(insightExpandedId === exec.id ? null : exec.id)}
+                    className="flex items-center gap-1.5 text-xs text-amber-300/90 hover:text-amber-200 transition-colors"
+                  >
+                    <Lightbulb className="h-3.5 w-3.5" />
+                    <span className="font-medium">{t("execution.insight")}:</span>
+                    <span className="text-foreground/70 truncate max-w-[200px]">{exec.insightNote.title}</span>
+                    {insightExpandedId === exec.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  </button>
+                  {insightExpandedId === exec.id && (
+                    <div className="mt-2 rounded-md bg-amber-500/5 border border-amber-500/10 p-3 text-xs text-foreground/80 whitespace-pre-wrap">
+                      {exec.insightNote.content}
+                    </div>
+                  )}
                 </div>
               )}
               {/* Action buttons */}
