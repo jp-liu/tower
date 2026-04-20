@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { WebLinksAddon } from "@xterm/addon-web-links";
 import { useTheme } from "next-themes";
+import { LocalFileLinkProvider } from "@/lib/terminal-link-provider";
 import { useI18n } from "@/lib/i18n";
 import { getConfigValue } from "@/actions/config-actions";
 import "@xterm/xterm/css/xterm.css";
@@ -13,6 +15,8 @@ export interface TaskTerminalProps {
   taskId: string;
   worktreePath?: string | null;
   onSessionEnd?: (exitCode: number) => void;
+  /** Called when user clicks a file path in terminal output. Opens file in workbench editor. */
+  onFileOpen?: (fullPath: string, line?: number, col?: number) => void;
   /** Force canvas renderer instead of WebGL. Use when many terminals coexist (portal system). */
   useCanvasRenderer?: boolean;
 }
@@ -32,6 +36,7 @@ export function TaskTerminal({
   taskId,
   worktreePath,
   onSessionEnd,
+  onFileOpen,
   useCanvasRenderer = false,
 }: TaskTerminalProps) {
   const { t } = useI18n();
@@ -42,9 +47,11 @@ export function TaskTerminal({
   const wsRef = useRef<WebSocket | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
 
-  // Stable ref for callback — avoids useEffect re-run on prop change
+  // Stable refs for callbacks — avoids useEffect re-run on prop change
   const onSessionEndRef = useRef(onSessionEnd);
   onSessionEndRef.current = onSessionEnd;
+  const onFileOpenRef = useRef(onFileOpen);
+  onFileOpenRef.current = onFileOpen;
 
   const [wsStatus, setWsStatus] = useState<WsStatus>("connecting");
   const [connectedVisible, setConnectedVisible] = useState(false);
@@ -87,6 +94,21 @@ export function TaskTerminal({
       } catch {
         // WebGL not available — fall back to canvas renderer
       }
+    }
+
+    // URL links — opens in new browser tab
+    const webLinksAddon = new WebLinksAddon((_event, uri) => {
+      window.open(uri, "_blank");
+    });
+    terminal.loadAddon(webLinksAddon);
+
+    // Local file links — opens in workbench editor
+    if (worktreePath) {
+      terminal.registerLinkProvider(
+        new LocalFileLinkProvider(terminal, worktreePath, (fullPath, line, col) => {
+          onFileOpenRef.current?.(fullPath, line, col);
+        }),
+      );
     }
 
     fitAddon.fit();
@@ -154,6 +176,7 @@ export function TaskTerminal({
     return () => {
       cancelled = true;
       dataDisposable?.dispose();
+      webLinksAddon.dispose();
       webglAddon?.dispose();
       fitAddon.dispose();
       terminal.dispose();

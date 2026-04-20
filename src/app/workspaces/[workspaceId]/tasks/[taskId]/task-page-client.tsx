@@ -85,6 +85,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const [diffData, setDiffData] = useState<DiffData | null>(null);
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [previewUrl, setPreviewUrl] = useState("");
   const [isExecuting, setIsExecuting] = useState(false);
@@ -349,6 +350,10 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                   taskId={task.id}
                   worktreePath={activeWorktreePath}
                   onSessionEnd={handleSessionEnd}
+                  onFileOpen={(fullPath) => {
+                    setSelectedFilePath(fullPath);
+                    setActiveTab("files");
+                  }}
                 />
               </div>
             </div>
@@ -415,7 +420,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           const isWorktreeDone = taskStatus === "DONE" && !!task.baseBranch;
           const defaultTab = isWorktreeDone ? "changes" : "files";
           return (
-        <Tabs defaultValue={defaultTab} key={defaultTab} className="flex h-full flex-col gap-0">
+        <Tabs value={activeTab ?? defaultTab} onValueChange={setActiveTab} key={defaultTab} className="flex h-full flex-col gap-0">
           {/* Tab bar — segmented control style matching Settings page */}
           <div className="flex shrink-0 items-center border-b border-border px-3 py-2">
             <TabsList className="h-auto border border-border">

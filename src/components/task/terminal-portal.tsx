@@ -34,6 +34,7 @@ interface TerminalInstance {
   taskId: string;
   worktreePath: string;
   onSessionEnd: { current: ((exitCode: number) => void) | null };
+  onFileOpen: { current: ((fullPath: string, line?: number, col?: number) => void) | null };
 }
 
 interface TerminalPortalContextValue {
@@ -43,6 +44,8 @@ interface TerminalPortalContextValue {
   removePortal: (taskId: string) => void;
   /** Register session-end callback for a task */
   setOnSessionEnd: (taskId: string, fn: ((exitCode: number) => void) | null) => void;
+  /** Register file-open callback for a task (terminal link clicks) */
+  setOnFileOpen: (taskId: string, fn: ((fullPath: string, line?: number, col?: number) => void) | null) => void;
 }
 
 const TerminalPortalContext = createContext<TerminalPortalContextValue | null>(null);
@@ -69,6 +72,7 @@ export function TerminalPortalProvider({ children }: { children: ReactNode }) {
       taskId,
       worktreePath,
       onSessionEnd: { current: null },
+      onFileOpen: { current: null },
     };
     instancesRef.current.set(taskId, instance);
     setTick((t) => t + 1);
@@ -85,6 +89,11 @@ export function TerminalPortalProvider({ children }: { children: ReactNode }) {
     if (inst) inst.onSessionEnd.current = fn;
   }, []);
 
+  const setOnFileOpen = useCallback((taskId: string, fn: ((fullPath: string, line?: number, col?: number) => void) | null) => {
+    const inst = instancesRef.current.get(taskId);
+    if (inst) inst.onFileOpen.current = fn;
+  }, []);
+
   // Render all terminal instances via InPortal (they stay alive even when OutPortal unmounts)
   const portals = Array.from(instancesRef.current.values()).map((inst) => (
     <InPortal key={inst.taskId} node={inst.portalNode}>
@@ -92,13 +101,14 @@ export function TerminalPortalProvider({ children }: { children: ReactNode }) {
         taskId={inst.taskId}
         worktreePath={inst.worktreePath}
         onSessionEnd={(code) => inst.onSessionEnd.current?.(code)}
+        onFileOpen={(path, line, col) => inst.onFileOpen.current?.(path, line, col)}
         useCanvasRenderer
       />
     </InPortal>
   ));
 
   return (
-    <TerminalPortalContext.Provider value={{ getPortal, removePortal, setOnSessionEnd }}>
+    <TerminalPortalContext.Provider value={{ getPortal, removePortal, setOnSessionEnd, setOnFileOpen }}>
       {children}
       {portals}
     </TerminalPortalContext.Provider>
@@ -113,12 +123,14 @@ export function TerminalOutlet({
   taskId,
   worktreePath,
   onSessionEnd,
+  onFileOpen,
 }: {
   taskId: string;
   worktreePath: string;
   onSessionEnd?: (exitCode: number) => void;
+  onFileOpen?: (fullPath: string, line?: number, col?: number) => void;
 }) {
-  const { getPortal, setOnSessionEnd } = useTerminalPortal();
+  const { getPortal, setOnSessionEnd, setOnFileOpen } = useTerminalPortal();
   const [instance, setInstance] = useState<TerminalInstance | null>(null);
 
   // Create/get portal instance — clear stale instance immediately when taskId changes
@@ -132,6 +144,12 @@ export function TerminalOutlet({
     setOnSessionEnd(taskId, onSessionEnd ?? null);
     return () => setOnSessionEnd(taskId, null);
   }, [taskId, onSessionEnd, setOnSessionEnd]);
+
+  // Register file-open callback
+  useEffect(() => {
+    setOnFileOpen(taskId, onFileOpen ?? null);
+    return () => setOnFileOpen(taskId, null);
+  }, [taskId, onFileOpen, setOnFileOpen]);
 
   if (!instance) return null;
   return <OutPortal node={instance.portalNode} />;
