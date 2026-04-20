@@ -21,19 +21,15 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - @ts-nocheck 清理 + TaskWithLabels 类型安全
 - 结构化日志 + Error Boundary + stale execution 清理
 
-## Current Milestone: v0.96 UX Polish & Knowledge Capture
+## Completed Milestone: v0.96 UX Polish & Knowledge Capture (2026-04-20)
 
-**Goal:** 提升用户体验（资源预览、项目导入迁移、UI 一致性）+ 会话知识沉淀系统（Dreaming + Auto-Upload Hook）
-
-**Target features:**
-- Session Dreaming — 终端结束时深度 AI 分析，自动沉淀坑点/模式到项目笔记
-- 项目导入/迁移 — 拆分新建 vs 导入、fs.rename 迁移到 git 规范路径
-- 资源预览 — 图片 lightbox、文本/md 预览、在文件夹中显示
-- UI 快修 — 删除不触发抽屉、公共 Empty 组件、hover 一致性
-- Auto-Upload Hook — Claude Code 全局 PostToolUse hook 实时捕获文件资源关联任务
-- 资源归属展示 + 任务概览抽屉 — 项目资源展示任务资源、通用 TaskOverviewDrawer
+**Shipped:** 全链路 UX 优化 + 知识沉淀系统 — 资源预览（lightbox/文本/Finder 揭示）、项目导入迁移（拆分流程 + 原子 rename）、Session Dreaming（AI 洞察自动沉淀为笔记）、Auto-Upload Hook（PostToolUse 实时捕获）、资源归属 + TaskOverviewDrawer。24 需求 / 6 阶段 / 11 计划交付。
 
 ## Current State
+
+**Shipped:** v0.96 UX Polish & Knowledge Capture (2026-04-20)
+- Phase 55-60: UI fixes (EmptyState, hover, delete propagation), asset preview (lightbox, text, reveal), project import/migration (git clone, folder import, atomic rename), session dreaming (AI insights → ProjectNote), auto-upload hook (PostToolUse → assets), resource attribution (task badges, TaskOverviewDrawer)
+- 24 requirements delivered (UI-01~03, ASSET-01~04, PROJ-01~06, DREAM-01~04, HOOK-01~06, RES-01~05)
 
 **Shipped:** v0.94 Cache & File Management (2026-04-20)
 - Phase 44-46: Cache directory restructured to year-month/type subdirectories, original filename preservation with UUID suffix, catch-all cache serving route, frontend subpath adaptation, asset name restoration (UUID strip on copy)
@@ -249,4 +245,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-20 — v0.96 UX Polish & Knowledge Capture started*
+*Last updated: 2026-04-20 after v0.96 milestone*

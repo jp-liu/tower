@@ -1,5 +1,22 @@
 # Milestones
 
+## v0.96 UX Polish & Knowledge Capture (Shipped: 2026-04-20)
+
+**Phases completed:** 6 phases, 11 plans, 19 tasks
+
+**Key accomplishments:**
+
+- Image lightbox with zoom/pan, text/md/json preview dialog, and reveal-in-Finder API route with platform detection
+- Wired ImageLightbox, TextPreviewDialog, and Reveal in Finder into asset list with unified preview state
+- Split monolithic project creation dialog into two flows: git URL-first (create) and folder browse-first (import) with auto-detection
+- Atomic directory migration via fs.rename with 3 pre-flight safety checks (running executions, PTY sessions, worktrees) and editable target path derived from git URL rules
+- Fire-and-forget AI dreaming that extracts reusable insights from terminal sessions into ProjectNotes linked via insightNoteId FK
+- Execution timeline insight row with Lightbulb icon + daily_summary MCP insights array for session-insight notes
+- Full asset visibility with task attribution badges and reusable TaskOverviewDrawer component for quick task preview from asset context
+- DONE/CANCELLED task clicks routed to lightweight TaskOverviewDrawer instead of full TaskDetailPanel
+
+---
+
 ## v0.95 Pre-Release Hardening (Shipped: 2026-04-20)
 
 **Phases completed:** 8 phases, 18 plans, 29 tasks
