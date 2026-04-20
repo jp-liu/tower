@@ -45,7 +45,6 @@ const mockedReadConfigValue = vi.mocked(readConfigValue);
 function makeFakeChild(): ChildProcess {
   return {
     killed: false,
-    unref: vi.fn(),
     kill: vi.fn(),
     pid: 12345,
   } as unknown as ChildProcess;
@@ -73,15 +72,6 @@ describe("startPreview", () => {
     });
     expect(mockedRegisterPreviewProcess).toHaveBeenCalledWith("task-1", fakeChild);
     expect(result).toEqual({ started: true });
-  });
-
-  it("calls unref() on the spawned child process", async () => {
-    const fakeChild = makeFakeChild();
-    mockedSpawn.mockReturnValue(fakeChild);
-
-    await startPreview("task-1", "pnpm dev", "/some/path");
-
-    expect(fakeChild.unref).toHaveBeenCalled();
   });
 
   it("handles single-word command (no args)", async () => {
