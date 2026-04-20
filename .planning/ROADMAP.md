@@ -294,7 +294,9 @@ Plans:
   2. A valid CUID projectId passes validation and the file is served normally
   3. internal-api-guard unit tests confirm that requests from non-localhost origins are blocked, including spoofed `x-forwarded-for` headers
   4. All new tests pass in CI with no regressions
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 48-01-PLAN.md — CUID validation on asset route + internal-api-guard unit tests
 
 ### Phase 49: Server Actions Test Coverage
 **Goal**: The seven server action modules each have unit tests covering their CRUD operations and business-rule enforcement
@@ -423,8 +425,8 @@ Phases execute in numeric order: 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54
 | 44. Cache Storage Refactor | v0.94 | 2/2 | Complete | 2026-04-20 |
 | 45. Route & Frontend Adaptation | v0.94 | 1/1 | Complete | 2026-04-20 |
 | 46. Asset Name Restoration | v0.94 | 1/1 | Complete | 2026-04-20 |
-| 47. Failing Test Fixes | v0.95 | 2/2 | Complete   | 2026-04-20 |
-| 48. Security Hardening & Guard Tests | v0.95 | 0/TBD | Not started | - |
+| 47. Failing Test Fixes | v0.95 | 2/2 | Complete    | 2026-04-20 |
+| 48. Security Hardening & Guard Tests | v0.95 | 0/1 | Not started | - |
 | 49. Server Actions Test Coverage | v0.95 | 0/TBD | Not started | - |
 | 50. MCP Tools Test Coverage | v0.95 | 0/TBD | Not started | - |
 | 51. Core Lib Test Coverage | v0.95 | 0/TBD | Not started | - |
