@@ -358,7 +358,10 @@ Plans:
   2. use-image-upload.ts hook has unit tests covering upload initiation, progress tracking, error handling, and cleanup on unmount
   3. Extracted hooks/utils have tests that run without a DOM (pure logic, no React Testing Library required)
   4. The originating component still passes all existing tests after the extraction refactor
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 52-01-PLAN.md — Extract SSE event reducer from use-assistant-chat into pure utility + unit tests
+- [ ] 52-02-PLAN.md — Unit tests for use-image-upload hook (upload lifecycle, progress, errors, cleanup)
 
 ### Phase 53: E2E Tests
 **Goal**: Three Playwright test suites cover the critical user flows end-to-end against a running local instance
@@ -369,7 +372,10 @@ Plans:
   2. The task flow test creates a task, starts execution, verifies status changes to IN_PROGRESS, and verifies it can be marked DONE
   3. The chat flow test opens the assistant, sends a text message, and verifies a response bubble appears; paste-image upload path is tested to the upload confirmation
   4. The settings flow test changes a configuration value, saves, and verifies the new value persists on page reload
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 52-01-PLAN.md — Extract SSE event reducer from use-assistant-chat into pure utility + unit tests
+- [ ] 52-02-PLAN.md — Unit tests for use-image-upload hook (upload lifecycle, progress, errors, cleanup)
 **UI hint**: yes
 
 ### Phase 54: Error Handling & Refactoring
@@ -381,7 +387,10 @@ Plans:
   2. i18n.tsx (1192 lines) is split into `zh.ts` and `en.ts` language modules; the main i18n entry point imports and re-exports them
   3. Each of the 5 identified `as any` casts is replaced with a correctly narrowed TypeScript type; `tsc --noEmit` passes with zero new errors
   4. No new silent catches are introduced anywhere in the codebase during this phase
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 52-01-PLAN.md — Extract SSE event reducer from use-assistant-chat into pure utility + unit tests
+- [ ] 52-02-PLAN.md — Unit tests for use-image-upload hook (upload lifecycle, progress, errors, cleanup)
 
 ## Progress
 
@@ -441,7 +450,7 @@ Phases execute in numeric order: 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54
 | 48. Security Hardening & Guard Tests | v0.95 | 1/1 | Complete   | 2026-04-20 |
 | 49. Server Actions Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
 | 50. MCP Tools Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
-| 51. Core Lib Test Coverage | v0.95 | 3/3 | Complete   | 2026-04-20 |
-| 52. Hooks & Logic Extraction | v0.95 | 0/TBD | Not started | - |
+| 51. Core Lib Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
+| 52. Hooks & Logic Extraction | v0.95 | 0/2 | Not started | - |
 | 53. E2E Tests | v0.95 | 0/TBD | Not started | - |
 | 54. Error Handling & Refactoring | v0.95 | 0/TBD | Not started | - |
