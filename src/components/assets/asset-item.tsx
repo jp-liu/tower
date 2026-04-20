@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Download, Trash2 } from "lucide-react";
+import { FileText, Eye, FolderOpen, Trash2 } from "lucide-react";
 import { localPathToApiUrl } from "@/lib/file-serve-client";
 import { useI18n } from "@/lib/i18n";
 
@@ -16,6 +16,8 @@ export interface AssetItemType {
 
 interface AssetItemProps {
   asset: AssetItemType;
+  onPreview: (asset: AssetItemType) => void;
+  onReveal: (asset: AssetItemType) => void;
   onDelete: (assetId: string) => void;
 }
 
@@ -35,15 +37,15 @@ function formatDate(date: Date): string {
   });
 }
 
-export function AssetItem({ asset, onDelete }: AssetItemProps) {
+export function AssetItem({ asset, onPreview, onReveal, onDelete }: AssetItemProps) {
   const { t } = useI18n();
   const url = localPathToApiUrl(asset.path);
   const isImage = asset.mimeType?.startsWith("image/");
 
   return (
     <div className="flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/20">
-      {/* Preview / Icon */}
-      <div className="flex-shrink-0">
+      {/* Preview / Icon — clickable */}
+      <button onClick={() => onPreview(asset)} className="flex-shrink-0 cursor-pointer">
         {isImage ? (
           <img
             src={url}
@@ -55,7 +57,7 @@ export function AssetItem({ asset, onDelete }: AssetItemProps) {
             <FileText className="h-6 w-6 text-muted-foreground" />
           </div>
         )}
-      </div>
+      </button>
 
       {/* Info */}
       <div className="min-w-0 flex-1">
@@ -71,16 +73,22 @@ export function AssetItem({ asset, onDelete }: AssetItemProps) {
         </div>
       </div>
 
-      {/* Actions */}
+      {/* Actions: Preview, Reveal in Finder, Delete */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        <a
-          href={url}
-          download={asset.filename}
+        <button
+          onClick={() => onPreview(asset)}
           className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          aria-label={t("assets.download")}
+          aria-label={t("assets.preview")}
         >
-          <Download className="h-4 w-4" />
-        </a>
+          <Eye className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => onReveal(asset)}
+          className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          aria-label={t("assets.revealInFinder")}
+        >
+          <FolderOpen className="h-4 w-4" />
+        </button>
         <button
           onClick={() => onDelete(asset.id)}
           className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-rose-400"
