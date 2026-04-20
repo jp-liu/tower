@@ -1,9 +1,26 @@
 import { execFileSync } from "child_process";
 import { existsSync } from "fs";
 import { db } from "@/lib/db";
-import { findLatestSessionId, generateSummaryFromLog } from "@/lib/claude-session";
+import { findLatestSessionId, generateSummaryFromLog, generateDreamingInsight, DreamingResult } from "@/lib/claude-session";
 
 const TERMINAL_LOG_MAX = 10 * 1024; // 10 KB
+
+/** Format dreaming insights into readable Markdown content */
+function formatDreamingContent(dream: DreamingResult): string {
+  const lines: string[] = [];
+  lines.push("## Summary");
+  lines.push(dream.summary);
+  lines.push("");
+
+  if (dream.insights.length > 0) {
+    lines.push("## Insights");
+    for (const insight of dream.insights) {
+      lines.push(`- **[${insight.type}]**: ${insight.content}`);
+    }
+  }
+
+  return lines.join("\n");
+}
 
 interface GitStats {
   commits: number;
@@ -179,6 +196,7 @@ export async function captureExecutionSummary(
     });
 
     // Phase 2: Background AI summary — fire and forget, updates DB when done
+    // Phase 3: Dreaming — chains off Phase 2, creates ProjectNote if insights found
     if (terminalLog && worktreePath) {
       console.error("[captureExecutionSummary] Starting background AI summary...");
       generateSummaryFromLog(terminalLog, worktreePath)
@@ -190,9 +208,45 @@ export async function captureExecutionSummary(
               data: { summary: aiSummary },
             });
           }
+          return aiSummary;
+        })
+        .then(async (aiSummary) => {
+          // Phase 3: Dreaming — generate insights from the session
+          console.error("[captureExecutionSummary] Starting dreaming analysis...");
+          const dream = await generateDreamingInsight(terminalLog, worktreePath!, aiSummary);
+          if (!dream || !dream.shouldCreateNote) {
+            console.error("[captureExecutionSummary] Dreaming: no note needed");
+            return;
+          }
+
+          // Find the task's projectId
+          const execution = await db.taskExecution.findUnique({
+            where: { id: executionId },
+            select: { taskId: true, task: { select: { projectId: true } } },
+          });
+          if (!execution) return;
+
+          // Create the ProjectNote
+          const note = await db.projectNote.create({
+            data: {
+              title: dream.noteTitle || dream.summary.slice(0, 50),
+              content: formatDreamingContent(dream),
+              category: "session-insight",
+              projectId: execution.task.projectId,
+              taskId: execution.taskId,
+            },
+          });
+
+          // Link note to execution
+          await db.taskExecution.update({
+            where: { id: executionId },
+            data: { insightNoteId: note.id },
+          });
+
+          console.error(`[captureExecutionSummary] Dreaming note created: ${note.id}`);
         })
         .catch((err: unknown) => {
-          console.error("[captureExecutionSummary] Background AI summary failed:", err);
+          console.error("[captureExecutionSummary] Background AI summary/dreaming failed:", err);
         });
     }
   } catch (err: unknown) {

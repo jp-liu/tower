@@ -3,6 +3,13 @@ import { join } from "path";
 import { execFile } from "child_process";
 import { homedir } from "os";
 
+export interface DreamingResult {
+  summary: string;
+  insights: Array<{ type: "pattern" | "pitfall" | "decision" | "tool" | "reference"; content: string }>;
+  shouldCreateNote: boolean;
+  noteTitle?: string;
+}
+
 const PROJECTS_DIR = join(homedir(), ".claude", "projects");
 
 /**
@@ -131,6 +138,86 @@ ${terminalLog.slice(-5000)}
         }
         const result = stdout.trim().replace(/^[#*\->"'\s]+/, "").trim();
         resolve(result || null);
+      }
+    );
+  });
+}
+
+/**
+ * Generate dreaming insights from a completed session.
+ * Uses `claude -p` to analyze the terminal log and produce structured JSON.
+ * Returns null on any failure (timeout, parse error, etc).
+ */
+export function generateDreamingInsight(
+  terminalLog: string,
+  cwd: string,
+  aiSummary: string | null
+): Promise<DreamingResult | null> {
+  return new Promise((resolve) => {
+    const logSnippet = terminalLog.slice(-8000);
+    const summaryContext = aiSummary ? `\nSession summary: ${aiSummary}` : "";
+
+    const prompt = `You are analyzing a completed AI coding session. Extract reusable insights.
+${summaryContext}
+
+Terminal log (last 8000 chars):
+\`\`\`
+${logSnippet}
+\`\`\`
+
+Respond ONLY with valid JSON matching this schema (no markdown, no explanation):
+{
+  "summary": "one-sentence summary of what was accomplished",
+  "insights": [
+    { "type": "pattern|pitfall|decision|tool|reference", "content": "description" }
+  ],
+  "shouldCreateNote": true/false,
+  "noteTitle": "short title for the note (only if shouldCreateNote is true)"
+}
+
+Rules:
+- Set shouldCreateNote=true ONLY if there are genuinely reusable insights (architectural decisions, non-obvious pitfalls, useful patterns, important tool discoveries)
+- Trivial sessions (simple formatting, single-line edits, routine commits) should have shouldCreateNote=false
+- insights array can be empty if nothing notable
+- Keep each insight concise (1-2 sentences)`;
+
+    execFile(
+      "claude",
+      ["-p", prompt, "--no-session-persistence", "--max-turns", "1"],
+      {
+        cwd,
+        timeout: 60_000,
+        encoding: "utf-8",
+        env: { ...process.env },
+      },
+      (err, stdout) => {
+        if (err) {
+          console.error("[generateDreamingInsight] Failed:", err.message?.slice(0, 100));
+          resolve(null);
+          return;
+        }
+
+        try {
+          // Try to extract JSON from the response (handle potential markdown wrapping)
+          let jsonStr = stdout.trim();
+          const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            jsonStr = jsonMatch[0];
+          }
+          const parsed = JSON.parse(jsonStr) as DreamingResult;
+
+          // Basic validation
+          if (typeof parsed.summary !== "string" || typeof parsed.shouldCreateNote !== "boolean") {
+            console.error("[generateDreamingInsight] Invalid response structure");
+            resolve(null);
+            return;
+          }
+
+          resolve(parsed);
+        } catch (parseErr) {
+          console.error("[generateDreamingInsight] JSON parse failed:", (parseErr as Error).message);
+          resolve(null);
+        }
       }
     );
   });
