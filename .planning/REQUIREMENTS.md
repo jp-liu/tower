@@ -30,8 +30,8 @@
 
 ### 测试覆盖 — MCP Tools
 
-- [ ] **COV-08**: task-tools.ts 单元测试（create/update/move/delete + references + worktree）
-- [ ] **COV-09**: project-tools.ts 单元测试（CRUD + type 派生）
+- [x] **COV-08**: task-tools.ts 单元测试（create/update/move/delete + references + worktree）
+- [x] **COV-09**: project-tools.ts 单元测试（CRUD + type 派生）
 - [x] **COV-10**: workspace-tools.ts 单元测试（CRUD + 级联删除验证）
 - [x] **COV-11**: terminal-tools.ts 单元测试（get_output/send_input/get_status）
 - [x] **COV-12**: label-tools.ts 单元测试（CRUD + set_task_labels 全量替换）

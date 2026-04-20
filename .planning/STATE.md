@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.95
 milestone_name: Pre-Release Hardening
-status: executing
-stopped_at: Completed 50-02-PLAN.md
-last_updated: "2026-04-20T07:20:15.948Z"
+status: verifying
+stopped_at: Completed 50-01-PLAN.md
+last_updated: "2026-04-20T07:22:12.245Z"
 last_activity: 2026-04-20
 progress:
   total_phases: 15
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 9
-  completed_plans: 8
+  completed_plans: 9
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 
 Phase: 50 (mcp-tools-test-coverage) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-20
 
 Progress: [░░░░░░░░░░] 0%
@@ -74,6 +74,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 50]: Mock path for MCP db is ../../db (not ../db) since test is in tools/__tests__/ subdir
 - [Phase 50]: Mock path from __tests__/ is ../../db (not ../db) — __tests__ is a subdirectory of tools/, so db.ts is two levels up
 - [Phase 50]: global.fetch must be assigned before imports to intercept bridgeFetch in terminal-tools MCP handler tests
+- [Phase 50-mcp-tools-test-coverage]: // @vitest-environment node required for MCP tool tests mocking Node.js built-ins (fs, child_process) — jsdom prevents mock interception
+- [Phase 50-mcp-tools-test-coverage]: vi.mock path from tools/__tests__/ must be ../../db (not ../db) to resolve to src/mcp/db.ts
 
 ### Pending Todos
 
@@ -85,6 +87,6 @@ None at roadmap stage.
 
 ## Session Continuity
 
-Last session: 2026-04-20T07:20:15.945Z
-Stopped at: Completed 50-02-PLAN.md
+Last session: 2026-04-20T07:22:12.241Z
+Stopped at: Completed 50-01-PLAN.md
 Resume file: None

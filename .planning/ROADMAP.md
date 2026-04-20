@@ -155,7 +155,7 @@ See: [milestones/v0.94-ROADMAP.md](./milestones/v0.94-ROADMAP.md) for full detai
 - [x] **Phase 47: Failing Test Fixes** - Fix all 27 failing tests across 8 test files (mock/API/context issues) (completed 2026-04-20)
 - [x] **Phase 48: Security Hardening & Guard Tests** - CUID validation on public asset route + internal-api-guard unit tests (completed 2026-04-20)
 - [x] **Phase 49: Server Actions Test Coverage** - Unit tests for 7 server action modules (completed 2026-04-20)
-- [ ] **Phase 50: MCP Tools Test Coverage** - Unit tests for 6 MCP tool modules
+- [x] **Phase 50: MCP Tools Test Coverage** - Unit tests for 6 MCP tool modules (completed 2026-04-20)
 - [ ] **Phase 51: Core Lib Test Coverage** - Unit tests for 6 core library modules
 - [ ] **Phase 52: Hooks & Logic Extraction** - Extract business logic from components into hooks/utils and add tests
 - [ ] **Phase 53: E2E Tests** - Playwright setup + 3 critical user flow tests
@@ -328,7 +328,7 @@ Plans:
   6. report-tools.ts tests confirm daily_summary and daily_todo respect their filter parameters
 **Plans**: 3 plans
 Plans:
-- [ ] 50-01-PLAN.md — task-tools + project-tools tests (create/update/move/delete, references, worktree, type derivation)
+- [x] 50-01-PLAN.md — task-tools + project-tools tests (create/update/move/delete, references, worktree, type derivation)
 - [x] 50-02-PLAN.md — workspace-tools + label-tools + terminal-tools tests (CRUD, label replacement, HTTP bridge)
 - [x] 50-03-PLAN.md — report-tools tests (daily_summary/daily_todo filtering and grouping)
 
@@ -436,7 +436,7 @@ Phases execute in numeric order: 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54
 | 47. Failing Test Fixes | v0.95 | 2/2 | Complete    | 2026-04-20 |
 | 48. Security Hardening & Guard Tests | v0.95 | 1/1 | Complete   | 2026-04-20 |
 | 49. Server Actions Test Coverage | v0.95 | 3/3 | Complete    | 2026-04-20 |
-| 50. MCP Tools Test Coverage | v0.95 | 2/3 | In Progress|  |
+| 50. MCP Tools Test Coverage | v0.95 | 3/3 | Complete   | 2026-04-20 |
 | 51. Core Lib Test Coverage | v0.95 | 0/TBD | Not started | - |
 | 52. Hooks & Logic Extraction | v0.95 | 0/TBD | Not started | - |
 | 53. E2E Tests | v0.95 | 0/TBD | Not started | - |
