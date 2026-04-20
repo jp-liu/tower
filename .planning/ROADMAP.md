@@ -175,7 +175,7 @@ See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full detai
 - [x] **Phase 55: UI Fixes** - Delete task stops propagation, shared EmptyState component, icon button hover consistency (completed 2026-04-20)
 - [x] **Phase 56: Asset Preview** - Image lightbox, text/md preview dialog, reveal in Finder, reorganized action buttons (completed 2026-04-20)
 - [x] **Phase 57: Project Import & Migration** - Separate create vs import flows, optional fs.rename migration with pre-checks (completed 2026-04-20)
-- [ ] **Phase 58: Session Dreaming** - Deep AI analysis on session end, auto-create insight notes, timeline UI, daily summary integration
+- [x] **Phase 58: Session Dreaming** - Deep AI analysis on session end, auto-create insight notes, timeline UI, daily summary integration (completed 2026-04-20)
 - [ ] **Phase 59: Auto-Upload Hook** - PostToolUse hook script, file type config, upload API, env var rename, settings install button
 - [ ] **Phase 60: Resource Attribution & Task Drawer** - Show task-bound assets in project view, TaskOverviewDrawer shared component
 
@@ -238,7 +238,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 58-01-PLAN.md — Schema + dreaming logic + note creation
-- [ ] 58-02-PLAN.md — Timeline UI + daily report integration
+- [x] 58-02-PLAN.md — Timeline UI + daily report integration
 
 #### Phase 59: Auto-Upload Hook
 **Goal**: Files produced by Claude Code during task execution are automatically captured as task assets without any manual action from the user
@@ -252,7 +252,7 @@ Plans:
   5. All code references to AI_MANAGER_TASK_ID are replaced with TOWER_TASK_ID; the PTY spawn environment injects TOWER_TASK_ID and TOWER_API_URL
 **Plans**: 2 plans
 Plans:
-- [ ] 58-01-PLAN.md — Schema + dreaming logic + note creation
+- [x] 58-01-PLAN.md — Schema + dreaming logic + note creation
 - [ ] 58-02-PLAN.md — Timeline UI + daily report integration
 
 #### Phase 60: Resource Attribution & Task Drawer
@@ -277,6 +277,6 @@ Plans:
 | 55. UI Fixes | 1/1 | Complete    | 2026-04-20 |
 | 56. Asset Preview | 2/2 | Complete    | 2026-04-20 |
 | 57. Project Import & Migration | 2/2 | Complete    | 2026-04-20 |
-| 58. Session Dreaming | 1/2 | In Progress|  |
+| 58. Session Dreaming | 2/2 | Complete   | 2026-04-20 |
 | 59. Auto-Upload Hook | 0/? | Not started | - |
 | 60. Resource Attribution & Task Drawer | 0/? | Not started | - |

@@ -26,8 +26,8 @@
 
 - [x] **DREAM-01**: Phase 2+ AI analysis on final session stop (not on continue/resume) — structured JSON output (summary, insights, shouldCreateNote); git log uses full `merge-base..HEAD`
 - [x] **DREAM-02**: Auto-create `ProjectNote` (category: `session-insight`) when AI determines significance
-- [ ] **DREAM-03**: Execution timeline shows "归纳" row linking to insight note (inline expand + navigate)
-- [ ] **DREAM-04**: `daily_summary` report includes `insights` section listing session-insight notes created that day
+- [x] **DREAM-03**: Execution timeline shows "归纳" row linking to insight note (inline expand + navigate)
+- [x] **DREAM-04**: `daily_summary` report includes `insights` section listing session-insight notes created that day
 
 ## Auto-Upload Hook
 
