@@ -175,7 +175,7 @@ See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full detai
 - [x] **Phase 57: Project Import & Migration** - Separate create vs import flows, optional fs.rename migration with pre-checks (completed 2026-04-20)
 - [x] **Phase 58: Session Dreaming** - Deep AI analysis on session end, auto-create insight notes, timeline UI, daily summary integration (completed 2026-04-20)
 - [x] **Phase 59: Auto-Upload Hook** - PostToolUse hook script, file type config, upload API, env var rename, settings install button (completed 2026-04-20)
-- [ ] **Phase 60: Resource Attribution & Task Drawer** - Show task-bound assets in project view, TaskOverviewDrawer shared component
+- [x] **Phase 60: Resource Attribution & Task Drawer** - Show task-bound assets in project view, TaskOverviewDrawer shared component (completed 2026-04-20)
 
 ### Phase Details
 
@@ -264,7 +264,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 60-01-PLAN.md — Asset query with task inclusion + TaskOverviewDrawer + task badges
-- [ ] 60-02-PLAN.md — Route completed/cancelled task clicks to drawer
+- [x] 60-02-PLAN.md — Route completed/cancelled task clicks to drawer
 **UI hint**: yes
 
 ### Progress Table
@@ -276,4 +276,4 @@ Plans:
 | 57. Project Import & Migration | 2/2 | Complete    | 2026-04-20 |
 | 58. Session Dreaming | 2/2 | Complete    | 2026-04-20 |
 | 59. Auto-Upload Hook | 2/2 | Complete    | 2026-04-20 |
-| 60. Resource Attribution & Task Drawer | 1/2 | In Progress|  |
+| 60. Resource Attribution & Task Drawer | 2/2 | Complete   | 2026-04-20 |
