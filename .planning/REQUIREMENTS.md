@@ -25,7 +25,7 @@
 
 ### 资产关联
 
-- [ ] **ASSET-01**: `create_task` references 从 cache 复制到 asset 时，自动 strip UUID 后缀还原可读文件名
+- [x] **ASSET-01**: `create_task` references 从 cache 复制到 asset 时，自动 strip UUID 后缀还原可读文件名
 
 ## Future Requirements
 
@@ -57,4 +57,4 @@
 | ROUTE-01 | Phase 45 | Complete |
 | ROUTE-02 | Phase 45 | Complete |
 | ROUTE-03 | Phase 45 | Complete |
-| ASSET-01 | Phase 46 | Pending |
+| ASSET-01 | Phase 46 | Complete |

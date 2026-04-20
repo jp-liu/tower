@@ -142,7 +142,7 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
 
 - [x] **Phase 44: Cache Storage Refactor** - Year-month directory grouping, type subdirectories, original filename preservation with UUID suffix, filename sanitization (completed 2026-04-20)
 - [x] **Phase 45: Route & Frontend Adaptation** - Catch-all cache serving route, frontend src path updates, multimodal prompt path updates (completed 2026-04-20)
-- [ ] **Phase 46: Asset Name Restoration** - Strip UUID suffix when copying cache files to project assets
+- [x] **Phase 46: Asset Name Restoration** - Strip UUID suffix when copying cache files to project assets (completed 2026-04-20)
 
 ## Phase Details
 
@@ -250,7 +250,7 @@ Plans:
   4. Reference files that are not in the cache directory (e.g. already in assets) are copied unchanged
 **Plans**: 1 plan
 Plans:
-- [ ] 46-01-PLAN.md — TDD: stripCacheUuidSuffix + isAssistantCachePath helpers + wire into task-tools copy loop
+- [x] 46-01-PLAN.md — TDD: stripCacheUuidSuffix + isAssistantCachePath helpers + wire into task-tools copy loop
 **UI hint**: no
 
 ## Progress
@@ -306,4 +306,4 @@ Phases execute in numeric order: 44 -> 45 -> 46
 | 43. Claude SDK Multimodal Integration | v0.93 | 0/1 | Complete | 2026-04-18 |
 | 44. Cache Storage Refactor | v0.94 | 2/2 | Complete    | 2026-04-20 |
 | 45. Route & Frontend Adaptation | v0.94 | 1/1 | Complete    | 2026-04-20 |
-| 46. Asset Name Restoration | v0.94 | 0/1 | Not started | - |
+| 46. Asset Name Restoration | v0.94 | 1/1 | Complete   | 2026-04-20 |
