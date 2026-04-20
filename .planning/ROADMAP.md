@@ -219,7 +219,10 @@ Plans:
   3. Special characters and spaces in filenames are replaced with `_`; Chinese characters are preserved as-is
   4. `getAssistantCacheDir()` returns a path including the current year-month and type (e.g. `.../assistant/2026-04/images/`) and creates the directory if absent
   5. The directory structure reserves a `files/` sibling next to `images/` for future non-image file type support without code changes
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 44-01-PLAN.md — TDD: getAssistantCacheDir(type) + buildCacheFilename() + unit tests
+- [ ] 44-02-PLAN.md — Wire helpers into upload route + update chat route cache root
 **UI hint**: no
 
 ### Phase 45: Route & Frontend Adaptation
@@ -297,6 +300,6 @@ Phases execute in numeric order: 44 -> 45 -> 46
 | 41. Paste UX & Thumbnail Strip | v0.93 | 2/2 | Complete | 2026-04-18 |
 | 42. Message Image Display | v0.93 | 2/2 | Complete | 2026-04-18 |
 | 43. Claude SDK Multimodal Integration | v0.93 | 0/1 | Complete | 2026-04-18 |
-| 44. Cache Storage Refactor | v0.94 | 0/TBD | Not started | - |
+| 44. Cache Storage Refactor | v0.94 | 0/2 | Not started | - |
 | 45. Route & Frontend Adaptation | v0.94 | 0/TBD | Not started | - |
 | 46. Asset Name Restoration | v0.94 | 0/TBD | Not started | - |
