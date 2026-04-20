@@ -6,7 +6,7 @@ const PRIORITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2
 export const reportTools = {
   daily_summary: {
     description:
-      "Get a summary of today's work across all workspaces. Shows completed tasks, in-progress tasks with their last chat summary, grouped by workspace → project. Optionally pass a date (YYYY-MM-DD) to query a specific day. Date boundary is server-local time.",
+      "Get a summary of today's work across all workspaces. Shows completed tasks, in-progress tasks with their last chat summary, grouped by workspace → project. Also includes session-insight notes created that day in an `insights` array. Optionally pass a date (YYYY-MM-DD) to query a specific day. Date boundary is server-local time.",
     schema: z.object({
       date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
         .describe("Date in YYYY-MM-DD format. Defaults to today."),
@@ -80,6 +80,31 @@ export const reportTools = {
         }
       }
 
+      // Query session-insight notes created that day
+      const insightNotes = await db.projectNote.findMany({
+        where: {
+          category: "session-insight",
+          createdAt: { gte: date, lt: nextDay },
+        },
+        include: {
+          project: {
+            include: { workspace: true },
+          },
+          task: { select: { id: true, title: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      const insights = insightNotes.map((note) => ({
+        id: note.id,
+        title: note.title,
+        content: note.content.slice(0, 500),
+        createdAt: note.createdAt.toISOString(),
+        workspace: { id: note.project.workspace.id, name: note.project.workspace.name },
+        project: { id: note.project.id, name: note.project.name, alias: note.project.alias },
+        task: note.task ? { id: note.task.id, title: note.task.title } : null,
+      }));
+
       let totalCompleted = 0;
       let totalInProgress = 0;
       const workspaces = Array.from(wsMap.values()).map((ws) => ({
@@ -95,6 +120,8 @@ export const reportTools = {
         date: date.toISOString().slice(0, 10),
         workspaces,
         stats: { totalCompleted, totalInProgress, totalActive: totalCompleted + totalInProgress },
+        insights,
+        insightCount: insights.length,
       };
     },
   },
