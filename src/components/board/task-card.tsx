@@ -70,13 +70,13 @@ export function TaskCard({ task, onClick, onEdit, onDelete, onContextMenu }: Tas
             <MoreHorizontal className="h-4 w-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEdit?.(task)}>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit?.(task); }}>
               <Pencil className="mr-2 h-3.5 w-3.5" />
               {t("common.edit")}
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-rose-400"
-              onClick={() => onDelete?.(task.id)}
+              onClick={(e) => { e.stopPropagation(); onDelete?.(task.id); }}
             >
               <Trash2 className="mr-2 h-3.5 w-3.5" />
               {t("common.delete")}

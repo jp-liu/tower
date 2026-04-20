@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bot, Loader2, SendHorizonal, Square } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -11,21 +12,6 @@ import { AssistantChatBubble } from "./assistant-chat-bubble";
 import { useImageUpload, type PendingImage } from "@/hooks/use-image-upload";
 import { ImageThumbnailStrip } from "./image-thumbnail-strip";
 import { ImagePreviewModal } from "./image-preview-modal";
-
-// ---------------------------------------------------------------------------
-// Empty state
-// ---------------------------------------------------------------------------
-
-function EmptyState() {
-  const { t } = useI18n();
-  return (
-    <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
-      <Bot className="size-8 text-muted-foreground/40" />
-      <h3 className="text-sm font-semibold text-foreground">{t("assistant.emptyTitle")}</h3>
-      <p className="text-xs text-muted-foreground">{t("assistant.emptyBody")}</p>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Main component — uses chat state from AssistantProvider (persists across routes)
@@ -133,7 +119,7 @@ export function AssistantChat() {
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
             </div>
           ) : messages.length === 0 ? (
-            <EmptyState />
+            <EmptyState icon={Bot} title={t("assistant.emptyTitle")} description={t("assistant.emptyBody")} className="h-full px-6 gap-3" />
           ) : (
             messages.map((m) => (
               <AssistantChatBubble
@@ -179,7 +165,7 @@ export function AssistantChat() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 shrink-0"
+              className="h-8 w-8 shrink-0 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               onClick={handleSend}
               disabled={isSendDisabled}
               aria-label={t("assistant.sendLabel")}
