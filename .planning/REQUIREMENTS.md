@@ -33,10 +33,10 @@
 
 - [x] **HOOK-01**: Global PostToolUse hook script gated by `TOWER_TASK_ID` env var (no-op when absent)
 - [x] **HOOK-02**: Hook detects file creation/reference matching configured types and uploads to Tower API; checks file exists before upload; respects `system.maxUploadBytes` size limit
-- [ ] **HOOK-03**: File type whitelist configurable via SystemConfig `hooks.autoUploadTypes`
+- [x] **HOOK-03**: File type whitelist configurable via SystemConfig `hooks.autoUploadTypes`
 - [x] **HOOK-04**: Internal upload API endpoint accepts taskId + filePath, copies to `data/assets/{projectId}/`
 - [x] **HOOK-05**: Environment variable rename: `AI_MANAGER_TASK_ID` → `TOWER_TASK_ID`, add `TOWER_API_URL`; signal dir rename `/tmp/ai-manager-signals/` → `/tmp/tower-signals/`
-- [ ] **HOOK-06**: Settings page "安装 Hook" button — appends hook entry to existing `~/.claude/settings.json` hooks array (never overwrite existing hooks)
+- [x] **HOOK-06**: Settings page "安装 Hook" button — appends hook entry to existing `~/.claude/settings.json` hooks array (never overwrite existing hooks)
 
 ## Resource Attribution & Task Drawer
 

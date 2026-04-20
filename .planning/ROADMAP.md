@@ -174,7 +174,7 @@ See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full detai
 - [x] **Phase 56: Asset Preview** - Image lightbox, text/md preview dialog, reveal in Finder, reorganized action buttons (completed 2026-04-20)
 - [x] **Phase 57: Project Import & Migration** - Separate create vs import flows, optional fs.rename migration with pre-checks (completed 2026-04-20)
 - [x] **Phase 58: Session Dreaming** - Deep AI analysis on session end, auto-create insight notes, timeline UI, daily summary integration (completed 2026-04-20)
-- [ ] **Phase 59: Auto-Upload Hook** - PostToolUse hook script, file type config, upload API, env var rename, settings install button
+- [x] **Phase 59: Auto-Upload Hook** - PostToolUse hook script, file type config, upload API, env var rename, settings install button (completed 2026-04-20)
 - [ ] **Phase 60: Resource Attribution & Task Drawer** - Show task-bound assets in project view, TaskOverviewDrawer shared component
 
 ### Phase Details
@@ -251,7 +251,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 59-01-PLAN.md — Env rename + upload API + hook script
-- [ ] 59-02-PLAN.md — Settings UI: type config + install button
+- [x] 59-02-PLAN.md — Settings UI: type config + install button
 #### Phase 60: Resource Attribution & Task Drawer
 **Goal**: Users can see all assets associated with a project (including those created by task executions) and quickly preview any task from wherever its assets or completions are referenced
 **Depends on**: Phase 56, Phase 58
@@ -275,5 +275,5 @@ Plans:
 | 56. Asset Preview | 2/2 | Complete    | 2026-04-20 |
 | 57. Project Import & Migration | 2/2 | Complete    | 2026-04-20 |
 | 58. Session Dreaming | 2/2 | Complete    | 2026-04-20 |
-| 59. Auto-Upload Hook | 1/2 | In Progress|  |
+| 59. Auto-Upload Hook | 2/2 | Complete   | 2026-04-20 |
 | 60. Resource Attribution & Task Drawer | 0/? | Not started | - |
