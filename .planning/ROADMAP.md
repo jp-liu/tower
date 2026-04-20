@@ -140,7 +140,7 @@ See phase details in [milestones/v0.9-ROADMAP.md](./milestones/v0.9-ROADMAP.md) 
 
 **Milestone Goal:** 重构缓存目录体系，文件名保留原始名，支持按时间清理和未来多文件类型扩展。
 
-- [ ] **Phase 44: Cache Storage Refactor** - Year-month directory grouping, type subdirectories, original filename preservation with UUID suffix, filename sanitization
+- [x] **Phase 44: Cache Storage Refactor** - Year-month directory grouping, type subdirectories, original filename preservation with UUID suffix, filename sanitization (completed 2026-04-20)
 - [ ] **Phase 45: Route & Frontend Adaptation** - Catch-all cache serving route, frontend src path updates, multimodal prompt path updates
 - [ ] **Phase 46: Asset Name Restoration** - Strip UUID suffix when copying cache files to project assets
 
@@ -222,7 +222,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 44-01-PLAN.md — TDD: getAssistantCacheDir(type) + buildCacheFilename() + unit tests
-- [ ] 44-02-PLAN.md — Wire helpers into upload route + update chat route cache root
+- [x] 44-02-PLAN.md — Wire helpers into upload route + update chat route cache root
 **UI hint**: no
 
 ### Phase 45: Route & Frontend Adaptation
@@ -300,6 +300,6 @@ Phases execute in numeric order: 44 -> 45 -> 46
 | 41. Paste UX & Thumbnail Strip | v0.93 | 2/2 | Complete | 2026-04-18 |
 | 42. Message Image Display | v0.93 | 2/2 | Complete | 2026-04-18 |
 | 43. Claude SDK Multimodal Integration | v0.93 | 0/1 | Complete | 2026-04-18 |
-| 44. Cache Storage Refactor | v0.94 | 1/2 | In Progress|  |
+| 44. Cache Storage Refactor | v0.94 | 2/2 | Complete   | 2026-04-20 |
 | 45. Route & Frontend Adaptation | v0.94 | 0/TBD | Not started | - |
 | 46. Asset Name Restoration | v0.94 | 0/TBD | Not started | - |
