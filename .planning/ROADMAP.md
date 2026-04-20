@@ -164,8 +164,6 @@ See: [milestones/v0.94-ROADMAP.md](./milestones/v0.94-ROADMAP.md) for full detai
 See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full details.
 
 </details>
-
-
 ---
 
 ## v0.96 UX Polish & Knowledge Capture (Phases 55-60)
@@ -252,9 +250,8 @@ Plans:
   5. All code references to AI_MANAGER_TASK_ID are replaced with TOWER_TASK_ID; the PTY spawn environment injects TOWER_TASK_ID and TOWER_API_URL
 **Plans**: 2 plans
 Plans:
-- [x] 58-01-PLAN.md — Schema + dreaming logic + note creation
-- [ ] 58-02-PLAN.md — Timeline UI + daily report integration
-
+- [ ] 59-01-PLAN.md — Env rename + upload API + hook script
+- [ ] 59-02-PLAN.md — Settings UI: type config + install button
 #### Phase 60: Resource Attribution & Task Drawer
 **Goal**: Users can see all assets associated with a project (including those created by task executions) and quickly preview any task from wherever its assets or completions are referenced
 **Depends on**: Phase 56, Phase 58
@@ -278,5 +275,5 @@ Plans:
 | 56. Asset Preview | 2/2 | Complete    | 2026-04-20 |
 | 57. Project Import & Migration | 2/2 | Complete    | 2026-04-20 |
 | 58. Session Dreaming | 2/2 | Complete    | 2026-04-20 |
-| 59. Auto-Upload Hook | 0/? | Not started | - |
+| 59. Auto-Upload Hook | 0/2 | Not started | - |
 | 60. Resource Attribution & Task Drawer | 0/? | Not started | - |
