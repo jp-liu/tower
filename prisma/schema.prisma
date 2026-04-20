@@ -115,10 +115,14 @@ model TaskExecution {
   branchTipCommit String?
   createdAt      DateTime        @default(now())
 
+  insightNoteId   String?
+  insightNote     ProjectNote? @relation(fields: [insightNoteId], references: [id], onDelete: SetNull)
+
   task     Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
   messages TaskMessage[]
 
   @@index([taskId])
+  @@index([insightNoteId])
 }
 
 model TaskMessage {
@@ -162,6 +166,8 @@ model ProjectNote {
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   task    Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  insightExecutions TaskExecution[]
 
   @@index([projectId])
   @@index([taskId])
