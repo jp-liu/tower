@@ -1,5 +1,25 @@
 # Milestones
 
+## v0.94 Cache & File Management (Shipped: 2026-04-20)
+
+**Phases completed:** 7 phases, 11 plans, 11 tasks
+
+**Key accomplishments:**
+
+- `src/lib/mime-magic.ts`
+- 1. [Rule 3 - Blocking] Added getAssistantCacheDir/ensureAssistantCacheDir to file-utils.ts
+- One-liner:
+- AssistantChat wired with paste-to-thumbnail flow: clipboardData.items → XHR upload → 48px strip → ImagePreviewModal → send with filenames; provider and API route extended for imageFilenames
+- One-liner:
+- imageFilenames wired through provider message creation and sessionStorage cache for reload persistence; click-to-preview modal connected for sent message images
+- One-liner:
+- `getAssistantCacheDir(type)` + `buildCacheFilename()` pure functions implementing year-month/type directory structure and Unicode-preserving filename sanitization with 8-char UUID suffix
+- Upload route switched to `getAssistantCacheDir("images")` + `buildCacheFilename()` for structured paths and readable filenames; chat route switched to `getAssistantCacheRoot()` so sub-path filenames resolve correctly in multimodal prompts
+- One-liner:
+- One-liner:
+
+---
+
 ## v0.93 Chat Media Support (Shipped: 2026-04-18)
 
 **Phases completed:** 4 phases, 7 plans, 5 tasks

@@ -23,6 +23,10 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 ## Current State
 
+**Shipped:** v0.94 Cache & File Management (2026-04-20)
+- Phase 44-46: Cache directory restructured to year-month/type subdirectories, original filename preservation with UUID suffix, catch-all cache serving route, frontend subpath adaptation, asset name restoration (UUID strip on copy)
+- 10 requirements delivered (DIR-01~03, NAME-01~03, ROUTE-01~03, ASSET-01)
+
 **Shipped:** v0.93 Chat Media Support (2026-04-18)
 - Phase 40-43: Image upload API (magic-byte MIME validation, path traversal protection), paste-to-upload UX with thumbnail strip and progress bars, message image display with broken-image fallback, Claude SDK multimodal integration (Read tool for image vision)
 - 19 requirements delivered (CACHE-01~05, PASTE-01~07, MSG-01~04, AI-01~03)
@@ -247,4 +251,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-13 — Phase 35.1 Mission Control Dashboard complete*
+*Last updated: 2026-04-20 after v0.94 milestone*
