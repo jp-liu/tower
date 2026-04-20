@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.95
 milestone_name: Pre-Release Hardening
-status: executing
-stopped_at: Completed 53-01-PLAN.md
-last_updated: "2026-04-20T09:28:20.236Z"
+status: verifying
+stopped_at: Completed 53-02-PLAN.md
+last_updated: "2026-04-20T09:42:56.552Z"
 last_activity: 2026-04-20
 progress:
   total_phases: 15
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 16
-  completed_plans: 15
+  completed_plans: 16
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 
 Phase: 53 (e2e-tests) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-20
 
 Progress: [░░░░░░░░░░] 0%
@@ -85,6 +85,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 52-hooks-logic-extraction]: URL.createObjectURL patched as property on URL class (not vi.stubGlobal) to preserve jsdom constructor behavior
 - [Phase 52-hooks-logic-extraction]: idGenerator injected into applySSEEvent for deterministic IDs in tests; sessionId handling kept in hook as React ref side effect
 - [Phase 53-e2e-tests]: Context menu uses plain button elements in createPortal at z-index 9999; NO_PROXY required to bypass http_proxy for localhost in Playwright tests
+- [Phase 53]: Test 0 setup pattern: switches assistant to chat mode via settings UI before flow tests — avoids hard-coding config state
+- [Phase 53]: Response test uses test.slow() + 120s timeout accepting either assistant bubble or thinking indicator — graceful handling of missing Claude SDK credentials
 
 ### Pending Todos
 
@@ -96,6 +98,6 @@ None at roadmap stage.
 
 ## Session Continuity
 
-Last session: 2026-04-20T09:28:20.233Z
-Stopped at: Completed 53-01-PLAN.md
+Last session: 2026-04-20T09:42:56.549Z
+Stopped at: Completed 53-02-PLAN.md
 Resume file: None
