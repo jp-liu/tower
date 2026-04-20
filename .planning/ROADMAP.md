@@ -221,7 +221,7 @@ Plans:
   5. The directory structure reserves a `files/` sibling next to `images/` for future non-image file type support without code changes
 **Plans**: 2 plans
 Plans:
-- [ ] 44-01-PLAN.md — TDD: getAssistantCacheDir(type) + buildCacheFilename() + unit tests
+- [x] 44-01-PLAN.md — TDD: getAssistantCacheDir(type) + buildCacheFilename() + unit tests
 - [ ] 44-02-PLAN.md — Wire helpers into upload route + update chat route cache root
 **UI hint**: no
 
@@ -300,6 +300,6 @@ Phases execute in numeric order: 44 -> 45 -> 46
 | 41. Paste UX & Thumbnail Strip | v0.93 | 2/2 | Complete | 2026-04-18 |
 | 42. Message Image Display | v0.93 | 2/2 | Complete | 2026-04-18 |
 | 43. Claude SDK Multimodal Integration | v0.93 | 0/1 | Complete | 2026-04-18 |
-| 44. Cache Storage Refactor | v0.94 | 0/2 | Not started | - |
+| 44. Cache Storage Refactor | v0.94 | 1/2 | In Progress|  |
 | 45. Route & Frontend Adaptation | v0.94 | 0/TBD | Not started | - |
 | 46. Asset Name Restoration | v0.94 | 0/TBD | Not started | - |

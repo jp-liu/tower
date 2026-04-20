@@ -7,15 +7,15 @@
 
 ### 缓存目录结构
 
-- [ ] **DIR-01**: 上传图片存储到 `data/cache/assistant/{year-month}/images/` 年月分组目录
-- [ ] **DIR-02**: 缓存目录支持类型子目录（`images/`），为未来文件类型扩展预留 `files/` 结构
-- [ ] **DIR-03**: `getAssistantCacheDir()` 自动生成当前年月 + 类型的完整路径
+- [x] **DIR-01**: 上传图片存储到 `data/cache/assistant/{year-month}/images/` 年月分组目录
+- [x] **DIR-02**: 缓存目录支持类型子目录（`images/`），为未来文件类型扩展预留 `files/` 结构
+- [x] **DIR-03**: `getAssistantCacheDir()` 自动生成当前年月 + 类型的完整路径
 
 ### 文件命名
 
-- [ ] **NAME-01**: 复制系统文件粘贴时，保留原始文件名，格式为 `{原始名}-{8位uuid}.{ext}`
-- [ ] **NAME-02**: 截图或无意义文件名（如 `image.png`）时，使用 `tower_image-{8位uuid}.{ext}`
-- [ ] **NAME-03**: 文件名清洗：保留中文和英文字母数字，空格和特殊字符替换为 `_`
+- [x] **NAME-01**: 复制系统文件粘贴时，保留原始文件名，格式为 `{原始名}-{8位uuid}.{ext}`
+- [x] **NAME-02**: 截图或无意义文件名（如 `image.png`）时，使用 `tower_image-{8位uuid}.{ext}`
+- [x] **NAME-03**: 文件名清洗：保留中文和英文字母数字，空格和特殊字符替换为 `_`
 
 ### 路由适配
 
@@ -48,12 +48,12 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DIR-01 | Phase 44 | Pending |
-| DIR-02 | Phase 44 | Pending |
-| DIR-03 | Phase 44 | Pending |
-| NAME-01 | Phase 44 | Pending |
-| NAME-02 | Phase 44 | Pending |
-| NAME-03 | Phase 44 | Pending |
+| DIR-01 | Phase 44 | Complete |
+| DIR-02 | Phase 44 | Complete |
+| DIR-03 | Phase 44 | Complete |
+| NAME-01 | Phase 44 | Complete |
+| NAME-02 | Phase 44 | Complete |
+| NAME-03 | Phase 44 | Complete |
 | ROUTE-01 | Phase 45 | Pending |
 | ROUTE-02 | Phase 45 | Pending |
 | ROUTE-03 | Phase 45 | Pending |
