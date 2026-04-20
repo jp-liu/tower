@@ -237,7 +237,7 @@ Plans:
   4. The daily_summary MCP report includes an "insights" array listing all session-insight notes created that day with workspace/project/task context
 **Plans**: 2 plans
 Plans:
-- [ ] 58-01-PLAN.md — Schema + dreaming logic + note creation
+- [x] 58-01-PLAN.md — Schema + dreaming logic + note creation
 - [ ] 58-02-PLAN.md — Timeline UI + daily report integration
 
 #### Phase 59: Auto-Upload Hook
@@ -277,6 +277,6 @@ Plans:
 | 55. UI Fixes | 1/1 | Complete    | 2026-04-20 |
 | 56. Asset Preview | 2/2 | Complete    | 2026-04-20 |
 | 57. Project Import & Migration | 2/2 | Complete    | 2026-04-20 |
-| 58. Session Dreaming | 0/? | Not started | - |
+| 58. Session Dreaming | 1/2 | In Progress|  |
 | 59. Auto-Upload Hook | 0/? | Not started | - |
 | 60. Resource Attribution & Task Drawer | 0/? | Not started | - |
