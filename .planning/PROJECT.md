@@ -21,17 +21,17 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 - @ts-nocheck 清理 + TaskWithLabels 类型安全
 - 结构化日志 + Error Boundary + stale execution 清理
 
-## Current Milestone: v0.95 Pre-Release Hardening
+## Current Milestone: v0.96 UX Polish & Knowledge Capture
 
-**Goal:** 修复失败测试、补齐关键模块测试覆盖、安全加固、错误处理优化、代码重构，为 v1.0 同事试用做准备
+**Goal:** 提升用户体验（资源预览、项目导入迁移、UI 一致性）+ 会话知识沉淀系统（Dreaming + Auto-Upload Hook）
 
 **Target features:**
-- 修复 27 个失败测试（过时 mock、缺少 Provider 包装、API 变更）
-- 公开资产路由安全加固（projectId CUID 校验）
-- Server Actions 测试覆盖（workspace、label、note、prompt）
-- 静默 catch 改为用户可见错误提示
-- 大文件拆分（i18n.tsx 1192 行 → 按语言模块拆分）
-- `as any` 类型强转清理为正确类型
+- Session Dreaming — 终端结束时深度 AI 分析，自动沉淀坑点/模式到项目笔记
+- 项目导入/迁移 — 拆分新建 vs 导入、fs.rename 迁移到 git 规范路径
+- 资源预览 — 图片 lightbox、文本/md 预览、在文件夹中显示
+- UI 快修 — 删除不触发抽屉、公共 Empty 组件、hover 一致性
+- Auto-Upload Hook — Claude Code 全局 PostToolUse hook 实时捕获文件资源关联任务
+- 资源归属展示 + 任务概览抽屉 — 项目资源展示任务资源、通用 TaskOverviewDrawer
 
 ## Current State
 
@@ -178,23 +178,9 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 **Shipped:** 聊天图片支持全链路 — magic-byte MIME 验证上传 API、粘贴自动上传+缩略图预览条（XHR 进度条）、消息气泡内图片展示（缺失图片占位符）、Claude SDK Read 工具多模态集成（AI 可看图理解内容）。19 个需求全部交付。
 
-## Current Milestone: v0.94 Cache & File Management
+## Completed Milestone: v0.95 Pre-Release Hardening (2026-04-20)
 
-**Goal:** 重构缓存目录体系，文件名保留原始名，支持按时间清理和未来多文件类型扩展
-
-**Target features:**
-- 缓存目录按年月+类型分组（`assistant/2026-04/images/`）
-- 文件名保留原始名 + UUID 后缀（`设计稿-a1b2c3d4.png`）
-- 截图/无名文件用 `tower_image-{uuid}.png`
-- 文件名清洗（中文保留，特殊字符替换）
-- cache 路由改 catch-all 支持子路径
-- `create_task` references 复制到 asset 时自动还原可读文件名
-- 前端 src 路径适配新目录结构
-
-### Out of Scope
-- 非图片文件粘贴支持 — 后续 milestone
-- 拖拽上传 — 后续 milestone
-- 缓存自动清理策略 — 后续 milestone
+**Shipped:** 修复 27 个失败测试、安全加固（CUID 校验）、Server Actions/MCP/Core Lib 测试覆盖（200+ tests）、E2E Playwright 测试、i18n 拆分、静默 catch 修复、as any 清理。
 
 ## Context
 
@@ -263,4 +249,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-20 — v0.95 Pre-Release Hardening started*
+*Last updated: 2026-04-20 — v0.96 UX Polish & Knowledge Capture started*
