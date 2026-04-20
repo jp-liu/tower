@@ -15,6 +15,7 @@
     "db:init-fts": "tsx prisma/init-fts.ts",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:e2e": "playwright test",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
     "mcp": "tsx src/mcp/index.ts"
   },
