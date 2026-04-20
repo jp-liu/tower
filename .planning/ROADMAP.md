@@ -203,7 +203,10 @@ Plans:
   2. Clicking a .txt, .md, or .json asset opens a preview dialog — .md renders as Markdown, others as monospace text
   3. The "在文件夹中显示" button opens the system file manager with the file highlighted
   4. Each asset row shows exactly three action buttons in order: Preview, Reveal in Finder, Delete
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 56-01-PLAN.md — Image lightbox, text preview dialog, reveal API, i18n keys
+- [ ] 56-02-PLAN.md — Wire preview components into asset list UI
 **UI hint**: yes
 
 #### Phase 57: Project Import & Migration
@@ -260,7 +263,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 55. UI Fixes | 1/1 | Complete    | 2026-04-20 |
-| 56. Asset Preview | 0/? | Not started | - |
+| 56. Asset Preview | 0/2 | Not started | - |
 | 57. Project Import & Migration | 0/? | Not started | - |
 | 58. Session Dreaming | 0/? | Not started | - |
 | 59. Auto-Upload Hook | 0/? | Not started | - |
