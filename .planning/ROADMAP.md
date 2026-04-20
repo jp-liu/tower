@@ -174,7 +174,7 @@ See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full detai
 
 - [x] **Phase 55: UI Fixes** - Delete task stops propagation, shared EmptyState component, icon button hover consistency (completed 2026-04-20)
 - [x] **Phase 56: Asset Preview** - Image lightbox, text/md preview dialog, reveal in Finder, reorganized action buttons (completed 2026-04-20)
-- [ ] **Phase 57: Project Import & Migration** - Separate create vs import flows, optional fs.rename migration with pre-checks
+- [x] **Phase 57: Project Import & Migration** - Separate create vs import flows, optional fs.rename migration with pre-checks (completed 2026-04-20)
 - [ ] **Phase 58: Session Dreaming** - Deep AI analysis on session end, auto-create insight notes, timeline UI, daily summary integration
 - [ ] **Phase 59: Auto-Upload Hook** - PostToolUse hook script, file type config, upload API, env var rename, settings install button
 - [ ] **Phase 60: Resource Attribution & Task Drawer** - Show task-bound assets in project view, TaskOverviewDrawer shared component
@@ -223,7 +223,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 57-01-PLAN.md — Split create/import dialogs with auto-fill logic
-- [ ] 57-02-PLAN.md — Migration toggle with pre-checks and atomic rename
+- [x] 57-02-PLAN.md — Migration toggle with pre-checks and atomic rename
 **UI hint**: yes
 
 #### Phase 58: Session Dreaming
@@ -267,7 +267,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 55. UI Fixes | 1/1 | Complete    | 2026-04-20 |
 | 56. Asset Preview | 2/2 | Complete    | 2026-04-20 |
-| 57. Project Import & Migration | 1/2 | In Progress|  |
+| 57. Project Import & Migration | 2/2 | Complete   | 2026-04-20 |
 | 58. Session Dreaming | 0/? | Not started | - |
 | 59. Auto-Upload Hook | 0/? | Not started | - |
 | 60. Resource Attribution & Task Drawer | 0/? | Not started | - |
