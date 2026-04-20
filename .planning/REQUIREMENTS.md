@@ -15,8 +15,8 @@
 
 ## Project Import & Migration
 
-- [ ] **PROJ-01**: "新建项目" flow accepts git URL, auto-resolves local path, clones if not exist
-- [ ] **PROJ-02**: "导入项目" flow with folder browser, auto-detect git remote, auto-fill project name
+- [x] **PROJ-01**: "新建项目" flow accepts git URL, auto-resolves local path, clones if not exist
+- [x] **PROJ-02**: "导入项目" flow with folder browser, auto-detect git remote, auto-fill project name
 - [ ] **PROJ-03**: Migration toggle on import — shows target path derived from git rules, editable
 - [ ] **PROJ-04**: Migration pre-checks block if RUNNING executions, active PTY sessions, or existing worktrees; warn "建议先关闭 IDE" (non-blocking)
 - [ ] **PROJ-05**: Migration executes `fs.rename` (atomic, same-filesystem) with mkdir -p for parent dir
