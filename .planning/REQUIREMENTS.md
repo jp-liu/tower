@@ -18,13 +18,13 @@
 - [ ] **PROJ-01**: "新建项目" flow accepts git URL, auto-resolves local path, clones if not exist
 - [ ] **PROJ-02**: "导入项目" flow with folder browser, auto-detect git remote, auto-fill project name
 - [ ] **PROJ-03**: Migration toggle on import — shows target path derived from git rules, editable
-- [ ] **PROJ-04**: Migration pre-checks block if RUNNING executions, active PTY sessions, or existing worktrees
+- [ ] **PROJ-04**: Migration pre-checks block if RUNNING executions, active PTY sessions, or existing worktrees; warn "建议先关闭 IDE" (non-blocking)
 - [ ] **PROJ-05**: Migration executes `fs.rename` (atomic, same-filesystem) with mkdir -p for parent dir
 - [ ] **PROJ-06**: Migration error handling — rename failure leaves source intact, clear error messages
 
 ## Session Dreaming
 
-- [ ] **DREAM-01**: Phase 2+ AI analysis after session ends — structured JSON output (summary, insights, shouldCreateNote)
+- [ ] **DREAM-01**: Phase 2+ AI analysis on final session stop (not on continue/resume) — structured JSON output (summary, insights, shouldCreateNote); git log uses full `merge-base..HEAD`
 - [ ] **DREAM-02**: Auto-create `ProjectNote` (category: `session-insight`) when AI determines significance
 - [ ] **DREAM-03**: Execution timeline shows "归纳" row linking to insight note (inline expand + navigate)
 - [ ] **DREAM-04**: `daily_summary` report includes `insights` section listing session-insight notes created that day
@@ -32,11 +32,11 @@
 ## Auto-Upload Hook
 
 - [ ] **HOOK-01**: Global PostToolUse hook script gated by `TOWER_TASK_ID` env var (no-op when absent)
-- [ ] **HOOK-02**: Hook detects file creation/reference matching configured types and uploads to Tower API
+- [ ] **HOOK-02**: Hook detects file creation/reference matching configured types and uploads to Tower API; checks file exists before upload; respects `system.maxUploadBytes` size limit
 - [ ] **HOOK-03**: File type whitelist configurable via SystemConfig `hooks.autoUploadTypes`
 - [ ] **HOOK-04**: Internal upload API endpoint accepts taskId + filePath, copies to `data/assets/{projectId}/`
-- [ ] **HOOK-05**: Environment variable rename: `AI_MANAGER_TASK_ID` → `TOWER_TASK_ID`, add `TOWER_API_URL`
-- [ ] **HOOK-06**: Settings page "安装 Hook" button to register global hook in `~/.claude/settings.json`
+- [ ] **HOOK-05**: Environment variable rename: `AI_MANAGER_TASK_ID` → `TOWER_TASK_ID`, add `TOWER_API_URL`; signal dir rename `/tmp/ai-manager-signals/` → `/tmp/tower-signals/`
+- [ ] **HOOK-06**: Settings page "安装 Hook" button — appends hook entry to existing `~/.claude/settings.json` hooks array (never overwrite existing hooks)
 
 ## Resource Attribution & Task Drawer
 
