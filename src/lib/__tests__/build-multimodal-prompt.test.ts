@@ -8,14 +8,14 @@ vi.mock("node:fs", () => ({
 import * as fs from "node:fs";
 import { buildMultimodalPrompt } from "../build-multimodal-prompt";
 
-const CACHE_DIR = "/abs/cache";
+const CACHE_DIR = "/abs/cache/assistant";
 
-// Valid UUID v4 filenames for testing
-const UUID1 = "a1b2c3d4-e5f6-7890-abcd-ef1234567890.png";
-const UUID2 = "b2c3d4e5-f6a7-8901-bcde-f12345678901.jpg";
-const UUID3 = "c3d4e5f6-a7b8-9012-cdef-123456789012.webp";
-const UUID_EXISTS = "d4e5f6a7-b8c9-0123-defa-234567890123.png";
-const UUID_MISSING = "e5f6a7b8-c9d0-1234-efab-345678901234.jpg";
+// Valid sub-path format filenames for testing
+const SUBPATH1 = "2026-04/images/design-a1b2c3d4.png";
+const SUBPATH2 = "2026-04/images/photo-b2c3d4e5.jpg";
+const SUBPATH3 = "2025-12/images/test-c3d4e5f6.webp";
+const SUBPATH_EXISTS = "2026-04/images/exists-d4e5f6a7.png";
+const SUBPATH_MISSING = "2026-04/images/missing-e5f6a7b8.jpg";
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -32,11 +32,11 @@ describe("buildMultimodalPrompt", () => {
 
     const result = buildMultimodalPrompt(
       "/tower describe this",
-      [UUID1],
+      [SUBPATH1],
       CACHE_DIR
     );
 
-    expect(result).toContain(`/abs/cache/${UUID1}`);
+    expect(result).toContain(`/abs/cache/assistant/${SUBPATH1}`);
     expect(result).toContain("Read tool");
     expect(result).toContain("---");
   });
@@ -46,12 +46,12 @@ describe("buildMultimodalPrompt", () => {
 
     const result = buildMultimodalPrompt(
       "/tower compare",
-      [UUID1, UUID2],
+      [SUBPATH1, SUBPATH2],
       CACHE_DIR
     );
 
-    expect(result).toContain(`/abs/cache/${UUID1}`);
-    expect(result).toContain(`/abs/cache/${UUID2}`);
+    expect(result).toContain(`/abs/cache/assistant/${SUBPATH1}`);
+    expect(result).toContain(`/abs/cache/assistant/${SUBPATH2}`);
   });
 
   it("skips files that do not exist on disk", () => {
@@ -59,7 +59,7 @@ describe("buildMultimodalPrompt", () => {
 
     const result = buildMultimodalPrompt(
       "/tower hi",
-      [UUID1],
+      [SUBPATH1],
       CACHE_DIR
     );
 
@@ -72,7 +72,7 @@ describe("buildMultimodalPrompt", () => {
 
     const result = buildMultimodalPrompt(
       "/tower test",
-      [UUID1, UUID2, UUID3],
+      [SUBPATH1, SUBPATH2, SUBPATH3],
       CACHE_DIR
     );
 
@@ -82,17 +82,17 @@ describe("buildMultimodalPrompt", () => {
 
   it("includes only existing files when some are missing", () => {
     vi.mocked(fs.existsSync).mockImplementation((p) => {
-      return (p as string).includes(UUID_EXISTS);
+      return (p as string).includes("exists-d4e5f6a7");
     });
 
     const result = buildMultimodalPrompt(
       "/tower mixed",
-      [UUID_EXISTS, UUID_MISSING],
+      [SUBPATH_EXISTS, SUBPATH_MISSING],
       CACHE_DIR
     );
 
-    expect(result).toContain(`/abs/cache/${UUID_EXISTS}`);
-    expect(result).not.toContain(UUID_MISSING);
+    expect(result).toContain(`/abs/cache/assistant/${SUBPATH_EXISTS}`);
+    expect(result).not.toContain("missing-e5f6a7b8");
   });
 
   it("caps at 10 images — excess silently dropped", () => {
@@ -100,7 +100,7 @@ describe("buildMultimodalPrompt", () => {
 
     const manyImages = Array.from(
       { length: 15 },
-      (_, i) => `a0b1c2d3-e4f5-6789-abcd-${String(i).padStart(12, "0")}.png`
+      (_, i) => `2026-04/images/img-${String(i).padStart(8, "0")}.png`
     );
     const result = buildMultimodalPrompt("/tower many", manyImages, CACHE_DIR);
 
@@ -119,7 +119,7 @@ describe("buildMultimodalPrompt", () => {
 
     const result = buildMultimodalPrompt(
       "/tower check",
-      [UUID1],
+      [SUBPATH1],
       CACHE_DIR
     );
 
@@ -133,27 +133,41 @@ describe("buildMultimodalPrompt", () => {
 
     const result = buildMultimodalPrompt(
       "/tower safe",
-      ["../../etc/passwd", "../.env", UUID1],
+      ["../../etc/passwd", "../.env", SUBPATH1],
       CACHE_DIR
     );
 
-    // Only the valid UUID filename should appear
-    expect(result).toContain(UUID1);
+    // Only the valid sub-path filename should appear
+    expect(result).toContain(SUBPATH1);
     expect(result).not.toContain("passwd");
     expect(result).not.toContain(".env");
   });
 
-  it("rejects filenames that don't match UUID format", () => {
+  it("rejects filenames that don't match sub-path format", () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
 
     const result = buildMultimodalPrompt(
       "/tower strict",
-      ["not-a-uuid.png", "abc.jpg", UUID1],
+      ["not-valid.png", "abc.jpg", SUBPATH1],
       CACHE_DIR
     );
 
-    expect(result).toContain(UUID1);
-    expect(result).not.toContain("not-a-uuid");
+    expect(result).toContain(SUBPATH1);
+    expect(result).not.toContain("not-valid");
     expect(result).not.toContain("abc.jpg");
+  });
+
+  it("accepts sub-paths with Chinese characters", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+
+    const chineseSubPath = "2026-04/images/\u8bbe\u8ba1\u7a3f-a1b2c3d4.png";
+    const result = buildMultimodalPrompt(
+      "/tower check chinese",
+      [chineseSubPath],
+      CACHE_DIR
+    );
+
+    expect(result).toContain(chineseSubPath);
+    expect(result).toContain("Read tool");
   });
 });

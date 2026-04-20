@@ -43,9 +43,9 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // Validate imageFilenames: must be array of strings matching UUID filename format
+  // Validate imageFilenames: must be array of strings matching sub-path format YYYY-MM/type/filename.ext
   const IMAGE_FILENAME_RE =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|jpeg|png|gif|webp)$/i;
+    /^\d{4}-\d{2}\/(images|files)\/[^/]+\.(jpg|jpeg|png|gif|webp)$/i;
   const safeImageFilenames = Array.isArray(body.imageFilenames)
     ? body.imageFilenames.filter(
         (f): f is string => typeof f === "string" && IMAGE_FILENAME_RE.test(f)

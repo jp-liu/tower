@@ -3,9 +3,9 @@ import * as path from "node:path";
 
 const MAX_IMAGES = 10;
 
-/** UUID v4 + allowed image extensions — prevents traversal and arbitrary filenames */
-const SAFE_FILENAME_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|jpeg|png|gif|webp)$/i;
+/** Sub-path format: YYYY-MM/(images|files)/filename.ext — prevents traversal and arbitrary filenames */
+const SAFE_SUBPATH_RE =
+  /^\d{4}-\d{2}\/(images|files)\/[^/]+\.(jpg|jpeg|png|gif|webp)$/i;
 
 /**
  * Builds a multimodal prompt by appending image file paths to the prompt text.
@@ -18,7 +18,7 @@ const SAFE_FILENAME_RE =
  * so they become part of the conversation context (AI-01, AI-02).
  *
  * @param prompt - The original prompt text
- * @param imageFilenames - Array of filenames (not full paths) stored in cacheDir
+ * @param imageFilenames - Array of sub-paths (e.g. '2026-04/images/name.png') relative to cacheDir
  * @param cacheDir - Absolute path to the directory where images are stored
  * @returns The original prompt (if no valid images) or prompt with appended image section
  */
@@ -34,10 +34,10 @@ export function buildMultimodalPrompt(
   const filenames = imageFilenames.slice(0, MAX_IMAGES);
   const cacheDirNorm = path.resolve(cacheDir);
 
-  // Validate filename format, resolve path, and enforce containment
+  // Validate sub-path format, resolve path, and enforce containment
   const validPaths = filenames
-    .filter((filename) => SAFE_FILENAME_RE.test(filename))
-    .map((filename) => path.resolve(cacheDir, filename))
+    .filter((subPath) => SAFE_SUBPATH_RE.test(subPath))
+    .map((subPath) => path.resolve(cacheDir, subPath))
     .filter((absPath) => {
       if (!absPath.startsWith(cacheDirNorm + path.sep)) return false;
       return fs.existsSync(absPath);
