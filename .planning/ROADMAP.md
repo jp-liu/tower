@@ -263,7 +263,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 55. UI Fixes | 1/1 | Complete    | 2026-04-20 |
-| 56. Asset Preview | 2/2 | Complete   | 2026-04-20 |
+| 56. Asset Preview | 2/2 | Complete    | 2026-04-20 |
 | 57. Project Import & Migration | 0/? | Not started | - |
 | 58. Session Dreaming | 0/? | Not started | - |
 | 59. Auto-Upload Hook | 0/? | Not started | - |
