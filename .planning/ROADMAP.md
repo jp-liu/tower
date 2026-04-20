@@ -165,6 +165,7 @@ See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full detai
 
 </details>
 
+
 ---
 
 ## v0.96 UX Polish & Knowledge Capture (Phases 55-60)
@@ -188,7 +189,9 @@ See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full detai
   1. Clicking the delete button on a task card deletes the task without opening the detail drawer
   2. Empty states across asset list and assistant chat use the same visual component and copy pattern
   3. All clickable icon buttons show a background highlight on hover with consistent transition (no bare text highlight)
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 55-01-PLAN.md — Fix delete propagation, shared EmptyState, icon button hover
 **UI hint**: yes
 
 #### Phase 56: Asset Preview
@@ -256,7 +259,7 @@ See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full detai
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 55. UI Fixes | 0/? | Not started | - |
+| 55. UI Fixes | 0/1 | Not started | - |
 | 56. Asset Preview | 0/? | Not started | - |
 | 57. Project Import & Migration | 0/? | Not started | - |
 | 58. Session Dreaming | 0/? | Not started | - |
