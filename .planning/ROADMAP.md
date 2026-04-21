@@ -205,7 +205,7 @@ See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full detai
   5. The assistant chat icon appears to the right of the global search box in the header, not near the language toggle
 **Plans**: 3 plans
 Plans:
-- [x] 61-01-PLAN.md — Remove browse button from create dialog, add tilde warning (FORM-01, FORM-05 frontend)
+- [ ] 61-01-PLAN.md — Remove browse button from create dialog, add tilde warning (FORM-01, FORM-05 frontend)
 - [ ] 61-02-PLAN.md — Textarea max-height for import/task dialogs, Bot icon tooltip (FORM-04, UI-01)
 - [ ] 61-03-PLAN.md — Backend tilde rejection, create dialog textarea, verify FORM-02/03 (FORM-02, FORM-03, FORM-05 backend)
 **UI hint**: yes
@@ -249,7 +249,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 61. Form UX & UI Polish | 1/3 | In Progress|  |
+| 61. Form UX & UI Polish | 0/3 | Planned    |  |
 | 62. Project Analysis | 0/TBD | Not started | - |
 | 63. Mission Terminal Open | 0/TBD | Not started | - |
 | 64. Code Search | 0/TBD | Not started | - |
