@@ -186,7 +186,7 @@ See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full detai
 
 ### Summary Checklist
 
-- [ ] **Phase 61: Form UX & UI Polish** - Project path mode separation, textarea overflow fix, ~ path validation, assistant icon relocation
+- [x] **Phase 61: Form UX & UI Polish** - Project path mode separation, textarea overflow fix, ~ path validation, assistant icon relocation (completed 2026-04-21)
 - [ ] **Phase 62: Project Analysis** - "生成描述" button invokes Claude CLI to analyze localPath and auto-fill project description
 - [ ] **Phase 63: Mission Terminal Open** - "在终端打开" button on Mission card opens system terminal at project.localPath
 - [ ] **Phase 64: Code Search** - Ripgrep-powered search tab in detail page left panel with Monaco editor integration
@@ -205,9 +205,9 @@ See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full detai
   5. The assistant chat icon appears to the right of the global search box in the header, not near the language toggle
 **Plans**: 3 plans
 Plans:
-- [ ] 61-01-PLAN.md — Remove browse button from create dialog, add tilde warning (FORM-01, FORM-05 frontend)
-- [ ] 61-02-PLAN.md — Textarea max-height for import/task dialogs, Bot icon tooltip (FORM-04, UI-01)
-- [ ] 61-03-PLAN.md — Backend tilde rejection, create dialog textarea, verify FORM-02/03 (FORM-02, FORM-03, FORM-05 backend)
+- [x] 61-01-PLAN.md — Remove browse button from create dialog, add tilde warning (FORM-01, FORM-05 frontend)
+- [x] 61-02-PLAN.md — Textarea max-height for import/task dialogs, Bot icon tooltip (FORM-04, UI-01)
+- [x] 61-03-PLAN.md — Backend tilde rejection, create dialog textarea, verify FORM-02/03 (FORM-02, FORM-03, FORM-05 backend)
 **UI hint**: yes
 
 #### Phase 62: Project Analysis
@@ -249,7 +249,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 61. Form UX & UI Polish | 0/3 | Planned    |  |
+| 61. Form UX & UI Polish | 3/3 | Complete   | 2026-04-21 |
 | 62. Project Analysis | 0/TBD | Not started | - |
 | 63. Mission Terminal Open | 0/TBD | Not started | - |
 | 64. Code Search | 0/TBD | Not started | - |
