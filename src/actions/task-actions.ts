@@ -75,6 +75,13 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
     }
   }
 
+  // Dreaming: run insight analysis when task is DONE (not on every stop)
+  if (status === "DONE") {
+    import("@/lib/execution-summary").then(({ captureTaskDreaming }) => {
+      captureTaskDreaming(taskId).catch(() => {});
+    }).catch(() => {});
+  }
+
   // LC-01: Auto-cleanup worktree on CANCELLED (per D-03, D-04: only for GIT projects)
   if (status === "CANCELLED" && task.project?.localPath) {
     try {

@@ -196,7 +196,7 @@ export async function captureExecutionSummary(
     });
 
     // Phase 2: Background AI summary — fire and forget, updates DB when done
-    // Phase 3: Dreaming — chains off Phase 2, creates ProjectNote if insights found
+    // Dreaming (Phase 3) moved to captureTaskDreaming() — runs only on task DONE
     if (terminalLog && worktreePath) {
       console.error("[captureExecutionSummary] Starting background AI summary...");
       generateSummaryFromLog(terminalLog, worktreePath)
@@ -208,48 +208,85 @@ export async function captureExecutionSummary(
               data: { summary: aiSummary },
             });
           }
-          return aiSummary;
-        })
-        .then(async (aiSummary) => {
-          // Phase 3: Dreaming — generate insights from the session
-          console.error("[captureExecutionSummary] Starting dreaming analysis...");
-          const dream = await generateDreamingInsight(terminalLog, worktreePath!, aiSummary);
-          if (!dream || !dream.shouldCreateNote) {
-            console.error("[captureExecutionSummary] Dreaming: no note needed");
-            return;
-          }
-
-          // Find the task's projectId
-          const execution = await db.taskExecution.findUnique({
-            where: { id: executionId },
-            select: { taskId: true, task: { select: { projectId: true } } },
-          });
-          if (!execution) return;
-
-          // Create the ProjectNote
-          const note = await db.projectNote.create({
-            data: {
-              title: dream.noteTitle || dream.summary.slice(0, 50),
-              content: formatDreamingContent(dream),
-              category: "session-insight",
-              projectId: execution.task.projectId,
-              taskId: execution.taskId,
-            },
-          });
-
-          // Link note to execution
-          await db.taskExecution.update({
-            where: { id: executionId },
-            data: { insightNoteId: note.id },
-          });
-
-          console.error(`[captureExecutionSummary] Dreaming note created: ${note.id}`);
         })
         .catch((err: unknown) => {
-          console.error("[captureExecutionSummary] Background AI summary/dreaming failed:", err);
+          console.error("[captureExecutionSummary] Background AI summary failed:", err);
         });
     }
   } catch (err: unknown) {
     console.error("[captureExecutionSummary] Failed to capture summary:", err);
+  }
+}
+
+/**
+ * Run dreaming analysis on a completed task. Called once when task status → DONE.
+ * Collects terminal logs from all executions and generates a single insight note.
+ * Fire-and-forget — never throws.
+ */
+export async function captureTaskDreaming(taskId: string): Promise<void> {
+  try {
+    // Get all executions for this task
+    const task = await db.task.findUnique({
+      where: { id: taskId },
+      select: {
+        projectId: true,
+        executions: {
+          orderBy: { createdAt: "desc" },
+          select: { id: true, terminalLog: true, worktreePath: true, summary: true },
+        },
+      },
+    });
+    if (!task || task.executions.length === 0) return;
+
+    // Combine terminal logs from all executions (most recent first, cap at 8000 chars)
+    let combinedLog = "";
+    let worktreePath: string | null = null;
+    const summaries: string[] = [];
+    for (const exec of task.executions) {
+      if (exec.terminalLog) {
+        combinedLog += exec.terminalLog + "\n---\n";
+      }
+      if (exec.summary) {
+        summaries.push(exec.summary);
+      }
+      if (!worktreePath && exec.worktreePath) {
+        worktreePath = exec.worktreePath;
+      }
+    }
+    combinedLog = combinedLog.slice(-8000);
+    if (!combinedLog.trim()) return;
+
+    const combinedSummary = summaries.join("\n");
+    const effectivePath = worktreePath || process.cwd();
+
+    console.error(`[captureTaskDreaming] Starting for task=${taskId.slice(0, 8)}, ${task.executions.length} executions`);
+
+    const dream = await generateDreamingInsight(combinedLog, effectivePath, combinedSummary);
+    if (!dream || !dream.shouldCreateNote) {
+      console.error("[captureTaskDreaming] No note needed");
+      return;
+    }
+
+    // Create ProjectNote
+    const note = await db.projectNote.create({
+      data: {
+        title: dream.noteTitle || dream.summary.slice(0, 50),
+        content: formatDreamingContent(dream),
+        category: "session-insight",
+        projectId: task.projectId,
+        taskId,
+      },
+    });
+
+    // Link to the latest execution
+    const latestExecId = task.executions[0].id;
+    await db.taskExecution.update({
+      where: { id: latestExecId },
+      data: { insightNoteId: note.id },
+    });
+
+    console.error(`[captureTaskDreaming] Note created: ${note.id}`);
+  } catch (err: unknown) {
+    console.error("[captureTaskDreaming] Failed:", err);
   }
 }
