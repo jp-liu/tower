@@ -203,7 +203,11 @@ See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full detai
   3. All project description and task description textareas cap at a max-height and show a scrollbar when content exceeds it — the parent dialog does not grow beyond the viewport
   4. Submitting a clone directory path that starts with ~ shows a warning label and the backend returns a validation error
   5. The assistant chat icon appears to the right of the global search box in the header, not near the language toggle
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 61-01-PLAN.md — Remove browse button from create dialog, add tilde warning (FORM-01, FORM-05 frontend)
+- [ ] 61-02-PLAN.md — Textarea max-height for import/task dialogs, Bot icon tooltip (FORM-04, UI-01)
+- [ ] 61-03-PLAN.md — Backend tilde rejection, create dialog textarea, verify FORM-02/03 (FORM-02, FORM-03, FORM-05 backend)
 **UI hint**: yes
 
 #### Phase 62: Project Analysis
