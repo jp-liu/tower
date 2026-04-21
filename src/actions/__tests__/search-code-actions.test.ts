@@ -4,7 +4,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // (Phase 62 decision: mock factory runs before const declarations)
 const mockExecFileSync = vi.hoisted(() => vi.fn());
 
-vi.mock("node:child_process", () => ({
+vi.mock("child_process", () => ({
+  default: { execFileSync: mockExecFileSync },
   execFileSync: mockExecFileSync,
 }));
 
