@@ -32,6 +32,10 @@ function encodePathForClaude(path: string): string {
   for (const ch of stripped) {
     if (ch === "/") {
       result += "-";
+    } else if (ch === ".") {
+      // Claude CLI also replaces dots with dashes (confirmed by comparing
+      // actual ~/.claude/projects/ directory names with path encoding)
+      result += "-";
     } else if (ch.charCodeAt(0) > 127) {
       result += "-";
     } else {
