@@ -38,6 +38,7 @@ export const en: Translations = {
   "project.localPath": "Local Path",
   "project.localPathPlaceholder": "/Users/you/projects/my-app",
   "project.localPathHint": "Local folder path, auto-filled from Git URL",
+  "project.tildeWarning": "Use absolute path — ~ alias is not supported",
   "project.importHint": "Select an existing local project folder",
   "project.autoDetected": "Git remote auto-detected",
   "project.edit": "Edit Project",

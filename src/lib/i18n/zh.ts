@@ -41,6 +41,7 @@ export const zh = {
   "project.localPath": "本地路径",
   "project.localPathPlaceholder": "/Users/you/projects/my-app",
   "project.localPathHint": "项目在本地磁盘的文件夹路径，输入 Git 地址后自动填充",
+  "project.tildeWarning": "请输入绝对路径，不支持 ~ 别名",
   "project.importHint": "选择本地已有项目文件夹",
   "project.autoDetected": "已自动检测 Git 远程",
   "project.edit": "编辑项目",
