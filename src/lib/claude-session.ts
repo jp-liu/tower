@@ -68,6 +68,22 @@ export function ensureSessionSymlink(
 }
 
 /**
+ * Remove the worktree-encoded session directory from ~/.claude/projects/.
+ * Called when a worktree is removed (task DONE/CANCELLED) to clean up symlinks.
+ */
+export function cleanupSessionSymlinks(worktreePath: string): void {
+  const dir = join(PROJECTS_DIR, encodePathForClaude(worktreePath));
+  if (!existsSync(dir)) return;
+
+  try {
+    const { rmSync } = require("fs") as typeof import("fs");
+    rmSync(dir, { recursive: true, force: true });
+  } catch {
+    // Best effort — stale symlinks are harmless
+  }
+}
+
+/**
  * Find Claude session directory for a given cwd path.
  * Uses exact path encoding (matching Claude CLI's algorithm) with fallback to fuzzy matching.
  */
