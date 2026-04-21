@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const mockExecFileFn = vi.hoisted(() => vi.fn());
+
 vi.mock("@/lib/db", () => ({
   db: {
     project: { findUnique: vi.fn(), update: vi.fn() },
@@ -20,11 +22,19 @@ vi.mock("fs/promises", async (importOriginal) => {
 vi.mock("@/lib/pty/session-store", () => ({
   getSession: vi.fn(() => undefined),
 }));
+vi.mock("child_process", () => ({
+  default: { execFile: mockExecFileFn },
+  execFile: mockExecFileFn,
+  execFileSync: vi.fn(),
+  spawn: vi.fn(),
+  spawnSync: vi.fn(),
+  exec: vi.fn(),
+}));
 
 import { db } from "@/lib/db";
 import { existsSync } from "fs";
 import { rename, mkdir, readdir } from "fs/promises";
-import { checkMigrationSafety, migrateProjectPath } from "@/actions/project-actions";
+import { checkMigrationSafety, migrateProjectPath, analyzeProjectDirectory } from "@/actions/project-actions";
 
 const mockExistsSync = vi.mocked(existsSync);
 const mockRename = vi.mocked(rename);
@@ -119,4 +129,86 @@ describe("migrateProjectPath", () => {
   // FS mock interception issue — vitest resolves fs→node:fs internally
   it.todo("succeeds with atomic rename + DB update");
   it.todo("returns EXDEV error for cross-device rename");
+});
+
+// ---------------------------------------------------------------------------
+// analyzeProjectDirectory
+// ---------------------------------------------------------------------------
+
+describe("analyzeProjectDirectory", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("Test 1: throws for empty string localPath", async () => {
+    await expect(analyzeProjectDirectory("")).rejects.toThrow("无效的本地路径");
+  });
+
+  it("Test 2: throws for non-string localPath (null coerced)", async () => {
+    // @ts-expect-error testing invalid input
+    await expect(analyzeProjectDirectory(null)).rejects.toThrow("无效的本地路径");
+  });
+
+  it("Test 3: throws for localPath starting with tilde", async () => {
+    await expect(analyzeProjectDirectory("~/my-project")).rejects.toThrow(
+      "不支持 ~ 别名，请提供绝对路径"
+    );
+  });
+
+  it("Test 4: valid absolute path calls execFile with correct args", async () => {
+    mockExecFileFn.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (err: null, stdout: string) => void;
+      cb(null, "# My Project\n");
+      return {} as ReturnType<typeof execFile>;
+    });
+
+    await analyzeProjectDirectory("/valid/path");
+
+    expect(mockExecFileFn).toHaveBeenCalledWith(
+      "claude",
+      expect.arrayContaining(["-p", expect.stringContaining("package.json"), "--no-session-persistence", "--max-turns", "1"]),
+      expect.objectContaining({ cwd: "/valid/path", timeout: 30000, encoding: "utf-8" }),
+      expect.any(Function)
+    );
+  });
+
+  it("Test 5: valid path resolves with trimmed stdout on success", async () => {
+    mockExecFileFn.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (err: null, stdout: string) => void;
+      cb(null, "# My Project\n...\n");
+      return {} as ReturnType<typeof execFile>;
+    });
+
+    const result = await analyzeProjectDirectory("/valid/path");
+    expect(result).toBe("# My Project\n...");
+  });
+
+  it("Test 6: execFile error propagates as rejection", async () => {
+    const execError = new Error("timeout exceeded");
+    mockExecFileFn.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (err: Error, stdout: string) => void;
+      cb(execError, "");
+      return {} as ReturnType<typeof execFile>;
+    });
+
+    await expect(analyzeProjectDirectory("/valid/path")).rejects.toThrow("timeout exceeded");
+  });
+
+  it("Test 7: env object contains exactly PATH, HOME, USER, TMPDIR, TERM and NOT DATABASE_URL", async () => {
+    mockExecFileFn.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (err: null, stdout: string) => void;
+      cb(null, "result");
+      return {} as ReturnType<typeof execFile>;
+    });
+
+    await analyzeProjectDirectory("/valid/path");
+
+    const callOptions = mockExecFileFn.mock.calls[0][2] as { env: Record<string, unknown> };
+    const envKeys = Object.keys(callOptions.env);
+    expect(envKeys).toEqual(expect.arrayContaining(["PATH", "HOME", "USER", "TMPDIR", "TERM"]));
+    expect(envKeys).not.toContain("DATABASE_URL");
+    expect(envKeys).not.toContain("NODE_OPTIONS");
+    // Exactly those 5 keys
+    expect(envKeys.length).toBe(5);
+  });
 });
