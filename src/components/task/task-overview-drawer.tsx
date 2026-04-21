@@ -85,7 +85,7 @@ export function TaskOverviewDrawer({
         <ScrollArea className="flex-1 h-[calc(100%-80px)]">
           {isPending && !task ? (
             <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
-              {t("common.loading")}
+              {t("assets.loading")}
             </div>
           ) : task ? (
             <div className="p-4 space-y-4">

@@ -208,3 +208,7 @@ pnpm mcp            # Start MCP Server (standalone process)
 
 - [ ] Non-ASCII path support — Claude CLI encodes non-ASCII characters (Chinese, Japanese, etc.) as dashes in session directory names; current matching uses ASCII-only segments as workaround, need to replicate Claude's exact encoding algorithm for reliable session lookup
 - [ ] Terminal rendering stability — investigate garbled text when multiple xterm.js terminals run simultaneously (WebGL context conflicts)
+- [x] ~~BUG: create_task references 路径不完整~~ — 已修复：refText 改为完整绝对路径 + autoStart prompt 从 DB 重读
+- [x] ~~BUG: 助手聊天气泡区域不滚动~~ — 已修复：ScrollArea 加 overflow-hidden
+- [x] ~~FEAT: 助手聊天气泡复制按钮~~ — 已实现：assistant bubble hover 显示复制，tool bubble header 显示复制
+- [x] ~~FEAT: 助手空状态功能引导~~ — 已实现：4 个 suggestion chips（创建项目/任务/查进度/日报）

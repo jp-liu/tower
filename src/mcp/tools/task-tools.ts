@@ -148,18 +148,19 @@ export const taskTools = {
           }
         }
 
-        // Append reference info to task description
+        // Append reference info to task description with full absolute paths
         if (attachedFiles.length > 0) {
-          const refText = attachedFiles.map((f) => `- ${f}`).join("\n");
+          const refText = attachedFiles.map((f) => `- ${join(assetsDir, f)}`).join("\n");
           const updatedDesc = (task.description ?? "") + `\n\nAttached references:\n${refText}`;
           await db.task.update({ where: { id: task.id }, data: { description: updatedDesc } });
         }
       }
 
-      // Auto-start execution if requested
+      // Auto-start execution if requested — use updated description (includes reference paths)
       if (args.autoStart) {
         const PORT = process.env.PORT ?? "3000";
-        const prompt = args.description || args.title;
+        const updatedTask = await db.task.findUnique({ where: { id: task.id }, select: { description: true } });
+        const prompt = updatedTask?.description || args.description || args.title;
         try {
           const res = await fetch(`http://localhost:${PORT}/api/internal/terminal/${task.id}/start`, {
             method: "POST",

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Bot, ChevronRight, ImageOff, User } from "lucide-react";
+import { Bot, Check, ChevronRight, Copy, ImageOff, User } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import type { ChatMessage } from "@/hooks/use-assistant-chat";
 
@@ -14,6 +14,32 @@ import type { ChatMessage } from "@/hooks/use-assistant-chat";
 interface AssistantChatBubbleProps {
   message: ChatMessage;
   onImagePreview?: (url: string) => void;
+}
+
+// ---------------------------------------------------------------------------
+// CopyButton — hover-visible copy action
+// ---------------------------------------------------------------------------
+
+function CopyButton({ text, className }: { text: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  const { t } = useI18n();
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className={`rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground ${className ?? ""}`}
+      aria-label={t("assistant.copy")}
+    >
+      {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+    </button>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -108,42 +134,48 @@ function UserBubble({
 function AssistantBubble({ content }: { content: string }) {
   return (
     <div
-      className="flex justify-start gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200"
+      className="group/bubble flex justify-start gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200"
       aria-label="Assistant"
     >
       <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 mt-1">
         <Bot className="size-3.5 text-primary" />
       </div>
-      <div className="bg-muted text-foreground max-w-[85%] rounded-2xl rounded-bl-sm px-3 py-2">
-        <div className="prose prose-sm dark:prose-invert max-w-none">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              code({ inline, className, children, ...props }: any) {
-                if (inline) {
+      <div className="max-w-[85%]">
+        <div className="bg-muted text-foreground rounded-2xl rounded-bl-sm px-3 py-2">
+          <div className="prose prose-sm dark:prose-invert max-w-none">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                code({ inline, className, children, ...props }: any) {
+                  if (inline) {
+                    return (
+                      <code
+                        className="bg-muted/80 px-1 rounded text-[13px] font-mono"
+                        {...props}
+                      >
+                        {children}
+                      </code>
+                    );
+                  }
                   return (
                     <code
-                      className="bg-muted/80 px-1 rounded text-[13px] font-mono"
+                      className="bg-muted rounded-md p-3 font-mono text-[13px] overflow-x-auto block"
                       {...props}
                     >
                       {children}
                     </code>
                   );
-                }
-                return (
-                  <code
-                    className="bg-muted rounded-md p-3 font-mono text-[13px] overflow-x-auto block"
-                    {...props}
-                  >
-                    {children}
-                  </code>
-                );
-              },
-            }}
-          >
-            {content}
-          </ReactMarkdown>
+                },
+              }}
+            >
+              {content}
+            </ReactMarkdown>
+          </div>
+        </div>
+        {/* Action bar — visible on hover */}
+        <div className="flex items-center gap-0.5 mt-0.5 opacity-0 group-hover/bubble:opacity-100 transition-opacity">
+          <CopyButton text={content} />
         </div>
       </div>
     </div>
@@ -196,7 +228,7 @@ function ToolBubble({ content, toolName }: { content: string; toolName?: string 
   const displayName = toolName ?? t("assistant.toolLabel");
 
   return (
-    <div className="flex justify-start gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+    <div className="group/tool flex justify-start gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
       {/* Spacer to align with assistant avatar */}
       <div className="size-7 shrink-0" />
       <div className="bg-muted/60 border border-border max-w-[90%] rounded-lg px-3 py-1">
@@ -213,7 +245,9 @@ function ToolBubble({ content, toolName }: { content: string; toolName?: string 
             }`}
           />
           <span className="text-xs font-semibold text-foreground truncate">{displayName}</span>
-          <span className="ml-auto bg-muted text-muted-foreground text-[10px] px-1.5 rounded shrink-0">
+          <span className="flex-1" />
+          <CopyButton text={content} className="opacity-0 group-hover/tool:opacity-100" />
+          <span className="bg-muted text-muted-foreground text-[10px] px-1.5 rounded shrink-0">
             {t("assistant.toolLabel")}
           </span>
         </button>

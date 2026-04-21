@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bot, Loader2, SendHorizonal, Square } from "lucide-react";
-import { EmptyState } from "@/components/ui/empty-state";
+import { Bot, ClipboardList, FolderPlus, Loader2, Search, SendHorizonal, Square, TrendingUp } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -108,7 +107,7 @@ export function AssistantChat() {
   return (
     <div className="flex flex-col h-full">
       {/* Message list */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 overflow-hidden">
         <div
           className="flex flex-col gap-3 p-4 min-h-full"
           role="log"
@@ -119,7 +118,27 @@ export function AssistantChat() {
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
             </div>
           ) : messages.length === 0 ? (
-            <EmptyState icon={Bot} title={t("assistant.emptyTitle")} description={t("assistant.emptyBody")} className="h-full px-6 gap-3" />
+            <div className="flex flex-col items-center justify-center h-full gap-4 px-6">
+              <Bot className="size-8 text-muted-foreground/40" />
+              <h3 className="text-sm font-semibold text-foreground">{t("assistant.emptyTitle")}</h3>
+              <div className="grid grid-cols-1 gap-2 w-full max-w-[280px]">
+                {[
+                  { icon: FolderPlus, label: t("assistant.suggestion.createProject") },
+                  { icon: ClipboardList, label: t("assistant.suggestion.createTask") },
+                  { icon: Search, label: t("assistant.suggestion.checkProgress") },
+                  { icon: TrendingUp, label: t("assistant.suggestion.dailySummary") },
+                ].map(({ icon: Icon, label }) => (
+                  <button
+                    key={label}
+                    className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground text-left"
+                    onClick={() => { setInputValue(label); inputRef.current?.focus(); }}
+                  >
+                    <Icon className="size-3.5 shrink-0" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
           ) : (
             messages.map((m) => (
               <AssistantChatBubble
