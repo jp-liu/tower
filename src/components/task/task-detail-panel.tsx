@@ -163,11 +163,13 @@ export function TaskDetailPanel({
   const handleResume = useCallback(async (sessionId: string) => {
     setIsExecuting(true);
     respawningRef.current = true;
-    setActiveWorktreePath(null); // unmount old terminal
+    setActiveWorktreePath(null);
+    // Wait one frame to ensure React commits the unmount before remounting
+    await new Promise((r) => setTimeout(r, 50));
     try {
       const { worktreePath } = await resumePtyExecution(task.id, sessionId);
       respawningRef.current = false;
-      setActiveWorktreePath(worktreePath); // remount with new PTY
+      setActiveWorktreePath(worktreePath);
       setTaskStatus("IN_PROGRESS");
     } catch {
       respawningRef.current = false;
@@ -179,6 +181,7 @@ export function TaskDetailPanel({
     setIsExecuting(true);
     respawningRef.current = true;
     setActiveWorktreePath(null);
+    await new Promise((r) => setTimeout(r, 50));
     try {
       const { worktreePath } = await continueLatestPtyExecution(task.id);
       respawningRef.current = false;

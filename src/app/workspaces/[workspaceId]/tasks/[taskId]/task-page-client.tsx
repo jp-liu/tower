@@ -193,6 +193,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     setIsExecuting(true);
     respawningRef.current = true;
     setActiveWorktreePath(null);
+    await new Promise((r) => setTimeout(r, 50));
     try {
       const { worktreePath } = await resumePtyExecution(task.id, sessionId);
       respawningRef.current = false;
@@ -208,6 +209,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     setIsExecuting(true);
     respawningRef.current = true;
     setActiveWorktreePath(null);
+    await new Promise((r) => setTimeout(r, 50));
     try {
       const { worktreePath } = await continueLatestPtyExecution(task.id);
       respawningRef.current = false;
