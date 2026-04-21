@@ -212,3 +212,25 @@ pnpm mcp            # Start MCP Server (standalone process)
 - [x] ~~BUG: 助手聊天气泡区域不滚动~~ — 已修复：ScrollArea 加 overflow-hidden
 - [x] ~~FEAT: 助手聊天气泡复制按钮~~ — 已实现：assistant bubble hover 显示复制，tool bubble header 显示复制
 - [x] ~~FEAT: 助手空状态功能引导~~ — 已实现：4 个 suggestion chips（创建项目/任务/查进度/日报）
+- [ ] **CLI 集成抽象层 — 多 CLI 适配接口规范**
+  - **背景：** 当前 hook（SessionStart / PostToolUse）、环境变量注入（TOWER_TASK_ID）、session resume 等机制全部硬编码为 Claude Code。后续需要支持其他 AI CLI（Codex、Gemini CLI、OpenCode 等）
+  - **目标：** 定义 CLI Adapter 需要实现的接口，使 Tower 的任务执行、会话恢复、文件捕获、知识沉淀等功能与具体 CLI 解耦
+  - **CLI Adapter 接口清单（需实现）：**
+    - `spawn(cwd, args, env)` — 启动 CLI 进程（PTY 模式）
+    - `resume(sessionId)` — 恢复指定会话（对应 `--resume`）
+    - `continue()` — 继续最近会话（对应 `--continue`）
+    - `getSessionId()` — 获取当前会话 ID（通过 hook 上报或 stdout 解析）
+    - `getHooks()` — 返回需要注册的 hook 配置（不同 CLI 的 hook 格式/位置不同）
+    - `installHooks()` — 自动注入 hook 到 CLI 的配置文件
+    - `uninstallHooks()` — 卸载 hook
+    - `getSettingsPath()` — CLI 配置文件路径（Claude: `~/.claude/settings.json`）
+    - `getSessionsDir()` — 会话存储目录
+    - `buildEnvOverrides(taskId, apiUrl)` — 构建注入的环境变量
+  - **Tower 侧依赖的 CLI 能力：**
+    - 环境变量传递（PTY spawn 时注入）
+    - Hook 机制（至少支持 session start + tool use 两个时机）
+    - 会话持久化 + resume/continue
+    - MCP server 支持（Tower MCP 工具链）
+  - **参考：** 当前 CliProfile 模型已有 `command`、`baseArgs`、`envVars` 字段，可作为 Adapter 配置基础
+  - **时机：** 等第二个 CLI 需要接入时再做（如 Codex CLI），用 GSD milestone 驱动
+  - **原因：** 目前只有 Claude 一个实现，过早抽象容易设计出不匹配实际需求的接口。两个 CLI 对比才能提炼正确的抽象边界。现阶段保持 Claude-specific 代码，TODO 记录接口清单供后续参考
