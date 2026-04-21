@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal, Square, CheckCircle2, Search } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -158,11 +158,15 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     return () => { cancelled = true; };
   }, [task.id, taskStatus]);
 
+  // Track whether a new execution is being spawned — used to ignore stale WS close events
+  const spawningRef = useRef(false);
+
   const handleExecute = useCallback(async () => {
     if (isExecuting) return;
     setIsExecuting(true);
     try {
       const { worktreePath } = await startPtyExecution(task.id, "", selectedPromptId);
+      spawningRef.current = true;
       setActiveWorktreePath(worktreePath);
       setTerminalKey((k) => k + 1);
     } catch (err) {
@@ -172,6 +176,10 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   }, [task.id, isExecuting, selectedPromptId]);
 
   const handleSessionEnd = useCallback((exitCode: number) => {
+    if (spawningRef.current) {
+      spawningRef.current = false;
+      return;
+    }
     setIsExecuting(false);
     setActiveWorktreePath(null);
     removePortal(task.id);
@@ -193,6 +201,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     setIsExecuting(true);
     try {
       const { worktreePath } = await resumePtyExecution(task.id, sessionId);
+      spawningRef.current = true;
       setActiveWorktreePath(worktreePath);
       setTerminalKey((k) => k + 1);
       setTaskStatus("IN_PROGRESS");
@@ -206,6 +215,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     setIsExecuting(true);
     try {
       const { worktreePath } = await continueLatestPtyExecution(task.id);
+      spawningRef.current = true;
       setActiveWorktreePath(worktreePath);
       setTerminalKey((k) => k + 1);
       setTaskStatus("IN_PROGRESS");
