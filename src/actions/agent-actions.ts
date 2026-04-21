@@ -187,7 +187,11 @@ export async function resumePtyExecution(
 
   if (!prevExec) throw new Error("Previous execution not found");
 
-  const baseCwd = prevExec.worktreePath ?? task.project.localPath;
+  // Resume cwd: CLI stores session files under the git root project path (not worktree path),
+  // because worktree's .git file redirects to the main repo. --resume requires matching cwd
+  // to find the session, so we must use the main project localPath.
+  // The worktree path is still used as the working directory for the actual execution.
+  const baseCwd = task.project.localPath;
   const cwd = task.subPath ? join(baseCwd, task.subPath) : baseCwd;
 
   // Read CliProfile — determines which CLI binary to spawn
@@ -304,7 +308,8 @@ export async function continueLatestPtyExecution(
     data: { status: "FAILED", endedAt: new Date() },
   });
 
-  const baseCwd = latestExec?.worktreePath ?? task.project.localPath;
+  // --continue also searches by cwd — use main project path (same reason as resume)
+  const baseCwd = task.project.localPath;
   const cwd = task.subPath ? join(baseCwd, task.subPath) : baseCwd;
 
   // Read CliProfile
