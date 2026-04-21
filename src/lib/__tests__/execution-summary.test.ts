@@ -11,7 +11,6 @@ vi.mock("@/lib/db", () => ({
 }));
 
 vi.mock("@/lib/claude-session", () => ({
-  findLatestSessionId: vi.fn().mockReturnValue(null),
   generateSummaryFromLog: vi.fn().mockResolvedValue(null),
 }));
 
@@ -25,13 +24,12 @@ vi.mock("fs", () => ({
 
 import { captureExecutionSummary } from "../execution-summary";
 import { db } from "@/lib/db";
-import { findLatestSessionId, generateSummaryFromLog } from "@/lib/claude-session";
+import { generateSummaryFromLog } from "@/lib/claude-session";
 import { execFileSync } from "child_process";
 import { existsSync } from "fs";
 
 // Typed mock helpers
 const mockUpdate = vi.mocked(db.taskExecution.update);
-const mockFindLatestSessionId = vi.mocked(findLatestSessionId);
 const mockGenerateSummaryFromLog = vi.mocked(generateSummaryFromLog);
 const mockExecFileSync = vi.mocked(execFileSync);
 const mockExistsSync = vi.mocked(existsSync);
@@ -88,7 +86,7 @@ describe("captureExecutionSummary", () => {
 
   it("updates DB with git data when worktreePath exists and is a git repo", async () => {
     mockExistsSync.mockReturnValue(true);
-    mockFindLatestSessionId.mockReturnValue("session-abc");
+
     mockGenerateSummaryFromLog.mockResolvedValue("AI summary");
     setupGitMocks();
 
@@ -186,7 +184,6 @@ describe("captureExecutionSummary", () => {
 
   it("calls generateSummaryFromLog for background AI summary when terminalLog and worktreePath are present", async () => {
     mockExistsSync.mockReturnValue(true);
-    mockFindLatestSessionId.mockReturnValue(null);
     mockGenerateSummaryFromLog.mockResolvedValue("Background AI summary");
     setupGitMocks();
 

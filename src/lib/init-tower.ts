@@ -4,8 +4,9 @@
  * Idempotent — skips files that already exist.
  */
 
-import { existsSync, mkdirSync, copyFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+import { homedir } from "os";
 
 const CLAUDE_MD_CONTENT = `# Tower Assistant
 
@@ -53,5 +54,65 @@ export function ensureTowerDir(): string {
     console.error("[init-tower] Copied SKILL.md → .tower/.claude/skills/tower/");
   }
 
+  // 4. Auto-install Claude Code hooks (SessionStart + PostToolUse)
+  ensureClaudeHooks();
+
   return towerDir;
+}
+
+/**
+ * Ensure Tower hooks are registered in ~/.claude/settings.json.
+ * Idempotent — skips if hooks already present.
+ */
+function ensureClaudeHooks(): void {
+  const settingsPath = join(homedir(), ".claude", "settings.json");
+  const root = process.cwd();
+
+  let settings: Record<string, unknown> = {};
+  try {
+    settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+  } catch {
+    // File doesn't exist or invalid JSON — start fresh
+  }
+
+  const hooks = (settings["hooks"] as Record<string, unknown>) ?? {};
+  let changed = false;
+
+  // SessionStart hook — reports sessionId
+  const sessionStartEntries = (hooks["SessionStart"] as Array<{ hooks: Array<{ command: string }> }>) ?? [];
+  const hasSessionStart = sessionStartEntries.some(
+    (e) => e.hooks?.some((h) => h.command?.includes("session-start-hook.js"))
+  );
+  if (!hasSessionStart) {
+    const hookPath = join(root, "scripts", "session-start-hook.js");
+    sessionStartEntries.push({
+      hooks: [{ command: `node "${hookPath}"`, timeout: 5, type: "command" } as never],
+    });
+    hooks["SessionStart"] = sessionStartEntries;
+    changed = true;
+    console.error("[init-tower] Installed SessionStart hook");
+  }
+
+  // PostToolUse hook — auto-uploads files
+  const postToolEntries = (hooks["PostToolUse"] as Array<{ hooks: Array<{ command: string }> }>) ?? [];
+  const hasPostTool = postToolEntries.some(
+    (e) => e.hooks?.some((h) => h.command?.includes("post-tool-hook.js"))
+  );
+  if (!hasPostTool) {
+    const hookPath = join(root, "scripts", "post-tool-hook.js");
+    postToolEntries.push({
+      hooks: [{ command: `node "${hookPath}"`, timeout: 10, type: "command" } as never],
+      matcher: "Write|Edit|MultiEdit",
+    } as never);
+    hooks["PostToolUse"] = postToolEntries;
+    changed = true;
+    console.error("[init-tower] Installed PostToolUse hook");
+  }
+
+  if (changed) {
+    settings["hooks"] = hooks;
+    const dir = join(homedir(), ".claude");
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8");
+  }
 }
