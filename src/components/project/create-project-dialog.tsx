@@ -12,7 +12,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import { useI18n } from "@/lib/i18n";
 import { toCloneUrl, parseGitUrl } from "@/lib/git-url";
 import { resolveGitLocalPath } from "@/actions/config-actions";
@@ -44,7 +43,6 @@ export function CreateProjectDialog({
   const [gitUrl, setGitUrl] = useState("");
   const [localPath, setLocalPath] = useState("");
   const [localPathManual, setLocalPathManual] = useState(false);
-  const [showFolderBrowser, setShowFolderBrowser] = useState(false);
   const [projectType, setProjectType] = useState<"FRONTEND" | "BACKEND">("FRONTEND");
   const [cloneStatus, setCloneStatus] = useState<"idle" | "cloning" | "success" | "error">("idle");
   const [cloneError, setCloneError] = useState("");
@@ -152,22 +150,18 @@ export function CreateProjectDialog({
             <div>
               <label className="text-xs font-medium text-muted-foreground">{t("project.localPath")}</label>
               <p className="text-[10px] text-muted-foreground mt-0.5">{t("project.localPathHint")}</p>
-              <div className="mt-1.5 flex gap-2">
-                <Input
-                  placeholder={t("project.localPathPlaceholder")}
-                  value={localPath}
-                  onChange={(e) => handleLocalPathChange(e.target.value)}
-                  className="flex-1 font-mono text-xs"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowFolderBrowser(true)}
-                  className="shrink-0"
-                >
-                  {t("folder.browse")}
-                </Button>
-              </div>
+              <Input
+                placeholder={t("project.localPathPlaceholder")}
+                value={localPath}
+                onChange={(e) => handleLocalPathChange(e.target.value)}
+                className="mt-1.5 font-mono text-xs w-full"
+              />
+              {localPath.trim().startsWith("~") && (
+                <p className="mt-1 flex items-center gap-1 text-[11px] text-amber-400">
+                  <AlertCircle className="h-3 w-3" />
+                  {t("project.tildeWarning")}
+                </p>
+              )}
 
               {/* Clone button */}
               {gitUrl.trim() && localPath.trim() && (
@@ -264,12 +258,6 @@ export function CreateProjectDialog({
         </DialogContent>
       </Dialog>
 
-      {/* Folder Browser Dialog */}
-      <FolderBrowserDialog
-        open={showFolderBrowser}
-        onOpenChange={setShowFolderBrowser}
-        onSelect={(p) => handleLocalPathChange(p)}
-      />
     </>
   );
 }
