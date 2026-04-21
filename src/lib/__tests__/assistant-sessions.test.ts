@@ -84,31 +84,27 @@ describe("addSession", () => {
     expect(sessions[1].id).toBe("s2");
   });
 
-  it("caps at MAX_SESSIONS (20) — oldest is dropped when 21st session added", () => {
-    // Add 20 sessions (ids s1..s20)
-    for (let i = 1; i <= 20; i++) {
+  it("caps at MAX_SESSIONS (10) — oldest is dropped when 11th session added", () => {
+    for (let i = 1; i <= 10; i++) {
       addSession(makeSession(`s${i}`));
     }
-    expect(getSessions()).toHaveLength(20);
+    expect(getSessions()).toHaveLength(10);
 
-    // Add the 21st — should drop the oldest (s1, which is at the tail)
-    addSession(makeSession("s21"));
+    addSession(makeSession("s11"));
     const sessions = getSessions();
-    expect(sessions).toHaveLength(20);
-    expect(sessions[0].id).toBe("s21");
-    // s1 was added first, so after 20 prepends it's at the tail and gets dropped
+    expect(sessions).toHaveLength(10);
+    expect(sessions[0].id).toBe("s11");
     const ids = sessions.map((s) => s.id);
     expect(ids).not.toContain("s1");
   });
 
   it("respects MAX_SESSIONS cap even when deduplication occurs", () => {
-    for (let i = 1; i <= 20; i++) {
+    for (let i = 1; i <= 10; i++) {
       addSession(makeSession(`s${i}`));
     }
-    // Re-add s10 — dedup means no new entry; count stays 20
-    addSession(makeSession("s10"));
-    expect(getSessions()).toHaveLength(20);
-    expect(getSessions()[0].id).toBe("s10");
+    addSession(makeSession("s5"));
+    expect(getSessions()).toHaveLength(10);
+    expect(getSessions()[0].id).toBe("s5");
   });
 });
 

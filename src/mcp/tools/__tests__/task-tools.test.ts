@@ -37,6 +37,10 @@ vi.mock("../../db", () => ({
 vi.mock("child_process", () => ({
   execFileSync: vi.fn(),
 }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/actions/task-actions", () => ({
+  updateTaskStatus: vi.fn(async (taskId: string, status: string) => ({ id: taskId, status })),
+}));
 
 vi.mock("fs", () => ({
   existsSync: vi.fn(),
@@ -382,17 +386,12 @@ describe("task-tools", () => {
   // ─── move_task ────────────────────────────────────────────────────────────
 
   describe("move_task", () => {
-    it("updates task status to the new value", async () => {
-      const updatedTask = { id: "task1", status: "DONE" };
-      mockDb.task.update.mockResolvedValue(updatedTask);
-
+    it("delegates to updateTaskStatus", async () => {
       const result = await taskTools.move_task.handler({ taskId: "task1", status: "DONE" });
 
-      expect(mockDb.task.update).toHaveBeenCalledWith({
-        where: { id: "task1" },
-        data: { status: "DONE" },
-      });
-      expect(result).toEqual(updatedTask);
+      const { updateTaskStatus } = await import("@/actions/task-actions");
+      expect(updateTaskStatus).toHaveBeenCalledWith("task1", "DONE");
+      expect(result).toEqual({ id: "task1", status: "DONE" });
     });
   });
 

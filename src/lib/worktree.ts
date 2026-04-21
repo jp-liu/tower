@@ -109,14 +109,6 @@ export async function removeWorktree(
   const worktreePath = path.join(localPath, ".worktrees", "task-" + taskId);
   const worktreeBranch = "task/" + taskId;
 
-  // Clean up session symlinks in ~/.claude/projects/ for this worktree
-  try {
-    const { cleanupSessionSymlinks } = await import("@/lib/claude-session");
-    cleanupSessionSymlinks(worktreePath);
-  } catch {
-    // Best effort
-  }
-
   // D-11: Only remove worktree dir if it exists
   if (existsSync(worktreePath)) {
     execFileSync(

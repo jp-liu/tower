@@ -187,21 +187,8 @@ export async function resumePtyExecution(
 
   if (!prevExec) throw new Error("Previous execution not found");
 
-  // CLI stores session files under ~/.claude/projects/{encoded-git-root}/, keyed by the main
-  // project path (not worktree). --resume needs the session file in the cwd-encoded directory.
-  // Symlink the session file from main project dir to worktree-encoded dir so we can keep
-  // cwd as worktree path (preserving branch isolation for file operations).
   const baseCwd = prevExec.worktreePath ?? task.project.localPath;
   const cwd = task.subPath ? join(baseCwd, task.subPath) : baseCwd;
-
-  if (prevExec.worktreePath && previousSessionId) {
-    try {
-      const { ensureSessionSymlink } = await import("@/lib/claude-session");
-      ensureSessionSymlink(previousSessionId, task.project.localPath, prevExec.worktreePath);
-    } catch {
-      // Best effort
-    }
-  }
 
   // Read CliProfile — determines which CLI binary to spawn
   const profile = await db.cliProfile.findFirst({ where: { isDefault: true } });
@@ -317,18 +304,8 @@ export async function continueLatestPtyExecution(
     data: { status: "FAILED", endedAt: new Date() },
   });
 
-  // --continue searches by cwd — symlink latest session from main project dir to worktree dir
   const baseCwd = latestExec?.worktreePath ?? task.project.localPath;
   const cwd = task.subPath ? join(baseCwd, task.subPath) : baseCwd;
-
-  if (latestExec?.worktreePath && latestExec.sessionId) {
-    try {
-      const { ensureSessionSymlink } = await import("@/lib/claude-session");
-      ensureSessionSymlink(latestExec.sessionId, task.project.localPath, latestExec.worktreePath);
-    } catch {
-      // Best effort
-    }
-  }
 
   // Read CliProfile
   const profile = await db.cliProfile.findFirst({ where: { isDefault: true } });

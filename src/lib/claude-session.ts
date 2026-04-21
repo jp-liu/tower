@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdirSync, readdirSync, rmdirSync, statSync, symlinkSync, unlinkSync } from "fs";
+import { existsSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { execFile, execFileSync } from "child_process";
 import { homedir } from "os";
@@ -45,63 +45,6 @@ function encodePathForClaude(path: string): string {
   return "-" + result;
 }
 
-/**
- * Ensure a session .jsonl file is accessible from a worktree-encoded project directory.
- * CLI stores sessions under the git root path encoding, but --resume with worktree cwd
- * looks in the worktree path encoding. This creates a symlink so both paths find it.
- */
-export function ensureSessionSymlink(
-  sessionId: string,
-  projectLocalPath: string,
-  worktreePath: string
-): void {
-  const srcDir = join(PROJECTS_DIR, encodePathForClaude(projectLocalPath));
-  const dstDir = join(PROJECTS_DIR, encodePathForClaude(worktreePath));
-  const srcFile = join(srcDir, `${sessionId}.jsonl`);
-  const dstFile = join(dstDir, `${sessionId}.jsonl`);
-
-  if (!existsSync(srcFile)) return;
-
-  try {
-    mkdirSync(dstDir, { recursive: true });
-    symlinkSync(srcFile, dstFile);
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-    // EEXIST is fine — symlink already created by concurrent call
-  }
-}
-
-/**
- * Remove only symlinks from the worktree-encoded session directory.
- * Preserves real session files that CLI may have created directly.
- * Called when a worktree is removed (task DONE/CANCELLED).
- */
-export function cleanupSessionSymlinks(worktreePath: string): void {
-  const dir = join(PROJECTS_DIR, encodePathForClaude(worktreePath));
-  if (!existsSync(dir)) return;
-
-  try {
-    const entries = readdirSync(dir);
-    for (const entry of entries) {
-      const fullPath = join(dir, entry);
-      try {
-        const stat = lstatSync(fullPath);
-        if (stat.isSymbolicLink()) {
-          unlinkSync(fullPath);
-        }
-      } catch {
-        // Skip entries we can't stat
-      }
-    }
-    // Remove the directory only if it's now empty
-    const remaining = readdirSync(dir);
-    if (remaining.length === 0) {
-      rmdirSync(dir);
-    }
-  } catch {
-    // Best effort
-  }
-}
 
 /**
  * Find Claude session directory for a given cwd path.
