@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal, Square, CheckCircle2, Search } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -97,8 +97,6 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const [activeWorktreePath, setActiveWorktreePath] = useState<string | null>(
     latestExecution?.status === "RUNNING" ? (latestExecution?.worktreePath ?? null) : null
   );
-  const respawningRef = useRef(false);
-
   // Effective file root: worktreePath (worktree mode) or localPath+subPath (direct mode)
   const directCwd = task.project?.localPath
     ? (task.subPath ? `${task.project.localPath}/${task.subPath}` : task.project.localPath)
@@ -171,7 +169,6 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   }, [task.id, isExecuting, selectedPromptId]);
 
   const handleSessionEnd = useCallback((exitCode: number) => {
-    if (respawningRef.current) return;
     setIsExecuting(false);
     setActiveWorktreePath(null);
     removePortal(task.id);
@@ -191,28 +188,24 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
 
   const handleResume = useCallback(async (sessionId: string) => {
     setIsExecuting(true);
-    respawningRef.current = true;
+    // Must remove old portal so getPortal creates a fresh TaskTerminal with new WS
+    removePortal(task.id);
     setActiveWorktreePath(null);
-    await new Promise((r) => setTimeout(r, 50));
     try {
       const { worktreePath } = await resumePtyExecution(task.id, sessionId);
-      respawningRef.current = false;
       setActiveWorktreePath(worktreePath);
       setTaskStatus("IN_PROGRESS");
     } catch {
-      respawningRef.current = false;
       setIsExecuting(false);
     }
-  }, [task.id]);
+  }, [task.id, removePortal]);
 
   const handleContinueLatest = useCallback(async () => {
     setIsExecuting(true);
-    respawningRef.current = true;
+    removePortal(task.id);
     setActiveWorktreePath(null);
-    await new Promise((r) => setTimeout(r, 50));
     try {
       const { worktreePath } = await continueLatestPtyExecution(task.id);
-      respawningRef.current = false;
       setActiveWorktreePath(worktreePath);
       setTaskStatus("IN_PROGRESS");
     } catch (err) {

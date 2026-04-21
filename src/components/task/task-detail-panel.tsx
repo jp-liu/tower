@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ExternalLink, Terminal, Loader2, Square, FileText, CheckCircle2 } from "lucide-react";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
@@ -50,7 +50,6 @@ export function TaskDetailPanel({
   // Terminal + execution history state — reset when task changes
   const [activeWorktreePath, setActiveWorktreePath] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
-  const respawningRef = useRef(false);
   const [executionLoaded, setExecutionLoaded] = useState(false);
   const [pastExecutions, setPastExecutions] = useState<TaskExecution[]>([]);
 
@@ -133,8 +132,6 @@ export function TaskDetailPanel({
 
   const handleSessionEnd = useCallback(
     (exitCode: number) => {
-      // Skip if terminal was intentionally unmounted for resume/continue respawn
-      if (respawningRef.current) return;
       setIsExecuting(false);
       setActiveWorktreePath(null);
       removePortal(task.id);
@@ -162,37 +159,30 @@ export function TaskDetailPanel({
 
   const handleResume = useCallback(async (sessionId: string) => {
     setIsExecuting(true);
-    respawningRef.current = true;
+    removePortal(task.id);
     setActiveWorktreePath(null);
-    // Wait one frame to ensure React commits the unmount before remounting
-    await new Promise((r) => setTimeout(r, 50));
     try {
       const { worktreePath } = await resumePtyExecution(task.id, sessionId);
-      respawningRef.current = false;
       setActiveWorktreePath(worktreePath);
       setTaskStatus("IN_PROGRESS");
     } catch {
-      respawningRef.current = false;
       setIsExecuting(false);
     }
-  }, [task.id]);
+  }, [task.id, removePortal]);
 
   const handleContinueLatest = useCallback(async () => {
     setIsExecuting(true);
-    respawningRef.current = true;
+    removePortal(task.id);
     setActiveWorktreePath(null);
-    await new Promise((r) => setTimeout(r, 50));
     try {
       const { worktreePath } = await continueLatestPtyExecution(task.id);
-      respawningRef.current = false;
       setActiveWorktreePath(worktreePath);
       setTaskStatus("IN_PROGRESS");
     } catch (err) {
-      respawningRef.current = false;
       setIsExecuting(false);
       toast.error(err instanceof Error ? err.message : String(err));
     }
-  }, [task.id]);
+  }, [task.id, removePortal]);
 
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   const [mergeCommitLog, setMergeCommitLog] = useState<string[]>([]);
