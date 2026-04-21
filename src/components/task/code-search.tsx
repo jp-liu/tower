@@ -53,20 +53,17 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
   const [error, setError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const abortRef = useRef(false);
+  const generationRef = useRef(0);
 
   const handleSearch = useCallback(async () => {
     if (!localPath || !pattern.trim()) return;
 
-    // Cancel any in-flight search
-    abortRef.current = true;
-    abortRef.current = false;
+    // Increment generation to cancel any in-flight search
+    const thisGeneration = ++generationRef.current;
 
     setIsSearching(true);
     setError(null);
     setHasSearched(true);
-
-    const localAbort = false;
 
     try {
       const result = await searchCode(
@@ -75,13 +72,12 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
         glob.trim() || undefined
       );
 
-      if (localAbort || abortRef.current) return;
+      if (thisGeneration !== generationRef.current) return;
 
       if (result.error) {
         // Check if it's a rg-not-installed error
         if (
           result.error.toLowerCase().includes("ripgrep") ||
-          result.error.toLowerCase().includes("which") ||
           result.error.toLowerCase().includes("rg")
         ) {
           toast.error(t("codeSearch.rgNotInstalled"));
@@ -96,12 +92,12 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
         setTruncated(result.truncated);
       }
     } catch (err) {
-      if (localAbort || abortRef.current) return;
+      if (thisGeneration !== generationRef.current) return;
       setError(String(err));
       setResults([]);
       setTruncated(false);
     } finally {
-      if (!abortRef.current) {
+      if (thisGeneration === generationRef.current) {
         setIsSearching(false);
       }
     }
@@ -203,10 +199,7 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
                   </div>
                   {/* Line text with highlights */}
                   <div className="text-xs text-foreground/80 font-mono truncate">
-                    {renderHighlighted(match.lineText.trimStart(), match.submatches.map(s => ({
-                      start: Math.max(0, s.start - (match.lineText.length - match.lineText.trimStart().length)),
-                      end: Math.max(0, s.end - (match.lineText.length - match.lineText.trimStart().length)),
-                    })))}
+                    {renderHighlighted(match.lineText, match.submatches)}
                   </div>
                 </button>
               ))}

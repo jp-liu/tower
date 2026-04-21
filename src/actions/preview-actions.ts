@@ -3,7 +3,7 @@
 import { spawn } from "node:child_process";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, isAbsolute } from "node:path";
 import {
   registerPreviewProcess,
   killPreviewProcess,
@@ -62,7 +62,15 @@ export async function detectFramework(cwd: string): Promise<string | null> {
 
 // macOS-only: uses built-in `open -a` command
 // Uses execFileSync with args array — no shell interpolation (security constraint)
+const ALLOWED_TERMINAL_APPS = ["Terminal", "iTerm", "iTerm2", "Warp", "Hyper", "Alacritty", "WezTerm", "kitty"];
+
 export async function openInTerminal(worktreePath: string): Promise<void> {
+  if (!worktreePath || !isAbsolute(worktreePath)) {
+    throw new Error("openInTerminal requires an absolute path");
+  }
   const terminalApp = await readConfigValue<string>("terminal.app", "Terminal");
+  if (!ALLOWED_TERMINAL_APPS.includes(terminalApp)) {
+    throw new Error(`Terminal app '${terminalApp}' is not in the allowed list`);
+  }
   execFileSync("open", ["-a", terminalApp, worktreePath]);
 }

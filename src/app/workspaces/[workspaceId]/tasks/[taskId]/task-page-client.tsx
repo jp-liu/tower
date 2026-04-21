@@ -483,7 +483,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                   {/* Search sub-tab */}
                   <TabsContent value="search" className="flex-1 min-h-0 overflow-hidden mt-0">
                     <CodeSearch
-                      localPath={task.project?.localPath ?? null}
+                      localPath={fileRootPath ?? task.project?.localPath ?? null}
                       onResultSelect={(absolutePath, line) => {
                         setSelectedFilePath(absolutePath);
                         setSelectedLine(line);

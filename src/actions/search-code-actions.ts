@@ -109,6 +109,7 @@ export async function searchCode(
       encoding: "utf-8",
       maxBuffer: 10 * 1024 * 1024,
       stdio: ["ignore", "pipe", "pipe"],
+      timeout: 10_000,
     });
   } catch (err) {
     const rgErr = err as { status?: number; message?: string };
@@ -117,10 +118,11 @@ export async function searchCode(
       return { matches: [], truncated: false };
     }
     // any other exit code is an actual error
+    console.error("[searchCode] rg failed:", err);
     return {
       matches: [],
       truncated: false,
-      error: String(err),
+      error: "搜索失败，请重试",
     };
   }
 

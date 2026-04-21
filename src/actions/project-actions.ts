@@ -177,6 +177,9 @@ export async function analyzeProjectDirectory(localPath: string): Promise<string
   if (localPath.startsWith("~")) {
     throw new Error("不支持 ~ 别名，请提供绝对路径");
   }
+  if (!path.isAbsolute(localPath)) {
+    throw new Error("本地路径必须为绝对路径");
+  }
 
   const prompt = `You are analyzing a software project directory. Read the directory structure and key files (package.json, README.md, src/ or lib/ directory layout, any monorepo config like pnpm-workspace.yaml, lerna.json, or turbo.json) to generate a structured project description.
 

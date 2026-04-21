@@ -154,7 +154,7 @@ export function ImportProjectDialog({
     if (!localPath || isAnalyzing) return;
     setIsAnalyzing(true);
     try {
-      const result = await analyzeProjectDirectory(localPath);
+      const result = await analyzeProjectDirectory(localPath.trim());
       setProjectDesc(result);
     } catch {
       toast.error(t("project.analyzeError"));
