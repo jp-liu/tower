@@ -498,6 +498,7 @@ export const en: Translations = {
   "missions.statusStopped": "Stopped",
   "missions.statusRunning": "Running",
   "missions.dragHandle": "Drag to reorder",
+  "missions.openInTerminal": "Open in Terminal",
   "missions.launcher.title": "Launch Task",
   "missions.launcher.workspace": "Workspace",
   "missions.launcher.project": "Project",

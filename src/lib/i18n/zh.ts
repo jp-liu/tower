@@ -513,6 +513,7 @@ export const zh = {
   "missions.statusStopped": "已停止",
   "missions.statusRunning": "运行中",
   "missions.dragHandle": "拖拽排序",
+  "missions.openInTerminal": "在终端打开",
   "missions.launcher.title": "启动任务",
   "missions.launcher.workspace": "工作空间",
   "missions.launcher.project": "项目",
