@@ -249,7 +249,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 61. Form UX & UI Polish | 0/TBD | Not started | - |
+| 61. Form UX & UI Polish | 0/3 | Planned    |  |
 | 62. Project Analysis | 0/TBD | Not started | - |
 | 63. Mission Terminal Open | 0/TBD | Not started | - |
 | 64. Code Search | 0/TBD | Not started | - |

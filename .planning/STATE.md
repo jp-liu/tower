@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.97
 milestone_name: Workflow Enhancement & Developer Experience
-status: ready_to_plan
-stopped_at: Roadmap created, phase 61 ready to plan
-last_updated: "2026-04-21"
-last_activity: 2026-04-21
+status: planning
+stopped_at: Completed 61-02-PLAN.md — textarea max-height + Bot icon tooltip
+last_updated: "2026-04-21T05:46:10.244Z"
+last_activity: 2026-04-21 — v0.97 roadmap created; phases 61-64 defined, 16 requirements mapped
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
+  total_plans: 3
   completed_plans: 0
   percent: 0
 ---
@@ -58,6 +58,8 @@ Progress: [░░░░░░░░░░] 0%
 - Preview feature deferred to separate milestone
 - openInTerminal server action exists from v0.6 Phase 23 — Phase 63 should reuse it
 - Code search (Phase 64) requires ripgrep on host — add availability check with user-visible error
+- [Phase 61]: Use base-ui render prop pattern for TooltipTrigger (not asChild) — matches project convention for tooltip usage
+- [Phase 61]: delay prop on TooltipTrigger (not delayDuration) — base-ui API differs from shadcn/radix Tooltip
 
 ### Pending Todos
 
@@ -69,6 +71,6 @@ Progress: [░░░░░░░░░░] 0%
 
 ## Session Continuity
 
-Last session: 2026-04-21
-Stopped at: Roadmap created for v0.97, all 16 requirements mapped to 4 phases
+Last session: 2026-04-21T05:46:10.241Z
+Stopped at: Completed 61-02-PLAN.md — textarea max-height + Bot icon tooltip
 Resume file: None
