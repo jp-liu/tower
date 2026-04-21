@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("../../db", () => ({
   db: {
     task: { findMany: vi.fn() },
+    projectNote: { findMany: vi.fn() },
   },
 }));
 
@@ -11,6 +12,7 @@ import { reportTools } from "../report-tools";
 
 const mockDb = db as {
   task: { findMany: ReturnType<typeof vi.fn> };
+  projectNote: { findMany: ReturnType<typeof vi.fn> };
 };
 
 /** Build a minimal task object matching the daily_summary include clause */
@@ -73,6 +75,7 @@ function makeTodoTask(overrides: {
 describe("report-tools (MCP)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockDb.projectNote.findMany.mockResolvedValue([]);
   });
 
   // ── daily_summary ─────────────────────────────────────────────────────────

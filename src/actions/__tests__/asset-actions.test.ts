@@ -141,13 +141,13 @@ describe("asset-actions", () => {
   // ── getProjectAssets ─────────────────────────────────────────────────────
 
   describe("getProjectAssets", () => {
-    it("queries with projectId and taskId: null filter", async () => {
+    it("queries with projectId (includes all assets)", async () => {
       mockDb.projectAsset.findMany.mockResolvedValue([]);
 
       await getProjectAssets("proj123");
 
       expect(mockDb.projectAsset.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { projectId: "proj123", taskId: null } })
+        expect.objectContaining({ where: { projectId: "proj123" } })
       );
     });
   });
