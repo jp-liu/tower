@@ -239,3 +239,27 @@ pnpm mcp            # Start MCP Server (standalone process)
   - **附带收益：** 消除 `findClaudeBinary()` 依赖，不再需要 CLI 安装就能总结；也为后续多 CLI 场景下的总结解耦
   - **时机：** 等第二个 CLI 需要接入时再做（如 Codex CLI），用 GSD milestone 驱动
   - **原因：** 目前只有 Claude 一个实现，过早抽象容易设计出不匹配实际需求的接口。两个 CLI 对比才能提炼正确的抽象边界。现阶段保持 Claude-specific 代码，TODO 记录接口清单供后续参考
+
+## 踩坑记录
+
+> 后续迁移到项目知识库
+
+### react-reverse-portal 导致 Resume 终端不重连
+
+**现象：** Stop 后点 Resume，终端显示旧内容 + Disconnected，WebSocket 没有重连到新 PTY session。页面刷新后 Resume 正常。
+
+**根因：** 项目使用 `react-reverse-portal` 实现终端跨页面保活（抽屉 ↔ 详情页零重连）。`InPortal` 内的组件**永远不会被 React 卸载**——即使 `OutPortal` 从 DOM 移除，`InPortal` 里的 `TaskTerminal` 仍然活着，保持着旧的 WebSocket 连接。`getPortal(taskId)` 对相同 taskId 返回缓存的旧 instance，不会创建新的 `TaskTerminal`。
+
+**修复：** Resume/Continue 前必须先调 `removePortal(taskId)` 销毁旧 portal instance，再让 `getPortal` 创建全新的 `TaskTerminal`（连接新 PTY 的 WebSocket）。
+
+**教训：** reverse-portal 的保活特性在正常导航场景是优势（零闪烁），但在需要销毁重建的场景（Resume）是陷阱。`setActiveWorktreePath(null)` 只卸载 `OutPortal`，不销毁 `InPortal` 里的组件。必须显式 `removePortal` 才能真正销毁。
+
+### encodePathForClaude 遗漏点号替换
+
+**现象：** `findLatestSessionId` 找错 `~/.claude/projects/` 目录，返回错误的 sessionId，导致 `--resume` 报 "No conversation found"。
+
+**根因：** Claude CLI 编码路径时把 `.` 替换为 `-`（如 `.worktrees` → `-worktrees`），但我们的 `encodePathForClaude` 保留了 `.`。编码结果 `-.worktrees` ≠ CLI 的 `--worktrees`，导致目录名不匹配。
+
+**修复：** 已通过 SessionStart hook 上报 sessionId 彻底绕过目录扫描，不再依赖路径编码。
+
+**教训：** 依赖逆向工程第三方工具的内部编码规则（目录命名、session 存储格式）是脆弱的。优先使用工具提供的官方接口（hook stdin 的 `session_id` 字段）获取信息。
