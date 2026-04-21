@@ -247,7 +247,11 @@ Plans:
   3. The search input accepts regex patterns and an optional glob/file-type filter, both applied to the ripgrep command
   4. Each result row shows the file path, line number, and the matching line content with the keyword highlighted
   5. Clicking any result row opens the file in the Monaco editor and scrolls to the matched line number
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 64-01-PLAN.md — searchCode server action + TDD tests (SEARCH-02, SEARCH-03, SEARCH-04)
+- [ ] 64-02-PLAN.md — CodeEditor selectedLine prop + CodeSearch component (SEARCH-04, SEARCH-05)
+- [ ] 64-03-PLAN.md — Sub-tab wiring in task-page-client + i18n (SEARCH-01)
 **UI hint**: yes
 
 ### Progress Table
@@ -256,5 +260,5 @@ Plans:
 |-------|----------------|--------|-----------|
 | 61. Form UX & UI Polish | 3/3 | Complete    | 2026-04-21 |
 | 62. Project Analysis | 2/2 | Complete    | 2026-04-21 |
-| 63. Mission Terminal Open | 1/1 | Complete   | 2026-04-21 |
-| 64. Code Search | 0/TBD | Not started | - |
+| 63. Mission Terminal Open | 1/1 | Complete    | 2026-04-21 |
+| 64. Code Search | 0/3 | Not started | - |
