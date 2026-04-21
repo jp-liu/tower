@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, statSync, symlinkSync } from "fs";
 import { join } from "path";
 import { execFile, execFileSync } from "child_process";
 import { homedir } from "os";
@@ -39,6 +39,28 @@ function encodePathForClaude(path: string): string {
     }
   }
   return "-" + result;
+}
+
+/**
+ * Ensure a session .jsonl file is accessible from a worktree-encoded project directory.
+ * CLI stores sessions under the git root path encoding, but --resume with worktree cwd
+ * looks in the worktree path encoding. This creates a symlink so both paths find it.
+ */
+export function ensureSessionSymlink(
+  sessionId: string,
+  projectLocalPath: string,
+  worktreePath: string
+): void {
+  const srcDir = join(PROJECTS_DIR, encodePathForClaude(projectLocalPath));
+  const dstDir = join(PROJECTS_DIR, encodePathForClaude(worktreePath));
+  const srcFile = join(srcDir, `${sessionId}.jsonl`);
+  const dstFile = join(dstDir, `${sessionId}.jsonl`);
+
+  if (!existsSync(srcFile)) return;
+  if (existsSync(dstFile)) return; // Already exists (or already symlinked)
+
+  mkdirSync(dstDir, { recursive: true });
+  symlinkSync(srcFile, dstFile);
 }
 
 /**
