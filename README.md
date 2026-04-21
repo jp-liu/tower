@@ -232,5 +232,10 @@ pnpm mcp            # Start MCP Server (standalone process)
     - 会话持久化 + resume/continue
     - MCP server 支持（Tower MCP 工具链）
   - **参考：** 当前 CliProfile 模型已有 `command`、`baseArgs`、`envVars` 字段，可作为 Adapter 配置基础
+- [ ] **总结功能改用 Anthropic API 替代 `claude -p`**
+  - **现状：** 小总结（generateSummaryFromLog）和大总结（generateDreamingInsight）都用 `execFile("claude", ["-p", ...])` spawn CLI 子进程，启动开销 3-5s
+  - **目标：** 改用 Anthropic SDK 直接调 API（HTTP 请求，~0.5s），小总结用 Haiku（快+便宜），大总结用 Sonnet
+  - **前提：** 需要 API Key 管理（目前 Claude 通过 CLI OAuth 认证，没有独立 API Key）。可在 Settings 增加 API Key 配置，或复用 CliProfile 扩展
+  - **附带收益：** 消除 `findClaudeBinary()` 依赖，不再需要 CLI 安装就能总结；也为后续多 CLI 场景下的总结解耦
   - **时机：** 等第二个 CLI 需要接入时再做（如 Codex CLI），用 GSD milestone 驱动
   - **原因：** 目前只有 Claude 一个实现，过早抽象容易设计出不匹配实际需求的接口。两个 CLI 对比才能提炼正确的抽象边界。现阶段保持 Claude-specific 代码，TODO 记录接口清单供后续参考
