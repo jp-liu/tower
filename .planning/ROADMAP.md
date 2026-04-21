@@ -232,7 +232,9 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Each Mission card (or its toolbar) shows an "在终端打开" button when the task's project has a non-empty localPath
   2. Clicking the button opens the configured system terminal application with its working directory set to the project's localPath
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 63-01-PLAN.md — Add terminal open button to mission card (MISSION-01)
 **UI hint**: yes
 
 #### Phase 64: Code Search
@@ -253,6 +255,6 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 61. Form UX & UI Polish | 3/3 | Complete    | 2026-04-21 |
-| 62. Project Analysis | 2/2 | Complete   | 2026-04-21 |
-| 63. Mission Terminal Open | 0/TBD | Not started | - |
+| 62. Project Analysis | 2/2 | Complete    | 2026-04-21 |
+| 63. Mission Terminal Open | 0/1 | Not started | - |
 | 64. Code Search | 0/TBD | Not started | - |
