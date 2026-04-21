@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, statSync, symlinkSync } from "fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, rmdirSync, statSync, symlinkSync, unlinkSync } from "fs";
 import { join } from "path";
 import { execFile, execFileSync } from "child_process";
 import { homedir } from "os";
@@ -68,18 +68,34 @@ export function ensureSessionSymlink(
 }
 
 /**
- * Remove the worktree-encoded session directory from ~/.claude/projects/.
- * Called when a worktree is removed (task DONE/CANCELLED) to clean up symlinks.
+ * Remove only symlinks from the worktree-encoded session directory.
+ * Preserves real session files that CLI may have created directly.
+ * Called when a worktree is removed (task DONE/CANCELLED).
  */
 export function cleanupSessionSymlinks(worktreePath: string): void {
   const dir = join(PROJECTS_DIR, encodePathForClaude(worktreePath));
   if (!existsSync(dir)) return;
 
   try {
-    const { rmSync } = require("fs") as typeof import("fs");
-    rmSync(dir, { recursive: true, force: true });
+    const entries = readdirSync(dir);
+    for (const entry of entries) {
+      const fullPath = join(dir, entry);
+      try {
+        const stat = lstatSync(fullPath);
+        if (stat.isSymbolicLink()) {
+          unlinkSync(fullPath);
+        }
+      } catch {
+        // Skip entries we can't stat
+      }
+    }
+    // Remove the directory only if it's now empty
+    const remaining = readdirSync(dir);
+    if (remaining.length === 0) {
+      rmdirSync(dir);
+    }
   } catch {
-    // Best effort — stale symlinks are harmless
+    // Best effort
   }
 }
 
