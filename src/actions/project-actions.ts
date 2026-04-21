@@ -210,9 +210,9 @@ Keep the description concise (under 400 words). Do not add commentary or preambl
           USER: process.env.USER,
           TMPDIR: process.env.TMPDIR,
           TERM: process.env.TERM,
-        },
+        } as unknown as NodeJS.ProcessEnv,
       },
-      (err, stdout) => {
+      (err: Error | null, stdout: string) => {
         if (err) {
           reject(err);
           return;

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { ChildProcess } from "child_process";
 
 const mockExecFileFn = vi.hoisted(() => vi.fn());
 
@@ -159,7 +160,7 @@ describe("analyzeProjectDirectory", () => {
     mockExecFileFn.mockImplementation((...args: unknown[]) => {
       const cb = args[args.length - 1] as (err: null, stdout: string) => void;
       cb(null, "# My Project\n");
-      return {} as ReturnType<typeof execFile>;
+      return {} as ChildProcess;
     });
 
     await analyzeProjectDirectory("/valid/path");
@@ -176,7 +177,7 @@ describe("analyzeProjectDirectory", () => {
     mockExecFileFn.mockImplementation((...args: unknown[]) => {
       const cb = args[args.length - 1] as (err: null, stdout: string) => void;
       cb(null, "# My Project\n...\n");
-      return {} as ReturnType<typeof execFile>;
+      return {} as ChildProcess;
     });
 
     const result = await analyzeProjectDirectory("/valid/path");
@@ -188,7 +189,7 @@ describe("analyzeProjectDirectory", () => {
     mockExecFileFn.mockImplementation((...args: unknown[]) => {
       const cb = args[args.length - 1] as (err: Error, stdout: string) => void;
       cb(execError, "");
-      return {} as ReturnType<typeof execFile>;
+      return {} as ChildProcess;
     });
 
     await expect(analyzeProjectDirectory("/valid/path")).rejects.toThrow("timeout exceeded");
@@ -198,7 +199,7 @@ describe("analyzeProjectDirectory", () => {
     mockExecFileFn.mockImplementation((...args: unknown[]) => {
       const cb = args[args.length - 1] as (err: null, stdout: string) => void;
       cb(null, "result");
-      return {} as ReturnType<typeof execFile>;
+      return {} as ChildProcess;
     });
 
     await analyzeProjectDirectory("/valid/path");
