@@ -35,6 +35,16 @@ function main() {
     process.exit(0);
   }
 
+  // SECURITY: Only talk to localhost — refuse remote servers
+  try {
+    const parsed = new URL(apiUrl);
+    if (!["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)) {
+      process.exit(0);
+    }
+  } catch {
+    process.exit(0);
+  }
+
   // Read stdin with timeout
   let input = "";
   const timeout = setTimeout(() => {

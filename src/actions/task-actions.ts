@@ -297,6 +297,7 @@ export async function commitWorktreeChanges(taskId: string, message: string): Pr
 }
 
 export async function getTaskOverview(taskId: string) {
+  if (!/^c[a-z0-9]{20,30}$/.test(taskId)) return null;
   return db.task.findUnique({
     where: { id: taskId },
     include: {

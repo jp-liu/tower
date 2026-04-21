@@ -104,13 +104,30 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Look up task to get projectId
+  // Look up task to get projectId and project localPath for path containment check
   const task = await db.task.findUnique({
     where: { id: taskId },
-    select: { projectId: true },
+    select: {
+      projectId: true,
+      project: { select: { localPath: true } },
+    },
   });
   if (!task) {
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
+  }
+
+  // SECURITY: Restrict filePath to within the project directory (or /tmp)
+  // Prevents arbitrary file read from any path on the filesystem
+  const resolvedFile = path.resolve(filePath);
+  const projectRoot = task.project.localPath;
+  const tmpDir = process.env.TMPDIR || "/tmp";
+  const isUnderProject = projectRoot && resolvedFile.startsWith(path.resolve(projectRoot) + path.sep);
+  const isUnderTmp = resolvedFile.startsWith(path.resolve(tmpDir) + path.sep);
+  if (!isUnderProject && !isUnderTmp) {
+    return NextResponse.json(
+      { error: "filePath must be within the project directory or temp directory" },
+      { status: 403 }
+    );
   }
 
   const projectId = task.projectId;

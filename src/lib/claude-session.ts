@@ -128,7 +128,7 @@ ${terminalLog.slice(-5000)}
         cwd,
         timeout: 30_000,
         encoding: "utf-8",
-        env: { ...process.env },
+        env: { PATH: process.env.PATH, HOME: process.env.HOME, USER: process.env.USER, TMPDIR: process.env.TMPDIR, TERM: process.env.TERM },
       },
       (err, stdout) => {
         if (err) {
@@ -188,7 +188,7 @@ Rules:
         cwd,
         timeout: 60_000,
         encoding: "utf-8",
-        env: { ...process.env },
+        env: { PATH: process.env.PATH, HOME: process.env.HOME, USER: process.env.USER, TMPDIR: process.env.TMPDIR, TERM: process.env.TERM },
       },
       (err, stdout) => {
         if (err) {
