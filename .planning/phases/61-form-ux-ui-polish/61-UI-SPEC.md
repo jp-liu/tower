@@ -52,9 +52,17 @@ Exceptions:
 | Role | Size | Weight | Line Height | Source |
 |------|------|--------|-------------|--------|
 | Body | 14px (md:text-sm) | 400 | 1.5 | globals.css + input.tsx pattern |
-| Label | 14px | 500 | 1.4 | Existing form label pattern |
+| Label | 14px | 400 | 1.4 | Revised: matches Body weight; 2-weight rule |
 | Heading (dialog title) | 16px | 600 | 1.2 | DialogTitle observed in dialogs |
 | Warning / helper text | 12px | 400 | 1.4 | New: ~ path warning label |
+
+Distinct weights in use: **400** (Body, Label, Warning) and **600** (Heading). Total: 2 weights.
+
+---
+
+## Visuals
+
+**Focal point — dialogs:** The primary visual anchor in all form dialogs (CreateProjectDialog, ImportProjectDialog, CreateTaskDialog) is the **primary CTA button in the dialog footer**. It uses the `--primary` color token (amber, `oklch(0.65 0.14 75)` light / `oklch(0.80 0.14 75)` dark). All other dialog controls use secondary or muted colors so the eye is drawn to the footer CTA first.
 
 ---
 
@@ -67,7 +75,7 @@ All values use the project CSS custom property system (light + dark dual-theme).
 | Dominant (60%) | `oklch(0.97 0.005 260)` = `--background` | `oklch(0.15 0.005 260)` | Page background, dialog backdrop |
 | Secondary (30%) | `oklch(0.94 0.005 260)` = `--card` | `oklch(0.19 0.005 260)` | Dialog surface, form card areas |
 | Accent (10%) | `oklch(0.89 0.008 260)` = `--accent` | `oklch(0.24 0.008 260)` | Assistant icon active state background, hover state on icon buttons |
-| Primary | `oklch(0.65 0.14 75)` = `--primary` (amber) | `oklch(0.80 0.14 75)` | — not used in this phase |
+| Primary | `oklch(0.65 0.14 75)` = `--primary` (amber) | `oklch(0.80 0.14 75)` | Primary CTA button in all dialog footers (focal point) |
 | Destructive | `oklch(0.55 0.2 25)` = `--destructive` | `oklch(0.65 0.2 25)` | ~ path warning text color |
 | Muted foreground | `oklch(0.50 0.008 260)` | `oklch(0.65 0.008 260)` | Helper text, placeholder text, read-only localPath |
 
