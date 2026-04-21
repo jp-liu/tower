@@ -369,6 +369,8 @@ export const zh = {
   "taskPage.noDiff": "暂无变更（需要项目配置本地路径和基础分支）",
   "taskPage.tabFiles": "文件",
   "taskPage.tabPreview": "预览",
+  "taskPage.tabSearch": "搜索",
+  "taskPage.tabFileTree": "文件树",
   "taskPage.completeTask": "完成任务",
   "taskPage.uncommittedChanges": "工作区有 {count} 个未提交的文件，请先点击 Commit 按钮提交后再完成任务",
   "taskPage.noChangesToComplete": "没有任何改动，无法完成任务",

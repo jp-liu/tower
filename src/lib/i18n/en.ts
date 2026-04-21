@@ -354,6 +354,8 @@ export const en: Translations = {
   "taskPage.noDiff": "No changes (project needs local path and base branch configured)",
   "taskPage.tabFiles": "Files",
   "taskPage.tabPreview": "Preview",
+  "taskPage.tabSearch": "Search",
+  "taskPage.tabFileTree": "Files",
   "taskPage.completeTask": "Complete Task",
   "taskPage.taskCompleted": "Task completed",
   "taskPage.uncommittedChanges": "Worktree has {count} uncommitted file(s). Please click Commit button first",
