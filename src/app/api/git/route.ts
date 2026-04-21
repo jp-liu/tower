@@ -119,6 +119,12 @@ export async function POST(request: NextRequest) {
     if (!url || !clonePath) {
       return NextResponse.json({ error: "url and path required" }, { status: 400 });
     }
+    if (typeof clonePath === "string" && clonePath.startsWith("~")) {
+      return NextResponse.json(
+        { error: "请输入绝对路径，不支持 ~ 别名" },
+        { status: 400 }
+      );
+    }
     const resolved = path.resolve(expandHome(clonePath));
 
     // If target already exists and has content, don't overwrite
