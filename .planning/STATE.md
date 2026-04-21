@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.97
 milestone_name: Workflow Enhancement & Developer Experience
-status: ready_to_plan
-stopped_at: Roadmap created, phase 61 ready to plan
-last_updated: "2026-04-21"
+status: executing
+stopped_at: Completed 61-01-PLAN.md
+last_updated: "2026-04-21T05:44:50.314Z"
 last_activity: 2026-04-21
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 3
+  completed_plans: 1
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 61 — Form UX & UI Polish
+**Current focus:** Phase 61 — form-ux-ui-polish
 
 ## Current Position
 
-Phase: 61 of 64 (Form UX & UI Polish)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-04-21 — v0.97 roadmap created; phases 61-64 defined, 16 requirements mapped
+Phase: 61 (form-ux-ui-polish) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-04-21
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -58,6 +58,7 @@ Progress: [░░░░░░░░░░] 0%
 - Preview feature deferred to separate milestone
 - openInTerminal server action exists from v0.6 Phase 23 — Phase 63 should reuse it
 - Code search (Phase 64) requires ripgrep on host — add availability check with user-visible error
+- [Phase 61]: Removed FolderBrowserDialog from create dialog — browse pattern belongs only in import flow
 
 ### Pending Todos
 
@@ -69,6 +70,6 @@ Progress: [░░░░░░░░░░] 0%
 
 ## Session Continuity
 
-Last session: 2026-04-21
-Stopped at: Roadmap created for v0.97, all 16 requirements mapped to 4 phases
+Last session: 2026-04-21T05:44:50.311Z
+Stopped at: Completed 61-01-PLAN.md
 Resume file: None

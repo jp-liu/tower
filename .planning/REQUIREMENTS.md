@@ -2,11 +2,11 @@
 
 ## Form UX (项目表单交互)
 
-- [ ] **FORM-01**: User can create project with plain text path input (no browse button), path is editable
+- [x] **FORM-01**: User can create project with plain text path input (no browse button), path is editable
 - [ ] **FORM-02**: User can import project via browse dialog, selected localPath is read-only (not editable)
 - [ ] **FORM-03**: User can migrate project with editable target path
 - [ ] **FORM-04**: Project description and task description textarea have max-height with overflow-y scroll (prevent dialog height overflow)
-- [ ] **FORM-05**: Git cloneDir setting shows warning text "请输入绝对路径，不支持 ~ 别名", backend rejects paths starting with ~
+- [x] **FORM-05**: Git cloneDir setting shows warning text "请输入绝对路径，不支持 ~ 别名", backend rejects paths starting with ~
 
 ## UI Polish (界面优化)
 
