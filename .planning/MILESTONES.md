@@ -1,5 +1,20 @@
 # Milestones
 
+## v0.97 Workflow Enhancement & Developer Experience (Shipped: 2026-04-21)
+
+**Phases completed:** 4 phases, 9 plans, 11 tasks
+
+**Key accomplishments:**
+
+- 1. [Rule 1 - Bug] base-ui Tooltip API differs from shadcn/radix
+- `analyzeProjectDirectory` server action with Claude CLI one-shot invocation, env isolation, full input validation, and 7 unit tests; 4 i18n keys added to zh/en locales
+- 生成描述 button added to both project dialogs using base-ui Tooltip render prop pattern, with loading spinner, disabled state, auto-fill on success, and toast on error
+- TerminalSquare toolbar button in MissionCard opens system terminal at project localPath via existing openInTerminal server action
+- One-liner:
+- Inner file-tree/search sub-tabs wired into task-page-client with selectedLine state, completing end-to-end ripgrep code search with Monaco scroll-to-line navigation.
+
+---
+
 ## v0.96 UX Polish & Knowledge Capture (Shipped: 2026-04-20)
 
 **Phases completed:** 6 phases, 11 plans, 19 tasks

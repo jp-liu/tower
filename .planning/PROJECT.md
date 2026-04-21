@@ -25,21 +25,23 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 **Shipped:** 全链路 UX 优化 + 知识沉淀系统 — 资源预览（lightbox/文本/Finder 揭示）、项目导入迁移（拆分流程 + 原子 rename）、Session Dreaming（AI 洞察自动沉淀为笔记）、Auto-Upload Hook（PostToolUse 实时捕获）、资源归属 + TaskOverviewDrawer。24 需求 / 6 阶段 / 11 计划交付。
 
-## Current Milestone: v0.97 Workflow Enhancement & Developer Experience
+## Completed Milestone: v0.97 Workflow Enhancement & Developer Experience (2026-04-21)
 
-**Goal:** 优化项目管理工作流，增强 Mission Control，新增全局代码搜索，减少对编辑器的依赖。
+**Shipped:** 项目表单 UX 优化（创建/导入/迁移路径模式区分）、项目智能分析（Claude CLI 一键生成描述）、Mission 在终端打开、全局代码搜索（ripgrep + Monaco 联动）。4 阶段 / 9 计划 / 16 需求交付。
 
-**Target features:**
-- 项目路径交互优化（创建/导入/迁移三种模式区分）
-- Textarea 溢出修复（max-height + scroll）
-- ~ 路径校验与提示
-- 助手图标位置调整（搜索框右侧）
-- 项目智能分析（CLI 分析 localPath → 自动填充 description + startCommand + port + packageManager）
-- Mission 启动项目（读取项目启动配置，PTY 执行）
-- Mission 在终端打开（系统终端打开 localPath）
-- 全局代码搜索（详情页左侧面板，文件树/搜索 tab 切换，ripgrep 驱动）
+**Key features shipped:**
+- 项目路径交互优化（创建纯文本输入、导入浏览只读、迁移可编辑）
+- Textarea 溢出修复（max-height + scroll）、~ 路径校验
+- 助手图标移至搜索框右侧 + Tooltip
+- 项目智能分析（Claude CLI 分析 localPath → 自动填充 description）
+- Mission Control 在终端打开按钮
+- 全局代码搜索（详情页文件树/搜索 tab、ripgrep JSON 输出、关键词高亮、Monaco 跳转）
 
 ## Current State
+
+**Shipped:** v0.97 Workflow Enhancement & Developer Experience (2026-04-21)
+- Phase 61-64: Form UX polish (path modes, textarea overflow, tilde validation), project analysis (Claude CLI description generation), mission terminal open, code search (ripgrep + Monaco scroll-to-line)
+- 16 requirements delivered (FORM-01~05, UI-01, ANALYZE-01~04, MISSION-01, SEARCH-01~05)
 
 **Shipped:** v0.96 UX Polish & Knowledge Capture (2026-04-20)
 - Phase 55-60: UI fixes (EmptyState, hover, delete propagation), asset preview (lightbox, text, reveal), project import/migration (git clone, folder import, atomic rename), session dreaming (AI insights → ProjectNote), auto-upload hook (PostToolUse → assets), resource attribution (task badges, TaskOverviewDrawer)
