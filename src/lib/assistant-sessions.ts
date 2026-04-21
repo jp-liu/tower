@@ -7,7 +7,7 @@ export interface AssistantSession {
 
 const STORAGE_KEY = "tower-assistant-sessions";
 const ACTIVE_KEY = "tower-assistant-active-session";
-const MAX_SESSIONS = 20;
+const MAX_SESSIONS = 10;
 
 export function getSessions(): AssistantSession[] {
   if (typeof window === "undefined") return [];

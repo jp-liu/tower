@@ -141,27 +141,9 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { refreshConfig(); }, [refreshConfig]);
 
-  // Fetch session list from SDK via API
+  // Session list from localStorage registry (not SDK — avoids cross-project leakage)
   const refreshSessions = useCallback(async () => {
-    try {
-      const res = await fetch("/api/internal/assistant/sessions");
-      if (!res.ok) return;
-      const data = await res.json();
-      if (Array.isArray(data.sessions)) {
-        const mapped: AssistantSession[] = data.sessions.map(
-          (s: { id: string; title: string; lastModified: number }) => ({
-            id: s.id,
-            title: s.title,
-            createdAt: new Date(s.lastModified).toISOString(),
-            updatedAt: new Date(s.lastModified).toISOString(),
-          })
-        );
-        setSessions(mapped);
-      }
-    } catch {
-      // Fallback to localStorage if API fails
-      setSessions(getSessions());
-    }
+    setSessions(getSessions());
   }, []);
 
   // Fetch history messages for a session from SDK via API
