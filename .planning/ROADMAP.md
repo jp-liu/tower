@@ -221,7 +221,7 @@ Plans:
   4. After analysis completes, the project description textarea is auto-filled with structured Markdown covering tech stack, module breakdown, and MCP subPath guidance
 **Plans**: 2 plans
 Plans:
-- [ ] 62-01-PLAN.md — Server action + i18n keys (ANALYZE-01~04 foundation)
+- [x] 62-01-PLAN.md — Server action + i18n keys (ANALYZE-01~04 foundation)
 - [ ] 62-02-PLAN.md — UI buttons in both project dialogs (ANALYZE-01~04)
 **UI hint**: yes
 
@@ -253,6 +253,6 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 61. Form UX & UI Polish | 3/3 | Complete    | 2026-04-21 |
-| 62. Project Analysis | 0/TBD | Not started | - |
+| 62. Project Analysis | 1/2 | In Progress|  |
 | 63. Mission Terminal Open | 0/TBD | Not started | - |
 | 64. Code Search | 0/TBD | Not started | - |

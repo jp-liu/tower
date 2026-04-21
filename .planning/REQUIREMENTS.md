@@ -14,10 +14,10 @@
 
 ## Project Analysis (项目智能分析)
 
-- [ ] **ANALYZE-01**: "生成描述" button appears next to clone button and below import localPath field
-- [ ] **ANALYZE-02**: Button disabled (greyed out) with tooltip "请先选择路径" when no localPath is set or project not cloned
-- [ ] **ANALYZE-03**: Clicking button invokes Claude CLI to analyze localPath directory structure (package.json, README, src/, monorepo detection)
-- [ ] **ANALYZE-04**: Analysis result auto-fills project description textarea with structured Markdown (tech stack, module breakdown, MCP subPath guidance)
+- [x] **ANALYZE-01**: "生成描述" button appears next to clone button and below import localPath field
+- [x] **ANALYZE-02**: Button disabled (greyed out) with tooltip "请先选择路径" when no localPath is set or project not cloned
+- [x] **ANALYZE-03**: Clicking button invokes Claude CLI to analyze localPath directory structure (package.json, README, src/, monorepo detection)
+- [x] **ANALYZE-04**: Analysis result auto-fills project description textarea with structured Markdown (tech stack, module breakdown, MCP subPath guidance)
 
 ## Mission Control (任务监控增强)
 
