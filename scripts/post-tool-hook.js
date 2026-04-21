@@ -82,6 +82,11 @@ function processInput(input, taskId, apiUrl) {
     process.exit(0);
   }
 
+  // Report sessionId on every hook call — API deduplicates (only first write matters)
+  if (data.session_id) {
+    reportSessionId(taskId, apiUrl, data.session_id);
+  }
+
   const toolName = data.tool_name;
   if (!toolName || !FILE_WRITE_TOOLS.has(toolName)) {
     process.exit(0);
@@ -183,6 +188,38 @@ function uploadFile(apiUrl, taskId, filePath) {
 
   req.write(payload);
   req.end();
+}
+
+/**
+ * Report sessionId to Tower API — fire and forget.
+ * Tower stores it on the RUNNING execution for this taskId.
+ * Called on every hook invocation; API ignores if already set.
+ */
+function reportSessionId(taskId, apiUrl, sessionId) {
+  try {
+    const url = new URL("/api/internal/hooks/session", apiUrl);
+    const payload = JSON.stringify({ taskId, sessionId });
+    const mod = url.protocol === "https:" ? https : http;
+
+    const req = mod.request({
+      hostname: url.hostname,
+      port: url.port,
+      path: url.pathname,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(payload),
+      },
+      timeout: 3000,
+    });
+
+    req.on("error", () => {});
+    req.on("timeout", () => req.destroy());
+    req.write(payload);
+    req.end();
+  } catch {
+    // Silent — sessionId reporting is best-effort
+  }
 }
 
 main();

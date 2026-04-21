@@ -1,7 +1,7 @@
 import { execFileSync } from "child_process";
 import { existsSync } from "fs";
 import { db } from "@/lib/db";
-import { findLatestSessionId, generateSummaryFromLog, generateDreamingInsight, DreamingResult } from "@/lib/claude-session";
+import { generateSummaryFromLog, generateDreamingInsight, type DreamingResult } from "@/lib/claude-session";
 
 const TERMINAL_LOG_MAX = 10 * 1024; // 10 KB
 
@@ -175,19 +175,14 @@ export async function captureExecutionSummary(
 
     const terminalLog = trimTerminalBuffer(terminalBuffer);
 
-    // Capture Claude CLI session ID
-    let claudeSessionId: string | null = null;
-    if (worktreePath) {
-      claudeSessionId = findLatestSessionId(worktreePath);
-      console.error(`[captureExecutionSummary] Claude session ID: ${claudeSessionId}`);
-    }
+    // sessionId is now reported by PostToolUse hook → /api/internal/hooks/session
+    // No need to scan ~/.claude/projects/ directory here
 
-    // Phase 1: Immediate save — git data + terminal log + session ID (no blocking)
+    // Phase 1: Immediate save — git data + terminal log (no blocking)
     await db.taskExecution.update({
       where: { id: executionId },
       data: {
         summary: summary ?? (gitLog ? buildSummary(gitLog) : null),
-        sessionId: claudeSessionId,
         gitLog: gitLog ?? null,
         gitStats: gitStats ? JSON.stringify(gitStats) : null,
         exitCode,

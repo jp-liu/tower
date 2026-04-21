@@ -98,7 +98,8 @@ describe("captureExecutionSummary", () => {
     const callData = mockUpdate.mock.calls[0][0];
     expect(callData.where).toEqual({ id: EXEC_ID });
     expect(callData.data.exitCode).toBe(0);
-    expect(callData.data.sessionId).toBe("session-abc");
+    // sessionId is now reported via PostToolUse hook, not captured here
+    expect(callData.data.sessionId).toBeUndefined();
     // Git log and stats should be populated
     expect(callData.data.gitLog).toBeTruthy();
     expect(callData.data.gitStats).toBeTruthy();
