@@ -1,12 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // vi.hoisted required for child_process mock in jsdom vitest environment
-// (Phase 62 decision: mock factory runs before const declarations)
-const mockExecFileSync = vi.hoisted(() => vi.fn());
+const mockExecFile = vi.hoisted(() => vi.fn());
 
 vi.mock("child_process", () => ({
-  default: { execFileSync: mockExecFileSync },
-  execFileSync: mockExecFileSync,
+  default: { execFile: mockExecFile },
+  execFile: mockExecFile,
 }));
 
 import { searchCode } from "@/actions/search-code-actions";
@@ -36,6 +35,27 @@ function makeRgMatchLine(
   });
 }
 
+// Helper: mock execFile to call callback with success
+function mockExecFileSuccess(stdout: string) {
+  mockExecFile.mockImplementationOnce(
+    (_cmd: string, _args: string[], _opts: unknown, cb: (err: null, stdout: string, stderr: string) => void) => {
+      cb(null, stdout, "");
+      return {};
+    }
+  );
+}
+
+// Helper: mock execFile to call callback with error
+function mockExecFileError(code: number, message = "Command failed") {
+  mockExecFile.mockImplementationOnce(
+    (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error & { code?: number }, stdout: string, stderr: string) => void) => {
+      const err = Object.assign(new Error(message), { code });
+      cb(err, "", "");
+      return {};
+    }
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Test 1 (SEARCH-02): rg exit 0 → returns matches array with SearchMatch objects
 // ---------------------------------------------------------------------------
@@ -43,14 +63,11 @@ describe("Test 1: rg exit 0 returns matches", () => {
   it("returns non-empty matches array, no error", async () => {
     const rgOutput = [
       makeRgMatchLine("/project/src/foo.ts", 42, '  const hello = "world";\n', "hello", 8, 13),
-      // summary line — should be ignored
       JSON.stringify({ type: "summary", data: {} }),
     ].join("\n");
 
-    // First call is "which rg" — succeeds
-    mockExecFileSync.mockReturnValueOnce("/usr/bin/rg\n");
-    // Second call is the actual rg search
-    mockExecFileSync.mockReturnValueOnce(rgOutput);
+    mockExecFileSuccess("/usr/bin/rg\n"); // which rg
+    mockExecFileSuccess(rgOutput);        // rg search
 
     const result = await searchCode("/project", "hello");
 
@@ -60,18 +77,12 @@ describe("Test 1: rg exit 0 returns matches", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 2 (SEARCH-02): rg exit 1 (no matches) → returns empty matches, truncated=false, no error
+// Test 2 (SEARCH-02): rg exit 1 (no matches) → returns empty matches
 // ---------------------------------------------------------------------------
 describe("Test 2: rg exit 1 returns empty matches", () => {
   it("exit code 1 returns empty matches array without error", async () => {
-    // First call: "which rg" succeeds
-    mockExecFileSync.mockReturnValueOnce("/usr/bin/rg\n");
-    // Second call: rg exits with code 1 (no matches)
-    mockExecFileSync.mockImplementationOnce(() => {
-      const err = new Error("Command failed") as Error & { status: number };
-      err.status = 1;
-      throw err;
-    });
+    mockExecFileSuccess("/usr/bin/rg\n"); // which rg
+    mockExecFileError(1);                 // rg exits 1 (no matches)
 
     const result = await searchCode("/project", "nomatch_xyz");
 
@@ -82,18 +93,12 @@ describe("Test 2: rg exit 1 returns empty matches", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 3 (SEARCH-02): rg exit 2+ (error) → returns error string
+// Test 3 (SEARCH-02): rg exit 2+ (error) → returns sanitized error string
 // ---------------------------------------------------------------------------
 describe("Test 3: rg exit 2+ returns error string", () => {
   it("exit code 2 returns error string", async () => {
-    // First call: "which rg" succeeds
-    mockExecFileSync.mockReturnValueOnce("/usr/bin/rg\n");
-    // Second call: rg exits with code 2 (real error)
-    mockExecFileSync.mockImplementationOnce(() => {
-      const err = new Error("rg error") as Error & { status: number };
-      err.status = 2;
-      throw err;
-    });
+    mockExecFileSuccess("/usr/bin/rg\n"); // which rg
+    mockExecFileError(2, "rg error");     // rg exits 2
 
     const result = await searchCode("/project", "pattern");
 
@@ -103,14 +108,11 @@ describe("Test 3: rg exit 2+ returns error string", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 4 (SEARCH-02): rg not installed → returns error string mentioning ripgrep
+// Test 4 (SEARCH-02): rg not installed → returns error string
 // ---------------------------------------------------------------------------
 describe("Test 4: rg not installed returns error string", () => {
-  it("returns error including 'ripgrep' when which check throws", async () => {
-    // First call: "which rg" fails (rg not found)
-    mockExecFileSync.mockImplementationOnce(() => {
-      throw new Error("which: no rg in PATH");
-    });
+  it("returns error including 'ripgrep' when which check fails", async () => {
+    mockExecFileError(1, "which: no rg in PATH"); // which rg fails
 
     const result = await searchCode("/project", "pattern");
 
@@ -120,20 +122,19 @@ describe("Test 4: rg not installed returns error string", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 5 (SEARCH-03): glob filter → --glob arg is passed to execFileSync
+// Test 5 (SEARCH-03): glob filter → --glob arg is passed
 // ---------------------------------------------------------------------------
 describe("Test 5: glob filter passes --glob arg", () => {
   it("passes --glob and the glob value to rg args", async () => {
     const rgOutput = makeRgMatchLine("/project/src/foo.ts", 1, "hello world\n", "hello", 0, 5);
 
-    mockExecFileSync.mockReturnValueOnce("/usr/bin/rg\n"); // which rg
-    mockExecFileSync.mockReturnValueOnce(rgOutput);        // rg search
+    mockExecFileSuccess("/usr/bin/rg\n"); // which rg
+    mockExecFileSuccess(rgOutput);        // rg search
 
     await searchCode("/project", "hello", "*.ts");
 
-    // Second call to mockExecFileSync is the rg invocation
-    const calls = mockExecFileSync.mock.calls;
-    const rgCall = calls.find((c) => c[0] === "rg");
+    const calls = mockExecFile.mock.calls;
+    const rgCall = calls.find((c: unknown[]) => c[0] === "rg");
     expect(rgCall).toBeDefined();
     const args = rgCall![1] as string[];
     expect(args).toContain("--glob");
@@ -147,19 +148,13 @@ describe("Test 5: glob filter passes --glob arg", () => {
 describe("Test 6: filePath is relative (strips localPath prefix)", () => {
   it("strips localPath prefix from match absolute path", async () => {
     const rgOutput = makeRgMatchLine(
-      "/project/src/foo.ts",
-      42,
-      '  const hello = "world";\n',
-      "hello",
-      8,
-      13
+      "/project/src/foo.ts", 42, '  const hello = "world";\n', "hello", 8, 13
     );
 
-    mockExecFileSync.mockReturnValueOnce("/usr/bin/rg\n");
-    mockExecFileSync.mockReturnValueOnce(rgOutput);
+    mockExecFileSuccess("/usr/bin/rg\n");
+    mockExecFileSuccess(rgOutput);
 
     const result = await searchCode("/project", "hello");
-
     expect(result.matches[0].filePath).toBe("src/foo.ts");
   });
 });
@@ -170,16 +165,11 @@ describe("Test 6: filePath is relative (strips localPath prefix)", () => {
 describe("Test 7: result contains lineNumber, lineText, submatches", () => {
   it("match object has correct fields with start/end", async () => {
     const rgOutput = makeRgMatchLine(
-      "/project/src/foo.ts",
-      42,
-      '  const hello = "world";\n',
-      "hello",
-      8,
-      13
+      "/project/src/foo.ts", 42, '  const hello = "world";\n', "hello", 8, 13
     );
 
-    mockExecFileSync.mockReturnValueOnce("/usr/bin/rg\n");
-    mockExecFileSync.mockReturnValueOnce(rgOutput);
+    mockExecFileSuccess("/usr/bin/rg\n");
+    mockExecFileSuccess(rgOutput);
 
     const result = await searchCode("/project", "hello");
 
@@ -197,18 +187,115 @@ describe("Test 7: result contains lineNumber, lineText, submatches", () => {
 // ---------------------------------------------------------------------------
 describe("Test 8: results truncated at maxResults", () => {
   it("caps results at maxResults=200 and sets truncated=true when 250 matches", async () => {
-    // Generate 250 match lines
     const lines = Array.from({ length: 250 }, (_, i) =>
       makeRgMatchLine(`/project/src/file${i}.ts`, i + 1, `line content ${i}\n`, "pattern", 0, 7)
     );
     const rgOutput = lines.join("\n");
 
-    mockExecFileSync.mockReturnValueOnce("/usr/bin/rg\n");
-    mockExecFileSync.mockReturnValueOnce(rgOutput);
+    mockExecFileSuccess("/usr/bin/rg\n");
+    mockExecFileSuccess(rgOutput);
 
     const result = await searchCode("/project", "pattern", undefined, 200);
 
     expect(result.matches.length).toBe(200);
     expect(result.truncated).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 9: relative path rejected
+// ---------------------------------------------------------------------------
+describe("Test 9: relative localPath rejected", () => {
+  it("returns error for relative path like '../etc'", async () => {
+    const result = await searchCode("../etc", "password");
+    expect(result.error).toBeDefined();
+    expect(result.matches).toEqual([]);
+  });
+
+  it("returns error for bare directory name", async () => {
+    const result = await searchCode("my-project", "hello");
+    expect(result.error).toBeDefined();
+    expect(result.matches).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 10: pattern boundary — 500 chars accepted, 501 rejected
+// ---------------------------------------------------------------------------
+describe("Test 10: pattern boundary — 500 chars accepted, 501 rejected", () => {
+  it("500-char pattern is accepted", async () => {
+    const longPattern = "a".repeat(500);
+    mockExecFileSuccess("/usr/bin/rg\n");
+    mockExecFileError(1); // no matches
+
+    const result = await searchCode("/project", longPattern);
+    expect(result.error).toBeUndefined();
+  });
+
+  it("501-char pattern is rejected with validation error", async () => {
+    const tooLongPattern = "a".repeat(501);
+    const result = await searchCode("/project", tooLongPattern);
+    expect(result.error).toBeDefined();
+    expect(result.error).toMatch(/[Ii]nvalid/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 11: maxResults boundary values
+// ---------------------------------------------------------------------------
+describe("Test 11: maxResults boundary values", () => {
+  it("maxResults=1 returns at most 1 result", async () => {
+    const lines = Array.from({ length: 5 }, (_, i) =>
+      makeRgMatchLine(`/project/f${i}.ts`, i + 1, `line ${i}\n`, "x", 0, 1)
+    );
+    mockExecFileSuccess("/usr/bin/rg\n");
+    mockExecFileSuccess(lines.join("\n"));
+
+    const result = await searchCode("/project", "x", undefined, 1);
+    expect(result.matches.length).toBe(1);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("maxResults=0 is rejected by Zod (min 1)", async () => {
+    const result = await searchCode("/project", "x", undefined, 0);
+    expect(result.error).toBeDefined();
+  });
+
+  it("maxResults=501 is rejected by Zod (max 500)", async () => {
+    const result = await searchCode("/project", "x", undefined, 501);
+    expect(result.error).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 12: error messages sanitized — no server path leaks
+// ---------------------------------------------------------------------------
+describe("Test 12: error messages sanitized", () => {
+  it("rg error does not contain file system paths", async () => {
+    mockExecFileSuccess("/usr/bin/rg\n");
+    mockExecFileError(2, "rg: /secret/internal/path: Permission denied");
+
+    const result = await searchCode("/project", "pattern");
+    expect(result.error).toBeDefined();
+    expect(result.error).not.toContain("/secret/internal/path");
+    expect(result.error).not.toContain("Permission denied");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 13: execFile uses timeout option
+// ---------------------------------------------------------------------------
+describe("Test 13: rg invocation includes timeout", () => {
+  it("passes timeout option to execFile", async () => {
+    const rgOutput = makeRgMatchLine("/project/src/foo.ts", 1, "hello\n", "hello", 0, 5);
+    mockExecFileSuccess("/usr/bin/rg\n");
+    mockExecFileSuccess(rgOutput);
+
+    await searchCode("/project", "hello");
+
+    const rgCall = mockExecFile.mock.calls.find((c: unknown[]) => c[0] === "rg");
+    expect(rgCall).toBeDefined();
+    const opts = rgCall![2] as { timeout?: number };
+    expect(opts.timeout).toBe(10_000);
   });
 });

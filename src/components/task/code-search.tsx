@@ -181,6 +181,7 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
                   key={`${match.filePath}:${match.lineNumber}:${index}`}
                   type="button"
                   className="w-full flex flex-col gap-0.5 px-2 py-1.5 text-left hover:bg-accent/50 cursor-pointer border-b border-border/30 last:border-b-0"
+                  aria-label={`Open ${match.filePath} at line ${match.lineNumber}`}
                   onClick={() => {
                     const absolutePath = localPath.endsWith("/")
                       ? localPath + match.filePath

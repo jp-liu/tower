@@ -1,6 +1,6 @@
 "use server";
 
-import { execFileSync } from "child_process";
+import { execFile } from "child_process";
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------
@@ -49,6 +49,26 @@ interface RgLine {
 }
 
 // ---------------------------------------------------------------------------
+// Async execFile helper
+// ---------------------------------------------------------------------------
+
+function execFileAsync(
+  cmd: string,
+  args: string[],
+  opts: { encoding: string; maxBuffer?: number; stdio?: unknown; timeout?: number }
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, opts as Parameters<typeof execFile>[2], (err: Error | null, stdout: string | Buffer) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(typeof stdout === "string" ? stdout : stdout.toString());
+      }
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
 // searchCode server action
 // ---------------------------------------------------------------------------
 
@@ -84,9 +104,9 @@ export async function searchCode(
     };
   }
 
-  // 3. Check rg availability
+  // 3. Check rg availability (async)
   try {
-    execFileSync("which", ["rg"], { stdio: "pipe" });
+    await execFileAsync("which", ["rg"], { encoding: "utf-8" });
   } catch {
     return {
       matches: [],
@@ -102,22 +122,21 @@ export async function searchCode(
   }
   args.push(safePath);
 
-  // 5. Run rg
+  // 5. Run rg (async — does not block event loop)
   let output: string;
   try {
-    output = execFileSync("rg", args, {
+    output = await execFileAsync("rg", args, {
       encoding: "utf-8",
       maxBuffer: 10 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "pipe"],
       timeout: 10_000,
     });
   } catch (err) {
-    const rgErr = err as { status?: number; message?: string };
+    const rgErr = err as { code?: number; message?: string };
     // exit code 1 = no matches (not an error)
-    if (rgErr.status === 1) {
+    if (rgErr.code === 1) {
       return { matches: [], truncated: false };
     }
-    // any other exit code is an actual error
+    // any other exit code is an actual error — sanitize message
     console.error("[searchCode] rg failed:", err);
     return {
       matches: [],
@@ -134,26 +153,25 @@ export async function searchCode(
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    let parsed: RgLine;
+    let parsedLine: RgLine;
     try {
-      parsed = JSON.parse(trimmed) as RgLine;
+      parsedLine = JSON.parse(trimmed) as RgLine;
     } catch {
       continue;
     }
 
-    if (parsed.type !== "match") continue;
+    if (parsedLine.type !== "match") continue;
 
-    const data = parsed.data;
+    const data = parsedLine.data;
 
-    // 7. Build SearchMatch
-    // Strip localPath + "/" prefix for relative filePath
+    // 7. Build SearchMatch — strip localPath prefix for relative filePath
     const absoluteFilePath = data.path.text;
     const prefix = safePath.endsWith("/") ? safePath : safePath + "/";
     const filePath = absoluteFilePath.startsWith(prefix)
       ? absoluteFilePath.slice(prefix.length)
       : absoluteFilePath;
 
-    const lineText = data.lines.text.replace(/\r?\n$/, ""); // trimRight newline
+    const lineText = data.lines.text.replace(/\r?\n$/, "");
 
     const submatches = data.submatches.map((sm) => ({
       start: sm.start,

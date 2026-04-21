@@ -23,7 +23,7 @@ export async function startPreview(
     // Split command by whitespace into args — shell: false (security requirement)
     const parts = command.trim().split(/\s+/);
     const [cmd, ...args] = parts;
-    console.log(`[preview] Starting: ${command} | cwd: ${cwd}`);
+    // Removed console.log per coding standards — use structured logging if needed
     const child = spawn(cmd, args, {
       cwd,
       shell: false,
