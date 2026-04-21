@@ -251,7 +251,7 @@ Plans:
 Plans:
 - [x] 64-01-PLAN.md — searchCode server action + TDD tests (SEARCH-02, SEARCH-03, SEARCH-04)
 - [x] 64-02-PLAN.md — CodeEditor selectedLine prop + CodeSearch component (SEARCH-04, SEARCH-05)
-- [ ] 64-03-PLAN.md — Sub-tab wiring in task-page-client + i18n (SEARCH-01)
+- [x] 64-03-PLAN.md — Sub-tab wiring in task-page-client + i18n (SEARCH-01)
 **UI hint**: yes
 
 ### Progress Table

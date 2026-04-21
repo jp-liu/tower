@@ -25,7 +25,7 @@
 
 ## Code Search (全局代码搜索)
 
-- [ ] **SEARCH-01**: Detail page left panel has two tabs: "文件树" (existing) and "搜索" (new)
+- [x] **SEARCH-01**: Detail page left panel has two tabs: "文件树" (existing) and "搜索" (new)
 - [x] **SEARCH-02**: Search tab has input field with ripgrep-powered search scoped to project.localPath
 - [x] **SEARCH-03**: Search supports regex patterns and file type/glob filtering
 - [x] **SEARCH-04**: Search results display file path, line number, and matching line content with keyword highlighting
