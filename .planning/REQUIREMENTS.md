@@ -48,4 +48,19 @@
 
 | REQ-ID | Phase | Plan |
 |--------|-------|------|
-| (pending roadmap) | | |
+| FORM-01 | Phase 61 | TBD |
+| FORM-02 | Phase 61 | TBD |
+| FORM-03 | Phase 61 | TBD |
+| FORM-04 | Phase 61 | TBD |
+| FORM-05 | Phase 61 | TBD |
+| UI-01 | Phase 61 | TBD |
+| ANALYZE-01 | Phase 62 | TBD |
+| ANALYZE-02 | Phase 62 | TBD |
+| ANALYZE-03 | Phase 62 | TBD |
+| ANALYZE-04 | Phase 62 | TBD |
+| MISSION-01 | Phase 63 | TBD |
+| SEARCH-01 | Phase 64 | TBD |
+| SEARCH-02 | Phase 64 | TBD |
+| SEARCH-03 | Phase 64 | TBD |
+| SEARCH-04 | Phase 64 | TBD |
+| SEARCH-05 | Phase 64 | TBD |

@@ -14,7 +14,8 @@
 - ✅ **v0.93 Chat Media Support** — Phases 40-43 (shipped 2026-04-18)
 - ✅ **v0.94 Cache & File Management** — Phases 44-46 (shipped 2026-04-20)
 - ✅ **v0.95 Pre-Release Hardening** — Phases 47-54 (shipped 2026-04-20)
-- **v0.96 UX Polish & Knowledge Capture** — Phases 55-60 (in progress)
+- ✅ **v0.96 UX Polish & Knowledge Capture** — Phases 55-60 (shipped 2026-04-20)
+- 🚧 **v0.97 Workflow Enhancement & Developer Experience** — Phases 61-64 (in progress)
 
 ## Phases
 
@@ -164,11 +165,9 @@ See: [milestones/v0.94-ROADMAP.md](./milestones/v0.94-ROADMAP.md) for full detai
 See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full details.
 
 </details>
----
 
-## v0.96 UX Polish & Knowledge Capture (Phases 55-60)
-
-### Summary Checklist
+<details>
+<summary>✅ v0.96 UX Polish & Knowledge Capture (Phases 55-60) — SHIPPED 2026-04-20</summary>
 
 - [x] **Phase 55: UI Fixes** - Delete task stops propagation, shared EmptyState component, icon button hover consistency (completed 2026-04-20)
 - [x] **Phase 56: Asset Preview** - Image lightbox, text/md preview dialog, reveal in Finder, reorganized action buttons (completed 2026-04-20)
@@ -177,103 +176,76 @@ See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full detai
 - [x] **Phase 59: Auto-Upload Hook** - PostToolUse hook script, file type config, upload API, env var rename, settings install button (completed 2026-04-20)
 - [x] **Phase 60: Resource Attribution & Task Drawer** - Show task-bound assets in project view, TaskOverviewDrawer shared component (completed 2026-04-20)
 
+</details>
+
+---
+
+## v0.97 Workflow Enhancement & Developer Experience (Phases 61-64)
+
+**Milestone Goal:** 优化项目管理工作流，增强 Mission Control，新增项目智能分析和全局代码搜索，减少对外部编辑器的依赖。
+
+### Summary Checklist
+
+- [ ] **Phase 61: Form UX & UI Polish** - Project path mode separation, textarea overflow fix, ~ path validation, assistant icon relocation
+- [ ] **Phase 62: Project Analysis** - "生成描述" button invokes Claude CLI to analyze localPath and auto-fill project description
+- [ ] **Phase 63: Mission Terminal Open** - "在终端打开" button on Mission card opens system terminal at project.localPath
+- [ ] **Phase 64: Code Search** - Ripgrep-powered search tab in detail page left panel with Monaco editor integration
+
 ### Phase Details
 
-#### Phase 55: UI Fixes
-**Goal**: Users interact with the Kanban board and chat UI without friction from inconsistent interaction patterns
+#### Phase 61: Form UX & UI Polish
+**Goal**: Users interact with project forms without confusion between path modes, and the assistant icon is discoverable in its new location next to the search box
 **Depends on**: Nothing (self-contained UI fixes)
-**Requirements**: UI-01, UI-02, UI-03
+**Requirements**: FORM-01, FORM-02, FORM-03, FORM-04, FORM-05, UI-01
 **Success Criteria** (what must be TRUE):
-  1. Clicking the delete button on a task card deletes the task without opening the detail drawer
-  2. Empty states across asset list and assistant chat use the same visual component and copy pattern
-  3. All clickable icon buttons show a background highlight on hover with consistent transition (no bare text highlight)
-**Plans**: 1 plan
-Plans:
-- [x] 55-01-PLAN.md — Fix delete propagation, shared EmptyState, icon button hover
+  1. The "新建项目" form presents a plain editable text input for localPath; the "导入项目" form presents a browse button and shows the selected path as read-only
+  2. The "迁移" form shows an editable target path field
+  3. All project description and task description textareas cap at a max-height and show a scrollbar when content exceeds it — the parent dialog does not grow beyond the viewport
+  4. Submitting a clone directory path that starts with ~ shows a warning label and the backend returns a validation error
+  5. The assistant chat icon appears to the right of the global search box in the header, not near the language toggle
+**Plans**: TBD
 **UI hint**: yes
 
-#### Phase 56: Asset Preview
-**Goal**: Users can inspect any asset directly in the browser without downloading it first
-**Depends on**: Phase 55
-**Requirements**: ASSET-01, ASSET-02, ASSET-03, ASSET-04
+#### Phase 62: Project Analysis
+**Goal**: Users can generate a structured project description in one click by letting Claude CLI analyze the local directory, eliminating manual description writing
+**Depends on**: Phase 61
+**Requirements**: ANALYZE-01, ANALYZE-02, ANALYZE-03, ANALYZE-04
 **Success Criteria** (what must be TRUE):
-  1. Clicking an image asset opens a fullscreen lightbox with zoom/pan controls; Escape closes it
-  2. Clicking a .txt, .md, or .json asset opens a preview dialog — .md renders as Markdown, others as monospace text
-  3. The "在文件夹中显示" button opens the system file manager with the file highlighted
-  4. Each asset row shows exactly three action buttons in order: Preview, Reveal in Finder, Delete
-**Plans**: 2 plans
-Plans:
-- [x] 56-01-PLAN.md — Image lightbox, text preview dialog, reveal API, i18n keys
-- [x] 56-02-PLAN.md — Wire preview components into asset list UI
+  1. A "生成描述" button is visible next to the clone button in the create form and below the localPath field in the import form
+  2. When no localPath is selected, the button is visually disabled and shows a tooltip "请先选择路径" on hover
+  3. Clicking the enabled button triggers a Claude CLI analysis of the selected directory (package.json, README, src/, monorepo detection) and shows a loading indicator during analysis
+  4. After analysis completes, the project description textarea is auto-filled with structured Markdown covering tech stack, module breakdown, and MCP subPath guidance
+**Plans**: TBD
 **UI hint**: yes
 
-#### Phase 57: Project Import & Migration
-**Goal**: Users can onboard projects cleanly — creating from git URL or importing an existing folder — with an optional atomic migration to a canonical path
-**Depends on**: Phase 55
-**Requirements**: PROJ-01, PROJ-02, PROJ-03, PROJ-04, PROJ-05, PROJ-06
+#### Phase 63: Mission Terminal Open
+**Goal**: Users can jump from a Mission Control card directly into a system terminal at the project directory without switching apps manually
+**Depends on**: Phase 61
+**Requirements**: MISSION-01
 **Success Criteria** (what must be TRUE):
-  1. "新建项目" accepts a git URL, auto-resolves the local path via git rules, and clones if the path does not exist
-  2. "导入项目" lets the user browse to an existing folder, auto-detects git remote, and auto-fills project name
-  3. When the migration toggle is on, the target path is derived from git URL rules and is editable before confirming
-  4. Confirmation is blocked (with a clear error message) if there are running executions, active PTY sessions, or existing worktrees
-  5. A successful migration atomically moves the project directory and updates `localPath` in the database; the source path is gone and the target contains the `.git` directory
-  6. A failed migration leaves the source directory intact and displays the specific error to the user
-**Plans**: 2 plans
-Plans:
-- [x] 57-01-PLAN.md — Split create/import dialogs with auto-fill logic
-- [x] 57-02-PLAN.md — Migration toggle with pre-checks and atomic rename
+  1. Each Mission card (or its toolbar) shows an "在终端打开" button when the task's project has a non-empty localPath
+  2. Clicking the button opens the configured system terminal application with its working directory set to the project's localPath
+**Plans**: TBD
 **UI hint**: yes
 
-#### Phase 58: Session Dreaming
-**Goal**: When a task session ends, the system automatically extracts and persists reusable insights as project notes, visible in the execution timeline and daily reports
-**Depends on**: Phase 57
-**Requirements**: DREAM-01, DREAM-02, DREAM-03, DREAM-04
+#### Phase 64: Code Search
+**Goal**: Users can search across all source files in a project from within the detail page using regex patterns, without leaving Tower or opening an external editor
+**Depends on**: Phase 62
+**Requirements**: SEARCH-01, SEARCH-02, SEARCH-03, SEARCH-04, SEARCH-05
 **Success Criteria** (what must be TRUE):
-  1. After a task execution ends, a second AI analysis runs in the background and produces structured JSON with summary, typed insights, and a shouldCreateNote decision
-  2. When shouldCreateNote is true, a ProjectNote with category "session-insight" is created and linked to the execution via insightNoteId
-  3. The execution timeline card shows a "归纳" row with the note title when an insight note exists; clicking it expands the note content inline with a link to the full notes tab
-  4. The daily_summary MCP report includes an "insights" array listing all session-insight notes created that day with workspace/project/task context
-**Plans**: 2 plans
-Plans:
-- [x] 58-01-PLAN.md — Schema + dreaming logic + note creation
-- [x] 58-02-PLAN.md — Timeline UI + daily report integration
-
-#### Phase 59: Auto-Upload Hook
-**Goal**: Files produced by Claude Code during task execution are automatically captured as task assets without any manual action from the user
-**Depends on**: Phase 57
-**Requirements**: HOOK-01, HOOK-02, HOOK-03, HOOK-04, HOOK-05, HOOK-06
-**Success Criteria** (what must be TRUE):
-  1. When running outside a Tower session (no TOWER_TASK_ID), the hook exits immediately with no side effects
-  2. When Claude Code writes a file matching the configured type whitelist during a Tower session, the file appears in the task's asset list within seconds
-  3. The allowed file types are configurable in Settings and stored in SystemConfig under hooks.autoUploadTypes
-  4. The Settings page has an "安装 Hook" button that writes the PostToolUse hook entry into ~/.claude/settings.json; the button reflects installation state
-  5. All code references to AI_MANAGER_TASK_ID are replaced with TOWER_TASK_ID; the PTY spawn environment injects TOWER_TASK_ID and TOWER_API_URL
-**Plans**: 2 plans
-Plans:
-- [x] 59-01-PLAN.md — Env rename + upload API + hook script
-- [x] 59-02-PLAN.md — Settings UI: type config + install button
-#### Phase 60: Resource Attribution & Task Drawer
-**Goal**: Users can see all assets associated with a project (including those created by task executions) and quickly preview any task from wherever its assets or completions are referenced
-**Depends on**: Phase 56, Phase 58
-**Requirements**: RES-01, RES-02, RES-03, RES-04, RES-05
-**Success Criteria** (what must be TRUE):
-  1. The project assets page shows all assets for the project regardless of whether they are task-bound or project-level
-  2. Task-bound assets display a "[任务: <title>]" label (truncated to 20 characters) beside the asset name
-  3. Clicking a task label badge in the asset list opens the TaskOverviewDrawer showing that task's title, status, priority, description, labels, last execution summary, resource count, and creation date
-  4. Clicking a completed or archived task in the task list opens the TaskOverviewDrawer instead of navigating away
-**Plans**: 2 plans
-Plans:
-- [x] 60-01-PLAN.md — Asset query with task inclusion + TaskOverviewDrawer + task badges
-- [x] 60-02-PLAN.md — Route completed/cancelled task clicks to drawer
+  1. The detail page left panel has a "搜索" tab alongside the existing "文件树" tab; switching between them preserves the file tree state
+  2. Typing in the search input runs a ripgrep search scoped to the project's localPath and displays results within one second for typical codebases
+  3. The search input accepts regex patterns and an optional glob/file-type filter, both applied to the ripgrep command
+  4. Each result row shows the file path, line number, and the matching line content with the keyword highlighted
+  5. Clicking any result row opens the file in the Monaco editor and scrolls to the matched line number
+**Plans**: TBD
 **UI hint**: yes
 
 ### Progress Table
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 55. UI Fixes | 1/1 | Complete    | 2026-04-20 |
-| 56. Asset Preview | 2/2 | Complete    | 2026-04-20 |
-| 57. Project Import & Migration | 2/2 | Complete    | 2026-04-20 |
-| 58. Session Dreaming | 2/2 | Complete    | 2026-04-20 |
-| 59. Auto-Upload Hook | 2/2 | Complete    | 2026-04-20 |
-| 60. Resource Attribution & Task Drawer | 2/2 | Complete    | 2026-04-20 |
+| 61. Form UX & UI Polish | 0/TBD | Not started | - |
+| 62. Project Analysis | 0/TBD | Not started | - |
+| 63. Mission Terminal Open | 0/TBD | Not started | - |
+| 64. Code Search | 0/TBD | Not started | - |
