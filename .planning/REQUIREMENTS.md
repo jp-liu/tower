@@ -1,102 +1,51 @@
-# Requirements: v0.96 UX Polish & Knowledge Capture
+# Requirements: v0.97 Workflow Enhancement & Developer Experience
 
-## UI Fixes
+## Form UX (项目表单交互)
 
-- [ ] **UI-01**: Delete task button must not trigger task detail drawer/panel opening
-- [ ] **UI-02**: Shared `<EmptyState />` component extracted and used across asset-list, assistant-chat, and other empty states
-- [ ] **UI-03**: All icon buttons follow unified hover pattern (`hover:bg-accent hover:text-foreground transition-colors`) — audit and fix chat input area, thumbnail strip, etc.
+- [ ] **FORM-01**: User can create project with plain text path input (no browse button), path is editable
+- [ ] **FORM-02**: User can import project via browse dialog, selected localPath is read-only (not editable)
+- [ ] **FORM-03**: User can migrate project with editable target path
+- [ ] **FORM-04**: Project description and task description textarea have max-height with overflow-y scroll (prevent dialog height overflow)
+- [ ] **FORM-05**: Git cloneDir setting shows warning text "请输入绝对路径，不支持 ~ 别名", backend rejects paths starting with ~
 
-## Asset Preview
+## UI Polish (界面优化)
 
-- [x] **ASSET-01**: Clicking image asset opens fullscreen lightbox with zoom/pan and Escape to close
-- [x] **ASSET-02**: Clicking text/md/json asset opens preview dialog with markdown rendering or monospace display
-- [x] **ASSET-03**: "在文件夹中显示" button opens containing folder in system file manager (`open -R` on macOS)
-- [x] **ASSET-04**: Asset action buttons reorganized to: [预览] [在文件夹中显示] [删除]
+- [ ] **UI-01**: Assistant chat icon moved from language toggle area to right side of search box in header
 
-## Project Import & Migration
+## Project Analysis (项目智能分析)
 
-- [x] **PROJ-01**: "新建项目" flow accepts git URL, auto-resolves local path, clones if not exist
-- [x] **PROJ-02**: "导入项目" flow with folder browser, auto-detect git remote, auto-fill project name
-- [x] **PROJ-03**: Migration toggle on import — shows target path derived from git rules, editable
-- [x] **PROJ-04**: Migration pre-checks block if RUNNING executions, active PTY sessions, or existing worktrees; warn "建议先关闭 IDE" (non-blocking)
-- [x] **PROJ-05**: Migration executes `fs.rename` (atomic, same-filesystem) with mkdir -p for parent dir
-- [x] **PROJ-06**: Migration error handling — rename failure leaves source intact, clear error messages
+- [ ] **ANALYZE-01**: "生成描述" button appears next to clone button and below import localPath field
+- [ ] **ANALYZE-02**: Button disabled (greyed out) with tooltip "请先选择路径" when no localPath is set or project not cloned
+- [ ] **ANALYZE-03**: Clicking button invokes Claude CLI to analyze localPath directory structure (package.json, README, src/, monorepo detection)
+- [ ] **ANALYZE-04**: Analysis result auto-fills project description textarea with structured Markdown (tech stack, module breakdown, MCP subPath guidance)
 
-## Session Dreaming
+## Mission Control (任务监控增强)
 
-- [x] **DREAM-01**: Phase 2+ AI analysis on final session stop (not on continue/resume) — structured JSON output (summary, insights, shouldCreateNote); git log uses full `merge-base..HEAD`
-- [x] **DREAM-02**: Auto-create `ProjectNote` (category: `session-insight`) when AI determines significance
-- [x] **DREAM-03**: Execution timeline shows "归纳" row linking to insight note (inline expand + navigate)
-- [x] **DREAM-04**: `daily_summary` report includes `insights` section listing session-insight notes created that day
+- [ ] **MISSION-01**: "在终端打开" button in Mission card or toolbar, opens system terminal at project.localPath
 
-## Auto-Upload Hook
+## Code Search (全局代码搜索)
 
-- [x] **HOOK-01**: Global PostToolUse hook script gated by `TOWER_TASK_ID` env var (no-op when absent)
-- [x] **HOOK-02**: Hook detects file creation/reference matching configured types and uploads to Tower API; checks file exists before upload; respects `system.maxUploadBytes` size limit
-- [x] **HOOK-03**: File type whitelist configurable via SystemConfig `hooks.autoUploadTypes`
-- [x] **HOOK-04**: Internal upload API endpoint accepts taskId + filePath, copies to `data/assets/{projectId}/`
-- [x] **HOOK-05**: Environment variable rename: `AI_MANAGER_TASK_ID` → `TOWER_TASK_ID`, add `TOWER_API_URL`; signal dir rename `/tmp/ai-manager-signals/` → `/tmp/tower-signals/`
-- [x] **HOOK-06**: Settings page "安装 Hook" button — appends hook entry to existing `~/.claude/settings.json` hooks array (never overwrite existing hooks)
+- [ ] **SEARCH-01**: Detail page left panel has two tabs: "文件树" (existing) and "搜索" (new)
+- [ ] **SEARCH-02**: Search tab has input field with ripgrep-powered search scoped to project.localPath
+- [ ] **SEARCH-03**: Search supports regex patterns and file type/glob filtering
+- [ ] **SEARCH-04**: Search results display file path, line number, and matching line content with keyword highlighting
+- [ ] **SEARCH-05**: Clicking a search result opens the file in Monaco editor at the matching line
 
-## Resource Attribution & Task Drawer
+## Future Requirements (deferred to Preview milestone)
 
-- [x] **RES-01**: Project assets page shows all assets including task-bound ones (remove `taskId: null` filter)
-- [x] **RES-02**: Task-bound assets display `[任务: xxx]` label with task title
-- [x] **RES-03**: `TaskOverviewDrawer` component — shows task title, status, priority, description, labels, last execution summary, resource count, created date
-- [x] **RES-04**: Clicking task label in asset list opens TaskOverviewDrawer
-- [x] **RES-05**: Archive/completed task list items open TaskOverviewDrawer on click
-
----
-
-## Future Requirements (deferred)
-
-- 非图片文件粘贴支持
-- 拖拽上传
-- 缓存自动清理策略
-- 任务抽屉内跳转到终端/详情操作
-- 多用户/账号体系下的缓存隔离
+- 启动配置模型 (startCommand / startPort / packageManager / workDir fields on Project)
+- Mission "启动项目" button (read config, PTY execute)
+- Preview 前端项目 iframe 嵌入预览
+- 启动脚本编辑器（质效工作流风格）
 
 ## Out of Scope
 
-- Keyboard shortcut system expansion — only 2 shortcuts, already Windows-compatible
-- Electron/desktop features — pure web, local deploy only
-- Cross-device migration (cp fallback) — local tool, same filesystem guaranteed
-
----
+- 后端项目 Preview — 复杂度高，暂不支持
+- 多编辑器同时打开 — 用代码搜索替代
+- 全路径任意搜索 — 限制在已注册项目 localPath 内
 
 ## Traceability
 
-| Requirement | Phase | Plan | Status |
-|-------------|-------|------|--------|
-| UI-01 | Phase 55 | — | Pending |
-| UI-02 | Phase 55 | — | Pending |
-| UI-03 | Phase 55 | — | Pending |
-| ASSET-01 | Phase 56 | — | Pending |
-| ASSET-02 | Phase 56 | — | Pending |
-| ASSET-03 | Phase 56 | — | Pending |
-| ASSET-04 | Phase 56 | — | Pending |
-| PROJ-01 | Phase 57 | — | Pending |
-| PROJ-02 | Phase 57 | — | Pending |
-| PROJ-03 | Phase 57 | — | Pending |
-| PROJ-04 | Phase 57 | — | Pending |
-| PROJ-05 | Phase 57 | — | Pending |
-| PROJ-06 | Phase 57 | — | Pending |
-| DREAM-01 | Phase 58 | — | Pending |
-| DREAM-02 | Phase 58 | — | Pending |
-| DREAM-03 | Phase 58 | — | Pending |
-| DREAM-04 | Phase 58 | — | Pending |
-| HOOK-01 | Phase 59 | — | Pending |
-| HOOK-02 | Phase 59 | — | Pending |
-| HOOK-03 | Phase 59 | — | Pending |
-| HOOK-04 | Phase 59 | — | Pending |
-| HOOK-05 | Phase 59 | — | Pending |
-| HOOK-06 | Phase 59 | — | Pending |
-| RES-01 | Phase 60 | — | Pending |
-| RES-02 | Phase 60 | — | Pending |
-| RES-03 | Phase 60 | — | Pending |
-| RES-04 | Phase 60 | — | Pending |
-| RES-05 | Phase 60 | — | Pending |
-
----
-
-*Full design details: `.planning/v0.96-REQUIREMENTS.md`*
+| REQ-ID | Phase | Plan |
+|--------|-------|------|
+| (pending roadmap) | | |
