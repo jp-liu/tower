@@ -261,4 +261,4 @@ Plans:
 | 61. Form UX & UI Polish | 3/3 | Complete    | 2026-04-21 |
 | 62. Project Analysis | 2/2 | Complete    | 2026-04-21 |
 | 63. Mission Terminal Open | 1/1 | Complete    | 2026-04-21 |
-| 64. Code Search | 0/3 | Not started | - |
+| 64. Code Search | 0/3 | Planned    |  |
