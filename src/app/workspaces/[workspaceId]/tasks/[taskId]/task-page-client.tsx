@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal, Square, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal, Square, CheckCircle2, Search } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import Link from "next/link";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -11,6 +11,7 @@ import { TaskDiffView } from "@/components/task/task-diff-view";
 import { TaskMergeConfirmDialog } from "@/components/task/task-merge-confirm-dialog";
 import { FileTree } from "@/components/task/file-tree";
 import { CodeEditor } from "@/components/task/code-editor";
+import { CodeSearch } from "@/components/task/code-search";
 import { PreviewPanel } from "@/components/task/preview-panel";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
@@ -85,6 +86,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const [diffData, setDiffData] = useState<DiffData | null>(null);
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
+  const [selectedLine, setSelectedLine] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -446,20 +448,50 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
             </TabsList>
           </div>
 
-          {/* Files tab — Phase 21: FileTree + CodeEditor split layout */}
+          {/* Files tab — Phase 21+64: FileTree/Search sub-tabs + CodeEditor */}
           <TabsContent value="files" className="flex-1 min-h-0 overflow-hidden">
             <div className="flex h-full flex-row overflow-hidden">
-              {/* Left: file tree, fixed 240px */}
-              <div className="w-60 flex-none border-r border-border overflow-hidden">
-                <FileTree
-                  worktreePath={fileRootPath ?? null}
-                  baseBranch={task.baseBranch ?? null}
-                  worktreeBranch={latestExecution?.worktreeBranch ?? null}
-                  executionStatus={latestExecution?.status ?? "COMPLETED"}
-                  onFileSelect={(absolutePath) => {
-                    setSelectedFilePath(absolutePath);
-                  }}
-                />
+              {/* Left: sub-tabs for file tree vs search (240px fixed) */}
+              <div className="w-60 flex-none border-r border-border overflow-hidden flex flex-col">
+                <Tabs defaultValue="filetree" className="flex h-full flex-col gap-0">
+                  {/* Sub-tab bar */}
+                  <div className="flex shrink-0 border-b border-border px-2 py-1.5">
+                    <TabsList className="h-auto border border-border w-full">
+                      <TabsTrigger value="filetree" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
+                        <FolderTree className="h-3 w-3" />
+                        {t("taskPage.tabFileTree")}
+                      </TabsTrigger>
+                      <TabsTrigger value="search" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
+                        <Search className="h-3 w-3" />
+                        {t("taskPage.tabSearch")}
+                      </TabsTrigger>
+                    </TabsList>
+                  </div>
+                  {/* File tree sub-tab */}
+                  <TabsContent value="filetree" className="flex-1 min-h-0 overflow-hidden mt-0">
+                    <FileTree
+                      worktreePath={fileRootPath ?? null}
+                      baseBranch={task.baseBranch ?? null}
+                      worktreeBranch={latestExecution?.worktreeBranch ?? null}
+                      executionStatus={latestExecution?.status ?? "COMPLETED"}
+                      onFileSelect={(absolutePath) => {
+                        setSelectedFilePath(absolutePath);
+                        setSelectedLine(null);
+                      }}
+                    />
+                  </TabsContent>
+                  {/* Search sub-tab */}
+                  <TabsContent value="search" className="flex-1 min-h-0 overflow-hidden mt-0">
+                    <CodeSearch
+                      localPath={task.project?.localPath ?? null}
+                      onResultSelect={(absolutePath, line) => {
+                        setSelectedFilePath(absolutePath);
+                        setSelectedLine(line);
+                        setActiveTab("files");
+                      }}
+                    />
+                  </TabsContent>
+                </Tabs>
               </div>
               {/* Right: Monaco editor, fills remaining width */}
               <div className="flex-1 min-w-0 overflow-hidden">
@@ -467,6 +499,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                   <CodeEditor
                     worktreePath={fileRootPath}
                     selectedFilePath={selectedFilePath}
+                    selectedLine={selectedLine}
                     onFilePathChange={setSelectedFilePath}
                     onSave={() => setPreviewRefreshKey((k) => k + 1)}
                   />
