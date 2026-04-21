@@ -25,6 +25,20 @@ Users can organize, track, and execute AI-assisted tasks through a visual Kanban
 
 **Shipped:** 全链路 UX 优化 + 知识沉淀系统 — 资源预览（lightbox/文本/Finder 揭示）、项目导入迁移（拆分流程 + 原子 rename）、Session Dreaming（AI 洞察自动沉淀为笔记）、Auto-Upload Hook（PostToolUse 实时捕获）、资源归属 + TaskOverviewDrawer。24 需求 / 6 阶段 / 11 计划交付。
 
+## Current Milestone: v0.97 Workflow Enhancement & Developer Experience
+
+**Goal:** 优化项目管理工作流，增强 Mission Control，新增全局代码搜索，减少对编辑器的依赖。
+
+**Target features:**
+- 项目路径交互优化（创建/导入/迁移三种模式区分）
+- Textarea 溢出修复（max-height + scroll）
+- ~ 路径校验与提示
+- 助手图标位置调整（搜索框右侧）
+- 项目智能分析（CLI 分析 localPath → 自动填充 description + startCommand + port + packageManager）
+- Mission 启动项目（读取项目启动配置，PTY 执行）
+- Mission 在终端打开（系统终端打开 localPath）
+- 全局代码搜索（详情页左侧面板，文件树/搜索 tab 切换，ripgrep 驱动）
+
 ## Current State
 
 **Shipped:** v0.96 UX Polish & Knowledge Capture (2026-04-20)
@@ -245,4 +259,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-20 after v0.96 milestone*
+*Last updated: 2026-04-21 — milestone v0.97 started*
