@@ -207,6 +207,7 @@ export function CreateTaskDialog({
               rows={4}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              className="max-h-[200px] overflow-y-auto"
             />
           </div>
           <div className="space-y-2">
