@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, ArrowUpRight, X } from "lucide-react";
+import { GripVertical, ArrowUpRight, X, TerminalSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { useI18n } from "@/lib/i18n";
+import { openInTerminal } from "@/actions/preview-actions";
+import { toast } from "sonner";
 import type { ActiveExecutionInfo } from "@/actions/agent-actions";
 
 const TaskTerminal = dynamic(
@@ -69,6 +71,15 @@ export function MissionCard({
   const seconds = elapsed % 60;
   const formattedTime = `${minutes}m ${seconds}s`;
 
+  async function handleOpenInTerminal() {
+    if (!execution.projectLocalPath) return;
+    try {
+      await openInTerminal(execution.projectLocalPath);
+    } catch {
+      toast.error(t("preview.terminalError"));
+    }
+  }
+
   return (
     <div
       ref={setNodeRef}
@@ -118,6 +129,24 @@ export function MissionCard({
         <span className="text-[11px] text-muted-foreground ml-1 shrink-0">
           {formattedTime}
         </span>
+
+        {/* Open in terminal — only when project has a localPath */}
+        {execution.projectLocalPath && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  className="h-8 w-8 p-0 ml-1 shrink-0 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  onClick={handleOpenInTerminal}
+                />
+              }
+            >
+              <TerminalSquare className="h-3.5 w-3.5" />
+            </TooltipTrigger>
+            <TooltipContent>{t("missions.openInTerminal")}</TooltipContent>
+          </Tooltip>
+        )}
 
         {/* Open full view */}
         <Tooltip>
