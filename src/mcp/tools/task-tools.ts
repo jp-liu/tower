@@ -100,6 +100,7 @@ export const taskTools = {
 
       // Copy reference files to assets and create ProjectAsset records
       const attachedFiles: string[] = [];
+      let updatedDesc: string | null = null;
       if (args.references && args.references.length > 0) {
         const assetsDir = join(process.cwd(), "data", "assets", args.projectId);
         mkdirSync(assetsDir, { recursive: true });
@@ -151,16 +152,15 @@ export const taskTools = {
         // Append reference info to task description with full absolute paths
         if (attachedFiles.length > 0) {
           const refText = attachedFiles.map((f) => `- ${join(assetsDir, f)}`).join("\n");
-          const updatedDesc = (task.description ?? "") + `\n\nAttached references:\n${refText}`;
+          updatedDesc = (task.description ?? "") + `\n\nAttached references:\n${refText}`;
           await db.task.update({ where: { id: task.id }, data: { description: updatedDesc } });
         }
       }
 
-      // Auto-start execution if requested — use updated description (includes reference paths)
+      // Auto-start execution if requested — use locally-built description (no extra DB query)
       if (args.autoStart) {
         const PORT = process.env.PORT ?? "3000";
-        const updatedTask = await db.task.findUnique({ where: { id: task.id }, select: { description: true } });
-        const prompt = updatedTask?.description || args.description || args.title;
+        const prompt = updatedDesc || args.description || args.title;
         try {
           const res = await fetch(`http://localhost:${PORT}/api/internal/terminal/${task.id}/start`, {
             method: "POST",
@@ -227,10 +227,9 @@ export const taskTools = {
       status: TaskStatus,
     }),
     handler: async (args: { taskId: string; status: string }) => {
-      return db.task.update({
-        where: { id: args.taskId },
-        data: { status: args.status as "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED" },
-      });
+      // Delegate to updateTaskStatus to trigger side effects (dreaming on DONE, worktree cleanup on CANCELLED, etc.)
+      const { updateTaskStatus } = await import("@/actions/task-actions");
+      return updateTaskStatus(args.taskId, args.status as "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED");
     },
   },
 

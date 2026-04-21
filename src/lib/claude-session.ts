@@ -57,10 +57,14 @@ export function ensureSessionSymlink(
   const dstFile = join(dstDir, `${sessionId}.jsonl`);
 
   if (!existsSync(srcFile)) return;
-  if (existsSync(dstFile)) return; // Already exists (or already symlinked)
 
-  mkdirSync(dstDir, { recursive: true });
-  symlinkSync(srcFile, dstFile);
+  try {
+    mkdirSync(dstDir, { recursive: true });
+    symlinkSync(srcFile, dstFile);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    // EEXIST is fine — symlink already created by concurrent call
+  }
 }
 
 /**
