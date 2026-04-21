@@ -45,6 +45,7 @@ export interface CodeEditorProps {
   selectedFilePath: string | null;
   onFilePathChange?: (path: string | null) => void;
   onSave?: () => void;
+  selectedLine?: number | null;
 }
 
 export function CodeEditor({
@@ -52,6 +53,7 @@ export function CodeEditor({
   selectedFilePath,
   onFilePathChange,
   onSave,
+  selectedLine,
 }: CodeEditorProps) {
   const { t } = useI18n();
   const { resolvedTheme } = useTheme();
@@ -133,6 +135,21 @@ export function CodeEditor({
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFilePath, worktreePath]);
+
+  // Scroll Monaco to selectedLine when it changes (or active tab changes)
+  useEffect(() => {
+    if (!selectedLine || !editorRef.current) return;
+    const editor = editorRef.current as {
+      revealLineInCenter: (line: number) => void;
+      setPosition: (pos: { lineNumber: number; column: number }) => void;
+    };
+    // Delay 50ms to let Monaco finish loading the model
+    const timer = setTimeout(() => {
+      editor.revealLineInCenter(selectedLine);
+      editor.setPosition({ lineNumber: selectedLine, column: 1 });
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [selectedLine, activeTabPath]);
 
   // Create / switch Monaco model on active tab change
   useEffect(() => {
