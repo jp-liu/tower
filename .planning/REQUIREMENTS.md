@@ -21,7 +21,7 @@
 
 ## Mission Control (任务监控增强)
 
-- [ ] **MISSION-01**: "在终端打开" button in Mission card or toolbar, opens system terminal at project.localPath
+- [x] **MISSION-01**: "在终端打开" button in Mission card or toolbar, opens system terminal at project.localPath
 
 ## Code Search (全局代码搜索)
 

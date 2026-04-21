@@ -188,7 +188,7 @@ See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full detai
 
 - [x] **Phase 61: Form UX & UI Polish** - Project path mode separation, textarea overflow fix, ~ path validation, assistant icon relocation (completed 2026-04-21)
 - [x] **Phase 62: Project Analysis** - "生成描述" button invokes Claude CLI to analyze localPath and auto-fill project description (completed 2026-04-21)
-- [ ] **Phase 63: Mission Terminal Open** - "在终端打开" button on Mission card opens system terminal at project.localPath
+- [x] **Phase 63: Mission Terminal Open** - "在终端打开" button on Mission card opens system terminal at project.localPath (completed 2026-04-21)
 - [ ] **Phase 64: Code Search** - Ripgrep-powered search tab in detail page left panel with Monaco editor integration
 
 ### Phase Details
@@ -234,7 +234,7 @@ Plans:
   2. Clicking the button opens the configured system terminal application with its working directory set to the project's localPath
 **Plans**: 1 plan
 Plans:
-- [ ] 63-01-PLAN.md — Add terminal open button to mission card (MISSION-01)
+- [x] 63-01-PLAN.md — Add terminal open button to mission card (MISSION-01)
 **UI hint**: yes
 
 #### Phase 64: Code Search
@@ -256,5 +256,5 @@ Plans:
 |-------|----------------|--------|-----------|
 | 61. Form UX & UI Polish | 3/3 | Complete    | 2026-04-21 |
 | 62. Project Analysis | 2/2 | Complete    | 2026-04-21 |
-| 63. Mission Terminal Open | 0/1 | Not started | - |
+| 63. Mission Terminal Open | 1/1 | Complete   | 2026-04-21 |
 | 64. Code Search | 0/TBD | Not started | - |

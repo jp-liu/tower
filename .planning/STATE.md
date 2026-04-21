@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.97
 milestone_name: Workflow Enhancement & Developer Experience
-status: planning
-stopped_at: Completed 62-02-PLAN.md — 生成描述 button in both project dialogs
-last_updated: "2026-04-21T06:30:19.923Z"
-last_activity: 2026-04-21 — v0.97 roadmap created; phases 61-64 defined, 16 requirements mapped
+status: verifying
+stopped_at: Completed 63-01-PLAN.md — Mission terminal open button in MissionCard
+last_updated: "2026-04-21T06:42:07.751Z"
+last_activity: 2026-04-21
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
+  completed_phases: 3
+  total_plans: 6
+  completed_plans: 6
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 61 — Form UX & UI Polish
+**Current focus:** Phase 63 — mission-terminal-open
 
 ## Current Position
 
-Phase: 61 of 64 (Form UX & UI Polish)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-04-21 — v0.97 roadmap created; phases 61-64 defined, 16 requirements mapped
+Phase: 63 (mission-terminal-open) — EXECUTING
+Plan: 1 of 1
+Status: Phase complete — ready for verification
+Last activity: 2026-04-21
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -65,6 +65,7 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 62]: execFile env isolation: pass only PATH/HOME/USER/TMPDIR/TERM to Claude CLI — no DATABASE_URL/NODE_OPTIONS leak
 - [Phase 62]: TooltipTrigger uses render prop (render=<Button/>) not asChild — matches confirmed project convention from Phase 61
 - [Phase 62]: import-project-dialog disable condition uses !localPath (no trim) — path always from folder browser
+- [Phase 63]: Reused existing openInTerminal server action from preview-actions.ts for Mission terminal open button
 
 ### Pending Todos
 
@@ -76,6 +77,6 @@ Progress: [░░░░░░░░░░] 0%
 
 ## Session Continuity
 
-Last session: 2026-04-21T06:30:19.920Z
-Stopped at: Completed 62-02-PLAN.md — 生成描述 button in both project dialogs
+Last session: 2026-04-21T06:42:07.747Z
+Stopped at: Completed 63-01-PLAN.md — Mission terminal open button in MissionCard
 Resume file: None
