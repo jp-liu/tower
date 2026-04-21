@@ -615,4 +615,13 @@ export const zh = {
   "taskDrawer.lastExecution": "最近执行",
   "taskDrawer.noDescription": "暂无描述",
   "taskDrawer.noExecution": "暂无执行记录",
+  // Code search (Phase 64)
+  "codeSearch.patternPlaceholder": "搜索代码（支持正则）",
+  "codeSearch.globPlaceholder": "文件过滤，如 *.ts",
+  "codeSearch.noPath": "请先配置项目本地路径",
+  "codeSearch.searching": "搜索中...",
+  "codeSearch.noResults": "无匹配结果",
+  "codeSearch.truncated": "仅显示前 200 条结果",
+  "codeSearch.hint": "输入关键词后按 Enter 搜索",
+  "codeSearch.rgNotInstalled": "未找到 ripgrep (rg)，请安装: brew install ripgrep",
 } as const;

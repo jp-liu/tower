@@ -600,4 +600,13 @@ export const en: Translations = {
   "taskDrawer.lastExecution": "Last Execution",
   "taskDrawer.noDescription": "No description",
   "taskDrawer.noExecution": "No execution history",
+  // Code search (Phase 64)
+  "codeSearch.patternPlaceholder": "Search code (regex supported)",
+  "codeSearch.globPlaceholder": "File filter, e.g. *.ts",
+  "codeSearch.noPath": "Please configure local path first",
+  "codeSearch.searching": "Searching...",
+  "codeSearch.noResults": "No matches found",
+  "codeSearch.truncated": "Showing first 200 results",
+  "codeSearch.hint": "Type a keyword and press Enter to search",
+  "codeSearch.rgNotInstalled": "ripgrep (rg) not found, please install: brew install ripgrep",
 };
