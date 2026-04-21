@@ -601,6 +601,10 @@ export const zh = {
   "project.samePathInfo": "路径已是规范路径",
   "project.migrateSafetyWarning": "迁移前请确保没有运行中的任务",
   "project.worktreeWarning": "该项目有活跃的 Git Worktree，迁移将被阻止",
+  "project.genDesc": "生成描述",
+  "project.analyzing": "分析中...",
+  "project.analyzeError": "分析失败，请重试",
+  "project.genDescDisabledTooltip": "请先选择路径",
   // Task overview drawer (Phase 60)
   "taskDrawer.title": "任务概览",
   "taskDrawer.description": "描述",
