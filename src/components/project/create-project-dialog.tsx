@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { GitBranch, Loader2, Check, AlertCircle } from "lucide-react";
+import { GitBranch, Loader2, Check, AlertCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
@@ -12,9 +12,12 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 import { toCloneUrl, parseGitUrl } from "@/lib/git-url";
 import { resolveGitLocalPath } from "@/actions/config-actions";
+import { analyzeProjectDirectory } from "@/actions/project-actions";
+import { toast } from "sonner";
 
 interface CreateProjectData {
   name: string;
@@ -46,6 +49,7 @@ export function CreateProjectDialog({
   const [projectType, setProjectType] = useState<"FRONTEND" | "BACKEND">("FRONTEND");
   const [cloneStatus, setCloneStatus] = useState<"idle" | "cloning" | "success" | "error">("idle");
   const [cloneError, setCloneError] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const resetForm = () => {
     setProjectName("");
@@ -57,6 +61,20 @@ export function CreateProjectDialog({
     setProjectType("FRONTEND");
     setCloneStatus("idle");
     setCloneError("");
+    setIsAnalyzing(false);
+  };
+
+  const handleAnalyze = async () => {
+    if (!localPath.trim() || isAnalyzing) return;
+    setIsAnalyzing(true);
+    try {
+      const result = await analyzeProjectDirectory(localPath.trim());
+      setProjectDesc(result);
+    } catch {
+      toast.error(t("project.analyzeError"));
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const handleGitUrlChange = async (value: string) => {
@@ -233,7 +251,30 @@ export function CreateProjectDialog({
 
             {/* Description */}
             <div>
-              <label className="text-xs font-medium text-muted-foreground">{t("project.description")}</label>
+              <div className="flex items-center justify-between mt-0.5">
+                <label className="text-xs font-medium text-muted-foreground">{t("project.description")}</label>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={!localPath.trim() || isAnalyzing}
+                        onClick={handleAnalyze}
+                        className="h-6 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+                      />
+                    }
+                  >
+                    {isAnalyzing ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3 w-3" />
+                    )}
+                    {isAnalyzing ? t("project.analyzing") : t("project.genDesc")}
+                  </TooltipTrigger>
+                  <TooltipContent>{t("project.genDescDisabledTooltip")}</TooltipContent>
+                </Tooltip>
+              </div>
               <textarea
                 placeholder={t("project.descPlaceholder")}
                 value={projectDesc}
