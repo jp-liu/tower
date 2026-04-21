@@ -249,8 +249,8 @@ Plans:
   5. Clicking any result row opens the file in the Monaco editor and scrolls to the matched line number
 **Plans**: 3 plans
 Plans:
-- [ ] 64-01-PLAN.md — searchCode server action + TDD tests (SEARCH-02, SEARCH-03, SEARCH-04)
-- [ ] 64-02-PLAN.md — CodeEditor selectedLine prop + CodeSearch component (SEARCH-04, SEARCH-05)
+- [x] 64-01-PLAN.md — searchCode server action + TDD tests (SEARCH-02, SEARCH-03, SEARCH-04)
+- [x] 64-02-PLAN.md — CodeEditor selectedLine prop + CodeSearch component (SEARCH-04, SEARCH-05)
 - [ ] 64-03-PLAN.md — Sub-tab wiring in task-page-client + i18n (SEARCH-01)
 **UI hint**: yes
 
@@ -261,4 +261,4 @@ Plans:
 | 61. Form UX & UI Polish | 3/3 | Complete    | 2026-04-21 |
 | 62. Project Analysis | 2/2 | Complete    | 2026-04-21 |
 | 63. Mission Terminal Open | 1/1 | Complete    | 2026-04-21 |
-| 64. Code Search | 0/3 | Planned    |  |
+| 64. Code Search | 2/3 | In Progress|  |
