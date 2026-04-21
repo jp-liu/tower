@@ -2,6 +2,7 @@
 
 import { rename, mkdir, readdir } from "fs/promises";
 import { existsSync } from "fs";
+import { execFile } from "child_process";
 import path from "path";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
@@ -159,4 +160,65 @@ export async function migrateProjectPath(
   revalidatePath("/workspaces");
 
   return { success: true };
+}
+
+/**
+ * Analyze a project directory using Claude CLI one-shot and return a structured
+ * Markdown description of the project's tech stack, module structure, and entry points.
+ *
+ * @param localPath - Absolute path to the project directory (no tilde aliases)
+ * @returns Trimmed Markdown string from Claude CLI output
+ * @throws Error if path is invalid or CLI invocation fails
+ */
+export async function analyzeProjectDirectory(localPath: string): Promise<string> {
+  if (!localPath || typeof localPath !== "string") {
+    throw new Error("无效的本地路径");
+  }
+  if (localPath.startsWith("~")) {
+    throw new Error("不支持 ~ 别名，请提供绝对路径");
+  }
+
+  const prompt = `You are analyzing a software project directory. Read the directory structure and key files (package.json, README.md, src/ or lib/ directory layout, any monorepo config like pnpm-workspace.yaml, lerna.json, or turbo.json) to generate a structured project description.
+
+Output ONLY the Markdown description with these sections (omit sections with no data):
+
+## 技术栈
+List the primary languages, frameworks, and key libraries.
+
+## 模块结构
+Briefly describe the main packages/modules and their responsibilities.
+
+## 入口点
+Key entry files (e.g. src/index.ts, apps/web/src/app/page.tsx).
+
+## MCP subPath（如果是 monorepo）
+If this is a monorepo, list each package/app with its relative path and one-line purpose.
+
+Keep the description concise (under 400 words). Do not add commentary or preamble — output only the Markdown.`;
+
+  return new Promise((resolve, reject) => {
+    execFile(
+      "claude",
+      ["-p", prompt, "--no-session-persistence", "--max-turns", "1"],
+      {
+        cwd: localPath,
+        timeout: 30_000,
+        encoding: "utf-8",
+        env: {
+          PATH: process.env.PATH,
+          HOME: process.env.HOME,
+          USER: process.env.USER,
+          TMPDIR: process.env.TMPDIR,
+          TERM: process.env.TERM,
+        },
+      },
+      (err, stdout) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(stdout.trim());
+      }
+    );
+  });
 }
