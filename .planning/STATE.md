@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.97
 milestone_name: Workflow Enhancement & Developer Experience
 status: planning
-stopped_at: Completed 62-01-PLAN.md — analyzeProjectDirectory action + 7 unit tests + i18n keys
-last_updated: "2026-04-21T06:23:40.854Z"
+stopped_at: Completed 62-02-PLAN.md — 生成描述 button in both project dialogs
+last_updated: "2026-04-21T06:30:19.923Z"
 last_activity: 2026-04-21 — v0.97 roadmap created; phases 61-64 defined, 16 requirements mapped
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -63,6 +63,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 61]: Tilde backend guard placed before expandHome — ensures no filesystem resolution of ~ paths
 - [Phase 62]: vi.hoisted() required for child_process mock in jsdom vitest environment — mock factory runs before const declarations
 - [Phase 62]: execFile env isolation: pass only PATH/HOME/USER/TMPDIR/TERM to Claude CLI — no DATABASE_URL/NODE_OPTIONS leak
+- [Phase 62]: TooltipTrigger uses render prop (render=<Button/>) not asChild — matches confirmed project convention from Phase 61
+- [Phase 62]: import-project-dialog disable condition uses !localPath (no trim) — path always from folder browser
 
 ### Pending Todos
 
@@ -74,6 +76,6 @@ Progress: [░░░░░░░░░░] 0%
 
 ## Session Continuity
 
-Last session: 2026-04-21T06:23:40.851Z
-Stopped at: Completed 62-01-PLAN.md — analyzeProjectDirectory action + 7 unit tests + i18n keys
+Last session: 2026-04-21T06:30:19.920Z
+Stopped at: Completed 62-02-PLAN.md — 生成描述 button in both project dialogs
 Resume file: None
