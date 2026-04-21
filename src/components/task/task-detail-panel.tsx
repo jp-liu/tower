@@ -50,6 +50,7 @@ export function TaskDetailPanel({
   // Terminal + execution history state — reset when task changes
   const [activeWorktreePath, setActiveWorktreePath] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [terminalKey, setTerminalKey] = useState(0);
   const [executionLoaded, setExecutionLoaded] = useState(false);
   const [pastExecutions, setPastExecutions] = useState<TaskExecution[]>([]);
 
@@ -123,6 +124,7 @@ export function TaskDetailPanel({
     try {
       const { worktreePath } = await startPtyExecution(task.id, "", selectedPromptId);
       setActiveWorktreePath(worktreePath);
+      setTerminalKey((k) => k + 1);
       setTaskStatus("IN_PROGRESS");
     } catch (err) {
       setIsExecuting(false);
@@ -162,6 +164,7 @@ export function TaskDetailPanel({
     try {
       const { worktreePath } = await resumePtyExecution(task.id, sessionId);
       setActiveWorktreePath(worktreePath);
+      setTerminalKey((k) => k + 1);
       setTaskStatus("IN_PROGRESS");
     } catch {
       setIsExecuting(false);
@@ -174,6 +177,7 @@ export function TaskDetailPanel({
     try {
       const { worktreePath } = await continueLatestPtyExecution(task.id);
       setActiveWorktreePath(worktreePath);
+      setTerminalKey((k) => k + 1);
       setTaskStatus("IN_PROGRESS");
     } catch (err) {
       setIsExecuting(false);
@@ -342,6 +346,7 @@ export function TaskDetailPanel({
               </div>
               <div className="flex-1 min-h-0">
                 <TerminalOutlet
+                  key={terminalKey}
                   taskId={task.id}
                   worktreePath={activeWorktreePath}
                   onSessionEnd={handleSessionEnd}

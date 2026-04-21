@@ -1,7 +1,17 @@
 import { readdirSync, statSync } from "fs";
 import { join } from "path";
-import { execFile } from "child_process";
+import { execFile, execFileSync } from "child_process";
 import { homedir } from "os";
+
+/** Resolve claude CLI binary — env var > `which claude` > fallback */
+function findClaudeBinary(): string {
+  if (process.env.CLAUDE_CODE_PATH) return process.env.CLAUDE_CODE_PATH;
+  try {
+    return execFileSync("which", ["claude"], { encoding: "utf-8", timeout: 3000 }).trim();
+  } catch {
+    return "claude";
+  }
+}
 
 export interface DreamingResult {
   summary: string;
@@ -122,7 +132,7 @@ ${terminalLog.slice(-5000)}
 \`\`\``;
 
     execFile(
-      "claude",
+      findClaudeBinary(),
       ["-p", prompt, "--no-session-persistence", "--max-turns", "1"],
       {
         cwd,
@@ -182,7 +192,7 @@ Rules:
 - Keep each insight concise (1-2 sentences)`;
 
     execFile(
-      "claude",
+      findClaudeBinary(),
       ["-p", prompt, "--no-session-persistence", "--max-turns", "1"],
       {
         cwd,

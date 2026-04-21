@@ -97,6 +97,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const [activeWorktreePath, setActiveWorktreePath] = useState<string | null>(
     latestExecution?.status === "RUNNING" ? (latestExecution?.worktreePath ?? null) : null
   );
+  const [terminalKey, setTerminalKey] = useState(0);
 
   // Effective file root: worktreePath (worktree mode) or localPath+subPath (direct mode)
   const directCwd = task.project?.localPath
@@ -163,6 +164,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     try {
       const { worktreePath } = await startPtyExecution(task.id, "", selectedPromptId);
       setActiveWorktreePath(worktreePath);
+      setTerminalKey((k) => k + 1);
     } catch (err) {
       setIsExecuting(false);
       toast.error(err instanceof Error ? err.message : String(err));
@@ -192,6 +194,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     try {
       const { worktreePath } = await resumePtyExecution(task.id, sessionId);
       setActiveWorktreePath(worktreePath);
+      setTerminalKey((k) => k + 1);
       setTaskStatus("IN_PROGRESS");
     } catch {
       setIsExecuting(false);
@@ -204,6 +207,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     try {
       const { worktreePath } = await continueLatestPtyExecution(task.id);
       setActiveWorktreePath(worktreePath);
+      setTerminalKey((k) => k + 1);
       setTaskStatus("IN_PROGRESS");
     } catch (err) {
       setIsExecuting(false);
@@ -352,6 +356,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
               </div>
               <div className="flex-1 min-h-0">
                 <TerminalOutlet
+                  key={terminalKey}
                   taskId={task.id}
                   worktreePath={activeWorktreePath}
                   onSessionEnd={handleSessionEnd}
