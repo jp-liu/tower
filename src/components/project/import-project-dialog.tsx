@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { FolderOpen, AlertCircle, Info } from "lucide-react";
+import { FolderOpen, AlertCircle, Info, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
@@ -13,10 +13,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 import { resolveGitLocalPath } from "@/actions/config-actions";
-import { migrateProjectPath, checkMigrationSafety } from "@/actions/project-actions";
+import { migrateProjectPath, checkMigrationSafety, analyzeProjectDirectory } from "@/actions/project-actions";
 
 export interface CreateProjectData {
   name: string;
@@ -55,6 +56,7 @@ export function ImportProjectDialog({
   const [migrateError, setMigrateError] = useState("");
   const [safetyWarning, setSafetyWarning] = useState("");
   const [isSamePath, setIsSamePath] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const resetForm = () => {
     setProjectName("");
@@ -70,6 +72,7 @@ export function ImportProjectDialog({
     setMigrateError("");
     setSafetyWarning("");
     setIsSamePath(false);
+    setIsAnalyzing(false);
   };
 
   const handleFolderSelect = async (selectedPath: string) => {
@@ -146,6 +149,19 @@ export function ImportProjectDialog({
       }
     }
   }, [gitUrl, localPath]);
+
+  const handleAnalyze = async () => {
+    if (!localPath || isAnalyzing) return;
+    setIsAnalyzing(true);
+    try {
+      const result = await analyzeProjectDirectory(localPath);
+      setProjectDesc(result);
+    } catch {
+      toast.error(t("project.analyzeError"));
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const handleCreate = async () => {
     if (!projectName.trim()) return;
@@ -336,7 +352,30 @@ export function ImportProjectDialog({
 
             {/* Description */}
             <div>
-              <label className="text-xs font-medium text-muted-foreground">{t("project.description")}</label>
+              <div className="flex items-center justify-between mt-0.5">
+                <label className="text-xs font-medium text-muted-foreground">{t("project.description")}</label>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={!localPath || isAnalyzing}
+                        onClick={handleAnalyze}
+                        className="h-6 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+                      />
+                    }
+                  >
+                    {isAnalyzing ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3 w-3" />
+                    )}
+                    {isAnalyzing ? t("project.analyzing") : t("project.genDesc")}
+                  </TooltipTrigger>
+                  <TooltipContent>{t("project.genDescDisabledTooltip")}</TooltipContent>
+                </Tooltip>
+              </div>
               <textarea
                 placeholder={t("project.descPlaceholder")}
                 value={projectDesc}
