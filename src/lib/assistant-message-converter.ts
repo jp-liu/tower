@@ -71,6 +71,8 @@ export function convertSessionMessages(sdkMessages: SDKSessionMessage[]): ChatMe
         // Strip skill XML wrapping: <command-message>tower</command-message><command-name>/tower</command-name><command-args>actual text</command-args>
         const argsMatch = text.match(/<command-args>([\s\S]*?)<\/command-args>/);
         if (argsMatch) text = argsMatch[1].trim();
+        // Strip multimodal image prompt appended by buildMultimodalPrompt
+        text = text.replace(/\n---\nThe user has attached the following image\(s\)[\s\S]*$/, "").trim();
         const imageFilenames = extractImageFilenames(payload?.content);
         if (text) {
           result.push({ id: nextId(), role: "user", content: text, imageFilenames });
