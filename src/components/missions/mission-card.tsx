@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, ArrowUpRight, X, TerminalSquare } from "lucide-react";
-import { Button } from "@/components/ui/button";
+
 import {
   Tooltip,
   TooltipTrigger,
@@ -135,9 +135,8 @@ export function MissionCard({
           <Tooltip>
             <TooltipTrigger
               render={
-                <Button
-                  variant="ghost"
-                  className="h-8 w-8 p-0 ml-1 shrink-0 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                <button
+                  className="flex h-8 w-8 items-center justify-center rounded-md p-0 ml-1 shrink-0 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                   onClick={handleOpenInTerminal}
                 />
               }
@@ -152,9 +151,8 @@ export function MissionCard({
         <Tooltip>
           <TooltipTrigger
             render={
-              <Button
-                variant="ghost"
-                className="h-8 w-8 p-0 ml-1 shrink-0"
+              <button
+                className="flex h-8 w-8 items-center justify-center rounded-md p-0 ml-1 shrink-0 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 onClick={() =>
                   router.push(
                     `/workspaces/${execution.workspaceId}/tasks/${execution.taskId}`
@@ -172,9 +170,8 @@ export function MissionCard({
         <Tooltip>
           <TooltipTrigger
             render={
-              <Button
-                variant="ghost"
-                className="h-8 w-8 p-0 ml-1 shrink-0 text-destructive hover:bg-destructive/10"
+              <button
+                className="flex h-8 w-8 items-center justify-center rounded-md p-0 ml-1 shrink-0 text-destructive transition-colors hover:bg-destructive/10"
                 onClick={() => onStop(execution.taskId)}
                 disabled={isRemoving}
               />
