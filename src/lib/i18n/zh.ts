@@ -381,6 +381,7 @@ export const zh = {
   "taskPage.fileTree.newFolder": "新建文件夹",
   "taskPage.fileTree.rename": "重命名",
   "taskPage.fileTree.delete": "删除",
+  "taskPage.fileTree.revealInFinder": "在文件夹中显示",
   "taskPage.fileTree.emptyHeading": "文件树暂不可用",
   "taskPage.fileTree.emptyBody": "启动任务执行后将在此显示 worktree 目录结构",
   "taskPage.fileTree.emptyDir": "目录为空",

@@ -41,9 +41,13 @@ export function AssistantChat() {
   }, []);
 
   // Auto-scroll on new messages or content growth
+  // First mount uses instant scroll (no animation on page switch), subsequent uses smooth
+  const mountedRef = useRef(false);
   const lastContentLen = messages[messages.length - 1]?.content.length ?? 0;
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const behavior = mountedRef.current ? "smooth" : "instant";
+    messagesEndRef.current?.scrollIntoView({ behavior });
+    mountedRef.current = true;
   }, [messages.length, lastContentLen]);
 
   const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {

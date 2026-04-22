@@ -239,3 +239,24 @@ export async function writeFileContent(
   const absolute = safeResolvePath(worktreePath, relativePath);
   await writeFile(absolute, content, "utf-8");
 }
+
+/**
+ * Reveal a file or folder in the system file manager.
+ */
+export async function revealInFinder(worktreePath: string, relativePath: string): Promise<void> {
+  const absolute = safeResolvePath(worktreePath, relativePath);
+  const { execFile } = await import("child_process");
+  const platform = process.platform;
+
+  await new Promise<void>((resolve, reject) => {
+    if (platform === "darwin") {
+      execFile("open", ["-R", absolute], (err) => err ? reject(err) : resolve());
+    } else if (platform === "linux") {
+      execFile("xdg-open", [path.dirname(absolute)], (err) => err ? reject(err) : resolve());
+    } else if (platform === "win32") {
+      execFile("explorer", ["/select,", absolute], (err) => err ? reject(err) : resolve());
+    } else {
+      reject(new Error("Unsupported platform"));
+    }
+  });
+}

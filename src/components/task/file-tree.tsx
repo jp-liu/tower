@@ -546,6 +546,11 @@ export function FileTree({
           onNewFolder={handleNewFolder}
           onRename={handleRename}
           onDelete={handleDelete}
+          onRevealInFinder={worktreePath ? (entry) => {
+            import("@/actions/file-actions").then(({ revealInFinder }) => {
+              revealInFinder(worktreePath, entry.relativePath).catch(() => {});
+            });
+          } : undefined}
         />
       )}
 

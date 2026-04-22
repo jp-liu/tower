@@ -14,6 +14,7 @@ interface FileTreeContextMenuProps {
   onNewFolder: (entry: FileEntry) => void;
   onRename: (entry: FileEntry) => void;
   onDelete: (entry: FileEntry) => void;
+  onRevealInFinder?: (entry: FileEntry) => void;
 }
 
 export function FileTreeContextMenu({
@@ -25,6 +26,7 @@ export function FileTreeContextMenu({
   onNewFolder,
   onRename,
   onDelete,
+  onRevealInFinder,
 }: FileTreeContextMenuProps) {
   const { t } = useI18n();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -82,6 +84,15 @@ export function FileTreeContextMenu({
       >
         {t("taskPage.fileTree.rename")}
       </button>
+      {onRevealInFinder && (
+        <button
+          type="button"
+          className={itemClass}
+          onClick={() => { onRevealInFinder(entry); onClose(); }}
+        >
+          {t("taskPage.fileTree.revealInFinder")}
+        </button>
+      )}
       {!isGitDir && (
         <>
           <hr className="my-1 border-border" />

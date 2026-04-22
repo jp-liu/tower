@@ -366,6 +366,7 @@ export const en: Translations = {
   "taskPage.fileTree.newFolder": "New Folder",
   "taskPage.fileTree.rename": "Rename",
   "taskPage.fileTree.delete": "Delete",
+  "taskPage.fileTree.revealInFinder": "Reveal in Finder",
   "taskPage.fileTree.emptyHeading": "File tree unavailable",
   "taskPage.fileTree.emptyBody": "Start task execution to view the worktree directory",
   "taskPage.fileTree.emptyDir": "Empty directory",
