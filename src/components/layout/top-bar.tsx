@@ -88,14 +88,15 @@ export function TopBar({ onCreateProject }: TopBarProps) {
         {/* Right Actions */}
         <div className="flex items-center gap-1.5">
           {/* Language Toggle */}
-          <button
+          <Button
+            variant="ghost"
             onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
-            className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="text-muted-foreground"
             title={t("settings.language")}
           >
             <Globe className="h-3.5 w-3.5" />
             <span className="text-[11px] font-semibold">{locale === "zh" ? "EN" : "中"}</span>
-          </button>
+          </Button>
 
           {/* Divider */}
           <div className="h-4 w-px bg-border" />
