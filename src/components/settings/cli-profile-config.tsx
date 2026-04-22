@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { getDefaultCliProfile, updateCliProfile } from "@/actions/cli-profile-actions";
 
@@ -154,12 +155,11 @@ export function CliProfileConfig() {
 
         {/* Save button */}
         <div>
-          <button
+          <Button
             onClick={handleSave}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
             {t("common.save")}
-          </button>
+          </Button>
           {saveStatus && (
             <span className="ml-3 text-sm text-muted-foreground">{saveStatus}</span>
           )}

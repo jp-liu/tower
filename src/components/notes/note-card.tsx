@@ -3,6 +3,7 @@
 import { Pencil, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 
 export interface NoteItem {
@@ -27,20 +28,24 @@ export function NoteCard({ note, onEdit, onDelete }: NoteCardProps) {
     <div className="group relative rounded-lg border border-border bg-card p-4 transition-colors hover:border-border/80 hover:bg-accent/20">
       {/* Action buttons */}
       <div className="absolute right-3 top-3 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-        <button
+        <Button
+          variant="ghost"
+          size="icon-sm"
           onClick={() => onEdit(note)}
-          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="text-muted-foreground"
           aria-label={t("notes.edit")}
         >
           <Pencil className="h-3.5 w-3.5" />
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
           onClick={() => onDelete(note.id)}
-          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-rose-400"
+          className="text-muted-foreground hover:text-rose-400"
           aria-label={t("notes.delete")}
         >
           <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        </Button>
       </div>
 
       {/* Title */}

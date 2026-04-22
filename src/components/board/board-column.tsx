@@ -4,6 +4,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Plus } from "lucide-react";
 import { TaskCard } from "./task-card";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { TaskWithLabels } from "@/types";
 
@@ -47,13 +48,15 @@ export function BoardColumn({
             {tasks.length}
           </span>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          size="icon-xs"
           onClick={onAddTask}
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="text-muted-foreground"
           aria-label="add"
         >
           <Plus className="h-3.5 w-3.5" />
-        </button>
+        </Button>
       </div>
 
       {/* Task List */}

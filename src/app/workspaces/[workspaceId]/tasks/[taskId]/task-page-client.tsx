@@ -14,6 +14,7 @@ import { CodeEditor } from "@/components/task/code-editor";
 import { CodeSearch } from "@/components/task/code-search";
 import { PreviewPanel } from "@/components/task/preview-panel";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { startPtyExecution, stopPtyExecution, resumePtyExecution, continueLatestPtyExecution, getTaskExecutions } from "@/actions/agent-actions";
 import { updateTaskStatus, checkWorktreeClean, commitWorktreeChanges } from "@/actions/task-actions";
@@ -319,13 +320,14 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           {/* Complete button — only for IN_REVIEW tasks */}
           {taskStatus === "IN_REVIEW" && (
             <div className="mt-2">
-              <button
+              <Button
+                size="sm"
                 onClick={handleComplete}
-                className="flex items-center gap-1.5 rounded-md bg-emerald-500/15 px-3 py-1.5 text-xs font-medium text-emerald-400 ring-1 ring-emerald-500/20 hover:bg-emerald-500/25 transition-colors"
+                className="bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20 hover:bg-emerald-500/25"
               >
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 {t("taskPage.completeTask")}
-              </button>
+              </Button>
             </div>
           )}
         </div>

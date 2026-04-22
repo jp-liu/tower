@@ -1,6 +1,7 @@
 "use client";
 
 import { FileText, Eye, FolderOpen, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { localPathToApiUrl } from "@/lib/file-serve-client";
 import { useI18n } from "@/lib/i18n";
 
@@ -93,27 +94,33 @@ export function AssetItem({ asset, onPreview, onReveal, onDelete, onTaskClick }:
 
       {/* Actions: Preview, Reveal in Finder, Delete */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => onPreview(asset)}
-          className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="text-muted-foreground"
           aria-label={t("assets.preview")}
         >
           <Eye className="h-4 w-4" />
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => onReveal(asset)}
-          className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="text-muted-foreground"
           aria-label={t("assets.revealInFinder")}
         >
           <FolderOpen className="h-4 w-4" />
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => onDelete(asset.id)}
-          className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-rose-400"
+          className="text-muted-foreground hover:text-rose-400"
           aria-label={t("assets.delete")}
         >
           <Trash2 className="h-4 w-4" />
-        </button>
+        </Button>
       </div>
     </div>
   );

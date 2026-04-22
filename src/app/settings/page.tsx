@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { SettingsNav } from "@/components/settings/settings-nav";
 import { AIToolsConfig } from "@/components/settings/ai-tools-config";
 import { GeneralConfig } from "@/components/settings/general-config";
@@ -27,13 +28,14 @@ export default function SettingsPage() {
 
       <div className="relative flex-1 overflow-auto p-8">
         {/* ESC close button */}
-        <button
+        <Button
+          variant="outline"
           onClick={handleClose}
-          className="absolute right-4 top-4 flex items-center gap-1.5 rounded-md border bg-card px-3 py-1.5 text-sm text-muted-foreground shadow-sm hover:bg-muted"
+          className="absolute right-4 top-4 gap-1.5 bg-card shadow-sm"
         >
           <X className="h-3.5 w-3.5" />
           ESC
-        </button>
+        </Button>
 
         <div className="mx-auto max-w-3xl">
           {activeSection === "general" && <GeneralConfig />}

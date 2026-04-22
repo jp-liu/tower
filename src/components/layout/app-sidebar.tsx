@@ -238,25 +238,29 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
           <div className="text-sm font-semibold tracking-tight text-foreground">Tower</div>
           <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Studio</div>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          size="icon-xs"
           onClick={toggleCollapsed}
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="text-muted-foreground"
           title={t("sidebar.collapse")}
         >
           <ChevronsLeft className="h-4 w-4" />
-        </button>
+        </Button>
       </div>
 
       {/* Workspace Header */}
       <div className="relative z-10 flex items-center justify-between px-4 py-2">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t("sidebar.workspace")}</span>
-        <button
-          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground"
           onClick={() => { setDialogName(""); setDialogIcon(WORKSPACE_ICONS[0]); setShowCreateDialog(true); }}
           title={t("sidebar.newWorkspace")}
         >
           <Plus className="h-3.5 w-3.5" />
-        </button>
+        </Button>
       </div>
 
       {/* Workspace List */}
@@ -559,13 +563,14 @@ function LabelManagerDialog({
                 onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
                 className="flex-1 h-8"
               />
-              <button
+              <Button
+                size="sm"
                 onClick={handleAdd}
                 disabled={!newName.trim()}
-                className="rounded-md bg-amber-500/15 px-3 py-1.5 text-xs font-medium text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25 disabled:opacity-30"
+                className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
               >
                 {t("label.add")}
-              </button>
+              </Button>
             </div>
             {/* Color presets */}
             <div className="mt-2 flex gap-1.5">

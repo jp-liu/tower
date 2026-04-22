@@ -4,6 +4,7 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Bot, Check, ChevronRight, Copy, ImageOff, User } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import type { ChatMessage } from "@/hooks/use-assistant-chat";
 
@@ -45,13 +46,15 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
   };
 
   return (
-    <button
+    <Button
+      variant="ghost"
+      size="icon-xs"
       onClick={handleCopy}
-      className={`rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground ${className ?? ""}`}
+      className={`text-muted-foreground ${className ?? ""}`}
       aria-label={t("assistant.copy")}
     >
       {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-    </button>
+    </Button>
   );
 }
 

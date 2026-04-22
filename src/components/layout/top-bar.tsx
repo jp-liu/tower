@@ -51,16 +51,17 @@ export function TopBar({ onCreateProject }: TopBarProps) {
 
         {/* Search + Assistant group — Bot is immediately after search per UI-01 */}
         <div className="flex items-center gap-2">
-          <button
+          <Button
+            variant="outline"
             onClick={() => setShowSearch(true)}
-            className="flex h-8 w-96 items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 text-sm text-muted-foreground transition-colors hover:bg-muted"
+            className="h-8 w-96 justify-start gap-2 bg-muted/50 text-muted-foreground hover:bg-muted"
           >
             <Search className="h-3.5 w-3.5" />
             <span className="flex-1 text-left" suppressHydrationWarning>{t("topbar.searchPlaceholder")}</span>
             <kbd className="flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-mono">
               <Command className="h-2.5 w-2.5" />K
             </kbd>
-          </button>
+          </Button>
 
           {/* Assistant — per UI-01: immediately after search, before right-side settings area */}
           <Tooltip>

@@ -63,13 +63,14 @@ export function TaskDiffView({
         </div>
         <div className="flex items-center gap-2">
           {hasUncommitted && onCommit && (
-            <button
+            <Button
+              variant="outline"
               onClick={() => setShowCommitDialog(true)}
-              className="h-8 gap-2 px-3 text-sm flex items-center rounded-md border border-border hover:bg-accent transition-colors"
+              className="gap-2"
             >
               <GitCommitHorizontal className="h-4 w-4" />
               {t("diff.commit")}
-            </button>
+            </Button>
           )}
         </div>
       </div>

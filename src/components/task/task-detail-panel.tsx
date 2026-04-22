@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ExternalLink, Terminal, Loader2, Square, FileText, CheckCircle2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { TaskMetadata } from "./task-metadata";
@@ -295,22 +296,25 @@ export function TaskDetailPanel({
         </div>
         <div className="flex items-center gap-2">
           {taskStatus === "IN_REVIEW" && (
-            <button
+            <Button
+              size="sm"
               onClick={handleComplete}
-              className="flex items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-400 ring-1 ring-emerald-500/20 hover:bg-emerald-500/25 transition-colors"
+              className="bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20 hover:bg-emerald-500/25"
             >
               <CheckCircle2 className="h-3 w-3" />
               {t("taskPage.completeTask")}
-            </button>
+            </Button>
           )}
           {taskStatus !== "DONE" && taskStatus !== "CANCELLED" && (
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => router.push(`/workspaces/${workspaceId}/tasks/${task.id}`)}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              className="text-muted-foreground"
             >
               <ExternalLink className="h-3 w-3" />
               {t("taskPage.viewDetails")}
-            </button>
+            </Button>
           )}
         </div>
       </div>

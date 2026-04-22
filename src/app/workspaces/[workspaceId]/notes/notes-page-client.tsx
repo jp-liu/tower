@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n";
 import { NOTE_CATEGORIES_PRESET } from "@/lib/constants";
 import { createNote, updateNote, deleteNote, getProjectNotes } from "@/actions/note-actions";
 import { CategoryFilter } from "@/components/notes/category-filter";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { NoteList } from "@/components/notes/note-list";
 import { NoteEditor } from "@/components/notes/note-editor";
@@ -208,13 +209,13 @@ export function NotesPageClient({
           </Select>
         )}
         {!showForm && (
-          <button
+          <Button
             onClick={handleNewNote}
-            className="ml-auto flex items-center gap-1.5 rounded-md bg-amber-500/15 px-3 py-1.5 text-xs font-medium text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25 transition-colors"
+            className="ml-auto bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>{t("notes.newNote")}</span>
-          </button>
+          </Button>
         )}
       </div>
 
@@ -289,19 +290,19 @@ export function NotesPageClient({
             <NoteEditor value={formContent} onChange={setFormContent} />
 
             <div className="flex items-center gap-2 justify-end">
-              <button
+              <Button
+                variant="outline"
                 onClick={handleCancel}
-                className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               >
                 {t("notes.cancel")}
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={editingNote ? handleUpdate : handleCreate}
                 disabled={!formTitle.trim() || (!editingNote && !formProjectId)}
-                className="rounded-md bg-amber-500/15 px-4 py-2 text-sm font-medium text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25 disabled:opacity-30 transition-colors"
+                className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
               >
                 {t("notes.save")}
-              </button>
+              </Button>
             </div>
           </div>
         ) : (

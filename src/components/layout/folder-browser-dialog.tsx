@@ -152,20 +152,24 @@ export function FolderBrowserDialog({
 
           {/* Navigation bar */}
           <div className="flex items-center gap-1.5 border-y border-border px-4 py-2 shrink-0 min-w-0">
-            <button
+            <Button
+              variant="outline"
+              size="icon-sm"
               onClick={() => data?.homePath && browse(data.homePath)}
-              className="shrink-0 rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="shrink-0 text-muted-foreground"
               title="Home"
             >
               <Home className="h-3.5 w-3.5" />
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-sm"
               onClick={() => data?.parentPath && browse(data.parentPath)}
-              className="shrink-0 rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="shrink-0 text-muted-foreground"
               title="Parent"
             >
               <ChevronUp className="h-3.5 w-3.5" />
-            </button>
+            </Button>
             <div className="min-w-0 flex-1 truncate text-sm text-foreground font-mono" title={data?.currentPath ?? ""}>
               {data?.currentPath ?? "..."}
             </div>

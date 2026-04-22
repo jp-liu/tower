@@ -204,7 +204,9 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
               <p className="mt-0.5 text-xs text-muted-foreground">{project.alias}</p>
             )}
           </div>
-          <button
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={() => {
               setEditName(project.name);
               setEditAlias(project.alias ?? "");
@@ -212,10 +214,10 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
               setEditLocalPath(project.localPath ?? "");
               setShowEditDialog(true);
             }}
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="text-muted-foreground"
           >
             <Pencil className="h-3.5 w-3.5" />
-          </button>
+          </Button>
         </div>
         {project.description && (
           <p className="mt-2 text-sm text-secondary-foreground leading-relaxed">{project.description}</p>
@@ -249,13 +251,14 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
 
       {/* ── Git Section ── */}
       <div className="border-b border-border p-4">
-        <button
+        <Button
+          variant="ghost"
           onClick={() => setGitExpanded(!gitExpanded)}
-          className="flex w-full cursor-pointer items-center justify-between rounded-md px-2 py-2 transition-colors hover:bg-accent"
+          className="flex w-full cursor-pointer justify-between px-2 py-2"
         >
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t("git.section")}</span>
           {gitExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
-        </button>
+        </Button>
 
         {gitExpanded && (
           <div className="mt-3">
@@ -358,13 +361,14 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
 
       {/* ── Browse Local ── */}
       <div className="p-4">
-        <button
+        <Button
+          variant="ghost"
           onClick={() => setBrowseExpanded(!browseExpanded)}
-          className="flex w-full cursor-pointer items-center justify-between rounded-md px-2 py-2 transition-colors hover:bg-accent"
+          className="flex w-full cursor-pointer justify-between px-2 py-2"
         >
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t("sidebar.right.browseRepo")}</span>
           {browseExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
-        </button>
+        </Button>
         {browseExpanded && (
           <div className="mt-3 space-y-3">
             <Button

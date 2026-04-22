@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { GRID_PRESETS } from "./grid-layout-presets";
+import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { getConfigValues } from "@/actions/config-actions";
 
@@ -113,14 +114,15 @@ export function GridPresetPicker({ value, customValue, onChange }: GridPresetPic
   return (
     <div ref={containerRef} className="relative">
       {/* Trigger */}
-      <button
+      <Button
+        variant="outline"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 h-8 px-3 rounded-md border border-border bg-background text-sm hover:bg-accent transition-colors"
+        className="gap-2"
       >
         <MiniGrid cols={displayCols} rows={displayRows} active={false} />
         <span>{displayLabel}</span>
         <span className="text-[10px] text-muted-foreground">▼</span>
-      </button>
+      </Button>
 
       {/* Dropdown */}
       {open && (

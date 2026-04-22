@@ -152,13 +152,15 @@ export function TaskNotesPanel({ taskId, projectId }: TaskNotesPanelProps) {
                     {new Date(note.createdAt).toLocaleString()}
                   </p>
                 </div>
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
                   onClick={() => handleDeleteNote(note.id)}
-                  className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                  className="shrink-0 text-muted-foreground opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
                   title={t("taskPage.deleteNote")}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               </div>
             </div>
           ))}
@@ -199,13 +201,15 @@ export function TaskNotesPanel({ taskId, projectId }: TaskNotesPanelProps) {
               <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <span className="flex-1 truncate text-sm">{asset.filename}</span>
               <span className="shrink-0 text-[10px] text-muted-foreground">{formatSize(asset.size)}</span>
-              <button
+              <Button
+                variant="ghost"
+                size="icon-xs"
                 onClick={() => handleDeleteAsset(asset.id)}
-                className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                className="shrink-0 text-muted-foreground opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
                 title={t("taskPage.deleteAttachment")}
               >
                 <Trash2 className="h-3 w-3" />
-              </button>
+              </Button>
             </div>
           ))}
         </div>
