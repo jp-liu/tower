@@ -2,7 +2,6 @@
 
 import { rename, mkdir, readdir } from "fs/promises";
 import { existsSync } from "fs";
-import { execFile } from "child_process";
 import path from "path";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
@@ -199,29 +198,8 @@ If this is a monorepo, list each package/app with its relative path and one-line
 
 Keep the description concise (under 400 words). Do not add commentary or preamble — output only the Markdown.`;
 
-  return new Promise((resolve, reject) => {
-    execFile(
-      "claude",
-      ["-p", prompt, "--no-session-persistence", "--max-turns", "1"],
-      {
-        cwd: localPath,
-        timeout: 30_000,
-        encoding: "utf-8",
-        env: {
-          PATH: process.env.PATH,
-          HOME: process.env.HOME,
-          USER: process.env.USER,
-          TMPDIR: process.env.TMPDIR,
-          TERM: process.env.TERM,
-        } as unknown as NodeJS.ProcessEnv,
-      },
-      (err: Error | null, stdout: string) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve(stdout.trim());
-      }
-    );
-  });
+  const { aiQuery } = await import("@/lib/claude-session");
+  const result = await aiQuery(prompt, localPath);
+  if (!result) throw new Error("AI 分析未返回结果");
+  return result;
 }

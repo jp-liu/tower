@@ -261,15 +261,16 @@ pnpm mcp            # Start MCP Server (standalone process)
 | 能力 | 文件 | 调用方式 | 建议模型 | 说明 |
 |------|------|----------|----------|------|
 | 助手聊天 | `src/app/api/internal/assistant/chat/route.ts` | Agent SDK `query()` | 当前默认 | 多轮对话，带 MCP 工具 |
-| 小总结 | `src/lib/claude-session.ts` → `generateSummaryFromLog` | Agent SDK `query()` | Haiku 4.5 | stop 时生成，50 字内中文摘要 |
-| 大总结(Dreaming) | `src/lib/claude-session.ts` → `generateDreamingInsight` | Agent SDK `query()` | Sonnet 4.6 | 任务 DONE 时生成，结构化 JSON |
-| 项目分析 | `src/actions/project-actions.ts` → `analyzeProjectDirectory` | `execFile("claude", ["-p"])` | 当前默认 | 导入项目时分析目录结构 |
+| 小总结 | `src/lib/claude-session.ts` → `generateSummaryFromLog` | Agent SDK `aiQuery()` | Haiku 4.5 | stop 时生成，50 字内中文摘要 |
+| 大总结(Dreaming) | `src/lib/claude-session.ts` → `generateDreamingInsight` | Agent SDK `aiQuery()` | Sonnet 4.6 | 任务 DONE 时生成，结构化 JSON |
+| 项目分析 | `src/actions/project-actions.ts` → `analyzeProjectDirectory` | Agent SDK `aiQuery()` | Sonnet 4.6 | 导入项目时分析目录结构 |
 | 任务执行 | `src/actions/agent-actions.ts` → `startPtyExecution` | PTY spawn CLI | 当前默认 | 终端模式，用户交互 |
 
 **后续扩展方向：**
-- 支持通过 Settings 配置不同能力使用的模型（`ai.summaryModel`、`ai.dreamingModel`）
-- 支持 API Key 直调模式（绕过 CLI spawn，更快更稳定）
-- AI Adapter 接口统一收敛 `aiQuery()` 作为唯一入口
+- Settings 页面支持为每种 AI 能力配置不同的模型/方式（如小总结用 Haiku、大总结用 Sonnet、项目分析用 Opus）
+- 支持 API Key 直调模式（绕过 CLI spawn，更快更稳定，不依赖 CLI 安装）
+- AI Adapter 接口统一收敛 `aiQuery()` 作为唯一后台 AI 入口
+- 不同 AI 擅长不同场景：总结类用快模型，分析/推理类用强模型，创意类可切换不同厂商
 
 ### encodePathForClaude 遗漏点号替换
 
