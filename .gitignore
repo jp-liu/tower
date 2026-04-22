@@ -59,6 +59,9 @@ prisma/dev.db.bak-*
 .claude/worktrees/
 skills-lock.json
 
+# GSD planning (local dev workflow)
+.planning/
+
 # Docs site
 docs/node_modules/
 docs/.vitepress/dist/
