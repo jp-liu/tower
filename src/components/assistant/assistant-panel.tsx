@@ -84,7 +84,7 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
             {/* Session selector dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger
-                className="flex items-center gap-1 h-8 px-2 rounded-md text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground max-w-[120px] truncate"
+                className="flex items-center gap-1 h-8 px-2 rounded-md text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-w-[120px] truncate"
                 aria-label={t("assistant.sessionList")}
               >
                 <span className="truncate">{activeTitle}</span>
@@ -133,7 +133,7 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
             {/* New session button */}
             <Button
               variant="ghost"
-              className="h-8 w-8 p-0 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="h-8 w-8 p-0 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               onClick={createNewSession}
               aria-label={t("assistant.newSession")}
             >
@@ -146,7 +146,7 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
 
         <Button
           variant="ghost"
-          className="h-8 w-8 p-0 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="h-8 w-8 p-0 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           onClick={closeAssistant}
           aria-label={t("assistant.closeLabel")}
         >
