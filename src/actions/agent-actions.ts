@@ -480,7 +480,7 @@ export async function startPtyExecution(
       where: { id: promptId },
     });
     if (promptRecord?.content) {
-      tempDir = await mkdtemp(join(tmpdir(), "ai-manager-pty-"));
+      tempDir = await mkdtemp(join(tmpdir(), "tower-pty-"));
       instructionsFile = join(tempDir, "instructions.md");
       await writeFile(instructionsFile, promptRecord.content, "utf-8");
     }

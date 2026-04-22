@@ -23,6 +23,31 @@ Workspaces are top-level containers. Each workspace holds multiple Projects and 
 
 ---
 
+## Modules
+
+System modules for GSD phase scoping. Use the **Slug** as the commit scope (e.g. `feat(terminal-08.01): ...`).
+
+| Module | Slug | Description |
+|--------|------|-------------|
+| Workspace | `workspace` | 工作区 CRUD、标签管理 |
+| Project | `project` | 项目 CRUD、导入、git 仓库、描述生成 |
+| Task | `task` | 任务 CRUD、状态流转、Label、详情页 |
+| Board | `board` | 看板 UI、拖拽排序、筛选统计、置顶 |
+| Terminal | `terminal` | PTY 会话、WebSocket、xterm.js、CLI Profile |
+| Assistant | `assistant` | AI 助手聊天、SSE 流式、多模态 |
+| Missions | `missions` | 多任务监控面板、网格布局 |
+| Search | `search` | 全局搜索、代码搜索、FTS |
+| Settings | `settings` | 系统配置、CLI Profile、Agent 配置 |
+| MCP | `mcp` | MCP Server、23 个工具、stdio 传输 |
+| Git | `git` | Git 操作、Worktree、Diff、Merge |
+| Assets & Notes | `assets` | 项目资产上传、笔记系统 |
+| AI | `ai` | Claude SDK、CLI Adapter、执行总结、Prompt 管理 |
+| I18n | `i18n` | 国际化、zh/en 双语 |
+
+Detailed module documentation: [`docs/`](docs/README.md)
+
+---
+
 ## Data Model
 
 ### Hierarchy

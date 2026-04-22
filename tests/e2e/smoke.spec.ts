@@ -1,13 +1,13 @@
 import { test, expect } from "@playwright/test";
 
-test.describe.serial("AI Manager 可用性测试", () => {
+test.describe.serial("Tower 可用性测试", () => {
 
   // 1. 首页加载
   test("1. 首页加载，侧边栏显示", async ({ page }) => {
     await page.goto("/");
     await page.waitForURL(/\/workspaces/);
     await expect(page.locator("aside")).toBeVisible();
-    await expect(page.getByText("AI Manager", { exact: true })).toBeVisible();
+    await expect(page.getByText("Tower", { exact: true })).toBeVisible();
   });
 
   // 2. 新建工作空间（通过 Dialog）

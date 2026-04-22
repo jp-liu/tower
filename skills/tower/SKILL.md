@@ -17,7 +17,7 @@ Before using Tower tools, check if the `tower` MCP server is available. If tools
   "mcpServers": {
     "tower": {
       "command": "npx",
-      "args": ["tsx", "/Users/liujunping/project/i/ai-manager/src/mcp/index.ts"]
+      "args": ["tsx", "<project-root>/src/mcp/index.ts"]
     }
   }
 }

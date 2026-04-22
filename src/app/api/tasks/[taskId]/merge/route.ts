@@ -94,7 +94,7 @@ export async function POST(
       (line) => line.trim() !== "" && !line.startsWith("??")
     );
     if (hadStash) {
-      execFileSync("git", ["stash", "push", "-m", "ai-manager-merge-temp"], { ...gitOpts, cwd: localPath });
+      execFileSync("git", ["stash", "push", "-m", "tower-merge-temp"], { ...gitOpts, cwd: localPath });
     }
 
     let commitHash: string;

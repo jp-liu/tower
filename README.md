@@ -1,6 +1,13 @@
-# Tower
+<p align="center">
+  <img src="public/banner.png" width="100%" alt="Tower" />
+</p>
 
-[中文文档](./README.zh.md)
+
+<h1 align="center">Tower</h1>
+
+<p align="center">
+  AI Task Orchestration Platform &nbsp;·&nbsp; <b>English</b> | <a href="./README.zh.md">中文</a>
+</p>
 
 An AI task orchestration platform — manage, dispatch, and execute AI-assisted development tasks through a visual Kanban board.
 
@@ -17,7 +24,7 @@ Integrates terminal, code editor, file tree, live preview, and MCP toolchain int
 
 ```bash
 git clone <repo-url>
-cd ai-manager
+cd tower
 pnpm install
 
 # Configure environment
@@ -204,80 +211,4 @@ pnpm mcp            # Start MCP Server (standalone process)
 | DATABASE_URL | Database connection string | `file:./prisma/dev.db` (SQLite) |
 | PORT | Server port | 3000 |
 
-## TODO
-
-- [ ] Non-ASCII path support — Claude CLI encodes non-ASCII characters (Chinese, Japanese, etc.) as dashes in session directory names; current matching uses ASCII-only segments as workaround, need to replicate Claude's exact encoding algorithm for reliable session lookup
-- [ ] Terminal rendering stability — investigate garbled text when multiple xterm.js terminals run simultaneously (WebGL context conflicts)
-- [x] ~~BUG: create_task references 路径不完整~~ — 已修复：refText 改为完整绝对路径 + autoStart prompt 从 DB 重读
-- [x] ~~BUG: 助手聊天气泡区域不滚动~~ — 已修复：ScrollArea 加 overflow-hidden
-- [x] ~~FEAT: 助手聊天气泡复制按钮~~ — 已实现：assistant bubble hover 显示复制，tool bubble header 显示复制
-- [x] ~~FEAT: 助手空状态功能引导~~ — 已实现：4 个 suggestion chips（创建项目/任务/查进度/日报）
-- [ ] **CLI 集成抽象层 — 多 CLI 适配接口规范**
-  - **背景：** 当前 hook（SessionStart / PostToolUse）、环境变量注入（TOWER_TASK_ID）、session resume 等机制全部硬编码为 Claude Code。后续需要支持其他 AI CLI（Codex、Gemini CLI、OpenCode 等）
-  - **目标：** 定义 CLI Adapter 需要实现的接口，使 Tower 的任务执行、会话恢复、文件捕获、知识沉淀等功能与具体 CLI 解耦
-  - **CLI Adapter 接口清单（需实现）：**
-    - `spawn(cwd, args, env)` — 启动 CLI 进程（PTY 模式）
-    - `resume(sessionId)` — 恢复指定会话（对应 `--resume`）
-    - `continue()` — 继续最近会话（对应 `--continue`）
-    - `getSessionId()` — 获取当前会话 ID（通过 hook 上报或 stdout 解析）
-    - `getHooks()` — 返回需要注册的 hook 配置（不同 CLI 的 hook 格式/位置不同）
-    - `installHooks()` — 自动注入 hook 到 CLI 的配置文件
-    - `uninstallHooks()` — 卸载 hook
-    - `getSettingsPath()` — CLI 配置文件路径（Claude: `~/.claude/settings.json`）
-    - `getSessionsDir()` — 会话存储目录
-    - `buildEnvOverrides(taskId, apiUrl)` — 构建注入的环境变量
-  - **Tower 侧依赖的 CLI 能力：**
-    - 环境变量传递（PTY spawn 时注入）
-    - Hook 机制（至少支持 session start + tool use 两个时机）
-    - 会话持久化 + resume/continue
-    - MCP server 支持（Tower MCP 工具链）
-  - **参考：** 当前 CliProfile 模型已有 `command`、`baseArgs`、`envVars` 字段，可作为 Adapter 配置基础
-- [ ] **总结功能改用 Anthropic API 替代 `claude -p`**
-  - **现状：** 小总结（generateSummaryFromLog）和大总结（generateDreamingInsight）都用 `execFile("claude", ["-p", ...])` spawn CLI 子进程，启动开销 3-5s
-  - **目标：** 改用 Anthropic SDK 直接调 API（HTTP 请求，~0.5s），小总结用 Haiku（快+便宜），大总结用 Sonnet
-  - **前提：** 需要 API Key 管理（目前 Claude 通过 CLI OAuth 认证，没有独立 API Key）。可在 Settings 增加 API Key 配置，或复用 CliProfile 扩展
-  - **附带收益：** 消除 `findClaudeBinary()` 依赖，不再需要 CLI 安装就能总结；也为后续多 CLI 场景下的总结解耦
-  - **时机：** 等第二个 CLI 需要接入时再做（如 Codex CLI），用 GSD milestone 驱动
-  - **原因：** 目前只有 Claude 一个实现，过早抽象容易设计出不匹配实际需求的接口。两个 CLI 对比才能提炼正确的抽象边界。现阶段保持 Claude-specific 代码，TODO 记录接口清单供后续参考
-
-## 踩坑记录
-
-> 后续迁移到项目知识库
-
-### react-reverse-portal 导致 Resume 终端不重连
-
-**现象：** Stop 后点 Resume，终端显示旧内容 + Disconnected，WebSocket 没有重连到新 PTY session。页面刷新后 Resume 正常。
-
-**根因：** 项目使用 `react-reverse-portal` 实现终端跨页面保活（抽屉 ↔ 详情页零重连）。`InPortal` 内的组件**永远不会被 React 卸载**——即使 `OutPortal` 从 DOM 移除，`InPortal` 里的 `TaskTerminal` 仍然活着，保持着旧的 WebSocket 连接。`getPortal(taskId)` 对相同 taskId 返回缓存的旧 instance，不会创建新的 `TaskTerminal`。
-
-**修复：** Resume/Continue 前必须先调 `removePortal(taskId)` 销毁旧 portal instance，再让 `getPortal` 创建全新的 `TaskTerminal`（连接新 PTY 的 WebSocket）。
-
-**教训：** reverse-portal 的保活特性在正常导航场景是优势（零闪烁），但在需要销毁重建的场景（Resume）是陷阱。`setActiveWorktreePath(null)` 只卸载 `OutPortal`，不销毁 `InPortal` 里的组件。必须显式 `removePortal` 才能真正销毁。
-
-### AI 能力使用清单
-
-> 后续 AI Adapter 抽象时，以下所有调用点需统一收敛
-
-| 能力 | 文件 | 调用方式 | 建议模型 | 说明 |
-|------|------|----------|----------|------|
-| 助手聊天 | `src/app/api/internal/assistant/chat/route.ts` | Agent SDK `query()` | 当前默认 | 多轮对话，带 MCP 工具 |
-| 小总结 | `src/lib/claude-session.ts` → `generateSummaryFromLog` | Agent SDK `aiQuery()` | Haiku 4.5 | stop 时生成，50 字内中文摘要 |
-| 大总结(Dreaming) | `src/lib/claude-session.ts` → `generateDreamingInsight` | Agent SDK `aiQuery()` | Sonnet 4.6 | 任务 DONE 时生成，结构化 JSON |
-| 项目分析 | `src/actions/project-actions.ts` → `analyzeProjectDirectory` | Agent SDK `aiQuery()` | Sonnet 4.6 | 导入项目时分析目录结构 |
-| 任务执行 | `src/actions/agent-actions.ts` → `startPtyExecution` | PTY spawn CLI | 当前默认 | 终端模式，用户交互 |
-
-**后续扩展方向：**
-- Settings 页面支持为每种 AI 能力配置不同的模型/方式（如小总结用 Haiku、大总结用 Sonnet、项目分析用 Opus）
-- 支持 API Key 直调模式（绕过 CLI spawn，更快更稳定，不依赖 CLI 安装）
-- AI Adapter 接口统一收敛 `aiQuery()` 作为唯一后台 AI 入口
-- 不同 AI 擅长不同场景：总结类用快模型，分析/推理类用强模型，创意类可切换不同厂商
-
-### encodePathForClaude 遗漏点号替换
-
-**现象：** `findLatestSessionId` 找错 `~/.claude/projects/` 目录，返回错误的 sessionId，导致 `--resume` 报 "No conversation found"。
-
-**根因：** Claude CLI 编码路径时把 `.` 替换为 `-`（如 `.worktrees` → `-worktrees`），但我们的 `encodePathForClaude` 保留了 `.`。编码结果 `-.worktrees` ≠ CLI 的 `--worktrees`，导致目录名不匹配。
-
-**修复：** 已通过 SessionStart hook 上报 sessionId 彻底绕过目录扫描，不再依赖路径编码。
-
-**教训：** 依赖逆向工程第三方工具的内部编码规则（目录命名、session 存储格式）是脆弱的。优先使用工具提供的官方接口（hook stdin 的 `session_id` 字段）获取信息。
+<!-- Internal notes (TODO, pitfalls) moved to .notes/ (gitignored) -->
