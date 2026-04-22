@@ -3,7 +3,10 @@
 </p>
 
 <p align="center">
-  AI Task Orchestration Platform &nbsp;·&nbsp; <b>English</b> | <a href="./README.zh.md">中文</a>
+  AI Task Orchestration Platform
+</p>
+<p align="center">
+  <b>English</b> | <a href="./README.zh.md">中文</a>
 </p>
 
 An AI task orchestration platform — manage, dispatch, and execute AI-assisted development tasks through a visual Kanban board.

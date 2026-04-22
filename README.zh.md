@@ -3,7 +3,10 @@
 </p>
 
 <p align="center">
-  AI 任务调度平台 &nbsp;·&nbsp; <a href="./README.md">English</a> | <b>中文</b>
+  AI 任务调度平台
+</p>
+<p align="center">
+  <a href="./README.md">English</a> | <b>中文</b>
 </p>
 
 AI 任务调度平台 — 通过可视化看板管理、调度、执行 AI 辅助开发任务。
