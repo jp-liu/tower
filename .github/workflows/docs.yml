@@ -34,11 +34,11 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
-      - name: Install dependencies
-        run: cd docs && pnpm install
-
-      - name: Build VitePress
-        run: cd docs && pnpm build
+      - name: Install and Build
+        working-directory: docs
+        run: |
+          pnpm install
+          pnpm build
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
