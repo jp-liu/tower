@@ -2,8 +2,6 @@
   <img src="public/banner.jpg" width="100%" alt="Tower" />
 </p>
 
-<h1 align="center">Tower</h1>
-
 <p align="center">
   AI 任务调度平台 &nbsp;·&nbsp; <a href="./README.md">English</a> | <b>中文</b>
 </p>

@@ -2,9 +2,6 @@
   <img src="public/banner.jpg" width="100%" alt="Tower" />
 </p>
 
-
-<h1 align="center">Tower</h1>
-
 <p align="center">
   AI Task Orchestration Platform &nbsp;·&nbsp; <b>English</b> | <a href="./README.zh.md">中文</a>
 </p>
