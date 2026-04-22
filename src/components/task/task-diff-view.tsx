@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, ChevronDown, AlertTriangle, GitCommitHorizontal } from "lucide-react";
+import { ChevronRight, ChevronDown, AlertTriangle, GitCompare, GitCommitHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useI18n } from "@/lib/i18n";
@@ -97,9 +98,7 @@ export function TaskDiffView({
       {/* File list */}
       <div className="flex-1 overflow-auto">
         {files.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-sm text-muted-foreground">No changes detected</p>
-          </div>
+          <EmptyState icon={GitCompare} title={t("diff.noChanges")} className="h-full" />
         ) : (
           <div className="divide-y divide-border">
             {files.map((file) => {

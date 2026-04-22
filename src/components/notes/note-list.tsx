@@ -1,5 +1,7 @@
 "use client";
 
+import { FileText } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useI18n } from "@/lib/i18n";
 import { NoteCard, type NoteItem } from "./note-card";
 
@@ -14,10 +16,7 @@ export function NoteList({ notes, onEdit, onDelete }: NoteListProps) {
 
   if (notes.length === 0) {
     return (
-      <div className="flex h-64 flex-col items-center justify-center gap-2 text-center">
-        <p className="text-sm font-medium text-muted-foreground">{t("notes.empty")}</p>
-        <p className="text-xs text-muted-foreground/60">{t("notes.emptyHint")}</p>
-      </div>
+      <EmptyState icon={FileText} title={t("notes.empty")} description={t("notes.emptyHint")} />
     );
   }
 

@@ -413,6 +413,7 @@ export const zh = {
   "diff.commitChanges": "提交更改",
   "diff.commitMessagePlaceholder": "第一行为标题，空行后为详细描述\n\n例如:\nfeat: 添加用户认证\n\n实现 JWT token 验证和刷新机制",
   "diff.commit": "提交",
+  "diff.noChanges": "未检测到更改",
   "diff.commitSuccess": "已提交 ({hash})",
   // Merge (Phase 17)
   "merge.button": "合并",

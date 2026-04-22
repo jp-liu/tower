@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { FolderTree, AlertCircle, Folder, Search, X, FileIcon } from "lucide-react";
 import Fuse from "fuse.js";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
@@ -347,17 +348,12 @@ export function FileTree({
   // Empty state: no worktreePath
   if (!worktreePath) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-        <FolderTree className="h-8 w-8 text-muted-foreground" />
-        <div>
-          <p className="text-sm font-medium text-foreground">
-            {t("taskPage.fileTree.emptyHeading")}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {t("taskPage.fileTree.emptyBody")}
-          </p>
-        </div>
-      </div>
+      <EmptyState
+        icon={FolderTree}
+        title={t("taskPage.fileTree.emptyHeading")}
+        description={t("taskPage.fileTree.emptyBody")}
+        className="h-full"
+      />
     );
   }
 
@@ -383,12 +379,11 @@ export function FileTree({
   // Empty directory state
   if (!isLoading && rootEntries.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-        <Folder className="h-8 w-8 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">
-          {t("taskPage.fileTree.emptyDir")}
-        </p>
-      </div>
+      <EmptyState
+        icon={Folder}
+        title={t("taskPage.fileTree.emptyDir")}
+        className="h-full"
+      />
     );
   }
 

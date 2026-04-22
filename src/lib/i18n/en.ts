@@ -398,6 +398,7 @@ export const en: Translations = {
   "diff.commitChanges": "Commit Changes",
   "diff.commitMessagePlaceholder": "First line is the title, blank line then description\n\ne.g.:\nfeat: add user authentication\n\nImplement JWT token verification and refresh",
   "diff.commit": "Commit",
+  "diff.noChanges": "No changes detected",
   "diff.commitSuccess": "Committed ({hash})",
   // Merge (Phase 17)
   "merge.button": "Merge",

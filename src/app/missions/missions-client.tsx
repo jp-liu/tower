@@ -18,6 +18,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Rocket } from "lucide-react";
 import { GridPresetPicker } from "@/components/missions/grid-preset-picker";
 import {
@@ -288,14 +289,17 @@ export function MissionsClient({
       {/* Grid area */}
       <div ref={gridContainerRef} className="flex-1 overflow-auto min-h-0 p-4">
         {visibleCards.length === 0 && removingIds.size === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-4">
-            <Rocket className="h-12 w-12 text-muted-foreground" />
-            <h2 className="text-xl font-semibold">{t("missions.emptyTitle")}</h2>
-            <p className="text-sm text-muted-foreground">{t("missions.emptyDesc")}</p>
-            <Button onClick={() => setLauncherOpen(true)}>
-              {t("missions.launchTask")}
-            </Button>
-          </div>
+          <EmptyState
+            icon={Rocket}
+            title={t("missions.emptyTitle")}
+            description={t("missions.emptyDesc")}
+            className="h-full"
+            action={
+              <Button onClick={() => setLauncherOpen(true)}>
+                {t("missions.launchTask")}
+              </Button>
+            }
+          />
         ) : (
           <DndContext
             id="missions-dnd"

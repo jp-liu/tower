@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, CheckCircle2, XCircle, Loader2, Clock, PlayCircle, RotateCcw, Lightbulb } from "lucide-react";
+import { ChevronDown, ChevronUp, CheckCircle2, XCircle, Loader2, Clock, PlayCircle, RotateCcw, Lightbulb, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useI18n } from "@/lib/i18n";
 
 interface Execution {
@@ -111,11 +112,7 @@ export function ExecutionTimeline({ executions, onResume, onContinueLatest }: Ex
   const [insightExpandedId, setInsightExpandedId] = useState<string | null>(null);
 
   if (executions.length === 0) {
-    return (
-      <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-        {t("execution.noHistory")}
-      </div>
-    );
+    return <EmptyState icon={History} title={t("execution.noHistory")} />;
   }
 
   return (
