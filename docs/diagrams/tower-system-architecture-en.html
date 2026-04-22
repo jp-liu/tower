@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tower System Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #020617;
+    color: #e2e8f0;
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+  }
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, #22d3ee, #34d399, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #64748b;
+    margin-bottom: 32px;
+    letter-spacing: 1px;
+  }
+  .diagram-container {
+    width: 100%;
+    max-width: 1140px;
+    overflow-x: auto;
+  }
+  svg text {
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .cards {
+    display: flex;
+    gap: 20px;
+    max-width: 1140px;
+    width: 100%;
+    margin-top: 32px;
+    flex-wrap: wrap;
+  }
+  .card {
+    flex: 1;
+    min-width: 280px;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 12px;
+    padding: 20px;
+    backdrop-filter: blur(8px);
+  }
+  .card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .card-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .card-body {
+    font-size: 12px;
+    color: #94a3b8;
+    line-height: 1.7;
+  }
+  .footer {
+    margin-top: 40px;
+    font-size: 12px;
+    color: #475569;
+    letter-spacing: 2px;
+  }
+</style>
+</head>
+<body>
+
+<h1>System Architecture</h1>
+<p class="subtitle">AI TASK MANAGEMENT PLATFORM</p>
+
+<div class="diagram-container">
+<svg viewBox="0 0 1100 780" xmlns="http://www.w3.org/2000/svg" width="100%">
+  <defs>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(148,163,184,0.05)" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrow-cyan" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#22d3ee"/>
+    </marker>
+    <marker id="arrow-emerald" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#34d399"/>
+    </marker>
+    <marker id="arrow-violet" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#a78bfa"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#fbbf24"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#fb923c"/>
+    </marker>
+    <marker id="arrow-slate" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <!-- Background grid -->
+  <rect width="1100" height="780" fill="url(#grid)"/>
+
+  <!-- ============================================ -->
+  <!-- LAYER 1 - Client (y=20, cyan) -->
+  <!-- ============================================ -->
+  <rect x="20" y="20" width="1060" height="90" rx="8" fill="none" stroke="rgba(34,211,238,0.15)" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="36" y="38" fill="#22d3ee" font-size="9" font-weight="600" opacity="0.6">CLIENT LAYER</text>
+
+  <!-- Browser -->
+  <rect x="40" y="46" width="240" height="50" rx="6" fill="#0f172a"/>
+  <rect x="40" y="46" width="240" height="50" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="160" y="67" fill="#22d3ee" font-size="12" font-weight="600" text-anchor="middle">Browser</text>
+  <text x="160" y="83" fill="#94a3b8" font-size="9" text-anchor="middle">Next.js App Router</text>
+
+  <!-- xterm.js -->
+  <rect x="300" y="46" width="240" height="50" rx="6" fill="#0f172a"/>
+  <rect x="300" y="46" width="240" height="50" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="420" y="67" fill="#22d3ee" font-size="12" font-weight="600" text-anchor="middle">xterm.js Terminal</text>
+  <text x="420" y="83" fill="#94a3b8" font-size="9" text-anchor="middle">WebSocket</text>
+
+  <!-- Monaco -->
+  <rect x="560" y="46" width="240" height="50" rx="6" fill="#0f172a"/>
+  <rect x="560" y="46" width="240" height="50" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="680" y="67" fill="#22d3ee" font-size="12" font-weight="600" text-anchor="middle">Monaco Editor</text>
+  <text x="680" y="83" fill="#94a3b8" font-size="9" text-anchor="middle">Code Editing</text>
+
+  <!-- Assistant Panel -->
+  <rect x="820" y="46" width="240" height="50" rx="6" fill="#0f172a"/>
+  <rect x="820" y="46" width="240" height="50" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="940" y="67" fill="#22d3ee" font-size="12" font-weight="600" text-anchor="middle">Assistant Panel</text>
+  <text x="940" y="83" fill="#94a3b8" font-size="9" text-anchor="middle">SSE Chat</text>
+
+  <!-- ============================================ -->
+  <!-- LAYER 2 - Next.js Server (y=140, emerald) -->
+  <!-- ============================================ -->
+  <rect x="20" y="140" width="1060" height="90" rx="8" fill="none" stroke="rgba(52,211,153,0.15)" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="36" y="158" fill="#34d399" font-size="9" font-weight="600" opacity="0.6">NEXT.JS SERVER</text>
+
+  <!-- Server Actions -->
+  <rect x="40" y="166" width="320" height="50" rx="6" fill="#0f172a"/>
+  <rect x="40" y="166" width="320" height="50" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="200" y="187" fill="#34d399" font-size="12" font-weight="600" text-anchor="middle">Server Actions</text>
+  <text x="200" y="203" fill="#94a3b8" font-size="9" text-anchor="middle">task / workspace / label / agent / file / git</text>
+
+  <!-- API Routes -->
+  <rect x="390" y="166" width="320" height="50" rx="6" fill="#0f172a"/>
+  <rect x="390" y="166" width="320" height="50" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="550" y="187" fill="#34d399" font-size="12" font-weight="600" text-anchor="middle">API Routes</text>
+  <text x="550" y="203" fill="#94a3b8" font-size="9" text-anchor="middle">/api/internal/terminal/* · /api/internal/assistant/*</text>
+
+  <!-- SSE -->
+  <rect x="740" y="166" width="320" height="50" rx="6" fill="#0f172a"/>
+  <rect x="740" y="166" width="320" height="50" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="900" y="187" fill="#34d399" font-size="12" font-weight="600" text-anchor="middle">SSE Streaming Endpoint</text>
+  <text x="900" y="203" fill="#94a3b8" font-size="9" text-anchor="middle">Assistant Chat /chat · Agent SDK query()</text>
+
+  <!-- ============================================ -->
+  <!-- LAYER 3 - WebSocket Server (y=260, orange) -->
+  <!-- ============================================ -->
+  <rect x="20" y="260" width="1060" height="70" rx="8" fill="none" stroke="rgba(251,146,60,0.15)" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="36" y="278" fill="#fb923c" font-size="9" font-weight="600" opacity="0.6">WEBSOCKET SERVER</text>
+
+  <rect x="170" y="280" width="760" height="40" rx="6" fill="#0f172a"/>
+  <rect x="170" y="280" width="760" height="40" rx="6" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="550" y="298" fill="#fb923c" font-size="12" font-weight="600" text-anchor="middle">ws-server.ts</text>
+  <text x="550" y="312" fill="#94a3b8" font-size="9" text-anchor="middle">Port 3001 · Multi-client Broadcast · Terminal I/O Relay</text>
+
+  <!-- ============================================ -->
+  <!-- LAYER 4 - PTY (y=350, amber) -->
+  <!-- ============================================ -->
+  <rect x="20" y="350" width="1060" height="70" rx="8" fill="none" stroke="rgba(251,191,36,0.15)" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="36" y="368" fill="#fbbf24" font-size="9" font-weight="600" opacity="0.6">PTY LAYER</text>
+
+  <rect x="170" y="370" width="760" height="40" rx="6" fill="#0f172a"/>
+  <rect x="170" y="370" width="760" height="40" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="550" y="388" fill="#fbbf24" font-size="12" font-weight="600" text-anchor="middle">node-pty Sessions</text>
+  <text x="550" y="402" fill="#94a3b8" font-size="9" text-anchor="middle">session-store.ts · Keyed by taskId · Max 20 Concurrent · 2h Disconnect Keepalive</text>
+
+  <!-- ============================================ -->
+  <!-- LAYER 5 - Data + MCP (y=440) -->
+  <!-- ============================================ -->
+  <!-- SQLite (violet) -->
+  <rect x="40" y="440" width="480" height="70" rx="6" fill="#0f172a"/>
+  <rect x="40" y="440" width="480" height="70" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="280" y="468" fill="#a78bfa" font-size="12" font-weight="600" text-anchor="middle">SQLite + Prisma ORM</text>
+  <text x="280" y="488" fill="#94a3b8" font-size="9" text-anchor="middle">FTS5 Full-Text Search</text>
+
+  <!-- MCP Server (amber) -->
+  <rect x="560" y="440" width="500" height="70" rx="6" fill="#0f172a"/>
+  <rect x="560" y="440" width="500" height="70" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="810" y="468" fill="#fbbf24" font-size="12" font-weight="600" text-anchor="middle">MCP Server</text>
+  <text x="810" y="488" fill="#94a3b8" font-size="9" text-anchor="middle">stdio Transport · 24 Tools · 7 Categories · HTTP Bridge for Terminal</text>
+
+  <!-- ============================================ -->
+  <!-- LAYER 6 - AI (y=540, violet) -->
+  <!-- ============================================ -->
+  <rect x="20" y="540" width="1060" height="90" rx="8" fill="none" stroke="rgba(167,139,250,0.15)" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="36" y="558" fill="#a78bfa" font-size="9" font-weight="600" opacity="0.6">AI LAYER</text>
+
+  <!-- Agent SDK -->
+  <rect x="40" y="566" width="500" height="50" rx="6" fill="#0f172a"/>
+  <rect x="40" y="566" width="500" height="50" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="290" y="587" fill="#a78bfa" font-size="12" font-weight="600" text-anchor="middle">Claude Agent SDK</text>
+  <text x="290" y="603" fill="#94a3b8" font-size="9" text-anchor="middle">query() / aiQuery() · Assistant Chat / Summary / Analysis</text>
+
+  <!-- Claude CLI -->
+  <rect x="580" y="566" width="480" height="50" rx="6" fill="#0f172a"/>
+  <rect x="580" y="566" width="480" height="50" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="820" y="587" fill="#a78bfa" font-size="12" font-weight="600" text-anchor="middle">Claude CLI PTY</text>
+  <text x="820" y="603" fill="#94a3b8" font-size="9" text-anchor="middle">Task Execution · Interactive Terminal · CLI Profile Config</text>
+
+  <!-- ============================================ -->
+  <!-- LAYER 7 - External (y=660, slate) -->
+  <!-- ============================================ -->
+  <rect x="20" y="660" width="1060" height="90" rx="8" fill="none" stroke="rgba(148,163,184,0.1)" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="36" y="678" fill="#94a3b8" font-size="9" font-weight="600" opacity="0.6">EXTERNAL</text>
+
+  <!-- .tower/ -->
+  <rect x="40" y="686" width="500" height="50" rx="6" fill="#0f172a"/>
+  <rect x="40" y="686" width="500" height="50" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="290" y="707" fill="#94a3b8" font-size="12" font-weight="600" text-anchor="middle">.tower/ Directory</text>
+  <text x="290" y="723" fill="#64748b" font-size="9" text-anchor="middle">CLAUDE.md Persona · Skills · Hooks</text>
+
+  <!-- Git -->
+  <rect x="580" y="686" width="480" height="50" rx="6" fill="#0f172a"/>
+  <rect x="580" y="686" width="480" height="50" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="820" y="707" fill="#94a3b8" font-size="12" font-weight="600" text-anchor="middle">Git Repository</text>
+  <text x="820" y="723" fill="#64748b" font-size="9" text-anchor="middle">Worktree Isolation · Diff · Merge</text>
+
+  <!-- ============================================ -->
+  <!-- ARROWS -->
+  <!-- ============================================ -->
+
+  <!-- Browser → Server Actions (emerald) -->
+  <line x1="160" y1="96" x2="200" y2="166" stroke="#34d399" stroke-width="1.5" opacity="0.7" marker-end="url(#arrow-emerald)"/>
+
+  <!-- xterm.js → WebSocket Server (orange) -->
+  <line x1="420" y1="96" x2="450" y2="280" stroke="#fb923c" stroke-width="1.5" opacity="0.7" marker-end="url(#arrow-orange)"/>
+
+  <!-- Assistant Panel → SSE Endpoint (cyan) -->
+  <line x1="940" y1="96" x2="900" y2="166" stroke="#22d3ee" stroke-width="1.5" opacity="0.7" marker-end="url(#arrow-cyan)"/>
+
+  <!-- WebSocket → PTY (orange) -->
+  <line x1="550" y1="320" x2="550" y2="370" stroke="#fb923c" stroke-width="1.5" opacity="0.7" marker-end="url(#arrow-orange)"/>
+
+  <!-- Server Actions → SQLite (violet) -->
+  <line x1="200" y1="216" x2="280" y2="440" stroke="#a78bfa" stroke-width="1.5" opacity="0.7" marker-end="url(#arrow-violet)"/>
+
+  <!-- API Routes → MCP Server (amber) -->
+  <line x1="600" y1="216" x2="810" y2="440" stroke="#fbbf24" stroke-width="1.5" opacity="0.7" marker-end="url(#arrow-amber)"/>
+
+  <!-- PTY → Claude CLI (violet) -->
+  <line x1="700" y1="410" x2="820" y2="566" stroke="#a78bfa" stroke-width="1.5" opacity="0.7" marker-end="url(#arrow-violet)"/>
+
+  <!-- SSE → Agent SDK (violet) -->
+  <line x1="850" y1="216" x2="350" y2="566" stroke="#a78bfa" stroke-width="1.5" opacity="0.7" marker-end="url(#arrow-violet)"/>
+
+  <!-- Claude CLI → .tower (slate) -->
+  <line x1="750" y1="616" x2="350" y2="686" stroke="#94a3b8" stroke-width="1.5" opacity="0.7" marker-end="url(#arrow-slate)"/>
+
+  <!-- Claude CLI → Git (slate) -->
+  <line x1="820" y1="616" x2="820" y2="686" stroke="#94a3b8" stroke-width="1.5" opacity="0.7" marker-end="url(#arrow-slate)"/>
+
+  <!-- ============================================ -->
+  <!-- LEGEND -->
+  <!-- ============================================ -->
+  <rect x="880" y="755" width="210" height="20" rx="4" fill="rgba(15,23,42,0.9)"/>
+  <circle cx="895" cy="765" r="3" fill="#22d3ee"/>
+  <text x="902" y="769" fill="#64748b" font-size="7">Client</text>
+  <circle cx="935" cy="765" r="3" fill="#34d399"/>
+  <text x="942" y="769" fill="#64748b" font-size="7">Server</text>
+  <circle cx="978" cy="765" r="3" fill="#fb923c"/>
+  <text x="985" y="769" fill="#64748b" font-size="7">WS</text>
+  <circle cx="1005" cy="765" r="3" fill="#fbbf24"/>
+  <text x="1012" y="769" fill="#64748b" font-size="7">PTY/MCP</text>
+  <circle cx="1050" cy="765" r="3" fill="#a78bfa"/>
+  <text x="1057" y="769" fill="#64748b" font-size="7">AI/DB</text>
+</svg>
+</div>
+
+<div class="cards">
+  <div class="card">
+    <div class="card-title">
+      <span class="card-dot" style="background:#22d3ee"></span>
+      Tech Stack
+    </div>
+    <div class="card-body">
+      Next.js 16 · TypeScript · SQLite / Prisma ORM · node-pty · xterm.js · Monaco Editor · TailwindCSS 4 · shadcn (base-nova)
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">
+      <span class="card-dot" style="background:#34d399"></span>
+      Data Flow
+    </div>
+    <div class="card-body">
+      Browser ↔ Server Actions ↔ DB<br>
+      Browser ↔ WebSocket ↔ PTY ↔ CLI<br>
+      Server ↔ MCP (HTTP Bridge)
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">
+      <span class="card-dot" style="background:#a78bfa"></span>
+      AI Integration
+    </div>
+    <div class="card-body">
+      Agent SDK — query() / aiQuery() Streaming Chat<br>
+      CLI PTY — Task Execution Interactive Terminal<br>
+      .tower/ — Context Injection (CLAUDE.md / Skills / Hooks)
+    </div>
+  </div>
+</div>
+
+<p class="footer">Tower System Architecture &middot; v0.9</p>
+
+</body>
+</html>

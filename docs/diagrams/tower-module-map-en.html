@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tower Module Map</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'JetBrains Mono', monospace; background: #020617; min-height: 100vh; padding: 2rem; color: white; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot { width: 12px; height: 12px; background: #22d3ee; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container { background: rgba(15, 23, 42, 0.5); border-radius: 1rem; border: 1px solid #1e293b; padding: 1.5rem; overflow-x: auto; }
+    svg { width: 100%; min-width: 900px; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 2rem; }
+    .card { background: rgba(15, 23, 42, 0.5); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.25rem; }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Tower — Module Dependency Map</h1>
+      </div>
+      <p class="subtitle">14 Modules · 4 Layers · Data → Execution → UI → Infrastructure</p>
+    </div>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1100 700">
+        <defs>
+          <marker id="ab" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#60a5fa"/></marker>
+          <marker id="ag" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#34d399"/></marker>
+          <marker id="ap" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#a78bfa"/></marker>
+          <marker id="ao" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#fbbf24"/></marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+        <rect width="1100" height="700" fill="url(#grid)"/>
+
+        <!-- Arrows (behind boxes) -->
+        <path d="M165,270 L165,340 L165,530 L350,530 L350,560" stroke="#34d399" stroke-width="1.2" fill="none" marker-end="url(#ag)"/>
+        <path d="M325,270 L325,340 L170,340 L170,400" stroke="#34d399" stroke-width="1.2" fill="none" marker-end="url(#ag)"/>
+        <path d="M485,270 L485,340 L350,340 L350,400" stroke="#34d399" stroke-width="1.2" fill="none" marker-end="url(#ag)"/>
+        <path d="M165,324 L165,560" stroke="#34d399" stroke-width="1.2" fill="none" stroke-dasharray="4,2" marker-end="url(#ag)"/>
+        <path d="M170,460 L170,530 L530,530 L530,560" stroke="#a78bfa" stroke-width="1.2" fill="none" marker-end="url(#ap)"/>
+        <path d="M280,430 L240,430" stroke="#a78bfa" stroke-width="1.2" fill="none" marker-end="url(#ap)"/>
+        <path d="M530,460 L530,560" stroke="#a78bfa" stroke-width="1.2" fill="none" marker-end="url(#ap)"/>
+        <path d="M740,250 L660,250 L660,590 L600,590" stroke="#fbbf24" stroke-width="1.2" fill="none" marker-end="url(#ao)"/>
+        <path d="M910,260 L870,260 L870,430 L420,430" stroke="#fbbf24" stroke-width="1.2" fill="none" stroke-dasharray="4,2" marker-end="url(#ao)"/>
+        <path d="M740,340 L690,340 L690,240 L550,240" stroke="#fbbf24" stroke-width="1" fill="none" stroke-dasharray="3,2" marker-end="url(#ao)"/>
+        <path d="M240,590 L280,590" stroke="#60a5fa" stroke-width="1.2" fill="none" marker-end="url(#ab)"/>
+        <path d="M420,590 L460,590" stroke="#60a5fa" stroke-width="1.2" fill="none" marker-end="url(#ab)"/>
+
+        <!-- Data Layer -->
+        <rect x="40" y="530" width="1020" height="110" rx="12" fill="rgba(6,78,59,0.08)" stroke="#34d399" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="60" y="552" fill="#34d399" font-size="11" font-weight="600" letter-spacing="1" font-family="JetBrains Mono, monospace">DATA LAYER</text>
+        <rect x="100" y="560" width="140" height="60" rx="8" fill="#0f172a"/><rect x="100" y="560" width="140" height="60" rx="8" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="170" y="586" text-anchor="middle" fill="white" font-size="12" font-weight="600" font-family="JetBrains Mono, monospace">Workspace</text>
+        <text x="170" y="602" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="JetBrains Mono, monospace">workspace</text>
+        <rect x="280" y="560" width="140" height="60" rx="8" fill="#0f172a"/><rect x="280" y="560" width="140" height="60" rx="8" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="350" y="586" text-anchor="middle" fill="white" font-size="12" font-weight="600" font-family="JetBrains Mono, monospace">Project</text>
+        <text x="350" y="602" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="JetBrains Mono, monospace">project</text>
+        <rect x="460" y="560" width="140" height="60" rx="8" fill="#0f172a"/><rect x="460" y="560" width="140" height="60" rx="8" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="530" y="586" text-anchor="middle" fill="white" font-size="12" font-weight="600" font-family="JetBrains Mono, monospace">Task</text>
+        <text x="530" y="602" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="JetBrains Mono, monospace">task</text>
+
+        <!-- Execution Layer -->
+        <rect x="40" y="370" width="620" height="130" rx="12" fill="rgba(76,29,149,0.08)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="60" y="392" fill="#a78bfa" font-size="11" font-weight="600" letter-spacing="1" font-family="JetBrains Mono, monospace">EXECUTION LAYER</text>
+        <rect x="100" y="400" width="140" height="60" rx="8" fill="#0f172a"/><rect x="100" y="400" width="140" height="60" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="170" y="426" text-anchor="middle" fill="white" font-size="12" font-weight="600" font-family="JetBrains Mono, monospace">Terminal</text>
+        <text x="170" y="442" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="JetBrains Mono, monospace">terminal</text>
+        <rect x="280" y="400" width="140" height="60" rx="8" fill="#0f172a"/><rect x="280" y="400" width="140" height="60" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="350" y="426" text-anchor="middle" fill="white" font-size="12" font-weight="600" font-family="JetBrains Mono, monospace">AI</text>
+        <text x="350" y="442" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="JetBrains Mono, monospace">ai</text>
+        <rect x="460" y="400" width="140" height="60" rx="8" fill="#0f172a"/><rect x="460" y="400" width="140" height="60" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="530" y="426" text-anchor="middle" fill="white" font-size="12" font-weight="600" font-family="JetBrains Mono, monospace">Git</text>
+        <text x="530" y="442" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="JetBrains Mono, monospace">git</text>
+
+        <!-- UI Layer -->
+        <rect x="40" y="180" width="700" height="160" rx="12" fill="rgba(8,51,68,0.1)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="60" y="202" fill="#22d3ee" font-size="11" font-weight="600" letter-spacing="1" font-family="JetBrains Mono, monospace">UI LAYER</text>
+        <rect x="100" y="210" width="130" height="60" rx="8" fill="#0f172a"/><rect x="100" y="210" width="130" height="60" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="165" y="236" text-anchor="middle" fill="white" font-size="12" font-weight="600" font-family="JetBrains Mono, monospace">Board</text>
+        <text x="165" y="252" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="JetBrains Mono, monospace">board</text>
+        <rect x="260" y="210" width="130" height="60" rx="8" fill="#0f172a"/><rect x="260" y="210" width="130" height="60" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="325" y="236" text-anchor="middle" fill="white" font-size="12" font-weight="600" font-family="JetBrains Mono, monospace">Missions</text>
+        <text x="325" y="252" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="JetBrains Mono, monospace">missions</text>
+        <rect x="420" y="210" width="130" height="60" rx="8" fill="#0f172a"/><rect x="420" y="210" width="130" height="60" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="485" y="236" text-anchor="middle" fill="white" font-size="12" font-weight="600" font-family="JetBrains Mono, monospace">Assistant</text>
+        <text x="485" y="252" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="JetBrains Mono, monospace">assistant</text>
+        <rect x="100" y="280" width="130" height="44" rx="8" fill="#0f172a"/><rect x="100" y="280" width="130" height="44" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="165" y="298" text-anchor="middle" fill="white" font-size="12" font-weight="600" font-family="JetBrains Mono, monospace">Search</text>
+        <text x="165" y="314" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="JetBrains Mono, monospace">search</text>
+        <rect x="260" y="280" width="140" height="44" rx="8" fill="#0f172a"/><rect x="260" y="280" width="140" height="44" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="330" y="298" text-anchor="middle" fill="white" font-size="12" font-weight="600" font-family="JetBrains Mono, monospace">Assets/Notes</text>
+        <text x="330" y="314" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="JetBrains Mono, monospace">assets</text>
+
+        <!-- Infrastructure -->
+        <rect x="700" y="180" width="360" height="460" rx="12" fill="rgba(120,53,15,0.08)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="720" y="202" fill="#fbbf24" font-size="11" font-weight="600" letter-spacing="1" font-family="JetBrains Mono, monospace">INFRASTRUCTURE</text>
+        <rect x="740" y="220" width="140" height="60" rx="8" fill="#0f172a"/><rect x="740" y="220" width="140" height="60" rx="8" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="810" y="246" text-anchor="middle" fill="white" font-size="12" font-weight="600" font-family="JetBrains Mono, monospace">MCP</text>
+        <text x="810" y="262" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="JetBrains Mono, monospace">mcp</text>
+        <rect x="910" y="220" width="120" height="60" rx="8" fill="#0f172a"/><rect x="910" y="220" width="120" height="60" rx="8" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="970" y="246" text-anchor="middle" fill="white" font-size="12" font-weight="600" font-family="JetBrains Mono, monospace">Settings</text>
+        <text x="970" y="262" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="JetBrains Mono, monospace">settings</text>
+        <rect x="740" y="310" width="140" height="60" rx="8" fill="#0f172a"/><rect x="740" y="310" width="140" height="60" rx="8" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="810" y="336" text-anchor="middle" fill="white" font-size="12" font-weight="600" font-family="JetBrains Mono, monospace">I18n</text>
+        <text x="810" y="352" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="JetBrains Mono, monospace">i18n</text>
+
+        <!-- Legend -->
+        <g transform="translate(40,660)">
+          <rect x="0" y="-14" width="1020" height="28" rx="6" fill="rgba(15,23,42,0.8)" stroke="#1e293b" stroke-width="1"/>
+          <text x="14" y="4" fill="#64748b" font-size="10" font-weight="600" font-family="JetBrains Mono, monospace">LEGEND</text>
+          <rect x="80" y="-6" width="12" height="12" rx="2" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1"/>
+          <text x="98" y="4" fill="#94a3b8" font-size="9" font-family="JetBrains Mono, monospace">Data Layer</text>
+          <rect x="180" y="-6" width="12" height="12" rx="2" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1"/>
+          <text x="198" y="4" fill="#94a3b8" font-size="9" font-family="JetBrains Mono, monospace">Execution</text>
+          <rect x="280" y="-6" width="12" height="12" rx="2" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+          <text x="298" y="4" fill="#94a3b8" font-size="9" font-family="JetBrains Mono, monospace">UI Layer</text>
+          <rect x="370" y="-6" width="12" height="12" rx="2" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1"/>
+          <text x="388" y="4" fill="#94a3b8" font-size="9" font-family="JetBrains Mono, monospace">Infrastructure</text>
+          <line x1="490" y1="0" x2="520" y2="0" stroke="#94a3b8" stroke-width="1.2"/>
+          <text x="528" y="4" fill="#94a3b8" font-size="9" font-family="JetBrains Mono, monospace">Solid = Direct Dependency</text>
+          <line x1="700" y1="0" x2="730" y2="0" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="4,2"/>
+          <text x="738" y="4" fill="#94a3b8" font-size="9" font-family="JetBrains Mono, monospace">Dashed = Config / Cross-cutting</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header"><div class="card-dot emerald"></div><h3>Data Layer</h3></div>
+        <ul>
+          <li>• Workspace → Project → Task core hierarchy</li>
+          <li>• Cascade deletes ensure data consistency</li>
+          <li>• Data foundation for all modules</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot violet"></div><h3>Execution Layer</h3></div>
+        <ul>
+          <li>• Terminal — PTY session management</li>
+          <li>• AI — Claude SDK + CLI integration</li>
+          <li>• Git — Worktree isolated execution</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot cyan"></div><h3>UI + Infrastructure</h3></div>
+        <ul>
+          <li>• 5 UI modules (Board/Missions/Assistant/Search/Assets)</li>
+          <li>• MCP exposes 24 tools externally</li>
+          <li>• Settings global config · I18n bilingual (zh/en)</li>
+        </ul>
+      </div>
+    </div>
+    <p class="footer">Tower Module Dependency Map · 14 Modules · 4 Layers</p>
+  </div>
+</body>
+</html>
