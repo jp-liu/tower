@@ -31,14 +31,11 @@ jobs:
         with:
           node-version: 22
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Install and Build
+      - name: Install and Build docs
         working-directory: docs
         run: |
-          pnpm install
-          pnpm build
+          npm install
+          npx vitepress build
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
