@@ -254,6 +254,23 @@ pnpm mcp            # Start MCP Server (standalone process)
 
 **教训：** reverse-portal 的保活特性在正常导航场景是优势（零闪烁），但在需要销毁重建的场景（Resume）是陷阱。`setActiveWorktreePath(null)` 只卸载 `OutPortal`，不销毁 `InPortal` 里的组件。必须显式 `removePortal` 才能真正销毁。
 
+### AI 能力使用清单
+
+> 后续 AI Adapter 抽象时，以下所有调用点需统一收敛
+
+| 能力 | 文件 | 调用方式 | 建议模型 | 说明 |
+|------|------|----------|----------|------|
+| 助手聊天 | `src/app/api/internal/assistant/chat/route.ts` | Agent SDK `query()` | 当前默认 | 多轮对话，带 MCP 工具 |
+| 小总结 | `src/lib/claude-session.ts` → `generateSummaryFromLog` | Agent SDK `query()` | Haiku 4.5 | stop 时生成，50 字内中文摘要 |
+| 大总结(Dreaming) | `src/lib/claude-session.ts` → `generateDreamingInsight` | Agent SDK `query()` | Sonnet 4.6 | 任务 DONE 时生成，结构化 JSON |
+| 项目分析 | `src/actions/project-actions.ts` → `analyzeProjectDirectory` | `execFile("claude", ["-p"])` | 当前默认 | 导入项目时分析目录结构 |
+| 任务执行 | `src/actions/agent-actions.ts` → `startPtyExecution` | PTY spawn CLI | 当前默认 | 终端模式，用户交互 |
+
+**后续扩展方向：**
+- 支持通过 Settings 配置不同能力使用的模型（`ai.summaryModel`、`ai.dreamingModel`）
+- 支持 API Key 直调模式（绕过 CLI spawn，更快更稳定）
+- AI Adapter 接口统一收敛 `aiQuery()` 作为唯一入口
+
 ### encodePathForClaude 遗漏点号替换
 
 **现象：** `findLatestSessionId` 找错 `~/.claude/projects/` 目录，返回错误的 sessionId，导致 `--resume` 报 "No conversation found"。
