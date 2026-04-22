@@ -35,6 +35,7 @@ export async function aiQuery(prompt: string, cwd: string, maxTurns = 1): Promis
         maxTurns,
         cwd,
         pathToClaudeCodeExecutable: claudePath,
+        sessionPersistence: false,
       } as Parameters<typeof query>[0]["options"],
     });
 
