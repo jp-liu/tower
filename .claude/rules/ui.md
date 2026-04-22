@@ -46,23 +46,35 @@ paths:
 - Locale is read from localStorage in `useEffect` after mount.
 - All user-facing strings must use `t("key")` from `useI18n()`.
 
-## Icon Buttons (Toolbar / Header)
+## Buttons — 统一使用 `<Button>` 组件
 
-All ghost icon buttons in toolbars, headers, and panels must use the same hover pattern:
+**禁止在可交互按钮场景使用原生 `<button>` + 手写 hover 样式。** 必须使用 `<Button>` 组件，通过 `variant` 和 `size` 控制样式。
+
+### Icon Buttons（工具栏 / 头部 / 面板）
 
 ```tsx
-<Button
-  variant="ghost"
-  className="h-8 w-8 p-0 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
->
+<Button variant="ghost" size="icon" className="text-muted-foreground">
   <Icon className="h-4 w-4" />
 </Button>
 ```
 
-- Default: `text-muted-foreground` (subtle, not invisible)
-- Hover: `hover:bg-accent hover:text-foreground` (matches top-bar, sidebar, and settings buttons)
-- Always include `transition-colors` for smooth state change
-- Never use `hover:text-accent-foreground` — use `hover:text-foreground` for consistency
+### Text Buttons（带文字的操作按钮）
+
+```tsx
+<Button variant="ghost" className="text-muted-foreground">
+  <Icon className="h-3.5 w-3.5" />
+  <span className="text-xs">{label}</span>
+</Button>
+```
+
+### 规则
+
+- **Always use `<Button>`** — ghost 变体的 hover 样式（`hover:bg-accent`）在 light/dark 下统一生效
+- **Never use `<button>` + 手写 `hover:bg-*`** — 容易和 Button 组件不一致，dark 模式下可能看不见
+- `variant="ghost"` 用于工具栏、头部、面板内的非主要操作
+- `variant="outline"` 用于次要操作（取消、返回等）
+- `variant="default"` 用于主要操作（创建、提交等）
+- 只在特殊场景用原生 `<button>`：右键菜单项、自定义交互组件内部等
 
 ## DnD Kit
 
