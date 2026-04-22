@@ -17,6 +17,7 @@ interface BoardColumnProps {
   onEditTask?: (task: TaskWithLabels) => void;
   onAddTask?: () => void;
   onDeleteTask?: (taskId: string) => void;
+  onTogglePin?: (taskId: string) => void;
   onContextMenu?: (task: TaskWithLabels, x: number, y: number) => void;
 }
 
@@ -29,6 +30,7 @@ export function BoardColumn({
   onEditTask,
   onAddTask,
   onDeleteTask,
+  onTogglePin,
   onContextMenu,
 }: BoardColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id });
@@ -76,6 +78,7 @@ export function BoardColumn({
                 onClick={() => onTaskClick?.(task)}
                 onEdit={onEditTask}
                 onDelete={onDeleteTask}
+                onTogglePin={onTogglePin}
                 onContextMenu={onContextMenu}
               />
             ))}

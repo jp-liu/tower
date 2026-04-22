@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { setTaskLabels } from "@/actions/label-actions";
 import { removeWorktree } from "@/lib/worktree";
+import { z } from "zod";
 import { createTaskSchema, updateTaskSchema, taskStatusSchema } from "@/lib/schemas";
 import { logger } from "@/lib/logger";
 import type { TaskStatus, Priority } from "@prisma/client";
@@ -113,6 +114,20 @@ export async function updateTask(
   return task;
 }
 
+export async function toggleTaskPinned(taskId: string) {
+  z.string().cuid().parse(taskId);
+  const task = await db.task.findUniqueOrThrow({
+    where: { id: taskId },
+    select: { pinned: true },
+  });
+  const updated = await db.task.update({
+    where: { id: taskId },
+    data: { pinned: !task.pinned },
+  });
+  revalidatePath("/workspaces");
+  return updated;
+}
+
 export async function deleteTask(taskId: string) {
   // Clean up worktree + PTY session before deleting DB record
   const task = await db.task.findUnique({
@@ -154,7 +169,7 @@ export async function getProjectTasks(projectId: string) {
         { status: { in: ["DONE", "CANCELLED"] }, updatedAt: { gte: today } },
       ],
     },
-    orderBy: [{ order: "asc" }, { createdAt: "desc" }],
+    orderBy: [{ pinned: "desc" }, { order: "asc" }, { createdAt: "desc" }],
   });
 }
 

@@ -63,6 +63,8 @@ export const zh = {
   "board.contextMenu.changeStatus": "更改状态",
   "board.contextMenu.launch": "启动任务",
   "board.contextMenu.goToDetail": "查看详情",
+  "board.pin": "置顶",
+  "board.unpin": "取消置顶",
   // Task
   "task.create": "新建任务",
   "task.edit": "编辑任务",

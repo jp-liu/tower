@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useTransition } from "react";
+import { useState, useCallback, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { BoardStats } from "@/components/board/board-stats";
 import { BoardFilters } from "@/components/board/board-filters";
@@ -9,7 +9,7 @@ import { CreateTaskDialog } from "@/components/board/create-task-dialog";
 import { RepoSidebar } from "@/components/repository/repo-sidebar";
 import { TaskDetailPanel } from "@/components/task/task-detail-panel";
 import { TaskOverviewDrawer } from "@/components/task/task-overview-drawer";
-import { createTask, updateTaskStatus, updateTask, deleteTask } from "@/actions/task-actions";
+import { createTask, updateTaskStatus, updateTask, deleteTask, toggleTaskPinned } from "@/actions/task-actions";
 import { startPtyExecution } from "@/actions/agent-actions";
 import { ProjectTabs } from "@/components/board/project-tabs";
 import type { TaskStatus, Priority } from "@prisma/client";
@@ -74,6 +74,17 @@ export function BoardPageClient({
     });
   }, [router]);
 
+  // Auto-poll for external changes (MCP task creation, etc.)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      // Lightweight: only triggers Next.js RSC refetch, diff applied automatically
+      startTransition(() => {
+        router.refresh();
+      });
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [router]);
+
   const handleSearchChange = useCallback((query: string) => {
     setSearchQuery(query);
   }, []);
@@ -116,6 +127,11 @@ export function BoardPageClient({
     }
     refreshData();
   }, [refreshData, selectedTask]);
+
+  const handleTogglePin = useCallback(async (taskId: string) => {
+    await toggleTaskPinned(taskId);
+    refreshData();
+  }, [refreshData]);
 
   const handleLaunchTask = useCallback(async (taskId: string) => {
     try {
@@ -196,6 +212,7 @@ export function BoardPageClient({
             onEditTask={handleEditTask}
             onAddTask={handleAddTaskToColumn}
             onDeleteTask={handleDeleteTask}
+            onTogglePin={handleTogglePin}
             workspaceId={workspaceId}
             onContextMenuStatusChange={handleContextMenuStatusChange}
             onContextMenuLaunch={handleLaunchTask}

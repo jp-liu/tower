@@ -74,6 +74,7 @@ model Task {
   status      TaskStatus @default(TODO)
   priority    Priority   @default(MEDIUM)
   order       Int        @default(0)
+  pinned      Boolean    @default(false)
   promptId    String?
   baseBranch  String?
   subPath     String?

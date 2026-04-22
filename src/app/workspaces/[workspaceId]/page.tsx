@@ -27,7 +27,7 @@ export default async function WorkspaceBoardPage({ params, searchParams }: Props
                 { status: { in: ["DONE", "CANCELLED"] }, updatedAt: { gte: today } },
               ],
             },
-            orderBy: [{ order: "asc" }, { createdAt: "desc" }],
+            orderBy: [{ pinned: "desc" }, { order: "asc" }, { createdAt: "desc" }],
             include: {
               labels: {
                 include: { label: true },

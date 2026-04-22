@@ -54,6 +54,7 @@ const mockEditTask: Task = {
   status: "TODO",
   priority: "MEDIUM",
   order: 0,
+  pinned: false,
   promptId: null,
   projectId: "proj-1",
   baseBranch: null,

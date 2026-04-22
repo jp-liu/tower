@@ -25,6 +25,7 @@ interface KanbanBoardProps {
   onEditTask?: (task: TaskWithLabels) => void;
   onAddTask?: (status: TaskStatus) => void;
   onDeleteTask?: (taskId: string) => void;
+  onTogglePin?: (taskId: string) => void;
   onContextMenuStatusChange?: (taskId: string, status: TaskStatus) => void;
   onContextMenuLaunch?: (taskId: string) => void;
   workspaceId?: string;
@@ -37,6 +38,7 @@ export function KanbanBoard({
   onEditTask,
   onAddTask,
   onDeleteTask,
+  onTogglePin,
   onContextMenuStatusChange,
   onContextMenuLaunch,
   workspaceId,
@@ -129,6 +131,7 @@ export function KanbanBoard({
             onEditTask={onEditTask}
             onAddTask={() => onAddTask?.(column.id)}
             onDeleteTask={onDeleteTask}
+            onTogglePin={onTogglePin}
             onContextMenu={handleContextMenu}
           />
         ))}

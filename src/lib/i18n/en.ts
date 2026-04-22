@@ -58,6 +58,8 @@ export const en: Translations = {
   "board.contextMenu.changeStatus": "Change Status",
   "board.contextMenu.launch": "Launch Task",
   "board.contextMenu.goToDetail": "Go to Detail",
+  "board.pin": "Pin to Top",
+  "board.unpin": "Unpin",
   "task.create": "New Task",
   "task.edit": "Edit Task",
   "task.title": "Task Title",

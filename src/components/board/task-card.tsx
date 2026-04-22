@@ -2,8 +2,9 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Pin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,10 +20,11 @@ interface TaskCardProps {
   onClick?: () => void;
   onEdit?: (task: TaskWithLabels) => void;
   onDelete?: (taskId: string) => void;
+  onTogglePin?: (taskId: string) => void;
   onContextMenu?: (task: TaskWithLabels, x: number, y: number) => void;
 }
 
-export function TaskCard({ task, onClick, onEdit, onDelete, onContextMenu }: TaskCardProps) {
+export function TaskCard({ task, onClick, onEdit, onDelete, onTogglePin, onContextMenu }: TaskCardProps) {
   const { t } = useI18n();
   const {
     attributes,
@@ -58,6 +60,20 @@ export function TaskCard({ task, onClick, onEdit, onDelete, onContextMenu }: Tas
     >
       <div className="flex items-start justify-between">
         <h4 className="text-sm font-medium text-foreground">{task.title}</h4>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className={`transition-all ${
+              task.pinned
+                ? "text-amber-400 opacity-100"
+                : "text-muted-foreground opacity-0 group-hover:opacity-100"
+            }`}
+            onClick={(e) => { e.stopPropagation(); onTogglePin?.(task.id); }}
+            aria-label={task.pinned ? t("board.unpin") : t("board.pin")}
+          >
+            <Pin className={`h-3.5 w-3.5 ${task.pinned ? "-rotate-45" : ""}`} />
+          </Button>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -83,6 +99,7 @@ export function TaskCard({ task, onClick, onEdit, onDelete, onContextMenu }: Tas
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       </div>
 
       {task.description && (
