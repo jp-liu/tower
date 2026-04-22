@@ -49,12 +49,13 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { t } = useI18n();
-  const [collapsed, setCollapsed] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("sidebar-collapsed") === "true";
-    }
-    return false;
-  });
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Read collapsed state from localStorage after hydration to avoid mismatch
+  useEffect(() => {
+    const saved = localStorage.getItem("sidebar-collapsed");
+    if (saved === "true") setCollapsed(true);
+  }, []);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showLabelManager, setShowLabelManager] = useState(false);

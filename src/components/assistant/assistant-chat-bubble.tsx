@@ -246,9 +246,10 @@ function ToolBubble({ content, toolName }: { content: string; toolName?: string 
       <div className="size-7 shrink-0" />
       <div className="bg-muted/60 border border-border max-w-[90%] rounded-lg px-3 py-1">
         {/* Header */}
-        <button
-          className="flex items-center gap-1.5 w-full text-left py-0.5"
+        <div
+          className="flex items-center gap-1.5 w-full text-left py-0.5 cursor-pointer"
           onClick={() => setExpanded((v) => !v)}
+          role="button"
           aria-expanded={expanded}
           aria-label={t("assistant.expandTool")}
         >
@@ -263,7 +264,7 @@ function ToolBubble({ content, toolName }: { content: string; toolName?: string 
           <span className="bg-muted text-muted-foreground text-[10px] px-1.5 rounded shrink-0">
             {t("assistant.toolLabel")}
           </span>
-        </button>
+        </div>
 
         {/* Expanded body */}
         {expanded && (

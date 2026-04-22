@@ -68,6 +68,9 @@ export function convertSessionMessages(sdkMessages: SDKSessionMessage[]): ChatMe
         let text = typeof payload?.content === "string" ? payload.content : "";
         // Strip "/tower " prefix injected by chat route
         if (text.startsWith("/tower ")) text = text.slice(7);
+        // Strip skill XML wrapping: <command-message>tower</command-message><command-name>/tower</command-name><command-args>actual text</command-args>
+        const argsMatch = text.match(/<command-args>([\s\S]*?)<\/command-args>/);
+        if (argsMatch) text = argsMatch[1].trim();
         const imageFilenames = extractImageFilenames(payload?.content);
         if (text) {
           result.push({ id: nextId(), role: "user", content: text, imageFilenames });
