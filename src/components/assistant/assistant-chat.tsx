@@ -179,7 +179,7 @@ export function AssistantChat() {
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8 shrink-0 border-destructive/50 text-destructive transition-colors hover:bg-destructive hover:text-destructive-foreground"
+              className="h-8 w-8 shrink-0 border-destructive/50 text-destructive transition-colors hover:bg-destructive/20 hover:text-destructive hover:border-destructive"
               onClick={handleCancel}
               aria-label={t("assistant.cancelLabel")}
             >
@@ -189,7 +189,7 @@ export function AssistantChat() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 shrink-0 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="h-8 w-8 shrink-0 text-muted-foreground transition-colors hover:bg-amber-500/15 hover:text-amber-400"
               onClick={handleSend}
               disabled={isSendDisabled}
               aria-label={t("assistant.sendLabel")}

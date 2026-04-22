@@ -1,9 +1,13 @@
 import { z } from "zod";
 import { execFileSync } from "child_process";
 import { copyFileSync, existsSync, statSync, mkdirSync } from "fs";
-import { basename, extname, join } from "path";
+import { basename, extname, join, resolve } from "path";
 import { db } from "../db";
 import { stripCacheUuidSuffix, isAssistantCachePath } from "@/lib/file-utils";
+
+// Derive project root from this file's location (src/mcp/tools/ → ../../..)
+// This avoids depending on process.cwd() which varies when MCP is spawned from .tower/
+const MCP_PROJECT_ROOT = resolve(__dirname, "../../..");
 
 const TaskStatus = z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"]);
 const Priority = z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
@@ -102,7 +106,7 @@ export const taskTools = {
       const attachedFiles: string[] = [];
       let updatedDesc: string | null = null;
       if (args.references && args.references.length > 0) {
-        const assetsDir = join(process.cwd(), "data", "assets", args.projectId);
+        const assetsDir = join(MCP_PROJECT_ROOT, "data", "assets", args.projectId);
         mkdirSync(assetsDir, { recursive: true });
 
         for (const filePath of args.references) {

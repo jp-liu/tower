@@ -66,6 +66,7 @@ export function CodeEditor({
   const modelsRef = useRef<Map<string, unknown>>(new Map());
   const activeTabRef = useRef<EditorTab | null>(null);
   const onSaveRef = useRef<(() => void) | undefined>(undefined);
+  const latestFilePathRef = useRef<string | null>(null);
 
   // Keep activeTabRef in sync with current state for use in Monaco action callbacks
   useEffect(() => {
@@ -98,6 +99,9 @@ export function CodeEditor({
   useEffect(() => {
     if (!selectedFilePath) return;
 
+    // Track latest request to ignore stale async completions
+    latestFilePathRef.current = selectedFilePath;
+
     const existingTab = tabs.find((t) => t.path === selectedFilePath);
     if (existingTab) {
       setActiveTabPath(selectedFilePath);
@@ -111,11 +115,15 @@ export function CodeEditor({
       : selectedFilePath;
 
     const filename = relativePath.split("/").pop() ?? relativePath;
+    const requestedPath = selectedFilePath;
 
     readFileContent(worktreePath, relativePath)
       .then((content) => {
+        // Ignore if user has already clicked a different file
+        if (latestFilePathRef.current !== requestedPath) return;
+
         const newTab: EditorTab = {
-          path: selectedFilePath,
+          path: requestedPath,
           relativePath,
           filename,
           content,
@@ -123,12 +131,11 @@ export function CodeEditor({
         };
 
         setTabs((prev) => {
-          // Double-check no race condition added same tab
-          if (prev.some((t) => t.path === selectedFilePath)) return prev;
+          if (prev.some((t) => t.path === requestedPath)) return prev;
           return [...prev, newTab];
         });
-        setActiveTabPath(selectedFilePath);
-        onFilePathChange?.(selectedFilePath);
+        setActiveTabPath(requestedPath);
+        onFilePathChange?.(requestedPath);
       })
       .catch(() => {
         // Silently fail — file may not be readable

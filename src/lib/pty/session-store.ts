@@ -51,8 +51,13 @@ export function destroyAllSessions(): void {
   }
 }
 
-// D-08: Register SIGTERM cleanup handler
-process.on("SIGTERM", () => {
+// D-08: Register SIGTERM/SIGINT cleanup handler
+// Use once() to prevent listener accumulation across HMR reloads
+process.once("SIGTERM", () => {
   console.error("[session-store] SIGTERM received — cleaning up PTY sessions");
+  destroyAllSessions();
+});
+process.once("SIGINT", () => {
+  console.error("[session-store] SIGINT received — cleaning up PTY sessions");
   destroyAllSessions();
 });

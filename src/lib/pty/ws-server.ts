@@ -14,7 +14,11 @@ const ALLOWED_ORIGINS = new Set([
 // Process already exited → 5 minutes (just preserving output buffer for review).
 const KEEPALIVE_RUNNING_MS = 2 * 60 * 60 * 1000; // 2 hours
 const KEEPALIVE_EXITED_MS = 5 * 60 * 1000;        // 5 minutes
-const sessionClients = new Map<string, WebSocket>();
+
+// Multicast: multiple WS clients can connect to the same PTY session
+// (e.g. task detail panel + Mission Control viewing the same task)
+const sessionClients = new Map<string, Set<WebSocket>>();
+
 const BATCH_INTERVAL_MS = 8;
 const SEND_BUFFER_MAX = 64 * 1024;
 
@@ -23,15 +27,42 @@ const g = globalThis as typeof globalThis & { __wss?: InstanceType<typeof WebSoc
 export async function startWsServer(): Promise<void> {
   // Close previous server on HMR reload so fresh code always takes effect
   if (g.__wss) {
-    g.__wss.close();
+    const prev = g.__wss;
     g.__wss = undefined;
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise<void>((resolve) => {
+      prev.close(() => resolve());
+      // Fallback timeout in case close callback never fires
+      setTimeout(resolve, 1000);
+    });
   }
 
   const wsPort = await readConfigValue<number>("terminal.wsPort", 3001);
+
+  // Check if port is already in use (e.g. duplicate register() call in production)
+  const portInUse = await new Promise<boolean>((resolve) => {
+    const { createServer } = require("net") as typeof import("net");
+    const tester = createServer();
+    tester.once("error", () => resolve(true));
+    tester.once("listening", () => { tester.close(() => resolve(false)); });
+    tester.listen(wsPort, "127.0.0.1");
+  });
+  if (portInUse) {
+    console.error(`[ws-server] Port ${wsPort} already in use — skipping duplicate startup`);
+    return;
+  }
+
   const wss = new WebSocketServer({ port: wsPort, host: "127.0.0.1", perMessageDeflate: false });
   g.__wss = wss;
   console.error(`[ws-server] WebSocket server listening on port ${wsPort}`);
+
+  // Close WS server on SIGINT (Ctrl+C) to release port
+  const closeWss = () => {
+    wss.close();
+    g.__wss = undefined;
+  };
+  // Use once() to prevent listener accumulation across HMR reloads
+  process.once("SIGINT", closeWss);
+  process.once("SIGTERM", closeWss);
 
   wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     const origin = req.headers.origin ?? "";
@@ -100,8 +131,14 @@ export async function startWsServer(): Promise<void> {
       // Flush any pending batched data
       (ws as WebSocket & { _batcher?: BatchedSender })._batcher?.flush();
 
-      if (sessionClients.get(taskId) !== ws) return;
-      console.error(`[ws-server] WS disconnected for task ${taskId}`);
+      const clients = sessionClients.get(taskId);
+      if (!clients?.has(ws)) return;
+      clients.delete(ws);
+      console.error(`[ws-server] WS disconnected for task ${taskId} (${clients.size} remaining)`);
+
+      // If other clients still connected, keep session alive
+      if (clients.size > 0) return;
+
       sessionClients.delete(taskId);
       const s = getSession(taskId);
       if (!s) return;
@@ -125,7 +162,11 @@ export async function startWsServer(): Promise<void> {
       console.error(`[ws-server] WS error for task ${taskId}:`, err.message);
       // Clear polling timer if still active
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-      if (sessionClients.get(taskId) !== ws) return;
+      const clients = sessionClients.get(taskId);
+      if (!clients?.has(ws)) return;
+      clients.delete(ws);
+      if (clients.size > 0) return;
+      sessionClients.delete(taskId);
       const s = getSession(taskId);
       if (s && !s.killed) s.setDataListener(() => {});
     });
@@ -137,18 +178,48 @@ function wireSession(session: import("./pty-session").PtySession, ws: WebSocket,
     clearTimeout(session.disconnectTimer);
     session.disconnectTimer = null;
   }
+
+  // Add this WS to the client set
+  let clients = sessionClients.get(taskId);
+  if (!clients) {
+    clients = new Set();
+    sessionClients.set(taskId, clients);
+  }
+  clients.add(ws);
+
+  // Create batcher for this specific WS client
   const batcher = makeBatchedSender(ws);
-  session.setDataListener(batcher.send);
-  // Store batcher so close handler can flush pending data
   (ws as WebSocket & { _batcher?: BatchedSender })._batcher = batcher;
-  sessionClients.set(taskId, ws);
+
+  // Multicast data listener — broadcasts to ALL connected clients.
+  // setDataListener replaces the single listener (last-writer-wins by design).
+  // This is safe because `currentClients` captures the shared Set reference:
+  // when a new client connects, wireSession re-registers with the same Set,
+  // so the new lambda still broadcasts to all clients including earlier ones.
+  const currentClients = clients;
+  session.setDataListener((data: string) => {
+    for (const client of currentClients) {
+      const b = (client as WebSocket & { _batcher?: BatchedSender })._batcher;
+      if (b) {
+        b.send(data);
+      } else if (client.readyState === WebSocket.OPEN) {
+        client.send(data);
+      }
+    }
+  });
+
+  // Replay buffer for this new client
   const buffer = session.getBuffer();
   if (buffer && ws.readyState === WebSocket.OPEN) {
     ws.send(buffer);
   }
+
+  // Set up exit listener — notify ALL connected clients
   session.setExitListener((exitCode: number) => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.close(4000 + exitCode, "session_end");
+    for (const client of currentClients) {
+      if (client.readyState === WebSocket.OPEN) {
+        client.close(4000 + exitCode, "session_end");
+      }
     }
   });
 }

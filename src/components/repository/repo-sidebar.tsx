@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   ChevronDown, ChevronRight, Search, Plus,
   GitBranch, Globe, FileText, Pencil, FolderOpen, GitCommitVertical,
-  Check, AlertCircle, Loader2,
+  Check, AlertCircle, Loader2, Sparkles,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { updateProject, createProject, getRecentLocalProjects } from "@/actions/workspace-actions";
+import { analyzeProjectDirectory } from "@/actions/project-actions";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
@@ -68,6 +69,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
   const [browseCreateDesc, setBrowseCreateDesc] = useState("");
   const [browseCreateProjectType, setBrowseCreateProjectType] = useState<"FRONTEND" | "BACKEND">("FRONTEND");
   const [browseCreateLoading, setBrowseCreateLoading] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Git state
   const [gitInfo, setGitInfo] = useState<GitInfo | null>(null);
@@ -177,6 +179,19 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
       navigateToProject(workspaceId, newProject.id);
     } finally {
       setBrowseCreateLoading(false);
+    }
+  };
+
+  const handleEditAnalyze = async () => {
+    if (!editLocalPath || isAnalyzing) return;
+    setIsAnalyzing(true);
+    try {
+      const result = await analyzeProjectDirectory(editLocalPath.trim());
+      setEditDesc(result);
+    } catch {
+      toast.error(t("project.analyzeError"));
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -443,12 +458,28 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
               <Input value={editAlias} onChange={(e) => setEditAlias(e.target.value)} className="mt-1.5" />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">{t("project.description")}</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground">{t("project.description")}</label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={!editLocalPath || isAnalyzing}
+                  onClick={handleEditAnalyze}
+                  className="h-6 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+                >
+                  {isAnalyzing ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3 w-3" />
+                  )}
+                  {isAnalyzing ? t("project.analyzing") : t("project.genDesc")}
+                </Button>
+              </div>
               <textarea
                 value={editDesc}
                 onChange={(e) => setEditDesc(e.target.value)}
                 rows={2}
-                className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 resize-none"
+                className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 resize-none max-h-[200px] overflow-y-auto"
               />
             </div>
             <div>
