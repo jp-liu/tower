@@ -114,13 +114,15 @@ export function TaskTerminal({
     fitAddon.fit();
     terminal.focus();
 
-    // Fetch WS port from config, then connect
+    // Fetch WS port from config, then connect (with auto-reconnect)
     let ws: WebSocket | null = null;
     let dataDisposable: { dispose: () => void } | null = null;
     let cancelled = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let sessionEnded = false;
 
-    getConfigValue<number>("terminal.wsPort", 3001).then((wsPort) => {
-      if (cancelled) return;
+    function connectWs(wsPort: number) {
+      if (cancelled || sessionEnded) return;
       setWsStatus("connecting");
       const socket = new WebSocket(
         `ws://localhost:${wsPort}/terminal?taskId=${encodeURIComponent(taskId)}`
@@ -148,6 +150,7 @@ export function TaskTerminal({
       });
 
       // Input: terminal → WS
+      dataDisposable?.dispose();
       dataDisposable = terminal.onData((data) => {
         if (socket.readyState === WebSocket.OPEN) {
           socket.send(data);
@@ -156,18 +159,31 @@ export function TaskTerminal({
 
       // Session end: WS close code 4000+exitCode
       socket.addEventListener("close", (event) => {
-        setWsStatus("disconnected");
         if (event.code >= 4000) {
+          // Process exited — don't reconnect
+          sessionEnded = true;
+          setWsStatus("disconnected");
           onSessionEndRef.current?.(event.code - 4000);
+          return;
+        }
+        setWsStatus("disconnected");
+        // Auto-reconnect after 3s (session may still be alive)
+        if (!cancelled && !sessionEnded) {
+          reconnectTimer = setTimeout(() => connectWs(wsPort), 3000);
         }
       });
 
       socket.addEventListener("error", () => {
-        setWsStatus("disconnected");
+        // error is always followed by close, so reconnect is handled there
       });
 
       // Store refs for resize/theme effects
       wsRef.current = socket;
+    }
+
+    getConfigValue<number>("terminal.wsPort", 3001).then((wsPort) => {
+      if (cancelled) return;
+      connectWs(wsPort);
     });
 
     terminalRef.current = terminal;
@@ -175,6 +191,7 @@ export function TaskTerminal({
 
     return () => {
       cancelled = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       dataDisposable?.dispose();
       webLinksAddon.dispose();
       webglAddon?.dispose();

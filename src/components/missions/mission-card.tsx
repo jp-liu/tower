@@ -195,6 +195,7 @@ export function MissionCard({
           taskId={execution.taskId}
           worktreePath={execution.worktreePath ?? execution.projectLocalPath}
           onSessionEnd={(exitCode) => onSessionEnd?.(execution.taskId, exitCode)}
+          useCanvasRenderer
         />
       </div>
     </div>

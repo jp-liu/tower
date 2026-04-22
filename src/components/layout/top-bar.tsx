@@ -58,7 +58,7 @@ export function TopBar({ onCreateProject }: TopBarProps) {
           >
             <Search className="h-3.5 w-3.5" />
             <span className="flex-1 text-left" suppressHydrationWarning>{t("topbar.searchPlaceholder")}</span>
-            <kbd className="flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-mono">
+            <kbd className="mr-1 flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-mono">
               <Command className="h-2.5 w-2.5" />K
             </kbd>
           </Button>
