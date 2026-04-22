@@ -567,6 +567,7 @@ export const zh = {
   "assistant.starting": "启动中...",
   "assistant.errorTitle": "会话启动失败",
   "assistant.errorBody": "启动失败，请重试",
+  "assistant.loading": "加载中...",
   "assistant.emptyTitle": "我能帮你做什么？",
   "assistant.emptyBody": "输入消息以开始",
   "assistant.copy": "复制",

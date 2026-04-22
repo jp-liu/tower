@@ -113,16 +113,17 @@ export function AssistantChat() {
       {/* Message list */}
       <ScrollArea className="flex-1 overflow-hidden">
         <div
-          className="flex flex-col gap-3 p-4 min-h-full"
+          className={`flex flex-col gap-3 p-4 min-h-full ${isLoadingHistory || messages.length === 0 ? "justify-center" : ""}`}
           role="log"
           aria-live="polite"
         >
           {isLoadingHistory ? (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex flex-col items-center justify-center gap-2">
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">{t("assistant.loading")}</span>
             </div>
           ) : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-4 px-6">
+            <div className="flex flex-col items-center gap-4 px-6">
               <Bot className="size-8 text-muted-foreground/40" />
               <h3 className="text-sm font-semibold text-foreground">{t("assistant.emptyTitle")}</h3>
               <div className="grid grid-cols-1 gap-2 w-full max-w-[280px]">

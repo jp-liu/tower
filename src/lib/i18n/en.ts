@@ -552,6 +552,7 @@ export const en: Translations = {
   "assistant.starting": "Starting...",
   "assistant.errorTitle": "Session failed",
   "assistant.errorBody": "Failed to start. Try again.",
+  "assistant.loading": "Loading...",
   "assistant.emptyTitle": "What can I help you with?",
   "assistant.emptyBody": "Type a message to start",
   "assistant.copy": "Copy",
