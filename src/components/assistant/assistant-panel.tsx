@@ -131,27 +131,25 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
             </DropdownMenu>
 
             {/* New session button */}
-            <Button
-              variant="ghost"
-              className="h-8 w-8 p-0 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            <button
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               onClick={createNewSession}
               aria-label={t("assistant.newSession")}
             >
               <Plus className="h-4 w-4" />
-            </Button>
+            </button>
           </>
         )}
 
         {communicationMode !== "chat" && <div className="flex-1" />}
 
-        <Button
-          variant="ghost"
-          className="h-8 w-8 p-0 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        <button
+          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           onClick={closeAssistant}
           aria-label={t("assistant.closeLabel")}
         >
           <X className="h-4 w-4" />
-        </Button>
+        </button>
       </div>
 
       {/* Body */}
