@@ -520,8 +520,9 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           {/* Changes tab — functional, uses existing TaskDiffView */}
           <TabsContent value="changes" className="flex-1 min-h-0 overflow-auto">
             {isLoadingDiff ? (
-              <div className="flex h-full items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <div className="flex h-full flex-col items-center justify-center gap-2">
+                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">{t("taskPage.loadingDiff")}</span>
               </div>
             ) : diffData?.branchDeleted ? (
               <div className="flex h-full items-center justify-center">

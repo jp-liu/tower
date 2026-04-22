@@ -77,8 +77,9 @@ export function TextPreviewDialog({
   const renderContent = () => {
     if (loading) {
       return (
-        <div className="flex items-center justify-center py-12">
+        <div className="flex flex-col items-center justify-center py-12 gap-2">
           <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">{t("assets.loadingPreview")}</span>
         </div>
       );
     }

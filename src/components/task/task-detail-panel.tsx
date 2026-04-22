@@ -323,8 +323,9 @@ export function TaskDetailPanel({
       {activeTab === "terminal" ? (
         <div className="flex-1 min-h-0 overflow-hidden">
           {!executionLoaded ? (
-            <div className="flex h-full items-center justify-center bg-[#0f1419]">
-              <Loader2 className="h-5 w-5 animate-spin text-neutral-500" />
+            <div className="flex h-full flex-col items-center justify-center gap-2 bg-[#0f1419]">
+              <Loader2 className="size-5 animate-spin text-neutral-500" />
+              <span className="text-xs text-neutral-500">{t("execution.loading")}</span>
             </div>
           ) : activeWorktreePath ? (
             <div className="flex h-full flex-col overflow-hidden">

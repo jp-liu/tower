@@ -497,6 +497,7 @@ export const zh = {
   "execution.terminalOutput": "终端输出",
   "execution.history": "执行历史",
   "execution.gitLog": "Git 提交记录",
+  "execution.loading": "加载中...",
   "execution.noHistory": "暂无执行记录",
   "execution.resume": "恢复会话",
   "execution.tryRecover": "尝试继续",

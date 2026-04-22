@@ -482,6 +482,7 @@ export const en: Translations = {
   "execution.terminalOutput": "Terminal Output",
   "execution.history": "Execution History",
   "execution.gitLog": "Git Log",
+  "execution.loading": "Loading...",
   "execution.noHistory": "No execution history",
   "execution.resume": "Resume",
   "execution.tryRecover": "Try Continue",
