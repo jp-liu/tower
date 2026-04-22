@@ -231,9 +231,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
     <aside className="noise relative flex h-screen w-56 flex-col border-r border-border bg-sidebar">
       {/* Logo */}
       <div className="relative z-10 flex items-center gap-3 px-4 py-4">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/15 ring-1 ring-amber-500/25">
-          <Layers className="h-4 w-4 text-amber-400" />
-        </div>
+        <img src="/logo.png" alt="Tower" className="h-9 w-9 rounded-lg" />
         <div className="flex-1">
           <div className="text-sm font-semibold tracking-tight text-foreground">Tower</div>
           <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Studio</div>
