@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { AppSidebar } from "./app-sidebar";
 import { TopBar } from "./top-bar";
@@ -13,7 +13,6 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { NotificationPermissionBanner } from "@/components/notifications/notification-permission-banner";
 import { useNotificationListener } from "@/components/notifications/use-notification-listener";
 import { getConfigValue } from "@/actions/config-actions";
-import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 import { GuidedTour } from "@/components/onboarding/guided-tour";
 
 interface CreateProjectData {
@@ -28,7 +27,6 @@ interface CreateProjectData {
 interface LayoutClientProps {
   workspaces: Array<{ id: string; name: string; description: string | null; updatedAt: Date }>;
   isFirstRun: boolean;
-  lastStep: number;
   username: string | null;
   children: React.ReactNode;
 }
@@ -36,14 +34,12 @@ interface LayoutClientProps {
 function LayoutInner({
   workspaces,
   isFirstRun,
-  lastStep,
   username,
   children,
   handleCreateProject,
 }: {
   workspaces: LayoutClientProps["workspaces"];
   isFirstRun: boolean;
-  lastStep: number;
   username: string | null;
   children: React.ReactNode;
   handleCreateProject: (data: CreateProjectData) => Promise<{ id: string } | void>;
@@ -52,30 +48,45 @@ function LayoutInner({
   const router = useRouter();
   const { isOpen, displayMode, closeAssistant } = useAssistant();
 
-  const [showWizard, setShowWizard] = useState(isFirstRun);
-  const [showTour, setShowTour] = useState(false);
-  // Resume at next step after last completed; cap at 2 (max steps)
-  const wizardInitialStep = Math.min(lastStep >= 1 ? lastStep + 1 : 1, 2);
-  const handleWizardComplete = useCallback(() => {
-    setShowWizard(false);
-    setShowTour(true);
-    router.push("/workspaces");
-  }, [router]);
-
-  // Check if tour should show on mount (wizard already completed but tour not done)
+  // Redirect to onboarding page on first run
   useEffect(() => {
-    if (!isFirstRun && !showWizard) {
+    if (isFirstRun && !pathname.startsWith("/onboarding")) {
+      router.replace("/onboarding");
+    }
+  }, [isFirstRun, pathname, router]);
+
+  const [showTour, setShowTour] = useState(false);
+  const [showNotifBanner, setShowNotifBanner] = useState(false);
+
+  // Show guided tour after onboarding is completed but tour not yet done
+  useEffect(() => {
+    if (!isFirstRun && !pathname.startsWith("/onboarding")) {
       getConfigValue<boolean>("onboarding.tourCompleted", false).then((done) => {
-        if (!done) setShowTour(true);
+        if (!done) {
+          setShowTour(true);
+        } else {
+          // Tour already done — show banner if permission not yet decided
+          setShowNotifBanner(true);
+        }
       });
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isFirstRun, pathname]);
+
+  const handleTourComplete = () => {
+    setShowTour(false);
+    setShowNotifBanner(true);
+  };
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   useEffect(() => {
     getConfigValue<boolean>("notification.enabled", true).then(setNotificationsEnabled);
   }, []);
   useNotificationListener(notificationsEnabled);
+
+  // Onboarding page — render without sidebar/topbar
+  if (pathname.startsWith("/onboarding")) {
+    return <>{children}</>;
+  }
 
   const isTaskDetailPage = /\/workspaces\/[^/]+\/tasks\/[^/]+/.test(pathname);
   const isSubPage = /\/workspaces\/[^/]+\/(notes|assets|archive)/.test(pathname);
@@ -113,7 +124,7 @@ function LayoutInner({
   if (isTaskDetailPage || isSubPage) {
     return (
       <>
-        <NotificationPermissionBanner />
+        {showNotifBanner && <NotificationPermissionBanner onDismiss={() => setShowNotifBanner(false)} />}
         <div className="flex h-screen overflow-hidden">
           <div className="flex flex-1 flex-col overflow-hidden">
             <TopBar onCreateProject={handleCreateProject} username={username} />
@@ -127,15 +138,14 @@ function LayoutInner({
           </div>
         </div>
         {dialogPanel}
-        {showWizard && <OnboardingWizard onComplete={handleWizardComplete} initialStep={wizardInitialStep} initialUsername={username ?? ""} />}
-        {showTour && !showWizard && <GuidedTour onComplete={() => setShowTour(false)} />}
+        {showTour && <GuidedTour onComplete={handleTourComplete} />}
       </>
     );
   }
 
   return (
     <>
-      <NotificationPermissionBanner />
+      {showNotifBanner && <NotificationPermissionBanner onDismiss={() => setShowNotifBanner(false)} />}
       <div className="flex h-screen overflow-hidden">
         <AppSidebar workspaces={workspaces} />
         <div className="flex flex-1 flex-col overflow-hidden">
@@ -150,13 +160,12 @@ function LayoutInner({
         </div>
       </div>
       {dialogPanel}
-      {showWizard && <OnboardingWizard onComplete={handleWizardComplete} initialStep={wizardInitialStep} initialUsername={username ?? ""} />}
-        {showTour && !showWizard && <GuidedTour onComplete={() => setShowTour(false)} />}
+      {showTour && <GuidedTour onComplete={handleTourComplete} />}
     </>
   );
 }
 
-export function LayoutClient({ workspaces, isFirstRun, lastStep, username, children }: LayoutClientProps) {
+export function LayoutClient({ workspaces, isFirstRun, username, children }: LayoutClientProps) {
   const router = useRouter();
   const pathname = usePathname();
   const activeWorkspaceId = pathname.split("/workspaces/")[1]?.split("/")[0];
@@ -179,7 +188,7 @@ export function LayoutClient({ workspaces, isFirstRun, lastStep, username, child
   return (
     <AssistantProvider>
       <TerminalPortalProvider>
-        <LayoutInner workspaces={workspaces} isFirstRun={isFirstRun} lastStep={lastStep} username={username} handleCreateProject={handleCreateProject}>
+        <LayoutInner workspaces={workspaces} isFirstRun={isFirstRun} username={username} handleCreateProject={handleCreateProject}>
           {children}
         </LayoutInner>
       </TerminalPortalProvider>

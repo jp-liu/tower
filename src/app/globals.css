@@ -159,6 +159,24 @@
   box-shadow: 0 0 10px oklch(0.78 0.14 75 / 0.1);
 }
 
+/* ─── Onboarding ambient animations ─── */
+@keyframes ob-pulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  50% { transform: translate(-50%, -50%) scale(1.08); opacity: 0.7; }
+}
+@keyframes ob-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+@keyframes ob-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+@keyframes ob-dash {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: 100; }
+}
+
 /* ─── Noise texture overlay ─── */
 .noise::before {
   content: "";
