@@ -11,9 +11,10 @@ import type { TestResult } from "@/lib/cli-test";
 interface CLIAdapterTesterProps {
   adapterType: string;
   adapterLabel?: string;
+  onResult?: (result: TestResult) => void;
 }
 
-export function CLIAdapterTester({ adapterType, adapterLabel }: CLIAdapterTesterProps) {
+export function CLIAdapterTester({ adapterType, adapterLabel, onResult }: CLIAdapterTesterProps) {
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
   const { t } = useI18n();
@@ -30,11 +31,14 @@ export function CLIAdapterTester({ adapterType, adapterLabel }: CLIAdapterTester
       });
       const data: TestResult = await res.json();
       setResult(data);
+      onResult?.(data);
     } catch {
-      setResult({
+      const errResult: TestResult = {
         ok: false,
         checks: [{ name: "network_error", passed: false, message: "Network request failed" }],
-      });
+      };
+      setResult(errResult);
+      onResult?.(errResult);
     } finally {
       setTesting(false);
     }
