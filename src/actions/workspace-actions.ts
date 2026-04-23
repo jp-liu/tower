@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { createWorkspaceSchema, updateWorkspaceSchema, createProjectSchema, updateProjectSchema } from "@/lib/schemas";
+import { expandHome } from "@/lib/git-url";
 
 /** Lightweight list: workspace names + project names only (for selectors) */
 export async function getWorkspacesWithProjects() {
@@ -75,7 +76,7 @@ export async function createProject(data: {
       description: v.description,
       type: v.gitUrl ? "GIT" : "NORMAL",
       gitUrl: v.gitUrl || undefined,
-      localPath: v.localPath,
+      localPath: v.localPath ? expandHome(v.localPath) : undefined,
       projectType: v.projectType,
       previewCommand: v.previewCommand,
       workspaceId: v.workspaceId,
@@ -87,9 +88,11 @@ export async function createProject(data: {
 
 export async function updateProject(id: string, data: { name?: string; alias?: string; description?: string; localPath?: string; projectType?: "FRONTEND" | "BACKEND"; previewCommand?: string | null; previewPort?: number | null }) {
   const v = updateProjectSchema.parse(data);
+  const updateData = { ...v };
+  if (updateData.localPath) updateData.localPath = expandHome(updateData.localPath);
   const project = await db.project.update({
     where: { id },
-    data: v,
+    data: updateData,
   });
   revalidatePath("/workspaces");
   return project;

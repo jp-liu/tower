@@ -672,7 +672,7 @@ export const zh = {
   "onboarding.step3.ownerPlaceholder": "* 匹配所有，或填具体用户名",
   "onboarding.step3.pathLabel": "本地路径模板",
   "onboarding.step3.pathPlaceholder": "例如 ~/project/{repo}",
-  "onboarding.step3.pathHint": "支持 {owner} 和 {repo} 变量",
+  "onboarding.step3.pathHint": "支持 {owner} 和 {repo} 变量，推荐使用绝对路径（如 /Users/you/project/{repo}），~ 会自动展开为用户目录",
   "onboarding.step3.added": "已添加 {count} 条规则",
   "onboarding.stepIndicator": "步骤 {current}/{total}",
   "onboarding.welcomeCta": "创建您的第一个工作区开始使用",

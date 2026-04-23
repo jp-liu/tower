@@ -657,7 +657,7 @@ export const en: Translations = {
   "onboarding.step3.ownerPlaceholder": "* for all, or specific username",
   "onboarding.step3.pathLabel": "Local Path Template",
   "onboarding.step3.pathPlaceholder": "e.g. ~/project/{repo}",
-  "onboarding.step3.pathHint": "Supports {owner} and {repo} variables",
+  "onboarding.step3.pathHint": "Supports {owner} and {repo} variables. Use absolute paths (e.g. /Users/you/project/{repo}), ~ auto-expands to home directory",
   "onboarding.step3.added": "{count} rule(s) added",
   "onboarding.stepIndicator": "Step {current}/{total}",
   "onboarding.welcomeCta": "Create your first workspace to get started",
