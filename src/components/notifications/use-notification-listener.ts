@@ -37,10 +37,12 @@ function fireNotification(
 
 export function useNotificationListener(enabled: boolean) {
   const router = useRouter();
+  const routerRef = useRef(router);
   const enabledRef = useRef(enabled);
   const { t } = useI18n();
   const tRef = useRef(t);
 
+  routerRef.current = router;
   enabledRef.current = enabled;
   tRef.current = t;
 
@@ -54,7 +56,7 @@ export function useNotificationListener(enabled: boolean) {
         if (!res.ok) return;
         const data = (await res.json()) as { events: TaskCompletionPayload[] };
         for (const event of data.events) {
-          fireNotification(event, router, tRef.current);
+          fireNotification(event, routerRef.current, tRef.current);
         }
       } catch {
         // Silently ignore network errors — notifications are non-critical

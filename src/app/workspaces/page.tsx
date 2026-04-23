@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Layers, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { createWorkspace } from "@/actions/workspace-actions";
@@ -18,6 +19,7 @@ export default function WorkspacesPage() {
       const ws = await createWorkspace({ name: t("onboarding.defaultWorkspaceName") });
       router.push(`/workspaces/${ws.id}`);
     } catch {
+      toast.error(t("workspace.createError"));
       setCreating(false);
     }
   }

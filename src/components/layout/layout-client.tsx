@@ -52,6 +52,7 @@ function LayoutInner({
   const { isOpen, displayMode, closeAssistant } = useAssistant();
 
   const [showWizard, setShowWizard] = useState(isFirstRun);
+  // Resume at next step after last completed; cap at 2 (max steps)
   const wizardInitialStep = Math.min(lastStep >= 1 ? lastStep + 1 : 1, 2);
   const handleWizardComplete = useCallback(() => {
     setShowWizard(false);
@@ -114,7 +115,7 @@ function LayoutInner({
           </div>
         </div>
         {dialogPanel}
-        {showWizard && <OnboardingWizard onComplete={handleWizardComplete} initialStep={wizardInitialStep} />}
+        {showWizard && <OnboardingWizard onComplete={handleWizardComplete} initialStep={wizardInitialStep} initialUsername={username ?? ""} />}
       </>
     );
   }
@@ -136,7 +137,7 @@ function LayoutInner({
         </div>
       </div>
       {dialogPanel}
-      {showWizard && <OnboardingWizard onComplete={handleWizardComplete} initialStep={wizardInitialStep} />}
+      {showWizard && <OnboardingWizard onComplete={handleWizardComplete} initialStep={wizardInitialStep} initialUsername={username ?? ""} />}
     </>
   );
 }

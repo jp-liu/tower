@@ -99,16 +99,17 @@ export async function POST(request: NextRequest) {
           (options as Record<string, unknown>).resume = body.sessionId;
         }
 
-        // Prepend username identity context on first turn (no sessionId) so AI can address user by name.
-        const usernameRow = await db.systemConfig.findUnique({ where: { key: "onboarding.username" } });
-        let storedUsername: string | null = null;
-        try {
-          const parsed = usernameRow ? JSON.parse(usernameRow.value) : null;
-          if (typeof parsed === "string" && parsed.length > 0) storedUsername = parsed;
-        } catch { /* ignore parse errors */ }
-        const identityPrefix = storedUsername && !body.sessionId
-          ? `[Context: The user's name is ${storedUsername}.]\n\n`
-          : "";
+        // Prepend username identity context on first turn only (no sessionId)
+        let identityPrefix = "";
+        if (!body.sessionId) {
+          const usernameRow = await db.systemConfig.findUnique({ where: { key: "onboarding.username" } });
+          try {
+            const parsed = usernameRow ? JSON.parse(usernameRow.value) : null;
+            if (typeof parsed === "string" && parsed.length > 0) {
+              identityPrefix = `[Context: The user's name is ${parsed}.]\n\n`;
+            }
+          } catch { /* ignore parse errors */ }
+        }
 
         // Prepend /tower to every message to load the Tower skill into context.
         const prompt = `${identityPrefix}/tower ${body.message}`;

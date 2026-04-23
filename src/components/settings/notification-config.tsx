@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useI18n } from "@/lib/i18n";
 import { getConfigValue, setConfigValue } from "@/actions/config-actions";
+import { Button } from "@/components/ui/button";
 
 export function NotificationConfig() {
   const { t } = useI18n();
@@ -31,11 +32,12 @@ export function NotificationConfig() {
               {t("settings.notifications.enableDesc")}
             </p>
           </div>
-          <button
+          <Button
+            variant="ghost"
             role="switch"
             aria-checked={enabled}
             onClick={handleToggle}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent p-0 transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
               enabled ? "bg-primary" : "bg-muted"
             }`}
           >
@@ -45,7 +47,7 @@ export function NotificationConfig() {
                 enabled ? "translate-x-5" : "translate-x-0"
               }`}
             />
-          </button>
+          </Button>
         </div>
       </div>
     </div>

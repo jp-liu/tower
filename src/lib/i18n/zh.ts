@@ -238,6 +238,7 @@ export const zh = {
   // Workspace landing
   "workspace.selectHint": "选择一个工作空间",
   "workspace.selectDesc": "从左侧选择一个工作空间开始",
+  "workspace.createError": "创建工作区失败，请重试",
   // Empty state
   "board.noProject": "该工作空间没有项目，请点击顶部「新建项目」创建",
   "board.tipText": "复用现有拖拽、详情和任务创建链路",

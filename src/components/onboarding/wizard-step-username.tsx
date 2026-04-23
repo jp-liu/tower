@@ -43,6 +43,7 @@ export function WizardStepUsername({ onNext }: WizardStepUsernameProps) {
           onChange={(e) => setValue(e.target.value)}
           placeholder={t("onboarding.step1.usernamePlaceholder")}
           className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          maxLength={64}
           autoFocus
           autoComplete="username"
         />

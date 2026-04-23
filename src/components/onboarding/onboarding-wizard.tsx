@@ -12,12 +12,13 @@ const TOTAL_STEPS = 2;
 interface OnboardingWizardProps {
   onComplete: () => void;
   initialStep?: number;
+  initialUsername?: string;
 }
 
-export function OnboardingWizard({ onComplete, initialStep }: OnboardingWizardProps) {
+export function OnboardingWizard({ onComplete, initialStep, initialUsername }: OnboardingWizardProps) {
   const { t } = useI18n();
   const [step, setStep] = useState(initialStep ?? 1);
-  const [username, setUsername] = useState("");
+  const [username, setUsername] = useState(initialUsername ?? "");
 
   async function handleUsernameNext(name: string) {
     setUsername(name);

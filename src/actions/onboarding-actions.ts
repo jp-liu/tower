@@ -73,11 +73,14 @@ export async function completeOnboarding(username?: string): Promise<void> {
     update: { value: "2" },
   });
   if (username !== undefined) {
-    await db.systemConfig.upsert({
-      where: { key: "onboarding.username" },
-      create: { key: "onboarding.username", value: JSON.stringify(username) },
-      update: { value: JSON.stringify(username) },
-    });
+    const sanitized = username.trim().slice(0, 64).replace(/[\r\n]/g, " ");
+    if (sanitized.length > 0) {
+      await db.systemConfig.upsert({
+        where: { key: "onboarding.username" },
+        create: { key: "onboarding.username", value: JSON.stringify(sanitized) },
+        update: { value: JSON.stringify(sanitized) },
+      });
+    }
   }
   revalidatePath("/", "layout");
 }
@@ -97,11 +100,11 @@ export async function dispatchTaskCompletionEvent(
     // Push to globalThis queue for polling API route (Plan 01)
     if (!g.__taskCompletionQueue) g.__taskCompletionQueue = [];
     g.__taskCompletionQueue.push(payload);
-    // Cap queue at 50 entries — splice oldest if exceeded
+    // Cap queue at 50 entries — keep newest
     if (g.__taskCompletionQueue.length > 50) {
-      g.__taskCompletionQueue.splice(0, g.__taskCompletionQueue.length - 50);
+      g.__taskCompletionQueue = g.__taskCompletionQueue.slice(-50);
     }
   } catch {
-    // Best-effort: swallow errors silently
+    // Best-effort: notifications are non-critical
   }
 }

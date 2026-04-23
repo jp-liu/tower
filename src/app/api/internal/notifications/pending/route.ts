@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireLocalhost } from "@/lib/internal-api-guard";
 import type { TaskCompletionPayload } from "@/actions/onboarding-actions";
 
 export const runtime = "nodejs";
@@ -9,7 +10,10 @@ const g = globalThis as typeof globalThis & {
   __taskCompletionQueue?: TaskCompletionPayload[];
 };
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const blocked = requireLocalhost(request);
+  if (blocked) return blocked;
+
   const events = g.__taskCompletionQueue ?? [];
   g.__taskCompletionQueue = [];
   return NextResponse.json({ events });
