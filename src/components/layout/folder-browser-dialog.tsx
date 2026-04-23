@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Folder, FolderGit2, Home, ChevronUp, Search } from "lucide-react";
+import { Folder, FolderGit2, Home, ChevronUp, Search, HardDrive } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +23,7 @@ interface BrowseResult {
   parentPath: string;
   homePath: string;
   folders: FolderEntry[];
+  drives?: FolderEntry[];
 }
 
 interface FolderBrowserDialogProps {
@@ -44,12 +45,14 @@ export function FolderBrowserDialog({
   const [error, setError] = useState<string | null>(null);
   const [manualPath, setManualPath] = useState("");
   const [filterText, setFilterText] = useState("");
+  const [showDrives, setShowDrives] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const browse = useCallback(async (dirPath?: string) => {
     setLoading(true);
     setError(null);
     setFilterText("");
+    setShowDrives(false);
     try {
       const url = dirPath
         ? `/api/browse-fs?path=${encodeURIComponent(dirPath)}`
@@ -97,6 +100,22 @@ export function FolderBrowserDialog({
       // Navigate into the folder
       browse(folder.path);
     }
+  };
+
+  const handleGoUp = () => {
+    if (!data) return;
+    if (data.parentPath === "__DRIVES__") {
+      // At drive root on Windows — show drives list
+      setShowDrives(true);
+    } else {
+      setShowDrives(false);
+      browse(data.parentPath);
+    }
+  };
+
+  const handleDriveSelect = (drivePath: string) => {
+    setShowDrives(false);
+    browse(drivePath);
   };
 
   const filtered = data?.folders.filter((f) =>
@@ -164,12 +183,23 @@ export function FolderBrowserDialog({
             <Button
               variant="outline"
               size="icon-sm"
-              onClick={() => data?.parentPath && browse(data.parentPath)}
+              onClick={handleGoUp}
               className="shrink-0 text-muted-foreground"
               title="Parent"
             >
               <ChevronUp className="h-3.5 w-3.5" />
             </Button>
+            {data?.drives && data.drives.length > 0 && (
+              <Button
+                variant={showDrives ? "default" : "outline"}
+                size="icon-sm"
+                onClick={() => setShowDrives((v) => !v)}
+                className="shrink-0 text-muted-foreground"
+                title="Drives"
+              >
+                <HardDrive className="h-3.5 w-3.5" />
+              </Button>
+            )}
             <div className="min-w-0 flex-1 truncate text-sm text-foreground font-mono" title={data?.currentPath ?? ""}>
               {data?.currentPath ?? "..."}
             </div>
@@ -187,12 +217,24 @@ export function FolderBrowserDialog({
                 {error}
               </div>
             )}
-            {!loading && !error && filtered.length === 0 && (
+            {/* Windows drive list */}
+            {showDrives && data?.drives && data.drives.map((drive) => (
+              <button
+                key={drive.path}
+                onClick={() => handleDriveSelect(drive.path)}
+                className="flex w-full items-center gap-3 border-b border-border/30 px-4 py-2.5 text-left transition-colors hover:bg-accent last:border-b-0"
+              >
+                <HardDrive className="h-4 w-4 text-blue-400 shrink-0" />
+                <span className="flex-1 text-sm text-foreground truncate">{drive.name}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">{drive.path}</span>
+              </button>
+            ))}
+            {!showDrives && !loading && !error && filtered.length === 0 && (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                 {t("folder.empty")}
               </div>
             )}
-            {!loading && !error && filtered.map((folder) => (
+            {!showDrives && !loading && !error && filtered.map((folder) => (
               <button
                 key={folder.path}
                 onClick={() => handleSelectFolder(folder)}
