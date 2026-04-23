@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Bot, ChevronDown, Loader2, Plus, Trash2, X } from "lucide-react";
+import { Bot, ChevronDown, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -10,21 +10,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
 import { useAssistant } from "./assistant-provider";
 import { useI18n } from "@/lib/i18n";
 
 interface AssistantPanelProps {
   mode: "sidebar" | "dialog";
 }
-
-const DynamicTerminal = dynamic(
-  () =>
-    import("@/components/task/task-terminal").then((m) => ({
-      default: m.TaskTerminal,
-    })),
-  { ssr: false }
-);
 
 const DynamicChat = dynamic(
   () => import("./assistant-chat").then((m) => ({ default: m.AssistantChat })),
@@ -51,9 +42,6 @@ function formatRelativeTime(isoString: string): string {
 export function AssistantPanel({ mode }: AssistantPanelProps) {
   const {
     isOpen,
-    isStarting,
-    worktreePath,
-    communicationMode,
     closeAssistant,
     sessions,
     activeSessionId,
@@ -78,10 +66,9 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
         <Bot className="h-4 w-4 text-muted-foreground shrink-0" />
         <span className="text-sm font-semibold text-foreground shrink-0">{t("assistant.title")}</span>
 
-        {communicationMode === "chat" && (
-          <>
-            <div className="flex-1" />
-            {/* Session selector dropdown */}
+        <>
+          <div className="flex-1" />
+          {/* Session selector dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger
                 className="flex items-center gap-1 h-8 px-2 rounded-md text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground max-w-[120px] truncate"
@@ -141,9 +128,6 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
               <Plus className="h-4 w-4" />
             </Button>
           </>
-        )}
-
-        {communicationMode !== "chat" && <div className="flex-1" />}
 
         <Button
           variant="ghost"
@@ -156,25 +140,9 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
         </Button>
       </div>
 
-      {/* Body */}
+      {/* Body — chat only */}
       <div className="flex-1 overflow-hidden">
-        {communicationMode === "chat" ? (
-          /* Chat mode: uses Agent SDK via SSE — no PTY session needed */
-          isOpen ? <DynamicChat /> : null
-        ) : isStarting ? (
-          <div className="flex h-full items-center justify-center bg-popover">
-            <div className="flex flex-col items-center gap-2">
-              <Loader2 className="size-5 animate-spin text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">{t("assistant.starting")}</span>
-            </div>
-          </div>
-        ) : isOpen && !isStarting && worktreePath ? (
-          /* Terminal mode: uses PTY session via WebSocket */
-          <DynamicTerminal
-            taskId={ASSISTANT_SESSION_KEY}
-            worktreePath={worktreePath}
-          />
-        ) : null}
+        {isOpen ? <DynamicChat /> : null}
       </div>
     </div>
   );

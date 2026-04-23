@@ -31,7 +31,6 @@ interface AssistantContextValue {
   isOpen: boolean;
   isStarting: boolean;
   displayMode: "sidebar" | "dialog";
-  communicationMode: "terminal" | "chat";
   worktreePath: string | null;
   toggleAssistant: () => void;
   closeAssistant: () => void;
@@ -108,7 +107,6 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [displayMode, setDisplayMode] = useState<"sidebar" | "dialog">("sidebar");
-  const [communicationMode, setCommunicationMode] = useState<"terminal" | "chat">("chat");
   const [worktreePath, setWorktreePath] = useState<string | null>(null);
 
   // Chat state — lives here so it persists across route changes
@@ -131,12 +129,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   // Read config
   const refreshConfig = useCallback(async () => {
-    const [dm, cm] = await Promise.all([
-      getConfigValue<string>("assistant.displayMode", "sidebar"),
-      getConfigValue<string>("assistant.communicationMode", "chat"),
-    ]);
+    const dm = await getConfigValue<string>("assistant.displayMode", "sidebar");
     setDisplayMode(dm === "dialog" ? "dialog" : "sidebar");
-    setCommunicationMode(cm === "chat" ? "chat" : "terminal");
   }, []);
 
   useEffect(() => { refreshConfig(); }, [refreshConfig]);
@@ -226,19 +220,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     setIsStarting(true);
     try {
       await refreshConfig();
-      const latestCommMode = await getConfigValue<string>("assistant.communicationMode", "chat");
-      if (latestCommMode === "chat") {
-        setIsOpen(true);
-        return;
-      }
-      // Terminal mode: create PTY session
-      const res = await fetch("/api/internal/assistant", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Unknown error");
-      setWorktreePath(ASSISTANT_SESSION_KEY);
       setIsOpen(true);
-    } catch {
-      toast.error("Session failed to start. Try again.");
     } finally {
       setIsStarting(false);
     }
@@ -246,13 +228,9 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const closeAssistant = useCallback(() => {
     setIsOpen(false);
-    if (worktreePath) {
-      setWorktreePath(null);
-      fetch("/api/internal/assistant", { method: "DELETE" }).catch(() => {});
-    }
     // Abort any in-flight chat request
     abortRef.current?.abort();
-  }, [worktreePath]);
+  }, []);
 
   const toggleAssistant = useCallback(() => {
     if (isOpen || isStarting) {
@@ -516,7 +494,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   return (
     <AssistantContext.Provider
       value={{
-        isOpen, isStarting, displayMode, communicationMode, worktreePath,
+        isOpen, isStarting, displayMode, worktreePath,
         toggleAssistant, closeAssistant,
         chatMessages, chatStatus, isChatThinking, isLoadingHistory, sendChatMessage, cancelChat,
         sessions, activeSessionId, createNewSession, switchSession, removeSession, refreshSessions,

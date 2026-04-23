@@ -4,7 +4,6 @@ import { useTheme } from "next-themes";
 import { useState, useEffect } from "react";
 import { useI18n } from "@/lib/i18n";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import type { Locale } from "@/lib/i18n";
 import { getConfigValue, setConfigValue } from "@/actions/config-actions";
 
@@ -15,24 +14,13 @@ export function GeneralConfig() {
   const [terminalApp, setTerminalApp] = useState("Terminal");
   const [wsPort, setWsPort] = useState(3001);
   const [idleTimeout, setIdleTimeout] = useState(180);
-  const [commMode, setCommMode] = useState<"terminal" | "chat">("terminal");
-
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     getConfigValue<string>("terminal.app", "Terminal").then(setTerminalApp);
     getConfigValue<number>("terminal.wsPort", 3001).then(setWsPort);
     getConfigValue<number>("terminal.idleTimeoutSec", 180).then(setIdleTimeout);
-    getConfigValue<string>("assistant.communicationMode", "chat").then((v) =>
-      setCommMode(v === "terminal" ? "terminal" : "chat")
-    );
   }, []);
-
-  async function handleSaveCommMode(value: string | null, _eventDetails?: unknown) {
-    const mode = value === "chat" ? "chat" : "terminal";
-    setCommMode(mode);
-    await setConfigValue("assistant.communicationMode", mode);
-  }
 
   async function handleSaveTerminal() {
     await setConfigValue("terminal.app", terminalApp);
@@ -97,24 +85,6 @@ export function GeneralConfig() {
           </div>
         </div>
 
-        {/* Assistant communication mode section */}
-        <div>
-          <h3 className="text-sm font-medium">{t("settings.assistant.communicationMode")}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">{t("settings.assistant.communicationModeDesc")}</p>
-          <div className="mt-3">
-            <Select value={commMode} onValueChange={handleSaveCommMode}>
-              <SelectTrigger className="w-40">
-                <span className="truncate">
-                  {commMode === "chat" ? t("settings.assistant.modeChat") : t("settings.assistant.modeTerminal")}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="terminal">{t("settings.assistant.modeTerminal")}</SelectItem>
-                <SelectItem value="chat">{t("settings.assistant.modeChat")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
 
         {/* Terminal app section — D-09 per PV-05 */}
         <div>
