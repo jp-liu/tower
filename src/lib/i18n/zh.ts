@@ -664,4 +664,17 @@ export const zh = {
   "onboarding.welcomeCta": "创建您的第一个工作区开始使用",
   "onboarding.createWorkspace": "创建工作区",
   "onboarding.defaultWorkspaceName": "我的工作区",
+
+  // Guided Tour
+  "tour.step1.title": "创建工作区",
+  "tour.step1.desc": "工作区是最顶层的组织单元。点击这里创建您的第一个工作区。",
+  "tour.step2.title": "创建项目",
+  "tour.step2.desc": "项目属于工作区。点击这里创建或导入一个项目，关联您的代码仓库。",
+  "tour.step3.title": "创建任务",
+  "tour.step3.desc": "任务是工作的基本单元。在看板中创建任务，分配给 AI 代理执行。",
+  "tour.step4.title": "打开 AI 助手",
+  "tour.step4.desc": "AI 助手可以帮您管理任务和项目。点击这里随时与助手对话。",
+  "tour.skip": "跳过引导",
+  "tour.next": "下一步",
+  "tour.done": "完成",
 } as const;

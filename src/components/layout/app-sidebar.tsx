@@ -163,6 +163,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
             <TooltipTrigger
               render={
                 <button
+                  data-tour="create-workspace"
                   onClick={() => setShowCreateDialog(true)}
                   className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 />
@@ -254,6 +255,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
           variant="ghost"
           size="icon-sm"
           className="text-muted-foreground"
+          data-tour="create-workspace"
           onClick={() => { setDialogName(""); setDialogIcon(WORKSPACE_ICONS[0]); setShowCreateDialog(true); }}
           title={t("sidebar.newWorkspace")}
         >

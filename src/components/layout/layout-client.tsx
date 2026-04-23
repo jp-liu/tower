@@ -14,6 +14,7 @@ import { NotificationPermissionBanner } from "@/components/notifications/notific
 import { useNotificationListener } from "@/components/notifications/use-notification-listener";
 import { getConfigValue } from "@/actions/config-actions";
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
+import { GuidedTour } from "@/components/onboarding/guided-tour";
 
 interface CreateProjectData {
   name: string;
@@ -52,12 +53,23 @@ function LayoutInner({
   const { isOpen, displayMode, closeAssistant } = useAssistant();
 
   const [showWizard, setShowWizard] = useState(isFirstRun);
+  const [showTour, setShowTour] = useState(false);
   // Resume at next step after last completed; cap at 2 (max steps)
   const wizardInitialStep = Math.min(lastStep >= 1 ? lastStep + 1 : 1, 2);
   const handleWizardComplete = useCallback(() => {
     setShowWizard(false);
+    setShowTour(true);
     router.push("/workspaces");
   }, [router]);
+
+  // Check if tour should show on mount (wizard already completed but tour not done)
+  useEffect(() => {
+    if (!isFirstRun && !showWizard) {
+      getConfigValue<boolean>("onboarding.tourCompleted", false).then((done) => {
+        if (!done) setShowTour(true);
+      });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   useEffect(() => {
@@ -116,6 +128,7 @@ function LayoutInner({
         </div>
         {dialogPanel}
         {showWizard && <OnboardingWizard onComplete={handleWizardComplete} initialStep={wizardInitialStep} initialUsername={username ?? ""} />}
+        {showTour && !showWizard && <GuidedTour onComplete={() => setShowTour(false)} />}
       </>
     );
   }
@@ -138,6 +151,7 @@ function LayoutInner({
       </div>
       {dialogPanel}
       {showWizard && <OnboardingWizard onComplete={handleWizardComplete} initialStep={wizardInitialStep} initialUsername={username ?? ""} />}
+        {showTour && !showWizard && <GuidedTour onComplete={() => setShowTour(false)} />}
     </>
   );
 }

@@ -649,4 +649,17 @@ export const en: Translations = {
   "onboarding.welcomeCta": "Create your first workspace to get started",
   "onboarding.createWorkspace": "Create Workspace",
   "onboarding.defaultWorkspaceName": "My Workspace",
+
+  // Guided Tour
+  "tour.step1.title": "Create Workspace",
+  "tour.step1.desc": "Workspaces are the top-level organizer. Click here to create your first workspace.",
+  "tour.step2.title": "Create Project",
+  "tour.step2.desc": "Projects belong to workspaces. Click here to create or import a project linked to your code repository.",
+  "tour.step3.title": "Create Task",
+  "tour.step3.desc": "Tasks are units of work. Create a task on the board and assign it to an AI agent.",
+  "tour.step4.title": "Open AI Assistant",
+  "tour.step4.desc": "The AI assistant helps you manage tasks and projects. Click here to start a conversation anytime.",
+  "tour.skip": "Skip tour",
+  "tour.next": "Next",
+  "tour.done": "Done",
 };

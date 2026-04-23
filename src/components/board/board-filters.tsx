@@ -29,7 +29,7 @@ export function BoardFilters({
         />
       </div>
       <Button
-       
+        data-tour="create-task"
         variant="outline"
         className="ml-auto gap-1.5 border-border text-xs text-muted-foreground hover:border-amber-500/30 hover:text-amber-300"
         onClick={onCreateTask}

@@ -78,6 +78,7 @@ export function TopBar({ onCreateProject, username }: TopBarProps) {
               delay={500}
               render={
                 <button
+                  data-tour="open-assistant"
                   onClick={toggleAssistant}
                   aria-label={t("assistant.iconLabel")}
                   className={[
@@ -126,6 +127,7 @@ export function TopBar({ onCreateProject, username }: TopBarProps) {
             {t("topbar.importProject")}
           </Button>
           <Button
+            data-tour="create-project"
             className="gap-1.5 bg-primary/10 text-primary ring-1 ring-primary/25 hover:bg-primary/20"
             onClick={() => setShowCreateProject(true)}
           >
