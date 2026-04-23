@@ -622,4 +622,15 @@ export const en: Translations = {
   "codeSearch.truncated": "Showing first 200 results",
   "codeSearch.hint": "Type a keyword and press Enter to search",
   "codeSearch.rgNotInstalled": "ripgrep (rg) not found, please install: brew install ripgrep",
+  // Notifications (Phase 66)
+  "settings.notifications.title": "Notifications",
+  "settings.notifications.desc": "Task completion alerts",
+  "settings.notifications.navDesc": "Desktop and toast alerts",
+  "settings.notifications.enable": "Task Completion Notifications",
+  "settings.notifications.enableDesc": "Show a desktop notification or toast when a task finishes executing",
+  "notification.permissionPrompt": "Allow Tower to send desktop notifications when tasks complete",
+  "notification.allow": "Allow",
+  "notification.dismiss": "Dismiss",
+  "notification.taskCompleted": "Task completed",
+  "notification.taskFailed": "Task failed",
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { Settings, Cpu, FileText, SlidersHorizontal, Terminal } from "lucide-react";
+import { Settings, Cpu, FileText, SlidersHorizontal, Terminal, Bell } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 const NAV_ITEMS = [
@@ -33,6 +33,12 @@ const NAV_ITEMS = [
     labelKey: "settings.cliProfile.title" as const,
     descKey: "settings.cliProfile.navDesc" as const,
     icon: Terminal,
+  },
+  {
+    id: "notifications",
+    labelKey: "settings.notifications.title" as const,
+    descKey: "settings.notifications.navDesc" as const,
+    icon: Bell,
   },
 ];
 

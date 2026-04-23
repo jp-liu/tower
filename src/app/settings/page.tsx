@@ -10,6 +10,7 @@ import { GeneralConfig } from "@/components/settings/general-config";
 import { PromptsConfig } from "@/components/settings/prompts-config";
 import { SystemConfig } from "@/components/settings/system-config";
 import { CliProfileConfig } from "@/components/settings/cli-profile-config";
+import { NotificationConfig } from "@/components/settings/notification-config";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -47,6 +48,8 @@ export default function SettingsPage() {
           {activeSection === "config" && <SystemConfig />}
 
           {activeSection === "cli-profile" && <CliProfileConfig />}
+
+          {activeSection === "notifications" && <NotificationConfig />}
         </div>
       </div>
     </div>

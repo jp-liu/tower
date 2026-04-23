@@ -637,4 +637,15 @@ export const zh = {
   "codeSearch.truncated": "仅显示前 200 条结果",
   "codeSearch.hint": "输入关键词后按 Enter 搜索",
   "codeSearch.rgNotInstalled": "未找到 ripgrep (rg)，请安装: brew install ripgrep",
+  // Notifications (Phase 66)
+  "settings.notifications.title": "通知",
+  "settings.notifications.desc": "任务完成提醒",
+  "settings.notifications.navDesc": "桌面通知和 Toast 提醒",
+  "settings.notifications.enable": "任务完成通知",
+  "settings.notifications.enableDesc": "任务执行完成时显示桌面通知或 Toast 提醒",
+  "notification.permissionPrompt": "允许 Tower 在任务完成时发送桌面通知",
+  "notification.allow": "允许",
+  "notification.dismiss": "忽略",
+  "notification.taskCompleted": "任务已完成",
+  "notification.taskFailed": "任务失败",
 } as const;
