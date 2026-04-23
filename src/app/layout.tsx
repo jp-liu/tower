@@ -50,7 +50,7 @@ export default async function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <TooltipProvider>
             <I18nProvider>
-              <LayoutClient workspaces={workspaces} isFirstRun={onboardingStatus.isFirstRun} lastStep={onboardingStatus.lastStep}>
+              <LayoutClient workspaces={workspaces} isFirstRun={onboardingStatus.isFirstRun} lastStep={onboardingStatus.lastStep} username={onboardingStatus.username}>
                 {children}
               </LayoutClient>
               <Toaster richColors position="top-right" />

@@ -8,6 +8,7 @@ export interface OnboardingStatus {
   isFirstRun: boolean;
   isCompleted: boolean;
   lastStep: number;
+  username: string | null;
 }
 
 export interface TaskCompletionPayload {
@@ -21,7 +22,7 @@ export interface TaskCompletionPayload {
 // D-04: globalThis singleton — survives HMR/module re-evaluation in Next.js dev mode.
 const g = globalThis as typeof globalThis & { __taskCompletionQueue?: TaskCompletionPayload[] };
 
-const ONBOARDING_KEYS = ["onboarding.completed", "onboarding.lastStep"] as const;
+const ONBOARDING_KEYS = ["onboarding.completed", "onboarding.lastStep", "onboarding.username"] as const;
 
 export async function getOnboardingStatus(): Promise<OnboardingStatus> {
   const rows = await db.systemConfig.findMany({
@@ -40,11 +41,14 @@ export async function getOnboardingStatus(): Promise<OnboardingStatus> {
   const isCompleted = stored["onboarding.completed"] === true;
   const rawStep = stored["onboarding.lastStep"];
   const lastStep = typeof rawStep === "number" ? rawStep : 0;
+  const rawUsername = stored["onboarding.username"];
+  const username = typeof rawUsername === "string" && rawUsername.length > 0 ? rawUsername : null;
 
   return {
     isFirstRun: !isCompleted,
     isCompleted,
     lastStep,
+    username,
   };
 }
 

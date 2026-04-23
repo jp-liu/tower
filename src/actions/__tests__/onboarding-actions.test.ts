@@ -56,9 +56,10 @@ describe("onboarding-actions", () => {
         isFirstRun: true,
         isCompleted: false,
         lastStep: 0,
+        username: null,
       });
       expect(mockDb.systemConfig.findMany).toHaveBeenCalledWith({
-        where: { key: { in: ["onboarding.completed", "onboarding.lastStep"] } },
+        where: { key: { in: ["onboarding.completed", "onboarding.lastStep", "onboarding.username"] } },
       });
     });
 
@@ -74,6 +75,7 @@ describe("onboarding-actions", () => {
         isFirstRun: false,
         isCompleted: true,
         lastStep: 2,
+        username: null,
       });
     });
 
@@ -88,6 +90,7 @@ describe("onboarding-actions", () => {
         isFirstRun: true,
         isCompleted: false,
         lastStep: 1,
+        username: null,
       });
     });
 

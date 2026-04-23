@@ -28,6 +28,7 @@ interface LayoutClientProps {
   workspaces: Array<{ id: string; name: string; description: string | null; updatedAt: Date }>;
   isFirstRun: boolean;
   lastStep: number;
+  username: string | null;
   children: React.ReactNode;
 }
 
@@ -35,12 +36,14 @@ function LayoutInner({
   workspaces,
   isFirstRun,
   lastStep,
+  username,
   children,
   handleCreateProject,
 }: {
   workspaces: LayoutClientProps["workspaces"];
   isFirstRun: boolean;
   lastStep: number;
+  username: string | null;
   children: React.ReactNode;
   handleCreateProject: (data: CreateProjectData) => Promise<{ id: string } | void>;
 }) {
@@ -100,7 +103,7 @@ function LayoutInner({
         <NotificationPermissionBanner />
         <div className="flex h-screen overflow-hidden">
           <div className="flex flex-1 flex-col overflow-hidden">
-            <TopBar onCreateProject={handleCreateProject} />
+            <TopBar onCreateProject={handleCreateProject} username={username} />
             <div className="flex flex-1 overflow-hidden">
               {/* Push sidebar: flex sibling of main, inside content area below TopBar */}
               {sidebarPanel}
@@ -122,7 +125,7 @@ function LayoutInner({
       <div className="flex h-screen overflow-hidden">
         <AppSidebar workspaces={workspaces} />
         <div className="flex flex-1 flex-col overflow-hidden">
-          <TopBar onCreateProject={handleCreateProject} />
+          <TopBar onCreateProject={handleCreateProject} username={username} />
           <div className="flex flex-1 overflow-hidden">
             {/* Push sidebar: flex sibling of main, inside content area below TopBar (per RESEARCH.md Pattern 2) */}
             {sidebarPanel}
@@ -138,7 +141,7 @@ function LayoutInner({
   );
 }
 
-export function LayoutClient({ workspaces, isFirstRun, lastStep, children }: LayoutClientProps) {
+export function LayoutClient({ workspaces, isFirstRun, lastStep, username, children }: LayoutClientProps) {
   const router = useRouter();
   const pathname = usePathname();
   const activeWorkspaceId = pathname.split("/workspaces/")[1]?.split("/")[0];
@@ -161,7 +164,7 @@ export function LayoutClient({ workspaces, isFirstRun, lastStep, children }: Lay
   return (
     <AssistantProvider>
       <TerminalPortalProvider>
-        <LayoutInner workspaces={workspaces} isFirstRun={isFirstRun} lastStep={lastStep} handleCreateProject={handleCreateProject}>
+        <LayoutInner workspaces={workspaces} isFirstRun={isFirstRun} lastStep={lastStep} username={username} handleCreateProject={handleCreateProject}>
           {children}
         </LayoutInner>
       </TerminalPortalProvider>

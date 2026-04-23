@@ -23,9 +23,18 @@ interface CreateProjectData {
 
 interface TopBarProps {
   onCreateProject?: (data: CreateProjectData) => Promise<{ id: string } | void> | { id: string } | void;
+  username?: string | null;
 }
 
-export function TopBar({ onCreateProject }: TopBarProps) {
+export function getInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter((w) => w.length > 0);
+  return words
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
+}
+
+export function TopBar({ onCreateProject, username }: TopBarProps) {
   const { t, locale, setLocale } = useI18n();
   const { isOpen: assistantOpen, toggleAssistant } = useAssistant();
   const [showSearch, setShowSearch] = useState(false);
@@ -123,13 +132,16 @@ export function TopBar({ onCreateProject }: TopBarProps) {
             <Plus className="h-3.5 w-3.5" />
             {t("topbar.newProject")}
           </Button>
-          <div className="ml-0.5">
-            <Avatar className="h-7 w-7 ring-1 ring-border">
-              <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold">
-                JP
-              </AvatarFallback>
-            </Avatar>
-          </div>
+          {username && (
+            <div className="ml-0.5 flex items-center gap-1.5">
+              <span className="max-w-[80px] truncate text-xs text-muted-foreground">{username}</span>
+              <Avatar className="h-7 w-7 ring-1 ring-border">
+                <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold">
+                  {getInitials(username)}
+                </AvatarFallback>
+              </Avatar>
+            </div>
+          )}
         </div>
       </header>
 
