@@ -109,6 +109,21 @@ function ensureClaudeHooks(): void {
     console.error("[init-tower] Installed PostToolUse hook");
   }
 
+  // Stop hook — notifies Tower when Claude finishes responding
+  const stopEntries = (hooks["Stop"] as Array<{ hooks: Array<{ command: string }> }>) ?? [];
+  const hasStop = stopEntries.some(
+    (e) => e.hooks?.some((h) => h.command?.includes("stop-hook.js"))
+  );
+  if (!hasStop) {
+    const hookPath = join(root, "scripts", "stop-hook.js");
+    stopEntries.push({
+      hooks: [{ command: `node "${hookPath}"`, timeout: 5, type: "command" } as never],
+    });
+    hooks["Stop"] = stopEntries;
+    changed = true;
+    console.error("[init-tower] Installed Stop hook");
+  }
+
   if (changed) {
     settings["hooks"] = hooks;
     const dir = join(homedir(), ".claude");

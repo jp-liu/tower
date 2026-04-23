@@ -6,7 +6,16 @@ import { toast } from "sonner";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import type { TaskCompletionPayload } from "@/actions/onboarding-actions";
 
-function fireNotification(
+interface StopEvent {
+  taskId: string;
+  taskTitle: string;
+  sessionId: string;
+  workspaceId: string;
+  type: "stop";
+  timestamp: string;
+}
+
+function fireCompletionNotification(
   event: TaskCompletionPayload,
   router: ReturnType<typeof useRouter>,
   t: (key: TranslationKey) => string
@@ -35,6 +44,13 @@ function fireNotification(
   }
 }
 
+function fireStopNotification(event: StopEvent) {
+  toast.info(event.taskTitle, {
+    description: "AI 回复完成",
+    duration: 3000,
+  });
+}
+
 export function useNotificationListener(enabled: boolean) {
   const router = useRouter();
   const routerRef = useRef(router);
@@ -54,14 +70,20 @@ export function useNotificationListener(enabled: boolean) {
       try {
         const res = await fetch("/api/internal/notifications/pending");
         if (!res.ok) return;
-        const data = (await res.json()) as { events: TaskCompletionPayload[] };
+        const data = (await res.json()) as {
+          events: TaskCompletionPayload[];
+          stopEvents: StopEvent[];
+        };
         for (const event of data.events) {
-          fireNotification(event, routerRef.current, tRef.current);
+          fireCompletionNotification(event, routerRef.current, tRef.current);
+        }
+        for (const event of data.stopEvents) {
+          fireStopNotification(event);
         }
       } catch {
         // Silently ignore network errors — notifications are non-critical
       }
-    }, 30000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
