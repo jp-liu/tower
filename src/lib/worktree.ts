@@ -1,8 +1,9 @@
 import { execFileSync } from "child_process";
-import { existsSync } from "fs";
+import { existsSync, symlinkSync, lstatSync } from "fs";
 import { mkdir } from "fs/promises";
 import path from "path";
 import os from "os";
+import { logger } from "@/lib/logger";
 
 function expandHome(p: string): string {
   if (p.startsWith("~/") || p === "~") {
@@ -89,7 +90,46 @@ export async function createWorktree(
     );
   }
 
+  // Symlink node_modules from main project to worktree (avoids reinstalling deps)
+  symlinkNodeModules(localPath, worktreePath);
+
   return { worktreePath, worktreeBranch };
+}
+
+/**
+ * Creates a symlink for node_modules (and other common dependency dirs) from
+ * the main project to the worktree directory. This avoids requiring users to
+ * reinstall dependencies in every worktree.
+ *
+ * Only creates symlinks for directories that exist in the source and do NOT
+ * already exist in the target.
+ */
+function symlinkNodeModules(projectRoot: string, worktreePath: string): void {
+  const log = logger.create("worktree");
+  // Common dependency directories that should be shared
+  const dirs = ["node_modules", ".next"];
+
+  for (const dir of dirs) {
+    const source = path.join(projectRoot, dir);
+    const target = path.join(worktreePath, dir);
+
+    if (!existsSync(source)) continue;
+
+    // Skip if target already exists (real dir or existing symlink)
+    try {
+      lstatSync(target);
+      continue; // exists — don't overwrite
+    } catch {
+      // Does not exist — proceed to create symlink
+    }
+
+    try {
+      symlinkSync(source, target, "junction"); // "junction" works on Windows too
+      log.info(`Symlinked ${dir}`, { from: source, to: target });
+    } catch (err) {
+      log.warn(`Failed to symlink ${dir}`, { error: String(err) });
+    }
+  }
 }
 
 /**
