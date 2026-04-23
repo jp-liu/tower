@@ -61,7 +61,7 @@ export function useNotificationListener(enabled: boolean) {
       } catch {
         // Silently ignore network errors — notifications are non-critical
       }
-    }, 4000);
+    }, 30000);
 
     return () => clearInterval(interval);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
