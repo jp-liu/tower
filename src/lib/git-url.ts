@@ -31,7 +31,13 @@ export function matchGitPathRule(url: string, rules: GitPathRule[]): string {
   const owner = pathSegments[0] ?? "";
   const repo = pathSegments[pathSegments.length - 1] ?? "";
 
-  const sorted = [...rules].sort((a, b) => a.priority - b.priority);
+  // Exact owner matches take priority over wildcard (*), regardless of priority number
+  const sorted = [...rules].sort((a, b) => {
+    const aExact = a.ownerMatch !== "*" ? 0 : 1;
+    const bExact = b.ownerMatch !== "*" ? 0 : 1;
+    if (aExact !== bExact) return aExact - bExact;
+    return a.priority - b.priority;
+  });
 
   for (const rule of sorted) {
     if (rule.host !== host) continue;

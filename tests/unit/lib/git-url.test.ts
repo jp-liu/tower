@@ -64,7 +64,7 @@ describe("matchGitPathRule", () => {
       expect(result).toBe(`${home}/project/i/my-repo`);
     });
 
-    it("respects priority: wildcard (priority=0) wins over specific owner (priority=10)", () => {
+    it("exact owner match wins over wildcard regardless of priority number", () => {
       const rules: GitPathRule[] = [
         makeRule({
           id: "wildcard-rule",
@@ -81,7 +81,8 @@ describe("matchGitPathRule", () => {
         }),
       ];
       const result = matchGitPathRule("https://github.com/jp-liu/my-repo", rules);
-      expect(result).toBe(`${home}/project/f/my-repo`);
+      // Exact owner (jp-liu) takes priority over wildcard (*) even with lower priority number
+      expect(result).toBe(`${home}/project/i/my-repo`);
     });
   });
 
