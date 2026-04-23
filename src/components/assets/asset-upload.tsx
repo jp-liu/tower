@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Upload, X } from "lucide-react";
 import { uploadAsset } from "@/actions/asset-actions";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { useI18n } from "@/lib/i18n";
 
@@ -92,7 +93,7 @@ export function AssetUpload({
     <>
       <Button
         onClick={handleOpen}
-        className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
+        className="bg-primary/10 text-primary ring-1 ring-primary/20 hover:bg-primary/15"
       >
         <Upload className="h-3.5 w-3.5" />
         <span>{t("assets.upload")}</span>
@@ -168,12 +169,13 @@ export function AssetUpload({
                   onChange={handleFileChange}
                   className="hidden"
                 />
-                <button
+                <Button
+                  variant="outline"
                   onClick={handleFileSelect}
-                  className="flex-1 rounded-md border border-dashed border-border bg-background px-3 py-2 text-xs text-muted-foreground hover:border-amber-500/50 hover:text-foreground transition-colors text-left"
+                  className="flex-1 border-dashed bg-background px-3 py-2 text-xs text-muted-foreground hover:border-primary/50 hover:text-foreground transition-colors text-left justify-start"
                 >
                   {selectedFile ? selectedFile.name : t("assets.selectFile")}
-                </button>
+                </Button>
               </div>
 
               {/* Description */}
@@ -181,11 +183,11 @@ export function AssetUpload({
                 <label className="text-xs text-muted-foreground w-16 shrink-0 pt-1.5">
                   {t("assets.description")}
                 </label>
-                <textarea
+                <Textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder={t("assets.descriptionPlaceholder")}
-                  className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50 resize-none h-20"
+                  className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none h-20"
                 />
               </div>
             </div>
@@ -201,7 +203,7 @@ export function AssetUpload({
               <Button
                 onClick={handleUpload}
                 disabled={!selectedFile || !uploadProjectId || !description.trim() || isUploading}
-                className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
+                className="bg-primary/10 text-primary ring-1 ring-primary/20 hover:bg-primary/15"
               >
                 {isUploading ? t("assets.uploading") : t("assets.upload")}
               </Button>

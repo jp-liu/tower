@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/lib/i18n";
 
 interface DiffFileEntry {
@@ -106,10 +107,11 @@ export function TaskDiffView({
               return (
                 <div key={file.filename}>
                   {/* File header row */}
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     onClick={() => toggleFile(file.filename)}
-                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left hover:bg-accent/50 transition-colors"
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left hover:bg-accent/50 transition-colors rounded-none h-auto"
                   >
                     {isExpanded ? (
                       <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
@@ -132,7 +134,7 @@ export function TaskDiffView({
                         <span className="text-xs font-mono text-red-400">-{file.removed}</span>
                       </div>
                     )}
-                  </button>
+                  </Button>
 
                   {/* Expanded patch content */}
                   {isExpanded && file.patch && (
@@ -172,7 +174,7 @@ export function TaskDiffView({
             <DialogTitle>{t("diff.commitChanges")}</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-3">
-            <textarea
+            <Textarea
               value={commitMessage}
               onChange={(e) => setCommitMessage(e.target.value)}
               placeholder={t("diff.commitMessagePlaceholder")}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { GitBranch, Check } from "lucide-react";
+import { GitBranch, Check, ChevronsUpDown } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { useI18n } from "@/lib/i18n";
 import { getProjectBranches, fetchRemoteBranches, getCurrentBranch } from "@/actions/git-actions";
 import type { Task, Priority, TaskStatus } from "@prisma/client";
@@ -71,10 +84,8 @@ export function CreateTaskDialog({
   const [branches, setBranches] = useState<string[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<string>("");
-  const [branchFilter, setBranchFilter] = useState("");
-  const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
+  const [branchOpen, setBranchOpen] = useState(false);
   const [useWorktree, setUseWorktree] = useState(true);
-  const branchDropdownRef = useRef<HTMLDivElement>(null);
   const { t } = useI18n();
 
   const isEditing = !!editTask;
@@ -107,22 +118,9 @@ export function CreateTaskDialog({
       setSelectedLabelIds([]);
       setBranches([]);
       setSelectedBranch("");
-      setBranchFilter("");
-      setBranchDropdownOpen(false);
+      setBranchOpen(false);
     }
   }, [open, editTask]);
-
-  // Close branch dropdown on outside click
-  useEffect(() => {
-    if (!branchDropdownOpen) return;
-    function handleClick(e: MouseEvent) {
-      if (branchDropdownRef.current && !branchDropdownRef.current.contains(e.target as Node)) {
-        setBranchDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [branchDropdownOpen]);
 
   // Load branches instantly from cache, then refresh after background fetch
   useEffect(() => {
@@ -255,54 +253,37 @@ export function CreateTaskDialog({
               {branchesLoading ? (
                 <div className="text-sm text-muted-foreground">{t("task.branchLoading")}</div>
               ) : branches.length > 0 ? (
-                <div className="relative" ref={branchDropdownRef} data-testid="branch-selector">
-                  {/* Trigger button */}
-                  <button
-                    type="button"
-                    onClick={() => { setBranchDropdownOpen(!branchDropdownOpen); setBranchFilter(""); }}
-                    className="flex w-full items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
+                <Popover open={branchOpen} onOpenChange={setBranchOpen}>
+                  <PopoverTrigger
+                    className="flex w-full items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
+                    data-testid="branch-selector"
                   >
                     <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <span className="flex-1 truncate text-left font-mono text-xs">{selectedBranch || t("task.branchNone")}</span>
-                    <svg className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${branchDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                  </button>
-                  {/* Dropdown */}
-                  {branchDropdownOpen && (
-                    <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-md">
-                      {/* Search input */}
-                      <div className="border-b border-border p-1.5">
-                        <input
-                          type="text"
-                          value={branchFilter}
-                          onChange={(e) => setBranchFilter(e.target.value)}
-                          placeholder={t("task.branchSearch")}
-                          className="w-full rounded-sm bg-transparent px-2 py-1 text-xs outline-none placeholder:text-muted-foreground"
-                          autoFocus
-                        />
-                      </div>
-                      {/* Branch list */}
-                      <div className="max-h-48 overflow-y-auto p-1">
-                        {branches
-                          .filter((b) => b.toLowerCase().includes(branchFilter.toLowerCase()))
-                          .map((branch) => (
-                          <button
-                            key={branch}
-                            type="button"
-                            onClick={() => { setSelectedBranch(branch); setBranchDropdownOpen(false); }}
-                            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent"
-                          >
-                            <GitBranch className="h-3 w-3 text-muted-foreground shrink-0" />
-                            <span className="flex-1 truncate font-mono">{branch}</span>
-                            {branch === selectedBranch && <Check className="h-3 w-3 text-primary shrink-0" />}
-                          </button>
-                        ))}
-                        {branches.filter((b) => b.toLowerCase().includes(branchFilter.toLowerCase())).length === 0 && (
-                          <div className="px-2 py-3 text-center text-xs text-muted-foreground">{t("task.branchNone")}</div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                    <span className="flex-1 truncate text-left text-xs">{selectedBranch || t("task.branchNone")}</span>
+                    <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
+                  </PopoverTrigger>
+                  <PopoverContent className="p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder={t("task.branchSearch")} />
+                      <CommandList>
+                        <CommandEmpty>{t("task.branchNone")}</CommandEmpty>
+                        <CommandGroup>
+                          {branches.map((branch) => (
+                            <CommandItem
+                              key={branch}
+                              value={branch}
+                              onSelect={() => { setSelectedBranch(branch); setBranchOpen(false); }}
+                            >
+                              <GitBranch className="h-3 w-3 text-muted-foreground shrink-0 mr-2" />
+                              <span className="flex-1 truncate font-mono">{branch}</span>
+                              {branch === selectedBranch && <Check className="h-3 w-3 text-primary shrink-0 ml-auto" />}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               ) : (
                 <div className="text-sm text-muted-foreground">{t("task.branchNone")}</div>
               )}
@@ -370,7 +351,7 @@ export function CreateTaskDialog({
           </Button>
           <Button
             onClick={handleSubmit}
-            className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
+            className="bg-primary/10 text-primary ring-1 ring-primary/20 hover:bg-primary/15"
           >
             {isEditing ? t("common.save") : t("common.create")}
           </Button>

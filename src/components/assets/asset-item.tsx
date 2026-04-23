@@ -49,7 +49,7 @@ export function AssetItem({ asset, onPreview, onReveal, onDelete, onTaskClick }:
   return (
     <div className="flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/20">
       {/* Preview / Icon — clickable */}
-      <button onClick={() => onPreview(asset)} className="flex-shrink-0 cursor-pointer">
+      <Button variant="ghost" onClick={() => onPreview(asset)} className="flex-shrink-0 cursor-pointer p-0 h-auto">
         {isImage ? (
           <img
             src={url}
@@ -61,24 +61,25 @@ export function AssetItem({ asset, onPreview, onReveal, onDelete, onTaskClick }:
             <FileText className="h-6 w-6 text-muted-foreground" />
           </div>
         )}
-      </button>
+      </Button>
 
       {/* Info */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <p className="truncate text-sm font-medium text-foreground">{asset.filename}</p>
           {asset.taskTitle && asset.taskId && (
-            <button
+            <Button
+              variant="ghost"
               onClick={(e) => {
                 e.stopPropagation();
                 onTaskClick?.(asset.taskId!);
               }}
-              className="flex-shrink-0 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs px-1.5 py-0.5 rounded cursor-pointer hover:bg-blue-500/20 transition-colors"
+              className="flex-shrink-0 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs px-1.5 py-0.5 rounded cursor-pointer hover:bg-blue-500/20 transition-colors h-auto"
             >
               {asset.taskTitle.length > 20
                 ? `[任务: ${asset.taskTitle.slice(0, 20)}...]`
                 : `[任务: ${asset.taskTitle}]`}
-            </button>
+            </Button>
           )}
         </div>
         {asset.description && (

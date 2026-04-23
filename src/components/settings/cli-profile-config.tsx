@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/lib/i18n";
 import { getDefaultCliProfile, updateCliProfile } from "@/actions/cli-profile-actions";
 
@@ -113,7 +115,7 @@ export function CliProfileConfig() {
           <h3 className="text-sm font-medium">{t("settings.cliProfile.command")}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{t("settings.cliProfile.commandHint")}</p>
           <div className="mt-3">
-            <input
+            <Input
               type="text"
               value={command}
               onChange={(e) => setCommand(e.target.value)}
@@ -128,7 +130,7 @@ export function CliProfileConfig() {
           <h3 className="text-sm font-medium">{t("settings.cliProfile.baseArgs")}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{t("settings.cliProfile.baseArgsHint")}</p>
           <div className="mt-3">
-            <textarea
+            <Textarea
               value={baseArgsText}
               onChange={(e) => setBaseArgsText(e.target.value)}
               placeholder={t("settings.cliProfile.baseArgsPlaceholder")}
@@ -143,7 +145,7 @@ export function CliProfileConfig() {
           <h3 className="text-sm font-medium">{t("settings.cliProfile.envVars")}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{t("settings.cliProfile.envVarsHint")}</p>
           <div className="mt-3">
-            <textarea
+            <Textarea
               value={envVarsText}
               onChange={(e) => setEnvVarsText(e.target.value)}
               placeholder={t("settings.cliProfile.envVarsPlaceholder")}
