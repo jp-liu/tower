@@ -262,16 +262,28 @@ export function ImportProjectDialog({
             {/* Migration toggle — only when git detected */}
             {gitDetected && localPath && (
               <div className="rounded-md border border-border p-3 space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={migrateEnabled}
-                    onChange={(e) => handleMigrateToggle(e.target.checked)}
-                    className="rounded border-border"
-                  />
-                  <span className="text-xs font-medium">{t("project.migrate")}</span>
-                </label>
-                <p className="text-[10px] text-muted-foreground">{t("project.migrateHint")}</p>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-medium">{t("project.migrate")}</span>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{t("project.migrateHint")}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    role="switch"
+                    aria-checked={migrateEnabled}
+                    onClick={() => handleMigrateToggle(!migrateEnabled)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent p-0 transition-colors duration-200 ${
+                      migrateEnabled ? "bg-primary" : "bg-muted"
+                    }`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                        migrateEnabled ? "translate-x-4" : "translate-x-0"
+                      }`}
+                    />
+                  </Button>
+                </div>
 
                 {migrateEnabled && (
                   <div className="space-y-2 pt-1">
