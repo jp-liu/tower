@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { AppSidebar } from "./app-sidebar";
 import { TopBar } from "./top-bar";
@@ -13,6 +13,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { NotificationPermissionBanner } from "@/components/notifications/notification-permission-banner";
 import { useNotificationListener } from "@/components/notifications/use-notification-listener";
 import { getConfigValue } from "@/actions/config-actions";
+import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 
 interface CreateProjectData {
   name: string;
@@ -26,22 +27,33 @@ interface CreateProjectData {
 interface LayoutClientProps {
   workspaces: Array<{ id: string; name: string; description: string | null; updatedAt: Date }>;
   isFirstRun: boolean;
+  lastStep: number;
   children: React.ReactNode;
 }
 
 function LayoutInner({
   workspaces,
-  isFirstRun: _isFirstRun,
+  isFirstRun,
+  lastStep,
   children,
   handleCreateProject,
 }: {
   workspaces: LayoutClientProps["workspaces"];
   isFirstRun: boolean;
+  lastStep: number;
   children: React.ReactNode;
   handleCreateProject: (data: CreateProjectData) => Promise<{ id: string } | void>;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { isOpen, displayMode, closeAssistant } = useAssistant();
+
+  const [showWizard, setShowWizard] = useState(isFirstRun);
+  const wizardInitialStep = Math.min(lastStep >= 1 ? lastStep + 1 : 1, 2);
+  const handleWizardComplete = useCallback(() => {
+    setShowWizard(false);
+    router.push("/workspaces");
+  }, [router]);
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   useEffect(() => {
@@ -99,6 +111,7 @@ function LayoutInner({
           </div>
         </div>
         {dialogPanel}
+        {showWizard && <OnboardingWizard onComplete={handleWizardComplete} initialStep={wizardInitialStep} />}
       </>
     );
   }
@@ -120,11 +133,12 @@ function LayoutInner({
         </div>
       </div>
       {dialogPanel}
+      {showWizard && <OnboardingWizard onComplete={handleWizardComplete} initialStep={wizardInitialStep} />}
     </>
   );
 }
 
-export function LayoutClient({ workspaces, isFirstRun, children }: LayoutClientProps) {
+export function LayoutClient({ workspaces, isFirstRun, lastStep, children }: LayoutClientProps) {
   const router = useRouter();
   const pathname = usePathname();
   const activeWorkspaceId = pathname.split("/workspaces/")[1]?.split("/")[0];
@@ -147,7 +161,7 @@ export function LayoutClient({ workspaces, isFirstRun, children }: LayoutClientP
   return (
     <AssistantProvider>
       <TerminalPortalProvider>
-        <LayoutInner workspaces={workspaces} isFirstRun={isFirstRun} handleCreateProject={handleCreateProject}>
+        <LayoutInner workspaces={workspaces} isFirstRun={isFirstRun} lastStep={lastStep} handleCreateProject={handleCreateProject}>
           {children}
         </LayoutInner>
       </TerminalPortalProvider>
