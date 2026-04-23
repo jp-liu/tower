@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   Settings, Archive, Plus, Pencil, Trash2,
-  MoreHorizontal, Layers, ChevronsLeft, Tag, FileText, FolderOpen, Gauge,
+  MoreHorizontal, ChevronsLeft, Tag, FileText, FolderOpen, Gauge,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -130,7 +130,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
               />
             }
           >
-            <Layers className="h-4 w-4 text-amber-400" />
+            <img src="/logo.png" alt="Tower" className="h-6 w-6 rounded" />
           </TooltipTrigger>
           <TooltipContent side="right" sideOffset={8}>{t("sidebar.expand")}</TooltipContent>
         </Tooltip>
@@ -145,15 +145,17 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
                   render={
                     <button
                       onClick={() => { if (!isActive) router.push(`/workspaces/${ws.id}`); }}
-                      className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm transition-all ${
+                      className={`flex h-9 w-9 items-center justify-center rounded-lg transition-all ${
                         isActive
-                          ? "bg-accent ring-1 ring-primary/20 text-foreground cursor-default"
-                          : "text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
+                          ? "ring-1 ring-primary/20 text-foreground cursor-default"
+                          : "text-muted-foreground hover:text-foreground cursor-pointer"
                       }`}
                     />
                   }
                 >
-                  {WORKSPACE_ICONS.includes(icon) ? icon : <span className="text-xs font-semibold">{icon}</span>}
+                  <span className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-sm">
+                    {WORKSPACE_ICONS.includes(icon) ? icon : <span className="text-xs font-semibold">{icon}</span>}
+                  </span>
                 </TooltipTrigger>
                 <TooltipContent side="right" sideOffset={8}>{ws.name}</TooltipContent>
               </Tooltip>
