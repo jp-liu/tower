@@ -169,12 +169,18 @@ describe("onboarding-actions", () => {
   });
 
   describe("dispatchTaskCompletionEvent", () => {
+    beforeEach(() => {
+      // Reset the globalThis queue before each test
+      (globalThis as Record<string, unknown>).__taskCompletionQueue = undefined;
+    });
+
     it("logs the payload via logger without throwing", async () => {
       const payload: TaskCompletionPayload = {
         taskId: "task1",
         taskTitle: "Test Task",
         status: "COMPLETED",
         executionId: "exec1",
+        workspaceId: "ws1",
       };
 
       await expect(dispatchTaskCompletionEvent(payload)).resolves.not.toThrow();
@@ -182,6 +188,52 @@ describe("onboarding-actions", () => {
         "Task completion event dispatched",
         expect.objectContaining({ taskId: "task1", taskTitle: "Test Task", status: "COMPLETED" })
       );
+    });
+
+    it("pushes payload to globalThis.__taskCompletionQueue", async () => {
+      const payload: TaskCompletionPayload = {
+        taskId: "task1",
+        taskTitle: "Test Task",
+        status: "COMPLETED",
+        executionId: "exec1",
+        workspaceId: "ws1",
+      };
+
+      await dispatchTaskCompletionEvent(payload);
+
+      const queue = (globalThis as Record<string, unknown>).__taskCompletionQueue as TaskCompletionPayload[];
+      expect(queue).toBeDefined();
+      expect(queue).toHaveLength(1);
+      expect(queue[0]).toEqual(payload);
+    });
+
+    it("caps queue at 50 entries (splices oldest)", async () => {
+      // Pre-fill with 50 entries
+      const initialQueue: TaskCompletionPayload[] = Array.from({ length: 50 }, (_, i) => ({
+        taskId: `task-old-${i}`,
+        taskTitle: `Old Task ${i}`,
+        status: "COMPLETED" as const,
+        executionId: `exec-old-${i}`,
+        workspaceId: "ws1",
+      }));
+      (globalThis as Record<string, unknown>).__taskCompletionQueue = initialQueue;
+
+      const newPayload: TaskCompletionPayload = {
+        taskId: "task-new",
+        taskTitle: "New Task",
+        status: "COMPLETED",
+        executionId: "exec-new",
+        workspaceId: "ws1",
+      };
+
+      await dispatchTaskCompletionEvent(newPayload);
+
+      const queue = (globalThis as Record<string, unknown>).__taskCompletionQueue as TaskCompletionPayload[];
+      expect(queue).toHaveLength(50);
+      // Newest entry should be at the end
+      expect(queue[queue.length - 1]).toEqual(newPayload);
+      // Oldest entry should have been removed
+      expect(queue[0].taskId).toBe("task-old-1");
     });
 
     it("swallows errors silently (best-effort)", async () => {
@@ -195,6 +247,7 @@ describe("onboarding-actions", () => {
         taskTitle: "Failing Task",
         status: "FAILED",
         executionId: "exec2",
+        workspaceId: "ws2",
       };
 
       await expect(dispatchTaskCompletionEvent(payload)).resolves.not.toThrow();
