@@ -29,16 +29,9 @@ const TOUR_STEPS: TourStep[] = [
     waitForTarget: true,
   },
   {
-    target: "create-task",
+    target: "open-assistant",
     titleKey: "tour.step3.title",
     descKey: "tour.step3.desc",
-    placement: "bottom",
-    waitForTarget: true,
-  },
-  {
-    target: "open-assistant",
-    titleKey: "tour.step4.title",
-    descKey: "tour.step4.desc",
     placement: "bottom",
   },
 ];
@@ -55,6 +48,11 @@ export function GuidedTour({ onComplete }: GuidedTourProps) {
   const observerRef = useRef<MutationObserver | null>(null);
 
   const step = TOUR_STEPS[currentStep];
+
+  const handleComplete = useCallback(async () => {
+    await setConfigValue("onboarding.tourCompleted", true);
+    onComplete();
+  }, [onComplete]);
 
   const findTarget = useCallback(() => {
     if (!step) return null;
@@ -75,6 +73,8 @@ export function GuidedTour({ onComplete }: GuidedTourProps) {
   useEffect(() => {
     updatePosition();
 
+    let skipTimer: ReturnType<typeof setTimeout> | null = null;
+
     if (!visible && step?.waitForTarget) {
       observerRef.current = new MutationObserver(() => {
         const el = findTarget();
@@ -82,9 +82,25 @@ export function GuidedTour({ onComplete }: GuidedTourProps) {
           setTargetRect(el.getBoundingClientRect());
           setVisible(true);
           observerRef.current?.disconnect();
+          if (skipTimer) clearTimeout(skipTimer);
         }
       });
       observerRef.current.observe(document.body, { childList: true, subtree: true });
+
+      // Auto-skip after 5s if target never appears (user hasn't navigated there)
+      skipTimer = setTimeout(() => {
+        const el = findTarget();
+        if (!el) {
+          setCurrentStep((s) => {
+            const next = s + 1;
+            return next < TOUR_STEPS.length ? next : s;
+          });
+          // If it was the last step, complete the tour
+          if (currentStep >= TOUR_STEPS.length - 1) {
+            handleComplete();
+          }
+        }
+      }, 5000);
     }
 
     const handleResize = () => updatePosition();
@@ -93,10 +109,11 @@ export function GuidedTour({ onComplete }: GuidedTourProps) {
 
     return () => {
       observerRef.current?.disconnect();
+      if (skipTimer) clearTimeout(skipTimer);
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("scroll", handleResize, true);
     };
-  }, [currentStep, step, findTarget, updatePosition, visible]);
+  }, [currentStep, step, findTarget, updatePosition, visible, handleComplete]);
 
   // Re-position on any click (user may have navigated)
   useEffect(() => {
@@ -112,11 +129,6 @@ export function GuidedTour({ onComplete }: GuidedTourProps) {
       handleComplete();
     }
   }, [currentStep]);
-
-  const handleComplete = useCallback(async () => {
-    await setConfigValue("onboarding.tourCompleted", true);
-    onComplete();
-  }, [onComplete]);
 
   if (!step) return null;
 
