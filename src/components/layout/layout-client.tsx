@@ -21,15 +21,18 @@ interface CreateProjectData {
 
 interface LayoutClientProps {
   workspaces: Array<{ id: string; name: string; description: string | null; updatedAt: Date }>;
+  isFirstRun: boolean;
   children: React.ReactNode;
 }
 
 function LayoutInner({
   workspaces,
+  isFirstRun: _isFirstRun,
   children,
   handleCreateProject,
 }: {
   workspaces: LayoutClientProps["workspaces"];
+  isFirstRun: boolean;
   children: React.ReactNode;
   handleCreateProject: (data: CreateProjectData) => Promise<{ id: string } | void>;
 }) {
@@ -109,7 +112,7 @@ function LayoutInner({
   );
 }
 
-export function LayoutClient({ workspaces, children }: LayoutClientProps) {
+export function LayoutClient({ workspaces, isFirstRun, children }: LayoutClientProps) {
   const router = useRouter();
   const pathname = usePathname();
   const activeWorkspaceId = pathname.split("/workspaces/")[1]?.split("/")[0];
@@ -132,7 +135,7 @@ export function LayoutClient({ workspaces, children }: LayoutClientProps) {
   return (
     <AssistantProvider>
       <TerminalPortalProvider>
-        <LayoutInner workspaces={workspaces} handleCreateProject={handleCreateProject}>
+        <LayoutInner workspaces={workspaces} isFirstRun={isFirstRun} handleCreateProject={handleCreateProject}>
           {children}
         </LayoutInner>
       </TerminalPortalProvider>
