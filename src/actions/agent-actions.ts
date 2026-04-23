@@ -224,10 +224,16 @@ export async function resumePtyExecution(
   });
   revalidatePath("/workspaces");
 
+  const usernameVal = await readConfigValue<string>("onboarding.username", "");
+
   const claudeArgs: string[] = [
     "--resume", previousSessionId,
     ...profileBaseArgs,
   ];
+
+  if (usernameVal) {
+    claudeArgs.push("--append-system-prompt", `The user's name is ${usernameVal}.`);
+  }
 
   createSession(
     taskId,
@@ -351,11 +357,17 @@ export async function continueLatestPtyExecution(
   });
   revalidatePath("/workspaces");
 
+  const usernameVal = await readConfigValue<string>("onboarding.username", "");
+
   // Use --continue flag (no sessionId needed)
   const claudeArgs: string[] = [
     "--continue",
     ...profileBaseArgs,
   ];
+
+  if (usernameVal) {
+    claudeArgs.push("--append-system-prompt", `The user's name is ${usernameVal}.`);
+  }
 
   createSession(
     taskId,
@@ -583,6 +595,10 @@ export async function startPtyExecution(
     const { readFile } = await import("fs/promises");
     const promptContent = await readFile(instructionsFile, "utf-8");
     claudeArgs.push("--append-system-prompt", promptContent);
+  }
+  const usernameVal = await readConfigValue<string>("onboarding.username", "");
+  if (usernameVal) {
+    claudeArgs.push("--append-system-prompt", `The user's name is ${usernameVal}.`);
   }
   claudeArgs.push(fullPrompt);
 

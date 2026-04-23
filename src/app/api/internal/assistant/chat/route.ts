@@ -3,6 +3,7 @@ import { execFileSync } from "child_process";
 import { requireLocalhost } from "@/lib/internal-api-guard";
 import { buildMultimodalPrompt } from "@/lib/build-multimodal-prompt";
 import { getAssistantCacheRoot } from "@/lib/file-utils";
+import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -98,8 +99,19 @@ export async function POST(request: NextRequest) {
           (options as Record<string, unknown>).resume = body.sessionId;
         }
 
+        // Prepend username identity context on first turn (no sessionId) so AI can address user by name.
+        const usernameRow = await db.systemConfig.findUnique({ where: { key: "onboarding.username" } });
+        let storedUsername: string | null = null;
+        try {
+          const parsed = usernameRow ? JSON.parse(usernameRow.value) : null;
+          if (typeof parsed === "string" && parsed.length > 0) storedUsername = parsed;
+        } catch { /* ignore parse errors */ }
+        const identityPrefix = storedUsername && !body.sessionId
+          ? `[Context: The user's name is ${storedUsername}.]\n\n`
+          : "";
+
         // Prepend /tower to every message to load the Tower skill into context.
-        const prompt = `/tower ${body.message}`;
+        const prompt = `${identityPrefix}/tower ${body.message}`;
 
         // Build multimodal prompt with image paths if images attached (AI-01)
         const finalPrompt = hasImages
