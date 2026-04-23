@@ -108,7 +108,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [displayMode, setDisplayMode] = useState<"sidebar" | "dialog">("sidebar");
-  const [communicationMode, setCommunicationMode] = useState<"terminal" | "chat">("terminal");
+  const [communicationMode, setCommunicationMode] = useState<"terminal" | "chat">("chat");
   const [worktreePath, setWorktreePath] = useState<string | null>(null);
 
   // Chat state — lives here so it persists across route changes
@@ -133,7 +133,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const refreshConfig = useCallback(async () => {
     const [dm, cm] = await Promise.all([
       getConfigValue<string>("assistant.displayMode", "sidebar"),
-      getConfigValue<string>("assistant.communicationMode", "terminal"),
+      getConfigValue<string>("assistant.communicationMode", "chat"),
     ]);
     setDisplayMode(dm === "dialog" ? "dialog" : "sidebar");
     setCommunicationMode(cm === "chat" ? "chat" : "terminal");
@@ -226,7 +226,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     setIsStarting(true);
     try {
       await refreshConfig();
-      const latestCommMode = await getConfigValue<string>("assistant.communicationMode", "terminal");
+      const latestCommMode = await getConfigValue<string>("assistant.communicationMode", "chat");
       if (latestCommMode === "chat") {
         setIsOpen(true);
         return;

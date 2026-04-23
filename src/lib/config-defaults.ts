@@ -92,7 +92,7 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     label: "Assistant Display Mode",
   },
   "assistant.communicationMode": {
-    defaultValue: "terminal",
+    defaultValue: "chat",
     type: "string",
     label: "Assistant Communication Mode",
   },

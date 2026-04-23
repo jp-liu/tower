@@ -23,8 +23,8 @@ export function GeneralConfig() {
     getConfigValue<string>("terminal.app", "Terminal").then(setTerminalApp);
     getConfigValue<number>("terminal.wsPort", 3001).then(setWsPort);
     getConfigValue<number>("terminal.idleTimeoutSec", 180).then(setIdleTimeout);
-    getConfigValue<string>("assistant.communicationMode", "terminal").then((v) =>
-      setCommMode(v === "chat" ? "chat" : "terminal")
+    getConfigValue<string>("assistant.communicationMode", "chat").then((v) =>
+      setCommMode(v === "terminal" ? "terminal" : "chat")
     );
   }, []);
 
