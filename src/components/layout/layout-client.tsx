@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { AppSidebar } from "./app-sidebar";
 import { TopBar } from "./top-bar";
@@ -9,6 +10,9 @@ import { createProject, createWorkspace } from "@/actions/workspace-actions";
 import { AssistantProvider, useAssistant } from "@/components/assistant/assistant-provider";
 import { AssistantPanel } from "@/components/assistant/assistant-panel";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { NotificationPermissionBanner } from "@/components/notifications/notification-permission-banner";
+import { useNotificationListener } from "@/components/notifications/use-notification-listener";
+import { getConfigValue } from "@/actions/config-actions";
 
 interface CreateProjectData {
   name: string;
@@ -38,6 +42,12 @@ function LayoutInner({
 }) {
   const pathname = usePathname();
   const { isOpen, displayMode, closeAssistant } = useAssistant();
+
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  useEffect(() => {
+    getConfigValue<boolean>("notification.enabled", true).then(setNotificationsEnabled);
+  }, []);
+  useNotificationListener(notificationsEnabled);
 
   const isTaskDetailPage = /\/workspaces\/[^/]+\/tasks\/[^/]+/.test(pathname);
   const isSubPage = /\/workspaces\/[^/]+\/(notes|assets|archive)/.test(pathname);
@@ -75,6 +85,7 @@ function LayoutInner({
   if (isTaskDetailPage || isSubPage) {
     return (
       <>
+        <NotificationPermissionBanner />
         <div className="flex h-screen overflow-hidden">
           <div className="flex flex-1 flex-col overflow-hidden">
             <TopBar onCreateProject={handleCreateProject} />
@@ -94,6 +105,7 @@ function LayoutInner({
 
   return (
     <>
+      <NotificationPermissionBanner />
       <div className="flex h-screen overflow-hidden">
         <AppSidebar workspaces={workspaces} />
         <div className="flex flex-1 flex-col overflow-hidden">
