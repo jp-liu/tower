@@ -13,7 +13,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Switch } from "@/components/ui/switch";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 import { resolveGitLocalPath } from "@/actions/config-actions";
@@ -207,7 +209,7 @@ export function ImportProjectDialog({
   };
 
   const canMigrate = migrateEnabled && targetPath && !isSamePath && !migrating;
-  const isConfirmDisabled = !projectName.trim() || !localPath.trim() || migrating || (migrateEnabled && !!safetyWarning);
+  const isConfirmDisabled = !projectName.trim() || !localPath.trim() || migrating || isAnalyzing || (migrateEnabled && !!safetyWarning);
 
   return (
     <>
@@ -267,22 +269,10 @@ export function ImportProjectDialog({
                     <span className="text-xs font-medium">{t("project.migrate")}</span>
                     <p className="text-[10px] text-muted-foreground mt-0.5">{t("project.migrateHint")}</p>
                   </div>
-                  <Button
-                    variant="ghost"
-                    role="switch"
-                    aria-checked={migrateEnabled}
-                    onClick={() => handleMigrateToggle(!migrateEnabled)}
-                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent p-0 transition-colors duration-200 ${
-                      migrateEnabled ? "bg-primary" : "bg-muted"
-                    }`}
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
-                        migrateEnabled ? "translate-x-4" : "translate-x-0"
-                      }`}
-                    />
-                  </Button>
+                  <Switch
+                    checked={migrateEnabled}
+                    onCheckedChange={(checked) => handleMigrateToggle(checked)}
+                  />
                 </div>
 
                 {migrateEnabled && (
@@ -385,15 +375,15 @@ export function ImportProjectDialog({
                     )}
                     {isAnalyzing ? t("project.analyzing") : t("project.genDesc")}
                   </TooltipTrigger>
-                  <TooltipContent>{t("project.genDescDisabledTooltip")}</TooltipContent>
+                  {!localPath && <TooltipContent>{t("project.genDescDisabledTooltip")}</TooltipContent>}
                 </Tooltip>
               </div>
-              <textarea
+              <Textarea
                 placeholder={t("project.descPlaceholder")}
                 value={projectDesc}
                 onChange={(e) => setProjectDesc(e.target.value)}
                 rows={3}
-                className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 resize-none max-h-[200px] overflow-y-auto"
+                className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring resize-none max-h-[200px] overflow-y-auto"
               />
             </div>
           </div>

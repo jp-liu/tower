@@ -164,7 +164,7 @@ export function FolderBrowserDialog({
                 value={filterText}
                 onChange={(e) => setFilterText(e.target.value)}
                 placeholder="Filter folders and files..."
-                className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-3 text-sm text-foreground placeholder-muted-foreground outline-none focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20"
+                className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-3 text-sm text-foreground placeholder-muted-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
               />
             </div>
           </div>
@@ -244,7 +244,7 @@ export function FolderBrowserDialog({
                 {folder.isGit ? (
                   <FolderGit2 className="h-4 w-4 text-emerald-400 shrink-0" />
                 ) : (
-                  <Folder className="h-4 w-4 text-amber-400/70 shrink-0" />
+                  <Folder className="h-4 w-4 text-primary/70 shrink-0" />
                 )}
                 <span className="flex-1 text-sm text-foreground truncate">{folder.name}</span>
                 {folder.isGit && (
@@ -261,7 +261,7 @@ export function FolderBrowserDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
             <Button
               onClick={handleSelectCurrent}
-              className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
+              className="bg-primary/10 text-primary ring-1 ring-primary/20 hover:bg-primary/15"
             >
               {t("folder.selectPath")}
             </Button>

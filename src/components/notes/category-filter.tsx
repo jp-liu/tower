@@ -19,7 +19,7 @@ export function CategoryFilter({ active, onSelect }: CategoryFilterProps) {
         className={cn(
           "rounded-lg px-3 py-1 text-xs font-medium transition-colors",
           active === "all"
-            ? "bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/20"
+            ? "bg-primary/15 text-primary ring-1 ring-primary/20"
             : "text-muted-foreground hover:bg-accent"
         )}
       >
@@ -32,7 +32,7 @@ export function CategoryFilter({ active, onSelect }: CategoryFilterProps) {
           className={cn(
             "rounded-lg px-3 py-1 text-xs font-medium transition-colors",
             active === cat
-              ? "bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/20"
+              ? "bg-primary/15 text-primary ring-1 ring-primary/20"
               : "text-muted-foreground hover:bg-accent"
           )}
         >

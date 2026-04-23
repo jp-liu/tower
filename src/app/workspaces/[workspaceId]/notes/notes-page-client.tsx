@@ -211,7 +211,7 @@ export function NotesPageClient({
         {!showForm && (
           <Button
             onClick={handleNewNote}
-            className="ml-auto bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
+            className="ml-auto bg-primary/10 text-primary ring-1 ring-primary/20 hover:bg-primary/15"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>{t("notes.newNote")}</span>
@@ -284,7 +284,7 @@ export function NotesPageClient({
               value={formTitle}
               onChange={(e) => setFormTitle(e.target.value)}
               placeholder={t("notes.titlePlaceholder")}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             />
 
             <NoteEditor value={formContent} onChange={setFormContent} />
@@ -299,7 +299,7 @@ export function NotesPageClient({
               <Button
                 onClick={editingNote ? handleUpdate : handleCreate}
                 disabled={!formTitle.trim() || (!editingNote && !formProjectId)}
-                className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
+                className="bg-primary/10 text-primary ring-1 ring-primary/20 hover:bg-primary/15"
               >
                 {t("notes.save")}
               </Button>

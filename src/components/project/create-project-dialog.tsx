@@ -12,6 +12,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 import { toCloneUrl, parseGitUrl } from "@/lib/git-url";
@@ -275,12 +276,12 @@ export function CreateProjectDialog({
                   <TooltipContent>{t("project.genDescDisabledTooltip")}</TooltipContent>
                 </Tooltip>
               </div>
-              <textarea
+              <Textarea
                 placeholder={t("project.descPlaceholder")}
                 value={projectDesc}
                 onChange={(e) => setProjectDesc(e.target.value)}
                 rows={3}
-                className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 resize-none max-h-[200px] overflow-y-auto"
+                className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring resize-none max-h-[200px] overflow-y-auto"
               />
             </div>
           </div>

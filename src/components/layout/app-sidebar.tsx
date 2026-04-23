@@ -126,7 +126,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
             render={
               <button
                 onClick={toggleCollapsed}
-                className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/15 ring-1 ring-amber-500/25 transition-transform hover:scale-105"
+                className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/20 transition-transform hover:scale-105"
               />
             }
           >
@@ -267,7 +267,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
 
       {/* Workspace List */}
       <ScrollArea className="relative z-10 mt-2 flex-1 min-h-0">
-        <div className="px-2">
+        <div className="px-2 py-1">
         {workspaces.map((ws) => {
           const isActive = activeWorkspaceId === ws.id;
           const icon = getIcon(ws);
@@ -276,7 +276,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
             <div
               key={ws.id}
               className={`group relative flex items-center rounded-lg transition-all ${
-                isActive ? "bg-accent ring-1 ring-amber-500/15" : "hover:bg-accent/60"
+                isActive ? "bg-accent ring-1 ring-primary/15" : "hover:bg-accent/60"
               }`}
             >
               <button
@@ -458,7 +458,7 @@ function WorkspaceDialog({
                   onClick={() => onIconChange(emoji)}
                   className={`flex h-10 w-10 items-center justify-center rounded-lg text-lg transition-all ${
                     icon === emoji
-                      ? "bg-amber-500/15 ring-2 ring-amber-500/30 scale-110"
+                      ? "bg-primary/15 ring-2 ring-primary/30 scale-110"
                       : "bg-muted hover:bg-accent"
                   }`}
                 >
@@ -473,7 +473,7 @@ function WorkspaceDialog({
           <Button
             onClick={onSubmit}
             disabled={!name.trim()}
-            className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
+            className="bg-primary/10 text-primary ring-1 ring-primary/20 hover:bg-primary/15"
           >
             {submitLabel}
           </Button>
@@ -569,7 +569,7 @@ function LabelManagerDialog({
                 size="sm"
                 onClick={handleAdd}
                 disabled={!newName.trim()}
-                className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
+                className="bg-primary/10 text-primary ring-1 ring-primary/20 hover:bg-primary/15"
               >
                 {t("label.add")}
               </Button>

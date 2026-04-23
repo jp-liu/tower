@@ -38,7 +38,7 @@ export function BoardColumn({
   return (
     <div
       className={`flex w-0 min-w-[220px] flex-1 flex-col min-h-0 border-r border-border/50 last:border-r-0 transition-colors ${
-        isOver ? "bg-amber-500/5" : ""
+        isOver ? "bg-primary/[0.06]" : ""
       }`}
     >
       {/* Column Header */}

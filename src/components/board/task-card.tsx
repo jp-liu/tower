@@ -49,7 +49,7 @@ export function TaskCard({ task, onClick, onEdit, onDelete, onTogglePin, onConte
       style={style}
       {...attributes}
       {...listeners}
-      className="group cursor-grab rounded-lg border border-border bg-card p-3 transition-all hover:border-amber-500/20 hover:bg-accent/50 active:cursor-grabbing"
+      className="group cursor-grab rounded-lg border border-border bg-card p-3 transition-all hover:border-primary/20 hover:bg-accent/50 active:cursor-grabbing"
       onClick={onClick}
       onContextMenu={(e) => {
         e.preventDefault();
@@ -66,7 +66,7 @@ export function TaskCard({ task, onClick, onEdit, onDelete, onTogglePin, onConte
             size="icon-xs"
             className={`transition-all ${
               task.pinned
-                ? "text-amber-400 opacity-100"
+                ? "text-primary opacity-100"
                 : "text-muted-foreground opacity-0 group-hover:opacity-100"
             }`}
             onClick={(e) => { e.stopPropagation(); onTogglePin?.(task.id); }}

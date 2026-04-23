@@ -26,8 +26,8 @@ export function BoardStats({ totalTasks, runningTasks }: BoardStatsProps) {
 
       <div className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-amber-500/10 p-2 ring-1 ring-amber-500/20">
-            <Zap className="h-4 w-4 text-amber-400" />
+          <div className="rounded-lg bg-primary/10 p-2 ring-1 ring-primary/20">
+            <Zap className="h-4 w-4 text-primary" />
           </div>
           <div>
             <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{t("board.running")}</p>

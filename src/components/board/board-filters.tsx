@@ -31,7 +31,7 @@ export function BoardFilters({
       <Button
         data-tour="create-task"
         variant="outline"
-        className="ml-auto gap-1.5 border-border text-xs text-muted-foreground hover:border-amber-500/30 hover:text-amber-300"
+        className="ml-auto gap-1.5 border-border text-xs text-muted-foreground hover:border-primary/30 hover:text-primary"
         onClick={onCreateTask}
       >
         <Plus className="h-3.5 w-3.5" />

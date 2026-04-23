@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Search, FileText, FolderKanban, GitBranch, StickyNote, Package2, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { globalSearch } from "@/actions/search-actions";
 import type { SearchResult, SearchResultType, SearchCategory } from "@/lib/search";
@@ -125,9 +126,9 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
             className="flex-1 bg-transparent px-3 py-3.5 text-sm text-foreground placeholder-muted-foreground outline-none"
           />
           {query && (
-            <button onClick={() => { setQuery(""); setResults([]); }} className="rounded p-1 text-muted-foreground hover:text-foreground">
+            <Button variant="ghost" size="icon" onClick={() => { setQuery(""); setResults([]); }} className="text-muted-foreground">
               <X className="h-3.5 w-3.5" />
-            </button>
+            </Button>
           )}
         </div>
 
@@ -141,7 +142,7 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
                 onClick={() => setCategory(cat.id)}
                 className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
                   category === cat.id
-                    ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20"
+                    ? "bg-primary/10 text-primary ring-1 ring-primary/20"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 }`}
               >

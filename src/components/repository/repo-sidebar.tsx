@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { updateProject, createProject, getRecentLocalProjects } from "@/actions/workspace-actions";
 import { analyzeProjectDirectory } from "@/actions/project-actions";
 import { useRouter } from "next/navigation";
@@ -299,7 +300,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
                 </div>
                 <Button
                  
-                  className="mt-3 h-7 w-full gap-1.5 bg-amber-500/15 text-xs text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
+                  className="mt-3 h-7 w-full gap-1.5 bg-primary/10 text-xs text-primary ring-1 ring-primary/20 hover:bg-primary/15"
                   onClick={handleInitGit}
                   disabled={initLoading}
                 >
@@ -406,13 +407,13 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
                       key={rp.id}
                       onClick={() => { if (rp.id !== project.id) navigateToProject(rp.workspaceId, rp.id); }}
                       className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
-                        rp.id === project.id ? "bg-amber-500/10 text-amber-300 cursor-default" : "hover:bg-accent cursor-pointer"
+                        rp.id === project.id ? "bg-primary/10 text-primary cursor-default" : "hover:bg-accent cursor-pointer"
                       }`}
                     >
                       {rp.type === "GIT" ? (
                         <GitBranch className="h-3 w-3 shrink-0 text-emerald-400" />
                       ) : (
-                        <FolderOpen className="h-3 w-3 shrink-0 text-amber-400/70" />
+                        <FolderOpen className="h-3 w-3 shrink-0 text-primary/70" />
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-medium text-foreground">{rp.name}</p>
@@ -475,11 +476,11 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
                   {isAnalyzing ? t("project.analyzing") : t("project.genDesc")}
                 </Button>
               </div>
-              <textarea
+              <Textarea
                 value={editDesc}
                 onChange={(e) => setEditDesc(e.target.value)}
                 rows={2}
-                className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 resize-none max-h-[200px] overflow-y-auto"
+                className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring resize-none max-h-[200px] overflow-y-auto"
               />
             </div>
             <div>
@@ -502,7 +503,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
             <Button
               onClick={handleSaveProject}
               disabled={!editName.trim()}
-              className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
+              className="bg-primary/10 text-primary ring-1 ring-primary/20 hover:bg-primary/15"
             >
               {t("common.save")}
             </Button>
@@ -570,12 +571,12 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">{t("project.description")}</label>
-              <textarea
+              <Textarea
                 value={browseCreateDesc}
                 onChange={(e) => setBrowseCreateDesc(e.target.value)}
                 placeholder={t("project.descPlaceholder")}
                 rows={2}
-                className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 resize-none"
+                className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring resize-none"
               />
             </div>
           </div>
@@ -584,7 +585,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
             <Button
               onClick={handleBrowseCreate}
               disabled={!browseCreateName.trim() || browseCreateLoading}
-              className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
+              className="bg-primary/10 text-primary ring-1 ring-primary/20 hover:bg-primary/15"
             >
               {browseCreateLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
               {t("common.create")}
@@ -676,7 +677,7 @@ function BranchDropdown({
                   onChange={(e) => setFilter(e.target.value)}
                   placeholder="Filter..."
                   autoFocus
-                  className="h-7 w-full rounded-md bg-muted/50 pl-7 pr-2 text-xs text-foreground placeholder-muted-foreground outline-none focus:ring-1 focus:ring-amber-500/20"
+                  className="h-7 w-full rounded-md bg-muted/50 pl-7 pr-2 text-xs text-foreground placeholder-muted-foreground outline-none focus:ring-1 focus:ring-ring"
                 />
               </div>
             </div>
@@ -819,7 +820,7 @@ function CreateBranchDialog({
                         onChange={(e) => setBaseFilter(e.target.value)}
                         placeholder="Filter..."
                         autoFocus
-                        className="h-7 w-full rounded-md bg-muted/50 pl-7 pr-2 text-xs text-foreground placeholder-muted-foreground outline-none focus:ring-1 focus:ring-amber-500/20"
+                        className="h-7 w-full rounded-md bg-muted/50 pl-7 pr-2 text-xs text-foreground placeholder-muted-foreground outline-none focus:ring-1 focus:ring-ring"
                       />
                     </div>
                   </div>
@@ -846,12 +847,12 @@ function CreateBranchDialog({
           {/* Description */}
           <div>
             <label className="text-xs font-medium text-muted-foreground">{t("git.branchDesc")}</label>
-            <textarea
+            <Textarea
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
               placeholder={t("git.branchDescPlaceholder")}
               rows={2}
-              className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 resize-none"
+              className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring resize-none"
             />
           </div>
         </div>
@@ -860,7 +861,7 @@ function CreateBranchDialog({
           <Button
             onClick={handleCreate}
             disabled={!name.trim() || loading}
-            className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
+            className="bg-primary/10 text-primary ring-1 ring-primary/20 hover:bg-primary/15"
           >
             {loading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
             {t("common.create")}

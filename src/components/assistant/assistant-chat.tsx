@@ -133,14 +133,15 @@ export function AssistantChat() {
                   { icon: Search, label: t("assistant.suggestion.checkProgress") },
                   { icon: TrendingUp, label: t("assistant.suggestion.dailySummary") },
                 ].map(({ icon: Icon, label }) => (
-                  <button
+                  <Button
                     key={label}
-                    className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground text-left"
+                    variant="outline"
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground text-left justify-start h-auto"
                     onClick={() => { setInputValue(label); inputRef.current?.focus(); }}
                   >
                     <Icon className="size-3.5 shrink-0" />
                     {label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -189,7 +190,7 @@ export function AssistantChat() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 shrink-0 text-muted-foreground transition-colors hover:bg-amber-500/15 hover:text-amber-400"
+              className="h-8 w-8 shrink-0 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
               onClick={handleSend}
               disabled={isSendDisabled}
               aria-label={t("assistant.sendLabel")}

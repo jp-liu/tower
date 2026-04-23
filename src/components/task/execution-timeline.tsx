@@ -171,7 +171,7 @@ export function ExecutionTimeline({ executions, onResume, onContinueLatest }: Ex
                 <div className="mt-2">
                   <button
                     onClick={() => setInsightExpandedId(insightExpandedId === exec.id ? null : exec.id)}
-                    className="flex items-center gap-1.5 text-xs text-amber-300/90 hover:text-amber-200 transition-colors"
+                    className="flex items-center gap-1.5 text-xs text-primary/90 hover:text-primary transition-colors"
                   >
                     <Lightbulb className="h-3.5 w-3.5" />
                     <span className="font-medium">{t("execution.insight")}:</span>
@@ -179,7 +179,7 @@ export function ExecutionTimeline({ executions, onResume, onContinueLatest }: Ex
                     {insightExpandedId === exec.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                   </button>
                   {insightExpandedId === exec.id && (
-                    <div className="mt-2 rounded-md bg-amber-500/5 border border-amber-500/10 p-3 text-xs text-foreground/80 whitespace-pre-wrap">
+                    <div className="mt-2 rounded-md bg-primary/[0.06] border border-primary/10 p-3 text-xs text-foreground/80 whitespace-pre-wrap">
                       {exec.insightNote.content}
                     </div>
                   )}
@@ -191,7 +191,7 @@ export function ExecutionTimeline({ executions, onResume, onContinueLatest }: Ex
                   <Button
                     size="sm"
                     onClick={() => onResume(exec.sessionId!)}
-                    className="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20 hover:bg-amber-500/25"
+                    className="bg-primary/10 text-primary ring-1 ring-primary/20 hover:bg-primary/15"
                   >
                     <PlayCircle className="h-3.5 w-3.5" />
                     {t("execution.resume")}

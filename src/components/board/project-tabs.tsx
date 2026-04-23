@@ -54,7 +54,7 @@ export function ProjectTabs({ projects, activeProjectId, onSelect }: ProjectTabs
 
       <div
         ref={scrollRef}
-        className="flex items-center gap-1.5 overflow-x-auto scrollbar-none px-1"
+        className="flex items-center gap-1.5 overflow-x-auto scrollbar-none px-1 py-1"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         {projects.map((p) => {

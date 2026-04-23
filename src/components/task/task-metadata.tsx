@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft, GitBranch, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatRelativeTime } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
@@ -29,16 +30,17 @@ export function TaskMetadata({
     <div className="border-b border-border px-4 py-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-          <span className="text-xs font-semibold text-amber-300">{t("taskDetail.title")}</span>
+          <Sparkles className="h-3.5 w-3.5 text-primary" />
+          <span className="text-xs font-semibold text-primary">{t("taskDetail.title")}</span>
         </div>
-        <button
+        <Button
+          variant="ghost"
           onClick={onBack}
-          className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground h-auto px-2 py-1"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           {t("taskDetail.back")}
-        </button>
+        </Button>
       </div>
 
       <h2 className="mt-2.5 text-lg font-bold tracking-tight text-foreground">{title}</h2>
