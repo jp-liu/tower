@@ -10,7 +10,7 @@ export interface GitPathRule {
   id: string;
   host: string;
   ownerMatch: string;        // exact owner, or "*" for any
-  localPathTemplate: string; // supports {owner} and {repo}
+  localPathTemplate: string; // supports {owner}; {repo} auto-appended
   priority: number;          // lower number = higher priority
 }
 
@@ -42,10 +42,13 @@ export function matchGitPathRule(url: string, rules: GitPathRule[]): string {
   for (const rule of sorted) {
     if (rule.host !== host) continue;
     if (rule.ownerMatch !== "*" && rule.ownerMatch !== owner) continue;
+    // {repo} is always auto-appended to the end — users only configure the base path
+    const base = rule.localPathTemplate
+      .replace("{owner}", owner)
+      .replace("{repo}", "")  // strip any legacy {repo} from old configs
+      .replace(/\/+$/, "");   // trim trailing slashes
     return expandHome(
-      rule.localPathTemplate
-        .replace("{owner}", owner)
-        .replace("{repo}", repo)
+      `${base}/${repo}`
     );
   }
   return "";
