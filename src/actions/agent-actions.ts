@@ -267,6 +267,7 @@ export async function resumePtyExecution(
         taskTitle: task.title,
         status: exitCode === 0 ? "COMPLETED" : "FAILED",
         executionId: execution.id,
+        workspaceId: task.project.workspaceId,
       });
 
       if (exitCode === 0) {
@@ -391,6 +392,7 @@ export async function continueLatestPtyExecution(
         taskTitle: task.title,
         status: exitCode === 0 ? "COMPLETED" : "FAILED",
         executionId: execution.id,
+        workspaceId: task.project.workspaceId,
       });
 
       if (exitCode === 0) {
@@ -640,6 +642,7 @@ export async function startPtyExecution(
         taskTitle: task.title,
         status: exitCode === 0 ? "COMPLETED" : "FAILED",
         executionId: execution.id,
+        workspaceId: task.project.workspaceId,
       });
 
       if (exitCode === 0) {

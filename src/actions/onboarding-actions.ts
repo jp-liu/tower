@@ -15,7 +15,11 @@ export interface TaskCompletionPayload {
   taskTitle: string;
   status: "COMPLETED" | "FAILED";
   executionId: string;
+  workspaceId: string;
 }
+
+// D-04: globalThis singleton — survives HMR/module re-evaluation in Next.js dev mode.
+const g = globalThis as typeof globalThis & { __taskCompletionQueue?: TaskCompletionPayload[] };
 
 const ONBOARDING_KEYS = ["onboarding.completed", "onboarding.lastStep"] as const;
 
@@ -85,6 +89,14 @@ export async function dispatchTaskCompletionEvent(
       status: payload.status,
       executionId: payload.executionId,
     });
+
+    // Push to globalThis queue for polling API route (Plan 01)
+    if (!g.__taskCompletionQueue) g.__taskCompletionQueue = [];
+    g.__taskCompletionQueue.push(payload);
+    // Cap queue at 50 entries — splice oldest if exceeded
+    if (g.__taskCompletionQueue.length > 50) {
+      g.__taskCompletionQueue.splice(0, g.__taskCompletionQueue.length - 50);
+    }
   } catch {
     // Best-effort: swallow errors silently
   }
