@@ -260,6 +260,15 @@ export async function resumePtyExecution(
       const { captureExecutionSummary } = await import("@/lib/execution-summary");
       await captureExecutionSummary(execution.id, taskId, exitCode, terminalBuffer, summaryPath);
 
+      // Dispatch task completion event for notification system (Phase 65)
+      const { dispatchTaskCompletionEvent } = await import("@/actions/onboarding-actions");
+      await dispatchTaskCompletionEvent({
+        taskId,
+        taskTitle: task.title,
+        status: exitCode === 0 ? "COMPLETED" : "FAILED",
+        executionId: execution.id,
+      });
+
       if (exitCode === 0) {
         await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW" } }).catch(() => {});
       }
@@ -374,6 +383,15 @@ export async function continueLatestPtyExecution(
       const summaryPath = latestExec?.worktreePath || task.project!.localPath;
       const { captureExecutionSummary } = await import("@/lib/execution-summary");
       await captureExecutionSummary(execution.id, taskId, exitCode, terminalBuffer, summaryPath);
+
+      // Dispatch task completion event for notification system (Phase 65)
+      const { dispatchTaskCompletionEvent } = await import("@/actions/onboarding-actions");
+      await dispatchTaskCompletionEvent({
+        taskId,
+        taskTitle: task.title,
+        status: exitCode === 0 ? "COMPLETED" : "FAILED",
+        executionId: execution.id,
+      });
 
       if (exitCode === 0) {
         await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW" } }).catch(() => {});
@@ -614,6 +632,15 @@ export async function startPtyExecution(
         terminalBuffer,
         summaryPath
       );
+
+      // Dispatch task completion event for notification system (Phase 65)
+      const { dispatchTaskCompletionEvent } = await import("@/actions/onboarding-actions");
+      await dispatchTaskCompletionEvent({
+        taskId,
+        taskTitle: task.title,
+        status: exitCode === 0 ? "COMPLETED" : "FAILED",
+        executionId: execution.id,
+      });
 
       if (exitCode === 0) {
         await db.task
