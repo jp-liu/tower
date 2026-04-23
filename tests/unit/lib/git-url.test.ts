@@ -142,7 +142,7 @@ describe("matchGitPathRule", () => {
   });
 
   describe("template interpolation", () => {
-    it("interpolates both {owner} and {repo} tokens", () => {
+    it("interpolates both {owner} and {repo} tokens (legacy format)", () => {
       const rules: GitPathRule[] = [
         makeRule({
           host: "github.com",
@@ -164,6 +164,69 @@ describe("matchGitPathRule", () => {
       ];
       const result = matchGitPathRule("https://github.com/anyone/test-repo", rules);
       expect(result).toBe(`${home}/project/f/test-repo`);
+    });
+
+    it("auto-appends repo name when template has no {repo}", () => {
+      const rules: GitPathRule[] = [
+        makeRule({
+          host: "github.com",
+          ownerMatch: "*",
+          localPathTemplate: "~/project",
+        }),
+      ];
+      const result = matchGitPathRule("https://github.com/jp-liu/tower", rules);
+      expect(result).toBe(`${home}/project/tower`);
+    });
+
+    it("auto-appends repo name with {owner} but no {repo}", () => {
+      const rules: GitPathRule[] = [
+        makeRule({
+          host: "github.com",
+          ownerMatch: "*",
+          localPathTemplate: "~/project/{owner}",
+        }),
+      ];
+      const result = matchGitPathRule("https://github.com/jp-liu/tower", rules);
+      expect(result).toBe(`${home}/project/jp-liu/tower`);
+    });
+
+    it("handles absolute path without ~ or {repo}", () => {
+      const rules: GitPathRule[] = [
+        makeRule({
+          host: "github.com",
+          ownerMatch: "*",
+          localPathTemplate: "/opt/code",
+        }),
+      ];
+      const result = matchGitPathRule("https://github.com/org/app", rules);
+      expect(result).toBe("/opt/code/app");
+    });
+
+    it("strips legacy {repo} without producing double slash", () => {
+      const rules: GitPathRule[] = [
+        makeRule({
+          host: "github.com",
+          ownerMatch: "*",
+          localPathTemplate: "~/project/{repo}",
+        }),
+      ];
+      const result = matchGitPathRule("https://github.com/owner/my-app", rules);
+      // {repo} stripped, trailing slash trimmed, then /my-app appended
+      expect(result).toBe(`${home}/project/my-app`);
+      expect(result).not.toContain("//");
+    });
+
+    it("handles trailing slash in template gracefully", () => {
+      const rules: GitPathRule[] = [
+        makeRule({
+          host: "github.com",
+          ownerMatch: "*",
+          localPathTemplate: "~/project/",
+        }),
+      ];
+      const result = matchGitPathRule("https://github.com/owner/repo-name", rules);
+      expect(result).toBe(`${home}/project/repo-name`);
+      expect(result).not.toContain("//");
     });
   });
 
