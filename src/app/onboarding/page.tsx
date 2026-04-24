@@ -395,15 +395,9 @@ export default function OnboardingPage() {
                   <div className="space-y-2 text-xs">
                     <div className="space-y-0.5">
                       <p className="text-muted-foreground">{t("onboarding.step3.exampleCase1")}</p>
-                      <p className="font-mono text-foreground/80">
-                        git@github.com:user/my-app.git → <span className="text-primary">~/project/my-app</span>
-                      </p>
                     </div>
                     <div className="space-y-0.5">
                       <p className="text-muted-foreground">{t("onboarding.step3.exampleCase2")}</p>
-                      <p className="font-mono text-foreground/80">
-                        git@gitlab.com:team/api.git → <span className="text-primary">~/work/api</span>
-                      </p>
                     </div>
                   </div>
                   <p className="text-[11px] text-muted-foreground/70">{t("onboarding.step3.exampleDesc")}</p>

@@ -39,17 +39,31 @@ export function matchGitPathRule(url: string, rules: GitPathRule[]): string {
     return a.priority - b.priority;
   });
 
+  // Full path = all segments joined (e.g. "EBG_jcjf/jiangsu/NJZSBM/enrollment-static")
+  const fullPath = pathSegments.join("/");
+
   for (const rule of sorted) {
     if (rule.host !== host) continue;
     if (rule.ownerMatch !== "*" && rule.ownerMatch !== owner) continue;
-    // {repo} is always auto-appended to the end — users only configure the base path
-    const base = rule.localPathTemplate
+
+    const tpl = rule.localPathTemplate;
+
+    // If template contains {path}, replace with full path (preserves subgroup structure)
+    if (tpl.includes("{path}")) {
+      const result = tpl
+        .replace("{path}", fullPath)
+        .replace("{owner}", owner)
+        .replace("{repo}", repo)
+        .replace(/\/+$/, "");
+      return expandHome(result);
+    }
+
+    // Default: auto-append repo name to base path
+    const base = tpl
       .replace("{owner}", owner)
-      .replace("{repo}", "")  // strip any legacy {repo} from old configs
-      .replace(/\/+$/, "");   // trim trailing slashes
-    return expandHome(
-      `${base}/${repo}`
-    );
+      .replace("{repo}", "")
+      .replace(/\/+$/, "");
+    return expandHome(`${base}/${repo}`);
   }
   return "";
 }
