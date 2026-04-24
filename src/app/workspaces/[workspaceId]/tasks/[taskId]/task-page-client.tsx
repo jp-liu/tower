@@ -285,7 +285,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
       {/* Left panel: Terminal — 35% default, 20% minimum */}
       <Panel defaultSize={35} minSize={20} className="flex flex-col border-r border-border bg-sidebar">
         {/* Header: back + breadcrumb + status + branch */}
-        <div className="border-b border-border px-4 py-3 min-h-[theme(spacing.20)]">
+        <div className="header-lg px-4 py-3">
           {/* Back button + breadcrumb: workspace / project / task */}
           <div className="flex items-center gap-2">
             <Link
@@ -434,7 +434,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           return (
         <Tabs value={activeTab ?? defaultTab} onValueChange={setActiveTab} key={defaultTab} className="flex h-full flex-col gap-0">
           {/* Tab bar — segmented control style matching Settings page */}
-          <div className="flex shrink-0 items-center border-b border-border px-3 py-3 min-h-[theme(spacing.20)]">
+          <div className="header-lg flex shrink-0 items-center px-3 py-3">
             <TabsList className="h-auto border border-border">
               {!isWorktreeDone && (
                 <TabsTrigger value="files" className="data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
@@ -462,7 +462,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
               <div className="w-60 flex-none border-r border-border overflow-hidden flex flex-col">
                 <Tabs defaultValue="filetree" className="flex h-full flex-col gap-0">
                   {/* Sub-tab bar */}
-                  <div className="flex shrink-0 border-b border-border px-2 py-1.5">
+                  <div className="header-xs flex shrink-0 px-2 py-1.5">
                     <TabsList className="h-auto border border-border w-full">
                       <TabsTrigger value="filetree" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
                         <FolderTree className="h-3 w-3" />

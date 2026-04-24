@@ -47,6 +47,47 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* ─── Header Height Tokens ───
+   * Standardized header/toolbar heights for visual alignment.
+   * Rule: panels on the same horizontal line MUST use the same level.
+   *
+   * Level 1 (xs): Inner sub-tabs (Files/Search/Git)
+   * Level 2 (sm): Action bars, simple toolbars
+   * Level 3 (md): Main tab bars (Files/Changes/Preview), page nav
+   * Level 4 (lg): Page headers (title + status, two lines)
+   * Level 5 (xl): Page headers with actions (title + status + buttons)
+   */
+  --header-xs: 36px;
+  --header-sm: 44px;
+  --header-md: 56px;
+  --header-lg: 72px;
+  --header-xl: 88px;
+}
+
+/* ─── Header Height Utilities ───
+ * Usage: class="header-md" sets min-height + padding + border-b.
+ * Use min-h-header-* for min-height only (e.g. min-h-header-md).
+ */
+@utility header-xs {
+  min-height: var(--header-xs);
+  border-bottom: 1px solid var(--border);
+}
+@utility header-sm {
+  min-height: var(--header-sm);
+  border-bottom: 1px solid var(--border);
+}
+@utility header-md {
+  min-height: var(--header-md);
+  border-bottom: 1px solid var(--border);
+}
+@utility header-lg {
+  min-height: var(--header-lg);
+  border-bottom: 1px solid var(--border);
+}
+@utility header-xl {
+  min-height: var(--header-xl);
+  border-bottom: 1px solid var(--border);
 }
 
 /* ─── shadcn Default Light ─── */

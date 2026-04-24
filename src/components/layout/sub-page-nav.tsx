@@ -22,7 +22,7 @@ export function SubPageNav({ workspaceId }: SubPageNavProps) {
   const currentTab = tabs.find((tab) => pathname.includes(`/${tab.key}`))?.key;
 
   return (
-    <div className="flex items-center gap-1 border-b border-border px-4 py-2">
+    <div className="header-sm flex items-center gap-1 px-4 py-2">
       <Link
         href={`/workspaces/${workspaceId}`}
         className="mr-2 flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"

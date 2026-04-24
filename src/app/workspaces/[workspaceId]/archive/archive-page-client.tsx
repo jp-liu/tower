@@ -120,7 +120,7 @@ export function ArchivePageClient({
       <SubPageNav workspaceId={wsId} />
 
       {/* Action bar */}
-      <div className="flex items-center gap-3 border-b border-border px-6 py-2">
+      <div className="header-sm flex items-center gap-3 px-6 py-2">
         <Select value={wsId} onValueChange={(v) => v && handleWsChange(v)}>
           <SelectTrigger className="h-8 w-auto min-w-[120px]">
             <span className="truncate">{ws?.name ?? wsId}</span>

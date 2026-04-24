@@ -45,7 +45,7 @@ export function ProjectWorkbenchClient({
   return (
     <div className="flex h-full flex-col bg-background">
       {/* Header */}
-      <div className="flex items-center gap-3 border-b border-border px-4 py-3 shrink-0">
+      <div className="header-md flex items-center gap-3 px-4 py-3 shrink-0">
         <Link
           href={`/workspaces/${workspaceId}?projectId=${project.id}`}
           className="text-muted-foreground hover:text-foreground transition-colors"
@@ -64,7 +64,7 @@ export function ProjectWorkbenchClient({
         {/* Editor panel */}
         <Panel defaultSize={100} minSize={30} className="flex flex-col">
           <Tabs defaultValue="files" className="flex h-full flex-col gap-0">
-            <div className="flex shrink-0 items-center border-b border-border px-3 py-3">
+            <div className="header-md flex shrink-0 items-center px-3 py-3">
               <TabsList className="h-auto border border-border">
                 <TabsTrigger value="files" className="data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
                   <FolderTree className="h-3.5 w-3.5" />
@@ -85,7 +85,7 @@ export function ProjectWorkbenchClient({
                 {/* Left: sub-tabs */}
                 <div className="w-60 flex-none border-r border-border overflow-hidden flex flex-col">
                   <Tabs defaultValue="filetree" className="flex h-full flex-col gap-0">
-                    <div className="flex shrink-0 border-b border-border px-2 py-1.5">
+                    <div className="header-xs flex shrink-0 px-2 py-1.5">
                       <TabsList className="h-auto border border-border w-full">
                         <TabsTrigger value="filetree" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
                           <FolderTree className="h-3 w-3" />

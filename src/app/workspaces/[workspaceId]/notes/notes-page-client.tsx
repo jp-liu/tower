@@ -181,7 +181,7 @@ export function NotesPageClient({
       <SubPageNav workspaceId={listWsId} />
 
       {/* Action bar */}
-      <div className="flex items-center gap-3 border-b border-border px-6 py-2">
+      <div className="header-sm flex items-center gap-3 px-6 py-2">
         <Select value={listWsId} onValueChange={(v) => v && handleListWsChange(v)}>
           <SelectTrigger className="h-8 w-auto min-w-[120px]">
             <span className="truncate">{allWorkspaces.find((ws) => ws.id === listWsId)?.name ?? listWsId}</span>

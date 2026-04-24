@@ -241,7 +241,7 @@ export function MissionsClient({
   return (
     <div className="flex h-full flex-col">
       {/* Toolbar */}
-      <div className="h-12 shrink-0 border-b border-border px-4 flex items-center gap-3">
+      <div className="header-sm shrink-0 px-4 flex items-center gap-3">
         <h1 className="text-base font-semibold">{t("missions.pageTitle")}</h1>
 
         {/* Workspace filter — right of title */}

@@ -76,6 +76,30 @@ paths:
 - `variant="default"` 用于主要操作（创建、提交等）
 - 只在特殊场景用原生 `<button>`：右键菜单项、自定义交互组件内部等
 
+## Header Heights
+
+Standardized header/toolbar heights. **Panels on the same horizontal line MUST use the same level.**
+
+| Level | Utility Class | Height | Usage |
+|-------|--------------|--------|-------|
+| 1 | `header-xs` | 36px | Inner sub-tabs (Files/Search/Git) |
+| 2 | `header-sm` | 44px | Action bars, simple toolbars |
+| 3 | `header-md` | 56px | Main tab bars (Files/Changes/Preview), page nav |
+| 4 | `header-lg` | 72px | Page headers (title + status, two lines) |
+| 5 | `header-xl` | 88px | Page headers with actions (title + status + buttons) |
+
+Each utility sets `min-height` + `border-bottom`. Combine with padding classes as needed:
+
+```tsx
+{/* Left panel header — level 4 */}
+<div className="header-lg px-4 py-3 flex items-center">...</div>
+
+{/* Right panel tab bar — must also be level 4 to align */}
+<div className="header-lg px-3 py-3 flex items-center">...</div>
+```
+
+CSS variables available: `var(--header-xs)` through `var(--header-xl)`.
+
 ## DnD Kit
 
 - Always pass a stable `id` prop to `<DndContext>` to prevent hydration mismatch.
