@@ -41,7 +41,7 @@ function AmbientVisual({ step }: { step: number }) {
     <div className="relative h-full w-full overflow-hidden">
       {/* Dot grid background */}
       <div
-        className="absolute inset-0 opacity-[0.03] text-white"
+        className="absolute inset-0 opacity-[0.07] text-white"
         style={{
           backgroundImage:
             "radial-gradient(circle, currentColor 1px, transparent 1px)",
@@ -53,17 +53,17 @@ function AmbientVisual({ step }: { step: number }) {
       <div
         className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
         style={{
-          width: "340px",
-          height: "340px",
+          width: "380px",
+          height: "380px",
           background:
-            "radial-gradient(circle, oklch(0.80 0.14 75 / 0.12) 0%, oklch(0.80 0.14 75 / 0.03) 50%, transparent 70%)",
+            "radial-gradient(circle, oklch(0.80 0.14 75 / 0.25) 0%, oklch(0.80 0.14 75 / 0.08) 45%, transparent 70%)",
           animation: "ob-pulse 6s ease-in-out infinite",
         }}
       />
 
       {/* Orbiting ring */}
       <div
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-500/10"
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-400/25"
         style={{
           width: "260px",
           height: "260px",
@@ -71,47 +71,47 @@ function AmbientVisual({ step }: { step: number }) {
         }}
       >
         <div
-          className="absolute -top-1 left-1/2 -translate-x-1/2 h-2 w-2 rounded-full bg-amber-400/60"
-          style={{ boxShadow: "0 0 12px oklch(0.80 0.14 75 / 0.5)" }}
+          className="absolute -top-1.5 left-1/2 -translate-x-1/2 h-3 w-3 rounded-full bg-amber-400"
+          style={{ boxShadow: "0 0 16px oklch(0.80 0.14 75 / 0.7)" }}
         />
       </div>
 
       {/* Second orbit — counter direction */}
       <div
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-500/[0.06]"
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-400/15"
         style={{
           width: "380px",
           height: "380px",
           animation: "ob-spin 30s linear infinite reverse",
         }}
       >
-        <div className="absolute -top-1 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full bg-amber-400/40" />
-        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-amber-400/30" />
+        <div className="absolute -top-1 left-1/2 -translate-x-1/2 h-2 w-2 rounded-full bg-amber-400/70" />
+        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full bg-amber-400/50" />
       </div>
 
       {/* Floating hexagons */}
       <svg
         className="absolute"
         style={{ top: "18%", right: "22%", animation: "ob-float 8s ease-in-out infinite" }}
-        width="40" height="46" viewBox="0 0 40 46" fill="none"
+        width="44" height="50" viewBox="0 0 40 46" fill="none"
       >
-        <path d="M20 1 L38 12 L38 34 L20 45 L2 34 L2 12 Z" stroke="oklch(0.80 0.14 75 / 0.2)" strokeWidth="1" fill="oklch(0.80 0.14 75 / 0.03)" />
+        <path d="M20 1 L38 12 L38 34 L20 45 L2 34 L2 12 Z" stroke="oklch(0.80 0.14 75 / 0.4)" strokeWidth="1.5" fill="oklch(0.80 0.14 75 / 0.06)" />
       </svg>
       <svg
         className="absolute"
         style={{ bottom: "22%", left: "18%", animation: "ob-float 10s ease-in-out 2s infinite" }}
-        width="28" height="32" viewBox="0 0 40 46" fill="none"
+        width="32" height="36" viewBox="0 0 40 46" fill="none"
       >
-        <path d="M20 1 L38 12 L38 34 L20 45 L2 34 L2 12 Z" stroke="oklch(0.80 0.14 75 / 0.15)" strokeWidth="1" fill="oklch(0.80 0.14 75 / 0.02)" />
+        <path d="M20 1 L38 12 L38 34 L20 45 L2 34 L2 12 Z" stroke="oklch(0.80 0.14 75 / 0.3)" strokeWidth="1.5" fill="oklch(0.80 0.14 75 / 0.05)" />
       </svg>
 
       {/* Small floating circles */}
-      <div className="absolute h-3 w-3 rounded-full bg-amber-400/20" style={{ top: "30%", left: "28%", animation: "ob-float 7s ease-in-out 1s infinite" }} />
-      <div className="absolute h-2 w-2 rounded-full bg-amber-400/15" style={{ top: "65%", right: "30%", animation: "ob-float 9s ease-in-out 3s infinite" }} />
-      <div className="absolute h-1.5 w-1.5 rounded-full bg-amber-400/10" style={{ top: "45%", right: "15%", animation: "ob-float 6s ease-in-out 0.5s infinite" }} />
+      <div className="absolute h-3.5 w-3.5 rounded-full bg-amber-400/40" style={{ top: "30%", left: "28%", animation: "ob-float 7s ease-in-out 1s infinite" }} />
+      <div className="absolute h-2.5 w-2.5 rounded-full bg-amber-400/30" style={{ top: "65%", right: "30%", animation: "ob-float 9s ease-in-out 3s infinite" }} />
+      <div className="absolute h-2 w-2 rounded-full bg-amber-400/20" style={{ top: "45%", right: "15%", animation: "ob-float 6s ease-in-out 0.5s infinite" }} />
 
       {/* Connecting lines */}
-      <svg className="absolute inset-0 h-full w-full text-white opacity-[0.06]">
+      <svg className="absolute inset-0 h-full w-full text-white opacity-[0.12]">
         <line x1="30%" y1="25%" x2="70%" y2="45%" stroke="currentColor" strokeWidth="1" strokeDasharray="4 6" style={{ animation: "ob-dash 12s linear infinite" }} />
         <line x1="65%" y1="30%" x2="35%" y2="70%" stroke="currentColor" strokeWidth="1" strokeDasharray="4 6" style={{ animation: "ob-dash 15s linear infinite reverse" }} />
       </svg>
@@ -119,16 +119,16 @@ function AmbientVisual({ step }: { step: number }) {
       {/* Center icon — shifts with step */}
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
         <div
-          className="flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] backdrop-blur-sm transition-all duration-700"
-          style={{ boxShadow: "0 0 40px oklch(0.80 0.14 75 / 0.08)" }}
+          className="flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-400/35 bg-amber-500/10 backdrop-blur-sm transition-all duration-700"
+          style={{ boxShadow: "0 0 50px oklch(0.80 0.14 75 / 0.2)" }}
         >
-          <Icon className="h-7 w-7 text-amber-400/70" />
+          <Icon className="h-7 w-7 text-amber-400" />
         </div>
       </div>
 
       {/* Step label */}
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 translate-y-12 text-center">
-        <p className="text-[11px] font-medium tracking-widest uppercase text-amber-400/40">
+        <p className="text-[11px] font-medium tracking-widest uppercase text-amber-400/60">
           {label}
         </p>
       </div>
