@@ -159,7 +159,7 @@ export function AssistantChat() {
       </ScrollArea>
 
       {/* Input area */}
-      <div className="border-t border-border bg-popover p-4">
+      <div className="border-t border-border bg-sidebar p-4">
         <ImageThumbnailStrip
           pendingImages={pendingImages}
           onRemove={removeImage}

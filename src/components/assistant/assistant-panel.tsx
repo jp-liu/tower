@@ -53,7 +53,7 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
 
   const containerClass =
     mode === "sidebar"
-      ? "min-w-[320px] max-w-[480px] w-[30vw] shrink-0 border-r border-border flex flex-col bg-popover overflow-hidden"
+      ? "min-w-[320px] max-w-[480px] w-[30vw] shrink-0 border-r border-border flex flex-col bg-sidebar overflow-hidden"
       : "flex flex-col h-full overflow-hidden";
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
@@ -62,7 +62,7 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
   return (
     <div className={containerClass}>
       {/* Title bar */}
-      <div className="h-[44px] border-b border-border flex items-center px-4 gap-2 bg-popover">
+      <div className="header-sm flex items-center px-4 gap-2 bg-sidebar">
         <Bot className="h-4 w-4 text-muted-foreground shrink-0" />
         <span className="text-sm font-semibold text-foreground shrink-0">{t("assistant.title")}</span>
 
