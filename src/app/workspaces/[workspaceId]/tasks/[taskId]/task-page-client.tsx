@@ -319,19 +319,22 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
               </Badge>
             )}
           </div>
-          {/* Complete button — only for IN_REVIEW tasks */}
-          {taskStatus === "IN_REVIEW" && (
-            <div className="mt-2">
-              <Button
-                size="sm"
-                onClick={handleComplete}
-                className="bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20 hover:bg-emerald-500/25"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                {t("taskPage.completeTask")}
-              </Button>
-            </div>
-          )}
+          {/* 1px transparent border aligns with right panel's sub-tab border */}
+          <div className="border-t border-transparent">
+            {/* Complete button — only for IN_REVIEW tasks */}
+            {taskStatus === "IN_REVIEW" && (
+              <div className="mt-2">
+                <Button
+                  size="sm"
+                  onClick={handleComplete}
+                  className="bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20 hover:bg-emerald-500/25"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  {t("taskPage.completeTask")}
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Terminal fills all remaining space */}
@@ -339,7 +342,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           {activeWorktreePath ? (
             <div className="flex h-full flex-col overflow-hidden">
               {/* Stop button bar */}
-              <div className="shrink-0 flex items-center justify-between border-b border-neutral-800 px-3 py-2 bg-[#0a0a0a]">
+              <div className="header-xs shrink-0 flex items-center justify-between border-b-neutral-800 px-3 py-1.5 bg-[#0a0a0a]">
                 <span className="flex items-center gap-1.5 text-xs text-emerald-400">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   {t("execution.running")}
@@ -379,7 +382,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           ) : (
             <div className="flex h-full flex-col overflow-hidden bg-[#0a0a0a]">
               {/* Launch button */}
-              <div className="shrink-0 flex items-center gap-3 border-b border-neutral-800 px-4 py-3">
+              <div className="header-xs shrink-0 flex items-center gap-3 border-b-neutral-800 px-4 py-1.5">
                 {/* Prompt selector */}
                 {prompts.length > 0 && (
                   <Select key={`prompt-${prompts.length}`} defaultValue={selectedPromptId ?? "none"} onValueChange={(v) => setSelectedPromptId(v === "none" ? null : v)}>
@@ -400,18 +403,18 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                     </SelectContent>
                   </Select>
                 )}
-                <button
+                <Button
                   onClick={handleExecute}
                   disabled={isExecuting}
-                  className="flex items-center gap-2 rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+                  className="h-7 gap-2 px-4 text-xs"
                 >
                   {isExecuting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <Terminal className="h-4 w-4" />
+                    <Terminal className="h-3.5 w-3.5" />
                   )}
                   {isExecuting ? t("terminal.executing") : t("terminal.launch")}
-                </button>
+                </Button>
               </div>
               {/* Execution history */}
               <div className="flex-1 min-h-0 overflow-y-auto">
