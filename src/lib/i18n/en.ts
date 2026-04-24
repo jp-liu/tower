@@ -658,6 +658,8 @@ export const en: Translations = {
   "onboarding.step3.pathLabel": "Local Base Path",
   "onboarding.step3.pathPlaceholder": "e.g. /Users/you/project",
   "onboarding.step3.pathHint": "Variables: {path}=full path, {owner}=first segment, {repo}=repo name. Without variables, repo name is auto-appended",
+  "onboarding.step3.pathHintRepo": "Repository name is auto-appended to the path",
+  "onboarding.step3.pathHintFull": "Preserves full subgroup path (for GitLab nested groups)",
   "onboarding.step3.added": "{count} rule(s) added",
   "onboarding.step3.exampleTitle": "Example",
   "onboarding.step3.exampleCase1": "Rule: host github.com, path ~/project → result ~/project/my-app",

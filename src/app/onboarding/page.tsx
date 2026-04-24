@@ -190,8 +190,9 @@ export default function OnboardingPage() {
   // Step 3 state
   const [gitRules, setGitRules] = useState<GitPathRule[]>([]);
   const [ruleForm, setRuleForm] = useState<RuleFormData>({ ...EMPTY_RULE });
-  const [showRuleForm, setShowRuleForm] = useState(false);
-  const [sampleUrl, setSampleUrl] = useState("");
+  const [showRuleForm, setShowRuleForm] = useState(true); // default open
+  const [previewIdx, setPreviewIdx] = useState(0);
+  const [useFullPath, setUseFullPath] = useState(false);
 
   // Completion state
   const [completing, setCompleting] = useState(false);
@@ -219,15 +220,19 @@ export default function OnboardingPage() {
 
   function handleAddRule() {
     if (!ruleForm.host.trim() || !ruleForm.localPathTemplate.trim()) return;
+    // Build template: user enters base path, we append {path} or leave as-is (auto-append repo)
+    const basePath = ruleForm.localPathTemplate.trim().replace(/\/+$/, "");
+    const template = useFullPath ? `${basePath}/{path}` : basePath;
     const newRule: GitPathRule = {
       id: crypto.randomUUID(),
       host: ruleForm.host.trim(),
       ownerMatch: ruleForm.ownerMatch.trim() || "*",
-      localPathTemplate: ruleForm.localPathTemplate.trim(),
+      localPathTemplate: template,
       priority: gitRules.length,
     };
     setGitRules((prev) => [...prev, newRule]);
     setRuleForm({ ...EMPTY_RULE });
+    setUseFullPath(false);
     setShowRuleForm(false);
   }
 
@@ -260,7 +265,7 @@ export default function OnboardingPage() {
     <div className="flex h-screen bg-background">
       {/* ─── LEFT: Form ─── */}
       <div className="flex w-full flex-col px-8 pt-[10vh] pb-10 xl:w-2/5 xl:px-16 overflow-y-auto">
-        <div className="w-full max-w-md space-y-6">
+        <div className="w-full max-w-lg space-y-6">
         {/* Logo + step indicator */}
         <div className="space-y-4">
           {/* Brand */}
@@ -409,7 +414,7 @@ export default function OnboardingPage() {
 
             {/* ─── Step 3: Git Path Rules ─── */}
             {step === 3 && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-500">
+              <div className="space-y-5 animate-in fade-in slide-in-from-left-4 duration-500">
                 <div className="space-y-1.5">
                   <h1 className="text-2xl font-bold tracking-tight">
                     {t("onboarding.step3.title")}
@@ -417,20 +422,6 @@ export default function OnboardingPage() {
                   <p className="text-sm text-muted-foreground leading-relaxed">
                     {t("onboarding.step3.desc")}
                   </p>
-                </div>
-
-                {/* Example */}
-                <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2.5">
-                  <p className="text-xs font-medium text-muted-foreground">{t("onboarding.step3.exampleTitle")}</p>
-                  <div className="space-y-2 text-xs">
-                    <div className="space-y-0.5">
-                      <p className="text-muted-foreground">{t("onboarding.step3.exampleCase1")}</p>
-                    </div>
-                    <div className="space-y-0.5">
-                      <p className="text-muted-foreground">{t("onboarding.step3.exampleCase2")}</p>
-                    </div>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground/70">{t("onboarding.step3.exampleDesc")}</p>
                 </div>
 
                 {/* Existing rules list */}
@@ -468,7 +459,7 @@ export default function OnboardingPage() {
                   </div>
                 )}
 
-                {/* Add rule form */}
+                {/* Add rule form — default open */}
                 {showRuleForm ? (
                   <div className="space-y-3 rounded-lg border border-border p-4">
                     <div className="space-y-1.5">
@@ -492,38 +483,86 @@ export default function OnboardingPage() {
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium">{t("onboarding.step3.pathLabel")}</label>
-                      <Input
-                        value={ruleForm.localPathTemplate}
-                        onChange={(e) => setRuleForm((f) => ({ ...f, localPathTemplate: e.target.value }))}
-                        placeholder={t("onboarding.step3.pathPlaceholder")}
-                        className="h-9 font-mono text-xs"
-                      />
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={ruleForm.localPathTemplate}
+                          onChange={(e) => setRuleForm((f) => ({ ...f, localPathTemplate: e.target.value }))}
+                          placeholder={t("onboarding.step3.pathPlaceholder")}
+                          className="h-9 font-mono text-xs flex-1"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUseFullPath((v) => {
+                              if (!v) setPreviewIdx(2);
+                              return !v;
+                            });
+                          }}
+                          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-mono font-medium transition-colors ${
+                            useFullPath
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {"{path}"}
+                        </button>
+                      </div>
                       <p className="text-[11px] text-muted-foreground">
-                        {t("onboarding.step3.pathHint")}
+                        {useFullPath
+                          ? t("onboarding.step3.pathHintFull")
+                          : t("onboarding.step3.pathHintRepo")}
                       </p>
                     </div>
-                    {/* Live preview */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium">{t("onboarding.step3.previewLabel")}</label>
-                      <Input
-                        value={sampleUrl}
-                        onChange={(e) => setSampleUrl(e.target.value)}
-                        placeholder={t("onboarding.step3.previewPlaceholder")}
-                        className="h-9 font-mono text-xs"
-                      />
-                      {sampleUrl && ruleForm.localPathTemplate && (
-                        <div className="rounded-md bg-muted/50 px-3 py-2 font-mono text-xs">
-                          <span className="text-muted-foreground">→ </span>
-                          <span className="text-primary">
-                            {previewPath(ruleForm.localPathTemplate, sampleUrl) || t("onboarding.step3.previewNoMatch")}
-                          </span>
+
+                    {/* Live preview with sample tabs */}
+                    {ruleForm.localPathTemplate && (() => {
+                      const basePath = ruleForm.localPathTemplate.trim().replace(/\/+$/, "");
+                      const tpl = useFullPath ? `${basePath}/{path}` : basePath;
+                      const samples = [
+                        { label: "GitHub SSH", url: "git@github.com:user/my-app.git" },
+                        { label: "GitHub HTTPS", url: "https://github.com/user/my-app.git" },
+                        { label: "GitLab Subgroup", url: "https://gitlab.com/org/team/sub/my-api.git" },
+                      ];
+                      return (
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium">{t("onboarding.step3.previewLabel")}</label>
+                          <div className="flex gap-1 flex-wrap">
+                            {samples.map((s, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => setPreviewIdx(i)}
+                                className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                                  previewIdx === i
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-muted text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                {s.label}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="rounded-md bg-muted/50 px-3 py-2 space-y-1">
+                            <p className="font-mono text-[11px] text-muted-foreground truncate">
+                              {samples[previewIdx].url}
+                            </p>
+                            <p className="font-mono text-xs">
+                              <span className="text-muted-foreground">→ </span>
+                              <span className="text-primary">
+                                {previewPath(tpl, samples[previewIdx].url)}
+                              </span>
+                            </p>
+                          </div>
                         </div>
-                      )}
-                    </div>
+                      );
+                    })()}
+
                     <div className="flex justify-end gap-2 pt-1">
-                      <Button variant="ghost" onClick={() => setShowRuleForm(false)}>
-                        {t("settings.config.git.cancel")}
-                      </Button>
+                      {gitRules.length > 0 && (
+                        <Button variant="ghost" onClick={() => setShowRuleForm(false)}>
+                          {t("settings.config.git.cancel")}
+                        </Button>
+                      )}
                       <Button
                         onClick={handleAddRule}
                         disabled={!ruleForm.host.trim() || !ruleForm.localPathTemplate.trim()}
@@ -534,25 +573,16 @@ export default function OnboardingPage() {
                     </div>
                   </div>
                 ) : (
-                  <div>
-                    {gitRules.length === 0 && (
-                      <p className="text-xs text-muted-foreground mb-3">
-                        {t("onboarding.step3.noRules")}
-                      </p>
-                    )}
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setRuleForm({ ...EMPTY_RULE });
-                        setShowRuleForm(true);
-                      }}
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      {gitRules.length === 0
-                        ? t("onboarding.step3.addFirst")
-                        : t("settings.config.git.addRule")}
-                    </Button>
-                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setRuleForm({ ...EMPTY_RULE });
+                      setShowRuleForm(true);
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    {t("settings.config.git.addRule")}
+                  </Button>
                 )}
 
                 {/* Actions */}

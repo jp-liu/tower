@@ -673,6 +673,8 @@ export const zh = {
   "onboarding.step3.pathLabel": "本地基础路径",
   "onboarding.step3.pathPlaceholder": "例如 /Users/you/project",
   "onboarding.step3.pathHint": "支持变量：{path}=完整路径，{owner}=第一段，{repo}=仓库名。不含变量时自动追加仓库名",
+  "onboarding.step3.pathHintRepo": "仓库名会自动追加到路径末尾",
+  "onboarding.step3.pathHintFull": "开启后保留完整子组路径（适合 GitLab 多级分组）",
   "onboarding.step3.added": "已添加 {count} 条规则",
   "onboarding.step3.exampleTitle": "配置示例",
   "onboarding.step3.exampleCase1": "规则：主机 github.com，路径 ~/project → 结果 ~/project/my-app",
