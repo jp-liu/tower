@@ -269,7 +269,7 @@ export default function OnboardingPage() {
       </div>
 
       {/* ─── RIGHT: Form ─── */}
-      <div className="flex w-full flex-col px-8 pt-[10vh] pb-10 xl:w-2/5 xl:px-16 overflow-y-auto">
+      <div className="flex w-full flex-col items-center px-8 pt-[10vh] pb-10 xl:w-2/5 xl:px-16 overflow-y-auto">
         <div className="w-full max-w-lg space-y-6">
         {/* Logo + step indicator */}
         <div className="space-y-4">
