@@ -136,7 +136,7 @@ function AmbientVisual({ step }: { step: number }) {
   );
 }
 
-/* ─── Git rule form row ─── */
+/* ─── Git rule form ─── */
 interface RuleFormData {
   host: string;
   ownerMatch: string;
@@ -144,6 +144,35 @@ interface RuleFormData {
 }
 
 const EMPTY_RULE: RuleFormData = { host: "", ownerMatch: "*", localPathTemplate: "" };
+
+/** Client-side preview of what a Git URL would resolve to with the current rule */
+function previewPath(tpl: string, sampleUrl: string): string {
+  if (!tpl || !sampleUrl) return "";
+  const trimmed = sampleUrl.trim();
+  // Parse: git@host:path.git | ssh://git@host:port/path.git | https://host/path.git
+  let segments: string[] = [];
+  const sshShort = trimmed.match(/^git@[^:]+:(.+)$/);
+  if (sshShort) {
+    segments = sshShort[1].replace(/\.git\/?$/, "").split("/").filter(Boolean);
+  } else {
+    try {
+      const url = new URL(trimmed);
+      segments = decodeURIComponent(url.pathname).replace(/\.git\/?$/, "").split("/").filter(Boolean);
+    } catch {
+      return "";
+    }
+  }
+  if (!segments.length) return "";
+  const owner = segments[0];
+  const repo = segments[segments.length - 1];
+  const fullPath = segments.join("/");
+
+  if (tpl.includes("{path}")) {
+    return tpl.replace("{path}", fullPath).replace("{owner}", owner).replace("{repo}", repo).replace(/\/+$/, "");
+  }
+  const base = tpl.replace("{owner}", owner).replace("{repo}", "").replace(/\/+$/, "");
+  return `${base}/${repo}`;
+}
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -162,6 +191,7 @@ export default function OnboardingPage() {
   const [gitRules, setGitRules] = useState<GitPathRule[]>([]);
   const [ruleForm, setRuleForm] = useState<RuleFormData>({ ...EMPTY_RULE });
   const [showRuleForm, setShowRuleForm] = useState(false);
+  const [sampleUrl, setSampleUrl] = useState("");
 
   // Completion state
   const [completing, setCompleting] = useState(false);
@@ -471,6 +501,24 @@ export default function OnboardingPage() {
                       <p className="text-[11px] text-muted-foreground">
                         {t("onboarding.step3.pathHint")}
                       </p>
+                    </div>
+                    {/* Live preview */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium">{t("onboarding.step3.previewLabel")}</label>
+                      <Input
+                        value={sampleUrl}
+                        onChange={(e) => setSampleUrl(e.target.value)}
+                        placeholder={t("onboarding.step3.previewPlaceholder")}
+                        className="h-9 font-mono text-xs"
+                      />
+                      {sampleUrl && ruleForm.localPathTemplate && (
+                        <div className="rounded-md bg-muted/50 px-3 py-2 font-mono text-xs">
+                          <span className="text-muted-foreground">→ </span>
+                          <span className="text-primary">
+                            {previewPath(ruleForm.localPathTemplate, sampleUrl) || t("onboarding.step3.previewNoMatch")}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <div className="flex justify-end gap-2 pt-1">
                       <Button variant="ghost" onClick={() => setShowRuleForm(false)}>
