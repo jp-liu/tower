@@ -674,6 +674,8 @@ export const zh = {
   "onboarding.step3.pathPlaceholder": "例如 /Users/you/project",
   "onboarding.step3.pathHint": "支持 {owner} 变量，仓库名会自动追加到末尾。推荐使用绝对路径，~ 会自动展开为用户目录",
   "onboarding.step3.added": "已添加 {count} 条规则",
+  "onboarding.step3.exampleTitle": "配置示例",
+  "onboarding.step3.exampleDesc": "输入 Git 仓库地址创建项目时，系统会根据规则自动填充本地路径，{repo} 会替换为仓库名",
   "onboarding.stepIndicator": "步骤 {current}/{total}",
   "onboarding.welcomeCta": "创建您的第一个工作区开始使用",
   "onboarding.createWorkspace": "创建工作区",

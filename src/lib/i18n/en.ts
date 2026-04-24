@@ -659,6 +659,8 @@ export const en: Translations = {
   "onboarding.step3.pathPlaceholder": "e.g. /Users/you/project",
   "onboarding.step3.pathHint": "Supports {owner} variable. Repo name is auto-appended. Use absolute paths, ~ auto-expands to home directory",
   "onboarding.step3.added": "{count} rule(s) added",
+  "onboarding.step3.exampleTitle": "Example",
+  "onboarding.step3.exampleDesc": "When creating a project with a Git URL, the local path is auto-filled based on rules. {repo} is replaced with the repository name.",
   "onboarding.stepIndicator": "Step {current}/{total}",
   "onboarding.welcomeCta": "Create your first workspace to get started",
   "onboarding.createWorkspace": "Create Workspace",

@@ -207,12 +207,17 @@ export default function OnboardingPage() {
 
   async function handleComplete() {
     setCompleting(true);
-    // Save git rules if any
-    if (gitRules.length > 0) {
-      await setConfigValue("git.pathMappingRules", gitRules);
+    try {
+      // Save git rules if any
+      if (gitRules.length > 0) {
+        await setConfigValue("git.pathMappingRules", gitRules);
+      }
+      await completeOnboarding(username.trim());
+      // Use replace to avoid back-button returning to onboarding
+      router.replace("/workspaces");
+    } catch {
+      setCompleting(false);
     }
-    await completeOnboarding(username.trim());
-    router.push("/workspaces");
   }
 
   const stepIcons = [
@@ -382,6 +387,24 @@ export default function OnboardingPage() {
                   <p className="text-sm text-muted-foreground leading-relaxed">
                     {t("onboarding.step3.desc")}
                   </p>
+                </div>
+
+                {/* Example */}
+                <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">{t("onboarding.step3.exampleTitle")}</p>
+                  <div className="space-y-1.5 text-xs font-mono text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <span className="text-foreground/70">github.com</span>
+                      <span className="text-muted-foreground/50">→</span>
+                      <span>~/project/{"{repo}"}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-foreground/70">gitlab.com / my-team</span>
+                      <span className="text-muted-foreground/50">→</span>
+                      <span>~/work/{"{repo}"}</span>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/70">{t("onboarding.step3.exampleDesc")}</p>
                 </div>
 
                 {/* Existing rules list */}
