@@ -390,18 +390,20 @@ export default function OnboardingPage() {
                 </div>
 
                 {/* Example */}
-                <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2.5">
                   <p className="text-xs font-medium text-muted-foreground">{t("onboarding.step3.exampleTitle")}</p>
-                  <div className="space-y-1.5 text-xs font-mono text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <span className="text-foreground/70">github.com</span>
-                      <span className="text-muted-foreground/50">→</span>
-                      <span>~/project/{"{repo}"}</span>
+                  <div className="space-y-2 text-xs">
+                    <div className="space-y-0.5">
+                      <p className="text-muted-foreground">{t("onboarding.step3.exampleCase1")}</p>
+                      <p className="font-mono text-foreground/80">
+                        git@github.com:user/my-app.git → <span className="text-primary">~/project/my-app</span>
+                      </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-foreground/70">gitlab.com / my-team</span>
-                      <span className="text-muted-foreground/50">→</span>
-                      <span>~/work/{"{repo}"}</span>
+                    <div className="space-y-0.5">
+                      <p className="text-muted-foreground">{t("onboarding.step3.exampleCase2")}</p>
+                      <p className="font-mono text-foreground/80">
+                        git@gitlab.com:team/api.git → <span className="text-primary">~/work/api</span>
+                      </p>
                     </div>
                   </div>
                   <p className="text-[11px] text-muted-foreground/70">{t("onboarding.step3.exampleDesc")}</p>

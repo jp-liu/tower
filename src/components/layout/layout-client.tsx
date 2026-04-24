@@ -81,10 +81,11 @@ function LayoutInner({
   useEffect(() => {
     getConfigValue<boolean>("notification.enabled", true).then(setNotificationsEnabled);
   }, []);
-  useNotificationListener(notificationsEnabled);
+  const isOnboarding = pathname.startsWith("/onboarding");
+  useNotificationListener(notificationsEnabled && !isOnboarding);
 
   // Onboarding page — render without sidebar/topbar
-  if (pathname.startsWith("/onboarding")) {
+  if (isOnboarding) {
     return <>{children}</>;
   }
 
