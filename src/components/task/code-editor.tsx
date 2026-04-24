@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { readFileContent, writeFileContent } from "@/actions/file-actions";
 import { EditorTabs } from "./editor-tabs";
 import type { EditorTab } from "./editor-tabs";
+import { DiffEditorView } from "./diff-editor";
 
 // Configure CDN loader at module level (D-01)
 loader.config({
@@ -40,12 +41,18 @@ const LANG_MAP: Record<string, string> = {
   txt: "plaintext",
 };
 
+export interface DiffFileRequest {
+  relativePath: string;
+  originalContent: string;
+}
+
 export interface CodeEditorProps {
   worktreePath: string;
   selectedFilePath: string | null;
   onFilePathChange?: (path: string | null) => void;
   onSave?: () => void;
   selectedLine?: number | null;
+  diffFileRequest?: DiffFileRequest | null;
 }
 
 export function CodeEditor({
@@ -54,6 +61,7 @@ export function CodeEditor({
   onFilePathChange,
   onSave,
   selectedLine,
+  diffFileRequest,
 }: CodeEditorProps) {
   const { t } = useI18n();
   const { resolvedTheme } = useTheme();
@@ -142,6 +150,44 @@ export function CodeEditor({
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFilePath, worktreePath]);
+
+  // React to diffFileRequest — open file in diff mode
+  useEffect(() => {
+    if (!diffFileRequest) return;
+    const { relativePath, originalContent } = diffFileRequest;
+    const absolutePath = worktreePath + "/" + relativePath;
+    const diffTabKey = "diff:" + absolutePath;
+    const filename = relativePath.split("/").pop() ?? relativePath;
+
+    // If diff tab already open, just switch to it
+    const existing = tabs.find((t) => t.path === diffTabKey);
+    if (existing) {
+      setActiveTabPath(diffTabKey);
+      return;
+    }
+
+    readFileContent(worktreePath, relativePath)
+      .then((modifiedContent) => {
+        const newTab: EditorTab = {
+          path: diffTabKey,
+          relativePath,
+          filename,
+          content: modifiedContent,
+          isDirty: false,
+          isDiff: true,
+          originalContent,
+        };
+        setTabs((prev) => {
+          if (prev.some((t) => t.path === diffTabKey)) return prev;
+          return [...prev, newTab];
+        });
+        setActiveTabPath(diffTabKey);
+      })
+      .catch(() => {
+        // file not readable
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diffFileRequest, worktreePath]);
 
   // Scroll Monaco to selectedLine when it changes (or active tab changes)
   useEffect(() => {
@@ -271,6 +317,23 @@ export function CodeEditor({
           <p className="text-xs text-muted-foreground mt-1">
             {t("editor.selectFileHint")}
           </p>
+        </div>
+      ) : activeTab?.isDiff ? (
+        <div className="flex-1 min-h-0">
+          <DiffEditorView
+            originalContent={activeTab.originalContent ?? ""}
+            modifiedContent={activeTab.content}
+            filePath={activeTab.relativePath}
+            onModifiedChange={(value) => {
+              setTabs((prev) =>
+                prev.map((t) =>
+                  t.path === activeTabPath
+                    ? { ...t, content: value, isDirty: true }
+                    : t
+                )
+              );
+            }}
+          />
         </div>
       ) : (
         <div className="flex-1 min-h-0">

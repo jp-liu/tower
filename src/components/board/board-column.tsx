@@ -1,11 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { Plus } from "lucide-react";
+import { Plus, LayoutGrid } from "lucide-react";
 import { TaskCard } from "./task-card";
+import { ColumnTasksDialog } from "./column-tasks-dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useI18n } from "@/lib/i18n";
 import type { TaskWithLabels } from "@/types";
 
 interface BoardColumnProps {
@@ -34,6 +37,8 @@ export function BoardColumn({
   onContextMenu,
 }: BoardColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id });
+  const [viewAllOpen, setViewAllOpen] = useState(false);
+  const { t } = useI18n();
 
   return (
     <div
@@ -50,16 +55,36 @@ export function BoardColumn({
             {tasks.length}
           </span>
         </div>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={onAddTask}
-          className="text-muted-foreground"
-          aria-label="add"
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </Button>
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={() => setViewAllOpen(true)}
+            className="text-muted-foreground"
+            aria-label={t("board.viewAll")}
+          >
+            <LayoutGrid className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={onAddTask}
+            className="text-muted-foreground"
+            aria-label="add"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
+
+      <ColumnTasksDialog
+        open={viewAllOpen}
+        onOpenChange={setViewAllOpen}
+        columnLabel={label}
+        columnColor={color}
+        tasks={tasks}
+        onTaskClick={onTaskClick}
+      />
 
       {/* Task List */}
       <ScrollArea className="flex-1 min-h-0">

@@ -75,15 +75,16 @@ export function BoardPageClient({
   }, [router]);
 
   // Auto-poll for external changes (MCP task creation, etc.)
+  // Pause polling while create/edit dialog is open to prevent form reset
   useEffect(() => {
+    if (showCreateDialog) return;
     const timer = setInterval(() => {
-      // Lightweight: only triggers Next.js RSC refetch, diff applied automatically
       startTransition(() => {
         router.refresh();
       });
     }, 5000);
     return () => clearInterval(timer);
-  }, [router]);
+  }, [router, showCreateDialog]);
 
   const handleSearchChange = useCallback((query: string) => {
     setSearchQuery(query);

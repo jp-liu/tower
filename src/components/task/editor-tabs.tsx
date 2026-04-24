@@ -9,6 +9,8 @@ export interface EditorTab {
   filename: string;
   content: string;
   isDirty: boolean;
+  isDiff?: boolean;
+  originalContent?: string;
 }
 
 export interface EditorTabsProps {
@@ -40,6 +42,9 @@ export function EditorTabs({ tabs, activeTabPath, onTabClick, onTabClose }: Edit
                 : "border-transparent text-muted-foreground hover:text-foreground",
             ].join(" ")}
           >
+            {tab.isDiff && (
+              <span className="text-amber-400 text-[10px] font-mono font-bold">M</span>
+            )}
             {tab.isDirty && (
               <span className="text-primary text-xs">●</span>
             )}

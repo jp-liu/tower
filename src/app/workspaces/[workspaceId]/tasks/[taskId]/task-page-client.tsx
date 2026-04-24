@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal, Square, CheckCircle2, Search } from "lucide-react";
+import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal, Square, CheckCircle2, Search, GitPullRequestArrow } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import Link from "next/link";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -10,8 +10,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { TaskDiffView } from "@/components/task/task-diff-view";
 import { TaskMergeConfirmDialog } from "@/components/task/task-merge-confirm-dialog";
 import { FileTree } from "@/components/task/file-tree";
-import { CodeEditor } from "@/components/task/code-editor";
+import { CodeEditor, type DiffFileRequest } from "@/components/task/code-editor";
 import { CodeSearch } from "@/components/task/code-search";
+import { EditorGitPanel } from "@/components/task/editor-git-panel";
 import { PreviewPanel } from "@/components/task/preview-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -88,6 +89,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
+  const [diffFileRequest, setDiffFileRequest] = useState<DiffFileRequest | null>(null);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -283,7 +285,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
       {/* Left panel: Terminal — 35% default, 20% minimum */}
       <Panel defaultSize={35} minSize={20} className="flex flex-col border-r border-border bg-sidebar">
         {/* Header: back + breadcrumb + status + branch */}
-        <div className="border-b border-border px-4 py-3">
+        <div className="border-b border-border px-4 py-3 min-h-[theme(spacing.20)]">
           {/* Back button + breadcrumb: workspace / project / task */}
           <div className="flex items-center gap-2">
             <Link
@@ -432,7 +434,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           return (
         <Tabs value={activeTab ?? defaultTab} onValueChange={setActiveTab} key={defaultTab} className="flex h-full flex-col gap-0">
           {/* Tab bar — segmented control style matching Settings page */}
-          <div className="flex shrink-0 items-center border-b border-border px-3 py-2">
+          <div className="flex shrink-0 items-center border-b border-border px-3 py-3 min-h-[theme(spacing.20)]">
             <TabsList className="h-auto border border-border">
               {!isWorktreeDone && (
                 <TabsTrigger value="files" className="data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
@@ -470,6 +472,10 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                         <Search className="h-3 w-3" />
                         {t("taskPage.tabSearch")}
                       </TabsTrigger>
+                      <TabsTrigger value="git" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
+                        <GitPullRequestArrow className="h-3 w-3" />
+                        {t("git.tabLabel")}
+                      </TabsTrigger>
                     </TabsList>
                   </div>
                   {/* File tree sub-tab */}
@@ -496,6 +502,15 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                       }}
                     />
                   </TabsContent>
+                  {/* Git sub-tab */}
+                  <TabsContent value="git" className="flex-1 min-h-0 overflow-hidden mt-0">
+                    <EditorGitPanel
+                      localPath={task.project?.localPath ?? ""}
+                      onFileSelect={(relativePath, originalContent) => {
+                        setDiffFileRequest({ relativePath, originalContent });
+                      }}
+                    />
+                  </TabsContent>
                 </Tabs>
               </div>
               {/* Right: Monaco editor, fills remaining width */}
@@ -507,6 +522,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                     selectedLine={selectedLine}
                     onFilePathChange={setSelectedFilePath}
                     onSave={() => setPreviewRefreshKey((k) => k + 1)}
+                    diffFileRequest={diffFileRequest}
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center">

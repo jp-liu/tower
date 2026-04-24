@@ -58,9 +58,9 @@ export function useNotificationListener(enabled: boolean) {
         try {
           const event = JSON.parse(e.data) as NotificationEvent;
           if (isStopEvent(event)) {
-            toast.info(event.taskTitle, {
+            toast.success(event.taskTitle, {
               description: tRef.current("notification.taskCompleted"),
-              duration: 3000,
+              duration: 8000,
             });
           } else {
             // Completion event
