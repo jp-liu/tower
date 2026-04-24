@@ -3,8 +3,8 @@
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useI18n, type TranslationKey } from "@/lib/i18n";
-import type { TaskCompletionPayload } from "@/actions/onboarding-actions";
+import { useI18n } from "@/lib/i18n";
+import { getConfigValue } from "@/actions/config-actions";
 
 interface StopEvent {
   taskId: string;
@@ -15,40 +15,19 @@ interface StopEvent {
   timestamp: string;
 }
 
-function fireCompletionNotification(
-  event: TaskCompletionPayload,
-  router: ReturnType<typeof useRouter>,
-  t: (key: TranslationKey) => string
-) {
-  if (
-    typeof window !== "undefined" &&
-    "Notification" in window &&
-    window.Notification.permission === "granted"
-  ) {
-    const n = new Notification("Tower", {
-      body: event.taskTitle,
-      icon: "/web-app-manifest-192x192.png",
-    });
-    n.onclick = () => {
-      window.focus();
-      router.push(`/workspaces/${event.workspaceId}/tasks/${event.taskId}`);
-      n.close();
-    };
-  } else {
-    toast.info(event.taskTitle, {
-      description:
-        event.status === "COMPLETED"
-          ? t("notification.taskCompleted")
-          : t("notification.taskFailed"),
-    });
-  }
+interface CompletionEvent {
+  taskId: string;
+  taskTitle: string;
+  status: "COMPLETED" | "FAILED";
+  executionId: string;
+  workspaceId: string;
+  type?: "completion";
 }
 
-function fireStopNotification(event: StopEvent) {
-  toast.info(event.taskTitle, {
-    description: "AI 回复完成",
-    duration: 3000,
-  });
+type NotificationEvent = StopEvent | CompletionEvent;
+
+function isStopEvent(e: NotificationEvent): e is StopEvent {
+  return "type" in e && e.type === "stop";
 }
 
 export function useNotificationListener(enabled: boolean) {
@@ -63,28 +42,73 @@ export function useNotificationListener(enabled: boolean) {
   tRef.current = t;
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !enabled) return;
 
-    const interval = setInterval(async () => {
-      if (!enabledRef.current) return;
-      try {
-        const res = await fetch("/api/internal/notifications/pending");
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          events: TaskCompletionPayload[];
-          stopEvents: StopEvent[];
-        };
-        for (const event of data.events) {
-          fireCompletionNotification(event, routerRef.current, tRef.current);
-        }
-        for (const event of data.stopEvents) {
-          fireStopNotification(event);
-        }
-      } catch {
-        // Silently ignore network errors — notifications are non-critical
-      }
-    }, 5000);
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-    return () => clearInterval(interval);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    async function connect() {
+      const wsPort = await getConfigValue<number>("terminal.wsPort", 3001);
+      ws = new WebSocket(
+        `ws://localhost:${wsPort}/terminal?taskId=__notifications__`
+      );
+
+      ws.onmessage = (e) => {
+        if (!enabledRef.current) return;
+        try {
+          const event = JSON.parse(e.data) as NotificationEvent;
+          if (isStopEvent(event)) {
+            toast.info(event.taskTitle, {
+              description: tRef.current("notification.taskCompleted"),
+              duration: 3000,
+            });
+          } else {
+            // Completion event
+            if (
+              typeof window !== "undefined" &&
+              "Notification" in window &&
+              window.Notification.permission === "granted"
+            ) {
+              const n = new window.Notification("Tower", {
+                body: event.taskTitle,
+                icon: "/web-app-manifest-192x192.png",
+              });
+              n.onclick = () => {
+                window.focus();
+                routerRef.current.push(
+                  `/workspaces/${event.workspaceId}/tasks/${event.taskId}`
+                );
+                n.close();
+              };
+            } else {
+              toast.info(event.taskTitle, {
+                description:
+                  event.status === "COMPLETED"
+                    ? tRef.current("notification.taskCompleted")
+                    : tRef.current("notification.taskFailed"),
+              });
+            }
+          }
+        } catch {
+          // Ignore malformed messages
+        }
+      };
+
+      ws.onclose = () => {
+        // Reconnect after 5s
+        reconnectTimer = setTimeout(connect, 5000);
+      };
+
+      ws.onerror = () => {
+        ws?.close();
+      };
+    }
+
+    connect();
+
+    return () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      ws?.close();
+    };
+  }, [enabled]); // eslint-disable-line react-hooks/exhaustive-deps
 }

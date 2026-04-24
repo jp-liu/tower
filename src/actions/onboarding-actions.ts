@@ -19,9 +19,6 @@ export interface TaskCompletionPayload {
   workspaceId: string;
 }
 
-// D-04: globalThis singleton — survives HMR/module re-evaluation in Next.js dev mode.
-const g = globalThis as typeof globalThis & { __taskCompletionQueue?: TaskCompletionPayload[] };
-
 const ONBOARDING_KEYS = ["onboarding.completed", "onboarding.lastStep", "onboarding.username"] as const;
 
 export async function getOnboardingStatus(): Promise<OnboardingStatus> {
@@ -97,13 +94,9 @@ export async function dispatchTaskCompletionEvent(
       executionId: payload.executionId,
     });
 
-    // Push to globalThis queue for polling API route (Plan 01)
-    if (!g.__taskCompletionQueue) g.__taskCompletionQueue = [];
-    g.__taskCompletionQueue.push(payload);
-    // Cap queue at 50 entries — keep newest
-    if (g.__taskCompletionQueue.length > 50) {
-      g.__taskCompletionQueue = g.__taskCompletionQueue.slice(-50);
-    }
+    // Broadcast via WebSocket to all notification clients
+    const { broadcastNotification } = await import("@/lib/pty/ws-server");
+    broadcastNotification({ ...payload, type: "completion" });
   } catch {
     // Best-effort: notifications are non-critical
   }

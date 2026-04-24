@@ -19,6 +19,23 @@ const KEEPALIVE_EXITED_MS = 5 * 60 * 1000;        // 5 minutes
 // (e.g. task detail panel + Mission Control viewing the same task)
 const sessionClients = new Map<string, Set<WebSocket>>();
 
+// Global notification channel — clients connected with taskId=__notifications__
+const NOTIFICATION_CHANNEL = "__notifications__";
+const notificationClients = new Set<WebSocket>();
+
+/**
+ * Broadcast a JSON message to all connected notification clients.
+ * Called from API routes (e.g. Stop hook) to push events to the browser.
+ */
+export function broadcastNotification(payload: object): void {
+  const msg = JSON.stringify(payload);
+  for (const client of notificationClients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(msg);
+    }
+  }
+}
+
 const BATCH_INTERVAL_MS = 8;
 const SEND_BUFFER_MAX = 64 * 1024;
 
@@ -77,6 +94,14 @@ export async function startWsServer(): Promise<void> {
 
     if (!taskId) {
       ws.close(1008, "Missing taskId");
+      return;
+    }
+
+    // Notification channel — lightweight listener for global events (stop, completion)
+    if (taskId === NOTIFICATION_CHANNEL) {
+      notificationClients.add(ws);
+      ws.on("close", () => notificationClients.delete(ws));
+      ws.on("error", () => notificationClients.delete(ws));
       return;
     }
 
