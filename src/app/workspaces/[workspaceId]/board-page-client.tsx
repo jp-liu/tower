@@ -162,13 +162,18 @@ export function BoardPageClient({
     setShowCreateDialog(true);
   }, []);
 
+  // Exclude Tower-labeled tasks from kanban (system workbench tasks)
+  const boardTasks = initialTasks.filter(
+    (t) => !t.labels?.some((tl) => tl.label.name === "Tower" && tl.label.isBuiltin)
+  );
+
   const filteredTasks = searchQuery.trim()
-    ? initialTasks.filter((t) => {
+    ? boardTasks.filter((t) => {
         const q = searchQuery.toLowerCase();
         return t.title.toLowerCase().includes(q) ||
           (t.description?.toLowerCase().includes(q) ?? false);
       })
-    : initialTasks;
+    : boardTasks;
 
   return (
     <div className="flex h-full">

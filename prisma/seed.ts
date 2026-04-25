@@ -18,6 +18,7 @@ async function main() {
   // Built-in labels (no workspace = global)
   await prisma.label.create({ data: { name: "需求", color: "#3b82f6", isBuiltin: true } });
   await prisma.label.create({ data: { name: "缺陷", color: "#ef4444", isBuiltin: true } });
+  await prisma.label.create({ data: { name: "Tower", color: "#8b5cf6", isBuiltin: true } });
 
   // Default agent config
   await prisma.agentConfig.create({

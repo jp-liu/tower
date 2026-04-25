@@ -28,6 +28,28 @@ export async function cleanupStaleExecutions() {
  * This file is ONLY imported via dynamic import inside instrumentation.ts
  * when NEXT_RUNTIME === "nodejs", so Node.js modules are safe to use.
  */
+/**
+ * Ensure the builtin "Tower" label exists.
+ * Used for system workbench tasks (hidden from kanban board).
+ */
+export async function ensureTowerLabel() {
+  try {
+    await initDb();
+    const { TOWER_LABEL_NAME, TOWER_LABEL_COLOR } = await import("@/lib/constants");
+    const existing = await db.label.findFirst({
+      where: { name: TOWER_LABEL_NAME, isBuiltin: true },
+    });
+    if (!existing) {
+      await db.label.create({
+        data: { name: TOWER_LABEL_NAME, color: TOWER_LABEL_COLOR, isBuiltin: true },
+      });
+      log.info("Created builtin Tower label");
+    }
+  } catch (error) {
+    log.error("Failed to ensure Tower label", error);
+  }
+}
+
 export async function pruneOrphanedWorktrees() {
   try {
     await initDb();

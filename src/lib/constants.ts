@@ -15,6 +15,10 @@ export const PRIORITY_CONFIG = {
   CRITICAL: { label: "紧急", color: "bg-rose-500/20 text-rose-300 border border-rose-500/30" },
 } as const;
 
+/** System label name for project workbench tasks — hidden from kanban board */
+export const TOWER_LABEL_NAME = "Tower";
+export const TOWER_LABEL_COLOR = "#8b5cf6"; // purple
+
 export const AGENTS = ["CLAUDE_CODE", "MINIMAX"] as const;
 export type AgentType = (typeof AGENTS)[number];
 
