@@ -82,6 +82,15 @@ export async function createProject(data: {
       workspaceId: v.workspaceId,
     },
   });
+
+  // Auto-create Tower task (project workbench)
+  try {
+    const { ensureTowerTask } = await import("@/lib/instrumentation-tasks");
+    await ensureTowerTask(project.id, v.name);
+  } catch (error) {
+    console.warn("Failed to auto-create Tower task", error);
+  }
+
   revalidatePath("/workspaces");
   return project;
 }

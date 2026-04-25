@@ -24,6 +24,65 @@ export async function cleanupStaleExecutions() {
 }
 
 /**
+ * Ensure the builtin "Tower" label exists.
+ * Used for system workbench tasks (hidden from kanban board).
+ */
+export async function ensureTowerLabel() {
+  try {
+    await initDb();
+    const { TOWER_LABEL_NAME, TOWER_LABEL_COLOR } = await import("@/lib/constants");
+    const existing = await db.label.findFirst({
+      where: { name: TOWER_LABEL_NAME, isBuiltin: true },
+    });
+    if (!existing) {
+      await db.label.create({
+        data: { name: TOWER_LABEL_NAME, color: TOWER_LABEL_COLOR, isBuiltin: true },
+      });
+      log.info("Created builtin Tower label");
+    }
+  } catch (error) {
+    log.error("Failed to ensure Tower label", error);
+  }
+}
+
+/**
+ * Find or create the Tower system task for a project.
+ * Uses label-based lookup (not title) to survive project renames.
+ */
+export async function ensureTowerTask(projectId: string, projectName: string): Promise<string> {
+  const { TOWER_LABEL_NAME } = await import("@/lib/constants");
+
+  // Find by Tower label (rename-safe)
+  const existing = await db.task.findFirst({
+    where: {
+      projectId,
+      labels: { some: { label: { name: TOWER_LABEL_NAME, isBuiltin: true } } },
+    },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  // Create with label
+  const towerLabel = await db.label.findFirst({
+    where: { name: TOWER_LABEL_NAME, isBuiltin: true },
+  });
+
+  const task = await db.task.create({
+    data: {
+      title: `${projectName}-Tower`,
+      description: `Project workbench for ${projectName}`,
+      projectId,
+      status: "TODO",
+      priority: "LOW",
+      order: 0,
+      ...(towerLabel ? { labels: { create: { labelId: towerLabel.id } } } : {}),
+    },
+    select: { id: true },
+  });
+  return task.id;
+}
+
+/**
  * Prune orphaned git worktrees for all GIT projects at server startup.
  * This file is ONLY imported via dynamic import inside instrumentation.ts
  * when NEXT_RUNTIME === "nodejs", so Node.js modules are safe to use.

@@ -66,7 +66,8 @@ export function ensureTowerDir(): string {
  */
 function ensureClaudeHooks(): void {
   const settingsPath = join(homedir(), ".claude", "settings.json");
-  const root = process.cwd();
+  // Use forward slashes for cross-platform compatibility in hook commands
+  const root = process.cwd().replace(/\\/g, "/");
 
   let settings: Record<string, unknown> = {};
   try {
@@ -84,7 +85,7 @@ function ensureClaudeHooks(): void {
     (e) => e.hooks?.some((h) => h.command?.includes("session-start-hook.js"))
   );
   if (!hasSessionStart) {
-    const hookPath = join(root, "scripts", "session-start-hook.js");
+    const hookPath = join(root, "scripts", "session-start-hook.js").replace(/\\/g, "/");
     sessionStartEntries.push({
       hooks: [{ command: `node "${hookPath}"`, timeout: 5, type: "command" } as never],
     });
@@ -99,7 +100,7 @@ function ensureClaudeHooks(): void {
     (e) => e.hooks?.some((h) => h.command?.includes("post-tool-hook.js"))
   );
   if (!hasPostTool) {
-    const hookPath = join(root, "scripts", "post-tool-hook.js");
+    const hookPath = join(root, "scripts", "post-tool-hook.js").replace(/\\/g, "/");
     postToolEntries.push({
       hooks: [{ command: `node "${hookPath}"`, timeout: 10, type: "command" } as never],
       matcher: "Write|Edit|MultiEdit",
@@ -115,7 +116,7 @@ function ensureClaudeHooks(): void {
     (e) => e.hooks?.some((h) => h.command?.includes("stop-hook.js"))
   );
   if (!hasStop) {
-    const hookPath = join(root, "scripts", "stop-hook.js");
+    const hookPath = join(root, "scripts", "stop-hook.js").replace(/\\/g, "/");
     stopEntries.push({
       hooks: [{ command: `node "${hookPath}"`, timeout: 5, type: "command" } as never],
     });
