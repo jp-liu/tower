@@ -44,13 +44,25 @@ export async function createWorktree(
     { cwd: localPath, encoding: "utf-8", timeout: 10000 }
   );
 
+  // Normalize paths for cross-platform comparison (Windows may have mixed slashes)
+  const normalizedWorktreePath = path.normalize(worktreePath).replace(/\\/g, "/");
   const worktreeLines = worktreeList.split("\n");
   const alreadyExists = worktreeLines.some(
-    (line: string) => line === `worktree ${worktreePath}`
+    (line: string) => line.startsWith("worktree ") &&
+      line.slice(9).replace(/\\/g, "/") === normalizedWorktreePath
   );
 
   if (alreadyExists) {
     return { worktreePath, worktreeBranch };
+  }
+
+  // Additional check: if directory exists but not in git worktree list, clean it up first
+  if (existsSync(worktreePath)) {
+    logger.warn(`[worktree] Directory exists but not tracked by git, removing: ${worktreePath}`);
+    execFileSync(
+      "git", ["worktree", "remove", worktreePath, "--force"],
+      { cwd: localPath, encoding: "utf-8", timeout: 30000 }
+    );
   }
 
   // Check if the task branch already exists

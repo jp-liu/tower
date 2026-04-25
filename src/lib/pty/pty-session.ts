@@ -35,19 +35,17 @@ export class PtySession {
     this._onIdle = onIdle ?? null;
     this._idleThresholdMs = Math.max(idleThresholdMs ?? 180_000, 180_000);
 
+    // Inherit the full parent env (esp. on Windows: USERPROFILE, SystemRoot, ComSpec, Path,
+    // CLAUDE_CODE_GIT_BASH_PATH, etc.). A tiny whitelist made claude.cmd / Node shims exit immediately
+    // after start, while /test-terminal’s bash.exe often still worked.
     this._pty = pty.spawn(command, args, {
       name: "xterm-color",
       cols: 80,
       rows: 24,
       cwd,
       env: {
-        PATH: process.env.PATH ?? "",
-        HOME: process.env.HOME ?? "",
-        SHELL: process.env.SHELL ?? "/bin/zsh",
+        ...process.env,
         TERM: "xterm-color",
-        LANG: process.env.LANG ?? "en_US.UTF-8",
-        USER: process.env.USER ?? "",
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? "",
         ...envOverrides,
       },
     });
@@ -113,7 +111,7 @@ export class PtySession {
 
   /** Register a callback for PTY exit — ws-server uses this to send session_end.
    *  Replaces previous listeners to prevent accumulation on reconnect. */
-  setExitListener(fn: (exitCode: number) => void): void {
+  setExitListener(fn: (exitCode: number | undefined) => void): void {
     this._exitListeners = [fn];
   }
 

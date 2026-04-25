@@ -39,6 +39,31 @@ export function broadcastNotification(payload: object): void {
 const BATCH_INTERVAL_MS = 8;
 const SEND_BUFFER_MAX = 64 * 1024;
 
+const WS_PTY_EXIT_BASE = 4000; // 4000–4255: PTY 退出码 0–255 嵌入 WebSocket 关闭码（RFC 允许 1000–4999）
+const WS_PTY_UNKNOWN_EXIT = WS_PTY_EXIT_BASE + 255;
+
+/**
+ * node-pty 在进程被信号终止时 `exitCode` 可能为 `undefined`；Windows 上可能是大于 256 的 32 位无符号数。
+ * `client.close(4000 + undefined)` 会得到 NaN 并抛错。归一化到 0–255 再 +4000。
+ */
+function webSocketCloseCodeForPtyExit(exitCode: number | null | undefined): number {
+  if (exitCode == null) {
+    return WS_PTY_UNKNOWN_EXIT;
+  }
+  const n = Number(exitCode);
+  if (!Number.isFinite(n)) {
+    return WS_PTY_UNKNOWN_EXIT;
+  }
+  // 0–255 原样；否则取低 8 位（Windows 崩溃码 HRESULT 等）
+  const b = n >= 0 && n < 256 ? n | 0 : (n >>> 0) & 0xff;
+  const code = WS_PTY_EXIT_BASE + b;
+  // `ws` 要求关闭码在合法数值范围内
+  if (code < 1000 || code > 4999) {
+    return WS_PTY_UNKNOWN_EXIT;
+  }
+  return code;
+}
+
 const g = globalThis as typeof globalThis & { __wss?: InstanceType<typeof WebSocketServer> };
 
 export async function startWsServer(): Promise<void> {
@@ -240,10 +265,11 @@ function wireSession(session: import("./pty-session").PtySession, ws: WebSocket,
   }
 
   // Set up exit listener — notify ALL connected clients
-  session.setExitListener((exitCode: number) => {
+  session.setExitListener((exitCode) => {
+    const closeCode = webSocketCloseCodeForPtyExit(exitCode);
     for (const client of currentClients) {
       if (client.readyState === WebSocket.OPEN) {
-        client.close(4000 + exitCode, "session_end");
+        client.close(closeCode, "session_end");
       }
     }
   });
