@@ -13,6 +13,7 @@ import { createTask, updateTaskStatus, updateTask, deleteTask, toggleTaskPinned 
 import { startPtyExecution } from "@/actions/agent-actions";
 import { ProjectTabs } from "@/components/board/project-tabs";
 import type { TaskStatus, Priority } from "@prisma/client";
+import { TOWER_LABEL_NAME } from "@/lib/constants";
 import type { TaskWithLabels } from "@/types";
 import { toast } from "sonner";
 
@@ -40,8 +41,6 @@ interface BoardPageClientProps {
   project: ProjectInfo;
   projects: Array<{ id: string; name: string; alias: string | null }>;
   initialTasks: TaskWithLabels[];
-  totalTasks: number;
-  runningTasks: number;
   labels: LabelOption[];
   openTaskId?: string;
 }
@@ -52,8 +51,6 @@ export function BoardPageClient({
   project,
   projects,
   initialTasks,
-  totalTasks,
-  runningTasks,
   labels,
   openTaskId,
 }: BoardPageClientProps) {
@@ -164,7 +161,7 @@ export function BoardPageClient({
 
   // Exclude Tower-labeled tasks from kanban (system workbench tasks)
   const boardTasks = initialTasks.filter(
-    (t) => !t.labels?.some((tl) => tl.label.name === "Tower" && tl.label.isBuiltin)
+    (t) => !t.labels?.some((tl) => tl.label.name === TOWER_LABEL_NAME && tl.label.isBuiltin)
   );
 
   const filteredTasks = searchQuery.trim()
@@ -189,8 +186,8 @@ export function BoardPageClient({
 
         {/* Stats */}
         <BoardStats
-          totalTasks={totalTasks}
-          runningTasks={runningTasks}
+          totalTasks={boardTasks.length}
+          runningTasks={boardTasks.filter((t) => t.status === "IN_PROGRESS").length}
         />
 
         {/* Filters */}

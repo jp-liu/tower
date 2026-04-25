@@ -24,11 +24,6 @@ export async function cleanupStaleExecutions() {
 }
 
 /**
- * Prune orphaned git worktrees for all GIT projects at server startup.
- * This file is ONLY imported via dynamic import inside instrumentation.ts
- * when NEXT_RUNTIME === "nodejs", so Node.js modules are safe to use.
- */
-/**
  * Ensure the builtin "Tower" label exists.
  * Used for system workbench tasks (hidden from kanban board).
  */
@@ -50,6 +45,48 @@ export async function ensureTowerLabel() {
   }
 }
 
+/**
+ * Find or create the Tower system task for a project.
+ * Uses label-based lookup (not title) to survive project renames.
+ */
+export async function ensureTowerTask(projectId: string, projectName: string): Promise<string> {
+  const { TOWER_LABEL_NAME } = await import("@/lib/constants");
+
+  // Find by Tower label (rename-safe)
+  const existing = await db.task.findFirst({
+    where: {
+      projectId,
+      labels: { some: { label: { name: TOWER_LABEL_NAME, isBuiltin: true } } },
+    },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  // Create with label
+  const towerLabel = await db.label.findFirst({
+    where: { name: TOWER_LABEL_NAME, isBuiltin: true },
+  });
+
+  const task = await db.task.create({
+    data: {
+      title: `${projectName}-Tower`,
+      description: `Project workbench for ${projectName}`,
+      projectId,
+      status: "TODO",
+      priority: "LOW",
+      order: 0,
+      ...(towerLabel ? { labels: { create: { labelId: towerLabel.id } } } : {}),
+    },
+    select: { id: true },
+  });
+  return task.id;
+}
+
+/**
+ * Prune orphaned git worktrees for all GIT projects at server startup.
+ * This file is ONLY imported via dynamic import inside instrumentation.ts
+ * when NEXT_RUNTIME === "nodejs", so Node.js modules are safe to use.
+ */
 export async function pruneOrphanedWorktrees() {
   try {
     await initDb();

@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { notFound, redirect } from "next/navigation";
-import { TOWER_LABEL_NAME } from "@/lib/constants";
+import { ensureTowerTask } from "@/lib/instrumentation-tasks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,8 +10,8 @@ interface Props {
 }
 
 /**
- * Project Workbench — finds the "{name}-Tower" task (auto-created with project)
- * and redirects to the task detail page. Falls back to creating one if missing.
+ * Project Workbench — finds or creates the Tower task (by label, not title)
+ * and redirects to the task detail page.
  */
 export default async function ProjectWorkbenchPage({ params }: Props) {
   const { workspaceId, projectId } = await params;
@@ -25,33 +25,6 @@ export default async function ProjectWorkbenchPage({ params }: Props) {
     notFound();
   }
 
-  const towerTitle = `${project.name}-Tower`;
-
-  // Find existing Tower task
-  let task = await db.task.findFirst({
-    where: { projectId: project.id, title: towerTitle },
-    select: { id: true },
-  });
-
-  // Fallback: create if missing (e.g. project created before this feature)
-  if (!task) {
-    const towerLabel = await db.label.findFirst({
-      where: { name: TOWER_LABEL_NAME, isBuiltin: true },
-    });
-
-    task = await db.task.create({
-      data: {
-        title: towerTitle,
-        description: `Project workbench for ${project.name}`,
-        projectId: project.id,
-        status: "TODO",
-        priority: "LOW",
-        order: 0,
-        ...(towerLabel ? { labels: { create: { labelId: towerLabel.id } } } : {}),
-      },
-      select: { id: true },
-    });
-  }
-
-  redirect(`/workspaces/${workspaceId}/tasks/${task.id}`);
+  const taskId = await ensureTowerTask(project.id, project.name);
+  redirect(`/workspaces/${workspaceId}/tasks/${taskId}`);
 }

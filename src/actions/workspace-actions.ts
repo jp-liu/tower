@@ -85,23 +85,10 @@ export async function createProject(data: {
 
   // Auto-create Tower task (project workbench)
   try {
-    const { TOWER_LABEL_NAME } = await import("@/lib/constants");
-    const towerLabel = await db.label.findFirst({
-      where: { name: TOWER_LABEL_NAME, isBuiltin: true },
-    });
-    await db.task.create({
-      data: {
-        title: `${v.name}-Tower`,
-        description: `Project workbench for ${v.name}`,
-        projectId: project.id,
-        status: "TODO",
-        priority: "LOW",
-        order: 0,
-        ...(towerLabel ? { labels: { create: { labelId: towerLabel.id } } } : {}),
-      },
-    });
-  } catch {
-    // Non-critical — workbench task can be created later via Open Studio
+    const { ensureTowerTask } = await import("@/lib/instrumentation-tasks");
+    await ensureTowerTask(project.id, v.name);
+  } catch (error) {
+    console.warn("Failed to auto-create Tower task", error);
   }
 
   revalidatePath("/workspaces");

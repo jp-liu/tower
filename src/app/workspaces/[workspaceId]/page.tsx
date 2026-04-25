@@ -58,7 +58,6 @@ export default async function WorkspaceBoardPage({ params, searchParams }: Props
     : workspace.projects[0];
 
   const tasks = project.tasks;
-  const runningTasks = tasks.filter((t) => t.status === "IN_PROGRESS").length;
 
   return (
     <BoardPageClient
@@ -75,8 +74,6 @@ export default async function WorkspaceBoardPage({ params, searchParams }: Props
       }}
       projects={workspace.projects.map((p) => ({ id: p.id, name: p.name, alias: p.alias }))}
       initialTasks={tasks}
-      totalTasks={tasks.length}
-      runningTasks={runningTasks}
       labels={labels.map((l) => ({ id: l.id, name: l.name, color: l.color, isBuiltin: l.isBuiltin }))}
       openTaskId={openTaskId}
     />
