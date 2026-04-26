@@ -469,7 +469,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
 
       {/* ── Edit Project Dialog ── */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent style={{ maxWidth: "32rem" }}>
           <DialogHeader>
             <DialogTitle>{t("project.edit")}</DialogTitle>
           </DialogHeader>
