@@ -17,8 +17,6 @@ import { analyzeProjectDirectory } from "@/actions/project-actions";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { CreateBranchDialog } from "./create-branch-dialog";
@@ -276,9 +274,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
           </div>
         </div>
         {project.description && (
-          <div className="mt-2 max-h-32 overflow-y-auto text-sm text-secondary-foreground leading-relaxed prose prose-sm prose-invert prose-p:my-1 prose-ul:my-1 prose-li:my-0">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{project.description}</ReactMarkdown>
-          </div>
+          <p className="mt-2 text-sm text-secondary-foreground leading-relaxed line-clamp-4">{project.description}</p>
         )}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium ${
