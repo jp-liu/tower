@@ -66,7 +66,7 @@ export function CreateProjectDialog({
   };
 
   const handleAnalyze = async () => {
-    if (!localPath.trim() || isAnalyzing) return;
+    if (!localPath.trim() || isAnalyzing || cloneStatus !== "success") return;
     setIsAnalyzing(true);
     try {
       const result = await analyzeProjectDirectory(localPath.trim());
@@ -260,9 +260,8 @@ export function CreateProjectDialog({
                       <Button
                         type="button"
                         variant="ghost"
-                        disabled={!localPath.trim() || isAnalyzing}
                         onClick={handleAnalyze}
-                        className="h-6 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+                        className={`h-6 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground ${!localPath.trim() || isAnalyzing ? "opacity-50" : ""}`}
                       />
                     }
                   >
@@ -273,7 +272,13 @@ export function CreateProjectDialog({
                     )}
                     {isAnalyzing ? t("project.analyzing") : t("project.genDesc")}
                   </TooltipTrigger>
-                  <TooltipContent>{t("project.genDescDisabledTooltip")}</TooltipContent>
+                  <TooltipContent>
+                    {!localPath.trim()
+                      ? t("project.genDescNoPath")
+                      : cloneStatus !== "success"
+                        ? t("project.genDescNotCloned")
+                        : t("project.genDescReady")}
+                  </TooltipContent>
                 </Tooltip>
               </div>
               <Textarea

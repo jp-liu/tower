@@ -54,6 +54,10 @@ export async function updateWorkspace(id: string, data: { name?: string; descrip
 }
 
 export async function deleteWorkspace(id: string) {
+  const count = await db.workspace.count();
+  if (count <= 1) {
+    throw new Error("Cannot delete the last workspace");
+  }
   await db.workspace.delete({ where: { id } });
   revalidatePath("/workspaces");
 }
@@ -108,6 +112,40 @@ export async function updateProject(id: string, data: { name?: string; alias?: s
 }
 
 export async function deleteProject(id: string) {
+  // Graceful cleanup: stop active executions, cancel pending tasks, remove worktrees
+  const tasks = await db.task.findMany({
+    where: { projectId: id },
+    include: { project: { select: { localPath: true } } },
+  });
+
+  const { destroySession } = await import("@/lib/pty/session-store");
+  const { removeWorktree } = await import("@/lib/worktree");
+
+  for (const task of tasks) {
+    // Kill any running PTY session
+    try { destroySession(task.id); } catch { /* best-effort */ }
+
+    // Cancel running executions
+    await db.taskExecution.updateMany({
+      where: { taskId: task.id, status: { in: ["PENDING", "RUNNING", "PAUSED"] } },
+      data: { status: "FAILED", endedAt: new Date() },
+    });
+
+    // Clean up worktree
+    if (task.project?.localPath) {
+      try { await removeWorktree(task.project.localPath, task.id); } catch { /* best-effort */ }
+    }
+
+    // Set non-terminal tasks to CANCELLED
+    if (!["DONE", "CANCELLED"].includes(task.status)) {
+      await db.task.update({
+        where: { id: task.id },
+        data: { status: "CANCELLED" },
+      });
+    }
+  }
+
+  // Now safe to delete (cascade handles remaining DB records)
   await db.project.delete({ where: { id } });
   revalidatePath("/workspaces");
 }

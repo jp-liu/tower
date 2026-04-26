@@ -362,9 +362,8 @@ export function ImportProjectDialog({
                       <Button
                         type="button"
                         variant="ghost"
-                        disabled={!localPath || isAnalyzing}
                         onClick={handleAnalyze}
-                        className="h-6 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+                        className={`h-6 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground ${!localPath || isAnalyzing ? "opacity-50" : ""}`}
                       />
                     }
                   >
@@ -375,7 +374,9 @@ export function ImportProjectDialog({
                     )}
                     {isAnalyzing ? t("project.analyzing") : t("project.genDesc")}
                   </TooltipTrigger>
-                  {!localPath && <TooltipContent>{t("project.genDescDisabledTooltip")}</TooltipContent>}
+                  <TooltipContent>
+                    {!localPath ? t("project.genDescNoPath") : t("project.genDescReady")}
+                  </TooltipContent>
                 </Tooltip>
               </div>
               <Textarea

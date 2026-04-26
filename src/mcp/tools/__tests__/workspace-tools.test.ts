@@ -8,6 +8,7 @@ vi.mock("../../db", () => ({
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
+      count: vi.fn(),
     },
   },
 }));
@@ -15,12 +16,13 @@ vi.mock("../../db", () => ({
 import { db } from "../../db";
 import { workspaceTools } from "../workspace-tools";
 
-const mockDb = db as {
+const mockDb = db as unknown as {
   workspace: {
     findMany: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
+    count: ReturnType<typeof vi.fn>;
   };
 };
 
@@ -123,12 +125,22 @@ describe("workspace-tools", () => {
 
   describe("delete_workspace", () => {
     it("calls db.workspace.delete with workspaceId and returns deleted: true", async () => {
+      mockDb.workspace.count.mockResolvedValue(2);
       mockDb.workspace.delete.mockResolvedValue({ id: "ws1" });
 
       const result = await workspaceTools.delete_workspace.handler({ workspaceId: "ws1" });
 
       expect(mockDb.workspace.delete).toHaveBeenCalledWith({ where: { id: "ws1" } });
       expect(result).toEqual({ deleted: true, workspaceId: "ws1" });
+    });
+
+    it("throws when trying to delete the last workspace", async () => {
+      mockDb.workspace.count.mockResolvedValue(1);
+
+      await expect(
+        workspaceTools.delete_workspace.handler({ workspaceId: "ws1" }),
+      ).rejects.toThrow("Cannot delete the last workspace");
+      expect(mockDb.workspace.delete).not.toHaveBeenCalled();
     });
   });
 });

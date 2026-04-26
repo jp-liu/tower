@@ -386,10 +386,10 @@ export function TaskDetailPanel({
                     </SelectContent>
                   </Select>
                 )}
-                <button
+                <Button
                   onClick={handleExecute}
                   disabled={isExecuting}
-                  className="flex items-center gap-2 rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+                  className="h-7 gap-2 px-4 text-xs"
                 >
                   {isExecuting ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -397,7 +397,7 @@ export function TaskDetailPanel({
                     <Terminal className="h-3.5 w-3.5" />
                   )}
                   {isExecuting ? t("terminal.executing") : t("terminal.launch")}
-                </button>
+                </Button>
               </div>
               {/* Execution history */}
               <ScrollArea className="flex-1 min-h-0">

@@ -46,9 +46,10 @@ async function main() {
     },
   });
 
-  // NOTE: No test workspace/project/task created.
-  // New users go through the onboarding wizard (Phase 67) which guides
-  // them to create their first workspace.
+  // Default workspace — ensures at least one workspace always exists
+  await prisma.workspace.create({
+    data: { name: "我的工作区" },
+  });
 
   console.log("Seed completed successfully");
 }

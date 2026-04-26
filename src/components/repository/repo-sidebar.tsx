@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   ChevronDown, ChevronRight, Search, Plus,
   GitBranch, Globe, FileText, Pencil, FolderOpen, GitCommitVertical,
-  Check, AlertCircle, Loader2, Sparkles, RefreshCw,
+  Check, AlertCircle, Loader2, Sparkles, RefreshCw, Trash2,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { updateProject, createProject, getRecentLocalProjects } from "@/actions/workspace-actions";
+import { updateProject, createProject, deleteProject, getRecentLocalProjects } from "@/actions/workspace-actions";
 import { analyzeProjectDirectory } from "@/actions/project-actions";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
@@ -64,6 +64,9 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
   const [gitExpanded, setGitExpanded] = useState(true);
   const [browseExpanded, setBrowseExpanded] = useState(true);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showFolderBrowser, setShowFolderBrowser] = useState(false);
   const [editName, setEditName] = useState(project.name);
   const [editAlias, setEditAlias] = useState(project.alias ?? "");
@@ -242,20 +245,33 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
               <p className="mt-0.5 text-xs text-muted-foreground">{project.alias}</p>
             )}
           </div>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => {
-              setEditName(project.name);
-              setEditAlias(project.alias ?? "");
-              setEditDesc(project.description ?? "");
-              setEditLocalPath(project.localPath ?? "");
-              setShowEditDialog(true);
-            }}
-            className="text-muted-foreground"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
+          <div className="flex items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => {
+                setEditName(project.name);
+                setEditAlias(project.alias ?? "");
+                setEditDesc(project.description ?? "");
+                setEditLocalPath(project.localPath ?? "");
+                setShowEditDialog(true);
+              }}
+              className="text-muted-foreground"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => {
+                setDeleteConfirmText("");
+                setShowDeleteDialog(true);
+              }}
+              className="text-muted-foreground hover:text-rose-400"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
         {project.description && (
           <p className="mt-2 text-sm text-secondary-foreground leading-relaxed">{project.description}</p>
@@ -485,9 +501,8 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
                 <Button
                   type="button"
                   variant="ghost"
-                  disabled={!editLocalPath || isAnalyzing}
                   onClick={handleEditAnalyze}
-                  className="h-6 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  className={`h-6 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground ${!editLocalPath || isAnalyzing ? "opacity-50" : ""}`}
                 >
                   {isAnalyzing ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
@@ -630,6 +645,63 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
           onError={(msg) => showToast(`${t("git.createFailed")}: ${msg}`)}
         />
       )}
+
+      {/* Delete Project Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={(open) => {
+        setShowDeleteDialog(open);
+        if (!open) setDeleteConfirmText("");
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-rose-400">{t("project.deleteTitle")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              {t("project.deleteWarning", { name: project.name })}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {t("project.deleteIrreversible")}
+            </p>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">
+                {t("project.deleteConfirmLabel")}
+              </label>
+              <Input
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder={t("project.deleteConfirmPlaceholder")}
+                className="mt-1.5"
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteConfirmText !== t("project.deleteConfirmText") || isDeleting}
+              onClick={async () => {
+                setIsDeleting(true);
+                try {
+                  await deleteProject(project.id);
+                  toast.success(t("project.deleteSuccess"));
+                  router.push(`/workspaces/${workspaceId}`);
+                } catch {
+                  toast.error(t("project.deleteFailed"));
+                } finally {
+                  setIsDeleting(false);
+                  setShowDeleteDialog(false);
+                }
+              }}
+            >
+              {isDeleting && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
+              {t("project.deleteButton")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </aside>
   );
 }

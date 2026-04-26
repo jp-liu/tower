@@ -9,6 +9,7 @@ vi.mock("@/lib/db", () => ({
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
+      count: vi.fn(),
     },
     project: {
       create: vi.fn(),
@@ -21,6 +22,10 @@ vi.mock("@/lib/db", () => ({
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/instrumentation-tasks", () => ({
+  ensureTowerTask: vi.fn().mockResolvedValue("mock-task-id"),
+  ensureTowerLabel: vi.fn().mockResolvedValue("mock-label-id"),
+}));
 
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
@@ -34,13 +39,14 @@ import {
   getWorkspacesWithRecentTasks,
 } from "@/actions/workspace-actions";
 
-const mockDb = db as {
+const mockDb = db as unknown as {
   workspace: {
     findMany: ReturnType<typeof vi.fn>;
     findUnique: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
+    count: ReturnType<typeof vi.fn>;
   };
   project: {
     create: ReturnType<typeof vi.fn>;
@@ -154,12 +160,20 @@ describe("workspace-actions", () => {
 
   describe("deleteWorkspace", () => {
     it("deletes workspace and calls revalidatePath", async () => {
+      mockDb.workspace.count.mockResolvedValue(2);
       mockDb.workspace.delete.mockResolvedValue({ id: "ws1" });
 
       await deleteWorkspace("ws1");
 
       expect(mockDb.workspace.delete).toHaveBeenCalledWith({ where: { id: "ws1" } });
       expect(revalidatePath).toHaveBeenCalledWith("/workspaces");
+    });
+
+    it("throws when trying to delete the last workspace", async () => {
+      mockDb.workspace.count.mockResolvedValue(1);
+
+      await expect(deleteWorkspace("ws1")).rejects.toThrow("Cannot delete the last workspace");
+      expect(mockDb.workspace.delete).not.toHaveBeenCalled();
     });
   });
 

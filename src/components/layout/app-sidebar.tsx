@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { createWorkspace, updateWorkspace, deleteWorkspace } from "@/actions/workspace-actions";
 import { getLabelsForWorkspace, createLabel, deleteLabel } from "@/actions/label-actions";
 import { useI18n } from "@/lib/i18n";
+import { toast } from "sonner";
 
 const WORKSPACE_ICONS: string[] = ["\u{1F4CB}","\u{1F680}","\u{1F3AF}","\u{1F4A1}","\u{1F527}","\u{1F4E6}","\u{1F3A8}","\u{1F4CA}","\u{1F52C}","\u{1F31F}","\u{1F4DD}","\u{1F3D7}\uFE0F"];
 
@@ -101,11 +102,19 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
   }, []);
 
   const handleDelete = useCallback(async (id: string, name: string) => {
+    if (workspaces.length <= 1) {
+      toast.error(t("sidebar.lastWorkspaceError"));
+      return;
+    }
     if (!confirm(t("sidebar.deleteConfirm", { name }))) return;
-    await deleteWorkspace(id);
-    router.refresh();
-    if (activeWorkspaceId === id) router.push("/workspaces");
-  }, [activeWorkspaceId, router, t]);
+    try {
+      await deleteWorkspace(id);
+      router.refresh();
+      if (activeWorkspaceId === id) router.push("/workspaces");
+    } catch {
+      toast.error(t("sidebar.lastWorkspaceError"));
+    }
+  }, [activeWorkspaceId, router, t, workspaces.length]);
 
   const openLabelManager = useCallback((wsId: string) => {
     setLabelManagerWsId(wsId);
@@ -313,7 +322,11 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
                     <Tag className="mr-2 h-3.5 w-3.5" />
                     {t("sidebar.manageLabels")}
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="text-rose-400" onClick={() => handleDelete(ws.id, ws.name)}>
+                  <DropdownMenuItem
+                    className={workspaces.length <= 1 ? "text-muted-foreground opacity-50" : "text-rose-400"}
+                    disabled={workspaces.length <= 1}
+                    onClick={() => handleDelete(ws.id, ws.name)}
+                  >
                     <Trash2 className="mr-2 h-3.5 w-3.5" />
                     {t("sidebar.delete")}
                   </DropdownMenuItem>

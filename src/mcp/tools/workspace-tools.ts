@@ -62,6 +62,10 @@ export const workspaceTools = {
       workspaceId: z.string(),
     }),
     handler: async (args: { workspaceId: string }) => {
+      const count = await db.workspace.count();
+      if (count <= 1) {
+        throw new Error("Cannot delete the last workspace");
+      }
       await db.workspace.delete({ where: { id: args.workspaceId } });
       return { deleted: true, workspaceId: args.workspaceId };
     },
