@@ -389,13 +389,15 @@ export function TaskPickerDialog({
           </ScrollArea>
 
           {/* Footer — clickable to open full dialog */}
-          <Button
-            variant="ghost"
-            className="w-full rounded-none border-t border-border shrink-0 text-xs text-primary font-medium"
-            onClick={handleOpenFullDialog}
-          >
-            {t("missions.showMoreTasks")}
-          </Button>
+          <div className="shrink-0 border-t border-border">
+            <Button
+              variant="ghost"
+              className="w-full rounded-none text-xs text-primary font-medium"
+              onClick={handleOpenFullDialog}
+            >
+              {t("missions.showMoreTasks")}
+            </Button>
+          </div>
         </div>
       )}
 
