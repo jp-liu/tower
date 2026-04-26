@@ -73,16 +73,6 @@ export async function POST(request: NextRequest) {
 
         const hasImages = safeImageFilenames.length > 0;
 
-        // Isolate MCP: only load this Tower's MCP server, ignore all other configs
-        const mcpConfig = JSON.stringify({
-          mcpServers: {
-            tower: {
-              command: "npx",
-              args: ["tsx", path.join(process.cwd(), "src/mcp/index.ts")],
-            },
-          },
-        });
-
         const options: Record<string, unknown> = {
           // No built-in tools for text-only — add Read tool when images are attached (AI-02)
           tools: hasImages ? ["Read"] : [],
@@ -95,8 +85,23 @@ export async function POST(request: NextRequest) {
           // .tower/ directory has its own CLAUDE.md with assistant persona
           cwd: towerDir,
           pathToClaudeCodeExecutable: claudePath,
-          // Only use this Tower's MCP server
-          mcpConfig,
+          // Isolate MCP: only load this Tower's MCP server
+          mcpConfig: (() => {
+            const fs = require("node:fs");
+            const os = require("node:os");
+            const dir = path.join(os.tmpdir(), "tower-mcp");
+            fs.mkdirSync(dir, { recursive: true });
+            const p = path.join(dir, "chat-mcp.json");
+            fs.writeFileSync(p, JSON.stringify({
+              mcpServers: {
+                tower: {
+                  command: "npx",
+                  args: ["tsx", path.join(process.cwd(), "src/mcp/index.ts")],
+                },
+              },
+            }), "utf-8");
+            return p;
+          })(),
           strictMcpConfig: true,
         };
 
