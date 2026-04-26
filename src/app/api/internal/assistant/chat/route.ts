@@ -2,23 +2,13 @@ import { NextRequest } from "next/server";
 import { requireLocalhost } from "@/lib/internal-api-guard";
 import { buildMultimodalPrompt } from "@/lib/build-multimodal-prompt";
 import { getAssistantCacheRoot } from "@/lib/file-utils";
-import { resolveCommandPathSync } from "@/lib/platform";
+import { ClaudeCliAdapter } from "@/lib/ai/adapters/cli/claude-cli-adapter";
 import { db } from "@/lib/db";
+
+const claudeAdapter = new ClaudeCliAdapter();
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-/** Resolve the claude CLI binary path — env var > platform-aware resolution.
- *  On Windows, prefer `claude-code` (native exe) over `claude.cmd` (npm shim)
- *  because the Agent SDK spawns this directly without cmd.exe wrapping. */
-function findClaudeBinary(): string {
-  if (process.env.CLAUDE_CODE_PATH) return process.env.CLAUDE_CODE_PATH;
-  if (process.platform === "win32") {
-    const native = resolveCommandPathSync("claude-code");
-    if (native !== "claude-code") return native;
-  }
-  return resolveCommandPathSync("claude");
-}
 
 /**
  * POST /api/internal/assistant/chat
@@ -74,7 +64,7 @@ export async function POST(request: NextRequest) {
       try {
         const { query } = await import("@anthropic-ai/claude-agent-sdk");
 
-        const claudePath = findClaudeBinary();
+        const claudePath = claudeAdapter.resolveCommand();
 
         // Ensure .tower/ exists (runtime guard — handles deletion while server is running)
         const { ensureTowerDir } = await import("@/lib/init-tower");

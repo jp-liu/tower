@@ -1,23 +1,12 @@
-import { resolveCommandPathSync } from "@/lib/platform";
+import { ClaudeCliAdapter } from "@/lib/ai/adapters/cli/claude-cli-adapter";
+
+const claudeAdapter = new ClaudeCliAdapter();
 
 export interface DreamingResult {
   summary: string;
   insights: Array<{ type: "pattern" | "pitfall" | "decision" | "tool" | "reference"; content: string }>;
   shouldCreateNote: boolean;
   noteTitle?: string;
-}
-
-/** Resolve claude CLI binary — env var > platform-aware resolution.
- *  On Windows, prefer `claude-code` (native exe) over `claude.cmd` (npm shim)
- *  because the Agent SDK spawns this directly without cmd.exe wrapping. */
-function findClaudeBinary(): string {
-  if (process.env.CLAUDE_CODE_PATH) return process.env.CLAUDE_CODE_PATH;
-  // On Windows, try native binary first — SDK spawn doesn't wrap .cmd files
-  if (process.platform === "win32") {
-    const native = resolveCommandPathSync("claude-code");
-    if (native !== "claude-code") return native; // found real path
-  }
-  return resolveCommandPathSync("claude");
 }
 
 /**
@@ -40,7 +29,7 @@ export async function aiQuery(
   let result = "";
   try {
     const { query } = await import("@anthropic-ai/claude-agent-sdk");
-    const claudePath = findClaudeBinary();
+    const claudePath = claudeAdapter.resolveCommand();
     const q = query({
       prompt,
       options: {
