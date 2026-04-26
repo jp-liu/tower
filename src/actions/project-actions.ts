@@ -200,7 +200,7 @@ Keep the description concise (under 400 words). Do not add commentary or preambl
 
   const { aiQuery } = await import("@/lib/claude-session");
   const result = await aiQuery(prompt, localPath, {
-    maxTurns: 3,
+    maxTurns: 10,
     tools: ["Read", "Glob"],
     allowedTools: ["Read", "Glob"],
   });

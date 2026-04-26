@@ -37,11 +37,10 @@ export async function aiQuery(
   cwd: string,
   opts: AiQueryOptions = {},
 ): Promise<string | null> {
+  let result = "";
   try {
     const { query } = await import("@anthropic-ai/claude-agent-sdk");
     const claudePath = findClaudeBinary();
-
-    let result = "";
     const q = query({
       prompt,
       options: {
@@ -62,12 +61,22 @@ export async function aiQuery(
         result += textBlocks
           .map((b: { type: string; text?: string }) => b.text ?? "")
           .join("");
+      } else if (msg.type === "result") {
+        // SDK result message — may contain final text
+        const resultMsg = msg as Record<string, unknown>;
+        const resultText = typeof resultMsg.result === "string" ? resultMsg.result : "";
+        if (resultText && !result) result = resultText;
       }
     }
 
     return result.trim() || null;
   } catch (err) {
-    console.error("[aiQuery] Failed:", (err as Error).message?.slice(0, 100));
+    const error = err as Error;
+    // max_turns reached — SDK throws but we may have partial result
+    if (error.message?.includes("maximum number of turns") && result.trim()) {
+      return result.trim();
+    }
+    console.error("[aiQuery] Failed:", error.message, error.stack?.slice(0, 300));
     return null;
   }
 }
