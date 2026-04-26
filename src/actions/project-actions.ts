@@ -180,23 +180,18 @@ export async function analyzeProjectDirectory(localPath: string): Promise<string
     throw new Error("本地路径必须为绝对路径");
   }
 
-  const prompt = `You are analyzing a software project directory. Read the directory structure and key files (package.json, README.md, src/ or lib/ directory layout, any monorepo config like pnpm-workspace.yaml, lerna.json, or turbo.json) to generate a structured project description.
+  const prompt = `分析这个项目目录，生成一段简短的项目描述（纯文本，不要 Markdown 标题）。
 
-Output ONLY the Markdown description with these sections (omit sections with no data):
+读取 package.json、README.md 等关键文件，然后用 3-5 句话概括：
+1. 这个项目是什么（一句话定位）
+2. 主要技术栈
+3. 核心模块/功能
 
-## 技术栈
-List the primary languages, frameworks, and key libraries.
-
-## 模块结构
-Briefly describe the main packages/modules and their responsibilities.
-
-## 入口点
-Key entry files (e.g. src/index.ts, apps/web/src/app/page.tsx).
-
-## MCP subPath（如果是 monorepo）
-If this is a monorepo, list each package/app with its relative path and one-line purpose.
-
-Keep the description concise (under 400 words). Do not add commentary or preamble — output only the Markdown.`;
+要求：
+- 总字数不超过 200 字
+- 纯文本，不要用 ## 标题、表格、列表
+- 不要罗列每个文件，只说关键信息
+- 中文输出`;
 
   const { aiQuery } = await import("@/lib/claude-session");
   const result = await aiQuery(prompt, localPath, {
