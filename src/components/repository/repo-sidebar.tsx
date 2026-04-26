@@ -538,7 +538,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
             <Button variant="outline" onClick={() => setShowEditDialog(false)}>{t("common.cancel")}</Button>
             <Button
               onClick={handleSaveProject}
-              disabled={!editName.trim()}
+              disabled={!editName.trim() || isAnalyzing}
               className="bg-primary/10 text-primary ring-1 ring-primary/20 hover:bg-primary/15"
             >
               {t("common.save")}
