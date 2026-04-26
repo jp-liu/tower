@@ -180,17 +180,18 @@ export async function analyzeProjectDirectory(localPath: string): Promise<string
     throw new Error("本地路径必须为绝对路径");
   }
 
-  const prompt = `分析这个项目目录，生成一段简短的项目描述（纯文本，不要 Markdown 标题）。
+  const prompt = `分析这个项目目录，生成一段简短的 Markdown 项目描述。
 
-读取 package.json、README.md 等关键文件，然后用 3-5 句话概括：
-1. 这个项目是什么（一句话定位）
-2. 主要技术栈
-3. 核心模块/功能
+读取 package.json、README.md 等关键文件，然后概括：
+
+**技术栈：** 一句话列出主要语言、框架、关键库
+**定位：** 一句话说明项目是什么
+**核心模块：** 2-3 个关键模块，每个一句话
 
 要求：
-- 总字数不超过 200 字
-- 纯文本，不要用 ## 标题、表格、列表
-- 不要罗列每个文件，只说关键信息
+- 总字数不超过 300 字
+- 用简洁的 Markdown（加粗标签 + 短句），不要用 ## 大标题和表格
+- 不要罗列每个文件/目录，只说关键信息
 - 中文输出`;
 
   const { aiQuery } = await import("@/lib/claude-session");
