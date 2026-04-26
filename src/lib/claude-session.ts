@@ -24,7 +24,19 @@ function findClaudeBinary(): string {
  * Run a single-turn AI query via Claude Agent SDK.
  * Unified entry point — all AI capabilities route through here.
  */
-export async function aiQuery(prompt: string, cwd: string, maxTurns = 1): Promise<string | null> {
+export interface AiQueryOptions {
+  maxTurns?: number;
+  /** Built-in tools to enable (e.g. ["Read", "Glob", "Grep"]) */
+  tools?: string[];
+  /** Tool patterns to allow (e.g. ["Read", "Glob"]) */
+  allowedTools?: string[];
+}
+
+export async function aiQuery(
+  prompt: string,
+  cwd: string,
+  opts: AiQueryOptions = {},
+): Promise<string | null> {
   try {
     const { query } = await import("@anthropic-ai/claude-agent-sdk");
     const claudePath = findClaudeBinary();
@@ -33,9 +45,9 @@ export async function aiQuery(prompt: string, cwd: string, maxTurns = 1): Promis
     const q = query({
       prompt,
       options: {
-        tools: [],
-        allowedTools: [],
-        maxTurns,
+        tools: opts.tools ?? [],
+        allowedTools: opts.allowedTools ?? [],
+        maxTurns: opts.maxTurns ?? 1,
         cwd,
         pathToClaudeCodeExecutable: claudePath,
         sessionPersistence: false,

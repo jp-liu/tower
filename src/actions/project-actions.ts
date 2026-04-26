@@ -199,7 +199,11 @@ If this is a monorepo, list each package/app with its relative path and one-line
 Keep the description concise (under 400 words). Do not add commentary or preamble — output only the Markdown.`;
 
   const { aiQuery } = await import("@/lib/claude-session");
-  const result = await aiQuery(prompt, localPath);
+  const result = await aiQuery(prompt, localPath, {
+    maxTurns: 3,
+    tools: ["Read", "Glob"],
+    allowedTools: ["Read", "Glob"],
+  });
   if (!result) throw new Error("AI 分析未返回结果");
   return result;
 }
