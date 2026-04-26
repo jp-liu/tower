@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import * as path from "node:path";
 import { requireLocalhost } from "@/lib/internal-api-guard";
 import { buildMultimodalPrompt } from "@/lib/build-multimodal-prompt";
 import { getAssistantCacheRoot } from "@/lib/file-utils";
@@ -72,6 +73,16 @@ export async function POST(request: NextRequest) {
 
         const hasImages = safeImageFilenames.length > 0;
 
+        // Isolate MCP: only load this Tower's MCP server, ignore all other configs
+        const mcpConfig = JSON.stringify({
+          mcpServers: {
+            tower: {
+              command: "npx",
+              args: ["tsx", path.join(process.cwd(), "src/mcp/index.ts")],
+            },
+          },
+        });
+
         const options: Record<string, unknown> = {
           // No built-in tools for text-only — add Read tool when images are attached (AI-02)
           tools: hasImages ? ["Read"] : [],
@@ -84,6 +95,9 @@ export async function POST(request: NextRequest) {
           // .tower/ directory has its own CLAUDE.md with assistant persona
           cwd: towerDir,
           pathToClaudeCodeExecutable: claudePath,
+          // Only use this Tower's MCP server
+          mcpConfig,
+          strictMcpConfig: true,
         };
 
         // Resume previous session if sessionId provided

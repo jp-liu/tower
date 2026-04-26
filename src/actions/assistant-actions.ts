@@ -1,6 +1,7 @@
 "use server";
 
 import { randomUUID } from "crypto";
+import * as path from "node:path";
 import {
   createSession,
   destroySession,
@@ -55,9 +56,22 @@ export async function startAssistantSession(sessionId?: string): Promise<void> {
   // Tower project root is the cwd for the assistant session
   const cwd = process.cwd();
 
+  // Build MCP config pointing ONLY to this Tower instance's MCP server
+  const mcpConfig = JSON.stringify({
+    mcpServers: {
+      tower: {
+        command: "npx",
+        args: ["tsx", path.join(cwd, "src/mcp/index.ts")],
+      },
+    },
+  });
+
   // Build CLI arguments
   const claudeArgs: string[] = [
     ...profileBaseArgs,
+    // Isolate MCP: only load this Tower's MCP server, ignore all other configs
+    "--mcp-config", mcpConfig,
+    "--strict-mcp-config",
     // BE-03: Restrict to Tower MCP tools only
     "--allowedTools",
     "mcp__tower__*",
