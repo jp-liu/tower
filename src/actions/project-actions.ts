@@ -205,5 +205,6 @@ Keep the description concise (under 400 words). Do not add commentary or preambl
     allowedTools: ["Read", "Glob"],
   });
   if (!result) throw new Error("AI 分析未返回结果");
-  return result;
+  // Hard cap — prompt says 400 words but Claude may exceed
+  return result.length > 2000 ? result.slice(0, 2000).trimEnd() + "\n\n..." : result;
 }

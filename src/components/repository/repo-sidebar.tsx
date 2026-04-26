@@ -274,7 +274,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
           </div>
         </div>
         {project.description && (
-          <p className="mt-2 text-sm text-secondary-foreground leading-relaxed">{project.description}</p>
+          <p className="mt-2 text-sm text-secondary-foreground leading-relaxed line-clamp-4">{project.description}</p>
         )}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium ${
