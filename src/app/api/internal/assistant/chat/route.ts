@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import * as path from "node:path";
 import { requireLocalhost } from "@/lib/internal-api-guard";
 import { buildMultimodalPrompt } from "@/lib/build-multimodal-prompt";
 import { getAssistantCacheRoot } from "@/lib/file-utils";
@@ -85,24 +84,6 @@ export async function POST(request: NextRequest) {
           // .tower/ directory has its own CLAUDE.md with assistant persona
           cwd: towerDir,
           pathToClaudeCodeExecutable: claudePath,
-          // Isolate MCP: only load this Tower's MCP server
-          mcpConfig: (() => {
-            const fs = require("node:fs");
-            const os = require("node:os");
-            const dir = path.join(os.tmpdir(), "tower-mcp");
-            fs.mkdirSync(dir, { recursive: true });
-            const p = path.join(dir, "chat-mcp.json");
-            fs.writeFileSync(p, JSON.stringify({
-              mcpServers: {
-                tower: {
-                  command: "npx",
-                  args: ["tsx", path.join(process.cwd(), "src/mcp/index.ts")],
-                },
-              },
-            }), "utf-8");
-            return p;
-          })(),
-          strictMcpConfig: true,
         };
 
         // Resume previous session if sessionId provided
