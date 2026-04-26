@@ -169,18 +169,7 @@ export async function migrateProjectPath(
  * @returns Trimmed Markdown string from Claude CLI output
  * @throws Error if path is invalid or CLI invocation fails
  */
-export async function analyzeProjectDirectory(localPath: string): Promise<string> {
-  if (!localPath || typeof localPath !== "string") {
-    throw new Error("无效的本地路径");
-  }
-  if (localPath.startsWith("~")) {
-    throw new Error("不支持 ~ 别名，请提供绝对路径");
-  }
-  if (!path.isAbsolute(localPath)) {
-    throw new Error("本地路径必须为绝对路径");
-  }
-
-  const prompt = `分析这个项目目录，生成一段简短的 Markdown 项目描述。
+const ANALYZE_PROMPT_ZH = `分析这个项目目录，生成一段简短的 Markdown 项目描述。
 
 读取 package.json、README.md 等关键文件，然后概括：
 
@@ -193,6 +182,33 @@ export async function analyzeProjectDirectory(localPath: string): Promise<string
 - 用简洁的 Markdown（加粗标签 + 短句），不要用 ## 大标题和表格
 - 不要罗列每个文件/目录，只说关键信息
 - 中文输出`;
+
+const ANALYZE_PROMPT_EN = `Analyze this project directory and generate a brief Markdown project description.
+
+Read package.json, README.md and other key files, then summarize:
+
+**Tech Stack:** One sentence listing primary languages, frameworks, and key libraries
+**Overview:** One sentence describing what this project is
+**Core Modules:** 2-3 key modules, one sentence each
+
+Requirements:
+- Keep it under 300 words
+- Use concise Markdown (bold labels + short sentences), no ## headings or tables
+- Don't list every file/directory, only key information
+- Output in English`;
+
+export async function analyzeProjectDirectory(localPath: string, locale: string = "zh"): Promise<string> {
+  if (!localPath || typeof localPath !== "string") {
+    throw new Error("无效的本地路径");
+  }
+  if (localPath.startsWith("~")) {
+    throw new Error("不支持 ~ 别名，请提供绝对路径");
+  }
+  if (!path.isAbsolute(localPath)) {
+    throw new Error("本地路径必须为绝对路径");
+  }
+
+  const prompt = locale === "en" ? ANALYZE_PROMPT_EN : ANALYZE_PROMPT_ZH;
 
   const { aiQuery } = await import("@/lib/claude-session");
   const result = await aiQuery(prompt, localPath, {

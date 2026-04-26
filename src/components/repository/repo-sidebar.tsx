@@ -59,7 +59,7 @@ interface GitInfo {
 }
 
 export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const router = useRouter();
   const [gitExpanded, setGitExpanded] = useState(true);
   const [browseExpanded, setBrowseExpanded] = useState(true);
@@ -208,7 +208,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
     if (!editLocalPath || isAnalyzing) return;
     setIsAnalyzing(true);
     try {
-      const result = await analyzeProjectDirectory(editLocalPath.trim());
+      const result = await analyzeProjectDirectory(editLocalPath.trim(), locale);
       setEditDesc(result);
     } catch {
       toast.error(t("project.analyzeError"));

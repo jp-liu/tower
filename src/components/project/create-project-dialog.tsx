@@ -40,7 +40,7 @@ export function CreateProjectDialog({
   onOpenChange,
   onCreateProject,
 }: CreateProjectDialogProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [projectName, setProjectName] = useState("");
   const [projectAlias, setProjectAlias] = useState("");
   const [projectDesc, setProjectDesc] = useState("");
@@ -69,7 +69,7 @@ export function CreateProjectDialog({
     if (!localPath.trim() || isAnalyzing || cloneStatus !== "success") return;
     setIsAnalyzing(true);
     try {
-      const result = await analyzeProjectDirectory(localPath.trim());
+      const result = await analyzeProjectDirectory(localPath.trim(), locale);
       setProjectDesc(result);
     } catch {
       toast.error(t("project.analyzeError"));
