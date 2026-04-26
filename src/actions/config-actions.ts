@@ -3,6 +3,8 @@
 import { db } from "@/lib/db";
 import { CONFIG_DEFAULTS } from "@/lib/config-defaults";
 import { matchGitPathRule, gitUrlToLocalPath, type GitPathRule } from "@/lib/git-url";
+import { detectShells, detectTerminalApps, type DetectedShell, type DetectedTerminalApp } from "@/lib/platform";
+import { getActiveWsPort } from "@/lib/pty/ws-server";
 
 export async function getConfigValue<T>(key: string, defaultValue: T): Promise<T> {
   const row = await db.systemConfig.findUnique({ where: { key } });
@@ -55,4 +57,28 @@ export async function getConfigValues(keys: string[]): Promise<Record<string, un
     result[key] = key in stored ? stored[key] : (CONFIG_DEFAULTS[key]?.defaultValue ?? null);
   }
   return result;
+}
+
+export async function getAvailableShells(): Promise<DetectedShell[]> {
+  return detectShells();
+}
+
+export async function getAvailableTerminalApps(): Promise<DetectedTerminalApp[]> {
+  return detectTerminalApps();
+}
+
+export async function getPlatformInfo(): Promise<{ platform: NodeJS.Platform }> {
+  return { platform: process.platform };
+}
+
+/**
+ * Get the actual WebSocket port the server is listening on.
+ * May differ from config if the preferred port was occupied.
+ */
+export async function getActualWsPort(): Promise<number> {
+  const active = getActiveWsPort();
+  if (active !== null) return active;
+  // Fallback to configured value if server hasn't started yet
+  const httpPort = parseInt(process.env.PORT || "3000", 10);
+  return getConfigValue<number>("terminal.wsPort", httpPort + 1);
 }

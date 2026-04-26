@@ -5,31 +5,29 @@ import { useState, useEffect } from "react";
 import { useI18n } from "@/lib/i18n";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import type { Locale } from "@/lib/i18n";
-import { getConfigValue, setConfigValue } from "@/actions/config-actions";
+import { getConfigValue, setConfigValue, getAvailableTerminalApps } from "@/actions/config-actions";
+import type { DetectedTerminalApp } from "@/lib/platform";
 
 export function GeneralConfig() {
   const { theme, setTheme } = useTheme();
   const { locale, setLocale, t } = useI18n();
   const [mounted, setMounted] = useState(false);
+
+  // Terminal app (for "Open in Terminal")
   const [terminalApp, setTerminalApp] = useState("Terminal");
-  const [wsPort, setWsPort] = useState(3001);
+  const [detectedApps, setDetectedApps] = useState<DetectedTerminalApp[]>([]);
+
   const [idleTimeout, setIdleTimeout] = useState(180);
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     getConfigValue<string>("terminal.app", "Terminal").then(setTerminalApp);
-    getConfigValue<number>("terminal.wsPort", 3001).then(setWsPort);
     getConfigValue<number>("terminal.idleTimeoutSec", 180).then(setIdleTimeout);
+    getAvailableTerminalApps().then(setDetectedApps);
   }, []);
 
-  async function handleSaveTerminal() {
+  async function handleSaveTerminalApp() {
     await setConfigValue("terminal.app", terminalApp);
-  }
-
-  async function handleSaveWsPort() {
-    const port = Math.max(1024, Math.min(65535, wsPort));
-    setWsPort(port);
-    await setConfigValue("terminal.wsPort", port);
   }
 
   async function handleSaveIdleTimeout() {
@@ -49,13 +47,20 @@ export function GeneralConfig() {
     { value: "en" as Locale, label: "English" },
   ] as const;
 
+  const chipClass = (active: boolean) =>
+    `rounded-md border px-3 py-1.5 text-xs transition-colors ${
+      active
+        ? "border-primary bg-primary/10 text-primary"
+        : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+    }`;
+
   return (
     <div>
       <h2 className="text-2xl font-bold">{t("settings.general")}</h2>
       <p className="mt-1 text-sm text-muted-foreground">{t("settings.generalDesc")}</p>
 
       <div className="mt-8 space-y-8">
-        {/* Theme section */}
+        {/* Theme */}
         <div>
           <h3 className="text-sm font-medium">{t("settings.theme")}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{t("settings.themeDesc")}</p>
@@ -72,7 +77,7 @@ export function GeneralConfig() {
           </div>
         </div>
 
-        {/* Language section */}
+        {/* Language */}
         <div>
           <h3 className="text-sm font-medium">{t("settings.language")}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{t("settings.languageDesc")}</p>
@@ -85,36 +90,35 @@ export function GeneralConfig() {
           </div>
         </div>
 
-
-        {/* Terminal app section — D-09 per PV-05 */}
+        {/* Terminal App — for "Open in Terminal" */}
         <div>
           <h3 className="text-sm font-medium">{t("settings.terminal.label")}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{t("settings.terminal.desc")}</p>
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex flex-col gap-2">
+            {detectedApps.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {detectedApps.map((app) => (
+                  <button
+                    key={app.value}
+                    type="button"
+                    onClick={() => {
+                      setTerminalApp(app.value);
+                      void setConfigValue("terminal.app", app.value);
+                    }}
+                    className={chipClass(terminalApp === app.value)}
+                  >
+                    {app.name}
+                  </button>
+                ))}
+              </div>
+            )}
             <input
               type="text"
               value={terminalApp}
               onChange={(e) => setTerminalApp(e.target.value)}
-              onBlur={handleSaveTerminal}
+              onBlur={handleSaveTerminalApp}
               placeholder={t("settings.terminal.placeholder")}
-              className="h-9 w-48 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-          </div>
-        </div>
-
-        {/* WebSocket port */}
-        <div>
-          <h3 className="text-sm font-medium">{t("settings.terminal.wsPort")}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">{t("settings.terminal.wsPortDesc")}</p>
-          <div className="mt-3 flex gap-2">
-            <input
-              type="number"
-              value={wsPort}
-              onChange={(e) => setWsPort(Number(e.target.value))}
-              onBlur={handleSaveWsPort}
-              min={1024}
-              max={65535}
-              className="h-9 w-32 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              className="h-9 w-64 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
         </div>

@@ -1,4 +1,5 @@
 import * as pty from "node-pty";
+import { ensurePathInEnv, stripClaudeNestingEnv } from "@/lib/platform";
 
 export class PtySession {
   readonly taskId: string;
@@ -35,19 +36,18 @@ export class PtySession {
     this._onIdle = onIdle ?? null;
     this._idleThresholdMs = Math.max(idleThresholdMs ?? 180_000, 180_000);
 
-    // Inherit the full parent env (esp. on Windows: USERPROFILE, SystemRoot, ComSpec, Path,
-    // CLAUDE_CODE_GIT_BASH_PATH, etc.). A tiny whitelist made claude.cmd / Node shims exit immediately
-    // after start, while /test-terminal’s bash.exe often still worked.
+    // Build env: inherit full parent env, strip Claude nesting vars, ensure PATH exists
+    const baseEnv = stripClaudeNestingEnv(ensurePathInEnv(process.env));
     this._pty = pty.spawn(command, args, {
       name: "xterm-color",
       cols: 80,
       rows: 24,
       cwd,
       env: {
-        ...process.env,
+        ...baseEnv,
         TERM: "xterm-color",
         ...envOverrides,
-      },
+      } as Record<string, string>,
     });
 
     this._pty.onData((data) => {

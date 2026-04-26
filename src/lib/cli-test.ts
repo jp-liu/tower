@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { constants as fsConstants, promises as fs } from "node:fs";
 import path from "node:path";
+import { resolveCommandPath, resolveSpawnTarget, ensurePathInEnv, stripClaudeNestingEnv } from "./platform";
 
 // ---------------------------------------------------------------------------
 // Types (from adapters/types.ts)
@@ -40,11 +40,6 @@ interface RunningProcess {
   graceSec: number;
 }
 
-interface SpawnTarget {
-  command: string;
-  args: string[];
-}
-
 type ChildProcessWithEvents = ChildProcess & {
   on(event: "error", listener: (err: Error) => void): ChildProcess;
   on(
@@ -76,88 +71,13 @@ function appendWithCap(prev: string, chunk: string, cap = MAX_CAPTURE_BYTES) {
   return combined.length > cap ? combined.slice(combined.length - cap) : combined;
 }
 
-async function pathExists(candidate: string) {
-  try {
-    await fs.access(candidate, process.platform === "win32" ? fsConstants.F_OK : fsConstants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function windowsPathExts(env: NodeJS.ProcessEnv): string[] {
-  return (env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";").filter(Boolean);
-}
-
-async function resolveCommandPath(
-  command: string,
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-): Promise<string | null> {
-  const hasPathSeparator = command.includes("/") || command.includes("\\");
-  if (hasPathSeparator) {
-    const absolute = path.isAbsolute(command) ? command : path.resolve(cwd, command);
-    return (await pathExists(absolute)) ? absolute : null;
-  }
-
-  const pathValue = env.PATH ?? env.Path ?? "";
-  const delimiter = process.platform === "win32" ? ";" : ":";
-  const dirs = pathValue.split(delimiter).filter(Boolean);
-  const exts = process.platform === "win32" ? windowsPathExts(env) : [""];
-  const hasExtension = process.platform === "win32" && path.extname(command).length > 0;
-
-  for (const dir of dirs) {
-    const candidates =
-      process.platform === "win32"
-        ? hasExtension
-          ? [path.join(dir, command)]
-          : exts.map((ext) => path.join(dir, `${command}${ext}`))
-        : [path.join(dir, command)];
-    for (const candidate of candidates) {
-      if (await pathExists(candidate)) return candidate;
-    }
-  }
-
-  return null;
-}
-
-function quoteForCmd(arg: string) {
-  if (!arg.length) return '""';
-  const escaped = arg.replace(/"/g, '""');
-  return /[\s"&<>|^()]/.test(escaped) ? `"${escaped}"` : escaped;
-}
-
-async function resolveSpawnTarget(
-  command: string,
-  args: string[],
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-): Promise<SpawnTarget> {
-  const resolved = await resolveCommandPath(command, cwd, env);
-  const executable = resolved ?? command;
-
-  if (process.platform !== "win32") {
-    return { command: executable, args };
-  }
-
-  if (/\.(cmd|bat)$/i.test(executable)) {
-    const shell = env.ComSpec || process.env.ComSpec || "cmd.exe";
-    const commandLine = [quoteForCmd(executable), ...args.map(quoteForCmd)].join(" ");
-    return {
-      command: shell,
-      args: ["/d", "/s", "/c", commandLine],
-    };
-  }
-
-  return { command: executable, args };
-}
 
 async function ensureCommandResolvable(
   command: string,
   cwd: string,
-  env: NodeJS.ProcessEnv,
+  envVars: NodeJS.ProcessEnv,
 ) {
-  const resolved = await resolveCommandPath(command, cwd, env);
+  const resolved = await resolveCommandPath(command, { cwd, env: envVars });
   if (resolved) return;
   if (command.includes("/") || command.includes("\\")) {
     const absolute = path.isAbsolute(command) ? command : path.resolve(cwd, command);
@@ -183,9 +103,11 @@ async function runChildProcess(
   const onLogError = opts.onLogError ?? ((err, id, msg) => console.warn({ err, runId: id }, msg));
 
   return new Promise<RunProcessResult>((resolve, reject) => {
-    const mergedEnv: NodeJS.ProcessEnv = { ...process.env, ...opts.env };
+    const mergedEnv = ensurePathInEnv(
+      stripClaudeNestingEnv({ ...process.env, ...opts.env }),
+    ) as NodeJS.ProcessEnv;
 
-    void resolveSpawnTarget(command, args, opts.cwd, mergedEnv)
+    void resolveSpawnTarget(command, args, { cwd: opts.cwd, env: mergedEnv })
       .then((target) => {
         const child = spawn(target.command, target.args, {
           cwd: opts.cwd,

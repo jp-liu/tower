@@ -1,4 +1,4 @@
-import { execFileSync } from "child_process";
+import { resolveCommandPathSync } from "@/lib/platform";
 
 export interface DreamingResult {
   summary: string;
@@ -7,14 +7,17 @@ export interface DreamingResult {
   noteTitle?: string;
 }
 
-/** Resolve claude CLI binary — env var > `which claude` > fallback */
+/** Resolve claude CLI binary — env var > platform-aware resolution.
+ *  On Windows, prefer `claude-code` (native exe) over `claude.cmd` (npm shim)
+ *  because the Agent SDK spawns this directly without cmd.exe wrapping. */
 function findClaudeBinary(): string {
   if (process.env.CLAUDE_CODE_PATH) return process.env.CLAUDE_CODE_PATH;
-  try {
-    return execFileSync("which", ["claude"], { encoding: "utf-8", timeout: 3000 }).trim();
-  } catch {
-    return "claude";
+  // On Windows, try native binary first — SDK spawn doesn't wrap .cmd files
+  if (process.platform === "win32") {
+    const native = resolveCommandPathSync("claude-code");
+    if (native !== "claude-code") return native; // found real path
   }
+  return resolveCommandPathSync("claude");
 }
 
 /**

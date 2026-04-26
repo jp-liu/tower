@@ -4,10 +4,13 @@ import { getSession, destroySession } from "./session-store";
 import { readConfigValue } from "@/lib/config-reader";
 import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
 
-const ALLOWED_ORIGINS = new Set([
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-]);
+function getAllowedOrigins(): Set<string> {
+  const httpPort = parseInt(process.env.PORT || "3000", 10);
+  return new Set([
+    `http://localhost:${httpPort}`,
+    `http://127.0.0.1:${httpPort}`,
+  ]);
+}
 
 // Keepalive: how long a PTY session survives after WS disconnect.
 // Process still running → 2 hours (user may switch tasks, take a break).
@@ -64,7 +67,25 @@ function webSocketCloseCodeForPtyExit(exitCode: number | null | undefined): numb
   return code;
 }
 
-const g = globalThis as typeof globalThis & { __wss?: InstanceType<typeof WebSocketServer> };
+function isPortInUse(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const { createServer } = require("net") as typeof import("net");
+    const tester = createServer();
+    tester.once("error", () => resolve(true));
+    tester.once("listening", () => { tester.close(() => resolve(false)); });
+    tester.listen(port, "127.0.0.1");
+  });
+}
+
+const g = globalThis as typeof globalThis & {
+  __wss?: InstanceType<typeof WebSocketServer>;
+  __wsPort?: number;
+};
+
+/** Get the actual WebSocket port the server is listening on. */
+export function getActiveWsPort(): number | null {
+  return g.__wsPort ?? null;
+}
 
 export async function startWsServer(): Promise<void> {
   // Close previous server on HMR reload so fresh code always takes effect
@@ -78,29 +99,38 @@ export async function startWsServer(): Promise<void> {
     });
   }
 
-  const wsPort = await readConfigValue<number>("terminal.wsPort", 3001);
+  const httpPort = parseInt(process.env.PORT || "3000", 10);
+  const defaultWsPort = httpPort + 1;
+  const preferredPort = await readConfigValue<number>("terminal.wsPort", defaultWsPort);
 
-  // Check if port is already in use (e.g. duplicate register() call in production)
-  const portInUse = await new Promise<boolean>((resolve) => {
-    const { createServer } = require("net") as typeof import("net");
-    const tester = createServer();
-    tester.once("error", () => resolve(true));
-    tester.once("listening", () => { tester.close(() => resolve(false)); });
-    tester.listen(wsPort, "127.0.0.1");
-  });
-  if (portInUse) {
-    console.error(`[ws-server] Port ${wsPort} already in use — skipping duplicate startup`);
-    return;
+  // Try preferred port, then increment up to 10 times to find a free one
+  const MAX_RETRIES = 10;
+  let wsPort = preferredPort;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const inUse = await isPortInUse(wsPort);
+    if (!inUse) break;
+    if (attempt === MAX_RETRIES - 1) {
+      console.error(`[ws-server] No free port found after trying ${preferredPort}–${wsPort} — skipping startup`);
+      return;
+    }
+    console.error(`[ws-server] Port ${wsPort} in use, trying ${wsPort + 1}...`);
+    wsPort++;
   }
 
   const wss = new WebSocketServer({ port: wsPort, host: "127.0.0.1", perMessageDeflate: false });
   g.__wss = wss;
-  console.error(`[ws-server] WebSocket server listening on port ${wsPort}`);
+  g.__wsPort = wsPort;
+  if (wsPort !== preferredPort) {
+    console.error(`[ws-server] WebSocket server listening on port ${wsPort} (preferred ${preferredPort} was occupied)`);
+  } else {
+    console.error(`[ws-server] WebSocket server listening on port ${wsPort}`);
+  }
 
   // Close WS server on SIGINT (Ctrl+C) to release port
   const closeWss = () => {
     wss.close();
     g.__wss = undefined;
+    g.__wsPort = undefined;
   };
   // Use once() to prevent listener accumulation across HMR reloads
   process.once("SIGINT", closeWss);
@@ -108,7 +138,7 @@ export async function startWsServer(): Promise<void> {
 
   wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     const origin = req.headers.origin ?? "";
-    if (!ALLOWED_ORIGINS.has(origin)) {
+    if (!getAllowedOrigins().has(origin)) {
       console.error(`[ws-server] Rejected origin: ${origin || "(none)"}`);
       ws.close(1008, "Forbidden");
       return;
@@ -132,7 +162,7 @@ export async function startWsServer(): Promise<void> {
 
     // Security: __assistant__ is a deliberate exception to the CUID taskId convention.
     // The assistant session uses a fixed key (not a CUID) because it has no TaskExecution
-    // DB row. Origin checking (ALLOWED_ORIGINS above) mitigates cross-origin access.
+    // DB row. Origin checking (getAllowedOrigins() above) mitigates cross-origin access.
     // Non-existent session keys simply time out after 30s (poll loop below).
 
     console.error(`[ws-server] Connection for task ${taskId}`);

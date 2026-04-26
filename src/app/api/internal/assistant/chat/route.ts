@@ -1,21 +1,23 @@
 import { NextRequest } from "next/server";
-import { execFileSync } from "child_process";
 import { requireLocalhost } from "@/lib/internal-api-guard";
 import { buildMultimodalPrompt } from "@/lib/build-multimodal-prompt";
 import { getAssistantCacheRoot } from "@/lib/file-utils";
+import { resolveCommandPathSync } from "@/lib/platform";
 import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** Resolve the claude CLI binary path — env var > `which claude` */
+/** Resolve the claude CLI binary path — env var > platform-aware resolution.
+ *  On Windows, prefer `claude-code` (native exe) over `claude.cmd` (npm shim)
+ *  because the Agent SDK spawns this directly without cmd.exe wrapping. */
 function findClaudeBinary(): string {
   if (process.env.CLAUDE_CODE_PATH) return process.env.CLAUDE_CODE_PATH;
-  try {
-    return execFileSync("which", ["claude"], { encoding: "utf-8", timeout: 3000 }).trim();
-  } catch {
-    return "claude"; // fallback — let SDK try PATH
+  if (process.platform === "win32") {
+    const native = resolveCommandPathSync("claude-code");
+    if (native !== "claude-code") return native;
   }
+  return resolveCommandPathSync("claude");
 }
 
 /**

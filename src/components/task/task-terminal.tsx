@@ -8,7 +8,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { useTheme } from "next-themes";
 import { LocalFileLinkProvider } from "@/lib/terminal-link-provider";
 import { useI18n } from "@/lib/i18n";
-import { getConfigValue } from "@/actions/config-actions";
+import { getActualWsPort } from "@/actions/config-actions";
 import "@xterm/xterm/css/xterm.css";
 
 export interface TaskTerminalProps {
@@ -181,7 +181,7 @@ export function TaskTerminal({
       wsRef.current = socket;
     }
 
-    getConfigValue<number>("terminal.wsPort", 3001).then((wsPort) => {
+    getActualWsPort().then((wsPort) => {
       if (cancelled) return;
       connectWs(wsPort);
     });

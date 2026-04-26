@@ -235,6 +235,8 @@ export async function resumePtyExecution(
     claudeArgs.push("--append-system-prompt", `The user's name is ${usernameVal}.`);
   }
 
+  const SESSION_ERROR_RE = /no conversation found with session id|unknown session|session .* not found/i;
+
   createSession(
     taskId,
     profileCommand,
@@ -252,6 +254,21 @@ export async function resumePtyExecution(
       const { getSession } = await import("@/lib/pty/session-store");
       const session = getSession(taskId);
       const terminalBuffer = session?.getBuffer() ?? "";
+
+      // Session resume fallback: if Claude exited with session error, auto-retry fresh
+      if (exitCode !== 0 && SESSION_ERROR_RE.test(terminalBuffer)) {
+        log.info("Session resume failed — retrying with fresh execution", { taskId, previousSessionId });
+        await db.taskExecution.update({
+          where: { id: execution.id },
+          data: { status: "FAILED", endedAt: new Date() },
+        }).catch(() => {});
+        try {
+          await startPtyExecution(taskId, task.title);
+        } catch (err) {
+          log.error("Fresh execution retry also failed", err, { taskId });
+        }
+        return;
+      }
 
       await db.taskExecution.update({
         where: { id: execution.id },

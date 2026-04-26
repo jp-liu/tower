@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
-import { getConfigValue } from "@/actions/config-actions";
+import { getActualWsPort } from "@/actions/config-actions";
 
 interface StopEvent {
   taskId: string;
@@ -48,7 +48,7 @@ export function useNotificationListener(enabled: boolean) {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     async function connect() {
-      const wsPort = await getConfigValue<number>("terminal.wsPort", 3001);
+      const wsPort = await getActualWsPort();
       ws = new WebSocket(
         `ws://localhost:${wsPort}/terminal?taskId=__notifications__`
       );
