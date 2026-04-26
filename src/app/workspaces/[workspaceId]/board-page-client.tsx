@@ -8,7 +8,6 @@ import { KanbanBoard } from "@/components/board/kanban-board";
 import { CreateTaskDialog } from "@/components/board/create-task-dialog";
 import { RepoSidebar } from "@/components/repository/repo-sidebar";
 import { TaskDetailPanel } from "@/components/task/task-detail-panel";
-import { TaskOverviewDrawer } from "@/components/task/task-overview-drawer";
 import { createTask, updateTaskStatus, updateTask, deleteTask, toggleTaskPinned } from "@/actions/task-actions";
 import { startPtyExecution } from "@/actions/agent-actions";
 import { ProjectTabs } from "@/components/board/project-tabs";
@@ -63,7 +62,6 @@ export function BoardPageClient({
     openTaskId ? initialTasks.find((t) => t.id === openTaskId) ?? null : null
   );
   const [editingTask, setEditingTask] = useState<TaskWithLabels | null>(null);
-  const [drawerTaskId, setDrawerTaskId] = useState<string | null>(null);
 
   const refreshData = useCallback(() => {
     startTransition(() => {
@@ -206,9 +204,7 @@ export function BoardPageClient({
             initialTasks={filteredTasks}
             onTaskMove={handleTaskMove}
             onTaskClick={(task) => {
-              if (task.status === "DONE" || task.status === "CANCELLED") {
-                setDrawerTaskId(task.id);
-              } else {
+              {
                 setSelectedTask(task);
               }
             }}
@@ -256,12 +252,6 @@ export function BoardPageClient({
         <RepoSidebar project={project} workspaceId={workspaceId} />
       )}
 
-      {/* Task Overview Drawer for completed/cancelled tasks */}
-      <TaskOverviewDrawer
-        open={!!drawerTaskId}
-        onOpenChange={(o) => { if (!o) setDrawerTaskId(null); }}
-        taskId={drawerTaskId}
-      />
     </div>
   );
 }
