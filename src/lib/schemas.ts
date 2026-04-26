@@ -18,7 +18,7 @@ export const updateWorkspaceSchema = z.object({
 export const createProjectSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
   alias: z.string().max(100).optional(),
-  description: z.string().max(1000).optional(),
+  description: z.string().max(5000).optional(),
   gitUrl: z.string().max(500).optional().or(z.literal("")),
   localPath: z.string().optional(),
   workspaceId: cuid,
@@ -29,7 +29,7 @@ export const createProjectSchema = z.object({
 export const updateProjectSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   alias: z.string().max(100).optional(),
-  description: z.string().max(1000).optional(),
+  description: z.string().max(5000).optional(),
   localPath: z.string().optional(),
   projectType: z.enum(["FRONTEND", "BACKEND"]).optional(),
   previewCommand: z.string().max(500).nullable().optional(),
