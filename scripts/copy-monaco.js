@@ -16,9 +16,9 @@ if (!fs.existsSync(src)) {
   process.exit(0);
 }
 
-// Remove old copy if exists
-if (fs.existsSync(dest)) {
-  fs.rmSync(dest, { recursive: true, force: true });
+// Skip if already copied (check loader.js as sentinel)
+if (fs.existsSync(path.join(dest, "loader.js"))) {
+  process.exit(0);
 }
 
 // Recursive copy

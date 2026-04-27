@@ -3,8 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/copy-monaco.js",
     "dev": "next dev --webpack",
     "tower:init": "tsx scripts/init-tower.ts",
+    "prebuild": "node scripts/copy-monaco.js",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
