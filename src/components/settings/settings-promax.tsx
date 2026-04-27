@@ -1,0 +1,2124 @@
+"use client";
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
+import { useI18n } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+import {
+  Settings,
+  Cpu,
+  FileText,
+  SlidersHorizontal,
+  Terminal,
+  Bell,
+  X,
+  Plus,
+  Star,
+  Trash2,
+  Edit,
+  Save,
+  Loader2,
+  Check,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
+import {
+  getConfigValue,
+  setConfigValue,
+  getConfigValues,
+  getAvailableTerminalApps,
+} from "@/actions/config-actions";
+import {
+  getPrompts,
+  createPrompt,
+  updatePrompt,
+  deletePrompt,
+  setDefaultPrompt,
+} from "@/actions/prompt-actions";
+import {
+  getDefaultCliProfile,
+  updateCliProfile,
+} from "@/actions/cli-profile-actions";
+import type { TestResult } from "@/lib/cli-test";
+import type { AgentPrompt } from "@prisma/client";
+import type { DetectedTerminalApp } from "@/lib/platform";
+import type { GitPathRule } from "@/lib/git-url";
+
+// ---------------------------------------------------------------------------
+// Inline ProMaxSegmented
+// ---------------------------------------------------------------------------
+function ProMaxSegmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: T; label: React.ReactNode }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-lg border border-border/50 bg-muted/30 p-1 gap-0.5">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          className={cn(
+            "rounded-md px-3.5 py-1.5 text-sm font-medium transition-all duration-200 cursor-pointer",
+            value === opt.value
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Setting row helper
+// ---------------------------------------------------------------------------
+function SettingRow({
+  label,
+  description,
+  children,
+  className,
+}: {
+  label: React.ReactNode;
+  description?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-between py-4 border-b border-border/50 last:border-0",
+        className
+      )}
+    >
+      <div className="min-w-0 flex-1 pr-4">
+        <div className="text-sm font-medium">{label}</div>
+        {description && (
+          <div className="text-xs text-muted-foreground mt-0.5">
+            {description}
+          </div>
+        )}
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+const SECTIONS = [
+  {
+    id: "general",
+    labelKey: "settings.general" as const,
+    descKey: "settings.generalDesc" as const,
+    icon: Settings,
+    accent: "blue",
+  },
+  {
+    id: "ai-tools",
+    labelKey: "settings.aiTools.title" as const,
+    descKey: "settings.aiTools.cliVerificationDesc" as const,
+    icon: Cpu,
+    accent: "emerald",
+  },
+  {
+    id: "prompts",
+    labelKey: "settings.prompts" as const,
+    descKey: "settings.promptsDesc" as const,
+    icon: FileText,
+    accent: "violet",
+  },
+  {
+    id: "config",
+    labelKey: "settings.config" as const,
+    descKey: "settings.configDesc" as const,
+    icon: SlidersHorizontal,
+    accent: "amber",
+  },
+  {
+    id: "cli-profile",
+    labelKey: "settings.cliProfile.title" as const,
+    descKey: "settings.cliProfile.navDesc" as const,
+    icon: Terminal,
+    accent: "cyan",
+  },
+  {
+    id: "notifications",
+    labelKey: "settings.notifications.title" as const,
+    descKey: "settings.notifications.navDesc" as const,
+    icon: Bell,
+    accent: "rose",
+  },
+] as const;
+
+type SectionId = (typeof SECTIONS)[number]["id"];
+
+const ACCENT_STYLES: Record<
+  string,
+  { bg: string; text: string; ring: string; indicator: string }
+> = {
+  blue: {
+    bg: "bg-accent",
+    text: "text-foreground",
+    ring: "ring-border",
+    indicator: "bg-foreground",
+  },
+  emerald: {
+    bg: "bg-accent",
+    text: "text-foreground",
+    ring: "ring-border",
+    indicator: "bg-foreground",
+  },
+  violet: {
+    bg: "bg-accent",
+    text: "text-foreground",
+    ring: "ring-border",
+    indicator: "bg-foreground",
+  },
+  amber: {
+    bg: "bg-accent",
+    text: "text-foreground",
+    ring: "ring-border",
+    indicator: "bg-foreground",
+  },
+  cyan: {
+    bg: "bg-accent",
+    text: "text-foreground",
+    ring: "ring-border",
+    indicator: "bg-foreground",
+  },
+  rose: {
+    bg: "bg-accent",
+    text: "text-foreground",
+    ring: "ring-border",
+    indicator: "bg-foreground",
+  },
+};
+
+// ---------------------------------------------------------------------------
+// CLI Adapters (AI Tools)
+// ---------------------------------------------------------------------------
+const DEFAULT_CLI_ADAPTER_KEY = "ai-manager:default-cli-adapter";
+
+interface CLIAdapter {
+  type: string;
+  label: string;
+  source: "builtin" | "external";
+}
+
+const CLI_ADAPTERS: CLIAdapter[] = [
+  { type: "claude_local", label: "Claude Code", source: "builtin" },
+];
+
+// ---------------------------------------------------------------------------
+// CLI Profile helpers
+// ---------------------------------------------------------------------------
+type CliProfile = {
+  id: string;
+  name: string;
+  command: string;
+  baseArgs: string;
+  envVars: string;
+};
+
+function parseBaseArgsToText(baseArgs: string): string {
+  try {
+    const arr: string[] = JSON.parse(baseArgs);
+    return Array.isArray(arr) ? arr.join("\n") : "";
+  } catch {
+    return "";
+  }
+}
+
+function parseEnvVarsToText(envVars: string): string {
+  try {
+    const obj: Record<string, string> = JSON.parse(envVars);
+    if (typeof obj !== "object" || Array.isArray(obj) || obj === null) return "";
+    return Object.entries(obj)
+      .map(([k, v]) => `${k}=${v}`)
+      .join("\n");
+  } catch {
+    return "";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// System Config types
+// ---------------------------------------------------------------------------
+type RuleEditState = {
+  host: string;
+  ownerMatch: string;
+  localPathTemplate: string;
+  priority: number;
+};
+
+const EMPTY_FORM: RuleEditState = {
+  host: "",
+  ownerMatch: "*",
+  localPathTemplate: "",
+  priority: 0,
+};
+
+type SystemForm = { maxUploadMb: number; maxConcurrent: number };
+type GitParamsForm = { timeoutSec: number };
+type SearchForm = {
+  resultLimit: number;
+  allModeCap: number;
+  debounceMs: number;
+  snippetLength: number;
+};
+type MissionsGridForm = {
+  minCols: number;
+  maxCols: number;
+  minRows: number;
+  maxRows: number;
+};
+type HookStatus = { installed: boolean; hookPath: string };
+
+// ===========================================================================
+// MAIN COMPONENT
+// ===========================================================================
+export function SettingsProMax() {
+  const router = useRouter();
+  const { t } = useI18n();
+  const { theme, setTheme } = useTheme();
+  const { locale, setLocale } = useI18n();
+
+  const [activeSection, setActiveSection] = useState<SectionId>("general");
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
+
+  // ── General state ──────────────────────────────────────────────
+  const [mounted, setMounted] = useState(false);
+  const [terminalApp, setTerminalApp] = useState("Terminal");
+  const [detectedApps, setDetectedApps] = useState<DetectedTerminalApp[]>([]);
+  const [idleTimeout, setIdleTimeout] = useState(180);
+
+  // ── AI Tools state ─────────────────────────────────────────────
+  const [defaultAdapter, setDefaultAdapter] = useState("claude_local");
+  const [testingAdapter, setTestingAdapter] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, TestResult>>(
+    {}
+  );
+
+  // ── Prompts state ──────────────────────────────────────────────
+  const [prompts, setPrompts] = useState<AgentPrompt[]>([]);
+  const [promptDialogOpen, setPromptDialogOpen] = useState(false);
+  const [editingPrompt, setEditingPrompt] = useState<AgentPrompt | null>(null);
+  const [deletePromptId, setDeletePromptId] = useState<string | null>(null);
+  const [promptName, setPromptName] = useState("");
+  const [promptDescription, setPromptDescription] = useState("");
+  const [promptContent, setPromptContent] = useState("");
+
+  // ── System Config state ────────────────────────────────────────
+  const [rules, setRules] = useState<GitPathRule[]>([]);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [editRuleForm, setEditRuleForm] = useState<RuleEditState>({
+    ...EMPTY_FORM,
+  });
+  const [showAddRuleForm, setShowAddRuleForm] = useState(false);
+  const [addRuleForm, setAddRuleForm] = useState<RuleEditState>({
+    ...EMPTY_FORM,
+  });
+  const [useFullPath, setUseFullPath] = useState(false);
+  const [previewIdx, setPreviewIdx] = useState(0);
+  const [deleteRuleConfirmId, setDeleteRuleConfirmId] = useState<string | null>(
+    null
+  );
+  const [systemForm, setSystemForm] = useState<SystemForm>({
+    maxUploadMb: 50,
+    maxConcurrent: 3,
+  });
+  const [gitParamsForm, setGitParamsForm] = useState<GitParamsForm>({
+    timeoutSec: 30,
+  });
+  const [searchForm, setSearchForm] = useState<SearchForm>({
+    resultLimit: 20,
+    allModeCap: 5,
+    debounceMs: 250,
+    snippetLength: 80,
+  });
+  const [missionsGridForm, setMissionsGridForm] = useState<MissionsGridForm>({
+    minCols: 1,
+    maxCols: 5,
+    minRows: 1,
+    maxRows: 5,
+  });
+  const [hookStatus, setHookStatus] = useState<HookStatus | null>(null);
+  const [hookLoading, setHookLoading] = useState(false);
+  const [autoUploadTypes, setAutoUploadTypes] = useState("");
+
+  // ── CLI Profile state ──────────────────────────────────────────
+  const [cliProfile, setCliProfile] = useState<CliProfile | null>(null);
+  const [cliCommand, setCliCommand] = useState("");
+  const [cliBaseArgsText, setCliBaseArgsText] = useState("");
+  const [cliEnvVarsText, setCliEnvVarsText] = useState("");
+  const [cliSaveStatus, setCliSaveStatus] = useState<"" | "saved" | "error">(
+    ""
+  );
+  const [cliLoading, setCliLoading] = useState(true);
+
+  // ── Notifications state ────────────────────────────────────────
+  const [notifEnabled, setNotifEnabled] = useState(true);
+
+  // =========================================================================
+  // EFFECTS — mirror every original component
+  // =========================================================================
+
+  // Mount
+  useEffect(() => setMounted(true), []);
+
+  // General config load
+  useEffect(() => {
+    getConfigValue<string>("terminal.app", "Terminal").then(setTerminalApp);
+    getConfigValue<number>("terminal.idleTimeoutSec", 180).then(setIdleTimeout);
+    getAvailableTerminalApps().then(setDetectedApps);
+  }, []);
+
+  // AI Tools — default adapter from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem(DEFAULT_CLI_ADAPTER_KEY);
+    if (stored) setDefaultAdapter(stored);
+  }, []);
+
+  // Prompts load
+  useEffect(() => {
+    getPrompts().then(setPrompts);
+  }, []);
+
+  // System config load
+  const fetchHookStatus = async () => {
+    try {
+      const res = await fetch("/api/internal/hooks/install");
+      if (res.ok) {
+        const data = (await res.json()) as HookStatus;
+        setHookStatus(data);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    getConfigValue<GitPathRule[]>("git.pathMappingRules", []).then(setRules);
+    getConfigValue<string[]>(
+      "hooks.autoUploadTypes",
+      [
+        "png",
+        "jpg",
+        "jpeg",
+        "gif",
+        "webp",
+        "svg",
+        "pdf",
+        "md",
+        "txt",
+        "json",
+      ]
+    ).then((types) => {
+      setAutoUploadTypes(types.join(", "));
+    });
+    fetchHookStatus();
+    getConfigValues([
+      "system.maxUploadBytes",
+      "system.maxConcurrentExecutions",
+      "git.timeoutSec",
+      "search.resultLimit",
+      "search.allModeCap",
+      "search.debounceMs",
+      "search.snippetLength",
+      "missions.grid.minCols",
+      "missions.grid.maxCols",
+      "missions.grid.minRows",
+      "missions.grid.maxRows",
+    ]).then((cfg) => {
+      const maxBytes = (cfg["system.maxUploadBytes"] as number) ?? 52428800;
+      setSystemForm({
+        maxUploadMb: Math.round(maxBytes / 1024 / 1024),
+        maxConcurrent:
+          (cfg["system.maxConcurrentExecutions"] as number) ?? 3,
+      });
+      setGitParamsForm({
+        timeoutSec: (cfg["git.timeoutSec"] as number) ?? 30,
+      });
+      setSearchForm({
+        resultLimit: (cfg["search.resultLimit"] as number) ?? 20,
+        allModeCap: (cfg["search.allModeCap"] as number) ?? 5,
+        debounceMs: (cfg["search.debounceMs"] as number) ?? 250,
+        snippetLength: (cfg["search.snippetLength"] as number) ?? 80,
+      });
+      setMissionsGridForm({
+        minCols: (cfg["missions.grid.minCols"] as number) ?? 1,
+        maxCols: (cfg["missions.grid.maxCols"] as number) ?? 5,
+        minRows: (cfg["missions.grid.minRows"] as number) ?? 1,
+        maxRows: (cfg["missions.grid.maxRows"] as number) ?? 5,
+      });
+    });
+  }, []);
+
+  // CLI Profile load
+  useEffect(() => {
+    getDefaultCliProfile().then((p) => {
+      if (p) {
+        setCliProfile(p);
+        setCliCommand(p.command);
+        setCliBaseArgsText(parseBaseArgsToText(p.baseArgs));
+        setCliEnvVarsText(parseEnvVarsToText(p.envVars));
+      }
+      setCliLoading(false);
+    });
+  }, []);
+
+  // Notifications load
+  useEffect(() => {
+    getConfigValue<boolean>("notification.enabled", true).then(setNotifEnabled);
+  }, []);
+
+  // =========================================================================
+  // HANDLERS — General
+  // =========================================================================
+  async function handleSaveTerminalApp() {
+    await setConfigValue("terminal.app", terminalApp);
+  }
+
+  async function handleSaveIdleTimeout() {
+    const sec = Math.max(180, idleTimeout);
+    setIdleTimeout(sec);
+    await setConfigValue("terminal.idleTimeoutSec", sec);
+  }
+
+  // =========================================================================
+  // HANDLERS — AI Tools
+  // =========================================================================
+  function handleSetAdapterDefault(adapterType: string) {
+    setDefaultAdapter(adapterType);
+    localStorage.setItem(DEFAULT_CLI_ADAPTER_KEY, adapterType);
+  }
+
+  async function handleTestAdapter(adapterType: string) {
+    if (testingAdapter) return;
+    setTestingAdapter(adapterType);
+    setTestResults((prev) => {
+      const next = { ...prev };
+      delete next[adapterType];
+      return next;
+    });
+    try {
+      const res = await fetch("/api/adapters/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adapterType }),
+      });
+      const data: TestResult = await res.json();
+      setTestResults((prev) => ({ ...prev, [adapterType]: data }));
+    } catch {
+      setTestResults((prev) => ({
+        ...prev,
+        [adapterType]: {
+          ok: false,
+          checks: [
+            {
+              name: "network_error",
+              passed: false,
+              message: "Network request failed",
+            },
+          ],
+        },
+      }));
+    } finally {
+      setTestingAdapter(null);
+    }
+  }
+
+  // =========================================================================
+  // HANDLERS — Prompts
+  // =========================================================================
+  const openCreatePromptDialog = useCallback(() => {
+    setEditingPrompt(null);
+    setPromptName("");
+    setPromptDescription("");
+    setPromptContent("");
+    setPromptDialogOpen(true);
+  }, []);
+
+  const openEditPromptDialog = useCallback((prompt: AgentPrompt) => {
+    setEditingPrompt(prompt);
+    setPromptName(prompt.name);
+    setPromptDescription(prompt.description ?? "");
+    setPromptContent(prompt.content);
+    setPromptDialogOpen(true);
+  }, []);
+
+  const handleSavePrompt = useCallback(async () => {
+    if (!promptName.trim() || !promptContent.trim()) return;
+    if (editingPrompt) {
+      await updatePrompt(editingPrompt.id, {
+        name: promptName.trim(),
+        description: promptDescription.trim() || undefined,
+        content: promptContent.trim(),
+      });
+    } else {
+      await createPrompt({
+        name: promptName.trim(),
+        description: promptDescription.trim() || undefined,
+        content: promptContent.trim(),
+      });
+    }
+    setPromptDialogOpen(false);
+    const updated = await getPrompts();
+    setPrompts(updated);
+    router.refresh();
+  }, [promptName, promptDescription, promptContent, editingPrompt, router]);
+
+  const handleDeletePrompt = useCallback(async () => {
+    if (!deletePromptId) return;
+    await deletePrompt(deletePromptId);
+    setDeletePromptId(null);
+    const updated = await getPrompts();
+    setPrompts(updated);
+    router.refresh();
+  }, [deletePromptId, router]);
+
+  const handleSetDefaultPrompt = useCallback(
+    async (promptId: string) => {
+      await setDefaultPrompt(promptId);
+      const updated = await getPrompts();
+      setPrompts(updated);
+      router.refresh();
+    },
+    [router]
+  );
+
+  // =========================================================================
+  // HANDLERS — System Config
+  // =========================================================================
+  const handleSaveSystem = async () => {
+    await setConfigValue(
+      "system.maxUploadBytes",
+      systemForm.maxUploadMb * 1024 * 1024
+    );
+    await setConfigValue(
+      "system.maxConcurrentExecutions",
+      systemForm.maxConcurrent
+    );
+  };
+
+  const handleSaveGitParams = async () => {
+    await setConfigValue("git.timeoutSec", gitParamsForm.timeoutSec);
+  };
+
+  const handleSaveSearch = async () => {
+    await setConfigValue("search.resultLimit", searchForm.resultLimit);
+    await setConfigValue("search.allModeCap", searchForm.allModeCap);
+    await setConfigValue("search.debounceMs", searchForm.debounceMs);
+    await setConfigValue("search.snippetLength", searchForm.snippetLength);
+  };
+
+  const handleSaveMissionsGrid = async () => {
+    const minCols = Math.min(
+      missionsGridForm.minCols,
+      missionsGridForm.maxCols
+    );
+    const maxCols = Math.max(
+      missionsGridForm.minCols,
+      missionsGridForm.maxCols
+    );
+    const minRows = Math.min(
+      missionsGridForm.minRows,
+      missionsGridForm.maxRows
+    );
+    const maxRows = Math.max(
+      missionsGridForm.minRows,
+      missionsGridForm.maxRows
+    );
+    setMissionsGridForm({ minCols, maxCols, minRows, maxRows });
+    await setConfigValue("missions.grid.minCols", minCols);
+    await setConfigValue("missions.grid.maxCols", maxCols);
+    await setConfigValue("missions.grid.minRows", minRows);
+    await setConfigValue("missions.grid.maxRows", maxRows);
+  };
+
+  const handleSaveAutoUploadTypes = async () => {
+    const types = autoUploadTypes
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    await setConfigValue("hooks.autoUploadTypes", types);
+  };
+
+  const handleToggleHook = async () => {
+    if (!hookStatus) return;
+    setHookLoading(true);
+    try {
+      const method = hookStatus.installed ? "DELETE" : "POST";
+      await fetch("/api/internal/hooks/install", { method });
+      await fetchHookStatus();
+    } finally {
+      setHookLoading(false);
+    }
+  };
+
+  /** Preview what a Git URL would resolve to with a given template */
+  function previewPath(tpl: string, sampleUrl: string): string {
+    if (!tpl || !sampleUrl) return "";
+    const trimmed = sampleUrl.trim();
+    let segments: string[] = [];
+    const sshShort = trimmed.match(/^git@[^:]+:(.+)$/);
+    if (sshShort) {
+      segments = sshShort[1].replace(/\.git\/?$/, "").split("/").filter(Boolean);
+    } else {
+      try {
+        const url = new URL(trimmed);
+        segments = decodeURIComponent(url.pathname).replace(/\.git\/?$/, "").split("/").filter(Boolean);
+      } catch { return ""; }
+    }
+    if (!segments.length) return "";
+    const owner = segments[0];
+    const repo = segments[segments.length - 1];
+    const fullPath = segments.join("/");
+    if (tpl.includes("{path}")) {
+      return tpl.replace("{path}", fullPath).replace("{owner}", owner).replace("{repo}", repo).replace(/\/+$/, "");
+    }
+    const base = tpl.replace("{owner}", owner).replace("{repo}", "").replace(/\/+$/, "");
+    return `${base}/${repo}`;
+  }
+
+  const handleAddRule = async () => {
+    if (!addRuleForm.host.trim() || !addRuleForm.localPathTemplate.trim())
+      return;
+    const basePath = addRuleForm.localPathTemplate.trim().replace(/\/+$/, "");
+    const template = useFullPath ? `${basePath}/{path}` : basePath;
+    const newRule: GitPathRule = {
+      id: crypto.randomUUID(),
+      host: addRuleForm.host.trim(),
+      ownerMatch: addRuleForm.ownerMatch.trim() || "*",
+      localPathTemplate: template,
+      priority: addRuleForm.priority,
+    };
+    const updated = [...rules, newRule];
+    await setConfigValue("git.pathMappingRules", updated);
+    setRules(updated);
+    setAddRuleForm({ ...EMPTY_FORM });
+    setUseFullPath(false);
+    setShowAddRuleForm(false);
+  };
+
+  const handleEditRuleStart = (rule: GitPathRule) => {
+    setEditingRuleId(rule.id);
+    setEditRuleForm({
+      host: rule.host,
+      ownerMatch: rule.ownerMatch,
+      localPathTemplate: rule.localPathTemplate,
+      priority: rule.priority,
+    });
+  };
+
+  const handleEditRuleSave = async (ruleId: string) => {
+    if (!editRuleForm.host.trim() || !editRuleForm.localPathTemplate.trim())
+      return;
+    const updated = rules.map((r) =>
+      r.id === ruleId
+        ? {
+            ...r,
+            host: editRuleForm.host.trim(),
+            ownerMatch: editRuleForm.ownerMatch.trim() || "*",
+            localPathTemplate: editRuleForm.localPathTemplate.trim(),
+            priority: editRuleForm.priority,
+          }
+        : r
+    );
+    await setConfigValue("git.pathMappingRules", updated);
+    setRules(updated);
+    setEditingRuleId(null);
+  };
+
+  const handleDeleteRule = async (ruleId: string) => {
+    const updated = rules.filter((r) => r.id !== ruleId);
+    await setConfigValue("git.pathMappingRules", updated);
+    setRules(updated);
+    setDeleteRuleConfirmId(null);
+  };
+
+  // =========================================================================
+  // HANDLERS — CLI Profile
+  // =========================================================================
+  const handleSaveCliProfile = useCallback(async () => {
+    if (!cliProfile) return;
+    try {
+      const baseArgs = JSON.stringify(
+        cliBaseArgsText
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      );
+      const envVarsObj: Record<string, string> = {};
+      cliEnvVarsText
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .forEach((line) => {
+          const idx = line.indexOf("=");
+          if (idx > 0) {
+            const key = line.slice(0, idx).trim();
+            const val = line.slice(idx + 1).trim();
+            envVarsObj[key] = val;
+          }
+        });
+      const envVars = JSON.stringify(envVarsObj);
+      await updateCliProfile(cliProfile.id, {
+        command: cliCommand,
+        baseArgs,
+        envVars,
+      });
+      setCliSaveStatus("saved");
+    } catch {
+      setCliSaveStatus("error");
+    }
+    setTimeout(() => setCliSaveStatus(""), 2000);
+  }, [cliProfile, cliCommand, cliBaseArgsText, cliEnvVarsText]);
+
+  // =========================================================================
+  // HANDLERS — Notifications
+  // =========================================================================
+  async function handleToggleNotif() {
+    const next = !notifEnabled;
+    setNotifEnabled(next);
+    await setConfigValue("notification.enabled", next);
+  }
+
+  // =========================================================================
+  // Tab indicator
+  // =========================================================================
+  const handleClose = useCallback(() => {
+    router.back();
+  }, [router]);
+
+  useEffect(() => {
+    const container = tabsRef.current;
+    if (!container) return;
+    const activeTab = container.querySelector<HTMLButtonElement>(
+      `[data-section="${activeSection}"]`
+    );
+    if (!activeTab) return;
+    const containerRect = container.getBoundingClientRect();
+    const tabRect = activeTab.getBoundingClientRect();
+    setIndicatorStyle({
+      left: tabRect.left - containerRect.left,
+      width: tabRect.width,
+    });
+  }, [activeSection]);
+
+  const activeConfig = SECTIONS.find((s) => s.id === activeSection);
+  const accentStyle = activeConfig
+    ? ACCENT_STYLES[activeConfig.accent]
+    : ACCENT_STYLES.blue;
+
+  // =========================================================================
+  // RENDER — Section content
+  // =========================================================================
+
+  function renderGeneral() {
+    const themeOptions = [
+      { value: "light" as const, label: t("settings.themeLight") },
+      { value: "dark" as const, label: t("settings.themeDark") },
+      { value: "system" as const, label: t("settings.themeSystem") },
+    ];
+    const langOptions = [
+      { value: "zh" as Locale, label: "中文" },
+      { value: "en" as Locale, label: "English" },
+    ];
+
+    return (
+      <div className="divide-y divide-border/50">
+        {/* Theme */}
+        <SettingRow
+          label={t("settings.theme")}
+          description={t("settings.themeDesc")}
+        >
+          {!mounted ? (
+            <div className="inline-flex h-9 rounded-lg border border-border/50 bg-muted/30 p-1 w-[200px]" />
+          ) : (
+            <ProMaxSegmented
+              options={themeOptions}
+              value={(theme ?? "system") as "light" | "dark" | "system"}
+              onChange={(v) => setTheme(v)}
+            />
+          )}
+        </SettingRow>
+
+        {/* Language */}
+        <SettingRow
+          label={t("settings.language")}
+          description={t("settings.languageDesc")}
+        >
+          <ProMaxSegmented
+            options={langOptions}
+            value={locale}
+            onChange={(v) => setLocale(v as typeof locale)}
+          />
+        </SettingRow>
+
+        {/* Terminal App */}
+        <div className="py-4 border-b border-border/50">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1 pr-4">
+              <div className="text-sm font-medium">
+                {t("settings.terminal.label")}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {t("settings.terminal.desc")}
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-col gap-2">
+            {detectedApps.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {detectedApps.map((app) => (
+                  <button
+                    key={app.value}
+                    type="button"
+                    onClick={() => {
+                      setTerminalApp(app.value);
+                      void setConfigValue("terminal.app", app.value);
+                    }}
+                    className={cn(
+                      "rounded-lg border px-3.5 py-1.5 text-xs font-medium transition-all duration-200 cursor-pointer",
+                      terminalApp === app.value
+                        ? "border-foreground bg-accent text-foreground font-medium"
+                        : "border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                    )}
+                  >
+                    {app.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            <input
+              type="text"
+              value={terminalApp}
+              onChange={(e) => setTerminalApp(e.target.value)}
+              onBlur={handleSaveTerminalApp}
+              placeholder={t("settings.terminal.placeholder")}
+              className="h-9 w-64 rounded-lg border border-border/50 bg-muted/30 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            />
+          </div>
+        </div>
+
+        {/* Idle timeout */}
+        <SettingRow
+          label={t("settings.terminal.idleTimeout")}
+          description={t("settings.terminal.idleTimeoutDesc")}
+        >
+          <input
+            type="number"
+            value={idleTimeout}
+            onChange={(e) => setIdleTimeout(Number(e.target.value))}
+            onBlur={handleSaveIdleTimeout}
+            min={180}
+            className="h-9 w-28 rounded-lg border border-border/50 bg-muted/30 px-3 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          />
+        </SettingRow>
+      </div>
+    );
+  }
+
+  function renderAiTools() {
+    return (
+      <ul className="divide-y rounded-xl border border-border bg-card">
+        {CLI_ADAPTERS.map((adapter) => {
+          const isDefault = defaultAdapter === adapter.type;
+          const isTesting = testingAdapter === adapter.type;
+          const result = testResults[adapter.type];
+
+          return (
+            <li key={adapter.type}>
+              <div className="px-5 py-4">
+                {/* Row: info left, actions right */}
+                <div className="flex items-center gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{adapter.label}</span>
+                      <Badge variant="outline">{t("label.builtin")}</Badge>
+                      {isDefault && (
+                        <Badge variant="secondary" className="shrink-0">
+                          <Star className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
+                          {t("settings.prompts.default")}
+                        </Badge>
+                      )}
+                      {result && (
+                        <Badge
+                          variant={result.ok ? "secondary" : "destructive"}
+                          className={cn(
+                            "shrink-0",
+                            result.ok && "bg-green-600 text-white hover:bg-green-700"
+                          )}
+                        >
+                          {result.ok ? (
+                            <><CheckCircle2 className="h-3 w-3 mr-1" />{t("settings.aiTools.testPassed")}</>
+                          ) : (
+                            <><XCircle className="h-3 w-3 mr-1" />{t("settings.aiTools.testFailed")}</>
+                          )}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {adapter.type}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {!isDefault && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSetAdapterDefault(adapter.type)}
+                      >
+                        <Star className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                        {t("settings.prompts.setDefault")}
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleTestAdapter(adapter.type)}
+                      disabled={isTesting}
+                    >
+                      {isTesting ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                          {t("settings.aiTools.testing")}
+                        </>
+                      ) : (
+                        t("settings.aiTools.testConnection")
+                      )}
+                    </Button>
+                    {adapter.source === "external" && (
+                      <Button
+                        variant="outline"
+                        size="icon-sm"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        title={t("common.delete")}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Test results */}
+                {result && (
+                  <div className="mt-3 rounded-md border border-border bg-muted/30 px-4 py-3">
+                    <div className="space-y-1.5">
+                      {result.checks.map((check) => (
+                        <div
+                          key={`${adapter.type}-${check.name}`}
+                          className="flex items-center gap-2 text-sm"
+                        >
+                          <span
+                            className={cn(
+                              "w-1.5 h-1.5 rounded-full shrink-0",
+                              check.passed ? "bg-green-500" : "bg-red-500"
+                            )}
+                          />
+                          <span className={cn(
+                            check.passed
+                              ? "text-foreground"
+                              : "text-red-700 dark:text-red-300"
+                          )}>
+                            {check.message}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
+  function renderPrompts() {
+    if (!mounted) {
+      return <div className="h-32 rounded-lg bg-muted animate-pulse" />;
+    }
+
+    return (
+      <div className="space-y-4">
+        {/* Create button */}
+        <div className="flex justify-end">
+          <Button
+            onClick={openCreatePromptDialog}
+            variant="default"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            {t("settings.prompts.newPrompt")}
+          </Button>
+        </div>
+
+        {/* Prompt list — table-like rows */}
+        {prompts.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center rounded-lg border border-dashed border-border/50">
+            <p className="text-muted-foreground">
+              {t("settings.prompts.empty")}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t("settings.prompts.emptyHint")}
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border/50 divide-y divide-border/50">
+            {prompts.map((prompt) => (
+              <div
+                key={prompt.id}
+                className="flex items-center justify-between px-4 py-3.5 hover:bg-muted/30 transition-colors"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-medium truncate">
+                      {prompt.name}
+                    </h4>
+                    {prompt.isDefault && (
+                      <Badge
+                        variant="secondary"
+                        className="shrink-0 rounded-full text-xs"
+                      >
+                        <Star className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
+                        {t("settings.prompts.default")}
+                      </Badge>
+                    )}
+                  </div>
+                  {prompt.description && (
+                    <p className="mt-0.5 text-xs text-muted-foreground truncate">
+                      {prompt.description}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0 ml-4">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => handleSetDefaultPrompt(prompt.id)}
+                    title={t("settings.prompts.setDefault")}
+                  >
+                    <Star
+                      className={cn(
+                        "h-4 w-4",
+                        prompt.isDefault
+                          ? "fill-yellow-400 text-yellow-400"
+                          : "text-muted-foreground"
+                      )}
+                    />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => openEditPromptDialog(prompt)}
+                    title={t("settings.prompts.editPrompt")}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setDeletePromptId(prompt.id)}
+                    className="text-destructive"
+                    title={t("settings.prompts.delete")}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Create/Edit Dialog */}
+        <Dialog open={promptDialogOpen} onOpenChange={setPromptDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {editingPrompt
+                  ? t("settings.prompts.editPrompt")
+                  : t("settings.prompts.newPrompt")}
+              </DialogTitle>
+              <DialogDescription>
+                {editingPrompt
+                  ? t("settings.prompts.editPrompt")
+                  : t("settings.prompts.newPrompt")}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div>
+                <Label htmlFor="prompt-name">
+                  {t("settings.prompts.promptName")}
+                </Label>
+                <Input
+                  id="prompt-name"
+                  value={promptName}
+                  onChange={(e) => setPromptName(e.target.value)}
+                  placeholder={t("settings.prompts.promptNamePlaceholder")}
+                  className="mt-1.5"
+                />
+              </div>
+              <div>
+                <Label htmlFor="prompt-description">
+                  {t("settings.prompts.promptDescription")}
+                </Label>
+                <Input
+                  id="prompt-description"
+                  value={promptDescription}
+                  onChange={(e) => setPromptDescription(e.target.value)}
+                  placeholder={t(
+                    "settings.prompts.promptDescriptionPlaceholder"
+                  )}
+                  className="mt-1.5"
+                />
+              </div>
+              <div>
+                <Label htmlFor="prompt-content">
+                  {t("settings.prompts.promptContent")}
+                </Label>
+                <Textarea
+                  id="prompt-content"
+                  value={promptContent}
+                  onChange={(e) => setPromptContent(e.target.value)}
+                  placeholder={t("settings.prompts.promptContentPlaceholder")}
+                  rows={8}
+                  className="mt-1.5 font-mono text-sm"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setPromptDialogOpen(false)}
+              >
+                {t("settings.prompts.cancel")}
+              </Button>
+              <Button
+                onClick={handleSavePrompt}
+                disabled={!promptName.trim() || !promptContent.trim()}
+              >
+                {t("settings.prompts.save")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog
+          open={!!deletePromptId}
+          onOpenChange={(open) => !open && setDeletePromptId(null)}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {t("settings.prompts.deleteConfirmTitle")}
+              </DialogTitle>
+              <DialogDescription>
+                {t("settings.prompts.deleteConfirmMessage")}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setDeletePromptId(null)}
+              >
+                {t("settings.prompts.cancel")}
+              </Button>
+              <Button variant="destructive" onClick={handleDeletePrompt}>
+                {t("settings.prompts.delete")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
+
+  function renderSystemConfig() {
+    return (
+      <div className="space-y-8">
+        {/* ── Git Path Mapping Rules ──────────────────────────── */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-semibold">
+                {t("settings.config.git.title")}
+              </h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t("settings.config.git.desc")}
+              </p>
+            </div>
+            <Button
+              onClick={() => {
+                setAddRuleForm({ ...EMPTY_FORM });
+                setShowAddRuleForm(true);
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {t("settings.config.git.addRule")}
+            </Button>
+          </div>
+
+          <div className="space-y-3">
+            {rules.length === 0 && !showAddRuleForm ? (
+              <div className="rounded-xl border border-dashed border-border p-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  {t("settings.config.git.noRules")}
+                </p>
+              </div>
+            ) : (
+              <ul className="divide-y rounded-xl border border-border bg-card">
+                {rules.map((rule) =>
+                  editingRuleId === rule.id ? (
+                    <li key={rule.id} className="px-5 py-4 bg-muted/20">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-xs text-muted-foreground">{t("settings.config.git.host")}</label>
+                          <Input value={editRuleForm.host} onChange={(e) => setEditRuleForm((f) => ({ ...f, host: e.target.value }))} placeholder={t("settings.config.git.hostPlaceholder")} className="text-sm" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-muted-foreground">{t("settings.config.git.ownerMatch")}</label>
+                          <Input value={editRuleForm.ownerMatch} onChange={(e) => setEditRuleForm((f) => ({ ...f, ownerMatch: e.target.value }))} placeholder={t("settings.config.git.ownerMatchPlaceholder")} className="text-sm" />
+                        </div>
+                        <div className="space-y-1 col-span-2">
+                          <label className="text-xs text-muted-foreground">{t("settings.config.git.localPathTemplate")}</label>
+                          <Input value={editRuleForm.localPathTemplate} onChange={(e) => setEditRuleForm((f) => ({ ...f, localPathTemplate: e.target.value }))} placeholder={t("settings.config.git.localPathTemplatePlaceholder")} className="text-sm font-mono" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-muted-foreground">{t("settings.config.git.priority")}</label>
+                          <Input type="number" value={editRuleForm.priority} onChange={(e) => setEditRuleForm((f) => ({ ...f, priority: Number(e.target.value) }))} className="text-sm w-24" />
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2 mt-3">
+                        <Button variant="ghost" size="sm" onClick={() => setEditingRuleId(null)}>{t("settings.config.git.cancel")}</Button>
+                        <Button size="sm" onClick={() => handleEditRuleSave(rule.id)}>{t("settings.config.git.save")}</Button>
+                      </div>
+                    </li>
+                  ) : (
+                    <li key={rule.id} className="group px-5 py-4 hover:bg-muted/20 transition-colors">
+                      <div className="flex items-center gap-4">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">{rule.host}</span>
+                            {rule.ownerMatch !== "*" && (
+                              <span className="text-xs text-muted-foreground">/ {rule.ownerMatch}</span>
+                            )}
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{t("settings.config.git.priority")} {rule.priority}</Badge>
+                          </div>
+                          <p className="mt-0.5 font-mono text-xs text-muted-foreground truncate">{rule.localPathTemplate}</p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button variant="ghost" size="icon-sm" onClick={() => handleEditRuleStart(rule)} title={t("settings.config.git.edit")}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon-sm" onClick={() => setDeleteRuleConfirmId(rule.id)} className="text-destructive" title={t("settings.config.git.delete")}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </li>
+                  )
+                )}
+              </ul>
+            )}
+
+            {/* Add rule form */}
+            {showAddRuleForm && (
+              <div className="rounded-xl border border-border bg-muted/20 p-5 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium">{t("settings.config.git.host")}</label>
+                    <Input value={addRuleForm.host} onChange={(e) => setAddRuleForm((f) => ({ ...f, host: e.target.value }))} placeholder={t("settings.config.git.hostPlaceholder")} className="text-sm" autoFocus />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium">{t("settings.config.git.ownerMatch")}</label>
+                    <Input value={addRuleForm.ownerMatch} onChange={(e) => setAddRuleForm((f) => ({ ...f, ownerMatch: e.target.value }))} placeholder={t("settings.config.git.ownerMatchPlaceholder")} className="text-sm" />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium">{t("settings.config.git.localPathTemplate")}</label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={addRuleForm.localPathTemplate}
+                      onChange={(e) => setAddRuleForm((f) => ({ ...f, localPathTemplate: e.target.value }))}
+                      placeholder={t("settings.config.git.localPathTemplatePlaceholder")}
+                      className="text-sm font-mono flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setUseFullPath((v) => !v)}
+                      className={cn(
+                        "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-mono font-medium transition-colors cursor-pointer",
+                        useFullPath ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {"{path}"}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {useFullPath ? t("onboarding.step3.pathHintFull") : t("onboarding.step3.pathHintRepo")}
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium">{t("settings.config.git.priority")}</label>
+                  <Input type="number" value={addRuleForm.priority} onChange={(e) => setAddRuleForm((f) => ({ ...f, priority: Number(e.target.value) }))} className="text-sm w-24" />
+                </div>
+
+                {/* Live preview */}
+                {addRuleForm.localPathTemplate && (() => {
+                  const basePath = addRuleForm.localPathTemplate.trim().replace(/\/+$/, "");
+                  const tpl = useFullPath ? `${basePath}/{path}` : basePath;
+                  const samples = [
+                    { label: "GitHub SSH", url: "git@github.com:user/my-app.git" },
+                    { label: "GitHub HTTPS", url: "https://github.com/user/my-app.git" },
+                    { label: "GitLab Subgroup", url: "https://gitlab.com/org/team/sub/my-api.git" },
+                  ];
+                  return (
+                    <div className="rounded-lg bg-muted/40 border border-border px-4 py-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-muted-foreground">{t("onboarding.step3.previewLabel")}</span>
+                        <div className="flex gap-1">
+                          {samples.map((s, i) => (
+                            <button key={i} type="button" onClick={() => setPreviewIdx(i)}
+                              className={cn("rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors cursor-pointer",
+                                previewIdx === i ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground"
+                              )}>
+                              {s.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="font-mono text-[11px] text-muted-foreground truncate">{samples[previewIdx].url}</p>
+                        <p className="font-mono text-sm">
+                          <span className="text-muted-foreground">→ </span>
+                          <span className="text-foreground font-medium">{previewPath(tpl, samples[previewIdx].url)}</span>
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="flex justify-end gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setShowAddRuleForm(false)}>{t("settings.config.git.cancel")}</Button>
+                  <Button size="sm" onClick={handleAddRule} disabled={!addRuleForm.host.trim() || !addRuleForm.localPathTemplate.trim()}>
+                    <Save className="h-3.5 w-3.5 mr-1.5" />
+                    {t("settings.config.git.save")}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── System Parameters ────────────────────────────────── */}
+        <div className="rounded-xl border border-border bg-muted/50 p-5 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold">
+              {t("settings.config.system.title")}
+            </h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t("settings.config.system.desc")}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <label className="text-sm font-medium">
+                  {t("settings.config.system.maxUpload")}
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.config.system.maxUploadHint")}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={systemForm.maxUploadMb}
+                  onChange={(e) =>
+                    setSystemForm((f) => ({
+                      ...f,
+                      maxUploadMb: Number(e.target.value),
+                    }))
+                  }
+                  className="w-24 text-right rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
+                />
+                <span className="text-sm text-muted-foreground">MB</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <label className="text-sm font-medium">
+                  {t("settings.config.system.maxConcurrent")}
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.config.system.maxConcurrentHint")}
+                </p>
+              </div>
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                value={systemForm.maxConcurrent}
+                onChange={(e) =>
+                  setSystemForm((f) => ({
+                    ...f,
+                    maxConcurrent: Number(e.target.value),
+                  }))
+                }
+                className="w-24 text-right rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
+              />
+            </div>
+          </div>
+          <Button onClick={handleSaveSystem} className="rounded-lg">
+            {t("common.save")}
+          </Button>
+        </div>
+
+        {/* ── Git Parameters ──────────────────────────────────── */}
+        <div className="rounded-xl border border-border bg-muted/50 p-5 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold">
+              {t("settings.config.gitParams.title")}
+            </h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t("settings.config.gitParams.desc")}
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-sm font-medium">
+                {t("settings.config.gitParams.timeout")}
+              </label>
+              <p className="text-xs text-muted-foreground">
+                {t("settings.config.gitParams.timeoutHint")}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={5}
+                max={300}
+                value={gitParamsForm.timeoutSec}
+                onChange={(e) =>
+                  setGitParamsForm((f) => ({
+                    ...f,
+                    timeoutSec: Number(e.target.value),
+                  }))
+                }
+                className="w-24 text-right rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
+              />
+              <span className="text-sm text-muted-foreground">s</span>
+            </div>
+          </div>
+          <Button onClick={handleSaveGitParams} className="rounded-lg">
+            {t("common.save")}
+          </Button>
+        </div>
+
+        {/* ── Search Parameters ───────────────────────────────── */}
+        <div className="rounded-xl border border-border bg-muted/50 p-5 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold">
+              {t("settings.config.search.title")}
+            </h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t("settings.config.search.desc")}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <label className="text-sm font-medium">
+                  {t("settings.config.search.resultLimit")}
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.config.search.resultLimitHint")}
+                </p>
+              </div>
+              <Input
+                type="number"
+                min={5}
+                max={100}
+                value={searchForm.resultLimit}
+                onChange={(e) =>
+                  setSearchForm((f) => ({
+                    ...f,
+                    resultLimit: Number(e.target.value),
+                  }))
+                }
+                className="w-24 text-right rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
+              />
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <label className="text-sm font-medium">
+                  {t("settings.config.search.allModeCap")}
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.config.search.allModeCapHint")}
+                </p>
+              </div>
+              <Input
+                type="number"
+                min={1}
+                max={20}
+                value={searchForm.allModeCap}
+                onChange={(e) =>
+                  setSearchForm((f) => ({
+                    ...f,
+                    allModeCap: Number(e.target.value),
+                  }))
+                }
+                className="w-24 text-right rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
+              />
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <label className="text-sm font-medium">
+                  {t("settings.config.search.debounceMs")}
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.config.search.debounceMsHint")}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={50}
+                  max={1000}
+                  value={searchForm.debounceMs}
+                  onChange={(e) =>
+                    setSearchForm((f) => ({
+                      ...f,
+                      debounceMs: Number(e.target.value),
+                    }))
+                  }
+                  className="w-24 text-right rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
+                />
+                <span className="text-sm text-muted-foreground">ms</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <label className="text-sm font-medium">
+                  {t("settings.config.search.snippetLength")}
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.config.search.snippetLengthHint")}
+                </p>
+              </div>
+              <Input
+                type="number"
+                min={20}
+                max={500}
+                value={searchForm.snippetLength}
+                onChange={(e) =>
+                  setSearchForm((f) => ({
+                    ...f,
+                    snippetLength: Number(e.target.value),
+                  }))
+                }
+                className="w-24 text-right rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
+              />
+            </div>
+          </div>
+          <Button onClick={handleSaveSearch} className="rounded-lg">
+            {t("common.save")}
+          </Button>
+        </div>
+
+        {/* ── Missions Grid Layout ────────────────────────────── */}
+        <div className="rounded-xl border border-border bg-muted/50 p-5 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold">
+              {t("settings.config.missions.title")}
+            </h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t("settings.config.missions.desc")}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium flex-1">
+                {t("settings.config.missions.minCols")}
+              </label>
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                value={missionsGridForm.minCols}
+                onChange={(e) =>
+                  setMissionsGridForm((f) => ({
+                    ...f,
+                    minCols: Number(e.target.value),
+                  }))
+                }
+                className="w-20 text-right rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
+              />
+            </div>
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium flex-1">
+                {t("settings.config.missions.maxCols")}
+              </label>
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                value={missionsGridForm.maxCols}
+                onChange={(e) =>
+                  setMissionsGridForm((f) => ({
+                    ...f,
+                    maxCols: Number(e.target.value),
+                  }))
+                }
+                className="w-20 text-right rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
+              />
+            </div>
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium flex-1">
+                {t("settings.config.missions.minRows")}
+              </label>
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                value={missionsGridForm.minRows}
+                onChange={(e) =>
+                  setMissionsGridForm((f) => ({
+                    ...f,
+                    minRows: Number(e.target.value),
+                  }))
+                }
+                className="w-20 text-right rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
+              />
+            </div>
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium flex-1">
+                {t("settings.config.missions.maxRows")}
+              </label>
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                value={missionsGridForm.maxRows}
+                onChange={(e) =>
+                  setMissionsGridForm((f) => ({
+                    ...f,
+                    maxRows: Number(e.target.value),
+                  }))
+                }
+                className="w-20 text-right rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
+              />
+            </div>
+          </div>
+          <Button onClick={handleSaveMissionsGrid} className="rounded-lg">
+            {t("common.save")}
+          </Button>
+        </div>
+
+        {/* ── Hooks Configuration ─────────────────────────────── */}
+        <div className="rounded-xl border border-border bg-muted/50 p-5 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold">
+              {t("settings.config.hooks.title")}
+            </h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t("settings.config.hooks.desc")}
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-sm font-medium">
+                {t("settings.config.hooks.autoUploadTypes")}
+              </label>
+              <p className="text-xs text-muted-foreground">
+                {t("settings.config.hooks.autoUploadTypesHint")}
+              </p>
+            </div>
+            <Input
+              value={autoUploadTypes}
+              onChange={(e) => setAutoUploadTypes(e.target.value)}
+              placeholder="png, jpg, jpeg, gif, webp, svg, pdf"
+              className="w-80 rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
+            />
+          </div>
+          <Button onClick={handleSaveAutoUploadTypes} className="rounded-lg">
+            {t("common.save")}
+          </Button>
+
+          <div className="flex items-center gap-4 pt-4 border-t border-border/50">
+            <div className="flex-1">
+              <label className="text-sm font-medium">
+                {hookStatus?.installed
+                  ? t("settings.config.hooks.installed")
+                  : t("settings.config.hooks.notInstalled")}
+              </label>
+              <p className="text-xs text-muted-foreground">
+                {t("settings.config.hooks.installHint")}
+              </p>
+            </div>
+            <Button
+              variant={hookStatus?.installed ? "destructive" : "default"}
+              onClick={handleToggleHook}
+              disabled={hookLoading || !hookStatus}
+              className="rounded-lg"
+            >
+              {hookStatus?.installed
+                ? t("settings.config.hooks.uninstall")
+                : t("settings.config.hooks.install")}
+            </Button>
+          </div>
+        </div>
+
+        {/* Delete Rule Confirmation Dialog */}
+        <Dialog
+          open={!!deleteRuleConfirmId}
+          onOpenChange={(open) => !open && setDeleteRuleConfirmId(null)}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {t("settings.config.git.deleteConfirm")}
+              </DialogTitle>
+              <DialogDescription>
+                {t("settings.config.git.deleteConfirmMessage")}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setDeleteRuleConfirmId(null)}
+              >
+                {t("settings.config.git.cancel")}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() =>
+                  deleteRuleConfirmId && handleDeleteRule(deleteRuleConfirmId)
+                }
+              >
+                {t("settings.config.git.delete")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
+
+  function renderCliProfile() {
+    if (cliLoading) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+
+    if (!cliProfile) {
+      return (
+        <div className="text-sm text-muted-foreground">
+          {t("settings.cliProfile.noProfile")}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        {/* Command */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <label className="text-sm font-medium">
+              {t("settings.cliProfile.command")}
+            </label>
+          </div>
+          <p className="text-xs text-muted-foreground mb-2">
+            {t("settings.cliProfile.commandHint")}
+          </p>
+          <Input
+            type="text"
+            value={cliCommand}
+            onChange={(e) => setCliCommand(e.target.value)}
+            placeholder={t("settings.cliProfile.commandPlaceholder")}
+            className="w-full rounded-lg border-border/50 bg-zinc-900 dark:bg-zinc-950 text-cyan-400 font-mono text-sm px-4 py-2.5 focus:ring-2 focus:ring-cyan-500/30 placeholder:text-zinc-600"
+          />
+        </div>
+
+        {/* Base args */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <label className="text-sm font-medium">
+              {t("settings.cliProfile.baseArgs")}
+            </label>
+            <Badge
+              variant="secondary"
+              className="text-xs rounded-full px-2 py-0"
+            >
+              one per line
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mb-2">
+            {t("settings.cliProfile.baseArgsHint")}
+          </p>
+          <Textarea
+            value={cliBaseArgsText}
+            onChange={(e) => setCliBaseArgsText(e.target.value)}
+            placeholder={t("settings.cliProfile.baseArgsPlaceholder")}
+            rows={4}
+            className="w-full rounded-lg border-border/50 bg-zinc-900 dark:bg-zinc-950 text-cyan-400 font-mono text-sm px-4 py-3 leading-relaxed focus:ring-2 focus:ring-cyan-500/30 placeholder:text-zinc-600 resize-none"
+          />
+        </div>
+
+        {/* Env vars */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <label className="text-sm font-medium">
+              {t("settings.cliProfile.envVars")}
+            </label>
+            <Badge
+              variant="secondary"
+              className="text-xs rounded-full px-2 py-0"
+            >
+              KEY=VALUE per line
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mb-2">
+            {t("settings.cliProfile.envVarsHint")}
+          </p>
+          <Textarea
+            value={cliEnvVarsText}
+            onChange={(e) => setCliEnvVarsText(e.target.value)}
+            placeholder={t("settings.cliProfile.envVarsPlaceholder")}
+            rows={4}
+            className="w-full rounded-lg border-border/50 bg-zinc-900 dark:bg-zinc-950 text-cyan-400 font-mono text-sm px-4 py-3 leading-relaxed focus:ring-2 focus:ring-cyan-500/30 placeholder:text-zinc-600 resize-none"
+          />
+        </div>
+
+        {/* Save button with inline success indicator */}
+        <div className="flex items-center gap-3">
+          <Button onClick={handleSaveCliProfile} className="rounded-lg">
+            <Save className="h-4 w-4 mr-2" />
+            {t("common.save")}
+          </Button>
+          {cliSaveStatus === "saved" && (
+            <span className="inline-flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400 animate-in fade-in duration-300">
+              <Check className="h-4 w-4" />
+              {t("settings.cliProfile.saved")}
+            </span>
+          )}
+          {cliSaveStatus === "error" && (
+            <span className="inline-flex items-center gap-1 text-sm text-red-600 dark:text-red-400 animate-in fade-in duration-300">
+              <XCircle className="h-4 w-4" />
+              {t("settings.cliProfile.saveError")}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function renderNotifications() {
+    return (
+      <div className="divide-y divide-border/50">
+        <div className="flex items-center justify-between py-4">
+          <div>
+            <div className="text-sm font-medium">
+              {t("settings.notifications.enable")}
+            </div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {t("settings.notifications.enableDesc")}
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={notifEnabled}
+            onClick={handleToggleNotif}
+            className={cn(
+              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent p-0 transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+              notifEnabled ? "bg-foreground" : "bg-muted"
+            )}
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                notifEnabled ? "translate-x-5" : "translate-x-0"
+              )}
+            />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // Section router
+  // =========================================================================
+  function renderSectionContent() {
+    switch (activeSection) {
+      case "general":
+        return renderGeneral();
+      case "ai-tools":
+        return renderAiTools();
+      case "prompts":
+        return renderPrompts();
+      case "config":
+        return renderSystemConfig();
+      case "cli-profile":
+        return renderCliProfile();
+      case "notifications":
+        return renderNotifications();
+    }
+  }
+
+  // =========================================================================
+  // MAIN RENDER
+  // =========================================================================
+  return (
+    <div className="flex h-full flex-col bg-background">
+      {/* Top header bar */}
+      <div className="flex-shrink-0 border-b bg-card/50 backdrop-blur-sm">
+        <div className="mx-auto max-w-5xl px-6">
+          {/* Title row */}
+          <div className="flex items-center justify-between pb-3 pt-5">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">
+                {t("settings.title")}
+              </h1>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                {t("settings.configDesc")}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleClose}
+              className="gap-1.5 bg-card shadow-sm cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+              ESC
+            </Button>
+          </div>
+
+          {/* Horizontal tab navigation */}
+          <div ref={tabsRef} className="relative flex gap-1 overflow-x-auto">
+            {SECTIONS.map((section) => {
+              const Icon = section.icon;
+              const isActive = activeSection === section.id;
+              const accent = ACCENT_STYLES[section.accent];
+
+              return (
+                <button
+                  key={section.id}
+                  data-section={section.id}
+                  onClick={() => setActiveSection(section.id)}
+                  className={cn(
+                    "relative flex items-center gap-2 rounded-t-lg px-4 py-2.5",
+                    "text-sm font-medium whitespace-nowrap cursor-pointer",
+                    "transition-colors duration-200",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                    isActive
+                      ? `${accent.text} bg-background`
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex h-6 w-6 items-center justify-center rounded-md",
+                      "transition-colors duration-200",
+                      isActive ? accent.bg : "bg-transparent"
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                  </span>
+                  <span>{t(section.labelKey)}</span>
+                </button>
+              );
+            })}
+
+            {/* Sliding active indicator */}
+            <div
+              className={cn(
+                "absolute bottom-0 h-0.5 rounded-full",
+                "transition-all duration-250 ease-out",
+                accentStyle.indicator
+              )}
+              style={{
+                left: indicatorStyle.left,
+                width: indicatorStyle.width,
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-auto">
+        <div className="mx-auto max-w-4xl px-6 py-8">
+          {/* Section header with colored icon badge */}
+          {activeConfig && (
+            <div className="mb-6 flex items-start gap-4">
+              <div
+                className={cn(
+                  "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl",
+                  "ring-1",
+                  accentStyle.bg,
+                  accentStyle.text,
+                  accentStyle.ring
+                )}
+              >
+                <activeConfig.icon className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold leading-tight">
+                  {t(activeConfig.labelKey)}
+                </h2>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {t(activeConfig.descKey)}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Divider */}
+          <div className="mb-6 border-t" />
+
+          {/* Config content */}
+          {renderSectionContent()}
+        </div>
+      </div>
+    </div>
+  );
+}
