@@ -1,8 +1,9 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { getStorageDir } from "./tower-dir";
 
-const DATA_ROOT = path.join(process.cwd(), "data");
+const DATA_ROOT = getStorageDir();
 
 function assertWithinDataRoot(resolved: string): void {
   if (!resolved.startsWith(DATA_ROOT + path.sep)) {

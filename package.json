@@ -1,7 +1,10 @@
 {
-  "name": "tower",
+  "name": "@anthropic/tower",
   "version": "0.1.0",
-  "private": true,
+  "description": "AI Task Orchestration Platform — Kanban + Terminal + Code Editor + MCP",
+  "bin": {
+    "tower": "bin/tower.mjs"
+  },
   "scripts": {
     "predev": "node scripts/copy-monaco.js",
     "dev": "next dev --webpack",
@@ -14,13 +17,14 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
+    "db:init": "tsx scripts/init-db.ts",
     "db:init-fts": "tsx prisma/init-fts.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "test:e2e": "NO_PROXY=localhost,127.0.0.1 no_proxy=localhost,127.0.0.1 playwright test",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
     "mcp": "tsx src/mcp/index.ts",
-    "postinstall": "node scripts/copy-monaco.js"
+    "postinstall": "prisma generate && node scripts/copy-monaco.js"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

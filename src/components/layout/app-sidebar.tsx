@@ -187,6 +187,65 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
         </div></ScrollArea>
 
         <div className="mt-2 flex flex-col items-center gap-1">
+          {(() => {
+            const wsId = activeWorkspaceId || workspaces[0]?.id;
+            if (!wsId) return null;
+            return (
+              <>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        onClick={() => router.push(`/workspaces/${wsId}/notes`)}
+                        className={`rounded-lg p-2 transition-colors ${
+                          pathname.includes("/notes")
+                            ? "text-foreground bg-accent"
+                            : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                        }`}
+                      />
+                    }
+                  >
+                    <FileText className="h-4 w-4" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>{t("sidebar.notes")}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        onClick={() => router.push(`/workspaces/${wsId}/assets`)}
+                        className={`rounded-lg p-2 transition-colors ${
+                          pathname.includes("/assets")
+                            ? "text-foreground bg-accent"
+                            : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                        }`}
+                      />
+                    }
+                  >
+                    <FolderOpen className="h-4 w-4" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>{t("sidebar.assets")}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        onClick={() => router.push(`/workspaces/${wsId}/archive`)}
+                        className={`rounded-lg p-2 transition-colors ${
+                          pathname.includes("/archive")
+                            ? "text-foreground bg-accent"
+                            : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                        }`}
+                      />
+                    }
+                  >
+                    <Archive className="h-4 w-4" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>{t("sidebar.archive")}</TooltipContent>
+                </Tooltip>
+              </>
+            );
+          })()}
           <Tooltip>
             <TooltipTrigger
               render={

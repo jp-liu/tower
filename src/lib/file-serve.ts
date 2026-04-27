@@ -1,6 +1,7 @@
 import * as path from "node:path";
+import { getStorageDir } from "./tower-dir";
 
-const DATA_ROOT = path.join(process.cwd(), "data");
+const DATA_ROOT = getStorageDir();
 
 export const MIME_MAP: Record<string, string> = {
   ".png": "image/png",

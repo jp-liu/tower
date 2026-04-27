@@ -1,11 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// Mock tower-dir to return a predictable path instead of touching ~/.tower
+vi.mock("../tower-dir", () => ({
+  getStorageDir: () => "/mock/tower/storage",
+}));
+
 // Mock node:fs so mkdirSync doesn't create real directories
 vi.mock("node:fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs")>();
   return {
     ...actual,
     mkdirSync: vi.fn(),
+    existsSync: vi.fn(() => false),
   };
 });
 
@@ -54,6 +60,11 @@ describe("getAssistantCacheDir", () => {
   it("DIR-03: mkdirSync receives the same path returned by the function", () => {
     const result = getAssistantCacheDir("images");
     expect(fs.mkdirSync).toHaveBeenCalledWith(result, { recursive: true });
+  });
+
+  it("DIR-04: path is rooted under the mocked storage dir", () => {
+    const result = getAssistantCacheDir("images");
+    expect(result).toContain("/mock/tower/storage");
   });
 });
 
@@ -149,13 +160,14 @@ describe("stripCacheUuidSuffix", () => {
 
 describe("isAssistantCachePath", () => {
   it("ASSET-01: returns true for path inside assistant cache root", () => {
-    const cacheRoot = require("path").join(process.cwd(), "data", "cache", "assistant");
-    const filePath = require("path").join(cacheRoot, "2026-04", "images", "foo.png");
+    const path = require("path");
+    const filePath = path.join("/mock/tower/storage", "cache", "assistant", "2026-04", "images", "foo.png");
     expect(isAssistantCachePath(filePath)).toBe(true);
   });
 
   it("ASSET-01: returns false for path outside assistant cache (in assets)", () => {
-    const assetsPath = require("path").join(process.cwd(), "data", "assets", "proj123", "foo.png");
+    const path = require("path");
+    const assetsPath = path.join("/mock/tower/storage", "assets", "proj123", "foo.png");
     expect(isAssistantCachePath(assetsPath)).toBe(false);
   });
 

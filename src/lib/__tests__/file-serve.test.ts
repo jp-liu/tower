@@ -1,16 +1,22 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import * as path from "node:path";
+
+// Mock tower-dir to return a predictable path
+vi.mock("../tower-dir", () => ({
+  getStorageDir: () => "/mock/tower/storage",
+}));
+
 import { resolveAssetPath, MIME_MAP } from "../file-serve";
 import { localPathToApiUrl } from "../file-serve-client";
 
 // ── resolveAssetPath ──
 
 describe("resolveAssetPath — valid paths", () => {
-  it("returns resolved path under data/assets/{projectId} for a simple filename", () => {
+  it("returns resolved path under storage/assets/{projectId} for a simple filename", () => {
     const { resolved, error } = resolveAssetPath("proj123", "image.png");
     expect(error).toBeNull();
     expect(resolved).not.toBeNull();
-    expect(resolved!).toContain(path.join("data", "assets", "proj123", "image.png"));
+    expect(resolved!).toContain(path.join("storage", "assets", "proj123", "image.png"));
   });
 
   it("returns resolved path for filename with spaces", () => {
@@ -20,12 +26,9 @@ describe("resolveAssetPath — valid paths", () => {
   });
 
   it("returns resolved path for nested filename without traversal", () => {
-    // A file named "subdir/image.png" — traversal check should pass since it stays inside
     const { resolved, error } = resolveAssetPath("proj123", "subdir/image.png");
-    // This may or may not be allowed depending on implementation — document actual behavior
-    // The key is that the resolved path stays within data/assets/proj123
     if (error === null) {
-      expect(resolved!).toContain(path.join("data", "assets", "proj123"));
+      expect(resolved!).toContain(path.join("storage", "assets", "proj123"));
     } else {
       expect(error).toBe("Invalid path");
     }
@@ -51,19 +54,14 @@ describe("resolveAssetPath — path traversal blocking", () => {
     expect(error).toBe("Invalid path");
   });
 
-  it("allows single level up traversal that stays within data/assets '../sibling-proj/secret.txt'", () => {
-    // path.resolve("data/assets/proj123", "../sibling-proj/secret.txt") =
-    // "data/assets/sibling-proj/secret.txt" — still inside data/assets/
-    // so the guard does NOT block it (this is expected behavior)
+  it("allows single level up traversal that stays within storage/assets", () => {
     const { resolved, error } = resolveAssetPath("proj123", "../sibling-proj/secret.txt");
     expect(error).toBeNull();
     expect(resolved).not.toBeNull();
-    expect(resolved!).toContain(path.join("data", "assets", "sibling-proj", "secret.txt"));
+    expect(resolved!).toContain(path.join("storage", "assets", "sibling-proj", "secret.txt"));
   });
 
   it("blocks absolute path '/etc/passwd'", () => {
-    // path.resolve resolves absolute paths — this would resolve to /etc/passwd
-    // which doesn't start with the data/assets prefix
     const { resolved, error } = resolveAssetPath("proj123", "/etc/passwd");
     expect(resolved).toBeNull();
     expect(error).toBe("Invalid path");
@@ -129,7 +127,17 @@ describe("MIME_MAP", () => {
 // ── localPathToApiUrl ──
 
 describe("localPathToApiUrl", () => {
-  it("converts relative data/assets path to API URL", () => {
+  it("converts storage/assets path to API URL", () => {
+    const result = localPathToApiUrl("/Users/alice/.tower/storage/assets/abc123/file.png");
+    expect(result).toBe("/api/files/assets/abc123/file.png");
+  });
+
+  it("converts relative storage/assets path to API URL", () => {
+    const result = localPathToApiUrl("storage/assets/abc123/file.png");
+    expect(result).toBe("/api/files/assets/abc123/file.png");
+  });
+
+  it("converts legacy data/assets path to API URL (backward compat)", () => {
     const result = localPathToApiUrl("data/assets/abc123/file.png");
     expect(result).toBe("/api/files/assets/abc123/file.png");
   });
@@ -154,13 +162,13 @@ describe("localPathToApiUrl", () => {
     expect(localPathToApiUrl(url)).toBe(url);
   });
 
-  it("returns input unchanged for path that doesn't match data/assets pattern", () => {
+  it("returns input unchanged for path that doesn't match pattern", () => {
     const p = "cache/abc123/file.png";
     expect(localPathToApiUrl(p)).toBe(p);
   });
 
   it("converts path with project ID containing numbers and letters", () => {
-    const result = localPathToApiUrl("data/assets/clh1234567890abcdefghij/screenshot.jpg");
+    const result = localPathToApiUrl("storage/assets/clh1234567890abcdefghij/screenshot.jpg");
     expect(result).toBe("/api/files/assets/clh1234567890abcdefghij/screenshot.jpg");
   });
 

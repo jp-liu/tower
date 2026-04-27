@@ -3,8 +3,9 @@
  * No Node.js dependencies — safe to import from "use client" components.
  */
 export function localPathToApiUrl(src: string): string {
-  // Match data/assets/{projectId}/{filename} or /data/assets/{projectId}/{filename}
-  const match = src.match(/(?:^|\/)data\/assets\/([^/]+)\/([^/]+)$/);
+  // Match assets/{projectId}/{filename} under storage/ (.tower/storage/assets/...)
+  // Also supports legacy data/assets/ paths for backward compatibility
+  const match = src.match(/(?:^|\/)(?:storage|data)\/assets\/([^/]+)\/([^/]+)$/);
   if (match) {
     return `/api/files/assets/${match[1]}/${match[2]}`;
   }

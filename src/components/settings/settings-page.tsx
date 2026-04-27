@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -1961,24 +1962,10 @@ export function SettingsPage() {
               {t("settings.notifications.enableDesc")}
             </div>
           </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={notifEnabled}
-            onClick={handleToggleNotif}
-            className={cn(
-              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent p-0 transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-              notifEnabled ? "bg-foreground" : "bg-muted"
-            )}
-          >
-            <span
-              aria-hidden="true"
-              className={cn(
-                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                notifEnabled ? "translate-x-5" : "translate-x-0"
-              )}
-            />
-          </button>
+          <Switch
+            checked={notifEnabled}
+            onCheckedChange={handleToggleNotif}
+          />
         </div>
       </div>
     );

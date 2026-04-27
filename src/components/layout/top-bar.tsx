@@ -1,11 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
-import { Search, Settings, Plus, Command, Globe, FolderOpen, Bot } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
+import { Search, Settings, Plus, Command, Globe, FolderOpen, Bot, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { SearchDialog } from "./search-dialog";
 import { useI18n } from "@/lib/i18n";
 import { useAssistant } from "@/components/assistant/assistant-provider";
@@ -34,9 +41,65 @@ export function getInitials(name: string): string {
     .join("");
 }
 
+/**
+ * Toggle theme with View Transition API circle-expand animation.
+ * Falls back to instant switch if not supported.
+ */
+function useThemeTransition() {
+  const { resolvedTheme, setTheme } = useTheme();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const toggleTheme = useCallback(
+    (e?: React.MouseEvent<HTMLButtonElement>) => {
+      const next = resolvedTheme === "dark" ? "light" : "dark";
+
+      // Use View Transition API if available
+      if (
+        typeof document !== "undefined" &&
+        "startViewTransition" in document &&
+        !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ) {
+        const x = e?.clientX ?? window.innerWidth / 2;
+        const y = e?.clientY ?? 0;
+        const endRadius = Math.hypot(
+          Math.max(x, window.innerWidth - x),
+          Math.max(y, window.innerHeight - y)
+        );
+
+        const transition = (document as any).startViewTransition(() => {
+          setTheme(next);
+        });
+
+        transition.ready.then(() => {
+          document.documentElement.animate(
+            {
+              clipPath: [
+                `circle(0px at ${x}px ${y}px)`,
+                `circle(${endRadius}px at ${x}px ${y}px)`,
+              ],
+            },
+            {
+              duration: 400,
+              easing: "ease-in-out",
+              pseudoElement: "::view-transition-new(root)",
+            }
+          );
+        });
+      } else {
+        setTheme(next);
+      }
+    },
+    [resolvedTheme, setTheme]
+  );
+
+  return { resolvedTheme, toggleTheme, triggerRef };
+}
+
 export function TopBar({ onCreateProject, username }: TopBarProps) {
   const { t, locale, setLocale } = useI18n();
   const { isOpen: assistantOpen, toggleAssistant } = useAssistant();
+  const { resolvedTheme, toggleTheme, triggerRef } = useThemeTransition();
+  const router = useRouter();
   const [showSearch, setShowSearch] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showImportProject, setShowImportProject] = useState(false);
@@ -58,7 +121,7 @@ export function TopBar({ onCreateProject, username }: TopBarProps) {
       <header className="flex h-12 items-center justify-between border-b border-border bg-background/80 px-5 backdrop-blur-sm">
         <div className="w-40" />
 
-        {/* Search + Assistant group — Bot is immediately after search per UI-01 */}
+        {/* Search + Assistant group */}
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -72,7 +135,6 @@ export function TopBar({ onCreateProject, username }: TopBarProps) {
             </kbd>
           </Button>
 
-          {/* Assistant — per UI-01: immediately after search, before right-side settings area */}
           <Tooltip>
             <TooltipTrigger
               delay={500}
@@ -82,7 +144,7 @@ export function TopBar({ onCreateProject, username }: TopBarProps) {
                   onClick={toggleAssistant}
                   aria-label={t("assistant.iconLabel")}
                   className={[
-                    "rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+                    "cursor-pointer rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
                     assistantOpen ? "bg-accent text-foreground" : "",
                   ].join(" ")}
                 />
@@ -90,60 +152,109 @@ export function TopBar({ onCreateProject, username }: TopBarProps) {
             >
               <Bot className="h-4 w-4" />
             </TooltipTrigger>
-            <TooltipContent>
-              <p>{t("assistant.iconLabel")}</p>
-            </TooltipContent>
+            <TooltipContent>{t("assistant.iconLabel")}</TooltipContent>
           </Tooltip>
         </div>
 
         {/* Right Actions */}
         <div className="flex items-center gap-1.5">
           {/* Language Toggle */}
-          <Button
-            variant="ghost"
-            onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
-            className="text-muted-foreground"
-            title={t("settings.language")}
-          >
-            <Globe className="h-3.5 w-3.5" />
-            <span className="text-[11px] font-semibold">{locale === "zh" ? "EN" : "中"}</span>
-          </Button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
+                  className="text-muted-foreground"
+                />
+              }
+            >
+              <Globe className="h-3.5 w-3.5" />
+              <span className="text-[11px] font-semibold">{locale === "zh" ? "EN" : "中"}</span>
+            </TooltipTrigger>
+            <TooltipContent>{t("settings.language")}</TooltipContent>
+          </Tooltip>
+
+          {/* Theme Toggle */}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  ref={triggerRef}
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleTheme}
+                  className="text-muted-foreground"
+                />
+              }
+            >
+              {resolvedTheme === "dark" ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
+            </TooltipTrigger>
+            <TooltipContent>{t("settings.theme")}</TooltipContent>
+          </Tooltip>
 
           {/* Divider */}
           <div className="h-4 w-px bg-border" />
 
-          <Link
-            href="/settings"
-            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <Settings className="h-4 w-4" />
-          </Link>
-          <Button
-            variant="outline"
-            className="gap-1.5 ring-1 ring-border hover:bg-accent"
-            onClick={() => setShowImportProject(true)}
-          >
-            <FolderOpen className="h-3.5 w-3.5" />
-            {t("topbar.importProject")}
-          </Button>
-          <Button
-            data-tour="create-project"
-            className="gap-1.5 bg-primary/10 text-primary ring-1 ring-primary/25 hover:bg-primary/20"
-            onClick={() => setShowCreateProject(true)}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            {t("topbar.newProject")}
-          </Button>
-          {username && (
-            <div className="ml-0.5 flex items-center gap-1.5">
-              <span className="max-w-[80px] truncate text-xs text-muted-foreground">{username}</span>
-              <Avatar className="h-7 w-7 ring-1 ring-border">
-                <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold">
-                  {getInitials(username)}
-                </AvatarFallback>
-              </Avatar>
-            </div>
-          )}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="outline"
+                  className="gap-1.5 ring-1 ring-border hover:bg-accent"
+                  onClick={() => setShowImportProject(true)}
+                />
+              }
+            >
+              <FolderOpen className="h-3.5 w-3.5" />
+              {t("topbar.importProject")}
+            </TooltipTrigger>
+            <TooltipContent>{t("topbar.importProject")}</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  data-tour="create-project"
+                  className="gap-1.5 bg-primary/10 text-primary ring-1 ring-primary/25 hover:bg-primary/20"
+                  onClick={() => setShowCreateProject(true)}
+                />
+              }
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t("topbar.newProject")}
+            </TooltipTrigger>
+            <TooltipContent>{t("topbar.newProject")}</TooltipContent>
+          </Tooltip>
+
+          {/* User Avatar + Dropdown (Settings inside) */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button className="ml-0.5 flex cursor-pointer items-center gap-1.5 rounded-lg p-1 transition-colors hover:bg-accent">
+                  {username && (
+                    <span className="max-w-[80px] truncate text-xs text-muted-foreground">{username}</span>
+                  )}
+                  <Avatar className="h-7 w-7 ring-1 ring-border">
+                    <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold">
+                      {username ? getInitials(username) : "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
+              }
+            />
+            <DropdownMenuContent align="end" sideOffset={8} className="w-40">
+              <DropdownMenuItem onClick={() => router.push("/settings")}>
+                <Settings className="mr-2 h-3.5 w-3.5" />
+                {t("settings.title")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 

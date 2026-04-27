@@ -29,8 +29,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const resolvedPath = path.resolve(process.cwd(), bodyPath);
-  const assetsRoot = path.resolve(process.cwd(), "data/assets/");
+  const { getStorageDir } = await import("@/lib/tower-dir");
+  const dataRoot = getStorageDir();
+  const resolvedPath = path.resolve(dataRoot, bodyPath);
+  const assetsRoot = path.resolve(dataRoot, "assets/");
 
   // Security: prevent directory traversal outside data/assets/
   if (!resolvedPath.startsWith(assetsRoot + path.sep) && resolvedPath !== assetsRoot) {

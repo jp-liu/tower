@@ -7,6 +7,7 @@
 import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { getAssistantDir } from "./tower-dir";
 
 const CLAUDE_MD_CONTENT = `# Tower Assistant
 
@@ -28,36 +29,30 @@ const CLAUDE_MD_CONTENT = `# Tower Assistant
 `;
 
 export function ensureTowerDir(): string {
+  const assistantDir = getAssistantDir();
+  const claudeMd = join(assistantDir, "CLAUDE.md");
   const root = process.cwd();
-  const towerDir = join(root, ".tower");
-  const claudeMd = join(towerDir, "CLAUDE.md");
   const skillSrc = join(root, "skills", "tower", "SKILL.md");
-  const skillDestDir = join(towerDir, ".claude", "skills", "tower");
+  const skillDestDir = join(assistantDir, ".claude", "skills", "tower");
   const skillDest = join(skillDestDir, "SKILL.md");
-
-  // 1. Ensure .tower/ exists
-  if (!existsSync(towerDir)) {
-    mkdirSync(towerDir, { recursive: true });
-    console.error("[init-tower] Created .tower/");
-  }
 
   // 2. Ensure CLAUDE.md exists
   if (!existsSync(claudeMd)) {
     writeFileSync(claudeMd, CLAUDE_MD_CONTENT, "utf-8");
-    console.error("[init-tower] Created .tower/CLAUDE.md");
+    console.error(`[init-tower] Created ${claudeMd}`);
   }
 
   // 3. Copy SKILL.md from source if missing
   if (existsSync(skillSrc) && !existsSync(skillDest)) {
     mkdirSync(skillDestDir, { recursive: true });
     copyFileSync(skillSrc, skillDest);
-    console.error("[init-tower] Copied SKILL.md → .tower/.claude/skills/tower/");
+    console.error(`[init-tower] Copied SKILL.md → ${skillDestDir}`);
   }
 
   // 4. Auto-install Claude Code hooks (SessionStart + PostToolUse)
   ensureClaudeHooks();
 
-  return towerDir;
+  return assistantDir;
 }
 
 /**

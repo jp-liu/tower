@@ -1,63 +1,65 @@
 /**
  * Security tests for /api/internal/assets/reveal
  *
- * Tests that the reveal API only allows paths within data/assets/.
+ * Tests that the reveal API only allows paths within storage/assets/.
+ * The actual route resolves paths relative to getStorageDir() (~/.tower/storage/).
  */
 import { describe, it, expect } from "vitest";
 import * as path from "path";
 
 describe("Reveal Route Path Containment", () => {
-  // Extracted path containment logic from the route for unit testing
-  function isRevealAllowed(bodyPath: string, cwd: string): boolean {
-    const resolvedPath = path.resolve(cwd, bodyPath);
-    const assetsRoot = path.resolve(cwd, "data/assets/");
+  // Extracted path containment logic from the route for unit testing.
+  // dataRoot simulates getStorageDir() return value.
+  function isRevealAllowed(bodyPath: string, dataRoot: string): boolean {
+    const resolvedPath = path.resolve(dataRoot, bodyPath);
+    const assetsRoot = path.resolve(dataRoot, "assets/");
     return (
       resolvedPath.startsWith(assetsRoot + path.sep) ||
       resolvedPath === assetsRoot
     );
   }
 
-  const cwd = "/Users/test/project/tower";
+  const dataRoot = "/Users/test/.tower/storage";
 
-  describe("allows paths within data/assets/", () => {
+  describe("allows paths within storage/assets/", () => {
     it("accepts file directly in assets dir", () => {
-      expect(isRevealAllowed("data/assets/proj1/image.png", cwd)).toBe(true);
+      expect(isRevealAllowed("assets/proj1/image.png", dataRoot)).toBe(true);
     });
 
     it("accepts nested asset path", () => {
       expect(
-        isRevealAllowed("data/assets/proj1/2026-04/images/photo.jpg", cwd)
+        isRevealAllowed("assets/proj1/2026-04/images/photo.jpg", dataRoot)
       ).toBe(true);
     });
 
     it("accepts assets root itself", () => {
-      expect(isRevealAllowed("data/assets/", cwd)).toBe(true);
+      expect(isRevealAllowed("assets/", dataRoot)).toBe(true);
     });
   });
 
-  describe("BLOCKS paths outside data/assets/", () => {
+  describe("BLOCKS paths outside storage/assets/", () => {
     it("blocks path traversal to parent", () => {
-      expect(isRevealAllowed("data/assets/../../etc/passwd", cwd)).toBe(false);
+      expect(isRevealAllowed("assets/../../etc/passwd", dataRoot)).toBe(false);
     });
 
     it("blocks absolute path outside assets", () => {
-      expect(isRevealAllowed("/etc/passwd", cwd)).toBe(false);
+      expect(isRevealAllowed("/etc/passwd", dataRoot)).toBe(false);
     });
 
-    it("blocks path to project root", () => {
-      expect(isRevealAllowed(".", cwd)).toBe(false);
+    it("blocks path to storage root", () => {
+      expect(isRevealAllowed(".", dataRoot)).toBe(false);
     });
 
-    it("blocks path to data/ (not data/assets/)", () => {
-      expect(isRevealAllowed("data/cache/secrets.json", cwd)).toBe(false);
+    it("blocks path to cache (not assets)", () => {
+      expect(isRevealAllowed("cache/secrets.json", dataRoot)).toBe(false);
     });
 
-    it("blocks prefix-matching attack (data/assets-evil/)", () => {
-      expect(isRevealAllowed("data/assets-evil/file.txt", cwd)).toBe(false);
+    it("blocks prefix-matching attack (assets-evil/)", () => {
+      expect(isRevealAllowed("assets-evil/file.txt", dataRoot)).toBe(false);
     });
 
     it("blocks path to home directory", () => {
-      expect(isRevealAllowed("/Users/test/.ssh/id_rsa", cwd)).toBe(false);
+      expect(isRevealAllowed("/Users/test/.ssh/id_rsa", dataRoot)).toBe(false);
     });
   });
 });
