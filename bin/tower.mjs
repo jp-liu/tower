@@ -144,12 +144,22 @@ async function cmdStart() {
     await initDatabase();
   }
 
+  // Use standalone server.js if available (npm install), fallback to next start (dev)
+  const standaloneServer = join(PROJECT_ROOT, ".next", "standalone", "tower", "server.js");
+  const useStandalone = existsSync(standaloneServer);
+
   log(`Starting Tower on http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
-  const child = spawn("npx", ["next", "start", "-p", PORT, "-H", HOST], {
-    cwd: PROJECT_ROOT,
-    stdio: "inherit",
-    env: childEnv(),
-  });
+  const child = useStandalone
+    ? spawn("node", [standaloneServer], {
+        cwd: join(PROJECT_ROOT, ".next", "standalone", "tower"),
+        stdio: "inherit",
+        env: { ...childEnv(), PORT, HOSTNAME: HOST },
+      })
+    : spawn("npx", ["next", "start", "-p", PORT, "-H", HOST], {
+        cwd: PROJECT_ROOT,
+        stdio: "inherit",
+        env: childEnv(),
+      });
 
   child.on("exit", (code) => process.exit(code ?? 0));
   process.on("SIGINT", () => child.kill("SIGINT"));

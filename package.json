@@ -1,14 +1,14 @@
 {
   "name": "tower-studio",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "AI Task Orchestration Platform — Kanban + Terminal + Code Editor + MCP",
   "bin": {
     "tower": "bin/tower.mjs"
   },
   "files": [
     "bin/",
-    ".next/",
-    "public/",
+    ".next/standalone/",
+    ".next/static/",
     "prisma/schema.prisma",
     "prisma/init-fts.ts",
     "scripts/init-db.ts",
@@ -24,7 +24,7 @@
     "tower:init": "tsx scripts/init-tower.ts",
     "prebuild": "node scripts/copy-monaco.js",
     "build": "next build",
-    "build:clean": "rm -rf .next && next build && find .next -name '*.map' -delete",
+    "build:clean": "rm -rf .next && next build && find .next -name '*.map' -delete && cp -r .next/static .next/standalone/tower/.next/static",
     "release": "pnpm build:clean && npm pack",
     "release:publish": "pnpm build:clean && npm publish",
     "start": "next start",
