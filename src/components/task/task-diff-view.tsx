@@ -141,16 +141,13 @@ export function TaskDiffView({
                     <div className="border-t border-border bg-background">
                       <pre className="overflow-x-auto p-0 text-xs font-mono leading-5">
                         {file.patch.split("\n").map((line, idx) => {
-                          let lineClass = "px-4 block";
-                          if (line.startsWith("+") && !line.startsWith("+++")) {
-                            lineClass += " bg-green-500/10 text-green-400";
-                          } else if (line.startsWith("-") && !line.startsWith("---")) {
-                            lineClass += " bg-red-500/10 text-red-400";
-                          } else if (line.startsWith("@@")) {
-                            lineClass += " bg-blue-500/10 text-blue-300";
-                          } else {
-                            lineClass += " text-muted-foreground";
-                          }
+                          const lineClass = line.startsWith("+") && !line.startsWith("+++")
+                            ? "px-4 block bg-green-500/10 text-green-400"
+                            : line.startsWith("-") && !line.startsWith("---")
+                            ? "px-4 block bg-red-500/10 text-red-400"
+                            : line.startsWith("@@")
+                            ? "px-4 block bg-blue-500/10 text-blue-300"
+                            : "px-4 block text-muted-foreground";
                           return (
                             <span key={idx} className={lineClass}>
                               {line || " "}

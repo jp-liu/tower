@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { updateProject, createProject, deleteProject, getRecentLocalProjects } from "@/actions/workspace-actions";
+import { updateProject, createProject, deleteProject, getRecentLocalProjects, getOrCreateTowerTaskId } from "@/actions/workspace-actions";
 import { analyzeProjectDirectory } from "@/actions/project-actions";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
@@ -305,7 +305,14 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
           <Button
             variant="outline"
             className="mt-3 w-full h-8 gap-1.5 text-xs"
-            onClick={() => router.push(`/workspaces/${workspaceId}/projects/${project.id}`)}
+            onClick={async () => {
+              try {
+                const taskId = await getOrCreateTowerTaskId(project.id);
+                router.push(`/workspaces/${workspaceId}/tasks/${taskId}`);
+              } catch {
+                toast.error("Failed to open studio");
+              }
+            }}
           >
             <FolderOpen className="h-3.5 w-3.5" />
             {t("git.openStudio")}

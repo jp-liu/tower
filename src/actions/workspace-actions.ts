@@ -207,3 +207,18 @@ export async function getRecentLocalProjects(limit = 10) {
     take: limit,
   });
 }
+
+/**
+ * Get or create the Tower task for a project (for Open Studio).
+ * Returns the taskId directly so the client can navigate without a server-side redirect.
+ */
+export async function getOrCreateTowerTaskId(projectId: string): Promise<string> {
+  const project = await db.project.findUnique({
+    where: { id: projectId },
+    select: { id: true, name: true },
+  });
+  if (!project) throw new Error("Project not found");
+
+  const { ensureTowerTask } = await import("@/lib/instrumentation-tasks");
+  return ensureTowerTask(project.id, project.name);
+}
