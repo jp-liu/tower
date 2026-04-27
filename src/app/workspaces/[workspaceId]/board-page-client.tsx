@@ -234,7 +234,7 @@ export function BoardPageClient({
               ? editingTask.labels.map((tl) => tl.labelId)
               : []
           }
-          labels={labels}
+          labels={labels.filter((l) => !(l.name === TOWER_LABEL_NAME && l.isBuiltin))}
           projectType={project.type}
           projectLocalPath={project.localPath}
         />
