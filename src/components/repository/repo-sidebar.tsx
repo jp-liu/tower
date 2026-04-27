@@ -20,7 +20,6 @@ import { toast } from "sonner";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { CreateBranchDialog } from "./create-branch-dialog";
-import { GitChangesPanel } from "./git-changes-panel";
 import { GitLogPanel } from "./git-log-panel";
 import { GitStashPanel } from "./git-stash-panel";
 
@@ -371,26 +370,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
             ) : gitInfo?.isGit ? (
               /* Git repo — show current branch + dropdown selectors */
               <div className="space-y-3">
-                {/* Current branch */}
-                <div className="rounded-lg border border-border bg-muted/50 p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{t("git.currentBranch")}</p>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <GitBranch className="h-3.5 w-3.5 text-emerald-400" />
-                    <span className="font-mono text-sm font-medium text-foreground">{gitInfo.currentBranch}</span>
-                  </div>
-                </div>
-
-                {/* Changes + Commit + Pull/Push */}
-                <GitChangesPanel
-                  localPath={project.localPath!}
-                  changedFiles={gitInfo.changedFiles ?? []}
-                  ahead={gitInfo.ahead ?? 0}
-                  behind={gitInfo.behind ?? 0}
-                  hasRemote={!!gitInfo.remoteUrl}
-                  onRefresh={loadGitInfo}
-                />
-
-                {/* Branch selector + fetch */}
+                {/* Current branch + actions + branch selector */}
                 <UnifiedBranchDropdown
                   localBranches={gitInfo.branches ?? []}
                   remoteBranches={(gitInfo.remoteBranches ?? []).filter((b) => !gitInfo.branches?.includes(b))}
@@ -768,7 +748,7 @@ function UnifiedBranchDropdown({
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{t("git.switchBranch")}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{t("git.currentBranch")}</p>
         <div className="flex items-center gap-0.5">
           <Button
             variant="ghost"
@@ -791,6 +771,7 @@ function UnifiedBranchDropdown({
           </Button>
         </div>
       </div>
+      {/* Branch dropdown */}
       <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => { setOpen(!open); setFilter(""); }}

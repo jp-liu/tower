@@ -53,7 +53,7 @@ describe("SearchDialog - tabs", () => {
     // The All tab button should have the active styling class
     const allTab = screen.getByText("全部").closest("button");
     expect(allTab).toBeTruthy();
-    expect(allTab?.className).toContain("amber");
+    expect(allTab?.className).toContain("primary");
   });
 });
 

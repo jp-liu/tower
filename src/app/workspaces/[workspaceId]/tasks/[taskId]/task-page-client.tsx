@@ -386,7 +386,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                 {/* Prompt selector */}
                 {prompts.length > 0 && (
                   <Select key={`prompt-${prompts.length}`} defaultValue={selectedPromptId ?? "none"} onValueChange={(v) => setSelectedPromptId(v === "none" ? null : v)}>
-                    <SelectTrigger className="h-9 min-w-[140px]">
+                    <SelectTrigger size="sm" className="min-w-[140px]">
                       <span className="text-left truncate">
                         {selectedPromptId
                           ? prompts.find((p) => p.id === selectedPromptId)?.name ?? t("terminal.noPrompt")
@@ -406,7 +406,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                 <Button
                   onClick={handleExecute}
                   disabled={isExecuting}
-                  className="h-7 gap-2 px-4 text-xs"
+                  size="sm" className="gap-2 px-4"
                 >
                   {isExecuting ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />

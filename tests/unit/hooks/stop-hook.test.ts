@@ -13,6 +13,11 @@ vi.mock("@/lib/internal-api-guard", () => ({
   requireLocalhost: vi.fn(() => null),
 }));
 
+const mockBroadcastNotification = vi.fn();
+vi.mock("@/lib/pty/ws-server", () => ({
+  broadcastNotification: mockBroadcastNotification,
+}));
+
 // Mock the db
 vi.mock("@/lib/db", () => ({
   db: {
@@ -27,9 +32,7 @@ vi.mock("@/lib/db", () => ({
 
 describe("Stop hook API", () => {
   beforeEach(() => {
-    // Clear the global queue before each test
-    const g = globalThis as typeof globalThis & { __stopEventQueue?: unknown[] };
-    g.__stopEventQueue = [];
+    vi.clearAllMocks();
   });
 
   it("should accept valid stop event with taskId and sessionId", async () => {
@@ -95,11 +98,11 @@ describe("Stop hook API", () => {
 
     await POST(request as never);
 
-    const g = globalThis as typeof globalThis & { __stopEventQueue?: unknown[] };
-    expect(g.__stopEventQueue).toHaveLength(1);
-    expect(g.__stopEventQueue![0]).toMatchObject({
-      taskId: "ctask123456789012345",
-      type: "stop",
-    });
+    expect(mockBroadcastNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "ctask123456789012345",
+        type: "stop",
+      })
+    );
   });
 });

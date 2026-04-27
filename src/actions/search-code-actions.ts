@@ -2,6 +2,7 @@
 
 import { execFile } from "child_process";
 import { z } from "zod";
+import { rgPath } from "@vscode/ripgrep";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -95,27 +96,17 @@ export async function searchCode(
     maxResults: safeMaxResults,
   } = parsed.data;
 
-  // 2. Guard: localPath must be absolute
-  if (!safePath.startsWith("/")) {
+  // 2. Guard: localPath must be absolute (Unix: /path, Windows: C:\path)
+  const isAbsolute = safePath.startsWith("/") || /^[a-zA-Z]:[/\\]/.test(safePath);
+  if (!isAbsolute) {
     return {
       matches: [],
       truncated: false,
-      error: "localPath must be an absolute path (start with /)",
+      error: "localPath must be an absolute path",
     };
   }
 
-  // 3. Check rg availability (async)
-  try {
-    await execFileAsync("which", ["rg"], { encoding: "utf-8" });
-  } catch {
-    return {
-      matches: [],
-      truncated: false,
-      error: "ripgrep (rg) is not installed. Install with: brew install ripgrep",
-    };
-  }
-
-  // 4. Build rg args
+  // 3. Build rg args (using bundled @vscode/ripgrep binary)
   const args: string[] = ["--json", "-n", safePattern];
   if (safeGlob) {
     args.push("--glob", safeGlob);
@@ -125,7 +116,7 @@ export async function searchCode(
   // 5. Run rg (async — does not block event loop)
   let output: string;
   try {
-    output = await execFileAsync("rg", args, {
+    output = await execFileAsync(rgPath, args, {
       encoding: "utf-8",
       maxBuffer: 10 * 1024 * 1024,
       timeout: 10_000,

@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/instrumentation-tasks", () => ({
   pruneOrphanedWorktrees: vi.fn().mockResolvedValue(undefined),
   cleanupStaleExecutions: vi.fn().mockResolvedValue(undefined),
+  ensureTowerLabel: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock @/lib/pty/ws-server
@@ -25,7 +26,7 @@ beforeEach(() => {
 
 describe("register", () => {
   it("calls pruneOrphanedWorktrees and cleanupStaleExecutions on startup", async () => {
-    const { pruneOrphanedWorktrees, cleanupStaleExecutions } = await import(
+    const { pruneOrphanedWorktrees, cleanupStaleExecutions, ensureTowerLabel } = await import(
       "@/lib/instrumentation-tasks"
     );
     const { startWsServer } = await import("@/lib/pty/ws-server");
@@ -36,6 +37,7 @@ describe("register", () => {
 
     expect(pruneOrphanedWorktrees).toHaveBeenCalledOnce();
     expect(cleanupStaleExecutions).toHaveBeenCalledOnce();
+    expect(ensureTowerLabel).toHaveBeenCalledOnce();
     expect(startWsServer).toHaveBeenCalledOnce();
     expect(ensureTowerDir).toHaveBeenCalledOnce();
   });

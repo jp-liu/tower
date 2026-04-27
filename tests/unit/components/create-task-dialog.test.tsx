@@ -85,7 +85,7 @@ describe("CreateTaskDialog - branch selector", () => {
     });
 
     // Open the dropdown to see all branch options
-    const branchTrigger = screen.getByTestId("branch-selector").querySelector("button")!;
+    const branchTrigger = screen.getByTestId("branch-selector");
     fireEvent.click(branchTrigger);
 
     await waitFor(() => {

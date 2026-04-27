@@ -23,6 +23,11 @@ vi.mock("@/lib/logger", () => ({
   },
 }));
 
+const mockBroadcastNotification = vi.fn();
+vi.mock("@/lib/pty/ws-server", () => ({
+  broadcastNotification: mockBroadcastNotification,
+}));
+
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import {
@@ -34,7 +39,7 @@ import {
   type TaskCompletionPayload,
 } from "@/actions/onboarding-actions";
 
-const mockDb = db as {
+const mockDb = db as unknown as {
   systemConfig: {
     findMany: ReturnType<typeof vi.fn>;
     upsert: ReturnType<typeof vi.fn>;
@@ -208,11 +213,6 @@ describe("onboarding-actions", () => {
   });
 
   describe("dispatchTaskCompletionEvent", () => {
-    beforeEach(() => {
-      // Reset the globalThis queue before each test
-      (globalThis as Record<string, unknown>).__taskCompletionQueue = undefined;
-    });
-
     it("logs the payload via logger without throwing", async () => {
       const payload: TaskCompletionPayload = {
         taskId: "task1",
@@ -229,7 +229,7 @@ describe("onboarding-actions", () => {
       );
     });
 
-    it("pushes payload to globalThis.__taskCompletionQueue", async () => {
+    it("broadcasts payload via broadcastNotification with type completion", async () => {
       const payload: TaskCompletionPayload = {
         taskId: "task1",
         taskTitle: "Test Task",
@@ -240,39 +240,9 @@ describe("onboarding-actions", () => {
 
       await dispatchTaskCompletionEvent(payload);
 
-      const queue = (globalThis as Record<string, unknown>).__taskCompletionQueue as TaskCompletionPayload[];
-      expect(queue).toBeDefined();
-      expect(queue).toHaveLength(1);
-      expect(queue[0]).toEqual(payload);
-    });
-
-    it("caps queue at 50 entries (splices oldest)", async () => {
-      // Pre-fill with 50 entries
-      const initialQueue: TaskCompletionPayload[] = Array.from({ length: 50 }, (_, i) => ({
-        taskId: `task-old-${i}`,
-        taskTitle: `Old Task ${i}`,
-        status: "COMPLETED" as const,
-        executionId: `exec-old-${i}`,
-        workspaceId: "ws1",
-      }));
-      (globalThis as Record<string, unknown>).__taskCompletionQueue = initialQueue;
-
-      const newPayload: TaskCompletionPayload = {
-        taskId: "task-new",
-        taskTitle: "New Task",
-        status: "COMPLETED",
-        executionId: "exec-new",
-        workspaceId: "ws1",
-      };
-
-      await dispatchTaskCompletionEvent(newPayload);
-
-      const queue = (globalThis as Record<string, unknown>).__taskCompletionQueue as TaskCompletionPayload[];
-      expect(queue).toHaveLength(50);
-      // Newest entry should be at the end
-      expect(queue[queue.length - 1]).toEqual(newPayload);
-      // Oldest entry should have been removed
-      expect(queue[0].taskId).toBe("task-old-1");
+      expect(mockBroadcastNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ ...payload, type: "completion" })
+      );
     });
 
     it("swallows errors silently (best-effort)", async () => {

@@ -34,7 +34,7 @@ describe("CategoryFilter", () => {
       <CategoryFilter active="账号" onSelect={vi.fn()} />
     );
     const activeButton = screen.getByText("账号");
-    expect(activeButton.className).toMatch(/bg-amber-500\/20/);
+    expect(activeButton.className).toMatch(/bg-primary\/15/);
   });
 
   it("calls onSelect with category value when a category button is clicked", () => {

@@ -99,7 +99,7 @@ export function GitStashPanel({ localPath, stashes, hasChanges, onRefresh }: Git
               />
               <Button
                 variant="outline"
-                size="icon-xs"
+                size="icon-sm"
                 onClick={handleSave}
                 disabled={saving}
                 className="shrink-0"
