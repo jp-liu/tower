@@ -67,6 +67,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isOpeningStudio, setIsOpeningStudio] = useState(false);
   const [showFolderBrowser, setShowFolderBrowser] = useState(false);
   const [editName, setEditName] = useState(project.name);
   const [editAlias, setEditAlias] = useState(project.alias ?? "");
@@ -305,16 +306,20 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
           <Button
             variant="outline"
             className="mt-3 w-full h-8 gap-1.5 text-xs"
+            disabled={isOpeningStudio}
             onClick={async () => {
+              setIsOpeningStudio(true);
               try {
                 const taskId = await getOrCreateTowerTaskId(project.id);
                 router.push(`/workspaces/${workspaceId}/tasks/${taskId}`);
               } catch {
-                toast.error("Failed to open studio");
+                toast.error(t("git.openStudioFailed"));
+              } finally {
+                setIsOpeningStudio(false);
               }
             }}
           >
-            <FolderOpen className="h-3.5 w-3.5" />
+            {isOpeningStudio ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
             {t("git.openStudio")}
           </Button>
         )}

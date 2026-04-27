@@ -315,6 +315,7 @@ export const zh = {
   "git.discardSuccess": "已放弃所有更改",
   "git.tabLabel": "Git",
   "git.openStudio": "打开工作台",
+  "git.openStudioFailed": "打开工作台失败",
   // Archive
   "archive.title": "归档任务",
   "archive.backToBoard": "返回看板",

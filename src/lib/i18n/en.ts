@@ -300,6 +300,7 @@ export const en: Translations = {
   "git.discardSuccess": "All changes discarded",
   "git.tabLabel": "Git",
   "git.openStudio": "Open Studio",
+  "git.openStudioFailed": "Failed to open studio",
   // Archive
   "archive.title": "Archived Tasks",
   "archive.backToBoard": "Back to Board",
