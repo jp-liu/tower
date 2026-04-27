@@ -48,6 +48,9 @@ prisma/dev.db-shm
 prisma/dev.db-wal
 prisma/dev.db.bak-*
 
+# Monaco editor (copied from node_modules by postinstall)
+public/vs/
+
 # runtime data
 /data/
 

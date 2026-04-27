@@ -5,8 +5,9 @@ import dynamic from "next/dynamic";
 import { loader } from "@monaco-editor/react";
 import { useTheme } from "next-themes";
 
+// Load Monaco from local public/vs (copied from node_modules by postinstall script)
 loader.config({
-  paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs" },
+  paths: { vs: "/vs" },
 });
 
 const MonacoDiffEditor = dynamic(

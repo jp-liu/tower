@@ -11,9 +11,9 @@ import { EditorTabs } from "./editor-tabs";
 import type { EditorTab } from "./editor-tabs";
 import { DiffEditorView } from "./diff-editor";
 
-// Configure CDN loader at module level (D-01)
+// Load Monaco from local public/vs (copied from node_modules by postinstall script)
 loader.config({
-  paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs" },
+  paths: { vs: "/vs" },
 });
 
 // Dynamic import prevents SSR crash (D-01)
