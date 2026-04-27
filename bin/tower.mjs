@@ -4,16 +4,14 @@
  * Tower CLI — install via npm, run `tower` to start.
  *
  * Usage:
- *   tower              Start production server (auto-init on first run)
- *   tower dev           Start development server
- *   tower init          Initialize database only (no server start)
- *   tower build         Build for production
- *   tower --help        Show help
- *   tower --version     Show version
+ *   tower                Start server (auto-init on first run)
+ *   tower migrate        Migrate data from old project-local paths to ~/.tower
+ *   tower --help         Show help
+ *   tower --version      Show version
  *
  * Options:
- *   -p, --port <port>   Server port (default: 3000)
- *   -H, --host <host>   Server host (default: 0.0.0.0)
+ *   -p, --port <port>    Server port (default: 3000)
+ *   -H, --host <host>    Server host (default: 0.0.0.0)
  */
 
 import { existsSync, readFileSync, mkdirSync } from "fs";
@@ -63,10 +61,8 @@ if (flags.help) {
   Tower — AI Task Orchestration Platform
 
   Usage:
-    tower              Start production server (auto-init on first run)
-    tower dev           Start development server
-    tower init          Initialize database only
-    tower build         Build for production
+    tower              Start server (auto-init on first run)
+    tower migrate      Migrate data from old project-local paths to ~/.tower
 
   Options:
     -p, --port <port>   Server port (default: 3000)
@@ -93,7 +89,6 @@ function logError(msg) {
   console.error(`\x1b[31m[tower]\x1b[0m ${msg}`);
 }
 
-/** Shared env for all child processes — DATABASE_URL always points to ~/.tower/database/tower.db */
 function childEnv() {
   return { ...process.env, DATABASE_URL: DB_URL };
 }
@@ -116,7 +111,6 @@ function needsInit() {
   return !existsSync(DB_PATH);
 }
 
-// ─── Ensure directory structure ───
 function ensureDirs() {
   for (const dir of [TOWER_DIR, DB_DIR, join(TOWER_DIR, "storage"), join(TOWER_DIR, "assistant"), join(TOWER_DIR, "logs")]) {
     if (!existsSync(dir)) {
@@ -125,25 +119,20 @@ function ensureDirs() {
   }
 }
 
-// ─── Initialize database ───
 async function initDatabase() {
   log("Initializing Tower...");
   ensureDirs();
   log(`Data directory: ${TOWER_DIR}`);
 
-  // Generate Prisma client
   log("Generating Prisma client...");
   run("npx prisma generate");
 
-  // Push schema to database
   log("Syncing database schema...");
   run("npx prisma db push --skip-generate");
 
-  // Seed builtin data (labels, default config, default workspace)
   log("Seeding initial data...");
   run("npx tsx scripts/init-db.ts");
 
-  // Initialize FTS virtual table
   log("Initializing full-text search...");
   run("npx tsx prisma/init-fts.ts");
 
@@ -151,47 +140,14 @@ async function initDatabase() {
 }
 
 // ─── Commands ───
-async function cmdInit() {
-  await initDatabase();
-}
-
-async function cmdDev() {
-  if (needsInit()) {
-    await initDatabase();
-  }
-
-  log(`Starting development server on port ${PORT}...`);
-  const child = spawn("npx", ["next", "dev", "--webpack", "-p", PORT, "-H", HOST], {
-    cwd: PROJECT_ROOT,
-    stdio: "inherit",
-    env: childEnv(),
-  });
-
-  child.on("exit", (code) => process.exit(code ?? 0));
-  process.on("SIGINT", () => child.kill("SIGINT"));
-  process.on("SIGTERM", () => child.kill("SIGTERM"));
-}
-
-async function cmdBuild() {
-  if (needsInit()) {
-    await initDatabase();
-  }
-
-  log("Building for production...");
-  run("npx next build");
-  log("Build complete!");
+async function cmdMigrate() {
+  log("Running data migration...");
+  run("npx tsx scripts/migrate-data.ts --run");
 }
 
 async function cmdStart() {
   if (needsInit()) {
     await initDatabase();
-  }
-
-  // Check if build exists
-  const nextDir = join(PROJECT_ROOT, ".next");
-  if (!existsSync(nextDir)) {
-    log("No build found, building first...");
-    run("npx next build");
   }
 
   log(`Starting Tower on http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
@@ -208,14 +164,8 @@ async function cmdStart() {
 
 // ─── Dispatch ───
 switch (command) {
-  case "init":
-    await cmdInit();
-    break;
-  case "dev":
-    await cmdDev();
-    break;
-  case "build":
-    await cmdBuild();
+  case "migrate":
+    await cmdMigrate();
     break;
   case "start":
     await cmdStart();
