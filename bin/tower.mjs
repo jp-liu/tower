@@ -31,26 +31,20 @@ const DB_PATH = join(DB_DIR, "tower.db");
 const DB_URL = `file:${DB_PATH}`;
 
 // ─── Parse CLI args ───
-const args = process.argv.slice(2);
-const command = args.find((a) => !a.startsWith("-")) ?? "start";
-const flags = Object.fromEntries(
-  args
-    .filter((a) => a.startsWith("-"))
-    .reduce((acc, arg) => {
-      if (arg === "-p" || arg === "--port") {
-        const next = args[args.indexOf(arg) + 1];
-        if (next && !next.startsWith("-")) acc.push(["port", next]);
-      } else if (arg === "-H" || arg === "--host") {
-        const next = args[args.indexOf(arg) + 1];
-        if (next && !next.startsWith("-")) acc.push(["host", next]);
-      } else if (arg === "--help" || arg === "-h") {
-        acc.push(["help", "true"]);
-      } else if (arg === "--version" || arg === "-v") {
-        acc.push(["version", "true"]);
-      }
-      return acc;
-    }, [])
-);
+import { parseArgs } from "node:util";
+
+const { values: flags, positionals } = parseArgs({
+  args: process.argv.slice(2),
+  options: {
+    port:    { type: "string", short: "p" },
+    host:    { type: "string", short: "H" },
+    help:    { type: "boolean", short: "h" },
+    version: { type: "boolean", short: "v" },
+  },
+  allowPositionals: true,
+});
+
+const command = positionals[0] ?? "start";
 
 const PORT = flags.port ?? process.env.PORT ?? "3000";
 const HOST = flags.host ?? "0.0.0.0";

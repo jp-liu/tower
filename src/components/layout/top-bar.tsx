@@ -200,43 +200,29 @@ export function TopBar({ onCreateProject, username }: TopBarProps) {
           {/* Divider */}
           <div className="h-4 w-px bg-border" />
 
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="outline"
-                  className="gap-1.5 ring-1 ring-border hover:bg-accent"
-                  onClick={() => setShowImportProject(true)}
-                />
-              }
-            >
-              <FolderOpen className="h-3.5 w-3.5" />
-              {t("topbar.importProject")}
-            </TooltipTrigger>
-            <TooltipContent>{t("topbar.importProject")}</TooltipContent>
-          </Tooltip>
+          <Button
+            variant="outline"
+            className="gap-1.5 ring-1 ring-border hover:bg-accent"
+            onClick={() => setShowImportProject(true)}
+          >
+            <FolderOpen className="h-3.5 w-3.5" />
+            {t("topbar.importProject")}
+          </Button>
 
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  data-tour="create-project"
-                  className="gap-1.5 bg-primary/10 text-primary ring-1 ring-primary/25 hover:bg-primary/20"
-                  onClick={() => setShowCreateProject(true)}
-                />
-              }
-            >
-              <Plus className="h-3.5 w-3.5" />
-              {t("topbar.newProject")}
-            </TooltipTrigger>
-            <TooltipContent>{t("topbar.newProject")}</TooltipContent>
-          </Tooltip>
+          <Button
+            data-tour="create-project"
+            className="gap-1.5 bg-primary/10 text-primary ring-1 ring-primary/25 hover:bg-primary/20"
+            onClick={() => setShowCreateProject(true)}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {t("topbar.newProject")}
+          </Button>
 
           {/* User Avatar + Dropdown (Settings inside) */}
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
-                <button className="ml-0.5 flex cursor-pointer items-center gap-1.5 rounded-lg p-1 transition-colors hover:bg-accent">
+                <button className="ml-0.5 flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 transition-colors hover:bg-accent">
                   {username && (
                     <span className="max-w-[80px] truncate text-xs text-muted-foreground">{username}</span>
                   )}

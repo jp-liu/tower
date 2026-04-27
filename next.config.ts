@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["node-pty", "ws", "@prisma/client"],
+  serverExternalPackages: ["node-pty", "ws", "@prisma/client", "@vscode/ripgrep"],
 };
 
 export default nextConfig;
