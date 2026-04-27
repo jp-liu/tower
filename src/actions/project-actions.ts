@@ -178,7 +178,7 @@ const ANALYZE_PROMPT_ZH = `分析这个项目目录，生成一段简短的 Mark
 **核心模块：** 2-3 个关键模块，每个一句话
 
 要求：
-- 总字数不超过 300 字
+- 总字数不超过 500 字
 - 用简洁的 Markdown（加粗标签 + 短句），不要用 ## 大标题和表格
 - 不要罗列每个文件/目录，只说关键信息
 - 中文输出`;
@@ -192,7 +192,7 @@ Read package.json, README.md and other key files, then summarize:
 **Core Modules:** 2-3 key modules, one sentence each
 
 Requirements:
-- Keep it under 300 words
+- Keep it under 1000 words
 - Use concise Markdown (bold labels + short sentences), no ## headings or tables
 - Don't list every file/directory, only key information
 - Output in English`;
