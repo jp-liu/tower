@@ -60,9 +60,9 @@ import type { DetectedTerminalApp } from "@/lib/platform";
 import type { GitPathRule } from "@/lib/git-url";
 
 // ---------------------------------------------------------------------------
-// Inline ProMaxSegmented
+// Inline SegmentedToggle
 // ---------------------------------------------------------------------------
-function ProMaxSegmented<T extends string>({
+function SegmentedToggle<T extends string>({
   options,
   value,
   onChange,
@@ -301,7 +301,7 @@ type HookStatus = { installed: boolean; hookPath: string };
 // ===========================================================================
 // MAIN COMPONENT
 // ===========================================================================
-export function SettingsProMax() {
+export function SettingsPage() {
   const router = useRouter();
   const { t } = useI18n();
   const { theme, setTheme } = useTheme();
@@ -861,7 +861,7 @@ export function SettingsProMax() {
           {!mounted ? (
             <div className="inline-flex h-9 rounded-lg border border-border/50 bg-muted/30 p-1 w-[200px]" />
           ) : (
-            <ProMaxSegmented
+            <SegmentedToggle
               options={themeOptions}
               value={(theme ?? "system") as "light" | "dark" | "system"}
               onChange={(v) => setTheme(v)}
@@ -874,7 +874,7 @@ export function SettingsProMax() {
           label={t("settings.language")}
           description={t("settings.languageDesc")}
         >
-          <ProMaxSegmented
+          <SegmentedToggle
             options={langOptions}
             value={locale}
             onChange={(v) => setLocale(v as typeof locale)}

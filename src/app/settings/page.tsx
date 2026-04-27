@@ -1,7 +1,7 @@
 "use client";
 
-import { SettingsProMax } from "@/components/settings/settings-promax";
+import { SettingsPage as SettingsContent } from "@/components/settings/settings-page";
 
 export default function SettingsPage() {
-  return <SettingsProMax />;
+  return <SettingsContent />;
 }

@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
-  Settings, Archive, Plus, Pencil, Trash2,
+  Archive, Plus, Pencil, Trash2,
   MoreHorizontal, ChevronsLeft, Tag, FileText, FolderOpen, Gauge,
 } from "lucide-react";
 import {
@@ -203,19 +203,6 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
               <Gauge className="h-4 w-4" />
             </TooltipTrigger>
             <TooltipContent side="right" sideOffset={8}>{t("missions.navLabel")}</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  onClick={() => router.push("/settings")}
-                  className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                />
-              }
-            >
-              <Settings className="h-4 w-4" />
-            </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={8}>{t("sidebar.settings")}</TooltipContent>
           </Tooltip>
         </div>
 
