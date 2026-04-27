@@ -6,6 +6,7 @@ import { createWorktree } from "@/lib/worktree";
 import { createSession } from "@/lib/pty/session-store";
 import { logger } from "@/lib/logger";
 import { readConfigValue } from "@/lib/config-reader";
+import { resolveCliAdapter } from "@/lib/ai/capability-resolver";
 import { writeFile, rm, mkdtemp, mkdir } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -190,27 +191,24 @@ export async function resumePtyExecution(
   const baseCwd = prevExec.worktreePath ?? task.project.localPath;
   const cwd = task.subPath ? join(baseCwd, task.subPath) : baseCwd;
 
-  // Read CliProfile — determines which CLI binary to spawn
+  // Read CliProfile — determines profile args and env vars
   const profile = await db.cliProfile.findFirst({ where: { isDefault: true } });
   if (!profile) throw new Error("No default CLI profile found — run seed first");
-  const profileCommand = profile.command;
   const profileBaseArgs = parseProfileJson<string[]>(profile.baseArgs, "baseArgs");
   const profileEnvVars = parseProfileJson<Record<string, string>>(profile.envVars, "envVars");
 
   // Read idle timeout from config
   const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
 
-  // Build env overrides — inherit callbackUrl from previous execution if it had one
-  const envOverrides: Record<string, string> = {
-    ...profileEnvVars,
-    TOWER_TASK_ID: taskId,
-    TOWER_TASK_TITLE: task.title,
-    TOWER_STARTED_AT: new Date().toISOString(),
-    TOWER_API_URL: `http://localhost:${process.env.PORT || "3000"}`,
-  };
-  if (prevExec.callbackUrl) {
-    envOverrides.CALLBACK_URL = prevExec.callbackUrl;
-  }
+  // Resolve adapter
+  const { adapter: cliAdapter } = await resolveCliAdapter("terminal");
+
+  const adapterEnv = cliAdapter.buildEnvOverrides({
+    taskId,
+    taskTitle: task.title,
+    apiUrl: `http://localhost:${process.env.PORT || "3000"}`,
+    callbackUrl: prevExec.callbackUrl ?? undefined,
+  });
 
   // Reuse execution: set back to RUNNING
   const execution = await db.taskExecution.update({
@@ -226,21 +224,25 @@ export async function resumePtyExecution(
 
   const usernameVal = await readConfigValue<string>("onboarding.username", "");
 
-  const claudeArgs: string[] = [
-    "--resume", previousSessionId,
-    ...profileBaseArgs,
-  ];
-
-  if (usernameVal) {
-    claudeArgs.push("--append-system-prompt", `The user's name is ${usernameVal}.`);
-  }
+  const spawnResult = cliAdapter.buildSpawnArgs({
+    taskId,
+    prompt: "",
+    cwd,
+    resumeSessionId: previousSessionId,
+    profileArgs: [
+      ...profileBaseArgs,
+      ...(usernameVal ? ["--append-system-prompt", `The user's name is ${usernameVal}.`] : []),
+    ],
+    profileEnvVars,
+    envOverrides: adapterEnv,
+  });
 
   const SESSION_ERROR_RE = /no conversation found with session id|unknown session|session .* not found/i;
 
   createSession(
     taskId,
-    profileCommand,
-    claudeArgs,
+    spawnResult.command,
+    spawnResult.args,
     cwd,
     () => {},
     async (exitCode) => {
@@ -297,7 +299,7 @@ export async function resumePtyExecution(
         await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW" } }).catch(() => {});
       }
     },
-    envOverrides,
+    spawnResult.env,
     undefined,
     idleTimeoutSec * 1000
   );
@@ -343,24 +345,24 @@ export async function continueLatestPtyExecution(
   // Read CliProfile
   const profile = await db.cliProfile.findFirst({ where: { isDefault: true } });
   if (!profile) throw new Error("No default CLI profile found — run seed first");
-  const profileCommand = profile.command;
   const profileBaseArgs = parseProfileJson<string[]>(profile.baseArgs, "baseArgs");
   const profileEnvVars = parseProfileJson<Record<string, string>>(profile.envVars, "envVars");
   const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
 
-  const envOverrides: Record<string, string> = {
-    ...profileEnvVars,
-    TOWER_TASK_ID: taskId,
-    TOWER_TASK_TITLE: task.title,
-    TOWER_STARTED_AT: new Date().toISOString(),
-    TOWER_API_URL: `http://localhost:${process.env.PORT || "3000"}`,
-  };
+  // Resolve adapter
+  const { adapter: cliAdapter, provider: providerDef } = await resolveCliAdapter("terminal");
+
+  const adapterEnv = cliAdapter.buildEnvOverrides({
+    taskId,
+    taskTitle: task.title,
+    apiUrl: `http://localhost:${process.env.PORT || "3000"}`,
+  });
 
   // Create a new execution record
   const execution = await db.taskExecution.create({
     data: {
       taskId,
-      agent: "CLAUDE_CODE",
+      agent: providerDef.agentFieldValue,
       status: "RUNNING",
       startedAt: new Date(),
       worktreePath: latestExec?.worktreePath ?? null,
@@ -376,20 +378,23 @@ export async function continueLatestPtyExecution(
 
   const usernameVal = await readConfigValue<string>("onboarding.username", "");
 
-  // Use --continue flag (no sessionId needed)
-  const claudeArgs: string[] = [
-    "--continue",
-    ...profileBaseArgs,
-  ];
-
-  if (usernameVal) {
-    claudeArgs.push("--append-system-prompt", `The user's name is ${usernameVal}.`);
-  }
+  const spawnResult = cliAdapter.buildSpawnArgs({
+    taskId,
+    prompt: "",
+    cwd,
+    continueLatest: true,
+    profileArgs: [
+      ...profileBaseArgs,
+      ...(usernameVal ? ["--append-system-prompt", `The user's name is ${usernameVal}.`] : []),
+    ],
+    profileEnvVars,
+    envOverrides: adapterEnv,
+  });
 
   createSession(
     taskId,
-    profileCommand,
-    claudeArgs,
+    spawnResult.command,
+    spawnResult.args,
     cwd,
     () => {},
     async (exitCode) => {
@@ -428,7 +433,7 @@ export async function continueLatestPtyExecution(
         await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW" } }).catch(() => {});
       }
     },
-    envOverrides,
+    spawnResult.env,
     undefined,
     idleTimeoutSec * 1000
   );
@@ -475,15 +480,17 @@ export async function startPtyExecution(
     throw new Error(`已达并发上限（${maxConcurrent}），请等待其他任务完成后再启动`);
   }
 
-  // 1b. Read CliProfile — determines which CLI binary to spawn
+  // 1b. Read CliProfile — determines profile args and env vars
   const profile = await db.cliProfile.findFirst({ where: { isDefault: true } });
   if (!profile) throw new Error("No default CLI profile found — run seed first");
-  const profileCommand = profile.command;
   const profileBaseArgs = parseProfileJson<string[]>(profile.baseArgs, "baseArgs");
   const profileEnvVars = parseProfileJson<Record<string, string>>(profile.envVars, "envVars");
 
   // 1c. Read idle timeout from config
   const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
+
+  // 1d. Resolve adapter
+  const { adapter: cliAdapter, provider: providerDef, model: configuredModel } = await resolveCliAdapter("terminal");
 
   // 2. Clean up stale RUNNING executions (from crashed/killed processes)
   await db.taskExecution.updateMany({
@@ -556,7 +563,7 @@ export async function startPtyExecution(
   const execution = await db.taskExecution.create({
     data: {
       taskId,
-      agent: "CLAUDE_CODE",
+      agent: providerDef.agentFieldValue,
       status: "RUNNING",
       startedAt: new Date(),
       worktreePath: resolvedWorktreePath ?? null,
@@ -594,37 +601,42 @@ export async function startPtyExecution(
     }
   }
 
-  // 7c. Build env overrides — TOWER_TASK_ID always injected; CALLBACK_URL when provided
-  const envOverrides: Record<string, string> = {
-    ...profileEnvVars,
-    TOWER_TASK_ID: taskId,
-    TOWER_TASK_TITLE: task.title,
-    TOWER_STARTED_AT: new Date().toISOString(),
-    TOWER_API_URL: `http://localhost:${process.env.PORT || "3000"}`,
-  };
-  if (callbackUrl) {
-    envOverrides.CALLBACK_URL = callbackUrl;
-  }
-
-  // 8. Build CLI args from CliProfile — INT-02: no --output-format stream-json, no --print -
-  const claudeArgs: string[] = [...profileBaseArgs];
+  // 7c. Build system prompt additions
+  let appendSystemPrompt = "";
   if (instructionsFile) {
     const { readFile } = await import("fs/promises");
-    const promptContent = await readFile(instructionsFile, "utf-8");
-    claudeArgs.push("--append-system-prompt", promptContent);
+    appendSystemPrompt += await readFile(instructionsFile, "utf-8");
   }
   const usernameVal = await readConfigValue<string>("onboarding.username", "");
   if (usernameVal) {
-    claudeArgs.push("--append-system-prompt", `The user's name is ${usernameVal}.`);
+    appendSystemPrompt += (appendSystemPrompt ? "\n" : "") + `The user's name is ${usernameVal}.`;
   }
-  claudeArgs.push(fullPrompt);
+
+  // 8. Adapter produces complete command + args + env
+  const spawnResult = cliAdapter.buildSpawnArgs({
+    taskId,
+    prompt: fullPrompt,
+    cwd,
+    profileArgs: [
+      ...profileBaseArgs,
+      ...(appendSystemPrompt ? ["--append-system-prompt", appendSystemPrompt] : []),
+      ...(configuredModel ? ["--model", configuredModel] : []),
+    ],
+    profileEnvVars,
+    envOverrides: cliAdapter.buildEnvOverrides({
+      taskId,
+      taskTitle: task.title,
+      apiUrl: `http://localhost:${process.env.PORT || "3000"}`,
+      callbackUrl: callbackUrl ?? undefined,
+    }),
+  });
 
   // 9. Create PTY session — onData is a no-op; ws-server.ts wires the real
   //    broadcaster via setDataListener when the WebSocket client connects
   createSession(
     taskId,
-    profileCommand,
-    claudeArgs,
+    spawnResult.command,
+    spawnResult.args,
     cwd,
     () => {},
     async (exitCode) => {
@@ -691,7 +703,7 @@ export async function startPtyExecution(
         await rm(tempDir, { recursive: true, force: true }).catch(() => {});
       }
     },
-    envOverrides,
+    spawnResult.env,
     undefined,
     idleTimeoutSec * 1000
   );

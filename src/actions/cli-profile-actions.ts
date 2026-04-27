@@ -3,8 +3,12 @@
 import path from "node:path";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { providerRegistry } from "@/lib/ai/providers";
 
-const ALLOWED_COMMANDS = ["claude", "claude-code"];
+function getAllowedCommands(): string[] {
+  const fromRegistry = providerRegistry.getAllowedCommands();
+  return [...new Set([...fromRegistry, "claude-code"])];
+}
 
 const BLOCKED_ENV_KEYS = new Set([
   "PATH", "LD_PRELOAD", "DYLD_INSERT_LIBRARIES",
@@ -31,9 +35,10 @@ export async function updateCliProfile(
   // Validate command against allowlist
   if (data.command !== undefined) {
     const basename = path.basename(data.command);
-    if (!ALLOWED_COMMANDS.includes(basename)) {
+    const allowed = getAllowedCommands();
+    if (!allowed.includes(basename)) {
       throw new Error(
-        `command must be one of: ${ALLOWED_COMMANDS.join(", ")} (got: ${basename})`
+        `command must be one of: ${allowed.join(", ")} (got: ${basename})`
       );
     }
   }

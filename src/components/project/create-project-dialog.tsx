@@ -296,7 +296,7 @@ export function CreateProjectDialog({
             </Button>
             <Button
               onClick={handleCreate}
-              disabled={!projectName.trim()}
+              disabled={!projectName.trim() || isAnalyzing}
               className="bg-primary/10 text-primary ring-1 ring-primary/25 hover:bg-primary/20"
             >
               {t("common.create")}
