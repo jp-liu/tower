@@ -60,6 +60,7 @@ public/vs/
 # Claude Code runtime
 .agents/
 .claude/worktrees/
+.claude/skills/
 skills-lock.json
 
 # GSD planning (local dev workflow)
