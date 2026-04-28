@@ -1,21 +1,22 @@
 {
   "name": "tower-studio",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "AI Task Orchestration Platform — Kanban + Terminal + Code Editor + MCP",
   "bin": {
     "tower": "bin/tower.mjs"
   },
   "files": [
     "bin/",
+    ".next/",
     "public/",
-    "src/",
-    "prisma/",
-    "scripts/",
-    "skills/",
+    "prisma/schema.prisma",
+    "prisma/init-fts.ts",
+    "scripts/init-db.ts",
+    "scripts/migrate-data.ts",
+    "scripts/copy-monaco.js",
+    "src/mcp/",
     "next.config.ts",
-    "tsconfig.json",
-    "postcss.config.mjs",
-    "components.json"
+    "tsconfig.json"
   ],
   "scripts": {
     "predev": "node scripts/copy-monaco.js",
@@ -23,7 +24,7 @@
     "tower:init": "tsx scripts/init-tower.ts",
     "prebuild": "node scripts/copy-monaco.js",
     "build": "next build",
-    "build:clean": "rm -rf .next && next build && find .next -name '*.map' -delete && cp -r .next/static .next/standalone/tower/.next/static",
+    "build:clean": "rm -rf .next && next build && find .next -name '*.map' -delete",
     "release": "pnpm build:clean && npm pack",
     "release:publish": "pnpm build:clean && npm publish",
     "start": "next start",
@@ -39,7 +40,7 @@
     "test:e2e": "NO_PROXY=localhost,127.0.0.1 no_proxy=localhost,127.0.0.1 playwright test",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
     "mcp": "tsx src/mcp/index.ts",
-    "postinstall": "prisma generate && node scripts/copy-monaco.js && next build"
+    "postinstall": "prisma generate && node scripts/copy-monaco.js && node scripts/link-prisma.js"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
