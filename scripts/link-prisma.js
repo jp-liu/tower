@@ -5,12 +5,15 @@
  * output for the hashed name and creates a symlink so Node.js can
  * resolve it at runtime.
  *
+ * Works with both npm (flat node_modules) and pnpm (symlinked store).
  * Runs as part of postinstall.
  */
 const fs = require("fs");
 const path = require("path");
 
-const serverDir = path.join(__dirname, "..", ".next", "server");
+const packageRoot = path.join(__dirname, "..");
+const serverDir = path.join(packageRoot, ".next", "server");
+
 if (!fs.existsSync(serverDir)) {
   // No build output yet (dev install), skip silently
   process.exit(0);
@@ -46,9 +49,35 @@ if (!hash) {
 }
 
 const hashedName = `client-${hash}`;
-const nodeModules = path.join(__dirname, "..", "node_modules", "@prisma");
-const target = path.join(nodeModules, "client");
-const link = path.join(nodeModules, hashedName);
+
+// Find where @prisma/client actually lives (works with npm, pnpm, yarn)
+let prismaDir;
+try {
+  const clientEntry = require.resolve("@prisma/client", { paths: [packageRoot] });
+  // clientEntry is like .../node_modules/@prisma/client/default.js
+  // We need the @prisma/ directory (parent of client/)
+  prismaDir = path.dirname(path.dirname(clientEntry));
+  // Ensure we're in a @prisma directory
+  if (!prismaDir.endsWith(path.join("@prisma", "client"))) {
+    // Walk up to find the @prisma directory
+    const parts = clientEntry.split(path.sep);
+    const prismaIdx = parts.lastIndexOf("@prisma");
+    if (prismaIdx >= 0) {
+      prismaDir = parts.slice(0, prismaIdx + 1).join(path.sep);
+    } else {
+      throw new Error("Cannot locate @prisma directory");
+    }
+  } else {
+    // prismaDir = .../node_modules/@prisma/client, go up one level to @prisma/
+    prismaDir = path.dirname(prismaDir);
+  }
+} catch (e) {
+  console.warn(`[link-prisma] Cannot resolve @prisma/client: ${e.message}`);
+  process.exit(0);
+}
+
+const target = path.join(prismaDir, "client");
+const link = path.join(prismaDir, hashedName);
 
 if (fs.existsSync(link)) {
   console.log(`[link-prisma] @prisma/${hashedName} already exists`);
@@ -56,9 +85,13 @@ if (fs.existsSync(link)) {
 }
 
 if (!fs.existsSync(target)) {
-  console.warn("[link-prisma] @prisma/client not found, skipping");
+  console.warn("[link-prisma] @prisma/client not found at resolved path, skipping");
   process.exit(0);
 }
 
-fs.symlinkSync(target, link, "junction");
-console.log(`[link-prisma] Linked @prisma/${hashedName} → @prisma/client`);
+try {
+  fs.symlinkSync(target, link, "junction");
+  console.log(`[link-prisma] Linked @prisma/${hashedName} → @prisma/client`);
+} catch (e) {
+  console.warn(`[link-prisma] Failed to create symlink: ${e.message}`);
+}
