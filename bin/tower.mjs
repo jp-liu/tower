@@ -16,15 +16,17 @@
 
 import { existsSync, readFileSync, mkdirSync } from "fs";
 import { join, dirname, resolve } from "path";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { createServer } from "http";
 import { fileURLToPath } from "url";
 import { parseArgs } from "node:util";
 import { homedir } from "os";
+import { createRequire } from "module";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PROJECT_ROOT = resolve(__dirname, "..");
+const require = createRequire(import.meta.url);
 
 // ─── Data directory: ~/.tower ───
 const TOWER_DIR = join(homedir(), ".tower");
@@ -85,15 +87,27 @@ function logError(msg) {
   console.error(`\x1b[31m[tower]\x1b[0m ${msg}`);
 }
 
-function run(cmd) {
+function resolveBin(pkgName, binName) {
+  const pkgJsonPath = require.resolve(`${pkgName}/package.json`, { paths: [PROJECT_ROOT] });
+  const pkgJson = JSON.parse(readFileSync(pkgJsonPath, "utf-8"));
+  const binField = typeof pkgJson.bin === "string" ? pkgJson.bin : pkgJson.bin?.[binName];
+
+  if (!binField) {
+    throw new Error(`No bin entry found for ${pkgName}`);
+  }
+
+  return resolve(dirname(pkgJsonPath), binField);
+}
+
+function run(binPath, args) {
   try {
-    execSync(cmd, {
+    execFileSync(process.execPath, [binPath, ...args], {
       cwd: PROJECT_ROOT,
       stdio: "inherit",
       env: { ...process.env, DATABASE_URL: DB_URL },
     });
   } catch {
-    logError(`Command failed: ${cmd}`);
+    logError(`Command failed: ${binPath} ${args.join(" ")}`);
     process.exit(1);
   }
 }
@@ -111,26 +125,30 @@ function ensureDirs() {
 }
 
 async function initDatabase() {
+  const prismaBin = resolveBin("prisma", "prisma");
+  const tsxBin = resolveBin("tsx", "tsx");
+
   log("Initializing Tower...");
   ensureDirs();
   log(`Data directory: ${TOWER_DIR}`);
 
   log("Syncing database schema...");
-  run("npx prisma db push --skip-generate");
+  run(prismaBin, ["db", "push", "--skip-generate"]);
 
   log("Seeding initial data...");
-  run("npx tsx scripts/init-db.ts");
+  run(tsxBin, ["scripts/init-db.ts"]);
 
   log("Initializing full-text search...");
-  run("npx tsx prisma/init-fts.ts");
+  run(tsxBin, ["prisma/init-fts.ts"]);
 
   log("Initialization complete!");
 }
 
 // ─── Commands ───
 async function cmdMigrate() {
+  const tsxBin = resolveBin("tsx", "tsx");
   log("Running data migration...");
-  run("npx tsx scripts/migrate-data.ts --run");
+  run(tsxBin, ["scripts/migrate-data.ts", "--run"]);
 }
 
 async function cmdStart() {
@@ -150,6 +168,26 @@ async function cmdStart() {
   await app.prepare();
 
   const server = createServer(handle);
+  let shuttingDown = false;
+
+  const shutdown = (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    log(`Received ${signal}, shutting down...`);
+
+    const forceExitTimer = setTimeout(() => {
+      process.exit(0);
+    }, 2000);
+    forceExitTimer.unref();
+
+    server.close(() => {
+      process.exit(0);
+    });
+  };
+
+  process.once("SIGINT", () => shutdown("SIGINT"));
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+
   server.listen(PORT, HOST, () => {
     log(`Tower running on http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
   });
