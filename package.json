@@ -1,6 +1,6 @@
 {
   "name": "tower-studio",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "AI Task Orchestration Platform — Kanban + Terminal + Code Editor + MCP",
   "bin": {
     "tower": "bin/tower.mjs"
@@ -40,7 +40,7 @@
     "test:e2e": "NO_PROXY=localhost,127.0.0.1 no_proxy=localhost,127.0.0.1 playwright test",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
     "mcp": "tsx src/mcp/index.ts",
-    "postinstall": "npx prisma generate && node scripts/copy-monaco.js && node scripts/link-prisma.js"
+    "postinstall": "node scripts/copy-monaco.js && node scripts/link-prisma.js"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
