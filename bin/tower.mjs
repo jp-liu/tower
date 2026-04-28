@@ -16,8 +16,10 @@
 
 import { existsSync, readFileSync, mkdirSync } from "fs";
 import { join, dirname, resolve } from "path";
-import { execSync, spawn } from "child_process";
+import { execSync } from "child_process";
+import { createServer } from "http";
 import { fileURLToPath } from "url";
+import { parseArgs } from "node:util";
 import { homedir } from "os";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -30,9 +32,10 @@ const DB_DIR = join(TOWER_DIR, "database");
 const DB_PATH = join(DB_DIR, "tower.db");
 const DB_URL = `file:${DB_PATH}`;
 
-// ─── Parse CLI args ───
-import { parseArgs } from "node:util";
+// Set DATABASE_URL before anything else
+process.env.DATABASE_URL = DB_URL;
 
+// ─── Parse CLI args ───
 const { values: flags, positionals } = parseArgs({
   args: process.argv.slice(2),
   options: {
@@ -45,8 +48,7 @@ const { values: flags, positionals } = parseArgs({
 });
 
 const command = positionals[0] ?? "start";
-
-const PORT = flags.port ?? process.env.PORT ?? "3000";
+const PORT = parseInt(flags.port ?? process.env.PORT ?? "3000", 10);
 const HOST = flags.host ?? "0.0.0.0";
 
 // ─── Help ───
@@ -83,17 +85,12 @@ function logError(msg) {
   console.error(`\x1b[31m[tower]\x1b[0m ${msg}`);
 }
 
-function childEnv() {
-  return { ...process.env, DATABASE_URL: DB_URL };
-}
-
-function run(cmd, opts = {}) {
+function run(cmd) {
   try {
     execSync(cmd, {
       cwd: PROJECT_ROOT,
       stdio: "inherit",
-      env: childEnv(),
-      ...opts,
+      env: { ...process.env, DATABASE_URL: DB_URL },
     });
   } catch {
     logError(`Command failed: ${cmd}`);
@@ -118,9 +115,6 @@ async function initDatabase() {
   ensureDirs();
   log(`Data directory: ${TOWER_DIR}`);
 
-  log("Generating Prisma client...");
-  run("npx prisma generate");
-
   log("Syncing database schema...");
   run("npx prisma db push --skip-generate");
 
@@ -144,16 +138,21 @@ async function cmdStart() {
     await initDatabase();
   }
 
-  log(`Starting Tower on http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
-  const child = spawn("npx", ["next", "start", "-p", PORT, "-H", HOST], {
-    cwd: PROJECT_ROOT,
-    stdio: "inherit",
-    env: childEnv(),
+  // Use Next.js programmatic API (same approach as nextra, tldraw)
+  const next = (await import("next")).default;
+  const app = next({
+    dev: false,
+    dir: PROJECT_ROOT,
+    quiet: false,
   });
 
-  child.on("exit", (code) => process.exit(code ?? 0));
-  process.on("SIGINT", () => child.kill("SIGINT"));
-  process.on("SIGTERM", () => child.kill("SIGTERM"));
+  const handle = app.getRequestHandler();
+  await app.prepare();
+
+  const server = createServer(handle);
+  server.listen(PORT, HOST, () => {
+    log(`Tower running on http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
+  });
 }
 
 // ─── Dispatch ───
