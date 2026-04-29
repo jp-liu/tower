@@ -33,6 +33,7 @@
     "release": "pnpm build:clean && npm pack",
     "release:smoke": "node scripts/release-smoke.js",
     "release:publish": "pnpm build:clean && npm publish",
+    "start": "next start",
     "lint": "eslint",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
