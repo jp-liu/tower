@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -201,48 +202,72 @@ export function FolderBrowserDialog({
 
           {/* Navigation bar */}
           <div className="flex items-center gap-1.5 border-y border-border px-4 py-2 shrink-0 min-w-0">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={() => data?.homePath && browse(data.homePath)}
-              className="shrink-0 text-muted-foreground"
-              title="Home"
-            >
-              <Home className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={handleGoUp}
-              className="shrink-0 text-muted-foreground"
-              title="Parent"
-            >
-              <ChevronUp className="h-3.5 w-3.5" />
-            </Button>
-            {data?.drives && data.drives.length > 0 && (
-              <Button
-                variant={showDrives ? "default" : "outline"}
-                size="icon-sm"
-                onClick={() => setShowDrives((v) => !v)}
-                className="shrink-0 text-muted-foreground"
-                title="Drives"
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    onClick={() => data?.homePath && browse(data.homePath)}
+                    className="shrink-0 text-muted-foreground"
+                  />
+                }
               >
-                <HardDrive className="h-3.5 w-3.5" />
-              </Button>
+                <Home className="h-3.5 w-3.5" />
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={4}>Home</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    onClick={handleGoUp}
+                    className="shrink-0 text-muted-foreground"
+                  />
+                }
+              >
+                <ChevronUp className="h-3.5 w-3.5" />
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={4}>Parent</TooltipContent>
+            </Tooltip>
+            {data?.drives && data.drives.length > 0 && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant={showDrives ? "default" : "outline"}
+                      size="icon-sm"
+                      onClick={() => setShowDrives((v) => !v)}
+                      className="shrink-0 text-muted-foreground"
+                    />
+                  }
+                >
+                  <HardDrive className="h-3.5 w-3.5" />
+                </TooltipTrigger>
+                <TooltipContent side="bottom" sideOffset={4}>Drives</TooltipContent>
+              </Tooltip>
             )}
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={() => {
-                setCreatingFolder(true);
-                setNewFolderName("");
-                setTimeout(() => newFolderRef.current?.focus(), 50);
-              }}
-              className="shrink-0 text-muted-foreground"
-              title={t("folder.newFolder")}
-            >
-              <FolderPlus className="h-3.5 w-3.5" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    onClick={() => {
+                      setCreatingFolder(true);
+                      setNewFolderName("");
+                      setTimeout(() => newFolderRef.current?.focus(), 50);
+                    }}
+                    className="shrink-0 text-muted-foreground"
+                  />
+                }
+              >
+                <FolderPlus className="h-3.5 w-3.5" />
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={4}>{t("folder.newFolder")}</TooltipContent>
+            </Tooltip>
             <div className="min-w-0 flex-1 truncate text-sm text-foreground font-mono" title={data?.currentPath ?? ""}>
               {data?.currentPath ?? "..."}
             </div>
