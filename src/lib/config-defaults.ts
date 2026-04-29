@@ -20,6 +20,11 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "number",
     label: "Max Concurrent Executions",
   },
+  "system.backupDir": {
+    defaultValue: "",
+    type: "string",
+    label: "Backup Directory",
+  },
   "git.timeoutSec": {
     defaultValue: 30,
     type: "number",
