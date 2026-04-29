@@ -67,3 +67,10 @@ export function getLogsDir(): string {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return dir;
 }
+
+/** ~/.tower/backups */
+export function getBackupsDir(): string {
+  const dir = join(getTowerDir(), "backups");
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  return dir;
+}
