@@ -16,7 +16,7 @@
 
 import { existsSync, readFileSync, mkdirSync } from "fs";
 import { join, dirname, resolve } from "path";
-import { execFileSync } from "child_process";
+import { execFileSync, spawnSync } from "child_process";
 import { createServer } from "http";
 import { fileURLToPath } from "url";
 import { parseArgs } from "node:util";
@@ -52,6 +52,12 @@ const { values: flags, positionals } = parseArgs({
 const command = positionals[0] ?? "start";
 const PORT = parseInt(flags.port ?? process.env.PORT ?? "3000", 10);
 const HOST = flags.host ?? "0.0.0.0";
+
+// Next instrumentation runs during app.prepare(), before our HTTP server listens.
+// Expose the resolved CLI host/port early so WS startup and origin checks use
+// the actual runtime values instead of falling back to 3000/3001.
+process.env.PORT = String(PORT);
+process.env.HOST = HOST;
 
 // ─── Help ───
 if (flags.help) {
@@ -112,6 +118,33 @@ function run(binPath, args) {
   }
 }
 
+function hasGeneratedPrismaClient() {
+  const probe = spawnSync(
+    process.execPath,
+    [
+      "-e",
+      "const {PrismaClient}=require('@prisma/client'); const prisma=new PrismaClient(); console.log('ok'); prisma.$disconnect();",
+    ],
+    {
+      cwd: PROJECT_ROOT,
+      env: { ...process.env, DATABASE_URL: DB_URL },
+      encoding: "utf-8",
+    }
+  );
+
+  if (probe.status === 0) {
+    return true;
+  }
+
+  const output = `${probe.stdout ?? ""}\n${probe.stderr ?? ""}`;
+  if (output.includes('@prisma/client did not initialize yet')) {
+    return false;
+  }
+
+  logError(`Prisma client check failed:\n${output.trim()}`);
+  process.exit(1);
+}
+
 function needsInit() {
   return !existsSync(DB_PATH);
 }
@@ -124,6 +157,16 @@ function ensureDirs() {
   }
 }
 
+function ensurePrismaClientGenerated() {
+  if (hasGeneratedPrismaClient()) {
+    return;
+  }
+
+  const prismaBin = resolveBin("prisma", "prisma");
+  log("Generating Prisma client...");
+  run(prismaBin, ["generate", "--schema", "prisma/schema.prisma"]);
+}
+
 async function initDatabase() {
   const prismaBin = resolveBin("prisma", "prisma");
   const tsxBin = resolveBin("tsx", "tsx");
@@ -131,6 +174,7 @@ async function initDatabase() {
   log("Initializing Tower...");
   ensureDirs();
   log(`Data directory: ${TOWER_DIR}`);
+  ensurePrismaClientGenerated();
 
   log("Syncing database schema...");
   run(prismaBin, ["db", "push", "--skip-generate"]);
@@ -152,9 +196,17 @@ async function cmdMigrate() {
 }
 
 async function cmdStart() {
+  ensurePrismaClientGenerated();
+
   if (needsInit()) {
     await initDatabase();
   }
+
+  // Next.js resolves paths relative to process.cwd().
+  // On Windows, if cwd is on a different drive (e.g. C:\) than the package
+  // (e.g. E:\), path.resolve produces an invalid concatenation.
+  // Fix: set cwd to PROJECT_ROOT before starting Next.js.
+  process.chdir(PROJECT_ROOT);
 
   // Use Next.js programmatic API (same approach as nextra, tldraw)
   const next = (await import("next")).default;

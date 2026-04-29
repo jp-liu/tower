@@ -71,12 +71,19 @@ export function TaskTerminal({
       scrollback: 2000,
       cursorBlink: true,
       allowTransparency: false,
+      rescaleOverlappingGlyphs: true,
       theme: initialTheme,
     });
 
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(containerRef.current);
+
+    // Ensure the xterm helper textarea stays invisible (CSS may load late in dev)
+    const helperTextarea = containerRef.current.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea");
+    if (helperTextarea) {
+      helperTextarea.style.opacity = "0";
+    }
 
     // Attempt WebGL addon (GPU-accelerated renderer)
     // Skip WebGL when many terminals may coexist (portal system) —

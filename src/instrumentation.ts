@@ -7,7 +7,9 @@ export async function register() {
     await cleanupStaleExecutions();
     await ensureTowerLabel();
 
-    // WS-01: Start WebSocket server on port 3001 for PTY terminal sessions
+    // WS-01: Start WebSocket server for PTY terminal sessions.
+    // Port is derived from the resolved HTTP port (default: httpPort + 1),
+    // unless overridden by terminal.wsPort.
     const { startWsServer } = await import("@/lib/pty/ws-server");
     await startWsServer();
 

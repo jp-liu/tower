@@ -12,7 +12,7 @@
  */
 
 import { constants as fsConstants, promises as fs } from "node:fs";
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import path from "node:path";
 
 // ---------------------------------------------------------------------------
@@ -237,7 +237,19 @@ export function resolveCommandPathSync(
   }
 
   if (!isWindows(platform)) {
-    return command; // Unix callers rely on PATH lookup at spawn time
+    // Resolve full path via `which` — node-pty's posix_spawnp may fail
+    // when PATH differs between the shell and the spawned process
+    // (e.g. global npm install vs interactive shell).
+    try {
+      const resolved = execFileSync("which", [command], {
+        encoding: "utf-8",
+        timeout: 5000,
+      }).trim();
+      if (resolved) return resolved;
+    } catch {
+      // which failed — fall through to return bare command
+    }
+    return command;
   }
 
   try {

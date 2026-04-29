@@ -7,7 +7,7 @@ import {
   getSession,
 } from "@/lib/pty/session-store";
 import { readConfigValue } from "@/lib/config-reader";
-import { db } from "@/lib/db";
+import { resolveCliAdapter } from "@/lib/ai/capability-resolver";
 import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
 
 /**
@@ -23,28 +23,8 @@ export async function startAssistantSession(sessionId?: string): Promise<void> {
   // UX-01: Ensure a clean slate — destroy any existing assistant session
   destroySession(ASSISTANT_SESSION_KEY);
 
-  // Fetch the default CLI profile
-  const profile = await db.cliProfile.findFirst({ where: { isDefault: true } });
-  if (!profile) {
-    throw new Error(
-      "No default CLI profile — configure one in Settings"
-    );
-  }
-
-  // Parse profile JSON fields
-  let profileBaseArgs: string[];
-  try {
-    profileBaseArgs = JSON.parse(profile.baseArgs) as string[];
-  } catch {
-    throw new Error("CLI Profile baseArgs is malformed — fix in Settings");
-  }
-
-  let profileEnvVars: Record<string, string>;
-  try {
-    profileEnvVars = JSON.parse(profile.envVars) as Record<string, string>;
-  } catch {
-    throw new Error("CLI Profile envVars is malformed — fix in Settings");
-  }
+  // Resolve CLI adapter from AI abstraction layer
+  const { adapter: cliAdapter } = await resolveCliAdapter("terminal");
 
   // BE-02: Read the configured system prompt (default defined in config-defaults.ts)
   const systemPrompt = await readConfigValue<string>(
@@ -55,9 +35,8 @@ export async function startAssistantSession(sessionId?: string): Promise<void> {
   // Tower project root is the cwd for the assistant session
   const cwd = process.cwd();
 
-  // Build CLI arguments
-  const claudeArgs: string[] = [
-    ...profileBaseArgs,
+  // Build extra args for assistant-specific behavior
+  const extraArgs: string[] = [
     // BE-03: Restrict to Tower MCP tools only
     "--allowedTools",
     "mcp__tower__*",
@@ -68,23 +47,28 @@ export async function startAssistantSession(sessionId?: string): Promise<void> {
 
   // Session management: resume existing or start new with a generated ID
   if (sessionId) {
-    claudeArgs.push("--resume", sessionId);
+    extraArgs.push("--resume", sessionId);
   } else {
-    claudeArgs.push("--session-id", randomUUID());
+    extraArgs.push("--session-id", randomUUID());
   }
 
-  // Build env overrides — only profile vars, no AI_MANAGER_TASK_ID (assistant has no task)
-  const envOverrides: Record<string, string> = { ...profileEnvVars };
+  // Adapter builds the full spawn command (includes --dangerously-skip-permissions etc.)
+  const spawnResult = cliAdapter.buildSpawnArgs({
+    taskId: ASSISTANT_SESSION_KEY,
+    prompt: "",
+    cwd,
+    extraArgs,
+  });
 
   // BE-01: Spawn the PTY session keyed by __assistant__
   createSession(
     ASSISTANT_SESSION_KEY,
-    profile.command,
-    claudeArgs,
+    spawnResult.command,
+    spawnResult.args,
     cwd,
     () => {},
     () => {},
-    envOverrides
+    spawnResult.env
   );
 }
 

@@ -9,10 +9,12 @@ const CLAUDE_MODELS = ["sonnet", "opus", "haiku", "claude-sonnet-4-6", "claude-o
 export class ClaudeCliAdapter implements CliAdapter {
 
   buildSpawnArgs(opts: CliSpawnOptions): CliSpawnResult {
-    const args: string[] = [];
+    const args: string[] = [
+      "--dangerously-skip-permissions",
+    ];
 
-    if (opts.profileArgs?.length) {
-      args.push(...opts.profileArgs);
+    if (opts.extraArgs?.length) {
+      args.push(...opts.extraArgs);
     }
 
     if (opts.resumeSessionId) {
@@ -26,7 +28,6 @@ export class ClaudeCliAdapter implements CliAdapter {
     }
 
     const env: Record<string, string> = {
-      ...(opts.profileEnvVars ?? {}),
       ...(opts.envOverrides ?? {}),
     };
 

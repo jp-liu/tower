@@ -38,13 +38,6 @@ async function writeExitSignal(taskId: string, exitCode: number): Promise<void> 
   }
 }
 
-function parseProfileJson<T>(raw: string, label: string): T {
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    throw new Error(`CLI Profile ${label} 格式损坏，请在 Settings 中修复`);
-  }
-}
 
 export async function sendTaskMessage(taskId: string, content: string) {
   const userMessage = await db.taskMessage.create({
@@ -191,12 +184,6 @@ export async function resumePtyExecution(
   const baseCwd = prevExec.worktreePath ?? task.project.localPath;
   const cwd = task.subPath ? join(baseCwd, task.subPath) : baseCwd;
 
-  // Read CliProfile — determines profile args and env vars
-  const profile = await db.cliProfile.findFirst({ where: { isDefault: true } });
-  if (!profile) throw new Error("No default CLI profile found — run seed first");
-  const profileBaseArgs = parseProfileJson<string[]>(profile.baseArgs, "baseArgs");
-  const profileEnvVars = parseProfileJson<Record<string, string>>(profile.envVars, "envVars");
-
   // Read idle timeout from config
   const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
 
@@ -229,11 +216,9 @@ export async function resumePtyExecution(
     prompt: "",
     cwd,
     resumeSessionId: previousSessionId,
-    profileArgs: [
-      ...profileBaseArgs,
+    extraArgs: [
       ...(usernameVal ? ["--append-system-prompt", `The user's name is ${usernameVal}.`] : []),
     ],
-    profileEnvVars,
     envOverrides: adapterEnv,
   });
 
@@ -342,11 +327,6 @@ export async function continueLatestPtyExecution(
   const baseCwd = latestExec?.worktreePath ?? task.project.localPath;
   const cwd = task.subPath ? join(baseCwd, task.subPath) : baseCwd;
 
-  // Read CliProfile
-  const profile = await db.cliProfile.findFirst({ where: { isDefault: true } });
-  if (!profile) throw new Error("No default CLI profile found — run seed first");
-  const profileBaseArgs = parseProfileJson<string[]>(profile.baseArgs, "baseArgs");
-  const profileEnvVars = parseProfileJson<Record<string, string>>(profile.envVars, "envVars");
   const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
 
   // Resolve adapter
@@ -383,11 +363,9 @@ export async function continueLatestPtyExecution(
     prompt: "",
     cwd,
     continueLatest: true,
-    profileArgs: [
-      ...profileBaseArgs,
+    extraArgs: [
       ...(usernameVal ? ["--append-system-prompt", `The user's name is ${usernameVal}.`] : []),
     ],
-    profileEnvVars,
     envOverrides: adapterEnv,
   });
 
@@ -480,16 +458,10 @@ export async function startPtyExecution(
     throw new Error(`已达并发上限（${maxConcurrent}），请等待其他任务完成后再启动`);
   }
 
-  // 1b. Read CliProfile — determines profile args and env vars
-  const profile = await db.cliProfile.findFirst({ where: { isDefault: true } });
-  if (!profile) throw new Error("No default CLI profile found — run seed first");
-  const profileBaseArgs = parseProfileJson<string[]>(profile.baseArgs, "baseArgs");
-  const profileEnvVars = parseProfileJson<Record<string, string>>(profile.envVars, "envVars");
-
-  // 1c. Read idle timeout from config
+  // 1b. Read idle timeout from config
   const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
 
-  // 1d. Resolve adapter
+  // 1c. Resolve adapter
   const { adapter: cliAdapter, provider: providerDef, model: configuredModel } = await resolveCliAdapter("terminal");
 
   // 2. Clean up stale RUNNING executions (from crashed/killed processes)
@@ -617,12 +589,10 @@ export async function startPtyExecution(
     taskId,
     prompt: fullPrompt,
     cwd,
-    profileArgs: [
-      ...profileBaseArgs,
+    extraArgs: [
       ...(appendSystemPrompt ? ["--append-system-prompt", appendSystemPrompt] : []),
       ...(configuredModel ? ["--model", configuredModel] : []),
     ],
-    profileEnvVars,
     envOverrides: cliAdapter.buildEnvOverrides({
       taskId,
       taskTitle: task.title,

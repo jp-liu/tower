@@ -1,8 +1,27 @@
 "use server";
 
-import { execFile } from "child_process";
+import { execFile, execFileSync } from "child_process";
 import { z } from "zod";
-import { rgPath } from "@vscode/ripgrep";
+
+/** Resolve rg binary: bundled @vscode/ripgrep → system rg fallback */
+function resolveRgPath(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return (require("@vscode/ripgrep") as { rgPath: string }).rgPath;
+  } catch {
+    try {
+      return execFileSync("which", ["rg"], { encoding: "utf-8" }).trim();
+    } catch {
+      throw new Error("ripgrep not found: install @vscode/ripgrep or system rg");
+    }
+  }
+}
+
+let _rgPath: string | undefined;
+function getRgPath(): string {
+  if (!_rgPath) _rgPath = resolveRgPath();
+  return _rgPath;
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -116,7 +135,7 @@ export async function searchCode(
   // 5. Run rg (async — does not block event loop)
   let output: string;
   try {
-    output = await execFileAsync(rgPath, args, {
+    output = await execFileAsync(getRgPath(), args, {
       encoding: "utf-8",
       maxBuffer: 10 * 1024 * 1024,
       timeout: 10_000,

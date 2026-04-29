@@ -12,8 +12,8 @@ export interface CliSpawnOptions {
   resumeSessionId?: string;
   continueLatest?: boolean;
   worktreePath?: string;
-  profileArgs?: string[];
-  profileEnvVars?: Record<string, string>;
+  /** Extra CLI args (e.g. --append-system-prompt, --model) appended after built-in defaults */
+  extraArgs?: string[];
 }
 
 export interface CliSpawnResult {

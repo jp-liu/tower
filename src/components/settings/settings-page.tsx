@@ -25,7 +25,6 @@ import {
   Cpu,
   FileText,
   SlidersHorizontal,
-  Terminal,
   Bell,
   X,
   Plus,
@@ -34,7 +33,6 @@ import {
   Edit,
   Save,
   Loader2,
-  Check,
   CheckCircle2,
   XCircle,
 } from "lucide-react";
@@ -51,10 +49,6 @@ import {
   deletePrompt,
   setDefaultPrompt,
 } from "@/actions/prompt-actions";
-import {
-  getDefaultCliProfile,
-  updateCliProfile,
-} from "@/actions/cli-profile-actions";
 import type { TestResult } from "@/lib/cli-test";
 import type { AgentPrompt } from "@prisma/client";
 import type { DetectedTerminalApp } from "@/lib/platform";
@@ -160,13 +154,6 @@ const SECTIONS = [
     accent: "amber",
   },
   {
-    id: "cli-profile",
-    labelKey: "settings.cliProfile.title" as const,
-    descKey: "settings.cliProfile.navDesc" as const,
-    icon: Terminal,
-    accent: "cyan",
-  },
-  {
     id: "notifications",
     labelKey: "settings.notifications.title" as const,
     descKey: "settings.notifications.navDesc" as const,
@@ -233,38 +220,6 @@ interface CLIAdapter {
 const CLI_ADAPTERS: CLIAdapter[] = [
   { type: "claude_local", label: "Claude Code", source: "builtin" },
 ];
-
-// ---------------------------------------------------------------------------
-// CLI Profile helpers
-// ---------------------------------------------------------------------------
-type CliProfile = {
-  id: string;
-  name: string;
-  command: string;
-  baseArgs: string;
-  envVars: string;
-};
-
-function parseBaseArgsToText(baseArgs: string): string {
-  try {
-    const arr: string[] = JSON.parse(baseArgs);
-    return Array.isArray(arr) ? arr.join("\n") : "";
-  } catch {
-    return "";
-  }
-}
-
-function parseEnvVarsToText(envVars: string): string {
-  try {
-    const obj: Record<string, string> = JSON.parse(envVars);
-    if (typeof obj !== "object" || Array.isArray(obj) || obj === null) return "";
-    return Object.entries(obj)
-      .map(([k, v]) => `${k}=${v}`)
-      .join("\n");
-  } catch {
-    return "";
-  }
-}
 
 // ---------------------------------------------------------------------------
 // System Config types
@@ -372,15 +327,6 @@ export function SettingsPage() {
   const [hookLoading, setHookLoading] = useState(false);
   const [autoUploadTypes, setAutoUploadTypes] = useState("");
 
-  // ── CLI Profile state ──────────────────────────────────────────
-  const [cliProfile, setCliProfile] = useState<CliProfile | null>(null);
-  const [cliCommand, setCliCommand] = useState("");
-  const [cliBaseArgsText, setCliBaseArgsText] = useState("");
-  const [cliEnvVarsText, setCliEnvVarsText] = useState("");
-  const [cliSaveStatus, setCliSaveStatus] = useState<"" | "saved" | "error">(
-    ""
-  );
-  const [cliLoading, setCliLoading] = useState(true);
 
   // ── Notifications state ────────────────────────────────────────
   const [notifEnabled, setNotifEnabled] = useState(true);
@@ -480,18 +426,6 @@ export function SettingsPage() {
     });
   }, []);
 
-  // CLI Profile load
-  useEffect(() => {
-    getDefaultCliProfile().then((p) => {
-      if (p) {
-        setCliProfile(p);
-        setCliCommand(p.command);
-        setCliBaseArgsText(parseBaseArgsToText(p.baseArgs));
-        setCliEnvVarsText(parseEnvVarsToText(p.envVars));
-      }
-      setCliLoading(false);
-    });
-  }, []);
 
   // Notifications load
   useEffect(() => {
@@ -762,44 +696,6 @@ export function SettingsPage() {
     setRules(updated);
     setDeleteRuleConfirmId(null);
   };
-
-  // =========================================================================
-  // HANDLERS — CLI Profile
-  // =========================================================================
-  const handleSaveCliProfile = useCallback(async () => {
-    if (!cliProfile) return;
-    try {
-      const baseArgs = JSON.stringify(
-        cliBaseArgsText
-          .split("\n")
-          .map((s) => s.trim())
-          .filter(Boolean)
-      );
-      const envVarsObj: Record<string, string> = {};
-      cliEnvVarsText
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .forEach((line) => {
-          const idx = line.indexOf("=");
-          if (idx > 0) {
-            const key = line.slice(0, idx).trim();
-            const val = line.slice(idx + 1).trim();
-            envVarsObj[key] = val;
-          }
-        });
-      const envVars = JSON.stringify(envVarsObj);
-      await updateCliProfile(cliProfile.id, {
-        command: cliCommand,
-        baseArgs,
-        envVars,
-      });
-      setCliSaveStatus("saved");
-    } catch {
-      setCliSaveStatus("error");
-    }
-    setTimeout(() => setCliSaveStatus(""), 2000);
-  }, [cliProfile, cliCommand, cliBaseArgsText, cliEnvVarsText]);
 
   // =========================================================================
   // HANDLERS — Notifications
@@ -1839,117 +1735,6 @@ export function SettingsPage() {
     );
   }
 
-  function renderCliProfile() {
-    if (cliLoading) {
-      return (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      );
-    }
-
-    if (!cliProfile) {
-      return (
-        <div className="text-sm text-muted-foreground">
-          {t("settings.cliProfile.noProfile")}
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-6">
-        {/* Command */}
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <label className="text-sm font-medium">
-              {t("settings.cliProfile.command")}
-            </label>
-          </div>
-          <p className="text-xs text-muted-foreground mb-2">
-            {t("settings.cliProfile.commandHint")}
-          </p>
-          <Input
-            type="text"
-            value={cliCommand}
-            onChange={(e) => setCliCommand(e.target.value)}
-            placeholder={t("settings.cliProfile.commandPlaceholder")}
-            className="w-full rounded-lg border-border/50 bg-zinc-900 dark:bg-zinc-950 text-cyan-400 font-mono text-sm px-4 py-2.5 focus:ring-2 focus:ring-cyan-500/30 placeholder:text-zinc-600"
-          />
-        </div>
-
-        {/* Base args */}
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <label className="text-sm font-medium">
-              {t("settings.cliProfile.baseArgs")}
-            </label>
-            <Badge
-              variant="secondary"
-              className="text-xs rounded-full px-2 py-0"
-            >
-              one per line
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground mb-2">
-            {t("settings.cliProfile.baseArgsHint")}
-          </p>
-          <Textarea
-            value={cliBaseArgsText}
-            onChange={(e) => setCliBaseArgsText(e.target.value)}
-            placeholder={t("settings.cliProfile.baseArgsPlaceholder")}
-            rows={4}
-            className="w-full rounded-lg border-border/50 bg-zinc-900 dark:bg-zinc-950 text-cyan-400 font-mono text-sm px-4 py-3 leading-relaxed focus:ring-2 focus:ring-cyan-500/30 placeholder:text-zinc-600 resize-none"
-          />
-        </div>
-
-        {/* Env vars */}
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <label className="text-sm font-medium">
-              {t("settings.cliProfile.envVars")}
-            </label>
-            <Badge
-              variant="secondary"
-              className="text-xs rounded-full px-2 py-0"
-            >
-              KEY=VALUE per line
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground mb-2">
-            {t("settings.cliProfile.envVarsHint")}
-          </p>
-          <Textarea
-            value={cliEnvVarsText}
-            onChange={(e) => setCliEnvVarsText(e.target.value)}
-            placeholder={t("settings.cliProfile.envVarsPlaceholder")}
-            rows={4}
-            className="w-full rounded-lg border-border/50 bg-zinc-900 dark:bg-zinc-950 text-cyan-400 font-mono text-sm px-4 py-3 leading-relaxed focus:ring-2 focus:ring-cyan-500/30 placeholder:text-zinc-600 resize-none"
-          />
-        </div>
-
-        {/* Save button with inline success indicator */}
-        <div className="flex items-center gap-3">
-          <Button onClick={handleSaveCliProfile} className="rounded-lg">
-            <Save className="h-4 w-4 mr-2" />
-            {t("common.save")}
-          </Button>
-          {cliSaveStatus === "saved" && (
-            <span className="inline-flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400 animate-in fade-in duration-300">
-              <Check className="h-4 w-4" />
-              {t("settings.cliProfile.saved")}
-            </span>
-          )}
-          {cliSaveStatus === "error" && (
-            <span className="inline-flex items-center gap-1 text-sm text-red-600 dark:text-red-400 animate-in fade-in duration-300">
-              <XCircle className="h-4 w-4" />
-              {t("settings.cliProfile.saveError")}
-            </span>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   function renderNotifications() {
     return (
       <div className="divide-y divide-border/50">
@@ -1984,8 +1769,6 @@ export function SettingsPage() {
         return renderPrompts();
       case "config":
         return renderSystemConfig();
-      case "cli-profile":
-        return renderCliProfile();
       case "notifications":
         return renderNotifications();
     }

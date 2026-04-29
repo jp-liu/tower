@@ -38,17 +38,24 @@ export class PtySession {
 
     // Build env: inherit full parent env, strip Claude nesting vars, ensure PATH exists
     const baseEnv = stripClaudeNestingEnv(ensurePathInEnv(process.env));
-    this._pty = pty.spawn(command, args, {
-      name: "xterm-color",
-      cols: 80,
-      rows: 24,
-      cwd,
-      env: {
-        ...baseEnv,
-        TERM: "xterm-color",
-        ...envOverrides,
-      } as Record<string, string>,
-    });
+    const spawnEnv = {
+      ...baseEnv,
+      TERM: "xterm-color",
+      ...envOverrides,
+    } as Record<string, string>;
+
+    try {
+      this._pty = pty.spawn(command, args, {
+        name: "xterm-color",
+        cols: 80,
+        rows: 24,
+        cwd,
+        env: spawnEnv,
+      });
+    } catch (err) {
+      console.error(`[pty] spawn failed: command="${command}", cwd="${cwd}", PATH="${spawnEnv.PATH?.slice(0, 200)}"`);
+      throw err;
+    }
 
     this._pty.onData((data) => {
       // Update ring buffer — keep last BUFFER_MAX bytes

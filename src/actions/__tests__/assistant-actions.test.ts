@@ -6,7 +6,7 @@ describe("assistant-actions", () => {
     it.todo("includes --allowedTools mcp__tower__* in CLI args (BE-03)");
     it.todo("includes --append-system-prompt with configured prompt (BE-02)");
     it.todo("destroys existing session before creating new one (UX-01)");
-    it.todo("throws if no default CliProfile exists");
+    it.todo("uses resolveCliAdapter for CLI adapter resolution");
   });
 
   describe("stopAssistantSession", () => {

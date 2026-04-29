@@ -56,10 +56,11 @@ export function destroyAllSessions(): void {
 }
 
 // D-08: Register SIGTERM/SIGINT cleanup handler
-// Use globalThis flag to prevent listener accumulation across HMR reloads
-// (process.once with different anonymous functions still registers multiple listeners)
+// Only at runtime — build workers import this module and fire SIGINT on exit,
+// producing noisy "[session-store] SIGINT received" messages during `next build`.
+// Use globalThis flag to prevent listener accumulation across HMR reloads.
 const gSignal = globalThis as typeof globalThis & { __ptySignalHandlersRegistered?: boolean };
-if (!gSignal.__ptySignalHandlersRegistered) {
+if (process.env.NEXT_PHASE !== "phase-production-build" && !gSignal.__ptySignalHandlersRegistered) {
   gSignal.__ptySignalHandlersRegistered = true;
   process.once("SIGTERM", () => {
     console.error("[session-store] SIGTERM received — cleaning up PTY sessions");

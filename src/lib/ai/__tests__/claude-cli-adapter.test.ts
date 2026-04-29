@@ -42,19 +42,24 @@ describe("ClaudeCliAdapter", () => {
       expect(result.args).not.toContain("Fix the bug");
     });
 
-    it("merges profileArgs into args", () => {
+    it("includes --dangerously-skip-permissions by default", () => {
+      const result = adapter.buildSpawnArgs(baseOpts);
+      expect(result.args).toContain("--dangerously-skip-permissions");
+    });
+
+    it("merges extraArgs into args", () => {
       const result = adapter.buildSpawnArgs({
         ...baseOpts,
-        profileArgs: ["--model", "opus"],
+        extraArgs: ["--model", "opus"],
       });
       expect(result.args).toContain("--model");
       expect(result.args).toContain("opus");
     });
 
-    it("merges profileEnvVars into env", () => {
+    it("merges envOverrides into env", () => {
       const result = adapter.buildSpawnArgs({
         ...baseOpts,
-        profileEnvVars: { CUSTOM_VAR: "value" },
+        envOverrides: { CUSTOM_VAR: "value" },
       });
       expect(result.env.CUSTOM_VAR).toBe("value");
     });
