@@ -25,10 +25,10 @@ import { mkdirSync, existsSync } from "node:fs";
 
 let _dir: string | undefined;
 
-/** ~/.tower */
+/** TOWER_DATA_DIR env or ~/.tower */
 export function getTowerDir(): string {
   if (_dir) return _dir;
-  _dir = join(homedir(), ".tower");
+  _dir = process.env.TOWER_DATA_DIR || join(homedir(), ".tower");
   if (!existsSync(_dir)) {
     mkdirSync(_dir, { recursive: true });
   }

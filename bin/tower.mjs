@@ -28,8 +28,8 @@ const __dirname = dirname(__filename);
 const PROJECT_ROOT = resolve(__dirname, "..");
 const require = createRequire(import.meta.url);
 
-// ─── Data directory: ~/.tower ───
-const TOWER_DIR = join(homedir(), ".tower");
+// ─── Data directory: TOWER_DATA_DIR or ~/.tower ───
+const TOWER_DIR = process.env.TOWER_DATA_DIR || join(homedir(), ".tower");
 const DB_DIR = join(TOWER_DIR, "database");
 const DB_PATH = join(DB_DIR, "tower.db");
 const DB_URL = `file:${DB_PATH}`;
