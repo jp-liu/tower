@@ -56,13 +56,30 @@ export function useTerminalPortal() {
   return ctx;
 }
 
+// Max number of terminal instances kept alive simultaneously.
+// Oldest unused instances are evicted when this limit is exceeded.
+const MAX_PORTAL_INSTANCES = 3;
+
 export function TerminalPortalProvider({ children }: { children: ReactNode }) {
   const instancesRef = useRef(new Map<string, TerminalInstance>());
+  // Track access order for LRU eviction (most recent at end)
+  const accessOrderRef = useRef<string[]>([]);
   const [, setTick] = useState(0);
 
   const getPortal = useCallback((taskId: string, worktreePath: string) => {
     const existing = instancesRef.current.get(taskId);
-    if (existing) return existing;
+    if (existing) {
+      // Move to end of access order (most recently used)
+      accessOrderRef.current = accessOrderRef.current.filter((id) => id !== taskId);
+      accessOrderRef.current.push(taskId);
+      return existing;
+    }
+
+    // Evict oldest instances if at capacity
+    while (instancesRef.current.size >= MAX_PORTAL_INSTANCES && accessOrderRef.current.length > 0) {
+      const oldestId = accessOrderRef.current.shift()!;
+      instancesRef.current.delete(oldestId);
+    }
 
     const portalNode = createHtmlPortalNode({
       attributes: { style: "width:100%;height:100%" },
@@ -75,12 +92,14 @@ export function TerminalPortalProvider({ children }: { children: ReactNode }) {
       onFileOpen: { current: null },
     };
     instancesRef.current.set(taskId, instance);
+    accessOrderRef.current.push(taskId);
     setTick((t) => t + 1);
     return instance;
   }, []);
 
   const removePortal = useCallback((taskId: string) => {
     instancesRef.current.delete(taskId);
+    accessOrderRef.current = accessOrderRef.current.filter((id) => id !== taskId);
     setTick((t) => t + 1);
   }, []);
 

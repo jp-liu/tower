@@ -56,12 +56,17 @@ export function destroyAllSessions(): void {
 }
 
 // D-08: Register SIGTERM/SIGINT cleanup handler
-// Use once() to prevent listener accumulation across HMR reloads
-process.once("SIGTERM", () => {
-  console.error("[session-store] SIGTERM received — cleaning up PTY sessions");
-  destroyAllSessions();
-});
-process.once("SIGINT", () => {
-  console.error("[session-store] SIGINT received — cleaning up PTY sessions");
-  destroyAllSessions();
-});
+// Use globalThis flag to prevent listener accumulation across HMR reloads
+// (process.once with different anonymous functions still registers multiple listeners)
+const gSignal = globalThis as typeof globalThis & { __ptySignalHandlersRegistered?: boolean };
+if (!gSignal.__ptySignalHandlersRegistered) {
+  gSignal.__ptySignalHandlersRegistered = true;
+  process.once("SIGTERM", () => {
+    console.error("[session-store] SIGTERM received — cleaning up PTY sessions");
+    destroyAllSessions();
+  });
+  process.once("SIGINT", () => {
+    console.error("[session-store] SIGINT received — cleaning up PTY sessions");
+    destroyAllSessions();
+  });
+}
