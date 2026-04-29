@@ -23,6 +23,16 @@ export async function initDb(): Promise<PrismaClient> {
   return db;
 }
 
+/**
+ * Reset the database connection after a DB file swap (restore/reset).
+ * Disconnects, resets the initialized flag, and re-runs PRAGMAs.
+ */
+export async function resetDbConnection(): Promise<void> {
+  try { await db.$disconnect(); } catch { /* best-effort */ }
+  initialized = false;
+  await initDb();
+}
+
 // Ensure WAL is flushed and connections closed on exit
 process.on("SIGTERM", () => { db.$disconnect().catch(() => {}); });
 process.on("SIGINT", () => { db.$disconnect().catch(() => {}); });
