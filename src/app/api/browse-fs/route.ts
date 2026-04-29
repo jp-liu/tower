@@ -3,6 +3,9 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 // Dangerous system directories that should not be browsed
 const BLOCKED_PATHS_UNIX = ["/proc", "/sys", "/dev", "/boot", "/sbin"];
 const BLOCKED_PATHS_WIN = ["C:\\Windows", "C:\\$Recycle.Bin"];
@@ -86,5 +89,37 @@ export async function GET(request: NextRequest) {
       { error: "Cannot read directory", currentPath: dirPath },
       { status: 400 }
     );
+  }
+}
+
+/** Create a new folder inside a given directory. */
+export async function POST(request: NextRequest) {
+  try {
+    const { parentPath, name } = await request.json();
+    if (!parentPath || !name) {
+      return NextResponse.json({ error: "parentPath and name are required" }, { status: 400 });
+    }
+
+    // Sanitize: no path separators, no traversal
+    const sanitized = name.replace(/[/\\]/g, "").trim();
+    if (!sanitized || sanitized === "." || sanitized === "..") {
+      return NextResponse.json({ error: "Invalid folder name" }, { status: 400 });
+    }
+
+    const resolved = path.resolve(parentPath, sanitized);
+
+    if (isBlockedPath(resolved)) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
+
+    if (fs.existsSync(resolved)) {
+      return NextResponse.json({ error: "Folder already exists" }, { status: 409 });
+    }
+
+    fs.mkdirSync(resolved, { recursive: true });
+
+    return NextResponse.json({ path: resolved });
+  } catch {
+    return NextResponse.json({ error: "Failed to create folder" }, { status: 500 });
   }
 }

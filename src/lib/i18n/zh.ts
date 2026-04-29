@@ -257,6 +257,9 @@ export const zh = {
   "folder.selectPath": "选择路径",
   "folder.empty": "此目录下没有文件夹",
   "folder.browse": "浏览",
+  "folder.newFolder": "新建文件夹",
+  "folder.newFolderPlaceholder": "文件夹名称",
+  "folder.newFolderError": "创建文件夹失败",
   // Git
   "git.section": "Git",
   "git.currentBranch": "当前分支",

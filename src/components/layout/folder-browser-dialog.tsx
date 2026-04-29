@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Folder, FolderGit2, Home, ChevronUp, Search, HardDrive } from "lucide-react";
+import { Folder, FolderGit2, Home, ChevronUp, Search, HardDrive, FolderPlus, Check, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -47,6 +47,9 @@ export function FolderBrowserDialog({
   const [filterText, setFilterText] = useState("");
   const [showDrives, setShowDrives] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const newFolderRef = useRef<HTMLInputElement>(null);
 
   const browse = useCallback(async (dirPath?: string) => {
     setLoading(true);
@@ -116,6 +119,33 @@ export function FolderBrowserDialog({
   const handleDriveSelect = (drivePath: string) => {
     setShowDrives(false);
     browse(drivePath);
+  };
+
+  const handleCreateFolder = async () => {
+    const name = newFolderName.trim();
+    if (!name || !data?.currentPath) return;
+    try {
+      const res = await fetch("/api/browse-fs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ parentPath: data.currentPath, name }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        setError(err.error || t("folder.newFolderError"));
+        return;
+      }
+      setCreatingFolder(false);
+      setNewFolderName("");
+      browse(data.currentPath); // refresh list
+    } catch {
+      setError(t("folder.newFolderError"));
+    }
+  };
+
+  const handleCancelCreate = () => {
+    setCreatingFolder(false);
+    setNewFolderName("");
   };
 
   const filtered = data?.folders.filter((f) =>
@@ -200,6 +230,19 @@ export function FolderBrowserDialog({
                 <HardDrive className="h-3.5 w-3.5" />
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={() => {
+                setCreatingFolder(true);
+                setNewFolderName("");
+                setTimeout(() => newFolderRef.current?.focus(), 50);
+              }}
+              className="shrink-0 text-muted-foreground"
+              title={t("folder.newFolder")}
+            >
+              <FolderPlus className="h-3.5 w-3.5" />
+            </Button>
             <div className="min-w-0 flex-1 truncate text-sm text-foreground font-mono" title={data?.currentPath ?? ""}>
               {data?.currentPath ?? "..."}
             </div>
@@ -207,6 +250,40 @@ export function FolderBrowserDialog({
 
           {/* Folder list */}
           <ScrollArea className="min-h-0 flex-1">
+            {/* Inline new folder input */}
+            {creatingFolder && (
+              <div className="flex items-center gap-2 border-b border-border/30 px-4 py-2">
+                <Folder className="h-4 w-4 text-primary/70 shrink-0" />
+                <input
+                  ref={newFolderRef}
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleCreateFolder();
+                    if (e.key === "Escape") handleCancelCreate();
+                  }}
+                  placeholder={t("folder.newFolderPlaceholder")}
+                  className="h-7 flex-1 rounded-md border border-border bg-background px-2 text-sm text-foreground placeholder-muted-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+                />
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={handleCreateFolder}
+                  disabled={!newFolderName.trim()}
+                  className="text-emerald-400 hover:text-emerald-300"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={handleCancelCreate}
+                  className="text-muted-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
             {loading && (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                 Loading...
