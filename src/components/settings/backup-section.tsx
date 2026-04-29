@@ -13,6 +13,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import {
   Download,
   Upload,
@@ -56,8 +57,7 @@ export function BackupSection() {
   const router = useRouter();
   const [backups, setBackups] = useState<BackupInfo[]>([]);
   const [backupDir, setBackupDirState] = useState("");
-  const [editingDir, setEditingDir] = useState(false);
-  const [dirInput, setDirInput] = useState("");
+  const [showFolderBrowser, setShowFolderBrowser] = useState(false);
   const [loading, setLoading] = useState(true);
   const [operating, setOperating] = useState<string | null>(null);
 
@@ -121,11 +121,11 @@ export function BackupSection() {
     }
   };
 
-  const handleSaveDir = async () => {
+  const handleSelectDir = async (path: string) => {
+    setShowFolderBrowser(false);
     try {
-      await setBackupDir(dirInput);
-      setBackupDirState(dirInput);
-      setEditingDir(false);
+      await setBackupDir(path);
+      setBackupDirState(path);
       toast.success(t("settings.backup.dirSaved"));
       await loadData();
     } catch {
@@ -168,34 +168,21 @@ export function BackupSection() {
         <h3 className="text-base font-semibold">{t("settings.backup.sectionTitle")}</h3>
         <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
           <span>{t("settings.backup.dir")}:</span>
-          {editingDir ? (
-            <>
-              <Input
-                value={dirInput}
-                onChange={(e) => setDirInput(e.target.value)}
-                placeholder={t("settings.backup.dirPlaceholder")}
-                className="h-8 w-64"
-              />
-              <Button variant="outline" onClick={handleSaveDir}>
-                {t("common.save")}
-              </Button>
-              <Button variant="ghost" onClick={() => setEditingDir(false)}>
-                {t("common.cancel")}
-              </Button>
-            </>
-          ) : (
-            <>
-              <code className="rounded bg-muted px-2 py-0.5 text-xs">{backupDir}</code>
-              <Button
-                variant="ghost"
-                onClick={() => { setDirInput(backupDir); setEditingDir(true); }}
-                className="text-xs text-muted-foreground"
-              >
-                {t("settings.backup.dirChange")}
-              </Button>
-            </>
-          )}
+          <code className="rounded bg-muted px-2 py-0.5 text-xs">{backupDir}</code>
+          <Button
+            variant="ghost"
+            onClick={() => setShowFolderBrowser(true)}
+            className="text-xs text-muted-foreground"
+          >
+            {t("settings.backup.dirChange")}
+          </Button>
         </div>
+
+        <FolderBrowserDialog
+          open={showFolderBrowser}
+          onOpenChange={setShowFolderBrowser}
+          onSelect={handleSelectDir}
+        />
       </div>
 
       <Button
