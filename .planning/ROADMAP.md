@@ -16,7 +16,7 @@
 - ✅ **v0.95 Pre-Release Hardening** — Phases 47-54 (shipped 2026-04-20)
 - ✅ **v0.96 UX Polish & Knowledge Capture** — Phases 55-60 (shipped 2026-04-20)
 - ✅ **v0.97 Workflow Enhancement & Developer Experience** — Phases 61-64 (shipped 2026-04-21)
-- 🚧 **v1.0 首次使用引导 & 任务完成通知** — Phases 65-68 (in progress)
+- ✅ **v1.0 首次使用引导 & 任务完成通知** — Phases 65-68 (shipped 2026-04-23)
 
 ## Phases
 
@@ -189,83 +189,14 @@ See: [milestones/v0.95-ROADMAP.md](./milestones/v0.95-ROADMAP.md) for full detai
 
 </details>
 
----
+<details>
+<summary>✅ v1.0 首次使用引导 & 任务完成通知 (Phases 65-68) — SHIPPED 2026-04-23</summary>
 
-## v1.0 首次使用引导 & 任务完成通知 (Phases 65-68)
+- [x] Phase 65: Onboarding Data Layer (2/2 plans) — completed 2026-04-23
+- [x] Phase 66: Notification Infrastructure (3/3 plans) — completed 2026-04-23
+- [x] Phase 67: Onboarding Wizard UI (2/2 plans) — completed 2026-04-23
+- [x] Phase 68: Username Display & AI Context (1/1 plan) — completed 2026-04-23
 
-**Milestone Goal:** 为新用户提供首次使用引导流程，并在 AI 任务完成时通过多种渠道通知用户。
+See: [milestones/v1.0-ROADMAP.md](./milestones/v1.0-ROADMAP.md) for full details.
 
-### Summary Checklist
-
-- [x] **Phase 65: Onboarding Data Layer** - SystemConfig onboarding keys + PTY onExit notification hook (completed 2026-04-23)
-- [x] **Phase 66: Notification Infrastructure** - Browser Notification API wrapper + Toast fallback + Settings toggle + click-to-navigate (completed 2026-04-23)
-- [x] **Phase 67: Onboarding Wizard UI** - Mandatory Dialog stepper (username + CLI test) + post-wizard redirect (completed 2026-04-23)
-- [x] **Phase 68: Username Display & AI Context** - TopBar username chip + AI assistant context injection (completed 2026-04-23)
-
-### Phase Details
-
-#### Phase 65: Onboarding Data Layer
-**Goal**: The system can detect first-run state, persist wizard progress across page reloads, and fire a task completion notification at the moment a PTY session exits
-**Depends on**: Nothing (pure data layer, no UI)
-**Requirements**: ONBD-01, ONBD-02, ONBD-08
-**Success Criteria** (what must be TRUE):
-  1. A fresh database (no SystemConfig rows) causes the app to recognize first-run state and expose it to the UI layer via a server-side prop
-  2. After a wizard step completes, refreshing the page and re-checking onboarding status returns the last completed step number rather than step 1
-  3. When a PTY session exits, the system records the task completion event and prepares the notification payload (taskId, taskTitle, status) for delivery to the browser — verifiable by inspecting the dispatch call in agent-actions.ts onExit
-**Plans:** 2/2 plans complete
-Plans:
-- [x] 65-01-PLAN.md — Onboarding server actions (TDD: getOnboardingStatus, setOnboardingProgress, completeOnboarding, dispatchTaskCompletionEvent)
-- [x] 65-02-PLAN.md — PTY onExit dispatch + layout isFirstRun prop
-
-#### Phase 66: Notification Infrastructure
-**Goal**: Users receive a desktop notification when a task finishes executing, and can control this behavior from Settings
-**Depends on**: Phase 65
-**Requirements**: NOTIF-01, NOTIF-02, NOTIF-03, NOTIF-04, NOTIF-05
-**Success Criteria** (what must be TRUE):
-  1. On first page load the browser shows a permission prompt for notifications; on subsequent loads with permission already granted, no prompt appears
-  2. When a running task's PTY session exits, a desktop notification appears with the task title as the notification body — visible even when the Tower tab is in the background
-  3. When notification permission is denied or the browser does not support the API, a Sonner Toast appears at the bottom of the screen instead, showing the same task title
-  4. Clicking the desktop notification brings the Tower tab to focus and navigates to that task's detail page
-  5. A toggle in Settings allows the user to disable all task completion notifications; when disabled, neither desktop notifications nor the Toast fallback fire
-**Plans:** 3/3 plans complete
-Plans:
-- [x] 66-01-PLAN.md — Server-side event queue + API route + workspaceId payload extension
-- [x] 66-02-PLAN.md — Settings notification toggle + i18n keys
-- [x] 66-03-PLAN.md — Client notification listener + permission banner + layout wiring
-
-#### Phase 67: Onboarding Wizard UI
-**Goal**: A new user cannot access any part of the app until they have completed the two-step onboarding wizard, after which they land on the Kanban board with a prompt to create their first workspace
-**Depends on**: Phase 65
-**Requirements**: ONBD-03, ONBD-06, ONBD-07, ONBD-09
-**Success Criteria** (what must be TRUE):
-  1. On first launch a full-screen Dialog overlay appears and all underlying UI is inert (not clickable); there is no close button or skip mechanism
-  2. Step 1 shows a username input field; submitting a non-empty username saves it to SystemConfig and advances to Step 2
-  3. Step 2 embeds the existing CliAdapterTester component; the "Next" or "Complete" button is disabled until at least one CLI check passes
-  4. If the CLI test fails entirely, an inline error message explains that a working Claude CLI is required and the button remains disabled — the user cannot complete the wizard without a working CLI
-  5. After the wizard completes the overlay dismisses and the app navigates to the Kanban board where a highlighted empty-state CTA prompts creating the first workspace or project
-**Plans:** 2/2 plans complete
-Plans:
-- [x] 67-01-PLAN.md — Onboarding wizard components (CLIAdapterTester onResult + wizard shell + steps + i18n)
-- [x] 67-02-PLAN.md — Layout wiring + workspaces CTA
-**UI hint**: yes
-
-#### Phase 68: Username Display & AI Context
-**Goal**: The username collected during onboarding is visible in the app header and known to the AI assistant so it can address the user by name
-**Depends on**: Phase 67
-**Requirements**: ONBD-04, ONBD-05
-**Success Criteria** (what must be TRUE):
-  1. After onboarding completes, the TopBar right section shows the configured username as a text chip or avatar label on every page of the app
-  2. When the AI assistant responds in a chat session, it addresses the user by their configured username — verifiable by sending "what is my name?" and receiving a response containing the username
-**Plans:** 1/1 plans complete
-Plans:
-- [x] 68-01-PLAN.md — TopBar username chip + AI assistant context injection
-**UI hint**: yes
-
-### Progress Table
-
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 65. Onboarding Data Layer | 2/2 | Complete    | 2026-04-23 |
-| 66. Notification Infrastructure | 3/3 | Complete    | 2026-04-23 |
-| 67. Onboarding Wizard UI | 2/2 | Complete    | 2026-04-23 |
-| 68. Username Display & AI Context | 1/1 | Complete   | 2026-04-23 |
+</details>
