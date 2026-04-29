@@ -25,7 +25,7 @@
     "tsconfig.json"
   ],
   "scripts": {
-    "predev": "node scripts/copy-monaco.js",
+    "predev": "node scripts/copy-monaco.js && node scripts/ensure-dev-db.js",
     "dev": "next dev --webpack -p 9022",
     "tower:init": "tsx scripts/init-tower.ts",
     "prebuild": "node scripts/copy-monaco.js",
