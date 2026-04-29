@@ -13,6 +13,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import {
   Download,
@@ -61,6 +62,11 @@ export function BackupSection() {
   const [loading, setLoading] = useState(true);
   const [operating, setOperating] = useState<string | null>(null);
 
+  // Create dialog
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [createLabel, setCreateLabel] = useState("");
+
+  // Reset dialog
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetInput, setResetInput] = useState("");
 
@@ -78,9 +84,12 @@ export function BackupSection() {
   useEffect(() => { loadData(); }, [loadData]);
 
   const handleCreate = async () => {
+    const label = createLabel.trim() || undefined;
+    setShowCreateDialog(false);
+    setCreateLabel("");
     setOperating("create");
     try {
-      await createBackup();
+      await createBackup(label);
       toast.success(t("settings.backup.createSuccess"));
       await loadData();
     } catch {
@@ -186,7 +195,7 @@ export function BackupSection() {
       </div>
 
       <Button
-        onClick={handleCreate}
+        onClick={() => { setCreateLabel(""); setShowCreateDialog(true); }}
         disabled={isDisabled}
         className="gap-2"
       >
@@ -197,6 +206,40 @@ export function BackupSection() {
         )}
       </Button>
 
+      {/* Create backup dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("settings.backup.create")}</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <label className="text-xs font-medium text-muted-foreground">
+              {t("settings.backup.createLabel")}
+            </label>
+            <Input
+              value={createLabel}
+              onChange={(e) => setCreateLabel(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+              placeholder={t("settings.backup.createLabelPlaceholder")}
+              className="mt-1.5"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              onClick={handleCreate}
+              className="bg-primary/10 text-primary ring-1 ring-primary/20 hover:bg-primary/15"
+            >
+              {t("settings.backup.create")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Backup list */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -217,15 +260,22 @@ export function BackupSection() {
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium font-mono text-foreground">
-                      {backup.filename}
-                    </span>
+                    {backup.label ? (
+                      <span className="truncate text-sm font-medium text-foreground">{backup.label}</span>
+                    ) : (
+                      <span className="truncate text-sm font-medium font-mono text-foreground">
+                        {backup.filename}
+                      </span>
+                    )}
                     {backup.autoBackup && (
                       <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-500 ring-1 ring-amber-500/20">
                         {t("settings.backup.autoLabel")}
                       </span>
                     )}
                   </div>
+                  {backup.label && (
+                    <div className="mt-0.5 text-[11px] font-mono text-muted-foreground/60">{backup.filename}</div>
+                  )}
                   <div className="mt-1 text-xs text-muted-foreground">
                     {formatBytes(backup.size)} · {formatDate(backup.createdAt, locale)}
                   </div>
@@ -249,26 +299,38 @@ export function BackupSection() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    onClick={() => handleRestore(backup.filename)}
-                    disabled={isDisabled}
-                    title={t("settings.backup.restore")}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    <Upload className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    onClick={() => handleDelete(backup.filename)}
-                    disabled={isDisabled}
-                    title={t("settings.backup.delete")}
-                    className="text-muted-foreground hover:text-rose-400"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          onClick={() => handleRestore(backup.filename)}
+                          disabled={isDisabled}
+                          className="text-muted-foreground hover:text-foreground"
+                        />
+                      }
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" sideOffset={4}>{t("settings.backup.restore")}</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          onClick={() => handleDelete(backup.filename)}
+                          disabled={isDisabled}
+                          className="text-muted-foreground hover:text-rose-400"
+                        />
+                      }
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" sideOffset={4}>{t("settings.backup.delete")}</TooltipContent>
+                  </Tooltip>
                 </div>
               </div>
             </div>
@@ -276,6 +338,7 @@ export function BackupSection() {
         </div>
       )}
 
+      {/* Danger zone */}
       <div className="border-t border-border pt-6">
         <div className="flex items-center gap-2 text-sm font-semibold text-rose-400">
           <AlertTriangle className="h-4 w-4" />
@@ -295,6 +358,7 @@ export function BackupSection() {
         </Button>
       </div>
 
+      {/* Reset confirmation dialog */}
       <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>

@@ -692,6 +692,8 @@ export const en: Translations = {
   "settings.backup.dirSaved": "Backup directory updated",
   "settings.backup.dirError": "Invalid path, must be an absolute path within home directory",
   "settings.backup.create": "Create Backup",
+  "settings.backup.createLabel": "Backup name (optional)",
+  "settings.backup.createLabelPlaceholder": "e.g. Pre-release backup",
   "settings.backup.creating": "Creating backup...",
   "settings.backup.createSuccess": "Backup created successfully",
   "settings.backup.createError": "Failed to create backup",

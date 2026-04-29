@@ -708,6 +708,8 @@ export const zh = {
   "settings.backup.dirSaved": "存档路径已更新",
   "settings.backup.dirError": "路径无效，必须是主目录下的绝对路径",
   "settings.backup.create": "创建存档",
+  "settings.backup.createLabel": "存档名称（可选）",
+  "settings.backup.createLabelPlaceholder": "例如：上线前备份",
   "settings.backup.creating": "正在创建存档...",
   "settings.backup.createSuccess": "存档创建成功",
   "settings.backup.createError": "创建存档失败",

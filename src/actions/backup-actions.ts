@@ -29,7 +29,7 @@ async function getResolvedBackupsDir(): Promise<string> {
   return custom || getBackupsDir();
 }
 
-async function buildMetadata(auto: boolean): Promise<BackupMetadata> {
+async function buildMetadata(auto: boolean, label?: string): Promise<BackupMetadata> {
   const [wsCount, projCount, taskCount] = await Promise.all([
     db.workspace.count(),
     db.project.count(),
@@ -60,6 +60,7 @@ async function buildMetadata(auto: boolean): Promise<BackupMetadata> {
     createdAt: new Date().toISOString(),
     towerVersion: getTowerVersion(),
     autoBackup: auto,
+    label: label || undefined,
     stats: { workspaces: wsCount, projects: projCount, tasks: taskCount },
     preview,
   };
@@ -69,11 +70,11 @@ async function buildMetadata(auto: boolean): Promise<BackupMetadata> {
 // Public server actions
 // ---------------------------------------------------------------------------
 
-export async function createBackup(): Promise<BackupInfo> {
+export async function createBackup(label?: string): Promise<BackupInfo> {
   const backupsDir = await getResolvedBackupsDir();
   acquireLock(backupsDir);
   try {
-    const metadata = await buildMetadata(false);
+    const metadata = await buildMetadata(false, label);
     await db.$queryRaw`PRAGMA wal_checkpoint(TRUNCATE)`;
     return await createArchive(getTowerDir(), backupsDir, metadata, false);
   } finally {

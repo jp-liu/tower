@@ -11,6 +11,7 @@ export interface BackupMetadata {
   createdAt: string;
   towerVersion: string;
   autoBackup: boolean;
+  label?: string;
   stats: { workspaces: number; projects: number; tasks: number };
   preview: { workspace: string; projects: string[] }[];
 }
@@ -20,6 +21,7 @@ export interface BackupInfo {
   size: number;
   createdAt: string;
   autoBackup: boolean;
+  label: string;
   stats: BackupMetadata["stats"];
   preview: BackupMetadata["preview"];
 }
@@ -113,6 +115,7 @@ export async function createArchive(
       size: st.size,
       createdAt: metadata.createdAt,
       autoBackup: auto,
+      label: metadata.label ?? "",
       stats: metadata.stats,
       preview: metadata.preview,
     };
@@ -167,6 +170,7 @@ export async function listArchives(backupsDir: string): Promise<BackupInfo[]> {
       size: st.size,
       createdAt: meta?.createdAt ?? st.mtime.toISOString(),
       autoBackup: meta?.autoBackup ?? filename.startsWith("tower-auto"),
+      label: meta?.label ?? "",
       stats: meta?.stats ?? { workspaces: 0, projects: 0, tasks: 0 },
       preview: meta?.preview ?? [],
     });
