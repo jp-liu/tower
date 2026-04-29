@@ -76,6 +76,17 @@ export function CodeEditor({
   const onSaveRef = useRef<(() => void) | undefined>(undefined);
   const latestFilePathRef = useRef<string | null>(null);
 
+  // Dispose all Monaco models on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      modelsRef.current.forEach((model) => {
+        const m = model as { dispose?: () => void };
+        m?.dispose?.();
+      });
+      modelsRef.current.clear();
+    };
+  }, []);
+
   // Keep activeTabRef in sync with current state for use in Monaco action callbacks
   useEffect(() => {
     activeTabRef.current = tabs.find((t) => t.path === activeTabPath) ?? null;

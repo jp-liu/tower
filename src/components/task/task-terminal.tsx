@@ -68,7 +68,7 @@ export function TaskTerminal({
     const terminal = new Terminal({
       fontFamily: "Menlo, Monaco, 'Courier New', monospace",
       fontSize: 13,
-      scrollback: 5000,
+      scrollback: 2000,
       cursorBlink: true,
       allowTransparency: false,
       theme: initialTheme,

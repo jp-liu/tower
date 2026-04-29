@@ -81,11 +81,14 @@ export async function POST(
       // Best effort — diff will fallback gracefully
     }
 
-    // Normal merge: checkout baseBranch, merge task branch
-    // Preserves full commit history from the task branch
+    // Record current branch before merge
+    const originalBranch = execFileSync(
+      "git", ["rev-parse", "--abbrev-ref", "HEAD"],
+      { ...gitOpts, cwd: localPath }
+    ).trim();
+    const needsCheckout = originalBranch !== task.baseBranch;
 
-    // 1. Stash any uncommitted changes in main repo (safety)
-    // Filter out untracked files (??) — git stash push doesn't handle them without -u
+    // Stash uncommitted changes (safety for checkout)
     const mainStatus = execFileSync(
       "git", ["status", "--porcelain"],
       { ...gitOpts, cwd: localPath }
@@ -99,21 +102,31 @@ export async function POST(
 
     let commitHash: string;
     try {
-      // 2. Checkout baseBranch in main repo
-      execFileSync("git", ["checkout", task.baseBranch], { ...gitOpts, cwd: localPath });
+      // Checkout baseBranch if not already on it
+      if (needsCheckout) {
+        execFileSync("git", ["checkout", task.baseBranch], { ...gitOpts, cwd: localPath });
+      }
 
-      // 3. Merge the task branch (normal merge, preserves commit history)
+      // Merge the task branch (normal merge, preserves commit history)
       execFileSync("git", ["merge", worktreeBranch, "--no-edit"], { ...gitOpts, cwd: localPath });
 
-      // 4. Get the merge commit hash
+      // Get the merge commit hash
       commitHash = execFileSync(
         "git", ["rev-parse", "--short", "HEAD"],
         { ...gitOpts, cwd: localPath }
       ).trim();
     } finally {
-      // Restore stash if we had one
+      // Switch back to original branch before popping stash
+      // Stash was created on originalBranch, must pop on the same branch
+      if (needsCheckout) {
+        try {
+          execFileSync("git", ["checkout", originalBranch], { ...gitOpts, cwd: localPath });
+        } catch {
+          // Best effort — stay on baseBranch if checkout fails
+        }
+      }
       if (hadStash) {
-        execFileSync("git", ["stash", "pop"], { ...gitOpts, cwd: localPath }).toString();
+        execFileSync("git", ["stash", "pop"], { ...gitOpts, cwd: localPath });
       }
     }
 

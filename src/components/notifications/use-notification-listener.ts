@@ -46,9 +46,13 @@ export function useNotificationListener(enabled: boolean) {
 
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
 
     async function connect() {
+      if (cancelled) return;
       const wsPort = await getActualWsPort();
+      if (cancelled) return;
+
       ws = new WebSocket(
         `ws://localhost:${wsPort}/terminal?taskId=__notifications__`
       );
@@ -95,6 +99,7 @@ export function useNotificationListener(enabled: boolean) {
       };
 
       ws.onclose = () => {
+        if (cancelled) return;
         // Reconnect after 5s
         reconnectTimer = setTimeout(connect, 5000);
       };
@@ -107,6 +112,7 @@ export function useNotificationListener(enabled: boolean) {
     connect();
 
     return () => {
+      cancelled = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       ws?.close();
     };
