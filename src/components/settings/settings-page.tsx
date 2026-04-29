@@ -26,6 +26,7 @@ import {
   FileText,
   SlidersHorizontal,
   Bell,
+  HardDrive,
   X,
   Plus,
   Star,
@@ -53,6 +54,7 @@ import type { TestResult } from "@/lib/cli-test";
 import type { AgentPrompt } from "@prisma/client";
 import type { DetectedTerminalApp } from "@/lib/platform";
 import type { GitPathRule } from "@/lib/git-url";
+import { BackupSection } from "./backup-section";
 
 // ---------------------------------------------------------------------------
 // Inline SegmentedToggle
@@ -159,6 +161,13 @@ const SECTIONS = [
     descKey: "settings.notifications.navDesc" as const,
     icon: Bell,
     accent: "rose",
+  },
+  {
+    id: "backup",
+    labelKey: "settings.backup.title" as const,
+    descKey: "settings.backup.navDesc" as const,
+    icon: HardDrive,
+    accent: "cyan",
   },
 ] as const;
 
@@ -1771,6 +1780,8 @@ export function SettingsPage() {
         return renderSystemConfig();
       case "notifications":
         return renderNotifications();
+      case "backup":
+        return <BackupSection />;
     }
   }
 
