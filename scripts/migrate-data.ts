@@ -7,17 +7,19 @@
  *   data/cache/           → ~/.tower/storage/cache/
  *
  * Usage:
- *   npx tsx scripts/migrate-data.ts          # dry-run (preview only)
- *   npx tsx scripts/migrate-data.ts --run    # actually migrate
+ *   npx tsx scripts/migrate-data.ts                  # dry-run (preview only)
+ *   npx tsx scripts/migrate-data.ts --run            # actually migrate (skip existing)
+ *   npx tsx scripts/migrate-data.ts --run --force    # migrate and overwrite existing
  */
 
-import { existsSync, cpSync, copyFileSync, mkdirSync, statSync } from "fs";
+import { existsSync, cpSync, copyFileSync, mkdirSync, statSync, rmSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 
 const PROJECT_ROOT = process.cwd();
 const TOWER_DIR = join(homedir(), ".tower");
 const dryRun = !process.argv.includes("--run");
+const force = process.argv.includes("--force");
 
 function log(msg: string) {
   console.log(`${dryRun ? "[dry-run] " : ""}${msg}`);
@@ -32,7 +34,7 @@ function ensureDir(dir: string) {
 
 function migrateFile(src: string, dest: string) {
   if (!existsSync(src)) return false;
-  if (existsSync(dest)) {
+  if (existsSync(dest) && !force) {
     const srcSize = statSync(src).size;
     const destSize = statSync(dest).size;
     log(`SKIP ${src} → ${dest} (destination exists, src=${srcSize}B, dest=${destSize}B)`);
@@ -40,24 +42,27 @@ function migrateFile(src: string, dest: string) {
   }
   ensureDir(join(dest, "..").replace(/\/\.\.$/, ""));
   if (!dryRun) copyFileSync(src, dest);
-  log(`COPY ${src} → ${dest}`);
+  log(`${existsSync(dest) ? "OVERWRITE" : "COPY"} ${src} → ${dest}`);
   return true;
 }
 
 function migrateDir(src: string, dest: string) {
   if (!existsSync(src)) return false;
-  if (existsSync(dest)) {
+  if (existsSync(dest) && !force) {
     log(`SKIP ${src} → ${dest} (destination exists)`);
     return false;
   }
   ensureDir(join(dest, ".."));
-  if (!dryRun) cpSync(src, dest, { recursive: true });
-  log(`COPY ${src}/ → ${dest}/`);
+  if (!dryRun) {
+    if (existsSync(dest)) rmSync(dest, { recursive: true, force: true });
+    cpSync(src, dest, { recursive: true });
+  }
+  log(`${existsSync(dest) ? "OVERWRITE" : "COPY"} ${src}/ → ${dest}/`);
   return true;
 }
 
 // ─── Main ───
-console.log(`\nTower Data Migration${dryRun ? " (DRY RUN — add --run to execute)" : ""}\n`);
+console.log(`\nTower Data Migration${dryRun ? " (DRY RUN — add --run to execute)" : ""}${force ? " [FORCE — overwrite existing]" : ""}\n`);
 console.log(`Source: ${PROJECT_ROOT}`);
 console.log(`Target: ${TOWER_DIR}\n`);
 
