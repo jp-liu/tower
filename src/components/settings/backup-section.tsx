@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import {
   Download,
   Upload,
+  FolderUp,
   Trash2,
   RotateCcw,
   AlertTriangle,
@@ -65,6 +66,7 @@ export function BackupSection() {
   // Create dialog
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createLabel, setCreateLabel] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Reset dialog
   const [showResetDialog, setShowResetDialog] = useState(false);
@@ -142,6 +144,35 @@ export function BackupSection() {
     }
   };
 
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset input so same file can be re-selected
+    e.target.value = "";
+
+    setOperating("import");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/internal/backup/import", { method: "POST", body: formData });
+      if (!res.ok) {
+        const err = await res.json();
+        toast.error(err.error === "Invalid backup archive"
+          ? t("settings.backup.importInvalid")
+          : err.error === "File already exists"
+            ? t("settings.backup.importError")
+            : t("settings.backup.importError"));
+        return;
+      }
+      toast.success(t("settings.backup.importSuccess"));
+      await loadData();
+    } catch {
+      toast.error(t("settings.backup.importError"));
+    } finally {
+      setOperating(null);
+    }
+  };
+
   const handleReset = async () => {
     if (resetInput !== "RESET") return;
     setShowResetDialog(false);
@@ -194,17 +225,44 @@ export function BackupSection() {
         />
       </div>
 
-      <Button
-        onClick={() => { setCreateLabel(""); setShowCreateDialog(true); }}
-        disabled={isDisabled}
-        className="gap-2"
-      >
-        {operating === "create" ? (
-          <><Loader2 className="h-4 w-4 animate-spin" /> {t("settings.backup.creating")}</>
-        ) : (
-          <><Download className="h-4 w-4" /> {t("settings.backup.create")}</>
-        )}
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button
+          onClick={() => { setCreateLabel(""); setShowCreateDialog(true); }}
+          disabled={isDisabled}
+          className="gap-2"
+        >
+          {operating === "create" ? (
+            <><Loader2 className="h-4 w-4 animate-spin" /> {t("settings.backup.creating")}</>
+          ) : (
+            <><Download className="h-4 w-4" /> {t("settings.backup.create")}</>
+          )}
+        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="outline"
+                disabled={isDisabled}
+                onClick={() => fileInputRef.current?.click()}
+                className="gap-2"
+              />
+            }
+          >
+            <FolderUp className="h-4 w-4" />
+            {t("settings.backup.import")}
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={4}>
+            {t("settings.backup.importHint")}
+          </TooltipContent>
+        </Tooltip>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".tar.gz,.gz"
+          className="hidden"
+          onChange={handleImport}
+        />
+      </div>
 
       {/* Create backup dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
