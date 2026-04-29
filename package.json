@@ -26,7 +26,7 @@
   ],
   "scripts": {
     "predev": "node scripts/copy-monaco.js",
-    "dev": "next dev --webpack",
+    "dev": "next dev --webpack -p 9022",
     "tower:init": "tsx scripts/init-tower.ts",
     "prebuild": "node scripts/copy-monaco.js",
     "build": "next build",
