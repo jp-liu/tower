@@ -25,9 +25,8 @@
     "tsconfig.json"
   ],
   "scripts": {
-    "predev": "node scripts/copy-monaco.js && node scripts/ensure-dev-db.js",
+    "predev": "node scripts/ensure-dev-db.js",
     "dev": "next dev --webpack -p 9022",
-    "prebuild": "node scripts/copy-monaco.js",
     "build": "next build",
     "build:clean": "rm -rf .next && next build && find .next -name '*.map' -delete",
     "release": "pnpm build:clean && npm pack",
