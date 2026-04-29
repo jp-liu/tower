@@ -35,6 +35,7 @@
     "release:smoke": "node scripts/release-smoke.js",
     "release:publish": "pnpm build:clean && npm publish",
     "start": "next start",
+    "start:prod": "TOWER_DATA_DIR=$HOME/.tower DATABASE_URL=file:$HOME/.tower/database/tower.db next start -p 3000",
     "lint": "eslint",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
