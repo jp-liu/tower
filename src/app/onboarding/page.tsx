@@ -184,8 +184,9 @@ export default function OnboardingPage() {
   // Step 1 state
   const [username, setUsername] = useState("");
 
-  // Step 2 state
-  const [cliResult, setCliResult] = useState<TestResult | null>(null);
+  // Step 2 state — track per-provider results, pass if at least one succeeds
+  const [cliResults, setCliResults] = useState<Record<string, TestResult>>({});
+  const cliPassed = Object.values(cliResults).some((r) => r.ok);
 
   // Step 3 state
   const [gitRules, setGitRules] = useState<GitPathRule[]>([]);
@@ -401,7 +402,15 @@ export default function OnboardingPage() {
                 <CLIAdapterTester
                   adapterType="claude_code"
                   adapterLabel="Claude CLI"
-                  onResult={setCliResult}
+                  provider="claude"
+                  onResult={(r) => setCliResults((prev) => ({ ...prev, claude: r }))}
+                />
+                <CLIAdapterTester
+                  adapterType="codex_cli"
+                  adapterLabel="Codex CLI"
+                  provider="codex"
+                  hideHeader
+                  onResult={(r) => setCliResults((prev) => ({ ...prev, codex: r }))}
                 />
 
                 <div className="flex items-center justify-between pt-3">
@@ -409,7 +418,7 @@ export default function OnboardingPage() {
                     <ChevronLeft className="h-4 w-4 mr-1" />
                     {t("onboarding.back")}
                   </Button>
-                  <Button onClick={handleNextStep} disabled={!cliResult?.ok} className="px-5">
+                  <Button onClick={handleNextStep} disabled={!cliPassed} className="px-5">
                     {t("onboarding.step1.next")}
                     <ChevronRight className="h-4 w-4 ml-1" />
                   </Button>

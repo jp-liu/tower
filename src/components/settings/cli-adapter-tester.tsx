@@ -11,10 +11,14 @@ import type { TestResult } from "@/lib/cli-test";
 interface CLIAdapterTesterProps {
   adapterType: string;
   adapterLabel?: string;
+  /** Provider name passed to the test API (e.g. "claude", "codex") */
+  provider?: string;
+  /** Hide the section header (useful when multiple testers share one header) */
+  hideHeader?: boolean;
   onResult?: (result: TestResult) => void;
 }
 
-export function CLIAdapterTester({ adapterType, adapterLabel, onResult }: CLIAdapterTesterProps) {
+export function CLIAdapterTester({ adapterType, adapterLabel, provider, hideHeader, onResult }: CLIAdapterTesterProps) {
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
   const { t } = useI18n();
@@ -27,7 +31,7 @@ export function CLIAdapterTester({ adapterType, adapterLabel, onResult }: CLIAda
       const res = await fetch("/api/adapters/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adapterType }),
+        body: JSON.stringify({ adapterType, provider }),
       });
       const data: TestResult = await res.json();
       setResult(data);
@@ -47,15 +51,17 @@ export function CLIAdapterTester({ adapterType, adapterLabel, onResult }: CLIAda
   return (
     <div className="space-y-4">
       {/* Section header with icon */}
-      <div className="flex items-center gap-3">
-        <div className="rounded-lg bg-emerald-100 dark:bg-emerald-900/30 p-2">
-          <Terminal className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+      {!hideHeader && (
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-emerald-100 dark:bg-emerald-900/30 p-2">
+            <Terminal className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+          </div>
+          <div>
+            <h3 className="font-semibold">{t("settings.aiTools.cliVerification")}</h3>
+            <p className="text-sm text-muted-foreground">{t("settings.aiTools.cliVerificationDesc")}</p>
+          </div>
         </div>
-        <div>
-          <h3 className="font-semibold">{t("settings.aiTools.cliVerification")}</h3>
-          <p className="text-sm text-muted-foreground">{t("settings.aiTools.cliVerificationDesc")}</p>
-        </div>
-      </div>
+      )}
 
       {/* Adapter card */}
       <Card>

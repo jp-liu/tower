@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 
 const bodySchema = z.object({
   adapterType: z.string().optional(),
+  provider: z.string().optional(),
   cwd: z.string().optional(),
 });
 
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "Invalid request body" }, { status: 400 });
     }
 
-    const { cwd } = parsed.data;
+    const { cwd, provider } = parsed.data;
 
     // Validate cwd: must be an existing project localPath or use process.cwd()
     let resolvedCwd = process.cwd();
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
       resolvedCwd = cwd;
     }
 
-    const result: TestResult = await testEnvironment(resolvedCwd);
+    const result: TestResult = await testEnvironment(resolvedCwd, provider);
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(

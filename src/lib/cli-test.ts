@@ -1,6 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 import { resolveCommandPath, resolveSpawnTarget, ensurePathInEnv, stripClaudeNestingEnv } from "./platform";
+import type { CliAdapter } from "./ai/types";
+import { providerRegistry } from "./ai/providers";
 
 // ---------------------------------------------------------------------------
 // Types (from adapters/types.ts)
@@ -340,7 +342,139 @@ function detectClaudeLoginRequired(input: {
 // testEnvironment (from adapters/claude-local/test.ts)
 // ---------------------------------------------------------------------------
 
-export async function testEnvironment(cwd: string): Promise<TestResult> {
+export async function testEnvironment(cwd: string, provider?: string): Promise<TestResult> {
+  const providerName = provider ?? "claude";
+  const providerDef = providerRegistry.get(providerName);
+  const adapter = providerDef?.cli?.adapter;
+  const command = providerDef?.cli?.command ?? providerName;
+
+  // If we have an adapter, use the generic path
+  if (adapter) {
+    return testWithAdapter(cwd, providerName, command, adapter);
+  }
+
+  // Fallback: Claude-specific path (legacy, keeps stream-json parsing)
+  return testClaudeEnvironment(cwd);
+}
+
+/**
+ * Generic CLI test using adapter interface.
+ * New providers only need to implement getApiKeyInfo() and buildHelloProbeArgs().
+ */
+async function testWithAdapter(
+  cwd: string,
+  providerName: string,
+  command: string,
+  adapter: CliAdapter,
+): Promise<TestResult> {
+  const checks: TestCheck[] = [];
+
+  // Check 1: command resolvable
+  try {
+    await ensureCommandResolvable(command, cwd, { ...process.env });
+    checks.push({
+      name: `${providerName}_command_resolvable`,
+      passed: true,
+      message: `${command} command found in PATH`,
+    });
+  } catch (err) {
+    checks.push({
+      name: `${providerName}_command_resolvable`,
+      passed: false,
+      message: err instanceof Error ? err.message : `${command} command not found in PATH`,
+    });
+    return { ok: false, checks };
+  }
+
+  // Check 2: version
+  try {
+    const version = await adapter.getVersion();
+    checks.push({
+      name: `${providerName}_version`,
+      passed: true,
+      message: version ? `Version: ${version}` : "Version: unknown",
+    });
+  } catch {
+    checks.push({
+      name: `${providerName}_version`,
+      passed: true,
+      message: "Version: unknown",
+    });
+  }
+
+  // Check 3: API key (from adapter — not required blocks pass)
+  const keyInfo = adapter.getApiKeyInfo();
+  const apiKey = process.env[keyInfo.envVar];
+  const hasApiKey = typeof apiKey === "string" && apiKey.trim().length > 0;
+  checks.push({
+    name: `${providerName}_api_key`,
+    passed: hasApiKey,
+    message: hasApiKey
+      ? `${keyInfo.envVar} is set`
+      : `${keyInfo.envVar} is not set${keyInfo.required ? "" : ` (${command} may use subscription auth)`}`,
+  });
+
+  // Check 4: hello probe (from adapter)
+  const probeSpec = adapter.buildHelloProbeArgs();
+  const probeId = `${providerName}-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  try {
+    const probe = await runChildProcess(
+      probeId,
+      probeSpec.command,
+      probeSpec.args,
+      {
+        cwd,
+        env: {},
+        stdin: "Respond with just the word hello",
+        timeoutSec: 45,
+        graceSec: 5,
+        onLog: async () => {},
+      },
+    );
+
+    if (probe.timedOut) {
+      checks.push({
+        name: `${providerName}_hello_probe`,
+        passed: false,
+        message: `${command} hello probe timed out`,
+      });
+    } else if ((probe.exitCode ?? 1) === 0) {
+      const output = probe.stdout.trim();
+      const hasHello = /\bhello\b/i.test(output);
+      checks.push({
+        name: `${providerName}_hello_probe`,
+        passed: hasHello,
+        message: hasHello
+          ? `${command} hello probe succeeded`
+          : `${command} probe ran but returned unexpected output: ${output.slice(0, 120)}`,
+      });
+    } else {
+      const stderrLine =
+        probe.stderr
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .find(Boolean) ?? "";
+      checks.push({
+        name: `${providerName}_hello_probe`,
+        passed: false,
+        message: stderrLine
+          ? `${command} hello probe failed: ${stderrLine}`
+          : `${command} hello probe failed with exit code ${probe.exitCode ?? -1}`,
+      });
+    }
+  } catch (err) {
+    checks.push({
+      name: `${providerName}_hello_probe`,
+      passed: false,
+      message: err instanceof Error ? err.message : `${command} hello probe threw an error`,
+    });
+  }
+
+  const ok = checks.every((c) => c.passed || c.name === `${providerName}_api_key`);
+  return { ok, checks };
+}
+
+async function testClaudeEnvironment(cwd: string): Promise<TestResult> {
   const checks: TestCheck[] = [];
 
   // Check 1: verify `claude` command exists

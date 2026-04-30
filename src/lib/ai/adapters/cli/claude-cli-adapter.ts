@@ -124,6 +124,17 @@ export class ClaudeCliAdapter implements CliAdapter {
     return path.join(this.getConfigDir(), "projects");
   }
 
+  getApiKeyInfo(): { envVar: string; required: boolean } {
+    return { envVar: "ANTHROPIC_API_KEY", required: false };
+  }
+
+  buildHelloProbeArgs(): { command: string; args: string[] } {
+    return {
+      command: this.resolveCommand(),
+      args: ["--print", "-", "--output-format", "stream-json", "--verbose"],
+    };
+  }
+
   /** Resolve claude binary — env var > platform-aware resolution.
    *  Public so claude-session.ts can reuse instead of duplicating findClaudeBinary(). */
   resolveCommand(): string {

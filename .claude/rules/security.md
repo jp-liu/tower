@@ -9,7 +9,7 @@ paths:
 
 ## CLI Profile
 
-- `command` field must be validated against allowlist (`claude`, `claude-code`).
+- `command` field must be validated against allowlist (`claude`, `claude-code`, `codex`).
 - `baseArgs` elements must be strings with no shell metacharacters (`;&|` etc.).
 - `envVars` must block dangerous keys: PATH, LD_PRELOAD, DYLD_INSERT_LIBRARIES, NODE_OPTIONS, HOME, SHELL.
 

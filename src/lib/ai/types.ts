@@ -45,6 +45,14 @@ export interface CliAdapter {
   getConfigDir(): string;
   getSettingsPath(): string;
   getSessionsDir(): string;
+
+  /** API key environment variable name and whether it's strictly required.
+   *  If not required, missing key is a warning (user may use subscription auth). */
+  getApiKeyInfo(): { envVar: string; required: boolean };
+
+  /** Build the command + args for a non-interactive hello probe.
+   *  The probe should accept a prompt via stdin and return text on stdout. */
+  buildHelloProbeArgs(): { command: string; args: string[] };
 }
 
 // ---------------------------------------------------------------------------
