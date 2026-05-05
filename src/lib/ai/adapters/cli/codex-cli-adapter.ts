@@ -1,7 +1,7 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import { resolveCommandPathSync } from "@/lib/platform";
-import type { CliAdapter, CliSpawnOptions, CliSpawnResult } from "../../types";
+import type { CliAdapter, CliSpawnOptions, CliSpawnResult, McpServerConfig } from "../../types";
 
 const CODEX_MODELS = ["o4-mini", "o3", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "codex-mini-latest"];
 
@@ -73,6 +73,47 @@ export class CodexCliAdapter implements CliAdapter {
   async isHooksInstalled(): Promise<boolean> {
     // No hooks installed for Codex yet
     return false;
+  }
+
+  async installMcp(server: McpServerConfig): Promise<void> {
+    const { execFile } = await import("child_process");
+    const { promisify } = await import("util");
+    const execFileAsync = promisify(execFile);
+    const cmd = this.resolveCommand();
+
+    // Build args: codex mcp add <name> [--env K=V ...] -- <command> <args...>
+    const args = ["mcp", "add", server.name];
+    if (server.env) {
+      for (const [k, v] of Object.entries(server.env)) {
+        args.push("--env", `${k}=${v}`);
+      }
+    }
+    args.push("--", server.command, ...server.args);
+
+    await execFileAsync(cmd, args, { timeout: 10000 });
+  }
+
+  async uninstallMcp(name: string): Promise<void> {
+    const { execFile } = await import("child_process");
+    const { promisify } = await import("util");
+    const execFileAsync = promisify(execFile);
+    const cmd = this.resolveCommand();
+
+    await execFileAsync(cmd, ["mcp", "remove", name], { timeout: 10000 });
+  }
+
+  async isMcpInstalled(name: string): Promise<boolean> {
+    const { execFile } = await import("child_process");
+    const { promisify } = await import("util");
+    const execFileAsync = promisify(execFile);
+    const cmd = this.resolveCommand();
+
+    try {
+      await execFileAsync(cmd, ["mcp", "get", name], { timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async isAvailable(): Promise<boolean> {

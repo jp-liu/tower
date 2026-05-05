@@ -2,12 +2,15 @@
  * Ensure .tower/ directory exists with assistant persona and skill files.
  * Called once on server startup via instrumentation.ts.
  * Idempotent — skips files that already exist.
+ *
+ * Also auto-installs hooks and MCP server config for all registered providers.
  */
 
-import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, copyFileSync, writeFileSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
 import { getAssistantDir } from "./tower-dir";
+import { providerRegistry } from "./ai/providers";
+import type { McpServerConfig } from "./ai/types";
 
 const CLAUDE_MD_CONTENT = `# Tower Assistant
 
@@ -49,81 +52,62 @@ export function ensureTowerDir(): string {
     console.error(`[init-tower] Copied SKILL.md → ${skillDestDir}`);
   }
 
-  // 4. Auto-install Claude Code hooks (SessionStart + PostToolUse)
-  ensureClaudeHooks();
+  // 4. Auto-install hooks and MCP for all available providers
+  void ensureProviderIntegrations();
 
   return assistantDir;
 }
 
 /**
- * Ensure Tower hooks are registered in ~/.claude/settings.json.
- * Idempotent — skips if hooks already present.
+ * Build the Tower MCP server config for injection into CLI adapters.
  */
-function ensureClaudeHooks(): void {
-  const settingsPath = join(homedir(), ".claude", "settings.json");
-  // Use forward slashes for cross-platform compatibility in hook commands
+function buildTowerMcpConfig(): McpServerConfig {
   const root = process.cwd().replace(/\\/g, "/");
+  return {
+    name: "tower",
+    command: "npx",
+    args: ["tsx", `${root}/src/mcp/index.ts`],
+  };
+}
 
-  let settings: Record<string, unknown> = {};
-  try {
-    settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
-  } catch {
-    // File doesn't exist or invalid JSON — start fresh
-  }
+/**
+ * Install hooks and MCP server config for all registered providers.
+ * Uses the CliAdapter interface — each provider handles its own config format.
+ * Idempotent — skips providers that already have hooks/MCP installed.
+ */
+async function ensureProviderIntegrations(): Promise<void> {
+  const mcpConfig = buildTowerMcpConfig();
 
-  const hooks = (settings["hooks"] as Record<string, unknown>) ?? {};
-  let changed = false;
+  for (const provider of providerRegistry.getAll()) {
+    const adapter = provider.cli?.adapter;
+    if (!adapter) continue;
 
-  // SessionStart hook — reports sessionId
-  const sessionStartEntries = (hooks["SessionStart"] as Array<{ hooks: Array<{ command: string }> }>) ?? [];
-  const hasSessionStart = sessionStartEntries.some(
-    (e) => e.hooks?.some((h) => h.command?.includes("session-start-hook.js"))
-  );
-  if (!hasSessionStart) {
-    const hookPath = join(root, "scripts", "session-start-hook.js").replace(/\\/g, "/");
-    sessionStartEntries.push({
-      hooks: [{ command: `node "${hookPath}"`, timeout: 5, type: "command" } as never],
-    });
-    hooks["SessionStart"] = sessionStartEntries;
-    changed = true;
-    console.error("[init-tower] Installed SessionStart hook");
-  }
+    // Check availability before attempting install
+    const available = await adapter.isAvailable();
+    if (!available) continue;
 
-  // PostToolUse hook — auto-uploads files
-  const postToolEntries = (hooks["PostToolUse"] as Array<{ hooks: Array<{ command: string }> }>) ?? [];
-  const hasPostTool = postToolEntries.some(
-    (e) => e.hooks?.some((h) => h.command?.includes("post-tool-hook.js"))
-  );
-  if (!hasPostTool) {
-    const hookPath = join(root, "scripts", "post-tool-hook.js").replace(/\\/g, "/");
-    postToolEntries.push({
-      hooks: [{ command: `node "${hookPath}"`, timeout: 10, type: "command" } as never],
-      matcher: "Write|Edit|MultiEdit",
-    } as never);
-    hooks["PostToolUse"] = postToolEntries;
-    changed = true;
-    console.error("[init-tower] Installed PostToolUse hook");
-  }
+    const label = provider.displayName;
 
-  // Stop hook — notifies Tower when Claude finishes responding
-  const stopEntries = (hooks["Stop"] as Array<{ hooks: Array<{ command: string }> }>) ?? [];
-  const hasStop = stopEntries.some(
-    (e) => e.hooks?.some((h) => h.command?.includes("stop-hook.js"))
-  );
-  if (!hasStop) {
-    const hookPath = join(root, "scripts", "stop-hook.js").replace(/\\/g, "/");
-    stopEntries.push({
-      hooks: [{ command: `node "${hookPath}"`, timeout: 5, type: "command" } as never],
-    });
-    hooks["Stop"] = stopEntries;
-    changed = true;
-    console.error("[init-tower] Installed Stop hook");
-  }
+    // Install hooks
+    try {
+      const hooksInstalled = await adapter.isHooksInstalled();
+      if (!hooksInstalled) {
+        await adapter.installHooks(`http://localhost:3000`);
+        console.error(`[init-tower] Installed hooks for ${label}`);
+      }
+    } catch (err) {
+      console.error(`[init-tower] Failed to install hooks for ${label}:`, err);
+    }
 
-  if (changed) {
-    settings["hooks"] = hooks;
-    const dir = join(homedir(), ".claude");
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8");
+    // Install MCP
+    try {
+      const mcpInstalled = await adapter.isMcpInstalled("tower");
+      if (!mcpInstalled) {
+        await adapter.installMcp(mcpConfig);
+        console.error(`[init-tower] Installed Tower MCP for ${label}`);
+      }
+    } catch (err) {
+      console.error(`[init-tower] Failed to install MCP for ${label}:`, err);
+    }
   }
 }

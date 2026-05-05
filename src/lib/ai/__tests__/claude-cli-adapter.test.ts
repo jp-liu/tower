@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import * as fs from "node:fs";
 import { ClaudeCliAdapter } from "../adapters/cli/claude-cli-adapter";
 import type { CliSpawnOptions } from "../types";
 
@@ -103,6 +104,81 @@ describe("ClaudeCliAdapter", () => {
       expect(adapter.getConfigDir()).toContain(".claude");
       expect(adapter.getSettingsPath()).toContain("settings.json");
       expect(adapter.getSessionsDir()).toContain("projects");
+    });
+  });
+
+  describe("MCP", () => {
+    let settingsPath: string;
+    let originalContent: string | null = null;
+
+    beforeEach(() => {
+      settingsPath = adapter.getSettingsPath();
+      try {
+        originalContent = fs.readFileSync(settingsPath, "utf-8");
+      } catch {
+        originalContent = null;
+      }
+    });
+
+    afterEach(() => {
+      // Restore original settings
+      if (originalContent !== null) {
+        fs.writeFileSync(settingsPath, originalContent, "utf-8");
+      } else {
+        // Remove the mcpServers key we added (don't delete the file)
+        try {
+          const current = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+          delete current.mcpServers;
+          fs.writeFileSync(settingsPath, JSON.stringify(current, null, 2), "utf-8");
+        } catch {
+          // file doesn't exist, nothing to clean
+        }
+      }
+    });
+
+    it("installs MCP server config into settings.json", async () => {
+      await adapter.installMcp({
+        name: "test-tower",
+        command: "npx",
+        args: ["tsx", "/test/mcp/index.ts"],
+      });
+
+      const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+      expect(settings.mcpServers["test-tower"]).toEqual({
+        command: "npx",
+        args: ["tsx", "/test/mcp/index.ts"],
+      });
+
+      // Clean up
+      await adapter.uninstallMcp("test-tower");
+    });
+
+    it("reports MCP installed/not installed correctly", async () => {
+      expect(await adapter.isMcpInstalled("test-tower")).toBe(false);
+
+      await adapter.installMcp({
+        name: "test-tower",
+        command: "npx",
+        args: ["tsx", "/test/mcp/index.ts"],
+      });
+      expect(await adapter.isMcpInstalled("test-tower")).toBe(true);
+
+      await adapter.uninstallMcp("test-tower");
+      expect(await adapter.isMcpInstalled("test-tower")).toBe(false);
+    });
+
+    it("includes env in MCP config when provided", async () => {
+      await adapter.installMcp({
+        name: "test-tower",
+        command: "npx",
+        args: ["tsx", "/test/mcp/index.ts"],
+        env: { NODE_ENV: "production" },
+      });
+
+      const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+      expect(settings.mcpServers["test-tower"].env).toEqual({ NODE_ENV: "production" });
+
+      await adapter.uninstallMcp("test-tower");
     });
   });
 });

@@ -147,4 +147,12 @@ describe("CodexCliAdapter", () => {
       expect(probe.args).toContain("-");
     });
   });
+
+  describe("MCP interface", () => {
+    it("has installMcp, uninstallMcp, isMcpInstalled methods", () => {
+      expect(typeof adapter.installMcp).toBe("function");
+      expect(typeof adapter.uninstallMcp).toBe("function");
+      expect(typeof adapter.isMcpInstalled).toBe("function");
+    });
+  });
 });

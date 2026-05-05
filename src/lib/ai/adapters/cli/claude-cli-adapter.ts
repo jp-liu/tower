@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { resolveCommandPathSync } from "@/lib/platform";
-import type { CliAdapter, CliSpawnOptions, CliSpawnResult } from "../../types";
+import type { CliAdapter, CliSpawnOptions, CliSpawnResult, McpServerConfig } from "../../types";
 
 const CLAUDE_MODELS = ["sonnet", "opus", "haiku", "claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001"];
 
@@ -59,35 +59,104 @@ export class ClaudeCliAdapter implements CliAdapter {
   async installHooks(_apiUrl: string): Promise<void> {
     const settings = this.readSettings();
     const hooks = (settings["hooks"] as Record<string, unknown>) ?? {};
-    const entries = this.getPostToolUseArray(settings);
+    const root = process.cwd().replace(/\\/g, "/");
+    let changed = false;
 
-    if (this.findTowerHookIndex(entries) >= 0) return;
+    // SessionStart hook — reports sessionId
+    const sessionStartEntries = this.getHookArray(hooks, "SessionStart");
+    if (!this.hasHook(sessionStartEntries, "session-start-hook.js")) {
+      const hookPath = path.join(root, "scripts", "session-start-hook.js").replace(/\\/g, "/");
+      sessionStartEntries.push({
+        hooks: [{ command: `node "${hookPath}"`, timeout: 5, type: "command" }],
+      });
+      hooks["SessionStart"] = sessionStartEntries;
+      changed = true;
+    }
 
-    const hookPath = path.join(process.cwd(), "scripts", "post-tool-hook.js");
-    const newEntry = {
-      hooks: [{ command: `node "${hookPath}"`, timeout: 10, type: "command" }],
-      matcher: "Write|Edit|MultiEdit",
-    };
+    // PostToolUse hook — auto-uploads files
+    const postToolEntries = this.getHookArray(hooks, "PostToolUse");
+    if (!this.hasHook(postToolEntries, "post-tool-hook.js")) {
+      const hookPath = path.join(root, "scripts", "post-tool-hook.js").replace(/\\/g, "/");
+      postToolEntries.push({
+        hooks: [{ command: `node "${hookPath}"`, timeout: 10, type: "command" }],
+        matcher: "Write|Edit|MultiEdit",
+      });
+      hooks["PostToolUse"] = postToolEntries;
+      changed = true;
+    }
 
-    settings["hooks"] = { ...hooks, PostToolUse: [...entries, newEntry] };
-    this.writeSettings(settings);
+    // Stop hook — notifies Tower when Claude finishes responding
+    const stopEntries = this.getHookArray(hooks, "Stop");
+    if (!this.hasHook(stopEntries, "stop-hook.js")) {
+      const hookPath = path.join(root, "scripts", "stop-hook.js").replace(/\\/g, "/");
+      stopEntries.push({
+        hooks: [{ command: `node "${hookPath}"`, timeout: 5, type: "command" }],
+      });
+      hooks["Stop"] = stopEntries;
+      changed = true;
+    }
+
+    if (changed) {
+      settings["hooks"] = hooks;
+      this.writeSettings(settings);
+    }
   }
 
   async uninstallHooks(): Promise<void> {
     const settings = this.readSettings();
     const hooks = (settings["hooks"] as Record<string, unknown>) ?? {};
-    const entries = this.getPostToolUseArray(settings);
-    const filtered = entries.filter(
-      (e) => !e.hooks?.some((h: { command?: string }) => h.command?.includes("post-tool-hook.js"))
-    );
-    settings["hooks"] = { ...hooks, PostToolUse: filtered };
+    const hookFiles = ["session-start-hook.js", "post-tool-hook.js", "stop-hook.js"];
+
+    for (const event of ["SessionStart", "PostToolUse", "Stop"]) {
+      const entries = this.getHookArray(hooks, event);
+      hooks[event] = entries.filter(
+        (e) => !e.hooks?.some((h: { command?: string }) =>
+          hookFiles.some((f) => h.command?.includes(f))
+        )
+      );
+    }
+
+    settings["hooks"] = hooks;
     this.writeSettings(settings);
   }
 
   async isHooksInstalled(): Promise<boolean> {
     const settings = this.readSettings();
-    const entries = this.getPostToolUseArray(settings);
-    return this.findTowerHookIndex(entries) >= 0;
+    const hooks = (settings["hooks"] as Record<string, unknown>) ?? {};
+    // Consider installed if the PostToolUse hook exists (primary hook)
+    const entries = this.getHookArray(hooks, "PostToolUse");
+    return this.hasHook(entries, "post-tool-hook.js");
+  }
+
+  async installMcp(server: McpServerConfig): Promise<void> {
+    const settings = this.readSettings();
+    const mcpServers = (settings["mcpServers"] as Record<string, unknown>) ?? {};
+
+    const entry: Record<string, unknown> = {
+      command: server.command,
+      args: server.args,
+    };
+    if (server.env && Object.keys(server.env).length > 0) {
+      entry.env = server.env;
+    }
+
+    mcpServers[server.name] = entry;
+    settings["mcpServers"] = mcpServers;
+    this.writeSettings(settings);
+  }
+
+  async uninstallMcp(name: string): Promise<void> {
+    const settings = this.readSettings();
+    const mcpServers = (settings["mcpServers"] as Record<string, unknown>) ?? {};
+    delete mcpServers[name];
+    settings["mcpServers"] = mcpServers;
+    this.writeSettings(settings);
+  }
+
+  async isMcpInstalled(name: string): Promise<boolean> {
+    const settings = this.readSettings();
+    const mcpServers = (settings["mcpServers"] as Record<string, unknown>) ?? {};
+    return name in mcpServers;
   }
 
   async isAvailable(): Promise<boolean> {
@@ -160,19 +229,16 @@ export class ClaudeCliAdapter implements CliAdapter {
     fs.writeFileSync(this.getSettingsPath(), JSON.stringify(data, null, 2), "utf-8");
   }
 
-  private getPostToolUseArray(settings: Record<string, unknown>): Array<{
-    hooks: Array<{ command: string; timeout: number; type: string }>;
-    matcher: string;
-  }> {
-    const hooks = settings["hooks"] as Record<string, unknown> | undefined;
-    if (!hooks) return [];
-    const arr = hooks["PostToolUse"];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private getHookArray(hooks: Record<string, unknown>, event: string): any[] {
+    const arr = hooks[event];
     return Array.isArray(arr) ? arr : [];
   }
 
-  private findTowerHookIndex(entries: Array<{ hooks: Array<{ command?: string }> }>): number {
-    return entries.findIndex((e) =>
-      e.hooks?.some((h) => h.command?.includes("post-tool-hook.js"))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private hasHook(entries: any[], filename: string): boolean {
+    return entries.some(
+      (e) => e.hooks?.some((h: { command?: string }) => h.command?.includes(filename))
     );
   }
 }

@@ -24,6 +24,17 @@ export interface CliSpawnResult {
   initialInput?: string;
 }
 
+export interface McpServerConfig {
+  /** Unique name for the MCP server (e.g. "tower") */
+  name: string;
+  /** Command to launch the server (e.g. "npx") */
+  command: string;
+  /** Arguments for the command */
+  args: string[];
+  /** Environment variables to pass to the server process */
+  env?: Record<string, string>;
+}
+
 export interface CliAdapter {
   buildSpawnArgs(opts: CliSpawnOptions): CliSpawnResult;
 
@@ -37,6 +48,13 @@ export interface CliAdapter {
   installHooks(apiUrl: string): Promise<void>;
   uninstallHooks(): Promise<void>;
   isHooksInstalled(): Promise<boolean>;
+
+  /** Register an MCP server so the CLI can use its tools at runtime. */
+  installMcp(server: McpServerConfig): Promise<void>;
+  /** Remove a previously registered MCP server by name. */
+  uninstallMcp(name: string): Promise<void>;
+  /** Check whether an MCP server with the given name is registered. */
+  isMcpInstalled(name: string): Promise<boolean>;
 
   isAvailable(): Promise<boolean>;
   getVersion(): Promise<string | null>;
