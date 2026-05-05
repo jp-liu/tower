@@ -13,3 +13,8 @@ if (typeof globalThis.ResizeObserver === "undefined") {
 if (typeof window !== "undefined" && !window.HTMLElement.prototype.scrollIntoView) {
   window.HTMLElement.prototype.scrollIntoView = function () {};
 }
+
+// Polyfill getAnimations for jsdom (used by @base-ui/react ScrollAreaViewport)
+if (typeof window !== "undefined" && !window.HTMLElement.prototype.getAnimations) {
+  window.HTMLElement.prototype.getAnimations = function () { return []; };
+}

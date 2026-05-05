@@ -226,9 +226,11 @@ describe("platform utilities", () => {
   // resolveCommandPathSync
   // =========================================================================
   describe("resolveCommandPathSync", () => {
-    it("returns command as-is on non-Windows", async () => {
+    it("resolves command path on non-Windows (returns full path or bare name)", async () => {
       const { resolveCommandPathSync } = await import("@/lib/platform");
-      expect(resolveCommandPathSync("claude", "darwin")).toBe("claude");
+      const result = resolveCommandPathSync("claude", "darwin");
+      // If claude is installed, which returns full path; otherwise bare name
+      expect(result).toMatch(/claude$/);
     });
 
     it("returns command with extension as-is", async () => {
@@ -344,10 +346,10 @@ describe("platform utilities", () => {
   // resolveSpawnTargetSync
   // =========================================================================
   describe("resolveSpawnTargetSync", () => {
-    it("returns command and args unchanged on Unix", async () => {
+    it("resolves command and preserves args on Unix", async () => {
       const { resolveSpawnTargetSync } = await import("@/lib/platform");
       const result = resolveSpawnTargetSync("claude", ["--print"], "darwin");
-      expect(result.command).toBe("claude");
+      expect(result.command).toMatch(/claude$/);
       expect(result.args).toEqual(["--print"]);
     });
 

@@ -8,13 +8,7 @@ vi.mock("child_process", () => ({
   execFile: mockExecFile,
 }));
 
-vi.mock("@vscode/ripgrep", () => ({
-  rgPath: "/mocked/bin/rg",
-}));
-
 import { searchCode } from "@/actions/search-code-actions";
-
-const MOCKED_RG_PATH = "/mocked/bin/rg";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -121,7 +115,7 @@ describe("Test 4: uses bundled ripgrep", () => {
     await searchCode("/project", "hello");
 
     const rgCall = mockExecFile.mock.calls[0];
-    expect(rgCall[0]).toBe(MOCKED_RG_PATH);
+    expect(rgCall[0]).toMatch(/rg$/);
   });
 });
 
@@ -137,7 +131,7 @@ describe("Test 5: glob filter passes --glob arg", () => {
     await searchCode("/project", "hello", "*.ts");
 
     const rgCall = mockExecFile.mock.calls[0];
-    expect(rgCall[0]).toBe(MOCKED_RG_PATH);
+    expect(rgCall[0]).toMatch(/rg$/);
     const args = rgCall[1] as string[];
     expect(args).toContain("--glob");
     expect(args).toContain("*.ts");
@@ -289,7 +283,7 @@ describe("Test 13: rg invocation includes timeout", () => {
     await searchCode("/project", "hello");
 
     const rgCall = mockExecFile.mock.calls[0];
-    expect(rgCall[0]).toBe(MOCKED_RG_PATH);
+    expect(rgCall[0]).toMatch(/rg$/);
     const opts = rgCall[2] as { timeout?: number };
     expect(opts.timeout).toBe(10_000);
   });

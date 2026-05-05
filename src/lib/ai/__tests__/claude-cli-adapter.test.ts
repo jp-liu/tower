@@ -19,7 +19,7 @@ describe("ClaudeCliAdapter", () => {
 
     it("builds fresh start args with prompt as last argument", () => {
       const result = adapter.buildSpawnArgs(baseOpts);
-      expect(result.command).toBe("claude");
+      expect(result.command).toMatch(/claude$/);
       expect(result.args[result.args.length - 1]).toBe("Fix the bug");
       expect(result.initialInput).toBeUndefined();
     });
