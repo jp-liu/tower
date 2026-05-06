@@ -187,6 +187,23 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
         </div></ScrollArea>
 
         <div className="mt-2 flex flex-col items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  onClick={() => router.push("/missions")}
+                  className={`rounded-lg p-2 transition-colors ${
+                    pathname === "/missions"
+                      ? "text-foreground bg-accent"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  }`}
+                />
+              }
+            >
+              <Gauge className="h-4 w-4" />
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={8}>{t("missions.navLabel")}</TooltipContent>
+          </Tooltip>
           {(() => {
             const wsId = activeWorkspaceId || workspaces[0]?.id;
             if (!wsId) return null;
@@ -246,23 +263,6 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
               </>
             );
           })()}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  onClick={() => router.push("/missions")}
-                  className={`rounded-lg p-2 transition-colors ${
-                    pathname === "/missions"
-                      ? "text-foreground bg-accent"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                  }`}
-                />
-              }
-            >
-              <Gauge className="h-4 w-4" />
-            </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={8}>{t("missions.navLabel")}</TooltipContent>
-          </Tooltip>
         </div>
 
         <WorkspaceDialog

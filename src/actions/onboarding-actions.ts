@@ -79,6 +79,7 @@ export async function completeOnboarding(username?: string): Promise<void> {
       });
     }
   }
+
   revalidatePath("/", "layout");
 }
 

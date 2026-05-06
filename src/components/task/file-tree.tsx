@@ -427,7 +427,7 @@ export function FileTree({
 
       {/* Search results */}
       {isSearching ? (
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 min-h-0">
           <div ref={searchResultsRef} className="py-1">
             {searchResults.length === 0 ? (
               <p className="px-3 py-4 text-xs text-muted-foreground text-center">
@@ -503,7 +503,7 @@ export function FileTree({
           </div>
         </ScrollArea>
       ) : (
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="py-1">
           {rootEntries.map((entry) => (
             <FileTreeNode

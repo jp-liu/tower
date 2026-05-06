@@ -265,9 +265,9 @@ export function TaskTerminal({
 
   if (!worktreePath) {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center bg-[#0a0a0a] text-center">
-        <p className="text-sm text-neutral-400">{t("terminal.noWorktree")}</p>
-        <p className="text-xs text-neutral-600 mt-1">{t("terminal.noWorktreeDesc")}</p>
+      <div className="flex h-full w-full flex-col items-center justify-center bg-[#fafafa] dark:bg-[#0a0a0a] text-center">
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">{t("terminal.noWorktree")}</p>
+        <p className="text-xs text-neutral-400 dark:text-neutral-600 mt-1">{t("terminal.noWorktreeDesc")}</p>
       </div>
     );
   }
@@ -283,17 +283,17 @@ export function TaskTerminal({
         : t("terminal.disconnected");
 
   return (
-    <div className="relative h-full w-full bg-[#0a0a0a]">
+    <div className="relative h-full w-full bg-[#fafafa] dark:bg-[#0a0a0a]">
       <div
         className={[
           "absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded px-2 py-0.5 text-xs transition-opacity duration-500",
           wsStatus === "connected" && !connectedVisible ? "opacity-0 pointer-events-none" : "opacity-100",
-          "bg-black/40 backdrop-blur-sm",
+          "bg-white/60 dark:bg-black/40 backdrop-blur-sm",
         ].join(" ")}
         title={statusLabel}
       >
         <span className={`h-2 w-2 rounded-full ${statusColor}`} />
-        <span className="text-neutral-300">{statusLabel}</span>
+        <span className="text-neutral-600 dark:text-neutral-300">{statusLabel}</span>
       </div>
       <div ref={containerRef} className="h-full w-full overflow-hidden" />
     </div>
