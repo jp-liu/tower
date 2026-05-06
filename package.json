@@ -27,14 +27,15 @@
     "scripts/post-tool-hook.js",
     "scripts/session-start-hook.js",
     "scripts/stop-hook.js",
+    "dist/mcp-server.cjs",
     "src/mcp/",
     "next.config.ts",
     "tsconfig.json"
   ],
   "scripts": {
-    "predev": "node scripts/ensure-dev-db.js",
+    "predev": "node scripts/ensure-dev-db.js && pnpm mcp:build",
     "dev": "next dev --webpack -p 9022",
-    "build": "rm -rf .next && next build && find .next -name '*.map' -delete",
+    "build": "pnpm mcp:build && rm -rf .next && next build && find .next -name '*.map' -delete",
     "release": "pnpm build && npm pack",
     "release:smoke": "node scripts/release-smoke.js",
     "release:publish": "pnpm build && npm publish",
@@ -50,7 +51,9 @@
     "test:run": "vitest run",
     "test:e2e": "NO_PROXY=localhost,127.0.0.1 no_proxy=localhost,127.0.0.1 playwright test",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
-    "mcp": "tsx src/mcp/index.ts",
+    "mcp": "node dist/mcp-server.cjs",
+    "mcp:build": "esbuild src/mcp/index.ts --bundle --platform=node --target=node18 --format=cjs --outfile=dist/mcp-server.cjs --external:@prisma/client --external:@modelcontextprotocol/sdk --external:@opentelemetry/api --alias:@=./src",
+    "mcp:dev": "tsx src/mcp/index.ts",
     "postinstall": "node scripts/copy-monaco.js && node scripts/generate-prisma-client.js && node scripts/link-prisma.js && node scripts/fix-native-permissions.js"
   },
   "pnpm": {

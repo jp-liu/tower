@@ -4,6 +4,8 @@ import { buildMultimodalPrompt } from "@/lib/build-multimodal-prompt";
 import { getAssistantCacheRoot } from "@/lib/file-utils";
 import { ClaudeCliAdapter } from "@/lib/ai/adapters/cli/claude-cli-adapter";
 import { db } from "@/lib/db";
+import { getTowerDbPath } from "@/lib/tower-dir";
+import { existsSync } from "fs";
 
 const claudeAdapter = new ClaudeCliAdapter();
 
@@ -72,18 +74,32 @@ export async function POST(request: NextRequest) {
 
         const hasImages = safeImageFilenames.length > 0;
 
+        // Build MCP server config inline — avoids relying on settings.json discovery
+        const projectRoot = process.cwd().replace(/\\/g, "/");
+        const dbUrl =
+          process.env.DATABASE_URL ||
+          `file:${getTowerDbPath().replace(/\\/g, "/")}`;
+
         const options: Record<string, unknown> = {
-          // No built-in tools for text-only — add Read tool when images are attached (AI-02)
+          // Disable all built-in tools — assistant is a task operator, not a coding assistant.
+          // Only allow Read when attachments are present (to read the provided files).
           tools: hasImages ? ["Read"] : [],
-          // Auto-approve Tower MCP tools; also auto-approve Read when images attached
-          allowedTools: hasImages
-            ? ["mcp__tower__*", "Read"]
-            : ["mcp__tower__*"],
+          allowedTools: ["mcp__tower__*", "Read"],
           // Streaming — receive text_delta chunks as they arrive
           includePartialMessages: true,
           // .tower/ directory has its own CLAUDE.md with assistant persona
           cwd: towerDir,
           pathToClaudeCodeExecutable: claudePath,
+          // Pass Tower MCP server config directly — more reliable than settings.json
+          mcpServers: {
+            tower: (() => {
+              const builtPath = `${projectRoot}/dist/mcp-server.cjs`;
+              if (existsSync(builtPath)) {
+                return { type: "stdio" as const, command: "node", args: [builtPath], env: { DATABASE_URL: dbUrl } };
+              }
+              return { type: "stdio" as const, command: `${projectRoot}/node_modules/.bin/tsx`, args: [`${projectRoot}/src/mcp/index.ts`], env: { DATABASE_URL: dbUrl } };
+            })(),
+          },
         };
 
         // Resume previous session if sessionId provided
