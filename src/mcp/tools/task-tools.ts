@@ -24,6 +24,8 @@ export const taskTools = {
         where: {
           projectId: args.projectId,
           ...(args.status ? { status: args.status as "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED" } : {}),
+          // Exclude system tasks tagged with the builtin "Tower" label
+          NOT: { labels: { some: { label: { name: "Tower", isBuiltin: true } } } },
         },
         include: {
           labels: { include: { label: true } },

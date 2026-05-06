@@ -24,6 +24,8 @@ export const reportTools = {
             { executions: { some: { startedAt: { gte: date, lt: nextDay } } } },
             { messages: { some: { createdAt: { gte: date, lt: nextDay } } } },
           ],
+          // Exclude system tasks tagged with the builtin "Tower" label
+          NOT: { labels: { some: { label: { name: "Tower", isBuiltin: true } } } },
         },
         include: {
           project: { include: { workspace: true } },
@@ -146,7 +148,11 @@ export const reportTools = {
       const statusFilter = args.status ?? ["TODO", "IN_PROGRESS", "IN_REVIEW"];
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const where: any = { status: { in: statusFilter } };
+      const where: any = {
+        status: { in: statusFilter },
+        // Exclude system tasks tagged with the builtin "Tower" label
+        NOT: { labels: { some: { label: { name: "Tower", isBuiltin: true } } } },
+      };
       if (args.priority) where.priority = { in: args.priority };
       if (args.projectId) where.projectId = args.projectId;
       if (args.workspaceId) where.project = { workspaceId: args.workspaceId };
