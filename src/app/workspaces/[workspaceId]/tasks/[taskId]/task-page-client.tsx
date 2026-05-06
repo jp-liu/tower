@@ -163,7 +163,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     if (isExecuting) return;
     setIsExecuting(true);
     try {
-      const { worktreePath } = await startPtyExecution(task.id, "", selectedPromptId);
+      const { worktreePath } = await startPtyExecution(task.id, "", selectedPromptId, null, true);
       setActiveWorktreePath(worktreePath);
     } catch (err) {
       setIsExecuting(false);

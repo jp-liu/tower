@@ -435,7 +435,9 @@ export async function startPtyExecution(
   taskId: string,
   prompt: string,
   selectedPromptId?: string | null,
-  callbackUrl?: string | null
+  callbackUrl?: string | null,
+  /** When true, skip injecting task context — start a clean CLI session */
+  cleanStart?: boolean
 ): Promise<{ executionId: string; worktreePath: string | null }> {
   // 1. Load task with project
   const task = await db.task.findUnique({
@@ -480,10 +482,9 @@ export async function startPtyExecution(
   }
 
   // 4. Build full prompt string (mirrors stream/route.ts buildExecutionPrompt)
-  // When prompt is empty, start a clean CLI session without injecting task context.
-  // This is the "Open Studio" use case — user wants a pure terminal.
+  // When cleanStart is true, skip all context — user wants a pure CLI terminal.
   let fullPrompt = "";
-  if (prompt.trim()) {
+  if (!cleanStart) {
     const messages = await db.taskMessage.findMany({
       where: { taskId },
       orderBy: { createdAt: "desc" },
@@ -498,7 +499,7 @@ export async function startPtyExecution(
             .map((m) => `${m.role}: ${m.content}`)
             .join("\n")}`
         : "",
-      `User message: ${prompt}`,
+      prompt.trim() ? `User message: ${prompt}` : "",
     ].filter(Boolean);
     fullPrompt = contextParts.join("\n\n");
   }

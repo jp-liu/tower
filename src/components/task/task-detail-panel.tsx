@@ -122,7 +122,7 @@ export function TaskDetailPanel({
     if (isExecuting) return;
     setIsExecuting(true);
     try {
-      const { worktreePath } = await startPtyExecution(task.id, "", selectedPromptId);
+      const { worktreePath } = await startPtyExecution(task.id, "", selectedPromptId, null, true);
       setActiveWorktreePath(worktreePath);
       setTaskStatus("IN_PROGRESS");
     } catch (err) {
