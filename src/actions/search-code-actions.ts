@@ -24,6 +24,53 @@ function getRgPath(): string {
 }
 
 // ---------------------------------------------------------------------------
+// Check rg availability (for UI to show install prompt)
+// ---------------------------------------------------------------------------
+
+export async function checkRgAvailable(): Promise<{ available: boolean; platform: string }> {
+  try {
+    getRgPath();
+    return { available: true, platform: process.platform };
+  } catch {
+    return { available: false, platform: process.platform };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Install rg via platform package manager
+// ---------------------------------------------------------------------------
+
+export async function installRg(): Promise<{ success: boolean; error?: string }> {
+  const platform = process.platform;
+  let cmd: string;
+  let args: string[];
+
+  if (platform === "darwin") {
+    cmd = "brew";
+    args = ["install", "ripgrep"];
+  } else if (platform === "win32") {
+    cmd = "winget";
+    args = ["install", "BurntSushi.ripgrep.MSVC", "--accept-source-agreements", "--accept-package-agreements"];
+  } else {
+    // Linux: try apt, fall back to snap
+    cmd = "sudo";
+    args = ["apt-get", "install", "-y", "ripgrep"];
+  }
+
+  try {
+    await execFileAsync(cmd, args, {
+      encoding: "utf-8",
+      timeout: 120_000,
+    });
+    // Clear cached path so it re-resolves
+    _rgPath = undefined;
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
