@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { resolveCommandPathSync } from "@/lib/platform";
@@ -61,18 +62,70 @@ export class CodexCliAdapter implements CliAdapter {
   }
 
   async installHooks(_apiUrl: string): Promise<void> {
-    // Codex uses TOML config at ~/.codex/config.toml
-    // Hook installation for Codex is a no-op for now — Codex hook system
-    // differs from Claude's JSON-based hooks and needs further investigation.
+    const hooks = this.readHooks();
+    const root = process.cwd().replace(/\\/g, "/");
+    let changed = false;
+
+    // SessionStart hook — reports sessionId
+    const sessionStartEntries = this.getHookArray(hooks, "SessionStart");
+    if (!this.hasHook(sessionStartEntries, "session-start-hook.js")) {
+      const hookPath = path.join(root, "scripts", "session-start-hook.js").replace(/\\/g, "/");
+      sessionStartEntries.push({
+        hooks: [{ command: `node "${hookPath}"`, timeout: 5, type: "command" }],
+      });
+      hooks["SessionStart"] = sessionStartEntries;
+      changed = true;
+    }
+
+    // PostToolUse hook — auto-uploads files
+    const postToolEntries = this.getHookArray(hooks, "PostToolUse");
+    if (!this.hasHook(postToolEntries, "post-tool-hook.js")) {
+      const hookPath = path.join(root, "scripts", "post-tool-hook.js").replace(/\\/g, "/");
+      postToolEntries.push({
+        hooks: [{ command: `node "${hookPath}"`, timeout: 10, type: "command" }],
+        matcher: "Write|Edit|MultiEdit",
+      });
+      hooks["PostToolUse"] = postToolEntries;
+      changed = true;
+    }
+
+    // Stop hook — notifies Tower when agent finishes
+    const stopEntries = this.getHookArray(hooks, "Stop");
+    if (!this.hasHook(stopEntries, "stop-hook.js")) {
+      const hookPath = path.join(root, "scripts", "stop-hook.js").replace(/\\/g, "/");
+      stopEntries.push({
+        hooks: [{ command: `node "${hookPath}"`, timeout: 5, type: "command" }],
+      });
+      hooks["Stop"] = stopEntries;
+      changed = true;
+    }
+
+    if (changed) {
+      this.writeHooks(hooks);
+      this.ensureHooksFeatureEnabled();
+    }
   }
 
   async uninstallHooks(): Promise<void> {
-    // No-op — see installHooks comment
+    const hooks = this.readHooks();
+    const hookFiles = ["session-start-hook.js", "post-tool-hook.js", "stop-hook.js"];
+
+    for (const event of ["SessionStart", "PostToolUse", "Stop"]) {
+      const entries = this.getHookArray(hooks, event);
+      hooks[event] = entries.filter(
+        (e) => !e.hooks?.some((h: { command?: string }) =>
+          hookFiles.some((f) => h.command?.includes(f))
+        )
+      );
+    }
+
+    this.writeHooks(hooks);
   }
 
   async isHooksInstalled(): Promise<boolean> {
-    // No hooks installed for Codex yet
-    return false;
+    const hooks = this.readHooks();
+    const entries = this.getHookArray(hooks, "PostToolUse");
+    return this.hasHook(entries, "post-tool-hook.js");
   }
 
   async installMcp(server: McpServerConfig): Promise<void> {
@@ -165,5 +218,60 @@ export class CodexCliAdapter implements CliAdapter {
   resolveCommand(): string {
     if (process.env.CODEX_CLI_PATH) return process.env.CODEX_CLI_PATH;
     return resolveCommandPathSync("codex");
+  }
+
+  // -- hooks.json helpers ---------------------------------------------------
+
+  private getHooksPath(): string {
+    return path.join(this.getConfigDir(), "hooks.json");
+  }
+
+  private readHooks(): Record<string, unknown> {
+    try {
+      const raw = JSON.parse(fs.readFileSync(this.getHooksPath(), "utf-8")) as Record<string, unknown>;
+      return (raw["hooks"] as Record<string, unknown>) ?? {};
+    } catch {
+      return {};
+    }
+  }
+
+  private writeHooks(hooks: Record<string, unknown>): void {
+    const dir = this.getConfigDir();
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(this.getHooksPath(), JSON.stringify({ hooks }, null, 2), "utf-8");
+  }
+
+  /** Ensure `[features] codex_hooks = true` in config.toml so hooks actually fire. */
+  private ensureHooksFeatureEnabled(): void {
+    const tomlPath = this.getSettingsPath();
+    let content = "";
+    try { content = fs.readFileSync(tomlPath, "utf-8"); } catch { /* file may not exist */ }
+
+    if (/codex_hooks\s*=\s*true/.test(content)) return;
+
+    // Append or update the feature flag
+    if (/\[features\]/.test(content)) {
+      // Section exists — append under it
+      content = content.replace(/\[features\]/, "[features]\ncodex_hooks = true");
+    } else {
+      content += "\n[features]\ncodex_hooks = true\n";
+    }
+
+    const dir = this.getConfigDir();
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(tomlPath, content, "utf-8");
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private getHookArray(hooks: Record<string, unknown>, event: string): any[] {
+    const arr = hooks[event];
+    return Array.isArray(arr) ? arr : [];
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private hasHook(entries: any[], filename: string): boolean {
+    return entries.some(
+      (e) => e.hooks?.some((h: { command?: string }) => h.command?.includes(filename))
+    );
   }
 }

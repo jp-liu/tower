@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { CodexCliAdapter } from "../adapters/cli/codex-cli-adapter";
 import type { CliSpawnOptions } from "../types";
 
@@ -118,8 +120,85 @@ describe("CodexCliAdapter", () => {
   });
 
   describe("hooks", () => {
-    it("reports hooks as not installed (Codex TOML hooks not yet supported)", async () => {
+    const tmpDir = path.join(__dirname, ".tmp-codex-hooks-test");
+    const hooksJsonPath = path.join(tmpDir, "hooks.json");
+    const configTomlPath = path.join(tmpDir, "config.toml");
+
+    beforeEach(() => {
+      fs.mkdirSync(tmpDir, { recursive: true });
+      // Point adapter to temp dir
+      vi.spyOn(adapter, "getConfigDir").mockReturnValue(tmpDir);
+      vi.spyOn(adapter, "getSettingsPath").mockReturnValue(configTomlPath);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it("reports hooks as not installed when hooks.json does not exist", async () => {
       expect(await adapter.isHooksInstalled()).toBe(false);
+    });
+
+    it("installs hooks to hooks.json and enables feature flag in config.toml", async () => {
+      await adapter.installHooks("http://localhost:3000");
+
+      expect(await adapter.isHooksInstalled()).toBe(true);
+
+      // Verify hooks.json structure
+      const raw = JSON.parse(fs.readFileSync(hooksJsonPath, "utf-8"));
+      expect(raw.hooks.PostToolUse).toBeDefined();
+      expect(raw.hooks.SessionStart).toBeDefined();
+      expect(raw.hooks.Stop).toBeDefined();
+      expect(raw.hooks.PostToolUse[0].matcher).toBe("Write|Edit|MultiEdit");
+
+      // Verify config.toml has codex_hooks = true
+      const toml = fs.readFileSync(configTomlPath, "utf-8");
+      expect(toml).toContain("codex_hooks = true");
+    });
+
+    it("does not duplicate hooks on repeated install", async () => {
+      await adapter.installHooks("http://localhost:3000");
+      await adapter.installHooks("http://localhost:3000");
+
+      const raw = JSON.parse(fs.readFileSync(hooksJsonPath, "utf-8"));
+      expect(raw.hooks.PostToolUse).toHaveLength(1);
+      expect(raw.hooks.SessionStart).toHaveLength(1);
+      expect(raw.hooks.Stop).toHaveLength(1);
+    });
+
+    it("uninstalls hooks from hooks.json", async () => {
+      await adapter.installHooks("http://localhost:3000");
+      expect(await adapter.isHooksInstalled()).toBe(true);
+
+      await adapter.uninstallHooks();
+      expect(await adapter.isHooksInstalled()).toBe(false);
+
+      const raw = JSON.parse(fs.readFileSync(hooksJsonPath, "utf-8"));
+      expect(raw.hooks.PostToolUse).toHaveLength(0);
+      expect(raw.hooks.SessionStart).toHaveLength(0);
+      expect(raw.hooks.Stop).toHaveLength(0);
+    });
+
+    it("preserves existing [features] section when enabling hooks", async () => {
+      fs.writeFileSync(configTomlPath, "[features]\nsome_flag = true\n", "utf-8");
+
+      await adapter.installHooks("http://localhost:3000");
+
+      const toml = fs.readFileSync(configTomlPath, "utf-8");
+      expect(toml).toContain("codex_hooks = true");
+      expect(toml).toContain("some_flag = true");
+    });
+
+    it("skips feature flag write if already enabled", async () => {
+      fs.writeFileSync(configTomlPath, "[features]\ncodex_hooks = true\n", "utf-8");
+
+      await adapter.installHooks("http://localhost:3000");
+
+      const toml = fs.readFileSync(configTomlPath, "utf-8");
+      // Should not have duplicated the flag
+      const matches = toml.match(/codex_hooks/g);
+      expect(matches).toHaveLength(1);
     });
   });
 
