@@ -304,6 +304,18 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true });
       }
 
+      case "discard-file": {
+        const safeFile = sanitizeFilePath(body.file);
+        // For untracked files, remove them; for tracked files, restore from HEAD
+        try {
+          await git.checkout(["--", safeFile]);
+        } catch {
+          // File might be untracked — clean it
+          await git.clean("f", [safeFile]);
+        }
+        return NextResponse.json({ success: true });
+      }
+
       case "discard-all": {
         await git.checkout(["--", "."]);
         await git.clean("f", ["-d"]);

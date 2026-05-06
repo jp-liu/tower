@@ -5,7 +5,7 @@ import {
   File, FilePlus, FileMinus, FileQuestion, FileEdit,
   Loader2, ArrowDown, ArrowUp, Check, ChevronRight, ChevronDown,
   Folder, Minus, Plus, MoreHorizontal, RefreshCw, Archive, ArrowUpFromLine,
-  Undo2, GitBranch, Search, Globe,
+  Undo2, GitBranch, Search, Globe, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -275,6 +275,16 @@ export function EditorGitPanel({ localPath, onFileSelect }: EditorGitPanelProps)
     try {
       await gitAction(localPath, "stash-pop", { index: 0 });
       toast.success(t("git.stashApplied"));
+      await loadGitInfo();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const handleDiscardFile = async (filePath: string) => {
+    try {
+      await gitAction(localPath, "discard-file", { file: filePath });
+      toast.success(t("git.discardFileSuccess"));
       await loadGitInfo();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -626,6 +636,8 @@ export function EditorGitPanel({ localPath, onFileSelect }: EditorGitPanelProps)
           onFileClick={handleFileClick}
           onFileAction={(f) => handleStage([f])}
           fileActionIcon="+"
+          onFileSecondaryAction={(f) => handleDiscardFile(f)}
+          fileSecondaryIcon={<Trash2 className="h-2.5 w-2.5" />}
         />
 
         {gitInfo.changedFiles.length === 0 && (
@@ -659,6 +671,7 @@ function FileSection({
   label, count, labelColor, tree,
   batchAction, batchLabel, batchIcon,
   onFileClick, onFileAction, fileActionIcon,
+  onFileSecondaryAction, fileSecondaryIcon,
 }: {
   label: string;
   count: number;
@@ -670,6 +683,8 @@ function FileSection({
   onFileClick: (f: ChangedFile) => void;
   onFileAction: (filePath: string) => void;
   fileActionIcon: string;
+  onFileSecondaryAction?: (filePath: string) => void;
+  fileSecondaryIcon?: React.ReactNode;
 }) {
   const [expanded, setExpanded] = useState(true);
 
@@ -711,6 +726,8 @@ function FileSection({
               onFileClick={onFileClick}
               onFileAction={onFileAction}
               fileActionIcon={fileActionIcon}
+              onFileSecondaryAction={onFileSecondaryAction}
+              fileSecondaryIcon={fileSecondaryIcon}
             />
           ))}
         </div>
@@ -723,12 +740,15 @@ function FileSection({
 
 function TreeRow({
   node, depth, onFileClick, onFileAction, fileActionIcon,
+  onFileSecondaryAction, fileSecondaryIcon,
 }: {
   node: TreeNode;
   depth: number;
   onFileClick: (f: ChangedFile) => void;
   onFileAction: (filePath: string) => void;
   fileActionIcon: string;
+  onFileSecondaryAction?: (filePath: string) => void;
+  fileSecondaryIcon?: React.ReactNode;
 }) {
   const [expanded, setExpanded] = useState(true);
   const paddingLeft = 8 + depth * 12;
@@ -760,6 +780,8 @@ function TreeRow({
               onFileClick={onFileClick}
               onFileAction={onFileAction}
               fileActionIcon={fileActionIcon}
+              onFileSecondaryAction={onFileSecondaryAction}
+              fileSecondaryIcon={fileSecondaryIcon}
             />
           ))}
       </>
@@ -781,6 +803,15 @@ function TreeRow({
       <Icon className={`h-3 w-3 shrink-0 ${color}`} />
       <span className="text-xs text-foreground truncate flex-1">{node.name}</span>
       <span className={`text-[10px] font-mono font-bold shrink-0 mr-1 ${color}`}>{letter}</span>
+      {onFileSecondaryAction && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onFileSecondaryAction(file.file); }}
+          className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive transition-all"
+          title={file.file}
+        >
+          {fileSecondaryIcon}
+        </button>
+      )}
       <button
         onClick={(e) => { e.stopPropagation(); onFileAction(file.file); }}
         className="shrink-0 rounded px-1 text-xs font-mono text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-background hover:text-foreground transition-all mr-1"
