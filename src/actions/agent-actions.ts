@@ -480,23 +480,28 @@ export async function startPtyExecution(
   }
 
   // 4. Build full prompt string (mirrors stream/route.ts buildExecutionPrompt)
-  const messages = await db.taskMessage.findMany({
-    where: { taskId },
-    orderBy: { createdAt: "desc" },
-    take: 10,
-  });
-  const contextParts = [
-    `Task: ${task.title}`,
-    task.description ? `Description: ${task.description}` : "",
-    messages.length > 0
-      ? `Recent conversation:\n${messages
-          .reverse()
-          .map((m) => `${m.role}: ${m.content}`)
-          .join("\n")}`
-      : "",
-    prompt.trim() ? `User message: ${prompt}` : "",
-  ].filter(Boolean);
-  const fullPrompt = contextParts.join("\n\n");
+  // When prompt is empty, start a clean CLI session without injecting task context.
+  // This is the "Open Studio" use case — user wants a pure terminal.
+  let fullPrompt = "";
+  if (prompt.trim()) {
+    const messages = await db.taskMessage.findMany({
+      where: { taskId },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    });
+    const contextParts = [
+      `Task: ${task.title}`,
+      task.description ? `Description: ${task.description}` : "",
+      messages.length > 0
+        ? `Recent conversation:\n${messages
+            .reverse()
+            .map((m) => `${m.role}: ${m.content}`)
+            .join("\n")}`
+        : "",
+      `User message: ${prompt}`,
+    ].filter(Boolean);
+    fullPrompt = contextParts.join("\n\n");
+  }
 
   // 5. Prepare instructions file if task has a promptId (or selectedPromptId)
   let instructionsFile: string | undefined;
