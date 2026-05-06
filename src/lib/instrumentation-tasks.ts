@@ -24,6 +24,23 @@ export async function cleanupStaleExecutions() {
 }
 
 /**
+ * Ensure at least one workspace exists.
+ * The last workspace cannot be deleted, so this only runs on first launch.
+ */
+export async function ensureDefaultWorkspace() {
+  try {
+    await initDb();
+    const count = await db.workspace.count();
+    if (count === 0) {
+      await db.workspace.create({ data: { name: "Default Workspace" } });
+      log.info("Created default workspace");
+    }
+  } catch (error) {
+    log.error("Failed to ensure default workspace", error);
+  }
+}
+
+/**
  * Ensure the builtin "Tower" label exists.
  * Used for system workbench tasks (hidden from kanban board).
  */

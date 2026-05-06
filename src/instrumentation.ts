@@ -1,11 +1,12 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { pruneOrphanedWorktrees, cleanupStaleExecutions, ensureTowerLabel } = await import(
+    const { pruneOrphanedWorktrees, cleanupStaleExecutions, ensureTowerLabel, ensureDefaultWorkspace } = await import(
       "@/lib/instrumentation-tasks"
     );
     await pruneOrphanedWorktrees();
     await cleanupStaleExecutions();
     await ensureTowerLabel();
+    await ensureDefaultWorkspace();
 
     // WS-01: Start WebSocket server for PTY terminal sessions.
     // Port is derived from the resolved HTTP port (default: httpPort + 1),
