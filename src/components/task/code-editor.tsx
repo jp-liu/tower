@@ -10,6 +10,7 @@ import { readFileContent, writeFileContent } from "@/actions/file-actions";
 import { EditorTabs } from "./editor-tabs";
 import type { EditorTab } from "./editor-tabs";
 import { DiffEditorView } from "./diff-editor";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 // Load Monaco from local public/vs (copied from node_modules by postinstall script)
 loader.config({
@@ -73,6 +74,7 @@ export function CodeEditor({
   const monacoRef = useRef<unknown>(null);
   const modelsRef = useRef<Map<string, unknown>>(new Map());
   const activeTabRef = useRef<EditorTab | null>(null);
+  const activeTabPathRef = useRef<string | null>(null);
   const onSaveRef = useRef<(() => void) | undefined>(undefined);
   const latestFilePathRef = useRef<string | null>(null);
 
@@ -87,9 +89,10 @@ export function CodeEditor({
     };
   }, []);
 
-  // Keep activeTabRef in sync with current state for use in Monaco action callbacks
+  // Keep refs in sync with current state for use in Monaco callbacks (avoids stale closures)
   useEffect(() => {
     activeTabRef.current = tabs.find((t) => t.path === activeTabPath) ?? null;
+    activeTabPathRef.current = activeTabPath;
   }, [tabs, activeTabPath]);
 
   // Keep onSaveRef in sync to avoid stale closure in Monaco addAction
@@ -115,11 +118,16 @@ export function CodeEditor({
   }, [monacoTheme]);
 
   // React to selectedFilePath changes (D-04)
+  // Use a generation counter to prevent race conditions when rapidly clicking files.
+  // Each click increments the counter; stale async completions are discarded.
+  const fileLoadGenRef = useRef(0);
+
   useEffect(() => {
     if (!selectedFilePath) return;
 
     // Track latest request to ignore stale async completions
     latestFilePathRef.current = selectedFilePath;
+    const thisGen = ++fileLoadGenRef.current;
 
     const existingTab = tabs.find((t) => t.path === selectedFilePath);
     if (existingTab) {
@@ -138,8 +146,8 @@ export function CodeEditor({
 
     readFileContent(worktreePath, relativePath)
       .then((content) => {
-        // Ignore if user has already clicked a different file
-        if (latestFilePathRef.current !== requestedPath) return;
+        // Ignore if user has already clicked a different file (generation mismatch)
+        if (fileLoadGenRef.current !== thisGen) return;
 
         const newTab: EditorTab = {
           path: requestedPath,
@@ -331,23 +339,28 @@ export function CodeEditor({
         </div>
       ) : activeTab?.isDiff ? (
         <div className="flex-1 min-h-0">
-          <DiffEditorView
-            originalContent={activeTab.originalContent ?? ""}
-            modifiedContent={activeTab.content}
-            filePath={activeTab.relativePath}
-            onModifiedChange={(value) => {
-              setTabs((prev) =>
-                prev.map((t) =>
-                  t.path === activeTabPath
-                    ? { ...t, content: value, isDirty: true }
-                    : t
-                )
-              );
-            }}
-          />
+          <ErrorBoundary>
+            <DiffEditorView
+              originalContent={activeTab.originalContent ?? ""}
+              modifiedContent={activeTab.content}
+              filePath={activeTab.relativePath}
+              onModifiedChange={(value) => {
+                const currentPath = activeTabPathRef.current;
+                if (!currentPath) return;
+                setTabs((prev) =>
+                  prev.map((t) =>
+                    t.path === currentPath
+                      ? { ...t, content: value, isDirty: true }
+                      : t
+                  )
+                );
+              }}
+            />
+          </ErrorBoundary>
         </div>
       ) : (
         <div className="flex-1 min-h-0">
+          <ErrorBoundary>
           <MonacoEditor
             height="100%"
             theme={monacoTheme}
@@ -355,9 +368,13 @@ export function CodeEditor({
             onMount={handleEditorMount}
             onChange={(value) => {
               if (value === undefined) return;
+              // Use ref to get the current active tab path, avoiding stale closure
+              // during rapid tab switches
+              const currentPath = activeTabPathRef.current;
+              if (!currentPath) return;
               setTabs((prev) =>
                 prev.map((t) =>
-                  t.path === activeTabPath
+                  t.path === currentPath
                     ? { ...t, content: value, isDirty: true }
                     : t
                 )
@@ -379,6 +396,7 @@ export function CodeEditor({
               </div>
             }
           />
+          </ErrorBoundary>
         </div>
       )}
 
