@@ -35,7 +35,7 @@ Plans:
 - [x] 69-01-PLAN.md — Foundation: system.maxReadableFileBytes config + readFileContent kind detection (RELI-02)
 - [x] 69-02-PLAN.md — File IO error toasts + retry across editor and file-tree, placeholder card for oversized/binary (RELI-01)
 - [x] 69-03-PLAN.md — Code search timeout config + AbortController cancel + categorized error banner (RELI-03, RELI-04, RELI-05)
-- [ ] 69-04-PLAN.md — Settings UI for codeTimeoutSec and maxReadableFileBytes inputs (RELI-02, RELI-03)
+- [x] 69-04-PLAN.md — Settings UI for codeTimeoutSec and maxReadableFileBytes inputs (RELI-02, RELI-03)
 
 **Success Criteria:**
 - File read/write/list/rename/delete errors surface to the user with retry affordance

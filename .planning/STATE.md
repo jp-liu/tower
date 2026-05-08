@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Detail Page Reliability & Discovery
-status: executing
-stopped_at: Completed 69-03-PLAN.md (search timeout + categorized errors + cancel via AbortController)
-last_updated: "2026-05-08T11:21:13.011Z"
+status: verifying
+stopped_at: Completed 69-04-PLAN.md (Settings UI exposes maxReadableMb + codeTimeoutSec)
+last_updated: "2026-05-08T11:29:43.549Z"
 last_activity: 2026-05-08
 progress:
   total_phases: 2
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ Last shipped: v1.0 (2026-04-23, archived 2026-05-08)
 
 Phase: 69 (Detail Page Reliability) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-08
 
 Progress: [░░░░░░░░░░] 0% (0/2 phases)
@@ -61,6 +61,7 @@ Progress: [░░░░░░░░░░] 0% (0/2 phases)
 - [Phase 69]: Plan 69-01: readFileContent now returns FileReadResult union (text/oversized/binary); readFileContentForce companion bypasses guards. Default limit 5 MiB via system.maxReadableFileBytes.
 - [Phase 69]: Plan 69-02: file-tree + code-editor silent .catch() blocks replaced with sonner toast.error; retry action only on read/list ops; oversized/binary files render placeholder card with same-tab force-open via readFileContentForce.
 - [Phase 69-detail-page-reliability]: Plan 69-03: searchCode now reads search.codeTimeoutSec config (default 30s) and accepts an AbortSignal; rg failures are categorized into 5 SearchErrorKind values; UI shows a Cancel button + truncated/expandable error banner driven by errorKind.
+- [Phase 69]: Plan 69-04: Settings UI now exposes system.maxReadableFileBytes (System card, MB) and search.codeTimeoutSec (Search card, s); per-card Save buttons persist values, getConfigValues hydrates on mount, live consumers pick up new values without restart.
 
 ### Pending Todos
 
@@ -73,6 +74,6 @@ Progress: [░░░░░░░░░░] 0% (0/2 phases)
 
 ## Session Continuity
 
-Last session: 2026-05-08T11:21:13.006Z
-Stopped at: Completed 69-03-PLAN.md (search timeout + categorized errors + cancel via AbortController)
+Last session: 2026-05-08T11:29:43.547Z
+Stopped at: Completed 69-04-PLAN.md (Settings UI exposes maxReadableMb + codeTimeoutSec)
 Resume file: None
