@@ -376,6 +376,11 @@ export const en: Translations = {
   "assets.loadingPreview": "Loading...",
   "assets.previewError": "Failed to load preview",
   "assets.fileTooLarge": "File too large to preview (over 1MB)",
+  "assets.lightbox.zoomActual": "Actual size",
+  "assets.lightbox.zoomFit": "Fit to window",
+  "assets.lightbox.prev": "Previous",
+  "assets.lightbox.next": "Next",
+  "assets.lightbox.close": "Close",
   // Task page (Phase 17)
   "taskPage.title": "Task Details",
   "taskPage.back": "Back",

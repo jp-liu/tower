@@ -391,6 +391,11 @@ export const zh = {
   "assets.loadingPreview": "加载中...",
   "assets.previewError": "加载预览失败",
   "assets.fileTooLarge": "文件过大，无法预览（超过 1MB）",
+  "assets.lightbox.zoomActual": "实际尺寸",
+  "assets.lightbox.zoomFit": "适应窗口",
+  "assets.lightbox.prev": "上一张",
+  "assets.lightbox.next": "下一张",
+  "assets.lightbox.close": "关闭",
   // Task page (Phase 17)
   "taskPage.title": "任务详情",
   "taskPage.back": "返回",
