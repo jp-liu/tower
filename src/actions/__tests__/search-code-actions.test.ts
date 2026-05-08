@@ -8,10 +8,20 @@ vi.mock("child_process", () => ({
   execFile: mockExecFile,
 }));
 
+// Mock getConfigValue so timeout is deterministic per-test
+vi.mock("@/actions/config-actions", () => ({
+  getConfigValue: vi.fn(async (_k: string, def: number) => def),
+}));
+
 import { searchCode } from "@/actions/search-code-actions";
+import { getConfigValue } from "@/actions/config-actions";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Reset config mock to default-pass-through behaviour each test
+  (getConfigValue as ReturnType<typeof vi.fn>).mockImplementation(
+    async (_k: string, def: number) => def
+  );
 });
 
 // Helper: build a valid rg JSON match line
@@ -56,6 +66,70 @@ function mockExecFileError(code: number, message = "Command failed") {
   );
 }
 
+// Helper: mock execFile to simulate a subprocess timeout (killed by SIGTERM)
+function mockExecFileTimeout() {
+  mockExecFile.mockImplementationOnce(
+    (
+      _cmd: string,
+      _args: string[],
+      _opts: unknown,
+      cb: (
+        err: Error & { code?: number | null; killed?: boolean; signal?: string; stderr?: string },
+        stdout: string,
+        stderr: string
+      ) => void
+    ) => {
+      const err = Object.assign(new Error("Command timed out"), {
+        killed: true,
+        signal: "SIGTERM",
+        code: null,
+      });
+      cb(err as Error & { killed: boolean; signal: string }, "", "");
+      return {};
+    }
+  );
+}
+
+// Helper: mock execFile to simulate an AbortError from caller-supplied signal
+function mockExecFileAbort() {
+  mockExecFile.mockImplementationOnce(
+    (
+      _cmd: string,
+      _args: string[],
+      _opts: unknown,
+      cb: (err: Error, stdout: string, stderr: string) => void
+    ) => {
+      const err = Object.assign(new Error("aborted"), { name: "AbortError" });
+      cb(err, "", "");
+      return {};
+    }
+  );
+}
+
+// Helper: mock execFile with permission-denied stderr
+function mockExecFilePermDenied() {
+  mockExecFile.mockImplementationOnce(
+    (
+      _cmd: string,
+      _args: string[],
+      _opts: unknown,
+      cb: (
+        err: Error & { code?: number; stderr?: string },
+        stdout: string,
+        stderr: string
+      ) => void
+    ) => {
+      const stderrMsg = "rg: /protected: Permission denied (os error 13)";
+      const err = Object.assign(new Error("Command failed"), {
+        code: 2,
+        stderr: stderrMsg,
+      });
+      cb(err, "", stderrMsg);
+      return {};
+    }
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Test 1 (SEARCH-02): rg exit 0 → returns matches array with SearchMatch objects
 // ---------------------------------------------------------------------------
@@ -91,16 +165,17 @@ describe("Test 2: rg exit 1 returns empty matches", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 3 (SEARCH-02): rg exit 2+ (error) → returns sanitized error string
+// Test 3 (SEARCH-02): rg exit 2+ (error) → returns error string + errorKind
 // ---------------------------------------------------------------------------
-describe("Test 3: rg exit 2+ returns error string", () => {
-  it("exit code 2 returns error string", async () => {
-    mockExecFileError(2, "rg error");
+describe("Test 3: rg exit 2+ returns error string and errorKind", () => {
+  it("exit code 2 returns error string with errorKind=unknown for unrecognised stderr", async () => {
+    mockExecFileError(2, "rg: some random error");
 
     const result = await searchCode("/project", "pattern");
 
     expect(result.error).toBeDefined();
     expect(typeof result.error).toBe("string");
+    expect(result.errorKind).toBe("unknown");
   });
 });
 
@@ -259,24 +334,26 @@ describe("Test 11: maxResults boundary values", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 12: error messages sanitized — no server path leaks
+// Test 12: error includes real rg stderr (desktop app — paths OK)
+// Per RELI-04 the actual rg message must surface for debugging.
 // ---------------------------------------------------------------------------
-describe("Test 12: error messages sanitized", () => {
-  it("rg error does not contain file system paths", async () => {
-    mockExecFileError(2, "rg: /secret/internal/path: Permission denied");
+describe("Test 12: error includes real rg stderr (desktop app — paths OK)", () => {
+  it("rg error contains the stderr message for debugging", async () => {
+    mockExecFilePermDenied();
 
     const result = await searchCode("/project", "pattern");
     expect(result.error).toBeDefined();
-    expect(result.error).not.toContain("/secret/internal/path");
-    expect(result.error).not.toContain("Permission denied");
+    // Per RELI-04 the actual rg message must surface for debugging
+    expect(result.error).toContain("Permission denied");
+    expect(result.errorKind).toBe("permission_denied");
   });
 });
 
 // ---------------------------------------------------------------------------
-// Test 13: execFile uses timeout option
+// Test 13: execFile uses timeout option (now configurable via search.codeTimeoutSec)
 // ---------------------------------------------------------------------------
 describe("Test 13: rg invocation includes timeout", () => {
-  it("passes timeout option to execFile", async () => {
+  it("passes timeout option to execFile (default 30s = 30_000ms)", async () => {
     const rgOutput = makeRgMatchLine("/project/src/foo.ts", 1, "hello\n", "hello", 0, 5);
     mockExecFileSuccess(rgOutput);
 
@@ -285,7 +362,7 @@ describe("Test 13: rg invocation includes timeout", () => {
     const rgCall = mockExecFile.mock.calls[0];
     expect(rgCall[0]).toMatch(/rg$/);
     const opts = rgCall[2] as { timeout?: number };
-    expect(opts.timeout).toBe(10_000);
+    expect(opts.timeout).toBe(30_000);
   });
 });
 
@@ -298,5 +375,106 @@ describe("Test 14: Windows absolute path accepted", () => {
 
     const result = await searchCode("C:\\project", "hello");
     expect(result.error).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test A (RELI-04): errorKind="timeout" on SIGTERM-killed subprocess
+// ---------------------------------------------------------------------------
+describe("Test A: errorKind=timeout on SIGTERM kill", () => {
+  it("returns errorKind=timeout when execFile killed with SIGTERM", async () => {
+    mockExecFileTimeout();
+
+    const result = await searchCode("/project", "pattern");
+
+    expect(result.errorKind).toBe("timeout");
+    expect(result.matches).toEqual([]);
+    expect(result.aborted).toBeUndefined();
+    expect(result.error).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test B (RELI-04): errorKind="permission_denied" on stderr "permission denied"
+// ---------------------------------------------------------------------------
+describe("Test B: errorKind=permission_denied on stderr permission_denied", () => {
+  it("returns errorKind=permission_denied with truncated stderr in error", async () => {
+    mockExecFilePermDenied();
+
+    const result = await searchCode("/project", "pattern");
+
+    expect(result.errorKind).toBe("permission_denied");
+    expect(result.error).toContain("Permission denied");
+    expect(result.error!.length).toBeLessThanOrEqual(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test C (RELI-05): errorKind=undefined + aborted=true on AbortError
+// ---------------------------------------------------------------------------
+describe("Test C: aborted=true when execFile rejects with AbortError", () => {
+  it("returns aborted=true and no errorKind/error when caller aborts", async () => {
+    mockExecFileAbort();
+
+    const result = await searchCode("/project", "pattern");
+
+    expect(result.aborted).toBe(true);
+    expect(result.errorKind).toBeUndefined();
+    expect(result.error).toBeUndefined();
+    expect(result.matches).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test D (RELI-04): errorKind="unknown" with truncated stderr fallback
+// ---------------------------------------------------------------------------
+describe("Test D: errorKind=unknown for unrecognized error", () => {
+  it("falls back to errorKind=unknown for unrecognised exit code/message", async () => {
+    mockExecFileError(99, "some weird error nobody knows about");
+
+    const result = await searchCode("/project", "pattern");
+
+    expect(result.errorKind).toBe("unknown");
+    expect(result.error).toBeDefined();
+    expect(result.error!.length).toBeLessThanOrEqual(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test E (RELI-03): timeout option = configured search.codeTimeoutSec * 1000
+// ---------------------------------------------------------------------------
+describe("Test E: timeout option = configured value * 1000", () => {
+  it("uses 30s default timeout (30000ms)", async () => {
+    mockExecFileError(1); // no matches
+
+    await searchCode("/project", "x");
+
+    const opts = mockExecFile.mock.calls[0][2] as { timeout?: number };
+    expect(opts.timeout).toBe(30_000);
+  });
+
+  it("uses configured timeout when getConfigValue returns 60", async () => {
+    (getConfigValue as ReturnType<typeof vi.fn>).mockResolvedValueOnce(60);
+    mockExecFileError(1);
+
+    await searchCode("/project", "x");
+
+    const opts = mockExecFile.mock.calls[0][2] as { timeout?: number };
+    expect(opts.timeout).toBe(60_000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test F (RELI-05): AbortSignal forwarded to execFile opts.signal
+// ---------------------------------------------------------------------------
+describe("Test F: signal forwarded to execFile", () => {
+  it("forwards AbortSignal to execFile opts", async () => {
+    const controller = new AbortController();
+    mockExecFileError(1);
+
+    await searchCode("/project", "x", undefined, 200, controller.signal);
+
+    const opts = mockExecFile.mock.calls[0][2] as { signal?: AbortSignal };
+    expect(opts.signal).toBe(controller.signal);
   });
 });
