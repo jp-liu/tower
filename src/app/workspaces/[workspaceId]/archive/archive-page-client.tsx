@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import { useI18n } from "@/lib/i18n";
 import { SubPageNav } from "@/components/layout/sub-page-nav";
 import { getArchivedTasks } from "@/actions/task-actions";
+import { TaskOverviewDrawer } from "@/components/task/task-overview-drawer";
 import type { TaskStatus } from "@prisma/client";
 
 interface SimpleProject {
@@ -85,6 +86,7 @@ export function ArchivePageClient({
   const [wsId, setWsId] = useState(initialWorkspaceId);
   const [projectId, setProjectId] = useState<string | null>(initialProjectId);
   const [tasks, setTasks] = useState<ArchivedTask[]>(initialTasks);
+  const [drawerTaskId, setDrawerTaskId] = useState<string | null>(null);
 
   const ws = allWorkspaces.find((w) => w.id === wsId);
   const projects = ws?.projects ?? [];
@@ -178,7 +180,16 @@ export function ArchivePageClient({
                 return (
                   <div
                     key={task.id}
-                    className="group rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:border-border/80 hover:bg-accent/30"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setDrawerTaskId(task.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setDrawerTaskId(task.id);
+                      }
+                    }}
+                    className="group cursor-pointer rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:border-border/80 hover:bg-accent/30 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
                   >
                     <div className="flex items-start gap-3">
                       <div className="mt-0.5 shrink-0">
@@ -253,6 +264,12 @@ export function ArchivePageClient({
           )}
         </div>
       </div>
+
+      <TaskOverviewDrawer
+        open={!!drawerTaskId}
+        onOpenChange={(o) => { if (!o) setDrawerTaskId(null); }}
+        taskId={drawerTaskId}
+      />
     </div>
   );
 }
