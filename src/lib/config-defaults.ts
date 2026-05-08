@@ -55,6 +55,11 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "number",
     label: "Snippet Length (characters)",
   },
+  "search.codeTimeoutSec": {
+    defaultValue: 30,
+    type: "number",
+    label: "Code Search Timeout (seconds)",
+  },
   "missions.grid.minCols": {
     defaultValue: 1,
     type: "number",

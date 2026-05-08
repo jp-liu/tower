@@ -2,6 +2,14 @@
 
 import { execFile, execFileSync } from "child_process";
 import { z } from "zod";
+import { getConfigValue } from "@/actions/config-actions";
+
+export type SearchErrorKind =
+  | "timeout"
+  | "not_installed"
+  | "permission_denied"
+  | "aborted"
+  | "unknown";
 
 /** Resolve rg binary: bundled @vscode/ripgrep → system rg fallback */
 function resolveRgPath(): string {
@@ -84,7 +92,9 @@ export interface SearchMatch {
 export interface SearchResult {
   matches: SearchMatch[];
   truncated: boolean;
+  aborted?: boolean;
   error?: string;
+  errorKind?: SearchErrorKind;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,17 +132,74 @@ interface RgLine {
 function execFileAsync(
   cmd: string,
   args: string[],
-  opts: { encoding: string; maxBuffer?: number; stdio?: unknown; timeout?: number }
+  opts: {
+    encoding: string;
+    maxBuffer?: number;
+    stdio?: unknown;
+    timeout?: number;
+    signal?: AbortSignal;
+  }
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(cmd, args, opts as Parameters<typeof execFile>[2], (err: Error | null, stdout: string | Buffer) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(typeof stdout === "string" ? stdout : stdout.toString());
+    execFile(
+      cmd,
+      args,
+      opts as Parameters<typeof execFile>[2],
+      (err: Error | null, stdout: string | Buffer, stderr: string | Buffer) => {
+        if (err) {
+          // Attach stderr for downstream categorization
+          (err as Error & { stderr?: string }).stderr =
+            typeof stderr === "string" ? stderr : stderr?.toString();
+          reject(err);
+        } else {
+          resolve(typeof stdout === "string" ? stdout : stdout.toString());
+        }
       }
-    });
+    );
   });
+}
+
+// ---------------------------------------------------------------------------
+// Categorize ripgrep failure into SearchErrorKind
+// ---------------------------------------------------------------------------
+
+function categorizeRgError(
+  err: Error & {
+    code?: number | string;
+    killed?: boolean;
+    signal?: string;
+    stderr?: string;
+    name?: string;
+  }
+): { kind: SearchErrorKind; message: string } {
+  if (err.name === "AbortError") {
+    return { kind: "aborted", message: "" };
+  }
+  if (err.killed && (err.signal === "SIGTERM" || err.signal === "SIGKILL")) {
+    return { kind: "timeout", message: err.message ?? "search timed out" };
+  }
+  const stderr = err.stderr ?? "";
+  const combined = `${err.message ?? ""} ${stderr}`.toLowerCase();
+  if (combined.includes("permission denied") || combined.includes("eacces")) {
+    return {
+      kind: "permission_denied",
+      message: stderr || err.message || "permission denied",
+    };
+  }
+  if (
+    combined.includes("not found") ||
+    combined.includes("enoent") ||
+    combined.includes("ripgrep")
+  ) {
+    return {
+      kind: "not_installed",
+      message: stderr || err.message || "ripgrep not found",
+    };
+  }
+  return {
+    kind: "unknown",
+    message: (stderr || err.message || "unknown error").slice(0, 200),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -143,7 +210,8 @@ export async function searchCode(
   localPath: string,
   pattern: string,
   glob?: string,
-  maxResults: number = 200
+  maxResults: number = 200,
+  signal?: AbortSignal
 ): Promise<SearchResult> {
   // 1. Validate inputs with Zod
   const parsed = searchCodeSchema.safeParse({ localPath, pattern, glob, maxResults });
@@ -172,37 +240,65 @@ export async function searchCode(
     };
   }
 
-  // 3. Build rg args (using bundled @vscode/ripgrep binary)
+  // 3. Resolve rg path; not_installed is a categorical error
+  let rgPath: string;
+  try {
+    rgPath = getRgPath();
+  } catch (err) {
+    return {
+      matches: [],
+      truncated: false,
+      error: (err as Error).message.slice(0, 200),
+      errorKind: "not_installed",
+    };
+  }
+
+  // 4. Build rg args (using bundled @vscode/ripgrep binary)
   const args: string[] = ["--json", "-n", safePattern];
   if (safeGlob) {
     args.push("--glob", safeGlob);
   }
   args.push(safePath);
 
-  // 5. Run rg (async — does not block event loop)
+  // 5. Read configured timeout (RELI-03)
+  const timeoutSec = await getConfigValue<number>("search.codeTimeoutSec", 30);
+  const timeoutMs = Math.max(1, timeoutSec) * 1000;
+
+  // 6. Run rg (async — does not block event loop)
   let output: string;
   try {
-    output = await execFileAsync(getRgPath(), args, {
+    output = await execFileAsync(rgPath, args, {
       encoding: "utf-8",
       maxBuffer: 10 * 1024 * 1024,
-      timeout: 10_000,
+      timeout: timeoutMs,
+      signal,
     });
   } catch (err) {
-    const rgErr = err as { code?: number; message?: string };
+    const rgErr = err as Error & {
+      code?: number;
+      killed?: boolean;
+      signal?: string;
+      stderr?: string;
+      name?: string;
+    };
     // exit code 1 = no matches (not an error)
     if (rgErr.code === 1) {
       return { matches: [], truncated: false };
     }
-    // any other exit code is an actual error — sanitize message
+    const categorized = categorizeRgError(rgErr);
+    if (categorized.kind === "aborted") {
+      return { matches: [], truncated: false, aborted: true };
+    }
     console.error("[searchCode] rg failed:", err);
     return {
       matches: [],
       truncated: false,
-      error: "搜索失败，请重试",
+      error: categorized.message.slice(0, 200),
+      errorKind: categorized.kind,
     };
   }
 
-  // 6. Parse output: split by "\n", JSON.parse each line, filter type==="match"
+  // 7. Parse output: split by "\n", JSON.parse each line, filter type==="match"
   const lines = output.split("\n");
   const matches: SearchMatch[] = [];
 
@@ -221,7 +317,7 @@ export async function searchCode(
 
     const data = parsedLine.data;
 
-    // 7. Build SearchMatch — strip localPath prefix for relative filePath
+    // 8. Build SearchMatch — strip localPath prefix for relative filePath
     const absoluteFilePath = data.path.text;
     const prefix = safePath.endsWith("/") ? safePath : safePath + "/";
     const filePath = absoluteFilePath.startsWith(prefix)
@@ -243,7 +339,7 @@ export async function searchCode(
     });
   }
 
-  // 8. Truncate at maxResults
+  // 9. Truncate at maxResults
   const truncated = matches.length > safeMaxResults;
   const finalMatches = truncated ? matches.slice(0, safeMaxResults) : matches;
 
