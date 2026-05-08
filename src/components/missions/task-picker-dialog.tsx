@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import Fuse from "fuse.js";
 import { useI18n } from "@/lib/i18n";
 import { getWorkspacesWithRecentTasks } from "@/actions/workspace-actions";
 import { getProjectTasks } from "@/actions/task-actions";
 import { startPtyExecution, resumePtyExecution } from "@/actions/agent-actions";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +21,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { Play, RotateCcw } from "lucide-react";
+import { Play, RotateCcw, Search, X as XIcon } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 type TaskStatus = "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED";
@@ -168,12 +170,14 @@ function FullTaskDialog({
   const [selectedWsId, setSelectedWsId] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (!open) return;
     setSelectedWsId("");
     setSelectedProjectId("");
     setTasks([]);
+    setSearchQuery("");
     getWorkspacesWithRecentTasks(100)
       .then(setWorkspaces)
       .catch(() => toast.error(t("missions.error.launchFailed")));
@@ -192,6 +196,48 @@ function FullTaskDialog({
       .catch(() => toast.error(t("missions.error.launchFailed")));
   }, [selectedProjectId, t]);
 
+  // Flatten all active tasks across workspaces (for Fuse + result rendering)
+  interface FlatTaskRow {
+    task: TaskItem;
+    workspaceName: string;
+    projectName: string;
+  }
+  const allTasks = useMemo<FlatTaskRow[]>(() => {
+    const rows: FlatTaskRow[] = [];
+    for (const ws of workspaces) {
+      for (const proj of ws.projects) {
+        for (const tk of proj.tasks) {
+          if (tk.status === "TODO" || tk.status === "IN_PROGRESS" || tk.status === "IN_REVIEW") {
+            rows.push({
+              task: tk,
+              workspaceName: ws.name,
+              projectName: proj.alias ?? proj.name,
+            });
+          }
+        }
+      }
+    }
+    return rows;
+  }, [workspaces]);
+
+  const fuse = useMemo(
+    () =>
+      new Fuse(allTasks, {
+        keys: ["task.title"],
+        threshold: 0.4,
+        distance: 200,
+      }),
+    [allTasks]
+  );
+
+  const searchResults = useMemo<FlatTaskRow[]>(() => {
+    const q = searchQuery.trim();
+    if (!q) return [];
+    return fuse.search(q, { limit: 30 }).map((r) => r.item);
+  }, [fuse, searchQuery]);
+
+  const isSearching = searchQuery.trim().length > 0;
+
   const selectedWs = workspaces.find((w) => w.id === selectedWsId);
   const projects = selectedWs?.projects ?? [];
 
@@ -201,34 +247,83 @@ function FullTaskDialog({
         <DialogHeader>
           <DialogTitle>{t("missions.fullPickerTitle")}</DialogTitle>
         </DialogHeader>
-        <div className="flex items-center gap-2 shrink-0">
-          <Select value={selectedWsId} onValueChange={(v) => { setSelectedWsId(v ?? ""); setSelectedProjectId(""); }}>
-            <SelectTrigger id="full-picker-ws" className="w-48 h-8">
-              <span className="truncate">
-                {workspaces.find((w) => w.id === selectedWsId)?.name ?? t("missions.launcher.selectWorkspace")}
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              {workspaces.map((ws) => (
-                <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={selectedProjectId} onValueChange={(v) => setSelectedProjectId(v ?? "")} disabled={!selectedWsId}>
-            <SelectTrigger id="full-picker-proj" className="w-48 h-8">
-              <span className="truncate">
-                {projects.find((p) => p.id === selectedProjectId)?.name ?? t("missions.launcher.selectProject")}
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              {projects.map((p) => (
-                <SelectItem key={p.id} value={p.id}>{p.alias ?? p.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex flex-col gap-2 shrink-0">
+          {/* Search input row */}
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t("missions.fullPicker.searchPlaceholder")}
+              className="pl-8 pr-8 h-8"
+            />
+            {searchQuery && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+                onClick={() => setSearchQuery("")}
+                aria-label={t("missions.fullPicker.clearSearch")}
+              >
+                <XIcon className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+          {/* Workspace/Project Selects — hidden when searching */}
+          {!isSearching && (
+            <div className="flex items-center gap-2">
+              <Select value={selectedWsId} onValueChange={(v) => { setSelectedWsId(v ?? ""); setSelectedProjectId(""); }}>
+                <SelectTrigger id="full-picker-ws" className="w-48 h-8">
+                  <span className="truncate">
+                    {workspaces.find((w) => w.id === selectedWsId)?.name ?? t("missions.launcher.selectWorkspace")}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {workspaces.map((ws) => (
+                    <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={selectedProjectId} onValueChange={(v) => setSelectedProjectId(v ?? "")} disabled={!selectedWsId}>
+                <SelectTrigger id="full-picker-proj" className="w-48 h-8">
+                  <span className="truncate">
+                    {projects.find((p) => p.id === selectedProjectId)?.name ?? t("missions.launcher.selectProject")}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.alias ?? p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
         <ScrollArea className="flex-1 min-h-0 -mx-2">
-          {tasks.length === 0 && selectedProjectId ? (
+          {isSearching ? (
+            searchResults.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                {t("missions.fullPicker.noSearchResults")}
+              </p>
+            ) : (
+              searchResults.map((row) => (
+                <div key={row.task.id}>
+                  <div className="px-3 pt-2 pb-0.5 text-[11px] text-muted-foreground">
+                    {row.workspaceName} · {row.projectName}
+                  </div>
+                  <TaskRow
+                    task={row.task}
+                    isRunning={runningTaskIds.has(row.task.id)}
+                    launchingId={launchingId}
+                    onLaunchNew={onLaunchNew}
+                    onResume={onResume}
+                    t={t}
+                  />
+                </div>
+              ))
+            )
+          ) : tasks.length === 0 && selectedProjectId ? (
             <p className="text-sm text-muted-foreground text-center py-8">{t("missions.launcher.noTasks")}</p>
           ) : tasks.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">{t("missions.fullPickerHint")}</p>
