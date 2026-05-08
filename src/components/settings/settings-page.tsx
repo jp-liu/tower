@@ -247,13 +247,18 @@ const EMPTY_FORM: RuleEditState = {
   priority: 0,
 };
 
-type SystemForm = { maxUploadMb: number; maxConcurrent: number };
+type SystemForm = {
+  maxUploadMb: number;
+  maxConcurrent: number;
+  maxReadableMb: number;
+};
 type GitParamsForm = { timeoutSec: number };
 type SearchForm = {
   resultLimit: number;
   allModeCap: number;
   debounceMs: number;
   snippetLength: number;
+  codeTimeoutSec: number;
 };
 type MissionsGridForm = {
   minCols: number;
@@ -316,6 +321,7 @@ export function SettingsPage() {
   const [systemForm, setSystemForm] = useState<SystemForm>({
     maxUploadMb: 50,
     maxConcurrent: 3,
+    maxReadableMb: 5,
   });
   const [gitParamsForm, setGitParamsForm] = useState<GitParamsForm>({
     timeoutSec: 30,
@@ -325,6 +331,7 @@ export function SettingsPage() {
     allModeCap: 5,
     debounceMs: 250,
     snippetLength: 80,
+    codeTimeoutSec: 30,
   });
   const [missionsGridForm, setMissionsGridForm] = useState<MissionsGridForm>({
     minCols: 1,
@@ -401,21 +408,26 @@ export function SettingsPage() {
     getConfigValues([
       "system.maxUploadBytes",
       "system.maxConcurrentExecutions",
+      "system.maxReadableFileBytes",
       "git.timeoutSec",
       "search.resultLimit",
       "search.allModeCap",
       "search.debounceMs",
       "search.snippetLength",
+      "search.codeTimeoutSec",
       "missions.grid.minCols",
       "missions.grid.maxCols",
       "missions.grid.minRows",
       "missions.grid.maxRows",
     ]).then((cfg) => {
       const maxBytes = (cfg["system.maxUploadBytes"] as number) ?? 52428800;
+      const maxReadableBytes =
+        (cfg["system.maxReadableFileBytes"] as number) ?? 5_242_880;
       setSystemForm({
         maxUploadMb: Math.round(maxBytes / 1024 / 1024),
         maxConcurrent:
           (cfg["system.maxConcurrentExecutions"] as number) ?? 3,
+        maxReadableMb: Math.round(maxReadableBytes / 1024 / 1024),
       });
       setGitParamsForm({
         timeoutSec: (cfg["git.timeoutSec"] as number) ?? 30,
@@ -425,6 +437,7 @@ export function SettingsPage() {
         allModeCap: (cfg["search.allModeCap"] as number) ?? 5,
         debounceMs: (cfg["search.debounceMs"] as number) ?? 250,
         snippetLength: (cfg["search.snippetLength"] as number) ?? 80,
+        codeTimeoutSec: (cfg["search.codeTimeoutSec"] as number) ?? 30,
       });
       setMissionsGridForm({
         minCols: (cfg["missions.grid.minCols"] as number) ?? 1,
@@ -568,6 +581,10 @@ export function SettingsPage() {
       "system.maxConcurrentExecutions",
       systemForm.maxConcurrent
     );
+    await setConfigValue(
+      "system.maxReadableFileBytes",
+      systemForm.maxReadableMb * 1024 * 1024
+    );
   };
 
   const handleSaveGitParams = async () => {
@@ -579,6 +596,10 @@ export function SettingsPage() {
     await setConfigValue("search.allModeCap", searchForm.allModeCap);
     await setConfigValue("search.debounceMs", searchForm.debounceMs);
     await setConfigValue("search.snippetLength", searchForm.snippetLength);
+    await setConfigValue(
+      "search.codeTimeoutSec",
+      searchForm.codeTimeoutSec
+    );
   };
 
   const handleSaveMissionsGrid = async () => {
