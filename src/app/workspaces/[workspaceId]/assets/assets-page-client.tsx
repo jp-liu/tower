@@ -84,6 +84,18 @@ export function AssetsPageClient({
         : null
     : null;
 
+  // Image-only asset list, in same order as the AssetList renders, for lightbox prev/next
+  const imageAssets = assets
+    .filter((a) => a.mimeType?.startsWith("image/"))
+    .map((a) => ({
+      id: a.id,
+      url: localPathToApiUrl(a.path),
+      filename: a.filename,
+    }));
+  const currentImageIndex = previewAsset
+    ? imageAssets.findIndex((a) => a.id === previewAsset.id)
+    : -1;
+
   const handlePreview = (asset: AssetItemType) => {
     const isImage = asset.mimeType?.startsWith("image/");
     const isText = /\.(txt|md|json)$/i.test(asset.filename);
@@ -211,10 +223,32 @@ export function AssetsPageClient({
       </div>
 
       <ImageLightbox
-        imageUrl={previewType === "image" && previewAsset ? localPathToApiUrl(previewAsset.path) : null}
-        filename={previewAsset?.filename ?? ""}
+        imageUrl={
+          previewType === "image" && currentImageIndex >= 0
+            ? imageAssets[currentImageIndex].url
+            : null
+        }
+        filename={
+          previewType === "image" && currentImageIndex >= 0
+            ? imageAssets[currentImageIndex].filename
+            : ""
+        }
         open={previewType === "image"}
         onOpenChange={(open) => { if (!open) setPreviewAsset(null); }}
+        assets={imageAssets.map(({ url, filename }) => ({ url, filename }))}
+        currentIndex={currentImageIndex >= 0 ? currentImageIndex : undefined}
+        onIndexChange={(nextIndex) => {
+          const target = imageAssets[nextIndex];
+          if (!target) return;
+          // Find the original ProjectAssetWithTask to preserve PreviewAsset shape
+          const orig = assets.find((a) => a.id === target.id);
+          if (!orig) return;
+          setPreviewAsset({
+            ...orig,
+            taskId: orig.task?.id ?? null,
+            taskTitle: orig.task?.title ?? null,
+          });
+        }}
       />
       <TextPreviewDialog
         url={previewType === "text" && previewAsset ? localPathToApiUrl(previewAsset.path) : null}
