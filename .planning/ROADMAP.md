@@ -17,52 +17,19 @@
 - ✅ **v0.96 UX Polish & Knowledge Capture** — Phases 55-60 (shipped 2026-04-20)
 - ✅ **v0.97 Workflow Enhancement & Developer Experience** — Phases 61-64 (shipped 2026-04-21)
 - ✅ **v1.0 首次使用引导 & 任务完成通知** — Phases 65-68 (shipped 2026-04-23)
-- 🚧 **v1.1 Detail Page Reliability & Discovery** — Phases 69-70 (planning)
+- ✅ **v1.1 Detail Page Reliability & Discovery** — Phases 69-70 (shipped 2026-05-08)
 
 ## Phases
 
-### 🚧 v1.1 Detail Page Reliability & Discovery (In Progress)
+<details>
+<summary>✅ v1.1 Detail Page Reliability & Discovery (Phases 69-70) — SHIPPED 2026-05-08</summary>
 
-#### Phase 69: Detail Page Reliability
+- [x] Phase 69: Detail Page Reliability (4/4 plans) — completed 2026-05-08
+- [x] Phase 70: Task Discovery & Image Preview (3/3 plans) — completed 2026-05-08
 
-**Goal:** Detail page operations (file IO, code search) currently swallow errors silently and have hard-coded limits. Make failures visible, configurable, and recoverable.
+See: [milestones/v1.1-ROADMAP.md](./milestones/v1.1-ROADMAP.md) for full details.
 
-**Requirements:** RELI-01, RELI-02, RELI-03, RELI-04, RELI-05
-
-**Plans:** 4 plans
-
-Plans:
-- [x] 69-01-PLAN.md — Foundation: system.maxReadableFileBytes config + readFileContent kind detection (RELI-02)
-- [x] 69-02-PLAN.md — File IO error toasts + retry across editor and file-tree, placeholder card for oversized/binary (RELI-01)
-- [x] 69-03-PLAN.md — Code search timeout config + AbortController cancel + categorized error banner (RELI-03, RELI-04, RELI-05)
-- [x] 69-04-PLAN.md — Settings UI for codeTimeoutSec and maxReadableFileBytes inputs (RELI-02, RELI-03)
-
-**Success Criteria:**
-- File read/write/list/rename/delete errors surface to the user with retry affordance
-- Large (>5MB default) and binary files prompt user instead of corrupting UTF-8
-- Code search timeout is configurable in Settings (default 30s)
-- ripgrep error messages surface to user (not generic "搜索失败")
-- In-flight code search is cancellable from UI
-
-#### Phase 70: Task Discovery & Image Preview
-
-**Goal:** Archive page is a dead-end (cards aren't clickable), Missions task picker shows too few options and has no search across workspaces, image lightbox is unusable when zoomed.
-
-**Requirements:** DISC-01, DISC-02, DISC-03, DISC-04, IMG-01, IMG-02, IMG-03
-
-**Plans:** 3 plans
-
-Plans:
-- [x] 70-01-PLAN.md — Archive cards open TaskOverviewDrawer + file-changes summary + rerun button (DISC-01, DISC-02)
-- [x] 70-02-PLAN.md — Missions quick picker 3→5 + cross-workspace fuzzy search in FullTaskDialog (DISC-03, DISC-04)
-- [x] 70-03-PLAN.md — ImageLightbox zoom toggle + pointer pan + prev/next navigation across project images (IMG-01, IMG-02, IMG-03)
-
-**Success Criteria:**
-- Clicking an archived task card opens TaskOverviewDrawer with file changes and a rerun action
-- Missions task picker shows 5 recent tasks per project (was 3) and supports cross-workspace search
-- Image lightbox supports fit/100% zoom modes (centered), pan when zoomed, and ←/→ navigation between project assets
-
-
+</details>
 
 <details>
 <summary>✅ v0.1 Settings (Phases 1-3) — SHIPPED 2026-03-27</summary>
