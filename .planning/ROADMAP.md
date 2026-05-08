@@ -29,6 +29,14 @@
 
 **Requirements:** RELI-01, RELI-02, RELI-03, RELI-04, RELI-05
 
+**Plans:** 4 plans
+
+Plans:
+- [x] 69-01-PLAN.md — Foundation: system.maxReadableFileBytes config + readFileContent kind detection (RELI-02)
+- [ ] 69-02-PLAN.md — File IO error toasts + retry across editor and file-tree, placeholder card for oversized/binary (RELI-01)
+- [ ] 69-03-PLAN.md — Code search timeout config + AbortController cancel + categorized error banner (RELI-03, RELI-04, RELI-05)
+- [ ] 69-04-PLAN.md — Settings UI for codeTimeoutSec and maxReadableFileBytes inputs (RELI-02, RELI-03)
+
 **Success Criteria:**
 - File read/write/list/rename/delete errors surface to the user with retry affordance
 - Large (>5MB default) and binary files prompt user instead of corrupting UTF-8
