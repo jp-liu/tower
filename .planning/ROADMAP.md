@@ -17,8 +17,16 @@
 - ✅ **v0.96 UX Polish & Knowledge Capture** — Phases 55-60 (shipped 2026-04-20)
 - ✅ **v0.97 Workflow Enhancement & Developer Experience** — Phases 61-64 (shipped 2026-04-21)
 - ✅ **v1.0 首次使用引导 & 任务完成通知** — Phases 65-68 (shipped 2026-04-23)
+- 🚧 **v1.1 Detail Page Reliability & Discovery** — Phases 69-70 (planning)
 
 ## Phases
+
+### 🚧 v1.1 Detail Page Reliability & Discovery (In Progress)
+
+- [ ] **Phase 69: Detail Page Reliability** (5 requirements) — File IO error visibility, large/binary file protection, code search timeout/errors/cancel
+- [ ] **Phase 70: Task Discovery & Image Preview** (7 requirements) — Archive drawer wiring, Missions recent count + search, image lightbox fit/pan/navigation
+
+
 
 <details>
 <summary>✅ v0.1 Settings (Phases 1-3) — SHIPPED 2026-03-27</summary>
