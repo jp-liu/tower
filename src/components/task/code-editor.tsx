@@ -6,11 +6,17 @@ import { loader } from "@monaco-editor/react";
 import { useTheme } from "next-themes";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
-import { readFileContent, writeFileContent } from "@/actions/file-actions";
+import { FileWarning, FileX } from "lucide-react";
+import { readFileContent, writeFileContent, readFileContentForce } from "@/actions/file-actions";
+import { Button } from "@/components/ui/button";
 import { EditorTabs } from "./editor-tabs";
 import type { EditorTab } from "./editor-tabs";
 import { DiffEditorView } from "./diff-editor";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+
+type GuardInfo =
+  | { kind: "oversized"; size: number; limit: number }
+  | { kind: "binary"; size: number };
 
 // Load Monaco from local public/vs (copied from node_modules by postinstall script)
 loader.config({
@@ -69,6 +75,7 @@ export function CodeEditor({
   const monacoTheme = resolvedTheme === "dark" ? "vs-dark" : "light";
 
   const [tabs, setTabs] = useState<EditorTab[]>([]);
+  const [guardByPath, setGuardByPath] = useState<Map<string, GuardInfo>>(new Map());
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
   const editorRef = useRef<unknown>(null);
   const monacoRef = useRef<unknown>(null);
@@ -99,14 +106,6 @@ export function CodeEditor({
   useEffect(() => {
     onSaveRef.current = onSave;
   }, [onSave]);
-
-  function showToast(type: "success" | "error") {
-    if (type === "success") {
-      toast.success(t("editor.saveSuccess"));
-    } else {
-      toast.error(t("editor.saveError"));
-    }
-  }
 
   // Sync Monaco theme when resolvedTheme changes (D-05)
   useEffect(() => {
@@ -144,29 +143,54 @@ export function CodeEditor({
     const filename = relativePath.split("/").pop() ?? relativePath;
     const requestedPath = selectedFilePath;
 
-    readFileContent(worktreePath, relativePath)
-      .then((content) => {
-        // Ignore if user has already clicked a different file (generation mismatch)
-        if (fileLoadGenRef.current !== thisGen) return;
+    const loadOnce = () => {
+      readFileContent(worktreePath, relativePath)
+        .then((result) => {
+          // Ignore if user has already clicked a different file (generation mismatch)
+          if (fileLoadGenRef.current !== thisGen) return;
 
-        const newTab: EditorTab = {
-          path: requestedPath,
-          relativePath,
-          filename,
-          content,
-          isDirty: false,
-        };
+          if (result.kind !== "text") {
+            // Oversized or binary — store guard info and open empty tab as a placeholder host
+            setGuardByPath((prev) => {
+              const next = new Map(prev);
+              next.set(requestedPath, result);
+              return next;
+            });
+            const newTab: EditorTab = {
+              path: requestedPath,
+              relativePath,
+              filename,
+              content: "",
+              isDirty: false,
+            };
+            setTabs((prev) => (prev.some((t) => t.path === requestedPath) ? prev : [...prev, newTab]));
+            setActiveTabPath(requestedPath);
+            onFilePathChange?.(requestedPath);
+            return;
+          }
 
-        setTabs((prev) => {
-          if (prev.some((t) => t.path === requestedPath)) return prev;
-          return [...prev, newTab];
+          const newTab: EditorTab = {
+            path: requestedPath,
+            relativePath,
+            filename,
+            content: result.content,
+            isDirty: false,
+          };
+
+          setTabs((prev) => {
+            if (prev.some((t) => t.path === requestedPath)) return prev;
+            return [...prev, newTab];
+          });
+          setActiveTabPath(requestedPath);
+          onFilePathChange?.(requestedPath);
+        })
+        .catch(() => {
+          toast.error(t("codeEditor.readError"), {
+            action: { label: t("codeEditor.retryAction"), onClick: loadOnce },
+          });
         });
-        setActiveTabPath(requestedPath);
-        onFilePathChange?.(requestedPath);
-      })
-      .catch(() => {
-        // Silently fail — file may not be readable
-      });
+    };
+    loadOnce();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFilePath, worktreePath]);
 
@@ -185,26 +209,42 @@ export function CodeEditor({
       return;
     }
 
-    readFileContent(worktreePath, relativePath)
-      .then((modifiedContent) => {
-        const newTab: EditorTab = {
-          path: diffTabKey,
-          relativePath,
-          filename,
-          content: modifiedContent,
-          isDirty: false,
-          isDiff: true,
-          originalContent,
-        };
-        setTabs((prev) => {
-          if (prev.some((t) => t.path === diffTabKey)) return prev;
-          return [...prev, newTab];
+    const loadDiffOnce = () => {
+      readFileContent(worktreePath, relativePath)
+        .then((result) => {
+          if (result.kind !== "text") {
+            // Diff mode does not support placeholder cards — surface the guard reason as a plain toast.
+            toast.error(
+              t(
+                result.kind === "oversized"
+                  ? "codeEditor.fileGuard.oversizedTitle"
+                  : "codeEditor.fileGuard.binaryTitle"
+              )
+            );
+            return;
+          }
+          const newTab: EditorTab = {
+            path: diffTabKey,
+            relativePath,
+            filename,
+            content: result.content,
+            isDirty: false,
+            isDiff: true,
+            originalContent,
+          };
+          setTabs((prev) => {
+            if (prev.some((t) => t.path === diffTabKey)) return prev;
+            return [...prev, newTab];
+          });
+          setActiveTabPath(diffTabKey);
+        })
+        .catch(() => {
+          toast.error(t("codeEditor.readError"), {
+            action: { label: t("codeEditor.retryAction"), onClick: loadDiffOnce },
+          });
         });
-        setActiveTabPath(diffTabKey);
-      })
-      .catch(() => {
-        // file not readable
-      });
+    };
+    loadDiffOnce();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diffFileRequest, worktreePath]);
 
@@ -269,26 +309,30 @@ export function CodeEditor({
       KeyCode: { KeyS: number };
     };
 
+    const saveActiveTab = async () => {
+      const tab = activeTabRef.current;
+      if (!tab || !tab.isDirty) return;
+      try {
+        await writeFileContent(worktreePath, tab.relativePath, tab.content);
+        setTabs((prev) =>
+          prev.map((tt) =>
+            tt.path === tab.path ? { ...tt, isDirty: false } : tt
+          )
+        );
+        toast.success(t("editor.saveSuccess"));
+        onSaveRef.current?.();
+      } catch {
+        toast.error(t("editor.saveError"), {
+          action: { label: t("codeEditor.retryAction"), onClick: () => { void saveActiveTab(); } },
+        });
+      }
+    };
+
     e.addAction({
       id: "save-file",
       label: "Save File",
       keybindings: [m.KeyMod.CtrlCmd | m.KeyCode.KeyS],
-      run: async () => {
-        const tab = activeTabRef.current;
-        if (!tab || !tab.isDirty) return;
-        try {
-          await writeFileContent(worktreePath, tab.relativePath, tab.content);
-          setTabs((prev) =>
-            prev.map((t) =>
-              t.path === tab.path ? { ...t, isDirty: false } : t
-            )
-          );
-          showToast("success");
-          onSaveRef.current?.();
-        } catch {
-          showToast("error");
-        }
-      },
+      run: saveActiveTab,
     });
   }
 
@@ -304,6 +348,14 @@ export function CodeEditor({
     } | undefined;
     if (model?.dispose) model.dispose();
     modelsRef.current.delete(path);
+
+    // Clear guard entry if present (oversized/binary placeholder)
+    setGuardByPath((prev) => {
+      if (!prev.has(path)) return prev;
+      const next = new Map(prev);
+      next.delete(path);
+      return next;
+    });
 
     setTabs((prev) => {
       const filtered = prev.filter((t) => t.path !== path);
@@ -337,6 +389,65 @@ export function CodeEditor({
             {t("editor.selectFileHint")}
           </p>
         </div>
+      ) : activeTab && guardByPath.has(activeTab.path) ? (
+        (() => {
+          const guard = guardByPath.get(activeTab.path)!;
+          const isOversized = guard.kind === "oversized";
+          const Icon = isOversized ? FileWarning : FileX;
+          const title = t(
+            isOversized
+              ? "codeEditor.fileGuard.oversizedTitle"
+              : "codeEditor.fileGuard.binaryTitle"
+          );
+          const sizeStr = `${(guard.size / 1024 / 1024).toFixed(2)} MB`;
+          const limitStr = isOversized
+            ? `${(guard.limit / 1024 / 1024).toFixed(2)} MB`
+            : "";
+          const desc = t(
+            isOversized
+              ? "codeEditor.fileGuard.oversizedBody"
+              : "codeEditor.fileGuard.binaryBody"
+          )
+            .replace("{size}", sizeStr)
+            .replace("{limit}", limitStr);
+
+          return (
+            <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
+              <Icon className="h-10 w-10 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium text-foreground">{title}</p>
+                <p className="mt-1 text-xs text-muted-foreground max-w-[360px]">{desc}</p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  toast.warning(t("codeEditor.fileGuard.forceOpenWarning"));
+                  readFileContentForce(worktreePath, activeTab.relativePath)
+                    .then(({ content }) => {
+                      // Force-open replaces the placeholder content in the SAME tab.
+                      // Clearing the guard entry causes this branch to no longer match,
+                      // so the editor will render the now-populated tab.content normally.
+                      setGuardByPath((prev) => {
+                        const next = new Map(prev);
+                        next.delete(activeTab.path);
+                        return next;
+                      });
+                      setTabs((prev) =>
+                        prev.map((tt) =>
+                          tt.path === activeTab.path
+                            ? { ...tt, content, isDirty: false }
+                            : tt
+                        )
+                      );
+                    })
+                    .catch(() => toast.error(t("codeEditor.readError")));
+                }}
+              >
+                {t("codeEditor.fileGuard.forceOpenAction")}
+              </Button>
+            </div>
+          );
+        })()
       ) : activeTab?.isDiff ? (
         <div className="flex-1 min-h-0">
           <ErrorBoundary>
