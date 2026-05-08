@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Detail Page Reliability & Discovery
 status: executing
-stopped_at: "Completed 69-01-PLAN.md (foundation: file IO guards + i18n keys)"
-last_updated: "2026-05-08T10:48:16.229Z"
+stopped_at: Completed 69-02-PLAN.md (file IO error toasts + placeholder card)
+last_updated: "2026-05-08T11:06:42.174Z"
 last_activity: 2026-05-08
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ Last shipped: v1.0 (2026-04-23, archived 2026-05-08)
 ## Current Position
 
 Phase: 69 (Detail Page Reliability) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-05-08
 
@@ -59,6 +59,7 @@ Progress: [░░░░░░░░░░] 0% (0/2 phases)
 - Git robustness deliberately deferred to v1.2 (separate milestone) — keeps v1.1 scope tight
 - No PROJECT.md created — project's existing convention skips it
 - [Phase 69]: Plan 69-01: readFileContent now returns FileReadResult union (text/oversized/binary); readFileContentForce companion bypasses guards. Default limit 5 MiB via system.maxReadableFileBytes.
+- [Phase 69]: Plan 69-02: file-tree + code-editor silent .catch() blocks replaced with sonner toast.error; retry action only on read/list ops; oversized/binary files render placeholder card with same-tab force-open via readFileContentForce.
 
 ### Pending Todos
 
@@ -71,6 +72,6 @@ Progress: [░░░░░░░░░░] 0% (0/2 phases)
 
 ## Session Continuity
 
-Last session: 2026-05-08T10:48:16.226Z
-Stopped at: Completed 69-01-PLAN.md (foundation: file IO guards + i18n keys)
+Last session: 2026-05-08T11:06:42.171Z
+Stopped at: Completed 69-02-PLAN.md (file IO error toasts + placeholder card)
 Resume file: None
