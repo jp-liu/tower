@@ -219,6 +219,8 @@ export const zh = {
   "settings.config.system.maxUploadHint": "单个文件允许的最大上传大小",
   "settings.config.system.maxConcurrent": "最大并发执行数",
   "settings.config.system.maxConcurrentHint": "同时运行的 AI 任务上限",
+  "settings.config.system.maxReadable": "可读文件大小上限",
+  "settings.config.system.maxReadableHint": "代码编辑器可直接打开的文件最大大小（超过将提示强制打开）",
   "settings.config.system.saved": "系统参数已保存",
   // Git params section
   "settings.config.gitParams.title": "Git 参数",
@@ -237,6 +239,8 @@ export const zh = {
   "settings.config.search.debounceMsHint": "输入停止后等待多久执行搜索",
   "settings.config.search.snippetLength": "摘要长度",
   "settings.config.search.snippetLengthHint": "搜索结果预览文本的最大字符数",
+  "settings.config.search.codeTimeout": "代码搜索超时",
+  "settings.config.search.codeTimeoutHint": "ripgrep 搜索的最长执行时间",
   "settings.config.search.saved": "搜索参数已保存",
   // Workspace landing
   "workspace.selectHint": "选择一个工作空间",

@@ -208,6 +208,8 @@ export const en: Translations = {
   "settings.config.system.maxUploadHint": "Maximum allowed size for a single file upload",
   "settings.config.system.maxConcurrent": "Max Concurrent Executions",
   "settings.config.system.maxConcurrentHint": "Maximum number of AI tasks running simultaneously",
+  "settings.config.system.maxReadable": "Max Readable File Size",
+  "settings.config.system.maxReadableHint": "Maximum file size the code editor opens directly (larger files prompt for force-open)",
   "settings.config.system.saved": "System parameters saved",
   // Git params section
   "settings.config.gitParams.title": "Git Parameters",
@@ -226,6 +228,8 @@ export const en: Translations = {
   "settings.config.search.debounceMsHint": "Wait time after typing stops before executing search",
   "settings.config.search.snippetLength": "Snippet Length",
   "settings.config.search.snippetLengthHint": "Maximum characters for search result preview text",
+  "settings.config.search.codeTimeout": "Code Search Timeout",
+  "settings.config.search.codeTimeoutHint": "Maximum execution time for ripgrep search",
   "settings.config.search.saved": "Search parameters saved",
   "workspace.selectHint": "Select a workspace",
   "workspace.selectDesc": "Choose a workspace from the sidebar",
