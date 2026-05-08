@@ -269,7 +269,7 @@ export function TaskPickerDialog({
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    getWorkspacesWithRecentTasks(3)
+    getWorkspacesWithRecentTasks(5)
       .then(setWorkspaces)
       .catch(() => toast.error(t("missions.error.launchFailed")))
       .finally(() => setLoading(false));
