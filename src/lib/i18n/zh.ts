@@ -698,6 +698,15 @@ export const zh = {
   "codeSearch.rgInstallSuccess": "ripgrep 安装成功",
   "codeSearch.rgInstallFailed": "安装失败，请手动安装",
   "codeSearch.rgDownloadPage": "前往官网下载",
+  // Code editor file guard (Phase 69)
+  "codeEditor.fileGuard.oversizedTitle": "文件过大",
+  "codeEditor.fileGuard.oversizedBody": "文件大小 {size}，超过限制 {limit}。直接打开可能导致浏览器卡顿。",
+  "codeEditor.fileGuard.binaryTitle": "二进制文件",
+  "codeEditor.fileGuard.binaryBody": "检测到二进制内容，按 UTF-8 打开会出现乱码。",
+  "codeEditor.fileGuard.forceOpenAction": "强制打开 (UTF-8)",
+  "codeEditor.fileGuard.forceOpenWarning": "已强制打开，可能出现乱码或卡顿",
+  "codeEditor.readError": "读取文件失败",
+  "codeEditor.retryAction": "重试",
   "git.discardFile": "放弃此文件更改",
   "git.discardFileSuccess": "已放弃文件更改",
   // Notifications (Phase 66)

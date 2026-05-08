@@ -683,6 +683,15 @@ export const en: Translations = {
   "codeSearch.rgInstallSuccess": "ripgrep installed successfully",
   "codeSearch.rgInstallFailed": "Installation failed, please install manually",
   "codeSearch.rgDownloadPage": "Download Page",
+  // Code editor file guard (Phase 69)
+  "codeEditor.fileGuard.oversizedTitle": "File too large",
+  "codeEditor.fileGuard.oversizedBody": "File size {size} exceeds limit {limit}. Opening may freeze the browser.",
+  "codeEditor.fileGuard.binaryTitle": "Binary file",
+  "codeEditor.fileGuard.binaryBody": "Binary content detected; UTF-8 decoding will produce garbled text.",
+  "codeEditor.fileGuard.forceOpenAction": "Force open (UTF-8)",
+  "codeEditor.fileGuard.forceOpenWarning": "Force-opened — content may be garbled or slow",
+  "codeEditor.readError": "Failed to read file",
+  "codeEditor.retryAction": "Retry",
   "git.discardFile": "Discard file changes",
   "git.discardFileSuccess": "File changes discarded",
   // Notifications (Phase 66)
