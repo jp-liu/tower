@@ -682,6 +682,11 @@ export const en: Translations = {
   "taskDrawer.lastExecution": "Last Execution",
   "taskDrawer.noDescription": "No description",
   "taskDrawer.noExecution": "No execution history",
+  "taskDrawer.fileChanges": "File changes",
+  "taskDrawer.noFileChanges": "No file changes",
+  "taskDrawer.rerun": "Rerun task",
+  "taskDrawer.rerunStarted": "Task rerun started",
+  "taskDrawer.rerunFailed": "Failed to start rerun",
   // Code search (Phase 64)
   "codeSearch.patternPlaceholder": "Search code (regex supported)",
   "codeSearch.globPlaceholder": "File filter, e.g. *.ts",
