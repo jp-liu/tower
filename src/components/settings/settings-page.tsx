@@ -1427,6 +1427,32 @@ export function SettingsPage() {
                 className="w-24 text-right rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
               />
             </div>
+            <div className="flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <label className="text-sm font-medium">
+                  {t("settings.config.system.maxReadable")}
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.config.system.maxReadableHint")}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={systemForm.maxReadableMb}
+                  onChange={(e) =>
+                    setSystemForm((f) => ({
+                      ...f,
+                      maxReadableMb: Number(e.target.value),
+                    }))
+                  }
+                  className="w-24 text-right rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
+                />
+                <span className="text-sm text-muted-foreground">MB</span>
+              </div>
+            </div>
           </div>
           <Button onClick={handleSaveSystem} className="rounded-lg">
             {t("common.save")}
@@ -1579,6 +1605,33 @@ export function SettingsPage() {
                 }
                 className="w-24 text-right rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
               />
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <label className="text-sm font-medium">
+                  {t("settings.config.search.codeTimeout")}
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.config.search.codeTimeoutHint")}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={5}
+                  max={300}
+                  step={5}
+                  value={searchForm.codeTimeoutSec}
+                  onChange={(e) =>
+                    setSearchForm((f) => ({
+                      ...f,
+                      codeTimeoutSec: Number(e.target.value),
+                    }))
+                  }
+                  className="w-24 text-right rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
+                />
+                <span className="text-sm text-muted-foreground">s</span>
+              </div>
             </div>
           </div>
           <Button onClick={handleSaveSearch} className="rounded-lg">
