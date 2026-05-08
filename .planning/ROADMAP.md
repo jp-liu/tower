@@ -23,8 +23,29 @@
 
 ### 🚧 v1.1 Detail Page Reliability & Discovery (In Progress)
 
-- [ ] **Phase 69: Detail Page Reliability** (5 requirements) — File IO error visibility, large/binary file protection, code search timeout/errors/cancel
-- [ ] **Phase 70: Task Discovery & Image Preview** (7 requirements) — Archive drawer wiring, Missions recent count + search, image lightbox fit/pan/navigation
+#### Phase 69: Detail Page Reliability
+
+**Goal:** Detail page operations (file IO, code search) currently swallow errors silently and have hard-coded limits. Make failures visible, configurable, and recoverable.
+
+**Requirements:** RELI-01, RELI-02, RELI-03, RELI-04, RELI-05
+
+**Success Criteria:**
+- File read/write/list/rename/delete errors surface to the user with retry affordance
+- Large (>5MB default) and binary files prompt user instead of corrupting UTF-8
+- Code search timeout is configurable in Settings (default 30s)
+- ripgrep error messages surface to user (not generic "搜索失败")
+- In-flight code search is cancellable from UI
+
+#### Phase 70: Task Discovery & Image Preview
+
+**Goal:** Archive page is a dead-end (cards aren't clickable), Missions task picker shows too few options and has no search across workspaces, image lightbox is unusable when zoomed.
+
+**Requirements:** DISC-01, DISC-02, DISC-03, DISC-04, IMG-01, IMG-02, IMG-03
+
+**Success Criteria:**
+- Clicking an archived task card opens TaskOverviewDrawer with file changes and a rerun action
+- Missions task picker shows 5 recent tasks per project (was 3) and supports cross-workspace search
+- Image lightbox supports fit/100% zoom modes (centered), pan when zoomed, and ←/→ navigation between project assets
 
 
 
