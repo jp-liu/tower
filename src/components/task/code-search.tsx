@@ -1,13 +1,22 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Search, Filter, Loader2, Download, ExternalLink } from "lucide-react";
+import {
+  Search,
+  Filter,
+  Loader2,
+  Download,
+  ExternalLink,
+  XCircle,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 import { searchCode, checkRgAvailable, installRg } from "@/actions/search-code-actions";
-import type { SearchMatch } from "@/actions/search-code-actions";
+import type { SearchMatch, SearchErrorKind } from "@/actions/search-code-actions";
 
 interface CodeSearchProps {
   localPath: string | null;
@@ -52,9 +61,12 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
   const [results, setResults] = useState<SearchMatch[]>([]);
   const [truncated, setTruncated] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorKind, setErrorKind] = useState<SearchErrorKind | null>(null);
+  const [errorBannerOpen, setErrorBannerOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const generationRef = useRef(0);
+  const controllerRef = useRef<AbortController | null>(null);
 
   // rg availability check
   const [rgChecked, setRgChecked] = useState(false);
@@ -73,33 +85,43 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
   const handleSearch = useCallback(async () => {
     if (!localPath || !pattern.trim()) return;
 
-    // Increment generation to cancel any in-flight search
+    // Abort any in-flight search before starting a new one (subprocess kill via AbortController)
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+
+    // Generation counter retained as defense-in-depth alongside AbortController
     const thisGeneration = ++generationRef.current;
 
     setIsSearching(true);
     setError(null);
+    setErrorKind(null);
+    setErrorBannerOpen(false);
     setHasSearched(true);
 
     try {
       const result = await searchCode(
         localPath,
         pattern.trim(),
-        glob.trim() || undefined
+        glob.trim() || undefined,
+        undefined, // maxResults default
+        controller.signal
       );
 
       if (thisGeneration !== generationRef.current) return;
 
+      if (result.aborted) {
+        setIsSearching(false);
+        setResults([]);
+        setTruncated(false);
+        return;
+      }
+
       if (result.error) {
-        // Check if it's a rg-not-installed error
-        if (
-          result.error.toLowerCase().includes("ripgrep") ||
-          result.error.toLowerCase().includes("rg")
-        ) {
-          toast.error(t("codeSearch.rgNotInstalled"));
-          setError(t("codeSearch.rgNotInstalled"));
-        } else {
-          setError(result.error);
-        }
+        const kind: SearchErrorKind = result.errorKind ?? "unknown";
+        setError(result.error);
+        setErrorKind(kind);
+        toast.error(t(`codeSearch.errors.${kind}` as const));
         setResults([]);
         setTruncated(false);
       } else {
@@ -109,6 +131,7 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
     } catch (err) {
       if (thisGeneration !== generationRef.current) return;
       setError(String(err));
+      setErrorKind("unknown");
       setResults([]);
       setTruncated(false);
     } finally {
@@ -117,6 +140,23 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
       }
     }
   }, [localPath, pattern, glob, t]);
+
+  const handleCancel = useCallback(() => {
+    controllerRef.current?.abort();
+    controllerRef.current = null;
+    setIsSearching(false);
+    setResults([]);
+    setError(null);
+    setErrorKind(null);
+    toast.info(t("codeSearch.cancelled"));
+  }, [t]);
+
+  // Abort any in-flight search subprocess on unmount
+  useEffect(() => {
+    return () => {
+      controllerRef.current?.abort();
+    };
+  }, []);
 
   const handlePatternKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -215,6 +255,16 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
             onChange={(e) => setGlob(e.target.value)}
           />
         </div>
+
+        {/* Cancel button — visible only while a search is in flight */}
+        {isSearching && (
+          <div className="flex justify-end pt-1">
+            <Button variant="outline" onClick={handleCancel} className="gap-1.5">
+              <XCircle className="h-3.5 w-3.5" />
+              {t("codeSearch.cancel")}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Results area */}
@@ -225,8 +275,38 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
             <p className="text-xs text-muted-foreground">{t("codeSearch.searching")}</p>
           </div>
         ) : error ? (
-          <div className="px-3 py-4 text-xs text-destructive">
-            {error}
+          <div className="mx-2 my-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-3 text-xs text-destructive flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <span className="px-1.5 py-0.5 rounded bg-destructive/20 text-destructive text-[10px] font-semibold uppercase tracking-wide flex-shrink-0">
+                {errorKind
+                  ? t(`codeSearch.errors.${errorKind}` as const)
+                  : t("codeSearch.errors.unknown")}
+              </span>
+              <span className="truncate flex-1">
+                {error.length > 120 ? error.slice(0, 120) + "…" : error}
+              </span>
+            </div>
+            {error.length > 120 && (
+              <>
+                <button
+                  type="button"
+                  className="self-start text-[11px] text-destructive/80 underline cursor-pointer flex items-center gap-1"
+                  onClick={() => setErrorBannerOpen((v) => !v)}
+                >
+                  {errorBannerOpen ? (
+                    <ChevronDown className="h-3 w-3" />
+                  ) : (
+                    <ChevronRight className="h-3 w-3" />
+                  )}
+                  {t("codeSearch.errorBanner.viewFull")}
+                </button>
+                {errorBannerOpen && (
+                  <pre className="text-[11px] whitespace-pre-wrap break-all bg-background/40 p-2 rounded border border-border max-h-32 overflow-auto">
+                    {error}
+                  </pre>
+                )}
+              </>
+            )}
           </div>
         ) : !hasSearched ? (
           <div className="flex h-full items-center justify-center">
