@@ -4,7 +4,7 @@ milestone: v1.1
 milestone_name: Detail Page Reliability & Discovery
 status: verifying
 stopped_at: Completed 69-04-PLAN.md (Settings UI exposes maxReadableMb + codeTimeoutSec)
-last_updated: "2026-05-08T11:29:43.549Z"
+last_updated: "2026-05-08T13:39:16.140Z"
 last_activity: 2026-05-08
 progress:
   total_phases: 2
@@ -27,8 +27,8 @@ Last shipped: v1.0 (2026-04-23, archived 2026-05-08)
 
 ## Current Position
 
-Phase: 69 (Detail Page Reliability) — EXECUTING
-Plan: 4 of 4
+Phase: 70
+Plan: Not started
 Status: Phase complete — ready for verification
 Last activity: 2026-05-08
 
