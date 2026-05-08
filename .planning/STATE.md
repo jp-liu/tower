@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Detail Page Reliability & Discovery
 status: executing
-stopped_at: Completed 69-02-PLAN.md (file IO error toasts + placeholder card)
-last_updated: "2026-05-08T11:06:42.174Z"
+stopped_at: Completed 69-03-PLAN.md (search timeout + categorized errors + cancel via AbortController)
+last_updated: "2026-05-08T11:21:13.011Z"
 last_activity: 2026-05-08
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ Last shipped: v1.0 (2026-04-23, archived 2026-05-08)
 ## Current Position
 
 Phase: 69 (Detail Page Reliability) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-05-08
 
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0% (0/2 phases)
 - No PROJECT.md created — project's existing convention skips it
 - [Phase 69]: Plan 69-01: readFileContent now returns FileReadResult union (text/oversized/binary); readFileContentForce companion bypasses guards. Default limit 5 MiB via system.maxReadableFileBytes.
 - [Phase 69]: Plan 69-02: file-tree + code-editor silent .catch() blocks replaced with sonner toast.error; retry action only on read/list ops; oversized/binary files render placeholder card with same-tab force-open via readFileContentForce.
+- [Phase 69-detail-page-reliability]: Plan 69-03: searchCode now reads search.codeTimeoutSec config (default 30s) and accepts an AbortSignal; rg failures are categorized into 5 SearchErrorKind values; UI shows a Cancel button + truncated/expandable error banner driven by errorKind.
 
 ### Pending Todos
 
@@ -72,6 +73,6 @@ Progress: [░░░░░░░░░░] 0% (0/2 phases)
 
 ## Session Continuity
 
-Last session: 2026-05-08T11:06:42.171Z
-Stopped at: Completed 69-02-PLAN.md (file IO error toasts + placeholder card)
+Last session: 2026-05-08T11:21:13.006Z
+Stopped at: Completed 69-03-PLAN.md (search timeout + categorized errors + cancel via AbortController)
 Resume file: None
