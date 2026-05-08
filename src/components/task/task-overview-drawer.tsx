@@ -10,11 +10,15 @@ import {
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { getTaskOverview } from "@/actions/task-actions";
 import type { TaskOverviewData } from "@/actions/task-actions";
+import { startPtyExecution } from "@/actions/agent-actions";
 import { BOARD_COLUMNS, PRIORITY_CONFIG } from "@/lib/constants";
-import { Calendar, Package, PlayCircle } from "lucide-react";
+import { Calendar, Package, Play, PlayCircle } from "lucide-react";
+import { TaskFileChanges } from "@/components/task/task-file-changes";
+import { toast } from "sonner";
 
 interface TaskOverviewDrawerProps {
   open: boolean;
@@ -30,6 +34,7 @@ export function TaskOverviewDrawer({
   const { t } = useI18n();
   const [task, setTask] = useState<TaskOverviewData | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isRerunning, setIsRerunning] = useState(false);
 
   useEffect(() => {
     if (!taskId || !open) {
@@ -49,6 +54,31 @@ export function TaskOverviewDrawer({
     : null;
   const priorityConfig = task ? PRIORITY_CONFIG[task.priority] : null;
   const lastExecution = task?.executions?.[0] ?? null;
+
+  const lastExecGitStats = (() => {
+    const raw = lastExecution?.gitStats;
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as { insertions?: number; deletions?: number };
+      return { added: parsed.insertions ?? 0, removed: parsed.deletions ?? 0 };
+    } catch {
+      return null;
+    }
+  })();
+
+  const handleRerun = async () => {
+    if (!taskId || isRerunning) return;
+    try {
+      setIsRerunning(true);
+      await startPtyExecution(taskId, "");
+      toast.success(t("taskDrawer.rerunStarted"));
+      onOpenChange(false);
+    } catch {
+      toast.error(t("taskDrawer.rerunFailed"));
+    } finally {
+      setIsRerunning(false);
+    }
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -140,6 +170,23 @@ export function TaskOverviewDrawer({
                 <span className="text-foreground">{task._count.assets}</span>
               </section>
 
+              {/* File changes */}
+              <section>
+                <h4 className="text-xs font-medium text-muted-foreground mb-1.5">
+                  {t("taskDrawer.fileChanges")}
+                </h4>
+                {lastExecGitStats ? (
+                  <TaskFileChanges
+                    added={lastExecGitStats.added}
+                    removed={lastExecGitStats.removed}
+                  />
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {t("taskDrawer.noFileChanges")}
+                  </p>
+                )}
+              </section>
+
               {/* Last execution */}
               <section>
                 <h4 className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
@@ -162,6 +209,19 @@ export function TaskOverviewDrawer({
                     {t("taskDrawer.noExecution")}
                   </p>
                 )}
+              </section>
+
+              {/* Rerun action */}
+              <section>
+                <Button
+                  variant="default"
+                  className="w-full"
+                  onClick={handleRerun}
+                  disabled={isRerunning || !taskId}
+                >
+                  <Play className="h-4 w-4" />
+                  {t("taskDrawer.rerun")}
+                </Button>
               </section>
             </div>
           ) : null}
