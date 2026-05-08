@@ -54,7 +54,7 @@ Plans:
 
 Plans:
 - [x] 70-01-PLAN.md — Archive cards open TaskOverviewDrawer + file-changes summary + rerun button (DISC-01, DISC-02)
-- [ ] 70-02-PLAN.md — Missions quick picker 3→5 + cross-workspace fuzzy search in FullTaskDialog (DISC-03, DISC-04)
+- [x] 70-02-PLAN.md — Missions quick picker 3→5 + cross-workspace fuzzy search in FullTaskDialog (DISC-03, DISC-04)
 - [ ] 70-03-PLAN.md — ImageLightbox zoom toggle + pointer pan + prev/next navigation across project images (IMG-01, IMG-02, IMG-03)
 
 **Success Criteria:**
