@@ -423,6 +423,17 @@ export const en: Translations = {
   "taskPage.fileTree.deleteConfirmAction": "Delete",
   "taskPage.fileTree.searchPlaceholder": "Search files…",
   "taskPage.fileTree.searchNoResults": "No matching files",
+  // File tree errors (Phase 69)
+  "taskPage.fileTree.errors.listDirectory": "Failed to load directory",
+  "taskPage.fileTree.errors.refresh": "Failed to refresh file tree",
+  "taskPage.fileTree.errors.rename": "Rename failed",
+  "taskPage.fileTree.errors.delete": "Delete failed",
+  "taskPage.fileTree.errors.createFile": "Failed to create file",
+  "taskPage.fileTree.errors.createFolder": "Failed to create folder",
+  "taskPage.fileTree.errors.listAll": "Failed to load file list",
+  "taskPage.fileTree.errors.reveal": "Could not reveal in file manager",
+  "taskPage.fileTree.errors.gitStatus": "Git status read failed",
+  "taskPage.fileTree.retryAction": "Retry",
   // Editor (Phase 21)
   "editor.selectFile": "Select a file to open",
   "editor.selectFileHint": "Click any file in the file tree on the left",

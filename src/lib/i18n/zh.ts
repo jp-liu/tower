@@ -438,6 +438,17 @@ export const zh = {
   "taskPage.fileTree.deleteConfirmAction": "删除",
   "taskPage.fileTree.searchPlaceholder": "搜索文件…",
   "taskPage.fileTree.searchNoResults": "无匹配文件",
+  // File tree errors (Phase 69)
+  "taskPage.fileTree.errors.listDirectory": "加载目录失败",
+  "taskPage.fileTree.errors.refresh": "刷新文件树失败",
+  "taskPage.fileTree.errors.rename": "重命名失败",
+  "taskPage.fileTree.errors.delete": "删除失败",
+  "taskPage.fileTree.errors.createFile": "创建文件失败",
+  "taskPage.fileTree.errors.createFolder": "创建文件夹失败",
+  "taskPage.fileTree.errors.listAll": "加载文件列表失败",
+  "taskPage.fileTree.errors.reveal": "无法在文件管理器中显示",
+  "taskPage.fileTree.errors.gitStatus": "Git 状态读取失败",
+  "taskPage.fileTree.retryAction": "重试",
   // Editor (Phase 21)
   "editor.selectFile": "选择文件以打开",
   "editor.selectFileHint": "在左侧文件树中点击任意文件",
