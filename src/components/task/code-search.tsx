@@ -71,13 +71,11 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
   // rg availability check
   const [rgChecked, setRgChecked] = useState(false);
   const [rgAvailable, setRgAvailable] = useState(true);
-  const [rgPlatform, setRgPlatform] = useState("darwin");
   const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
     checkRgAvailable().then((res) => {
       setRgAvailable(res.available);
-      setRgPlatform(res.platform);
       setRgChecked(true);
     });
   }, []);
