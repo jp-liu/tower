@@ -327,7 +327,7 @@ export async function getTaskOverview(taskId: string) {
       executions: {
         orderBy: { createdAt: "desc" },
         take: 1,
-        select: { summary: true, status: true, endedAt: true },
+        select: { summary: true, status: true, endedAt: true, gitStats: true },
       },
       _count: { select: { assets: true } },
     },
