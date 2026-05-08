@@ -1,11 +1,12 @@
 "use server";
 
-import { readdir, readFile, writeFile, mkdir, rename, rm, unlink, stat } from "fs/promises";
+import { readdir, readFile, writeFile, mkdir, rename, rm, unlink, stat, open } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 import ignore from "ignore";
 import { execFileSync } from "child_process";
 import { safeResolvePath } from "@/lib/fs-security";
+import { getConfigValue } from "@/actions/config-actions";
 import { z } from "zod";
 
 export interface FileEntry {
@@ -214,13 +215,65 @@ const readFileContentSchema = z.object({
   relativePath: z.string().min(1),
 });
 
+/**
+ * Discriminated result of a guarded file read.
+ * - `text`: file passed size + binary checks; full UTF-8 content returned
+ * - `oversized`: file size exceeds the configured `system.maxReadableFileBytes` limit; body NOT read
+ * - `binary`: a NUL byte was found in the first 8KB; body NOT read
+ */
+export type FileReadResult =
+  | { kind: "text"; content: string; size: number }
+  | { kind: "oversized"; size: number; limit: number }
+  | { kind: "binary"; size: number };
+
 export async function readFileContent(
   worktreePath: string,
   relativePath: string
-): Promise<string> {
+): Promise<FileReadResult> {
   readFileContentSchema.parse({ worktreePath, relativePath });
   const absolute = safeResolvePath(worktreePath, relativePath);
-  return readFile(absolute, "utf-8");
+
+  const limit = await getConfigValue<number>("system.maxReadableFileBytes", 5_242_880);
+  const info = await stat(absolute);
+
+  // Fast path: oversized files short-circuit before any read
+  if (info.size > limit) {
+    return { kind: "oversized", size: info.size, limit };
+  }
+
+  // Sniff first 8KB for null bytes to detect binary
+  const fh = await open(absolute, "r");
+  try {
+    const sniffSize = Math.min(8192, info.size);
+    if (sniffSize > 0) {
+      const sniff = Buffer.alloc(sniffSize);
+      await fh.read(sniff, 0, sniffSize, 0);
+      if (sniff.includes(0)) {
+        return { kind: "binary", size: info.size };
+      }
+    }
+  } finally {
+    await fh.close();
+  }
+
+  const content = await readFile(absolute, "utf-8");
+  return { kind: "text", content, size: info.size };
+}
+
+// ---- readFileContentForce ----
+/**
+ * Force-open variant: bypasses both size and binary guards. Caller accepts
+ * possible UTF-8 garbling and browser slowdown. Path traversal protection still applies.
+ */
+export async function readFileContentForce(
+  worktreePath: string,
+  relativePath: string
+): Promise<{ content: string; size: number }> {
+  readFileContentSchema.parse({ worktreePath, relativePath });
+  const absolute = safeResolvePath(worktreePath, relativePath);
+  const info = await stat(absolute);
+  const content = await readFile(absolute, "utf-8");
+  return { content, size: info.size };
 }
 
 // ---- writeFileContent ----
