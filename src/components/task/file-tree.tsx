@@ -13,6 +13,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
 import { listDirectory, getGitStatus, createFile, createDirectory, renameEntry, deleteEntry, listAllFiles } from "@/actions/file-actions";
 import type { FileEntry } from "@/actions/file-actions";
@@ -65,8 +66,11 @@ export function FileTree({
       setLoadError(false);
     } catch {
       setLoadError(true);
+      toast.error(t("taskPage.fileTree.errors.listDirectory"), {
+        action: { label: t("taskPage.fileTree.retryAction"), onClick: () => { void loadRoot(); } },
+      });
     }
-  }, [worktreePath]);
+  }, [worktreePath, t]);
 
   const loadChildren = useCallback(
     async (relativePath: string) => {
@@ -79,10 +83,12 @@ export function FileTree({
           return next;
         });
       } catch {
-        // Silently fail for subdirectory loads
+        toast.error(`${t("taskPage.fileTree.errors.listDirectory")}: ${relativePath}`, {
+          action: { label: t("taskPage.fileTree.retryAction"), onClick: () => { void loadChildren(relativePath); } },
+        });
       }
     },
-    [worktreePath]
+    [worktreePath, t]
   );
 
   const refreshTree = useCallback(async () => {
@@ -90,7 +96,8 @@ export function FileTree({
     try {
       const entries = await listDirectory(worktreePath, ".");
       setRootEntries(entries);
-      // Refresh all expanded paths without clearing expandedPaths
+      // Refresh all expanded paths without clearing expandedPaths.
+      // Per-rel failures are swallowed silently to avoid spamming toasts during the auto-poll loop.
       const currentExpanded = expandedPathsRef.current;
       for (const rel of currentExpanded) {
         const children = await listDirectory(worktreePath, rel).catch(() => null);
@@ -103,9 +110,11 @@ export function FileTree({
         }
       }
     } catch {
-      // Silently degrade on refresh failure
+      toast.error(t("taskPage.fileTree.errors.refresh"), {
+        action: { label: t("taskPage.fileTree.retryAction"), onClick: () => { void refreshTree(); } },
+      });
     }
-  }, [worktreePath]);
+  }, [worktreePath, t]);
 
   // Initial load
   useEffect(() => {
@@ -122,8 +131,11 @@ export function FileTree({
     // Load git status — branch diff (worktree mode) or working tree status (direct mode)
     getGitStatus(worktreePath, baseBranch, worktreeBranch)
       .then(setGitStatusMap)
-      .catch(() => setGitStatusMap({}));
-  }, [worktreePath, baseBranch, worktreeBranch, loadRoot]);
+      .catch(() => {
+        setGitStatusMap({});
+        toast.error(t("taskPage.fileTree.errors.gitStatus"));
+      });
+  }, [worktreePath, baseBranch, worktreeBranch, loadRoot, t]);
 
   // Auto-refresh while RUNNING
   useEffect(() => {
@@ -228,11 +240,12 @@ export function FileTree({
       try {
         await renameEntry(worktreePath, entry.relativePath, newRelative);
         await refreshTree();
-      } catch {
-        // Silently fail rename
+      } catch (err) {
+        const detail = (err as Error)?.message ?? entry.relativePath;
+        toast.error(`${t("taskPage.fileTree.errors.rename")}: ${detail}`);
       }
     },
-    [worktreePath, refreshTree]
+    [worktreePath, refreshTree, t]
   );
 
   const handleRenameCancel = useCallback(() => {
@@ -251,11 +264,16 @@ export function FileTree({
           await createDirectory(worktreePath, relativePath);
         }
         await refreshTree();
-      } catch {
-        // Silently fail create
+      } catch (err) {
+        const key =
+          type === "file"
+            ? "taskPage.fileTree.errors.createFile"
+            : "taskPage.fileTree.errors.createFolder";
+        const detail = (err as Error)?.message ?? name;
+        toast.error(`${t(key)}: ${detail}`);
       }
     },
-    [worktreePath, refreshTree]
+    [worktreePath, refreshTree, t]
   );
 
   const handleCreateCancel = useCallback(() => {
@@ -269,8 +287,9 @@ export function FileTree({
     try {
       await deleteEntry(worktreePath, target.relativePath);
       await refreshTree();
-    } catch {
-      // Silently fail delete
+    } catch (err) {
+      const detail = (err as Error)?.message ?? target.relativePath;
+      toast.error(`${t("taskPage.fileTree.errors.delete")}: ${detail}`);
     }
   };
 
@@ -282,9 +301,11 @@ export function FileTree({
       setAllFiles(files);
       setAllFilesLoaded(true);
     } catch {
-      // Silently fail — search just won't work
+      toast.error(t("taskPage.fileTree.errors.listAll"), {
+        action: { label: t("taskPage.fileTree.retryAction"), onClick: () => { void loadAllFiles(); } },
+      });
     }
-  }, [worktreePath, allFilesLoaded]);
+  }, [worktreePath, allFilesLoaded, t]);
 
   // Reset file list when worktree changes
   useEffect(() => {
@@ -543,7 +564,9 @@ export function FileTree({
           onDelete={handleDelete}
           onRevealInFinder={worktreePath ? (entry) => {
             import("@/actions/file-actions").then(({ revealInFinder }) => {
-              revealInFinder(worktreePath, entry.relativePath).catch(() => {});
+              revealInFinder(worktreePath, entry.relativePath).catch(() => {
+                toast.error(t("taskPage.fileTree.errors.reveal"));
+              });
             });
           } : undefined}
         />
