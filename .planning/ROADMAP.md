@@ -50,6 +50,13 @@ Plans:
 
 **Requirements:** DISC-01, DISC-02, DISC-03, DISC-04, IMG-01, IMG-02, IMG-03
 
+**Plans:** 3 plans
+
+Plans:
+- [x] 70-01-PLAN.md — Archive cards open TaskOverviewDrawer + file-changes summary + rerun button (DISC-01, DISC-02)
+- [ ] 70-02-PLAN.md — Missions quick picker 3→5 + cross-workspace fuzzy search in FullTaskDialog (DISC-03, DISC-04)
+- [ ] 70-03-PLAN.md — ImageLightbox zoom toggle + pointer pan + prev/next navigation across project images (IMG-01, IMG-02, IMG-03)
+
 **Success Criteria:**
 - Clicking an archived task card opens TaskOverviewDrawer with file changes and a rerun action
 - Missions task picker shows 5 recent tasks per project (was 3) and supports cross-workspace search

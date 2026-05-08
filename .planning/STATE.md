@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Detail Page Reliability & Discovery
-status: verifying
-stopped_at: Completed 69-04-PLAN.md (Settings UI exposes maxReadableMb + codeTimeoutSec)
-last_updated: "2026-05-08T13:39:16.140Z"
+status: executing
+stopped_at: Completed 70-01-PLAN.md (Archive drawer click + rerun)
+last_updated: "2026-05-08T14:06:51.041Z"
 last_activity: 2026-05-08
 progress:
   total_phases: 2
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 7
+  completed_plans: 5
   percent: 0
 ---
 
@@ -23,13 +23,13 @@ REQUIREMENTS: .planning/REQUIREMENTS.md
 Last shipped: v1.0 (2026-04-23, archived 2026-05-08)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase 69 — Detail Page Reliability
+**Current focus:** Phase 70 — Task Discovery & Image Preview
 
 ## Current Position
 
-Phase: 70
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 70 (Task Discovery & Image Preview) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
 Last activity: 2026-05-08
 
 Progress: [░░░░░░░░░░] 0% (0/2 phases)
@@ -62,6 +62,7 @@ Progress: [░░░░░░░░░░] 0% (0/2 phases)
 - [Phase 69]: Plan 69-02: file-tree + code-editor silent .catch() blocks replaced with sonner toast.error; retry action only on read/list ops; oversized/binary files render placeholder card with same-tab force-open via readFileContentForce.
 - [Phase 69-detail-page-reliability]: Plan 69-03: searchCode now reads search.codeTimeoutSec config (default 30s) and accepts an AbortSignal; rg failures are categorized into 5 SearchErrorKind values; UI shows a Cancel button + truncated/expandable error banner driven by errorKind.
 - [Phase 69]: Plan 69-04: Settings UI now exposes system.maxReadableFileBytes (System card, MB) and search.codeTimeoutSec (Search card, s); per-card Save buttons persist values, getConfigValues hydrates on mount, live consumers pick up new values without restart.
+- [Phase 70]: Plan 70-01: Archive cards now clickable -> open TaskOverviewDrawer; drawer reads gitStats JSON for file-changes summary; primary 'Rerun task' Button fires startPtyExecution + sonner toast (no confirm dialog)
 
 ### Pending Todos
 
@@ -74,6 +75,6 @@ Progress: [░░░░░░░░░░] 0% (0/2 phases)
 
 ## Session Continuity
 
-Last session: 2026-05-08T11:29:43.547Z
-Stopped at: Completed 69-04-PLAN.md (Settings UI exposes maxReadableMb + codeTimeoutSec)
+Last session: 2026-05-08T14:06:51.038Z
+Stopped at: Completed 70-01-PLAN.md (Archive drawer click + rerun)
 Resume file: None
