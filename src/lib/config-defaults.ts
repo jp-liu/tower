@@ -20,6 +20,11 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "number",
     label: "Max Concurrent Executions",
   },
+  "system.maxReadableFileBytes": {
+    defaultValue: 5_242_880,
+    type: "number",
+    label: "Max Readable File Size (bytes)",
+  },
   "system.backupDir": {
     defaultValue: "",
     type: "string",
