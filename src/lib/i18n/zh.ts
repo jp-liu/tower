@@ -709,6 +709,15 @@ export const zh = {
   "codeSearch.rgInstallSuccess": "ripgrep 安装成功",
   "codeSearch.rgInstallFailed": "安装失败，请手动安装",
   "codeSearch.rgDownloadPage": "前往官网下载",
+  // Code search reliability — categorized errors + cancel (Phase 69)
+  "codeSearch.errors.timeout": "搜索超时",
+  "codeSearch.errors.not_installed": "ripgrep 未安装",
+  "codeSearch.errors.permission_denied": "权限不足",
+  "codeSearch.errors.aborted": "已取消",
+  "codeSearch.errors.unknown": "搜索失败",
+  "codeSearch.cancel": "取消搜索",
+  "codeSearch.cancelled": "已取消搜索",
+  "codeSearch.errorBanner.viewFull": "查看完整错误",
   // Code editor file guard (Phase 69)
   "codeEditor.fileGuard.oversizedTitle": "文件过大",
   "codeEditor.fileGuard.oversizedBody": "文件大小 {size}，超过限制 {limit}。直接打开可能导致浏览器卡顿。",

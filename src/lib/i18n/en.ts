@@ -694,6 +694,15 @@ export const en: Translations = {
   "codeSearch.rgInstallSuccess": "ripgrep installed successfully",
   "codeSearch.rgInstallFailed": "Installation failed, please install manually",
   "codeSearch.rgDownloadPage": "Download Page",
+  // Code search reliability — categorized errors + cancel (Phase 69)
+  "codeSearch.errors.timeout": "Search timed out",
+  "codeSearch.errors.not_installed": "ripgrep not installed",
+  "codeSearch.errors.permission_denied": "Permission denied",
+  "codeSearch.errors.aborted": "Aborted",
+  "codeSearch.errors.unknown": "Search failed",
+  "codeSearch.cancel": "Cancel",
+  "codeSearch.cancelled": "Search cancelled",
+  "codeSearch.errorBanner.viewFull": "View full error",
   // Code editor file guard (Phase 69)
   "codeEditor.fileGuard.oversizedTitle": "File too large",
   "codeEditor.fileGuard.oversizedBody": "File size {size} exceeds limit {limit}. Opening may freeze the browser.",
