@@ -28,18 +28,17 @@ interface UserContentBlock {
 }
 
 /**
- * Extract imageFilenames from a user message's content field.
- * Currently returns undefined for Phase 42 (images tracked client-side).
- * Phase 43 will populate this from SDK image blocks when multimodal is wired.
+ * Extract attachmentFilenames from a user message's content field.
+ * Currently returns undefined — attachments are tracked client-side via the
+ * sessionStorage cache in assistant-provider.tsx. A future iteration will
+ * populate this from SDK image/file blocks when multimodal storage is wired.
  */
-function extractImageFilenames(content: unknown): string[] | undefined {
-  // If content is an array of multimodal blocks, look for image blocks (Phase 43+)
+function extractAttachmentFilenames(content: unknown): string[] | undefined {
   if (Array.isArray(content)) {
-    const imageBlocks = (content as UserContentBlock[]).filter(
+    const blocks = (content as UserContentBlock[]).filter(
       (b) => b.type === "image" && b.source?.data
     );
-    if (imageBlocks.length > 0) {
-      // Phase 43 will map these to server filenames; for now return undefined
+    if (blocks.length > 0) {
       return undefined;
     }
   }
@@ -71,11 +70,15 @@ export function convertSessionMessages(sdkMessages: SDKSessionMessage[]): ChatMe
         // Strip skill XML wrapping: <command-message>tower</command-message><command-name>/tower</command-name><command-args>actual text</command-args>
         const argsMatch = text.match(/<command-args>([\s\S]*?)<\/command-args>/);
         if (argsMatch) text = argsMatch[1].trim();
-        // Strip multimodal image prompt appended by buildMultimodalPrompt
-        text = text.replace(/\n---\nThe user has attached the following image\(s\)[\s\S]*$/, "").trim();
-        const imageFilenames = extractImageFilenames(payload?.content);
+        // Strip attachment prompt appended by buildAttachmentPrompt
+        text = text
+          .replace(/\n---\nThe user has attached the following file\(s\)[\s\S]*$/, "")
+          // Legacy image-only prompt format from earlier versions
+          .replace(/\n---\nThe user has attached the following image\(s\)[\s\S]*$/, "")
+          .trim();
+        const attachmentFilenames = extractAttachmentFilenames(payload?.content);
         if (text) {
-          result.push({ id: nextId(), role: "user", content: text, imageFilenames });
+          result.push({ id: nextId(), role: "user", content: text, attachmentFilenames });
         }
         break;
       }

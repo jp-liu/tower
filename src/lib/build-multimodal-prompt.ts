@@ -1,53 +1,57 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-
-const MAX_IMAGES = 10;
-
-/** Sub-path format: YYYY-MM/(images|files)/filename.ext — prevents traversal and arbitrary filenames */
-const SAFE_SUBPATH_RE =
-  /^\d{4}-\d{2}\/(images|files)\/[^/]+\.(jpg|jpeg|png|gif|webp)$/i;
+import {
+  ATTACHMENT_SUBPATH_RE,
+  MAX_ATTACHMENTS,
+  classifyAttachmentSubPath,
+} from "./attachment-utils";
 
 /**
- * Builds a multimodal prompt by appending image file paths to the prompt text.
+ * Builds a chat prompt enriched with attachment file paths.
  *
- * If no images are provided (or all resolve to missing files), returns the
- * original prompt unchanged — preserving backward compatibility for text-only
- * messages (AI-03).
+ * Behaviour:
+ *   - Empty attachment list returns the prompt unchanged.
+ *   - Each attachment sub-path (e.g. `2026-04/files/note-abc.md`) is validated
+ *     against the central regex, resolved into the cache directory, and contained
+ *     within it (path-traversal guard). Missing files are skipped.
+ *   - The appended block tags each path with [Image] / [Text] so Claude knows
+ *     whether it's looking at media or readable text and can pick the right tool.
  *
- * The appended section instructs Claude to use the Read tool to view the images,
- * so they become part of the conversation context (AI-01, AI-02).
- *
- * @param prompt - The original prompt text
- * @param imageFilenames - Array of sub-paths (e.g. '2026-04/images/name.png') relative to cacheDir
- * @param cacheDir - Absolute path to the directory where images are stored
- * @returns The original prompt (if no valid images) or prompt with appended image section
+ * The MAX_ATTACHMENTS cap is enforced by truncating the input list — callers
+ * already validate up-front, this is a final safety net.
  */
-export function buildMultimodalPrompt(
+export function buildAttachmentPrompt(
   prompt: string,
-  imageFilenames: string[],
+  attachmentFilenames: string[],
   cacheDir: string
 ): string {
-  if (imageFilenames.length === 0) {
+  if (attachmentFilenames.length === 0) {
     return prompt;
   }
 
-  const filenames = imageFilenames.slice(0, MAX_IMAGES);
+  const filenames = attachmentFilenames.slice(0, MAX_ATTACHMENTS);
   const cacheDirNorm = path.resolve(cacheDir);
 
-  // Validate sub-path format, resolve path, and enforce containment
-  const validPaths = filenames
-    .filter((subPath) => SAFE_SUBPATH_RE.test(subPath))
-    .map((subPath) => path.resolve(cacheDir, subPath))
-    .filter((absPath) => {
-      if (!absPath.startsWith(cacheDirNorm + path.sep)) return false;
-      return fs.existsSync(absPath);
-    });
+  type Entry = { kind: "image" | "text"; absPath: string };
+  const valid: Entry[] = [];
 
-  if (validPaths.length === 0) {
+  for (const subPath of filenames) {
+    if (!ATTACHMENT_SUBPATH_RE.test(subPath)) continue;
+    const kind = classifyAttachmentSubPath(subPath);
+    if (!kind) continue;
+    const absPath = path.resolve(cacheDir, subPath);
+    if (!absPath.startsWith(cacheDirNorm + path.sep)) continue;
+    if (!fs.existsSync(absPath)) continue;
+    valid.push({ kind, absPath });
+  }
+
+  if (valid.length === 0) {
     return prompt;
   }
 
-  const pathList = validPaths.map((p) => `- ${p}`).join("\n");
+  const pathList = valid
+    .map((e) => `- [${e.kind === "image" ? "Image" : "Text"}] ${e.absPath}`)
+    .join("\n");
 
-  return `${prompt}\n\n---\nThe user has attached the following image(s). Use the Read tool to view them:\n${pathList}`;
+  return `${prompt}\n\n---\nThe user has attached the following file(s). Use the Read tool to view them:\n${pathList}`;
 }

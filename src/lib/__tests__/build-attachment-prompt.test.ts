@@ -6,7 +6,7 @@ vi.mock("node:fs", () => ({
 }));
 
 import * as fs from "node:fs";
-import { buildMultimodalPrompt } from "../build-multimodal-prompt";
+import { buildAttachmentPrompt } from "../build-multimodal-prompt";
 
 const CACHE_DIR = "/abs/cache/assistant";
 
@@ -21,16 +21,16 @@ beforeEach(() => {
   vi.resetAllMocks();
 });
 
-describe("buildMultimodalPrompt", () => {
+describe("buildAttachmentPrompt", () => {
   it("returns prompt unchanged when imageFilenames is empty", () => {
-    const result = buildMultimodalPrompt("/tower hello", [], CACHE_DIR);
+    const result = buildAttachmentPrompt("/tower hello", [], CACHE_DIR);
     expect(result).toBe("/tower hello");
   });
 
   it("appends image path section for a single existing image", () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
 
-    const result = buildMultimodalPrompt(
+    const result = buildAttachmentPrompt(
       "/tower describe this",
       [SUBPATH1],
       CACHE_DIR
@@ -44,7 +44,7 @@ describe("buildMultimodalPrompt", () => {
   it("appends all image paths when multiple images exist", () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
 
-    const result = buildMultimodalPrompt(
+    const result = buildAttachmentPrompt(
       "/tower compare",
       [SUBPATH1, SUBPATH2],
       CACHE_DIR
@@ -57,7 +57,7 @@ describe("buildMultimodalPrompt", () => {
   it("skips files that do not exist on disk", () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
 
-    const result = buildMultimodalPrompt(
+    const result = buildAttachmentPrompt(
       "/tower hi",
       [SUBPATH1],
       CACHE_DIR
@@ -70,7 +70,7 @@ describe("buildMultimodalPrompt", () => {
   it("returns prompt unchanged when all files are missing", () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
 
-    const result = buildMultimodalPrompt(
+    const result = buildAttachmentPrompt(
       "/tower test",
       [SUBPATH1, SUBPATH2, SUBPATH3],
       CACHE_DIR
@@ -85,7 +85,7 @@ describe("buildMultimodalPrompt", () => {
       return (p as string).includes("exists-d4e5f6a7");
     });
 
-    const result = buildMultimodalPrompt(
+    const result = buildAttachmentPrompt(
       "/tower mixed",
       [SUBPATH_EXISTS, SUBPATH_MISSING],
       CACHE_DIR
@@ -102,7 +102,7 @@ describe("buildMultimodalPrompt", () => {
       { length: 15 },
       (_, i) => `2026-04/images/img-${String(i).padStart(8, "0")}.png`
     );
-    const result = buildMultimodalPrompt("/tower many", manyImages, CACHE_DIR);
+    const result = buildAttachmentPrompt("/tower many", manyImages, CACHE_DIR);
 
     // Only first 10 should appear
     for (let i = 0; i < 10; i++) {
@@ -117,7 +117,7 @@ describe("buildMultimodalPrompt", () => {
   it("uses a clear delimiter section so Claude knows where image references start", () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
 
-    const result = buildMultimodalPrompt(
+    const result = buildAttachmentPrompt(
       "/tower check",
       [SUBPATH1],
       CACHE_DIR
@@ -125,13 +125,14 @@ describe("buildMultimodalPrompt", () => {
 
     // Should have the delimiter and the instruction text
     expect(result).toContain("\n\n---\n");
-    expect(result).toMatch(/attached.*image/i);
+    expect(result).toMatch(/attached.*file/i);
+    expect(result).toContain("[Image]");
   });
 
   it("rejects filenames with path traversal sequences", () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
 
-    const result = buildMultimodalPrompt(
+    const result = buildAttachmentPrompt(
       "/tower safe",
       ["../../etc/passwd", "../.env", SUBPATH1],
       CACHE_DIR
@@ -146,7 +147,7 @@ describe("buildMultimodalPrompt", () => {
   it("rejects filenames that don't match sub-path format", () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
 
-    const result = buildMultimodalPrompt(
+    const result = buildAttachmentPrompt(
       "/tower strict",
       ["not-valid.png", "abc.jpg", SUBPATH1],
       CACHE_DIR
@@ -161,7 +162,7 @@ describe("buildMultimodalPrompt", () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
 
     const chineseSubPath = "2026-04/images/\u8bbe\u8ba1\u7a3f-a1b2c3d4.png";
-    const result = buildMultimodalPrompt(
+    const result = buildAttachmentPrompt(
       "/tower check chinese",
       [chineseSubPath],
       CACHE_DIR

@@ -1,11 +1,12 @@
 import { NextRequest } from "next/server";
 import { requireLocalhost } from "@/lib/internal-api-guard";
-import { buildMultimodalPrompt } from "@/lib/build-multimodal-prompt";
+import { buildAttachmentPrompt } from "@/lib/build-multimodal-prompt";
 import { getAssistantCacheRoot } from "@/lib/file-utils";
 import { ClaudeCliAdapter } from "@/lib/ai/adapters/cli/claude-cli-adapter";
 import { db } from "@/lib/db";
 import { getTowerDbPath } from "@/lib/tower-dir";
 import { existsSync } from "fs";
+import { ATTACHMENT_SUBPATH_RE, MAX_ATTACHMENTS } from "@/lib/attachment-utils";
 
 const claudeAdapter = new ClaudeCliAdapter();
 
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
   const blocked = requireLocalhost(request);
   if (blocked) return blocked;
 
-  let body: { message: string; sessionId?: string; imageFilenames?: string[] };
+  let body: { message: string; sessionId?: string; attachmentFilenames?: string[] };
   try {
     body = await request.json();
   } catch {
@@ -38,17 +39,17 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // Validate imageFilenames: must be array of strings matching sub-path format YYYY-MM/type/filename.ext
-  const IMAGE_FILENAME_RE =
-    /^\d{4}-\d{2}\/(images|files)\/[^/]+\.(jpg|jpeg|png|gif|webp)$/i;
-  const safeImageFilenames = Array.isArray(body.imageFilenames)
-    ? body.imageFilenames.filter(
-        (f): f is string => typeof f === "string" && IMAGE_FILENAME_RE.test(f)
-      )
+  // Validate attachmentFilenames against the central allowlist regex
+  const safeAttachmentFilenames = Array.isArray(body.attachmentFilenames)
+    ? body.attachmentFilenames
+        .filter(
+          (f): f is string => typeof f === "string" && ATTACHMENT_SUBPATH_RE.test(f)
+        )
+        .slice(0, MAX_ATTACHMENTS)
     : [];
 
-  if (!body.message?.trim() && safeImageFilenames.length === 0) {
-    return new Response(JSON.stringify({ error: "Message or images required" }), {
+  if (!body.message?.trim() && safeAttachmentFilenames.length === 0) {
+    return new Response(JSON.stringify({ error: "Message or attachments required" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
         const { ensureTowerDir } = await import("@/lib/init-tower");
         const towerDir = ensureTowerDir();
 
-        const hasImages = safeImageFilenames.length > 0;
+        const hasAttachments = safeAttachmentFilenames.length > 0;
 
         // Build MCP server config inline — avoids relying on settings.json discovery
         const projectRoot = process.cwd().replace(/\\/g, "/");
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
         const options: Record<string, unknown> = {
           // Disable all built-in tools — assistant is a task operator, not a coding assistant.
           // Only allow Read when attachments are present (to read the provided files).
-          tools: hasImages ? ["Read"] : [],
+          tools: hasAttachments ? ["Read"] : [],
           allowedTools: ["mcp__tower__*", "Read"],
           // Streaming — receive text_delta chunks as they arrive
           includePartialMessages: true,
@@ -122,9 +123,9 @@ export async function POST(request: NextRequest) {
         // Prepend /tower to every message to load the Tower skill into context.
         const prompt = `${identityPrefix}/tower ${body.message}`;
 
-        // Build multimodal prompt with image paths if images attached (AI-01)
-        const finalPrompt = hasImages
-          ? buildMultimodalPrompt(prompt, safeImageFilenames, getAssistantCacheRoot())
+        // Append attachment file paths so Claude can Read them (AI-01)
+        const finalPrompt = hasAttachments
+          ? buildAttachmentPrompt(prompt, safeAttachmentFilenames, getAssistantCacheRoot())
           : prompt;
 
         const q = query({

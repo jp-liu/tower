@@ -16,7 +16,8 @@ export interface ChatMessage {
   content: string;
   toolName?: string;
   isStreaming?: boolean;
-  imageFilenames?: string[];
+  /** Sub-paths of attachments (images and text files) sent with this message. */
+  attachmentFilenames?: string[];
 }
 
 export interface UseAssistantChatReturn {

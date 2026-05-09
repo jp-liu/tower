@@ -3,10 +3,11 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Bot, Check, ChevronRight, Copy, ImageOff, User } from "lucide-react";
+import { Bot, Check, ChevronRight, Copy, FileText, ImageOff, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import type { ChatMessage } from "@/hooks/use-assistant-chat";
+import { classifyAttachmentSubPath } from "@/lib/attachment-utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -105,32 +106,67 @@ function MessageImage({
 // User bubble
 // ---------------------------------------------------------------------------
 
+function MessageFile({ filename }: { filename: string }) {
+  const url = `/api/internal/cache/${filename}`;
+  // Display name: strip path + uuid suffix. The cache route enforces auth.
+  const baseName = filename.split("/").pop() ?? filename;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-primary-foreground/10 text-primary-foreground hover:bg-primary-foreground/20 transition-colors max-w-[180px]"
+      title={baseName}
+    >
+      <FileText className="size-3.5 shrink-0" />
+      <span className="text-xs truncate">{baseName}</span>
+    </a>
+  );
+}
+
 function UserBubble({
   content,
-  imageFilenames,
+  attachmentFilenames,
   onImagePreview,
 }: {
   content: string;
-  imageFilenames?: string[];
+  attachmentFilenames?: string[];
   onImagePreview?: (url: string) => void;
 }) {
+  const images: string[] = [];
+  const files: string[] = [];
+  if (attachmentFilenames) {
+    for (const f of attachmentFilenames) {
+      const kind = classifyAttachmentSubPath(f);
+      if (kind === "image") images.push(f);
+      else if (kind === "text") files.push(f);
+    }
+  }
+
   return (
     <div
       className="flex justify-end gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200"
       aria-label="You"
     >
       <div className="bg-primary text-primary-foreground max-w-[80%] rounded-2xl rounded-br-sm px-3 py-2 text-sm whitespace-pre-wrap break-words">
-        {imageFilenames && imageFilenames.length > 0 && (
+        {images.length > 0 && (
           <div
             className="flex flex-wrap gap-1.5 mb-2"
             style={{ maxWidth: "calc(4 * 64px + 3 * 6px)" }}
           >
-            {imageFilenames.map((filename) => (
+            {images.map((filename) => (
               <MessageImage
                 key={filename}
                 filename={filename}
                 onPreview={onImagePreview}
               />
+            ))}
+          </div>
+        )}
+        {files.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {files.map((filename) => (
+              <MessageFile key={filename} filename={filename} />
             ))}
           </div>
         )}
@@ -292,7 +328,7 @@ export function AssistantChatBubble({ message, onImagePreview }: AssistantChatBu
       return (
         <UserBubble
           content={message.content}
-          imageFilenames={message.imageFilenames}
+          attachmentFilenames={message.attachmentFilenames}
           onImagePreview={onImagePreview}
         />
       );

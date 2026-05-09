@@ -65,3 +65,32 @@ export const MIME_TO_EXT: Record<string, string> = {
   "image/gif": ".gif",
   "image/webp": ".webp",
 };
+
+/**
+ * Heuristically detects whether a buffer is plain text.
+ *
+ * Rationale:
+ *   - Text-format magic bytes don't exist (UTF-8 BOM is optional).
+ *   - We sniff the first 8KB and reject if any NUL byte is present — a strong
+ *     signal of a binary payload (compiled code, archives, images, office docs).
+ *   - This pairs with the extension allowlist in attachment-utils.ts to make
+ *     "wrong extension on a binary" rejection robust.
+ */
+const TEXT_SNIFF_BYTES = 8 * 1024;
+
+export function isLikelyTextFile(buffer: Buffer): boolean {
+  if (buffer.length === 0) return true; // empty file is "text" by convention
+  const limit = Math.min(buffer.length, TEXT_SNIFF_BYTES);
+  for (let i = 0; i < limit; i++) {
+    if (buffer[i] === 0x00) return false;
+  }
+  return true;
+}
+
+/** Map text-file extension to a canonical content-type for serving. */
+export const TEXT_EXT_TO_MIME: Record<string, string> = {
+  ".md": "text/markdown",
+  ".txt": "text/plain",
+  ".json": "application/json",
+  ".csv": "text/csv",
+};

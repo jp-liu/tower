@@ -1,16 +1,37 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bot, ClipboardList, FolderPlus, Loader2, Search, SendHorizonal, Square, TrendingUp } from "lucide-react";
+import {
+  Bot,
+  ClipboardList,
+  FolderPlus,
+  Loader2,
+  Plus,
+  Search,
+  SendHorizonal,
+  Square,
+  TrendingUp,
+} from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 import { useAssistant } from "./assistant-provider";
 import { AssistantChatBubble } from "./assistant-chat-bubble";
-import { useImageUpload, type PendingImage } from "@/hooks/use-image-upload";
-import { ImageThumbnailStrip } from "./image-thumbnail-strip";
+import {
+  useAttachmentUpload,
+  type PendingAttachment,
+} from "@/hooks/use-attachment-upload";
+import { ImageStrip, FileStrip } from "./attachment-strip";
 import { ImagePreviewModal } from "./image-preview-modal";
+import {
+  ALLOWED_IMAGE_EXTS,
+  ALLOWED_TEXT_EXTS,
+  ATTACHMENT_ACCEPT_ATTR,
+  MAX_ATTACHMENTS,
+  classifyAttachmentExt,
+} from "@/lib/attachment-utils";
 
 // ---------------------------------------------------------------------------
 // Main component — uses chat state from AssistantProvider (persists across routes)
@@ -19,10 +40,10 @@ import { ImagePreviewModal } from "./image-preview-modal";
 export function AssistantChat() {
   const [inputValue, setInputValue] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { t } = useI18n();
 
-  // Chat state lives in the provider — survives route changes
   const {
     chatMessages: messages,
     isChatThinking: isThinking,
@@ -31,17 +52,21 @@ export function AssistantChat() {
     cancelChat,
   } = useAssistant();
 
-  const { pendingImages, addImages, removeImage, clearAll, hasUploading } = useImageUpload();
-  const [previewImage, setPreviewImage] = useState<PendingImage | null>(null);
+  const {
+    pendingAttachments,
+    addAttachments,
+    removeAttachment,
+    clearAll,
+    hasUploading,
+  } = useAttachmentUpload();
+  const [previewAttachment, setPreviewAttachment] =
+    useState<PendingAttachment | null>(null);
   const [messagePreviewUrl, setMessagePreviewUrl] = useState<string | null>(null);
 
-  // Auto-focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  // Auto-scroll on new messages or content growth
-  // First mount uses instant scroll (no animation on page switch), subsequent uses smooth
   const mountedRef = useRef(false);
   const lastContentLen = messages[messages.length - 1]?.content.length ?? 0;
   useEffect(() => {
@@ -50,31 +75,120 @@ export function AssistantChat() {
     mountedRef.current = true;
   }, [messages.length, lastContentLen]);
 
-  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const imageFiles: File[] = [];
-    const items = Array.from(e.clipboardData.items);
-    for (const item of items) {
-      if (item.type.startsWith("image/")) {
+  // ---- Handlers --------------------------------------------------------------
+
+  const remainingSlots = MAX_ATTACHMENTS - pendingAttachments.length;
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+
+  const hasAllowedExt = useCallback((name: string): boolean => {
+    const dotIdx = name.lastIndexOf(".");
+    const ext = dotIdx >= 0 ? name.slice(dotIdx) : "";
+    return classifyAttachmentExt(ext) !== null;
+  }, []);
+
+  const ingestFiles = useCallback(
+    (files: File[]) => {
+      if (files.length === 0 || remainingSlots <= 0) return;
+      const accepted = files
+        .filter((f) => {
+          const dotIdx = f.name.lastIndexOf(".");
+          const ext = dotIdx >= 0 ? f.name.slice(dotIdx) : "";
+          return classifyAttachmentExt(ext) !== null;
+        })
+        .slice(0, remainingSlots);
+      if (accepted.length > 0) addAttachments(accepted);
+    },
+    [addAttachments, remainingSlots]
+  );
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      // Only intercept clipboard entries that are FILE-kind (e.g. user copied
+      // foo.md in Finder, then pasted into the textarea). String-kind entries —
+      // i.e. plain text the user copied — keep flowing through native paste so
+      // long pasted text just lands in the textarea like normal.
+      const items = Array.from(e.clipboardData.items);
+      const droppedFiles: File[] = [];
+      for (const item of items) {
+        if (item.kind !== "file") continue;
         const file = item.getAsFile();
-        if (file) imageFiles.push(file);
+        if (!file) continue;
+        // Filter against the attachment whitelist; ingestFiles also re-checks.
+        // Image clipboard entries usually have empty file.name (e.g. "image.png"
+        // from screenshots) — accept by mime prefix in that case.
+        const looksLikeImage = item.type.startsWith("image/");
+        if (looksLikeImage || hasAllowedExt(file.name)) {
+          droppedFiles.push(file);
+        }
       }
-    }
-    if (imageFiles.length > 0) {
-      addImages(imageFiles);
-    }
-    // Do NOT call e.preventDefault() — text items still paste normally
-  }, [addImages]);
+      if (droppedFiles.length > 0) ingestFiles(droppedFiles);
+    },
+    [ingestFiles, hasAllowedExt]
+  );
+
+  const handleFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files ? Array.from(e.target.files) : [];
+      if (files.length > 0) ingestFiles(files);
+      // Reset value so picking the same file again still triggers onChange
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    },
+    [ingestFiles]
+  );
+
+  const openFilePicker = () => fileInputRef.current?.click();
+
+  // Drag-and-drop handlers — react to whole-window drags so the user gets a
+  // visual cue as soon as they enter the chat panel. We use a counter to handle
+  // the dragenter/dragleave bubbling behaviour cleanly.
+  const dragDepth = useRef(0);
+
+  const handleDragEnter = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+      e.preventDefault();
+      dragDepth.current += 1;
+      setIsDraggingOver(true);
+    },
+    []
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setIsDraggingOver(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+      e.preventDefault();
+      dragDepth.current = 0;
+      setIsDraggingOver(false);
+      const dropped = Array.from(e.dataTransfer.files).filter((f) =>
+        hasAllowedExt(f.name)
+      );
+      if (dropped.length > 0) ingestFiles(dropped);
+    },
+    [hasAllowedExt, ingestFiles]
+  );
 
   const handleSend = () => {
     const text = inputValue.trim();
-    const doneFilenames = pendingImages
+    const doneFilenames = pendingAttachments
       .filter((i) => i.status === "done")
       .map((i) => i.filename!);
 
     if (!text && doneFilenames.length === 0) return;
     if (isThinking || hasUploading) return;
 
-    sendMessage(text, { imageFilenames: doneFilenames });
+    sendMessage(text, { attachmentFilenames: doneFilenames });
     setInputValue("");
     clearAll();
     inputRef.current?.focus();
@@ -82,16 +196,12 @@ export function AssistantChat() {
 
   const handleCancel = () => {
     const restored = cancelChat();
-    if (restored) {
-      setInputValue(restored);
-    }
+    if (restored) setInputValue(restored);
     inputRef.current?.focus();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Ignore Enter during IME composition (e.g. Chinese input)
     if (e.nativeEvent.isComposing) return;
-
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -102,30 +212,34 @@ export function AssistantChat() {
     }
   };
 
-  const hasDoneImages = pendingImages.some((i) => i.status === "done");
+  const hasDoneAttachments = pendingAttachments.some((i) => i.status === "done");
   const isSendDisabled =
-    (!inputValue.trim() && !hasDoneImages)
-    || isThinking
-    || hasUploading;
+    (!inputValue.trim() && !hasDoneAttachments) || isThinking || hasUploading;
 
   return (
     <div className="flex flex-col h-full">
       {/* Message list */}
       <ScrollArea className="flex-1 overflow-hidden">
         <div
-          className={`flex flex-col gap-3 p-4 min-h-full ${isLoadingHistory || messages.length === 0 ? "justify-center" : ""}`}
+          className={`flex flex-col gap-3 p-4 min-h-full ${
+            isLoadingHistory || messages.length === 0 ? "justify-center" : ""
+          }`}
           role="log"
           aria-live="polite"
         >
           {isLoadingHistory ? (
             <div className="flex flex-col items-center justify-center gap-2">
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">{t("assistant.loading")}</span>
+              <span className="text-xs text-muted-foreground">
+                {t("assistant.loading")}
+              </span>
             </div>
           ) : messages.length === 0 ? (
             <div className="flex flex-col items-center gap-4 px-6">
               <Bot className="size-8 text-muted-foreground/40" />
-              <h3 className="text-sm font-semibold text-foreground">{t("assistant.emptyTitle")}</h3>
+              <h3 className="text-sm font-semibold text-foreground">
+                {t("assistant.emptyTitle")}
+              </h3>
               <div className="grid grid-cols-1 gap-2 w-full max-w-[280px]">
                 {[
                   { icon: FolderPlus, label: t("assistant.suggestion.createProject") },
@@ -137,7 +251,10 @@ export function AssistantChat() {
                     key={label}
                     variant="outline"
                     className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground text-left justify-start h-auto"
-                    onClick={() => { setInputValue(label); inputRef.current?.focus(); }}
+                    onClick={() => {
+                      setInputValue(label);
+                      inputRef.current?.focus();
+                    }}
                   >
                     <Icon className="size-3.5 shrink-0" />
                     {label}
@@ -158,14 +275,40 @@ export function AssistantChat() {
         </div>
       </ScrollArea>
 
-      {/* Input area */}
-      <div className="border-t border-border bg-sidebar p-4">
-        <ImageThumbnailStrip
-          pendingImages={pendingImages}
-          onRemove={removeImage}
-          onPreview={(img) => setPreviewImage(img)}
-        />
-        <div className={`flex items-end gap-2 ${pendingImages.length > 0 ? "mt-2" : ""}`}>
+      {/* Input area — wrapper container with attachment strip + textarea + toolbar */}
+      <div
+        className="border-t border-border bg-sidebar p-4"
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <div
+          className={`relative rounded-lg border bg-background transition-colors ${
+            isDraggingOver
+              ? "border-primary ring-3 ring-primary/40"
+              : "border-border focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
+          }`}
+        >
+          {isDraggingOver && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-primary/10 text-xs font-medium text-primary">
+              {t("assistant.dropToUpload")}
+            </div>
+          )}
+          {/* Block 1: image attachments — hidden when none */}
+          <ImageStrip
+            pendingAttachments={pendingAttachments}
+            onRemove={removeAttachment}
+            onPreview={(att: PendingAttachment) => setPreviewAttachment(att)}
+          />
+
+          {/* Block 2: file attachments — hidden when none */}
+          <FileStrip
+            pendingAttachments={pendingAttachments}
+            onRemove={removeAttachment}
+          />
+
+          {/* Block 3: textarea */}
           <Textarea
             ref={inputRef}
             value={inputValue}
@@ -173,42 +316,95 @@ export function AssistantChat() {
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             placeholder={t("assistant.inputPlaceholder")}
-            className="flex-1 min-h-[72px] max-h-[120px] resize-none text-sm"
+            className="min-h-[72px] max-h-[120px] resize-none rounded-none border-0 focus-visible:ring-0 focus-visible:border-0 bg-transparent dark:bg-transparent text-sm"
             rows={3}
           />
-          {isThinking ? (
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8 shrink-0 border-destructive/50 text-destructive transition-colors hover:bg-destructive/20 hover:text-destructive hover:border-destructive"
-              onClick={handleCancel}
-              aria-label={t("assistant.cancelLabel")}
-            >
-              <Square className="h-3 w-3 fill-current" />
-            </Button>
-          ) : (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 shrink-0 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
-              onClick={handleSend}
-              disabled={isSendDisabled}
-              aria-label={t("assistant.sendLabel")}
-            >
-              <SendHorizonal className="h-4 w-4" />
-            </Button>
-          )}
+
+          {/* Block 4: action bar */}
+          <div className="flex items-center justify-between px-2 pb-2 border-t border-border/60 pt-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ATTACHMENT_ACCEPT_ATTR}
+              multiple
+              hidden
+              onChange={handleFileChange}
+            />
+            <Tooltip>
+              <TooltipTrigger
+                onClick={openFilePicker}
+                disabled={remainingSlots <= 0}
+                aria-label={t("assistant.addAttachment")}
+                className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:pointer-events-none transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+              </TooltipTrigger>
+              <TooltipContent side="top" align="start" className="max-w-xs">
+                {remainingSlots <= 0 ? (
+                  <span className="text-xs">
+                    {t("assistant.attachmentLimitReached")}
+                  </span>
+                ) : (
+                  <div className="space-y-1 text-xs">
+                    <div className="font-medium">
+                      {t("assistant.addAttachment")}
+                    </div>
+                    <div className="opacity-80">
+                      <span>{t("assistant.attachmentTypeImages")}: </span>
+                      <span className="font-mono">
+                        {ALLOWED_IMAGE_EXTS.map((e) => `.${e}`).join(" ")}
+                      </span>
+                    </div>
+                    <div className="opacity-80">
+                      <span>{t("assistant.attachmentTypeText")}: </span>
+                      <span className="font-mono">
+                        {ALLOWED_TEXT_EXTS.map((e) => `.${e}`).join(" ")}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </TooltipContent>
+            </Tooltip>
+
+            {isThinking ? (
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-7 w-7 border-destructive/50 text-destructive transition-colors hover:bg-destructive/20 hover:text-destructive hover:border-destructive"
+                onClick={handleCancel}
+                aria-label={t("assistant.cancelLabel")}
+              >
+                <Square className="h-3 w-3 fill-current" />
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+                onClick={handleSend}
+                disabled={isSendDisabled}
+                aria-label={t("assistant.sendLabel")}
+              >
+                <SendHorizonal className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
+
       <ImagePreviewModal
-        imageUrl={previewImage?.blobUrl ?? null}
-        open={previewImage !== null}
-        onOpenChange={(open) => { if (!open) setPreviewImage(null); }}
+        imageUrl={previewAttachment?.blobUrl ?? null}
+        open={previewAttachment !== null && previewAttachment.kind === "image"}
+        onOpenChange={(open) => {
+          if (!open) setPreviewAttachment(null);
+        }}
       />
       <ImagePreviewModal
         imageUrl={messagePreviewUrl}
         open={messagePreviewUrl !== null}
-        onOpenChange={(open) => { if (!open) setMessagePreviewUrl(null); }}
+        onOpenChange={(open) => {
+          if (!open) setMessagePreviewUrl(null);
+        }}
       />
     </div>
   );

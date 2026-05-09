@@ -4,14 +4,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireLocalhost } from "@/lib/internal-api-guard";
 import { MIME_MAP } from "@/lib/file-serve";
 import { getAssistantCacheRoot } from "@/lib/file-utils";
+import { ATTACHMENT_SUBPATH_RE } from "@/lib/attachment-utils";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// Sub-path format: YYYY-MM/(images|files)/filename.ext
+// Sub-path format: YYYY-MM/(images|files)/filename.ext (image or text whitelist)
 // Uses [^/]+ for the filename segment to allow Unicode/Chinese characters
-const SUBPATH_RE =
-  /^\d{4}-\d{2}\/(images|files)\/[^/]+\.(jpg|jpeg|png|gif|webp)$/i;
+const SUBPATH_RE = ATTACHMENT_SUBPATH_RE;
 
 export async function GET(
   request: NextRequest,
