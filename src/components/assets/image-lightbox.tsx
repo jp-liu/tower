@@ -231,30 +231,6 @@ export function ImageLightbox({
         {hasNav ? ` · ${(currentIndex as number) + 1} / ${(assets as LightboxAsset[]).length}` : ""}
       </div>
 
-      {/* Prev / Next chevrons */}
-      {hasNav && (
-        <>
-          <NavBtn
-            side="left"
-            onClick={goPrev}
-            disabled={!canPrev}
-            title={t("assets.lightbox.prev")}
-            aria-label={t("assets.lightbox.prev")}
-          >
-            <ChevronLeft className="h-6 w-6" />
-          </NavBtn>
-          <NavBtn
-            side="right"
-            onClick={goNext}
-            disabled={!canNext}
-            title={t("assets.lightbox.next")}
-            aria-label={t("assets.lightbox.next")}
-          >
-            <ChevronRight className="h-6 w-6" />
-          </NavBtn>
-        </>
-      )}
-
       {/* Image stage — wheel-to-zoom + click-on-empty closes */}
       <div
         className={`absolute inset-0 flex items-center justify-center overflow-hidden select-none ${cursorClass}`}
@@ -288,6 +264,27 @@ export function ImageLightbox({
         className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 rounded-lg bg-black/50 px-2 py-1.5 backdrop-blur-md ring-1 ring-white/10"
         onClick={(e) => e.stopPropagation()}
       >
+        {hasNav && (
+          <>
+            <ToolbarBtn
+              onClick={goPrev}
+              title={t("assets.lightbox.prev")}
+              aria-label={t("assets.lightbox.prev")}
+              disabled={!canPrev}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </ToolbarBtn>
+            <ToolbarBtn
+              onClick={goNext}
+              title={t("assets.lightbox.next")}
+              aria-label={t("assets.lightbox.next")}
+              disabled={!canNext}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </ToolbarBtn>
+            <div className="mx-1 h-5 w-px bg-white/20" />
+          </>
+        )}
         <ToolbarBtn
           onClick={zoomOut}
           title={t("assets.lightbox.zoomOut")}
@@ -359,33 +356,3 @@ function ToolbarBtn({
   );
 }
 
-function NavBtn({
-  side,
-  children,
-  onClick,
-  title,
-  disabled,
-  ...rest
-}: {
-  side: "left" | "right";
-  children: React.ReactNode;
-  onClick: () => void;
-  title: string;
-  disabled?: boolean;
-} & React.AriaAttributes) {
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        if (!disabled) onClick();
-      }}
-      title={title}
-      disabled={disabled}
-      className={`absolute ${side === "left" ? "left-3" : "right-3"} top-1/2 z-10 -translate-y-1/2 inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/30 text-white/90 hover:bg-black/60 hover:text-white disabled:opacity-20 disabled:hover:bg-black/30 disabled:cursor-not-allowed backdrop-blur-sm transition-colors`}
-      {...rest}
-    >
-      {children}
-    </button>
-  );
-}
