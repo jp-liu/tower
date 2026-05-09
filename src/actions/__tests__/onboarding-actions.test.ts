@@ -34,6 +34,7 @@ import {
   getOnboardingStatus,
   setOnboardingProgress,
   completeOnboarding,
+  setOnboardingExtensions,
   dispatchTaskCompletionEvent,
   type OnboardingStatus,
   type TaskCompletionPayload,
@@ -136,7 +137,7 @@ describe("onboarding-actions", () => {
   });
 
   describe("completeOnboarding", () => {
-    it("upserts both onboarding.completed=true and onboarding.lastStep=2", async () => {
+    it("upserts both onboarding.completed=true and onboarding.lastStep=4 (default)", async () => {
       mockDb.systemConfig.upsert.mockResolvedValue({});
 
       await completeOnboarding();
@@ -148,8 +149,8 @@ describe("onboarding-actions", () => {
       });
       expect(mockDb.systemConfig.upsert).toHaveBeenCalledWith({
         where: { key: "onboarding.lastStep" },
-        create: { key: "onboarding.lastStep", value: "2" },
-        update: { value: "2" },
+        create: { key: "onboarding.lastStep", value: "4" },
+        update: { value: "4" },
       });
       expect(mockDb.systemConfig.upsert).toHaveBeenCalledTimes(2);
     });
@@ -209,6 +210,71 @@ describe("onboarding-actions", () => {
       await completeOnboarding();
 
       expect(revalidatePath).toHaveBeenCalledWith("/", "layout");
+    });
+  });
+
+  describe("setOnboardingExtensions", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it("persists requested + completed to SystemConfig as JSON arrays", async () => {
+      mockDb.systemConfig.upsert.mockResolvedValue({});
+
+      await setOnboardingExtensions(["rg", "monaco"], ["rg"]);
+
+      expect(mockDb.systemConfig.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { key: "onboarding.extensions.requested" },
+          create: { key: "onboarding.extensions.requested", value: JSON.stringify(["rg", "monaco"]) },
+          update: { value: JSON.stringify(["rg", "monaco"]) },
+        })
+      );
+      expect(mockDb.systemConfig.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { key: "onboarding.extensions.completed" },
+          create: { key: "onboarding.extensions.completed", value: JSON.stringify(["rg"]) },
+          update: { value: JSON.stringify(["rg"]) },
+        })
+      );
+    });
+
+    it("handles empty arrays — user opted out of all extensions", async () => {
+      mockDb.systemConfig.upsert.mockResolvedValue({});
+
+      await setOnboardingExtensions([], []);
+
+      expect(mockDb.systemConfig.upsert).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("completeOnboarding (parametrized lastStep)", () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it("default lastStep is 4 (post-Phase-73)", async () => {
+      mockDb.systemConfig.upsert.mockResolvedValue({});
+
+      await completeOnboarding("alice");
+
+      expect(mockDb.systemConfig.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { key: "onboarding.lastStep" },
+          update: { value: "4" },
+        })
+      );
+    });
+
+    it("explicit lastStep overrides default", async () => {
+      mockDb.systemConfig.upsert.mockResolvedValue({});
+
+      await completeOnboarding("alice", 7);
+
+      expect(mockDb.systemConfig.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { key: "onboarding.lastStep" },
+          update: { value: "7" },
+        })
+      );
     });
   });
 
