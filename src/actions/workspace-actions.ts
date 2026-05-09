@@ -168,7 +168,11 @@ export async function getWorkspacesWithRecentTasks(limit = 3) {
           name: true,
           alias: true,
           tasks: {
-            where: { status: { in: ["TODO", "IN_PROGRESS", "IN_REVIEW"] } },
+            where: {
+              status: { in: ["TODO", "IN_PROGRESS", "IN_REVIEW"] },
+              // Exclude system tasks tagged with the builtin "Tower" label
+              NOT: { labels: { some: { label: { name: "Tower", isBuiltin: true } } } },
+            },
             select: {
               id: true,
               title: true,
@@ -187,7 +191,10 @@ export async function getWorkspacesWithRecentTasks(limit = 3) {
           _count: {
             select: {
               tasks: {
-                where: { status: { in: ["TODO", "IN_PROGRESS", "IN_REVIEW"] } },
+                where: {
+                  status: { in: ["TODO", "IN_PROGRESS", "IN_REVIEW"] },
+                  NOT: { labels: { some: { label: { name: "Tower", isBuiltin: true } } } },
+                },
               },
             },
           },
