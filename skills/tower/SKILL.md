@@ -218,7 +218,9 @@ Note: the response does not include workspace name. Use the workspace name from 
 
 ### Task Creation Confirmation
 
-After `create_task` succeeds:
+After `create_task` succeeds, render based on the **response** (not the input
+parameter — `autoStart: true` does NOT mean execution actually started; check
+`response.execution` and `response.executionError`):
 
 ```
 ✅ Task created: **{title}**
@@ -226,8 +228,12 @@ After `create_task` succeeds:
 - Priority: {priority}
 - Status: {status}
 - Worktree: {yes/no}
-{autoStart ? "⚡ Execution started" : ""}
+{response.execution ? "⚡ Execution started" : response.executionError ? "⚠️ Auto-start failed: " + response.executionError : ""}
 ```
+
+If `executionError` is present, surface it verbatim — common causes are server
+not running, concurrency limit hit, or project missing localPath. Do not say
+"Execution started" when the response only shows `executionError`.
 
 ### Daily Summary (`daily_summary`)
 

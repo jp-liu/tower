@@ -164,7 +164,14 @@ export const taskTools = {
       }
 
       // Auto-start execution if requested — pass title as prompt since
-      // startPtyExecution already injects task description as context
+      // startPtyExecution already injects task description as context.
+      //
+      // We always surface the outcome on the response so the assistant doesn't
+      // claim "Execution started" when the kanban still shows TODO. Common
+      // failure modes worth keeping visible:
+      //   - Next.js server unreachable (wrong port / not running)
+      //   - Concurrency limit hit (system.maxConcurrentExecutions)
+      //   - Project missing localPath
       if (args.autoStart) {
         const PORT = process.env.PORT ?? "3000";
         const prompt = args.title;
@@ -178,8 +185,20 @@ export const taskTools = {
             const execData = await res.json();
             return { ...task, execution: execData };
           }
-        } catch {
-          // Task created but auto-start failed — return task anyway
+          let errMsg = `HTTP ${res.status}`;
+          try {
+            const errBody = (await res.json()) as { error?: string };
+            if (errBody?.error) errMsg = errBody.error;
+          } catch {
+            /* response body wasn't JSON; keep status code */
+          }
+          return { ...task, execution: null, executionError: errMsg };
+        } catch (err) {
+          return {
+            ...task,
+            execution: null,
+            executionError: err instanceof Error ? err.message : String(err),
+          };
         }
       }
 
