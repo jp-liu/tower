@@ -22,6 +22,7 @@ import { updateTaskStatus, checkWorktreeClean, commitWorktreeChanges } from "@/a
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "@/components/task/execution-timeline";
 import { useI18n } from "@/lib/i18n";
+import { useExtension } from "@/lib/extensions/client";
 import { toast } from "sonner";
 import type { DiffResponse } from "@/lib/diff-parser";
 
@@ -86,6 +87,8 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const router = useRouter();
   const { t } = useI18n();
   const { removePortal } = useTerminalPortal();
+  const { status: rgStatus } = useExtension("rg");
+  const { status: monacoStatus } = useExtension("monaco");
   const [taskStatus, setTaskStatus] = useState(task.status);
   // Sync taskStatus when server-side task prop changes (router.refresh, etc.)
   useEffect(() => {
@@ -164,6 +167,13 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
       });
     return () => { cancelled = true; };
   }, [task.id, taskStatus]);
+
+  // Force away from "files" tab when Monaco is not installed
+  useEffect(() => {
+    if (!monacoStatus.installed && (activeTab === "files" || activeTab == null)) {
+      setActiveTab("changes");
+    }
+  }, [monacoStatus.installed, activeTab]);
 
   const handleExecute = useCallback(async () => {
     if (isExecuting) return;
@@ -447,7 +457,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           {/* Tab bar — segmented control style matching Settings page */}
           <div className="header-lg flex shrink-0 items-center px-3 py-3">
             <TabsList className="h-auto border border-border">
-              {!isWorktreeDone && (
+              {!isWorktreeDone && monacoStatus.installed && (
                 <TabsTrigger value="files" className="data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
                   <FolderTree className="h-3.5 w-3.5" />
                   {t("taskPage.tabFiles")}
@@ -467,6 +477,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           </div>
 
           {/* Files tab — Phase 21+64: FileTree/Search sub-tabs + CodeEditor */}
+          {monacoStatus.installed && (
           <TabsContent value="files" className="flex-1 min-h-0 overflow-hidden">
             <div className="flex h-full flex-row overflow-hidden">
               {/* Left: sub-tabs for file tree vs search (240px fixed) */}
@@ -479,10 +490,12 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                         <FolderTree className="h-3 w-3" />
                         {t("taskPage.tabFileTree")}
                       </TabsTrigger>
+                      {rgStatus.installed && (
                       <TabsTrigger value="search" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
                         <Search className="h-3 w-3" />
                         {t("taskPage.tabSearch")}
                       </TabsTrigger>
+                      )}
                       <TabsTrigger value="git" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
                         <GitPullRequestArrow className="h-3 w-3" />
                         {t("git.tabLabel")}
@@ -503,6 +516,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                     />
                   </TabsContent>
                   {/* Search sub-tab */}
+                  {rgStatus.installed && (
                   <TabsContent value="search" className="flex-1 min-h-0 overflow-hidden mt-0">
                     <CodeSearch
                       localPath={fileRootPath ?? task.project?.localPath ?? null}
@@ -513,6 +527,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                       }}
                     />
                   </TabsContent>
+                  )}
                   {/* Git sub-tab */}
                   <TabsContent value="git" className="flex-1 min-h-0 overflow-hidden mt-0">
                     <EditorGitPanel
@@ -543,6 +558,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
               </div>
             </div>
           </TabsContent>
+          )}
 
           {/* Changes tab — functional, uses existing TaskDiffView */}
           <TabsContent value="changes" className="flex-1 min-h-0 overflow-auto">
