@@ -4,6 +4,36 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { CodexCliAdapter } from "../adapters/cli/codex-cli-adapter";
 import type { CliSpawnOptions } from "../types";
 
+// Hoisted shared state for child_process mock — see claude-cli-adapter.test.ts
+// for why this is shared at module scope (vi.doMock doesn't reach dynamic
+// imports after the first cache).
+const { execCalls, mockBehavior, execFileMock } = vi.hoisted(() => {
+  const execCalls: Array<{ cmd: string; args: string[] }> = [];
+  const mockBehavior: { fn: (cmd: string, args: string[]) => { stdout: string } } = {
+    fn: () => ({ stdout: "" }),
+  };
+  const execFileMock = (
+    cmd: string,
+    args: string[],
+    _opts: unknown,
+    cb: (err: Error | null, out: { stdout: string; stderr: string }) => void,
+  ) => {
+    execCalls.push({ cmd, args });
+    try {
+      const { stdout } = mockBehavior.fn(cmd, args);
+      cb(null, { stdout, stderr: "" });
+    } catch (err) {
+      cb(err as Error, { stdout: "", stderr: "" });
+    }
+  };
+  return { execCalls, mockBehavior, execFileMock };
+});
+
+vi.mock("node:child_process", async (importOriginal) => {
+  const original = await importOriginal<typeof import("node:child_process")>();
+  return { ...original, execFile: execFileMock };
+});
+
 describe("CodexCliAdapter", () => {
   let adapter: CodexCliAdapter;
 
@@ -227,11 +257,84 @@ describe("CodexCliAdapter", () => {
     });
   });
 
-  describe("MCP interface", () => {
-    it("has installMcp, uninstallMcp, isMcpInstalled methods", () => {
-      expect(typeof adapter.installMcp).toBe("function");
-      expect(typeof adapter.uninstallMcp).toBe("function");
-      expect(typeof adapter.isMcpInstalled).toBe("function");
+  describe("MCP (CLI-driven)", () => {
+    beforeEach(() => {
+      execCalls.length = 0;
+      mockBehavior.fn = () => ({ stdout: "" });
+    });
+
+    it("installMcp invokes `codex mcp add` with --env and -- separator", async () => {
+      const result = await adapter.installMcp({
+        name: "test-tower",
+        command: "node",
+        args: ["/srv/mcp.cjs"],
+        env: { DATABASE_URL: "file:/tmp/db" },
+      });
+      expect(result.ok).toBe(true);
+      expect(result.method).toBe("cli");
+      const add = execCalls.find((c) => c.args[0] === "mcp" && c.args[1] === "add");
+      expect(add).toBeDefined();
+      expect(add!.args).toEqual([
+        "mcp",
+        "add",
+        "test-tower",
+        "--env",
+        "DATABASE_URL=file:/tmp/db",
+        "--",
+        "node",
+        "/srv/mcp.cjs",
+      ]);
+    });
+
+    it("uninstallMcp invokes `codex mcp remove`", async () => {
+      const result = await adapter.uninstallMcp("test-tower");
+      expect(result.ok).toBe(true);
+      expect(execCalls[0].args).toEqual(["mcp", "remove", "test-tower"]);
+    });
+
+    it("isMcpInstalled honors `codex mcp get` exit code", async () => {
+      mockBehavior.fn = (_c, args) => {
+        if (args[0] === "mcp" && args[1] === "get") return { stdout: "ok" };
+        throw new Error("unexpected");
+      };
+      expect(await adapter.isMcpInstalled("test-tower")).toBe(true);
+      mockBehavior.fn = () => { throw new Error("not found"); };
+      expect(await adapter.isMcpInstalled("test-tower")).toBe(false);
+    });
+  });
+
+  describe("Skills (symlink)", () => {
+    let sourceDir: string;
+    let skillsHome: string;
+
+    beforeEach(() => {
+      sourceDir = fs.mkdtempSync(path.join(__dirname, "tower-skill-src-"));
+      fs.writeFileSync(path.join(sourceDir, "SKILL.md"), "# test\n", "utf-8");
+      skillsHome = fs.mkdtempSync(path.join(__dirname, "tower-codex-home-"));
+      vi.spyOn(adapter, "getConfigDir").mockReturnValue(skillsHome);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      fs.rmSync(sourceDir, { recursive: true, force: true });
+      fs.rmSync(skillsHome, { recursive: true, force: true });
+    });
+
+    it("installSkill creates a symlink in <CODEX_HOME>/skills", async () => {
+      const result = await adapter.installSkill("tower", sourceDir);
+      expect(result.ok).toBe(true);
+      expect(result.method).toBe("symlink");
+      const target = path.join(skillsHome, "skills", "tower");
+      const stat = fs.lstatSync(target);
+      expect(stat.isSymbolicLink()).toBe(true);
+      expect(path.resolve(fs.readlinkSync(target))).toBe(path.resolve(sourceDir));
+    });
+
+    it("uninstallSkill removes only our symlink", async () => {
+      await adapter.installSkill("tower", sourceDir);
+      const result = await adapter.uninstallSkill("tower");
+      expect(result.ok).toBe(true);
+      expect(fs.existsSync(path.join(skillsHome, "skills", "tower"))).toBe(false);
     });
   });
 });

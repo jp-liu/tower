@@ -1,16 +1,22 @@
 /**
- * Ensure .tower/ directory exists with assistant persona and skill files.
- * Called once on server startup via instrumentation.ts.
- * Idempotent — skips files that already exist.
+ * Local Tower bootstrap — runs once on server startup via instrumentation.ts.
  *
- * Also auto-installs hooks and MCP server config for all registered providers.
+ * IMPORTANT scope: this file ONLY touches Tower's own data dir (~/.tower) and
+ * the embedded assistant's project-level config. It does NOT install MCP /
+ * hooks / skills into the user's global ~/.claude or ~/.codex.
+ *
+ * Why: earlier versions auto-injected those integrations on every boot, which
+ * (a) bypassed the CLI's own command surface and (b) ran before we knew the
+ * user actually had a working CLI. Provider integration is now triggered by
+ * /api/adapters/test on a successful connection probe — see
+ * src/lib/ai/install-orchestrator.ts and .notes/ai-provider-integration.md.
  */
 
 import { existsSync, mkdirSync, copyFileSync, writeFileSync, readFileSync } from "fs";
 import { join } from "path";
 import { getAssistantDir, getTowerDbPath } from "./tower-dir";
-import { providerRegistry } from "./ai/providers";
 import type { McpServerConfig } from "./ai/types";
+import { getTowerMcpName } from "./ai/install-orchestrator";
 
 const CLAUDE_MD_CONTENT = `# Tower Assistant
 
@@ -39,33 +45,34 @@ export function ensureTowerDir(): string {
   const skillDestDir = join(assistantDir, ".claude", "skills", "tower");
   const skillDest = join(skillDestDir, "SKILL.md");
 
-  // 2. Ensure CLAUDE.md exists
+  // Assistant CLAUDE.md
   if (!existsSync(claudeMd)) {
     writeFileSync(claudeMd, CLAUDE_MD_CONTENT, "utf-8");
     console.error(`[init-tower] Created ${claudeMd}`);
   }
 
-  // 3. Copy SKILL.md from source if missing
+  // Assistant skill — file copy is intentional here (not symlink). The
+  // assistant's config dir is Tower-owned and short-lived per session, so
+  // a stable copy avoids surprises if the user moves the repo.
   if (existsSync(skillSrc) && !existsSync(skillDest)) {
     mkdirSync(skillDestDir, { recursive: true });
     copyFileSync(skillSrc, skillDest);
     console.error(`[init-tower] Copied SKILL.md → ${skillDestDir}`);
   }
 
-  // 4. Ensure assistant-local MCP config (tower MCP in project-level settings)
+  // MCP config for the embedded assistant. The assistant runs with
+  // cwd=assistantDir and reads `<assistantDir>/.claude/settings.json`. We
+  // write this directly (not via `claude mcp add -s project`) because the
+  // assistant must work even if the user's `claude` binary is misconfigured —
+  // and this dir is ours alone, so direct write is safe.
   ensureAssistantMcpConfig(assistantDir);
-
-  // 5. Auto-install hooks and MCP for all available providers (global)
-  void ensureProviderIntegrations();
 
   return assistantDir;
 }
 
 /**
  * Write MCP config into the assistant's project-level .claude/settings.json.
- * Claude CLI reads project-level settings from cwd/.claude/settings.json,
- * so the assistant session (cwd = assistantDir) picks up this config.
- * Uses the same "tower" name — project-level overrides global if both exist.
+ * Direct file write is intentional — see comment in ensureTowerDir().
  */
 function ensureAssistantMcpConfig(assistantDir: string): void {
   const settingsDir = join(assistantDir, ".claude");
@@ -80,7 +87,6 @@ function ensureAssistantMcpConfig(assistantDir: string): void {
     entry.env = mcpConfig.env;
   }
 
-  // Read existing settings or start fresh
   let settings: Record<string, unknown> = {};
   if (existsSync(settingsFile)) {
     try {
@@ -91,13 +97,15 @@ function ensureAssistantMcpConfig(assistantDir: string): void {
   }
 
   const mcpServers = (settings["mcpServers"] as Record<string, unknown>) ?? {};
-  const existing = mcpServers["tower"];
+  // Use the same dynamic name as the user-scope install so dev/prod don't
+  // share the assistant's project-scope `tower` key either.
+  const name = mcpConfig.name;
+  const existing = mcpServers[name];
 
-  // Only write if config changed (avoid unnecessary disk writes)
   const newJson = JSON.stringify(entry);
   if (JSON.stringify(existing) === newJson) return;
 
-  mcpServers["tower"] = entry;
+  mcpServers[name] = entry;
   settings["mcpServers"] = mcpServers;
 
   mkdirSync(settingsDir, { recursive: true });
@@ -106,82 +114,34 @@ function ensureAssistantMcpConfig(assistantDir: string): void {
 }
 
 /**
- * Build the Tower MCP server config for injection into CLI adapters.
- * Passes DATABASE_URL so the MCP subprocess can connect to the same database
- * even when Claude CLI starts it from a different cwd without .env.
+ * Build the Tower MCP server config for the embedded assistant. Kept here
+ * (instead of imported from install-orchestrator) so this file has zero
+ * coupling to the provider integration code path that runs after test-connect.
  */
 function buildTowerMcpConfig(): McpServerConfig {
   const root = process.cwd().replace(/\\/g, "/");
-
-  // Forward DATABASE_URL from the running app — MCP subprocess needs it
-  // since it won't have access to the project .env file.
-  // Fall back to the default tower DB path when env is not set.
   const dbUrl =
     process.env.DATABASE_URL || `file:${getTowerDbPath().replace(/\\/g, "/")}`;
-
-  // Prefer pre-built JS (fast, no tsx dependency, resolves @/ aliases)
   const builtPath = `${root}/dist/mcp-server.cjs`;
+  // Match the user-scope name so the assistant's project-scope MCP and the
+  // user-scope CLI install refer to the same logical server. (Project scope
+  // overrides user scope in Claude — both pointing at the same env-bound DB
+  // means there's no surprise when the assistant runs.)
+  const name = getTowerMcpName();
 
   if (existsSync(builtPath)) {
     return {
-      name: "tower",
+      name,
       command: "node",
       args: [builtPath],
       env: { DATABASE_URL: dbUrl },
     };
   }
 
-  // Fallback: run TS source via project-local tsx (not npx — avoids alias resolution issues)
   return {
-    name: "tower",
+    name,
     command: `${root}/node_modules/.bin/tsx`,
     args: [`${root}/src/mcp/index.ts`],
     env: { DATABASE_URL: dbUrl },
   };
-}
-
-/**
- * Install hooks and MCP server config for all registered providers.
- * Uses the CliAdapter interface — each provider handles its own config format.
- * Runs once per process — guarded by _integrationsChecked flag.
- */
-let _integrationsChecked = false;
-
-async function ensureProviderIntegrations(): Promise<void> {
-  if (_integrationsChecked) return;
-  _integrationsChecked = true;
-
-  const mcpConfig = buildTowerMcpConfig();
-
-  for (const provider of providerRegistry.getAll()) {
-    const adapter = provider.cli?.adapter;
-    if (!adapter) continue;
-
-    const available = await adapter.isAvailable();
-    if (!available) continue;
-
-    const label = provider.displayName;
-
-    // Install hooks (only if missing)
-    try {
-      const hooksInstalled = await adapter.isHooksInstalled();
-      if (!hooksInstalled) {
-        await adapter.installHooks(`http://localhost:3000`);
-        console.error(`[init-tower] Installed hooks for ${label}`);
-      }
-    } catch (err) {
-      console.error(`[init-tower] Failed to install hooks for ${label}:`, err);
-    }
-
-    // Install MCP (only if missing)
-    try {
-      const mcpInstalled = await adapter.isMcpInstalled("tower");
-      if (!mcpInstalled) {
-        await adapter.installMcp(mcpConfig);
-        console.error(`[init-tower] Installed Tower MCP for ${label}`);
-      }
-    } catch (err) {
-      console.error(`[init-tower] Failed to install MCP for ${label}:`, err);
-    }
-  }
 }

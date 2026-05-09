@@ -2,9 +2,16 @@ import { db } from "@/lib/db";
 import { providerRegistry } from "./providers";
 import { AiProviderError } from "./types";
 import type { CliAdapter, AiQueryAdapter, ProviderDefinition, AiSlot } from "./types";
+import {
+  isProviderConnected,
+  getConnectedProviders,
+} from "@/actions/provider-connection-actions";
 
 const DEFAULT_PROVIDER = "claude";
 const DEFAULT_MODE = "cli";
+
+const NOT_CONNECTED_HINT =
+  "请到 Settings → Test Connection 测试该 Provider 后再使用（未注入的 CLI 不能被插槽选中）";
 
 interface ResolvedCliAdapter {
   adapter: CliAdapter;
@@ -22,10 +29,45 @@ async function loadSlotConfig(slot: AiSlot) {
   return db.aiCapabilityConfig.findUnique({ where: { slot } });
 }
 
+/**
+ * Decide which provider to actually use for a slot.
+ *
+ * Rules (added in Batch 2 — see .notes/ai-provider-integration.md):
+ *   1. If the slot has a configured provider, REQUIRE that provider be
+ *      connected. Don't silently fall back — that would hide misconfiguration.
+ *   2. If the slot has no config, fall back to the default IF it's connected.
+ *      Otherwise pick the first other connected provider.
+ *   3. If nothing is connected, throw with a clear pointer to Test Connection.
+ *
+ * Untested or partially-installed providers are intentionally invisible here:
+ * we don't know that their hooks/MCP/skills landed correctly without a probe.
+ */
+async function resolveProviderName(configuredProvider: string | null): Promise<string> {
+  if (configuredProvider) {
+    if (await isProviderConnected(configuredProvider)) return configuredProvider;
+    throw new AiProviderError(
+      "CLI_NOT_FOUND",
+      configuredProvider,
+      `Provider "${configuredProvider}" 未连接：${NOT_CONNECTED_HINT}`,
+    );
+  }
+
+  const connected = await getConnectedProviders();
+  if (connected.length === 0) {
+    throw new AiProviderError(
+      "CLI_NOT_FOUND",
+      DEFAULT_PROVIDER,
+      `没有任何 AI Provider 已连接：${NOT_CONNECTED_HINT}`,
+    );
+  }
+  return connected.includes(DEFAULT_PROVIDER) ? DEFAULT_PROVIDER : connected[0];
+}
+
 export async function resolveCliAdapter(slot: "terminal"): Promise<ResolvedCliAdapter> {
   const config = await loadSlotConfig(slot);
-  const providerName = config?.provider ?? DEFAULT_PROVIDER;
   const model = config?.model ?? undefined;
+
+  const providerName = await resolveProviderName(config?.provider ?? null);
 
   const providerDef = providerRegistry.get(providerName);
   if (!providerDef) {
@@ -48,9 +90,10 @@ export async function resolveQueryAdapter(
   slot: "summary" | "dreaming" | "analysis" | "assistant"
 ): Promise<ResolvedQueryAdapter> {
   const config = await loadSlotConfig(slot);
-  const providerName = config?.provider ?? DEFAULT_PROVIDER;
   const mode = config?.mode ?? DEFAULT_MODE;
   const model = config?.model ?? undefined;
+
+  const providerName = await resolveProviderName(config?.provider ?? null);
 
   const providerDef = providerRegistry.get(providerName);
   if (!providerDef) {

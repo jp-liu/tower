@@ -3,6 +3,36 @@ import * as fs from "node:fs";
 import { ClaudeCliAdapter } from "../adapters/cli/claude-cli-adapter";
 import type { CliSpawnOptions } from "../types";
 
+// Hoisted shared state for the child_process mock — every test that touches
+// the CLI sees the SAME mock function. dynamic `import("node:child_process")`
+// inside the adapter resolves to this module.
+const { execCalls, mockBehavior, execFileMock } = vi.hoisted(() => {
+  const execCalls: Array<{ cmd: string; args: string[] }> = [];
+  const mockBehavior: { fn: (cmd: string, args: string[]) => { stdout: string } } = {
+    fn: () => ({ stdout: "" }),
+  };
+  const execFileMock = (
+    cmd: string,
+    args: string[],
+    _opts: unknown,
+    cb: (err: Error | null, out: { stdout: string; stderr: string }) => void,
+  ) => {
+    execCalls.push({ cmd, args });
+    try {
+      const { stdout } = mockBehavior.fn(cmd, args);
+      cb(null, { stdout, stderr: "" });
+    } catch (err) {
+      cb(err as Error, { stdout: "", stderr: "" });
+    }
+  };
+  return { execCalls, mockBehavior, execFileMock };
+});
+
+vi.mock("node:child_process", async (importOriginal) => {
+  const original = await importOriginal<typeof import("node:child_process")>();
+  return { ...original, execFile: execFileMock };
+});
+
 describe("ClaudeCliAdapter", () => {
   let adapter: ClaudeCliAdapter;
 
@@ -107,78 +137,114 @@ describe("ClaudeCliAdapter", () => {
     });
   });
 
-  describe("MCP", () => {
-    let settingsPath: string;
-    let originalContent: string | null = null;
-
+  describe("MCP (CLI-driven)", () => {
+    // installMcp / uninstallMcp / isMcpInstalled shell out to
+    // `claude mcp add-json|remove|get`. We mock execFile via vi.mock at module
+    // scope so dynamic `import("node:child_process")` inside the adapter sees
+    // the same shared mock across every test in this file.
     beforeEach(() => {
-      settingsPath = adapter.getSettingsPath();
-      try {
-        originalContent = fs.readFileSync(settingsPath, "utf-8");
-      } catch {
-        originalContent = null;
-      }
+      execCalls.length = 0;
+      mockBehavior.fn = () => ({ stdout: "" });
     });
 
-    afterEach(() => {
-      // Restore original settings
-      if (originalContent !== null) {
-        fs.writeFileSync(settingsPath, originalContent, "utf-8");
-      } else {
-        // Remove the mcpServers key we added (don't delete the file)
-        try {
-          const current = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-          delete current.mcpServers;
-          fs.writeFileSync(settingsPath, JSON.stringify(current, null, 2), "utf-8");
-        } catch {
-          // file doesn't exist, nothing to clean
-        }
-      }
-    });
-
-    it("installs MCP server config into settings.json", async () => {
-      await adapter.installMcp({
-        name: "test-tower",
-        command: "npx",
-        args: ["tsx", "/test/mcp/index.ts"],
-      });
-
-      const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-      expect(settings.mcpServers["test-tower"]).toEqual({
-        command: "npx",
-        args: ["tsx", "/test/mcp/index.ts"],
-      });
-
-      // Clean up
-      await adapter.uninstallMcp("test-tower");
-    });
-
-    it("reports MCP installed/not installed correctly", async () => {
-      expect(await adapter.isMcpInstalled("test-tower")).toBe(false);
-
-      await adapter.installMcp({
-        name: "test-tower",
-        command: "npx",
-        args: ["tsx", "/test/mcp/index.ts"],
-      });
-      expect(await adapter.isMcpInstalled("test-tower")).toBe(true);
-
-      await adapter.uninstallMcp("test-tower");
-      expect(await adapter.isMcpInstalled("test-tower")).toBe(false);
-    });
-
-    it("includes env in MCP config when provided", async () => {
-      await adapter.installMcp({
+    it("installMcp invokes `claude mcp add-json -s user`", async () => {
+      const result = await adapter.installMcp({
         name: "test-tower",
         command: "npx",
         args: ["tsx", "/test/mcp/index.ts"],
         env: { NODE_ENV: "production" },
       });
 
-      const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-      expect(settings.mcpServers["test-tower"].env).toEqual({ NODE_ENV: "production" });
+      expect(result.ok).toBe(true);
+      expect(result.method).toBe("cli");
 
-      await adapter.uninstallMcp("test-tower");
+      // First call is a best-effort `mcp remove` (idempotent), then `mcp add-json`.
+      const addJson = execCalls.find((c) => c.args.includes("add-json"));
+      expect(addJson).toBeDefined();
+      expect(addJson!.args.slice(0, 4)).toEqual(["mcp", "add-json", "-s", "user"]);
+      expect(addJson!.args[4]).toBe("test-tower");
+      expect(JSON.parse(addJson!.args[5])).toEqual({
+        command: "npx",
+        args: ["tsx", "/test/mcp/index.ts"],
+        env: { NODE_ENV: "production" },
+      });
+    });
+
+    it("uninstallMcp invokes `claude mcp remove -s user`", async () => {
+      const result = await adapter.uninstallMcp("test-tower");
+      expect(result.ok).toBe(true);
+      expect(result.method).toBe("cli");
+      expect(execCalls[0].args).toEqual(["mcp", "remove", "-s", "user", "test-tower"]);
+    });
+
+    it("isMcpInstalled returns true when `claude mcp get` succeeds", async () => {
+      mockBehavior.fn = (_cmd, args) => {
+        if (args[0] === "mcp" && args[1] === "get") return { stdout: "ok" };
+        throw new Error("unexpected");
+      };
+      expect(await adapter.isMcpInstalled("test-tower")).toBe(true);
+    });
+
+    it("isMcpInstalled returns false when `claude mcp get` errors", async () => {
+      mockBehavior.fn = () => { throw new Error("not found"); };
+      expect(await adapter.isMcpInstalled("test-tower")).toBe(false);
+    });
+  });
+
+  describe("Skills (symlink)", () => {
+    // Use a temp dir as the source skill, then verify symlink target via lstat.
+    const os = require("node:os");
+    const path = require("node:path");
+    let sourceDir: string;
+    let skillsHome: string;
+    let originalConfigDir: string;
+
+    beforeEach(() => {
+      sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), "tower-skill-src-"));
+      fs.writeFileSync(path.join(sourceDir, "SKILL.md"), "# test\n", "utf-8");
+      skillsHome = fs.mkdtempSync(path.join(os.tmpdir(), "tower-claude-home-"));
+      originalConfigDir = adapter.getConfigDir();
+      // Override getConfigDir to point at our temp dir for this suite.
+      vi.spyOn(adapter, "getConfigDir").mockReturnValue(skillsHome);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      fs.rmSync(sourceDir, { recursive: true, force: true });
+      fs.rmSync(skillsHome, { recursive: true, force: true });
+      void originalConfigDir;
+    });
+
+    it("installSkill creates a symlink to the source dir", async () => {
+      const result = await adapter.installSkill("tower", sourceDir);
+      expect(result.ok).toBe(true);
+      expect(result.method).toBe("symlink");
+      const target = path.join(skillsHome, "skills", "tower");
+      const stat = fs.lstatSync(target);
+      expect(stat.isSymbolicLink()).toBe(true);
+      expect(path.resolve(fs.readlinkSync(target))).toBe(path.resolve(sourceDir));
+    });
+
+    it("isSkillInstalled validates the symlink target when given", async () => {
+      await adapter.installSkill("tower", sourceDir);
+      expect(await adapter.isSkillInstalled("tower")).toBe(true);
+      expect(await adapter.isSkillInstalled("tower", sourceDir)).toBe(true);
+      expect(await adapter.isSkillInstalled("tower", "/some/other/path")).toBe(false);
+    });
+
+    it("uninstallSkill removes only our symlink", async () => {
+      await adapter.installSkill("tower", sourceDir);
+      const result = await adapter.uninstallSkill("tower");
+      expect(result.ok).toBe(true);
+      expect(fs.existsSync(path.join(skillsHome, "skills", "tower"))).toBe(false);
+    });
+
+    it("uninstallSkill refuses to remove a real directory", async () => {
+      const realDir = path.join(skillsHome, "skills", "user-skill");
+      fs.mkdirSync(realDir, { recursive: true });
+      const result = await adapter.uninstallSkill("user-skill");
+      expect(result.ok).toBe(false);
+      expect(fs.existsSync(realDir)).toBe(true);
     });
   });
 });

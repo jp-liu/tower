@@ -250,6 +250,29 @@ model SystemConfig {
   updatedAt DateTime @updatedAt
 }
 
+/// One row per AI provider that has been tested via Settings → Test Connection.
+/// Capability slots can only select a provider that has a row here with
+/// testOk=true and the relevant integrations installed. See
+/// .notes/ai-provider-integration.md and .notes/ai-capability-slots.md.
+model ProviderConnection {
+  id              String   @id @default(cuid())
+  /// Provider key from providerRegistry: "claude" | "codex" | ...
+  provider        String   @unique
+  /// Last time the user clicked Test Connection (regardless of outcome).
+  lastTestedAt    DateTime?
+  /// Outcome of the last hello probe.
+  testOk          Boolean  @default(false)
+  /// CLI version captured at last test, e.g. "1.0.0 (Claude Code)".
+  version         String?
+  mcpInstalled    Boolean  @default(false)
+  hooksInstalled  Boolean  @default(false)
+  skillsInstalled Boolean  @default(false)
+  /// Most recent install report, for debugging / Show Last Install button.
+  installLog      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
 enum ProjectType {
   NORMAL
   GIT

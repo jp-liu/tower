@@ -35,6 +35,33 @@ export interface McpServerConfig {
   env?: Record<string, string>;
 }
 
+/** Where the registration lives. CLI commands accept this as `-s <scope>`. */
+export type McpScope = "user" | "project" | "local";
+
+export interface McpInstallOptions {
+  /** Defaults to "user" — system-wide registration in ~/.claude.json or ~/.codex/config.toml. */
+  scope?: McpScope;
+  /** Required for scope=project — the project directory whose .mcp.json gets the entry. */
+  cwd?: string;
+}
+
+/**
+ * Result of a single integration install/uninstall.
+ *
+ * `method` lets the UI / logs surface *how* the change was applied, so we can tell
+ * at a glance whether we used the CLI's own API ("cli") or had to fall back to a
+ * file write ("file") because the CLI doesn't expose that operation. "symlink"
+ * is its own bucket because skill discovery is filesystem-based on both Claude
+ * and Codex — there is no `claude skill add` command.
+ */
+export interface InstallResult {
+  ok: boolean;
+  method: "cli" | "file" | "symlink";
+  /** Command string, file path, or symlink target — whatever was actually applied. */
+  detail: string;
+  error?: string;
+}
+
 export interface CliAdapter {
   buildSpawnArgs(opts: CliSpawnOptions): CliSpawnResult;
 
@@ -45,16 +72,31 @@ export interface CliAdapter {
     callbackUrl?: string;
   }): Record<string, string>;
 
-  installHooks(apiUrl: string): Promise<void>;
-  uninstallHooks(): Promise<void>;
+  // ---- Hooks ---------------------------------------------------------------
+  // Method: file write (no CLI subcommand exists in Claude 4.x or Codex 1.x).
+  // See .notes/ai-provider-integration.md for the rationale.
+  installHooks(apiUrl: string): Promise<InstallResult>;
+  uninstallHooks(): Promise<InstallResult>;
   isHooksInstalled(): Promise<boolean>;
 
-  /** Register an MCP server so the CLI can use its tools at runtime. */
-  installMcp(server: McpServerConfig): Promise<void>;
-  /** Remove a previously registered MCP server by name. */
-  uninstallMcp(name: string): Promise<void>;
-  /** Check whether an MCP server with the given name is registered. */
-  isMcpInstalled(name: string): Promise<boolean>;
+  // ---- MCP -----------------------------------------------------------------
+  // Method: CLI (`claude mcp add-json` / `codex mcp add`). Direct file edits
+  // are forbidden — the CLI's own command keeps us forward-compatible with
+  // schema changes.
+  installMcp(server: McpServerConfig, opts?: McpInstallOptions): Promise<InstallResult>;
+  uninstallMcp(name: string, opts?: McpInstallOptions): Promise<InstallResult>;
+  isMcpInstalled(name: string, opts?: McpInstallOptions): Promise<boolean>;
+
+  // ---- Skills --------------------------------------------------------------
+  // Method: symlink (`~/.claude/skills/<name>` → repo skill dir).
+  // No CLI add/remove command — skills are discovered by directory scan.
+  // Symlink lets edits in the repo reflect immediately and lets us safely
+  // identify our own installs vs user-managed skills (lstat → isSymbolicLink +
+  // readlink target check).
+  installSkill(skillName: string, sourceDir: string): Promise<InstallResult>;
+  uninstallSkill(skillName: string): Promise<InstallResult>;
+  /** When `expectedSourceDir` is given, also verifies the symlink points to that path. */
+  isSkillInstalled(skillName: string, expectedSourceDir?: string): Promise<boolean>;
 
   isAvailable(): Promise<boolean>;
   getVersion(): Promise<string | null>;
