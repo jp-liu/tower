@@ -27,6 +27,7 @@ import {
   SlidersHorizontal,
   Bell,
   HardDrive,
+  Package,
   X,
   Plus,
   Star,
@@ -55,6 +56,7 @@ import type { AgentPrompt } from "@prisma/client";
 import type { DetectedTerminalApp } from "@/lib/platform";
 import type { GitPathRule } from "@/lib/git-url";
 import { BackupSection } from "./backup-section";
+import { ExtensionsSection } from "./extensions-section";
 
 // ---------------------------------------------------------------------------
 // Inline SegmentedToggle
@@ -156,6 +158,13 @@ const SECTIONS = [
     accent: "amber",
   },
   {
+    id: "extensions",
+    labelKey: "settings.extensions.title" as const,
+    descKey: "settings.extensions.navDesc" as const,
+    icon: Package,
+    accent: "indigo",
+  },
+  {
     id: "notifications",
     labelKey: "settings.notifications.title" as const,
     descKey: "settings.notifications.navDesc" as const,
@@ -208,6 +217,12 @@ const ACCENT_STYLES: Record<
     indicator: "bg-foreground",
   },
   rose: {
+    bg: "bg-accent",
+    text: "text-foreground",
+    ring: "ring-border",
+    indicator: "bg-foreground",
+  },
+  indigo: {
     bg: "bg-accent",
     text: "text-foreground",
     ring: "ring-border",
@@ -1856,6 +1871,8 @@ export function SettingsPage() {
         return renderNotifications();
       case "backup":
         return <BackupSection />;
+      case "extensions":
+        return <ExtensionsSection />;
     }
   }
 
