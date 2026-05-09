@@ -23,6 +23,7 @@ export const zh = {
   "common.save": "保存",
   "common.delete": "删除",
   "common.add": "添加",
+  "common.loading": "加载中...",
   "common.edit": "编辑",
   "common.search": "搜索",
   // Top bar
@@ -884,4 +885,22 @@ export const zh = {
   // Extensions (Phase 71+)
   "extensions.notInstalled.title": "扩展未安装",
   "extensions.notInstalled.desc": "需要先安装对应扩展才能使用此功能",
+  // Settings → Extensions section (Phase 72)
+  "settings.extensions.title": "扩展",
+  "settings.extensions.navDesc": "管理可选扩展",
+  "settings.extensions.desc": "可选扩展提供搜索 / 编辑器等功能。装一次，所有项目共享；不装不影响核心功能。",
+  "settings.extensions.installed": "已安装",
+  "settings.extensions.notInstalledShort": "未安装",
+  "settings.extensions.install": "安装",
+  "settings.extensions.installing": "安装中...",
+  "settings.extensions.reinstall": "重新安装",
+  "settings.extensions.reinstalling": "重新安装中...",
+  "settings.extensions.uninstall": "卸载",
+  "settings.extensions.uninstalling": "卸载中...",
+  "settings.extensions.recheck": "重新检测",
+  "settings.extensions.visitHomepage": "访问官网",
+  "settings.extensions.installSuccess": "已安装 {name}",
+  "settings.extensions.installFailed": "安装 {name} 失败",
+  "settings.extensions.uninstallSuccess": "已卸载 {name}",
+  "settings.extensions.uninstallFailed": "卸载 {name} 失败",
 } as const;
