@@ -7,6 +7,7 @@ import type { ExtensionId, ExtensionStatus, ExtensionResult } from "./types";
 export interface UseExtensionReturn {
   status: ExtensionStatus;
   loading: boolean;
+  isInstalling: boolean;
   install(): Promise<ExtensionResult>;
   uninstall(): Promise<ExtensionResult>;
   refresh(): Promise<void>;
@@ -20,6 +21,7 @@ export function useExtension(id: ExtensionId): UseExtensionReturn {
   return {
     status: ctx.statusMap[id],
     loading: ctx.loading,
+    isInstalling: ctx.installing.has(id),
     install: () => ctx.install(id),
     uninstall: () => ctx.uninstall(id),
     refresh: () => ctx.refresh(id),
