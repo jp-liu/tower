@@ -115,7 +115,7 @@ export function ImageLightbox({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="max-w-[90vw] max-h-[90vh] p-0 overflow-hidden bg-black/90 ring-0"
+        className="w-[90vw] h-[90vh] max-w-none sm:max-w-none p-0 overflow-hidden bg-black/90 ring-0 rounded-lg"
       >
         {/* Top-right controls */}
         <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
@@ -183,7 +183,7 @@ export function ImageLightbox({
 
         {/* Image stage — centered at all times */}
         <div
-          className={`flex items-center justify-center w-[90vw] h-[85vh] overflow-hidden select-none ${cursorClass}`}
+          className={`flex h-full w-full items-center justify-center overflow-hidden select-none ${cursorClass}`}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={endDrag}
@@ -196,7 +196,7 @@ export function ImageLightbox({
                 src={imageUrl}
                 alt={filename}
                 onClick={toggleZoom}
-                className="max-w-[90vw] max-h-[85vh] object-contain"
+                className="max-h-full max-w-full object-contain"
                 draggable={false}
               />
             ) : (
