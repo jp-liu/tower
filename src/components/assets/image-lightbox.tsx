@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { X, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
+import { X, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RotateCcw } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 export interface LightboxAsset {
@@ -23,6 +23,7 @@ interface ImageLightboxProps {
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 8;
 const ZOOM_STEP = 1.25;
+const GALLERY_PAGE_SIZE = 10;
 
 export function ImageLightbox({
   imageUrl,
@@ -39,24 +40,26 @@ export function ImageLightbox({
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
   const [mounted, setMounted] = useState(false);
-  const galleryRef = useRef<HTMLDivElement | null>(null);
 
   const hasNav =
     !!assets && assets.length > 1 && typeof currentIndex === "number" && !!onIndexChange;
   const canPrev = hasNav && (currentIndex as number) > 0;
   const canNext = hasNav && (currentIndex as number) < (assets as LightboxAsset[]).length - 1;
 
+  // Pagination over the gallery strip — every 10 thumbs is one page.
+  const totalImages = hasNav ? (assets as LightboxAsset[]).length : 0;
+  const totalPages = totalImages > 0 ? Math.ceil(totalImages / GALLERY_PAGE_SIZE) : 0;
+  const currentPage = hasNav ? Math.floor((currentIndex as number) / GALLERY_PAGE_SIZE) : 0;
+  const pageStart = currentPage * GALLERY_PAGE_SIZE;
+  const pageEnd = Math.min(pageStart + GALLERY_PAGE_SIZE, totalImages);
+  const hasMultiPage = totalPages > 1;
+  const canPrevPage = hasNav && currentPage > 0;
+  const canNextPage = hasNav && currentPage < totalPages - 1;
+
   // Portal needs document — only render after mount
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  // Keep current thumbnail centered in the gallery strip when index changes
-  useEffect(() => {
-    if (!hasNav || !galleryRef.current) return;
-    const active = galleryRef.current.querySelector<HTMLElement>("[data-active='true']");
-    active?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-  }, [currentIndex, hasNav]);
 
   // Reset scale + pan whenever image changes
   useEffect(() => {
@@ -85,6 +88,18 @@ export function ImageLightbox({
     if (!hasNav || !canNext) return;
     onIndexChange!(currentIndex! + 1);
   }, [hasNav, canNext, onIndexChange, currentIndex]);
+
+  // Page jump — go to the first image of the previous/next page.
+  const goPrevPage = useCallback(() => {
+    if (!hasNav || !canPrevPage) return;
+    onIndexChange!((currentPage - 1) * GALLERY_PAGE_SIZE);
+  }, [hasNav, canPrevPage, onIndexChange, currentPage]);
+
+  const goNextPage = useCallback(() => {
+    if (!hasNav || !canNextPage) return;
+    const next = (currentPage + 1) * GALLERY_PAGE_SIZE;
+    onIndexChange!(Math.min(next, totalImages - 1));
+  }, [hasNav, canNextPage, onIndexChange, currentPage, totalImages]);
 
   const zoomIn = useCallback(() => {
     setScale((s) => Math.min(MAX_SCALE, s * ZOOM_STEP));
@@ -274,6 +289,16 @@ export function ImageLightbox({
       >
         {hasNav && (
           <div className="flex items-center gap-1 rounded-lg bg-black/50 px-1.5 py-1.5 backdrop-blur-md ring-1 ring-white/10 max-w-[92vw]">
+            {hasMultiPage && (
+              <ToolbarBtn
+                onClick={goPrevPage}
+                title={`${t("assets.lightbox.prev")} (-${GALLERY_PAGE_SIZE})`}
+                aria-label={`${t("assets.lightbox.prev")} (-${GALLERY_PAGE_SIZE})`}
+                disabled={!canPrevPage}
+              >
+                <ChevronsLeft className="h-4 w-4" />
+              </ToolbarBtn>
+            )}
             <ToolbarBtn
               onClick={goPrev}
               title={t("assets.lightbox.prev")}
@@ -282,21 +307,17 @@ export function ImageLightbox({
             >
               <ChevronLeft className="h-4 w-4" />
             </ToolbarBtn>
-            <div
-              ref={galleryRef}
-              className="flex items-center gap-1.5 overflow-x-auto"
-              style={{ scrollbarColor: "rgba(255,255,255,0.2) transparent" }}
-            >
-              {(assets as LightboxAsset[]).map((a, i) => {
-                const isActive = i === currentIndex;
+            <div className="flex items-center gap-1.5">
+              {(assets as LightboxAsset[]).slice(pageStart, pageEnd).map((a, i) => {
+                const absoluteIndex = pageStart + i;
+                const isActive = absoluteIndex === currentIndex;
                 return (
                   <button
-                    key={a.url + i}
+                    key={a.url + absoluteIndex}
                     type="button"
-                    data-active={isActive}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (!isActive) onIndexChange!(i);
+                      if (!isActive) onIndexChange!(absoluteIndex);
                     }}
                     title={a.filename}
                     className={`shrink-0 h-12 w-12 overflow-hidden rounded-md transition-all ${
@@ -324,6 +345,16 @@ export function ImageLightbox({
             >
               <ChevronRight className="h-4 w-4" />
             </ToolbarBtn>
+            {hasMultiPage && (
+              <ToolbarBtn
+                onClick={goNextPage}
+                title={`${t("assets.lightbox.next")} (+${GALLERY_PAGE_SIZE})`}
+                aria-label={`${t("assets.lightbox.next")} (+${GALLERY_PAGE_SIZE})`}
+                disabled={!canNextPage}
+              >
+                <ChevronsRight className="h-4 w-4" />
+              </ToolbarBtn>
+            )}
           </div>
         )}
 
