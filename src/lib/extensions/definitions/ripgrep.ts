@@ -1,5 +1,92 @@
 import { Search } from "lucide-react";
-import type { Extension } from "../types";
+import { execFile } from "child_process";
+import type { Extension, ExtensionStatus, ExtensionResult } from "../types";
+
+/** Promisify wrapper that always calls through the live execFile reference */
+function execFileP(
+  cmd: string,
+  args: string[],
+  opts: { timeout: number }
+): Promise<{ stdout: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, opts, (err, stdout) => {
+      if (err) reject(err);
+      else resolve({ stdout: stdout as string });
+    });
+  });
+}
+
+async function runVersion(rgPath: string): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileP(rgPath, ["--version"], { timeout: 3000 });
+    // Output: "ripgrep 14.1.1 ..."
+    return stdout.split("\n")[0]?.replace(/^ripgrep\s+/, "").split(" ")[0] ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function detectPackageBinary(): Promise<string | null> {
+  try {
+    const mod = await import("@vscode/ripgrep");
+    const rgPath = (mod as { rgPath?: string }).rgPath;
+    if (!rgPath) return null;
+    return rgPath;
+  } catch {
+    return null;
+  }
+}
+
+async function detectSystemBinary(): Promise<string | null> {
+  try {
+    const { stdout } = await execFileP("which", ["rg"], { timeout: 3000 });
+    const path = stdout.trim();
+    return path || null;
+  } catch {
+    return null;
+  }
+}
+
+async function check(): Promise<ExtensionStatus> {
+  // Dual-track: package binary first, then system PATH
+  const packagePath = await detectPackageBinary();
+  if (packagePath) {
+    const version = await runVersion(packagePath);
+    return { installed: true, path: packagePath, version };
+  }
+  const systemPath = await detectSystemBinary();
+  if (systemPath) {
+    const version = await runVersion(systemPath);
+    return { installed: true, path: systemPath, version };
+  }
+  return { installed: false };
+}
+
+async function install(): Promise<ExtensionResult> {
+  try {
+    await execFileP("pnpm", ["add", "@vscode/ripgrep"], { timeout: 120_000 });
+    // Clear cached path in legacy search-code-actions if it exists
+    try {
+      const mod = await import("@/actions/search-code-actions");
+      // @ts-expect-error mutating internal cache for hot-reload
+      mod._rgPath = undefined;
+    } catch {
+      // Ignore — cache invalidation is best-effort
+    }
+    return { success: true, message: "Installed @vscode/ripgrep" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
+}
+
+async function uninstall(): Promise<ExtensionResult> {
+  try {
+    await execFileP("pnpm", ["remove", "@vscode/ripgrep"], { timeout: 60_000 });
+    return { success: true, message: "Removed @vscode/ripgrep" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
+}
 
 export const ripgrepExtension: Extension = {
   id: "rg",
@@ -8,10 +95,7 @@ export const ripgrepExtension: Extension = {
   icon: Search,
   sizeMB: 5,
   homepageUrl: "https://github.com/BurntSushi/ripgrep#installation",
-  async check() {
-    return { installed: false };
-  },
-  async install() {
-    return { success: false, error: "not implemented" };
-  },
+  check,
+  install,
+  uninstall,
 };
