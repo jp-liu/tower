@@ -158,30 +158,54 @@ export function ImageLightbox({
     });
   };
 
-  // Drag pan (only meaningful when scale > 1)
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (scale <= 1) return;
-    if (e.button !== 0) return; // primary button only
+  // Drag pan + click-to-zoom share the same image pointer events.
+  // We track movement to disambiguate: small movement = click (toggle zoom);
+  // large movement = drag (pan).
+  const dragMovedRef = useRef(false);
+  const DRAG_THRESHOLD = 5; // pixels
+
+  const handleImagePointerDown = (e: React.PointerEvent<HTMLImageElement>) => {
+    if (e.button !== 0) return;
+    e.stopPropagation(); // prevent backdrop close
+    dragMovedRef.current = false;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     dragStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
-    setIsDragging(true);
+    if (scale > 1) setIsDragging(true);
   };
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDragging || !dragStart.current) return;
+  const handleImagePointerMove = (e: React.PointerEvent<HTMLImageElement>) => {
+    if (!dragStart.current) return;
     const dx = e.clientX - dragStart.current.x;
     const dy = e.clientY - dragStart.current.y;
-    setPan({
-      x: dragStart.current.panX + dx,
-      y: dragStart.current.panY + dy,
-    });
+    if (Math.abs(dx) + Math.abs(dy) > DRAG_THRESHOLD) {
+      dragMovedRef.current = true;
+    }
+    if (isDragging) {
+      setPan({
+        x: dragStart.current.panX + dx,
+        y: dragStart.current.panY + dy,
+      });
+    }
   };
   const endDrag = () => {
     if (isDragging) setIsDragging(false);
     dragStart.current = null;
   };
 
-  // Click backdrop closes (but not when clicking image / controls)
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleImageClick = (e: React.MouseEvent<HTMLImageElement>) => {
+    e.stopPropagation();
+    // Suppress click that was actually a drag
+    if (dragMovedRef.current) {
+      dragMovedRef.current = false;
+      return;
+    }
+    // Single click toggles between fit (1x) and 2x zoom
+    toggleZoom();
+  };
+
+  // Click anywhere outside the image (or on backdrop) closes the lightbox
+  const handleStageClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only close when click target is the stage itself (not the image — the
+    // image's onClick stops propagation, so this fires for empty-area clicks).
     if (e.target === e.currentTarget) close();
   };
 
@@ -196,45 +220,15 @@ export function ImageLightbox({
 
   const overlay = (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-sm"
-      onClick={handleBackdropClick}
+      className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t("assets.lightbox.zoomFit")}
     >
-      {/* Top toolbar */}
-      <div className="absolute top-3 right-3 z-10 flex items-center gap-1">
-        <ToolbarBtn
-          onClick={zoomOut}
-          title={t("assets.lightbox.zoomOut")}
-          aria-label={t("assets.lightbox.zoomOut")}
-          disabled={scale <= MIN_SCALE}
-        >
-          <ZoomOut className="h-4 w-4" />
-        </ToolbarBtn>
-        <span className="px-2 text-xs text-white/70 tabular-nums select-none min-w-12 text-center">
-          {Math.round(scale * 100)}%
-        </span>
-        <ToolbarBtn
-          onClick={zoomIn}
-          title={t("assets.lightbox.zoomIn")}
-          aria-label={t("assets.lightbox.zoomIn")}
-          disabled={scale >= MAX_SCALE}
-        >
-          <ZoomIn className="h-4 w-4" />
-        </ToolbarBtn>
-        <ToolbarBtn
-          onClick={reset}
-          title={t("assets.lightbox.reset")}
-          aria-label={t("assets.lightbox.reset")}
-          disabled={scale === 1 && pan.x === 0 && pan.y === 0}
-        >
-          <RotateCcw className="h-4 w-4" />
-        </ToolbarBtn>
-        <div className="mx-1 h-5 w-px bg-white/20" />
-        <ToolbarBtn onClick={close} title={t("assets.lightbox.close")} aria-label={t("assets.lightbox.close")}>
-          <X className="h-4 w-4" />
-        </ToolbarBtn>
+      {/* Top: filename + (i/N) — pointer-events-none so it never blocks clicks */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 max-w-[80vw] truncate rounded-md bg-black/40 px-3 py-1 text-xs text-white/80 backdrop-blur-sm pointer-events-none">
+        {filename}
+        {hasNav ? ` · ${(currentIndex as number) + 1} / ${(assets as LightboxAsset[]).length}` : ""}
       </div>
 
       {/* Prev / Next chevrons */}
@@ -261,22 +255,22 @@ export function ImageLightbox({
         </>
       )}
 
-      {/* Image stage — wheel-to-zoom + drag-to-pan */}
+      {/* Image stage — wheel-to-zoom + click-on-empty closes */}
       <div
         className={`absolute inset-0 flex items-center justify-center overflow-hidden select-none ${cursorClass}`}
+        onClick={handleStageClick}
         onWheel={handleWheel}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={endDrag}
-        onPointerLeave={endDrag}
-        onPointerCancel={endDrag}
       >
         {imageUrl && (
           <img
             src={imageUrl}
             alt={filename}
-            onDoubleClick={toggleZoom}
-            onClick={(e) => e.stopPropagation()}
+            onClick={handleImageClick}
+            onPointerDown={handleImagePointerDown}
+            onPointerMove={handleImagePointerMove}
+            onPointerUp={endDrag}
+            onPointerLeave={endDrag}
+            onPointerCancel={endDrag}
             className="max-h-[88vh] max-w-[92vw] object-contain pointer-events-auto"
             style={{
               transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${scale})`,
@@ -289,10 +283,42 @@ export function ImageLightbox({
         )}
       </div>
 
-      {/* Bottom: filename + (i/N) */}
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 max-w-[80vw] truncate rounded-md bg-black/40 px-3 py-1 text-xs text-white/80 backdrop-blur-sm pointer-events-none">
-        {filename}
-        {hasNav ? ` · ${(currentIndex as number) + 1} / ${(assets as LightboxAsset[]).length}` : ""}
+      {/* Bottom-center toolbar */}
+      <div
+        className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 rounded-lg bg-black/50 px-2 py-1.5 backdrop-blur-md ring-1 ring-white/10"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <ToolbarBtn
+          onClick={zoomOut}
+          title={t("assets.lightbox.zoomOut")}
+          aria-label={t("assets.lightbox.zoomOut")}
+          disabled={scale <= MIN_SCALE}
+        >
+          <ZoomOut className="h-4 w-4" />
+        </ToolbarBtn>
+        <span className="px-2 text-xs text-white/80 tabular-nums select-none min-w-12 text-center">
+          {Math.round(scale * 100)}%
+        </span>
+        <ToolbarBtn
+          onClick={zoomIn}
+          title={t("assets.lightbox.zoomIn")}
+          aria-label={t("assets.lightbox.zoomIn")}
+          disabled={scale >= MAX_SCALE}
+        >
+          <ZoomIn className="h-4 w-4" />
+        </ToolbarBtn>
+        <ToolbarBtn
+          onClick={reset}
+          title={t("assets.lightbox.reset")}
+          aria-label={t("assets.lightbox.reset")}
+          disabled={scale === 1 && pan.x === 0 && pan.y === 0}
+        >
+          <RotateCcw className="h-4 w-4" />
+        </ToolbarBtn>
+        <div className="mx-1 h-5 w-px bg-white/20" />
+        <ToolbarBtn onClick={close} title={t("assets.lightbox.close")} aria-label={t("assets.lightbox.close")}>
+          <X className="h-4 w-4" />
+        </ToolbarBtn>
       </div>
     </div>
   );
