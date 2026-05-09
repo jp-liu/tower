@@ -273,46 +273,7 @@ export function ImageLightbox({
         onClick={(e) => e.stopPropagation()}
       >
         {hasNav && (
-          <div
-            ref={galleryRef}
-            className="flex items-center gap-1.5 rounded-lg bg-black/50 px-2 py-1.5 backdrop-blur-md ring-1 ring-white/10 overflow-x-auto max-w-[92vw] scrollbar-thin scrollbar-thumb-white/20"
-            style={{ scrollbarColor: "rgba(255,255,255,0.2) transparent" }}
-          >
-            {(assets as LightboxAsset[]).map((a, i) => {
-              const isActive = i === currentIndex;
-              return (
-                <button
-                  key={a.url + i}
-                  type="button"
-                  data-active={isActive}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (!isActive) onIndexChange!(i);
-                  }}
-                  title={a.filename}
-                  className={`shrink-0 h-12 w-12 overflow-hidden rounded-md transition-all ${
-                    isActive
-                      ? "ring-2 ring-white opacity-100 scale-105"
-                      : "opacity-60 hover:opacity-100 ring-1 ring-white/20"
-                  }`}
-                >
-                  <img
-                    src={a.url}
-                    alt={a.filename}
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                    draggable={false}
-                  />
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Toolbar */}
-        <div className="flex items-center gap-1 rounded-lg bg-black/50 px-2 py-1.5 backdrop-blur-md ring-1 ring-white/10">
-        {hasNav && (
-          <>
+          <div className="flex items-center gap-1 rounded-lg bg-black/50 px-1.5 py-1.5 backdrop-blur-md ring-1 ring-white/10 max-w-[92vw]">
             <ToolbarBtn
               onClick={goPrev}
               title={t("assets.lightbox.prev")}
@@ -321,6 +282,40 @@ export function ImageLightbox({
             >
               <ChevronLeft className="h-4 w-4" />
             </ToolbarBtn>
+            <div
+              ref={galleryRef}
+              className="flex items-center gap-1.5 overflow-x-auto"
+              style={{ scrollbarColor: "rgba(255,255,255,0.2) transparent" }}
+            >
+              {(assets as LightboxAsset[]).map((a, i) => {
+                const isActive = i === currentIndex;
+                return (
+                  <button
+                    key={a.url + i}
+                    type="button"
+                    data-active={isActive}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!isActive) onIndexChange!(i);
+                    }}
+                    title={a.filename}
+                    className={`shrink-0 h-12 w-12 overflow-hidden rounded-md transition-all ${
+                      isActive
+                        ? "ring-2 ring-white opacity-100 scale-105"
+                        : "opacity-60 hover:opacity-100 ring-1 ring-white/20"
+                    }`}
+                  >
+                    <img
+                      src={a.url}
+                      alt={a.filename}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                      draggable={false}
+                    />
+                  </button>
+                );
+              })}
+            </div>
             <ToolbarBtn
               onClick={goNext}
               title={t("assets.lightbox.next")}
@@ -329,9 +324,11 @@ export function ImageLightbox({
             >
               <ChevronRight className="h-4 w-4" />
             </ToolbarBtn>
-            <div className="mx-1 h-5 w-px bg-white/20" />
-          </>
+          </div>
         )}
+
+        {/* Toolbar */}
+        <div className="flex items-center gap-1 rounded-lg bg-black/50 px-2 py-1.5 backdrop-blur-md ring-1 ring-white/10">
         <ToolbarBtn
           onClick={zoomOut}
           title={t("assets.lightbox.zoomOut")}
