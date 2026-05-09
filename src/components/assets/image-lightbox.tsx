@@ -39,6 +39,7 @@ export function ImageLightbox({
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
   const [mounted, setMounted] = useState(false);
+  const galleryRef = useRef<HTMLDivElement | null>(null);
 
   const hasNav =
     !!assets && assets.length > 1 && typeof currentIndex === "number" && !!onIndexChange;
@@ -49,6 +50,13 @@ export function ImageLightbox({
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Keep current thumbnail centered in the gallery strip when index changes
+  useEffect(() => {
+    if (!hasNav || !galleryRef.current) return;
+    const active = galleryRef.current.querySelector<HTMLElement>("[data-active='true']");
+    active?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [currentIndex, hasNav]);
 
   // Reset scale + pan whenever image changes
   useEffect(() => {
@@ -259,11 +267,50 @@ export function ImageLightbox({
         )}
       </div>
 
-      {/* Bottom-center toolbar */}
+      {/* Bottom: gallery strip (multi-image only) + toolbar */}
       <div
-        className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 rounded-lg bg-black/50 px-2 py-1.5 backdrop-blur-md ring-1 ring-white/10"
+        className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2 max-w-[92vw]"
         onClick={(e) => e.stopPropagation()}
       >
+        {hasNav && (
+          <div
+            ref={galleryRef}
+            className="flex items-center gap-1.5 rounded-lg bg-black/50 px-2 py-1.5 backdrop-blur-md ring-1 ring-white/10 overflow-x-auto max-w-[92vw] scrollbar-thin scrollbar-thumb-white/20"
+            style={{ scrollbarColor: "rgba(255,255,255,0.2) transparent" }}
+          >
+            {(assets as LightboxAsset[]).map((a, i) => {
+              const isActive = i === currentIndex;
+              return (
+                <button
+                  key={a.url + i}
+                  type="button"
+                  data-active={isActive}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isActive) onIndexChange!(i);
+                  }}
+                  title={a.filename}
+                  className={`shrink-0 h-12 w-12 overflow-hidden rounded-md transition-all ${
+                    isActive
+                      ? "ring-2 ring-white opacity-100 scale-105"
+                      : "opacity-60 hover:opacity-100 ring-1 ring-white/20"
+                  }`}
+                >
+                  <img
+                    src={a.url}
+                    alt={a.filename}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                    draggable={false}
+                  />
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Toolbar */}
+        <div className="flex items-center gap-1 rounded-lg bg-black/50 px-2 py-1.5 backdrop-blur-md ring-1 ring-white/10">
         {hasNav && (
           <>
             <ToolbarBtn
@@ -316,6 +363,7 @@ export function ImageLightbox({
         <ToolbarBtn onClick={close} title={t("assets.lightbox.close")} aria-label={t("assets.lightbox.close")}>
           <X className="h-4 w-4" />
         </ToolbarBtn>
+        </div>
       </div>
     </div>
   );
