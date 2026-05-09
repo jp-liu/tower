@@ -50,44 +50,36 @@
 
 ---
 
+## Task 0: Verify test infrastructure
+
+Quick check before writing tests so we don't get sidetracked by missing deps later.
+
+- [ ] **Step 1: Confirm RTL is installed**
+
+```bash
+grep "@testing-library/react" package.json
+# Expected: "@testing-library/react": "^16.3.2" (or similar). If absent, run pnpm add -D @testing-library/react @testing-library/jest-dom and commit before proceeding.
+```
+
+- [ ] **Step 2: Confirm vitest run works**
+
+```bash
+pnpm test:run src/actions/__tests__/file-actions.test.ts 2>&1 | tail -3
+# Expected: "Tests N passed" — confirms the runner path is healthy.
+```
+
+No commit needed; infra check only.
+
+---
+
 ## Task 1: Define core types
 
 **Files:**
 - Create: `src/lib/extensions/types.ts`
 
-- [ ] **Step 1: Write the failing test** — verify type contract with a structural assertion
+Pure type module — no separate test file. Coverage comes from Task 2's registry test which imports from this file at runtime; if types are wrong the whole chain fails to compile.
 
-```typescript
-// src/lib/extensions/__tests__/types.test.ts
-import { describe, it, expectTypeOf } from "vitest";
-import type { Extension, ExtensionId, ExtensionStatus, ExtensionResult } from "../types";
-
-describe("Extension types", () => {
-  it("ExtensionId is a union of 'rg' | 'monaco'", () => {
-    expectTypeOf<ExtensionId>().toEqualTypeOf<"rg" | "monaco">();
-  });
-
-  it("ExtensionStatus has installed:boolean + optional version/path/error", () => {
-    const s: ExtensionStatus = { installed: true, version: "14.1.1", path: "/usr/bin/rg" };
-    expectTypeOf(s.installed).toBeBoolean();
-    expectTypeOf(s.version).toEqualTypeOf<string | undefined>();
-  });
-
-  it("Extension contract requires id, name, description, icon, sizeMB, homepageUrl, check, install", () => {
-    type Required = "id" | "name" | "description" | "icon" | "sizeMB" | "homepageUrl" | "check" | "install";
-    expectTypeOf<keyof Extension>().toMatchTypeOf<Required | "uninstall">();
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-```bash
-pnpm test:run src/lib/extensions/__tests__/types.test.ts
-# Expected: FAIL — Cannot find module '../types'
-```
-
-- [ ] **Step 3: Implement types**
+- [ ] **Step 1: Implement types**
 
 ```typescript
 // src/lib/extensions/types.ts
@@ -121,17 +113,17 @@ export interface Extension {
 }
 ```
 
-- [ ] **Step 4: Run test to verify pass**
+- [ ] **Step 2: TS check passes**
 
 ```bash
-pnpm test:run src/lib/extensions/__tests__/types.test.ts
-# Expected: PASS
+pnpm tsc --noEmit 2>&1 | grep "src/lib/extensions/types"
+# Expected: no output (clean)
 ```
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/lib/extensions/types.ts src/lib/extensions/__tests__/types.test.ts
+git add src/lib/extensions/types.ts
 git commit -m "feat(ext-71): define core Extension types"
 ```
 
@@ -277,36 +269,119 @@ The rg extension wraps existing logic. **check** is dual-track:
 
 **uninstall** runs `pnpm remove @vscode/ripgrep` (does not touch system rg if present).
 
-- [ ] **Step 1: Write failing tests with mocked execFile + fs**
+- [ ] **Step 1: Write failing tests with mocked execFile + dynamic mocks**
+
+The dual-track tests use `vi.doMock` + `vi.resetModules()` so we can swap between "package present" and "package missing" within a single test file. Static `vi.mock` cannot do that.
 
 ```typescript
 // src/lib/extensions/__tests__/ripgrep.test.ts
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ripgrepExtension } from "../definitions/ripgrep";
 
 vi.mock("child_process", () => ({
   execFile: vi.fn(),
-  execFileSync: vi.fn(),
 }));
-
-vi.mock("@vscode/ripgrep", () => {
-  // require.resolve resolution path stub
-  return { rgPath: "/repo/node_modules/@vscode/ripgrep/bin/rg" };
-});
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.resetModules();
 });
 
-describe("ripgrep extension", () => {
-  it("check returns installed:true with package binary path when @vscode/ripgrep is resolvable", async () => {
-    const status = await ripgrepExtension.check();
+// Helper — dynamic re-import of ripgrep extension after mock setup
+async function loadRipgrep() {
+  const { ripgrepExtension } = await import("../definitions/ripgrep");
+  return ripgrepExtension;
+}
+
+describe("ripgrep extension — dual-track check", () => {
+  it("returns installed:true with package binary path when @vscode/ripgrep is resolvable", async () => {
+    vi.doMock("@vscode/ripgrep", () => ({
+      rgPath: "/repo/node_modules/@vscode/ripgrep/bin/rg",
+    }));
+    // execFile mock for `rg --version`
+    const cp = await import("child_process");
+    (cp.execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
+        cb(null, "ripgrep 14.1.1\n");
+      }
+    );
+
+    const ext = await loadRipgrep();
+    const status = await ext.check();
     expect(status.installed).toBe(true);
     expect(status.path).toContain("ripgrep");
+    expect(status.version).toBe("14.1.1");
   });
 
-  // Additional cases will be filled in once implementation is in place.
-  // Test runner provides scaffolding; we adjust mocks per-case.
+  it("falls back to system rg via `which` when @vscode/ripgrep is NOT resolvable", async () => {
+    // Make import("@vscode/ripgrep") throw — simulate missing package
+    vi.doMock("@vscode/ripgrep", () => {
+      throw new Error("Cannot find module '@vscode/ripgrep'");
+    });
+    const cp = await import("child_process");
+    (cp.execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      (cmd: string, args: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
+        if (cmd === "which" && args[0] === "rg") {
+          cb(null, "/opt/homebrew/bin/rg\n");
+        } else if (args[0] === "--version") {
+          cb(null, "ripgrep 14.0.0\n");
+        }
+      }
+    );
+
+    const ext = await loadRipgrep();
+    const status = await ext.check();
+    expect(status.installed).toBe(true);
+    expect(status.path).toBe("/opt/homebrew/bin/rg");
+  });
+
+  it("returns installed:false when both package binary and system rg are missing", async () => {
+    vi.doMock("@vscode/ripgrep", () => {
+      throw new Error("Cannot find module '@vscode/ripgrep'");
+    });
+    const cp = await import("child_process");
+    (cp.execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
+        cb(new Error("not found"), "");
+      }
+    );
+
+    const ext = await loadRipgrep();
+    const status = await ext.check();
+    expect(status.installed).toBe(false);
+  });
+
+  it("install runs pnpm add @vscode/ripgrep and returns success", async () => {
+    const cp = await import("child_process");
+    (cp.execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
+        cb(null, "");
+      }
+    );
+
+    const ext = await loadRipgrep();
+    const result = await ext.install();
+    expect(result.success).toBe(true);
+    expect(cp.execFile).toHaveBeenCalledWith(
+      "pnpm",
+      ["add", "@vscode/ripgrep"],
+      expect.any(Object),
+      expect.any(Function)
+    );
+  });
+
+  it("install returns success:false with error when pnpm fails", async () => {
+    const cp = await import("child_process");
+    (cp.execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
+        cb(new Error("pnpm: network unreachable"));
+      }
+    );
+
+    const ext = await loadRipgrep();
+    const result = await ext.install();
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/network unreachable/);
+  });
 });
 ```
 
@@ -413,22 +488,16 @@ export const ripgrepExtension: Extension = {
 };
 ```
 
-- [ ] **Step 4: Round-trip the test — check returns installed:true via the mock**
+- [ ] **Step 4: Run all 5 tests from Step 1 — all should pass**
 
 ```bash
 pnpm test:run src/lib/extensions/__tests__/ripgrep.test.ts
-# Expected: PASS for the basic check case
+# Expected: 5 passed (package binary, system fallback, both missing, install OK, install fail)
 ```
 
-- [ ] **Step 5: Add fall-back + failure tests, then commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-# Tests file is incrementally extended in this same pass — write additional cases:
-# - check returns installed:true via system rg when package missing
-# - check returns installed:false when both missing
-# - install success / failure
-# - uninstall success / failure
-
 git add src/lib/extensions/definitions/ripgrep.ts src/lib/extensions/__tests__/ripgrep.test.ts
 git commit -m "feat(ext-71): rg extension — dual-track check + pnpm install/uninstall"
 ```
@@ -892,25 +961,38 @@ pnpm test:run src/lib/extensions/__tests__/context.test.tsx
 # Expected: PASS
 ```
 
-- [ ] **Step 6: Wire into root layout**
+- [ ] **Step 6: Wire into root layout — exact placement**
 
-Find the root layout (likely `src/app/layout.tsx`). Wrap the children with `<ExtensionProvider>`. Read the file first to understand existing wrapping structure (I18nProvider, ThemeProvider, etc.), then place inside the closest place that has access to client-side state (likely after I18nProvider).
+The current `src/app/layout.tsx` nesting is:
 
-```bash
-# Inspect first
-cat src/app/layout.tsx
+```
+ThemeProvider
+  TooltipProvider
+    I18nProvider
+      LayoutClient (workspaces, isFirstRun, username)
+        {children}
+      Toaster
+```
+
+Place `<ExtensionProvider>` **inside `I18nProvider`, wrapping both `LayoutClient` and `Toaster`** so every consumer (including future Settings UI and onboarding wizard) has access. The provider is a "use client" component, so it goes after I18nProvider's translation context.
+
+Resulting structure:
+
+```tsx
+<I18nProvider>
+  <ExtensionProvider>
+    <LayoutClient workspaces={workspaces} isFirstRun={onboardingStatus.isFirstRun} username={onboardingStatus.username}>
+      {children}
+    </LayoutClient>
+    <Toaster richColors position="top-right" />
+  </ExtensionProvider>
+</I18nProvider>
 ```
 
 Add import:
 
 ```tsx
 import { ExtensionProvider } from "@/lib/extensions/context";
-```
-
-Wrap children:
-
-```tsx
-<ExtensionProvider>{children}</ExtensionProvider>
 ```
 
 - [ ] **Step 7: Verify dev server boots without errors**
@@ -947,29 +1029,35 @@ After migration:
 3. Keep the `searchCode` server action import (still needed)
 4. `installRg` import removed; install moves to Settings (Phase 72)
 
-- [ ] **Step 1: Read current code-search.tsx top section**
+- [ ] **Step 1: Map every reference in the file** — line numbers are likely to drift, so always grep.
 
 ```bash
-sed -n '1,80p' src/components/task/code-search.tsx
+grep -n "rgAvailable\|rgChecked\|installing\|handleInstallRg\|RgNotInstalled\|checkRgAvailable\|installRg\b" src/components/task/code-search.tsx
 ```
+
+This produces a working list. Touch every line shown — declarations, useEffect, conditionals, JSX, and the `RgNotInstalled` JSX block (likely ~40 lines including the install button + download link). The implementer should review the full output before editing.
 
 - [ ] **Step 2: Update imports**
 
-Remove:
+Remove the combined import:
 ```tsx
 import { searchCode, checkRgAvailable, installRg } from "@/actions/search-code-actions";
 ```
 
-Add:
+Add (split):
 ```tsx
 import { searchCode } from "@/actions/search-code-actions";
 import { useExtension } from "@/lib/extensions/client";
 ```
 
-- [ ] **Step 3: Remove the rg-checked / rg-available state and inline panel**
+Also drop unused icon imports that only appeared in the install panel (likely `Download`, `ExternalLink`, `Loader2`) — let the implementer verify by re-running TS check after the edit.
 
-Replace this block (around lines 70-83):
+- [ ] **Step 3: Replace state + effect with the hook**
+
+Delete the rg-related state declarations and the `useEffect` that calls `checkRgAvailable()`:
+
 ```tsx
+// DELETE:
 const [rgChecked, setRgChecked] = useState(false);
 const [rgAvailable, setRgAvailable] = useState(true);
 const [installing, setInstalling] = useState(false);
@@ -982,14 +1070,18 @@ useEffect(() => {
 }, []);
 ```
 
-With:
+Add at the top of the component body (after `useI18n()` etc.):
+
 ```tsx
 const { status: rgStatus, loading: rgLoading } = useExtension("rg");
 ```
 
-- [ ] **Step 4: Remove the `handleInstallRg` callback and the `rgNotInstalled` JSX block** (the early-return panel around lines 188-219). The whole branch goes away.
+- [ ] **Step 4: Remove the `handleInstallRg` callback and the entire `RgNotInstalled` JSX branch.**
 
-Add a guard at the top of the render:
+Use grep to find the panel — it begins with a guard like `if (rgChecked && !rgAvailable)` and ends with a `</div>` before the next major branch. Delete the whole if-block including its return and any helper handlers.
+
+Replace the early-return area with a defensive guard at the top of the render:
+
 ```tsx
 if (rgLoading) {
   return (
@@ -998,11 +1090,18 @@ if (rgLoading) {
     </div>
   );
 }
-// rg should always be available when this component renders (parent filters tabs).
-// But guard defensively.
+// rg should always be installed when this tab renders (parent filters it out otherwise).
+// Guard defensively in case of race during install/uninstall.
 if (!rgStatus.installed) {
   return null;
 }
+```
+
+After the edits, **all** tokens from Step 1's grep should be gone. Re-run the grep to confirm:
+
+```bash
+grep -n "rgAvailable\|rgChecked\|handleInstallRg\|RgNotInstalled\|checkRgAvailable\|installRg\b" src/components/task/code-search.tsx
+# Expected: no output (only "installing" might remain if it's used by something unrelated to rg — re-check that case).
 ```
 
 - [ ] **Step 5: Search for any other `checkRgAvailable`/`installRg` references**
@@ -1033,54 +1132,129 @@ git commit -m "refactor(ext-71): code-search uses useExtension('rg'), drops inli
 **Files:**
 - Modify: `src/app/workspaces/[workspaceId]/tasks/[taskId]/task-page-client.tsx`
 
-Find the tab list. Search/file tabs are rendered when their respective extension is installed. Currently the tab list is a static array. We make it dependent on extension state.
+### Real tab topology (verified against current code)
 
-- [ ] **Step 1: Locate the tab definition**
+The task page has **two layers of Tabs**:
 
-```bash
-grep -n "code-search\|file-tree\|code-editor\|tabs\|<TabsTrigger\|<TabsContent" src/app/workspaces/\[workspaceId\]/tasks/\[taskId\]/task-page-client.tsx | head -20
+```
+Outer Tabs (lines ~438+):
+  TabsTrigger: files | changes | preview
+  TabsContent value="files":
+    Inner Tabs (lines ~466+):
+      TabsTrigger: filetree | search | git
+      TabsContent: filetree (FileTree component)
+      TabsContent: search (CodeSearch component)
+      TabsContent: git (Git component)
+  TabsContent value="changes":  (TaskDiffView)
+  TabsContent value="preview":  (PreviewPanel)
 ```
 
-- [ ] **Step 2: Read the surrounding code (~30 lines around match)** so the implementation matches actual structure (current code uses shadcn Tabs).
+### Mapping rules (per EXT-07)
 
-- [ ] **Step 3: Build the filtered tab list**
+| Extension state | What hides |
+|-----------------|-----------|
+| **rg not installed** | The `inner` "search" `TabsTrigger` + `TabsContent` (filetree/git stay) |
+| **Monaco not installed** | The `outer` "files" `TabsTrigger` + entire `TabsContent` for value="files" (kills filetree + search + git + the editor area inside files content) |
+| **changes / preview** | Untouched — they don't depend on rg or Monaco |
+
+> **Note** — when Monaco is missing, search becomes inaccessible too because search lives inside `files`. This is acceptable v1.2 behavior; a future iteration could promote search out of the files tab if users complain.
+
+### Default-active fallback
+
+Both inner Tabs (`defaultValue="filetree"`) and outer Tabs (computed from `defaultTab`) need fallback when their default disappears. Use `useEffect`:
+
+- If `activeTab === "files"` and `!monacoStatus.installed`, force outer active tab to "changes" (or "preview").
+- For the inner tabs, since shadcn `Tabs` is uncontrolled here (uses `defaultValue`), simply not rendering the search trigger is enough — the default `"filetree"` stays valid. No effect needed for the inner case.
+
+### Implementation steps
+
+- [ ] **Step 1: Confirm the tab structure matches the description above** by re-grepping. If the grep output diverges materially from the description (e.g., new tabs added since this plan was written), pause and reconcile the plan before continuing.
+
+```bash
+grep -n "TabsTrigger\|TabsContent\|<Tabs\b" "src/app/workspaces/[workspaceId]/tasks/[taskId]/task-page-client.tsx" | head -40
+```
+
+Expected lines: outer triggers/contents around 438-581, inner around 466-516.
+
+- [ ] **Step 2: Add the hook calls + import**
+
+At the top of the file, add:
 
 ```tsx
 import { useExtension } from "@/lib/extensions/client";
-
-// inside component body:
-const { status: rgStatus } = useExtension("rg");
-const { status: monacoStatus } = useExtension("monaco");
-
-const tabs = useMemo(() => {
-  return [
-    monacoStatus.installed && { value: "files", label: t("taskPage.tabs.files"), Component: FileTreePanel },
-    monacoStatus.installed && { value: "diff", label: t("taskPage.tabs.diff"), Component: DiffPanel },
-    rgStatus.installed && { value: "search", label: t("taskPage.tabs.search"), Component: CodeSearch },
-    { value: "preview", label: t("taskPage.tabs.preview"), Component: PreviewPanel },
-    { value: "terminal", label: t("taskPage.tabs.terminal"), Component: TerminalPanel },
-  ].filter(Boolean) as { value: string; label: string; Component: ComponentType }[];
-}, [rgStatus.installed, monacoStatus.installed, t]);
 ```
 
-(Adjust to actual tab structure — the above is illustrative; preserve all current tab IDs and component references.)
+Inside the component body (after existing hooks):
 
-- [ ] **Step 4: Make sure the default-active tab logic falls back gracefully**
+```tsx
+const { status: rgStatus } = useExtension("rg");
+const { status: monacoStatus } = useExtension("monaco");
+```
 
-If the user was on "search" tab and rg gets uninstalled, switch to first available tab. Use `useEffect` on `tabs` change.
+- [ ] **Step 3: Conditionally render the inner "search" sub-tab**
 
-- [ ] **Step 5: TS check + smoke test**
+Wrap the `TabsTrigger value="search"` and the corresponding `TabsContent value="search"` blocks (look for the matching pair via grep) with `{rgStatus.installed && (…)}`. Both must be wrapped, otherwise shadcn Tabs warns about content with no trigger.
+
+```tsx
+{rgStatus.installed && (
+  <TabsTrigger value="search" className="...">
+    {/* existing JSX */}
+  </TabsTrigger>
+)}
+
+{rgStatus.installed && (
+  <TabsContent value="search" className="...">
+    {/* existing CodeSearch component */}
+  </TabsContent>
+)}
+```
+
+- [ ] **Step 4: Conditionally render the outer "files" tab**
+
+Same pattern, wrap the `TabsTrigger value="files"` and `TabsContent value="files"` with `{monacoStatus.installed && (…)}`.
+
+```tsx
+{monacoStatus.installed && (
+  <TabsTrigger value="files" className="...">
+    {/* existing JSX */}
+  </TabsTrigger>
+)}
+
+{monacoStatus.installed && (
+  <TabsContent value="files" className="...">
+    {/* existing nested Tabs */}
+  </TabsContent>
+)}
+```
+
+- [ ] **Step 5: Force outer active tab away from "files" when monaco is missing**
+
+Find the `activeTab` state declaration (search for `useState.*defaultTab` or `setActiveTab`). Add an effect:
+
+```tsx
+useEffect(() => {
+  if (!monacoStatus.installed && (activeTab === "files" || activeTab == null)) {
+    setActiveTab("changes");
+  }
+}, [monacoStatus.installed, activeTab]);
+```
+
+Adjust to use whatever state hook the file already uses for active tab. If `activeTab` is `null/undefined`, falling back to `"changes"` (or `"preview"` if changes wouldn't make sense) is fine — both always render.
+
+- [ ] **Step 6: TS check + smoke test**
 
 ```bash
 pnpm tsc --noEmit 2>&1 | grep "task-page-client"
 # Expected: no errors
 ```
 
-- [ ] **Step 6: Commit**
+Manual smoke (deferred to Task 11 — tab hide/show is verified there with rename-binary trick).
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/app/workspaces/\[workspaceId\]/tasks/\[taskId\]/task-page-client.tsx
-git commit -m "feat(ext-71): hide 搜索 / 文件 tabs when their extension is missing"
+git add "src/app/workspaces/[workspaceId]/tasks/[taskId]/task-page-client.tsx"
+git commit -m "feat(ext-71): hide 搜索 sub-tab + outer 文件 tab when extensions missing"
 ```
 
 ---
