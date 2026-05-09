@@ -118,14 +118,6 @@ export function ImageLightbox({
     setPan({ x: 0, y: 0 });
   }, []);
 
-  const toggleZoom = useCallback(() => {
-    setScale((s) => {
-      const next = s === 1 ? 2 : 1;
-      if (next === 1) setPan({ x: 0, y: 0 });
-      return next;
-    });
-  }, []);
-
   // Keyboard shortcuts
   useEffect(() => {
     if (!open) return;
@@ -214,15 +206,13 @@ export function ImageLightbox({
     dragStart.current = null;
   };
 
+  // Image click only blocks bubbling so backdrop close doesn't fire when the
+  // user mouses up on the image. Zoom is wheel/toolbar only.
   const handleImageClick = (e: React.MouseEvent<HTMLImageElement>) => {
     e.stopPropagation();
-    // Suppress click that was actually a drag
     if (dragMovedRef.current) {
       dragMovedRef.current = false;
-      return;
     }
-    // Single click toggles between fit (1x) and 2x zoom
-    toggleZoom();
   };
 
   // Click anywhere outside the image (or on backdrop) closes the lightbox
