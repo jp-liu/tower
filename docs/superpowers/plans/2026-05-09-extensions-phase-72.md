@@ -89,10 +89,15 @@ it("isInstalling becomes true while install is in flight", async () => {
 });
 
 it("rejects concurrent install on the same id", async () => {
+  // Use a deferred promise so the first install is genuinely in-flight when
+  // the second click fires. mockResolvedValue would resolve synchronously and
+  // the guard would already have cleared by the time the second click runs,
+  // making this test pass for the wrong reason.
   const installModule = await import("@/actions/extension-actions");
-  (installModule.installExtension as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-    success: true,
-  });
+  let resolveInstall: (v: { success: boolean }) => void = () => {};
+  (installModule.installExtension as unknown as ReturnType<typeof vi.fn>).mockReturnValue(
+    new Promise((r) => { resolveInstall = r; })
+  );
 
   function ConcurrentProbe() {
     const rg = useExtension("rg");
@@ -105,11 +110,16 @@ it("rejects concurrent install on the same id", async () => {
       <ConcurrentProbe />
     </ExtensionProvider>
   );
-  // Click twice rapidly
+  // Click twice while the first install is still pending
   await user.click(screen.getByTestId("trigger"));
   await user.click(screen.getByTestId("trigger"));
-  // Only one install should fire
+  // First click should have fired one call; second click is rejected by the guard
+  expect(installModule.installExtension).toHaveBeenCalledTimes(1);
+
+  // Resolve to clean up — guarded install removes the id from installing Set in finally
+  resolveInstall({ success: true });
   await waitFor(() => {
+    // Eventually the first call's success flow finishes (refresh), but no second install fires
     expect(installModule.installExtension).toHaveBeenCalledTimes(1);
   });
 });
@@ -803,11 +813,11 @@ In the `SECTIONS` array (around line 129-172), add a new entry. Place it logical
   labelKey: "settings.extensions.title" as const,
   descKey: "settings.extensions.navDesc" as const,
   icon: Package,
-  accent: "violet", // any unused accent works; pick whichever is least used. amber/violet/cyan are taken — try "purple" or any new color, OR reuse violet if no clash. The plan implementer should pick whichever avoids visual clash with adjacent items.
+  accent: "indigo",
 },
 ```
 
-(If `violet` clashes with `prompts`, pick `cyan` or another. The implementer should look at the file's `ACCENT_STYLES` to see what's available.)
+**Accent note:** Existing accents in use are `blue, emerald, violet, amber, rose, cyan` (one per existing section). Add a new entry `indigo` to `ACCENT_STYLES` (around line 176-185 of settings-page.tsx) following the same shape as the others — copy any existing entry's CSS classes and tweak `from-indigo-500/30 to-indigo-500/10` etc. as analogous to other colors. If you don't want to add a new accent style, pick `violet` (visual collision with `prompts` is acceptable since they appear in different list positions).
 
 ### Step 3: Add case to renderSectionContent
 
