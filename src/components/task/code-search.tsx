@@ -158,7 +158,7 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
   if (rgLoading) {
     return (
       <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-        Loading...
+        {t("common.loading")}
       </div>
     );
   }
