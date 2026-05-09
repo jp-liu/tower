@@ -865,4 +865,7 @@ export const en: Translations = {
   "aiConfig.cliNotFound": "CLI not installed",
   "aiConfig.apiKeyMissing": "API key not configured",
   "aiConfig.saved": "Saved",
+  // Extensions (Phase 71+)
+  "extensions.notInstalled.title": "Extension not installed",
+  "extensions.notInstalled.desc": "Install this extension to enable the feature",
 };

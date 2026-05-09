@@ -881,4 +881,7 @@ export const zh = {
   "aiConfig.cliNotFound": "CLI 未安装",
   "aiConfig.apiKeyMissing": "API Key 未配置",
   "aiConfig.saved": "已保存",
+  // Extensions (Phase 71+)
+  "extensions.notInstalled.title": "扩展未安装",
+  "extensions.notInstalled.desc": "需要先安装对应扩展才能使用此功能",
 } as const;
