@@ -48,6 +48,14 @@ export async function checkRgAvailable(): Promise<{ available: boolean; platform
 // Install rg via platform package manager
 // ---------------------------------------------------------------------------
 
+/**
+ * Clear cached rg binary path. Called after extension install/uninstall
+ * to force re-resolution on next searchCode call.
+ */
+export function clearRgPathCache(): void {
+  _rgPath = undefined;
+}
+
 export async function installRg(): Promise<{ success: boolean; error?: string }> {
   const platform = process.platform;
   let cmd: string;

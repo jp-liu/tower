@@ -20,7 +20,7 @@ async function runVersion(rgPath: string): Promise<string | undefined> {
   try {
     const { stdout } = await execFileP(rgPath, ["--version"], { timeout: 3000 });
     // Output: "ripgrep 14.1.1 ..."
-    return stdout.split("\n")[0]?.replace(/^ripgrep\s+/, "").split(" ")[0] ?? undefined;
+    return stdout.split("\n")[0]?.replace(/^ripgrep\s+/, "").split(" ")[0] || undefined;
   } catch {
     return undefined;
   }
@@ -65,13 +65,12 @@ async function check(): Promise<ExtensionStatus> {
 async function install(): Promise<ExtensionResult> {
   try {
     await execFileP("pnpm", ["add", "@vscode/ripgrep"], { timeout: 120_000 });
-    // Clear cached path in legacy search-code-actions if it exists
+    // Clear cached rg path so next searchCode call re-resolves.
     try {
-      const mod = await import("@/actions/search-code-actions");
-      // @ts-expect-error mutating internal cache for hot-reload
-      mod._rgPath = undefined;
+      const { clearRgPathCache } = await import("@/actions/search-code-actions");
+      clearRgPathCache();
     } catch {
-      // Ignore — cache invalidation is best-effort
+      // Best-effort — if module load fails, the cache will refresh at server restart.
     }
     return { success: true, message: "Installed @vscode/ripgrep" };
   } catch (err) {
@@ -82,6 +81,13 @@ async function install(): Promise<ExtensionResult> {
 async function uninstall(): Promise<ExtensionResult> {
   try {
     await execFileP("pnpm", ["remove", "@vscode/ripgrep"], { timeout: 60_000 });
+    // Clear cached rg path so next searchCode attempt detects absence.
+    try {
+      const { clearRgPathCache } = await import("@/actions/search-code-actions");
+      clearRgPathCache();
+    } catch {
+      // Best-effort
+    }
     return { success: true, message: "Removed @vscode/ripgrep" };
   } catch (err) {
     return { success: false, error: (err as Error).message };
