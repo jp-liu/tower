@@ -4,7 +4,7 @@
 
 **Goal:** Onboarding wizard adds a new "Extensions" step between CLI test (current step 2) and the final "complete" action. Both extensions default-checked. Unchecking shows hint about Settings → Extensions. Submit installs in parallel; failures persisted to SystemConfig for later notification.
 
-**Architecture:** New `WizardStepExtensions` component slotted as step 3 in `OnboardingWizard`. New `setOnboardingExtensions` server action persists `onboarding.extensions.requested` / `onboarding.extensions.completed` to `SystemConfig`. The CLI step's `handleComplete` becomes `handleNext` (advances to step 3); the Extensions step's submit calls `completeOnboarding`.
+**Architecture:** Insert a new step 4 ("Enable extensions") into the actual onboarding entry point — `src/app/onboarding/page.tsx` (NOT the dead `OnboardingWizard` dialog component). Existing 3 steps stay in order: Username → CLI test → Git path rules → **Extensions (new)** → complete. New `setOnboardingExtensions` server action persists `onboarding.extensions.requested` / `onboarding.extensions.completed` to `SystemConfig`. The Git rules step's "complete" action becomes "next"; the new Extensions step owns the final `completeOnboarding(username)` call.
 
 **Tech Stack:** Next.js 16 App Router, React 19, Vitest + RTL, shadcn Button/Checkbox.
 
@@ -13,17 +13,19 @@
 ## Files Created / Modified
 
 **Created**
-- `src/components/onboarding/wizard-step-extensions.tsx` — new wizard step
-- `src/components/onboarding/__tests__/wizard-step-extensions.test.tsx` — RTL smoke test
+- `src/app/onboarding/wizard-step-extensions.tsx` — new step component (collocated with the page)
+- `src/app/onboarding/__tests__/wizard-step-extensions.test.tsx` — RTL smoke test
 
 **Modified**
-- `src/components/onboarding/onboarding-wizard.tsx` — `TOTAL_STEPS` to 3, add step 3 rendering
-- `src/components/onboarding/wizard-step-cli.tsx` — rename `handleComplete` to `handleNext`, advance to step 3 instead of completing; remove `completeOnboarding` call (step 3 owns it now)
-- `src/actions/onboarding-actions.ts` — add `setOnboardingExtensions(requested, completed)` server action
-- `src/actions/__tests__/onboarding-actions.test.ts` — add tests for new action
-- `src/lib/i18n/zh.ts` and `src/lib/i18n/en.ts` — add `onboarding.step3.*` keys
+- `src/app/onboarding/page.tsx` — `TOTAL_STEPS` 3→4, add step 4 to `stepIcons`, add `step === 4` rendering, change step 3's "complete" button to "next" (advances to step 4); the new step 4 calls `handleComplete`
+- `src/actions/onboarding-actions.ts` — add `setOnboardingExtensions(requested, completed)` server action; update `completeOnboarding` to accept optional `lastStep` param (default 4) so resume logic works correctly post-Phase 73
+- `src/actions/__tests__/onboarding-actions.test.ts` — add tests for new action + parametrized completeOnboarding
+- `src/lib/i18n/zh.ts` and `src/lib/i18n/en.ts` — add `onboarding.step4.*` keys (step3 namespace is already taken by Git rules)
 
-**Untouched**
+**Untouched (deliberately)**
+- `src/components/onboarding/onboarding-wizard.tsx` — DEAD CODE (not imported anywhere outside its own dir). Don't waste effort modifying it.
+- `src/components/onboarding/wizard-step-cli.tsx` — only consumed by the dead OnboardingWizard. Leave alone.
+- `src/components/onboarding/__tests__/onboarding-wizard.test.tsx` — tests dead component; will continue to pass without changes.
 - `src/lib/extensions/*` — Phases 71/72 already provide the install action
 - `src/components/settings/extensions-section.tsx` — already exists for the "future setup" path
 
@@ -42,38 +44,51 @@
 
 ---
 
-## Task 1: Server action — setOnboardingExtensions
+## Task 1: Server action — setOnboardingExtensions + parametrize completeOnboarding
 
 **Files:**
 - Modify: `src/actions/onboarding-actions.ts`
 - Modify: `src/actions/__tests__/onboarding-actions.test.ts`
 
-The action persists user's extension selection in `SystemConfig`. Two keys:
-- `onboarding.extensions.requested` — JSON-serialized array of extension ids the user opted into
-- `onboarding.extensions.completed` — JSON-serialized array of ids that successfully installed
+Two additions:
+1. **`setOnboardingExtensions(requested, completed)`** — persists user's extension selection. Two SystemConfig keys, JSON-serialized arrays:
+   - `onboarding.extensions.requested` — ids the user opted into
+   - `onboarding.extensions.completed` — ids that successfully installed (may diverge if installs fail)
 
-Both stored independently — they may diverge if some installs fail.
+2. **`completeOnboarding(username?, lastStep?)`** — currently hardcodes `lastStep = "2"`. Change to accept an optional `lastStep` parameter (default 4 so post-Phase-73 calls reflect the new total). Existing callers pass undefined and get the new default.
 
-### Step 1: Write failing test
+### Step 1: Inspect the existing test file's mock pattern
 
-In `src/actions/__tests__/onboarding-actions.test.ts`, add a new describe block:
+```bash
+sed -n '1,40p' src/actions/__tests__/onboarding-actions.test.ts
+```
+
+Note how `db` is mocked. The existing pattern likely uses a typed `mockDb` alias and `mockDb.systemConfig.upsert.mockResolvedValue({})` in setup. Use the same pattern in new tests.
+
+### Step 2: Write failing tests
+
+Add a new describe block to `src/actions/__tests__/onboarding-actions.test.ts`:
 
 ```typescript
 describe("setOnboardingExtensions", () => {
+  beforeEach(() => {
+    // Match the file's existing reset pattern (likely vi.clearAllMocks)
+    vi.clearAllMocks();
+  });
+
   it("persists requested + completed to SystemConfig as JSON arrays", async () => {
     const { setOnboardingExtensions } = await import("../onboarding-actions");
-    const { db } = await import("@/lib/db");
 
     await setOnboardingExtensions(["rg", "monaco"], ["rg"]);
 
-    expect(db.systemConfig.upsert).toHaveBeenCalledWith(
+    expect(mockDb.systemConfig.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { key: "onboarding.extensions.requested" },
         create: { key: "onboarding.extensions.requested", value: JSON.stringify(["rg", "monaco"]) },
         update: { value: JSON.stringify(["rg", "monaco"]) },
       })
     );
-    expect(db.systemConfig.upsert).toHaveBeenCalledWith(
+    expect(mockDb.systemConfig.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { key: "onboarding.extensions.completed" },
         create: { key: "onboarding.extensions.completed", value: JSON.stringify(["rg"]) },
@@ -84,18 +99,41 @@ describe("setOnboardingExtensions", () => {
 
   it("handles empty arrays — user opted out of all extensions", async () => {
     const { setOnboardingExtensions } = await import("../onboarding-actions");
-    const { db } = await import("@/lib/db");
-    (db.systemConfig.upsert as unknown as ReturnType<typeof vi.fn>).mockClear();
 
     await setOnboardingExtensions([], []);
 
-    // Should still write both keys with "[]"
-    expect(db.systemConfig.upsert).toHaveBeenCalledTimes(2);
+    expect(mockDb.systemConfig.upsert).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("completeOnboarding (parametrized lastStep)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("default lastStep is 4 (post-Phase-73)", async () => {
+    const { completeOnboarding } = await import("../onboarding-actions");
+    await completeOnboarding("alice");
+    expect(mockDb.systemConfig.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { key: "onboarding.lastStep" },
+        update: { value: "4" },
+      })
+    );
+  });
+
+  it("explicit lastStep overrides default", async () => {
+    const { completeOnboarding } = await import("../onboarding-actions");
+    await completeOnboarding("alice", 7);
+    expect(mockDb.systemConfig.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { key: "onboarding.lastStep" },
+        update: { value: "7" },
+      })
+    );
   });
 });
 ```
 
-(Adjust mocking to match the existing test file's setup — read it first to see how `db.systemConfig.upsert` is mocked.)
+If `mockDb` is named differently in the file, adjust accordingly. The point: don't fight the existing test infrastructure.
 
 ### Step 2: Run — fail (action doesn't exist)
 
@@ -104,9 +142,11 @@ pnpm test:run src/actions/__tests__/onboarding-actions.test.ts
 # Expected: FAIL — Cannot find name setOnboardingExtensions
 ```
 
-### Step 3: Implement action
+### Step 3: Implement changes
 
-Append to `src/actions/onboarding-actions.ts`:
+Two edits to `src/actions/onboarding-actions.ts`:
+
+**A. Append new action:**
 
 ```typescript
 export async function setOnboardingExtensions(
@@ -127,6 +167,45 @@ export async function setOnboardingExtensions(
 }
 ```
 
+**B. Parameterize `completeOnboarding`:**
+
+Replace the existing signature:
+
+```typescript
+export async function completeOnboarding(username?: string): Promise<void> {
+  // ... hardcoded "2"
+  await db.systemConfig.upsert({
+    where: { key: "onboarding.lastStep" },
+    create: { key: "onboarding.lastStep", value: "2" },
+    update: { value: "2" },
+  });
+  // ...
+}
+```
+
+With:
+
+```typescript
+export async function completeOnboarding(
+  username?: string,
+  lastStep: number = 4
+): Promise<void> {
+  await db.systemConfig.upsert({
+    where: { key: "onboarding.completed" },
+    create: { key: "onboarding.completed", value: "true" },
+    update: { value: "true" },
+  });
+  await db.systemConfig.upsert({
+    where: { key: "onboarding.lastStep" },
+    create: { key: "onboarding.lastStep", value: String(lastStep) },
+    update: { value: String(lastStep) },
+  });
+  // ... rest of username handling unchanged
+}
+```
+
+The default `4` is correct for the post-Phase-73 wizard. Existing callers (`src/app/onboarding/page.tsx:251`) don't pass step → get default 4 → which matches reality (they finish step 4 = extensions step). Step 5 of this Task updates that call site if needed.
+
 ### Step 4: Run — should pass
 
 ```bash
@@ -143,43 +222,47 @@ git commit -m "feat(ext-73): setOnboardingExtensions action — persist requeste
 
 ---
 
-## Task 2: i18n keys for step 3
+## Task 2: i18n keys for step 4
 
 **Files:**
 - Modify: `src/lib/i18n/zh.ts`
 - Modify: `src/lib/i18n/en.ts`
 
-### Keys (zh.ts — find the existing `onboarding.*` cluster)
+⚠️ The `onboarding.step3.*` namespace is **already in use** for the existing Git path rules step. Use `onboarding.step4.*` for the new Extensions step.
+
+Also need to add a "下一步" / "Next" button for the step 3 (Git rules) → step 4 (Extensions) transition. The existing `onboarding.step1.next` key is `"下一步"`; we can reuse it (it's generic enough) OR introduce a new `onboarding.step3.next` if you prefer namespacing. Reusing is simpler — the plan does that.
+
+### Keys (zh.ts)
 
 ```typescript
-"onboarding.step3.title": "启用扩展（可选）",
-"onboarding.step3.desc": "下面这些扩展能解锁文件查看和代码搜索。装一次，所有项目共享。",
-"onboarding.step3.skipHint": "未启用的扩展可在 设置 → Extensions 中随时启用。",
-"onboarding.step3.installing": "安装中...",
-"onboarding.step3.continue": "完成",
-"onboarding.step3.continueWithoutInstall": "跳过并完成",
-"onboarding.step3.installFailedSummary": "{count} 个扩展安装失败，可在设置中重试",
+"onboarding.step4.title": "启用扩展（可选）",
+"onboarding.step4.desc": "下面这些扩展能解锁文件查看和代码搜索。装一次，所有项目共享。",
+"onboarding.step4.skipHint": "未启用的扩展可在 设置 → Extensions 中随时启用。",
+"onboarding.step4.installing": "安装中...",
+"onboarding.step4.continue": "完成",
+"onboarding.step4.continueWithoutInstall": "跳过并完成",
+"onboarding.step4.installFailedSummary": "{count} 个扩展安装失败，可在设置中重试",
 ```
 
-### Keys (en.ts — same set)
+### Keys (en.ts)
 
 ```typescript
-"onboarding.step3.title": "Enable extensions (optional)",
-"onboarding.step3.desc": "These extensions unlock file viewing and code search. Install once, shared across all projects.",
-"onboarding.step3.skipHint": "Skipped extensions can be enabled later in Settings → Extensions.",
-"onboarding.step3.installing": "Installing...",
-"onboarding.step3.continue": "Finish",
-"onboarding.step3.continueWithoutInstall": "Skip and finish",
-"onboarding.step3.installFailedSummary": "{count} extension(s) failed to install — retry in Settings",
+"onboarding.step4.title": "Enable extensions (optional)",
+"onboarding.step4.desc": "These extensions unlock file viewing and code search. Install once, shared across all projects.",
+"onboarding.step4.skipHint": "Skipped extensions can be enabled later in Settings → Extensions.",
+"onboarding.step4.installing": "Installing...",
+"onboarding.step4.continue": "Finish",
+"onboarding.step4.continueWithoutInstall": "Skip and finish",
+"onboarding.step4.installFailedSummary": "{count} extension(s) failed to install — retry in Settings",
 ```
 
-### Step 1: Add keys (find the existing `onboarding.step2.*` cluster and add adjacent)
+### Step 1: Find insertion point
 
 ```bash
-grep -n "onboarding\\.step2\\." src/lib/i18n/zh.ts
+grep -n "onboarding\\.step3\\.pathHint" src/lib/i18n/zh.ts | head -3
 ```
 
-Then add the 7 step3 keys right after step2.
+Add the 7 step4 keys right after the step3 cluster ends.
 
 ### Step 2: TS check — both files must have matching keys
 
@@ -192,7 +275,7 @@ pnpm tsc --noEmit 2>&1 | grep "i18n" | head -3
 
 ```bash
 git add src/lib/i18n/zh.ts src/lib/i18n/en.ts
-git commit -m "i18n(ext-73): add onboarding.step3.* keys for Extensions wizard step"
+git commit -m "i18n(ext-73): add onboarding.step4.* keys for Extensions wizard step"
 ```
 
 ---
@@ -200,7 +283,7 @@ git commit -m "i18n(ext-73): add onboarding.step3.* keys for Extensions wizard s
 ## Task 3: WizardStepExtensions component
 
 **Files:**
-- Create: `src/components/onboarding/wizard-step-extensions.tsx`
+- Create: `src/app/onboarding/wizard-step-extensions.tsx`
 
 ```tsx
 "use client";
@@ -281,8 +364,8 @@ export function WizardStepExtensions({ username, onComplete }: WizardStepExtensi
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <h2 className="text-xl font-semibold">{t("onboarding.step3.title")}</h2>
-        <p className="text-sm text-muted-foreground">{t("onboarding.step3.desc")}</p>
+        <h2 className="text-xl font-semibold">{t("onboarding.step4.title")}</h2>
+        <p className="text-sm text-muted-foreground">{t("onboarding.step4.desc")}</p>
       </div>
 
       <div className="space-y-2">
@@ -330,7 +413,7 @@ export function WizardStepExtensions({ username, onComplete }: WizardStepExtensi
 
       {someUnchecked && (
         <p className="text-xs text-muted-foreground italic">
-          {t("onboarding.step3.skipHint")}
+          {t("onboarding.step4.skipHint")}
         </p>
       )}
 
@@ -339,12 +422,12 @@ export function WizardStepExtensions({ username, onComplete }: WizardStepExtensi
           {installing ? (
             <>
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {t("onboarding.step3.installing")}
+              {t("onboarding.step4.installing")}
             </>
           ) : selectedCount === 0 ? (
-            t("onboarding.step3.continueWithoutInstall")
+            t("onboarding.step4.continueWithoutInstall")
           ) : (
-            t("onboarding.step3.continue")
+            t("onboarding.step4.continue")
           )}
         </Button>
       </div>
@@ -365,7 +448,7 @@ pnpm tsc --noEmit 2>&1 | grep "wizard-step-extensions" | head -3
 ### Step 3: Commit
 
 ```bash
-git add src/components/onboarding/wizard-step-extensions.tsx
+git add src/app/onboarding/wizard-step-extensions.tsx
 git commit -m "feat(ext-73): WizardStepExtensions — onboarding wizard step 3"
 ```
 
@@ -374,7 +457,7 @@ git commit -m "feat(ext-73): WizardStepExtensions — onboarding wizard step 3"
 ## Task 4: WizardStepExtensions smoke test
 
 **Files:**
-- Create: `src/components/onboarding/__tests__/wizard-step-extensions.test.tsx`
+- Create: `src/app/onboarding/__tests__/wizard-step-extensions.test.tsx`
 
 ```tsx
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -482,189 +565,131 @@ describe("WizardStepExtensions", () => {
 ### Step 1: Run — should pass after fixing imports / mocks
 
 ```bash
-pnpm test:run src/components/onboarding/__tests__/wizard-step-extensions.test.tsx
+pnpm test:run src/app/onboarding/__tests__/wizard-step-extensions.test.tsx
 # Expected: 5 passed
 ```
 
 ### Step 2: Verify no regressions
 
 ```bash
-pnpm test:run src/lib/extensions/ src/actions/__tests__/extension-actions.test.ts src/actions/__tests__/onboarding-actions.test.ts src/components/settings/__tests__/extensions-section.test.tsx src/components/onboarding/__tests__/wizard-step-extensions.test.tsx
+pnpm test:run src/lib/extensions/ src/actions/__tests__/extension-actions.test.ts src/actions/__tests__/onboarding-actions.test.ts src/components/settings/__tests__/extensions-section.test.tsx src/app/onboarding/__tests__/wizard-step-extensions.test.tsx
 # Expected: all green
 ```
 
 ### Step 3: Commit
 
 ```bash
-git add src/components/onboarding/__tests__/wizard-step-extensions.test.tsx
+git add src/app/onboarding/__tests__/wizard-step-extensions.test.tsx
 git commit -m "test(ext-73): smoke test for WizardStepExtensions"
 ```
 
 ---
 
-## Task 5: Wire step 3 into OnboardingWizard + adjust step 2
+## Task 5: Wire step 4 into the real onboarding page
 
-**Files:**
-- Modify: `src/components/onboarding/onboarding-wizard.tsx`
-- Modify: `src/components/onboarding/wizard-step-cli.tsx`
+**File:**
+- Modify: `src/app/onboarding/page.tsx` — the actual onboarding entry (NOT `onboarding-wizard.tsx`, which is dead code)
 
-### Changes to onboarding-wizard.tsx
+### Changes
 
-1. Add `import { WizardStepExtensions } from "./wizard-step-extensions";`
-2. Change `const TOTAL_STEPS = 2;` → `const TOTAL_STEPS = 3;`
-3. Update step 2's `WizardStepCli` to call new `handleCliNext` instead of `onComplete`
-4. Add step 3 rendering with `<WizardStepExtensions username={username} onComplete={onComplete} />`
+1. Add `import { Package } from "lucide-react";` (for stepIcons array)
+2. Add `import { WizardStepExtensions } from "./wizard-step-extensions";`
+3. Change `const TOTAL_STEPS = 3;` → `const TOTAL_STEPS = 4;`
+4. Add a 4th entry to `stepIcons` array (around line 260):
+   ```tsx
+   { icon: Package, label: t("onboarding.step4.title") },
+   ```
+5. Locate step 3's submit/finish button (around line 540+ — the Git rules step's "complete" button currently calls `handleComplete`). Change it to `setStep((s) => s + 1)` instead, and update its label from `onboarding.complete` (or whatever current key) to `onboarding.step1.next` (reusing the generic 下一步 / Next).
+6. Add step 4 rendering after step 3's closing block:
+   ```tsx
+   {step === 4 && (
+     <WizardStepExtensions
+       username={username}
+       gitRules={gitRules}
+       onComplete={handleComplete}
+     />
+   )}
+   ```
 
-```tsx
-"use client";
+   Note: `handleComplete` already saves git rules + calls `completeOnboarding`. The WizardStepExtensions component invokes it as the final step.
 
-import { useState } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { useI18n } from "@/lib/i18n";
-import { setOnboardingProgress } from "@/actions/onboarding-actions";
-import { WizardStepUsername } from "./wizard-step-username";
-import { WizardStepCli } from "./wizard-step-cli";
-import { WizardStepExtensions } from "./wizard-step-extensions";
+7. WizardStepExtensions needs the `gitRules` prop because step 3's submit no longer calls `handleComplete` — instead, step 4 takes responsibility for the final save. Update the component signature in Task 3 to accept `gitRules` and pass them through to `handleComplete`.
 
-const TOTAL_STEPS = 3;
+   **OR** (simpler): step 3 still saves git rules to SystemConfig on its "next" click (separate save), and step 4 only handles extension install + completeOnboarding. Pick the simpler split:
+   - **Step 3 next click**: `await setConfigValue("git.pathMappingRules", gitRules); setStep(s => s + 1);`
+   - **Step 4 finish click**: install extensions, persist requested/completed, call `completeOnboarding(username)`, then `router.replace("/workspaces")`.
 
-interface OnboardingWizardProps {
-  onComplete: () => void;
-  initialStep?: number;
-  initialUsername?: string;
-}
+   This way step 4 doesn't need `gitRules` prop. **Use this simpler split.**
 
-export function OnboardingWizard({ onComplete, initialStep, initialUsername }: OnboardingWizardProps) {
-  const { t } = useI18n();
-  const [step, setStep] = useState(initialStep ?? 1);
-  const [username, setUsername] = useState(initialUsername ?? "");
+### Component signature (for Task 3)
 
-  async function handleUsernameNext(name: string) {
-    setUsername(name);
-    await setOnboardingProgress(1);
-    setStep(2);
-  }
-
-  async function handleCliNext() {
-    await setOnboardingProgress(2);
-    setStep(3);
-  }
-
-  const stepIndicator = t("onboarding.stepIndicator")
-    .replace("{current}", String(step))
-    .replace("{total}", String(TOTAL_STEPS));
-
-  return (
-    <Dialog open={true} onOpenChange={() => {}} disablePointerDismissal>
-      <DialogContent
-        showCloseButton={false}
-        style={{
-          width: "100vw",
-          height: "100vh",
-          maxWidth: "none",
-          top: 0,
-          left: 0,
-          transform: "none",
-          borderRadius: 0,
-        }}
-      >
-        <div className="flex flex-col items-center justify-center h-full">
-          <div className="w-full max-w-md px-4 space-y-8">
-            <div className="text-center space-y-3">
-              <h1 className="text-2xl font-bold">{t("onboarding.title")}</h1>
-
-              <div className="flex items-center justify-center gap-2">
-                {Array.from({ length: TOTAL_STEPS }, (_, i) => (
-                  <div
-                    key={i}
-                    className={`h-2 w-2 rounded-full transition-colors ${
-                      i + 1 === step
-                        ? "bg-primary"
-                        : i + 1 < step
-                        ? "bg-primary/50"
-                        : "bg-muted"
-                    }`}
-                  />
-                ))}
-              </div>
-
-              <p className="text-xs text-muted-foreground">{stepIndicator}</p>
-            </div>
-
-            {step === 1 && (
-              <WizardStepUsername onNext={handleUsernameNext} />
-            )}
-            {step === 2 && (
-              <WizardStepCli onNext={handleCliNext} />
-            )}
-            {step === 3 && (
-              <WizardStepExtensions username={username} onComplete={onComplete} />
-            )}
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-```
-
-### Changes to wizard-step-cli.tsx
-
-The CLI step previously called `completeOnboarding(username)` directly. Now it just signals "advance to step 3" — step 3 will call completeOnboarding.
-
-Change the prop interface:
+Task 3 already specifies `onComplete: () => void` — keep as-is. Caller in page.tsx:
 
 ```tsx
-interface WizardStepCliProps {
-  onNext: () => void;
-}
+{step === 4 && (
+  <WizardStepExtensions
+    username={username}
+    onComplete={() => router.replace("/workspaces")}
+  />
+)}
+```
 
-export function WizardStepCli({ onNext }: WizardStepCliProps) {
-  // ... existing state
-  // Remove handleComplete
-  // Add:
-  const [advancing, setAdvancing] = useState(false);
-  async function handleNext() {
-    setAdvancing(true);
-    onNext();
+The component's internal flow:
+1. Install selected extensions in parallel
+2. `setOnboardingExtensions(requested, completed)`
+3. `completeOnboarding(username)` (uses default `lastStep: 4`)
+4. Call `onComplete()` — which triggers the router redirect
+
+### Step 1: Edit page.tsx
+
+Read the file's relevant sections first:
+
+```bash
+sed -n '1,60p' src/app/onboarding/page.tsx          # imports
+sed -n '180,230p' src/app/onboarding/page.tsx        # state + handlers
+sed -n '244,270p' src/app/onboarding/page.tsx        # handleComplete + stepIcons
+sed -n '430,560p' src/app/onboarding/page.tsx        # step 3 (Git rules) submit
+```
+
+Locate the step 3 finish button (the one that calls `handleComplete`). Change its onClick to advance to step 4 + save git rules:
+
+```tsx
+onClick={async () => {
+  if (gitRules.length > 0) {
+    await setConfigValue("git.pathMappingRules", gitRules);
   }
-  // Render: button calls handleNext, label changes from "完成" to "下一步"
-}
+  setStep((s) => s + 1);
+}}
 ```
 
-Also remove the `username` prop and `completeOnboarding` import — no longer needed here.
+The original `handleComplete` is now unused for step 3 — step 4's `WizardStepExtensions` calls `completeOnboarding` directly. The original function can be removed if nothing else references it.
 
-The button label should change from `t("onboarding.complete")` to `t("onboarding.next")` (use existing key if it exists, else add).
-
-### Step 1: Verify if `onboarding.next` key already exists
+### Step 2: TS check
 
 ```bash
-grep -n "onboarding\\.next\\|onboarding\\.complete" src/lib/i18n/zh.ts | head -5
-```
-
-If `onboarding.next` exists, use it. Otherwise add it (same Task 2 pattern). Likely value: zh `"下一步"`, en `"Next"`.
-
-### Step 2: Make all changes, run tests
-
-```bash
-pnpm test:run src/components/onboarding/__tests__/
-# Existing onboarding-wizard.test.tsx may need updating since CLI step changed.
-# Read the existing test file first; if it tested handleComplete on step 2,
-# update it to test handleCliNext instead. Run all onboarding tests.
-```
-
-### Step 3: TS check
-
-```bash
-pnpm tsc --noEmit 2>&1 | grep "onboarding" | head -10
+pnpm tsc --noEmit 2>&1 | grep "onboarding/page" | head -10
 # Expected: clean
+```
+
+### Step 3: Run all extension + onboarding tests (no regressions)
+
+```bash
+pnpm test:run \
+  src/lib/extensions/ \
+  src/actions/__tests__/extension-actions.test.ts \
+  src/actions/__tests__/onboarding-actions.test.ts \
+  src/components/settings/__tests__/extensions-section.test.tsx \
+  src/app/onboarding/__tests__/ \
+  src/components/onboarding/__tests__/
+# Expected: all green. The legacy onboarding-wizard.test.tsx still passes
+# because we didn't touch that dead component.
 ```
 
 ### Step 4: Commit
 
 ```bash
-git add src/components/onboarding/onboarding-wizard.tsx src/components/onboarding/wizard-step-cli.tsx src/lib/i18n/zh.ts src/lib/i18n/en.ts src/components/onboarding/__tests__/onboarding-wizard.test.tsx
-git commit -m "feat(ext-73): wire wizard step 3 + advance step 2 from complete to next"
+git add src/app/onboarding/page.tsx src/lib/i18n/zh.ts src/lib/i18n/en.ts
+git commit -m "feat(ext-73): insert Extensions as step 4 in onboarding wizard"
 ```
 
 ---
@@ -732,12 +757,16 @@ Build & Distribution slimming remains deferred to a separate milestone."
 
 ---
 
+## Spec Deltas (Phase 73)
+
+- **ONBD-EXT-04 partial — `onboarding.extensions.failed` flag NOT implemented**: The spec text says "On any failure: continue to next wizard step but persist a SystemConfig flag `onboarding.extensions.failed = ['monaco']` so a deferred toast surfaces on first workspace load." This plan persists `requested` + `completed` instead, from which the failure list is derivable (`requested - completed`). The deferred toast is not built — failures are visible in Settings → Extensions immediately, which we judge sufficient. If a deferred toast is later required, a small Phase 73.x can add it.
+
 ## Out of Scope (Phase 73)
 
-- **Failure notification toast on first workspace load** — the plan originally proposed `onboarding.extensions.failed` flag for a deferred toast. Acceptable to skip in v1.2 since failures are visible in Settings → Extensions immediately. If you really want a deferred toast, add as a Phase 73.x mini-task.
-- **Per-extension progress (which extension is installing now)** — current implementation shows a single global "安装中..." spinner. Per-extension progress is nice-to-have, not in scope.
-- **Retry-failed-installs button in step 3** — if any install fails, the user can finish onboarding and use Settings → Extensions later. No in-wizard retry.
+- **Per-extension progress** — current implementation shows a single global "安装中..." spinner. Per-extension granular progress is nice-to-have, not in scope.
+- **Retry-failed-installs button in step 4** — if any install fails, the user can finish onboarding and use Settings → Extensions later. No in-wizard retry.
 - **Build & Distribution** (npm pack slimming, optionalDeps) — separate v1.2.x or v1.3 milestone.
+- **Touching `onboarding-wizard.tsx` / `wizard-step-cli.tsx`** — these are dead code (not on the live onboarding path). Modifying them adds risk without value.
 
 ---
 
