@@ -11,6 +11,22 @@ paths:
 - All Button and SelectTrigger use **default size** (`h-8` = 32px). Never use `size="sm"`.
 - Inputs, selects, and buttons that sit side by side must use the same height.
 
+## Dialog (shadcn)
+
+- `DialogContent` ships with `sm:max-w-sm` (≈ 384px) baked into its default class list.
+- Any wider dialog **MUST** use the `sm:` prefix — otherwise the default wins on `≥ 640px` screens and the dialog stays at 384px.
+  ```tsx
+  // ✗ Wrong — sm:max-w-sm overrides this on desktop
+  <DialogContent className="max-w-3xl">
+
+  // ✓ Right
+  <DialogContent className="sm:max-w-3xl">
+
+  // ✓ Or fully escape the default
+  <DialogContent className="w-[min(960px,92vw)] max-w-none sm:max-w-none">
+  ```
+- Past offenders: `image-lightbox.tsx` (rebuilt as portal overlay), `text-preview-dialog.tsx`.
+
 ## Select (Base UI)
 
 - **Never use `<SelectValue />`** — it renders the raw `value` (ID), not the display name.
