@@ -124,11 +124,13 @@ export function TextPreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
-        <h3 className="text-sm font-medium truncate px-4 pt-4">{filename}</h3>
-        <div className="flex-1 overflow-auto px-4 pb-4 pt-2">
-          {renderContent()}
-        </div>
+      <DialogContent
+        className="w-[min(960px,92vw)] max-w-none sm:max-w-none h-[85vh] max-h-[85vh] flex flex-col p-0 gap-0"
+      >
+        <h3 className="text-sm font-medium truncate px-5 py-3 border-b border-border/50">
+          {filename}
+        </h3>
+        <div className="flex-1 overflow-auto px-5 py-4">{renderContent()}</div>
       </DialogContent>
     </Dialog>
   );
