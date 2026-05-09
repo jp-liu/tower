@@ -121,8 +121,9 @@ export function TaskDetailPanel({
   const handleExecute = useCallback(async () => {
     if (isExecuting) return;
     setIsExecuting(true);
+    removePortal(task.id);
     try {
-      const { worktreePath } = await startPtyExecution(task.id, "", selectedPromptId, null, true);
+      const { worktreePath } = await startPtyExecution(task.id, "", selectedPromptId);
       setActiveWorktreePath(worktreePath);
       setTaskStatus("IN_PROGRESS");
     } catch (err) {
@@ -150,6 +151,7 @@ export function TaskDetailPanel({
   const handleStop = useCallback(async () => {
     await stopPtyExecution(task.id);
     setIsExecuting(false);
+    removePortal(task.id);
     setActiveWorktreePath(null);
     setTaskStatus("IN_REVIEW");
     getTaskExecutions(task.id).then((execs) => {

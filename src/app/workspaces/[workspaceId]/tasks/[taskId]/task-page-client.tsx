@@ -60,6 +60,8 @@ interface TaskPageClientProps {
     startedAt?: string | null;
     endedAt?: string | null;
   }>;
+  /** True when task is the project workbench (Tower-labeled). Studio mode launches clean. */
+  isTowerTask?: boolean;
 }
 
 type DiffData = DiffResponse & { commitCount: number; hasUncommitted?: boolean; branchDeleted?: boolean };
@@ -80,11 +82,15 @@ const STATUS_COLORS: Record<string, string> = {
   CANCELLED: "bg-muted text-muted-foreground",
 };
 
-export function TaskPageClient({ task, workspaceId, workspaceName, latestExecution, executions = [] }: TaskPageClientProps) {
+export function TaskPageClient({ task, workspaceId, workspaceName, latestExecution, executions = [], isTowerTask = false }: TaskPageClientProps) {
   const router = useRouter();
   const { t } = useI18n();
   const { removePortal } = useTerminalPortal();
   const [taskStatus, setTaskStatus] = useState(task.status);
+  // Sync taskStatus when server-side task prop changes (router.refresh, etc.)
+  useEffect(() => {
+    setTaskStatus(task.status);
+  }, [task.status]);
   const [diffData, setDiffData] = useState<DiffData | null>(null);
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
@@ -162,14 +168,15 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const handleExecute = useCallback(async () => {
     if (isExecuting) return;
     setIsExecuting(true);
+    removePortal(task.id);
     try {
-      const { worktreePath } = await startPtyExecution(task.id, "", selectedPromptId, null, true);
+      const { worktreePath } = await startPtyExecution(task.id, "", selectedPromptId, null, isTowerTask);
       setActiveWorktreePath(worktreePath);
     } catch (err) {
       setIsExecuting(false);
       toast.error(err instanceof Error ? err.message : String(err));
     }
-  }, [task.id, isExecuting, selectedPromptId]);
+  }, [task.id, isExecuting, selectedPromptId, removePortal, isTowerTask]);
 
   const handleSessionEnd = useCallback((exitCode: number) => {
     setIsExecuting(false);
@@ -184,10 +191,11 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const handleStop = useCallback(async () => {
     await stopPtyExecution(task.id);
     setIsExecuting(false);
+    removePortal(task.id);
     setActiveWorktreePath(null);
     setTaskStatus("IN_REVIEW");
     router.refresh();
-  }, [task.id, router]);
+  }, [task.id, router, removePortal]);
 
   const handleResume = useCallback(async (sessionId: string) => {
     setIsExecuting(true);
@@ -365,6 +373,10 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                   taskId={task.id}
                   worktreePath={activeWorktreePath}
                   onSessionEnd={handleSessionEnd}
+                  onFileOpen={(fullPath) => {
+                    setSelectedFilePath(fullPath);
+                    setActiveTab("files");
+                  }}
                 />
               </div>
             </div>

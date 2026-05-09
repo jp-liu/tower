@@ -58,9 +58,9 @@ export function BoardPageClient({
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createDefaultStatus, setCreateDefaultStatus] = useState<TaskStatus>("TODO");
-  const [selectedTask, setSelectedTask] = useState<TaskWithLabels | null>(
-    openTaskId ? initialTasks.find((t) => t.id === openTaskId) ?? null : null
-  );
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(openTaskId ?? null);
+  // Derive selectedTask from initialTasks so router.refresh auto-syncs status
+  const selectedTask = selectedTaskId ? initialTasks.find((t) => t.id === selectedTaskId) ?? null : null;
   const [editingTask, setEditingTask] = useState<TaskWithLabels | null>(null);
 
   const refreshData = useCallback(() => {
@@ -87,11 +87,8 @@ export function BoardPageClient({
 
   const handleTaskMove = useCallback(async (taskId: string, newStatus: TaskStatus) => {
     await updateTaskStatus(taskId, newStatus);
-    if (selectedTask?.id === taskId) {
-      setSelectedTask({ ...selectedTask, status: newStatus });
-    }
     refreshData();
-  }, [refreshData, selectedTask]);
+  }, [refreshData]);
 
   const handleCreateTask = useCallback(
     async (data: { title: string; description: string; priority: Priority; status: TaskStatus; labelIds: string[]; baseBranch?: string; subPath?: string }) => {
@@ -118,11 +115,11 @@ export function BoardPageClient({
 
   const handleDeleteTask = useCallback(async (taskId: string) => {
     await deleteTask(taskId);
-    if (selectedTask?.id === taskId) {
-      setSelectedTask(null);
+    if (selectedTaskId === taskId) {
+      setSelectedTaskId(null);
     }
     refreshData();
-  }, [refreshData, selectedTask]);
+  }, [refreshData, selectedTaskId]);
 
   const handleTogglePin = useCallback(async (taskId: string) => {
     await toggleTaskPinned(taskId);
@@ -140,11 +137,8 @@ export function BoardPageClient({
 
   const handleContextMenuStatusChange = useCallback(async (taskId: string, status: TaskStatus) => {
     await updateTaskStatus(taskId, status);
-    if (selectedTask?.id === taskId) {
-      setSelectedTask({ ...selectedTask, status });
-    }
     refreshData();
-  }, [refreshData, selectedTask]);
+  }, [refreshData]);
 
   const handleAddTaskToColumn = useCallback((status: TaskStatus) => {
     setCreateDefaultStatus(status);
@@ -204,9 +198,7 @@ export function BoardPageClient({
             initialTasks={filteredTasks}
             onTaskMove={handleTaskMove}
             onTaskClick={(task) => {
-              {
-                setSelectedTask(task);
-              }
+              setSelectedTaskId(task.id);
             }}
             onEditTask={handleEditTask}
             onAddTask={handleAddTaskToColumn}
@@ -246,7 +238,7 @@ export function BoardPageClient({
           task={selectedTask}
           workspaceId={workspaceId}
           projectLocalPath={project.localPath}
-          onClose={() => setSelectedTask(null)}
+          onClose={() => setSelectedTaskId(null)}
         />
       ) : (
         <RepoSidebar project={project} workspaceId={workspaceId} />

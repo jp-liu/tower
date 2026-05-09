@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
 import { TaskPageClient } from "./task-page-client";
 import { getTaskExecutions } from "@/actions/agent-actions";
+import { TOWER_LABEL_NAME } from "@/lib/constants";
 
 interface Props {
   params: Promise<{ workspaceId: string; taskId: string }>;
@@ -85,6 +86,10 @@ export default async function TaskPage({ params }: Props) {
       endedAt: e.endedAt instanceof Date ? e.endedAt.toISOString() : null,
     }));
 
+  const isTowerTask = task.labels.some(
+    (tl) => tl.label.name === TOWER_LABEL_NAME && tl.label.isBuiltin
+  );
+
   return (
     <TaskPageClient
       task={serialized}
@@ -92,6 +97,7 @@ export default async function TaskPage({ params }: Props) {
       workspaceName={workspace?.name ?? ""}
       latestExecution={serializedExecution}
       executions={serializedExecutions}
+      isTowerTask={isTowerTask}
     />
   );
 }
