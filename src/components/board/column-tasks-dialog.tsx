@@ -33,7 +33,7 @@ export function ColumnTasksDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[80vh]">
+      <DialogContent className="sm:max-w-6xl max-h-[80vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className={`h-2.5 w-2.5 rounded-full ${columnColor}`} />
@@ -43,8 +43,8 @@ export function ColumnTasksDialog({
             </span>
           </DialogTitle>
         </DialogHeader>
-        <ScrollArea className="max-h-[calc(80vh-80px)]">
-          <div className="grid grid-cols-3 gap-3 pr-3">
+        <ScrollArea className="max-h-[680px]">
+          <div className="grid grid-cols-4 gap-3 pr-3">
             {tasks.map((task) => {
               const priorityConfig = PRIORITY_CONFIG[task.priority];
               return (
@@ -88,7 +88,7 @@ export function ColumnTasksDialog({
               );
             })}
             {tasks.length === 0 && (
-              <div className="col-span-3 py-8 text-center text-sm text-muted-foreground">
+              <div className="col-span-4 py-8 text-center text-sm text-muted-foreground">
                 {t("board.noTasks")}
               </div>
             )}
