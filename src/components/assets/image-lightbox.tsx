@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { X, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RotateCcw } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RotateCcw } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 export interface LightboxAsset {
@@ -185,7 +185,7 @@ export function ImageLightbox({
     dragMovedRef.current = false;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     dragStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
-    if (scale > 1) setIsDragging(true);
+    setIsDragging(true);
   };
   const handleImagePointerMove = (e: React.PointerEvent<HTMLImageElement>) => {
     if (!dragStart.current) return;
@@ -222,12 +222,7 @@ export function ImageLightbox({
     if (e.target === e.currentTarget) close();
   };
 
-  const cursorClass =
-    scale > 1
-      ? isDragging
-        ? "cursor-grabbing"
-        : "cursor-grab"
-      : "cursor-zoom-in";
+  const cursorClass = isDragging ? "cursor-grabbing" : "cursor-grab";
 
   if (!open || !mounted) return null;
 
@@ -350,37 +345,21 @@ export function ImageLightbox({
 
         {/* Toolbar */}
         <div className="flex items-center gap-1 rounded-lg bg-black/50 px-2 py-1.5 backdrop-blur-md ring-1 ring-white/10">
-        <ToolbarBtn
-          onClick={zoomOut}
-          title={t("assets.lightbox.zoomOut")}
-          aria-label={t("assets.lightbox.zoomOut")}
-          disabled={scale <= MIN_SCALE}
-        >
-          <ZoomOut className="h-4 w-4" />
-        </ToolbarBtn>
-        <span className="px-2 text-xs text-white/80 tabular-nums select-none min-w-12 text-center">
-          {Math.round(scale * 100)}%
-        </span>
-        <ToolbarBtn
-          onClick={zoomIn}
-          title={t("assets.lightbox.zoomIn")}
-          aria-label={t("assets.lightbox.zoomIn")}
-          disabled={scale >= MAX_SCALE}
-        >
-          <ZoomIn className="h-4 w-4" />
-        </ToolbarBtn>
-        <ToolbarBtn
-          onClick={reset}
-          title={t("assets.lightbox.reset")}
-          aria-label={t("assets.lightbox.reset")}
-          disabled={scale === 1 && pan.x === 0 && pan.y === 0}
-        >
-          <RotateCcw className="h-4 w-4" />
-        </ToolbarBtn>
-        <div className="mx-1 h-5 w-px bg-white/20" />
-        <ToolbarBtn onClick={close} title={t("assets.lightbox.close")} aria-label={t("assets.lightbox.close")}>
-          <X className="h-4 w-4" />
-        </ToolbarBtn>
+          <span className="px-2 text-xs text-white/80 tabular-nums select-none min-w-12 text-center">
+            {Math.round(scale * 100)}%
+          </span>
+          <ToolbarBtn
+            onClick={reset}
+            title={t("assets.lightbox.reset")}
+            aria-label={t("assets.lightbox.reset")}
+            disabled={scale === 1 && pan.x === 0 && pan.y === 0}
+          >
+            <RotateCcw className="h-4 w-4" />
+          </ToolbarBtn>
+          <div className="mx-1 h-5 w-px bg-white/20" />
+          <ToolbarBtn onClick={close} title={t("assets.lightbox.close")} aria-label={t("assets.lightbox.close")}>
+            <X className="h-4 w-4" />
+          </ToolbarBtn>
         </div>
       </div>
     </div>
