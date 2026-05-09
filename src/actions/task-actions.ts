@@ -324,6 +324,9 @@ export async function getTaskOverview(taskId: string) {
     where: { id: taskId },
     include: {
       labels: { include: { label: true } },
+      project: {
+        select: { id: true, name: true, type: true, localPath: true, workspaceId: true },
+      },
       executions: {
         orderBy: { createdAt: "desc" },
         take: 1,

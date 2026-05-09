@@ -59,6 +59,18 @@ interface CreateTaskDialogProps {
   defaultStatus?: TaskStatus;
   editTask?: Task | null;
   editTaskLabelIds?: string[];
+  /**
+   * Pre-fill the create form with another task's data (used by "duplicate task"
+   * from archive drawer). Only applied when `editTask` is null/undefined.
+   */
+  prefillFromTask?: {
+    title?: string;
+    description?: string | null;
+    priority?: Priority;
+    subPath?: string | null;
+    labelIds?: string[];
+    baseBranch?: string | null;
+  } | null;
   labels: LabelOption[];
   projectType?: string;
   projectLocalPath?: string | null;
@@ -72,6 +84,7 @@ export function CreateTaskDialog({
   defaultStatus = "TODO",
   editTask,
   editTaskLabelIds,
+  prefillFromTask,
   labels,
   projectType: _projectType,
   projectLocalPath,
@@ -91,7 +104,7 @@ export function CreateTaskDialog({
   const isEditing = !!editTask;
   const isGitProject = !!projectLocalPath;
 
-  // Pre-fill when editing
+  // Pre-fill when editing OR when create-with-prefill (duplicate task)
   useEffect(() => {
     if (editTask) {
       setTitle(editTask.title);
@@ -99,6 +112,12 @@ export function CreateTaskDialog({
       setPriority(editTask.priority);
       setSubPath(editTask.subPath ?? "");
       setSelectedLabelIds(editTaskLabelIds ?? []);
+    } else if (prefillFromTask) {
+      setTitle(prefillFromTask.title ?? "");
+      setDescription(prefillFromTask.description ?? "");
+      setPriority(prefillFromTask.priority ?? "MEDIUM");
+      setSubPath(prefillFromTask.subPath ?? "");
+      setSelectedLabelIds(prefillFromTask.labelIds ?? []);
     } else {
       setTitle("");
       setDescription("");
@@ -106,7 +125,7 @@ export function CreateTaskDialog({
       setSubPath("");
       setSelectedLabelIds([]);
     }
-  }, [editTask, editTaskLabelIds]);
+  }, [editTask, editTaskLabelIds, prefillFromTask]);
 
   // Reset when dialog closes
   useEffect(() => {
@@ -132,8 +151,18 @@ export function CreateTaskDialog({
       getCurrentBranch(projectLocalPath!),
     ]).then(([list, current]) => {
       setBranches(list);
-      // Default to current active branch, fallback to first
-      setSelectedBranch(current && list.includes(current) ? current : list[0] ?? "");
+      // Branch selection priority:
+      //   1. prefillFromTask.baseBranch (only if it still exists locally)
+      //   2. current active branch
+      //   3. first available
+      // If a prefilled branch is no longer in the list, fall through so the user
+      // can pick something — they'll see the dropdown defaulted to current branch.
+      const prefilledBranch = prefillFromTask?.baseBranch ?? null;
+      if (prefilledBranch && list.includes(prefilledBranch)) {
+        setSelectedBranch(prefilledBranch);
+      } else {
+        setSelectedBranch(current && list.includes(current) ? current : list[0] ?? "");
+      }
       setBranchesLoading(false);
       // 2. Trigger background git fetch, then refresh list
       fetchRemoteBranches(projectLocalPath!).then(() => {
@@ -151,7 +180,7 @@ export function CreateTaskDialog({
       setSelectedBranch("");
       setBranchesLoading(false);
     });
-  }, [open, isGitProject, projectLocalPath, editTask]);
+  }, [open, isGitProject, projectLocalPath, editTask, prefillFromTask]);
 
   const handleSubmit = () => {
     if (!title.trim()) return;

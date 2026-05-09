@@ -710,9 +710,9 @@ export const zh = {
   "taskDrawer.noExecution": "暂无执行记录",
   "taskDrawer.fileChanges": "文件改动",
   "taskDrawer.noFileChanges": "无文件改动",
-  "taskDrawer.rerun": "重新执行",
-  "taskDrawer.rerunStarted": "已开始重新执行",
-  "taskDrawer.rerunFailed": "重新执行启动失败",
+  "taskDrawer.duplicate": "复制并新建任务",
+  "taskDrawer.duplicateSuccess": "已复制为新任务",
+  "taskDrawer.duplicateFailed": "复制任务失败",
   // Code search (Phase 64)
   "codeSearch.patternPlaceholder": "搜索代码（支持正则）",
   "codeSearch.globPlaceholder": "文件过滤，如 *.ts",

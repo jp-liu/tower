@@ -12,11 +12,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
-import { getTaskOverview } from "@/actions/task-actions";
+import { createTask, getTaskOverview } from "@/actions/task-actions";
 import type { TaskOverviewData } from "@/actions/task-actions";
-import { startPtyExecution } from "@/actions/agent-actions";
+import { getLabelsForWorkspace } from "@/actions/label-actions";
+import { CreateTaskDialog } from "@/components/board/create-task-dialog";
 import { BOARD_COLUMNS, PRIORITY_CONFIG } from "@/lib/constants";
-import { Calendar, Package, Play, PlayCircle } from "lucide-react";
+import { Calendar, Copy, Package, PlayCircle } from "lucide-react";
 import { TaskFileChanges } from "@/components/task/task-file-changes";
 import { toast } from "sonner";
 
@@ -34,7 +35,10 @@ export function TaskOverviewDrawer({
   const { t } = useI18n();
   const [task, setTask] = useState<TaskOverviewData | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [isRerunning, setIsRerunning] = useState(false);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [labels, setLabels] = useState<
+    { id: string; name: string; color: string; isBuiltin: boolean }[]
+  >([]);
 
   useEffect(() => {
     if (!taskId || !open) {
@@ -45,6 +49,18 @@ export function TaskOverviewDrawer({
       const data = await getTaskOverview(taskId);
       if (data) {
         setTask(data);
+        if (data.project?.workspaceId) {
+          getLabelsForWorkspace(data.project.workspaceId).then((ls) => {
+            setLabels(
+              ls.map((l) => ({
+                id: l.id,
+                name: l.name,
+                color: l.color,
+                isBuiltin: l.isBuiltin,
+              }))
+            );
+          }).catch(() => setLabels([]));
+        }
       }
     });
   }, [taskId, open]);
@@ -66,17 +82,31 @@ export function TaskOverviewDrawer({
     }
   })();
 
-  const handleRerun = async () => {
-    if (!taskId || isRerunning) return;
+  const handleDuplicate = () => {
+    if (!task) return;
+    setDuplicateOpen(true);
+  };
+
+  const handleDuplicateSubmit = async (data: {
+    title: string;
+    description: string;
+    priority: import("@prisma/client").Priority;
+    status: import("@prisma/client").TaskStatus;
+    labelIds: string[];
+    baseBranch?: string;
+    subPath?: string;
+  }) => {
+    if (!task?.project) return;
     try {
-      setIsRerunning(true);
-      await startPtyExecution(taskId, "");
-      toast.success(t("taskDrawer.rerunStarted"));
+      await createTask({
+        ...data,
+        projectId: task.project.id,
+      });
+      toast.success(t("taskDrawer.duplicateSuccess"));
+      setDuplicateOpen(false);
       onOpenChange(false);
     } catch {
-      toast.error(t("taskDrawer.rerunFailed"));
-    } finally {
-      setIsRerunning(false);
+      toast.error(t("taskDrawer.duplicateFailed"));
     }
   };
 
@@ -211,22 +241,43 @@ export function TaskOverviewDrawer({
                 )}
               </section>
 
-              {/* Rerun action */}
+              {/* Duplicate action — opens create-task dialog with current task's
+                  data prefilled. Avoids the worktree-recycle pitfalls of true rerun. */}
               <section>
                 <Button
                   variant="default"
                   className="w-full"
-                  onClick={handleRerun}
-                  disabled={isRerunning || !taskId}
+                  onClick={handleDuplicate}
+                  disabled={!task}
                 >
-                  <Play className="h-4 w-4" />
-                  {t("taskDrawer.rerun")}
+                  <Copy className="h-4 w-4" />
+                  {t("taskDrawer.duplicate")}
                 </Button>
               </section>
             </div>
           ) : null}
         </ScrollArea>
       </SheetContent>
+
+      {/* Duplicate dialog — only render when task fully loaded */}
+      {task?.project && (
+        <CreateTaskDialog
+          open={duplicateOpen}
+          onOpenChange={setDuplicateOpen}
+          onSubmit={handleDuplicateSubmit}
+          labels={labels}
+          projectType={task.project.type}
+          projectLocalPath={task.project.localPath}
+          prefillFromTask={{
+            title: task.title,
+            description: task.description,
+            priority: task.priority,
+            subPath: task.subPath,
+            labelIds: task.labels.map((tl) => tl.label.id),
+            baseBranch: task.baseBranch,
+          }}
+        />
+      )}
     </Sheet>
   );
 }
