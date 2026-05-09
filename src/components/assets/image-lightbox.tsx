@@ -220,7 +220,7 @@ export function ImageLightbox({
 
   const overlay = (
     <div
-      className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] bg-black/70 dark:bg-black/40 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
       aria-label={t("assets.lightbox.zoomFit")}
