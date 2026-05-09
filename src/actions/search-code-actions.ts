@@ -52,7 +52,7 @@ export async function checkRgAvailable(): Promise<{ available: boolean; platform
  * Clear cached rg binary path. Called after extension install/uninstall
  * to force re-resolution on next searchCode call.
  */
-export function clearRgPathCache(): void {
+export async function clearRgPathCache(): Promise<void> {
   _rgPath = undefined;
 }
 

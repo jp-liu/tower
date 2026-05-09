@@ -68,7 +68,7 @@ async function install(): Promise<ExtensionResult> {
     // Clear cached rg path so next searchCode call re-resolves.
     try {
       const { clearRgPathCache } = await import("@/actions/search-code-actions");
-      clearRgPathCache();
+      await clearRgPathCache();
     } catch {
       // Best-effort — if module load fails, the cache will refresh at server restart.
     }
@@ -84,7 +84,7 @@ async function uninstall(): Promise<ExtensionResult> {
     // Clear cached rg path so next searchCode attempt detects absence.
     try {
       const { clearRgPathCache } = await import("@/actions/search-code-actions");
-      clearRgPathCache();
+      await clearRgPathCache();
     } catch {
       // Best-effort
     }
