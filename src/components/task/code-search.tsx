@@ -5,8 +5,6 @@ import {
   Search,
   Filter,
   Loader2,
-  Download,
-  ExternalLink,
   XCircle,
   ChevronDown,
   ChevronRight,
@@ -15,7 +13,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
-import { searchCode, checkRgAvailable, installRg } from "@/actions/search-code-actions";
+import { searchCode } from "@/actions/search-code-actions";
+import { useExtension } from "@/lib/extensions/client";
 import type { SearchMatch, SearchErrorKind } from "@/actions/search-code-actions";
 
 interface CodeSearchProps {
@@ -68,17 +67,7 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
   const generationRef = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
 
-  // rg availability check
-  const [rgChecked, setRgChecked] = useState(false);
-  const [rgAvailable, setRgAvailable] = useState(true);
-  const [installing, setInstalling] = useState(false);
-
-  useEffect(() => {
-    checkRgAvailable().then((res) => {
-      setRgAvailable(res.available);
-      setRgChecked(true);
-    });
-  }, []);
+  const { status: rgStatus, loading: rgLoading } = useExtension("rg");
 
   const handleSearch = useCallback(async () => {
     if (!localPath || !pattern.trim()) return;
@@ -166,54 +155,17 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
     [handleSearch]
   );
 
-  const handleInstallRg = useCallback(async () => {
-    setInstalling(true);
-    try {
-      const res = await installRg();
-      if (res.success) {
-        toast.success(t("codeSearch.rgInstallSuccess"));
-        setRgAvailable(true);
-      } else {
-        toast.error(res.error ?? t("codeSearch.rgInstallFailed"));
-      }
-    } catch {
-      toast.error(t("codeSearch.rgInstallFailed"));
-    } finally {
-      setInstalling(false);
-    }
-  }, [t]);
-
-  // Show rg not installed prompt
-  if (rgChecked && !rgAvailable) {
-    const downloadUrl = "https://github.com/BurntSushi/ripgrep/releases";
+  if (rgLoading) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-        <Search className="h-8 w-8 text-muted-foreground" />
-        <p className="text-sm font-medium text-foreground">{t("codeSearch.rgNotInstalledTitle")}</p>
-        <p className="text-xs text-muted-foreground max-w-[240px]">
-          {t("codeSearch.rgNotInstalledDesc")}
-        </p>
-        <div className="flex flex-col gap-2 w-full max-w-[200px]">
-          <Button
-            variant="default"
-            className="w-full gap-1.5"
-            onClick={handleInstallRg}
-            disabled={installing}
-          >
-            {installing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-            {installing ? t("codeSearch.rgInstalling") : t("codeSearch.rgInstallBtn")}
-          </Button>
-          <Button
-            variant="outline"
-            className="w-full gap-1.5"
-            onClick={() => window.open(downloadUrl, "_blank")}
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            {t("codeSearch.rgDownloadPage")}
-          </Button>
-        </div>
+      <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+        Loading...
       </div>
     );
+  }
+  // rg should always be installed when this tab renders (parent filters it out otherwise).
+  // Guard defensively in case of race during install/uninstall.
+  if (!rgStatus.installed) {
+    return null;
   }
 
   if (!localPath) {
