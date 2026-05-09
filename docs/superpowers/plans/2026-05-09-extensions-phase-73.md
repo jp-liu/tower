@@ -449,7 +449,7 @@ pnpm tsc --noEmit 2>&1 | grep "wizard-step-extensions" | head -3
 
 ```bash
 git add src/app/onboarding/wizard-step-extensions.tsx
-git commit -m "feat(ext-73): WizardStepExtensions — onboarding wizard step 3"
+git commit -m "feat(ext-73): WizardStepExtensions — onboarding wizard step 4"
 ```
 
 ---
@@ -662,7 +662,7 @@ onClick={async () => {
 }}
 ```
 
-The original `handleComplete` is now unused for step 3 — step 4's `WizardStepExtensions` calls `completeOnboarding` directly. The original function can be removed if nothing else references it.
+The original `handleComplete` is now unused — step 4's `WizardStepExtensions` calls `completeOnboarding` directly. **Delete the orphan `handleComplete` function** (and any unused state like `completing` if it's exclusive to it) so we don't leave dead code behind.
 
 ### Step 2: TS check
 
@@ -724,7 +724,8 @@ Then:
 |------|----------|
 | `pnpm dev`, navigate to root | Wizard opens at step 1 (username) |
 | Enter username, click Next | Advance to step 2 (CLI test) |
-| CLI test passes, click 下一步 | Advance to step 3 (Extensions) |
+| CLI test passes, click 下一步 | Advance to step 3 (Git path rules) |
+| Git rules step, click 下一步 | Advance to step 4 (Extensions) |
 | Step 3 shows: title, description, 2 extension rows with checkboxes | ✓ |
 | Both checkboxes default-checked | ✓ |
 | Uncheck one → "可在 设置 → Extensions" hint appears | ✓ |
