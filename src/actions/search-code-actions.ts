@@ -265,13 +265,18 @@ export async function searchCode(
   const timeoutMs = Math.max(1, timeoutSec) * 1000;
 
   // 6. Run rg (async — does not block event loop)
+  // Server Actions cannot transport AbortSignal across the RPC boundary —
+  // if the value isn't a real AbortSignal (e.g., it was deserialized from a
+  // client call), drop it. Cancellation is then UI-side only (generation
+  // counter discards the late result; server process exits at timeout).
+  const safeSignal = signal instanceof AbortSignal ? signal : undefined;
   let output: string;
   try {
     output = await execFileAsync(rgPath, args, {
       encoding: "utf-8",
       maxBuffer: 10 * 1024 * 1024,
       timeout: timeoutMs,
-      signal,
+      signal: safeSignal,
     });
   } catch (err) {
     const rgErr = err as Error & {
