@@ -163,10 +163,11 @@ export const taskTools = {
         }
       }
 
-      // Auto-start execution if requested — use locally-built description (no extra DB query)
+      // Auto-start execution if requested — pass title as prompt since
+      // startPtyExecution already injects task description as context
       if (args.autoStart) {
         const PORT = process.env.PORT ?? "3000";
-        const prompt = updatedDesc || args.description || args.title;
+        const prompt = args.title;
         try {
           const res = await fetch(`http://localhost:${PORT}/api/internal/terminal/${task.id}/start`, {
             method: "POST",
