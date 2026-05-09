@@ -263,7 +263,10 @@ export function CodeEditor({
     return () => clearTimeout(timer);
   }, [selectedLine, activeTabPath]);
 
-  // Create / switch Monaco model on active tab change
+  // Create / switch Monaco model on active tab change.
+  // We own the model lifecycle here — DO NOT pass `value` to <MonacoEditor>,
+  // it would call editor.setValue() on the current model (= previous tab's model)
+  // every render, scrambling content across tabs.
   useEffect(() => {
     const editor = editorRef.current as {
       setModel: (m: unknown) => void;
@@ -282,12 +285,18 @@ export function CodeEditor({
     if (!tab) return;
 
     const uri = monaco.Uri.parse("file://" + tab.path);
-    let model = modelsRef.current.get(tab.path);
+    let model = modelsRef.current.get(tab.path) as
+      | { getValue: () => string; setValue: (v: string) => void }
+      | undefined;
     if (!model) {
       const ext = tab.filename.split(".").pop() ?? "";
       const lang = LANG_MAP[ext] ?? "plaintext";
-      model = monaco.editor.createModel(tab.content, lang, uri);
+      model = monaco.editor.createModel(tab.content, lang, uri) as typeof model;
       modelsRef.current.set(tab.path, model);
+    } else if (!tab.isDirty && model.getValue() !== tab.content) {
+      // External content update (force-open, refresh) — sync to model
+      // Skip if user has unsaved edits, otherwise we'd erase their work.
+      model.setValue(tab.content);
     }
     editor.setModel(model);
   }, [activeTabPath, tabs]);
@@ -475,7 +484,7 @@ export function CodeEditor({
           <MonacoEditor
             height="100%"
             theme={monacoTheme}
-            value={activeTab?.content ?? ""}
+            defaultValue=""
             onMount={handleEditorMount}
             onChange={(value) => {
               if (value === undefined) return;
