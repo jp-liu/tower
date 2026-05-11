@@ -370,6 +370,45 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, branch: safeBranch });
       }
 
+      case "diff-file": {
+        const safeFile = sanitizeFilePath(body.file);
+        const staged = Boolean(body.staged);
+        // Patches are returned relative to the repo root. Hand-built patches passed to
+        // stage-hunk/discard-hunk MUST use the same root-relative paths — see note in task.
+        const patch = staged
+          ? await git.diff(["--cached", "--", safeFile])
+          : await git.diff(["--", safeFile]);
+        return NextResponse.json({ patch: patch.replace(/\r\n/g, "\n") });
+      }
+
+      case "stage-hunk":
+      case "discard-hunk": {
+        const patch = body.patch;
+        if (typeof patch !== "string" || !patch.includes("@@")) {
+          return NextResponse.json({ error: "invalid patch" }, { status: 400 });
+        }
+        const tmpPath = path.join(
+          os.tmpdir(),
+          `tower-git-${Date.now()}-${Math.random().toString(36).slice(2)}.patch`
+        );
+        fs.writeFileSync(tmpPath, patch, { mode: 0o600 });
+        try {
+          if (action === "stage-hunk") {
+            await git.raw(["apply", "--cached", tmpPath]);
+          } else {
+            await git.raw(["apply", "-R", tmpPath]);
+          }
+          return NextResponse.json({ success: true });
+        } catch (e) {
+          return NextResponse.json(
+            { error: (e as Error).message || "apply failed" },
+            { status: 500 }
+          );
+        } finally {
+          try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+        }
+      }
+
       default:
         return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }
