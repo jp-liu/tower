@@ -51,12 +51,26 @@ export function DiffView({
         // Build the hunks array expected by @git-diff-view/react's `data` prop.
         // Each element is a raw hunk string (header + lines).
         // NOTE: parse-diff stores the raw hunk header in chunk.content and
-        // the individual change lines in chunk.changes[*].content.
+        // the individual change lines in chunk.changes[*].content with marker.
         const hunkLines: string[] = [chunk.content];
         for (const change of chunk.changes) {
           hunkLines.push(change.content);
         }
         const hunkString = hunkLines.join("\n");
+
+        // @git-diff-view/react REQUIRES oldFile.content + newFile.content to
+        // render anything; hunks alone produces an empty body. Reconstruct
+        // per-chunk content from changes — strip the leading marker so the
+        // library reapplies its own colors. Lines: " " context → both sides;
+        // "+" → newFile only; "-" → oldFile only.
+        const oldContent = chunk.changes
+          .filter((c) => c.type !== "add")
+          .map((c) => c.content.slice(1))
+          .join("\n");
+        const newContent = chunk.changes
+          .filter((c) => c.type !== "del")
+          .map((c) => c.content.slice(1))
+          .join("\n");
 
         return (
           <div
@@ -96,10 +110,12 @@ export function DiffView({
                 oldFile: {
                   fileName: file.from ?? undefined,
                   fileLang: language,
+                  content: oldContent,
                 },
                 newFile: {
                   fileName: file.to ?? undefined,
                   fileLang: language,
+                  content: newContent,
                 },
                 hunks: [hunkString],
               }}

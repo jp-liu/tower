@@ -19,6 +19,7 @@ import { applyGutterDecorations, chunksToGutterHunks } from "@/lib/monaco-gutter
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { FileHistoryPanel } from "./file-history-panel";
 import { BlameList } from "./blame-overlay";
 
@@ -295,6 +296,10 @@ export function CodeEditor({
 
     const tab = tabs.find((t) => t.path === activeTabPath);
     if (!tab) return;
+    // Diff tabs are rendered via <DiffEditorView> with its own Monaco instance.
+    // Don't touch the main editor's model for them (URI like "file://diff:..."
+    // would also be malformed and could throw on Uri.parse / createModel).
+    if (tab.isDiff) return;
 
     const uri = monaco.Uri.parse("file://" + tab.path);
     let model = modelsRef.current.get(tab.path) as
@@ -435,26 +440,28 @@ export function CodeEditor({
         />
         {showHistoryButton && (
           <>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="shrink-0 text-muted-foreground"
-              title={t("git.toggleBlame")}
-              onClick={() => setBlameOpen(true)}
-              data-testid="blame-button"
-            >
-              <User className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="shrink-0 text-muted-foreground"
-              title={t("git.history")}
-              onClick={() => setHistoryOpen(true)}
-              data-testid="history-button"
-            >
-              <Clock className="h-4 w-4" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger
+                onClick={() => setBlameOpen(true)}
+                className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                aria-label={t("git.toggleBlame")}
+                data-testid="blame-button"
+              >
+                <User className="h-4 w-4" />
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{t("git.toggleBlame")}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                onClick={() => setHistoryOpen(true)}
+                className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                aria-label={t("git.history")}
+                data-testid="history-button"
+              >
+                <Clock className="h-4 w-4" />
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{t("git.history")}</TooltipContent>
+            </Tooltip>
           </>
         )}
       </div>
