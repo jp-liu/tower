@@ -1,6 +1,7 @@
 "use server";
 
 import { execFile, execFileSync } from "child_process";
+import { existsSync } from "fs";
 import { z } from "zod";
 import { getConfigValue } from "@/actions/config-actions";
 
@@ -11,18 +12,24 @@ export type SearchErrorKind =
   | "aborted"
   | "unknown";
 
-/** Resolve rg binary: bundled @vscode/ripgrep → system rg fallback */
+/** Resolve rg binary: bundled @vscode/ripgrep → system rg fallback.
+ * Verifies the binary file actually exists — package import succeeding
+ * isn't enough (postinstall download may have failed silently). */
 function resolveRgPath(): string {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return (require("@vscode/ripgrep") as { rgPath: string }).rgPath;
+    const pkgPath = (require("@vscode/ripgrep") as { rgPath: string }).rgPath;
+    if (pkgPath && existsSync(pkgPath)) return pkgPath;
   } catch {
-    try {
-      return execFileSync("which", ["rg"], { encoding: "utf-8" }).trim();
-    } catch {
-      throw new Error("ripgrep not found: install @vscode/ripgrep or system rg");
-    }
+    // package not installed — fall through to system fallback
   }
+  try {
+    const sysPath = execFileSync("which", ["rg"], { encoding: "utf-8" }).trim();
+    if (sysPath && existsSync(sysPath)) return sysPath;
+  } catch {
+    // which failed
+  }
+  throw new Error("ripgrep not found: install @vscode/ripgrep or system rg");
 }
 
 let _rgPath: string | undefined;
