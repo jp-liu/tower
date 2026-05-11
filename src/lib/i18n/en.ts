@@ -44,6 +44,9 @@ export const en: Translations = {
   "project.importHint": "Select an existing local project folder",
   "project.autoDetected": "Git remote auto-detected",
   "project.edit": "Edit Project",
+  "git.history": "File History",
+  "git.noHistory": "No commit history",
+  "git.viewCommit": "View commit",
   "git.stageHunk": "Stage hunk",
   "git.discardHunk": "Discard hunk",
   // TODO: wire when dedicated unstage-hunk action is implemented (v1.4)

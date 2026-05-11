@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, waitFor, cleanup, act } from "@testing-library/react";
+import { render, waitFor, cleanup, act, screen, fireEvent } from "@testing-library/react";
 import React from "react";
 
 // ---------------------------------------------------------------------------
@@ -137,6 +137,26 @@ vi.mock("next-themes", () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Mock FileHistoryPanel (avoid real gitAction calls inside panel)
+// ---------------------------------------------------------------------------
+vi.mock("@/components/task/file-history-panel", () => ({
+  FileHistoryPanel: ({ relativePath }: { relativePath: string }) => (
+    <div data-testid="file-history-panel">{relativePath}</div>
+  ),
+}));
+
+// ---------------------------------------------------------------------------
+// Mock Dialog (shadcn) — render children when open
+// ---------------------------------------------------------------------------
+vi.mock("@/components/ui/dialog", () => ({
+  Dialog: ({ open, children }: { open: boolean; onOpenChange?: (o: boolean) => void; children: React.ReactNode }) =>
+    open ? <div data-testid="dialog">{children}</div> : null,
+  DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+// ---------------------------------------------------------------------------
 // Now import the component under test (after all mocks are set up)
 // ---------------------------------------------------------------------------
 import { CodeEditor } from "@/components/task/code-editor";
@@ -230,5 +250,51 @@ describe("CodeEditor — first-tab syntax highlight", () => {
 
     // setModel must have been called with the returned model
     expect(fakeEditor.setModel).toHaveBeenCalledWith(fakeModel);
+  });
+});
+
+describe("CodeEditor — History button", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fakeMonaco.editor.createModel.mockReturnValue(fakeModel);
+    fakeMonaco.editor.getModel.mockReturnValue(null);
+    fakeMonaco.Uri.parse.mockImplementation((uri: string) => ({ toString: () => uri }));
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("shows History button when a regular tab is active", async () => {
+    await act(async () => {
+      renderEditor({ worktreePath: "/x", selectedFilePath: "/x/a.ts" });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("history-button")).toBeInTheDocument();
+    });
+  });
+
+  it("opens FileHistoryPanel dialog when History button is clicked", async () => {
+    await act(async () => {
+      renderEditor({ worktreePath: "/x", selectedFilePath: "/x/a.ts" });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("history-button")).toBeInTheDocument();
+    });
+
+    // Dialog should not be open yet
+    expect(screen.queryByTestId("file-history-panel")).not.toBeInTheDocument();
+
+    // Click history button
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("history-button"));
+    });
+
+    // Panel should now be visible
+    await waitFor(() => {
+      expect(screen.getByTestId("file-history-panel")).toBeInTheDocument();
+    });
   });
 });

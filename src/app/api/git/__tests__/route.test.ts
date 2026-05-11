@@ -69,6 +69,76 @@ afterAll(() => {
   }
 });
 
+// log-file tests use their own isolated repo to avoid polluting the shared repoPath state
+let logFileRepoPath: string;
+
+beforeAll(async () => {
+  logFileRepoPath = fs.mkdtempSync(path.join(os.tmpdir(), "tower-git-logfile-test-"));
+  const git = simpleGit(logFileRepoPath);
+  await git.init();
+  await git.addConfig("user.email", "test@test.com");
+  await git.addConfig("user.name", "Test");
+
+  // First commit
+  fs.writeFileSync(path.join(logFileRepoPath, "history.txt"), "line1\n");
+  await git.add("history.txt");
+  await git.commit("First commit");
+
+  // Second commit
+  fs.writeFileSync(path.join(logFileRepoPath, "history.txt"), "line1\nline2\n");
+  await git.add("history.txt");
+  await git.commit("Second commit");
+});
+
+afterAll(() => {
+  if (logFileRepoPath && fs.existsSync(logFileRepoPath)) {
+    fs.rmSync(logFileRepoPath, { recursive: true, force: true });
+  }
+});
+
+describe("POST /api/git log-file", () => {
+  it("returns commits for a tracked file with correct shape", async () => {
+    const req = makePost({ action: "log-file", path: logFileRepoPath, file: "history.txt" });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(Array.isArray(data.commits)).toBe(true);
+    expect(data.commits.length).toBeGreaterThanOrEqual(2);
+
+    const first = data.commits[0];
+    expect(typeof first.hash).toBe("string");
+    expect(first.hash.length).toBe(40);
+    expect(typeof first.shortHash).toBe("string");
+    expect(first.shortHash.length).toBe(7);
+    expect(first.shortHash).toBe(first.hash.slice(0, 7));
+    expect(typeof first.message).toBe("string");
+    expect(typeof first.author).toBe("string");
+    expect(typeof first.date).toBe("string");
+  });
+
+  it("returns empty commits array for a file not in the repo", async () => {
+    const req = makePost({ action: "log-file", path: logFileRepoPath, file: "nonexistent.txt" });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.commits).toEqual([]);
+  });
+
+  it("returns 500 for an invalid (absolute) file path", async () => {
+    const req = makePost({ action: "log-file", path: logFileRepoPath, file: "/etc/passwd" });
+    const res = await POST(req);
+    expect(res.status).toBeGreaterThanOrEqual(400);
+  });
+
+  it("respects limit parameter", async () => {
+    const req = makePost({ action: "log-file", path: logFileRepoPath, file: "history.txt", limit: "1" });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.commits.length).toBe(1);
+  });
+});
+
 describe("POST /api/git diff-file", () => {
   it("returns a patch with both @@ markers for a modified file", async () => {
     const req = makePost({ action: "diff-file", path: repoPath, file: "test.txt" });

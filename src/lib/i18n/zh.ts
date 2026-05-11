@@ -48,6 +48,9 @@ export const zh = {
   "project.autoDetected": "已自动检测 Git 远程",
   "project.edit": "编辑项目",
   // Git clone
+  "git.history": "文件历史",
+  "git.noHistory": "无提交记录",
+  "git.viewCommit": "查看此提交",
   "git.stageHunk": "暂存此 hunk",
   "git.discardHunk": "丢弃此 hunk",
   // TODO: wire when dedicated unstage-hunk action is implemented (v1.4)

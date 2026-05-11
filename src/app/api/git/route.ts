@@ -370,6 +370,25 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, branch: safeBranch });
       }
 
+      case "log-file": {
+        const safeFile = sanitizeFilePath(body.file);
+        const rawLimit = parseInt(body.limit ?? "50", 10);
+        const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+        try {
+          const log = await git.log({ file: safeFile, maxCount: limit });
+          const commits = log.all.map((c) => ({
+            hash: c.hash,
+            shortHash: c.hash.slice(0, 7),
+            message: c.message,
+            author: c.author_name,
+            date: c.date,
+          }));
+          return NextResponse.json({ commits });
+        } catch {
+          return NextResponse.json({ commits: [] });
+        }
+      }
+
       case "diff-file": {
         const safeFile = sanitizeFilePath(body.file);
         const staged = Boolean(body.staged);

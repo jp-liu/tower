@@ -6,7 +6,7 @@ import { loader } from "@monaco-editor/react";
 import { useTheme } from "next-themes";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
-import { FileWarning, FileX } from "lucide-react";
+import { FileWarning, FileX, Clock } from "lucide-react";
 import { readFileContent, writeFileContent, readFileContentForce } from "@/actions/file-actions";
 import { Button } from "@/components/ui/button";
 import { EditorTabs } from "./editor-tabs";
@@ -16,6 +16,10 @@ import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { gitAction } from "@/lib/git-api";
 import { parseUnifiedDiff } from "@/lib/git-diff";
 import { applyGutterDecorations, chunksToGutterHunks } from "@/lib/monaco-gutter";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { FileHistoryPanel } from "./file-history-panel";
 
 type GuardInfo =
   | { kind: "oversized"; size: number; limit: number }
@@ -82,6 +86,7 @@ export function CodeEditor({
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
   const [monacoReady, setMonacoReady] = useState(false);
   const [gutterTick, setGutterTick] = useState(0);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const editorRef = useRef<unknown>(null);
   const monacoRef = useRef<unknown>(null);
   const modelsRef = useRef<Map<string, unknown>>(new Map());
@@ -414,15 +419,31 @@ export function CodeEditor({
   }
 
   const activeTab = tabs.find((t) => t.path === activeTabPath);
+  // Show History button only when a regular (non-diff) editable tab is active
+  const showHistoryButton = activeTab !== undefined && !activeTab.isDiff;
 
   return (
     <div className="flex flex-col h-full overflow-hidden relative">
-      <EditorTabs
-        tabs={tabs}
-        activeTabPath={activeTabPath}
-        onTabClick={handleTabClick}
-        onTabClose={handleTabClose}
-      />
+      <div className="flex items-center">
+        <EditorTabs
+          tabs={tabs}
+          activeTabPath={activeTabPath}
+          onTabClick={handleTabClick}
+          onTabClose={handleTabClose}
+        />
+        {showHistoryButton && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 text-muted-foreground"
+            title={t("git.history")}
+            onClick={() => setHistoryOpen(true)}
+            data-testid="history-button"
+          >
+            <Clock className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
 
       {tabs.length === 0 ? (
         <div className="flex h-full flex-col items-center justify-center text-center">
@@ -555,6 +576,24 @@ export function CodeEditor({
         </div>
       )}
 
+
+      {/* File history dialog */}
+      {showHistoryButton && activeTab && (
+        <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+          <DialogContent className="w-[min(720px,90vw)] max-w-none sm:max-w-none flex flex-col" style={{ height: "min(540px, 80vh)" }}>
+            <DialogHeader>
+              <DialogTitle>{t("git.history")} — {activeTab.filename}</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <FileHistoryPanel
+                worktreePath={worktreePath}
+                relativePath={activeTab.relativePath}
+                onClose={() => setHistoryOpen(false)}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
