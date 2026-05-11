@@ -13,6 +13,9 @@ import { EditorTabs } from "./editor-tabs";
 import type { EditorTab } from "./editor-tabs";
 import { DiffEditorView } from "./diff-editor";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { gitAction } from "@/lib/git-api";
+import { parseUnifiedDiff } from "@/lib/git-diff";
+import { applyGutterDecorations, chunksToGutterHunks } from "@/lib/monaco-gutter";
 
 type GuardInfo =
   | { kind: "oversized"; size: number; limit: number }
@@ -78,6 +81,7 @@ export function CodeEditor({
   const [guardByPath, setGuardByPath] = useState<Map<string, GuardInfo>>(new Map());
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
   const [monacoReady, setMonacoReady] = useState(false);
+  const [gutterTick, setGutterTick] = useState(0);
   const editorRef = useRef<unknown>(null);
   const monacoRef = useRef<unknown>(null);
   const modelsRef = useRef<Map<string, unknown>>(new Map());
@@ -302,6 +306,33 @@ export function CodeEditor({
     editor.setModel(model);
   }, [activeTabPath, tabs, monacoReady]);
 
+  // Fetch git diff and apply VSCode-style gutter decorations.
+  // Deps: activeTabPath, monacoReady, gutterTick, worktreePath.
+  // Intentionally excludes `tabs` to avoid re-firing on every keystroke;
+  // activeTabRef.current is kept in sync by a separate effect above.
+  useEffect(() => {
+    if (!monacoReady || !activeTabPath || !worktreePath) return;
+    const activeTab = activeTabRef.current;
+    if (!activeTab || activeTab.isDiff) return; // skip diff tabs
+
+    const handle = setTimeout(async () => {
+      try {
+        const res = await gitAction(worktreePath, "diff-file", { file: activeTab.relativePath });
+        const patch = (res as { patch?: string }).patch ?? "";
+        if (!patch) return; // file not tracked or no changes
+        const files = parseUnifiedDiff(patch);
+        const hunks = chunksToGutterHunks(files[0]?.chunks ?? []);
+        const ed = editorRef.current as Parameters<typeof applyGutterDecorations>[0] | null;
+        const m = monacoRef.current as Parameters<typeof applyGutterDecorations>[1] | null;
+        if (ed && m) applyGutterDecorations(ed, m, hunks);
+      } catch {
+        // file may not be in a git repo, or worktree gone — silently ignore
+      }
+    }, 300);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTabPath, monacoReady, gutterTick, worktreePath]);
+
   function handleEditorMount(editor: unknown, monaco: unknown) {
     editorRef.current = editor;
     monacoRef.current = monaco;
@@ -329,6 +360,7 @@ export function CodeEditor({
             tt.path === tab.path ? { ...tt, isDirty: false } : tt
           )
         );
+        setGutterTick((t) => t + 1);
         toast.success(t("editor.saveSuccess"));
         onSaveRef.current?.();
       } catch {

@@ -3,6 +3,22 @@ import { render, waitFor, cleanup, act } from "@testing-library/react";
 import React from "react";
 
 // ---------------------------------------------------------------------------
+// Mock @/lib/git-api
+// ---------------------------------------------------------------------------
+vi.mock("@/lib/git-api", () => ({
+  gitAction: vi.fn(() => Promise.resolve({ patch: "" })),
+}));
+
+// ---------------------------------------------------------------------------
+// Mock @/lib/monaco-gutter
+// ---------------------------------------------------------------------------
+vi.mock("@/lib/monaco-gutter", () => ({
+  applyGutterDecorations: vi.fn(),
+  clearGutterDecorations: vi.fn(),
+  chunksToGutterHunks: vi.fn(() => []),
+}));
+
+// ---------------------------------------------------------------------------
 // Fakes for Monaco editor instance
 // ---------------------------------------------------------------------------
 const fakeModel = { getValue: vi.fn(() => ""), setValue: vi.fn() };
@@ -125,6 +141,7 @@ vi.mock("next-themes", () => ({
 // ---------------------------------------------------------------------------
 import { CodeEditor } from "@/components/task/code-editor";
 import { I18nProvider } from "@/lib/i18n";
+import { gitAction } from "@/lib/git-api";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -140,6 +157,47 @@ function renderEditor(props: { worktreePath: string; selectedFilePath: string })
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Test helpers
+// ---------------------------------------------------------------------------
+const mockGitAction = gitAction as ReturnType<typeof vi.fn>;
+
+describe("CodeEditor — gutter decorations via gitAction diff-file", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fakeMonaco.editor.createModel.mockReturnValue(fakeModel);
+    fakeMonaco.editor.getModel.mockReturnValue(null);
+    fakeMonaco.Uri.parse.mockImplementation((uri: string) => ({ toString: () => uri }));
+    mockGitAction.mockResolvedValue({ patch: "" });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("calls gitAction('diff-file', ...) after Monaco mounts and active tab changes", async () => {
+    await act(async () => {
+      render(
+        <I18nProvider>
+          <CodeEditor worktreePath="/x" selectedFilePath="/x/a.ts" />
+        </I18nProvider>
+      );
+    });
+
+    // Wait for Monaco to mount + file to load, then wait for debounced gutter effect (300ms)
+    await waitFor(
+      () => {
+        expect(mockGitAction).toHaveBeenCalledWith(
+          "/x",
+          "diff-file",
+          expect.objectContaining({ file: "a.ts" })
+        );
+      },
+      { timeout: 1000 }
+    );
+  });
+});
+
 describe("CodeEditor — first-tab syntax highlight", () => {
   beforeEach(() => {
     vi.clearAllMocks();
