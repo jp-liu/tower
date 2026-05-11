@@ -1,7 +1,5 @@
 "use client";
 
-const TRUNCATE_AT = 500;
-
 import { useState } from "react";
 import { ChevronRight, ChevronDown, AlertTriangle, GitCompare, GitCommitHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,6 +8,27 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/lib/i18n";
+import { DiffView } from "./diff-view";
+
+const LANG_MAP: Record<string, string> = {
+  ts: "typescript",
+  tsx: "typescript",
+  js: "javascript",
+  jsx: "javascript",
+  json: "json",
+  md: "markdown",
+  css: "css",
+  html: "html",
+  py: "python",
+  sh: "shell",
+  yaml: "yaml",
+  yml: "yaml",
+};
+
+function detectLanguage(filename: string): string {
+  const ext = filename.split(".").pop() ?? "";
+  return LANG_MAP[ext] ?? "plaintext";
+}
 
 interface DiffFileEntry {
   filename: string;
@@ -139,42 +158,9 @@ export function TaskDiffView({
                   </Button>
 
                   {/* Expanded patch content */}
-                  {isExpanded && file.patch && (
+                  {isExpanded && file.patch && !file.isBinary && (
                     <div className="border-t border-border bg-background">
-                      {(() => {
-                        const allLines = file.patch.split("\n");
-                        const displayLines = allLines.slice(0, TRUNCATE_AT);
-                        const truncated = allLines.length > TRUNCATE_AT;
-                        return (
-                          <>
-                            <pre className="overflow-x-auto p-0 text-xs font-mono leading-5">
-                              {displayLines.map((line, idx) => {
-                                const lineClass =
-                                  line.startsWith("+") && !line.startsWith("+++")
-                                    ? "px-4 block bg-green-500/10 text-green-400"
-                                    : line.startsWith("-") && !line.startsWith("---")
-                                    ? "px-4 block bg-red-500/10 text-red-400"
-                                    : line.startsWith("@@")
-                                    ? "px-4 block bg-blue-500/10 text-blue-300"
-                                    : "px-4 block text-muted-foreground";
-                                return (
-                                  <span key={idx} className={lineClass}>
-                                    {line || " "}
-                                  </span>
-                                );
-                              })}
-                            </pre>
-                            {truncated && (
-                              <div className="px-4 py-2 text-xs text-muted-foreground border-t border-border">
-                                {t("diff.patchTruncated", {
-                                  n: String(TRUNCATE_AT),
-                                  total: String(allLines.length),
-                                })}
-                              </div>
-                            )}
-                          </>
-                        );
-                      })()}
+                      <DiffView patch={file.patch} language={detectLanguage(file.filename)} />
                     </div>
                   )}
                 </div>
