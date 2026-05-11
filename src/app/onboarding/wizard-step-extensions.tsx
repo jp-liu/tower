@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Loader2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
-import { listExtensions } from "@/lib/extensions/registry";
+import { listExtensionMetadata } from "@/lib/extensions/metadata";
 import { installExtension } from "@/actions/extension-actions";
 import {
   completeOnboarding,
@@ -19,7 +19,7 @@ interface WizardStepExtensionsProps {
 
 export function WizardStepExtensions({ username, onComplete }: WizardStepExtensionsProps) {
   const { t } = useI18n();
-  const extensions = listExtensions();
+  const extensions = listExtensionMetadata();
 
   // Default: all extensions checked. State is the set of currently-checked ids.
   const [selected, setSelected] = useState<Set<ExtensionId>>(

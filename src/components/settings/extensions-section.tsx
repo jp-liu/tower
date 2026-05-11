@@ -1,12 +1,12 @@
 "use client";
 
 import { useI18n } from "@/lib/i18n";
-import { listExtensions } from "@/lib/extensions/registry";
+import { listExtensionMetadata } from "@/lib/extensions/metadata";
 import { ExtensionCard } from "./extension-card";
 
 export function ExtensionsSection() {
   const { t } = useI18n();
-  const extensions = listExtensions();
+  const extensions = listExtensionMetadata();
 
   return (
     <div className="space-y-5">

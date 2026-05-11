@@ -7,7 +7,7 @@ import {
   listAllExtensionStatus,
   uninstallExtension,
 } from "@/actions/extension-actions";
-import { listExtensions } from "./registry";
+import { listExtensionMetadata } from "./metadata";
 import type { ExtensionId, ExtensionStatus, ExtensionResult } from "./types";
 
 type StatusMap = Record<ExtensionId, ExtensionStatus>;
@@ -15,10 +15,10 @@ type StatusMap = Record<ExtensionId, ExtensionStatus>;
 const DEFAULT_STATUS: ExtensionStatus = { installed: false };
 
 function buildInitialMap(): StatusMap {
-  // Derived from registry so adding a new extension definition automatically
-  // gets a default status entry.
+  // Derived from metadata so adding a new extension definition automatically
+  // gets a default status entry. metadata.ts is client-safe (no Node imports).
   return Object.fromEntries(
-    listExtensions().map((ext) => [ext.id, DEFAULT_STATUS])
+    listExtensionMetadata().map((meta) => [meta.id, DEFAULT_STATUS])
   ) as StatusMap;
 }
 

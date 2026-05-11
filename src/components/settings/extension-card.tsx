@@ -5,11 +5,11 @@ import { CheckCircle2, Circle, ExternalLink, Loader2, RefreshCw } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { useExtension } from "@/lib/extensions/client";
-import type { Extension } from "@/lib/extensions/types";
+import type { ExtensionMetadata } from "@/lib/extensions/types";
 import { toast } from "sonner";
 
 interface ExtensionCardProps {
-  extension: Extension;
+  extension: ExtensionMetadata;
 }
 
 export function ExtensionCard({ extension }: ExtensionCardProps) {
