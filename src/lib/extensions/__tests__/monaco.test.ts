@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("fs", async () => {
   const actual = await vi.importActual<typeof import("fs")>("fs");
-  return { ...actual, existsSync: vi.fn(), readFileSync: vi.fn(), rmSync: vi.fn() };
+  return { ...actual, existsSync: vi.fn(), readFileSync: vi.fn(), rmSync: vi.fn(), cpSync: vi.fn() };
 });
 
 vi.mock("child_process", () => ({
@@ -71,22 +71,43 @@ describe("monaco extension — check", () => {
 });
 
 describe("monaco extension — install", () => {
-  it("install runs pnpm add then node scripts/copy-monaco.js", async () => {
+  it("install runs pnpm add then inline-copies vs assets to public/vs", async () => {
     const cp = await import("child_process");
     (cp.execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
       (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
         cb(null, "");
       }
     );
+    const fs = await import("fs");
+    (fs.existsSync as unknown as ReturnType<typeof vi.fn>).mockReturnValue(true);
 
     const ext = await loadMonaco();
     const result = await ext.install();
     expect(result.success).toBe(true);
-    // Two calls: pnpm add, then node scripts/copy-monaco.js
-    expect(cp.execFile).toHaveBeenCalledTimes(2);
+    expect(cp.execFile).toHaveBeenCalledTimes(1);
     expect((cp.execFile as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe("pnpm");
     expect((cp.execFile as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]).toEqual(["add", "monaco-editor"]);
-    expect((cp.execFile as unknown as ReturnType<typeof vi.fn>).mock.calls[1][0]).toBe("node");
+    expect(fs.cpSync).toHaveBeenCalledWith(
+      expect.stringContaining("monaco-editor/min/vs"),
+      expect.stringContaining("public/vs"),
+      expect.objectContaining({ recursive: true })
+    );
+  });
+
+  it("install reports failure when pnpm succeeds but vs source is missing", async () => {
+    const cp = await import("child_process");
+    (cp.execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
+        cb(null, "");
+      }
+    );
+    const fs = await import("fs");
+    (fs.existsSync as unknown as ReturnType<typeof vi.fn>).mockReturnValue(false);
+
+    const ext = await loadMonaco();
+    const result = await ext.install();
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/min\/vs not found/);
   });
 
   it("install returns success:false when pnpm fails", async () => {

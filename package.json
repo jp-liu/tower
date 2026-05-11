@@ -23,7 +23,6 @@
     "scripts/link-prisma.js",
     "scripts/fix-native-permissions.js",
     "scripts/migrate-data.ts",
-    "scripts/copy-monaco.js",
     "scripts/post-tool-hook.js",
     "scripts/session-start-hook.js",
     "scripts/stop-hook.js",
