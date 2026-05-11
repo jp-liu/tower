@@ -922,4 +922,7 @@ export const zh = {
   "settings.extensions.installFailed": "安装 {name} 失败",
   "settings.extensions.uninstallSuccess": "已卸载 {name}",
   "settings.extensions.uninstallFailed": "卸载 {name} 失败",
+  // Git graph hover tooltip
+  "git.hoverParentsLabel": "父提交",
+  "git.hoverRefsLabel": "分支/标签",
 } as const;

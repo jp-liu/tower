@@ -906,4 +906,7 @@ export const en: Translations = {
   "settings.extensions.installFailed": "Failed to install {name}",
   "settings.extensions.uninstallSuccess": "Uninstalled {name}",
   "settings.extensions.uninstallFailed": "Failed to uninstall {name}",
+  // Git graph hover tooltip
+  "git.hoverParentsLabel": "Parents",
+  "git.hoverRefsLabel": "Refs",
 };
