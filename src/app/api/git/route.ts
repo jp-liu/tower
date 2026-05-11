@@ -331,7 +331,7 @@ export async function POST(request: NextRequest) {
         const safeRef = (gitRef || "HEAD").replace(/[^a-zA-Z0-9_\-\/\.~^]/g, "");
         try {
           const content = await git.show(`${safeRef}:${safeFile}`);
-          return NextResponse.json({ success: true, content });
+          return NextResponse.json({ success: true, content: content.replace(/\r\n/g, "\n") });
         } catch {
           return NextResponse.json({ success: true, content: "" });
         }

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { loader } from "@monaco-editor/react";
 import { useTheme } from "next-themes";
+import { normalizeLF } from "@/lib/git-diff";
 
 // Load Monaco from local public/vs (copied from node_modules by postinstall script)
 loader.config({
@@ -65,8 +66,8 @@ export function DiffEditorView({
     <MonacoDiffEditor
       height="100%"
       theme={monacoTheme}
-      original={originalContent}
-      modified={modifiedContent}
+      original={normalizeLF(originalContent)}
+      modified={normalizeLF(modifiedContent)}
       language={lang}
       onMount={(editor) => {
         editorRef.current = editor;
