@@ -480,6 +480,7 @@ export const zh = {
   "editor.saveSuccess": "保存成功",
   "editor.saveError": "保存失败，请重试",
   "editor.closeTab": "关闭标签页",
+  "editor.diffTabSuffix": "(工作区)",
   "editor.noWorktree": "暂无工作区，请先执行任务",
   "editor.extensionRequired": "需要安装 Monaco 扩展才能查看和编辑文件，可在 设置 → 扩展 中启用",
   "simpleViewer.fallbackNotice": "未安装 Monaco — 纯文本只读预览，安装后可获得完整编辑器",

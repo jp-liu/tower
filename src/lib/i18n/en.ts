@@ -465,6 +465,7 @@ export const en: Translations = {
   "editor.saveSuccess": "File saved",
   "editor.saveError": "Save failed, please try again",
   "editor.closeTab": "Close tab",
+  "editor.diffTabSuffix": "(Working Tree)",
   "editor.noWorktree": "No worktree — run the task first",
   "editor.extensionRequired": "Install the Monaco extension to view and edit files (Settings → Extensions)",
   "simpleViewer.fallbackNotice": "Monaco not installed — plain-text read-only preview. Install for full editor.",

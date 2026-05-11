@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { X, GitCompare } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 export interface EditorTab {
@@ -43,12 +43,17 @@ export function EditorTabs({ tabs, activeTabPath, onTabClick, onTabClose }: Edit
             ].join(" ")}
           >
             {tab.isDiff && (
-              <span className="text-amber-400 text-[10px] font-mono font-bold">M</span>
+              <GitCompare className="w-3 h-3 text-amber-400 shrink-0" />
             )}
             {tab.isDirty && (
               <span className="text-primary text-xs">●</span>
             )}
             <span>{tab.filename}</span>
+            {tab.isDiff && (
+              <span className="text-muted-foreground text-xs ml-0.5">
+                {t("editor.diffTabSuffix")}
+              </span>
+            )}
             <button
               type="button"
               aria-label={t("editor.closeTab")}
