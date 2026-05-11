@@ -455,6 +455,9 @@ export const en: Translations = {
   "editor.closeTab": "Close tab",
   "editor.noWorktree": "No worktree — run the task first",
   "editor.extensionRequired": "Install the Monaco extension to view and edit files (Settings → Extensions)",
+  "simpleViewer.fallbackNotice": "Monaco not installed — plain-text read-only preview. Install for full editor.",
+  "simpleViewer.oversized": "File too large ({size}, limit {limit}) — preview unavailable",
+  "simpleViewer.binary": "Binary file — preview unavailable",
   // Diff view (Phase 17)
   "diff.filesChanged": "{count} files changed",
   "diff.additions": "+{count}",

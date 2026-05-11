@@ -12,6 +12,7 @@ import { TaskMergeConfirmDialog } from "@/components/task/task-merge-confirm-dia
 import { FileTree } from "@/components/task/file-tree";
 import { CodeEditor, type DiffFileRequest } from "@/components/task/code-editor";
 import { CodeSearch } from "@/components/task/code-search";
+import { SimpleFileViewer } from "@/components/task/simple-file-viewer";
 import { EditorGitPanel } from "@/components/task/editor-git-panel";
 import { PreviewPanel } from "@/components/task/preview-panel";
 import { Badge } from "@/components/ui/badge";
@@ -551,14 +552,22 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                   </TabsContent>
                 </Tabs>
               </div>
-              {/* Right: Monaco editor (only when monaco extension installed); else placeholder */}
+              {/* Right: Monaco editor when installed; SimpleFileViewer fallback otherwise */}
               <div className="flex-1 min-w-0 overflow-hidden">
                 {!monacoStatus.installed ? (
-                  <div className="flex h-full items-center justify-center px-6 text-center">
-                    <p className="text-sm text-muted-foreground">
-                      {t("editor.extensionRequired")}
-                    </p>
-                  </div>
+                  fileRootPath ? (
+                    <SimpleFileViewer
+                      worktreePath={fileRootPath}
+                      selectedFilePath={selectedFilePath}
+                      selectedLine={selectedLine}
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center px-6 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        {t("editor.extensionRequired")}
+                      </p>
+                    </div>
+                  )
                 ) : fileRootPath ? (
                   <CodeEditor
                     worktreePath={fileRootPath}

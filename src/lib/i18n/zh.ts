@@ -470,6 +470,9 @@ export const zh = {
   "editor.closeTab": "关闭标签页",
   "editor.noWorktree": "暂无工作区，请先执行任务",
   "editor.extensionRequired": "需要安装 Monaco 扩展才能查看和编辑文件，可在 设置 → 扩展 中启用",
+  "simpleViewer.fallbackNotice": "未安装 Monaco — 纯文本只读预览，安装后可获得完整编辑器",
+  "simpleViewer.oversized": "文件过大（{size}，上限 {limit}），无法预览",
+  "simpleViewer.binary": "二进制文件，无法预览",
   // Diff view (Phase 17)
   "diff.filesChanged": "{count} 个文件更改",
   "diff.additions": "+{count}",
