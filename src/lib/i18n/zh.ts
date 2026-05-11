@@ -50,6 +50,10 @@ export const zh = {
   // Git clone
   "git.stageHunk": "暂存此 hunk",
   "git.discardHunk": "丢弃此 hunk",
+  // TODO: wire when dedicated unstage-hunk action is implemented (v1.4)
+  "git.unstageHunk": "取消暂存此 hunk",
+  "git.viewHunks": "查看 / 操作 hunk",
+  "git.hunkApplyFailed": "应用 hunk 失败 — 文件可能已更改",
   "git.clone": "克隆到本地",
   "git.cloning": "正在克隆...",
   "git.cloned": "已克隆",

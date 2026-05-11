@@ -46,6 +46,10 @@ export const en: Translations = {
   "project.edit": "Edit Project",
   "git.stageHunk": "Stage hunk",
   "git.discardHunk": "Discard hunk",
+  // TODO: wire when dedicated unstage-hunk action is implemented (v1.4)
+  "git.unstageHunk": "Unstage hunk",
+  "git.viewHunks": "View / stage hunks",
+  "git.hunkApplyFailed": "Hunk apply failed — file may have changed",
   "git.clone": "Clone",
   "git.cloning": "Cloning...",
   "git.cloned": "Cloned",
