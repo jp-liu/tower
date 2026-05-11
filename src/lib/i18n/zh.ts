@@ -928,4 +928,9 @@ export const zh = {
   // Git history panel
   "git.noCommits": "暂无提交",
   "git.commitFiles": "提交文件",
+  "git.tabGraph": "图谱",
+  "git.commitDiff": "提交差异",
+  "git.hoverHashLabel": "哈希",
+  "git.hoverAuthorLabel": "作者",
+  "git.hoverDateLabel": "时间",
 } as const;

@@ -912,4 +912,9 @@ export const en: Translations = {
   // Git history panel
   "git.noCommits": "No commits",
   "git.commitFiles": "Files in commit",
+  "git.tabGraph": "Graph",
+  "git.commitDiff": "Commit diff",
+  "git.hoverHashLabel": "Hash",
+  "git.hoverAuthorLabel": "Author",
+  "git.hoverDateLabel": "Date",
 };
