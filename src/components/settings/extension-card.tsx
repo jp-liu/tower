@@ -89,11 +89,6 @@ export function ExtensionCard({ extension }: ExtensionCardProps) {
               {t("settings.extensions.installed")}
               {status.version ? ` v${status.version}` : ""}
             </span>
-            {status.path && (
-              <span className="ml-2 truncate text-muted-foreground" title={status.path}>
-                {status.path}
-              </span>
-            )}
           </>
         ) : (
           <>
