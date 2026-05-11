@@ -454,6 +454,7 @@ export const en: Translations = {
   "editor.saveError": "Save failed, please try again",
   "editor.closeTab": "Close tab",
   "editor.noWorktree": "No worktree — run the task first",
+  "editor.extensionRequired": "Install the Monaco extension to view and edit files (Settings → Extensions)",
   // Diff view (Phase 17)
   "diff.filesChanged": "{count} files changed",
   "diff.additions": "+{count}",

@@ -100,6 +100,11 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
   const [diffFileRequest, setDiffFileRequest] = useState<DiffFileRequest | null>(null);
   const [activeTab, setActiveTab] = useState<string | null>(null);
+  // Inner sub-tab inside files: filetree | search | git. Initial pick is
+  // the first available sub-tab given current extension state.
+  const [innerTab, setInnerTab] = useState<string>(() =>
+    monacoStatus.installed ? "filetree" : rgStatus.installed ? "search" : "git"
+  );
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [previewUrl, setPreviewUrl] = useState("");
   const [isExecuting, setIsExecuting] = useState(false);
@@ -168,12 +173,15 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     return () => { cancelled = true; };
   }, [task.id, taskStatus]);
 
-  // Force away from "files" tab when Monaco is not installed
+  // Inner sub-tab fallback: if the currently selected sub-tab becomes
+  // unavailable (extension uninstalled), fall back to the next available.
   useEffect(() => {
-    if (!monacoStatus.installed && (activeTab === "files" || activeTab == null)) {
-      setActiveTab("changes");
+    if (innerTab === "filetree" && !monacoStatus.installed) {
+      setInnerTab(rgStatus.installed ? "search" : "git");
+    } else if (innerTab === "search" && !rgStatus.installed) {
+      setInnerTab(monacoStatus.installed ? "filetree" : "git");
     }
-  }, [monacoStatus.installed, activeTab]);
+  }, [monacoStatus.installed, rgStatus.installed, innerTab]);
 
   const handleExecute = useCallback(async () => {
     if (isExecuting) return;
@@ -457,7 +465,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           {/* Tab bar — segmented control style matching Settings page */}
           <div className="header-lg flex shrink-0 items-center px-3 py-3">
             <TabsList className="h-auto border border-border">
-              {!isWorktreeDone && monacoStatus.installed && (
+              {!isWorktreeDone && (
                 <TabsTrigger value="files" className="data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
                   <FolderTree className="h-3.5 w-3.5" />
                   {t("taskPage.tabFiles")}
@@ -477,24 +485,25 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           </div>
 
           {/* Files tab — Phase 21+64: FileTree/Search sub-tabs + CodeEditor */}
-          {monacoStatus.installed && (
           <TabsContent value="files" className="flex-1 min-h-0 overflow-hidden">
             <div className="flex h-full flex-row overflow-hidden">
               {/* Left: sub-tabs for file tree vs search (240px fixed) */}
               <div className="w-60 flex-none border-r border-border overflow-hidden flex flex-col">
-                <Tabs defaultValue="filetree" className="flex h-full flex-col gap-0">
+                <Tabs value={innerTab} onValueChange={setInnerTab} className="flex h-full flex-col gap-0">
                   {/* Sub-tab bar */}
                   <div className="header-xs flex shrink-0 px-2 py-1.5">
                     <TabsList className="h-auto border border-border w-full">
-                      <TabsTrigger value="filetree" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
-                        <FolderTree className="h-3 w-3" />
-                        {t("taskPage.tabFileTree")}
-                      </TabsTrigger>
+                      {monacoStatus.installed && (
+                        <TabsTrigger value="filetree" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
+                          <FolderTree className="h-3 w-3" />
+                          {t("taskPage.tabFileTree")}
+                        </TabsTrigger>
+                      )}
                       {rgStatus.installed && (
-                      <TabsTrigger value="search" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
-                        <Search className="h-3 w-3" />
-                        {t("taskPage.tabSearch")}
-                      </TabsTrigger>
+                        <TabsTrigger value="search" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
+                          <Search className="h-3 w-3" />
+                          {t("taskPage.tabSearch")}
+                        </TabsTrigger>
                       )}
                       <TabsTrigger value="git" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
                         <GitPullRequestArrow className="h-3 w-3" />
@@ -503,32 +512,35 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                     </TabsList>
                   </div>
                   {/* File tree sub-tab */}
-                  <TabsContent value="filetree" className="flex-1 min-h-0 overflow-hidden mt-0">
-                    <FileTree
-                      worktreePath={fileRootPath ?? null}
-                      baseBranch={task.baseBranch ?? null}
-                      worktreeBranch={latestExecution?.worktreeBranch ?? null}
-                      executionStatus={latestExecution?.status ?? "COMPLETED"}
-                      onFileSelect={(absolutePath) => {
-                        setSelectedFilePath(absolutePath);
-                        setSelectedLine(null);
-                      }}
-                    />
-                  </TabsContent>
+                  {monacoStatus.installed && (
+                    <TabsContent value="filetree" className="flex-1 min-h-0 overflow-hidden mt-0">
+                      <FileTree
+                        worktreePath={fileRootPath ?? null}
+                        baseBranch={task.baseBranch ?? null}
+                        worktreeBranch={latestExecution?.worktreeBranch ?? null}
+                        executionStatus={latestExecution?.status ?? "COMPLETED"}
+                        onFileSelect={(absolutePath) => {
+                          setSelectedFilePath(absolutePath);
+                          setSelectedLine(null);
+                        }}
+                      />
+                    </TabsContent>
+                  )}
                   {/* Search sub-tab */}
                   {rgStatus.installed && (
-                  <TabsContent value="search" className="flex-1 min-h-0 overflow-hidden mt-0">
-                    <CodeSearch
-                      localPath={fileRootPath ?? task.project?.localPath ?? null}
-                      onResultSelect={(absolutePath, line) => {
-                        setSelectedFilePath(absolutePath);
-                        setSelectedLine(line);
-                        setActiveTab("files");
-                      }}
-                    />
-                  </TabsContent>
+                    <TabsContent value="search" className="flex-1 min-h-0 overflow-hidden mt-0">
+                      <CodeSearch
+                        localPath={fileRootPath ?? task.project?.localPath ?? null}
+                        onResultSelect={(absolutePath, line) => {
+                          setSelectedFilePath(absolutePath);
+                          setSelectedLine(line);
+                          setActiveTab("files");
+                          if (monacoStatus.installed) setInnerTab("filetree");
+                        }}
+                      />
+                    </TabsContent>
                   )}
-                  {/* Git sub-tab */}
+                  {/* Git sub-tab — always available */}
                   <TabsContent value="git" className="flex-1 min-h-0 overflow-hidden mt-0">
                     <EditorGitPanel
                       localPath={fileRootPath ?? task.project?.localPath ?? ""}
@@ -539,9 +551,15 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                   </TabsContent>
                 </Tabs>
               </div>
-              {/* Right: Monaco editor, fills remaining width */}
+              {/* Right: Monaco editor (only when monaco extension installed); else placeholder */}
               <div className="flex-1 min-w-0 overflow-hidden">
-                {fileRootPath ? (
+                {!monacoStatus.installed ? (
+                  <div className="flex h-full items-center justify-center px-6 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      {t("editor.extensionRequired")}
+                    </p>
+                  </div>
+                ) : fileRootPath ? (
                   <CodeEditor
                     worktreePath={fileRootPath}
                     selectedFilePath={selectedFilePath}
@@ -558,7 +576,6 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
               </div>
             </div>
           </TabsContent>
-          )}
 
           {/* Changes tab — functional, uses existing TaskDiffView */}
           <TabsContent value="changes" className="flex-1 min-h-0 overflow-auto">

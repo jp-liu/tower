@@ -469,6 +469,7 @@ export const zh = {
   "editor.saveError": "保存失败，请重试",
   "editor.closeTab": "关闭标签页",
   "editor.noWorktree": "暂无工作区，请先执行任务",
+  "editor.extensionRequired": "需要安装 Monaco 扩展才能查看和编辑文件，可在 设置 → 扩展 中启用",
   // Diff view (Phase 17)
   "diff.filesChanged": "{count} 个文件更改",
   "diff.additions": "+{count}",
