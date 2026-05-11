@@ -1,5 +1,6 @@
 import { Search } from "lucide-react";
 import { execFile } from "child_process";
+import { existsSync } from "fs";
 import type { Extension, ExtensionStatus, ExtensionResult } from "../types";
 
 /** Promisify wrapper that always calls through the live execFile reference */
@@ -31,6 +32,9 @@ async function detectPackageBinary(): Promise<string | null> {
     const mod = await import("@vscode/ripgrep");
     const rgPath = (mod as { rgPath?: string }).rgPath;
     if (!rgPath) return null;
+    // The package may be installed but its postinstall (binary download) failed.
+    // Verify the binary file actually exists before reporting installed.
+    if (!existsSync(rgPath)) return null;
     return rgPath;
   } catch {
     return null;
@@ -41,7 +45,8 @@ async function detectSystemBinary(): Promise<string | null> {
   try {
     const { stdout } = await execFileP("which", ["rg"], { timeout: 3000 });
     const path = stdout.trim();
-    return path || null;
+    if (!path || !existsSync(path)) return null;
+    return path;
   } catch {
     return null;
   }
@@ -71,6 +76,16 @@ async function install(): Promise<ExtensionResult> {
       await clearRgPathCache();
     } catch {
       // Best-effort — if module load fails, the cache will refresh at server restart.
+    }
+    // Verify the binary actually exists — pnpm add succeeds even if the
+    // package's postinstall (binary download) fails silently.
+    const verified = await detectPackageBinary();
+    if (!verified) {
+      return {
+        success: false,
+        error:
+          "@vscode/ripgrep installed but the rg binary is missing — postinstall download likely failed. Try running `pnpm install` manually or check network access to GitHub releases.",
+      };
     }
     return { success: true, message: "Installed @vscode/ripgrep" };
   } catch (err) {

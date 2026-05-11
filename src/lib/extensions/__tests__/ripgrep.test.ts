@@ -5,6 +5,13 @@ vi.mock("child_process", () => ({
   execFile: vi.fn(),
 }));
 
+// Mock fs.existsSync so detectPackageBinary / detectSystemBinary believe
+// the binary exists. Tests that want "binary missing" override per-test.
+vi.mock("fs", async () => {
+  const actual = await vi.importActual<typeof import("fs")>("fs");
+  return { ...actual, existsSync: vi.fn(() => true) };
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.resetModules();
@@ -73,6 +80,10 @@ describe("ripgrep extension — dual-track check", () => {
   });
 
   it("install runs pnpm add @vscode/ripgrep and returns success", async () => {
+    // Need @vscode/ripgrep mock for the post-install verification step
+    vi.doMock("@vscode/ripgrep", () => ({
+      rgPath: "/repo/node_modules/@vscode/ripgrep/bin/rg",
+    }));
     const cp = await import("child_process");
     (cp.execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
       (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
@@ -89,6 +100,26 @@ describe("ripgrep extension — dual-track check", () => {
       expect.any(Object),
       expect.any(Function)
     );
+  });
+
+  it("install reports failure when pnpm succeeds but binary still missing", async () => {
+    // Simulate: package present, but binary file does NOT exist (postinstall failed silently)
+    vi.doMock("@vscode/ripgrep", () => ({
+      rgPath: "/repo/node_modules/@vscode/ripgrep/bin/rg",
+    }));
+    const fs = await import("fs");
+    (fs.existsSync as unknown as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    const cp = await import("child_process");
+    (cp.execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
+        cb(null);
+      }
+    );
+
+    const ext = await loadRipgrep();
+    const result = await ext.install();
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/binary is missing|postinstall/i);
   });
 
   it("install returns success:false with error when pnpm fails", async () => {
