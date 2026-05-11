@@ -1,5 +1,7 @@
 "use client";
 
+const TRUNCATE_AT = 500;
+
 import { useState } from "react";
 import { ChevronRight, ChevronDown, AlertTriangle, GitCompare, GitCommitHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -139,22 +141,40 @@ export function TaskDiffView({
                   {/* Expanded patch content */}
                   {isExpanded && file.patch && (
                     <div className="border-t border-border bg-background">
-                      <pre className="overflow-x-auto p-0 text-xs font-mono leading-5">
-                        {file.patch.split("\n").map((line, idx) => {
-                          const lineClass = line.startsWith("+") && !line.startsWith("+++")
-                            ? "px-4 block bg-green-500/10 text-green-400"
-                            : line.startsWith("-") && !line.startsWith("---")
-                            ? "px-4 block bg-red-500/10 text-red-400"
-                            : line.startsWith("@@")
-                            ? "px-4 block bg-blue-500/10 text-blue-300"
-                            : "px-4 block text-muted-foreground";
-                          return (
-                            <span key={idx} className={lineClass}>
-                              {line || " "}
-                            </span>
-                          );
-                        })}
-                      </pre>
+                      {(() => {
+                        const allLines = file.patch.split("\n");
+                        const displayLines = allLines.slice(0, TRUNCATE_AT);
+                        const truncated = allLines.length > TRUNCATE_AT;
+                        return (
+                          <>
+                            <pre className="overflow-x-auto p-0 text-xs font-mono leading-5">
+                              {displayLines.map((line, idx) => {
+                                const lineClass =
+                                  line.startsWith("+") && !line.startsWith("+++")
+                                    ? "px-4 block bg-green-500/10 text-green-400"
+                                    : line.startsWith("-") && !line.startsWith("---")
+                                    ? "px-4 block bg-red-500/10 text-red-400"
+                                    : line.startsWith("@@")
+                                    ? "px-4 block bg-blue-500/10 text-blue-300"
+                                    : "px-4 block text-muted-foreground";
+                                return (
+                                  <span key={idx} className={lineClass}>
+                                    {line || " "}
+                                  </span>
+                                );
+                              })}
+                            </pre>
+                            {truncated && (
+                              <div className="px-4 py-2 text-xs text-muted-foreground border-t border-border">
+                                {t("diff.patchTruncated", {
+                                  n: String(TRUNCATE_AT),
+                                  total: String(allLines.length),
+                                })}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>

@@ -486,6 +486,8 @@ export const zh = {
   "diff.commit": "提交",
   "diff.noChanges": "未检测到更改",
   "diff.commitSuccess": "已提交 ({hash})",
+  "diff.patchTruncated": "差异内容过大，已截断显示前 {n} 行（共 {total} 行）",
+  "diff.openInDiffView": "在并排视图中打开",
   // Merge (Phase 17)
   "merge.button": "合并",
   "merge.confirmTitle": "确认 Squash 合并",

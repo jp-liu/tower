@@ -471,6 +471,8 @@ export const en: Translations = {
   "diff.commit": "Commit",
   "diff.noChanges": "No changes detected",
   "diff.commitSuccess": "Committed ({hash})",
+  "diff.patchTruncated": "Patch too large — showing first {n} of {total} lines",
+  "diff.openInDiffView": "Open in side-by-side view",
   // Merge (Phase 17)
   "merge.button": "Merge",
   "merge.confirmTitle": "Confirm Squash Merge",
