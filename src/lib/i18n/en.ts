@@ -909,4 +909,7 @@ export const en: Translations = {
   // Git graph hover tooltip
   "git.hoverParentsLabel": "Parents",
   "git.hoverRefsLabel": "Refs",
+  // Git history panel
+  "git.noCommits": "No commits",
+  "git.commitFiles": "Files in commit",
 };

@@ -925,4 +925,7 @@ export const zh = {
   // Git graph hover tooltip
   "git.hoverParentsLabel": "父提交",
   "git.hoverRefsLabel": "分支/标签",
+  // Git history panel
+  "git.noCommits": "暂无提交",
+  "git.commitFiles": "提交文件",
 } as const;
