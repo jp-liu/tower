@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal, Square, CheckCircle2, Search, GitPullRequestArrow } from "lucide-react";
+import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal, Square, CheckCircle2, Search, GitPullRequestArrow, Network } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import Link from "next/link";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -14,6 +14,7 @@ import { CodeEditor, type DiffFileRequest } from "@/components/task/code-editor"
 import { CodeSearch } from "@/components/task/code-search";
 import { SimpleFileViewer } from "@/components/task/simple-file-viewer";
 import { EditorGitPanel } from "@/components/task/editor-git-panel";
+import { GitHistoryPanel } from "@/components/task/git-history-panel";
 import { PreviewPanel } from "@/components/task/preview-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -100,6 +101,11 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
   const [diffFileRequest, setDiffFileRequest] = useState<DiffFileRequest | null>(null);
+  const [commitDiffRequest, setCommitDiffRequest] = useState<{
+    commitHash: string;
+    relativePath: string;
+    patch: string;
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   // Inner sub-tab inside files: filetree | search | git. Initial pick is
   // the first available sub-tab given current extension state.
@@ -510,6 +516,10 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                         <GitPullRequestArrow className="h-3 w-3" />
                         {t("git.tabLabel")}
                       </TabsTrigger>
+                      <TabsTrigger value="graph" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
+                        <Network className="h-3 w-3" />
+                        {t("git.tabGraph")}
+                      </TabsTrigger>
                     </TabsList>
                   </div>
                   {/* File tree sub-tab */}
@@ -550,6 +560,15 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                       }}
                     />
                   </TabsContent>
+                  {/* Graph sub-tab — commit history graph */}
+                  <TabsContent value="graph" className="flex-1 min-h-0 overflow-hidden mt-0">
+                    <GitHistoryPanel
+                      worktreePath={fileRootPath ?? task.project?.localPath ?? ""}
+                      onSelectCommitFile={(commitHash, relativePath, patch) => {
+                        setCommitDiffRequest({ commitHash, relativePath, patch });
+                      }}
+                    />
+                  </TabsContent>
                 </Tabs>
               </div>
               {/* Right: Monaco editor when installed; SimpleFileViewer fallback otherwise */}
@@ -576,6 +595,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                     onFilePathChange={setSelectedFilePath}
                     onSave={() => setPreviewRefreshKey((k) => k + 1)}
                     diffFileRequest={diffFileRequest}
+                    commitDiffRequest={commitDiffRequest}
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center">
