@@ -7,7 +7,9 @@ import { gitAction } from "@/lib/git-api";
 import { layoutGraph, type RawCommit } from "@/lib/git-graph-layout";
 import { GitGraphSvg } from "./git-graph-svg";
 import { formatBlameAge } from "./blame-overlay";
-import { FileEdit, Loader2 } from "lucide-react";
+import { FileEdit, Loader2, MoreHorizontal } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { CommitActionMenu } from "./commit-action-menu";
 
 // Must match GitGraphSvg's ROW_HEIGHT constant
 const ROW_HEIGHT = 24;
@@ -53,15 +55,20 @@ export function GitHistoryPanel({
 }: GitHistoryPanelProps) {
   const { t } = useI18n();
   const [commits, setCommits] = useState<RawCommit[]>([]);
-  // head plumbed through for Phase 6 (amend-message HEAD check); unused for now
-  const [, setHead] = useState<string | null>(null);
+  const [head, setHead] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedHash, setSelectedHash] = useState<string | null>(null);
   const [commitFiles, setCommitFiles] = useState<CommitFile[]>([]);
   const [commitPatch, setCommitPatch] = useState("");
   const [loadingFiles, setLoadingFiles] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{
+    hash: string;
+    x?: number;
+    y?: number;
+  } | null>(null);
+  const [refetchTick, setRefetchTick] = useState(0);
 
-  // Fetch the graph on mount + when worktreePath changes
+  // Fetch the graph on mount + when worktreePath changes + when refetchTick changes
   useEffect(() => {
     if (!worktreePath) return;
     let cancelled = false;
@@ -84,7 +91,17 @@ export function GitHistoryPanel({
     return () => {
       cancelled = true;
     };
-  }, [worktreePath]);
+  }, [worktreePath, refetchTick]);
+
+  const handleActionComplete = () => {
+    setRefetchTick((t) => t + 1);
+  };
+
+  const handleMoreButtonClick = (e: React.MouseEvent, hash: string) => {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setContextMenu({ hash, x: rect.right, y: rect.bottom });
+  };
 
   // Fetch commit details when a commit is selected
   useEffect(() => {
@@ -161,7 +178,11 @@ export function GitHistoryPanel({
                 <li
                   key={commit.hash}
                   onClick={() => setSelectedHash(commit.hash)}
-                  className={`flex items-center gap-2 px-2 cursor-pointer hover:bg-accent/50 border-l-2 ${
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({ hash: commit.hash, x: e.clientX, y: e.clientY });
+                  }}
+                  className={`group flex items-center gap-2 px-2 cursor-pointer hover:bg-accent/50 border-l-2 ${
                     isSelected
                       ? "border-primary bg-accent/30"
                       : "border-transparent"
@@ -182,6 +203,16 @@ export function GitHistoryPanel({
                   <span className="shrink-0 text-[10px] text-muted-foreground">
                     {formatBlameAge(commit.date)}
                   </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => handleMoreButtonClick(e, commit.hash)}
+                    aria-label="More actions"
+                    data-testid="commit-more-button"
+                  >
+                    <MoreHorizontal className="h-3 w-3" />
+                  </Button>
                 </li>
               );
             })}
@@ -225,6 +256,25 @@ export function GitHistoryPanel({
             </ul>
           )}
         </div>
+      )}
+
+      {/* Context menu — controlled by contextMenu state */}
+      {contextMenu && (
+        <CommitActionMenu
+          worktreePath={worktreePath}
+          commit={commits.find((c) => c.hash === contextMenu.hash)!}
+          currentHead={head}
+          open={!!contextMenu}
+          onOpenChange={(open) => {
+            if (!open) setContextMenu(null);
+          }}
+          anchorPosition={
+            contextMenu.x !== undefined && contextMenu.y !== undefined
+              ? { x: contextMenu.x, y: contextMenu.y }
+              : undefined
+          }
+          onActionComplete={handleActionComplete}
+        />
       )}
     </div>
   );

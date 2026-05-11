@@ -52,6 +52,14 @@ vi.mock("@/components/ui/scroll-area", () => ({
   ),
 }));
 
+// ---------------------------------------------------------------------------
+// Stub CommitActionMenu — renders a testid div when open
+// ---------------------------------------------------------------------------
+vi.mock("@/components/task/commit-action-menu", () => ({
+  CommitActionMenu: ({ open, commit }: { open: boolean; commit: { hash: string } }) =>
+    open ? <div data-testid="commit-action-menu-stub">{commit.hash}</div> : null,
+}));
+
 import { GitHistoryPanel } from "@/components/task/git-history-panel";
 import { I18nProvider } from "@/lib/i18n";
 import { gitAction } from "@/lib/git-api";
@@ -231,5 +239,67 @@ describe("GitHistoryPanel", () => {
     await waitFor(() => {
       expect(screen.getByText("暂无提交")).toBeInTheDocument();
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 5: ⋯ button click opens CommitActionMenu
+  // -------------------------------------------------------------------------
+  it("clicking the ⋯ button on a commit row opens CommitActionMenu", async () => {
+    mockGitAction.mockResolvedValue({
+      commits: FAKE_COMMITS,
+      head: FAKE_COMMITS[2].hash,
+    });
+
+    renderPanel();
+
+    await waitFor(() => {
+      expect(screen.getByText("first commit")).toBeInTheDocument();
+    });
+
+    // Menu should not be visible initially
+    expect(screen.queryByTestId("commit-action-menu-stub")).not.toBeInTheDocument();
+
+    // Click the ⋯ button on the first commit row
+    const moreButtons = screen.getAllByTestId("commit-more-button");
+    fireEvent.click(moreButtons[0]);
+
+    // Menu should now be visible showing the commit hash
+    await waitFor(() => {
+      expect(screen.getByTestId("commit-action-menu-stub")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("commit-action-menu-stub")).toHaveTextContent(
+      FAKE_COMMITS[0].hash
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 6: Right-click on commit row opens CommitActionMenu
+  // -------------------------------------------------------------------------
+  it("right-clicking a commit row opens CommitActionMenu for that commit", async () => {
+    mockGitAction.mockResolvedValue({
+      commits: FAKE_COMMITS,
+      head: FAKE_COMMITS[2].hash,
+    });
+
+    renderPanel();
+
+    await waitFor(() => {
+      expect(screen.getByText("second commit")).toBeInTheDocument();
+    });
+
+    // Menu should not be visible initially
+    expect(screen.queryByTestId("commit-action-menu-stub")).not.toBeInTheDocument();
+
+    // Right-click on the second commit row
+    const commitRows = screen.getAllByTestId("commit-row");
+    fireEvent.contextMenu(commitRows[1]);
+
+    // Menu should now be visible showing the second commit's hash
+    await waitFor(() => {
+      expect(screen.getByTestId("commit-action-menu-stub")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("commit-action-menu-stub")).toHaveTextContent(
+      FAKE_COMMITS[1].hash
+    );
   });
 });
