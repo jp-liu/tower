@@ -6,7 +6,7 @@ import { loader } from "@monaco-editor/react";
 import { useTheme } from "next-themes";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
-import { FileWarning, FileX, Clock, User } from "lucide-react";
+import { FileWarning, FileX, Clock } from "lucide-react";
 import { readFileContent, writeFileContent, readFileContentForce } from "@/actions/file-actions";
 import { Button } from "@/components/ui/button";
 import { EditorTabs } from "./editor-tabs";
@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { FileHistoryPanel } from "./file-history-panel";
-import { BlameList } from "./blame-overlay";
+import { type BlameLine, formatBlameAge } from "./blame-overlay";
 
 type GuardInfo =
   | { kind: "oversized"; size: number; limit: number }
@@ -89,7 +89,6 @@ export function CodeEditor({
   const [monacoReady, setMonacoReady] = useState(false);
   const [gutterTick, setGutterTick] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [blameOpen, setBlameOpen] = useState(false);
   const editorRef = useRef<unknown>(null);
   const monacoRef = useRef<unknown>(null);
   const modelsRef = useRef<Map<string, unknown>>(new Map());
@@ -97,6 +96,9 @@ export function CodeEditor({
   const activeTabPathRef = useRef<string | null>(null);
   const onSaveRef = useRef<(() => void) | undefined>(undefined);
   const latestFilePathRef = useRef<string | null>(null);
+  // Inline blame: cache per-tab line data + track current decoration IDs
+  const blameByTabRef = useRef<Map<string, BlameLine[]>>(new Map());
+  const blameDecorationsRef = useRef<string[]>([]);
 
   // Dispose all Monaco models on unmount to prevent memory leaks
   useEffect(() => {
@@ -345,6 +347,77 @@ export function CodeEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabPath, monacoReady, gutterTick, worktreePath]);
 
+  // Inline blame: fetch per-file blame data on tab activation, cache it,
+  // and apply the after-line annotation on the current cursor line.
+  // Uses the same passive "fail silent if not in git" pattern as the gutter.
+  const updateBlameAnnotation = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    if (!monacoReady || !activeTabPath || !worktreePath) return;
+    const activeTab = activeTabRef.current;
+    if (!activeTab || activeTab.isDiff) return;
+
+    const tabPath = activeTab.path;
+    const relativePath = activeTab.relativePath;
+
+    const applyForCurrentLine = () => {
+      const ed = editorRef.current as {
+        getPosition: () => { lineNumber: number; column: number } | null;
+        deltaDecorations: (oldIds: string[], next: unknown[]) => string[];
+      } | null;
+      const m = monacoRef.current as { Range: new (a: number, b: number, c: number, d: number) => unknown } | null;
+      if (!ed || !m) return;
+      const blame = blameByTabRef.current.get(tabPath);
+      const pos = ed.getPosition();
+      if (!blame || !pos) {
+        blameDecorationsRef.current = ed.deltaDecorations(blameDecorationsRef.current, []);
+        return;
+      }
+      const entry = blame.find((b) => b.line === pos.lineNumber);
+      if (!entry) {
+        blameDecorationsRef.current = ed.deltaDecorations(blameDecorationsRef.current, []);
+        return;
+      }
+      // Uncommitted line (sha is all zeros) — skip annotation
+      if (/^0+$/.test(entry.sha)) {
+        blameDecorationsRef.current = ed.deltaDecorations(blameDecorationsRef.current, []);
+        return;
+      }
+      const age = formatBlameAge(entry.date);
+      const text = `   ${entry.author}, ${age} · ${entry.summary}`.replace(/\n/g, " ");
+      blameDecorationsRef.current = ed.deltaDecorations(blameDecorationsRef.current, [
+        {
+          range: new m.Range(pos.lineNumber, 1, pos.lineNumber, 1),
+          options: {
+            after: {
+              content: text,
+              inlineClassName: "blame-inline-annotation",
+            },
+          },
+        },
+      ]);
+    };
+    updateBlameAnnotation.current = applyForCurrentLine;
+
+    if (blameByTabRef.current.has(tabPath)) {
+      applyForCurrentLine();
+      return;
+    }
+    let cancelled = false;
+    gitAction(worktreePath, "blame", { file: relativePath })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res as { lines?: BlameLine[] };
+        blameByTabRef.current.set(tabPath, data.lines ?? []);
+        applyForCurrentLine();
+      })
+      .catch(() => {
+        if (cancelled) return;
+        blameByTabRef.current.set(tabPath, []);
+      });
+    return () => { cancelled = true; };
+  }, [activeTabPath, monacoReady, worktreePath]);
+
   function handleEditorMount(editor: unknown, monaco: unknown) {
     editorRef.current = editor;
     monacoRef.current = monaco;
@@ -387,6 +460,15 @@ export function CodeEditor({
       label: "Save File",
       keybindings: [m.KeyMod.CtrlCmd | m.KeyCode.KeyS],
       run: saveActiveTab,
+    });
+
+    // Inline blame: redraw the after-line annotation whenever the cursor moves.
+    // Optional chaining for the test mock which doesn't expose this listener.
+    const cursorAware = editor as {
+      onDidChangeCursorPosition?: (cb: () => void) => void;
+    };
+    cursorAware.onDidChangeCursorPosition?.(() => {
+      updateBlameAnnotation.current();
     });
 
     setMonacoReady(true);
@@ -439,30 +521,17 @@ export function CodeEditor({
           onTabClose={handleTabClose}
         />
         {showHistoryButton && (
-          <>
-            <Tooltip>
-              <TooltipTrigger
-                onClick={() => setBlameOpen(true)}
-                className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-                aria-label={t("git.toggleBlame")}
-                data-testid="blame-button"
-              >
-                <User className="h-4 w-4" />
-              </TooltipTrigger>
-              <TooltipContent side="bottom">{t("git.toggleBlame")}</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger
-                onClick={() => setHistoryOpen(true)}
-                className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-                aria-label={t("git.history")}
-                data-testid="history-button"
-              >
-                <Clock className="h-4 w-4" />
-              </TooltipTrigger>
-              <TooltipContent side="bottom">{t("git.history")}</TooltipContent>
-            </Tooltip>
-          </>
+          <Tooltip>
+            <TooltipTrigger
+              onClick={() => setHistoryOpen(true)}
+              className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              aria-label={t("git.history")}
+              data-testid="history-button"
+            >
+              <Clock className="h-4 w-4" />
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t("git.history")}</TooltipContent>
+          </Tooltip>
         )}
       </div>
 
@@ -616,22 +685,6 @@ export function CodeEditor({
         </Dialog>
       )}
 
-      {/* Blame dialog */}
-      {showHistoryButton && activeTab && (
-        <Dialog open={blameOpen} onOpenChange={setBlameOpen}>
-          <DialogContent className="w-[min(720px,90vw)] max-w-none sm:max-w-none flex flex-col" style={{ height: "min(540px, 80vh)" }}>
-            <DialogHeader>
-              <DialogTitle>{t("git.blame")} — {activeTab.filename}</DialogTitle>
-            </DialogHeader>
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <BlameList
-                worktreePath={worktreePath}
-                relativePath={activeTab.relativePath}
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
     </div>
   );
 }

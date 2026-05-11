@@ -308,49 +308,7 @@ describe("CodeEditor — History button", () => {
   });
 });
 
-describe("CodeEditor — Blame button", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    fakeMonaco.editor.createModel.mockReturnValue(fakeModel);
-    fakeMonaco.editor.getModel.mockReturnValue(null);
-    fakeMonaco.Uri.parse.mockImplementation((uri: string) => ({ toString: () => uri }));
-    mockGitAction.mockResolvedValue({ patch: "" });
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
-
-  it("shows Blame button when a regular tab is active", async () => {
-    await act(async () => {
-      renderEditor({ worktreePath: "/x", selectedFilePath: "/x/a.ts" });
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("blame-button")).toBeInTheDocument();
-    });
-  });
-
-  it("opens BlameList dialog when Blame button is clicked", async () => {
-    await act(async () => {
-      renderEditor({ worktreePath: "/x", selectedFilePath: "/x/a.ts" });
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("blame-button")).toBeInTheDocument();
-    });
-
-    // Dialog should not be open yet
-    expect(screen.queryByTestId("blame-list-panel")).not.toBeInTheDocument();
-
-    // Click blame button
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("blame-button"));
-    });
-
-    // Blame panel should now be visible
-    await waitFor(() => {
-      expect(screen.getByTestId("blame-list-panel")).toBeInTheDocument();
-    });
-  });
-});
+// Blame button + dialog removed in favor of inline blame annotation
+// (see updateBlameAnnotation in code-editor.tsx). Tests for the inline
+// annotation flow would require mocking Monaco's onDidChangeCursorPosition,
+// which the current test scaffolding doesn't expose — deferred to e2e.

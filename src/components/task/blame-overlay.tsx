@@ -19,7 +19,7 @@ export interface BlameListProps {
   relativePath: string;
 }
 
-function formatBlameAge(dateStr: string | undefined): string {
+export function formatBlameAge(dateStr: string | undefined): string {
   if (!dateStr) return "";
   try {
     const date = new Date(dateStr);
