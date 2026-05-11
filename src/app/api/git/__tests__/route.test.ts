@@ -400,6 +400,119 @@ describe("POST /api/git log-graph", () => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/git show-commit — integration test with a 2-file commit fixture
+// ---------------------------------------------------------------------------
+let showCommitRepoPath: string;
+let showCommitHash: string;
+
+beforeAll(async () => {
+  showCommitRepoPath = fs.mkdtempSync(path.join(os.tmpdir(), "tower-git-showcommit-test-"));
+
+  const gitExec = (args: string[], extraEnv?: Record<string, string>) =>
+    execFileSync("git", args, {
+      cwd: showCommitRepoPath,
+      env: { ...process.env, ...extraEnv },
+      encoding: "utf-8",
+    });
+
+  const envA = { GIT_COMMITTER_DATE: "2026-01-01T00:00:01+00:00", GIT_AUTHOR_DATE: "2026-01-01T00:00:01+00:00" };
+  const envB = { GIT_COMMITTER_DATE: "2026-01-01T00:00:03+00:00", GIT_AUTHOR_DATE: "2026-01-01T00:00:03+00:00" };
+
+  gitExec(["init"]);
+  gitExec(["config", "user.email", "show@test.com"]);
+  gitExec(["config", "user.name", "ShowTest"]);
+  gitExec(["symbolic-ref", "HEAD", "refs/heads/main"]);
+
+  // Initial commit: only a.txt
+  fs.writeFileSync(path.join(showCommitRepoPath, "a.txt"), "hello from a\n");
+  gitExec(["add", "a.txt"]);
+  gitExec(["commit", "-m", "Initial commit"], envA);
+
+  // Second commit: modify a.txt AND create b.txt — 2 files changed (M + A cases)
+  fs.writeFileSync(path.join(showCommitRepoPath, "a.txt"), "hello from a\nline added to a\n");
+  fs.writeFileSync(path.join(showCommitRepoPath, "b.txt"), "hello from b\n");
+  gitExec(["add", "a.txt", "b.txt"]);
+  gitExec(["commit", "-m", "Add b.txt and modify a.txt"], envB);
+
+  // Capture the second commit hash for tests
+  showCommitHash = gitExec(["rev-parse", "HEAD"]).trim();
+});
+
+afterAll(() => {
+  if (showCommitRepoPath && fs.existsSync(showCommitRepoPath)) {
+    fs.rmSync(showCommitRepoPath, { recursive: true, force: true });
+  }
+});
+
+describe("POST /api/git show-commit", () => {
+  it("happy path: returns patch and 2-file breakdown for a multi-file commit", async () => {
+    const req = makePost({ action: "show-commit", path: showCommitRepoPath, hash: showCommitHash });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+
+    // patch is a non-empty string containing diff --git markers for both files
+    expect(typeof data.patch).toBe("string");
+    expect(data.patch).toContain("diff --git");
+    expect(data.patch).toContain("a.txt");
+    expect(data.patch).toContain("b.txt");
+
+    // files array has exactly 2 entries
+    expect(Array.isArray(data.files)).toBe(true);
+    expect(data.files.length).toBe(2);
+
+    // Each file has the expected shape
+    for (const f of data.files) {
+      expect(typeof f.filename).toBe("string");
+      expect(f.filename.length).toBeGreaterThan(0);
+      expect(typeof f.added).toBe("number");
+      expect(typeof f.removed).toBe("number");
+      expect(typeof f.isBinary).toBe("boolean");
+      // files[].patch is intentionally empty per spec
+      expect(f.patch).toBe("");
+    }
+
+    // Verify specific filenames and add/remove counts
+    const aFile = data.files.find((f: { filename: string }) => f.filename === "a.txt");
+    const bFile = data.files.find((f: { filename: string }) => f.filename === "b.txt");
+    expect(aFile).toBeDefined();
+    expect(bFile).toBeDefined();
+
+    // a.txt had 1 line added (existing file, one new line appended)
+    expect(aFile.added).toBe(1);
+    expect(aFile.removed).toBe(0);
+
+    // b.txt is newly created: 1 line added
+    expect(bFile.added).toBe(1);
+    expect(bFile.removed).toBe(0);
+  });
+
+  it("invalid hash format → 400 with error: 'invalid commit hash'", async () => {
+    const req = makePost({ action: "show-commit", path: showCommitRepoPath, hash: "not-hex" });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe("invalid commit hash");
+  });
+
+  it("invalid hash: too short (3 chars) → 400", async () => {
+    const req = makePost({ action: "show-commit", path: showCommitRepoPath, hash: "abc" });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe("invalid commit hash");
+  });
+
+  it("non-existent well-formed hash → 404 with error: 'commit not found or unreadable'", async () => {
+    const req = makePost({ action: "show-commit", path: showCommitRepoPath, hash: "0000000" });
+    const res = await POST(req);
+    expect(res.status).toBe(404);
+    const data = await res.json();
+    expect(data.error).toBe("commit not found or unreadable");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // parseBlamePorcelain unit tests (fixture-based, no real git needed)
 // ---------------------------------------------------------------------------
 describe("parseBlamePorcelain — unit", () => {

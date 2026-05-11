@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import simpleGit, { type StatusResult } from "simple-git";
+import { parseUnifiedDiff } from "@/lib/git-diff";
 
 function expandHome(p: string): string {
   if (p.startsWith("~/") || p === "~") {
@@ -434,6 +435,39 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ commits, head });
         } catch {
           return NextResponse.json({ commits: [], head: null });
+        }
+      }
+
+      case "show-commit": {
+        const { hash } = body;
+        if (typeof hash !== "string" || !/^[a-f0-9]{4,40}$/i.test(hash)) {
+          return NextResponse.json({ error: "invalid commit hash" }, { status: 400 });
+        }
+        try {
+          // Get the patch with diff for all files in this commit (vs first parent).
+          // For a merge: shows changes vs first parent. For a root: shows full file content as +.
+          const patch = await git.show([hash, "--format="]);
+          // Per-file breakdown via parseUnifiedDiff (parse-diff, already a dep, used in DiffView).
+          // NOTE: files[].patch is intentionally empty — clients should slice the
+          // full patch by `diff --git a/<filename>` markers (cheap on the client,
+          // avoids re-stringification on the server).
+          const parsed = parseUnifiedDiff(patch);
+          const files = parsed.map((f) => {
+            const filename = f.to && f.to !== "/dev/null" ? f.to : (f.from ?? "");
+            let added = 0;
+            let removed = 0;
+            const isBinary = false;
+            for (const chunk of f.chunks) {
+              for (const c of chunk.changes) {
+                if (c.type === "add") added++;
+                else if (c.type === "del") removed++;
+              }
+            }
+            return { filename, added, removed, isBinary, patch: "" };
+          });
+          return NextResponse.json({ patch: patch.replace(/\r\n/g, "\n"), files });
+        } catch {
+          return NextResponse.json({ error: "commit not found or unreadable" }, { status: 404 });
         }
       }
 
