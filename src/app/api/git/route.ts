@@ -399,6 +399,44 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      case "log-graph": {
+        const rawLimit = parseInt(body.limit ?? "200", 10);
+        const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 1000) : 200;
+        try {
+          // Format: hash | parents (space-sep) | author | date | refs | subject
+          // Use ASCII unit separator (\x1f) — safe vs commit subjects which may contain pipes.
+          const SEP = "\x1f";
+          const raw = await git.raw([
+            "log", "--all",
+            `--max-count=${limit}`,
+            `--format=%H${SEP}%P${SEP}%an${SEP}%aI${SEP}%D${SEP}%s`,
+          ]);
+          const lines = raw.split("\n").filter((l) => l.length > 0);
+          const commits = lines.map((line) => {
+            const [hash, parentsStr, author, date, refsStr, subject] = line.split(SEP);
+            const parents = parentsStr ? parentsStr.split(" ").filter(Boolean) : [];
+            // %D yields e.g. "HEAD -> main, origin/main, tag: v1.0"
+            const refs = refsStr
+              ? refsStr.split(",").map((r) => r.trim().replace(/^HEAD -> /, "").replace(/^tag: /, "")).filter(Boolean)
+              : [];
+            return {
+              hash,
+              shortHash: hash.slice(0, 7),
+              parents,
+              author: author ?? "",
+              date: date ?? "",
+              subject: subject ?? "",
+              refs,
+            };
+          });
+          let head: string | null = null;
+          try { head = (await git.revparse(["HEAD"])).trim(); } catch { /* detached or empty repo */ }
+          return NextResponse.json({ commits, head });
+        } catch {
+          return NextResponse.json({ commits: [], head: null });
+        }
+      }
+
       case "stash-save": {
         const { message } = body;
         const args = ["push"];

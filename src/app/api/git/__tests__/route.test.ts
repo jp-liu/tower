@@ -3,6 +3,7 @@ import { describe, it, expect, afterAll, beforeAll } from "vitest";
 import os from "os";
 import fs from "fs";
 import path from "path";
+import { execFileSync } from "child_process";
 import simpleGit from "simple-git";
 import { NextRequest } from "next/server";
 import { POST } from "../route";
@@ -260,6 +261,141 @@ describe("POST /api/git discard-hunk", () => {
     expect(res.status).toBe(400);
     const data = await res.json();
     expect(data.error).toBe("invalid patch");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/git log-graph — integration test with branch + merge fixture
+// ---------------------------------------------------------------------------
+let logGraphRepoPath: string;
+
+beforeAll(async () => {
+  logGraphRepoPath = fs.mkdtempSync(path.join(os.tmpdir(), "tower-git-loggraph-test-"));
+
+  // Helper to run git commands with per-commit timestamps using execFileSync.
+  // Distinct timestamps are needed so assertions can rely on finding commits by
+  // subject rather than position (git log --all order is not guaranteed).
+  const gitExec = (args: string[], extraEnv?: Record<string, string>) =>
+    execFileSync("git", args, {
+      cwd: logGraphRepoPath,
+      env: { ...process.env, ...extraEnv },
+      encoding: "utf-8",
+    });
+  const envA = { GIT_COMMITTER_DATE: "2026-01-01T00:00:01+00:00", GIT_AUTHOR_DATE: "2026-01-01T00:00:01+00:00" };
+  const envB = { GIT_COMMITTER_DATE: "2026-01-01T00:00:03+00:00", GIT_AUTHOR_DATE: "2026-01-01T00:00:03+00:00" };
+  const envC = { GIT_COMMITTER_DATE: "2026-01-01T00:00:05+00:00", GIT_AUTHOR_DATE: "2026-01-01T00:00:05+00:00" };
+  const envD = { GIT_COMMITTER_DATE: "2026-01-01T00:00:07+00:00", GIT_AUTHOR_DATE: "2026-01-01T00:00:07+00:00" };
+
+  gitExec(["init"]);
+  gitExec(["config", "user.email", "graph@test.com"]);
+  gitExec(["config", "user.name", "GraphTest"]);
+  // Force branch name to "main" regardless of git config default
+  gitExec(["symbolic-ref", "HEAD", "refs/heads/main"]);
+
+  // Commit A on main
+  fs.writeFileSync(path.join(logGraphRepoPath, "a.txt"), "commit-a\n");
+  gitExec(["add", "a.txt"]);
+  gitExec(["commit", "-m", "Commit A"], envA);
+
+  // Create feat branch, commit B
+  gitExec(["checkout", "-b", "feat"]);
+  fs.writeFileSync(path.join(logGraphRepoPath, "b.txt"), "commit-b\n");
+  gitExec(["add", "b.txt"]);
+  gitExec(["commit", "-m", "Commit B"], envB);
+
+  // Back to main, commit C
+  gitExec(["checkout", "main"]);
+  fs.writeFileSync(path.join(logGraphRepoPath, "c.txt"), "commit-c\n");
+  gitExec(["add", "c.txt"]);
+  gitExec(["commit", "-m", "Commit C"], envC);
+
+  // Merge feat → main with --no-ff to force a merge commit D (2 parents)
+  gitExec(["merge", "feat", "--no-ff", "-m", "Merge feat into main"], envD);
+});
+
+afterAll(() => {
+  if (logGraphRepoPath && fs.existsSync(logGraphRepoPath)) {
+    fs.rmSync(logGraphRepoPath, { recursive: true, force: true });
+  }
+});
+
+describe("POST /api/git log-graph", () => {
+  it("returns 4 commits with correct shapes (A, B, C, D)", async () => {
+    const req = makePost({ action: "log-graph", path: logGraphRepoPath });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+
+    expect(Array.isArray(data.commits)).toBe(true);
+    expect(data.commits.length).toBe(4);
+
+    for (const c of data.commits) {
+      expect(typeof c.hash).toBe("string");
+      expect(c.hash).toMatch(/^[0-9a-f]{40}$/);
+      expect(typeof c.shortHash).toBe("string");
+      expect(c.shortHash.length).toBe(7);
+      expect(c.shortHash).toBe(c.hash.slice(0, 7));
+      expect(Array.isArray(c.parents)).toBe(true);
+      expect(typeof c.author).toBe("string");
+      expect(c.author.length).toBeGreaterThan(0);
+      expect(typeof c.date).toBe("string");
+      expect(typeof c.subject).toBe("string");
+      expect(Array.isArray(c.refs)).toBe(true);
+    }
+  });
+
+  it("merge commit D has exactly 2 parents", async () => {
+    const req = makePost({ action: "log-graph", path: logGraphRepoPath });
+    const res = await POST(req);
+    const data = await res.json();
+
+    // Find the merge commit by subject (order is not guaranteed with --all)
+    const mergeCommit = data.commits.find((c: { subject: string }) => c.subject.includes("Merge feat"));
+    expect(mergeCommit).toBeDefined();
+    expect(mergeCommit.parents.length).toBe(2);
+    // Each parent SHA should be a full 40-char hex
+    for (const parent of mergeCommit.parents) {
+      expect(parent).toMatch(/^[0-9a-f]{40}$/);
+    }
+  });
+
+  it("root commit A has 0 parents", async () => {
+    const req = makePost({ action: "log-graph", path: logGraphRepoPath });
+    const res = await POST(req);
+    const data = await res.json();
+
+    // Find the root commit by subject
+    const rootCommit = data.commits.find((c: { subject: string }) => c.subject === "Commit A");
+    expect(rootCommit).toBeDefined();
+    expect(rootCommit.parents.length).toBe(0);
+  });
+
+  it("head is a valid SHA and matches HEAD in the commits list", async () => {
+    const req = makePost({ action: "log-graph", path: logGraphRepoPath });
+    const res = await POST(req);
+    const data = await res.json();
+
+    expect(typeof data.head).toBe("string");
+    expect(data.head).toMatch(/^[0-9a-f]{40}$/);
+    // HEAD should point to one of the returned commits
+    const headCommit = data.commits.find((c: { hash: string }) => c.hash === data.head);
+    expect(headCommit).toBeDefined();
+    // HEAD is currently on main after the merge — that's the merge commit
+    expect(headCommit.subject).toContain("Merge feat");
+  });
+
+  it("respects limit parameter", async () => {
+    const req = makePost({ action: "log-graph", path: logGraphRepoPath, limit: "2" });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.commits.length).toBe(2);
+  });
+
+  it("returns 400 when path is missing", async () => {
+    const req = makePost({ action: "log-graph" });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
   });
 });
 
