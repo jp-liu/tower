@@ -44,6 +44,8 @@ export const en: Translations = {
   "project.importHint": "Select an existing local project folder",
   "project.autoDetected": "Git remote auto-detected",
   "project.edit": "Edit Project",
+  "git.stageHunk": "Stage hunk",
+  "git.discardHunk": "Discard hunk",
   "git.clone": "Clone",
   "git.cloning": "Cloning...",
   "git.cloned": "Cloned",

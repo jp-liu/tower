@@ -48,6 +48,8 @@ export const zh = {
   "project.autoDetected": "已自动检测 Git 远程",
   "project.edit": "编辑项目",
   // Git clone
+  "git.stageHunk": "暂存此 hunk",
+  "git.discardHunk": "丢弃此 hunk",
   "git.clone": "克隆到本地",
   "git.cloning": "正在克隆...",
   "git.cloned": "已克隆",
