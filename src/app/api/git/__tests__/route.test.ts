@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, afterAll, beforeAll } from "vitest";
+import { describe, it, expect, afterAll, afterEach, beforeAll, beforeEach } from "vitest";
 import os from "os";
 import fs from "fs";
 import path from "path";
@@ -680,5 +680,285 @@ describe("POST /api/git blame", () => {
     const req = makePost({ action: "blame", path: blameRepoPath, file: "/etc/passwd" });
     const res = await POST(req);
     expect(res.status).toBeGreaterThanOrEqual(400);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/git commit-ops — checkout / reset / tag / cherry-pick / revert / amend
+// ---------------------------------------------------------------------------
+
+let commitOpsRepoPath: string;
+let firstCommitHash: string;
+let secondCommitHash: string;
+
+// Helper to build a fresh 2-commit repo for each test (bulletproof isolation)
+async function buildCommitOpsFixture(dir: string) {
+  const gitExec = (args: string[], extraEnv?: Record<string, string>) =>
+    execFileSync("git", args, {
+      cwd: dir,
+      env: { ...process.env, ...extraEnv },
+      encoding: "utf-8",
+    });
+
+  const envA = { GIT_COMMITTER_DATE: "2026-01-01T00:00:01+00:00", GIT_AUTHOR_DATE: "2026-01-01T00:00:01+00:00" };
+  const envB = { GIT_COMMITTER_DATE: "2026-01-01T00:00:03+00:00", GIT_AUTHOR_DATE: "2026-01-01T00:00:03+00:00" };
+
+  gitExec(["init"]);
+  gitExec(["config", "user.email", "ops@test.com"]);
+  gitExec(["config", "user.name", "OpsTest"]);
+  gitExec(["symbolic-ref", "HEAD", "refs/heads/main"]);
+
+  // First commit
+  fs.writeFileSync(path.join(dir, "a.txt"), "first\n");
+  gitExec(["add", "a.txt"]);
+  gitExec(["commit", "-m", "First commit"], envA);
+  const first = gitExec(["rev-parse", "HEAD"]).trim();
+
+  // Second commit
+  fs.writeFileSync(path.join(dir, "a.txt"), "second\n");
+  gitExec(["add", "a.txt"]);
+  gitExec(["commit", "-m", "Second commit"], envB);
+  const second = gitExec(["rev-parse", "HEAD"]).trim();
+
+  return { first, second };
+}
+
+beforeEach(async () => {
+  commitOpsRepoPath = fs.mkdtempSync(path.join(os.tmpdir(), "tower-git-commitops-"));
+  const hashes = await buildCommitOpsFixture(commitOpsRepoPath);
+  firstCommitHash = hashes.first;
+  secondCommitHash = hashes.second;
+});
+
+afterEach(() => {
+  if (commitOpsRepoPath && fs.existsSync(commitOpsRepoPath)) {
+    fs.rmSync(commitOpsRepoPath, { recursive: true, force: true });
+  }
+});
+
+describe("POST /api/git commit-ops", () => {
+  // --- checkout-commit ---
+  it("checkout-commit: HEAD moves to first commit (detached)", async () => {
+    const req = makePost({ action: "checkout-commit", path: commitOpsRepoPath, hash: firstCommitHash });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+
+    const git = simpleGit(commitOpsRepoPath);
+    const head = (await git.revparse(["HEAD"])).trim();
+    expect(head).toBe(firstCommitHash);
+  });
+
+  it("checkout-commit invalid hash → 400", async () => {
+    const req = makePost({ action: "checkout-commit", path: commitOpsRepoPath, hash: "zzz" });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe("invalid commit hash");
+  });
+
+  // --- reset-commit ---
+  it("reset-commit soft: HEAD at first commit, second commit's changes still staged", async () => {
+    const req = makePost({ action: "reset-commit", path: commitOpsRepoPath, hash: firstCommitHash, mode: "soft" });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+    expect(data.mode).toBe("soft");
+
+    const git = simpleGit(commitOpsRepoPath);
+    const head = (await git.revparse(["HEAD"])).trim();
+    expect(head).toBe(firstCommitHash);
+
+    // Staged diff should show the second commit's changes (a.txt: first → second)
+    const staged = await git.diff(["--cached"]);
+    expect(staged).toContain("second");
+  });
+
+  it("reset-commit mixed: HEAD at first commit, staged area reset, working tree intact", async () => {
+    const req = makePost({ action: "reset-commit", path: commitOpsRepoPath, hash: firstCommitHash, mode: "mixed" });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+    expect(data.mode).toBe("mixed");
+
+    const git = simpleGit(commitOpsRepoPath);
+    const head = (await git.revparse(["HEAD"])).trim();
+    expect(head).toBe(firstCommitHash);
+
+    // After mixed reset: staged area is clean (no staged diff), but working tree has "second"
+    const staged = await git.diff(["--cached"]);
+    expect(staged).toBe("");
+
+    const working = await git.diff([]);
+    expect(working).toContain("second");
+  });
+
+  it("reset-commit defaults to mixed when mode is omitted", async () => {
+    const req = makePost({ action: "reset-commit", path: commitOpsRepoPath, hash: firstCommitHash });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.mode).toBe("mixed");
+  });
+
+  it("reset-commit invalid hash → 400", async () => {
+    const req = makePost({ action: "reset-commit", path: commitOpsRepoPath, hash: "zzz" });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+  });
+
+  // --- create-tag ---
+  it("create-tag: lightweight tag appears in git.tags()", async () => {
+    const req = makePost({ action: "create-tag", path: commitOpsRepoPath, hash: secondCommitHash, name: "v1.0" });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+    expect(data.name).toBe("v1.0");
+
+    const git = simpleGit(commitOpsRepoPath);
+    const tags = await git.tags();
+    expect(tags.all).toContain("v1.0");
+  });
+
+  it("create-tag sanitization: 'v1.0;rm-rf' → sanitized name used", async () => {
+    const req = makePost({ action: "create-tag", path: commitOpsRepoPath, hash: secondCommitHash, name: "v1.0;rm-rf" });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+    // The semicolon is stripped, resulting in "v1.0rm-rf"
+    expect(data.name).toBe("v1.0rm-rf");
+
+    const git = simpleGit(commitOpsRepoPath);
+    const tags = await git.tags();
+    expect(tags.all).toContain("v1.0rm-rf");
+  });
+
+  it("create-tag empty name → 400", async () => {
+    const req = makePost({ action: "create-tag", path: commitOpsRepoPath, hash: secondCommitHash, name: "  " });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe("tag name required");
+  });
+
+  it("create-tag invalid hash → 400", async () => {
+    const req = makePost({ action: "create-tag", path: commitOpsRepoPath, hash: "zzz", name: "v2.0" });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe("invalid commit hash");
+  });
+
+  // --- cherry-pick ---
+  it("cherry-pick: creates a new commit from a different branch commit", async () => {
+    // Create a third commit on a side branch, then cherry-pick it onto main
+    const gitExec = (args: string[], extraEnv?: Record<string, string>) =>
+      execFileSync("git", args, {
+        cwd: commitOpsRepoPath,
+        env: { ...process.env, ...extraEnv },
+        encoding: "utf-8",
+      });
+
+    const envC = { GIT_COMMITTER_DATE: "2026-01-01T00:00:05+00:00", GIT_AUTHOR_DATE: "2026-01-01T00:00:05+00:00" };
+
+    // Create side branch from first commit and add a new file
+    gitExec(["checkout", "-b", "side", firstCommitHash]);
+    fs.writeFileSync(path.join(commitOpsRepoPath, "cherry.txt"), "cherry content\n");
+    gitExec(["add", "cherry.txt"]);
+    gitExec(["commit", "-m", "Cherry commit"], envC);
+    const cherryHash = gitExec(["rev-parse", "HEAD"]).trim();
+
+    // Go back to main
+    gitExec(["checkout", "main"]);
+
+    const countBefore = parseInt(gitExec(["rev-list", "--count", "HEAD"]).trim(), 10);
+
+    // Cherry-pick the side branch commit onto main
+    const req = makePost({ action: "cherry-pick", path: commitOpsRepoPath, hash: cherryHash });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+
+    // Verify commit count increased
+    const countAfter = parseInt(gitExec(["rev-list", "--count", "HEAD"]).trim(), 10);
+    expect(countAfter).toBe(countBefore + 1);
+
+    // The cherry-picked file should now exist on main
+    expect(fs.existsSync(path.join(commitOpsRepoPath, "cherry.txt"))).toBe(true);
+  });
+
+  it("cherry-pick invalid hash → 400", async () => {
+    const req = makePost({ action: "cherry-pick", path: commitOpsRepoPath, hash: "zzz" });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe("invalid commit hash");
+  });
+
+  // --- revert ---
+  it("revert: creates a new 'Revert' commit reversing the second commit", async () => {
+    const gitExec = (args: string[]) =>
+      execFileSync("git", args, {
+        cwd: commitOpsRepoPath,
+        env: { ...process.env },
+        encoding: "utf-8",
+      });
+
+    const countBefore = parseInt(gitExec(["rev-list", "--count", "HEAD"]).trim(), 10);
+
+    const req = makePost({ action: "revert", path: commitOpsRepoPath, hash: secondCommitHash });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+
+    // A new "Revert ..." commit should have been created
+    const countAfter = parseInt(gitExec(["rev-list", "--count", "HEAD"]).trim(), 10);
+    expect(countAfter).toBe(countBefore + 1);
+
+    // The latest commit subject should start with "Revert"
+    const git = simpleGit(commitOpsRepoPath);
+    const log = await git.log(["-1"]);
+    expect(log.latest?.message).toContain("Revert");
+  });
+
+  it("revert invalid hash → 400", async () => {
+    const req = makePost({ action: "revert", path: commitOpsRepoPath, hash: "zzz" });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe("invalid commit hash");
+  });
+
+  // --- amend-message ---
+  it("amend-message: HEAD commit message updated", async () => {
+    const newMessage = "Amended: improved second commit message";
+    const req = makePost({ action: "amend-message", path: commitOpsRepoPath, message: newMessage });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+
+    const git = simpleGit(commitOpsRepoPath);
+    const log = await git.log(["-1"]);
+    expect(log.latest?.message).toBe(newMessage);
+
+    // The commit hash should change after amend (different commit object)
+    const head = (await git.revparse(["HEAD"])).trim();
+    expect(head).not.toBe(secondCommitHash);
+  });
+
+  it("amend-message empty message → 400", async () => {
+    const req = makePost({ action: "amend-message", path: commitOpsRepoPath, message: "   " });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe("message required");
   });
 });

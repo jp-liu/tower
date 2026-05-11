@@ -471,6 +471,118 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      case "checkout-commit": {
+        const { hash } = body;
+        if (typeof hash !== "string" || !/^[a-f0-9]{4,40}$/i.test(hash)) {
+          return NextResponse.json({ error: "invalid commit hash" }, { status: 400 });
+        }
+        try {
+          // Detached HEAD checkout. Refuses if there are uncommitted local changes.
+          await git.checkout([hash]);
+          return NextResponse.json({ success: true });
+        } catch (e) {
+          return NextResponse.json(
+            { error: (e as Error).message || "Checkout failed (uncommitted changes?)" },
+            { status: 500 }
+          );
+        }
+      }
+
+      case "reset-commit": {
+        const { hash, mode } = body;
+        if (typeof hash !== "string" || !/^[a-f0-9]{4,40}$/i.test(hash)) {
+          return NextResponse.json({ error: "invalid commit hash" }, { status: 400 });
+        }
+        const safeMode = mode === "soft" || mode === "mixed" || mode === "hard" ? mode : "mixed";
+        try {
+          await git.reset([`--${safeMode}`, hash]);
+          return NextResponse.json({ success: true, mode: safeMode });
+        } catch (e) {
+          return NextResponse.json(
+            { error: (e as Error).message || "Reset failed" },
+            { status: 500 }
+          );
+        }
+      }
+
+      case "create-tag": {
+        const { hash, name, message } = body;
+        if (typeof hash !== "string" || !/^[a-f0-9]{4,40}$/i.test(hash)) {
+          return NextResponse.json({ error: "invalid commit hash" }, { status: 400 });
+        }
+        if (typeof name !== "string" || !name.trim()) {
+          return NextResponse.json({ error: "tag name required" }, { status: 400 });
+        }
+        const safeName = name.trim().replace(/[^a-zA-Z0-9_\-./]/g, "");
+        if (!safeName) {
+          return NextResponse.json({ error: "tag name invalid" }, { status: 400 });
+        }
+        try {
+          if (typeof message === "string" && message.trim()) {
+            await git.tag(["-a", safeName, hash, "-m", message.trim()]);
+          } else {
+            await git.tag([safeName, hash]);
+          }
+          return NextResponse.json({ success: true, name: safeName });
+        } catch (e) {
+          return NextResponse.json(
+            { error: (e as Error).message || "Tag creation failed" },
+            { status: 500 }
+          );
+        }
+      }
+
+      case "cherry-pick": {
+        const { hash } = body;
+        if (typeof hash !== "string" || !/^[a-f0-9]{4,40}$/i.test(hash)) {
+          return NextResponse.json({ error: "invalid commit hash" }, { status: 400 });
+        }
+        try {
+          await git.raw(["cherry-pick", hash]);
+          return NextResponse.json({ success: true });
+        } catch (e) {
+          return NextResponse.json(
+            { error: (e as Error).message || "Cherry-pick failed (conflict?)" },
+            { status: 500 }
+          );
+        }
+      }
+
+      case "revert": {
+        const { hash } = body;
+        if (typeof hash !== "string" || !/^[a-f0-9]{4,40}$/i.test(hash)) {
+          return NextResponse.json({ error: "invalid commit hash" }, { status: 400 });
+        }
+        try {
+          // --no-edit auto-fills "Revert <subject>" message
+          await git.raw(["revert", "--no-edit", hash]);
+          return NextResponse.json({ success: true });
+        } catch (e) {
+          return NextResponse.json(
+            { error: (e as Error).message || "Revert failed (conflict?)" },
+            { status: 500 }
+          );
+        }
+      }
+
+      case "amend-message": {
+        const { message } = body;
+        if (typeof message !== "string" || !message.trim()) {
+          return NextResponse.json({ error: "message required" }, { status: 400 });
+        }
+        try {
+          // git commit --amend ALWAYS targets HEAD. Caller responsibility to ensure
+          // this is invoked only when the selected commit IS the current HEAD.
+          await git.raw(["commit", "--amend", "-m", message.trim()]);
+          return NextResponse.json({ success: true });
+        } catch (e) {
+          return NextResponse.json(
+            { error: (e as Error).message || "Amend failed" },
+            { status: 500 }
+          );
+        }
+      }
+
       case "stash-save": {
         const { message } = body;
         const args = ["push"];
