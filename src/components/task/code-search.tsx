@@ -9,7 +9,6 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
@@ -291,7 +290,7 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
             <p className="text-xs text-muted-foreground">{t("codeSearch.noResults")}</p>
           </div>
         ) : (
-          <ScrollArea className="flex-1">
+          <div className="flex-1 min-h-0 overflow-y-auto">
             <div className="py-1">
               {grouped.map(([filePath, matches]) => {
                 const collapsed = collapsedFiles.has(filePath);
@@ -349,7 +348,7 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
                 {t("codeSearch.truncated")}
               </div>
             )}
-          </ScrollArea>
+          </div>
         )}
       </div>
     </div>
