@@ -77,6 +77,7 @@ export function CodeEditor({
   const [tabs, setTabs] = useState<EditorTab[]>([]);
   const [guardByPath, setGuardByPath] = useState<Map<string, GuardInfo>>(new Map());
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
+  const [monacoReady, setMonacoReady] = useState(false);
   const editorRef = useRef<unknown>(null);
   const monacoRef = useRef<unknown>(null);
   const modelsRef = useRef<Map<string, unknown>>(new Map());
@@ -299,7 +300,7 @@ export function CodeEditor({
       model.setValue(tab.content);
     }
     editor.setModel(model);
-  }, [activeTabPath, tabs]);
+  }, [activeTabPath, tabs, monacoReady]);
 
   function handleEditorMount(editor: unknown, monaco: unknown) {
     editorRef.current = editor;
@@ -343,6 +344,8 @@ export function CodeEditor({
       keybindings: [m.KeyMod.CtrlCmd | m.KeyCode.KeyS],
       run: saveActiveTab,
     });
+
+    setMonacoReady(true);
   }
 
   function handleTabClick(path: string) {
