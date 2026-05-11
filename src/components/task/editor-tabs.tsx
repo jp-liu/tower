@@ -1,6 +1,6 @@
 "use client";
 
-import { X, GitCompare } from "lucide-react";
+import { X, GitCompare, History } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 export interface EditorTab {
@@ -11,6 +11,10 @@ export interface EditorTab {
   isDirty: boolean;
   isDiff?: boolean;
   originalContent?: string;
+  // commit-diff tab fields (v1.3.1):
+  isCommitDiff?: boolean;
+  commitHash?: string;
+  patch?: string;
 }
 
 export interface EditorTabsProps {
@@ -42,16 +46,24 @@ export function EditorTabs({ tabs, activeTabPath, onTabClick, onTabClose }: Edit
                 : "border-transparent text-muted-foreground hover:text-foreground",
             ].join(" ")}
           >
-            {tab.isDiff && (
+            {tab.isDiff && !tab.isCommitDiff && (
               <GitCompare className="w-3 h-3 text-amber-400 shrink-0" />
+            )}
+            {tab.isCommitDiff && (
+              <History className="w-3 h-3 text-sky-400 shrink-0" />
             )}
             {tab.isDirty && (
               <span className="text-primary text-xs">●</span>
             )}
             <span>{tab.filename}</span>
-            {tab.isDiff && (
+            {tab.isDiff && !tab.isCommitDiff && (
               <span className="text-muted-foreground text-xs ml-0.5">
                 {t("editor.diffTabSuffix")}
+              </span>
+            )}
+            {tab.isCommitDiff && tab.commitHash && (
+              <span className="text-muted-foreground text-xs ml-0.5 font-mono">
+                · {tab.commitHash.slice(0, 7)}
               </span>
             )}
             <button

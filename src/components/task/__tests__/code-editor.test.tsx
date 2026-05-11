@@ -312,3 +312,113 @@ describe("CodeEditor — History button", () => {
 // (see updateBlameAnnotation in code-editor.tsx). Tests for the inline
 // annotation flow would require mocking Monaco's onDidChangeCursorPosition,
 // which the current test scaffolding doesn't expose — deferred to e2e.
+
+// ---------------------------------------------------------------------------
+// Mock @/components/task/diff-view for commit-diff tests
+// ---------------------------------------------------------------------------
+vi.mock("@/components/task/diff-view", () => ({
+  DiffView: ({ patch, language }: { patch: string; language?: string }) => (
+    <div data-testid="diff-view-stub" data-language={language}>
+      {`__DIFFVIEW__:${patch.length}`}
+    </div>
+  ),
+}));
+
+describe("CodeEditor — commit-diff tab", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fakeMonaco.editor.createModel.mockReturnValue(fakeModel);
+    fakeMonaco.editor.getModel.mockReturnValue(null);
+    fakeMonaco.Uri.parse.mockImplementation((uri: string) => ({ toString: () => uri }));
+    mockGitAction.mockResolvedValue({ patch: "" });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("opens a commit-diff tab and renders DiffView stub when commitDiffRequest is provided", async () => {
+    const patch = "diff --git a/src/foo.ts b/src/foo.ts\n--- a/src/foo.ts\n+++ b/src/foo.ts\n@@ -1 +1 @@\n-old\n+new";
+
+    await act(async () => {
+      render(
+        <I18nProvider>
+          <CodeEditor
+            worktreePath="/x"
+            selectedFilePath={null}
+            commitDiffRequest={{
+              commitHash: "abc1234def5678",
+              relativePath: "src/foo.ts",
+              patch,
+            }}
+          />
+        </I18nProvider>
+      );
+    });
+
+    // DiffView stub should be rendered with the patch
+    await waitFor(() => {
+      expect(screen.getByTestId("diff-view-stub")).toBeInTheDocument();
+    });
+
+    const stub = screen.getByTestId("diff-view-stub");
+    // Stub renders "__DIFFVIEW__:<patchLength>" — verify length is correct
+    expect(stub.textContent).toBe(`__DIFFVIEW__:${patch.length}`);
+    // Language should be detected as typescript for .ts
+    expect(stub.getAttribute("data-language")).toBe("typescript");
+  });
+
+  it("shows the short hash (7 chars) in the tab label", async () => {
+    const patch = "diff --git a/src/bar.ts b/src/bar.ts\n@@ -1 +1 @@\n-a\n+b";
+
+    await act(async () => {
+      render(
+        <I18nProvider>
+          <CodeEditor
+            worktreePath="/x"
+            selectedFilePath={null}
+            commitDiffRequest={{
+              commitHash: "abc1234xyz",
+              relativePath: "src/bar.ts",
+              patch,
+            }}
+          />
+        </I18nProvider>
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("diff-view-stub")).toBeInTheDocument();
+    });
+
+    // The short hash suffix "· abc1234" should appear somewhere in the tab bar
+    expect(screen.getByText("· abc1234")).toBeInTheDocument();
+  });
+
+  it("does not create a Monaco model for commit-diff tabs", async () => {
+    const patch = "diff --git a/src/baz.ts b/src/baz.ts\n@@ -1 +1 @@\n-x\n+y";
+
+    await act(async () => {
+      render(
+        <I18nProvider>
+          <CodeEditor
+            worktreePath="/x"
+            selectedFilePath={null}
+            commitDiffRequest={{
+              commitHash: "deadbeef1234",
+              relativePath: "src/baz.ts",
+              patch,
+            }}
+          />
+        </I18nProvider>
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("diff-view-stub")).toBeInTheDocument();
+    });
+
+    // Monaco should not have been asked to create a model for the commit-diff tab
+    expect(fakeMonaco.editor.createModel).not.toHaveBeenCalled();
+  });
+});

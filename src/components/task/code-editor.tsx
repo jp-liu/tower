@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { EditorTabs } from "./editor-tabs";
 import type { EditorTab } from "./editor-tabs";
 import { DiffEditorView } from "./diff-editor";
+import { DiffView } from "./diff-view";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { gitAction } from "@/lib/git-api";
 import { parseUnifiedDiff } from "@/lib/git-diff";
@@ -69,6 +70,7 @@ export interface CodeEditorProps {
   onSave?: () => void;
   selectedLine?: number | null;
   diffFileRequest?: DiffFileRequest | null;
+  commitDiffRequest?: { commitHash: string; relativePath: string; patch: string } | null;
 }
 
 export function CodeEditor({
@@ -78,6 +80,7 @@ export function CodeEditor({
   onSave,
   selectedLine,
   diffFileRequest,
+  commitDiffRequest,
 }: CodeEditorProps) {
   const { t } = useI18n();
   const { resolvedTheme } = useTheme();
@@ -263,6 +266,33 @@ export function CodeEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diffFileRequest, worktreePath]);
 
+  // React to commitDiffRequest — open a read-only commit patch tab
+  useEffect(() => {
+    if (!commitDiffRequest) return;
+    const { commitHash, relativePath, patch } = commitDiffRequest;
+    const tabKey = `commit:${commitHash}:${relativePath}`;
+    const filename = relativePath.split("/").pop() ?? relativePath;
+    // If commit-diff tab already open, just switch to it
+    const existing = tabs.find((t) => t.path === tabKey);
+    if (existing) {
+      setActiveTabPath(tabKey);
+      return;
+    }
+    const newTab: EditorTab = {
+      path: tabKey,
+      relativePath,
+      filename,
+      content: "",
+      isDirty: false,
+      isCommitDiff: true,
+      commitHash,
+      patch,
+    };
+    setTabs((prev) => (prev.some((t) => t.path === tabKey) ? prev : [...prev, newTab]));
+    setActiveTabPath(tabKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commitDiffRequest]);
+
   // Scroll Monaco to selectedLine when it changes (or active tab changes)
   useEffect(() => {
     if (!selectedLine || !editorRef.current) return;
@@ -302,6 +332,8 @@ export function CodeEditor({
     // Don't touch the main editor's model for them (URI like "file://diff:..."
     // would also be malformed and could throw on Uri.parse / createModel).
     if (tab.isDiff) return;
+    // Commit-diff tabs are rendered via <DiffView> — no Monaco model needed.
+    if (tab.isCommitDiff) return;
 
     const uri = monaco.Uri.parse("file://" + tab.path);
     let model = modelsRef.current.get(tab.path) as
@@ -334,7 +366,7 @@ export function CodeEditor({
   useEffect(() => {
     if (!monacoReady || !activeTabPath || !worktreePath) return;
     const activeTab = activeTabRef.current;
-    if (!activeTab || activeTab.isDiff) return; // skip diff tabs
+    if (!activeTab || activeTab.isDiff || activeTab.isCommitDiff) return; // skip diff/commit-diff tabs
 
     const handle = setTimeout(async () => {
       try {
@@ -362,7 +394,7 @@ export function CodeEditor({
   useEffect(() => {
     if (!monacoReady || !activeTabPath || !worktreePath) return;
     const activeTab = activeTabRef.current;
-    if (!activeTab || activeTab.isDiff) return;
+    if (!activeTab || activeTab.isDiff || activeTab.isCommitDiff) return;
 
     const tabPath = activeTab.path;
     const relativePath = activeTab.relativePath;
@@ -515,8 +547,8 @@ export function CodeEditor({
   }
 
   const activeTab = tabs.find((t) => t.path === activeTabPath);
-  // Show History button only when a regular (non-diff) editable tab is active
-  const showHistoryButton = activeTab !== undefined && !activeTab.isDiff;
+  // Show History button only when a regular (non-diff, non-commit-diff) editable tab is active
+  const showHistoryButton = activeTab !== undefined && !activeTab.isDiff && !activeTab.isCommitDiff;
 
   return (
     <div className="flex flex-col h-full overflow-hidden relative">
@@ -610,6 +642,19 @@ export function CodeEditor({
         );
       })()}
 
+      {/* Commit-diff viewer — read-only patch view for commit-diff tabs.
+          Sibling to MonacoEditor (which stays hidden but alive). */}
+      {tabs.length > 0 && activeTab?.isCommitDiff && (
+        <div className="flex-1 min-h-0 overflow-auto">
+          <ErrorBoundary>
+            <DiffView
+              patch={activeTab.patch ?? ""}
+              language={LANG_MAP[activeTab.filename.split(".").pop() ?? ""] ?? "plaintext"}
+            />
+          </ErrorBoundary>
+        </div>
+      )}
+
       {/* Diff editor — only when the active tab is a diff tab. Sibling, not
           mutually exclusive with MonacoEditor below: hidden Monaco still keeps
           its instance + models alive across diff-tab transitions. */}
@@ -645,7 +690,7 @@ export function CodeEditor({
       {tabs.length > 0 && (
         <div
           className={`flex-1 min-h-0 ${
-            !activeTab || activeTab.isDiff || guardByPath.has(activeTab.path)
+            !activeTab || activeTab.isDiff || activeTab.isCommitDiff || guardByPath.has(activeTab.path)
               ? "hidden"
               : ""
           }`}
