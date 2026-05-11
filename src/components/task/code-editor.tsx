@@ -542,7 +542,8 @@ export function CodeEditor({
         )}
       </div>
 
-      {tabs.length === 0 ? (
+      {/* Empty state — only when no tabs exist */}
+      {tabs.length === 0 && (
         <div className="flex h-full flex-col items-center justify-center text-center">
           <p className="text-sm text-muted-foreground">
             {t("editor.selectFile")}
@@ -551,66 +552,68 @@ export function CodeEditor({
             {t("editor.selectFileHint")}
           </p>
         </div>
-      ) : activeTab && guardByPath.has(activeTab.path) ? (
-        (() => {
-          const guard = guardByPath.get(activeTab.path)!;
-          const isOversized = guard.kind === "oversized";
-          const Icon = isOversized ? FileWarning : FileX;
-          const title = t(
-            isOversized
-              ? "codeEditor.fileGuard.oversizedTitle"
-              : "codeEditor.fileGuard.binaryTitle"
-          );
-          const sizeStr = `${(guard.size / 1024 / 1024).toFixed(2)} MB`;
-          const limitStr = isOversized
-            ? `${(guard.limit / 1024 / 1024).toFixed(2)} MB`
-            : "";
-          const desc = t(
-            isOversized
-              ? "codeEditor.fileGuard.oversizedBody"
-              : "codeEditor.fileGuard.binaryBody"
-          )
-            .replace("{size}", sizeStr)
-            .replace("{limit}", limitStr);
+      )}
 
-          return (
-            <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
-              <Icon className="h-10 w-10 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium text-foreground">{title}</p>
-                <p className="mt-1 text-xs text-muted-foreground max-w-[360px]">{desc}</p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  toast.warning(t("codeEditor.fileGuard.forceOpenWarning"));
-                  readFileContentForce(worktreePath, activeTab.relativePath)
-                    .then(({ content }) => {
-                      // Force-open replaces the placeholder content in the SAME tab.
-                      // Clearing the guard entry causes this branch to no longer match,
-                      // so the editor will render the now-populated tab.content normally.
-                      setGuardByPath((prev) => {
-                        const next = new Map(prev);
-                        next.delete(activeTab.path);
-                        return next;
-                      });
-                      setTabs((prev) =>
-                        prev.map((tt) =>
-                          tt.path === activeTab.path
-                            ? { ...tt, content, isDirty: false }
-                            : tt
-                        )
-                      );
-                    })
-                    .catch(() => toast.error(t("codeEditor.readError")));
-                }}
-              >
-                {t("codeEditor.fileGuard.forceOpenAction")}
-              </Button>
+      {/* Guard panel — only when the active tab is binary / oversized */}
+      {tabs.length > 0 && activeTab && guardByPath.has(activeTab.path) && (() => {
+        const guard = guardByPath.get(activeTab.path)!;
+        const isOversized = guard.kind === "oversized";
+        const Icon = isOversized ? FileWarning : FileX;
+        const title = t(
+          isOversized
+            ? "codeEditor.fileGuard.oversizedTitle"
+            : "codeEditor.fileGuard.binaryTitle"
+        );
+        const sizeStr = `${(guard.size / 1024 / 1024).toFixed(2)} MB`;
+        const limitStr = isOversized
+          ? `${(guard.limit / 1024 / 1024).toFixed(2)} MB`
+          : "";
+        const desc = t(
+          isOversized
+            ? "codeEditor.fileGuard.oversizedBody"
+            : "codeEditor.fileGuard.binaryBody"
+        )
+          .replace("{size}", sizeStr)
+          .replace("{limit}", limitStr);
+        return (
+          <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
+            <Icon className="h-10 w-10 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium text-foreground">{title}</p>
+              <p className="mt-1 text-xs text-muted-foreground max-w-[360px]">{desc}</p>
             </div>
-          );
-        })()
-      ) : activeTab?.isDiff ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                toast.warning(t("codeEditor.fileGuard.forceOpenWarning"));
+                readFileContentForce(worktreePath, activeTab.relativePath)
+                  .then(({ content }) => {
+                    setGuardByPath((prev) => {
+                      const next = new Map(prev);
+                      next.delete(activeTab.path);
+                      return next;
+                    });
+                    setTabs((prev) =>
+                      prev.map((tt) =>
+                        tt.path === activeTab.path
+                          ? { ...tt, content, isDirty: false }
+                          : tt
+                      )
+                    );
+                  })
+                  .catch(() => toast.error(t("codeEditor.readError")));
+              }}
+            >
+              {t("codeEditor.fileGuard.forceOpenAction")}
+            </Button>
+          </div>
+        );
+      })()}
+
+      {/* Diff editor — only when the active tab is a diff tab. Sibling, not
+          mutually exclusive with MonacoEditor below: hidden Monaco still keeps
+          its instance + models alive across diff-tab transitions. */}
+      {tabs.length > 0 && activeTab?.isDiff && (
         <div className="flex-1 min-h-0">
           <ErrorBoundary>
             <DiffEditorView
@@ -631,49 +634,57 @@ export function CodeEditor({
             />
           </ErrorBoundary>
         </div>
-      ) : (
-        <div className="flex-1 min-h-0">
+      )}
+
+      {/* Main Monaco editor — ALWAYS mounted when there are any tabs, even if
+          a diff tab or guard panel is showing. CSS-hidden in those states so it
+          doesn't take layout space but its instance + models stay alive. Without
+          this, switching to a diff tab unmounted Monaco and disposed its services
+          (InstantiationService), triggering errors when the user clicked back to
+          a regular tab. */}
+      {tabs.length > 0 && (
+        <div
+          className={`flex-1 min-h-0 ${
+            !activeTab || activeTab.isDiff || guardByPath.has(activeTab.path)
+              ? "hidden"
+              : ""
+          }`}
+        >
           <ErrorBoundary>
-          <MonacoEditor
-            height="100%"
-            theme={monacoTheme}
-            defaultValue=""
-            // Survive component unmount (we own model lifecycle via modelsRef +
-            // unmount-cleanup effect). Without this, switching to a diff tab
-            // unmounts MonacoEditor → disposes the active model → re-clicking
-            // the tab triggers "Model is disposed!" on setModel.
-            keepCurrentModel
-            onMount={handleEditorMount}
-            onChange={(value) => {
-              if (value === undefined) return;
-              // Use ref to get the current active tab path, avoiding stale closure
-              // during rapid tab switches
-              const currentPath = activeTabPathRef.current;
-              if (!currentPath) return;
-              setTabs((prev) =>
-                prev.map((t) =>
-                  t.path === currentPath
-                    ? { ...t, content: value, isDirty: true }
-                    : t
-                )
-              );
-            }}
-            options={{
-              automaticLayout: true,
-              minimap: { enabled: false },
-              fontSize: 13,
-              fontFamily: '"JetBrains Mono", "Geist Mono", monospace',
-              lineNumbers: "on",
-              wordWrap: "off",
-              scrollBeyondLastLine: false,
-              tabSize: 2,
-            }}
-            loading={
-              <div className="flex h-full items-center justify-center bg-muted/20">
-                <span className="text-sm text-muted-foreground">Loading editor...</span>
-              </div>
-            }
-          />
+            <MonacoEditor
+              height="100%"
+              theme={monacoTheme}
+              defaultValue=""
+              keepCurrentModel
+              onMount={handleEditorMount}
+              onChange={(value) => {
+                if (value === undefined) return;
+                const currentPath = activeTabPathRef.current;
+                if (!currentPath) return;
+                setTabs((prev) =>
+                  prev.map((t) =>
+                    t.path === currentPath
+                      ? { ...t, content: value, isDirty: true }
+                      : t
+                  )
+                );
+              }}
+              options={{
+                automaticLayout: true,
+                minimap: { enabled: false },
+                fontSize: 13,
+                fontFamily: '"JetBrains Mono", "Geist Mono", monospace',
+                lineNumbers: "on",
+                wordWrap: "off",
+                scrollBeyondLastLine: false,
+                tabSize: 2,
+              }}
+              loading={
+                <div className="flex h-full items-center justify-center bg-muted/20">
+                  <span className="text-sm text-muted-foreground">Loading editor...</span>
+                </div>
+              }
+            />
           </ErrorBoundary>
         </div>
       )}
