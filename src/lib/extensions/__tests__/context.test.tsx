@@ -10,14 +10,15 @@ afterEach(() => {
 });
 
 vi.mock("@/actions/extension-actions", () => ({
-  listAllExtensionStatus: vi.fn().mockResolvedValue({
-    rg: { installed: true, version: "14.1.1" },
-    monaco: { installed: false },
-  }),
   checkExtension: vi.fn(),
   installExtension: vi.fn(),
   uninstallExtension: vi.fn(),
 }));
+
+const INITIAL_STATUS = {
+  rg: { installed: true, version: "14.1.1" },
+  monaco: { installed: false },
+};
 
 function Probe() {
   const rg = useExtension("rg");
@@ -34,7 +35,7 @@ function Probe() {
 describe("ExtensionProvider + useExtension", () => {
   it("hydrates initial status and propagates to consumers", async () => {
     render(
-      <ExtensionProvider>
+      <ExtensionProvider initialStatus={INITIAL_STATUS}>
         <Probe />
       </ExtensionProvider>
     );
@@ -64,7 +65,7 @@ describe("ExtensionProvider + useExtension", () => {
 
     const user = userEvent.setup();
     render(
-      <ExtensionProvider>
+      <ExtensionProvider initialStatus={INITIAL_STATUS}>
         <InstallProbe />
       </ExtensionProvider>
     );
@@ -94,7 +95,7 @@ describe("ExtensionProvider + useExtension", () => {
 
     const user = userEvent.setup();
     render(
-      <ExtensionProvider>
+      <ExtensionProvider initialStatus={INITIAL_STATUS}>
         <ConcurrentProbe />
       </ExtensionProvider>
     );

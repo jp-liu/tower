@@ -8,6 +8,7 @@ import { ExtensionProvider } from "@/lib/extensions/context";
 import { Toaster } from "@/components/ui/sonner";
 import { db } from "@/lib/db";
 import { getOnboardingStatus } from "@/actions/onboarding-actions";
+import { listAllExtensionStatus } from "@/actions/extension-actions";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -30,12 +31,13 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [workspaces, onboardingStatus] = await Promise.all([
+  const [workspaces, onboardingStatus, extensionStatus] = await Promise.all([
     db.workspace.findMany({
       orderBy: { updatedAt: "desc" },
       select: { id: true, name: true, description: true, updatedAt: true },
     }),
     getOnboardingStatus(),
+    listAllExtensionStatus(),
   ]);
 
   return (
@@ -51,7 +53,7 @@ export default async function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <TooltipProvider>
             <I18nProvider>
-              <ExtensionProvider>
+              <ExtensionProvider initialStatus={extensionStatus}>
                 <LayoutClient workspaces={workspaces} isFirstRun={onboardingStatus.isFirstRun} username={onboardingStatus.username}>
                   {children}
                 </LayoutClient>
