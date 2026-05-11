@@ -69,6 +69,68 @@ function mapStatus(s: StatusResult) {
   };
 }
 
+export interface BlameLine {
+  line: number;
+  sha: string;
+  author: string;
+  summary: string;
+  date?: string;
+}
+
+export function parseBlamePorcelain(raw: string): BlameLine[] {
+  const result: BlameLine[] = [];
+  const lines = raw.split("\n");
+  let i = 0;
+
+  // Per-sha metadata cache: sha → { author, summary, date }
+  const shaMetaCache: Record<string, { author: string; summary: string; date: string }> = {};
+
+  while (i < lines.length) {
+    const headerLine = lines[i];
+    if (!headerLine) { i++; continue; }
+
+    // First token check: sha (40 hex chars) + at least 2 numbers
+    const headerMatch = headerLine.match(/^([0-9a-f]{40})\s+\d+\s+(\d+)(?:\s+\d+)?$/);
+    if (!headerMatch) { i++; continue; }
+
+    const sha = headerMatch[1];
+    const finalLine = parseInt(headerMatch[2], 10);
+    i++;
+
+    let author = "";
+    let summary = "";
+    let date = "";
+
+    // Consume header key-value lines until we hit the tab-prefixed content line
+    while (i < lines.length && !lines[i].startsWith("\t")) {
+      const kv = lines[i];
+      if (kv.startsWith("author ")) author = kv.slice(7).trim();
+      else if (kv.startsWith("summary ")) summary = kv.slice(8).trim();
+      else if (kv.startsWith("author-time ")) {
+        const ts = parseInt(kv.slice(12).trim(), 10);
+        if (!isNaN(ts)) date = new Date(ts * 1000).toISOString();
+      }
+      i++;
+    }
+
+    // Skip the tab-prefixed content line
+    if (i < lines.length && lines[i].startsWith("\t")) i++;
+
+    // If this sha appeared before (no author metadata emitted), pull from cache
+    if (!author && shaMetaCache[sha]) {
+      author = shaMetaCache[sha].author;
+      summary = shaMetaCache[sha].summary;
+      date = shaMetaCache[sha].date;
+    } else if (author) {
+      shaMetaCache[sha] = { author, summary, date };
+    }
+
+    result.push({ line: finalLine, sha, author, summary, date: date || undefined });
+  }
+
+  return result;
+}
+
 // GET: git info for a path
 export async function GET(request: NextRequest) {
   const dirPath = request.nextUrl.searchParams.get("path");
@@ -425,6 +487,17 @@ export async function POST(request: NextRequest) {
           );
         } finally {
           try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+        }
+      }
+
+      case "blame": {
+        const safeFile = sanitizeFilePath(body.file);
+        try {
+          const raw = await git.raw(["blame", "--porcelain", safeFile]);
+          const lines = parseBlamePorcelain(raw);
+          return NextResponse.json({ lines });
+        } catch {
+          return NextResponse.json({ lines: [] });
         }
       }
 

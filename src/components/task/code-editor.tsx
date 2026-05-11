@@ -6,7 +6,7 @@ import { loader } from "@monaco-editor/react";
 import { useTheme } from "next-themes";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
-import { FileWarning, FileX, Clock } from "lucide-react";
+import { FileWarning, FileX, Clock, User } from "lucide-react";
 import { readFileContent, writeFileContent, readFileContentForce } from "@/actions/file-actions";
 import { Button } from "@/components/ui/button";
 import { EditorTabs } from "./editor-tabs";
@@ -20,6 +20,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { FileHistoryPanel } from "./file-history-panel";
+import { BlameList } from "./blame-overlay";
 
 type GuardInfo =
   | { kind: "oversized"; size: number; limit: number }
@@ -87,6 +88,7 @@ export function CodeEditor({
   const [monacoReady, setMonacoReady] = useState(false);
   const [gutterTick, setGutterTick] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [blameOpen, setBlameOpen] = useState(false);
   const editorRef = useRef<unknown>(null);
   const monacoRef = useRef<unknown>(null);
   const modelsRef = useRef<Map<string, unknown>>(new Map());
@@ -432,16 +434,28 @@ export function CodeEditor({
           onTabClose={handleTabClose}
         />
         {showHistoryButton && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="shrink-0 text-muted-foreground"
-            title={t("git.history")}
-            onClick={() => setHistoryOpen(true)}
-            data-testid="history-button"
-          >
-            <Clock className="h-4 w-4" />
-          </Button>
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="shrink-0 text-muted-foreground"
+              title={t("git.toggleBlame")}
+              onClick={() => setBlameOpen(true)}
+              data-testid="blame-button"
+            >
+              <User className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="shrink-0 text-muted-foreground"
+              title={t("git.history")}
+              onClick={() => setHistoryOpen(true)}
+              data-testid="history-button"
+            >
+              <Clock className="h-4 w-4" />
+            </Button>
+          </>
         )}
       </div>
 
@@ -589,6 +603,23 @@ export function CodeEditor({
                 worktreePath={worktreePath}
                 relativePath={activeTab.relativePath}
                 onClose={() => setHistoryOpen(false)}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Blame dialog */}
+      {showHistoryButton && activeTab && (
+        <Dialog open={blameOpen} onOpenChange={setBlameOpen}>
+          <DialogContent className="w-[min(720px,90vw)] max-w-none sm:max-w-none flex flex-col" style={{ height: "min(540px, 80vh)" }}>
+            <DialogHeader>
+              <DialogTitle>{t("git.blame")} — {activeTab.filename}</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <BlameList
+                worktreePath={worktreePath}
+                relativePath={activeTab.relativePath}
               />
             </div>
           </DialogContent>

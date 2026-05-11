@@ -50,6 +50,9 @@ export const zh = {
   // Git clone
   "git.history": "文件历史",
   "git.noHistory": "无提交记录",
+  "git.blame": "文件标注",
+  "git.toggleBlame": "查看 Blame",
+  "git.noBlame": "无 Blame 数据",
   "git.viewCommit": "查看此提交",
   "git.stageHunk": "暂存此 hunk",
   "git.discardHunk": "丢弃此 hunk",

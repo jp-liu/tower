@@ -7,6 +7,7 @@ import simpleGit from "simple-git";
 import { NextRequest } from "next/server";
 import { POST } from "../route";
 import { parseUnifiedDiff, hunkToPatch } from "@/lib/git-diff";
+import { parseBlamePorcelain } from "../route";
 
 // Helper to build a POST request
 function makePost(body: object): NextRequest {
@@ -259,5 +260,176 @@ describe("POST /api/git discard-hunk", () => {
     expect(res.status).toBe(400);
     const data = await res.json();
     expect(data.error).toBe("invalid patch");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseBlamePorcelain unit tests (fixture-based, no real git needed)
+// ---------------------------------------------------------------------------
+describe("parseBlamePorcelain — unit", () => {
+  // Minimal two-line porcelain fixture: two different shas, metadata for each
+  const FIXTURE = [
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 1 1 1",
+    "author Alice",
+    "author-mail <alice@example.com>",
+    "author-time 1700000000",
+    "author-tz +0800",
+    "committer Alice",
+    "committer-mail <alice@example.com>",
+    "committer-time 1700000000",
+    "committer-tz +0800",
+    "summary First commit",
+    "filename foo.ts",
+    "\tconst x = 1;",
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb 2 2 1",
+    "author Bob",
+    "author-mail <bob@example.com>",
+    "author-time 1700086400",
+    "author-tz +0800",
+    "committer Bob",
+    "committer-mail <bob@example.com>",
+    "committer-time 1700086400",
+    "committer-tz +0800",
+    "summary Second commit",
+    "filename foo.ts",
+    "\tconst y = 2;",
+  ].join("\n");
+
+  it("parses two distinct shas with correct line numbers", () => {
+    const lines = parseBlamePorcelain(FIXTURE);
+    expect(lines).toHaveLength(2);
+    expect(lines[0].sha).toBe("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    expect(lines[0].line).toBe(1);
+    expect(lines[1].sha).toBe("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    expect(lines[1].line).toBe(2);
+  });
+
+  it("extracts correct author names", () => {
+    const lines = parseBlamePorcelain(FIXTURE);
+    expect(lines[0].author).toBe("Alice");
+    expect(lines[1].author).toBe("Bob");
+  });
+
+  it("extracts correct summary strings", () => {
+    const lines = parseBlamePorcelain(FIXTURE);
+    expect(lines[0].summary).toBe("First commit");
+    expect(lines[1].summary).toBe("Second commit");
+  });
+
+  it("parses author-time as an ISO date string", () => {
+    const lines = parseBlamePorcelain(FIXTURE);
+    // 1700000000 → 2023-11-14T…
+    expect(lines[0].date).toBeDefined();
+    expect(lines[0].date).toContain("2023");
+  });
+
+  it("returns empty array for empty input", () => {
+    const lines = parseBlamePorcelain("");
+    expect(lines).toEqual([]);
+  });
+
+  it("re-uses cached metadata for repeated sha", () => {
+    // Same sha appearing on two lines — second occurrence has no metadata headers
+    const repeated = [
+      "cccccccccccccccccccccccccccccccccccccccc 1 1 2",
+      "author Charlie",
+      "author-mail <charlie@example.com>",
+      "author-time 1700000000",
+      "author-tz +0800",
+      "committer Charlie",
+      "committer-mail <charlie@example.com>",
+      "committer-time 1700000000",
+      "committer-tz +0800",
+      "summary Cached commit",
+      "filename bar.ts",
+      "\tline one",
+      "cccccccccccccccccccccccccccccccccccccccc 2 2",
+      "\tline two",
+    ].join("\n");
+
+    const lines = parseBlamePorcelain(repeated);
+    expect(lines).toHaveLength(2);
+    expect(lines[0].author).toBe("Charlie");
+    expect(lines[1].author).toBe("Charlie");
+    expect(lines[1].summary).toBe("Cached commit");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/git blame — integration test using real temp repo
+// ---------------------------------------------------------------------------
+let blameRepoPath: string;
+
+beforeAll(async () => {
+  blameRepoPath = fs.mkdtempSync(path.join(os.tmpdir(), "tower-git-blame-test-"));
+  const git = simpleGit(blameRepoPath);
+  await git.init();
+  await git.addConfig("user.email", "blame@test.com");
+  await git.addConfig("user.name", "BlameTest");
+
+  // First commit: file with 3 lines
+  fs.writeFileSync(path.join(blameRepoPath, "blame.txt"), "line1\nline2\nline3\n");
+  await git.add("blame.txt");
+  await git.commit("Initial blame commit");
+
+  // Second commit: change line2 only
+  fs.writeFileSync(path.join(blameRepoPath, "blame.txt"), "line1\nline2-modified\nline3\n");
+  await git.add("blame.txt");
+  await git.commit("Second blame commit");
+});
+
+afterAll(() => {
+  if (blameRepoPath && fs.existsSync(blameRepoPath)) {
+    fs.rmSync(blameRepoPath, { recursive: true, force: true });
+  }
+});
+
+describe("POST /api/git blame", () => {
+  it("returns blame lines with sha, author, and line numbers", async () => {
+    const req = makePost({ action: "blame", path: blameRepoPath, file: "blame.txt" });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(Array.isArray(data.lines)).toBe(true);
+    expect(data.lines.length).toBe(3);
+
+    const first = data.lines[0];
+    expect(typeof first.sha).toBe("string");
+    expect(first.sha.length).toBe(40);
+    expect(typeof first.author).toBe("string");
+    expect(typeof first.line).toBe("number");
+  });
+
+  it("returns two distinct shas — line2 was changed in second commit", async () => {
+    const req = makePost({ action: "blame", path: blameRepoPath, file: "blame.txt" });
+    const res = await POST(req);
+    const { lines } = await res.json() as { lines: { sha: string; line: number }[] };
+
+    const line1Sha = lines.find((l) => l.line === 1)?.sha;
+    const line2Sha = lines.find((l) => l.line === 2)?.sha;
+    const line3Sha = lines.find((l) => l.line === 3)?.sha;
+
+    expect(line1Sha).toBeDefined();
+    expect(line2Sha).toBeDefined();
+    expect(line3Sha).toBeDefined();
+
+    // line1 and line3 were NOT changed — same sha as initial commit
+    expect(line1Sha).toBe(line3Sha);
+    // line2 was changed — different sha
+    expect(line2Sha).not.toBe(line1Sha);
+  });
+
+  it("returns empty lines for a non-existent file", async () => {
+    const req = makePost({ action: "blame", path: blameRepoPath, file: "nonexistent.txt" });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.lines).toEqual([]);
+  });
+
+  it("returns 500 for an invalid (absolute) file path", async () => {
+    const req = makePost({ action: "blame", path: blameRepoPath, file: "/etc/passwd" });
+    const res = await POST(req);
+    expect(res.status).toBeGreaterThanOrEqual(400);
   });
 });
