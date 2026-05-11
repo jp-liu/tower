@@ -520,7 +520,7 @@ export function CodeEditor({
 
   return (
     <div className="flex flex-col h-full overflow-hidden relative">
-      <div className="flex items-center">
+      <div className="header-xs flex items-center bg-card">
         <EditorTabs
           tabs={tabs}
           activeTabPath={activeTabPath}
@@ -531,11 +531,11 @@ export function CodeEditor({
           <Tooltip>
             <TooltipTrigger
               onClick={() => setHistoryOpen(true)}
-              className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              className="shrink-0 mr-2 inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
               aria-label={t("git.history")}
               data-testid="history-button"
             >
-              <Clock className="h-4 w-4" />
+              <Clock className="h-3.5 w-3.5" />
             </TooltipTrigger>
             <TooltipContent side="bottom">{t("git.history")}</TooltipContent>
           </Tooltip>

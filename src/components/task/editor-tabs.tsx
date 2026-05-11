@@ -26,7 +26,7 @@ export function EditorTabs({ tabs, activeTabPath, onTabClick, onTabClose }: Edit
   if (tabs.length === 0) return null;
 
   return (
-    <div className="header-xs flex items-stretch overflow-x-auto bg-card flex-shrink-0">
+    <div className="flex items-stretch overflow-x-auto bg-card flex-1 min-w-0">
       {tabs.map((tab) => {
         const isActive = tab.path === activeTabPath;
         return (
