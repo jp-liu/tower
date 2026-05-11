@@ -305,8 +305,15 @@ export function CodeEditor({
 
     const uri = monaco.Uri.parse("file://" + tab.path);
     let model = modelsRef.current.get(tab.path) as
-      | { getValue: () => string; setValue: (v: string) => void }
+      | { getValue: () => string; setValue: (v: string) => void; isDisposed?: () => boolean }
       | undefined;
+    // Defensive: if the cached model was disposed by Monaco (e.g. an unexpected
+    // editor remount without keepCurrentModel), evict and recreate. Otherwise
+    // setModel(disposedModel) throws "Model is disposed!" from Monaco.
+    if (model && model.isDisposed?.()) {
+      modelsRef.current.delete(tab.path);
+      model = undefined;
+    }
     if (!model) {
       const ext = tab.filename.split(".").pop() ?? "";
       const lang = LANG_MAP[ext] ?? "plaintext";
@@ -631,6 +638,11 @@ export function CodeEditor({
             height="100%"
             theme={monacoTheme}
             defaultValue=""
+            // Survive component unmount (we own model lifecycle via modelsRef +
+            // unmount-cleanup effect). Without this, switching to a diff tab
+            // unmounts MonacoEditor → disposes the active model → re-clicking
+            // the tab triggers "Model is disposed!" on setModel.
+            keepCurrentModel
             onMount={handleEditorMount}
             onChange={(value) => {
               if (value === undefined) return;
