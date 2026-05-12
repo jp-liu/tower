@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { CommitActionMenu } from "./commit-action-menu";
 
 // Must match GitGraphSvg's ROW_HEIGHT constant
-const ROW_HEIGHT = 24;
+const ROW_HEIGHT = 44;
 
 interface CommitFile {
   filename: string;
@@ -186,7 +186,7 @@ export function GitHistoryPanel({
                     e.preventDefault();
                     setContextMenu({ hash: commit.hash, x: e.clientX, y: e.clientY });
                   }}
-                  className={`group flex items-center gap-2 px-2 cursor-pointer hover:bg-accent/50 border-l-2 ${
+                  className={`group relative flex flex-col justify-center gap-0.5 px-2 cursor-pointer hover:bg-accent/50 border-l-2 ${
                     isSelected
                       ? "border-primary bg-accent/30"
                       : "border-transparent"
@@ -195,22 +195,23 @@ export function GitHistoryPanel({
                   data-testid="commit-row"
                   data-hash={commit.hash}
                 >
-                  <span className="truncate text-xs text-foreground flex-1 min-w-0">
+                  {/* Row 1: subject — full width */}
+                  <span className="truncate text-xs text-foreground min-w-0" title={commit.subject}>
                     {commit.subject}
                   </span>
-                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                    {commit.shortHash}
-                  </span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground truncate max-w-[80px]">
-                    {commit.author}
-                  </span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
-                    {formatBlameAge(commit.date)}
-                  </span>
+                  {/* Row 2: meta line — short hash · author · age */}
+                  <div className="flex items-center gap-1.5 min-w-0 text-[10px] text-muted-foreground">
+                    <span className="shrink-0 font-mono">{commit.shortHash}</span>
+                    <span className="shrink-0 opacity-50">·</span>
+                    <span className="truncate flex-1 min-w-0">{commit.author}</span>
+                    <span className="shrink-0 opacity-50">·</span>
+                    <span className="shrink-0">{formatBlameAge(commit.date)}</span>
+                  </div>
+                  {/* ⋯ More-actions button — absolute right, hover-revealed */}
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-5 w-5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute right-1 top-1 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity bg-card/80 backdrop-blur"
                     onClick={(e) => handleMoreButtonClick(e, commit.hash)}
                     aria-label="More actions"
                     data-testid="commit-more-button"

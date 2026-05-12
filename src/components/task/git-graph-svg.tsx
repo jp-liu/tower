@@ -9,12 +9,14 @@ import { useI18n } from "@/lib/i18n";
 // Constants
 // ---------------------------------------------------------------------------
 const LANE_WIDTH = 16;   // px between lanes
-const ROW_HEIGHT = 24;   // px between rows
+const ROW_HEIGHT = 44;   // px between rows — also the per-commit list-row height in git-history-panel.tsx (must match)
 const DOT_RADIUS = 5;
 const SVG_PADDING = 8;
 const TOOLTIP_WIDTH = 240;
 const TOOLTIP_HEIGHT = 180;
 const TOOLTIP_OFFSET = 20;
+// Internal constants only; ROW_HEIGHT/LANE_WIDTH/DOT_RADIUS/SVG_PADDING are
+// re-declared here AND in git-history-panel.tsx — keep them in sync.
 
 // ---------------------------------------------------------------------------
 // Props
