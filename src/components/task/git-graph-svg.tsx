@@ -9,7 +9,7 @@ import { useI18n } from "@/lib/i18n";
 // Constants
 // ---------------------------------------------------------------------------
 const LANE_WIDTH = 16;   // px between lanes
-const ROW_HEIGHT = 44;   // px between rows — also the per-commit list-row height in git-history-panel.tsx (must match)
+const ROW_HEIGHT = 28;   // px per row — single-line layout in git-history-panel.tsx (must match)
 const DOT_RADIUS = 5;
 const SVG_PADDING = 8;
 const TOOLTIP_WIDTH = 240;
@@ -25,6 +25,10 @@ export interface GitGraphSvgProps {
   layout: GraphLayout;
   selectedCommitHash?: string | null;
   onCommitClick?: (hash: string) => void;
+  /** Insert `extraRows` empty rows AFTER the commit at `afterRow` (no dot
+   *  there). Used for VSCode-style inline file-list expansion under the
+   *  selected commit. All commits with row index > afterRow shift down. */
+  expandedAt?: { afterRow: number; extraRows: number } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -38,6 +42,12 @@ function cy(row: number): number {
   return SVG_PADDING + row * ROW_HEIGHT + ROW_HEIGHT / 2;
 }
 
+// Return the effective (post-expansion) row index for a commit at `row`.
+function shiftedRow(row: number, expandedAt: GitGraphSvgProps["expandedAt"]): number {
+  if (!expandedAt || row <= expandedAt.afterRow) return row;
+  return row + expandedAt.extraRows;
+}
+
 // ---------------------------------------------------------------------------
 // GitGraphSvg component
 // ---------------------------------------------------------------------------
@@ -45,12 +55,14 @@ export function GitGraphSvg({
   layout,
   selectedCommitHash,
   onCommitClick,
+  expandedAt = null,
 }: GitGraphSvgProps) {
   const { t } = useI18n();
   const [hoveredCommit, setHoveredCommit] = useState<string | null>(null);
 
+  const extraRows = expandedAt?.extraRows ?? 0;
   const svgWidth = layout.laneCount * LANE_WIDTH + SVG_PADDING * 2;
-  const svgHeight = layout.commits.length * ROW_HEIGHT + SVG_PADDING * 2;
+  const svgHeight = (layout.commits.length + extraRows) * ROW_HEIGHT + SVG_PADDING * 2;
 
   // ---------------------------------------------------------------------------
   // Hover tooltip positioning
@@ -58,12 +70,13 @@ export function GitGraphSvg({
   const hoveredPos = hoveredCommit
     ? layout.commits.find((c) => c.hash === hoveredCommit)
     : null;
+  const hoveredRow = hoveredPos ? shiftedRow(hoveredPos.row, expandedAt) : 0;
 
   // Tooltip positioning — offset OFF the dot (so cursor doesn't cover the popup
   // text) and auto-flip horizontally + vertically when it would overflow the
   // SVG bounds. Default placement: to the right of and below the dot.
   const dotX = hoveredPos ? hoveredPos.lane * LANE_WIDTH + SVG_PADDING + LANE_WIDTH / 2 : 0;
-  const dotY = hoveredPos ? hoveredPos.row * ROW_HEIGHT + SVG_PADDING + ROW_HEIGHT / 2 : 0;
+  const dotY = hoveredPos ? hoveredRow * ROW_HEIGHT + SVG_PADDING + ROW_HEIGHT / 2 : 0;
 
   const wantRight = dotX + TOOLTIP_OFFSET + TOOLTIP_WIDTH <= svgWidth;
   const tipX = hoveredPos
@@ -90,9 +103,9 @@ export function GitGraphSvg({
       {/* ------------------------------------------------------------------ */}
       {layout.edges.map((edge, i) => {
         const x1 = cx(edge.fromLane);
-        const y1 = cy(edge.fromRow);
+        const y1 = cy(shiftedRow(edge.fromRow, expandedAt));
         const x2 = cx(edge.toLane);
-        const y2 = cy(edge.toRow);
+        const y2 = cy(shiftedRow(edge.toRow, expandedAt));
 
         const d =
           edge.fromLane === edge.toLane
@@ -115,7 +128,7 @@ export function GitGraphSvg({
       {/* ------------------------------------------------------------------ */}
       {layout.commits.map((commit) => {
         const commitCx = cx(commit.lane);
-        const commitCy = cy(commit.row);
+        const commitCy = cy(shiftedRow(commit.row, expandedAt));
         const isSelected = commit.hash === selectedCommitHash;
 
         return (
