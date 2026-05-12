@@ -161,8 +161,12 @@ export function GitHistoryPanel({
       {/* Top row: graph SVG + commit list (scrollable together) */}
       <ScrollArea className="flex-1 min-h-0">
         <div className="flex">
-          {/* Left: graph SVG column */}
-          <div className="shrink-0">
+          {/* Left: graph SVG column.
+              Fixed-width container with internal horizontal scroll — without
+              this, the SVG (laneCount * 16 + padding) would consume the entire
+              panel width on multi-branch graphs and the commit list to the
+              right would collapse to 0 px. */}
+          <div className="w-24 flex-none overflow-x-auto scrollbar-thin">
             <GitGraphSvg
               layout={layout}
               selectedCommitHash={selectedHash}

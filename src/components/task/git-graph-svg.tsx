@@ -13,6 +13,8 @@ const ROW_HEIGHT = 24;   // px between rows
 const DOT_RADIUS = 5;
 const SVG_PADDING = 8;
 const TOOLTIP_WIDTH = 240;
+const TOOLTIP_HEIGHT = 180;
+const TOOLTIP_OFFSET = 20;
 
 // ---------------------------------------------------------------------------
 // Props
@@ -55,13 +57,25 @@ export function GitGraphSvg({
     ? layout.commits.find((c) => c.hash === hoveredCommit)
     : null;
 
+  // Tooltip positioning — offset OFF the dot (so cursor doesn't cover the popup
+  // text) and auto-flip horizontally + vertically when it would overflow the
+  // SVG bounds. Default placement: to the right of and below the dot.
+  const dotX = hoveredPos ? hoveredPos.lane * LANE_WIDTH + SVG_PADDING + LANE_WIDTH / 2 : 0;
+  const dotY = hoveredPos ? hoveredPos.row * ROW_HEIGHT + SVG_PADDING + ROW_HEIGHT / 2 : 0;
+
+  const wantRight = dotX + TOOLTIP_OFFSET + TOOLTIP_WIDTH <= svgWidth;
   const tipX = hoveredPos
-    ? hoveredPos.lane * LANE_WIDTH + SVG_PADDING + LANE_WIDTH + 8 + TOOLTIP_WIDTH > svgWidth
-      ? Math.max(0, hoveredPos.lane * LANE_WIDTH + SVG_PADDING - TOOLTIP_WIDTH - 8)
-      : hoveredPos.lane * LANE_WIDTH + SVG_PADDING + LANE_WIDTH + 8
+    ? wantRight
+      ? dotX + TOOLTIP_OFFSET
+      : Math.max(0, dotX - TOOLTIP_OFFSET - TOOLTIP_WIDTH)
     : 0;
 
-  const tipY = hoveredPos ? hoveredPos.row * ROW_HEIGHT + SVG_PADDING : 0;
+  const wantBelow = dotY + TOOLTIP_OFFSET + TOOLTIP_HEIGHT <= svgHeight;
+  const tipY = hoveredPos
+    ? wantBelow
+      ? dotY + TOOLTIP_OFFSET
+      : Math.max(0, dotY - TOOLTIP_OFFSET - TOOLTIP_HEIGHT)
+    : 0;
 
   return (
     <svg
@@ -154,7 +168,7 @@ export function GitGraphSvg({
           x={tipX}
           y={tipY}
           width={TOOLTIP_WIDTH}
-          height={180}
+          height={TOOLTIP_HEIGHT}
           style={{ pointerEvents: "none" }}
         >
           <div className="bg-popover border border-border rounded-md shadow-lg p-2 text-xs space-y-1">

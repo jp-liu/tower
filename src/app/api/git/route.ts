@@ -446,7 +446,15 @@ export async function POST(request: NextRequest) {
         try {
           // Get the patch with diff for all files in this commit (vs first parent).
           // For a merge: shows changes vs first parent. For a root: shows full file content as +.
-          const patch = await git.show([hash, "--format="]);
+          // Pass `-c core.quotepath=false` so non-ASCII filenames (Chinese,
+          // emoji, etc.) appear verbatim in the patch instead of being quoted
+          // and octal-escaped like `"a/\346\265\213\350\257\225.md"`. Without
+          // this, the client's per-file slicer (which matches on `a/<filename>`)
+          // misses those files and renders an empty diff.
+          const patch = await git.raw([
+            "-c", "core.quotepath=false",
+            "show", hash, "--format=",
+          ]);
           // Per-file breakdown via parseUnifiedDiff (parse-diff, already a dep, used in DiffView).
           // NOTE: files[].patch is intentionally empty — clients should slice the
           // full patch by `diff --git a/<filename>` markers (cheap on the client,
