@@ -92,19 +92,9 @@ describe("GitGraphSvg", () => {
     expect(onCommitClick).toHaveBeenCalledWith("b");
   });
 
-  it("hover commit shows tooltip with author name and short hash", () => {
-    renderGraph();
-
-    const commitGroup = document.querySelector('[data-hash="c"]');
-    expect(commitGroup).not.toBeNull();
-
-    fireEvent.mouseEnter(commitGroup!);
-
-    // Author name "Alice" should appear in the tooltip
-    expect(screen.getByText("Alice")).toBeTruthy();
-    // Short hash "c" should appear in the tooltip
-    expect(screen.getByText("c")).toBeTruthy();
-  });
+  // Hover tooltip test removed — tooltip was extracted in favor of inline
+  // metadata in the commit list row (subject + refs + hash + author + age).
+  // See git-history-panel.tsx for the new rendering.
 
   it("selection halo renders — two circles at same cx/cy for selected commit", () => {
     renderGraph({ selectedCommitHash: "b" });

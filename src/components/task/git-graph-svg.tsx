@@ -1,9 +1,6 @@
 "use client";
 
-import { useState } from "react";
 import type { GraphLayout } from "@/lib/git-graph-layout";
-import { formatBlameAge } from "@/components/task/blame-overlay";
-import { useI18n } from "@/lib/i18n";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -12,9 +9,6 @@ const LANE_WIDTH = 16;   // px between lanes
 const ROW_HEIGHT = 28;   // px per row — single-line layout in git-history-panel.tsx (must match)
 const DOT_RADIUS = 5;
 const SVG_PADDING = 8;
-const TOOLTIP_WIDTH = 240;
-const TOOLTIP_HEIGHT = 180;
-const TOOLTIP_OFFSET = 20;
 // Internal constants only; ROW_HEIGHT/LANE_WIDTH/DOT_RADIUS/SVG_PADDING are
 // re-declared here AND in git-history-panel.tsx — keep them in sync.
 
@@ -57,40 +51,9 @@ export function GitGraphSvg({
   onCommitClick,
   expandedAt = null,
 }: GitGraphSvgProps) {
-  const { t } = useI18n();
-  const [hoveredCommit, setHoveredCommit] = useState<string | null>(null);
-
   const extraRows = expandedAt?.extraRows ?? 0;
   const svgWidth = layout.laneCount * LANE_WIDTH + SVG_PADDING * 2;
   const svgHeight = (layout.commits.length + extraRows) * ROW_HEIGHT + SVG_PADDING * 2;
-
-  // ---------------------------------------------------------------------------
-  // Hover tooltip positioning
-  // ---------------------------------------------------------------------------
-  const hoveredPos = hoveredCommit
-    ? layout.commits.find((c) => c.hash === hoveredCommit)
-    : null;
-  const hoveredRow = hoveredPos ? shiftedRow(hoveredPos.row, expandedAt) : 0;
-
-  // Tooltip positioning — offset OFF the dot (so cursor doesn't cover the popup
-  // text) and auto-flip horizontally + vertically when it would overflow the
-  // SVG bounds. Default placement: to the right of and below the dot.
-  const dotX = hoveredPos ? hoveredPos.lane * LANE_WIDTH + SVG_PADDING + LANE_WIDTH / 2 : 0;
-  const dotY = hoveredPos ? hoveredRow * ROW_HEIGHT + SVG_PADDING + ROW_HEIGHT / 2 : 0;
-
-  const wantRight = dotX + TOOLTIP_OFFSET + TOOLTIP_WIDTH <= svgWidth;
-  const tipX = hoveredPos
-    ? wantRight
-      ? dotX + TOOLTIP_OFFSET
-      : Math.max(0, dotX - TOOLTIP_OFFSET - TOOLTIP_WIDTH)
-    : 0;
-
-  const wantBelow = dotY + TOOLTIP_OFFSET + TOOLTIP_HEIGHT <= svgHeight;
-  const tipY = hoveredPos
-    ? wantBelow
-      ? dotY + TOOLTIP_OFFSET
-      : Math.max(0, dotY - TOOLTIP_OFFSET - TOOLTIP_HEIGHT)
-    : 0;
 
   return (
     <svg
@@ -135,8 +98,6 @@ export function GitGraphSvg({
           <g
             key={commit.hash}
             data-hash={commit.hash}
-            onMouseEnter={() => setHoveredCommit(commit.hash)}
-            onMouseLeave={() => setHoveredCommit(null)}
             onClick={() => onCommitClick?.(commit.hash)}
             style={{ cursor: onCommitClick ? "pointer" : "default" }}
           >
@@ -175,49 +136,10 @@ export function GitGraphSvg({
         );
       })}
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Hover tooltip                                                       */}
-      {/* ------------------------------------------------------------------ */}
-      {hoveredPos && (
-        <foreignObject
-          x={tipX}
-          y={tipY}
-          width={TOOLTIP_WIDTH}
-          height={TOOLTIP_HEIGHT}
-          style={{ pointerEvents: "none" }}
-        >
-          <div className="bg-popover border border-border rounded-md shadow-lg p-2 text-xs space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold">{hoveredPos.author}</span>
-              <span className="font-mono text-muted-foreground">
-                {hoveredPos.shortHash}
-              </span>
-            </div>
-            <div className="text-muted-foreground">
-              {formatBlameAge(hoveredPos.date)}
-            </div>
-            <div className="text-foreground break-words">{hoveredPos.subject}</div>
-            {hoveredPos.refs.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {hoveredPos.refs.map((r) => (
-                  <span
-                    key={r}
-                    className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-mono"
-                  >
-                    {r}
-                  </span>
-                ))}
-              </div>
-            )}
-            {hoveredPos.parents.length > 0 && (
-              <div className="font-mono text-[10px] text-muted-foreground">
-                {t("git.hoverParentsLabel")}:{" "}
-                {hoveredPos.parents.map((p) => p.slice(0, 7)).join(", ")}
-              </div>
-            )}
-          </div>
-        </foreignObject>
-      )}
+      {/* Hover tooltip removed — all commit metadata (subject, hash, author,
+          age, refs) now lives inline in the commit row, and parents/full
+          message appear in the inline expanded-detail header when selected.
+          Hover state is kept only for the row highlight + click target. */}
     </svg>
   );
 }

@@ -164,9 +164,10 @@ export function GitHistoryPanel({
           expansion under the selected commit, VSCode-style). */}
       <ScrollArea className="flex-1 min-h-0">
         <div className="flex">
-          {/* Left: graph SVG column. Fixed width with internal h-scroll for
-              wide multi-branch repos. */}
-          <div className="w-24 flex-none overflow-x-auto scrollbar-thin">
+          {/* Left: graph SVG column. Wider (192px ≈ 12 lanes) so most repos'
+              dots fit without horizontal scrolling. Pathological repos with
+              >12 lanes still scroll within this fixed window. */}
+          <div className="w-48 flex-none overflow-x-auto scrollbar-thin">
             <GitGraphSvg
               layout={layout}
               selectedCommitHash={selectedHash}
@@ -214,6 +215,28 @@ export function GitHistoryPanel({
                     >
                       {commit.subject}
                     </span>
+                    {/* Ref badges — HEAD, branches, tags inline (was tooltip-only) */}
+                    {commit.refs.length > 0 && (
+                      <span className="flex items-center gap-1 shrink-0">
+                        {commit.refs.slice(0, 2).map((r) => (
+                          <span
+                            key={r}
+                            className="px-1.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-mono leading-4 truncate max-w-[120px]"
+                            title={r}
+                          >
+                            {r}
+                          </span>
+                        ))}
+                        {commit.refs.length > 2 && (
+                          <span
+                            className="text-[10px] text-muted-foreground font-mono"
+                            title={commit.refs.slice(2).join(", ")}
+                          >
+                            +{commit.refs.length - 2}
+                          </span>
+                        )}
+                      </span>
+                    )}
                     <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
                       {commit.shortHash}
                     </span>
