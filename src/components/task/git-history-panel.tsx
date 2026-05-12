@@ -164,10 +164,18 @@ export function GitHistoryPanel({
           expansion under the selected commit, VSCode-style). */}
       <ScrollArea className="flex-1 min-h-0">
         <div className="flex">
-          {/* Left: graph SVG column. Wider (192px ≈ 12 lanes) so most repos'
-              dots fit without horizontal scrolling. Pathological repos with
-              >12 lanes still scroll within this fixed window. */}
-          <div className="w-48 flex-none overflow-x-auto scrollbar-thin">
+          {/* Left: graph SVG column. Width hugs actual laneCount so dots stay
+              visually close to the commit subject (no big empty gap for narrow
+              graphs). Capped at 192px (12 lanes) — wider repos scroll inside. */}
+          <div
+            className="flex-none overflow-x-auto scrollbar-thin"
+            style={{
+              width: `${Math.min(
+                Math.max(layout.laneCount * 16 + 16, 32),
+                192
+              )}px`,
+            }}
+          >
             <GitGraphSvg
               layout={layout}
               selectedCommitHash={selectedHash}
