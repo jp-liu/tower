@@ -38,6 +38,17 @@ export function DiffView({
   );
 
   if (!file || file.chunks.length === 0) {
+    // Fallback: parse-diff couldn't extract a file/chunks (unusual filename,
+    // binary marker, malformed patch). If the raw patch still has content,
+    // render it as monospace plaintext so the user at least sees SOMETHING
+    // instead of a blank tab. Otherwise show the empty-state message.
+    if (patch && patch.trim().length > 0) {
+      return (
+        <pre className="px-4 py-2 text-xs font-mono whitespace-pre overflow-auto text-foreground">
+          {patch}
+        </pre>
+      );
+    }
     return (
       <div className="px-4 py-2 text-xs text-muted-foreground">
         {t("diff.noChanges")}
@@ -107,15 +118,23 @@ export function DiffView({
                 content is omitted so the library renders diff-only mode. */}
             <GitDiffView
               data={{
+                // Convert parse-diff's "/dev/null" sentinel for new/deleted
+                // files into undefined — the library treats "/dev/null" as a
+                // real path and tries to syntax-highlight it, which can lead
+                // to rendering quirks.
                 oldFile: {
-                  fileName: file.from ?? undefined,
+                  fileName:
+                    file.from && file.from !== "/dev/null" ? file.from : undefined,
                   fileLang: language,
-                  content: oldContent,
+                  // Empty string content for new files makes the lib bail out;
+                  // pass undefined so it falls back to hunk-only rendering.
+                  content: oldContent.length > 0 ? oldContent : undefined,
                 },
                 newFile: {
-                  fileName: file.to ?? undefined,
+                  fileName:
+                    file.to && file.to !== "/dev/null" ? file.to : undefined,
                   fileLang: language,
-                  content: newContent,
+                  content: newContent.length > 0 ? newContent : undefined,
                 },
                 hunks: [hunkString],
               }}

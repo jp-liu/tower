@@ -13,8 +13,6 @@ import { CommitActionMenu } from "./commit-action-menu";
 
 // Must match GitGraphSvg's ROW_HEIGHT constant
 const ROW_HEIGHT = 28;
-// Per-file row inside the inline expansion (no SVG dot here)
-const FILE_ROW_HEIGHT = 24;
 
 interface CommitFile {
   filename: string;
@@ -160,18 +158,6 @@ export function GitHistoryPanel({
 
   // Compute graph gutter width (px) — hugs actual laneCount, capped to 192px.
   const graphGutter = Math.min(Math.max(layout.laneCount * 16 + 16, 32), 192);
-  const expandedAt =
-    selectedHash && commitFiles.length > 0
-      ? {
-          afterRow:
-            layout.commits.find((c) => c.hash === selectedHash)?.row ?? 0,
-          extraRows: Math.ceil(
-            ((loadingFiles ? 1 : Math.max(commitFiles.length, 1)) *
-              FILE_ROW_HEIGHT) /
-              ROW_HEIGHT
-          ),
-        }
-      : null;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -191,7 +177,6 @@ export function GitHistoryPanel({
                 layout={layout}
                 selectedCommitHash={selectedHash}
                 onCommitClick={setSelectedHash}
-                expandedAt={expandedAt}
               />
             </div>
           </div>
@@ -267,60 +252,54 @@ export function GitHistoryPanel({
                     </Button>
                   </li>
 
-                  {/* Inline file expansion — VSCode Git Graph style. Renders
-                      directly under the selected commit's row; the SVG
-                      reserves matching empty space via expandedAt. */}
-                  {isSelected && (
-                    <li
-                      className="bg-accent/10"
-                      style={{ paddingLeft: `${graphGutter + 8}px` }}
-                    >
-                      {loadingFiles ? (
-                        <div
-                          className="flex items-center justify-center"
-                          style={{ height: `${FILE_ROW_HEIGHT}px` }}
-                        >
-                          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-                        </div>
-                      ) : commitFiles.length === 0 ? (
-                        <div
-                          className="flex items-center px-6 text-[11px] text-muted-foreground"
-                          style={{ height: `${FILE_ROW_HEIGHT}px` }}
-                        >
-                          {t("git.noCommits")}
-                        </div>
-                      ) : (
-                        <ul>
-                          {commitFiles.map((file) => (
-                            <li
-                              key={file.filename}
-                              onClick={() => handleFileClick(file.filename)}
-                              className="flex items-center gap-1.5 pl-2 pr-3 cursor-pointer hover:bg-accent/40"
-                              style={{ height: `${FILE_ROW_HEIGHT}px` }}
-                              data-testid="commit-file-row"
-                            >
-                              <FileEdit className="h-3 w-3 shrink-0 text-amber-400" />
-                              <span className="text-[11px] text-foreground truncate flex-1 min-w-0">
-                                {file.filename}
-                              </span>
-                              <span className="shrink-0 text-[10px] font-mono text-emerald-400">
-                                +{file.added}
-                              </span>
-                              <span className="shrink-0 text-[10px] font-mono text-rose-400">
-                                -{file.removed}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </li>
-                  )}
                 </React.Fragment>
               );
             })}
           </ul>
         </div>
       </ScrollArea>
+
+      {/* Bottom: files-changed panel for the selected commit. Separate block
+          so the SVG↔commit-row alignment never jitters when files load. */}
+      {selectedHash && (
+        <div
+          className="shrink-0 border-t border-border bg-card/30 max-h-[40%] overflow-y-auto"
+          data-testid="commit-files-panel"
+        >
+          <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sticky top-0 bg-card/95 backdrop-blur border-b border-border">
+            {t("git.commitFiles")}
+          </div>
+          {loadingFiles ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+            </div>
+          ) : commitFiles.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-muted-foreground">—</div>
+          ) : (
+            <ul>
+              {commitFiles.map((file) => (
+                <li
+                  key={file.filename}
+                  onClick={() => handleFileClick(file.filename)}
+                  className="flex items-center gap-1.5 px-3 py-1 cursor-pointer hover:bg-accent/50"
+                  data-testid="commit-file-row"
+                >
+                  <FileEdit className="h-3 w-3 shrink-0 text-amber-400" />
+                  <span className="text-xs text-foreground truncate flex-1 min-w-0">
+                    {file.filename}
+                  </span>
+                  <span className="shrink-0 text-[10px] font-mono text-emerald-400">
+                    +{file.added}
+                  </span>
+                  <span className="shrink-0 text-[10px] font-mono text-rose-400">
+                    -{file.removed}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Context menu — controlled by contextMenu state */}
       {contextMenu && (
