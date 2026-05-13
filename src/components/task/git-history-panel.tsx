@@ -9,6 +9,7 @@ import { GitGraphSvg } from "./git-graph-svg";
 import { formatBlameAge } from "./blame-overlay";
 import { FileEdit, Loader2, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CommitActionMenu } from "./commit-action-menu";
 
 // Must match GitGraphSvg's ROW_HEIGHT constant
@@ -186,22 +187,27 @@ export function GitHistoryPanel({
               const isSelected = commit.hash === selectedHash;
               return (
                 <React.Fragment key={commit.hash}>
-                  <li
-                    onClick={() => setSelectedHash(commit.hash)}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      setContextMenu({ hash: commit.hash, x: e.clientX, y: e.clientY });
-                    }}
-                    className={`group relative flex items-center gap-2 pr-2 cursor-pointer hover:bg-accent/50 ${
-                      isSelected ? "bg-accent/30" : ""
-                    }`}
-                    style={{
-                      height: `${ROW_HEIGHT}px`,
-                      paddingLeft: `${graphGutter + 8}px`,
-                    }}
-                    data-testid="commit-row"
-                    data-hash={commit.hash}
-                  >
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <li
+                          onClick={() => setSelectedHash(commit.hash)}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setContextMenu({ hash: commit.hash, x: e.clientX, y: e.clientY });
+                          }}
+                          className={`group relative flex items-center gap-2 pr-2 cursor-pointer hover:bg-accent/50 ${
+                            isSelected ? "bg-accent/30" : ""
+                          }`}
+                          style={{
+                            height: `${ROW_HEIGHT}px`,
+                            paddingLeft: `${graphGutter + 8}px`,
+                          }}
+                          data-testid="commit-row"
+                          data-hash={commit.hash}
+                        />
+                      }
+                    >
                     <span
                       className="truncate text-xs text-foreground flex-1 min-w-0"
                       title={commit.subject}
@@ -249,8 +255,44 @@ export function GitHistoryPanel({
                     >
                       <MoreHorizontal className="h-3 w-3" />
                     </Button>
-                  </li>
-
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="right"
+                      align="center"
+                      sideOffset={8}
+                      className="max-w-sm space-y-1.5 text-xs"
+                    >
+                      <div className="font-medium text-foreground whitespace-pre-wrap break-words">
+                        {commit.subject}
+                      </div>
+                      <div className="text-muted-foreground space-y-0.5">
+                        <div>
+                          <span className="font-medium">{t("git.hoverHashLabel")}:</span>{" "}
+                          <span className="font-mono">{commit.hash}</span>
+                        </div>
+                        <div>
+                          <span className="font-medium">{t("git.hoverAuthorLabel")}:</span>{" "}
+                          {commit.author}
+                        </div>
+                        <div>
+                          <span className="font-medium">{t("git.hoverDateLabel")}:</span>{" "}
+                          {new Date(commit.date).toLocaleString()}
+                        </div>
+                        {commit.refs.length > 0 && (
+                          <div>
+                            <span className="font-medium">{t("git.hoverRefsLabel")}:</span>{" "}
+                            {commit.refs.join(", ")}
+                          </div>
+                        )}
+                        {commit.parents.length > 1 && (
+                          <div>
+                            <span className="font-medium">{t("git.hoverParentsLabel")}:</span>{" "}
+                            {commit.parents.length}
+                          </div>
+                        )}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
                 </React.Fragment>
               );
             })}
