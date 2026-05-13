@@ -236,12 +236,6 @@ export function GitHistoryPanel({
                         )}
                       </span>
                     )}
-                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                      {commit.shortHash}
-                    </span>
-                    <span className="shrink-0 text-[10px] text-muted-foreground truncate max-w-[80px]">
-                      {commit.author}
-                    </span>
                     <span className="shrink-0 text-[10px] text-muted-foreground">
                       {formatBlameAge(commit.date)}
                     </span>
