@@ -208,10 +208,7 @@ export function GitHistoryPanel({
                         />
                       }
                     >
-                    <span
-                      className="truncate text-xs text-foreground flex-1 min-w-0"
-                      title={commit.subject}
-                    >
+                    <span className="truncate text-xs text-foreground flex-1 min-w-0">
                       {commit.subject}
                     </span>
                     <span className="shrink-0 text-[10px] text-muted-foreground">
