@@ -260,36 +260,23 @@ export function GitHistoryPanel({
                       side="right"
                       align="center"
                       sideOffset={8}
-                      className="max-w-sm space-y-1.5 text-xs"
+                      className="block max-w-md p-0 text-xs bg-popover text-popover-foreground border border-border shadow-lg"
                     >
-                      <div className="font-medium text-foreground whitespace-pre-wrap break-words">
+                      <div className="px-3 py-2.5 whitespace-pre-wrap break-words font-sans leading-snug text-foreground">
                         {commit.subject}
+                        {commit.body && commit.body.length > 0 && (
+                          <>
+                            {"\n\n"}
+                            <span className="text-muted-foreground">{commit.body}</span>
+                          </>
+                        )}
                       </div>
-                      <div className="text-muted-foreground space-y-0.5">
-                        <div>
-                          <span className="font-medium">{t("git.hoverHashLabel")}:</span>{" "}
-                          <span className="font-mono">{commit.hash}</span>
-                        </div>
-                        <div>
-                          <span className="font-medium">{t("git.hoverAuthorLabel")}:</span>{" "}
-                          {commit.author}
-                        </div>
-                        <div>
-                          <span className="font-medium">{t("git.hoverDateLabel")}:</span>{" "}
-                          {new Date(commit.date).toLocaleString()}
-                        </div>
-                        {commit.refs.length > 0 && (
-                          <div>
-                            <span className="font-medium">{t("git.hoverRefsLabel")}:</span>{" "}
-                            {commit.refs.join(", ")}
-                          </div>
-                        )}
-                        {commit.parents.length > 1 && (
-                          <div>
-                            <span className="font-medium">{t("git.hoverParentsLabel")}:</span>{" "}
-                            {commit.parents.length}
-                          </div>
-                        )}
+                      <div className="px-3 py-1.5 border-t border-border bg-muted/40 text-[11px] text-muted-foreground flex items-center gap-2">
+                        <span>{new Date(commit.date).toLocaleString()}</span>
+                        <span className="text-border">·</span>
+                        <span className="font-mono">{commit.shortHash}</span>
+                        <span className="text-border">·</span>
+                        <span className="truncate">{commit.author}</span>
                       </div>
                     </TooltipContent>
                   </Tooltip>

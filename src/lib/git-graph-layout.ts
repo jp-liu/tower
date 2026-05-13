@@ -23,6 +23,8 @@ export interface RawCommit {
   author: string;
   date: string;
   subject: string;
+  /** Commit message body (everything after the subject line). May be empty. */
+  body?: string;
   refs: string[];
 }
 

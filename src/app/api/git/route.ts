@@ -404,8 +404,10 @@ export async function POST(request: NextRequest) {
         const rawLimit = parseInt(body.limit ?? "200", 10);
         const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 1000) : 200;
         try {
-          // Format: hash | parents (space-sep) | author | date | refs | subject
-          // Use ASCII unit separator (\x1f) — safe vs commit subjects which may contain pipes.
+          // Fields per record: hash | parents | author | date | refs | subject | body.
+          // Records are NUL-separated (`-z`) because %b can contain newlines.
+          // Fields within a record are ASCII US-separated (\x1f) — safe vs any
+          // commit content (subjects/bodies cannot contain \x1f or \0).
           const SEP = "\x1f";
           // No `--all` / `--branches` — `git log` with no ref defaults to HEAD,
           // which is the current branch's reachable history (matching what
@@ -414,12 +416,13 @@ export async function POST(request: NextRequest) {
           // merge commits' second parents); unmerged refs are correctly hidden.
           const raw = await git.raw([
             "log",
+            "-z",
             `--max-count=${limit}`,
-            `--format=%H${SEP}%P${SEP}%an${SEP}%aI${SEP}%D${SEP}%s`,
+            `--format=%H${SEP}%P${SEP}%an${SEP}%aI${SEP}%D${SEP}%s${SEP}%b`,
           ]);
-          const lines = raw.split("\n").filter((l) => l.length > 0);
-          const commits = lines.map((line) => {
-            const [hash, parentsStr, author, date, refsStr, subject] = line.split(SEP);
+          const records = raw.split("\0").filter((r) => r.length > 0);
+          const commits = records.map((rec) => {
+            const [hash, parentsStr, author, date, refsStr, subject, bodyRaw] = rec.split(SEP);
             const parents = parentsStr ? parentsStr.split(" ").filter(Boolean) : [];
             // %D yields e.g. "HEAD -> main, origin/main, tag: v1.0"
             const refs = refsStr
@@ -432,6 +435,7 @@ export async function POST(request: NextRequest) {
               author: author ?? "",
               date: date ?? "",
               subject: subject ?? "",
+              body: (bodyRaw ?? "").replace(/\n+$/, ""),
               refs,
             };
           });

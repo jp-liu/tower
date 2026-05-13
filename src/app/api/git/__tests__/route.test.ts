@@ -309,8 +309,19 @@ beforeAll(async () => {
   gitExec(["add", "c.txt"]);
   gitExec(["commit", "-m", "Commit C"], envC);
 
-  // Merge feat → main with --no-ff to force a merge commit D (2 parents)
-  gitExec(["merge", "feat", "--no-ff", "-m", "Merge feat into main"], envD);
+  // Merge feat → main with --no-ff to force a merge commit D (2 parents).
+  // Multi-line message: subject + body. The body line exercises the new -z
+  // record-separator + %b body capture path in the log-graph action.
+  gitExec(
+    [
+      "merge",
+      "feat",
+      "--no-ff",
+      "-m",
+      "Merge feat into main\n\nThis is the body of the merge commit.\nIt spans multiple lines.",
+    ],
+    envD
+  );
 });
 
 afterAll(() => {
@@ -390,6 +401,25 @@ describe("POST /api/git log-graph", () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.commits.length).toBe(2);
+  });
+
+  it("captures multi-line commit body in `body` field (subject stays single-line)", async () => {
+    const req = makePost({ action: "log-graph", path: logGraphRepoPath });
+    const res = await POST(req);
+    const data = await res.json();
+
+    const merge = data.commits.find((c: { subject: string }) => c.subject.includes("Merge feat"));
+    expect(merge).toBeDefined();
+    expect(merge.subject).toBe("Merge feat into main");
+    expect(typeof merge.body).toBe("string");
+    expect(merge.body).toContain("This is the body of the merge commit.");
+    expect(merge.body).toContain("It spans multiple lines.");
+
+    // Bodyless commits should have an empty body string (NOT undefined — the
+    // route normalises so downstream UI can read `body` without guards).
+    const root = data.commits.find((c: { subject: string }) => c.subject === "Commit A");
+    expect(root).toBeDefined();
+    expect(root.body).toBe("");
   });
 
   it("returns 400 when path is missing", async () => {
