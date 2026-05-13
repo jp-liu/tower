@@ -8,8 +8,11 @@ import type { GraphLayout } from "@/lib/git-graph-layout";
 const LANE_WIDTH = 16;   // px between lanes
 const ROW_HEIGHT = 28;   // px per row — single-line layout in git-history-panel.tsx (must match)
 const DOT_RADIUS = 5;
-const SVG_PADDING = 8;
-// Internal constants only; ROW_HEIGHT/LANE_WIDTH/DOT_RADIUS/SVG_PADDING are
+// Horizontal-only padding. There is NO top padding: the SVG is absolute-
+// positioned at top:0 over a commit list whose rows also start at y=0, so a
+// top offset here would push every dot below its row's vertical center.
+const SVG_PADDING_X = 8;
+// Internal constants only; ROW_HEIGHT/LANE_WIDTH/DOT_RADIUS are
 // re-declared here AND in git-history-panel.tsx — keep them in sync.
 
 // ---------------------------------------------------------------------------
@@ -29,11 +32,13 @@ export interface GitGraphSvgProps {
 // Helper: compute (cx, cy) for a commit at lane L, row R
 // ---------------------------------------------------------------------------
 function cx(lane: number): number {
-  return SVG_PADDING + lane * LANE_WIDTH + LANE_WIDTH / 2;
+  return SVG_PADDING_X + lane * LANE_WIDTH + LANE_WIDTH / 2;
 }
 
 function cy(row: number): number {
-  return SVG_PADDING + row * ROW_HEIGHT + ROW_HEIGHT / 2;
+  // No top padding — row 0's center must coincide with the first LI's center
+  // (y = ROW_HEIGHT / 2). Adding any SVG-top offset breaks dot↔text alignment.
+  return row * ROW_HEIGHT + ROW_HEIGHT / 2;
 }
 
 // Return the effective (post-expansion) row index for a commit at `row`.
@@ -52,8 +57,9 @@ export function GitGraphSvg({
   expandedAt = null,
 }: GitGraphSvgProps) {
   const extraRows = expandedAt?.extraRows ?? 0;
-  const svgWidth = layout.laneCount * LANE_WIDTH + SVG_PADDING * 2;
-  const svgHeight = (layout.commits.length + extraRows) * ROW_HEIGHT + SVG_PADDING * 2;
+  const svgWidth = layout.laneCount * LANE_WIDTH + SVG_PADDING_X * 2;
+  // Height == exact stack of rows; vertical padding would shift dots off-row.
+  const svgHeight = (layout.commits.length + extraRows) * ROW_HEIGHT;
 
   return (
     <svg
