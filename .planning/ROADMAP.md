@@ -20,6 +20,7 @@
 - ✅ **v1.1 Detail Page Reliability & Discovery** — Phases 69-70 (shipped 2026-05-08)
 - ✅ **v1.2 Extensions & Slim Distribution** — Phases 71-73 (shipped 2026-05-09)
 - ✅ **v1.3 Detail Page VSCode-like Git UX & Reliability** — 5 phases / 13 tasks (shipped 2026-05-11)
+- ✅ **v1.3.1 Git History Graph + Commit Context Menu** — 6 phases / 11 tasks (shipped 2026-05-11)
 
 ## Phases
 

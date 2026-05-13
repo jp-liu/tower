@@ -484,6 +484,41 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      case "commit-file-content": {
+        const { hash, file } = body;
+        if (typeof hash !== "string" || !/^[a-f0-9]{4,40}$/i.test(hash)) {
+          return NextResponse.json({ error: "invalid commit hash" }, { status: 400 });
+        }
+        if (typeof file !== "string" || !file.trim()) {
+          return NextResponse.json({ error: "file required" }, { status: 400 });
+        }
+        const safeFile = sanitizeFilePath(file);
+        // Fetch before (parent's version) and after (this commit's version).
+        // Each side may legitimately not exist:
+        //   - Added file: parent has no such path → before is null
+        //   - Deleted file: this commit has no such path → after is null
+        //   - Root commit: there is no parent at all → before is null
+        // Pass core.quotepath=false so non-ASCII paths aren't octal-escaped.
+        let before: string | null = null;
+        try {
+          before = await git.raw([
+            "-c", "core.quotepath=false",
+            "show", `${hash}^:${safeFile}`,
+          ]);
+        } catch { /* file didn't exist at parent — leave null */ }
+        let after: string | null = null;
+        try {
+          after = await git.raw([
+            "-c", "core.quotepath=false",
+            "show", `${hash}:${safeFile}`,
+          ]);
+        } catch { /* file deleted in this commit — leave null */ }
+        return NextResponse.json({
+          before: before === null ? null : before.replace(/\r\n/g, "\n"),
+          after: after === null ? null : after.replace(/\r\n/g, "\n"),
+        });
+      }
+
       case "checkout-commit": {
         const { hash } = body;
         if (typeof hash !== "string" || !/^[a-f0-9]{4,40}$/i.test(hash)) {

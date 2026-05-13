@@ -314,13 +314,29 @@ describe("CodeEditor — History button", () => {
 // which the current test scaffolding doesn't expose — deferred to e2e.
 
 // ---------------------------------------------------------------------------
-// Mock @/components/task/diff-view for commit-diff tests
+// Mock @/components/task/diff-editor for commit-diff tests (Monaco DiffEditor
+// is rendered via DiffEditorView for commit-diff tabs after the v1.3.1
+// refactor away from @git-diff-view/react).
 // ---------------------------------------------------------------------------
-vi.mock("@/components/task/diff-view", () => ({
-  DiffView: ({ patch, language }: { patch: string; language?: string }) => (
-    <div data-testid="diff-view-stub" data-language={language}>
-      {`__DIFFVIEW__:${patch.length}`}
-    </div>
+vi.mock("@/components/task/diff-editor", () => ({
+  DiffEditorView: ({
+    originalContent,
+    modifiedContent,
+    filePath,
+    readOnly,
+  }: {
+    originalContent: string;
+    modifiedContent: string;
+    filePath: string;
+    readOnly?: boolean;
+  }) => (
+    <div
+      data-testid="diff-editor-stub"
+      data-file={filePath}
+      data-readonly={readOnly ? "true" : "false"}
+      data-original-length={originalContent.length}
+      data-modified-length={modifiedContent.length}
+    />
   ),
 }));
 
@@ -337,8 +353,7 @@ describe("CodeEditor — commit-diff tab", () => {
     cleanup();
   });
 
-  it("opens a commit-diff tab and renders DiffView stub when commitDiffRequest is provided", async () => {
-    const patch = "diff --git a/src/foo.ts b/src/foo.ts\n--- a/src/foo.ts\n+++ b/src/foo.ts\n@@ -1 +1 @@\n-old\n+new";
+  it("opens a commit-diff tab and renders the DiffEditor stub with original+modified content", async () => {
 
     await act(async () => {
       render(
@@ -349,27 +364,29 @@ describe("CodeEditor — commit-diff tab", () => {
             commitDiffRequest={{
               commitHash: "abc1234def5678",
               relativePath: "src/foo.ts",
-              patch,
+              originalContent: "old line",
+              modifiedContent: "new line",
             }}
           />
         </I18nProvider>
       );
     });
 
-    // DiffView stub should be rendered with the patch
+    // DiffEditor stub should be rendered (Monaco DiffEditorView in production)
     await waitFor(() => {
-      expect(screen.getByTestId("diff-view-stub")).toBeInTheDocument();
+      expect(screen.getByTestId("diff-editor-stub")).toBeInTheDocument();
     });
 
-    const stub = screen.getByTestId("diff-view-stub");
-    // Stub renders "__DIFFVIEW__:<patchLength>" — verify length is correct
-    expect(stub.textContent).toBe(`__DIFFVIEW__:${patch.length}`);
-    // Language should be detected as typescript for .ts
-    expect(stub.getAttribute("data-language")).toBe("typescript");
+    const stub = screen.getByTestId("diff-editor-stub");
+    expect(stub.getAttribute("data-file")).toBe("src/foo.ts");
+    expect(stub.getAttribute("data-readonly")).toBe("true");
+    expect(stub.getAttribute("data-original-length")).toBe("8");
+    expect(stub.getAttribute("data-modified-length")).toBe("8");
   });
 
   it("shows the short hash (7 chars) in the tab label", async () => {
-    const patch = "diff --git a/src/bar.ts b/src/bar.ts\n@@ -1 +1 @@\n-a\n+b";
+    // No-op patch reference removed; commit-diff now uses content not patch.
+    // const _patch = "diff --git a/src/bar.ts b/src/bar.ts\n@@ -1 +1 @@\n-a\n+b";
 
     await act(async () => {
       render(
@@ -380,7 +397,8 @@ describe("CodeEditor — commit-diff tab", () => {
             commitDiffRequest={{
               commitHash: "abc1234xyz",
               relativePath: "src/bar.ts",
-              patch,
+              originalContent: "old line",
+              modifiedContent: "new line",
             }}
           />
         </I18nProvider>
@@ -388,7 +406,7 @@ describe("CodeEditor — commit-diff tab", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("diff-view-stub")).toBeInTheDocument();
+      expect(screen.getByTestId("diff-editor-stub")).toBeInTheDocument();
     });
 
     // The short hash suffix "· abc1234" should appear somewhere in the tab bar
@@ -396,7 +414,8 @@ describe("CodeEditor — commit-diff tab", () => {
   });
 
   it("does not create a Monaco model for commit-diff tabs", async () => {
-    const patch = "diff --git a/src/baz.ts b/src/baz.ts\n@@ -1 +1 @@\n-x\n+y";
+    // No-op patch reference removed; commit-diff now uses content not patch.
+    // const _patch = "diff --git a/src/baz.ts b/src/baz.ts\n@@ -1 +1 @@\n-x\n+y";
 
     await act(async () => {
       render(
@@ -407,7 +426,8 @@ describe("CodeEditor — commit-diff tab", () => {
             commitDiffRequest={{
               commitHash: "deadbeef1234",
               relativePath: "src/baz.ts",
-              patch,
+              originalContent: "old line",
+              modifiedContent: "new line",
             }}
           />
         </I18nProvider>
@@ -415,7 +435,7 @@ describe("CodeEditor — commit-diff tab", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("diff-view-stub")).toBeInTheDocument();
+      expect(screen.getByTestId("diff-editor-stub")).toBeInTheDocument();
     });
 
     // Monaco should not have been asked to create a model for the commit-diff tab

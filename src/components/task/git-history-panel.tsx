@@ -23,31 +23,14 @@ interface CommitFile {
 
 export interface GitHistoryPanelProps {
   worktreePath: string;
-  onSelectCommitFile?: (
-    commitHash: string,
-    relativePath: string,
-    patch: string
-  ) => void;
+  onSelectCommitFile?: (params: {
+    commitHash: string;
+    relativePath: string;
+    originalContent: string;
+    modifiedContent: string;
+  }) => void;
 }
 
-/**
- * Slice the per-file portion of a full git patch.
- * Finds the "diff --git a/<filename>" marker and returns that chunk.
- */
-function slicePerFilePatch(fullPatch: string, filename: string): string {
-  const markers = fullPatch.split(/^diff --git /m);
-  for (let i = 1; i < markers.length; i++) {
-    const chunk = "diff --git " + markers[i];
-    const firstLine = chunk.split("\n")[0] ?? "";
-    if (
-      firstLine.includes(`a/${filename}`) ||
-      firstLine.includes(`b/${filename}`)
-    ) {
-      return chunk;
-    }
-  }
-  return "";
-}
 
 export function GitHistoryPanel({
   worktreePath,
@@ -59,7 +42,6 @@ export function GitHistoryPanel({
   const [loading, setLoading] = useState(true);
   const [selectedHash, setSelectedHash] = useState<string | null>(null);
   const [commitFiles, setCommitFiles] = useState<CommitFile[]>([]);
-  const [commitPatch, setCommitPatch] = useState("");
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
     hash: string;
@@ -103,11 +85,12 @@ export function GitHistoryPanel({
     setContextMenu({ hash, x: rect.right, y: rect.bottom });
   };
 
-  // Fetch commit details when a commit is selected
+  // Fetch commit details when a commit is selected. Only the file list is
+  // needed now — per-file before/after content is fetched on demand when the
+  // user clicks a file (via commit-file-content action).
   useEffect(() => {
     if (!selectedHash || !worktreePath) {
       setCommitFiles([]);
-      setCommitPatch("");
       return;
     }
     let cancelled = false;
@@ -115,13 +98,11 @@ export function GitHistoryPanel({
     gitAction(worktreePath, "show-commit", { hash: selectedHash })
       .then((res) => {
         if (cancelled) return;
-        const data = res as { patch?: string; files?: CommitFile[] };
-        setCommitPatch(data.patch ?? "");
+        const data = res as { files?: CommitFile[] };
         setCommitFiles(data.files ?? []);
       })
       .catch(() => {
         if (cancelled) return;
-        setCommitPatch("");
         setCommitFiles([]);
       })
       .finally(() => {
@@ -132,10 +113,28 @@ export function GitHistoryPanel({
     };
   }, [selectedHash, worktreePath]);
 
-  const handleFileClick = (filename: string) => {
+  const handleFileClick = async (filename: string) => {
     if (!selectedHash || !onSelectCommitFile) return;
-    const perFilePatch = slicePerFilePatch(commitPatch, filename);
-    onSelectCommitFile(selectedHash, filename, perFilePatch);
+    try {
+      const res = (await gitAction(worktreePath, "commit-file-content", {
+        hash: selectedHash,
+        file: filename,
+      })) as { before: string | null; after: string | null };
+      onSelectCommitFile({
+        commitHash: selectedHash,
+        relativePath: filename,
+        originalContent: res.before ?? "",
+        modifiedContent: res.after ?? "",
+      });
+    } catch {
+      // Fallback: pass empty strings so the tab still opens with empty diff
+      onSelectCommitFile({
+        commitHash: selectedHash,
+        relativePath: filename,
+        originalContent: "",
+        modifiedContent: "",
+      });
+    }
   };
 
   const layout = useMemo(() => layoutGraph(commits), [commits]);
@@ -263,41 +262,49 @@ export function GitHistoryPanel({
           so the SVG↔commit-row alignment never jitters when files load. */}
       {selectedHash && (
         <div
-          className="shrink-0 border-t border-border bg-card/30 max-h-[40%] overflow-y-auto"
+          className="shrink-0 border-t-2 border-border bg-muted/30 flex flex-col"
           data-testid="commit-files-panel"
+          style={{ height: "min(50%, 360px)", minHeight: "120px" }}
         >
-          <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sticky top-0 bg-card/95 backdrop-blur border-b border-border">
-            {t("git.commitFiles")}
+          <div className="shrink-0 px-3 py-2 text-xs font-semibold tracking-wide text-foreground border-b border-border flex items-center gap-2">
+            <FileEdit className="h-3.5 w-3.5 text-amber-400" />
+            <span>{t("git.commitFiles")}</span>
+            {commitFiles.length > 0 && (
+              <span className="text-muted-foreground font-normal">({commitFiles.length})</span>
+            )}
           </div>
-          {loadingFiles ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-            </div>
-          ) : commitFiles.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-muted-foreground">—</div>
-          ) : (
-            <ul>
-              {commitFiles.map((file) => (
-                <li
-                  key={file.filename}
-                  onClick={() => handleFileClick(file.filename)}
-                  className="flex items-center gap-1.5 px-3 py-1 cursor-pointer hover:bg-accent/50"
-                  data-testid="commit-file-row"
-                >
-                  <FileEdit className="h-3 w-3 shrink-0 text-amber-400" />
-                  <span className="text-xs text-foreground truncate flex-1 min-w-0">
-                    {file.filename}
-                  </span>
-                  <span className="shrink-0 text-[10px] font-mono text-emerald-400">
-                    +{file.added}
-                  </span>
-                  <span className="shrink-0 text-[10px] font-mono text-rose-400">
-                    -{file.removed}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {loadingFiles ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </div>
+            ) : commitFiles.length === 0 ? (
+              <div className="px-3 py-3 text-xs text-muted-foreground">—</div>
+            ) : (
+              <ul className="py-1">
+                {commitFiles.map((file) => (
+                  <li
+                    key={file.filename}
+                    onClick={() => handleFileClick(file.filename)}
+                    className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-accent/60 transition-colors"
+                    data-testid="commit-file-row"
+                    title={file.filename}
+                  >
+                    <FileEdit className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                    <span className="text-sm text-foreground truncate flex-1 min-w-0">
+                      {file.filename}
+                    </span>
+                    <span className="shrink-0 text-xs font-mono text-emerald-400">
+                      +{file.added}
+                    </span>
+                    <span className="shrink-0 text-xs font-mono text-rose-400">
+                      -{file.removed}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
 

@@ -513,6 +513,66 @@ describe("POST /api/git show-commit", () => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/git commit-file-content — fetches before/after content for a
+// specific file at a specific commit, used by the Monaco DiffEditor renderer
+// in the commit-diff tab (v1.3.1 refactor).
+// ---------------------------------------------------------------------------
+describe("POST /api/git commit-file-content", () => {
+  it("modified file: returns both before (parent) and after (this commit) content", async () => {
+    const req = makePost({
+      action: "commit-file-content",
+      path: showCommitRepoPath,
+      hash: showCommitHash,
+      file: "a.txt",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.before).toBe("hello from a\n");
+    expect(data.after).toBe("hello from a\nline added to a\n");
+  });
+
+  it("newly added file: before is null (didn't exist at parent), after has content", async () => {
+    const req = makePost({
+      action: "commit-file-content",
+      path: showCommitRepoPath,
+      hash: showCommitHash,
+      file: "b.txt",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.before).toBeNull();
+    expect(data.after).toBe("hello from b\n");
+  });
+
+  it("invalid hash format → 400", async () => {
+    const req = makePost({
+      action: "commit-file-content",
+      path: showCommitRepoPath,
+      hash: "not-hex",
+      file: "a.txt",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe("invalid commit hash");
+  });
+
+  it("missing file param → 400", async () => {
+    const req = makePost({
+      action: "commit-file-content",
+      path: showCommitRepoPath,
+      hash: showCommitHash,
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe("file required");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // parseBlamePorcelain unit tests (fixture-based, no real git needed)
 // ---------------------------------------------------------------------------
 describe("parseBlamePorcelain — unit", () => {

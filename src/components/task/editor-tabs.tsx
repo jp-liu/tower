@@ -11,10 +11,11 @@ export interface EditorTab {
   isDirty: boolean;
   isDiff?: boolean;
   originalContent?: string;
-  // commit-diff tab fields (v1.3.1):
+  // commit-diff tab fields (v1.3.1). Reuses `originalContent` (parent commit
+  // version) + `content` (this commit's version) — same shape as working-tree
+  // diff tabs. Rendered with Monaco DiffEditor.
   isCommitDiff?: boolean;
   commitHash?: string;
-  patch?: string;
 }
 
 export interface EditorTabsProps {

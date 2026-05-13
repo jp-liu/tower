@@ -190,14 +190,16 @@ describe("GitHistoryPanel", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Test 3: Click file fires onSelectCommitFile callback with correct args
+  // Test 3: Click file fires onSelectCommitFile with content fetched via
+  // commit-file-content action (Monaco DiffEditor refactor, v1.3.1)
   // -------------------------------------------------------------------------
-  it("clicking a file row fires onSelectCommitFile with hash, filename, and patch", async () => {
+  it("clicking a file row fires onSelectCommitFile with hash, filename, and before/after content", async () => {
     const onSelectCommitFile = vi.fn();
 
     mockGitAction
       .mockResolvedValueOnce({ commits: FAKE_COMMITS, head: null })
-      .mockResolvedValueOnce({ patch: FAKE_PATCH, files: FAKE_FILES });
+      .mockResolvedValueOnce({ patch: FAKE_PATCH, files: FAKE_FILES })
+      .mockResolvedValueOnce({ before: "old foo\n", after: "new foo\n" });
 
     renderPanel({ onSelectCommitFile });
 
@@ -215,16 +217,18 @@ describe("GitHistoryPanel", () => {
       expect(screen.getByText("src/foo.ts")).toBeInTheDocument();
     });
 
-    // Click the first file
+    // Click the first file — fires async commit-file-content fetch
     const fileRows = screen.getAllByTestId("commit-file-row");
     fireEvent.click(fileRows[0]);
 
-    expect(onSelectCommitFile).toHaveBeenCalledTimes(1);
-    const [calledHash, calledFilename, calledPatch] = onSelectCommitFile.mock.calls[0];
-    expect(calledHash).toBe("bbbbbbbbbbbbbbbbbbbbbb");
-    expect(calledFilename).toBe("src/foo.ts");
-    expect(calledPatch).toContain("diff --git");
-    expect(calledPatch).toContain("src/foo.ts");
+    await waitFor(() => {
+      expect(onSelectCommitFile).toHaveBeenCalledTimes(1);
+    });
+    const args = onSelectCommitFile.mock.calls[0][0];
+    expect(args.commitHash).toBe("bbbbbbbbbbbbbbbbbbbbbb");
+    expect(args.relativePath).toBe("src/foo.ts");
+    expect(args.originalContent).toBe("old foo\n");
+    expect(args.modifiedContent).toBe("new foo\n");
   });
 
   // -------------------------------------------------------------------------

@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { EditorTabs } from "./editor-tabs";
 import type { EditorTab } from "./editor-tabs";
 import { DiffEditorView } from "./diff-editor";
-import { DiffView } from "./diff-view";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { gitAction } from "@/lib/git-api";
 import { parseUnifiedDiff } from "@/lib/git-diff";
@@ -70,7 +69,12 @@ export interface CodeEditorProps {
   onSave?: () => void;
   selectedLine?: number | null;
   diffFileRequest?: DiffFileRequest | null;
-  commitDiffRequest?: { commitHash: string; relativePath: string; patch: string } | null;
+  commitDiffRequest?: {
+    commitHash: string;
+    relativePath: string;
+    originalContent: string;
+    modifiedContent: string;
+  } | null;
 }
 
 export function CodeEditor({
@@ -266,10 +270,12 @@ export function CodeEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diffFileRequest, worktreePath]);
 
-  // React to commitDiffRequest — open a read-only commit patch tab
+  // React to commitDiffRequest — open a read-only commit-diff tab. Renders
+  // via Monaco DiffEditor (same as working-tree diff), with original/modified
+  // content fetched server-side (git show <ref>^:<file> / git show <ref>:<file>).
   useEffect(() => {
     if (!commitDiffRequest) return;
-    const { commitHash, relativePath, patch } = commitDiffRequest;
+    const { commitHash, relativePath, originalContent, modifiedContent } = commitDiffRequest;
     const tabKey = `commit:${commitHash}:${relativePath}`;
     const filename = relativePath.split("/").pop() ?? relativePath;
     // If commit-diff tab already open, just switch to it
@@ -282,11 +288,11 @@ export function CodeEditor({
       path: tabKey,
       relativePath,
       filename,
-      content: "",
+      content: modifiedContent,
       isDirty: false,
       isCommitDiff: true,
       commitHash,
-      patch,
+      originalContent,
     };
     setTabs((prev) => (prev.some((t) => t.path === tabKey) ? prev : [...prev, newTab]));
     setActiveTabPath(tabKey);
@@ -642,14 +648,17 @@ export function CodeEditor({
         );
       })()}
 
-      {/* Commit-diff viewer — read-only patch view for commit-diff tabs.
-          Sibling to MonacoEditor (which stays hidden but alive). */}
+      {/* Commit-diff viewer — read-only Monaco DiffEditor for commit-diff tabs.
+          Uses the same component as working-tree diff. Sibling to the main
+          MonacoEditor (which stays hidden but alive). */}
       {tabs.length > 0 && activeTab?.isCommitDiff && (
-        <div className="flex-1 min-h-0 overflow-auto">
+        <div className="flex-1 min-h-0">
           <ErrorBoundary>
-            <DiffView
-              patch={activeTab.patch ?? ""}
-              language={LANG_MAP[activeTab.filename.split(".").pop() ?? ""] ?? "plaintext"}
+            <DiffEditorView
+              originalContent={activeTab.originalContent ?? ""}
+              modifiedContent={activeTab.content}
+              filePath={activeTab.relativePath}
+              readOnly
             />
           </ErrorBoundary>
         </div>

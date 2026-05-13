@@ -104,7 +104,8 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const [commitDiffRequest, setCommitDiffRequest] = useState<{
     commitHash: string;
     relativePath: string;
-    patch: string;
+    originalContent: string;
+    modifiedContent: string;
   } | null>(null);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   // Inner sub-tab inside files: filetree | search | git. Initial pick is
@@ -564,8 +565,8 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                   <TabsContent value="graph" className="flex-1 min-h-0 overflow-hidden mt-0">
                     <GitHistoryPanel
                       worktreePath={fileRootPath ?? task.project?.localPath ?? ""}
-                      onSelectCommitFile={(commitHash, relativePath, patch) => {
-                        setCommitDiffRequest({ commitHash, relativePath, patch });
+                      onSelectCommitFile={(params) => {
+                        setCommitDiffRequest(params);
                       }}
                     />
                   </TabsContent>
