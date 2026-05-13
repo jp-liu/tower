@@ -158,46 +158,46 @@ export function GitHistoryPanel({
     );
   }
 
+  // Compute graph gutter width (px) — hugs actual laneCount, capped to 192px.
+  const graphGutter = Math.min(Math.max(layout.laneCount * 16 + 16, 32), 192);
+  const expandedAt =
+    selectedHash && commitFiles.length > 0
+      ? {
+          afterRow:
+            layout.commits.find((c) => c.hash === selectedHash)?.row ?? 0,
+          extraRows: Math.ceil(
+            ((loadingFiles ? 1 : Math.max(commitFiles.length, 1)) *
+              FILE_ROW_HEIGHT) /
+              ROW_HEIGHT
+          ),
+        }
+      : null;
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Single scroll area: graph SVG + commit list (with inline file
-          expansion under the selected commit, VSCode-style). */}
+      {/* Single scroll area. Graph SVG is absolute-positioned and the commit
+          list sits underneath it; each row's `paddingLeft = graphGutter` keeps
+          text from overlapping the SVG. This is the VSCode Git Graph layout
+          — dots fuse with their row visually. */}
       <ScrollArea className="flex-1 min-h-0">
-        <div className="flex">
-          {/* Left: graph SVG column. Width hugs actual laneCount so dots stay
-              visually close to the commit subject (no big empty gap for narrow
-              graphs). Capped at 192px (12 lanes) — wider repos scroll inside. */}
+        <div className="relative">
+          {/* Graph SVG — absolute, overlays the list's left gutter. */}
           <div
-            className="flex-none overflow-x-auto scrollbar-thin"
-            style={{
-              width: `${Math.min(
-                Math.max(layout.laneCount * 16 + 16, 32),
-                192
-              )}px`,
-            }}
+            className="absolute left-0 top-0 z-10 pointer-events-none"
+            style={{ width: `${graphGutter}px` }}
           >
-            <GitGraphSvg
-              layout={layout}
-              selectedCommitHash={selectedHash}
-              onCommitClick={setSelectedHash}
-              expandedAt={
-                selectedHash && commitFiles.length > 0
-                  ? {
-                      afterRow:
-                        layout.commits.find((c) => c.hash === selectedHash)?.row ?? 0,
-                      extraRows: Math.ceil(
-                        ((loadingFiles ? 1 : Math.max(commitFiles.length, 1)) *
-                          FILE_ROW_HEIGHT) /
-                          ROW_HEIGHT
-                      ),
-                    }
-                  : null
-              }
-            />
+            <div className="pointer-events-auto overflow-x-auto scrollbar-thin" style={{ width: `${graphGutter}px` }}>
+              <GitGraphSvg
+                layout={layout}
+                selectedCommitHash={selectedHash}
+                onCommitClick={setSelectedHash}
+                expandedAt={expandedAt}
+              />
+            </div>
           </div>
 
-          {/* Right: commit list — interleaves file rows after the selected commit. */}
-          <ul className="flex-1 min-w-0">
+          {/* Commit list — full width; left padding leaves room for the SVG. */}
+          <ul className="w-full">
             {commits.map((commit) => {
               const isSelected = commit.hash === selectedHash;
               return (
@@ -208,12 +208,13 @@ export function GitHistoryPanel({
                       e.preventDefault();
                       setContextMenu({ hash: commit.hash, x: e.clientX, y: e.clientY });
                     }}
-                    className={`group relative flex items-center gap-2 px-2 cursor-pointer hover:bg-accent/50 border-l-2 ${
-                      isSelected
-                        ? "border-primary bg-accent/30"
-                        : "border-transparent"
+                    className={`group relative flex items-center gap-2 pr-2 cursor-pointer hover:bg-accent/50 ${
+                      isSelected ? "bg-accent/30" : ""
                     }`}
-                    style={{ height: `${ROW_HEIGHT}px` }}
+                    style={{
+                      height: `${ROW_HEIGHT}px`,
+                      paddingLeft: `${graphGutter + 8}px`,
+                    }}
                     data-testid="commit-row"
                     data-hash={commit.hash}
                   >
@@ -270,7 +271,10 @@ export function GitHistoryPanel({
                       directly under the selected commit's row; the SVG
                       reserves matching empty space via expandedAt. */}
                   {isSelected && (
-                    <li className="bg-accent/10 border-l-2 border-primary">
+                    <li
+                      className="bg-accent/10"
+                      style={{ paddingLeft: `${graphGutter + 8}px` }}
+                    >
                       {loadingFiles ? (
                         <div
                           className="flex items-center justify-center"
@@ -291,7 +295,7 @@ export function GitHistoryPanel({
                             <li
                               key={file.filename}
                               onClick={() => handleFileClick(file.filename)}
-                              className="flex items-center gap-1.5 pl-8 pr-3 cursor-pointer hover:bg-accent/40"
+                              className="flex items-center gap-1.5 pl-2 pr-3 cursor-pointer hover:bg-accent/40"
                               style={{ height: `${FILE_ROW_HEIGHT}px` }}
                               data-testid="commit-file-row"
                             >
