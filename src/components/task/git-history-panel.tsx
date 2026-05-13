@@ -214,28 +214,6 @@ export function GitHistoryPanel({
                     >
                       {commit.subject}
                     </span>
-                    {/* Ref badges — HEAD, branches, tags inline (was tooltip-only) */}
-                    {commit.refs.length > 0 && (
-                      <span className="flex items-center gap-1 shrink-0">
-                        {commit.refs.slice(0, 2).map((r) => (
-                          <span
-                            key={r}
-                            className="px-1.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-mono leading-4 truncate max-w-[120px]"
-                            title={r}
-                          >
-                            {r}
-                          </span>
-                        ))}
-                        {commit.refs.length > 2 && (
-                          <span
-                            className="text-[10px] text-muted-foreground font-mono"
-                            title={commit.refs.slice(2).join(", ")}
-                          >
-                            +{commit.refs.length - 2}
-                          </span>
-                        )}
-                      </span>
-                    )}
                     <span className="shrink-0 text-[10px] text-muted-foreground">
                       {formatBlameAge(commit.date)}
                     </span>

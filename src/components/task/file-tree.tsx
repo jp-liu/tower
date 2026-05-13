@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { FolderTree, AlertCircle, Folder, Search, X, FileIcon } from "lucide-react";
+import { FolderTree, AlertCircle, Folder, Search, X, FileIcon, Loader2 } from "lucide-react";
 import Fuse from "fuse.js";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -441,13 +441,21 @@ export function FileTree({
         </div>
       </div>
 
-      {/* Thin loading indicator */}
+      {/* Top "breathing" loading bar — primary color pulsing.
+          Stays visible for both initial loads and subsequent refreshes. */}
       {isLoading && (
-        <div className="h-0.5 w-full bg-primary/30 animate-pulse flex-shrink-0" />
+        <div className="h-1 w-full overflow-hidden flex-shrink-0">
+          <div className="h-full w-full bg-primary/70 animate-pulse" />
+        </div>
       )}
 
-      {/* Search results */}
-      {isSearching ? (
+      {/* Body: center spinner during initial load (nothing to show yet),
+          otherwise the tree / search results. */}
+      {isLoading && rootEntries.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center min-h-0">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : isSearching ? (
         <ScrollArea className="flex-1 min-h-0">
           <div ref={searchResultsRef} className="py-1">
             {searchResults.length === 0 ? (
