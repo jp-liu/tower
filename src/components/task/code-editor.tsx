@@ -558,7 +558,11 @@ export function CodeEditor({
 
   return (
     <div className="flex flex-col h-full overflow-hidden relative">
-      <div className="header-xs flex items-center bg-card">
+      {/* items-stretch (not items-center) so EditorTabs fills the full 36px
+          header height — otherwise the active tab's bottom border floats in
+          the vertical middle of the row instead of sitting flush with the
+          header's own bottom border. */}
+      <div className="header-xs flex items-stretch bg-card">
         <EditorTabs
           tabs={tabs}
           activeTabPath={activeTabPath}
@@ -569,7 +573,7 @@ export function CodeEditor({
           <Tooltip>
             <TooltipTrigger
               onClick={() => setHistoryOpen(true)}
-              className="shrink-0 mr-2 inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              className="self-center shrink-0 mr-2 inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
               aria-label={t("git.history")}
               data-testid="history-button"
             >
