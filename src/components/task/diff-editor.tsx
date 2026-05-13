@@ -87,6 +87,11 @@ export function DiffEditorView({
         fontFamily: '"JetBrains Mono", "Geist Mono", monospace',
         scrollBeyondLastLine: false,
         renderSideBySide: true,
+        // "line" (Monaco default) draws a 1px top+bottom border around the
+        // cursor row, leaving the content area transparent — looks like a
+        // broken/gapped highlight. "all" fills the entire row uniformly
+        // including the gutter, matching typical IDE behavior.
+        renderLineHighlight: "all",
       }}
       loading={
         <div className="flex h-full items-center justify-center bg-muted/20">
