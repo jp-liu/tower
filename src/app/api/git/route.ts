@@ -407,8 +407,13 @@ export async function POST(request: NextRequest) {
           // Format: hash | parents (space-sep) | author | date | refs | subject
           // Use ASCII unit separator (\x1f) — safe vs commit subjects which may contain pipes.
           const SEP = "\x1f";
+          // No `--all` / `--branches` — `git log` with no ref defaults to HEAD,
+          // which is the current branch's reachable history (matching what
+          // donjayamanne's gitHistoryVSCode does for its "current branch" mode).
+          // Side branches that have been merged into HEAD still appear (via
+          // merge commits' second parents); unmerged refs are correctly hidden.
           const raw = await git.raw([
-            "log", "--all",
+            "log",
             `--max-count=${limit}`,
             `--format=%H${SEP}%P${SEP}%an${SEP}%aI${SEP}%D${SEP}%s`,
           ]);
