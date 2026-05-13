@@ -442,11 +442,14 @@ export function FileTree({
       </div>
 
       {/* Top "breathing" loading bar — primary color pulsing.
-          Stays visible for both initial loads and subsequent refreshes. */}
+          Stays visible for both initial loads and subsequent refreshes.
+          Explicit inline height since the parent flex column can otherwise
+          collapse a class-only height in some sub-tab nesting contexts. */}
       {isLoading && (
-        <div className="h-1 w-full overflow-hidden flex-shrink-0">
-          <div className="h-full w-full bg-primary/70 animate-pulse" />
-        </div>
+        <div
+          className="w-full bg-primary/70 animate-pulse flex-shrink-0"
+          style={{ height: 3 }}
+        />
       )}
 
       {/* Body: center spinner during initial load (nothing to show yet),
