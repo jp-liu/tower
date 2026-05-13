@@ -495,8 +495,8 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           {/* Files tab — Phase 21+64: FileTree/Search sub-tabs + CodeEditor */}
           <TabsContent value="files" className="flex-1 min-h-0 overflow-hidden">
             <div className="flex h-full flex-row overflow-hidden">
-              {/* Left: sub-tabs for file tree vs search (240px fixed) */}
-              <div className={`${innerTab === "graph" ? "w-[480px]" : "w-60"} flex-none border-r border-border overflow-hidden flex flex-col transition-[width]`}>
+              {/* Left: sub-tabs for file tree / search / git / graph — single 280px width */}
+              <div className="w-70 flex-none border-r border-border overflow-hidden flex flex-col">
                 <Tabs value={innerTab} onValueChange={setInnerTab} className="flex h-full flex-col gap-0">
                   {/* Sub-tab bar */}
                   <div className="header-xs flex shrink-0 px-2 py-1.5">

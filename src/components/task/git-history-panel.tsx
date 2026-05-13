@@ -260,6 +260,7 @@ export function GitHistoryPanel({
                       side="right"
                       align="center"
                       sideOffset={8}
+                      hideArrow
                       className="block max-w-md p-0 text-xs bg-popover text-popover-foreground border border-border shadow-lg"
                     >
                       <div className="px-3 py-2.5 whitespace-pre-wrap break-words font-sans leading-snug text-foreground">
