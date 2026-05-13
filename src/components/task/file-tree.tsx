@@ -45,7 +45,9 @@ export function FileTree({
   const [creatingIn, setCreatingIn] = useState<{ parentPath: string; type: "file" | "folder" } | null>(null);
   const [menuState, setMenuState] = useState<{ entry: FileEntry; x: number; y: number } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<FileEntry | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  // Initialize true so the first render shows the loading state instead of
+  // briefly flashing the empty-dir short-circuit before the useEffect runs.
+  const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   // File search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -116,9 +118,13 @@ export function FileTree({
     }
   }, [worktreePath, t]);
 
-  // Initial load
+  // Initial load. Holds isLoading=true for at least MIN_LOAD_MS so the
+  // breathing top bar + center spinner are perceptible even on fast local FS
+  // (raw listDirectory often returns in 20-40 ms).
   useEffect(() => {
     if (!worktreePath) return;
+    const MIN_LOAD_MS = 350;
+    const start = Date.now();
     setIsLoading(true);
     setLoadError(false);
     setRootEntries([]);
@@ -126,7 +132,12 @@ export function FileTree({
     setExpandedPaths(new Set());
     setSelectedPath(null);
 
-    loadRoot().finally(() => setIsLoading(false));
+    loadRoot().finally(() => {
+      const elapsed = Date.now() - start;
+      const remaining = Math.max(0, MIN_LOAD_MS - elapsed);
+      if (remaining === 0) setIsLoading(false);
+      else setTimeout(() => setIsLoading(false), remaining);
+    });
 
     // Load git status — branch diff (worktree mode) or working tree status (direct mode)
     getGitStatus(worktreePath, baseBranch, worktreeBranch)
