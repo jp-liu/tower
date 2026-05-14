@@ -14,12 +14,16 @@ import { CommitActionMenu } from "./commit-action-menu";
 
 // Must match GitGraphSvg's ROW_HEIGHT constant
 const ROW_HEIGHT = 28;
-// Must match GitGraphSvg's LANE_WIDTH / SVG_PADDING_X constants
+// Must match GitGraphSvg's LANE_WIDTH / SVG_PADDING_X / DOT_RADIUS constants
 const LANE_WIDTH = 16;
 const SVG_PADDING_X = 8;
+const DOT_RADIUS = 5;
 // Graph gutter is capped to this many lanes — wider histories are clipped so
 // the commit-message column always has room.
 const MAX_GRAPH_LANES = 3;
+// Breathing room after the last visible dot, so the overflow-hidden clip lands
+// in the gap between lanes instead of slicing a dot in half.
+const GRAPH_RIGHT_PAD = 4;
 
 interface CommitFile {
   filename: string;
@@ -162,11 +166,14 @@ export function GitHistoryPanel({
     );
   }
 
-  // Compute graph gutter width (px) — hugs actual laneCount, capped to
-  // MAX_GRAPH_LANES so the commit-message column always has room.
+  // Compute graph gutter width (px) — hugs actual laneCount, capped so at most
+  // MAX_GRAPH_LANES dots show in full. The cap lands in the gap *after* the
+  // last visible dot (center + radius + pad), so overflow-hidden never slices a
+  // dot in half.
+  const lastDotCenterX = SVG_PADDING_X + (MAX_GRAPH_LANES - 1) * LANE_WIDTH + LANE_WIDTH / 2;
   const graphGutter = Math.min(
     Math.max(layout.laneCount * LANE_WIDTH + SVG_PADDING_X * 2, 2 * LANE_WIDTH),
-    MAX_GRAPH_LANES * LANE_WIDTH + SVG_PADDING_X * 2,
+    lastDotCenterX + DOT_RADIUS + GRAPH_RIGHT_PAD,
   );
 
   return (
