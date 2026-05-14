@@ -867,7 +867,6 @@ export const zh = {
   "onboarding.step4.installing": "安装中...",
   "onboarding.step4.continue": "完成",
   "onboarding.step4.continueWithoutInstall": "跳过并完成",
-  "onboarding.step4.installFailedSummary": "{count} 个扩展安装失败，可在设置中重试",
   "onboarding.stepIndicator": "步骤 {current}/{total}",
   "onboarding.welcomeCta": "创建您的第一个工作区开始使用",
   "onboarding.createWorkspace": "创建工作区",

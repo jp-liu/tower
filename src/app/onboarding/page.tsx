@@ -33,8 +33,8 @@ const TOTAL_STEPS = 4;
 
 /* ─── Right-panel ambient animation (pure CSS) ─── */
 function AmbientVisual({ step }: { step: number }) {
-  const icons = [User, Terminal, GitBranch];
-  const labels = ["Profile", "Connect", "Configure"];
+  const icons = [User, Terminal, GitBranch, Package];
+  const labels = ["Profile", "Connect", "Configure", "Extensions"];
   const Icon = icons[step - 1] ?? User;
   const label = labels[step - 1] ?? "";
 

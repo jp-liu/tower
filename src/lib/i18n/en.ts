@@ -851,7 +851,6 @@ export const en: Translations = {
   "onboarding.step4.installing": "Installing...",
   "onboarding.step4.continue": "Finish",
   "onboarding.step4.continueWithoutInstall": "Skip and finish",
-  "onboarding.step4.installFailedSummary": "{count} extension(s) failed to install — retry in Settings",
   "onboarding.stepIndicator": "Step {current}/{total}",
   "onboarding.welcomeCta": "Create your first workspace to get started",
   "onboarding.createWorkspace": "Create Workspace",
