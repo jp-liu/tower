@@ -620,6 +620,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
               </div>
             ) : diffData ? (
               <TaskDiffView
+                taskId={task.id}
                 files={diffData.files}
                 totalAdded={diffData.totalAdded}
                 totalRemoved={diffData.totalRemoved}

@@ -5,6 +5,7 @@ import { execFileSync } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import path from "path";
 import { parseDiffOutput, checkConflicts, type DiffFile } from "@/lib/diff-parser";
+import { resolveTaskDiffSource } from "@/lib/task-diff-resolver";
 
 export async function GET(
   _request: NextRequest,
@@ -36,64 +37,38 @@ export async function GET(
     const baseBranch = task.baseBranch || "main";
     const localPath = task.project.localPath;
 
+    const resolved = await resolveTaskDiffSource(parsed.data);
+    if (resolved.kind === "error") {
+      return NextResponse.json(
+        { error: resolved.message },
+        { status: resolved.status }
+      );
+    }
+    if (resolved.kind === "empty") {
+      return NextResponse.json({
+        files: [], totalAdded: 0, totalRemoved: 0,
+        hasConflicts: false, conflictFiles: [], commitCount: 0,
+      });
+    }
+    if (resolved.kind === "branch-deleted") {
+      return NextResponse.json({
+        error: "Branch deleted", branchDeleted: true,
+        files: [], totalAdded: 0, totalRemoved: 0,
+        hasConflicts: false, conflictFiles: [], commitCount: 0,
+      });
+    }
+    const { diffCwd, diffTarget } = resolved.data;
+    // Below code paths still need a few raw execution fields; refetch them.
+    // Cheap (already cached in the task row via include).
     const latestExecution = await db.taskExecution.findFirst({
       where: { taskId: parsed.data },
       orderBy: { createdAt: "desc" },
     });
-
-    if (!latestExecution) {
-      return NextResponse.json({
-        files: [], totalAdded: 0, totalRemoved: 0,
-        hasConflicts: false, conflictFiles: [], commitCount: 0,
-      });
-    }
-
-    const forkCommit = latestExecution.forkCommit;
-    const mergeCommit = latestExecution.mergeCommit;
-    const branchTipCommit = latestExecution.branchTipCommit;
-    const worktreeBranch = latestExecution.worktreeBranch;
-    const worktreePath = latestExecution.worktreePath;
-
-    let diffCwd: string;
-    let diffTarget: string;
-
-    if (mergeCommit && forkCommit) {
-      // DONE state — use branchTipCommit to show only task's own changes,
-      // falling back to mergeCommit for backward compatibility
-      diffCwd = localPath;
-      const endCommit = branchTipCommit || mergeCommit;
-      diffTarget = `${forkCommit}..${endCommit}`;
-    } else if (forkCommit && worktreePath && existsSync(worktreePath)) {
-      // IN_PROGRESS/IN_REVIEW worktree mode — diff from fork point in worktree (includes uncommitted)
-      diffCwd = worktreePath;
-      diffTarget = forkCommit;
-    } else if (forkCommit && !worktreePath) {
-      // IN_PROGRESS/IN_REVIEW direct mode — diff from fork point on main repo
-      diffCwd = localPath;
-      diffTarget = forkCommit;
-    } else if (worktreeBranch) {
-      // Fallback — use branch names to compute merge-base
-      try {
-        const mb = execFileSync(
-          "git", ["merge-base", baseBranch, worktreeBranch],
-          { cwd: localPath, encoding: "utf-8", timeout: 5000 }
-        ).trim();
-        const wtp = worktreePath && existsSync(worktreePath) ? worktreePath : localPath;
-        diffCwd = wtp;
-        diffTarget = mb;
-      } catch {
-        return NextResponse.json({
-          error: "Branch deleted", branchDeleted: true,
-          files: [], totalAdded: 0, totalRemoved: 0,
-          hasConflicts: false, conflictFiles: [], commitCount: 0,
-        });
-      }
-    } else {
-      return NextResponse.json({
-        files: [], totalAdded: 0, totalRemoved: 0,
-        hasConflicts: false, conflictFiles: [], commitCount: 0,
-      });
-    }
+    const forkCommit = latestExecution?.forkCommit ?? null;
+    const mergeCommit = latestExecution?.mergeCommit ?? null;
+    const branchTipCommit = latestExecution?.branchTipCommit ?? null;
+    const worktreeBranch = latestExecution?.worktreeBranch ?? null;
+    const worktreePath = latestExecution?.worktreePath ?? null;
 
     // Run numstat + unified diff
     const numstat = execFileSync(
