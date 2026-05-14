@@ -22,10 +22,10 @@ export function SubPageNav({ workspaceId }: SubPageNavProps) {
   const currentTab = tabs.find((tab) => pathname.includes(`/${tab.key}`))?.key;
 
   return (
-    <div className="header-sm flex items-center gap-1 px-4 py-2">
+    <div className="header-sm flex items-center gap-1 px-4">
       <Link
         href={`/workspaces/${workspaceId}`}
-        className="mr-2 flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        className="mr-2 inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         <span>{t("archive.backToBoard")}</span>
@@ -38,7 +38,7 @@ export function SubPageNav({ workspaceId }: SubPageNavProps) {
           <Link
             key={tab.key}
             href={`/workspaces/${workspaceId}/${tab.key}`}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors ${
               isActive
                 ? "bg-accent text-foreground"
                 : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"

@@ -6,10 +6,12 @@ import { ArchivePageClient } from "./archive-page-client";
 
 interface Props {
   params: Promise<{ workspaceId: string }>;
+  searchParams: Promise<{ projectId?: string }>;
 }
 
-export default async function ArchivePage({ params }: Props) {
+export default async function ArchivePage({ params, searchParams }: Props) {
   const { workspaceId } = await params;
+  const { projectId: queryProjectId } = await searchParams;
 
   const workspace = await db.workspace.findUnique({
     where: { id: workspaceId },
@@ -20,7 +22,10 @@ export default async function ArchivePage({ params }: Props) {
   const allWorkspaces = await getWorkspacesWithProjects();
 
   const currentWs = allWorkspaces.find((ws) => ws.id === workspaceId);
-  const initialProject = currentWs?.projects[0];
+  const matchedProject = queryProjectId
+    ? currentWs?.projects.find((p) => p.id === queryProjectId)
+    : undefined;
+  const initialProject = matchedProject ?? currentWs?.projects[0];
   const initialTasks = initialProject
     ? await getArchivedTasks(initialProject.id)
     : [];

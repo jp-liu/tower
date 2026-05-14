@@ -88,13 +88,19 @@ export async function search(
       take: resultLimit,
       orderBy: { updatedAt: "desc" },
     });
-    return tasks.map((t) => ({
-      id: t.id,
-      type: "task" as const,
-      title: t.title,
-      subtitle: `${t.project.workspace.name} / ${t.project.name}`,
-      navigateTo: `/workspaces/${t.project.workspaceId}?projectId=${t.projectId}`,
-    }));
+    return tasks.map((t) => {
+      const isArchived = t.status === "DONE" || t.status === "CANCELLED";
+      const wsId = t.project.workspaceId;
+      return {
+        id: t.id,
+        type: "task" as const,
+        title: t.title,
+        subtitle: `${t.project.workspace.name} / ${t.project.name}`,
+        navigateTo: isArchived
+          ? `/workspaces/${wsId}/archive?projectId=${t.projectId}`
+          : `/workspaces/${wsId}?projectId=${t.projectId}`,
+      };
+    });
   }
 
   if (category === "project") {
