@@ -21,7 +21,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { Play, RotateCcw, Search, X as XIcon } from "lucide-react";
+import { ChevronRight, Play, RotateCcw, Search, X as XIcon } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 type TaskStatus = "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED";
@@ -243,7 +243,7 @@ function FullTaskDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[70vh] flex flex-col">
+      <DialogContent className="sm:max-w-2xl max-h-[80vh]">
         <DialogHeader>
           <DialogTitle>{t("missions.fullPickerTitle")}</DialogTitle>
         </DialogHeader>
@@ -300,7 +300,7 @@ function FullTaskDialog({
             </div>
           )}
         </div>
-        <ScrollArea className="flex-1 min-h-0 -mx-2">
+        <ScrollArea className="max-h-[60vh] -mx-2">
           {isSearching ? (
             searchResults.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">
@@ -359,6 +359,7 @@ export function TaskPickerDialog({
   const [loading, setLoading] = useState(false);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
   const [fullDialogOpen, setFullDialogOpen] = useState(false);
+  const [collapsedWs, setCollapsedWs] = useState<Set<string>>(new Set());
 
   // Load data when opened
   useEffect(() => {
@@ -369,6 +370,21 @@ export function TaskPickerDialog({
       .catch(() => toast.error(t("missions.error.launchFailed")))
       .finally(() => setLoading(false));
   }, [open, t]);
+
+  // Only workspaces that have at least one project with tasks
+  const visibleWorkspaces = useMemo(
+    () => workspaces.filter((ws) => ws.projects.some((p) => p._count.tasks > 0)),
+    [workspaces]
+  );
+
+  const toggleWs = useCallback((id: string) => {
+    setCollapsedWs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   // Click-outside to close (fallback for when hover doesn't apply)
   useEffect(() => {
@@ -425,66 +441,81 @@ export function TaskPickerDialog({
       {open && (
         <div
           ref={popoverRef}
-          className="absolute right-0 z-50 mt-1 w-96 rounded-lg border border-border bg-popover shadow-xl flex flex-col overflow-hidden"
-          style={{ maxHeight: "480px" }}
+          className="absolute right-0 z-50 mt-1 grid max-h-[480px] w-96 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
         >
           {/* Header */}
-          <div className="px-3 py-2 border-b border-border shrink-0">
+          <div className="px-3 py-2 border-b border-border">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               {t("missions.pickerTitle")}
             </p>
           </div>
 
           {/* Tree list */}
-          <ScrollArea className="flex-1 min-h-0 overflow-hidden">
+          <ScrollArea>
             {loading ? (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                 Loading...
               </div>
-            ) : workspaces.length === 0 ? (
+            ) : visibleWorkspaces.length === 0 ? (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                 {t("missions.noAvailableTasks")}
               </div>
             ) : (
-              workspaces.map((ws) => (
-                <div key={ws.id}>
-                  {/* Workspace header */}
-                  <div className="sticky top-0 z-10 px-3 py-1.5 bg-popover border-b border-border/50">
-                    <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                      {ws.name}
-                    </span>
-                  </div>
+              visibleWorkspaces.map((ws) => {
+                const isCollapsed = collapsedWs.has(ws.id);
+                const visibleProjects = ws.projects.filter((p) => p._count.tasks > 0);
+                return (
+                  <div key={ws.id}>
+                    {/* Workspace header — collapsible */}
+                    <Button
+                      variant="ghost"
+                      onClick={() => toggleWs(ws.id)}
+                      className="flex h-auto w-full justify-start gap-1.5 rounded-none border-b border-border/50 px-3 py-1.5 hover:bg-accent"
+                    >
+                      <ChevronRight
+                        className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${isCollapsed ? "" : "rotate-90"}`}
+                      />
+                      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        {ws.name}
+                      </span>
+                    </Button>
 
-                  {ws.projects.map((project) => {
-                    if (project._count.tasks === 0) return null;
-                    return (
-                      <div key={project.id} className="mb-1">
-                        <div className="px-3 pt-2 pb-0.5">
-                          <span className="text-xs font-medium text-foreground">
-                            {project.alias ?? project.name}
-                          </span>
-                        </div>
-                        {project.tasks.map((task) => (
-                          <TaskRow
-                            key={task.id}
-                            task={task}
-                            isRunning={runningTaskIds.has(task.id)}
-                            launchingId={launchingId}
-                            onLaunchNew={handleLaunchNew}
-                            onResume={handleResume}
-                            t={t}
-                          />
+                    {!isCollapsed && (
+                      <div className="ml-[19px] mt-0.5 border-l border-border/50">
+                        {visibleProjects.map((project) => (
+                          <div key={project.id} className="py-0.5">
+                            {/* Project header */}
+                            <div className="pl-3 pt-1.5 pb-1">
+                              <span className="text-xs font-medium text-foreground">
+                                {project.alias ?? project.name}
+                              </span>
+                            </div>
+                            {/* Tasks */}
+                            <div className="pl-3">
+                              {project.tasks.map((task) => (
+                                <TaskRow
+                                  key={task.id}
+                                  task={task}
+                                  isRunning={runningTaskIds.has(task.id)}
+                                  launchingId={launchingId}
+                                  onLaunchNew={handleLaunchNew}
+                                  onResume={handleResume}
+                                  t={t}
+                                />
+                              ))}
+                            </div>
+                          </div>
                         ))}
                       </div>
-                    );
-                  })}
-                </div>
-              ))
+                    )}
+                  </div>
+                );
+              })
             )}
           </ScrollArea>
 
           {/* Footer — clickable to open full dialog */}
-          <div className="shrink-0 border-t border-border">
+          <div className="border-t border-border">
             <Button
               variant="ghost"
               className="w-full rounded-none text-xs text-primary font-medium"
