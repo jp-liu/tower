@@ -420,6 +420,7 @@ export function TaskDetailPanel({
             </div>
           ) : diffData ? (
             <TaskDiffView
+              taskId={task.id}
               files={diffData.files}
               totalAdded={diffData.totalAdded}
               totalRemoved={diffData.totalRemoved}
