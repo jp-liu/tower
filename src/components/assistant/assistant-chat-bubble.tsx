@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { Bot, Check, ChevronRight, Copy, FileText, ImageOff, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import type { ChatMessage } from "@/hooks/use-assistant-chat";
 import { classifyAttachmentSubPath } from "@/lib/attachment-utils";
+import { AssistantMarkdown } from "./assistant-markdown";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -183,7 +182,13 @@ function UserBubble({
 // Assistant bubble
 // ---------------------------------------------------------------------------
 
-function AssistantBubble({ content }: { content: string }) {
+function AssistantBubble({
+  content,
+  isStreaming,
+}: {
+  content: string;
+  isStreaming?: boolean;
+}) {
   return (
     <div
       className="group/bubble flex justify-start gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200"
@@ -192,38 +197,9 @@ function AssistantBubble({ content }: { content: string }) {
       <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 mt-1">
         <Bot className="size-3.5 text-primary" />
       </div>
-      <div className="max-w-[85%]">
+      <div className="max-w-[85%] min-w-0">
         <div className="bg-muted text-foreground rounded-2xl rounded-bl-sm px-3 py-2">
-          <div className="prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                code({ inline, className, children, ...props }: any) {
-                  if (inline) {
-                    return (
-                      <code
-                        className="bg-muted/80 px-1 rounded text-[13px] font-mono"
-                        {...props}
-                      >
-                        {children}
-                      </code>
-                    );
-                  }
-                  return (
-                    <code
-                      className="bg-muted rounded-md p-3 font-mono text-[13px] overflow-x-auto block"
-                      {...props}
-                    >
-                      {children}
-                    </code>
-                  );
-                },
-              }}
-            >
-              {content}
-            </ReactMarkdown>
-          </div>
+          <AssistantMarkdown content={content} isStreaming={isStreaming} />
         </div>
         {/* Action bar — visible on hover */}
         <div className="flex items-center gap-0.5 mt-0.5 opacity-0 group-hover/bubble:opacity-100 transition-opacity">
@@ -307,8 +283,8 @@ function ToolBubble({ content, toolName }: { content: string; toolName?: string 
 
         {/* Expanded body */}
         {expanded && (
-          <div className="mt-1 border-t border-border pt-1">
-            <pre className="font-mono text-[12px] max-h-[200px] overflow-y-auto whitespace-pre-wrap break-all text-muted-foreground">
+          <div className="mt-1 mb-1 rounded-md bg-background/60 border border-border/60 px-2.5 py-1.5">
+            <pre className="font-mono text-[12px] leading-relaxed max-h-[240px] overflow-auto whitespace-pre-wrap break-all text-muted-foreground">
               {content}
             </pre>
           </div>
@@ -333,7 +309,12 @@ export function AssistantChatBubble({ message, onImagePreview }: AssistantChatBu
         />
       );
     case "assistant":
-      return <AssistantBubble content={message.content} />;
+      return (
+        <AssistantBubble
+          content={message.content}
+          isStreaming={message.isStreaming}
+        />
+      );
     case "thinking":
       return <ThinkingBubble />;
     case "tool":

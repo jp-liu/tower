@@ -1,7 +1,6 @@
 "use client";
 
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Streamdown } from "streamdown";
 import { Textarea } from "@/components/ui/textarea";
 
 interface NoteEditorProps {
@@ -19,8 +18,8 @@ export function NoteEditor({ value, onChange }: NoteEditorProps) {
         placeholder="Write Markdown here..."
       />
       <div className="absolute inset-0 left-1/2 pl-2">
-        <div className="h-full overflow-y-auto border rounded-md p-3 border-border prose prose-sm dark:prose-invert max-w-none">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
+        <div className="h-full overflow-y-auto border rounded-md p-3 border-border text-sm leading-relaxed">
+          <Streamdown>{value}</Streamdown>
         </div>
       </div>
     </div>

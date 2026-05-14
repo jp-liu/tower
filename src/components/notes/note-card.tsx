@@ -1,8 +1,7 @@
 "use client";
 
 import { Pencil, Trash2 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Streamdown } from "streamdown";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 
@@ -59,8 +58,8 @@ export function NoteCard({ note, onEdit, onDelete }: NoteCardProps) {
       </span>
 
       {/* Content preview */}
-      <div className="prose prose-sm dark:prose-invert max-h-24 overflow-hidden text-muted-foreground">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{contentPreview}</ReactMarkdown>
+      <div className="max-h-24 overflow-hidden text-sm leading-relaxed text-muted-foreground">
+        <Streamdown>{contentPreview}</Streamdown>
       </div>
     </div>
   );

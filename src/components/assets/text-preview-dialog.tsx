@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Streamdown } from "streamdown";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useI18n } from "@/lib/i18n";
 
@@ -94,8 +93,8 @@ export function TextPreviewDialog({
 
     if (ext === "md") {
       return (
-        <div className="prose prose-sm dark:prose-invert max-w-none">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+        <div className="text-sm leading-relaxed">
+          <Streamdown>{content}</Streamdown>
         </div>
       );
     }
