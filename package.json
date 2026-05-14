@@ -22,6 +22,7 @@
     "scripts/generate-prisma-client.js",
     "scripts/link-prisma.js",
     "scripts/fix-native-permissions.js",
+    "scripts/post-install-banner.js",
     "scripts/migrate-data.ts",
     "scripts/post-tool-hook.js",
     "scripts/session-start-hook.js",
@@ -53,7 +54,7 @@
     "mcp": "node dist/mcp-server.cjs",
     "mcp:build": "esbuild src/mcp/index.ts --bundle --platform=node --target=node18 --format=cjs --outfile=dist/mcp-server.cjs --external:@prisma/client --external:@modelcontextprotocol/sdk --external:@opentelemetry/api --alias:@=./src",
     "mcp:dev": "tsx src/mcp/index.ts",
-    "postinstall": "node scripts/generate-prisma-client.js && node scripts/link-prisma.js && node scripts/fix-native-permissions.js"
+    "postinstall": "node scripts/generate-prisma-client.js && node scripts/link-prisma.js && node scripts/fix-native-permissions.js && node scripts/post-install-banner.js"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
