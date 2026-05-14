@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { loader } from "@monaco-editor/react";
 import { useTheme } from "next-themes";
+import { normalizeLF } from "@/lib/git-diff";
 
 // Load Monaco from local public/vs (copied from node_modules by postinstall script)
 loader.config({
@@ -65,8 +66,8 @@ export function DiffEditorView({
     <MonacoDiffEditor
       height="100%"
       theme={monacoTheme}
-      original={originalContent}
-      modified={modifiedContent}
+      original={normalizeLF(originalContent)}
+      modified={normalizeLF(modifiedContent)}
       language={lang}
       onMount={(editor) => {
         editorRef.current = editor;
@@ -86,6 +87,22 @@ export function DiffEditorView({
         fontFamily: '"JetBrains Mono", "Geist Mono", monospace',
         scrollBeyondLastLine: false,
         renderSideBySide: true,
+        // "line" (Monaco default) draws a 1px top+bottom border around the
+        // cursor row, leaving the content area transparent — looks like a
+        // broken/gapped highlight. "all" fills the entire row uniformly
+        // including the gutter, matching typical IDE behavior.
+        renderLineHighlight: "all",
+        // Collapse unchanged regions to small "N hidden lines" placeholders
+        // (VSCode SCM-diff behavior). Without this Monaco scrolls through
+        // every untouched line — for a long file with a small edit at the
+        // bottom, the user has to scroll through hundreds of unchanged
+        // lines to find the change.
+        hideUnchangedRegions: {
+          enabled: true,
+          contextLineCount: 3,
+          minimumLineCount: 3,
+          revealLineCount: 20,
+        },
       }}
       loading={
         <div className="flex h-full items-center justify-center bg-muted/20">

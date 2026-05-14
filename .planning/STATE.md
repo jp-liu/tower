@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.1
-milestone_name: milestone
-status: executing
-stopped_at: Completed 70-03-PLAN.md (ImageLightbox zoom/pan/nav)
-last_updated: "2026-05-08T14:37:53.768Z"
-last_activity: 2026-05-08 -- Phase next execution started
+milestone: post-v1.2
+milestone_name: (between milestones)
+status: planning
+stopped_at: v1.2 archived 2026-05-09 — ready for next milestone
+last_updated: "2026-05-09T15:00:00.000Z"
+last_activity: 2026-05-09
 progress:
   total_phases: 0
   completed_phases: 0
@@ -19,27 +19,19 @@ progress:
 ## Project Reference
 
 ROADMAP: .planning/ROADMAP.md
-REQUIREMENTS: .planning/REQUIREMENTS.md
-Last shipped: v1.0 (2026-04-23, archived 2026-05-08)
+Last shipped: v1.2 (2026-05-09, archived)
 
 **Core value:** Users can organize, track, and execute AI-assisted tasks through a visual Kanban board with direct AI agent integration, backed by a per-project knowledge base.
-**Current focus:** Phase next — Planning next milestone
+**Current focus:** Between milestones — pending v1.3 scope decision
 
 ## Current Position
 
-Phase: next (Planning next milestone) — EXECUTING
-Plan: 1 of ?
-Status: Executing Phase next
-Last activity: 2026-05-08 -- Phase next execution started
+Phase: — (between milestones)
+Plan: —
+Status: v1.2 archived; awaiting v1.3 milestone scope
+Last activity: 2026-05-09 — v1.2 milestone archived
 
-Progress: [░░░░░░░░░░] 0% (0/2 phases)
-
-## Phase Overview
-
-| Phase | Name | Requirements | Status |
-|------:|------|--------------|--------|
-| 69 | Detail Page Reliability | RELI-01..05 | 📋 Not started |
-| 70 | Task Discovery & Image Preview | DISC-01..04, IMG-01..03 | 📋 Not started |
+Progress: [░░░░░░░░░░] 0%
 
 ## Milestone History
 
@@ -47,7 +39,8 @@ Progress: [░░░░░░░░░░] 0% (0/2 phases)
 |-----------|-------:|--------|
 | v0.1 — v0.97 | 1-64 | ✅ shipped (see ROADMAP) |
 | v1.0 — 首次使用引导 & 任务完成通知 | 65-68 | ✅ shipped 2026-04-23 |
-| v1.1 — Detail Page Reliability & Discovery | 69-70 | 🚧 in planning |
+| v1.1 — Detail Page Reliability & Discovery | 69-70 | ✅ shipped 2026-05-08 |
+| v1.2 — Extensions & Slim Distribution | 71-73 | ✅ shipped 2026-05-09 |
 
 ## Accumulated Context
 
@@ -55,28 +48,29 @@ Progress: [░░░░░░░░░░] 0% (0/2 phases)
 
 - v1.0 milestone artifacts kept local-only — `.planning/` is gitignored since `dbaf04d` (2026-04-22)
 - Only `.planning/ROADMAP.md` and `.planning/STATE.md` are git-tracked
-- v1.1 splits stability (Phase 69) from discovery/UX (Phase 70) — easy to parallelize and verify independently
-- Git robustness deliberately deferred to v1.2 (separate milestone) — keeps v1.1 scope tight
-- No PROJECT.md created — project's existing convention skips it
-- [Phase 69]: Plan 69-01: readFileContent now returns FileReadResult union (text/oversized/binary); readFileContentForce companion bypasses guards. Default limit 5 MiB via system.maxReadableFileBytes.
-- [Phase 69]: Plan 69-02: file-tree + code-editor silent .catch() blocks replaced with sonner toast.error; retry action only on read/list ops; oversized/binary files render placeholder card with same-tab force-open via readFileContentForce.
-- [Phase 69-detail-page-reliability]: Plan 69-03: searchCode now reads search.codeTimeoutSec config (default 30s) and accepts an AbortSignal; rg failures are categorized into 5 SearchErrorKind values; UI shows a Cancel button + truncated/expandable error banner driven by errorKind.
-- [Phase 69]: Plan 69-04: Settings UI now exposes system.maxReadableFileBytes (System card, MB) and search.codeTimeoutSec (Search card, s); per-card Save buttons persist values, getConfigValues hydrates on mount, live consumers pick up new values without restart.
-- [Phase 70]: Plan 70-01: Archive cards now clickable -> open TaskOverviewDrawer; drawer reads gitStats JSON for file-changes summary; primary 'Rerun task' Button fires startPtyExecution + sonner toast (no confirm dialog)
-- [Phase 70]: Plan 70-02: Quick picker bumped to 5 recent tasks; FullTaskDialog gains memoized Fuse.js fuzzy search (threshold 0.4, distance 200, limit 30) over flattened active tasks across all workspaces; isSearching toggle replaces Selects view with results panel reusing TaskRow + workspace · project context label
-- [Phase 70]: Plan 70-03: ImageLightbox rewritten with fit/100% zoom toggle (centered both modes), pointer-event drag-pan via translate3d (no clamping; reset on toggle/nav), prev/next via chevrons + ←/→ keys; backwards-compatible optional props (assets/currentIndex/onIndexChange) so existing single-image callers work unchanged
+- v1.1: stability + discovery split (Phase 69-70); 12 manual UAT items deferred to HUMAN-UAT.md
+- v1.2: established **Extension abstraction** (registry + check/install/uninstall + hooks) for ripgrep + Monaco. First milestone executed via superpowers TDD (writing-plans + subagent-driven-development) instead of GSD; plans live at docs/superpowers/plans/
+- v1.2 spec deltas accepted:
+  - **ONBD-EXT-04 partial**: failure list persisted via `requested - completed` set difference; `onboarding.extensions.failed` flag + deferred toast NOT built (failures visible in Settings instead)
+- v1.2 follow-ups for v1.3:
+  - Build & Distribution slimming (originally Phase 74) — deferred to dedicated milestone
+  - AmbientVisual icons/labels arrays missing step 4 (cosmetic)
+  - `onboarding.step4.installFailedSummary` defined but unused (wire or delete)
+  - Pre-existing test failures (instrumentation, task-tools) accumulated since v0.95-v1.0 — needs cleanup pass
 
 ### Pending Todos
 
+- v1.3 scope discussion (likely: Build & Distribution slimming + cleanup pass for pre-existing test failures)
 - Preview 功能需求梳理（前端项目启动 + iframe 预览，独立里程碑）
 - Weekly knowledge digest 工具（`.notes/todo-weekly-knowledge-digest.md`）
+- Git robustness（stash / undo / 推送重试 / 冲突标记 / fetch 可见）— 仍待立项
 
 ### Blockers/Concerns
 
-- None
+- Workspace 仍有 11 个未提交修改 + 6 个新文件（AI provider / MCP migration），跟 v1.2 无关，长期占着工作区
 
 ## Session Continuity
 
-Last session: 2026-05-08T14:21:27.897Z
-Stopped at: Completed 70-03-PLAN.md (ImageLightbox zoom/pan/nav)
+Last session: 2026-05-09T15:00:00.000Z
+Stopped at: v1.2 archived 2026-05-09
 Resume file: None

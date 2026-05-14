@@ -18,8 +18,35 @@
 - ✅ **v0.97 Workflow Enhancement & Developer Experience** — Phases 61-64 (shipped 2026-04-21)
 - ✅ **v1.0 首次使用引导 & 任务完成通知** — Phases 65-68 (shipped 2026-04-23)
 - ✅ **v1.1 Detail Page Reliability & Discovery** — Phases 69-70 (shipped 2026-05-08)
+- ✅ **v1.2 Extensions & Slim Distribution** — Phases 71-73 (shipped 2026-05-09)
+- ✅ **v1.3 Detail Page VSCode-like Git UX & Reliability** — 5 phases / 13 tasks (shipped 2026-05-11)
+- ✅ **v1.3.1 Git History Graph + Commit Context Menu** — 6 phases / 11 tasks (shipped 2026-05-11)
 
 ## Phases
+
+<details>
+<summary>✅ v1.3 Detail Page VSCode-like Git UX & Reliability (5 phases, 13 tasks) — SHIPPED 2026-05-11</summary>
+
+Single-plan milestone via superpowers writing-plans + subagent-driven-development. ~60 new tests added. Plan: [docs/superpowers/plans/2026-05-11-detail-page-vscode-git.md](../docs/superpowers/plans/2026-05-11-detail-page-vscode-git.md).
+
+- [x] **Phase 1: Critical Bug Fixes** — first-tab Monaco highlight race (P1-T1), Windows DiffEditor CRLF (P1-T2), large-diff page crash via 500-line truncation (P1-T3)
+- [x] **Phase 2: Virtualized Diff Viewer** — `@git-diff-view/react` + `parse-diff` (P2-T4), `DiffView` component with per-hunk callbacks (P2-T5), `TaskDiffView` body swap (P2-T6)
+- [x] **Phase 3: Hunk-level Stage / Discard** — server `diff-file` / `stage-hunk` / `discard-hunk` POST actions backed by `git apply --cached` and `git apply -R` (P3-T7), hunk menu in `EditorGitPanel` opens dialog with per-hunk Stage / Discard buttons (P3-T9)
+- [x] **Phase 4: Monaco Gutter Decorations** — `monaco-gutter.ts` library with WeakMap-tracked idempotent `applyGutterDecorations` (P4-T10), wired into `CodeEditor` via 300ms-debounced effect keyed on `gutterTick` save signal (P4-T11)
+- [x] **Phase 5: File History + Blame** — `log-file` POST + `FileHistoryPanel` dialog opened via Clock toolbar button (P5-T12), `blame` POST with porcelain parser + `BlameList` dialog opened via User toolbar button (P5-T13)
+
+</details>
+
+<details>
+<summary>✅ v1.2 Extensions & Slim Distribution (Phases 71-73) — SHIPPED 2026-05-09</summary>
+
+- [x] Phase 71: Extension Detection & Wiring (12 tasks) — completed 2026-05-09
+- [x] Phase 72: Extensions Settings Tab (7 tasks) — completed 2026-05-09
+- [x] Phase 73: Onboarding Integration (6 tasks) — completed 2026-05-09
+
+See: [milestones/v1.2-ROADMAP.md](./milestones/v1.2-ROADMAP.md) for full details.
+
+</details>
 
 <details>
 <summary>✅ v1.1 Detail Page Reliability & Discovery (Phases 69-70) — SHIPPED 2026-05-08</summary>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { FolderTree, AlertCircle, Folder, Search, X, FileIcon } from "lucide-react";
+import { FolderTree, AlertCircle, Folder, Search, X, FileIcon, Loader2 } from "lucide-react";
 import Fuse from "fuse.js";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -45,7 +45,9 @@ export function FileTree({
   const [creatingIn, setCreatingIn] = useState<{ parentPath: string; type: "file" | "folder" } | null>(null);
   const [menuState, setMenuState] = useState<{ entry: FileEntry; x: number; y: number } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<FileEntry | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  // Initialize true so the first render shows the loading state instead of
+  // briefly flashing the empty-dir short-circuit before the useEffect runs.
+  const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   // File search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -116,9 +118,13 @@ export function FileTree({
     }
   }, [worktreePath, t]);
 
-  // Initial load
+  // Initial load. Holds isLoading=true for at least MIN_LOAD_MS so the
+  // breathing top bar + center spinner are perceptible even on fast local FS
+  // (raw listDirectory often returns in 20-40 ms).
   useEffect(() => {
     if (!worktreePath) return;
+    const MIN_LOAD_MS = 350;
+    const start = Date.now();
     setIsLoading(true);
     setLoadError(false);
     setRootEntries([]);
@@ -126,7 +132,12 @@ export function FileTree({
     setExpandedPaths(new Set());
     setSelectedPath(null);
 
-    loadRoot().finally(() => setIsLoading(false));
+    loadRoot().finally(() => {
+      const elapsed = Date.now() - start;
+      const remaining = Math.max(0, MIN_LOAD_MS - elapsed);
+      if (remaining === 0) setIsLoading(false);
+      else setTimeout(() => setIsLoading(false), remaining);
+    });
 
     // Load git status — branch diff (worktree mode) or working tree status (direct mode)
     getGitStatus(worktreePath, baseBranch, worktreeBranch)
@@ -441,13 +452,24 @@ export function FileTree({
         </div>
       </div>
 
-      {/* Thin loading indicator */}
+      {/* Top "breathing" loading bar — primary color pulsing.
+          Stays visible for both initial loads and subsequent refreshes.
+          Explicit inline height since the parent flex column can otherwise
+          collapse a class-only height in some sub-tab nesting contexts. */}
       {isLoading && (
-        <div className="h-0.5 w-full bg-primary/30 animate-pulse flex-shrink-0" />
+        <div
+          className="w-full bg-primary/70 animate-pulse flex-shrink-0"
+          style={{ height: 3 }}
+        />
       )}
 
-      {/* Search results */}
-      {isSearching ? (
+      {/* Body: center spinner during initial load (nothing to show yet),
+          otherwise the tree / search results. */}
+      {isLoading && rootEntries.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center min-h-0">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : isSearching ? (
         <ScrollArea className="flex-1 min-h-0">
           <div ref={searchResultsRef} className="py-1">
             {searchResults.length === 0 ? (

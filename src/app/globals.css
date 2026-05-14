@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "@git-diff-view/react/styles/diff-view.css";
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -244,4 +245,35 @@
 }
 ::view-transition-new(root) {
   z-index: 9999;
+}
+
+/* ─── Monaco gutter decorations (linesDecorationsClassName) ─── */
+/* Applied via applyGutterDecorations() in src/lib/monaco-gutter.ts.        */
+/* Class names match the template literal `line-${kind}` (add/modify/delete). */
+.line-add {
+  background: rgba(74, 222, 128, 0.65) !important;
+  width: 3px !important;
+  margin-left: 3px;
+}
+.line-modify {
+  background: rgba(96, 165, 250, 0.65) !important;
+  width: 3px !important;
+  margin-left: 3px;
+}
+.line-delete {
+  background: rgba(248, 113, 113, 0.65) !important;
+  width: 3px !important;
+  margin-left: 3px;
+  height: 6px !important;
+  margin-top: -3px;
+}
+
+/* ─── Inline blame annotation (VSCode/GitLens-style after-text) ─── */
+/* Applied via Monaco deltaDecorations after-content in code-editor.tsx. */
+.blame-inline-annotation {
+  color: rgba(160, 160, 160, 0.55) !important;
+  font-style: italic;
+  font-weight: normal;
+  margin-left: 1.5rem;
+  pointer-events: none;
 }

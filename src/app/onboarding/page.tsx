@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { CLIAdapterTester } from "@/components/settings/cli-adapter-tester";
 import { useI18n } from "@/lib/i18n";
-import { completeOnboarding } from "@/actions/onboarding-actions";
 import { setConfigValue } from "@/actions/config-actions";
 import type { Locale } from "@/lib/i18n";
 import type { TestResult } from "@/lib/cli-test";
@@ -17,6 +16,7 @@ import {
   User,
   Terminal,
   GitBranch,
+  Package,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -27,13 +27,14 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import { WizardStepExtensions } from "./wizard-step-extensions";
 
-const TOTAL_STEPS = 3;
+const TOTAL_STEPS = 4;
 
 /* ─── Right-panel ambient animation (pure CSS) ─── */
 function AmbientVisual({ step }: { step: number }) {
-  const icons = [User, Terminal, GitBranch];
-  const labels = ["Profile", "Connect", "Configure"];
+  const icons = [User, Terminal, GitBranch, Package];
+  const labels = ["Profile", "Connect", "Configure", "Extensions"];
   const Icon = icons[step - 1] ?? User;
   const label = labels[step - 1] ?? "";
 
@@ -195,9 +196,6 @@ export default function OnboardingPage() {
   const [previewIdx, setPreviewIdx] = useState(0);
   const [useFullPath, setUseFullPath] = useState(false);
 
-  // Completion state
-  const [completing, setCompleting] = useState(false);
-
   useEffect(() => setMounted(true), []);
 
   const themeOptions = [
@@ -241,25 +239,11 @@ export default function OnboardingPage() {
     setGitRules((prev) => prev.filter((r) => r.id !== id));
   }
 
-  async function handleComplete() {
-    setCompleting(true);
-    try {
-      // Save git rules if any
-      if (gitRules.length > 0) {
-        await setConfigValue("git.pathMappingRules", gitRules);
-      }
-      await completeOnboarding(username.trim());
-      // Use replace to avoid back-button returning to onboarding
-      router.replace("/workspaces");
-    } catch {
-      setCompleting(false);
-    }
-  }
-
   const stepIcons = [
     { icon: User, label: t("onboarding.step1.title") },
     { icon: Terminal, label: t("onboarding.step2.title") },
     { icon: GitBranch, label: t("onboarding.step3.title") },
+    { icon: Package, label: t("onboarding.step4.title") },
   ];
 
   return (
@@ -605,12 +589,28 @@ export default function OnboardingPage() {
                     <ChevronLeft className="h-4 w-4 mr-1" />
                     {t("onboarding.back")}
                   </Button>
-                  <Button onClick={handleComplete} disabled={completing} className="px-5">
-                    {t("onboarding.complete")}
-                    <Check className="h-4 w-4 ml-1" />
+                  <Button
+                    onClick={async () => {
+                      if (gitRules.length > 0) {
+                        await setConfigValue("git.pathMappingRules", gitRules);
+                      }
+                      setStep((s) => s + 1);
+                    }}
+                    className="px-5"
+                  >
+                    {t("onboarding.step1.next")}
+                    <ChevronRight className="h-4 w-4 ml-1" />
                   </Button>
                 </div>
               </div>
+            )}
+
+            {/* ─── Step 4: Extensions ─── */}
+            {step === 4 && (
+              <WizardStepExtensions
+                username={username}
+                onComplete={() => router.replace("/workspaces")}
+              />
             )}
         </div>
 

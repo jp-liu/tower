@@ -6,13 +6,22 @@ import { loader } from "@monaco-editor/react";
 import { useTheme } from "next-themes";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
-import { FileWarning, FileX } from "lucide-react";
+import { FileWarning, FileX, Clock } from "lucide-react";
 import { readFileContent, writeFileContent, readFileContentForce } from "@/actions/file-actions";
 import { Button } from "@/components/ui/button";
 import { EditorTabs } from "./editor-tabs";
 import type { EditorTab } from "./editor-tabs";
 import { DiffEditorView } from "./diff-editor";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { gitAction } from "@/lib/git-api";
+import { parseUnifiedDiff } from "@/lib/git-diff";
+import { applyGutterDecorations, chunksToGutterHunks } from "@/lib/monaco-gutter";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { FileHistoryPanel } from "./file-history-panel";
+import { type BlameLine, formatBlameAge } from "./blame-overlay";
 
 type GuardInfo =
   | { kind: "oversized"; size: number; limit: number }
@@ -60,6 +69,12 @@ export interface CodeEditorProps {
   onSave?: () => void;
   selectedLine?: number | null;
   diffFileRequest?: DiffFileRequest | null;
+  commitDiffRequest?: {
+    commitHash: string;
+    relativePath: string;
+    originalContent: string;
+    modifiedContent: string;
+  } | null;
 }
 
 export function CodeEditor({
@@ -69,6 +84,7 @@ export function CodeEditor({
   onSave,
   selectedLine,
   diffFileRequest,
+  commitDiffRequest,
 }: CodeEditorProps) {
   const { t } = useI18n();
   const { resolvedTheme } = useTheme();
@@ -77,6 +93,9 @@ export function CodeEditor({
   const [tabs, setTabs] = useState<EditorTab[]>([]);
   const [guardByPath, setGuardByPath] = useState<Map<string, GuardInfo>>(new Map());
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
+  const [monacoReady, setMonacoReady] = useState(false);
+  const [gutterTick, setGutterTick] = useState(0);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const editorRef = useRef<unknown>(null);
   const monacoRef = useRef<unknown>(null);
   const modelsRef = useRef<Map<string, unknown>>(new Map());
@@ -84,6 +103,9 @@ export function CodeEditor({
   const activeTabPathRef = useRef<string | null>(null);
   const onSaveRef = useRef<(() => void) | undefined>(undefined);
   const latestFilePathRef = useRef<string | null>(null);
+  // Inline blame: cache per-tab line data + track current decoration IDs
+  const blameByTabRef = useRef<Map<string, BlameLine[]>>(new Map());
+  const blameDecorationsRef = useRef<string[]>([]);
 
   // Dispose all Monaco models on unmount to prevent memory leaks
   useEffect(() => {
@@ -248,6 +270,35 @@ export function CodeEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diffFileRequest, worktreePath]);
 
+  // React to commitDiffRequest — open a read-only commit-diff tab. Renders
+  // via Monaco DiffEditor (same as working-tree diff), with original/modified
+  // content fetched server-side (git show <ref>^:<file> / git show <ref>:<file>).
+  useEffect(() => {
+    if (!commitDiffRequest) return;
+    const { commitHash, relativePath, originalContent, modifiedContent } = commitDiffRequest;
+    const tabKey = `commit:${commitHash}:${relativePath}`;
+    const filename = relativePath.split("/").pop() ?? relativePath;
+    // If commit-diff tab already open, just switch to it
+    const existing = tabs.find((t) => t.path === tabKey);
+    if (existing) {
+      setActiveTabPath(tabKey);
+      return;
+    }
+    const newTab: EditorTab = {
+      path: tabKey,
+      relativePath,
+      filename,
+      content: modifiedContent,
+      isDirty: false,
+      isCommitDiff: true,
+      commitHash,
+      originalContent,
+    };
+    setTabs((prev) => (prev.some((t) => t.path === tabKey) ? prev : [...prev, newTab]));
+    setActiveTabPath(tabKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commitDiffRequest]);
+
   // Scroll Monaco to selectedLine when it changes (or active tab changes)
   useEffect(() => {
     if (!selectedLine || !editorRef.current) return;
@@ -283,11 +334,24 @@ export function CodeEditor({
 
     const tab = tabs.find((t) => t.path === activeTabPath);
     if (!tab) return;
+    // Diff tabs are rendered via <DiffEditorView> with its own Monaco instance.
+    // Don't touch the main editor's model for them (URI like "file://diff:..."
+    // would also be malformed and could throw on Uri.parse / createModel).
+    if (tab.isDiff) return;
+    // Commit-diff tabs are rendered via <DiffView> — no Monaco model needed.
+    if (tab.isCommitDiff) return;
 
     const uri = monaco.Uri.parse("file://" + tab.path);
     let model = modelsRef.current.get(tab.path) as
-      | { getValue: () => string; setValue: (v: string) => void }
+      | { getValue: () => string; setValue: (v: string) => void; isDisposed?: () => boolean }
       | undefined;
+    // Defensive: if the cached model was disposed by Monaco (e.g. an unexpected
+    // editor remount without keepCurrentModel), evict and recreate. Otherwise
+    // setModel(disposedModel) throws "Model is disposed!" from Monaco.
+    if (model && model.isDisposed?.()) {
+      modelsRef.current.delete(tab.path);
+      model = undefined;
+    }
     if (!model) {
       const ext = tab.filename.split(".").pop() ?? "";
       const lang = LANG_MAP[ext] ?? "plaintext";
@@ -299,7 +363,105 @@ export function CodeEditor({
       model.setValue(tab.content);
     }
     editor.setModel(model);
-  }, [activeTabPath, tabs]);
+  }, [activeTabPath, tabs, monacoReady]);
+
+  // Fetch git diff and apply VSCode-style gutter decorations.
+  // Deps: activeTabPath, monacoReady, gutterTick, worktreePath.
+  // Intentionally excludes `tabs` to avoid re-firing on every keystroke;
+  // activeTabRef.current is kept in sync by a separate effect above.
+  useEffect(() => {
+    if (!monacoReady || !activeTabPath || !worktreePath) return;
+    const activeTab = activeTabRef.current;
+    if (!activeTab || activeTab.isDiff || activeTab.isCommitDiff) return; // skip diff/commit-diff tabs
+
+    const handle = setTimeout(async () => {
+      try {
+        const res = await gitAction(worktreePath, "diff-file", { file: activeTab.relativePath });
+        const patch = (res as { patch?: string }).patch ?? "";
+        if (!patch) return; // file not tracked or no changes
+        const files = parseUnifiedDiff(patch);
+        const hunks = chunksToGutterHunks(files[0]?.chunks ?? []);
+        const ed = editorRef.current as Parameters<typeof applyGutterDecorations>[0] | null;
+        const m = monacoRef.current as Parameters<typeof applyGutterDecorations>[1] | null;
+        if (ed && m) applyGutterDecorations(ed, m, hunks);
+      } catch {
+        // file may not be in a git repo, or worktree gone — silently ignore
+      }
+    }, 300);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTabPath, monacoReady, gutterTick, worktreePath]);
+
+  // Inline blame: fetch per-file blame data on tab activation, cache it,
+  // and apply the after-line annotation on the current cursor line.
+  // Uses the same passive "fail silent if not in git" pattern as the gutter.
+  const updateBlameAnnotation = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    if (!monacoReady || !activeTabPath || !worktreePath) return;
+    const activeTab = activeTabRef.current;
+    if (!activeTab || activeTab.isDiff || activeTab.isCommitDiff) return;
+
+    const tabPath = activeTab.path;
+    const relativePath = activeTab.relativePath;
+
+    const applyForCurrentLine = () => {
+      const ed = editorRef.current as {
+        getPosition: () => { lineNumber: number; column: number } | null;
+        deltaDecorations: (oldIds: string[], next: unknown[]) => string[];
+      } | null;
+      const m = monacoRef.current as { Range: new (a: number, b: number, c: number, d: number) => unknown } | null;
+      if (!ed || !m) return;
+      const blame = blameByTabRef.current.get(tabPath);
+      const pos = ed.getPosition();
+      if (!blame || !pos) {
+        blameDecorationsRef.current = ed.deltaDecorations(blameDecorationsRef.current, []);
+        return;
+      }
+      const entry = blame.find((b) => b.line === pos.lineNumber);
+      if (!entry) {
+        blameDecorationsRef.current = ed.deltaDecorations(blameDecorationsRef.current, []);
+        return;
+      }
+      // Uncommitted line (sha is all zeros) — skip annotation
+      if (/^0+$/.test(entry.sha)) {
+        blameDecorationsRef.current = ed.deltaDecorations(blameDecorationsRef.current, []);
+        return;
+      }
+      const age = formatBlameAge(entry.date);
+      const text = `   ${entry.author}, ${age} · ${entry.summary}`.replace(/\n/g, " ");
+      blameDecorationsRef.current = ed.deltaDecorations(blameDecorationsRef.current, [
+        {
+          range: new m.Range(pos.lineNumber, 1, pos.lineNumber, 1),
+          options: {
+            after: {
+              content: text,
+              inlineClassName: "blame-inline-annotation",
+            },
+          },
+        },
+      ]);
+    };
+    updateBlameAnnotation.current = applyForCurrentLine;
+
+    if (blameByTabRef.current.has(tabPath)) {
+      applyForCurrentLine();
+      return;
+    }
+    let cancelled = false;
+    gitAction(worktreePath, "blame", { file: relativePath })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res as { lines?: BlameLine[] };
+        blameByTabRef.current.set(tabPath, data.lines ?? []);
+        applyForCurrentLine();
+      })
+      .catch(() => {
+        if (cancelled) return;
+        blameByTabRef.current.set(tabPath, []);
+      });
+    return () => { cancelled = true; };
+  }, [activeTabPath, monacoReady, worktreePath]);
 
   function handleEditorMount(editor: unknown, monaco: unknown) {
     editorRef.current = editor;
@@ -328,6 +490,7 @@ export function CodeEditor({
             tt.path === tab.path ? { ...tt, isDirty: false } : tt
           )
         );
+        setGutterTick((t) => t + 1);
         toast.success(t("editor.saveSuccess"));
         onSaveRef.current?.();
       } catch {
@@ -343,6 +506,17 @@ export function CodeEditor({
       keybindings: [m.KeyMod.CtrlCmd | m.KeyCode.KeyS],
       run: saveActiveTab,
     });
+
+    // Inline blame: redraw the after-line annotation whenever the cursor moves.
+    // Optional chaining for the test mock which doesn't expose this listener.
+    const cursorAware = editor as {
+      onDidChangeCursorPosition?: (cb: () => void) => void;
+    };
+    cursorAware.onDidChangeCursorPosition?.(() => {
+      updateBlameAnnotation.current();
+    });
+
+    setMonacoReady(true);
   }
 
   function handleTabClick(path: string) {
@@ -379,17 +553,39 @@ export function CodeEditor({
   }
 
   const activeTab = tabs.find((t) => t.path === activeTabPath);
+  // Show History button only when a regular (non-diff, non-commit-diff) editable tab is active
+  const showHistoryButton = activeTab !== undefined && !activeTab.isDiff && !activeTab.isCommitDiff;
 
   return (
     <div className="flex flex-col h-full overflow-hidden relative">
-      <EditorTabs
-        tabs={tabs}
-        activeTabPath={activeTabPath}
-        onTabClick={handleTabClick}
-        onTabClose={handleTabClose}
-      />
+      {/* items-stretch (not items-center) so EditorTabs fills the full 36px
+          header height — otherwise the active tab's bottom border floats in
+          the vertical middle of the row instead of sitting flush with the
+          header's own bottom border. */}
+      <div className="header-xs flex items-stretch bg-card">
+        <EditorTabs
+          tabs={tabs}
+          activeTabPath={activeTabPath}
+          onTabClick={handleTabClick}
+          onTabClose={handleTabClose}
+        />
+        {showHistoryButton && (
+          <Tooltip>
+            <TooltipTrigger
+              onClick={() => setHistoryOpen(true)}
+              className="self-center shrink-0 mr-2 inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              aria-label={t("git.history")}
+              data-testid="history-button"
+            >
+              <Clock className="h-3.5 w-3.5" />
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t("git.history")}</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
 
-      {tabs.length === 0 ? (
+      {/* Empty state — only when no tabs exist */}
+      {tabs.length === 0 && (
         <div className="flex h-full flex-col items-center justify-center text-center">
           <p className="text-sm text-muted-foreground">
             {t("editor.selectFile")}
@@ -398,66 +594,84 @@ export function CodeEditor({
             {t("editor.selectFileHint")}
           </p>
         </div>
-      ) : activeTab && guardByPath.has(activeTab.path) ? (
-        (() => {
-          const guard = guardByPath.get(activeTab.path)!;
-          const isOversized = guard.kind === "oversized";
-          const Icon = isOversized ? FileWarning : FileX;
-          const title = t(
-            isOversized
-              ? "codeEditor.fileGuard.oversizedTitle"
-              : "codeEditor.fileGuard.binaryTitle"
-          );
-          const sizeStr = `${(guard.size / 1024 / 1024).toFixed(2)} MB`;
-          const limitStr = isOversized
-            ? `${(guard.limit / 1024 / 1024).toFixed(2)} MB`
-            : "";
-          const desc = t(
-            isOversized
-              ? "codeEditor.fileGuard.oversizedBody"
-              : "codeEditor.fileGuard.binaryBody"
-          )
-            .replace("{size}", sizeStr)
-            .replace("{limit}", limitStr);
+      )}
 
-          return (
-            <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
-              <Icon className="h-10 w-10 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium text-foreground">{title}</p>
-                <p className="mt-1 text-xs text-muted-foreground max-w-[360px]">{desc}</p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  toast.warning(t("codeEditor.fileGuard.forceOpenWarning"));
-                  readFileContentForce(worktreePath, activeTab.relativePath)
-                    .then(({ content }) => {
-                      // Force-open replaces the placeholder content in the SAME tab.
-                      // Clearing the guard entry causes this branch to no longer match,
-                      // so the editor will render the now-populated tab.content normally.
-                      setGuardByPath((prev) => {
-                        const next = new Map(prev);
-                        next.delete(activeTab.path);
-                        return next;
-                      });
-                      setTabs((prev) =>
-                        prev.map((tt) =>
-                          tt.path === activeTab.path
-                            ? { ...tt, content, isDirty: false }
-                            : tt
-                        )
-                      );
-                    })
-                    .catch(() => toast.error(t("codeEditor.readError")));
-                }}
-              >
-                {t("codeEditor.fileGuard.forceOpenAction")}
-              </Button>
+      {/* Guard panel — only when the active tab is binary / oversized */}
+      {tabs.length > 0 && activeTab && guardByPath.has(activeTab.path) && (() => {
+        const guard = guardByPath.get(activeTab.path)!;
+        const isOversized = guard.kind === "oversized";
+        const Icon = isOversized ? FileWarning : FileX;
+        const title = t(
+          isOversized
+            ? "codeEditor.fileGuard.oversizedTitle"
+            : "codeEditor.fileGuard.binaryTitle"
+        );
+        const sizeStr = `${(guard.size / 1024 / 1024).toFixed(2)} MB`;
+        const limitStr = isOversized
+          ? `${(guard.limit / 1024 / 1024).toFixed(2)} MB`
+          : "";
+        const desc = t(
+          isOversized
+            ? "codeEditor.fileGuard.oversizedBody"
+            : "codeEditor.fileGuard.binaryBody"
+        )
+          .replace("{size}", sizeStr)
+          .replace("{limit}", limitStr);
+        return (
+          <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
+            <Icon className="h-10 w-10 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium text-foreground">{title}</p>
+              <p className="mt-1 text-xs text-muted-foreground max-w-[360px]">{desc}</p>
             </div>
-          );
-        })()
-      ) : activeTab?.isDiff ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                toast.warning(t("codeEditor.fileGuard.forceOpenWarning"));
+                readFileContentForce(worktreePath, activeTab.relativePath)
+                  .then(({ content }) => {
+                    setGuardByPath((prev) => {
+                      const next = new Map(prev);
+                      next.delete(activeTab.path);
+                      return next;
+                    });
+                    setTabs((prev) =>
+                      prev.map((tt) =>
+                        tt.path === activeTab.path
+                          ? { ...tt, content, isDirty: false }
+                          : tt
+                      )
+                    );
+                  })
+                  .catch(() => toast.error(t("codeEditor.readError")));
+              }}
+            >
+              {t("codeEditor.fileGuard.forceOpenAction")}
+            </Button>
+          </div>
+        );
+      })()}
+
+      {/* Commit-diff viewer — read-only Monaco DiffEditor for commit-diff tabs.
+          Uses the same component as working-tree diff. Sibling to the main
+          MonacoEditor (which stays hidden but alive). */}
+      {tabs.length > 0 && activeTab?.isCommitDiff && (
+        <div className="flex-1 min-h-0">
+          <ErrorBoundary>
+            <DiffEditorView
+              originalContent={activeTab.originalContent ?? ""}
+              modifiedContent={activeTab.content}
+              filePath={activeTab.relativePath}
+              readOnly
+            />
+          </ErrorBoundary>
+        </div>
+      )}
+
+      {/* Diff editor — only when the active tab is a diff tab. Sibling, not
+          mutually exclusive with MonacoEditor below: hidden Monaco still keeps
+          its instance + models alive across diff-tab transitions. */}
+      {tabs.length > 0 && activeTab?.isDiff && (
         <div className="flex-1 min-h-0">
           <ErrorBoundary>
             <DiffEditorView
@@ -478,46 +692,78 @@ export function CodeEditor({
             />
           </ErrorBoundary>
         </div>
-      ) : (
-        <div className="flex-1 min-h-0">
+      )}
+
+      {/* Main Monaco editor — ALWAYS mounted when there are any tabs, even if
+          a diff tab or guard panel is showing. CSS-hidden in those states so it
+          doesn't take layout space but its instance + models stay alive. Without
+          this, switching to a diff tab unmounted Monaco and disposed its services
+          (InstantiationService), triggering errors when the user clicked back to
+          a regular tab. */}
+      {tabs.length > 0 && (
+        <div
+          className={`flex-1 min-h-0 ${
+            !activeTab || activeTab.isDiff || activeTab.isCommitDiff || guardByPath.has(activeTab.path)
+              ? "hidden"
+              : ""
+          }`}
+        >
           <ErrorBoundary>
-          <MonacoEditor
-            height="100%"
-            theme={monacoTheme}
-            defaultValue=""
-            onMount={handleEditorMount}
-            onChange={(value) => {
-              if (value === undefined) return;
-              // Use ref to get the current active tab path, avoiding stale closure
-              // during rapid tab switches
-              const currentPath = activeTabPathRef.current;
-              if (!currentPath) return;
-              setTabs((prev) =>
-                prev.map((t) =>
-                  t.path === currentPath
-                    ? { ...t, content: value, isDirty: true }
-                    : t
-                )
-              );
-            }}
-            options={{
-              automaticLayout: true,
-              minimap: { enabled: false },
-              fontSize: 13,
-              fontFamily: '"JetBrains Mono", "Geist Mono", monospace',
-              lineNumbers: "on",
-              wordWrap: "off",
-              scrollBeyondLastLine: false,
-              tabSize: 2,
-            }}
-            loading={
-              <div className="flex h-full items-center justify-center bg-muted/20">
-                <span className="text-sm text-muted-foreground">Loading editor...</span>
-              </div>
-            }
-          />
+            <MonacoEditor
+              height="100%"
+              theme={monacoTheme}
+              defaultValue=""
+              keepCurrentModel
+              onMount={handleEditorMount}
+              onChange={(value) => {
+                if (value === undefined) return;
+                const currentPath = activeTabPathRef.current;
+                if (!currentPath) return;
+                setTabs((prev) =>
+                  prev.map((t) =>
+                    t.path === currentPath
+                      ? { ...t, content: value, isDirty: true }
+                      : t
+                  )
+                );
+              }}
+              options={{
+                automaticLayout: true,
+                minimap: { enabled: false },
+                fontSize: 13,
+                fontFamily: '"JetBrains Mono", "Geist Mono", monospace',
+                lineNumbers: "on",
+                wordWrap: "off",
+                scrollBeyondLastLine: false,
+                tabSize: 2,
+              }}
+              loading={
+                <div className="flex h-full items-center justify-center bg-muted/20">
+                  <span className="text-sm text-muted-foreground">Loading editor...</span>
+                </div>
+              }
+            />
           </ErrorBoundary>
         </div>
+      )}
+
+
+      {/* File history dialog */}
+      {showHistoryButton && activeTab && (
+        <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+          <DialogContent className="w-[min(720px,90vw)] max-w-none sm:max-w-none flex flex-col" style={{ height: "min(540px, 80vh)" }}>
+            <DialogHeader>
+              <DialogTitle>{t("git.history")} — {activeTab.filename}</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <FileHistoryPanel
+                worktreePath={worktreePath}
+                relativePath={activeTab.relativePath}
+                onClose={() => setHistoryOpen(false)}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
 
     </div>

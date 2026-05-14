@@ -1,12 +1,10 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import {
   Search,
   Filter,
   Loader2,
-  Download,
-  ExternalLink,
   XCircle,
   ChevronDown,
   ChevronRight,
@@ -15,7 +13,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
-import { searchCode, checkRgAvailable, installRg } from "@/actions/search-code-actions";
+import { searchCode } from "@/actions/search-code-actions";
+import { useExtension } from "@/lib/extensions/client";
 import type { SearchMatch, SearchErrorKind } from "@/actions/search-code-actions";
 
 interface CodeSearchProps {
@@ -65,20 +64,11 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
   const [errorBannerOpen, setErrorBannerOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [collapsedFiles, setCollapsedFiles] = useState<Set<string>>(new Set());
   const generationRef = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
 
-  // rg availability check
-  const [rgChecked, setRgChecked] = useState(false);
-  const [rgAvailable, setRgAvailable] = useState(true);
-  const [installing, setInstalling] = useState(false);
-
-  useEffect(() => {
-    checkRgAvailable().then((res) => {
-      setRgAvailable(res.available);
-      setRgChecked(true);
-    });
-  }, []);
+  const { status: rgStatus, loading: rgLoading } = useExtension("rg");
 
   const handleSearch = useCallback(async () => {
     if (!localPath || !pattern.trim()) return;
@@ -96,6 +86,7 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
     setErrorKind(null);
     setErrorBannerOpen(false);
     setHasSearched(true);
+    setCollapsedFiles(new Set());
 
     try {
       const result = await searchCode(
@@ -166,54 +157,37 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
     [handleSearch]
   );
 
-  const handleInstallRg = useCallback(async () => {
-    setInstalling(true);
-    try {
-      const res = await installRg();
-      if (res.success) {
-        toast.success(t("codeSearch.rgInstallSuccess"));
-        setRgAvailable(true);
-      } else {
-        toast.error(res.error ?? t("codeSearch.rgInstallFailed"));
-      }
-    } catch {
-      toast.error(t("codeSearch.rgInstallFailed"));
-    } finally {
-      setInstalling(false);
-    }
-  }, [t]);
+  const toggleFileCollapsed = useCallback((filePath: string) => {
+    setCollapsedFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(filePath)) next.delete(filePath);
+      else next.add(filePath);
+      return next;
+    });
+  }, []);
 
-  // Show rg not installed prompt
-  if (rgChecked && !rgAvailable) {
-    const downloadUrl = "https://github.com/BurntSushi/ripgrep/releases";
+  // Group matches by file path while preserving rg's emit order
+  const grouped = useMemo(() => {
+    const map = new Map<string, SearchMatch[]>();
+    for (const m of results) {
+      const arr = map.get(m.filePath);
+      if (arr) arr.push(m);
+      else map.set(m.filePath, [m]);
+    }
+    return Array.from(map.entries());
+  }, [results]);
+
+  if (rgLoading) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-        <Search className="h-8 w-8 text-muted-foreground" />
-        <p className="text-sm font-medium text-foreground">{t("codeSearch.rgNotInstalledTitle")}</p>
-        <p className="text-xs text-muted-foreground max-w-[240px]">
-          {t("codeSearch.rgNotInstalledDesc")}
-        </p>
-        <div className="flex flex-col gap-2 w-full max-w-[200px]">
-          <Button
-            variant="default"
-            className="w-full gap-1.5"
-            onClick={handleInstallRg}
-            disabled={installing}
-          >
-            {installing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-            {installing ? t("codeSearch.rgInstalling") : t("codeSearch.rgInstallBtn")}
-          </Button>
-          <Button
-            variant="outline"
-            className="w-full gap-1.5"
-            onClick={() => window.open(downloadUrl, "_blank")}
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            {t("codeSearch.rgDownloadPage")}
-          </Button>
-        </div>
+      <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+        {t("common.loading")}
       </div>
     );
+  }
+  // rg should always be installed when this tab renders (parent filters it out otherwise).
+  // Guard defensively in case of race during install/uninstall.
+  if (!rgStatus.installed) {
+    return null;
   }
 
   if (!localPath) {
@@ -317,36 +291,57 @@ export function CodeSearch({ localPath, onResultSelect }: CodeSearchProps) {
             <p className="text-xs text-muted-foreground">{t("codeSearch.noResults")}</p>
           </div>
         ) : (
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 min-h-0">
             <div className="py-1">
-              {results.map((match, index) => (
-                <button
-                  key={`${match.filePath}:${match.lineNumber}:${index}`}
-                  type="button"
-                  className="w-full flex flex-col gap-0.5 px-2 py-1.5 text-left hover:bg-accent/50 cursor-pointer border-b border-border/30 last:border-b-0"
-                  aria-label={`Open ${match.filePath} at line ${match.lineNumber}`}
-                  onClick={() => {
-                    const absolutePath = localPath.endsWith("/")
-                      ? localPath + match.filePath
-                      : localPath + "/" + match.filePath;
-                    onResultSelect(absolutePath, match.lineNumber);
-                  }}
-                >
-                  {/* File path + line number row */}
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-xs text-muted-foreground truncate flex-1">
-                      {match.filePath}
-                    </span>
-                    <span className="text-xs text-primary/80 flex-shrink-0 tabular-nums">
-                      :{match.lineNumber}
-                    </span>
+              {grouped.map(([filePath, matches]) => {
+                const collapsed = collapsedFiles.has(filePath);
+                return (
+                  <div key={filePath} className="border-b border-border/30 last:border-b-0">
+                    {/* File header — click to collapse/expand */}
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-1 px-2 py-1.5 text-left hover:bg-accent/50 cursor-pointer"
+                      onClick={() => toggleFileCollapsed(filePath)}
+                      aria-expanded={!collapsed}
+                    >
+                      {collapsed ? (
+                        <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                      )}
+                      <span className="text-xs text-foreground truncate flex-1 font-mono">
+                        {filePath}
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground tabular-nums flex-shrink-0">
+                        {matches.length}
+                      </span>
+                    </button>
+                    {/* Match lines — indented */}
+                    {!collapsed &&
+                      matches.map((match, index) => (
+                        <button
+                          key={`${match.lineNumber}:${index}`}
+                          type="button"
+                          className="w-full flex items-baseline gap-2 pl-7 pr-2 py-0.5 text-left hover:bg-accent/50 cursor-pointer"
+                          aria-label={`Open ${match.filePath} at line ${match.lineNumber}`}
+                          onClick={() => {
+                            const absolutePath = localPath.endsWith("/")
+                              ? localPath + match.filePath
+                              : localPath + "/" + match.filePath;
+                            onResultSelect(absolutePath, match.lineNumber);
+                          }}
+                        >
+                          <span className="text-[10px] text-muted-foreground/70 tabular-nums flex-shrink-0 min-w-[2.5rem] text-right">
+                            {match.lineNumber}
+                          </span>
+                          <span className="text-xs text-foreground/80 font-mono truncate flex-1">
+                            {renderHighlighted(match.lineText, match.submatches)}
+                          </span>
+                        </button>
+                      ))}
                   </div>
-                  {/* Line text with highlights */}
-                  <div className="text-xs text-foreground/80 font-mono truncate">
-                    {renderHighlighted(match.lineText, match.submatches)}
-                  </div>
-                </button>
-              ))}
+                );
+              })}
             </div>
 
             {truncated && (

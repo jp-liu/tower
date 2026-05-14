@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { X, GitCompare, History } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 export interface EditorTab {
@@ -11,6 +11,11 @@ export interface EditorTab {
   isDirty: boolean;
   isDiff?: boolean;
   originalContent?: string;
+  // commit-diff tab fields (v1.3.1). Reuses `originalContent` (parent commit
+  // version) + `content` (this commit's version) — same shape as working-tree
+  // diff tabs. Rendered with Monaco DiffEditor.
+  isCommitDiff?: boolean;
+  commitHash?: string;
 }
 
 export interface EditorTabsProps {
@@ -26,7 +31,7 @@ export function EditorTabs({ tabs, activeTabPath, onTabClick, onTabClose }: Edit
   if (tabs.length === 0) return null;
 
   return (
-    <div className="header-xs flex items-stretch overflow-x-auto bg-card flex-shrink-0">
+    <div className="flex items-stretch overflow-x-auto bg-card flex-1 min-w-0">
       {tabs.map((tab) => {
         const isActive = tab.path === activeTabPath;
         return (
@@ -42,13 +47,26 @@ export function EditorTabs({ tabs, activeTabPath, onTabClick, onTabClose }: Edit
                 : "border-transparent text-muted-foreground hover:text-foreground",
             ].join(" ")}
           >
-            {tab.isDiff && (
-              <span className="text-amber-400 text-[10px] font-mono font-bold">M</span>
+            {tab.isDiff && !tab.isCommitDiff && (
+              <GitCompare className="w-3 h-3 text-amber-400 shrink-0" />
+            )}
+            {tab.isCommitDiff && (
+              <History className="w-3 h-3 text-sky-400 shrink-0" />
             )}
             {tab.isDirty && (
               <span className="text-primary text-xs">●</span>
             )}
             <span>{tab.filename}</span>
+            {tab.isDiff && !tab.isCommitDiff && (
+              <span className="text-muted-foreground text-xs ml-0.5">
+                {t("editor.diffTabSuffix")}
+              </span>
+            )}
+            {tab.isCommitDiff && tab.commitHash && (
+              <span className="text-muted-foreground text-xs ml-0.5 font-mono">
+                · {tab.commitHash.slice(0, 7)}
+              </span>
+            )}
             <button
               type="button"
               aria-label={t("editor.closeTab")}

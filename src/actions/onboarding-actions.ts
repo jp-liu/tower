@@ -58,7 +58,7 @@ export async function setOnboardingProgress(step: number): Promise<void> {
   revalidatePath("/", "layout");
 }
 
-export async function completeOnboarding(username?: string): Promise<void> {
+export async function completeOnboarding(username?: string, lastStep: number = 4): Promise<void> {
   await db.systemConfig.upsert({
     where: { key: "onboarding.completed" },
     create: { key: "onboarding.completed", value: "true" },
@@ -66,8 +66,8 @@ export async function completeOnboarding(username?: string): Promise<void> {
   });
   await db.systemConfig.upsert({
     where: { key: "onboarding.lastStep" },
-    create: { key: "onboarding.lastStep", value: "2" },
-    update: { value: "2" },
+    create: { key: "onboarding.lastStep", value: String(lastStep) },
+    update: { value: String(lastStep) },
   });
   if (username !== undefined) {
     const sanitized = username.trim().slice(0, 64).replace(/[\r\n]/g, " ");
@@ -80,6 +80,23 @@ export async function completeOnboarding(username?: string): Promise<void> {
     }
   }
 
+  revalidatePath("/", "layout");
+}
+
+export async function setOnboardingExtensions(
+  requested: string[],
+  completed: string[]
+): Promise<void> {
+  await db.systemConfig.upsert({
+    where: { key: "onboarding.extensions.requested" },
+    create: { key: "onboarding.extensions.requested", value: JSON.stringify(requested) },
+    update: { value: JSON.stringify(requested) },
+  });
+  await db.systemConfig.upsert({
+    where: { key: "onboarding.extensions.completed" },
+    create: { key: "onboarding.extensions.completed", value: JSON.stringify(completed) },
+    update: { value: JSON.stringify(completed) },
+  });
   revalidatePath("/", "layout");
 }
 

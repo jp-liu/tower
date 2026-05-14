@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { GitBranch, Loader2, Check, AlertCircle, Sparkles } from "lucide-react";
+import { GitBranch, Loader2, Check, AlertCircle, Sparkles, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
@@ -18,6 +18,7 @@ import { useI18n } from "@/lib/i18n";
 import { toCloneUrl, parseGitUrl } from "@/lib/git-url";
 import { resolveGitLocalPath } from "@/actions/config-actions";
 import { analyzeProjectDirectory } from "@/actions/project-actions";
+import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import { toast } from "sonner";
 
 interface CreateProjectData {
@@ -51,6 +52,7 @@ export function CreateProjectDialog({
   const [cloneStatus, setCloneStatus] = useState<"idle" | "cloning" | "success" | "error">("idle");
   const [cloneError, setCloneError] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showFolderBrowser, setShowFolderBrowser] = useState(false);
 
   const resetForm = () => {
     setProjectName("");
@@ -126,6 +128,15 @@ export function CreateProjectDialog({
     setLocalPathManual(true);
   };
 
+  const handleBrowseSelect = (selectedPath: string) => {
+    setLocalPath(selectedPath);
+    setLocalPathManual(true);
+    if (!projectName.trim()) {
+      const folderName = selectedPath.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop() ?? "";
+      if (folderName) setProjectName(folderName);
+    }
+  };
+
   const handleCreate = async () => {
     if (projectName.trim()) {
       await onCreateProject?.({
@@ -169,12 +180,30 @@ export function CreateProjectDialog({
             <div>
               <label className="text-xs font-medium text-muted-foreground">{t("project.localPath")}</label>
               <p className="text-[10px] text-muted-foreground mt-0.5">{t("project.localPathHint")}</p>
-              <Input
-                placeholder={t("project.localPathPlaceholder")}
-                value={localPath}
-                onChange={(e) => handleLocalPathChange(e.target.value)}
-                className="mt-1.5 font-mono text-xs w-full"
-              />
+              <div className="mt-1.5 flex gap-2">
+                <Input
+                  placeholder={t("project.localPathPlaceholder")}
+                  value={localPath}
+                  onChange={(e) => handleLocalPathChange(e.target.value)}
+                  className="flex-1 min-w-0 font-mono text-xs"
+                />
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowFolderBrowser(true)}
+                        className="shrink-0 gap-1.5 px-2.5 text-xs text-muted-foreground"
+                      />
+                    }
+                  >
+                    <FolderOpen className="h-3.5 w-3.5" />
+                    <span>{t("folder.browse")}</span>
+                  </TooltipTrigger>
+                  <TooltipContent>{t("folder.selectFolder")}</TooltipContent>
+                </Tooltip>
+              </div>
               {localPath.trim().startsWith("~") && (
                 <p className="mt-1 flex items-center gap-1 text-[11px] text-amber-400">
                   <AlertCircle className="h-3 w-3" />
@@ -305,6 +334,11 @@ export function CreateProjectDialog({
         </DialogContent>
       </Dialog>
 
+      <FolderBrowserDialog
+        open={showFolderBrowser}
+        onOpenChange={setShowFolderBrowser}
+        onSelect={handleBrowseSelect}
+      />
     </>
   );
 }

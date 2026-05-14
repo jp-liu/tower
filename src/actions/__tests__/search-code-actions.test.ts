@@ -2,11 +2,20 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // vi.hoisted required for child_process mock in jsdom vitest environment
 const mockExecFile = vi.hoisted(() => vi.fn());
+const mockExecFileSync = vi.hoisted(() => vi.fn(() => "/opt/homebrew/bin/rg\n"));
 
 vi.mock("child_process", () => ({
-  default: { execFile: mockExecFile },
+  default: { execFile: mockExecFile, execFileSync: mockExecFileSync },
   execFile: mockExecFile,
+  execFileSync: mockExecFileSync,
 }));
+
+// Mock fs.existsSync so resolveRgPath's binary-existence check passes.
+// The real @vscode/ripgrep package may resolve to a broken path on this machine.
+vi.mock("fs", async () => {
+  const actual = await vi.importActual<typeof import("fs")>("fs");
+  return { ...actual, existsSync: vi.fn(() => true) };
+});
 
 // Mock getConfigValue so timeout is deterministic per-test
 vi.mock("@/actions/config-actions", () => ({

@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, ChevronDown, AlertTriangle, GitCompare, GitCommitHorizontal } from "lucide-react";
+import { ChevronRight, ChevronDown, AlertTriangle, GitCompare, GitCommitHorizontal, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/lib/i18n";
+import { DiffEditorView } from "./diff-editor";
 
 interface DiffFileEntry {
   filename: string;
@@ -18,6 +19,7 @@ interface DiffFileEntry {
 }
 
 interface TaskDiffViewProps {
+  taskId: string;
   files: DiffFileEntry[];
   totalAdded: number;
   totalRemoved: number;
@@ -27,7 +29,15 @@ interface TaskDiffViewProps {
   hasUncommitted?: boolean;
 }
 
+interface FileContent {
+  before: string | null;
+  after: string | null;
+  isBinary: boolean;
+  status: "loading" | "ready" | "error";
+}
+
 export function TaskDiffView({
+  taskId,
   files,
   totalAdded,
   totalRemoved,
@@ -38,11 +48,37 @@ export function TaskDiffView({
 }: TaskDiffViewProps) {
   const { t } = useI18n();
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
+  const [contentByFile, setContentByFile] = useState<Map<string, FileContent>>(new Map());
   const [showCommitDialog, setShowCommitDialog] = useState(false);
   const [commitMessage, setCommitMessage] = useState("");
   const [isCommitting, setIsCommitting] = useState(false);
 
+  const fetchFileContent = (filename: string) => {
+    setContentByFile((prev) => {
+      const next = new Map(prev);
+      next.set(filename, { before: null, after: null, isBinary: false, status: "loading" });
+      return next;
+    });
+    fetch(`/api/tasks/${taskId}/diff-file?file=${encodeURIComponent(filename)}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data: { before: string | null; after: string | null; isBinary: boolean }) => {
+        setContentByFile((prev) => {
+          const next = new Map(prev);
+          next.set(filename, { ...data, status: "ready" });
+          return next;
+        });
+      })
+      .catch(() => {
+        setContentByFile((prev) => {
+          const next = new Map(prev);
+          next.set(filename, { before: null, after: null, isBinary: false, status: "error" });
+          return next;
+        });
+      });
+  };
+
   const toggleFile = (filename: string) => {
+    const wasExpanded = expandedFiles.has(filename);
     setExpandedFiles((prev) => {
       const next = new Set(prev);
       if (next.has(filename)) {
@@ -52,6 +88,12 @@ export function TaskDiffView({
       }
       return next;
     });
+    // Lazy-fetch on first expand. Skip binary files — the row shows a Binary
+    // badge instead of a diff, no content needed.
+    if (wasExpanded || contentByFile.has(filename)) return;
+    const fileEntry = files.find((f) => f.filename === filename);
+    if (fileEntry?.isBinary) return;
+    fetchFileContent(filename);
   };
 
   return (
@@ -136,25 +178,18 @@ export function TaskDiffView({
                     )}
                   </Button>
 
-                  {/* Expanded patch content */}
-                  {isExpanded && file.patch && (
-                    <div className="border-t border-border bg-background">
-                      <pre className="overflow-x-auto p-0 text-xs font-mono leading-5">
-                        {file.patch.split("\n").map((line, idx) => {
-                          const lineClass = line.startsWith("+") && !line.startsWith("+++")
-                            ? "px-4 block bg-green-500/10 text-green-400"
-                            : line.startsWith("-") && !line.startsWith("---")
-                            ? "px-4 block bg-red-500/10 text-red-400"
-                            : line.startsWith("@@")
-                            ? "px-4 block bg-blue-500/10 text-blue-300"
-                            : "px-4 block text-muted-foreground";
-                          return (
-                            <span key={idx} className={lineClass}>
-                              {line || " "}
-                            </span>
-                          );
-                        })}
-                      </pre>
+                  {/* Expanded diff content — Monaco DiffEditor reading
+                      full before/after from /diff-file (the old
+                      @git-diff-view/react renderer rendered blank for
+                      certain inputs, e.g. new files / patches missing
+                      hunk markers). */}
+                  {isExpanded && !file.isBinary && (
+                    <div className="border-t border-border bg-background" style={{ height: 480 }}>
+                      <ExpandedDiff
+                        content={contentByFile.get(file.filename)}
+                        filename={file.filename}
+                        onRetry={() => fetchFileContent(file.filename)}
+                      />
                     </div>
                   )}
                 </div>
@@ -203,5 +238,46 @@ export function TaskDiffView({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function ExpandedDiff({
+  content,
+  filename,
+  onRetry,
+}: {
+  content: FileContent | undefined;
+  filename: string;
+  onRetry: () => void;
+}) {
+  if (!content || content.status === "loading") {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  if (content.status === "error") {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+        <span>Failed to load diff</span>
+        <Button variant="ghost" onClick={onRetry}>Retry</Button>
+      </div>
+    );
+  }
+  if (content.isBinary) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        Binary file — diff not shown
+      </div>
+    );
+  }
+  return (
+    <DiffEditorView
+      originalContent={content.before ?? ""}
+      modifiedContent={content.after ?? ""}
+      filePath={filename}
+      readOnly
+    />
   );
 }

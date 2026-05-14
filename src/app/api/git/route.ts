@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import simpleGit, { type StatusResult } from "simple-git";
+import { parseUnifiedDiff } from "@/lib/git-diff";
 
 function expandHome(p: string): string {
   if (p.startsWith("~/") || p === "~") {
@@ -67,6 +68,68 @@ function mapStatus(s: StatusResult) {
     },
     changedFiles,
   };
+}
+
+export interface BlameLine {
+  line: number;
+  sha: string;
+  author: string;
+  summary: string;
+  date?: string;
+}
+
+export function parseBlamePorcelain(raw: string): BlameLine[] {
+  const result: BlameLine[] = [];
+  const lines = raw.split("\n");
+  let i = 0;
+
+  // Per-sha metadata cache: sha → { author, summary, date }
+  const shaMetaCache: Record<string, { author: string; summary: string; date: string }> = {};
+
+  while (i < lines.length) {
+    const headerLine = lines[i];
+    if (!headerLine) { i++; continue; }
+
+    // First token check: sha (40 hex chars) + at least 2 numbers
+    const headerMatch = headerLine.match(/^([0-9a-f]{40})\s+\d+\s+(\d+)(?:\s+\d+)?$/);
+    if (!headerMatch) { i++; continue; }
+
+    const sha = headerMatch[1];
+    const finalLine = parseInt(headerMatch[2], 10);
+    i++;
+
+    let author = "";
+    let summary = "";
+    let date = "";
+
+    // Consume header key-value lines until we hit the tab-prefixed content line
+    while (i < lines.length && !lines[i].startsWith("\t")) {
+      const kv = lines[i];
+      if (kv.startsWith("author ")) author = kv.slice(7).trim();
+      else if (kv.startsWith("summary ")) summary = kv.slice(8).trim();
+      else if (kv.startsWith("author-time ")) {
+        const ts = parseInt(kv.slice(12).trim(), 10);
+        if (!isNaN(ts)) date = new Date(ts * 1000).toISOString();
+      }
+      i++;
+    }
+
+    // Skip the tab-prefixed content line
+    if (i < lines.length && lines[i].startsWith("\t")) i++;
+
+    // If this sha appeared before (no author metadata emitted), pull from cache
+    if (!author && shaMetaCache[sha]) {
+      author = shaMetaCache[sha].author;
+      summary = shaMetaCache[sha].summary;
+      date = shaMetaCache[sha].date;
+    } else if (author) {
+      shaMetaCache[sha] = { author, summary, date };
+    }
+
+    result.push({ line: finalLine, sha, author, summary, date: date || undefined });
+  }
+
+  return result;
 }
 
 // GET: git info for a path
@@ -331,9 +394,244 @@ export async function POST(request: NextRequest) {
         const safeRef = (gitRef || "HEAD").replace(/[^a-zA-Z0-9_\-\/\.~^]/g, "");
         try {
           const content = await git.show(`${safeRef}:${safeFile}`);
-          return NextResponse.json({ success: true, content });
+          return NextResponse.json({ success: true, content: content.replace(/\r\n/g, "\n") });
         } catch {
           return NextResponse.json({ success: true, content: "" });
+        }
+      }
+
+      case "log-graph": {
+        const rawLimit = parseInt(body.limit ?? "200", 10);
+        const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 1000) : 200;
+        try {
+          // Fields per record: hash | parents | author | date | refs | subject | body.
+          // Records are NUL-separated (`-z`) because %b can contain newlines.
+          // Fields within a record are ASCII US-separated (\x1f) — safe vs any
+          // commit content (subjects/bodies cannot contain \x1f or \0).
+          const SEP = "\x1f";
+          // No `--all` / `--branches` — `git log` with no ref defaults to HEAD,
+          // which is the current branch's reachable history (matching what
+          // donjayamanne's gitHistoryVSCode does for its "current branch" mode).
+          // Side branches that have been merged into HEAD still appear (via
+          // merge commits' second parents); unmerged refs are correctly hidden.
+          const raw = await git.raw([
+            "log",
+            "-z",
+            `--max-count=${limit}`,
+            `--format=%H${SEP}%P${SEP}%an${SEP}%aI${SEP}%D${SEP}%s${SEP}%b`,
+          ]);
+          const records = raw.split("\0").filter((r) => r.length > 0);
+          const commits = records.map((rec) => {
+            const [hash, parentsStr, author, date, refsStr, subject, bodyRaw] = rec.split(SEP);
+            const parents = parentsStr ? parentsStr.split(" ").filter(Boolean) : [];
+            // %D yields e.g. "HEAD -> main, origin/main, tag: v1.0"
+            const refs = refsStr
+              ? refsStr.split(",").map((r) => r.trim().replace(/^HEAD -> /, "").replace(/^tag: /, "")).filter(Boolean)
+              : [];
+            return {
+              hash,
+              shortHash: hash.slice(0, 7),
+              parents,
+              author: author ?? "",
+              date: date ?? "",
+              subject: subject ?? "",
+              body: (bodyRaw ?? "").replace(/\n+$/, ""),
+              refs,
+            };
+          });
+          let head: string | null = null;
+          try { head = (await git.revparse(["HEAD"])).trim(); } catch { /* detached or empty repo */ }
+          return NextResponse.json({ commits, head });
+        } catch {
+          return NextResponse.json({ commits: [], head: null });
+        }
+      }
+
+      case "show-commit": {
+        const { hash } = body;
+        if (typeof hash !== "string" || !/^[a-f0-9]{4,40}$/i.test(hash)) {
+          return NextResponse.json({ error: "invalid commit hash" }, { status: 400 });
+        }
+        try {
+          // Get the patch with diff for all files in this commit (vs first parent).
+          // For a merge: shows changes vs first parent. For a root: shows full file content as +.
+          // Pass `-c core.quotepath=false` so non-ASCII filenames (Chinese,
+          // emoji, etc.) appear verbatim in the patch instead of being quoted
+          // and octal-escaped like `"a/\346\265\213\350\257\225.md"`. Without
+          // this, the client's per-file slicer (which matches on `a/<filename>`)
+          // misses those files and renders an empty diff.
+          const patch = await git.raw([
+            "-c", "core.quotepath=false",
+            "show", hash, "--format=",
+          ]);
+          // Per-file breakdown via parseUnifiedDiff (parse-diff, already a dep, used in DiffView).
+          // NOTE: files[].patch is intentionally empty — clients should slice the
+          // full patch by `diff --git a/<filename>` markers (cheap on the client,
+          // avoids re-stringification on the server).
+          const parsed = parseUnifiedDiff(patch);
+          const files = parsed.map((f) => {
+            const filename = f.to && f.to !== "/dev/null" ? f.to : (f.from ?? "");
+            let added = 0;
+            let removed = 0;
+            const isBinary = false;
+            for (const chunk of f.chunks) {
+              for (const c of chunk.changes) {
+                if (c.type === "add") added++;
+                else if (c.type === "del") removed++;
+              }
+            }
+            return { filename, added, removed, isBinary, patch: "" };
+          });
+          return NextResponse.json({ patch: patch.replace(/\r\n/g, "\n"), files });
+        } catch {
+          return NextResponse.json({ error: "commit not found or unreadable" }, { status: 404 });
+        }
+      }
+
+      case "commit-file-content": {
+        const { hash, file } = body;
+        if (typeof hash !== "string" || !/^[a-f0-9]{4,40}$/i.test(hash)) {
+          return NextResponse.json({ error: "invalid commit hash" }, { status: 400 });
+        }
+        if (typeof file !== "string" || !file.trim()) {
+          return NextResponse.json({ error: "file required" }, { status: 400 });
+        }
+        const safeFile = sanitizeFilePath(file);
+        // Fetch before (parent's version) and after (this commit's version).
+        // Each side may legitimately not exist:
+        //   - Added file: parent has no such path → before is null
+        //   - Deleted file: this commit has no such path → after is null
+        //   - Root commit: there is no parent at all → before is null
+        // Pass core.quotepath=false so non-ASCII paths aren't octal-escaped.
+        let before: string | null = null;
+        try {
+          before = await git.raw([
+            "-c", "core.quotepath=false",
+            "show", `${hash}^:${safeFile}`,
+          ]);
+        } catch { /* file didn't exist at parent — leave null */ }
+        let after: string | null = null;
+        try {
+          after = await git.raw([
+            "-c", "core.quotepath=false",
+            "show", `${hash}:${safeFile}`,
+          ]);
+        } catch { /* file deleted in this commit — leave null */ }
+        return NextResponse.json({
+          before: before === null ? null : before.replace(/\r\n/g, "\n"),
+          after: after === null ? null : after.replace(/\r\n/g, "\n"),
+        });
+      }
+
+      case "checkout-commit": {
+        const { hash } = body;
+        if (typeof hash !== "string" || !/^[a-f0-9]{4,40}$/i.test(hash)) {
+          return NextResponse.json({ error: "invalid commit hash" }, { status: 400 });
+        }
+        try {
+          // Detached HEAD checkout. Refuses if there are uncommitted local changes.
+          await git.checkout([hash]);
+          return NextResponse.json({ success: true });
+        } catch (e) {
+          return NextResponse.json(
+            { error: (e as Error).message || "Checkout failed (uncommitted changes?)" },
+            { status: 500 }
+          );
+        }
+      }
+
+      case "reset-commit": {
+        const { hash, mode } = body;
+        if (typeof hash !== "string" || !/^[a-f0-9]{4,40}$/i.test(hash)) {
+          return NextResponse.json({ error: "invalid commit hash" }, { status: 400 });
+        }
+        const safeMode = mode === "soft" || mode === "mixed" || mode === "hard" ? mode : "mixed";
+        try {
+          await git.reset([`--${safeMode}`, hash]);
+          return NextResponse.json({ success: true, mode: safeMode });
+        } catch (e) {
+          return NextResponse.json(
+            { error: (e as Error).message || "Reset failed" },
+            { status: 500 }
+          );
+        }
+      }
+
+      case "create-tag": {
+        const { hash, name, message } = body;
+        if (typeof hash !== "string" || !/^[a-f0-9]{4,40}$/i.test(hash)) {
+          return NextResponse.json({ error: "invalid commit hash" }, { status: 400 });
+        }
+        if (typeof name !== "string" || !name.trim()) {
+          return NextResponse.json({ error: "tag name required" }, { status: 400 });
+        }
+        const safeName = name.trim().replace(/[^a-zA-Z0-9_\-./]/g, "");
+        if (!safeName) {
+          return NextResponse.json({ error: "tag name invalid" }, { status: 400 });
+        }
+        try {
+          if (typeof message === "string" && message.trim()) {
+            await git.tag(["-a", safeName, hash, "-m", message.trim()]);
+          } else {
+            await git.tag([safeName, hash]);
+          }
+          return NextResponse.json({ success: true, name: safeName });
+        } catch (e) {
+          return NextResponse.json(
+            { error: (e as Error).message || "Tag creation failed" },
+            { status: 500 }
+          );
+        }
+      }
+
+      case "cherry-pick": {
+        const { hash } = body;
+        if (typeof hash !== "string" || !/^[a-f0-9]{4,40}$/i.test(hash)) {
+          return NextResponse.json({ error: "invalid commit hash" }, { status: 400 });
+        }
+        try {
+          await git.raw(["cherry-pick", hash]);
+          return NextResponse.json({ success: true });
+        } catch (e) {
+          return NextResponse.json(
+            { error: (e as Error).message || "Cherry-pick failed (conflict?)" },
+            { status: 500 }
+          );
+        }
+      }
+
+      case "revert": {
+        const { hash } = body;
+        if (typeof hash !== "string" || !/^[a-f0-9]{4,40}$/i.test(hash)) {
+          return NextResponse.json({ error: "invalid commit hash" }, { status: 400 });
+        }
+        try {
+          // --no-edit auto-fills "Revert <subject>" message
+          await git.raw(["revert", "--no-edit", hash]);
+          return NextResponse.json({ success: true });
+        } catch (e) {
+          return NextResponse.json(
+            { error: (e as Error).message || "Revert failed (conflict?)" },
+            { status: 500 }
+          );
+        }
+      }
+
+      case "amend-message": {
+        const { message } = body;
+        if (typeof message !== "string" || !message.trim()) {
+          return NextResponse.json({ error: "message required" }, { status: 400 });
+        }
+        try {
+          // git commit --amend ALWAYS targets HEAD. Caller responsibility to ensure
+          // this is invoked only when the selected commit IS the current HEAD.
+          await git.raw(["commit", "--amend", "-m", message.trim()]);
+          return NextResponse.json({ success: true });
+        } catch (e) {
+          return NextResponse.json(
+            { error: (e as Error).message || "Amend failed" },
+            { status: 500 }
+          );
         }
       }
 
@@ -368,6 +666,75 @@ export async function POST(request: NextRequest) {
         const base = (baseBranch || "HEAD").replace(/[^a-zA-Z0-9_\-\/\.]/g, "");
         await git.checkoutBranch(safeBranch, base);
         return NextResponse.json({ success: true, branch: safeBranch });
+      }
+
+      case "log-file": {
+        const safeFile = sanitizeFilePath(body.file);
+        const rawLimit = parseInt(body.limit ?? "50", 10);
+        const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+        try {
+          const log = await git.log({ file: safeFile, maxCount: limit });
+          const commits = log.all.map((c) => ({
+            hash: c.hash,
+            shortHash: c.hash.slice(0, 7),
+            message: c.message,
+            author: c.author_name,
+            date: c.date,
+          }));
+          return NextResponse.json({ commits });
+        } catch {
+          return NextResponse.json({ commits: [] });
+        }
+      }
+
+      case "diff-file": {
+        const safeFile = sanitizeFilePath(body.file);
+        const staged = Boolean(body.staged);
+        // Patches are returned relative to the repo root. Hand-built patches passed to
+        // stage-hunk/discard-hunk MUST use the same root-relative paths — see note in task.
+        const patch = staged
+          ? await git.diff(["--cached", "--", safeFile])
+          : await git.diff(["--", safeFile]);
+        return NextResponse.json({ patch: patch.replace(/\r\n/g, "\n") });
+      }
+
+      case "stage-hunk":
+      case "discard-hunk": {
+        const patch = body.patch;
+        if (typeof patch !== "string" || !patch.includes("@@")) {
+          return NextResponse.json({ error: "invalid patch" }, { status: 400 });
+        }
+        const tmpPath = path.join(
+          os.tmpdir(),
+          `tower-git-${Date.now()}-${Math.random().toString(36).slice(2)}.patch`
+        );
+        fs.writeFileSync(tmpPath, patch, { mode: 0o600 });
+        try {
+          if (action === "stage-hunk") {
+            await git.raw(["apply", "--cached", tmpPath]);
+          } else {
+            await git.raw(["apply", "-R", tmpPath]);
+          }
+          return NextResponse.json({ success: true });
+        } catch (e) {
+          return NextResponse.json(
+            { error: (e as Error).message || "apply failed" },
+            { status: 500 }
+          );
+        } finally {
+          try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+        }
+      }
+
+      case "blame": {
+        const safeFile = sanitizeFilePath(body.file);
+        try {
+          const raw = await git.raw(["blame", "--porcelain", safeFile]);
+          const lines = parseBlamePorcelain(raw);
+          return NextResponse.json({ lines });
+        } catch {
+          return NextResponse.json({ lines: [] });
+        }
       }
 
       default:

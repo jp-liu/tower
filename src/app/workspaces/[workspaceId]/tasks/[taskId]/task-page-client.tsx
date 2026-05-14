@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal, Square, CheckCircle2, Search, GitPullRequestArrow } from "lucide-react";
+import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal, Square, CheckCircle2, Search, GitPullRequestArrow, Network } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import Link from "next/link";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -12,7 +12,9 @@ import { TaskMergeConfirmDialog } from "@/components/task/task-merge-confirm-dia
 import { FileTree } from "@/components/task/file-tree";
 import { CodeEditor, type DiffFileRequest } from "@/components/task/code-editor";
 import { CodeSearch } from "@/components/task/code-search";
+import { SimpleFileViewer } from "@/components/task/simple-file-viewer";
 import { EditorGitPanel } from "@/components/task/editor-git-panel";
+import { GitHistoryPanel } from "@/components/task/git-history-panel";
 import { PreviewPanel } from "@/components/task/preview-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +24,7 @@ import { updateTaskStatus, checkWorktreeClean, commitWorktreeChanges } from "@/a
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "@/components/task/execution-timeline";
 import { useI18n } from "@/lib/i18n";
+import { useExtension } from "@/lib/extensions/client";
 import { toast } from "sonner";
 import type { DiffResponse } from "@/lib/diff-parser";
 
@@ -86,6 +89,8 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const router = useRouter();
   const { t } = useI18n();
   const { removePortal } = useTerminalPortal();
+  const { status: rgStatus } = useExtension("rg");
+  const { status: monacoStatus } = useExtension("monaco");
   const [taskStatus, setTaskStatus] = useState(task.status);
   // Sync taskStatus when server-side task prop changes (router.refresh, etc.)
   useEffect(() => {
@@ -96,7 +101,18 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
   const [diffFileRequest, setDiffFileRequest] = useState<DiffFileRequest | null>(null);
+  const [commitDiffRequest, setCommitDiffRequest] = useState<{
+    commitHash: string;
+    relativePath: string;
+    originalContent: string;
+    modifiedContent: string;
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<string | null>(null);
+  // Inner sub-tab inside files: filetree | search | git. Initial pick is
+  // the first available sub-tab given current extension state.
+  const [innerTab, setInnerTab] = useState<string>(() =>
+    monacoStatus.installed ? "filetree" : rgStatus.installed ? "search" : "git"
+  );
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [previewUrl, setPreviewUrl] = useState("");
   const [isExecuting, setIsExecuting] = useState(false);
@@ -164,6 +180,16 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
       });
     return () => { cancelled = true; };
   }, [task.id, taskStatus]);
+
+  // Inner sub-tab fallback: if the currently selected sub-tab becomes
+  // unavailable (extension uninstalled), fall back to the next available.
+  useEffect(() => {
+    if (innerTab === "filetree" && !monacoStatus.installed) {
+      setInnerTab(rgStatus.installed ? "search" : "git");
+    } else if (innerTab === "search" && !rgStatus.installed) {
+      setInnerTab(monacoStatus.installed ? "filetree" : "git");
+    }
+  }, [monacoStatus.installed, rgStatus.installed, innerTab]);
 
   const handleExecute = useCallback(async () => {
     if (isExecuting) return;
@@ -465,51 +491,64 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           {/* Files tab — Phase 21+64: FileTree/Search sub-tabs + CodeEditor */}
           <TabsContent value="files" className="flex-1 min-h-0 overflow-hidden">
             <div className="flex h-full flex-row overflow-hidden">
-              {/* Left: sub-tabs for file tree vs search (240px fixed) */}
-              <div className="w-60 flex-none border-r border-border overflow-hidden flex flex-col">
-                <Tabs defaultValue="filetree" className="flex h-full flex-col gap-0">
+              {/* Left: sub-tabs for file tree / search / git / graph — single 280px width */}
+              <div className="w-70 flex-none border-r border-border overflow-hidden flex flex-col">
+                <Tabs value={innerTab} onValueChange={setInnerTab} className="flex h-full flex-col gap-0">
                   {/* Sub-tab bar */}
                   <div className="header-xs flex shrink-0 px-2 py-1.5">
                     <TabsList className="h-auto border border-border w-full">
-                      <TabsTrigger value="filetree" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
-                        <FolderTree className="h-3 w-3" />
-                        {t("taskPage.tabFileTree")}
-                      </TabsTrigger>
-                      <TabsTrigger value="search" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
-                        <Search className="h-3 w-3" />
-                        {t("taskPage.tabSearch")}
-                      </TabsTrigger>
+                      {monacoStatus.installed && (
+                        <TabsTrigger value="filetree" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
+                          <FolderTree className="h-3 w-3" />
+                          {t("taskPage.tabFileTree")}
+                        </TabsTrigger>
+                      )}
+                      {rgStatus.installed && (
+                        <TabsTrigger value="search" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
+                          <Search className="h-3 w-3" />
+                          {t("taskPage.tabSearch")}
+                        </TabsTrigger>
+                      )}
                       <TabsTrigger value="git" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
                         <GitPullRequestArrow className="h-3 w-3" />
                         {t("git.tabLabel")}
                       </TabsTrigger>
+                      <TabsTrigger value="graph" className="flex-1 text-xs gap-1 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-background dark:data-active:border-transparent">
+                        <Network className="h-3 w-3" />
+                        {t("git.tabGraph")}
+                      </TabsTrigger>
                     </TabsList>
                   </div>
                   {/* File tree sub-tab */}
-                  <TabsContent value="filetree" className="flex-1 min-h-0 overflow-hidden mt-0">
-                    <FileTree
-                      worktreePath={fileRootPath ?? null}
-                      baseBranch={task.baseBranch ?? null}
-                      worktreeBranch={latestExecution?.worktreeBranch ?? null}
-                      executionStatus={latestExecution?.status ?? "COMPLETED"}
-                      onFileSelect={(absolutePath) => {
-                        setSelectedFilePath(absolutePath);
-                        setSelectedLine(null);
-                      }}
-                    />
-                  </TabsContent>
+                  {monacoStatus.installed && (
+                    <TabsContent value="filetree" className="flex-1 min-h-0 overflow-hidden mt-0">
+                      <FileTree
+                        worktreePath={fileRootPath ?? null}
+                        baseBranch={task.baseBranch ?? null}
+                        worktreeBranch={latestExecution?.worktreeBranch ?? null}
+                        executionStatus={latestExecution?.status ?? "COMPLETED"}
+                        onFileSelect={(absolutePath) => {
+                          setSelectedFilePath(absolutePath);
+                          setSelectedLine(null);
+                        }}
+                      />
+                    </TabsContent>
+                  )}
                   {/* Search sub-tab */}
-                  <TabsContent value="search" className="flex-1 min-h-0 overflow-hidden mt-0">
-                    <CodeSearch
-                      localPath={fileRootPath ?? task.project?.localPath ?? null}
-                      onResultSelect={(absolutePath, line) => {
-                        setSelectedFilePath(absolutePath);
-                        setSelectedLine(line);
-                        setActiveTab("files");
-                      }}
-                    />
-                  </TabsContent>
-                  {/* Git sub-tab */}
+                  {rgStatus.installed && (
+                    <TabsContent value="search" className="flex-1 min-h-0 overflow-hidden mt-0">
+                      <CodeSearch
+                        localPath={fileRootPath ?? task.project?.localPath ?? null}
+                        onResultSelect={(absolutePath, line) => {
+                          setSelectedFilePath(absolutePath);
+                          setSelectedLine(line);
+                          setActiveTab("files");
+                          if (monacoStatus.installed) setInnerTab("filetree");
+                        }}
+                      />
+                    </TabsContent>
+                  )}
+                  {/* Git sub-tab — always available */}
                   <TabsContent value="git" className="flex-1 min-h-0 overflow-hidden mt-0">
                     <EditorGitPanel
                       localPath={fileRootPath ?? task.project?.localPath ?? ""}
@@ -518,11 +557,34 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                       }}
                     />
                   </TabsContent>
+                  {/* Graph sub-tab — commit history graph */}
+                  <TabsContent value="graph" className="flex-1 min-h-0 overflow-hidden mt-0">
+                    <GitHistoryPanel
+                      worktreePath={fileRootPath ?? task.project?.localPath ?? ""}
+                      onSelectCommitFile={(params) => {
+                        setCommitDiffRequest(params);
+                      }}
+                    />
+                  </TabsContent>
                 </Tabs>
               </div>
-              {/* Right: Monaco editor, fills remaining width */}
+              {/* Right: Monaco editor when installed; SimpleFileViewer fallback otherwise */}
               <div className="flex-1 min-w-0 overflow-hidden">
-                {fileRootPath ? (
+                {!monacoStatus.installed ? (
+                  fileRootPath ? (
+                    <SimpleFileViewer
+                      worktreePath={fileRootPath}
+                      selectedFilePath={selectedFilePath}
+                      selectedLine={selectedLine}
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center px-6 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        {t("editor.extensionRequired")}
+                      </p>
+                    </div>
+                  )
+                ) : fileRootPath ? (
                   <CodeEditor
                     worktreePath={fileRootPath}
                     selectedFilePath={selectedFilePath}
@@ -530,6 +592,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                     onFilePathChange={setSelectedFilePath}
                     onSave={() => setPreviewRefreshKey((k) => k + 1)}
                     diffFileRequest={diffFileRequest}
+                    commitDiffRequest={commitDiffRequest}
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center">
@@ -553,6 +616,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
               </div>
             ) : diffData ? (
               <TaskDiffView
+                taskId={task.id}
                 files={diffData.files}
                 totalAdded={diffData.totalAdded}
                 totalRemoved={diffData.totalRemoved}

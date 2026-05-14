@@ -1,5 +1,7 @@
 "use server";
 
+import { mkdir } from "fs/promises";
+import path from "path";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { createWorkspaceSchema, updateWorkspaceSchema, createProjectSchema, updateProjectSchema } from "@/lib/schemas";
@@ -73,6 +75,19 @@ export async function createProject(data: {
   previewCommand?: string | null;
 }) {
   const v = createProjectSchema.parse(data);
+  const resolvedLocalPath = v.localPath ? expandHome(v.localPath) : undefined;
+
+  // Ensure target folder exists for non-git projects (git clone creates it automatically).
+  // Without this, downstream features (terminal, file tree) fail with ENOENT.
+  if (resolvedLocalPath && !v.gitUrl && path.isAbsolute(resolvedLocalPath)) {
+    try {
+      await mkdir(resolvedLocalPath, { recursive: true });
+    } catch (err) {
+      const error = err as NodeJS.ErrnoException;
+      throw new Error(`无法创建项目目录 ${resolvedLocalPath}: ${error.message}`);
+    }
+  }
+
   const project = await db.project.create({
     data: {
       name: v.name,
@@ -80,7 +95,7 @@ export async function createProject(data: {
       description: v.description,
       type: v.gitUrl ? "GIT" : "NORMAL",
       gitUrl: v.gitUrl || undefined,
-      localPath: v.localPath ? expandHome(v.localPath) : undefined,
+      localPath: resolvedLocalPath,
       projectType: v.projectType,
       previewCommand: v.previewCommand,
       workspaceId: v.workspaceId,
