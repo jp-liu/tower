@@ -92,6 +92,17 @@ export function DiffEditorView({
         // broken/gapped highlight. "all" fills the entire row uniformly
         // including the gutter, matching typical IDE behavior.
         renderLineHighlight: "all",
+        // Collapse unchanged regions to small "N hidden lines" placeholders
+        // (VSCode SCM-diff behavior). Without this Monaco scrolls through
+        // every untouched line — for a long file with a small edit at the
+        // bottom, the user has to scroll through hundreds of unchanged
+        // lines to find the change.
+        hideUnchangedRegions: {
+          enabled: true,
+          contextLineCount: 3,
+          minimumLineCount: 3,
+          revealLineCount: 20,
+        },
       }}
       loading={
         <div className="flex h-full items-center justify-center bg-muted/20">
