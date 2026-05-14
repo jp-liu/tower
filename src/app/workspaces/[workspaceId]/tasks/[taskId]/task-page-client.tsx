@@ -373,10 +373,6 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                   taskId={task.id}
                   worktreePath={activeWorktreePath}
                   onSessionEnd={handleSessionEnd}
-                  onFileOpen={(fullPath) => {
-                    setSelectedFilePath(fullPath);
-                    setActiveTab("files");
-                  }}
                 />
               </div>
             </div>
