@@ -14,6 +14,12 @@ import { CommitActionMenu } from "./commit-action-menu";
 
 // Must match GitGraphSvg's ROW_HEIGHT constant
 const ROW_HEIGHT = 28;
+// Must match GitGraphSvg's LANE_WIDTH / SVG_PADDING_X constants
+const LANE_WIDTH = 16;
+const SVG_PADDING_X = 8;
+// Graph gutter is capped to this many lanes — wider histories are clipped so
+// the commit-message column always has room.
+const MAX_GRAPH_LANES = 3;
 
 interface CommitFile {
   filename: string;
@@ -156,8 +162,12 @@ export function GitHistoryPanel({
     );
   }
 
-  // Compute graph gutter width (px) — hugs actual laneCount, capped to 192px.
-  const graphGutter = Math.min(Math.max(layout.laneCount * 16 + 16, 32), 192);
+  // Compute graph gutter width (px) — hugs actual laneCount, capped to
+  // MAX_GRAPH_LANES so the commit-message column always has room.
+  const graphGutter = Math.min(
+    Math.max(layout.laneCount * LANE_WIDTH + SVG_PADDING_X * 2, 2 * LANE_WIDTH),
+    MAX_GRAPH_LANES * LANE_WIDTH + SVG_PADDING_X * 2,
+  );
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -167,18 +177,16 @@ export function GitHistoryPanel({
           — dots fuse with their row visually. */}
       <ScrollArea className="flex-1 min-h-0">
         <div className="relative">
-          {/* Graph SVG — absolute, overlays the list's left gutter. */}
+          {/* Graph SVG — absolute, overlays the list's left gutter. Purely
+              decorative: pointer-events-none lets hover/click/tooltip reach the
+              full-width commit <li> underneath (which owns selection). Clipped
+              to graphGutter so histories wider than MAX_GRAPH_LANES don't bleed
+              into the message column. */}
           <div
-            className="absolute left-0 top-0 z-10 pointer-events-none"
+            className="absolute left-0 top-0 z-10 pointer-events-none overflow-hidden"
             style={{ width: `${graphGutter}px` }}
           >
-            <div className="pointer-events-auto overflow-x-auto scrollbar-thin" style={{ width: `${graphGutter}px` }}>
-              <GitGraphSvg
-                layout={layout}
-                selectedCommitHash={selectedHash}
-                onCommitClick={setSelectedHash}
-              />
-            </div>
+            <GitGraphSvg layout={layout} selectedCommitHash={selectedHash} />
           </div>
 
           {/* Commit list — full width; left padding leaves room for the SVG. */}
