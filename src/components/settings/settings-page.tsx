@@ -224,10 +224,12 @@ interface CLIAdapter {
   type: string;
   label: string;
   source: "builtin" | "external";
+  /** Provider registry key — required so the test endpoint runs install + records connection state. */
+  provider: string;
 }
 
 const CLI_ADAPTERS: CLIAdapter[] = [
-  { type: "claude_local", label: "Claude Code", source: "builtin" },
+  { type: "claude_local", label: "Claude Code", source: "builtin", provider: "claude" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -475,7 +477,7 @@ export function SettingsPage() {
     localStorage.setItem(DEFAULT_CLI_ADAPTER_KEY, adapterType);
   }
 
-  async function handleTestAdapter(adapterType: string) {
+  async function handleTestAdapter(adapterType: string, provider: string) {
     if (testingAdapter) return;
     setTestingAdapter(adapterType);
     setTestResults((prev) => {
@@ -487,7 +489,7 @@ export function SettingsPage() {
       const res = await fetch("/api/adapters/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adapterType }),
+        body: JSON.stringify({ adapterType, provider }),
       });
       const data: TestResult = await res.json();
       setTestResults((prev) => ({ ...prev, [adapterType]: data }));
@@ -929,7 +931,7 @@ export function SettingsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleTestAdapter(adapter.type)}
+                      onClick={() => handleTestAdapter(adapter.type, adapter.provider)}
                       disabled={isTesting}
                     >
                       {isTesting ? (
