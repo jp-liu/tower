@@ -51,7 +51,9 @@ import {
   deletePrompt,
   setDefaultPrompt,
 } from "@/actions/prompt-actions";
+import { getAvailableProviders } from "@/actions/ai-config-actions";
 import type { TestResult } from "@/lib/cli-test";
+import type { ProviderAvailability } from "@/lib/ai/types";
 import type { AgentPrompt } from "@prisma/client";
 import type { DetectedTerminalApp } from "@/lib/platform";
 import type { GitPathRule } from "@/lib/git-url";
@@ -233,19 +235,11 @@ const ACCENT_STYLES: Record<
 // ---------------------------------------------------------------------------
 // CLI Adapters (AI Tools)
 // ---------------------------------------------------------------------------
+// The AI Tools list is rendered dynamically from the provider registry
+// (getAvailableProviders) — adding a provider there surfaces it here with no
+// UI change. The provider `name` ("claude", "codex", …) is the identifier
+// used for the default-adapter preference and the test endpoint.
 const DEFAULT_CLI_ADAPTER_KEY = "ai-manager:default-cli-adapter";
-
-interface CLIAdapter {
-  type: string;
-  label: string;
-  source: "builtin" | "external";
-  /** Provider registry key — required so the test endpoint runs install + records connection state. */
-  provider: string;
-}
-
-const CLI_ADAPTERS: CLIAdapter[] = [
-  { type: "claude_local", label: "Claude Code", source: "builtin", provider: "claude" },
-];
 
 // ---------------------------------------------------------------------------
 // System Config types
@@ -305,7 +299,8 @@ export function SettingsPage() {
   const [idleTimeout, setIdleTimeout] = useState(180);
 
   // ── AI Tools state ─────────────────────────────────────────────
-  const [defaultAdapter, setDefaultAdapter] = useState("claude_local");
+  const [providers, setProviders] = useState<ProviderAvailability[]>([]);
+  const [defaultAdapter, setDefaultAdapter] = useState("claude");
   const [testingAdapter, setTestingAdapter] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, TestResult>>(
     {}
@@ -378,8 +373,9 @@ export function SettingsPage() {
     getAvailableTerminalApps().then(setDetectedApps);
   }, []);
 
-  // AI Tools — default adapter from localStorage
+  // AI Tools — providers from the registry + default adapter from localStorage
   useEffect(() => {
+    getAvailableProviders().then(setProviders);
     const stored = localStorage.getItem(DEFAULT_CLI_ADAPTER_KEY);
     if (stored) setDefaultAdapter(stored);
   }, []);
@@ -487,31 +483,31 @@ export function SettingsPage() {
   // =========================================================================
   // HANDLERS — AI Tools
   // =========================================================================
-  function handleSetAdapterDefault(adapterType: string) {
-    setDefaultAdapter(adapterType);
-    localStorage.setItem(DEFAULT_CLI_ADAPTER_KEY, adapterType);
+  function handleSetAdapterDefault(provider: string) {
+    setDefaultAdapter(provider);
+    localStorage.setItem(DEFAULT_CLI_ADAPTER_KEY, provider);
   }
 
-  async function handleTestAdapter(adapterType: string, provider: string) {
+  async function handleTestAdapter(provider: string) {
     if (testingAdapter) return;
-    setTestingAdapter(adapterType);
+    setTestingAdapter(provider);
     setTestResults((prev) => {
       const next = { ...prev };
-      delete next[adapterType];
+      delete next[provider];
       return next;
     });
     try {
       const res = await fetch("/api/adapters/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adapterType, provider }),
+        body: JSON.stringify({ provider }),
       });
       const data: TestResult = await res.json();
-      setTestResults((prev) => ({ ...prev, [adapterType]: data }));
+      setTestResults((prev) => ({ ...prev, [provider]: data }));
     } catch {
       setTestResults((prev) => ({
         ...prev,
-        [adapterType]: {
+        [provider]: {
           ok: false,
           checks: [
             {
@@ -892,19 +888,19 @@ export function SettingsPage() {
   function renderAiTools() {
     return (
       <ul className="divide-y rounded-xl border border-border bg-card">
-        {CLI_ADAPTERS.map((adapter) => {
-          const isDefault = defaultAdapter === adapter.type;
-          const isTesting = testingAdapter === adapter.type;
-          const result = testResults[adapter.type];
+        {providers.map((provider) => {
+          const isDefault = defaultAdapter === provider.name;
+          const isTesting = testingAdapter === provider.name;
+          const result = testResults[provider.name];
 
           return (
-            <li key={adapter.type}>
+            <li key={provider.name}>
               <div className="px-5 py-4">
                 {/* Row: info left, actions right */}
                 <div className="flex items-center gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">{adapter.label}</span>
+                      <span className="font-medium">{provider.displayName}</span>
                       <Badge variant="outline">{t("label.builtin")}</Badge>
                       {isDefault && (
                         <Badge variant="secondary" className="shrink-0">
@@ -929,7 +925,9 @@ export function SettingsPage() {
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {adapter.type}
+                      {provider.cli.available && provider.cli.version
+                        ? `${provider.name} · ${provider.cli.version}`
+                        : provider.name}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -937,7 +935,7 @@ export function SettingsPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleSetAdapterDefault(adapter.type)}
+                        onClick={() => handleSetAdapterDefault(provider.name)}
                       >
                         <Star className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
                         {t("settings.prompts.setDefault")}
@@ -946,7 +944,7 @@ export function SettingsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleTestAdapter(adapter.type, adapter.provider)}
+                      onClick={() => handleTestAdapter(provider.name)}
                       disabled={isTesting}
                     >
                       {isTesting ? (
@@ -958,16 +956,6 @@ export function SettingsPage() {
                         t("settings.aiTools.testConnection")
                       )}
                     </Button>
-                    {adapter.source === "external" && (
-                      <Button
-                        variant="outline"
-                        size="icon-sm"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        title={t("common.delete")}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
                   </div>
                 </div>
 
@@ -977,7 +965,7 @@ export function SettingsPage() {
                     <div className="space-y-1.5">
                       {result.checks.map((check) => (
                         <div
-                          key={`${adapter.type}-${check.name}`}
+                          key={`${provider.name}-${check.name}`}
                           className="flex items-center gap-2 text-sm"
                         >
                           <span
