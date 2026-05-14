@@ -309,6 +309,8 @@ export const zh = {
   "git.unstagedChanges": "未暂存",
   "git.stageAll": "全部暂存",
   "git.unstageAll": "全部取消",
+  "git.stageFile": "暂存此文件更改",
+  "git.unstageFile": "取消暂存此文件",
   "git.commit": "提交",
   "git.commitSuccess": "提交成功",
   "git.commitMsgPlaceholder": "提交信息 (⌘+Enter 提交)",

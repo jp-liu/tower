@@ -175,7 +175,7 @@ describe("EditorGitPanel — hunk dialog", () => {
     });
 
     // Click the view-hunks button — it should call gitAction with diff-file
-    const viewHunksBtn = screen.getByTitle(/查看|view.*hunk/i);
+    const viewHunksBtn = screen.getByLabelText(/查看|view.*hunk/i);
     await act(async () => {
       fireEvent.click(viewHunksBtn);
     });
@@ -197,7 +197,7 @@ describe("EditorGitPanel — hunk dialog", () => {
     });
 
     // Click the view-hunks icon
-    const viewHunksBtn = screen.getByTitle(/查看|view.*hunk/i);
+    const viewHunksBtn = screen.getByLabelText(/查看|view.*hunk/i);
     await act(async () => {
       fireEvent.click(viewHunksBtn);
     });
@@ -223,7 +223,7 @@ describe("EditorGitPanel — hunk dialog", () => {
       expect(screen.getByText("x.ts")).toBeInTheDocument();
     });
 
-    const viewHunksBtn = screen.getByTitle(/查看|view.*hunk/i);
+    const viewHunksBtn = screen.getByLabelText(/查看|view.*hunk/i);
     await act(async () => {
       fireEvent.click(viewHunksBtn);
     });
@@ -287,7 +287,7 @@ describe("EditorGitPanel — hunk dialog", () => {
     });
 
     // Staged section has a hunk button too
-    const viewHunksBtn = screen.getByTitle(/查看|view.*hunk/i);
+    const viewHunksBtn = screen.getByLabelText(/查看|view.*hunk/i);
     await act(async () => {
       fireEvent.click(viewHunksBtn);
     });

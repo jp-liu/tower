@@ -666,6 +666,7 @@ export function EditorGitPanel({ localPath, onFileSelect }: EditorGitPanelProps)
           onFileClick={handleFileClick}
           onFileAction={(f) => handleUnstage([f])}
           fileActionIcon="−"
+          fileActionLabel={t("git.unstageFile")}
           onFileHunkAction={(f) => openHunkDialog(f, true)}
           fileHunkLabel={t("git.viewHunks")}
         />
@@ -682,8 +683,10 @@ export function EditorGitPanel({ localPath, onFileSelect }: EditorGitPanelProps)
           onFileClick={handleFileClick}
           onFileAction={(f) => handleStage([f])}
           fileActionIcon="+"
+          fileActionLabel={t("git.stageFile")}
           onFileSecondaryAction={(f) => handleDiscardFile(f)}
           fileSecondaryIcon={<Trash2 className="h-2.5 w-2.5" />}
+          fileSecondaryLabel={t("git.discardFile")}
           onFileHunkAction={(f) => openHunkDialog(f, false)}
           fileHunkLabel={t("git.viewHunks")}
         />
@@ -741,8 +744,8 @@ export function EditorGitPanel({ localPath, onFileSelect }: EditorGitPanelProps)
 function FileSection({
   label, count, labelColor, tree,
   batchAction, batchLabel, batchIcon,
-  onFileClick, onFileAction, fileActionIcon,
-  onFileSecondaryAction, fileSecondaryIcon,
+  onFileClick, onFileAction, fileActionIcon, fileActionLabel,
+  onFileSecondaryAction, fileSecondaryIcon, fileSecondaryLabel,
   onFileHunkAction, fileHunkLabel,
 }: {
   label: string;
@@ -755,8 +758,10 @@ function FileSection({
   onFileClick: (f: ChangedFile) => void;
   onFileAction: (filePath: string) => void;
   fileActionIcon: string;
+  fileActionLabel?: string;
   onFileSecondaryAction?: (filePath: string) => void;
   fileSecondaryIcon?: React.ReactNode;
+  fileSecondaryLabel?: string;
   onFileHunkAction?: (filePath: string) => void;
   fileHunkLabel?: string;
 }) {
@@ -800,8 +805,10 @@ function FileSection({
               onFileClick={onFileClick}
               onFileAction={onFileAction}
               fileActionIcon={fileActionIcon}
+              fileActionLabel={fileActionLabel}
               onFileSecondaryAction={onFileSecondaryAction}
               fileSecondaryIcon={fileSecondaryIcon}
+              fileSecondaryLabel={fileSecondaryLabel}
               onFileHunkAction={onFileHunkAction}
               fileHunkLabel={fileHunkLabel}
             />
@@ -815,8 +822,8 @@ function FileSection({
 // ── Tree row (recursive) ──
 
 function TreeRow({
-  node, depth, onFileClick, onFileAction, fileActionIcon,
-  onFileSecondaryAction, fileSecondaryIcon,
+  node, depth, onFileClick, onFileAction, fileActionIcon, fileActionLabel,
+  onFileSecondaryAction, fileSecondaryIcon, fileSecondaryLabel,
   onFileHunkAction, fileHunkLabel,
 }: {
   node: TreeNode;
@@ -824,27 +831,29 @@ function TreeRow({
   onFileClick: (f: ChangedFile) => void;
   onFileAction: (filePath: string) => void;
   fileActionIcon: string;
+  fileActionLabel?: string;
   onFileSecondaryAction?: (filePath: string) => void;
   fileSecondaryIcon?: React.ReactNode;
+  fileSecondaryLabel?: string;
   onFileHunkAction?: (filePath: string) => void;
   fileHunkLabel?: string;
 }) {
   const [expanded, setExpanded] = useState(true);
-  const paddingLeft = 8 + depth * 12;
+  const indentStyle = { paddingLeft: `calc(${depth} * 8px + 4px)` };
 
   if (node.isDir) {
     return (
       <>
         <button
           onClick={() => setExpanded(!expanded)}
-          className="flex w-full items-center gap-1 py-0.5 hover:bg-accent/50 transition-colors text-left"
-          style={{ paddingLeft }}
+          className="flex w-full items-center gap-1 py-0.5 px-1 rounded-sm min-h-[28px] hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+          style={indentStyle}
         >
           {expanded
             ? <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
             : <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />}
-          <Folder className="h-3 w-3 shrink-0 text-amber-400/70" />
-          <span className="text-xs text-muted-foreground truncate">{node.name}</span>
+          <Folder className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+          <span className="text-[13px] text-muted-foreground truncate">{node.name}</span>
         </button>
         {expanded && node.children
           .sort((a, b) => {
@@ -859,8 +868,10 @@ function TreeRow({
               onFileClick={onFileClick}
               onFileAction={onFileAction}
               fileActionIcon={fileActionIcon}
+              fileActionLabel={fileActionLabel}
               onFileSecondaryAction={onFileSecondaryAction}
               fileSecondaryIcon={fileSecondaryIcon}
+              fileSecondaryLabel={fileSecondaryLabel}
               onFileHunkAction={onFileHunkAction}
               fileHunkLabel={fileHunkLabel}
             />
@@ -877,40 +888,55 @@ function TreeRow({
 
   return (
     <div
-      className="group flex items-center gap-1 py-0.5 hover:bg-accent/50 transition-colors cursor-pointer"
-      style={{ paddingLeft: paddingLeft + 16 }} // extra indent for file (no chevron)
+      className="group flex items-center gap-1 py-0.5 px-1 rounded-sm min-h-[28px] hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer"
+      style={indentStyle}
       onClick={() => onFileClick(file)}
     >
-      <Icon className={`h-3 w-3 shrink-0 ${color}`} />
-      <span className="text-xs text-foreground truncate flex-1">{node.name}</span>
-      <span className={`text-[10px] font-mono font-bold shrink-0 mr-1 ${color}`}>{letter}</span>
+      {/* Empty chevron spacer — keeps files aligned with sibling directories */}
+      <span className="h-3 w-3 shrink-0" />
+      <Icon className={`h-3.5 w-3.5 shrink-0 ${color}`} />
+      <span className="text-[13px] text-foreground truncate flex-1">{node.name}</span>
+      <span className={`text-[11px] font-mono font-bold shrink-0 mr-1 ${color}`}>{letter}</span>
       {onFileHunkAction && (
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={(e) => { e.stopPropagation(); onFileHunkAction(file.file); }}
-          className="shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
-          title={fileHunkLabel ?? "View hunks"}
-          aria-label={fileHunkLabel ?? "View hunks"}
-        >
-          <Layers className="h-3 w-3" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={(e) => { e.stopPropagation(); onFileHunkAction(file.file); }}
+                className="shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                aria-label={fileHunkLabel ?? "View hunks"}
+              />
+            }
+          >
+            <Layers className="h-3 w-3" />
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{fileHunkLabel ?? "View hunks"}</TooltipContent>
+        </Tooltip>
       )}
       {onFileSecondaryAction && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onFileSecondaryAction(file.file); }}
-          className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive transition-all"
-          title={file.file}
-        >
-          {fileSecondaryIcon}
-        </button>
+        <Tooltip>
+          <TooltipTrigger
+            onClick={(e) => { e.stopPropagation(); onFileSecondaryAction(file.file); }}
+            className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive transition-all"
+            aria-label={fileSecondaryLabel ?? ""}
+          >
+            {fileSecondaryIcon}
+          </TooltipTrigger>
+          {fileSecondaryLabel && <TooltipContent side="bottom">{fileSecondaryLabel}</TooltipContent>}
+        </Tooltip>
       )}
-      <button
-        onClick={(e) => { e.stopPropagation(); onFileAction(file.file); }}
-        className="shrink-0 rounded px-1 text-xs font-mono text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-background hover:text-foreground transition-all mr-1"
-      >
-        {fileActionIcon}
-      </button>
+      <Tooltip>
+        <TooltipTrigger
+          onClick={(e) => { e.stopPropagation(); onFileAction(file.file); }}
+          className="shrink-0 rounded px-1 text-xs font-mono text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-background hover:text-foreground transition-all mr-1"
+          aria-label={fileActionLabel ?? ""}
+        >
+          {fileActionIcon}
+        </TooltipTrigger>
+        {fileActionLabel && <TooltipContent side="bottom">{fileActionLabel}</TooltipContent>}
+      </Tooltip>
     </div>
   );
 }

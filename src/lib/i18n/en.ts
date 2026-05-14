@@ -294,6 +294,8 @@ export const en: Translations = {
   "git.unstagedChanges": "Unstaged",
   "git.stageAll": "Stage All",
   "git.unstageAll": "Unstage All",
+  "git.stageFile": "Stage changes",
+  "git.unstageFile": "Unstage changes",
   "git.commit": "Commit",
   "git.commitSuccess": "Committed successfully",
   "git.commitMsgPlaceholder": "Commit message (⌘+Enter to commit)",
