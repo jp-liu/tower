@@ -19,10 +19,17 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
+// ExtensionProvider takes server-injected initialStatus — it does not fetch on
+// mount. Mirror the status the layout's RSC would compute.
+const INITIAL_STATUS = {
+  rg: { installed: true, version: "14.1.1", path: "/usr/bin/rg" },
+  monaco: { installed: false },
+};
+
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
     <I18nProvider>
-      <ExtensionProvider>{children}</ExtensionProvider>
+      <ExtensionProvider initialStatus={INITIAL_STATUS}>{children}</ExtensionProvider>
     </I18nProvider>
   );
 }

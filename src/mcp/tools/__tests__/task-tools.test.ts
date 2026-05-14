@@ -117,7 +117,10 @@ describe("task-tools", () => {
 
       expect(mockDb.task.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { projectId: "proj1" },
+          where: {
+            projectId: "proj1",
+            NOT: { labels: { some: { label: { name: "Tower", isBuiltin: true } } } },
+          },
         })
       );
       expect(result[0].labels).toEqual([{ id: "label1", name: "Bug", color: "#ff0000" }]);
@@ -130,7 +133,11 @@ describe("task-tools", () => {
 
       expect(mockDb.task.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { projectId: "proj1", status: "IN_PROGRESS" },
+          where: {
+            projectId: "proj1",
+            status: "IN_PROGRESS",
+            NOT: { labels: { some: { label: { name: "Tower", isBuiltin: true } } } },
+          },
         })
       );
     });
@@ -310,11 +317,12 @@ describe("task-tools", () => {
         autoStart: true,
       });
 
+      // Prompt is the task title — startPtyExecution injects the description as context separately.
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining("/api/internal/terminal/task-autostart-01/start"),
         expect.objectContaining({
           method: "POST",
-          body: expect.stringContaining("start me"),
+          body: expect.stringContaining("AutoStart Task"),
         })
       );
     });

@@ -6,6 +6,7 @@ vi.mock("@/lib/instrumentation-tasks", () => ({
   pruneOrphanedWorktrees: vi.fn().mockResolvedValue(undefined),
   cleanupStaleExecutions: vi.fn().mockResolvedValue(undefined),
   ensureTowerLabel: vi.fn().mockResolvedValue(undefined),
+  ensureDefaultWorkspace: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock @/lib/pty/ws-server
