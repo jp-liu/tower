@@ -1,67 +1,330 @@
 "use server";
 
-import { spawn } from "node:child_process";
+import { createServer } from "node:net";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join, isAbsolute } from "node:path";
+import { isAbsolute, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { parse as shellParse } from "shell-quote";
+import { db } from "@/lib/db";
+import { PRESETS } from "@/lib/preview/presets";
 import {
-  registerPreviewProcess,
-  killPreviewProcess,
-  isPreviewRunning,
-} from "@/lib/preview-process";
+  getPreviewKey,
+  getPreviewCwd,
+  getEffectiveCommand,
+  getEffectivePort,
+} from "@/lib/preview/preview-key";
+import {
+  getOrCreatePreviewSession,
+  getPreviewSession,
+} from "@/lib/preview/session-store";
+import type { PreviewPreset } from "@/lib/preview/preset-types";
+import { detectPreset } from "@/lib/preview/detector";
 import { readConfigValue } from "@/lib/config-reader";
 
-export async function startPreview(
-  taskId: string,
-  command: string,
-  cwd: string
-): Promise<{ started: boolean; error?: string }> {
-  if (isPreviewRunning(taskId)) {
-    killPreviewProcess(taskId);
-  }
-  try {
-    // Split command by whitespace into args — shell: false (security requirement)
-    const parts = command.trim().split(/\s+/);
-    const [cmd, ...args] = parts;
-    // Removed console.log per coding standards — use structured logging if needed
-    const child = spawn(cmd, args, {
-      cwd,
-      shell: false,
-      detached: false,
-      stdio: "ignore",
-    });
-    registerPreviewProcess(taskId, child);
-    return { started: true };
-  } catch (err) {
-    return { started: false, error: String(err) };
-  }
+interface PreviewStateResp {
+  previewKey: string;
+  status: string;
+  preset: { id: string; name: string; icon: string; docUrl?: string } | null;
+  presetSource: "project" | "subPath-detected" | null;
+  command: string;
+  port: number;
+  installCommand: string | null;
+  url: string | null;
+  installed: boolean | null;
+  startedAt: number | null;
+  readyAt: number | null;
+  errorMessage: string | null;
+  recentLogs: string[];
+  activeSubscribers: number;
+  cwd: string | null;
 }
 
-export async function stopPreview(taskId: string): Promise<void> {
-  killPreviewProcess(taskId);
+function parseCommandLine(cmd: string, port: number): {
+  command: string;
+  args: string[];
+  envOverrides?: Record<string, string>;
+} {
+  const replaced = cmd.replace(/\{port\}/g, String(port));
+  const tokens = shellParse(replaced);
+  const env: Record<string, string> = {};
+  const parts: string[] = [];
+  for (const tok of tokens) {
+    if (typeof tok !== "string") continue;
+    if (parts.length === 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tok)) {
+      const idx = tok.indexOf("=");
+      env[tok.slice(0, idx)] = tok.slice(idx + 1);
+      continue;
+    }
+    parts.push(tok);
+  }
+  return {
+    command: parts[0] ?? "",
+    args: parts.slice(1),
+    envOverrides: Object.keys(env).length > 0 ? env : undefined,
+  };
 }
 
-/**
- * Detect the frontend framework from package.json in the given directory.
- * Returns "vite" | "next" | "nuxt" | "angular" | null
- */
-export async function detectFramework(cwd: string): Promise<string | null> {
+function checkInstalled(
+  preset: PreviewPreset | null,
+  cwd: string | null
+): boolean | null {
+  if (!preset || !preset.installMarker || !cwd) return null;
+  return preset.installMarker.some((m) => {
+    try {
+      return existsSync(join(cwd, m));
+    } catch {
+      return false;
+    }
+  });
+}
+
+function isMonorepoRoot(projectLocalPath: string): boolean {
   try {
-    const raw = readFileSync(join(cwd, "package.json"), "utf-8");
-    const pkg = JSON.parse(raw);
-    const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
-    if (allDeps["vite"] || allDeps["@vitejs/plugin-vue"] || allDeps["@vitejs/plugin-react"]) return "vite";
-    if (allDeps["next"]) return "next";
-    if (allDeps["nuxt"]) return "nuxt";
-    if (allDeps["@angular/core"]) return "angular";
-    return null;
+    if (existsSync(join(projectLocalPath, "pnpm-workspace.yaml"))) return true;
+    const pkgPath = join(projectLocalPath, "package.json");
+    if (existsSync(pkgPath)) {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as { workspaces?: unknown };
+      if (pkg.workspaces) return true;
+    }
   } catch {
-    return null;
+    // best-effort
   }
+  return false;
 }
 
-// Cross-platform terminal opener
+function getInstallCwd(
+  preset: PreviewPreset | null,
+  effectiveCwd: string,
+  projectLocalPath: string | null
+): string {
+  if (preset?.installCwd === "monorepo-root" && projectLocalPath) {
+    return projectLocalPath;
+  }
+  if (projectLocalPath && effectiveCwd !== projectLocalPath && isMonorepoRoot(projectLocalPath)) {
+    return projectLocalPath;
+  }
+  return effectiveCwd;
+}
+
+async function isPortInUse(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const srv = createServer();
+    srv.once("error", () => resolve(true));
+    srv.once("listening", () => srv.close(() => resolve(false)));
+    srv.listen(port, "0.0.0.0");
+  });
+}
+
+async function resolveEffective(args: {
+  taskId: string;
+  projectId: string;
+  worktreePath: string | null;
+}) {
+  const task = await db.task.findUniqueOrThrow({
+    where: { id: args.taskId },
+    select: {
+      previewCommandOverride: true,
+      previewPortOverride: true,
+      subPath: true,
+    },
+  });
+  const project = await db.project.findUniqueOrThrow({
+    where: { id: args.projectId },
+    select: {
+      localPath: true,
+      previewCommand: true,
+      previewPort: true,
+      previewPreset: true,
+      previewInstallCommand: true,
+    },
+  });
+
+  const cwd = getPreviewCwd({
+    worktreePath: args.worktreePath,
+    projectLocalPath: project.localPath,
+    subPath: task.subPath,
+  });
+
+  let preset: PreviewPreset | null = null;
+  let presetSource: "project" | "subPath-detected" | null = null;
+  if (task.subPath && cwd) {
+    preset = await detectPreset(cwd);
+    presetSource = preset ? "subPath-detected" : null;
+  } else if (project.previewPreset) {
+    preset = PRESETS.find((p) => p.id === project.previewPreset) ?? null;
+    presetSource = preset ? "project" : null;
+  }
+
+  const command = getEffectiveCommand({
+    taskOverride: task.previewCommandOverride,
+    projectDefault: project.previewCommand,
+    presetCommand: preset?.command ?? null,
+  });
+  const port = getEffectivePort({
+    taskOverride: task.previewPortOverride,
+    projectDefault: project.previewPort,
+    presetPort: preset?.port ?? null,
+  });
+  const installCommand = project.previewInstallCommand ?? preset?.installCommand ?? null;
+
+  return { task, project, preset, presetSource, cwd, command, port, installCommand };
+}
+
+export async function getPreviewState(args: {
+  taskId: string;
+  projectId: string;
+  worktreePath: string | null;
+}): Promise<PreviewStateResp> {
+  const eff = await resolveEffective(args);
+
+  // T2: background preset auto-detection — must use updateMany (conditional update can't mix id + non-unique field)
+  if (!eff.project.previewPreset && !eff.task.subPath && eff.cwd) {
+    void (async () => {
+      try {
+        const detected = await detectPreset(eff.cwd!);
+        if (detected) {
+          await db.project.updateMany({
+            where: { id: args.projectId, previewPreset: null },
+            data: { previewPreset: detected.id },
+          });
+        }
+      } catch {
+        // best-effort
+      }
+    })();
+  }
+
+  const previewKey = eff.cwd
+    ? getPreviewKey({ cwd: eff.cwd, command: eff.command, port: eff.port })
+    : "no-cwd";
+
+  const session = getPreviewSession(previewKey);
+  const installed = checkInstalled(eff.preset, eff.cwd);
+
+  return {
+    previewKey,
+    status: session?.status ?? "stopped",
+    preset: eff.preset
+      ? { id: eff.preset.id, name: eff.preset.name, icon: eff.preset.icon, docUrl: eff.preset.docUrl }
+      : null,
+    presetSource: eff.presetSource,
+    command: eff.command,
+    port: eff.port,
+    installCommand: eff.installCommand,
+    url: session?.getState().url ?? null,
+    installed,
+    startedAt: session?.getState().startedAt ?? null,
+    readyAt: session?.getState().readyAt ?? null,
+    errorMessage: session?.getState().errorMessage ?? null,
+    recentLogs: session?.getBuffer().slice(-500) ?? [],
+    activeSubscribers: session?.activeSubscriberCount ?? 0,
+    cwd: eff.cwd,
+  };
+}
+
+export async function startPreview(args: {
+  taskId: string;
+  projectId: string;
+  worktreePath: string | null;
+}): Promise<{ started: boolean; error?: string }> {
+  const eff = await resolveEffective(args);
+  if (!eff.cwd) return { started: false, error: "No working directory configured" };
+  if (!eff.command) return { started: false, error: "No command configured" };
+  if (eff.port <= 0) return { started: false, error: "Invalid port" };
+
+  if (await isPortInUse(eff.port)) {
+    return {
+      started: false,
+      error: `Port ${eff.port} is in use. Set Task.previewPortOverride to use a different port, or stop the conflicting process.`,
+    };
+  }
+
+  const previewKey = getPreviewKey({ cwd: eff.cwd, command: eff.command, port: eff.port });
+  const parsed = parseCommandLine(eff.command, eff.port);
+
+  const session = getOrCreatePreviewSession(previewKey, {
+    cwd: eff.cwd,
+    command: parsed.command,
+    args: parsed.args,
+    port: eff.port,
+    preset: eff.preset,
+    envOverrides: parsed.envOverrides,
+  });
+  return session.run();
+}
+
+export async function stopPreview(args: { previewKey: string }): Promise<void> {
+  const session = getPreviewSession(args.previewKey);
+  if (session) session.stop();
+}
+
+export async function installPreviewDeps(args: {
+  taskId: string;
+  projectId: string;
+  worktreePath: string | null;
+  autoStartAfter?: boolean;
+}): Promise<{ ok: boolean; error?: string }> {
+  const eff = await resolveEffective(args);
+  if (!eff.cwd) return { ok: false, error: "No working directory" };
+  if (!eff.installCommand) return { ok: false, error: "No install command configured" };
+
+  const previewKey = getPreviewKey({ cwd: eff.cwd, command: eff.command, port: eff.port });
+  const installParts = eff.installCommand.trim().split(/\s+/);
+  const installCmd = installParts[0] ?? "";
+  const installArgs = installParts.slice(1);
+
+  const parsed = parseCommandLine(eff.command, eff.port);
+  const session = getOrCreatePreviewSession(previewKey, {
+    cwd: eff.cwd,
+    command: parsed.command,
+    args: parsed.args,
+    port: eff.port,
+    preset: eff.preset,
+    envOverrides: parsed.envOverrides,
+  });
+  const installCwd = getInstallCwd(eff.preset, eff.cwd, eff.project.localPath);
+  return session.install({
+    installCommand: installCmd,
+    installArgs,
+    installCwd,
+    autoStartAfter: args.autoStartAfter,
+  });
+}
+
+export async function redetectPreset(args: {
+  projectId: string;
+  worktreePath?: string | null;
+}): Promise<{ preset: string | null }> {
+  const project = await db.project.findUniqueOrThrow({
+    where: { id: args.projectId },
+    select: { localPath: true },
+  });
+  const cwd = args.worktreePath ?? project.localPath;
+  if (!cwd) return { preset: null };
+  const detected = await detectPreset(cwd);
+  await db.project.update({
+    where: { id: args.projectId },
+    data: { previewPreset: detected?.id ?? null },
+  });
+  return { preset: detected?.id ?? null };
+}
+
+export async function setProjectPreset(args: {
+  projectId: string;
+  presetId: string | null;
+}): Promise<void> {
+  if (args.presetId && !PRESETS.some((p) => p.id === args.presetId)) {
+    throw new Error(`Unknown preset id: ${args.presetId}`);
+  }
+  await db.project.update({
+    where: { id: args.projectId },
+    data: { previewPreset: args.presetId },
+  });
+}
+
+// ─── openInTerminal — cross-platform terminal opener ─────────────────────────
 // Uses execFileSync with args array — no shell interpolation (security constraint)
+
 const ALLOWED_TERMINAL_APPS_MACOS = ["Terminal", "iTerm", "iTerm2", "Warp", "Hyper", "Alacritty", "WezTerm", "kitty"];
 const ALLOWED_TERMINAL_APPS_WINDOWS = ["cmd", "powershell", "pwsh", "wt", "Windows Terminal"];
 const ALLOWED_TERMINAL_APPS_LINUX = ["gnome-terminal", "konsole", "xterm", "alacritty", "kitty", "wezterm", "xfce4-terminal", "tilix"];
@@ -70,9 +333,7 @@ export async function openInTerminal(worktreePath: string): Promise<void> {
   if (!worktreePath || !isAbsolute(worktreePath)) {
     throw new Error("openInTerminal requires an absolute path");
   }
-
   const platform = process.platform;
-
   if (platform === "darwin") {
     const terminalApp = await readConfigValue<string>("terminal.app", "Terminal");
     if (!ALLOWED_TERMINAL_APPS_MACOS.includes(terminalApp)) {
@@ -83,22 +344,18 @@ export async function openInTerminal(worktreePath: string): Promise<void> {
     const terminalApp = await readConfigValue<string>("terminal.app", "wt");
     if (ALLOWED_TERMINAL_APPS_WINDOWS.includes(terminalApp)) {
       if (terminalApp === "wt" || terminalApp === "Windows Terminal") {
-        // Windows Terminal: open new tab in the specified directory
         execFileSync("cmd.exe", ["/c", "start", "wt", "-d", worktreePath]);
       } else if (terminalApp === "powershell" || terminalApp === "pwsh") {
         execFileSync("cmd.exe", ["/c", "start", terminalApp, "-NoExit", "-Command", `Set-Location '${worktreePath}'`]);
       } else {
-        // cmd
         execFileSync("cmd.exe", ["/c", "start", "cmd", "/k", `cd /d "${worktreePath}"`]);
       }
     } else {
       throw new Error(`Terminal app '${terminalApp}' is not in the allowed list`);
     }
   } else {
-    // Linux
     const terminalApp = await readConfigValue<string>("terminal.app", "xdg-open");
     if (terminalApp === "xdg-open") {
-      // Use xdg-open as fallback — opens default file manager, but it's always available
       execFileSync("xdg-open", [worktreePath]);
     } else if (ALLOWED_TERMINAL_APPS_LINUX.includes(terminalApp)) {
       execFileSync(terminalApp, ["--working-directory", worktreePath]);
