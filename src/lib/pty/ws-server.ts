@@ -3,6 +3,7 @@ import type { IncomingMessage } from "http";
 import { getSession, destroySession } from "./session-store";
 import { readConfigValue } from "@/lib/config-reader";
 import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
+import { getPreviewSession } from "@/lib/preview/session-store";
 
 function getAllowedOrigins(): Set<string> {
   const httpPort = parseInt(process.env.PORT || "3000", 10);
@@ -25,6 +26,29 @@ const sessionClients = new Map<string, Set<WebSocket>>();
 // Global notification channel — clients connected with taskId=__notifications__
 const NOTIFICATION_CHANNEL = "__notifications__";
 const notificationClients = new Set<WebSocket>();
+
+export const PREVIEW_TASK_ID = "__preview__";
+
+export interface PreviewWsParams {
+  role: "state" | "terminal";
+  previewKey: string;
+  connectionId: string;
+  taskId: string | null;
+}
+
+export function parsePreviewWsParams(params: URLSearchParams): PreviewWsParams | null {
+  if (params.get("taskId") !== PREVIEW_TASK_ID) return null;
+  const role = params.get("role");
+  const previewKey = params.get("previewKey");
+  if ((role !== "state" && role !== "terminal") || !previewKey) return null;
+  const connectionId = params.get("connectionId") ?? Math.random().toString(36).slice(2);
+  return {
+    role,
+    previewKey: decodeURIComponent(previewKey),
+    connectionId,
+    taskId: params.get("clientTaskId"),
+  };
+}
 
 /**
  * Broadcast a JSON message to all connected notification clients.
@@ -150,6 +174,46 @@ export async function startWsServer(): Promise<void> {
     if (!taskId) {
       ws.close(1008, "Missing taskId");
       return;
+    }
+
+    // Preview channel — dispatch by special taskId "__preview__" + role query
+    const previewParams = parsePreviewWsParams(url.searchParams);
+    if (previewParams) {
+      const session = getPreviewSession(previewParams.previewKey);
+      if (!session) {
+        ws.close(1008, "Preview session not found");
+        return;
+      }
+      const unsub = session.subscribe(
+        previewParams.connectionId,
+        previewParams.taskId ?? "unknown",
+        (state) => {
+          if (previewParams.role === "state") {
+            try {
+              ws.send(JSON.stringify({ type: "state", previewKey: session.key, state }));
+            } catch { /* best-effort */ }
+          }
+        },
+        (data) => {
+          if (previewParams.role === "terminal") {
+            try { ws.send(data); } catch { /* best-effort */ }
+          }
+        }
+      );
+      // Flush buffer + send initial state
+      if (previewParams.role === "terminal") {
+        const buf = session.getBuffer();
+        if (buf.length > 0) {
+          try { ws.send(buf.join("\n") + "\n"); } catch { /* ignore */ }
+        }
+      }
+      if (previewParams.role === "state") {
+        try {
+          ws.send(JSON.stringify({ type: "state", previewKey: session.key, state: session.getState() }));
+        } catch { /* ignore */ }
+      }
+      ws.on("close", () => unsub());
+      return;  // ⚠ early return to prevent falling into Claude PTY logic
     }
 
     // Notification channel — lightweight listener for global events (stop, completion)
