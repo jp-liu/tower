@@ -638,11 +638,10 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           <TabsContent value="preview" className="flex-1 min-h-0 overflow-hidden">
             <PreviewPanel
               taskId={task.id}
-              worktreePath={latestExecution?.worktreePath ?? null}
-              previewCommand={task.project?.previewCommand ?? null}
-              previewPort={task.project?.previewPort ?? null}
-              refreshKey={previewRefreshKey}
               projectId={task.projectId}
+              worktreePath={latestExecution?.worktreePath ?? null}
+              projectLocalPath={task.project?.localPath ?? null}
+              refreshKey={previewRefreshKey}
               previewUrl={previewUrl}
               onPreviewUrlChange={setPreviewUrl}
             />
