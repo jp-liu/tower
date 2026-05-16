@@ -103,8 +103,8 @@ function TaskRow({
   const isLaunching = launchingId === task.id;
 
   return (
-    <div className="group/task flex items-center gap-2 px-3 py-1.5 hover:bg-accent/50 cursor-default">
-      <div className="flex-1 min-w-0">
+    <div className="group/task grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-1.5 hover:bg-accent/50 cursor-default">
+      <div className="min-w-0">
         <p className={`text-sm truncate ${isRunning ? "italic text-muted-foreground" : ""}`}>
           {task.title}
         </p>
@@ -116,11 +116,11 @@ function TaskRow({
         </div>
       </div>
       {isRunning ? (
-        <span className="text-[10px] italic text-muted-foreground shrink-0">
+        <span className="text-[10px] italic text-muted-foreground">
           {t("missions.alreadyMonitored")}
         </span>
       ) : (
-        <div className="flex items-center gap-1 opacity-0 group-hover/task:opacity-100 transition-opacity shrink-0">
+        <div className="flex items-center gap-1 opacity-0 group-hover/task:opacity-100 transition-opacity">
           {lastSessionId && (
             <Button
               variant="outline"
@@ -441,7 +441,7 @@ export function TaskPickerDialog({
       {open && (
         <div
           ref={popoverRef}
-          className="absolute right-0 z-50 mt-1 grid max-h-[480px] w-96 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
+          className="absolute right-0 z-50 mt-1 grid max-h-[480px] w-[28rem] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
         >
           {/* Header */}
           <div className="px-3 py-2 border-b border-border">
