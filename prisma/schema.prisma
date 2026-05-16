@@ -30,6 +30,8 @@ model Project {
   projectType    ProjectCategory @default(FRONTEND)
   previewCommand String?
   previewPort    Int?
+  previewPreset  String?
+  previewInstallCommand String?
   workspaceId    String
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -78,6 +80,8 @@ model Task {
   promptId    String?
   baseBranch  String?
   subPath     String?
+  previewCommandOverride String?
+  previewPortOverride    Int?
   projectId   String
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
