@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, type RefObject } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Icon } from "@iconify/react";
 import { RefreshCw, Terminal, Loader2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -330,7 +330,7 @@ export function PreviewPanel({
         showInstallBanner={showInstallBanner}
         onInstallNow={handleInstall}
         onRunAnyway={handleRun}
-        xtermContainerRef={xtermContainerRef as RefObject<HTMLDivElement>}
+        xtermContainerRef={xtermContainerRef}
       />
 
       <StopPreviewConfirmDialog

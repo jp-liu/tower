@@ -13,7 +13,7 @@ export interface PreviewLogDrawerProps {
   onInstallNow: () => void;
   onRunAnyway: () => void;
   /** Expanded mode 的 xterm 容器 ref，由 PreviewPanel 提供（挂载 xterm 实例） */
-  xtermContainerRef?: React.RefObject<HTMLDivElement>;
+  xtermContainerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 export function PreviewLogDrawer({
