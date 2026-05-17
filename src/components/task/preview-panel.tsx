@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { Icon } from "@iconify/react";
 import { RefreshCw, Terminal, Loader2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,13 @@ import { getActualWsPort } from "@/actions/config-actions";
 import { updateTask } from "@/actions/task-actions";
 import { PreviewLogDrawer } from "./preview-log-drawer";
 import { StopPreviewConfirmDialog } from "./stop-preview-confirm-dialog";
+
+// xterm 在模块加载期访问 window —— 必须 ssr: false
+const PreviewLogTerminal = dynamic(
+  () =>
+    import("./preview-log-terminal").then((m) => m.PreviewLogTerminal),
+  { ssr: false },
+);
 import { PRESETS } from "@/lib/preview/presets";
 import { PREVIEW_TASK_ID } from "@/lib/pty/ws-server";
 
@@ -56,7 +64,6 @@ export function PreviewPanel({
   const [addressInput, setAddressInput] = useState(previewUrl ?? "");
   const [iframeUrl, setIframeUrl] = useState(previewUrl ?? "");
   const [manualRefreshKey, setManualRefreshKey] = useState(0);
-  const xtermContainerRef = useRef<HTMLDivElement>(null);
 
   const cwd = worktreePath ?? projectLocalPath;
 
@@ -330,7 +337,16 @@ export function PreviewPanel({
         showInstallBanner={showInstallBanner}
         onInstallNow={handleInstall}
         onRunAnyway={handleRun}
-        xtermContainerRef={xtermContainerRef}
+        terminalSlot={
+          drawerExpanded &&
+          state.previewKey &&
+          state.previewKey !== "no-cwd" ? (
+            <PreviewLogTerminal
+              previewKey={state.previewKey}
+              taskId={taskId}
+            />
+          ) : null
+        }
       />
 
       <StopPreviewConfirmDialog

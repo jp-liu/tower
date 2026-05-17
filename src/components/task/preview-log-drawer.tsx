@@ -12,8 +12,8 @@ export interface PreviewLogDrawerProps {
   showInstallBanner: boolean;
   onInstallNow: () => void;
   onRunAnyway: () => void;
-  /** Expanded mode 的 xterm 容器 ref，由 PreviewPanel 提供（挂载 xterm 实例） */
-  xtermContainerRef?: React.RefObject<HTMLDivElement | null>;
+  /** Expanded mode 的内容（通常是 xterm 视图，由 parent 通过 dynamic 注入） */
+  terminalSlot?: React.ReactNode;
 }
 
 export function PreviewLogDrawer({
@@ -23,7 +23,7 @@ export function PreviewLogDrawer({
   showInstallBanner,
   onInstallNow,
   onRunAnyway,
-  xtermContainerRef,
+  terminalSlot,
 }: PreviewLogDrawerProps) {
   const { t } = useI18n();
   const cleanLatest = stripAnsi(latestLogLine).slice(0, 200);
@@ -52,10 +52,9 @@ export function PreviewLogDrawer({
         <span className="truncate text-muted-foreground">{cleanLatest}</span>
       </button>
       {expanded && (
-        <div
-          ref={xtermContainerRef}
-          className="flex-1 overflow-hidden bg-black"
-        />
+        <div className="flex-1 overflow-hidden">
+          {terminalSlot ?? <div className="size-full bg-black" />}
+        </div>
       )}
     </div>
   );
