@@ -269,9 +269,9 @@ export async function installPreviewDeps(args: {
   if (!eff.installCommand) return { ok: false, error: "No install command configured" };
 
   const previewKey = getPreviewKey({ cwd: eff.cwd, command: eff.command, port: eff.port });
-  const installParts = eff.installCommand.trim().split(/\s+/);
-  const installCmd = installParts[0] ?? "";
-  const installArgs = installParts.slice(1);
+  const installParsed = parseCommandLine(eff.installCommand, eff.port);
+  const installCmd = installParsed.command;
+  const installArgs = installParsed.args;
 
   const parsed = parseCommandLine(eff.command, eff.port);
   const session = getOrCreatePreviewSession(previewKey, {
@@ -288,6 +288,7 @@ export async function installPreviewDeps(args: {
     installArgs,
     installCwd,
     autoStartAfter: args.autoStartAfter,
+    // TODO(V2): pass installParsed.envOverrides to session.install
   });
 }
 

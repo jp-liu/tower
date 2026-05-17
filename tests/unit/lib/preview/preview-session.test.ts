@@ -76,6 +76,26 @@ describe("PreviewSession", () => {
     expect(session.activeSubscriberCount).toBe(0);
   });
 
+  it("autoStartAfter triggers run after successful install (C-1 regression)", async () => {
+    session = new PreviewSession({
+      key: "test|node|9995",
+      cwd: process.cwd(),
+      command: "node",
+      args: ["-e", "process.exit(0)"],  // simulate dev server that exits immediately
+      port: 9995,
+      preset: null,
+    });
+    await session.install({
+      installCommand: "node",
+      installArgs: ["-e", "process.exit(0)"],  // simulate install that exits successfully
+      autoStartAfter: true,
+    });
+    // give install + autoStart a chance to complete
+    await new Promise((r) => setTimeout(r, 1500));
+    // status must not be stuck on "installing" — could be starting / running / stopped / error
+    expect(session.status).not.toBe("installing");
+  }, 10_000);
+
   it("cancelRequested during install transitions to stopped, not error", async () => {
     session = new PreviewSession({
       key: "test|sleep|9996",

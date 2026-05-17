@@ -249,12 +249,11 @@ export class PreviewSession {
       this.pendingAutoStart = false;
     } else if (exitCode === 0 && wasInstalling) {
       this.installed = true;
+      this.status = "stopped"; // must transition before scheduling run(), otherwise run() guard bails on "installing"
       if (this.pendingAutoStart) {
         this.pendingAutoStart = false;
         // Use setTimeout to avoid re-entrant state mutation
         setTimeout(() => void this.run(), 0);
-      } else {
-        this.status = "stopped";
       }
     } else if (exitCode !== 0) {
       this.status = "error";
@@ -276,6 +275,10 @@ export class PreviewSession {
   private handleTimeout(): void {
     this.status = "error";
     this.errorMessage = `Start timeout (${this.opts.preset?.startTimeoutMs ?? 60_000}ms). See logs.`;
+    if (this.readyWatcher) {
+      this.readyWatcher.stop();
+      this.readyWatcher = null;
+    }
     this.broadcastState();
   }
 
