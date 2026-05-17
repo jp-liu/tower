@@ -43,4 +43,13 @@ describe("parsePreviewWsParams", () => {
     const r = parsePreviewWsParams(url.searchParams);
     expect(r?.previewKey).toBe(original);
   });
+
+  // 注：handlePreviewWs 完整集成测试需要起真实 WS server + PreviewSession，
+  // 留作集成测试。此处仅验证 parsePreviewWsParams 没 regression。
+  it("still parses params correctly after C-2 fix", () => {
+    const url = new URL(
+      `http://x/?taskId=${PREVIEW_TASK_ID}&role=state&previewKey=${encodeURIComponent("k")}&connectionId=c`
+    );
+    expect(parsePreviewWsParams(url.searchParams)?.previewKey).toBe("k");
+  });
 });

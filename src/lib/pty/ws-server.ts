@@ -179,40 +179,72 @@ export async function startWsServer(): Promise<void> {
     // Preview channel — dispatch by special taskId "__preview__" + role query
     const previewParams = parsePreviewWsParams(url.searchParams);
     if (previewParams) {
-      const session = getPreviewSession(previewParams.previewKey);
-      if (!session) {
-        ws.close(1008, "Preview session not found");
-        return;
-      }
-      const unsub = session.subscribe(
-        previewParams.connectionId,
-        previewParams.taskId ?? "unknown",
-        (state) => {
-          if (previewParams.role === "state") {
-            try {
-              ws.send(JSON.stringify({ type: "state", previewKey: session.key, state }));
-            } catch { /* best-effort */ }
+      let session = getPreviewSession(previewParams.previewKey);
+      let pollTimer: ReturnType<typeof setInterval> | null = null;
+      let unsub: (() => void) | null = null;
+
+      function wirePreviewSession(): void {
+        if (!session) return;
+        unsub = session.subscribe(
+          previewParams!.connectionId,
+          previewParams!.taskId ?? "unknown",
+          (state) => {
+            if (previewParams!.role === "state") {
+              try {
+                ws.send(JSON.stringify({ type: "state", previewKey: session!.key, state }));
+              } catch { /* best-effort */ }
+            }
+          },
+          (data) => {
+            if (previewParams!.role === "terminal") {
+              try { ws.send(data); } catch { /* best-effort */ }
+            }
           }
-        },
-        (data) => {
-          if (previewParams.role === "terminal") {
-            try { ws.send(data); } catch { /* best-effort */ }
+        );
+        if (previewParams!.role === "terminal") {
+          const buf = session.getBuffer();
+          if (buf.length > 0) {
+            try { ws.send(buf.join("\n") + "\n"); } catch { /* ignore */ }
           }
         }
-      );
-      // Flush buffer + send initial state
-      if (previewParams.role === "terminal") {
-        const buf = session.getBuffer();
-        if (buf.length > 0) {
-          try { ws.send(buf.join("\n") + "\n"); } catch { /* ignore */ }
+        if (previewParams!.role === "state") {
+          try {
+            ws.send(JSON.stringify({ type: "state", previewKey: session!.key, state: session!.getState() }));
+          } catch { /* ignore */ }
         }
       }
-      if (previewParams.role === "state") {
-        try {
-          ws.send(JSON.stringify({ type: "state", previewKey: session.key, state: session.getState() }));
-        } catch { /* ignore */ }
+
+      if (session) {
+        wirePreviewSession();
+      } else {
+        // Session not yet created (user hasn't clicked Run) — poll every 500ms for up to 30s,
+        // mirroring the Claude PTY poll pattern at line 243.
+        let waited = 0;
+        pollTimer = setInterval(() => {
+          waited += 500;
+          session = getPreviewSession(previewParams!.previewKey);
+          if (session) {
+            clearInterval(pollTimer!);
+            pollTimer = null;
+            wirePreviewSession();
+          } else if (waited >= 30_000 || ws.readyState !== WebSocket.OPEN) {
+            clearInterval(pollTimer!);
+            pollTimer = null;
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.close(1008, "No preview session created within timeout.");
+            }
+          }
+        }, 500);
       }
-      ws.on("close", () => unsub());
+
+      ws.on("close", () => {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        if (unsub) { unsub(); unsub = null; }
+      });
+      ws.on("error", () => {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        if (unsub) { unsub(); unsub = null; }
+      });
       return;  // ⚠ early return to prevent falling into Claude PTY logic
     }
 
