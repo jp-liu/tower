@@ -422,7 +422,7 @@ function PresetBadge({
           <span>{presetName ?? t("preview.presetUnknown")}</span>
         </span>
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className="min-w-[220px]">
         {PRESETS.map((p) => (
           <SelectItem key={p.id} value={p.id}>
             <span className="flex items-center gap-1.5">
