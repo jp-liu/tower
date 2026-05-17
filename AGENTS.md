@@ -267,6 +267,18 @@ For AI working directly in the Next.js codebase, use these server actions (all i
 | `resumePtyExecution` | `(taskId, previousSessionId) → { executionId, worktreePath }` — resumes a previous Claude CLI session |
 | `getActiveExecutionsAcrossWorkspaces` | `() → ActiveExecutionInfo[]` — all RUNNING executions with workspace/project/task metadata |
 
+### `preview-actions.ts`
+
+| Function | Signature |
+|----------|-----------|
+| `getPreviewState` | `({ taskId, projectId, worktreePath }) → PreviewStateResp` |
+| `startPreview` | `({ taskId, projectId, worktreePath }) → { started, error? }` |
+| `stopPreview` | `({ previewKey }) → void` |
+| `installPreviewDeps` | `({ taskId, projectId, worktreePath, autoStartAfter? }) → { ok, error? }` |
+| `redetectPreset` | `({ projectId, worktreePath? }) → { preset: string \| null }` |
+| `setProjectPreset` | `({ projectId, presetId: string \| null }) → void` |
+| `openInTerminal` | `(worktreePath) → void` |
+
 ---
 
 ## Constraints

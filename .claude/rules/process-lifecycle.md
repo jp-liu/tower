@@ -29,3 +29,13 @@
 
 - Prisma `$disconnect()` called on SIGTERM/SIGINT.
 - SQLite WAL mode + busy_timeout=5000 set in `initDb()`.
+
+## Preview PTY Sessions
+
+- Sessions keyed by `(cwd, command, port)` 三元组 — see `src/lib/preview/preview-key.ts`.
+- 复用 `PtySession` 类，**不**使用 `pty/session-store.ts`（独立 store 在 `src/lib/preview/session-store.ts`）。
+- 长 lived — 用户关闭 task 详情页 PTY 不杀，再次打开继续看；只有显式 Stop 或 SIGTERM 才终止。
+- `onIdle: undefined` — dev server 长时间静默是正常状态，不能被 idle timer 误杀。
+- 创建后立即 `pty.resize(200, 50)` — 避免 dev server 因 80 列窄宽换行打断 readyRegex 匹配。
+- SIGTERM / SIGINT / SIGHUP 钩子注册时用 `globalThis.__previewSignalHandlersRegistered` flag 防重复。
+- `sessions` Map 挂在 `globalThis.__previewSessions` 上，HMR-safe。
