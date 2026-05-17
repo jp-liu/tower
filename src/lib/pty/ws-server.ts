@@ -27,28 +27,11 @@ const sessionClients = new Map<string, Set<WebSocket>>();
 const NOTIFICATION_CHANNEL = "__notifications__";
 const notificationClients = new Set<WebSocket>();
 
-export const PREVIEW_TASK_ID = "__preview__";
-
-export interface PreviewWsParams {
-  role: "state" | "terminal";
-  previewKey: string;
-  connectionId: string;
-  taskId: string | null;
-}
-
-export function parsePreviewWsParams(params: URLSearchParams): PreviewWsParams | null {
-  if (params.get("taskId") !== PREVIEW_TASK_ID) return null;
-  const role = params.get("role");
-  const previewKey = params.get("previewKey");
-  if ((role !== "state" && role !== "terminal") || !previewKey) return null;
-  const connectionId = params.get("connectionId") ?? Math.random().toString(36).slice(2);
-  return {
-    role,
-    previewKey: decodeURIComponent(previewKey),
-    connectionId,
-    taskId: params.get("clientTaskId"),
-  };
-}
+// PREVIEW_TASK_ID / parsePreviewWsParams / PreviewWsParams live in a separate
+// module so client bundles can import them without dragging node-pty into the
+// browser build. Re-export here so existing server callers (and tests) keep working.
+export { PREVIEW_TASK_ID, parsePreviewWsParams, type PreviewWsParams } from "@/lib/preview/ws-constants";
+import { parsePreviewWsParams } from "@/lib/preview/ws-constants";
 
 /**
  * Broadcast a JSON message to all connected notification clients.

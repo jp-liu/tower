@@ -33,7 +33,7 @@ const PreviewLogTerminal = dynamic(
   { ssr: false },
 );
 import { PRESETS } from "@/lib/preview/presets";
-import { PREVIEW_TASK_ID } from "@/lib/pty/ws-server";
+import { PREVIEW_TASK_ID } from "@/lib/preview/ws-constants";
 
 export interface PreviewPanelProps {
   taskId: string;

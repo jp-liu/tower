@@ -5,7 +5,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { useTheme } from "next-themes";
 import { getActualWsPort } from "@/actions/config-actions";
-import { PREVIEW_TASK_ID } from "@/lib/pty/ws-server";
+import { PREVIEW_TASK_ID } from "@/lib/preview/ws-constants";
 import "@xterm/xterm/css/xterm.css";
 
 export interface PreviewLogTerminalProps {
