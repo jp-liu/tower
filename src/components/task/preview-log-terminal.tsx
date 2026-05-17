@@ -101,9 +101,9 @@ export function PreviewLogTerminal({
     return () => {
       aborted = true;
       window.removeEventListener("resize", handleResize);
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.close();
-      }
+      // Close in CONNECTING or OPEN; browser cancels handshake if still connecting.
+      // Avoids a leak where user collapses the drawer before WS finishes opening.
+      wsRef.current?.close();
       wsRef.current = null;
       if (terminalRef.current) {
         terminalRef.current.dispose();
