@@ -2,8 +2,47 @@ import { describe, it, expect } from "vitest";
 import { PRESETS } from "@/lib/preview/presets";
 
 describe("PRESETS", () => {
-  it("contains exactly 11 presets", () => {
-    expect(PRESETS).toHaveLength(11);
+  it("contains exactly 14 presets", () => {
+    expect(PRESETS).toHaveLength(14);
+  });
+
+  it("uniapp matches before vite (vite-based uni-app has both deps)", () => {
+    const ctx = {
+      files: {
+        "package.json": JSON.stringify({
+          devDependencies: { vite: "^5.0.0", "@dcloudio/uni-app": "^3.0.0" },
+        }),
+      },
+      hasDir: () => false,
+    };
+    const uniIdx = PRESETS.findIndex((p) => p.id === "uniapp");
+    const viteIdx = PRESETS.findIndex((p) => p.id === "vite");
+    expect(uniIdx).toBeLessThan(viteIdx);
+    // Both detect would return true, but uniapp comes first
+    const uni = PRESETS[uniIdx];
+    const vite = PRESETS[viteIdx];
+    expect(uni.detect(ctx)).toBe(true);
+    expect(vite.detect(ctx)).toBe(true);
+  });
+
+  it("cra detects react-scripts dep", () => {
+    const cra = PRESETS.find((p) => p.id === "cra")!;
+    expect(
+      cra.detect({
+        files: { "package.json": JSON.stringify({ dependencies: { "react-scripts": "5.0.1" } }) },
+        hasDir: () => false,
+      })
+    ).toBe(true);
+  });
+
+  it("vue-cli detects @vue/cli-service dep", () => {
+    const vueCli = PRESETS.find((p) => p.id === "vue-cli")!;
+    expect(
+      vueCli.detect({
+        files: { "package.json": JSON.stringify({ devDependencies: { "@vue/cli-service": "~5.0.0" } }) },
+        hasDir: () => false,
+      })
+    ).toBe(true);
   });
 
   it("all presets have unique ids", () => {
