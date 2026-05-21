@@ -146,8 +146,8 @@ export class PtySession {
     return this._idleFired;
   }
 
-  /** D-06: double-kill guard */
-  kill(): void {
+  /** D-06: double-kill guard. Accepts optional signal (default SIGTERM). */
+  kill(signal?: string): void {
     if (this.killed) return;
     this.killed = true;
     // Clear idle timer when session is killed
@@ -156,9 +156,22 @@ export class PtySession {
       this._idleTimer = null;
     }
     try {
-      this._pty.kill();
+      this._pty.kill(signal);
     } catch {
       // Already dead — safe to ignore
     }
+  }
+
+  /**
+   * Force-kill the process bypassing the double-kill guard. Use when an
+   * earlier SIGTERM didn't take effect within a reasonable timeout.
+   */
+  forceKill(): void {
+    try {
+      this._pty.kill("SIGKILL");
+    } catch {
+      // Already dead — safe to ignore
+    }
+    this.killed = true;
   }
 }

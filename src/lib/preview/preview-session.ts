@@ -7,6 +7,7 @@ export type PreviewStatus =
   | "installing"
   | "starting"
   | "running"
+  | "stopping"
   | "error";
 
 export interface PreviewState {
@@ -53,6 +54,7 @@ export class PreviewSession {
   private readyWatcher: ReadyWatcher | null = null;
   private cancelRequested = false;
   private pendingAutoStart = false;
+  private forceKillTimer: ReturnType<typeof setTimeout> | null = null;
 
   private outputListeners = new Map<string, (data: string) => void>();
   private stateListeners = new Map<string, (state: PreviewState) => void>();
@@ -178,17 +180,58 @@ export class PreviewSession {
       this.readyWatcher.stop();
       this.readyWatcher = null;
     }
-    if (this.pty && !this.pty.killed) {
-      try {
-        this.pty.kill();
-      } catch {
-        // best-effort
-      }
-    }
+
+    // No live pty (already exited) — short-circuit to stopped
     if (!this.pty || this.pty.killed) {
+      this.injectLog("Stopped.");
       this.status = "stopped";
       this.pendingAutoStart = false;
       this.broadcastState();
+      return;
+    }
+
+    // Graceful shutdown: SIGTERM → wait → SIGKILL fallback
+    this.injectLog("Stopping (SIGTERM)...");
+    this.status = "stopping";
+    this.broadcastState();
+    try {
+      this.pty.kill("SIGTERM");
+    } catch {
+      // best-effort
+    }
+
+    // Force-kill if process doesn't exit within 3s — dev servers with
+    // worker children (webpack, vite) may ignore SIGTERM. handlePtyExit
+    // clears this timer when the process actually dies.
+    if (this.forceKillTimer) clearTimeout(this.forceKillTimer);
+    this.forceKillTimer = setTimeout(() => {
+      this.forceKillTimer = null;
+      if (this.pty && !this.pty.killed) {
+        this.injectLog("Process not responding — forcing SIGKILL.");
+        try {
+          this.pty.forceKill();
+        } catch {
+          // best-effort
+        }
+      }
+    }, 3000);
+  }
+
+  /**
+   * Push a synthetic log line to both the ring buffer (for state.recentLogs)
+   * and live output listeners (xterm drawer). Surfaces preview lifecycle
+   * events that didn't come from the child process itself.
+   */
+  private injectLog(message: string): void {
+    const line = `[preview] ${message}`;
+    this.pushBuffer(line);
+    const data = `\r\n${line}\r\n`;
+    for (const fn of this.outputListeners.values()) {
+      try {
+        fn(data);
+      } catch {
+        // ignore
+      }
     }
   }
 
@@ -244,7 +287,13 @@ export class PreviewSession {
       this.readyWatcher.stop();
       this.readyWatcher = null;
     }
+    // Clear pending force-kill — process exited on its own
+    if (this.forceKillTimer) {
+      clearTimeout(this.forceKillTimer);
+      this.forceKillTimer = null;
+    }
     if (wasCancel) {
+      this.injectLog(`Stopped (exit code ${exitCode}).`);
       this.status = "stopped";
       this.pendingAutoStart = false;
     } else if (exitCode === 0 && wasInstalling) {
@@ -256,10 +305,12 @@ export class PreviewSession {
         setTimeout(() => void this.run(), 0);
       }
     } else if (exitCode !== 0) {
+      this.injectLog(`Exited with code ${exitCode}.`);
       this.status = "error";
       this.errorMessage = `Process exited with code ${exitCode}`;
       this.pendingAutoStart = false;
     } else {
+      this.injectLog("Exited.");
       this.status = "stopped";
     }
     this.broadcastState();
