@@ -136,7 +136,22 @@ export async function migrateProjectPath(
   }
 
   // Create parent directory
-  await mkdir(path.dirname(targetPath), { recursive: true });
+  const parentDir = path.dirname(targetPath);
+  try {
+    await mkdir(parentDir, { recursive: true });
+  } catch (err: unknown) {
+    const error = err as NodeJS.ErrnoException;
+    if (error.code === "EACCES" || error.code === "EPERM") {
+      return {
+        success: false,
+        error: `无权限创建父目录 ${parentDir} — 请检查 Git 路径映射规则的模板是否漏了 "~/" 前缀`,
+      };
+    }
+    if (error.code === "EROFS") {
+      return { success: false, error: `父目录所在文件系统只读：${parentDir}` };
+    }
+    return { success: false, error: `创建父目录失败：${error.message || error.code || "未知错误"}` };
+  }
 
   // Atomic rename
   try {
@@ -145,6 +160,9 @@ export async function migrateProjectPath(
     const error = err as NodeJS.ErrnoException;
     if (error.code === "EXDEV") {
       return { success: false, error: "源路径和目标路径不在同一文件系统，不支持跨设备迁移" };
+    }
+    if (error.code === "EACCES" || error.code === "EPERM") {
+      return { success: false, error: `无权限移动到 ${targetPath}` };
     }
     return { success: false, error: error.message || "文件系统操作失败" };
   }

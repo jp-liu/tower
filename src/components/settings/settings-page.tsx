@@ -37,6 +37,7 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
+  FolderOpen,
 } from "lucide-react";
 import {
   getConfigValue,
@@ -59,6 +60,8 @@ import type { DetectedTerminalApp } from "@/lib/platform";
 import type { GitPathRule } from "@/lib/git-url";
 import { BackupSection } from "./backup-section";
 import { ExtensionsSection } from "./extensions-section";
+import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 // ---------------------------------------------------------------------------
 // Inline SegmentedToggle
@@ -326,10 +329,13 @@ export function SettingsPage() {
     ...EMPTY_FORM,
   });
   const [useFullPath, setUseFullPath] = useState(false);
+  const [editUseFullPath, setEditUseFullPath] = useState(false);
   const [previewIdx, setPreviewIdx] = useState(0);
   const [deleteRuleConfirmId, setDeleteRuleConfirmId] = useState<string | null>(
     null
   );
+  // Folder picker for git rule template — null when closed; otherwise which form is active
+  const [pickerTarget, setPickerTarget] = useState<"add" | "edit" | null>(null);
   const [systemForm, setSystemForm] = useState<SystemForm>({
     maxUploadMb: 50,
     maxConcurrent: 3,
@@ -399,7 +405,25 @@ export function SettingsPage() {
   };
 
   useEffect(() => {
-    getConfigValue<GitPathRule[]>("git.pathMappingRules", []).then(setRules);
+    getConfigValue<GitPathRule[]>("git.pathMappingRules", []).then((loaded) => {
+      // Defensive: guarantee unique non-empty ids on every loaded rule.
+      // Legacy / hand-edited configs may have missing or duplicate ids,
+      // which breaks the "edit this row" UI (always reopens the first match).
+      const seen = new Set<string>();
+      let dirty = false;
+      const normalized = loaded.map((r) => {
+        if (!r.id || seen.has(r.id)) {
+          dirty = true;
+          const fresh = { ...r, id: crypto.randomUUID() };
+          seen.add(fresh.id);
+          return fresh;
+        }
+        seen.add(r.id);
+        return r;
+      });
+      setRules(normalized);
+      if (dirty) void setConfigValue("git.pathMappingRules", normalized);
+    });
     getConfigValue<string[]>(
       "hooks.autoUploadTypes",
       [
@@ -705,25 +729,34 @@ export function SettingsPage() {
   };
 
   const handleEditRuleStart = (rule: GitPathRule) => {
+    // Parse template: if it ends with `{path}`, peel it off and toggle the switch on
+    const tpl = rule.localPathTemplate;
+    const hasFullPath = /\/\{path\}\/?$/.test(tpl);
+    const basePath = hasFullPath
+      ? tpl.replace(/\/?\{path\}\/?$/, "").replace(/\/+$/, "")
+      : tpl;
     setEditingRuleId(rule.id);
     setEditRuleForm({
       host: rule.host,
       ownerMatch: rule.ownerMatch,
-      localPathTemplate: rule.localPathTemplate,
+      localPathTemplate: basePath,
       priority: rule.priority,
     });
+    setEditUseFullPath(hasFullPath);
   };
 
   const handleEditRuleSave = async (ruleId: string) => {
     if (!editRuleForm.host.trim() || !editRuleForm.localPathTemplate.trim())
       return;
+    const basePath = editRuleForm.localPathTemplate.trim().replace(/\/+$/, "");
+    const template = editUseFullPath ? `${basePath}/{path}` : basePath;
     const updated = rules.map((r) =>
       r.id === ruleId
         ? {
             ...r,
             host: editRuleForm.host.trim(),
             ownerMatch: editRuleForm.ownerMatch.trim() || "*",
-            localPathTemplate: editRuleForm.localPathTemplate.trim(),
+            localPathTemplate: template,
             priority: editRuleForm.priority,
           }
         : r
@@ -731,6 +764,7 @@ export function SettingsPage() {
     await setConfigValue("git.pathMappingRules", updated);
     setRules(updated);
     setEditingRuleId(null);
+    setEditUseFullPath(false);
   };
 
   const handleDeleteRule = async (ruleId: string) => {
@@ -1231,25 +1265,71 @@ export function SettingsPage() {
                   editingRuleId === rule.id ? (
                     <li key={rule.id} className="px-5 py-4 bg-muted/20">
                       <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-xs text-muted-foreground">{t("settings.config.git.host")}</label>
+                        <div className="space-y-1.5">
+                          <label className="block text-xs text-muted-foreground">{t("settings.config.git.host")}</label>
                           <Input value={editRuleForm.host} onChange={(e) => setEditRuleForm((f) => ({ ...f, host: e.target.value }))} placeholder={t("settings.config.git.hostPlaceholder")} className="text-sm" />
                         </div>
-                        <div className="space-y-1">
-                          <label className="text-xs text-muted-foreground">{t("settings.config.git.ownerMatch")}</label>
+                        <div className="space-y-1.5">
+                          <label className="block text-xs text-muted-foreground">{t("settings.config.git.ownerMatch")}</label>
                           <Input value={editRuleForm.ownerMatch} onChange={(e) => setEditRuleForm((f) => ({ ...f, ownerMatch: e.target.value }))} placeholder={t("settings.config.git.ownerMatchPlaceholder")} className="text-sm" />
                         </div>
-                        <div className="space-y-1 col-span-2">
-                          <label className="text-xs text-muted-foreground">{t("settings.config.git.localPathTemplate")}</label>
-                          <Input value={editRuleForm.localPathTemplate} onChange={(e) => setEditRuleForm((f) => ({ ...f, localPathTemplate: e.target.value }))} placeholder={t("settings.config.git.localPathTemplatePlaceholder")} className="text-sm font-mono" />
+                        <div className="space-y-1.5 col-span-2">
+                          <label className="block text-xs text-muted-foreground">{t("settings.config.git.localPathTemplate")}</label>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              value={editRuleForm.localPathTemplate}
+                              onChange={(e) => setEditRuleForm((f) => ({ ...f, localPathTemplate: e.target.value }))}
+                              placeholder={t("settings.config.git.localPathTemplatePlaceholder")}
+                              className="text-sm font-mono flex-1"
+                            />
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <Button
+                                    variant={editUseFullPath ? "default" : "outline"}
+                                    size="sm"
+                                    type="button"
+                                    onClick={() => setEditUseFullPath((v) => !v)}
+                                    className="shrink-0 font-mono"
+                                  >
+                                    {"{path}"}
+                                  </Button>
+                                }
+                              />
+                              <TooltipContent side="top" className="max-w-xs">
+                                <div className="space-y-1 text-xs">
+                                  <div className="font-medium">{t("settings.config.git.pathTooltipTitle")}</div>
+                                  <div className="opacity-80">{t("settings.config.git.pathTooltipDetail")}</div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    type="button"
+                                    onClick={() => setPickerTarget("edit")}
+                                  >
+                                    <FolderOpen className="h-4 w-4" />
+                                  </Button>
+                                }
+                              />
+                              <TooltipContent>{t("settings.config.git.pickFolder")}</TooltipContent>
+                            </Tooltip>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {editUseFullPath ? t("onboarding.step3.pathHintFull") : t("onboarding.step3.pathHintRepo")}
+                          </p>
                         </div>
-                        <div className="space-y-1">
-                          <label className="text-xs text-muted-foreground">{t("settings.config.git.priority")}</label>
+                        <div className="space-y-1.5">
+                          <label className="block text-xs text-muted-foreground">{t("settings.config.git.priority")}</label>
                           <Input type="number" value={editRuleForm.priority} onChange={(e) => setEditRuleForm((f) => ({ ...f, priority: Number(e.target.value) }))} className="text-sm w-24" />
                         </div>
                       </div>
                       <div className="flex justify-end gap-2 mt-3">
-                        <Button variant="ghost" size="sm" onClick={() => setEditingRuleId(null)}>{t("settings.config.git.cancel")}</Button>
+                        <Button variant="ghost" size="sm" onClick={() => { setEditingRuleId(null); setEditUseFullPath(false); }}>{t("settings.config.git.cancel")}</Button>
                         <Button size="sm" onClick={() => handleEditRuleSave(rule.id)}>{t("settings.config.git.save")}</Button>
                       </div>
                     </li>
@@ -1296,7 +1376,7 @@ export function SettingsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium">{t("settings.config.git.localPathTemplate")}</label>
+                  <label className="block text-xs font-medium">{t("settings.config.git.localPathTemplate")}</label>
                   <div className="flex items-center gap-2">
                     <Input
                       value={addRuleForm.localPathTemplate}
@@ -1304,16 +1384,42 @@ export function SettingsPage() {
                       placeholder={t("settings.config.git.localPathTemplatePlaceholder")}
                       className="text-sm font-mono flex-1"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setUseFullPath((v) => !v)}
-                      className={cn(
-                        "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-mono font-medium transition-colors cursor-pointer",
-                        useFullPath ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      {"{path}"}
-                    </button>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            variant={useFullPath ? "default" : "outline"}
+                            size="sm"
+                            type="button"
+                            onClick={() => setUseFullPath((v) => !v)}
+                            className="shrink-0 font-mono"
+                          >
+                            {"{path}"}
+                          </Button>
+                        }
+                      />
+                      <TooltipContent side="top" className="max-w-xs">
+                        <div className="space-y-1 text-xs">
+                          <div className="font-medium">{t("settings.config.git.pathTooltipTitle")}</div>
+                          <div className="opacity-80">{t("settings.config.git.pathTooltipDetail")}</div>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            type="button"
+                            onClick={() => setPickerTarget("add")}
+                          >
+                            <FolderOpen className="h-4 w-4" />
+                          </Button>
+                        }
+                      />
+                      <TooltipContent>{t("settings.config.git.pickFolder")}</TooltipContent>
+                    </Tooltip>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {useFullPath ? t("onboarding.step3.pathHintFull") : t("onboarding.step3.pathHintRepo")}
@@ -1321,7 +1427,7 @@ export function SettingsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium">{t("settings.config.git.priority")}</label>
+                  <label className="block text-xs font-medium">{t("settings.config.git.priority")}</label>
                   <Input type="number" value={addRuleForm.priority} onChange={(e) => setAddRuleForm((f) => ({ ...f, priority: Number(e.target.value) }))} className="text-sm w-24" />
                 </div>
 
@@ -1981,6 +2087,20 @@ export function SettingsPage() {
           {renderSectionContent()}
         </div>
       </div>
+
+      {/* Folder picker for git rule template (shared by add / edit forms) */}
+      <FolderBrowserDialog
+        open={pickerTarget !== null}
+        onOpenChange={(o) => { if (!o) setPickerTarget(null); }}
+        onSelect={(selectedPath) => {
+          if (pickerTarget === "add") {
+            setAddRuleForm((f) => ({ ...f, localPathTemplate: selectedPath }));
+          } else if (pickerTarget === "edit") {
+            setEditRuleForm((f) => ({ ...f, localPathTemplate: selectedPath }));
+          }
+          setPickerTarget(null);
+        }}
+      />
     </div>
   );
 }

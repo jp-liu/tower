@@ -6,6 +6,8 @@ import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import { CLIAdapterTester } from "@/components/settings/cli-adapter-tester";
 import { useI18n } from "@/lib/i18n";
 import { setConfigValue } from "@/actions/config-actions";
@@ -26,6 +28,7 @@ import {
   Languages,
   Plus,
   Trash2,
+  FolderOpen,
 } from "lucide-react";
 import { WizardStepExtensions } from "./wizard-step-extensions";
 
@@ -195,6 +198,7 @@ export default function OnboardingPage() {
   const [showRuleForm, setShowRuleForm] = useState(true); // default open
   const [previewIdx, setPreviewIdx] = useState(0);
   const [useFullPath, setUseFullPath] = useState(false);
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
@@ -480,7 +484,7 @@ export default function OnboardingPage() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium">{t("onboarding.step3.pathLabel")}</label>
+                      <label className="block text-xs font-medium">{t("onboarding.step3.pathLabel")}</label>
                       <div className="flex items-center gap-2">
                         <Input
                           value={ruleForm.localPathTemplate}
@@ -488,22 +492,47 @@ export default function OnboardingPage() {
                           placeholder={t("onboarding.step3.pathPlaceholder")}
                           className="h-9 font-mono text-xs flex-1"
                         />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setUseFullPath((v) => {
-                              if (!v) setPreviewIdx(2);
-                              return !v;
-                            });
-                          }}
-                          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-mono font-medium transition-colors ${
-                            useFullPath
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground hover:text-foreground"
-                          }`}
-                        >
-                          {"{path}"}
-                        </button>
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <Button
+                                variant={useFullPath ? "default" : "outline"}
+                                size="sm"
+                                type="button"
+                                onClick={() => {
+                                  setUseFullPath((v) => {
+                                    if (!v) setPreviewIdx(2);
+                                    return !v;
+                                  });
+                                }}
+                                className="shrink-0 font-mono"
+                              >
+                                {"{path}"}
+                              </Button>
+                            }
+                          />
+                          <TooltipContent side="top" className="max-w-xs">
+                            <div className="space-y-1 text-xs">
+                              <div className="font-medium">{t("settings.config.git.pathTooltipTitle")}</div>
+                              <div className="opacity-80">{t("settings.config.git.pathTooltipDetail")}</div>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                type="button"
+                                onClick={() => setFolderPickerOpen(true)}
+                              >
+                                <FolderOpen className="h-4 w-4" />
+                              </Button>
+                            }
+                          />
+                          <TooltipContent>{t("settings.config.git.pickFolder")}</TooltipContent>
+                        </Tooltip>
                       </div>
                       <p className="text-[11px] text-muted-foreground">
                         {useFullPath
@@ -622,6 +651,15 @@ export default function OnboardingPage() {
         </div>
         </div>
       </div>
+
+      <FolderBrowserDialog
+        open={folderPickerOpen}
+        onOpenChange={setFolderPickerOpen}
+        onSelect={(selectedPath) => {
+          setRuleForm((f) => ({ ...f, localPathTemplate: selectedPath }));
+          setFolderPickerOpen(false);
+        }}
+      />
 
     </div>
   );

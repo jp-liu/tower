@@ -185,23 +185,30 @@ export function ImportProjectDialog({
       setMigrating(true);
       setMigrateError("");
 
-      // Run safety check
-      const safetyResult = await checkMigrationSafety(result.id);
-      if (!safetyResult.safe) {
-        setMigrateError(safetyResult.reason);
+      try {
+        // Run safety check
+        const safetyResult = await checkMigrationSafety(result.id);
+        if (!safetyResult.safe) {
+          setMigrateError(safetyResult.reason);
+          return; // Keep dialog open so user sees the error
+        }
+
+        const migrateResult = await migrateProjectPath(result.id, targetPath);
+        if (!migrateResult.success) {
+          setMigrateError(migrateResult.error ?? t("project.migrateError"));
+          return; // Keep dialog open — source is intact, show specific error
+        }
+
+        toast.success(t("project.migrateSuccess"));
+      } catch (err: unknown) {
+        // Defensive: any unexpected server action exception lands here so the
+        // dialog doesn't get stuck on "迁移中..." forever
+        const msg = err instanceof Error ? err.message : String(err);
+        setMigrateError(`${t("project.migrateError")}：${msg}`);
+        return;
+      } finally {
         setMigrating(false);
-        return; // Keep dialog open so user sees the error
       }
-
-      const migrateResult = await migrateProjectPath(result.id, targetPath);
-      setMigrating(false);
-
-      if (!migrateResult.success) {
-        setMigrateError(migrateResult.error ?? t("project.migrateError"));
-        return; // Keep dialog open — source is intact, show specific error
-      }
-
-      toast.success(t("project.migrateSuccess"));
     }
 
     resetForm();
