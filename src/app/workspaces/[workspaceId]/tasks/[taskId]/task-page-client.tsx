@@ -323,7 +323,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           {/* Back button + breadcrumb: workspace / project / task */}
           <div className="flex items-center gap-2">
             <Link
-              href={`/workspaces/${workspaceId}?projectId=${task.projectId}&taskId=${task.id}`}
+              href={`/workspaces/${workspaceId}?projectId=${task.projectId}${isTowerTask ? "" : `&taskId=${task.id}`}`}
               className="flex shrink-0 items-center justify-center rounded-md border border-border bg-muted px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <ArrowLeft className="mr-1 h-3 w-3" />
