@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    env:
+      # Tests hit a real SQLite file (preview-actions / search / fts suites).
+      DATABASE_URL: "file:./prisma/ci.db"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # postinstall runs `prisma generate` + native node-pty build.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set up test database
+        run: |
+          pnpm db:push
+          pnpm db:init-fts
+
+      - name: Test
+        run: pnpm test:run
