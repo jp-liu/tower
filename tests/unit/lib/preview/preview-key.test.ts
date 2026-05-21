@@ -4,6 +4,8 @@ import {
   getPreviewCwd,
   getEffectiveCommand,
   getEffectivePort,
+  getCommandSource,
+  getPortSource,
 } from "@/lib/preview/preview-key";
 
 describe("getPreviewKey", () => {
@@ -120,6 +122,72 @@ describe("getEffectiveCommand", () => {
         presetCommand: null,
       })
     ).toBe("");
+  });
+});
+
+describe("getCommandSource", () => {
+  it("returns 'task' when taskOverride is non-null (even empty string)", () => {
+    expect(
+      getCommandSource({
+        taskOverride: "task-cmd",
+        projectDefault: "proj-cmd",
+        presetCommand: "preset-cmd",
+      })
+    ).toBe("task");
+  });
+
+  it("returns 'project' when task is null but projectDefault present", () => {
+    expect(
+      getCommandSource({
+        taskOverride: null,
+        projectDefault: "proj-cmd",
+        presetCommand: "preset-cmd",
+      })
+    ).toBe("project");
+  });
+
+  it("returns 'preset' when task and project are null", () => {
+    expect(
+      getCommandSource({
+        taskOverride: null,
+        projectDefault: null,
+        presetCommand: "preset-cmd",
+      })
+    ).toBe("preset");
+  });
+
+  it("returns null when all layers null", () => {
+    expect(
+      getCommandSource({
+        taskOverride: null,
+        projectDefault: null,
+        presetCommand: null,
+      })
+    ).toBeNull();
+  });
+});
+
+describe("getPortSource", () => {
+  it("returns 'task' when taskOverride is non-null", () => {
+    expect(
+      getPortSource({ taskOverride: 1, projectDefault: 2, presetPort: 3 })
+    ).toBe("task");
+  });
+
+  it("returns 'project' then 'preset' then null", () => {
+    expect(
+      getPortSource({ taskOverride: null, projectDefault: 2, presetPort: 3 })
+    ).toBe("project");
+    expect(
+      getPortSource({ taskOverride: null, projectDefault: null, presetPort: 3 })
+    ).toBe("preset");
+    expect(
+      getPortSource({
+        taskOverride: null,
+        projectDefault: null,
+        presetPort: null,
+      })
+    ).toBeNull();
   });
 });
 

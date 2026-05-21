@@ -35,3 +35,27 @@ export function getEffectivePort(ctx: {
 }): number {
   return ctx.taskOverride ?? ctx.projectDefault ?? ctx.presetPort ?? 0;
 }
+
+export type EffectiveSource = "task" | "project" | "preset" | null;
+
+export function getCommandSource(ctx: {
+  taskOverride: string | null;
+  projectDefault: string | null;
+  presetCommand: string | null;
+}): EffectiveSource {
+  if (ctx.taskOverride !== null) return "task";
+  if (ctx.projectDefault !== null) return "project";
+  if (ctx.presetCommand !== null) return "preset";
+  return null;
+}
+
+export function getPortSource(ctx: {
+  taskOverride: number | null;
+  projectDefault: number | null;
+  presetPort: number | null;
+}): EffectiveSource {
+  if (ctx.taskOverride !== null) return "task";
+  if (ctx.projectDefault !== null) return "project";
+  if (ctx.presetPort !== null) return "preset";
+  return null;
+}

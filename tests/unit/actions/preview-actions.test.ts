@@ -77,6 +77,55 @@ describe("getPreviewState", () => {
     expect(s.command).toBe("pnpm dev:full");
     expect(s.port).toBe(6173);
   });
+
+  it("exposes source layers and fallback defaults", async () => {
+    // task override active for both layers (from previous test) — keep preset=vite
+    const s1 = await getPreviewState({
+      taskId,
+      projectId,
+      worktreePath: null,
+    });
+    expect(s1.commandSource).toBe("task");
+    expect(s1.portSource).toBe("task");
+    expect(s1.projectDefaultCommand).toBeNull();
+    expect(s1.projectDefaultPort).toBeNull();
+    expect(s1.presetCommand).toBe("pnpm dev");
+    expect(s1.presetPort).toBe(5173);
+
+    // Clear task override, set project default for command only
+    await db.task.update({
+      where: { id: taskId },
+      data: { previewCommandOverride: null, previewPortOverride: null },
+    });
+    await db.project.update({
+      where: { id: projectId },
+      data: { previewCommand: "pnpm start", previewPort: null },
+    });
+    const s2 = await getPreviewState({
+      taskId,
+      projectId,
+      worktreePath: null,
+    });
+    expect(s2.command).toBe("pnpm start");
+    expect(s2.commandSource).toBe("project");
+    expect(s2.port).toBe(5173);
+    expect(s2.portSource).toBe("preset");
+    expect(s2.projectDefaultCommand).toBe("pnpm start");
+    expect(s2.projectDefaultPort).toBeNull();
+
+    // Reset project layer to leave only preset
+    await db.project.update({
+      where: { id: projectId },
+      data: { previewCommand: null, previewPort: null },
+    });
+    const s3 = await getPreviewState({
+      taskId,
+      projectId,
+      worktreePath: null,
+    });
+    expect(s3.commandSource).toBe("preset");
+    expect(s3.portSource).toBe("preset");
+  });
 });
 
 describe("startPreview", () => {

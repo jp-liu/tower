@@ -12,6 +12,9 @@ import {
   getPreviewCwd,
   getEffectiveCommand,
   getEffectivePort,
+  getCommandSource,
+  getPortSource,
+  type EffectiveSource,
 } from "@/lib/preview/preview-key";
 import {
   getOrCreatePreviewSession,
@@ -28,6 +31,12 @@ interface PreviewStateResp {
   presetSource: "project" | "subPath-detected" | null;
   command: string;
   port: number;
+  commandSource: EffectiveSource;
+  portSource: EffectiveSource;
+  projectDefaultCommand: string | null;
+  projectDefaultPort: number | null;
+  presetCommand: string | null;
+  presetPort: number | null;
   installCommand: string | null;
   url: string | null;
   installed: boolean | null;
@@ -155,19 +164,46 @@ async function resolveEffective(args: {
     presetSource = preset ? "project" : null;
   }
 
+  const presetCommand = preset?.command ?? null;
+  const presetPort = preset?.port ?? null;
   const command = getEffectiveCommand({
     taskOverride: task.previewCommandOverride,
     projectDefault: project.previewCommand,
-    presetCommand: preset?.command ?? null,
+    presetCommand,
   });
   const port = getEffectivePort({
     taskOverride: task.previewPortOverride,
     projectDefault: project.previewPort,
-    presetPort: preset?.port ?? null,
+    presetPort,
+  });
+  const commandSource = getCommandSource({
+    taskOverride: task.previewCommandOverride,
+    projectDefault: project.previewCommand,
+    presetCommand,
+  });
+  const portSource = getPortSource({
+    taskOverride: task.previewPortOverride,
+    projectDefault: project.previewPort,
+    presetPort,
   });
   const installCommand = project.previewInstallCommand ?? preset?.installCommand ?? null;
 
-  return { task, project, preset, presetSource, cwd, command, port, installCommand };
+  return {
+    task,
+    project,
+    preset,
+    presetSource,
+    cwd,
+    command,
+    port,
+    commandSource,
+    portSource,
+    projectDefaultCommand: project.previewCommand,
+    projectDefaultPort: project.previewPort,
+    presetCommand,
+    presetPort,
+    installCommand,
+  };
 }
 
 export async function getPreviewState(args: {
@@ -210,6 +246,12 @@ export async function getPreviewState(args: {
     presetSource: eff.presetSource,
     command: eff.command,
     port: eff.port,
+    commandSource: eff.commandSource,
+    portSource: eff.portSource,
+    projectDefaultCommand: eff.projectDefaultCommand,
+    projectDefaultPort: eff.projectDefaultPort,
+    presetCommand: eff.presetCommand,
+    presetPort: eff.presetPort,
     installCommand: eff.installCommand,
     url: session?.getState().url ?? null,
     installed,
@@ -308,6 +350,21 @@ export async function redetectPreset(args: {
     data: { previewPreset: detected?.id ?? null },
   });
   return { preset: detected?.id ?? null };
+}
+
+export async function setProjectDefaults(args: {
+  projectId: string;
+  command?: string | null;
+  port?: number | null;
+}): Promise<void> {
+  const data: { previewCommand?: string | null; previewPort?: number | null } = {};
+  if (args.command !== undefined) data.previewCommand = args.command;
+  if (args.port !== undefined) data.previewPort = args.port;
+  if (Object.keys(data).length === 0) return;
+  await db.project.update({
+    where: { id: args.projectId },
+    data,
+  });
 }
 
 export async function setProjectPreset(args: {

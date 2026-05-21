@@ -42,15 +42,15 @@ export function PreviewLogDrawer({
           </Button>
         </div>
       )}
-      <button
-        type="button"
-        className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-card px-3 text-xs hover:bg-accent"
+      <Button
+        variant="ghost"
         onClick={onToggle}
+        className="h-9 w-full shrink-0 justify-start gap-2 rounded-none border-b border-border bg-card px-3 text-xs font-normal"
       >
         {expanded ? <ChevronDown className="size-3.5" /> : <ChevronUp className="size-3.5" />}
         <span className="font-medium">{t("preview.logsLabel")}:</span>
         <span className="truncate text-muted-foreground">{cleanLatest}</span>
-      </button>
+      </Button>
       {expanded && (
         <div className="flex-1 overflow-hidden">
           {terminalSlot ?? <div className="size-full bg-black" />}
