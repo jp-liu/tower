@@ -5,7 +5,7 @@ import {
   File, FilePlus, FileMinus, FileQuestion, FileEdit,
   Loader2, ArrowDown, ArrowUp, Check, ChevronRight, ChevronDown,
   Folder, Minus, Plus, MoreHorizontal, RefreshCw, Archive, ArrowUpFromLine,
-  Undo2, GitBranch, Search, Globe, Trash2, Layers,
+  Undo2, GitBranch, Search, Globe, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,13 +14,9 @@ import {
   DropdownMenuGroup, DropdownMenuSub, DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { CreateBranchDialog } from "@/components/repository/create-branch-dialog";
-import { DiffView } from "@/components/task/diff-view";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 import { gitAction } from "@/lib/git-api";
@@ -39,11 +35,19 @@ interface GitInfoData {
   currentBranch: string;
   branches: string[];
   remoteBranches: string[];
+  // Actual git repo root. May differ from `localPath` when the project points
+  // at a subdirectory of a larger repo — changed-file paths are relative to
+  // this, not to `localPath`.
+  topLevel: string;
 }
 
 export interface EditorGitPanelProps {
   localPath: string;
-  onFileSelect?: (filePath: string, originalContent: string) => void;
+  onFileSelect?: (
+    filePath: string,
+    originalContent: string,
+    rootPath: string
+  ) => void;
 }
 
 const STATUS_ICON: Record<string, typeof File> = {
@@ -136,11 +140,6 @@ export function EditorGitPanel({ localPath, onFileSelect }: EditorGitPanelProps)
   const [branchOpen, setBranchOpen] = useState(false);
   const [branchFilter, setBranchFilter] = useState("");
   const branchRef = useRef<HTMLDivElement>(null);
-  const [hunkDialog, setHunkDialog] = useState<{
-    file: string;
-    staged: boolean;
-    patch: string;
-  } | null>(null);
 
   useEffect(() => {
     if (!branchOpen) return;
@@ -167,6 +166,7 @@ export function EditorGitPanel({ localPath, onFileSelect }: EditorGitPanelProps)
           currentBranch: data.currentBranch ?? "",
           branches: data.branches ?? [],
           remoteBranches: data.remoteBranches ?? [],
+          topLevel: data.topLevel ?? localPath,
         });
       }
     } catch {
@@ -313,35 +313,15 @@ export function EditorGitPanel({ localPath, onFileSelect }: EditorGitPanelProps)
 
   const handleFileClick = async (file: ChangedFile) => {
     if (file.status === "deleted") return;
+    // Resolve diffs against the actual git toplevel (not `localPath`) so paths
+    // returned by `git status` — which are repo-root-relative — land on disk
+    // correctly even when `localPath` points at a subdir of the repo.
+    const rootPath = gitInfo?.topLevel ?? localPath;
     try {
       const res = await gitAction(localPath, "show", { file: file.file });
-      onFileSelect?.(file.file, res.content ?? "");
+      onFileSelect?.(file.file, res.content ?? "", rootPath);
     } catch {
-      onFileSelect?.(file.file, "");
-    }
-  };
-
-  const openHunkDialog = async (file: string, staged: boolean) => {
-    try {
-      const res = await gitAction(localPath, "diff-file", { file, staged });
-      const patch: string = res.patch ?? "";
-      if (!patch || !patch.includes("@@")) {
-        toast.error(t("git.hunkApplyFailed"));
-        return;
-      }
-      setHunkDialog({ file, staged, patch });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to load diff");
-    }
-  };
-
-  const handleHunkApply = async (action: "stage-hunk" | "discard-hunk", patch: string) => {
-    try {
-      await gitAction(localPath, action, { patch });
-      setHunkDialog(null);
-      await loadGitInfo();
-    } catch {
-      toast.error(t("git.hunkApplyFailed"));
+      onFileSelect?.(file.file, "", rootPath);
     }
   };
 
@@ -667,8 +647,6 @@ export function EditorGitPanel({ localPath, onFileSelect }: EditorGitPanelProps)
           onFileAction={(f) => handleUnstage([f])}
           fileActionIcon="−"
           fileActionLabel={t("git.unstageFile")}
-          onFileHunkAction={(f) => openHunkDialog(f, true)}
-          fileHunkLabel={t("git.viewHunks")}
         />
 
         {/* Unstaged */}
@@ -687,8 +665,6 @@ export function EditorGitPanel({ localPath, onFileSelect }: EditorGitPanelProps)
           onFileSecondaryAction={(f) => handleDiscardFile(f)}
           fileSecondaryIcon={<Trash2 className="h-2.5 w-2.5" />}
           fileSecondaryLabel={t("git.discardFile")}
-          onFileHunkAction={(f) => openHunkDialog(f, false)}
-          fileHunkLabel={t("git.viewHunks")}
         />
 
         {gitInfo.changedFiles.length === 0 && (
@@ -698,29 +674,6 @@ export function EditorGitPanel({ localPath, onFileSelect }: EditorGitPanelProps)
           </div>
         )}
       </ScrollArea>
-
-      {/* ── Hunk dialog ── */}
-      {hunkDialog && (
-        <Dialog open onOpenChange={(open) => !open && setHunkDialog(null)}>
-          <DialogContent className="sm:max-w-none w-[min(900px,92vw)]">
-            <DialogHeader>
-              <DialogTitle className="font-mono text-sm">{hunkDialog.file}</DialogTitle>
-            </DialogHeader>
-            <div className="max-h-[60vh] overflow-y-auto">
-              {/* For unstaged files: show Stage + Discard actions.
-                  For staged files: only Discard (which reverse-applies the hunk,
-                  effectively unstaging the working-tree change — v1.3 compromise;
-                  a dedicated unstage-hunk action can be added later). */}
-              <DiffView
-                patch={hunkDialog.patch}
-                language="plaintext"
-                onStageHunk={hunkDialog.staged ? undefined : (p) => handleHunkApply("stage-hunk", p)}
-                onDiscardHunk={(p) => handleHunkApply("discard-hunk", p)}
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
 
       {/* Create Branch Dialog — reuse shared component */}
       <CreateBranchDialog
@@ -746,7 +699,6 @@ function FileSection({
   batchAction, batchLabel, batchIcon,
   onFileClick, onFileAction, fileActionIcon, fileActionLabel,
   onFileSecondaryAction, fileSecondaryIcon, fileSecondaryLabel,
-  onFileHunkAction, fileHunkLabel,
 }: {
   label: string;
   count: number;
@@ -762,8 +714,6 @@ function FileSection({
   onFileSecondaryAction?: (filePath: string) => void;
   fileSecondaryIcon?: React.ReactNode;
   fileSecondaryLabel?: string;
-  onFileHunkAction?: (filePath: string) => void;
-  fileHunkLabel?: string;
 }) {
   const [expanded, setExpanded] = useState(true);
 
@@ -809,8 +759,6 @@ function FileSection({
               onFileSecondaryAction={onFileSecondaryAction}
               fileSecondaryIcon={fileSecondaryIcon}
               fileSecondaryLabel={fileSecondaryLabel}
-              onFileHunkAction={onFileHunkAction}
-              fileHunkLabel={fileHunkLabel}
             />
           ))}
         </div>
@@ -824,7 +772,6 @@ function FileSection({
 function TreeRow({
   node, depth, onFileClick, onFileAction, fileActionIcon, fileActionLabel,
   onFileSecondaryAction, fileSecondaryIcon, fileSecondaryLabel,
-  onFileHunkAction, fileHunkLabel,
 }: {
   node: TreeNode;
   depth: number;
@@ -835,8 +782,6 @@ function TreeRow({
   onFileSecondaryAction?: (filePath: string) => void;
   fileSecondaryIcon?: React.ReactNode;
   fileSecondaryLabel?: string;
-  onFileHunkAction?: (filePath: string) => void;
-  fileHunkLabel?: string;
 }) {
   const [expanded, setExpanded] = useState(true);
   const indentStyle = { paddingLeft: `calc(${depth} * 8px + 4px)` };
@@ -872,8 +817,6 @@ function TreeRow({
               onFileSecondaryAction={onFileSecondaryAction}
               fileSecondaryIcon={fileSecondaryIcon}
               fileSecondaryLabel={fileSecondaryLabel}
-              onFileHunkAction={onFileHunkAction}
-              fileHunkLabel={fileHunkLabel}
             />
           ))}
       </>
@@ -897,24 +840,6 @@ function TreeRow({
       <Icon className={`h-3.5 w-3.5 shrink-0 ${color}`} />
       <span className="text-[13px] text-foreground truncate flex-1">{node.name}</span>
       <span className={`text-[11px] font-mono font-bold shrink-0 mr-1 ${color}`}>{letter}</span>
-      {onFileHunkAction && (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={(e) => { e.stopPropagation(); onFileHunkAction(file.file); }}
-                className="shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
-                aria-label={fileHunkLabel ?? "View hunks"}
-              />
-            }
-          >
-            <Layers className="h-3 w-3" />
-          </TooltipTrigger>
-          <TooltipContent side="bottom">{fileHunkLabel ?? "View hunks"}</TooltipContent>
-        </Tooltip>
-      )}
       {onFileSecondaryAction && (
         <Tooltip>
           <TooltipTrigger

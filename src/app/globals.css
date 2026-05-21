@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@git-diff-view/react/styles/diff-view.css";
 @import "streamdown/styles.css";
 @plugin "@tailwindcss/typography";
 

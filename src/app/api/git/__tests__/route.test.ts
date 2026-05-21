@@ -6,8 +6,7 @@ import path from "path";
 import { execFileSync } from "child_process";
 import simpleGit from "simple-git";
 import { NextRequest } from "next/server";
-import { POST } from "../route";
-import { parseUnifiedDiff, hunkToPatch } from "@/lib/git-diff";
+import { POST, GET } from "../route";
 import { parseBlamePorcelain } from "../route";
 
 // Helper to build a POST request
@@ -172,95 +171,60 @@ describe("POST /api/git diff-file", () => {
     // sanitizeFilePath throws "Invalid file path" → caught by outer try/catch → 500
     expect(res.status).toBeGreaterThanOrEqual(400);
   });
-});
 
-describe("POST /api/git stage-hunk", () => {
-  it("stages only the first hunk — second hunk remains unstaged", async () => {
-    // 1. Get the full unstaged diff
-    const diffReq = makePost({ action: "diff-file", path: repoPath, file: "test.txt" });
-    const diffRes = await POST(diffReq);
-    const { patch: fullPatch } = await diffRes.json();
-    expect(fullPatch).toBeTruthy();
-
-    // 2. Parse and extract the first hunk
-    const files = parseUnifiedDiff(fullPatch);
-    expect(files).toHaveLength(1);
-    expect(files[0].chunks.length).toBeGreaterThanOrEqual(2);
-    const firstHunkPatch = hunkToPatch(files[0], files[0].chunks[0]);
-    expect(firstHunkPatch).toContain("@@");
-
-    // 3. Stage only the first hunk
-    const stageReq = makePost({ action: "stage-hunk", path: repoPath, patch: firstHunkPatch });
-    const stageRes = await POST(stageReq);
-    expect(stageRes.status).toBe(200);
-    const stageData = await stageRes.json();
-    expect(stageData.success).toBe(true);
-
-    // 4. Verify: staged diff has first hunk's change, unstaged has second hunk's change
-    const git = simpleGit(repoPath);
-    const stagedDiff = await git.diff(["--cached", "--", "test.txt"]);
-    const unstagedDiff = await git.diff(["--", "test.txt"]);
-
-    expect(stagedDiff).toContain("line1-original");
-    expect(stagedDiff).toContain("line1-modified");
-    expect(stagedDiff).not.toContain("line15-original");
-
-    expect(unstagedDiff).toContain("line15-original");
-    expect(unstagedDiff).toContain("line15-modified");
-    expect(unstagedDiff).not.toContain("line1-original");
-  });
-
-  it("returns 400 for a patch missing @@ markers", async () => {
-    const req = makePost({ action: "stage-hunk", path: repoPath, patch: "not a real patch" });
-    const res = await POST(req);
-    expect(res.status).toBe(400);
-    const data = await res.json();
-    expect(data.error).toBe("invalid patch");
+  // Regression: when the caller's `path` is a subdirectory of the actual git
+  // repo (e.g. project.localPath + task.subPath), `git status` returns paths
+  // relative to the toplevel — `git diff -- <pathspec>` must therefore run
+  // from the toplevel, not from the subdir, or it sees nothing.
+  it("works when invoked from a subdirectory of the repo", async () => {
+    const subDir = path.join(repoPath, "sub");
+    fs.mkdirSync(subDir, { recursive: true });
+    try {
+      const req = makePost({ action: "diff-file", path: subDir, file: "test.txt" });
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.patch).toContain("line1-modified");
+    } finally {
+      fs.rmSync(subDir, { recursive: true, force: true });
+    }
   });
 });
 
-describe("POST /api/git discard-hunk", () => {
-  it("discards the second (unstaged) hunk, restoring line15 to original", async () => {
-    // At this point from the previous test: line1 change is staged, line15 is unstaged
-    const git = simpleGit(repoPath);
-
-    // Get the unstaged diff (should only have line15 change)
-    const unstagedPatch = await git.diff(["--", "test.txt"]);
-    expect(unstagedPatch).toContain("line15-original");
-
-    const files = parseUnifiedDiff(unstagedPatch);
-    expect(files).toHaveLength(1);
-    expect(files[0].chunks.length).toBeGreaterThanOrEqual(1);
-    // Find the hunk containing line15
-    const hunk15 = files[0].chunks.find((c) =>
-      c.changes.some((ch) => ch.content.includes("line15"))
-    );
-    expect(hunk15).toBeDefined();
-    const hunkPatch = hunkToPatch(files[0], hunk15!);
-
-    // Discard the hunk (reverse-apply to working tree)
-    const discardReq = makePost({ action: "discard-hunk", path: repoPath, patch: hunkPatch });
-    const discardRes = await POST(discardReq);
-    expect(discardRes.status).toBe(200);
-    const discardData = await discardRes.json();
-    expect(discardData.success).toBe(true);
-
-    // Verify working tree now has line15-original (discard reversed the modification)
-    const fileContent = fs.readFileSync(path.join(repoPath, "test.txt"), "utf-8");
-    expect(fileContent).toContain("line15-original");
-    expect(fileContent).not.toContain("line15-modified");
-
-    // staged diff should still have line1 change
-    const stagedDiff = await git.diff(["--cached", "--", "test.txt"]);
-    expect(stagedDiff).toContain("line1-original");
+describe("GET /api/git topLevel resolution", () => {
+  // Regression: when localPath is a subdirectory of the actual repo, GET must
+  // still detect isGit=true and report the real toplevel — the old `.git`
+  // existsSync check returned isGit=false here.
+  it("returns isGit=true and topLevel for a subdirectory of the repo", async () => {
+    const subDir = path.join(repoPath, "deeply", "nested");
+    fs.mkdirSync(subDir, { recursive: true });
+    try {
+      const url = `http://localhost/api/git?path=${encodeURIComponent(subDir)}`;
+      const req = new NextRequest(url);
+      const res = await GET(req);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.isGit).toBe(true);
+      // `fs.realpath` collapses symlinks (e.g. /var → /private/var on macOS)
+      // — compare against the resolved repoPath, not the literal mkdtempSync value.
+      expect(data.topLevel).toBe(fs.realpathSync(repoPath));
+    } finally {
+      fs.rmSync(path.join(repoPath, "deeply"), { recursive: true, force: true });
+    }
   });
 
-  it("returns 400 for a patch missing @@ markers", async () => {
-    const req = makePost({ action: "discard-hunk", path: repoPath, patch: "garbage" });
-    const res = await POST(req);
-    expect(res.status).toBe(400);
-    const data = await res.json();
-    expect(data.error).toBe("invalid patch");
+  it("returns isGit=false when path is not in any repo", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "tower-not-git-"));
+    try {
+      const url = `http://localhost/api/git?path=${encodeURIComponent(tmpDir)}`;
+      const req = new NextRequest(url);
+      const res = await GET(req);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.isGit).toBe(false);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
 

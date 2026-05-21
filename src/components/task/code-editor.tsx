@@ -60,6 +60,11 @@ const LANG_MAP: Record<string, string> = {
 export interface DiffFileRequest {
   relativePath: string;
   originalContent: string;
+  // Base directory `relativePath` is resolved against. Falls back to
+  // `worktreePath` for callers that haven't been updated. Needed because git
+  // status emits paths relative to the repo root, which may sit above
+  // `worktreePath` (project localPath / task subPath).
+  rootPath?: string;
 }
 
 export interface CodeEditorProps {
@@ -229,8 +234,9 @@ export function CodeEditor({
   // React to diffFileRequest — open file in diff mode
   useEffect(() => {
     if (!diffFileRequest) return;
-    const { relativePath, originalContent } = diffFileRequest;
-    const absolutePath = worktreePath + "/" + relativePath;
+    const { relativePath, originalContent, rootPath } = diffFileRequest;
+    const base = rootPath ?? worktreePath;
+    const absolutePath = base + "/" + relativePath;
     const diffTabKey = "diff:" + absolutePath;
     const filename = relativePath.split("/").pop() ?? relativePath;
 
@@ -242,7 +248,7 @@ export function CodeEditor({
     }
 
     const loadDiffOnce = () => {
-      readFileContent(worktreePath, relativePath)
+      readFileContent(base, relativePath)
         .then((result) => {
           if (result.kind !== "text") {
             // Diff mode does not support placeholder cards — surface the guard reason as a plain toast.

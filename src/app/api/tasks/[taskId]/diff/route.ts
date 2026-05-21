@@ -70,17 +70,18 @@ export async function GET(
     const worktreeBranch = latestExecution?.worktreeBranch ?? null;
     const worktreePath = latestExecution?.worktreePath ?? null;
 
-    // Run numstat + unified diff
+    // Only need numstat for the UI — per-file diff content is lazy-loaded via
+    // /diff-file when the user expands a row. Computing the full unified diff
+    // here used to blow past execFileSync's default 1MB maxBuffer on repos
+    // with lockfile/pdfjs-scale changes (11MB+), surfacing as a generic
+    // "Failed to load changes" toast. The 64MB cap on numstat is defensive
+    // for huge file lists; numstat itself is ~one short line per file.
     const numstat = execFileSync(
       "git", ["diff", "--numstat", diffTarget],
-      { cwd: diffCwd, encoding: "utf-8", timeout: 30000 }
-    );
-    const unified = execFileSync(
-      "git", ["diff", "--unified=3", diffTarget],
-      { cwd: diffCwd, encoding: "utf-8", timeout: 30000 }
+      { cwd: diffCwd, encoding: "utf-8", timeout: 30000, maxBuffer: 64 * 1024 * 1024 }
     );
 
-    const parsedDiff = parseDiffOutput(numstat, unified);
+    const parsedDiff = parseDiffOutput(numstat, "");
 
     // Include untracked files for live worktree diffs (not DONE state)
     if (!mergeCommit && worktreePath && existsSync(worktreePath)) {

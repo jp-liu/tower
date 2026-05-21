@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/lib/i18n";
-import { DiffEditorView } from "./diff-editor";
 
 interface DiffFileEntry {
   filename: string;
@@ -29,11 +28,18 @@ interface TaskDiffViewProps {
   hasUncommitted?: boolean;
 }
 
-interface FileContent {
-  before: string | null;
-  after: string | null;
-  isBinary: boolean;
-  status: "loading" | "ready" | "error";
+// File expansion auto-loads the patch only when it's manageable; above this
+// the row shows a "click to load" placeholder so a task that touches pdfjs /
+// lockfiles doesn't fetch (or render) several megabytes on open.
+const AUTO_LOAD_LINE_LIMIT = 200;
+// Hard cap inside the inline renderer — patches taller than this are tail-
+// truncated so the page stays responsive. Users can still open the file in
+// the Git tab's Monaco editor for the full picture.
+const RENDER_LINE_LIMIT = 500;
+
+interface PatchState {
+  kind: "loading" | "ready" | "binary" | "empty" | "error";
+  patch?: string;
 }
 
 export function TaskDiffView({
@@ -48,52 +54,42 @@ export function TaskDiffView({
 }: TaskDiffViewProps) {
   const { t } = useI18n();
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
-  const [contentByFile, setContentByFile] = useState<Map<string, FileContent>>(new Map());
+  const [patchByFile, setPatchByFile] = useState<Map<string, PatchState>>(new Map());
   const [showCommitDialog, setShowCommitDialog] = useState(false);
   const [commitMessage, setCommitMessage] = useState("");
   const [isCommitting, setIsCommitting] = useState(false);
 
-  const fetchFileContent = (filename: string) => {
-    setContentByFile((prev) => {
-      const next = new Map(prev);
-      next.set(filename, { before: null, after: null, isBinary: false, status: "loading" });
-      return next;
-    });
-    fetch(`/api/tasks/${taskId}/diff-file?file=${encodeURIComponent(filename)}`)
+  const fetchPatch = (filename: string) => {
+    setPatchByFile((prev) => new Map(prev).set(filename, { kind: "loading" }));
+    fetch(`/api/tasks/${taskId}/diff-patch?file=${encodeURIComponent(filename)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((data: { before: string | null; after: string | null; isBinary: boolean }) => {
-        setContentByFile((prev) => {
+      .then((data: { kind?: string; patch?: string }) => {
+        setPatchByFile((prev) => {
           const next = new Map(prev);
-          next.set(filename, { ...data, status: "ready" });
+          if (data.kind === "binary") next.set(filename, { kind: "binary" });
+          else if (data.kind === "empty") next.set(filename, { kind: "empty" });
+          else next.set(filename, { kind: "ready", patch: data.patch ?? "" });
           return next;
         });
       })
       .catch(() => {
-        setContentByFile((prev) => {
-          const next = new Map(prev);
-          next.set(filename, { before: null, after: null, isBinary: false, status: "error" });
-          return next;
-        });
+        setPatchByFile((prev) => new Map(prev).set(filename, { kind: "error" }));
       });
   };
 
-  const toggleFile = (filename: string) => {
-    const wasExpanded = expandedFiles.has(filename);
+  const toggleFile = (file: DiffFileEntry) => {
+    const wasExpanded = expandedFiles.has(file.filename);
     setExpandedFiles((prev) => {
       const next = new Set(prev);
-      if (next.has(filename)) {
-        next.delete(filename);
-      } else {
-        next.add(filename);
-      }
+      if (next.has(file.filename)) next.delete(file.filename);
+      else next.add(file.filename);
       return next;
     });
-    // Lazy-fetch on first expand. Skip binary files — the row shows a Binary
-    // badge instead of a diff, no content needed.
-    if (wasExpanded || contentByFile.has(filename)) return;
-    const fileEntry = files.find((f) => f.filename === filename);
-    if (fileEntry?.isBinary) return;
-    fetchFileContent(filename);
+    if (wasExpanded || file.isBinary || patchByFile.has(file.filename)) return;
+    const totalChanges = file.added + file.removed;
+    if (totalChanges <= AUTO_LOAD_LINE_LIMIT) {
+      fetchPatch(file.filename);
+    }
   };
 
   return (
@@ -146,13 +142,16 @@ export function TaskDiffView({
           <div className="divide-y divide-border">
             {files.map((file) => {
               const isExpanded = expandedFiles.has(file.filename);
+              const patchState = patchByFile.get(file.filename);
+              const totalChanges = file.added + file.removed;
+              const isLargeFold = !patchState && totalChanges > AUTO_LOAD_LINE_LIMIT;
               return (
                 <div key={file.filename}>
                   {/* File header row */}
                   <Button
                     variant="ghost"
                     type="button"
-                    onClick={() => toggleFile(file.filename)}
+                    onClick={() => toggleFile(file)}
                     className="flex w-full items-center gap-2 px-4 py-2.5 text-left hover:bg-accent/50 transition-colors rounded-none h-auto"
                   >
                     {isExpanded ? (
@@ -168,7 +167,7 @@ export function TaskDiffView({
                         variant="secondary"
                         className="text-[10px] bg-muted text-muted-foreground border border-border"
                       >
-                        Binary
+                        {t("diff.binary")}
                       </Badge>
                     ) : (
                       <div className="flex items-center gap-1.5">
@@ -178,17 +177,14 @@ export function TaskDiffView({
                     )}
                   </Button>
 
-                  {/* Expanded diff content — Monaco DiffEditor reading
-                      full before/after from /diff-file (the old
-                      @git-diff-view/react renderer rendered blank for
-                      certain inputs, e.g. new files / patches missing
-                      hunk markers). */}
+                  {/* Expanded patch content */}
                   {isExpanded && !file.isBinary && (
-                    <div className="border-t border-border bg-background" style={{ height: 480 }}>
-                      <ExpandedDiff
-                        content={contentByFile.get(file.filename)}
+                    <div className="border-t border-border bg-background">
+                      <ExpandedPatch
                         filename={file.filename}
-                        onRetry={() => fetchFileContent(file.filename)}
+                        patchState={patchState}
+                        isLargeFold={isLargeFold}
+                        onLoad={() => fetchPatch(file.filename)}
                       />
                     </div>
                   )}
@@ -241,43 +237,98 @@ export function TaskDiffView({
   );
 }
 
-function ExpandedDiff({
-  content,
-  filename,
-  onRetry,
+function ExpandedPatch({
+  patchState,
+  isLargeFold,
+  onLoad,
 }: {
-  content: FileContent | undefined;
   filename: string;
-  onRetry: () => void;
+  patchState: PatchState | undefined;
+  isLargeFold: boolean;
+  onLoad: () => void;
 }) {
-  if (!content || content.status === "loading") {
+  const { t } = useI18n();
+
+  if (isLargeFold) {
     return (
-      <div className="flex h-full items-center justify-center">
+      <div className="flex flex-col items-center justify-center gap-1 py-6">
+        <Button variant="link" onClick={onLoad} className="h-auto p-0 text-sm">
+          {t("diff.loadDiff")}
+        </Button>
+        <span className="text-xs text-muted-foreground">{t("diff.foldedLarge")}</span>
+      </div>
+    );
+  }
+  if (!patchState || patchState.kind === "loading") {
+    return (
+      <div className="flex items-center justify-center py-6">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
-  if (content.status === "error") {
+  if (patchState.kind === "error") {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-        <span>Failed to load diff</span>
-        <Button variant="ghost" onClick={onRetry}>Retry</Button>
+      <div className="flex flex-col items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+        <span>{t("diff.loadFailed")}</span>
+        <Button variant="ghost" onClick={onLoad}>{t("diff.retry")}</Button>
       </div>
     );
   }
-  if (content.isBinary) {
+  if (patchState.kind === "binary") {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        Binary file — diff not shown
+      <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+        {t("diff.binaryNotShown")}
       </div>
     );
   }
+  if (patchState.kind === "empty") {
+    return (
+      <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+        {t("diff.noChanges")}
+      </div>
+    );
+  }
+  return <PatchHighlight patch={patchState.patch ?? ""} />;
+}
+
+// Inline unified-diff renderer — single <pre> with per-line color classes.
+// Ported from the pre-virtualization implementation: simple, no deps, fast
+// for the line budgets we render at.
+function PatchHighlight({ patch }: { patch: string }) {
+  const { t } = useI18n();
+  const allLines = patch.split("\n");
+  const truncated = allLines.length > RENDER_LINE_LIMIT;
+  const displayLines = truncated ? allLines.slice(0, RENDER_LINE_LIMIT) : allLines;
+
   return (
-    <DiffEditorView
-      originalContent={content.before ?? ""}
-      modifiedContent={content.after ?? ""}
-      filePath={filename}
-      readOnly
-    />
+    <>
+      <pre className="overflow-x-auto p-0 text-xs font-mono leading-5">
+        {displayLines.map((line, idx) => {
+          const lineClass =
+            line.startsWith("+++") || line.startsWith("---")
+              ? "px-4 block text-muted-foreground"
+              : line.startsWith("+")
+              ? "px-4 block bg-green-500/10 text-green-400"
+              : line.startsWith("-")
+              ? "px-4 block bg-red-500/10 text-red-400"
+              : line.startsWith("@@")
+              ? "px-4 block bg-blue-500/10 text-blue-300"
+              : "px-4 block text-muted-foreground";
+          return (
+            <span key={idx} className={lineClass}>
+              {line || " "}
+            </span>
+          );
+        })}
+      </pre>
+      {truncated && (
+        <div className="px-4 py-2 text-xs text-muted-foreground border-t border-border">
+          {t("diff.patchTruncated", {
+            n: String(RENDER_LINE_LIMIT),
+            total: String(allLines.length),
+          })}
+        </div>
+      )}
+    </>
   );
 }
