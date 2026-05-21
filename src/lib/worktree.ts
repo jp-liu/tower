@@ -29,7 +29,8 @@ export interface WorktreeResult {
 export async function createWorktree(
   localPathRaw: string,
   taskId: string,
-  baseBranch: string
+  baseBranch: string,
+  subPath?: string | null
 ): Promise<WorktreeResult> {
   const localPath = expandHome(localPathRaw);
   const worktreePath = path.join(localPath, ".worktrees", "task-" + taskId);
@@ -103,7 +104,7 @@ export async function createWorktree(
   }
 
   // Symlink node_modules from main project to worktree (avoids reinstalling deps)
-  symlinkNodeModules(localPath, worktreePath);
+  symlinkNodeModules(localPath, worktreePath, subPath);
 
   return { worktreePath, worktreeBranch };
 }
@@ -113,33 +114,46 @@ export async function createWorktree(
  * the main project to the worktree directory. This avoids requiring users to
  * reinstall dependencies in every worktree.
  *
+ * Handles both the repo root and the task's subPath (monorepo packages keep
+ * their own node_modules under e.g. `web/node_modules`), so a subPath task
+ * gets its dependencies linked at the location its dev server actually runs.
+ *
  * Only creates symlinks for directories that exist in the source and do NOT
  * already exist in the target.
  */
-function symlinkNodeModules(projectRoot: string, worktreePath: string): void {
+function symlinkNodeModules(
+  projectRoot: string,
+  worktreePath: string,
+  subPath?: string | null
+): void {
   const log = logger.create("worktree");
   // Common dependency directories that should be shared
   const dirs = ["node_modules", ".next"];
+  // Relative prefixes to check: repo root always, plus the subPath if set
+  const prefixes = subPath ? ["", subPath] : [""];
 
-  for (const dir of dirs) {
-    const source = path.join(projectRoot, dir);
-    const target = path.join(worktreePath, dir);
+  for (const prefix of prefixes) {
+    for (const dir of dirs) {
+      const rel = prefix ? path.join(prefix, dir) : dir;
+      const source = path.join(projectRoot, rel);
+      const target = path.join(worktreePath, rel);
 
-    if (!existsSync(source)) continue;
+      if (!existsSync(source)) continue;
 
-    // Skip if target already exists (real dir or existing symlink)
-    try {
-      lstatSync(target);
-      continue; // exists — don't overwrite
-    } catch {
-      // Does not exist — proceed to create symlink
-    }
+      // Skip if target already exists (real dir or existing symlink)
+      try {
+        lstatSync(target);
+        continue; // exists — don't overwrite
+      } catch {
+        // Does not exist — proceed to create symlink
+      }
 
-    try {
-      symlinkSync(source, target, "junction"); // "junction" works on Windows too
-      log.info(`Symlinked ${dir}`, { from: source, to: target });
-    } catch (err) {
-      log.warn(`Failed to symlink ${dir}`, { error: String(err) });
+      try {
+        symlinkSync(source, target, "junction"); // "junction" works on Windows too
+        log.info(`Symlinked ${rel}`, { from: source, to: target });
+      } catch (err) {
+        log.warn(`Failed to symlink ${rel}`, { error: String(err) });
+      }
     }
   }
 }
