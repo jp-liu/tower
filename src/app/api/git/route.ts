@@ -13,6 +13,22 @@ function expandHome(p: string): string {
   return p;
 }
 
+// Resolve to the actual git repo root so callers that pass a subdirectory
+// (e.g. project.localPath = repo/, task subPath = a child of repo/) still get
+// consistent results — `git status` paths are repo-root-relative, and any
+// pathspec we send must be interpreted from the same cwd to match.
+function resolveGitTopLevel(dir: string): string | null {
+  try {
+    return execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd: dir,
+      encoding: "utf-8",
+      timeout: 5000,
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
 function sanitizeFilePath(file: string): string {
   const normalized = path.normalize(file);
   if (normalized.startsWith("..") || path.isAbsolute(normalized)) {
@@ -141,13 +157,15 @@ export async function GET(request: NextRequest) {
 
   try {
     const resolved = path.resolve(expandHome(dirPath));
-    const gitDir = path.join(resolved, ".git");
-
-    if (!fs.existsSync(gitDir)) {
+    // Walk up via `git rev-parse --show-toplevel` so we work when the caller
+    // passed a subdirectory of the actual repo. The old `.git` existsSync
+    // check both missed this case and falsely matched stray `.git/` dirs.
+    const topLevel = resolveGitTopLevel(resolved);
+    if (!topLevel) {
       return NextResponse.json({ isGit: false, path: resolved });
     }
 
-    const git = simpleGit(resolved);
+    const git = simpleGit(topLevel);
 
     // Parallel: status, branches, log, stash, remote
     const [status, branchSummary, remotes] = await Promise.all([
@@ -205,7 +223,7 @@ export async function GET(request: NextRequest) {
     if (request.nextUrl.searchParams.get("checkWorktrees") === "true") {
       try {
         const raw = execFileSync("git", ["worktree", "list", "--porcelain"], {
-          cwd: resolved, encoding: "utf-8", timeout: 5000,
+          cwd: topLevel, encoding: "utf-8", timeout: 5000,
         }).trim();
         hasWorktrees = raw.split("\n\n").filter(Boolean).length > 1;
       } catch {
@@ -216,6 +234,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       isGit: true,
       path: resolved,
+      topLevel,
       currentBranch,
       branches,
       remoteBranches,
@@ -271,7 +290,13 @@ export async function POST(request: NextRequest) {
   }
 
   const resolved = path.resolve(expandHome(dirPath));
-  const git = simpleGit(resolved);
+  // `init` creates a brand-new repo at `resolved`. Every other action operates
+  // on an existing repo — resolve to the actual toplevel so pathspecs like
+  // `git diff -- web/foo.js` work even when the caller passed a subdir cwd.
+  const opRoot = action === "init"
+    ? resolved
+    : (resolveGitTopLevel(resolved) ?? resolved);
+  const git = simpleGit(opRoot);
 
   try {
     switch (action) {
@@ -688,42 +713,14 @@ export async function POST(request: NextRequest) {
       }
 
       case "diff-file": {
+        // Used by the code editor's gutter markers — runs `git diff` for one
+        // file and returns the raw unified patch (paths are repo-root-relative).
         const safeFile = sanitizeFilePath(body.file);
         const staged = Boolean(body.staged);
-        // Patches are returned relative to the repo root. Hand-built patches passed to
-        // stage-hunk/discard-hunk MUST use the same root-relative paths — see note in task.
         const patch = staged
           ? await git.diff(["--cached", "--", safeFile])
           : await git.diff(["--", safeFile]);
         return NextResponse.json({ patch: patch.replace(/\r\n/g, "\n") });
-      }
-
-      case "stage-hunk":
-      case "discard-hunk": {
-        const patch = body.patch;
-        if (typeof patch !== "string" || !patch.includes("@@")) {
-          return NextResponse.json({ error: "invalid patch" }, { status: 400 });
-        }
-        const tmpPath = path.join(
-          os.tmpdir(),
-          `tower-git-${Date.now()}-${Math.random().toString(36).slice(2)}.patch`
-        );
-        fs.writeFileSync(tmpPath, patch, { mode: 0o600 });
-        try {
-          if (action === "stage-hunk") {
-            await git.raw(["apply", "--cached", tmpPath]);
-          } else {
-            await git.raw(["apply", "-R", tmpPath]);
-          }
-          return NextResponse.json({ success: true });
-        } catch (e) {
-          return NextResponse.json(
-            { error: (e as Error).message || "apply failed" },
-            { status: 500 }
-          );
-        } finally {
-          try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
-        }
       }
 
       case "blame": {

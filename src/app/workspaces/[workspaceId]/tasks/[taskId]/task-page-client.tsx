@@ -552,8 +552,8 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                   <TabsContent value="git" className="flex-1 min-h-0 overflow-hidden mt-0">
                     <EditorGitPanel
                       localPath={fileRootPath ?? task.project?.localPath ?? ""}
-                      onFileSelect={(relativePath, originalContent) => {
-                        setDiffFileRequest({ relativePath, originalContent });
+                      onFileSelect={(relativePath, originalContent, rootPath) => {
+                        setDiffFileRequest({ relativePath, originalContent, rootPath });
                       }}
                     />
                   </TabsContent>
