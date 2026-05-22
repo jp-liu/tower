@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { createVersionSchema, updateVersionSchema } from "@/lib/schemas";
-import { getBranchHead } from "@/lib/version-git";
+import { getBranchHead, getDiffStat } from "@/lib/version-git";
 
 export async function getProjectVersions(projectId: string) {
   return db.version.findMany({
@@ -108,6 +108,17 @@ export async function releaseVersion(versionId: string, nextVersionId: string) {
     await tx.version.update({ where: { id: nextVersionId }, data: { isCurrent: true, status: "ACTIVE" } });
   });
   revalidatePath("/workspaces");
+}
+
+export async function getVersionDiffStat(versionId: string) {
+  const v = await db.version.findUnique({
+    where: { id: versionId },
+    select: { baseCommit: true, releaseCommit: true, baseBranch: true, project: { select: { localPath: true } } },
+  });
+  if (!v?.baseCommit || !v.project?.localPath) return null;
+  const to = v.releaseCommit ?? (v.baseBranch ? getBranchHead(v.project.localPath, v.baseBranch) : null);
+  if (!to) return null;
+  return getDiffStat(v.project.localPath, v.baseCommit, to);
 }
 
 export async function setCurrentVersion(versionId: string) {

@@ -12,8 +12,8 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/version-git", () => ({ getBranchHead: vi.fn(() => "deadbeef"), getDiffStat: vi.fn(() => ({ additions: 0, deletions: 0, files: 0 })) }));
 
 import { db } from "@/lib/db";
-import { getBranchHead } from "@/lib/version-git";
-import { createVersion, getProjectVersions, setCurrentVersion, assignTaskVersion, releaseVersion } from "@/actions/version-actions";
+import { getBranchHead, getDiffStat } from "@/lib/version-git";
+import { createVersion, getProjectVersions, setCurrentVersion, assignTaskVersion, releaseVersion, getVersionDiffStat } from "@/actions/version-actions";
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -64,6 +64,29 @@ describe("assignTaskVersion", () => {
     (db.task.updateMany as any).mockResolvedValue({ count: 1 });
     await assignTaskVersion("t1", null);
     expect((db.task.updateMany as any)).toHaveBeenCalledWith({ where: { id: "t1" }, data: { versionId: null } });
+  });
+});
+
+describe("getVersionDiffStat", () => {
+  it("uses baseCommit..releaseCommit when released", async () => {
+    (db.version.findUnique as any).mockResolvedValue({
+      baseCommit: "aaa", releaseCommit: "bbb", baseBranch: "main", project: { localPath: "/repo" },
+    });
+    (getDiffStat as any).mockReturnValue({ additions: 9, deletions: 1, files: 3 });
+    const r = await getVersionDiffStat("v1");
+    expect(getDiffStat).toHaveBeenCalledWith("/repo", "aaa", "bbb");
+    expect(r).toEqual({ additions: 9, deletions: 1, files: 3 });
+  });
+  it("uses live HEAD when not released", async () => {
+    (db.version.findUnique as any).mockResolvedValue({
+      baseCommit: "aaa", releaseCommit: null, baseBranch: "main", project: { localPath: "/repo" },
+    });
+    await getVersionDiffStat("v1");
+    expect(getBranchHead).toHaveBeenCalledWith("/repo", "main");
+  });
+  it("returns null when baseCommit missing", async () => {
+    (db.version.findUnique as any).mockResolvedValue({ baseCommit: null, project: { localPath: "/repo" } });
+    expect(await getVersionDiffStat("v1")).toBeNull();
   });
 });
 
