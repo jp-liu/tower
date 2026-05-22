@@ -83,6 +83,33 @@ export async function assignTaskVersion(taskId: string, versionId: string | null
   revalidatePath("/workspaces");
 }
 
+export async function releaseVersion(versionId: string, nextVersionId: string) {
+  const version = await db.version.findUnique({
+    where: { id: versionId },
+    select: { id: true, projectId: true, baseBranch: true, project: { select: { localPath: true } } },
+  });
+  if (!version) throw new Error("版本不存在");
+
+  let releaseCommit: string | null = null;
+  if (version.baseBranch && version.project?.localPath) {
+    releaseCommit = getBranchHead(version.project.localPath, version.baseBranch);
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.version.update({
+      where: { id: versionId },
+      data: { status: "RELEASED", releasedAt: new Date(), releaseCommit, isCurrent: false },
+    });
+    await tx.task.updateMany({
+      where: { versionId, status: { notIn: ["DONE", "CANCELLED"] } },
+      data: { versionId: nextVersionId },
+    });
+    await tx.version.updateMany({ where: { projectId: version.projectId, isCurrent: true }, data: { isCurrent: false } });
+    await tx.version.update({ where: { id: nextVersionId }, data: { isCurrent: true, status: "ACTIVE" } });
+  });
+  revalidatePath("/workspaces");
+}
+
 export async function setCurrentVersion(versionId: string) {
   const version = await db.version.findUnique({ where: { id: versionId }, select: { id: true, projectId: true } });
   if (!version) throw new Error("版本不存在");

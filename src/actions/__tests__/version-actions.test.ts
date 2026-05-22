@@ -13,7 +13,7 @@ vi.mock("@/lib/version-git", () => ({ getBranchHead: vi.fn(() => "deadbeef"), ge
 
 import { db } from "@/lib/db";
 import { getBranchHead } from "@/lib/version-git";
-import { createVersion, getProjectVersions, setCurrentVersion, assignTaskVersion } from "@/actions/version-actions";
+import { createVersion, getProjectVersions, setCurrentVersion, assignTaskVersion, releaseVersion } from "@/actions/version-actions";
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -64,5 +64,30 @@ describe("assignTaskVersion", () => {
     (db.task.updateMany as any).mockResolvedValue({ count: 1 });
     await assignTaskVersion("t1", null);
     expect((db.task.updateMany as any)).toHaveBeenCalledWith({ where: { id: "t1" }, data: { versionId: null } });
+  });
+});
+
+describe("releaseVersion", () => {
+  it("marks released, captures releaseCommit, rolls unfinished tasks, sets next current", async () => {
+    (db.version.findUnique as any).mockResolvedValue({
+      id: "v1", projectId: "p1", baseBranch: "main",
+      project: { localPath: "/repo" },
+    });
+    const tx = {
+      version: { update: vi.fn().mockResolvedValue({}), updateMany: vi.fn() },
+      task: { updateMany: vi.fn() },
+    };
+    (globalThis as any).__tx = tx;
+    await releaseVersion("v1", "v2");
+    expect(tx.version.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "v1" },
+      data: expect.objectContaining({ status: "RELEASED", releaseCommit: "deadbeef" }),
+    }));
+    expect(tx.task.updateMany).toHaveBeenCalledWith({
+      where: { versionId: "v1", status: { notIn: ["DONE", "CANCELLED"] } },
+      data: { versionId: "v2" },
+    });
+    expect(tx.version.updateMany).toHaveBeenCalledWith({ where: { projectId: "p1", isCurrent: true }, data: { isCurrent: false } });
+    expect(tx.version.update).toHaveBeenCalledWith({ where: { id: "v2" }, data: { isCurrent: true, status: "ACTIVE" } });
   });
 });
