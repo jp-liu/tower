@@ -78,6 +78,11 @@ export async function deleteVersion(versionId: string) {
   revalidatePath("/workspaces");
 }
 
+export async function assignTaskVersion(taskId: string, versionId: string | null) {
+  await db.task.updateMany({ where: { id: taskId }, data: { versionId } });
+  revalidatePath("/workspaces");
+}
+
 export async function setCurrentVersion(versionId: string) {
   const version = await db.version.findUnique({ where: { id: versionId }, select: { id: true, projectId: true } });
   if (!version) throw new Error("版本不存在");

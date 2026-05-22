@@ -13,7 +13,7 @@ vi.mock("@/lib/version-git", () => ({ getBranchHead: vi.fn(() => "deadbeef"), ge
 
 import { db } from "@/lib/db";
 import { getBranchHead } from "@/lib/version-git";
-import { createVersion, getProjectVersions, setCurrentVersion } from "@/actions/version-actions";
+import { createVersion, getProjectVersions, setCurrentVersion, assignTaskVersion } from "@/actions/version-actions";
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -51,5 +51,18 @@ describe("setCurrentVersion", () => {
     await setCurrentVersion("v1");
     expect(tx.version.updateMany).toHaveBeenCalledWith({ where: { projectId: "p1", isCurrent: true }, data: { isCurrent: false } });
     expect(tx.version.update).toHaveBeenCalledWith({ where: { id: "v1" }, data: { isCurrent: true, status: "ACTIVE" } });
+  });
+});
+
+describe("assignTaskVersion", () => {
+  it("sets versionId on the task", async () => {
+    (db.task.updateMany as any).mockResolvedValue({ count: 1 });
+    await assignTaskVersion("t1", "v2");
+    expect((db.task.updateMany as any)).toHaveBeenCalledWith({ where: { id: "t1" }, data: { versionId: "v2" } });
+  });
+  it("clears versionId when passed null (backlog)", async () => {
+    (db.task.updateMany as any).mockResolvedValue({ count: 1 });
+    await assignTaskVersion("t1", null);
+    expect((db.task.updateMany as any)).toHaveBeenCalledWith({ where: { id: "t1" }, data: { versionId: null } });
   });
 });
