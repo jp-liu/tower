@@ -92,10 +92,9 @@ describe("getVersionDiffStat", () => {
 
 describe("releaseVersion", () => {
   it("marks released, captures releaseCommit, rolls unfinished tasks, sets next current", async () => {
-    (db.version.findUnique as any).mockResolvedValue({
-      id: "v1", projectId: "p1", baseBranch: "main",
-      project: { localPath: "/repo" },
-    });
+    (db.version.findUnique as any)
+      .mockResolvedValueOnce({ id: "v1", projectId: "p1", baseBranch: "main", project: { localPath: "/repo" } })
+      .mockResolvedValueOnce({ id: "v2", projectId: "p1" });
     const tx = {
       version: { update: vi.fn().mockResolvedValue({}), updateMany: vi.fn() },
       task: { updateMany: vi.fn() },
@@ -112,5 +111,12 @@ describe("releaseVersion", () => {
     });
     expect(tx.version.updateMany).toHaveBeenCalledWith({ where: { projectId: "p1", isCurrent: true }, data: { isCurrent: false } });
     expect(tx.version.update).toHaveBeenCalledWith({ where: { id: "v2" }, data: { isCurrent: true, status: "ACTIVE" } });
+  });
+
+  it("rejects a next version from a different project", async () => {
+    (db.version.findUnique as any)
+      .mockResolvedValueOnce({ id: "v1", projectId: "p1", baseBranch: "main", project: { localPath: "/repo" } })
+      .mockResolvedValueOnce({ id: "v2", projectId: "OTHER" });
+    await expect(releaseVersion("v1", "v2")).rejects.toThrow("同一项目");
   });
 });

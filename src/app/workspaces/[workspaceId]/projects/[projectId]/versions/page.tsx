@@ -41,7 +41,6 @@ export default async function VersionsPage({ params }: Props) {
 
   return (
     <VersionTimelineClient
-      workspaceId={workspaceId}
       project={{ id: project.id, name: project.name, localPath: project.localPath }}
       versions={versions}
       diffStats={diffStats}

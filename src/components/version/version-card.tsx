@@ -223,7 +223,7 @@ export function VersionCard({ version, diffStat, onEdit, onRelease, onViewDiff }
   const countText = (() => {
     const base = `${totalTasks} ${t("version.tasksCount")}`;
     if (doneTasks > 0 && doneTasks < totalTasks) return `${base} · ${doneTasks} ${t("version.doneCount")}`;
-    if (doneTasks > 0 && doneTasks === totalTasks) return `${base} · 全部完成`;
+    if (doneTasks > 0 && doneTasks === totalTasks) return `${base} · ${t("version.allDone")}`;
     return base;
   })();
 

@@ -130,7 +130,7 @@ export function BoardPageClient({
     [projectId, refreshData]
   );
 
-  const handleUpdateTask = useCallback(async (taskId: string, data: { title: string; description: string; priority: Priority; labelIds: string[]; subPath?: string }) => {
+  const handleUpdateTask = useCallback(async (taskId: string, data: { title: string; description: string; priority: Priority; labelIds: string[]; subPath?: string; versionId?: string | null }) => {
     await updateTask(taskId, { ...data, labelIds: data.labelIds });
     setEditingTask(null);
     refreshData();

@@ -34,7 +34,6 @@ interface EditVersionShape {
 }
 
 export interface VersionTimelineClientProps {
-  workspaceId: string;
   project: { id: string; name: string; localPath: string | null };
   versions: VersionWithTasks[];
   diffStats: Record<string, DiffStat | null>;
@@ -161,7 +160,6 @@ function TimelineRow({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function VersionTimelineClient({
-  workspaceId,
   project,
   versions,
   diffStats,
@@ -366,12 +364,12 @@ export function VersionTimelineClient({
                           {/* Asset + Note counts */}
                           {task.assets.length > 0 && (
                             <span className="text-[11px] text-muted-foreground/60">
-                              {task.assets.length} 附件
+                              {task.assets.length} {t("version.resources")}
                             </span>
                           )}
                           {task.notes.length > 0 && (
                             <span className="text-[11px] text-muted-foreground/60">
-                              {task.notes.length} 笔记
+                              {task.notes.length} {t("version.notes")}
                             </span>
                           )}
                         </div>

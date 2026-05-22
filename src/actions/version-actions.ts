@@ -95,6 +95,11 @@ export async function releaseVersion(versionId: string, nextVersionId: string) {
     releaseCommit = getBranchHead(version.project.localPath, version.baseBranch);
   }
 
+  const next = await db.version.findUnique({ where: { id: nextVersionId }, select: { id: true, projectId: true } });
+  if (!next) throw new Error("目标版本不存在");
+  if (next.projectId !== version.projectId) throw new Error("目标版本必须属于同一项目");
+  if (next.id === versionId) throw new Error("目标版本不能是正在发布的版本本身");
+
   await db.$transaction(async (tx) => {
     await tx.version.update({
       where: { id: versionId },

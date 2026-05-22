@@ -1013,6 +1013,7 @@ export const zh = {
   "version.historyHint": "引入版本功能前创建的历史任务，统一归档，可手动归入版本。",
   "version.tasksCount": "任务",
   "version.doneCount": "完成",
+  "version.allDone": "全部完成",
   "version.type.FEATURE": "需求开发",
   "version.type.BUGFIX": "bug修复",
   "version.type.RESEARCH": "需求调研",
