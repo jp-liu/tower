@@ -110,6 +110,14 @@ export async function releaseVersion(versionId: string, nextVersionId: string) {
   revalidatePath("/workspaces");
 }
 
+export async function getVersionsForPicker(projectId: string) {
+  return db.version.findMany({
+    where: { projectId, status: { not: "RELEASED" } },
+    select: { id: true, number: true, name: true, isCurrent: true, status: true },
+    orderBy: [{ isCurrent: "desc" }, { targetDate: "desc" }, { createdAt: "desc" }],
+  });
+}
+
 export async function getVersionDiffStat(versionId: string) {
   const v = await db.version.findUnique({
     where: { id: versionId },

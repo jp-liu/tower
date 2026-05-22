@@ -14,6 +14,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { GitBranch, Check, ChevronsUpDown } from "lucide-react";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -37,6 +43,14 @@ interface LabelOption {
   isBuiltin: boolean;
 }
 
+interface VersionOption {
+  id: string;
+  number: string;
+  name: string;
+  isCurrent: boolean;
+  status: string;
+}
+
 interface CreateTaskDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -48,6 +62,7 @@ interface CreateTaskDialogProps {
     labelIds: string[];
     baseBranch?: string;
     subPath?: string;
+    versionId?: string | null;
   }) => void;
   onUpdate?: (taskId: string, data: {
     title: string;
@@ -55,6 +70,7 @@ interface CreateTaskDialogProps {
     priority: Priority;
     labelIds: string[];
     subPath?: string;
+    versionId?: string | null;
   }) => void;
   defaultStatus?: TaskStatus;
   editTask?: Task | null;
@@ -74,6 +90,10 @@ interface CreateTaskDialogProps {
   labels: LabelOption[];
   projectType?: string;
   projectLocalPath?: string | null;
+  /** Available versions for the version picker (optional; omit to hide picker) */
+  versions?: VersionOption[];
+  /** Default version to pre-select in create mode */
+  defaultVersionId?: string | null;
 }
 
 export function CreateTaskDialog({
@@ -88,6 +108,8 @@ export function CreateTaskDialog({
   labels,
   projectType: _projectType,
   projectLocalPath,
+  versions,
+  defaultVersionId,
 }: CreateTaskDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -99,6 +121,7 @@ export function CreateTaskDialog({
   const [selectedBranch, setSelectedBranch] = useState<string>("");
   const [branchOpen, setBranchOpen] = useState(false);
   const [useWorktree, setUseWorktree] = useState(true);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const { t } = useI18n();
 
   const isEditing = !!editTask;
@@ -112,20 +135,23 @@ export function CreateTaskDialog({
       setPriority(editTask.priority);
       setSubPath(editTask.subPath ?? "");
       setSelectedLabelIds(editTaskLabelIds ?? []);
+      setSelectedVersionId(editTask.versionId ?? null);
     } else if (prefillFromTask) {
       setTitle(prefillFromTask.title ?? "");
       setDescription(prefillFromTask.description ?? "");
       setPriority(prefillFromTask.priority ?? "MEDIUM");
       setSubPath(prefillFromTask.subPath ?? "");
       setSelectedLabelIds(prefillFromTask.labelIds ?? []);
+      setSelectedVersionId(defaultVersionId ?? null);
     } else {
       setTitle("");
       setDescription("");
       setPriority("MEDIUM");
       setSubPath("");
       setSelectedLabelIds([]);
+      setSelectedVersionId(defaultVersionId ?? null);
     }
-  }, [editTask, editTaskLabelIds, prefillFromTask]);
+  }, [editTask, editTaskLabelIds, prefillFromTask, defaultVersionId]);
 
   // Reset when dialog closes
   useEffect(() => {
@@ -138,8 +164,9 @@ export function CreateTaskDialog({
       setBranches([]);
       setSelectedBranch("");
       setBranchOpen(false);
+      setSelectedVersionId(defaultVersionId ?? null);
     }
-  }, [open, editTask]);
+  }, [open, editTask, defaultVersionId]);
 
   // Load branches instantly from cache, then refresh after background fetch
   useEffect(() => {
@@ -185,7 +212,14 @@ export function CreateTaskDialog({
   const handleSubmit = () => {
     if (!title.trim()) return;
     if (isEditing && onUpdate) {
-      onUpdate(editTask.id, { title, description, priority, labelIds: selectedLabelIds, subPath: subPath.trim() || "" });
+      onUpdate(editTask.id, {
+        title,
+        description,
+        priority,
+        labelIds: selectedLabelIds,
+        subPath: subPath.trim() || "",
+        versionId: selectedVersionId,
+      });
     } else {
       onSubmit({
         title,
@@ -195,6 +229,7 @@ export function CreateTaskDialog({
         labelIds: selectedLabelIds,
         ...(isGitProject && useWorktree && selectedBranch ? { baseBranch: selectedBranch } : {}),
         ...(subPath.trim() ? { subPath: subPath.trim() } : {}),
+        versionId: selectedVersionId,
       });
     }
     setTitle("");
@@ -205,6 +240,7 @@ export function CreateTaskDialog({
     setBranches([]);
     setSelectedBranch("");
     setUseWorktree(true);
+    setSelectedVersionId(null);
     onOpenChange(false);
   };
 
@@ -371,6 +407,40 @@ export function CreateTaskDialog({
                   );
                 })}
               </div>
+            </div>
+          )}
+          {/* Version Picker — only shown when versions are provided */}
+          {versions && versions.length > 0 && (
+            <div className="space-y-2">
+              <Label>{t("version.picker.label")}</Label>
+              <Select
+                value={selectedVersionId ?? "__none__"}
+                onValueChange={(val) => setSelectedVersionId(val === "__none__" ? null : val)}
+              >
+                <SelectTrigger>
+                  <span className="truncate text-sm">
+                    {selectedVersionId
+                      ? (() => {
+                          const v = versions.find((ver) => ver.id === selectedVersionId);
+                          if (!v) return t("version.picker.none");
+                          return v.isCurrent
+                            ? `${v.number} · ${v.name} · ${t("version.currentShort")}`
+                            : `${v.number} · ${v.name}`;
+                        })()
+                      : t("version.picker.none")}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">{t("version.picker.none")}</SelectItem>
+                  {versions.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>
+                      {v.isCurrent
+                        ? `${v.number} · ${v.name} · ${t("version.currentShort")}`
+                        : `${v.number} · ${v.name}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
         </div>

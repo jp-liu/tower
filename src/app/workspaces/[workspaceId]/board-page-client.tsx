@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { GitBranch } from "lucide-react";
 import { BoardStats } from "@/components/board/board-stats";
 import { BoardFilters } from "@/components/board/board-filters";
 import { KanbanBoard } from "@/components/board/kanban-board";
@@ -10,11 +12,14 @@ import { RepoSidebar } from "@/components/repository/repo-sidebar";
 import { TaskDetailPanel } from "@/components/task/task-detail-panel";
 import { createTask, updateTaskStatus, updateTask, deleteTask, toggleTaskPinned } from "@/actions/task-actions";
 import { startPtyExecution } from "@/actions/agent-actions";
+import { getVersionsForPicker } from "@/actions/version-actions";
 import { ProjectTabs } from "@/components/board/project-tabs";
+import { Button } from "@/components/ui/button";
 import type { TaskStatus, Priority } from "@prisma/client";
 import { TOWER_LABEL_NAME } from "@/lib/constants";
 import type { TaskWithLabels } from "@/types";
 import { toast } from "sonner";
+import { useI18n } from "@/lib/i18n";
 
 
 interface LabelOption {
@@ -44,6 +49,14 @@ interface BoardPageClientProps {
   openTaskId?: string;
 }
 
+type VersionPickerItem = {
+  id: string;
+  number: string;
+  name: string;
+  isCurrent: boolean;
+  status: string;
+};
+
 export function BoardPageClient({
   workspaceId,
   projectId,
@@ -54,14 +67,23 @@ export function BoardPageClient({
   openTaskId,
 }: BoardPageClientProps) {
   const router = useRouter();
+  const { t } = useI18n();
   const [, startTransition] = useTransition();
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createDefaultStatus, setCreateDefaultStatus] = useState<TaskStatus>("TODO");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(openTaskId ?? null);
+  const [versions, setVersions] = useState<VersionPickerItem[]>([]);
   // Derive selectedTask from initialTasks so router.refresh auto-syncs status
   const selectedTask = selectedTaskId ? initialTasks.find((t) => t.id === selectedTaskId) ?? null : null;
   const [editingTask, setEditingTask] = useState<TaskWithLabels | null>(null);
+
+  // Fetch versions for the active project (for the version picker in create dialog)
+  useEffect(() => {
+    getVersionsForPicker(projectId).then(setVersions).catch(() => setVersions([]));
+  }, [projectId]);
+
+  const defaultVersionId = versions.find((v) => v.isCurrent)?.id ?? null;
 
   const refreshData = useCallback(() => {
     startTransition(() => {
@@ -91,7 +113,7 @@ export function BoardPageClient({
   }, [refreshData]);
 
   const handleCreateTask = useCallback(
-    async (data: { title: string; description: string; priority: Priority; status: TaskStatus; labelIds: string[]; baseBranch?: string; subPath?: string }) => {
+    async (data: { title: string; description: string; priority: Priority; status: TaskStatus; labelIds: string[]; baseBranch?: string; subPath?: string; versionId?: string | null }) => {
       await createTask({
         title: data.title,
         description: data.description,
@@ -101,6 +123,7 @@ export function BoardPageClient({
         labelIds: data.labelIds,
         baseBranch: data.baseBranch,
         subPath: data.subPath,
+        versionId: data.versionId ?? undefined,
       });
       refreshData();
     },
@@ -182,15 +205,25 @@ export function BoardPageClient({
           runningTasks={boardTasks.filter((t) => t.status === "IN_PROGRESS").length}
         />
 
-        {/* Filters */}
-        <BoardFilters
-          searchQuery={searchQuery}
-          onSearchChange={handleSearchChange}
-          onCreateTask={() => {
-            setEditingTask(null);
-            setShowCreateDialog(true);
-          }}
-        />
+        {/* Filters + Version Timeline button */}
+        <div className="flex items-center gap-2 pr-4">
+          <div className="flex-1">
+            <BoardFilters
+              searchQuery={searchQuery}
+              onSearchChange={handleSearchChange}
+              onCreateTask={() => {
+                setEditingTask(null);
+                setShowCreateDialog(true);
+              }}
+            />
+          </div>
+          <Link href={`/workspaces/${workspaceId}/projects/${projectId}/versions`}>
+            <Button variant="outline" className="h-8 gap-1.5 text-xs text-muted-foreground">
+              <GitBranch className="h-3.5 w-3.5" />
+              {t("version.timeline")}
+            </Button>
+          </Link>
+        </div>
 
         {/* Kanban Board */}
         <div className="flex-1 min-h-0 overflow-hidden p-4">
@@ -229,6 +262,8 @@ export function BoardPageClient({
           labels={labels.filter((l) => !(l.name === TOWER_LABEL_NAME && l.isBuiltin))}
           projectType={project.type}
           projectLocalPath={project.localPath}
+          versions={versions}
+          defaultVersionId={defaultVersionId}
         />
       </div>
 
