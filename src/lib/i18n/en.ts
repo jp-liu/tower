@@ -1018,6 +1018,7 @@ export const en: Translations = {
   "version.diff.live": "live",
   "version.release.rolloverHint": "Unfinished tasks will roll over to the new current version",
   "version.release.nextVersion": "Next current version",
+  "version.release.noCandidates": "Create a PLANNED or ACTIVE version first to use as the rollover target",
   "version.resources": "Resources",
   "version.notes": "Notes",
   "version.empty.resources": "No resources",

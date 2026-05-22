@@ -1034,6 +1034,7 @@ export const zh = {
   "version.diff.live": "实时",
   "version.release.rolloverHint": "未完成任务将滚动到新的当前版本",
   "version.release.nextVersion": "下一个当前版本",
+  "version.release.noCandidates": "请先创建一个 PLANNED 或 ACTIVE 状态的版本作为接替目标",
   "version.resources": "资源",
   "version.notes": "笔记",
   "version.empty.resources": "暂无资源",
