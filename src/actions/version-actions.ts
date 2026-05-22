@@ -78,5 +78,12 @@ export async function deleteVersion(versionId: string) {
   revalidatePath("/workspaces");
 }
 
-// setCurrentVersion 占位（Task 5 替换为真实实现）
-export async function setCurrentVersion(versionId: string) { void versionId; }
+export async function setCurrentVersion(versionId: string) {
+  const version = await db.version.findUnique({ where: { id: versionId }, select: { id: true, projectId: true } });
+  if (!version) throw new Error("版本不存在");
+  await db.$transaction(async (tx) => {
+    await tx.version.updateMany({ where: { projectId: version.projectId, isCurrent: true }, data: { isCurrent: false } });
+    await tx.version.update({ where: { id: versionId }, data: { isCurrent: true, status: "ACTIVE" } });
+  });
+  revalidatePath("/workspaces");
+}

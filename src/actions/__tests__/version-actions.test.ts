@@ -13,7 +13,7 @@ vi.mock("@/lib/version-git", () => ({ getBranchHead: vi.fn(() => "deadbeef"), ge
 
 import { db } from "@/lib/db";
 import { getBranchHead } from "@/lib/version-git";
-import { createVersion, getProjectVersions } from "@/actions/version-actions";
+import { createVersion, getProjectVersions, setCurrentVersion } from "@/actions/version-actions";
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -40,5 +40,16 @@ describe("getProjectVersions", () => {
     (db.version.findMany as any).mockResolvedValue([]);
     await getProjectVersions("p1");
     expect((db.version.findMany as any).mock.calls[0][0].where).toEqual({ projectId: "p1" });
+  });
+});
+
+describe("setCurrentVersion", () => {
+  it("clears other current flags in the project then sets this one", async () => {
+    const tx = { version: { update: vi.fn().mockResolvedValue({ projectId: "p1" }), updateMany: vi.fn() } };
+    (globalThis as any).__tx = tx;
+    (db.version.findUnique as any).mockResolvedValue({ id: "v1", projectId: "p1" });
+    await setCurrentVersion("v1");
+    expect(tx.version.updateMany).toHaveBeenCalledWith({ where: { projectId: "p1", isCurrent: true }, data: { isCurrent: false } });
+    expect(tx.version.update).toHaveBeenCalledWith({ where: { id: "v1" }, data: { isCurrent: true, status: "ACTIVE" } });
   });
 });
