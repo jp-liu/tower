@@ -41,6 +41,7 @@ model Project {
   repositories Repository[]
   notes        ProjectNote[]
   assets       ProjectAsset[]
+  versions     Version[]
 
   @@index([workspaceId])
 }
@@ -83,6 +84,7 @@ model Task {
   previewCommandOverride String?
   previewPortOverride    Int?
   projectId   String
+  versionId   String?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
@@ -92,9 +94,11 @@ model Task {
   labels     TaskLabel[]
   notes      ProjectNote[]
   assets     ProjectAsset[]
+  version    Version?        @relation(fields: [versionId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
   @@index([status])
+  @@index([versionId])
 }
 
 model TaskExecution {
@@ -157,6 +161,32 @@ model Repository {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
+}
+
+model Version {
+  id            String        @id @default(cuid())
+  number        String
+  name          String
+  type          VersionType   @default(FEATURE)
+  status        VersionStatus @default(PLANNED)
+  isCurrent     Boolean       @default(false)
+  baseBranch    String?
+  baseCommit    String?
+  releaseCommit String?
+  startDate     DateTime?
+  targetDate    DateTime?
+  releasedAt    DateTime?
+  description   String?
+  order         Int           @default(0)
+  projectId     String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@index([projectId])
+  @@index([isCurrent])
 }
 
 model ProjectNote {
@@ -314,4 +344,16 @@ enum MessageRole {
 enum ProjectCategory {
   FRONTEND
   BACKEND
+}
+
+enum VersionType {
+  FEATURE
+  BUGFIX
+  RESEARCH
+}
+
+enum VersionStatus {
+  PLANNED
+  ACTIVE
+  RELEASED
 }
