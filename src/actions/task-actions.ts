@@ -98,7 +98,16 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
 
 export async function updateTask(
   taskId: string,
-  data: { title?: string; description?: string; priority?: Priority; labelIds?: string[]; baseBranch?: string; subPath?: string }
+  data: {
+    title?: string;
+    description?: string;
+    priority?: Priority;
+    labelIds?: string[];
+    baseBranch?: string;
+    subPath?: string;
+    previewCommandOverride?: string | null;
+    previewPortOverride?: number | null;
+  }
 ) {
   const v = updateTaskSchema.parse(data);
   const { labelIds, ...updateData } = v;

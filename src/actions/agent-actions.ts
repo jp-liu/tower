@@ -528,7 +528,8 @@ export async function startPtyExecution(
     const { worktreePath, worktreeBranch } = await createWorktree(
       task.project.localPath,
       taskId,
-      task.baseBranch
+      task.baseBranch,
+      task.subPath
     );
     resolvedWorktreePath = worktreePath;
     resolvedWorktreeBranch = worktreeBranch;

@@ -99,6 +99,11 @@ export function CodeEditor({
   const [guardByPath, setGuardByPath] = useState<Map<string, GuardInfo>>(new Map());
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
   const [monacoReady, setMonacoReady] = useState(false);
+  // Sticky: once Monaco has mounted (first file opened) keep it mounted even
+  // when all tabs close. Unmounting the editor disposes Monaco's singleton
+  // services (InstantiationService); a later remount then throws
+  // "InstantiationService has been disposed" when reopening a file.
+  const [editorMounted, setEditorMounted] = useState(false);
   const [gutterTick, setGutterTick] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
   const editorRef = useRef<unknown>(null);
@@ -128,6 +133,11 @@ export function CodeEditor({
     activeTabRef.current = tabs.find((t) => t.path === activeTabPath) ?? null;
     activeTabPathRef.current = activeTabPath;
   }, [tabs, activeTabPath]);
+
+  // Once any tab has opened, keep Monaco mounted for the rest of the session.
+  useEffect(() => {
+    if (tabs.length > 0) setEditorMounted(true);
+  }, [tabs.length]);
 
   // Keep onSaveRef in sync to avoid stale closure in Monaco addAction
   useEffect(() => {
@@ -706,7 +716,7 @@ export function CodeEditor({
           this, switching to a diff tab unmounted Monaco and disposed its services
           (InstantiationService), triggering errors when the user clicked back to
           a regular tab. */}
-      {tabs.length > 0 && (
+      {editorMounted && (
         <div
           className={`flex-1 min-h-0 ${
             !activeTab || activeTab.isDiff || activeTab.isCommitDiff || guardByPath.has(activeTab.path)

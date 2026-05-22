@@ -1,11 +1,13 @@
 "use server";
 
 import { mkdir } from "fs/promises";
+import { readdir } from "node:fs/promises";
 import path from "path";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { createWorkspaceSchema, updateWorkspaceSchema, createProjectSchema, updateProjectSchema } from "@/lib/schemas";
 import { expandHome } from "@/lib/git-url";
+import { detectPreset } from "@/lib/preview/detector";
 
 /** Lightweight list: workspace names + project names only (for selectors) */
 export async function getWorkspacesWithProjects() {
@@ -110,6 +112,24 @@ export async function createProject(data: {
     console.warn("Failed to auto-create Tower task", error);
   }
 
+  // T1: 探测 preset（仅当 localPath 非空时）
+  if (resolvedLocalPath) {
+    try {
+      const entries = await readdir(resolvedLocalPath).catch(() => [] as string[]);
+      if (entries.length > 0) {
+        const detected = await detectPreset(resolvedLocalPath);
+        if (detected) {
+          await db.project.update({
+            where: { id: project.id },
+            data: { previewPreset: detected.id },
+          });
+        }
+      }
+    } catch {
+      // 探测失败不阻塞创建
+    }
+  }
+
   revalidatePath("/workspaces");
   return project;
 }
@@ -122,6 +142,26 @@ export async function updateProject(id: string, data: { name?: string; alias?: s
     where: { id },
     data: updateData,
   });
+
+  // T1: 如果 localPath 变了，重新探测 preset
+  if (data.localPath !== undefined) {
+    const resolved = data.localPath ? expandHome(data.localPath) : null;
+    if (resolved) {
+      try {
+        const entries = await readdir(resolved).catch(() => [] as string[]);
+        if (entries.length > 0) {
+          const detected = await detectPreset(resolved);
+          await db.project.update({
+            where: { id },
+            data: { previewPreset: detected?.id ?? null },
+          });
+        }
+      } catch {
+        // 失败不阻塞 update
+      }
+    }
+  }
+
   revalidatePath("/workspaces");
   return project;
 }

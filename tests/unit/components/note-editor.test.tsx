@@ -22,13 +22,13 @@ describe("NoteEditor", () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
-  it("renders a preview panel alongside the textarea", () => {
+  it("renders a preview panel alongside the textarea", async () => {
     render(<NoteEditor value="**Bold text**" onChange={vi.fn()} />);
     // textarea exists
     expect(screen.getByRole("textbox")).toBeInTheDocument();
-    // preview content rendered via ReactMarkdown - look for the prose container
-    const container = document.querySelector(".prose");
-    expect(container).toBeInTheDocument();
+    // preview renders the markdown via Streamdown (textarea keeps the raw
+    // "**Bold text**", so matching "Bold text" targets the rendered preview)
+    expect(await screen.findByText("Bold text")).toBeInTheDocument();
   });
 
   it("renders without error when value is empty", () => {

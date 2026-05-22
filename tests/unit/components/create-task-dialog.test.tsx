@@ -59,6 +59,8 @@ const mockEditTask: Task = {
   projectId: "proj-1",
   baseBranch: null,
   subPath: null,
+  previewCommandOverride: null,
+  previewPortOverride: null,
   createdAt: new Date("2026-01-01"),
   updatedAt: new Date("2026-01-01"),
 };

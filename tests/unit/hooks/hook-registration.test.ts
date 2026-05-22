@@ -21,7 +21,9 @@ function readSettings(): Record<string, unknown> {
   }
 }
 
-describe("ensureClaudeHooks — Stop hook registration", () => {
+// Reads/writes the real ~/.claude/settings.json; CI has no such file and a
+// read-only-ish HOME, so these run locally only.
+describe.skipIf(process.env.CI)("ensureClaudeHooks — Stop hook registration", () => {
   it("should have Stop hook registered after ensureTowerDir", async () => {
     // Import and run — this writes to real settings
     const { ensureTowerDir } = await import("@/lib/init-tower");

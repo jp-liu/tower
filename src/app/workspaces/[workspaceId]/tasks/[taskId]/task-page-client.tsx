@@ -323,7 +323,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           {/* Back button + breadcrumb: workspace / project / task */}
           <div className="flex items-center gap-2">
             <Link
-              href={`/workspaces/${workspaceId}?projectId=${task.projectId}&taskId=${task.id}`}
+              href={`/workspaces/${workspaceId}?projectId=${task.projectId}${isTowerTask ? "" : `&taskId=${task.id}`}`}
               className="flex shrink-0 items-center justify-center rounded-md border border-border bg-muted px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <ArrowLeft className="mr-1 h-3 w-3" />
@@ -638,11 +638,10 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           <TabsContent value="preview" className="flex-1 min-h-0 overflow-hidden">
             <PreviewPanel
               taskId={task.id}
-              worktreePath={latestExecution?.worktreePath ?? null}
-              previewCommand={task.project?.previewCommand ?? null}
-              previewPort={task.project?.previewPort ?? null}
-              refreshKey={previewRefreshKey}
               projectId={task.projectId}
+              worktreePath={latestExecution?.worktreePath ?? null}
+              projectLocalPath={task.project?.localPath ?? null}
+              refreshKey={previewRefreshKey}
               previewUrl={previewUrl}
               onPreviewUrlChange={setPreviewUrl}
             />

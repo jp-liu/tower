@@ -60,57 +60,64 @@ export function ensureTowerDir(): string {
     console.error(`[init-tower] Copied SKILL.md → ${skillDestDir}`);
   }
 
-  // MCP config for the embedded assistant. The assistant runs with
-  // cwd=assistantDir and reads `<assistantDir>/.claude/settings.json`. We
-  // write this directly (not via `claude mcp add -s project`) because the
-  // assistant must work even if the user's `claude` binary is misconfigured —
-  // and this dir is ours alone, so direct write is safe.
-  ensureAssistantMcpConfig(assistantDir);
+  // Legacy cleanup: prior Tower versions wrote MCP config to project-scope
+  // files under the assistant dir. Both are obsolete now — boot-time
+  // installation goes straight to each provider's user-scope via its CLI
+  // (see instrumentation.ts → ensureProviderMcpInstalled).
+  cleanupLegacyAssistantMcp(assistantDir);
 
   return assistantDir;
 }
 
 /**
- * Write MCP config into the assistant's project-level .claude/settings.json.
- * Direct file write is intentional — see comment in ensureTowerDir().
+ * Remove stale MCP entries from prior Tower installations:
+ *
+ *   1. `<assistantDir>/.claude/settings.json` — written by Tower ≤ Claude CLI
+ *      3.x era; ignored by Claude 4.x.
+ *   2. `<assistantDir>/.mcp.json` — short-lived intermediate path written by
+ *      Tower in 2026-05; now superseded by user-scope auto-install at boot.
+ *
+ * Both removals are non-destructive: only `mcpServers` keys we recognize are
+ * stripped, the surrounding file is preserved.
  */
-function ensureAssistantMcpConfig(assistantDir: string): void {
-  const settingsDir = join(assistantDir, ".claude");
-  const settingsFile = join(settingsDir, "settings.json");
-
-  const mcpConfig = buildTowerMcpConfig();
-  const entry: Record<string, unknown> = {
-    command: mcpConfig.command,
-    args: mcpConfig.args,
-  };
-  if (mcpConfig.env && Object.keys(mcpConfig.env).length > 0) {
-    entry.env = mcpConfig.env;
-  }
-
-  let settings: Record<string, unknown> = {};
+function cleanupLegacyAssistantMcp(assistantDir: string): void {
+  // (1) .claude/settings.json — drop mcpServers field, keep file
+  const settingsFile = join(assistantDir, ".claude", "settings.json");
   if (existsSync(settingsFile)) {
     try {
-      settings = JSON.parse(readFileSync(settingsFile, "utf-8"));
+      const settings = JSON.parse(readFileSync(settingsFile, "utf-8")) as Record<string, unknown>;
+      if (settings && "mcpServers" in settings) {
+        delete settings["mcpServers"];
+        writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+        console.error(`[init-tower] Removed legacy mcpServers from ${settingsFile}`);
+      }
     } catch {
-      settings = {};
+      // best-effort
     }
   }
 
-  const mcpServers = (settings["mcpServers"] as Record<string, unknown>) ?? {};
-  // Use the same dynamic name as the user-scope install so dev/prod don't
-  // share the assistant's project-scope `tower` key either.
-  const name = mcpConfig.name;
-  const existing = mcpServers[name];
-
-  const newJson = JSON.stringify(entry);
-  if (JSON.stringify(existing) === newJson) return;
-
-  mcpServers[name] = entry;
-  settings["mcpServers"] = mcpServers;
-
-  mkdirSync(settingsDir, { recursive: true });
-  writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + "\n", "utf-8");
-  console.error(`[init-tower] Updated assistant MCP config → ${settingsFile}`);
+  // (2) .mcp.json — if it only contained the tower entry we wrote, delete the
+  // whole file; if it has other entries, drop just `mcpServers.<towerName>`
+  const mcpFile = join(assistantDir, ".mcp.json");
+  if (existsSync(mcpFile)) {
+    try {
+      const towerName = buildTowerMcpConfig().name;
+      const mcpJson = JSON.parse(readFileSync(mcpFile, "utf-8")) as Record<string, unknown>;
+      const mcpServers = (mcpJson["mcpServers"] as Record<string, unknown>) ?? {};
+      if (towerName in mcpServers) {
+        delete mcpServers[towerName];
+        if (Object.keys(mcpServers).length === 0) {
+          delete mcpJson["mcpServers"];
+        } else {
+          mcpJson["mcpServers"] = mcpServers;
+        }
+        writeFileSync(mcpFile, JSON.stringify(mcpJson, null, 2) + "\n", "utf-8");
+        console.error(`[init-tower] Removed legacy tower entry from ${mcpFile}`);
+      }
+    } catch {
+      // best-effort
+    }
+  }
 }
 
 /**

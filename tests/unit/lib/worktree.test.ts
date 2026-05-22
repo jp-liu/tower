@@ -14,16 +14,20 @@ vi.mock("fs/promises", () => ({
 // Mock fs before importing worktree
 vi.mock("fs", () => ({
   existsSync: vi.fn(),
+  symlinkSync: vi.fn(),
+  lstatSync: vi.fn(),
 }));
 
 import { execFileSync } from "child_process";
 import { mkdir } from "fs/promises";
-import { existsSync } from "fs";
+import { existsSync, symlinkSync, lstatSync } from "fs";
 import { createWorktree, removeWorktree } from "@/lib/worktree";
 
 const mockedExecFileSync = vi.mocked(execFileSync);
 const mockedMkdir = vi.mocked(mkdir);
 const mockedExistsSync = vi.mocked(existsSync);
+const mockedSymlinkSync = vi.mocked(symlinkSync);
+const mockedLstatSync = vi.mocked(lstatSync);
 
 const LOCAL_PATH = "/home/user/myproject";
 const TASK_ID = "clxabc123def";
@@ -70,6 +74,23 @@ describe("createWorktree", () => {
       { cwd: LOCAL_PATH, encoding: "utf-8", timeout: 30000 }
     );
     expect(result).toEqual({ worktreePath: expectedWorktreePath, worktreeBranch: expectedBranch });
+  });
+
+  it("symlinks node_modules for both repo root and subPath", async () => {
+    mockedExecFileSync.mockReturnValue("" as never);
+    // Source dependency dirs exist; targets do not (lstatSync throws)
+    mockedExistsSync.mockImplementation((p) =>
+      String(p).endsWith("node_modules")
+    );
+    mockedLstatSync.mockImplementation(() => {
+      throw new Error("ENOENT");
+    });
+
+    await createWorktree(LOCAL_PATH, TASK_ID, BASE_BRANCH, "web");
+
+    const symlinkTargets = mockedSymlinkSync.mock.calls.map((c) => String(c[1]));
+    expect(symlinkTargets).toContain(`${expectedWorktreePath}/node_modules`);
+    expect(symlinkTargets).toContain(`${expectedWorktreePath}/web/node_modules`);
   });
 
   it("reuses existing worktree when git worktree list contains target path", async () => {
