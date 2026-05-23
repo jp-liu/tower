@@ -5,8 +5,8 @@ import { VersionTypeBadge, VersionStatusBadge } from "@/components/version/versi
 
 describe("version badges", () => {
   it("renders type label", () => {
-    render(<I18nProvider><VersionTypeBadge type="BUGFIX" /></I18nProvider>);
-    expect(screen.getByText(/bug/i)).toBeInTheDocument();
+    render(<I18nProvider><VersionTypeBadge name="bug修复" /></I18nProvider>);
+    expect(screen.getByText("bug修复")).toBeInTheDocument();
   });
   it("renders status label", () => {
     render(<I18nProvider><VersionStatusBadge status="RELEASED" /></I18nProvider>);

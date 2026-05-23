@@ -292,7 +292,7 @@ export function VersionCard({ version, diffStat, onEdit, onRelease, onViewDiff, 
             {/* Version name */}
             <span className="text-[14.5px] font-semibold text-foreground">{version.name}</span>
             {/* Type badge */}
-            <VersionTypeBadge type={version.type as "FEATURE" | "BUGFIX" | "RESEARCH"} />
+            <VersionTypeBadge name={version.type?.name ?? null} />
             {/* Status badge */}
             <VersionStatusBadge status={version.status as "PLANNED" | "ACTIVE" | "RELEASED"} />
             {/* Current pill */}

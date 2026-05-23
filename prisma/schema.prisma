@@ -14,9 +14,10 @@ model Workspace {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  projects Project[]
-  labels   Label[]
-  prompts  AgentPrompt[]
+  projects     Project[]
+  labels       Label[]
+  prompts      AgentPrompt[]
+  versionTypes VersionType[]
 }
 
 model Project {
@@ -167,7 +168,7 @@ model Version {
   id            String        @id @default(cuid())
   number        String
   name          String
-  type          VersionType   @default(FEATURE)
+  typeId        String?
   status        VersionStatus @default(PLANNED)
   isCurrent     Boolean       @default(false)
   baseBranch    String?
@@ -182,11 +183,24 @@ model Version {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type    VersionType? @relation(fields: [typeId], references: [id], onDelete: SetNull)
   tasks   Task[]
 
   @@index([projectId])
   @@index([isCurrent])
+  @@index([typeId])
+}
+
+model VersionType {
+  id          String    @id @default(cuid())
+  name        String
+  workspaceId String
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  versions    Version[]
+
+  @@index([workspaceId])
 }
 
 model ProjectNote {
@@ -344,12 +358,6 @@ enum MessageRole {
 enum ProjectCategory {
   FRONTEND
   BACKEND
-}
-
-enum VersionType {
-  FEATURE
-  BUGFIX
-  RESEARCH
 }
 
 enum VersionStatus {

@@ -10,6 +10,7 @@ export async function getProjectVersions(projectId: string) {
     where: { projectId },
     orderBy: [{ targetDate: "desc" }, { order: "desc" }, { createdAt: "desc" }],
     include: {
+      type: true,
       tasks: {
         orderBy: [{ order: "asc" }, { createdAt: "desc" }],
         include: {
@@ -24,7 +25,7 @@ export async function getProjectVersions(projectId: string) {
 
 export async function createVersion(data: {
   projectId: string; number: string; name: string;
-  type?: "FEATURE" | "BUGFIX" | "RESEARCH"; baseBranch?: string;
+  typeId?: string; baseBranch?: string;
   startDate?: Date; targetDate?: Date; description?: string; setCurrent?: boolean;
 }) {
   const v = createVersionSchema.parse(data);
@@ -38,7 +39,7 @@ export async function createVersion(data: {
   const version = await db.version.create({
     data: {
       projectId: v.projectId, number: v.number, name: v.name,
-      type: v.type ?? "FEATURE", status: "PLANNED",
+      typeId: v.typeId ?? null, status: "PLANNED",
       baseBranch: v.baseBranch ?? null, baseCommit,
       startDate: v.startDate ?? null, targetDate: v.targetDate ?? null,
       description: v.description ?? null,
@@ -50,7 +51,7 @@ export async function createVersion(data: {
 }
 
 export async function updateVersion(versionId: string, data: {
-  number?: string; name?: string; type?: "FEATURE" | "BUGFIX" | "RESEARCH";
+  number?: string; name?: string; typeId?: string | null;
   baseBranch?: string | null; startDate?: Date | null; targetDate?: Date | null; description?: string | null;
 }) {
   const v = updateVersionSchema.parse(data);

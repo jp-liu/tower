@@ -74,7 +74,7 @@ export const createLabelSchema = z.object({
 export const createVersionSchema = z.object({
   number: z.string().min(1, "Number is required").max(50),
   name: z.string().min(1, "Name is required").max(100),
-  type: z.enum(["FEATURE", "BUGFIX", "RESEARCH"]).optional(),
+  typeId: cuid.optional(),
   baseBranch: z.string().max(200).optional(),
   startDate: z.coerce.date().optional(),
   targetDate: z.coerce.date().optional(),
@@ -86,9 +86,19 @@ export const createVersionSchema = z.object({
 export const updateVersionSchema = z.object({
   number: z.string().min(1).max(50).optional(),
   name: z.string().min(1).max(100).optional(),
-  type: z.enum(["FEATURE", "BUGFIX", "RESEARCH"]).optional(),
+  typeId: cuid.nullable().optional(),
   baseBranch: z.string().max(200).nullable().optional(),
   startDate: z.coerce.date().nullable().optional(),
   targetDate: z.coerce.date().nullable().optional(),
   description: z.string().max(5000).nullable().optional(),
+});
+
+// ── VersionType schemas ──
+export const createVersionTypeSchema = z.object({
+  workspaceId: cuid,
+  name: z.string().min(1).max(50),
+});
+
+export const updateVersionTypeSchema = z.object({
+  name: z.string().min(1).max(50),
 });
