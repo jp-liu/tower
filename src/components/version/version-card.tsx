@@ -8,14 +8,14 @@ import {
   GitCommitHorizontal,
   Tag,
   GitCompare,
-  Paperclip,
-  MessageSquare,
+  FolderOpen,
   FileText,
   Image,
   Pencil,
   PackageCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BOARD_COLUMNS } from "@/lib/constants";
 import { VersionTypeBadge, VersionStatusBadge } from "@/components/version/version-badges";
 import { useI18n } from "@/lib/i18n";
 import type { getProjectVersions } from "@/actions/version-actions";
@@ -45,13 +45,11 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const STATUS_DOT_COLOR: Record<string, string> = {
-  DONE: "bg-emerald-400",
-  IN_PROGRESS: "bg-sky-400",
-  IN_REVIEW: "bg-violet-400",
-  TODO: "bg-slate-400",
-  CANCELLED: "bg-slate-400",
-};
+// Mirror the kanban board's status colors (BOARD_COLUMNS) so a status looks
+// the same here as on the board.
+const STATUS_DOT_COLOR: Record<string, string> = Object.fromEntries(
+  BOARD_COLUMNS.map((c) => [c.id, c.color]),
+);
 
 const PRIORITY_CLASSES: Record<string, string> = {
   CRITICAL: "text-rose-300 bg-rose-500/20 border border-rose-500/30",
@@ -80,7 +78,13 @@ export function TaskRow({ task }: TaskRowProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
 
-  const isDone = task.status === "DONE" || task.status === "CANCELLED";
+  // active = normal text; DONE = muted; CANCELLED = muted + strikethrough
+  const titleClass =
+    task.status === "CANCELLED"
+      ? "text-muted-foreground line-through decoration-muted-foreground/40"
+      : task.status === "DONE"
+        ? "text-muted-foreground"
+        : "text-foreground";
 
   return (
     <div className="rounded-[10px]">
@@ -98,9 +102,7 @@ export function TaskRow({ task }: TaskRowProps) {
           className={`h-2 w-2 flex-none rounded-full ${STATUS_DOT_COLOR[task.status] ?? "bg-slate-400"}`}
         />
         {/* Title */}
-        <span
-          className={`text-[13.5px] font-medium ${isDone ? "text-muted-foreground line-through decoration-muted-foreground/40" : "text-foreground"}`}
-        >
+        <span className={`text-[13.5px] font-medium ${titleClass}`}>
           {task.title}
         </span>
         {/* Labels */}
@@ -126,7 +128,7 @@ export function TaskRow({ task }: TaskRowProps) {
           {/* Resources */}
           <div>
             <div className="mb-1.5 flex items-center gap-1.5">
-              <Paperclip className="h-3 w-3 text-muted-foreground/60" />
+              <FolderOpen className="h-3 w-3 text-muted-foreground/60" />
               <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground/60">
                 {t("version.resources")}
               </span>
@@ -163,7 +165,7 @@ export function TaskRow({ task }: TaskRowProps) {
           {/* Notes */}
           <div>
             <div className="mb-1.5 flex items-center gap-1.5">
-              <MessageSquare className="h-3 w-3 text-muted-foreground/60" />
+              <FileText className="h-3 w-3 text-muted-foreground/60" />
               <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground/60">
                 {t("version.notes")}
               </span>
