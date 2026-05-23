@@ -43,21 +43,21 @@ export interface VersionTimelineClientProps {
 // ─── Node colors per status/current ─────────────────────────────────────────
 
 function nodeClass(v: VersionWithTasks): string {
-  if (v.isCurrent) return "border-indigo-600 bg-indigo-600 shadow-[0_0_0_5px_#eef2ff]";
-  if (v.status === "ACTIVE") return "border-green-600 bg-white shadow-[0_0_0_4px_#ecfdf5]";
-  if (v.status === "RELEASED") return "border-zinc-300 bg-zinc-50";
+  if (v.isCurrent) return "border-primary bg-primary ring-2 ring-primary/30";
+  if (v.status === "ACTIVE") return "border-emerald-400 bg-emerald-400";
+  if (v.status === "RELEASED") return "border-zinc-500 bg-zinc-500";
   // PLANNED
-  return "border-slate-300 bg-white";
+  return "border-muted-foreground/40 bg-transparent border-dashed";
 }
 
 // ─── Status dot color for backlog tasks ──────────────────────────────────────
 
 const STATUS_DOT: Record<string, string> = {
-  DONE: "bg-emerald-500",
-  IN_PROGRESS: "bg-blue-500",
-  IN_REVIEW: "bg-violet-500",
+  DONE: "bg-emerald-400",
+  IN_PROGRESS: "bg-sky-400",
+  IN_REVIEW: "bg-violet-400",
   TODO: "bg-slate-400",
-  CANCELLED: "bg-slate-300",
+  CANCELLED: "bg-slate-400",
 };
 
 // ─── Ordering helpers ────────────────────────────────────────────────────────
@@ -117,7 +117,7 @@ function TimelineRow({
             "w-px flex-none",
             isFirst ? "h-6" : "h-6",
             dashed
-              ? "bg-[repeating-linear-gradient(to_bottom,#cbd5e1_0_4px,transparent_4px_8px)]"
+              ? "bg-[repeating-linear-gradient(to_bottom,hsl(var(--border))_0_4px,transparent_4px_8px)]"
               : "bg-border",
           ]
             .filter(Boolean)
@@ -136,7 +136,7 @@ function TimelineRow({
             className={[
               "w-px flex-1",
               dashed
-                ? "bg-[repeating-linear-gradient(to_bottom,#cbd5e1_0_4px,transparent_4px_8px)]"
+                ? "bg-[repeating-linear-gradient(to_bottom,hsl(var(--border))_0_4px,transparent_4px_8px)]"
                 : "bg-border",
             ].join(" ")}
           />
@@ -296,13 +296,13 @@ export function VersionTimelineClient({
             <div className="flex gap-4">
               {/* Dashed rail for history */}
               <div className="relative flex w-5 flex-none flex-col items-center">
-                <div className="h-6 w-px bg-[repeating-linear-gradient(to_bottom,#cbd5e1_0_4px,transparent_4px_8px)]" />
-                <div className="z-10 h-3.5 w-3.5 flex-none rounded-full border-2 border-dashed border-slate-400 bg-white" />
+                <div className="h-6 w-px bg-[repeating-linear-gradient(to_bottom,hsl(var(--border))_0_4px,transparent_4px_8px)]" />
+                <div className="z-10 h-3.5 w-3.5 flex-none rounded-full border-2 border-dashed border-muted-foreground/40 bg-transparent" />
               </div>
 
               {/* History card */}
               <div className="min-w-0 flex-1 pb-5">
-                <div className="overflow-hidden rounded-[14px] border border-dashed bg-[#fbfbfc] shadow-sm">
+                <div className="overflow-hidden rounded-[14px] border border-dashed bg-muted/40 shadow-sm">
                   {/* Header */}
                   <div className="flex items-center gap-2.5 border-b border-dashed px-4 py-3">
                     <History className="h-4 w-4 text-muted-foreground/60" />

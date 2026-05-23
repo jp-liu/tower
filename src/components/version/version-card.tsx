@@ -46,18 +46,18 @@ function formatFileSize(bytes: number): string {
 }
 
 const STATUS_DOT_COLOR: Record<string, string> = {
-  DONE: "bg-emerald-500",
-  IN_PROGRESS: "bg-blue-500",
-  IN_REVIEW: "bg-violet-500",
+  DONE: "bg-emerald-400",
+  IN_PROGRESS: "bg-sky-400",
+  IN_REVIEW: "bg-violet-400",
   TODO: "bg-slate-400",
-  CANCELLED: "bg-slate-300",
+  CANCELLED: "bg-slate-400",
 };
 
 const PRIORITY_CLASSES: Record<string, string> = {
-  CRITICAL: "text-red-700 bg-red-50 border border-red-200",
-  HIGH: "text-red-700 bg-red-50 border border-red-200",
-  MEDIUM: "text-amber-700 bg-amber-50 border border-amber-200",
-  LOW: "text-slate-600 bg-slate-100 border border-slate-200",
+  CRITICAL: "text-rose-300 bg-rose-500/20 border border-rose-500/30",
+  HIGH: "text-rose-300 bg-rose-500/20 border border-rose-500/30",
+  MEDIUM: "text-amber-300 bg-amber-500/20 border border-amber-500/30",
+  LOW: "text-slate-300 bg-slate-500/20 border border-slate-500/30",
 };
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -175,13 +175,12 @@ function TaskRow({ task }: TaskRowProps) {
                 {task.notes.map((note) => (
                   <div
                     key={note.id}
-                    className="rounded-lg border border-border border-l-violet-400 bg-background px-2.5 py-2 shadow-sm"
-                    style={{ borderLeftWidth: "3px", borderLeftColor: "#a78bfa" }}
+                    className="rounded-lg border border-border border-l-violet-500/50 bg-background px-2.5 py-2 shadow-sm [border-left-width:3px]"
                   >
                     <div className="flex items-center gap-2">
                       <span className="text-[12.5px] font-semibold text-foreground">{note.title}</span>
                       {note.category && (
-                        <span className="rounded-[5px] border border-violet-200 bg-violet-50 px-1.5 py-px text-[10px] font-bold text-violet-600">
+                        <span className="rounded-[5px] border border-violet-500/30 bg-violet-500/15 px-1.5 py-px text-[10px] font-bold text-violet-300">
                           {note.category}
                         </span>
                       )}
@@ -232,16 +231,16 @@ export function VersionCard({ version, diffStat, onEdit, onRelease, onViewDiff }
       className={[
         "relative overflow-hidden rounded-[14px] border bg-card shadow-sm transition-shadow duration-150 hover:shadow-md",
         version.isCurrent
-          ? "border-[#c4c8fb] shadow-[0_0_0_1px_#c4c8fb,0_8px_24px_rgba(79,70,229,.12)]"
+          ? "border-primary/50 ring-1 ring-primary/20"
           : "border-border",
         isReleased ? "opacity-[.96]" : "",
       ]
         .filter(Boolean)
         .join(" ")}
     >
-      {/* Indigo left accent bar for current version */}
+      {/* Primary left accent bar for current version */}
       {version.isCurrent && (
-        <div className="absolute bottom-0 left-0 top-0 z-10 w-[3px] bg-indigo-600" />
+        <div className="absolute bottom-0 left-0 top-0 z-10 w-[3px] bg-primary" />
       )}
 
       {/* Card header (always visible) */}
@@ -251,7 +250,7 @@ export function VersionCard({ version, diffStat, onEdit, onRelease, onViewDiff }
         className={[
           "w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           version.isCurrent
-            ? "bg-gradient-to-b from-[#f4f5ff] to-transparent"
+            ? "bg-primary/5"
             : "",
         ]
           .filter(Boolean)
@@ -275,8 +274,8 @@ export function VersionCard({ version, diffStat, onEdit, onRelease, onViewDiff }
             <VersionStatusBadge status={version.status as "PLANNED" | "ACTIVE" | "RELEASED"} />
             {/* Current pill */}
             {version.isCurrent && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-600 bg-indigo-600 px-2.5 py-0.5 text-[11px] font-bold text-white shadow-sm">
-                <span className="h-1.5 w-1.5 rounded-full bg-white opacity-90" />
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/15 px-2.5 py-0.5 text-[11px] font-bold text-primary shadow-sm">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary opacity-90" />
                 {t("version.current")}
               </span>
             )}
@@ -368,8 +367,8 @@ export function VersionCard({ version, diffStat, onEdit, onRelease, onViewDiff }
                 {!isReleased && (
                   <span className="text-muted-foreground">{t("version.diff.live")}</span>
                 )}
-                <span className="font-bold text-emerald-600">+{diffStat.additions.toLocaleString()}</span>
-                <span className="font-bold text-red-600">−{diffStat.deletions.toLocaleString()}</span>
+                <span className="font-bold text-emerald-400">+{diffStat.additions.toLocaleString()}</span>
+                <span className="font-bold text-rose-400">−{diffStat.deletions.toLocaleString()}</span>
                 <span className="text-muted-foreground">
                   · {diffStat.files} {t("version.diff.files")}
                 </span>
@@ -384,7 +383,7 @@ export function VersionCard({ version, diffStat, onEdit, onRelease, onViewDiff }
                   e.stopPropagation();
                   onViewDiff(version.id);
                 }}
-                className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-600 transition-colors hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <GitCompare className="h-3 w-3" />
                 {t("version.diff.view")} →
@@ -401,7 +400,7 @@ export function VersionCard({ version, diffStat, onEdit, onRelease, onViewDiff }
 
       {/* Collapsible task list */}
       {open && totalTasks > 0 && (
-        <div className="border-t border-dashed border-border bg-[#fcfcfd] px-2 pb-2 pt-1.5">
+        <div className="border-t border-dashed border-border bg-muted/40 px-2 pb-2 pt-1.5">
           {version.tasks.map((task) => (
             <TaskRow key={task.id} task={task} />
           ))}

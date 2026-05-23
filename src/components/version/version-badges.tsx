@@ -6,18 +6,18 @@ export const VERSION_TYPE_COLORS: Record<
   "FEATURE" | "BUGFIX" | "RESEARCH",
   string
 > = {
-  FEATURE: "bg-blue-50 text-blue-700",
-  BUGFIX: "bg-amber-50 text-amber-700",
-  RESEARCH: "bg-violet-50 text-violet-700",
+  FEATURE: "bg-sky-500/20 text-sky-300 border border-sky-500/30",
+  BUGFIX: "bg-amber-500/20 text-amber-300 border border-amber-500/30",
+  RESEARCH: "bg-violet-500/20 text-violet-300 border border-violet-500/30",
 };
 
 export const VERSION_STATUS_COLORS: Record<
   "PLANNED" | "ACTIVE" | "RELEASED",
   string
 > = {
-  PLANNED: "bg-slate-100 text-slate-600",
-  ACTIVE: "bg-emerald-50 text-emerald-700",
-  RELEASED: "bg-zinc-100 text-zinc-600",
+  PLANNED: "bg-slate-500/20 text-slate-300 border border-slate-500/30",
+  ACTIVE: "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30",
+  RELEASED: "bg-zinc-500/20 text-zinc-400 border border-zinc-500/30",
 };
 
 export function VersionTypeBadge({
