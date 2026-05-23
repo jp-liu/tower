@@ -117,7 +117,7 @@ function TimelineRow({
             "w-px flex-none",
             isFirst ? "h-6" : "h-6",
             dashed
-              ? "bg-[repeating-linear-gradient(to_bottom,hsl(var(--border))_0_4px,transparent_4px_8px)]"
+              ? "bg-[repeating-linear-gradient(to_bottom,var(--border)_0_4px,transparent_4px_8px)]"
               : "bg-border",
           ]
             .filter(Boolean)
@@ -136,7 +136,7 @@ function TimelineRow({
             className={[
               "w-px flex-1",
               dashed
-                ? "bg-[repeating-linear-gradient(to_bottom,hsl(var(--border))_0_4px,transparent_4px_8px)]"
+                ? "bg-[repeating-linear-gradient(to_bottom,var(--border)_0_4px,transparent_4px_8px)]"
                 : "bg-border",
             ].join(" ")}
           />
@@ -296,7 +296,7 @@ export function VersionTimelineClient({
             <div className="flex gap-4">
               {/* Dashed rail for history */}
               <div className="relative flex w-5 flex-none flex-col items-center">
-                <div className="h-6 w-px bg-[repeating-linear-gradient(to_bottom,hsl(var(--border))_0_4px,transparent_4px_8px)]" />
+                <div className="h-6 w-px bg-[repeating-linear-gradient(to_bottom,var(--border)_0_4px,transparent_4px_8px)]" />
                 <div className="z-10 h-3.5 w-3.5 flex-none rounded-full border-2 border-dashed border-muted-foreground/40 bg-transparent" />
               </div>
 
