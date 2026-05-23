@@ -1009,6 +1009,7 @@ export const en: Translations = {
   "version.field.name": "Name",
   "version.field.type": "Type",
   "version.field.baseBranch": "Base branch",
+  "version.field.baseCommit": "Base",
   "version.field.startDate": "Start date",
   "version.field.targetDate": "Target date",
   "version.field.description": "Description",

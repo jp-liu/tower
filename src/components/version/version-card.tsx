@@ -348,6 +348,7 @@ export function VersionCard({ version, diffStat, onEdit, onRelease, onViewDiff }
             {version.baseCommit && (
               <MetaChip>
                 <GitCommitHorizontal className="h-3 w-3" />
+                {t("version.field.baseCommit")}
                 <span className="font-mono text-[11px] text-foreground">
                   {shortCommit(version.baseCommit)}
                 </span>
