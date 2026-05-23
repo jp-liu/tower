@@ -1,6 +1,8 @@
 import { execFileSync } from "child_process";
 
 const GIT_TIMEOUT = 5000;
+const DIFF_TIMEOUT = 15000;
+const DIFF_MAX_BUFFER = 20 * 1024 * 1024;
 
 /** 取某分支（或 ref）的 HEAD commit；失败返回 null。 */
 export function getBranchHead(cwd: string, branch: string): string | null {
@@ -14,6 +16,20 @@ export function getBranchHead(cwd: string, branch: string): string | null {
 }
 
 export interface DiffStat { additions: number; deletions: number; files: number; }
+
+/** 获取 from..to 的 unified diff patch 文本；失败返回 ""。 */
+export function getDiffPatch(cwd: string, from: string, to: string): string {
+  try {
+    return execFileSync("git", ["diff", `${from}..${to}`], {
+      cwd,
+      encoding: "utf-8",
+      timeout: DIFF_TIMEOUT,
+      maxBuffer: DIFF_MAX_BUFFER,
+    });
+  } catch (_e) {
+    return "";
+  }
+}
 
 /** 计算 from..to 的增删行数与文件数；失败返回全 0。 */
 export function getDiffStat(cwd: string, from: string, to: string): DiffStat {

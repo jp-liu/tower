@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, History, Circle } from "lucide-react";
-import { toast } from "sonner";
+import { Plus, History, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { VersionCard } from "@/components/version/version-card";
+import { VersionCard, TaskRow } from "@/components/version/version-card";
 import { VersionFormDialog } from "@/components/version/version-form-dialog";
 import { ReleaseVersionDialog } from "@/components/version/release-version-dialog";
+import { VersionDiffDialog } from "@/components/version/version-diff-dialog";
 import { useI18n } from "@/lib/i18n";
 import type { getProjectVersions } from "@/actions/version-actions";
 
@@ -49,16 +49,6 @@ function nodeClass(v: VersionWithTasks): string {
   // PLANNED
   return "border-muted-foreground/40 bg-transparent border-dashed";
 }
-
-// ─── Status dot color for backlog tasks ──────────────────────────────────────
-
-const STATUS_DOT: Record<string, string> = {
-  DONE: "bg-emerald-400",
-  IN_PROGRESS: "bg-sky-400",
-  IN_REVIEW: "bg-violet-400",
-  TODO: "bg-slate-400",
-  CANCELLED: "bg-slate-400",
-};
 
 // ─── Ordering helpers ────────────────────────────────────────────────────────
 
@@ -173,6 +163,9 @@ export function VersionTimelineClient({
   const [editVersion, setEditVersion] = useState<EditVersionShape | null>(null);
   const [releaseOpen, setReleaseOpen] = useState(false);
   const [releaseTarget, setReleaseTarget] = useState<VersionWithTasks | null>(null);
+  const [diffVersionId, setDiffVersionId] = useState<string | null>(null);
+  // History collapse (default closed — can be 100+ tasks)
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Split into non-released / released
   const nonReleased = sortNonReleased(
@@ -207,8 +200,8 @@ export function VersionTimelineClient({
     setReleaseOpen(true);
   };
 
-  const handleViewDiff = (_id: string) => {
-    toast.info(t("version.diff.view"));
+  const handleViewDiff = (id: string) => {
+    setDiffVersionId(id);
   };
 
   const handleNewVersion = () => {
@@ -303,8 +296,15 @@ export function VersionTimelineClient({
               {/* History card */}
               <div className="min-w-0 flex-1 pb-5">
                 <div className="overflow-hidden rounded-[14px] border border-dashed bg-muted/40 shadow-sm">
-                  {/* Header */}
-                  <div className="flex items-center gap-2.5 border-b border-dashed px-4 py-3">
+                  {/* Collapse toggle header */}
+                  <button
+                    type="button"
+                    onClick={() => setHistoryOpen((v) => !v)}
+                    className="flex w-full items-center gap-2.5 border-b border-dashed px-4 py-3 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <ChevronRight
+                      className={`h-3.5 w-3.5 flex-none text-muted-foreground/60 transition-transform duration-150 ${historyOpen ? "rotate-90" : ""}`}
+                    />
                     <History className="h-4 w-4 text-muted-foreground/60" />
                     <span className="text-sm font-semibold text-foreground">
                       {t("version.history")}
@@ -315,67 +315,16 @@ export function VersionTimelineClient({
                     <span className="ml-1 text-xs text-muted-foreground/70">
                       {t("version.historyHint")}
                     </span>
-                  </div>
+                  </button>
 
-                  {/* Task list */}
-                  <div className="divide-y divide-dashed divide-border/60 px-2 py-1">
-                    {backlog.map((task) => {
-                      const isDone =
-                        task.status === "DONE" || task.status === "CANCELLED";
-                      return (
-                        <div
-                          key={task.id}
-                          className="flex items-center gap-2.5 px-2.5 py-2"
-                        >
-                          <Circle
-                            className={[
-                              "h-2 w-2 flex-none rounded-full",
-                              STATUS_DOT[task.status] ?? "bg-slate-400",
-                            ].join(" ")}
-                            style={{ fill: "currentColor" }}
-                          />
-                          <span
-                            className={[
-                              "flex-1 text-[13px] font-medium",
-                              isDone
-                                ? "text-muted-foreground line-through decoration-muted-foreground/40"
-                                : "text-foreground",
-                            ].join(" ")}
-                          >
-                            {task.title}
-                          </span>
-                          {/* Labels */}
-                          {task.labels.map(({ label }) => (
-                            <span
-                              key={label.id}
-                              className="rounded-full border border-border px-1.5 py-px text-[10.5px] text-muted-foreground"
-                              style={
-                                label.color
-                                  ? {
-                                      borderColor: label.color + "55",
-                                      color: label.color,
-                                    }
-                                  : undefined
-                              }
-                            >
-                              {label.name}
-                            </span>
-                          ))}
-                          {/* Asset + Note counts */}
-                          {task.assets.length > 0 && (
-                            <span className="text-[11px] text-muted-foreground/60">
-                              {task.assets.length} {t("version.resources")}
-                            </span>
-                          )}
-                          {task.notes.length > 0 && (
-                            <span className="text-[11px] text-muted-foreground/60">
-                              {task.notes.length} {t("version.notes")}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {/* Collapsible task list */}
+                  {historyOpen && (
+                    <div className="px-2 pb-2 pt-1.5">
+                      {backlog.map((task) => (
+                        <TaskRow key={task.id} task={task} />
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -414,6 +363,13 @@ export function VersionTimelineClient({
         }
         candidates={releaseCandidates}
         onSuccess={handleSuccess}
+      />
+
+      <VersionDiffDialog
+        open={!!diffVersionId}
+        onOpenChange={(o) => { if (!o) setDiffVersionId(null); }}
+        versionId={diffVersionId}
+        versionLabel={diffVersionId ? (() => { const v = versions.find((x) => x.id === diffVersionId); return v ? `${v.number} ${v.name}` : undefined; })() : undefined}
       />
     </div>
   );

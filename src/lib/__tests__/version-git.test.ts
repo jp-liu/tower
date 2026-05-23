@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const execFileSync = vi.fn();
 vi.mock("child_process", () => ({ default: {}, execFileSync: (...a: unknown[]) => execFileSync(...a) }));
 
-import { getBranchHead, getDiffStat } from "@/lib/version-git";
+import { getBranchHead, getDiffStat, getDiffPatch } from "@/lib/version-git";
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -17,6 +17,23 @@ describe("getBranchHead", () => {
   it("returns null when git fails", () => {
     execFileSync.mockImplementation(() => { throw new Error("no repo"); });
     expect(getBranchHead("/repo", "main")).toBeNull();
+  });
+});
+
+describe("getDiffPatch", () => {
+  it("returns patch text when git succeeds", () => {
+    const patch = "diff --git a/src/a.ts b/src/a.ts\n+added line\n";
+    execFileSync.mockReturnValue(patch);
+    expect(getDiffPatch("/repo", "aaa", "bbb")).toBe(patch);
+    expect(execFileSync).toHaveBeenCalledWith(
+      "git",
+      ["diff", "aaa..bbb"],
+      expect.objectContaining({ cwd: "/repo", encoding: "utf-8" })
+    );
+  });
+  it("returns empty string when git throws", () => {
+    execFileSync.mockImplementation(() => { throw new Error("no repo"); });
+    expect(getDiffPatch("/repo", "aaa", "bbb")).toBe("");
   });
 });
 

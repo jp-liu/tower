@@ -9,11 +9,15 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/version-git", () => ({ getBranchHead: vi.fn(() => "deadbeef"), getDiffStat: vi.fn(() => ({ additions: 0, deletions: 0, files: 0 })) }));
+vi.mock("@/lib/version-git", () => ({
+  getBranchHead: vi.fn(() => "deadbeef"),
+  getDiffStat: vi.fn(() => ({ additions: 0, deletions: 0, files: 0 })),
+  getDiffPatch: vi.fn(() => "diff --git a/x.ts b/x.ts\n+hello\n"),
+}));
 
 import { db } from "@/lib/db";
-import { getBranchHead, getDiffStat } from "@/lib/version-git";
-import { createVersion, getProjectVersions, setCurrentVersion, assignTaskVersion, releaseVersion, getVersionDiffStat } from "@/actions/version-actions";
+import { getBranchHead, getDiffStat, getDiffPatch } from "@/lib/version-git";
+import { createVersion, getProjectVersions, setCurrentVersion, assignTaskVersion, releaseVersion, getVersionDiffStat, getVersionDiff } from "@/actions/version-actions";
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -87,6 +91,35 @@ describe("getVersionDiffStat", () => {
   it("returns null when baseCommit missing", async () => {
     (db.version.findUnique as any).mockResolvedValue({ baseCommit: null, project: { localPath: "/repo" } });
     expect(await getVersionDiffStat("v1")).toBeNull();
+  });
+});
+
+describe("getVersionDiff", () => {
+  it("calls getDiffPatch with localPath, baseCommit, and releaseCommit when released", async () => {
+    (db.version.findUnique as any).mockResolvedValue({
+      baseCommit: "abc", releaseCommit: "def", baseBranch: "main", project: { localPath: "/repo" },
+    });
+    (getDiffPatch as any).mockReturnValue("diff text");
+    const r = await getVersionDiff("v1");
+    expect(getDiffPatch).toHaveBeenCalledWith("/repo", "abc", "def");
+    expect(r).toEqual({ patch: "diff text" });
+  });
+  it("resolves to from branch HEAD when no releaseCommit", async () => {
+    (db.version.findUnique as any).mockResolvedValue({
+      baseCommit: "abc", releaseCommit: null, baseBranch: "main", project: { localPath: "/repo" },
+    });
+    (getDiffPatch as any).mockReturnValue("patch text");
+    await getVersionDiff("v1");
+    // getBranchHead mocked to return "deadbeef"
+    expect(getDiffPatch).toHaveBeenCalledWith("/repo", "abc", "deadbeef");
+  });
+  it("returns null when baseCommit is missing", async () => {
+    (db.version.findUnique as any).mockResolvedValue({
+      baseCommit: null, releaseCommit: null, baseBranch: "main", project: { localPath: "/repo" },
+    });
+    const r = await getVersionDiff("v1");
+    expect(r).toBeNull();
+    expect(getDiffPatch).not.toHaveBeenCalled();
   });
 });
 

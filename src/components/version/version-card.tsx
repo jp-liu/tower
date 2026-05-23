@@ -21,7 +21,7 @@ import { useI18n } from "@/lib/i18n";
 import type { getProjectVersions } from "@/actions/version-actions";
 
 type VersionWithTasks = Awaited<ReturnType<typeof getProjectVersions>>[number];
-type TaskWithDetails = VersionWithTasks["tasks"][number];
+export type TaskWithDetails = VersionWithTasks["tasks"][number];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -76,7 +76,7 @@ interface TaskRowProps {
   task: TaskWithDetails;
 }
 
-function TaskRow({ task }: TaskRowProps) {
+export function TaskRow({ task }: TaskRowProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
 
@@ -140,12 +140,12 @@ function TaskRow({ task }: TaskRowProps) {
                   return (
                     <span
                       key={asset.id}
-                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-[12px] text-foreground shadow-sm transition-colors hover:border-indigo-400"
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-[12px] text-foreground shadow-sm transition-colors hover:border-primary/50"
                     >
                       {isImage ? (
-                        <Image className="h-3.5 w-3.5 text-indigo-500" />
+                        <Image className="h-3.5 w-3.5 text-muted-foreground" />
                       ) : (
-                        <FileText className="h-3.5 w-3.5 text-indigo-500" />
+                        <FileText className="h-3.5 w-3.5 text-muted-foreground" />
                       )}
                       <span>{asset.filename}</span>
                       {asset.size != null && (

@@ -1044,4 +1044,8 @@ export const zh = {
   "version.releasedAt": "发布于",
   "version.picker.label": "版本",
   "version.picker.none": "不归入版本（Backlog）",
+  "version.diff.title": "版本改动",
+  "version.diff.empty": "该版本暂无代码改动",
+  "version.diff.loading": "加载 diff…",
+  "version.diff.truncated": "内容过长已截断，可在 Git 标签页查看完整 diff",
 } as const;
