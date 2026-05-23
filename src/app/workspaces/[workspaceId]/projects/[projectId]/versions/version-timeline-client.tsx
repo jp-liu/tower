@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, History, ChevronRight } from "lucide-react";
+import { Plus, Archive, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { VersionCard, TaskRow } from "@/components/version/version-card";
 import { VersionFormDialog } from "@/components/version/version-form-dialog";
@@ -300,26 +300,32 @@ export function VersionTimelineClient({
                   <button
                     type="button"
                     onClick={() => setHistoryOpen((v) => !v)}
-                    className="flex w-full items-center gap-2.5 border-b border-dashed px-4 py-3 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="w-full px-4 py-3 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <ChevronRight
-                      className={`h-3.5 w-3.5 flex-none text-muted-foreground/60 transition-transform duration-150 ${historyOpen ? "rotate-90" : ""}`}
-                    />
-                    <History className="h-4 w-4 text-muted-foreground/60" />
-                    <span className="text-sm font-semibold text-foreground">
-                      {t("version.history")}
-                    </span>
-                    <span className="rounded-full bg-muted px-2 py-px text-[11px] text-muted-foreground">
-                      {backlog.length}
-                    </span>
-                    <span className="ml-1 text-xs text-muted-foreground/70">
+                    <div className="flex items-center gap-2.5">
+                      <ChevronRight
+                        className={`h-3.5 w-3.5 flex-none text-muted-foreground/60 transition-transform duration-150 ${historyOpen ? "rotate-90" : ""}`}
+                      />
+                      <Archive className="h-4 w-4 flex-none text-muted-foreground/70" />
+                      <span className="text-sm font-semibold text-foreground">
+                        {t("version.history")}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {t("version.historySub")}
+                      </span>
+                      <span className="flex-1" />
+                      <span className="text-[11.5px] text-muted-foreground">
+                        {backlog.length} {t("version.tasksCount")}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground/70">
                       {t("version.historyHint")}
-                    </span>
+                    </p>
                   </button>
 
                   {/* Collapsible task list */}
                   {historyOpen && (
-                    <div className="px-2 pb-2 pt-1.5">
+                    <div className="border-t border-dashed border-border px-2 pb-2 pt-1.5">
                       {backlog.map((task) => (
                         <TaskRow key={task.id} task={task} />
                       ))}

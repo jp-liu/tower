@@ -1010,6 +1010,7 @@ export const zh = {
   "version.currentShort": "当前",
   "version.backlog": "未归入版本",
   "version.history": "History",
+  "version.historySub": "未归入版本的历史任务",
   "version.historyHint": "引入版本功能前创建的历史任务，统一归档，可手动归入版本。",
   "version.tasksCount": "任务",
   "version.doneCount": "完成",

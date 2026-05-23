@@ -994,6 +994,7 @@ export const en: Translations = {
   "version.currentShort": "Current",
   "version.backlog": "Backlog",
   "version.history": "History",
+  "version.historySub": "Tasks not assigned to any version",
   "version.historyHint": "Tasks created before versioning; archived here, can be assigned to a version.",
   "version.tasksCount": "tasks",
   "version.doneCount": "done",
