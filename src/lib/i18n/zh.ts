@@ -1026,6 +1026,7 @@ export const zh = {
   "version.field.type": "类型",
   "version.field.baseBranch": "基线分支",
   "version.field.baseCommit": "基线",
+  "version.field.noBranch": "不指定分支",
   "version.field.startDate": "开始日期",
   "version.field.targetDate": "计划完成",
   "version.field.description": "版本说明",

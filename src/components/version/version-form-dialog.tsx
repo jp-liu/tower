@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { GitBranch, Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,9 +19,23 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { createVersion, updateVersion } from "@/actions/version-actions";
+import { getProjectBranches, fetchRemoteBranches } from "@/actions/git-actions";
 import { useI18n } from "@/lib/i18n";
 
 type VersionType = "FEATURE" | "BUGFIX" | "RESEARCH";
@@ -40,6 +55,7 @@ export interface VersionFormDialogProps {
     description: string | null;
   } | null;
   defaultBaseBranch?: string | null;
+  projectLocalPath?: string | null;
   onSuccess?: () => void;
 }
 
@@ -69,6 +85,7 @@ export function VersionFormDialog({
   projectId,
   editVersion,
   defaultBaseBranch,
+  projectLocalPath,
   onSuccess,
 }: VersionFormDialogProps) {
   const { t } = useI18n();
@@ -82,6 +99,12 @@ export function VersionFormDialog({
   const [targetDate, setTargetDate] = useState("");
   const [description, setDescription] = useState("");
   const [setCurrent, setSetCurrent] = useState(false);
+
+  // Branch picker
+  const [branches, setBranches] = useState<string[]>([]);
+  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [branchOpen, setBranchOpen] = useState(false);
+  const isGitProject = !!projectLocalPath;
 
   const [isPending, startTransition] = useTransition();
 
@@ -109,6 +132,22 @@ export function VersionFormDialog({
       setSetCurrent(false);
     }
   }, [open, editVersion, defaultBaseBranch]);
+
+  // Load git branches when dialog opens (cached first, then refresh remote)
+  useEffect(() => {
+    if (!open || !isGitProject) {
+      setBranches([]);
+      return;
+    }
+    setBranchesLoading(true);
+    getProjectBranches(projectLocalPath!)
+      .then(setBranches)
+      .catch(() => setBranches([]))
+      .finally(() => setBranchesLoading(false));
+    fetchRemoteBranches(projectLocalPath!)
+      .then(() => getProjectBranches(projectLocalPath!).then(setBranches))
+      .catch(() => {});
+  }, [open, isGitProject, projectLocalPath]);
 
   const handleSubmit = () => {
     if (!number.trim() || !name.trim()) return;
@@ -139,17 +178,11 @@ export function VersionFormDialog({
           });
         }
 
-        toast.success(
-          isEditMode
-            ? t("version.edit")
-            : t("version.new")
-        );
+        toast.success(isEditMode ? t("version.edit") : t("version.new"));
         onOpenChange(false);
         onSuccess?.();
       } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : String(err)
-        );
+        toast.error(err instanceof Error ? err.message : String(err));
       }
     });
   };
@@ -220,18 +253,64 @@ export function VersionFormDialog({
             </Select>
           </div>
 
-          {/* Base Branch */}
+          {/* Base Branch — git branch picker for git projects, text fallback otherwise */}
           <div className="grid gap-1.5">
-            <Label htmlFor="version-base-branch">
-              {t("version.field.baseBranch")}
-            </Label>
-            <Input
-              id="version-base-branch"
-              value={baseBranch}
-              onChange={(e) => setBaseBranch(e.target.value)}
-              placeholder="main"
-              disabled={isPending}
-            />
+            <Label>{t("version.field.baseBranch")}</Label>
+            {branchesLoading ? (
+              <div className="text-sm text-muted-foreground">{t("task.branchLoading")}</div>
+            ) : isGitProject && branches.length > 0 ? (
+              <Popover open={branchOpen} onOpenChange={setBranchOpen}>
+                <PopoverTrigger
+                  className="flex h-8 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-3 text-sm transition-colors hover:bg-accent focus:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
+                  disabled={isPending}
+                  data-testid="version-branch-selector"
+                >
+                  <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className={`flex-1 truncate text-left text-xs ${baseBranch ? "font-mono" : "text-muted-foreground"}`}>
+                    {baseBranch || t("version.field.noBranch")}
+                  </span>
+                  <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
+                </PopoverTrigger>
+                <PopoverContent className="p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder={t("task.branchSearch")} />
+                    <CommandList>
+                      <CommandEmpty>{t("task.branchNone")}</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="__none__"
+                          onSelect={() => { setBaseBranch(""); setBranchOpen(false); }}
+                        >
+                          <span className="flex-1 truncate text-muted-foreground">
+                            {t("version.field.noBranch")}
+                          </span>
+                          {!baseBranch && <Check className="ml-auto h-3 w-3 shrink-0 text-primary" />}
+                        </CommandItem>
+                        {branches.map((branch) => (
+                          <CommandItem
+                            key={branch}
+                            value={branch}
+                            onSelect={() => { setBaseBranch(branch); setBranchOpen(false); }}
+                          >
+                            <GitBranch className="mr-2 h-3 w-3 shrink-0 text-muted-foreground" />
+                            <span className="flex-1 truncate font-mono">{branch}</span>
+                            {branch === baseBranch && <Check className="ml-auto h-3 w-3 shrink-0 text-primary" />}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <Input
+                id="version-base-branch"
+                value={baseBranch}
+                onChange={(e) => setBaseBranch(e.target.value)}
+                placeholder="main"
+                disabled={isPending}
+              />
+            )}
           </div>
 
           {/* Start Date / Target Date — side by side */}

@@ -348,6 +348,7 @@ export function VersionTimelineClient({
         projectId={project.id}
         editVersion={editVersion}
         defaultBaseBranch={null}
+        projectLocalPath={project.localPath}
         onSuccess={handleSuccess}
       />
 
