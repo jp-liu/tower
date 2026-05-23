@@ -13,8 +13,10 @@ import {
   Image,
   Pencil,
   PackageCheck,
+  PanelRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { BOARD_COLUMNS } from "@/lib/constants";
 import { VersionTypeBadge, VersionStatusBadge } from "@/components/version/version-badges";
 import { useI18n } from "@/lib/i18n";
@@ -72,9 +74,10 @@ function MetaChip({ children, className }: { children: React.ReactNode; classNam
 
 interface TaskRowProps {
   task: TaskWithDetails;
+  onOpenDetail?: (taskId: string) => void;
 }
 
-export function TaskRow({ task }: TaskRowProps) {
+export function TaskRow({ task, onOpenDetail }: TaskRowProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
 
@@ -120,6 +123,35 @@ export function TaskRow({ task }: TaskRowProps) {
         <span className={`rounded-[5px] px-1.5 py-px text-[10.5px] font-bold ${PRIORITY_CLASSES[task.priority] ?? PRIORITY_CLASSES.LOW}`}>
           {task.priority}
         </span>
+        {/* Separator */}
+        <span className="h-3 w-px bg-border flex-none" />
+        {/* Status label */}
+        <span className="flex items-center gap-1">
+          <span className={`h-1.5 w-1.5 flex-none rounded-full ${STATUS_DOT_COLOR[task.status] ?? "bg-slate-400"}`} />
+          <span className="text-[10.5px] text-muted-foreground">
+            {t(`version.taskStatus.${task.status}` as Parameters<typeof t>[0])}
+          </span>
+        </span>
+        {/* Separator */}
+        <span className="h-3 w-px bg-border flex-none" />
+        {/* Detail button */}
+        {onOpenDetail && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-muted-foreground"
+                  onClick={(e) => { e.stopPropagation(); onOpenDetail(task.id); }}
+                />
+              }
+            >
+              <PanelRight className="h-3.5 w-3.5" />
+            </TooltipTrigger>
+            <TooltipContent>{t("version.detail")}</TooltipContent>
+          </Tooltip>
+        )}
       </button>
 
       {/* Expandable leaf: resources + notes */}
@@ -206,9 +238,10 @@ export interface VersionCardProps {
   onEdit?: (versionId: string) => void;
   onRelease?: (versionId: string) => void;
   onViewDiff?: (versionId: string) => void;
+  onOpenTaskDetail?: (taskId: string) => void;
 }
 
-export function VersionCard({ version, diffStat, onEdit, onRelease, onViewDiff }: VersionCardProps) {
+export function VersionCard({ version, diffStat, onEdit, onRelease, onViewDiff, onOpenTaskDetail }: VersionCardProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(version.isCurrent);
 
@@ -231,32 +264,20 @@ export function VersionCard({ version, diffStat, onEdit, onRelease, onViewDiff }
   return (
     <div
       className={[
-        "relative overflow-hidden rounded-[14px] border bg-card shadow-sm transition-shadow duration-150 hover:shadow-md",
+        "overflow-hidden rounded-[14px] border bg-card shadow-sm transition-shadow duration-150 hover:shadow-md",
         version.isCurrent
-          ? "border-primary/50 ring-1 ring-primary/20"
+          ? "border-border border-l-2 border-l-primary ring-1 ring-primary/20"
           : "border-border",
         isReleased ? "opacity-[.96]" : "",
       ]
         .filter(Boolean)
         .join(" ")}
     >
-      {/* Primary left accent bar for current version */}
-      {version.isCurrent && (
-        <div className="absolute bottom-0 left-0 top-0 z-10 w-[3px] bg-primary" />
-      )}
-
       {/* Card header (always visible) */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={[
-          "w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          version.isCurrent
-            ? "bg-primary/5"
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
+        className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <div className="px-4 py-3.5">
           {/* Top row: chevron + version number + name + badges + spacer + actions */}
@@ -293,15 +314,21 @@ export function VersionCard({ version, diffStat, onEdit, onRelease, onViewDiff }
               onKeyDown={(e) => e.stopPropagation()}
             >
               {onEdit && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground"
-                  onClick={() => onEdit(version.id)}
-                  title={t("version.edit")}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground"
+                        onClick={() => onEdit(version.id)}
+                      />
+                    }
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </TooltipTrigger>
+                  <TooltipContent>{t("version.edit")}</TooltipContent>
+                </Tooltip>
               )}
               {isActive && onRelease && (
                 <Button
@@ -380,17 +407,15 @@ export function VersionCard({ version, diffStat, onEdit, onRelease, onViewDiff }
 
             {/* View diff link */}
             {hasDiff && onViewDiff && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onViewDiff(version.id);
-                }}
-                className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 gap-1 px-2 text-xs text-muted-foreground"
+                onClick={(e) => { e.stopPropagation(); onViewDiff(version.id); }}
               >
                 <GitCompare className="h-3 w-3" />
                 {t("version.diff.view")} →
-              </button>
+              </Button>
             )}
           </div>
 
@@ -405,7 +430,7 @@ export function VersionCard({ version, diffStat, onEdit, onRelease, onViewDiff }
       {open && totalTasks > 0 && (
         <div className="border-t border-dashed border-border bg-muted/40 px-2 pb-2 pt-1.5">
           {version.tasks.map((task) => (
-            <TaskRow key={task.id} task={task} />
+            <TaskRow key={task.id} task={task} onOpenDetail={onOpenTaskDetail} />
           ))}
         </div>
       )}

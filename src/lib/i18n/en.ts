@@ -1035,4 +1035,10 @@ export const en: Translations = {
   "version.diff.empty": "No code changes in this version",
   "version.diff.loading": "Loading diff…",
   "version.diff.truncated": "Truncated — view full diff in the Git tab",
+  "version.taskStatus.TODO": "To Do",
+  "version.taskStatus.IN_PROGRESS": "In Progress",
+  "version.taskStatus.IN_REVIEW": "In Review",
+  "version.taskStatus.DONE": "Done",
+  "version.taskStatus.CANCELLED": "Cancelled",
+  "version.detail": "Detail",
 };

@@ -1051,4 +1051,10 @@ export const zh = {
   "version.diff.empty": "该版本暂无代码改动",
   "version.diff.loading": "加载 diff…",
   "version.diff.truncated": "内容过长已截断，可在 Git 标签页查看完整 diff",
+  "version.taskStatus.TODO": "待办",
+  "version.taskStatus.IN_PROGRESS": "进行中",
+  "version.taskStatus.IN_REVIEW": "待评审",
+  "version.taskStatus.DONE": "已完成",
+  "version.taskStatus.CANCELLED": "已取消",
+  "version.detail": "详情",
 } as const;

@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Archive, ChevronRight } from "lucide-react";
+import Link from "next/link";
+import { Plus, Archive, ChevronRight, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { VersionCard, TaskRow } from "@/components/version/version-card";
 import { VersionFormDialog } from "@/components/version/version-form-dialog";
 import { ReleaseVersionDialog } from "@/components/version/release-version-dialog";
 import { VersionDiffDialog } from "@/components/version/version-diff-dialog";
+import { TaskOverviewDrawer } from "@/components/task/task-overview-drawer";
 import { useI18n } from "@/lib/i18n";
 import type { getProjectVersions } from "@/actions/version-actions";
 
@@ -35,6 +38,7 @@ interface EditVersionShape {
 
 export interface VersionTimelineClientProps {
   project: { id: string; name: string; localPath: string | null };
+  workspaceId: string;
   versions: VersionWithTasks[];
   diffStats: Record<string, DiffStat | null>;
   backlog: BacklogTask[];
@@ -85,6 +89,7 @@ interface TimelineRowProps {
   onEdit: (id: string) => void;
   onRelease: (id: string) => void;
   onViewDiff: (id: string) => void;
+  onOpenTaskDetail?: (taskId: string) => void;
 }
 
 function TimelineRow({
@@ -96,6 +101,7 @@ function TimelineRow({
   onEdit,
   onRelease,
   onViewDiff,
+  onOpenTaskDetail,
 }: TimelineRowProps) {
   return (
     <div className="flex gap-4">
@@ -141,6 +147,7 @@ function TimelineRow({
           onEdit={onEdit}
           onRelease={onRelease}
           onViewDiff={onViewDiff}
+          onOpenTaskDetail={onOpenTaskDetail}
         />
       </div>
     </div>
@@ -151,6 +158,7 @@ function TimelineRow({
 
 export function VersionTimelineClient({
   project,
+  workspaceId,
   versions,
   diffStats,
   backlog,
@@ -164,6 +172,8 @@ export function VersionTimelineClient({
   const [releaseOpen, setReleaseOpen] = useState(false);
   const [releaseTarget, setReleaseTarget] = useState<VersionWithTasks | null>(null);
   const [diffVersionId, setDiffVersionId] = useState<string | null>(null);
+  // Task detail drawer
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   // History collapse (default closed — can be 100+ tasks)
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -236,6 +246,13 @@ export function VersionTimelineClient({
     <div className="flex h-full flex-col overflow-hidden">
       {/* Page header */}
       <div className="header-xl flex shrink-0 items-center gap-4 border-b px-6">
+        <Link
+          href={`/workspaces/${workspaceId}`}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          <span>{t("archive.backToBoard")}</span>
+        </Link>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span className="truncate font-medium">{project.name}</span>
@@ -253,90 +270,93 @@ export function VersionTimelineClient({
       </div>
 
       {/* Scrollable timeline body */}
-      <div className="flex-1 overflow-auto px-6 py-6">
-        <div className="mx-auto max-w-3xl">
-          {/* Empty state */}
-          {versions.length === 0 && backlog.length === 0 && (
-            <div className="flex flex-col items-center gap-4 py-20 text-center text-muted-foreground">
-              <p className="text-sm">{t("version.empty.list")}</p>
-              <Button variant="outline" onClick={handleNewVersion}>
-                <Plus className="h-4 w-4" />
-                {t("version.new")}
-              </Button>
-            </div>
-          )}
-
-          {/* Version timeline */}
-          {ordered.length > 0 && (
-            <div className="relative">
-              {ordered.map((v, idx) => (
-                <TimelineRow
-                  key={v.id}
-                  version={v}
-                  isFirst={idx === 0}
-                  isLast={idx === ordered.length - 1 && backlog.length === 0}
-                  diffStat={diffStats[v.id]}
-                  onEdit={handleEdit}
-                  onRelease={handleRelease}
-                  onViewDiff={handleViewDiff}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* History / backlog group */}
-          {backlog.length > 0 && (
-            <div className="flex gap-4">
-              {/* Dashed rail for history */}
-              <div className="relative flex w-5 flex-none flex-col items-center">
-                <div className="h-6 w-px bg-[repeating-linear-gradient(to_bottom,var(--border)_0_4px,transparent_4px_8px)]" />
-                <div className="z-10 h-3.5 w-3.5 flex-none rounded-full border-2 border-dashed border-muted-foreground/40 bg-transparent" />
+      <ScrollArea className="flex-1">
+        <div className="px-6 py-6">
+          <div className="mx-auto max-w-3xl">
+            {/* Empty state */}
+            {versions.length === 0 && backlog.length === 0 && (
+              <div className="flex flex-col items-center gap-4 py-20 text-center text-muted-foreground">
+                <p className="text-sm">{t("version.empty.list")}</p>
+                <Button variant="outline" onClick={handleNewVersion}>
+                  <Plus className="h-4 w-4" />
+                  {t("version.new")}
+                </Button>
               </div>
+            )}
 
-              {/* History card */}
-              <div className="min-w-0 flex-1 pb-5">
-                <div className="overflow-hidden rounded-[14px] border border-dashed bg-muted/40 shadow-sm">
-                  {/* Collapse toggle header */}
-                  <button
-                    type="button"
-                    onClick={() => setHistoryOpen((v) => !v)}
-                    className="w-full px-4 py-3 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <ChevronRight
-                        className={`h-3.5 w-3.5 flex-none text-muted-foreground/60 transition-transform duration-150 ${historyOpen ? "rotate-90" : ""}`}
-                      />
-                      <Archive className="h-4 w-4 flex-none text-muted-foreground/70" />
-                      <span className="text-sm font-semibold text-foreground">
-                        {t("version.history")}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {t("version.historySub")}
-                      </span>
-                      <span className="flex-1" />
-                      <span className="text-[11.5px] text-muted-foreground">
-                        {backlog.length} {t("version.tasksCount")}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-xs text-muted-foreground/70">
-                      {t("version.historyHint")}
-                    </p>
-                  </button>
+            {/* Version timeline */}
+            {ordered.length > 0 && (
+              <div className="relative">
+                {ordered.map((v, idx) => (
+                  <TimelineRow
+                    key={v.id}
+                    version={v}
+                    isFirst={idx === 0}
+                    isLast={idx === ordered.length - 1 && backlog.length === 0}
+                    diffStat={diffStats[v.id]}
+                    onEdit={handleEdit}
+                    onRelease={handleRelease}
+                    onViewDiff={handleViewDiff}
+                    onOpenTaskDetail={setDetailTaskId}
+                  />
+                ))}
+              </div>
+            )}
 
-                  {/* Collapsible task list */}
-                  {historyOpen && (
-                    <div className="border-t border-dashed border-border px-2 pb-2 pt-1.5">
-                      {backlog.map((task) => (
-                        <TaskRow key={task.id} task={task} />
-                      ))}
-                    </div>
-                  )}
+            {/* History / backlog group */}
+            {backlog.length > 0 && (
+              <div className="flex gap-4">
+                {/* Dashed rail for history */}
+                <div className="relative flex w-5 flex-none flex-col items-center">
+                  <div className="h-6 w-px bg-[repeating-linear-gradient(to_bottom,var(--border)_0_4px,transparent_4px_8px)]" />
+                  <div className="z-10 h-3.5 w-3.5 flex-none rounded-full border-2 border-dashed border-muted-foreground/40 bg-transparent" />
+                </div>
+
+                {/* History card */}
+                <div className="min-w-0 flex-1 pb-5">
+                  <div className="overflow-hidden rounded-[14px] border border-dashed bg-muted/40 shadow-sm">
+                    {/* Collapse toggle header */}
+                    <button
+                      type="button"
+                      onClick={() => setHistoryOpen((v) => !v)}
+                      className="w-full px-4 py-3 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <ChevronRight
+                          className={`h-3.5 w-3.5 flex-none text-muted-foreground/60 transition-transform duration-150 ${historyOpen ? "rotate-90" : ""}`}
+                        />
+                        <Archive className="h-4 w-4 flex-none text-muted-foreground/70" />
+                        <span className="text-sm font-semibold text-foreground">
+                          {t("version.history")}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {t("version.historySub")}
+                        </span>
+                        <span className="flex-1" />
+                        <span className="text-[11.5px] text-muted-foreground">
+                          {backlog.length} {t("version.tasksCount")}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground/70">
+                        {t("version.historyHint")}
+                      </p>
+                    </button>
+
+                    {/* Collapsible task list */}
+                    {historyOpen && (
+                      <div className="border-t border-dashed border-border px-2 pb-2 pt-1.5">
+                        {backlog.map((task) => (
+                          <TaskRow key={task.id} task={task} onOpenDetail={setDetailTaskId} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      </ScrollArea>
 
       {/* ── Dialogs ── */}
       <VersionFormDialog
@@ -377,6 +397,12 @@ export function VersionTimelineClient({
         onOpenChange={(o) => { if (!o) setDiffVersionId(null); }}
         versionId={diffVersionId}
         versionLabel={diffVersionId ? (() => { const v = versions.find((x) => x.id === diffVersionId); return v ? `${v.number} ${v.name}` : undefined; })() : undefined}
+      />
+
+      <TaskOverviewDrawer
+        open={!!detailTaskId}
+        onOpenChange={(o) => { if (!o) setDetailTaskId(null); }}
+        taskId={detailTaskId}
       />
     </div>
   );
