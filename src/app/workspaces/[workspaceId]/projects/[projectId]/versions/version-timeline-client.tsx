@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, Archive, ChevronRight, ArrowLeft } from "lucide-react";
+import { Plus, Archive, ChevronRight, ArrowLeft, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { VersionCard, TaskRow } from "@/components/version/version-card";
 import { VersionFormDialog } from "@/components/version/version-form-dialog";
+import { ManageTypesDialog } from "@/components/version/manage-types-dialog";
 import { ReleaseVersionDialog } from "@/components/version/release-version-dialog";
 import { VersionDiffDialog } from "@/components/version/version-diff-dialog";
 import { TaskOverviewDrawer } from "@/components/task/task-overview-drawer";
@@ -29,7 +30,7 @@ interface EditVersionShape {
   id: string;
   number: string;
   name: string;
-  type: "FEATURE" | "BUGFIX" | "RESEARCH";
+  typeId: string | null;
   baseBranch: string | null;
   startDate: Date | string | null;
   targetDate: Date | string | null;
@@ -169,6 +170,7 @@ export function VersionTimelineClient({
   // Dialog state
   const [formOpen, setFormOpen] = useState(false);
   const [editVersion, setEditVersion] = useState<EditVersionShape | null>(null);
+  const [manageTypesOpen, setManageTypesOpen] = useState(false);
   const [releaseOpen, setReleaseOpen] = useState(false);
   const [releaseTarget, setReleaseTarget] = useState<VersionWithTasks | null>(null);
   const [diffVersionId, setDiffVersionId] = useState<string | null>(null);
@@ -194,7 +196,7 @@ export function VersionTimelineClient({
       id: v.id,
       number: v.number,
       name: v.name,
-      type: v.type as "FEATURE" | "BUGFIX" | "RESEARCH",
+      typeId: v.typeId ?? null,
       baseBranch: v.baseBranch,
       startDate: v.startDate,
       targetDate: v.targetDate,
@@ -263,6 +265,10 @@ export function VersionTimelineClient({
             {t("version.historyHint")}
           </p>
         </div>
+        <Button variant="outline" onClick={() => setManageTypesOpen(true)}>
+          <Settings2 className="h-4 w-4" />
+          {t("version.manageTypes")}
+        </Button>
         <Button onClick={handleNewVersion}>
           <Plus className="h-4 w-4" />
           {t("version.new")}
@@ -366,10 +372,18 @@ export function VersionTimelineClient({
           if (!open) setEditVersion(null);
         }}
         projectId={project.id}
+        workspaceId={workspaceId}
         editVersion={editVersion}
         defaultBaseBranch={null}
         projectLocalPath={project.localPath}
         onSuccess={handleSuccess}
+      />
+
+      <ManageTypesDialog
+        open={manageTypesOpen}
+        onOpenChange={setManageTypesOpen}
+        workspaceId={workspaceId}
+        onChanged={() => router.refresh()}
       />
 
       <ReleaseVersionDialog

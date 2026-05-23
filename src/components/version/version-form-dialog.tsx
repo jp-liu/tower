@@ -35,20 +35,21 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { createVersion, updateVersion } from "@/actions/version-actions";
+import { getVersionTypes } from "@/actions/version-type-actions";
 import { getProjectBranches, fetchRemoteBranches } from "@/actions/git-actions";
+import { ManageTypesDialog } from "@/components/version/manage-types-dialog";
 import { useI18n } from "@/lib/i18n";
-
-type VersionType = "FEATURE" | "BUGFIX" | "RESEARCH";
 
 export interface VersionFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId: string;
+  workspaceId: string;
   editVersion?: {
     id: string;
     number: string;
     name: string;
-    type: VersionType;
+    typeId: string | null;
     baseBranch: string | null;
     startDate: Date | string | null;
     targetDate: Date | string | null;
@@ -83,6 +84,7 @@ export function VersionFormDialog({
   open,
   onOpenChange,
   projectId,
+  workspaceId,
   editVersion,
   defaultBaseBranch,
   projectLocalPath,
@@ -93,7 +95,9 @@ export function VersionFormDialog({
 
   const [number, setNumber] = useState("");
   const [name, setName] = useState("");
-  const [type, setType] = useState<VersionType>("FEATURE");
+  const [typeId, setTypeId] = useState<string>("");
+  const [types, setTypes] = useState<{ id: string; name: string }[]>([]);
+  const [manageOpen, setManageOpen] = useState(false);
   const [baseBranch, setBaseBranch] = useState("");
   const [startDate, setStartDate] = useState("");
   const [targetDate, setTargetDate] = useState("");
@@ -115,7 +119,7 @@ export function VersionFormDialog({
     if (editVersion) {
       setNumber(editVersion.number);
       setName(editVersion.name);
-      setType(editVersion.type);
+      setTypeId(editVersion.typeId ?? "");
       setBaseBranch(editVersion.baseBranch ?? "");
       setStartDate(toDateInputValue(editVersion.startDate));
       setTargetDate(toDateInputValue(editVersion.targetDate));
@@ -124,7 +128,7 @@ export function VersionFormDialog({
     } else {
       setNumber("");
       setName("");
-      setType("FEATURE");
+      setTypeId("");
       setBaseBranch(defaultBaseBranch ?? "");
       setStartDate("");
       setTargetDate("");
@@ -132,6 +136,12 @@ export function VersionFormDialog({
       setSetCurrent(false);
     }
   }, [open, editVersion, defaultBaseBranch]);
+
+  // Load workspace version types when dialog opens
+  useEffect(() => {
+    if (!open) return;
+    getVersionTypes(workspaceId).then(setTypes).catch(() => setTypes([]));
+  }, [open, workspaceId]);
 
   // Load git branches when dialog opens (cached first, then refresh remote)
   useEffect(() => {
@@ -158,7 +168,7 @@ export function VersionFormDialog({
           await updateVersion(editVersion.id, {
             number: number.trim(),
             name: name.trim(),
-            type,
+            typeId: typeId || null,
             baseBranch: baseBranch.trim() || null,
             startDate: parseDateInput(startDate) ?? null,
             targetDate: parseDateInput(targetDate) ?? null,
@@ -169,7 +179,7 @@ export function VersionFormDialog({
             projectId,
             number: number.trim(),
             name: name.trim(),
-            type,
+            typeId: typeId || undefined,
             baseBranch: baseBranch.trim() || undefined,
             startDate: parseDateInput(startDate),
             targetDate: parseDateInput(targetDate),
@@ -231,26 +241,39 @@ export function VersionFormDialog({
           <div className="grid gap-1.5">
             <Label>{t("version.field.type")}</Label>
             <Select
-              value={type}
+              value={typeId || "__none__"}
               onValueChange={(v) => {
-                if (v) setType(v as VersionType);
+                setTypeId(!v || v === "__none__" ? "" : v);
               }}
             >
               <SelectTrigger className="w-full" disabled={isPending}>
-                <span>{t(`version.type.${type}`)}</span>
+                <span className="truncate">
+                  {typeId
+                    ? (types.find((tp) => tp.id === typeId)?.name ?? t("version.type.uncategorized"))
+                    : t("version.type.uncategorized")}
+                </span>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="FEATURE">
-                  {t("version.type.FEATURE")}
+                <SelectItem value="__none__">
+                  {t("version.type.uncategorized")}
                 </SelectItem>
-                <SelectItem value="BUGFIX">
-                  {t("version.type.BUGFIX")}
-                </SelectItem>
-                <SelectItem value="RESEARCH">
-                  {t("version.type.RESEARCH")}
-                </SelectItem>
+                {types.map((tp) => (
+                  <SelectItem key={tp.id} value={tp.id}>
+                    {tp.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-auto justify-start px-0 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setManageOpen(true)}
+              disabled={isPending}
+            >
+              ＋ {t("version.manageTypes")}
+            </Button>
           </div>
 
           {/* Base Branch — git branch picker for git projects, text fallback otherwise */}
@@ -389,6 +412,13 @@ export function VersionFormDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <ManageTypesDialog
+        open={manageOpen}
+        onOpenChange={setManageOpen}
+        workspaceId={workspaceId}
+        onChanged={() => getVersionTypes(workspaceId).then(setTypes)}
+      />
     </Dialog>
   );
 }
