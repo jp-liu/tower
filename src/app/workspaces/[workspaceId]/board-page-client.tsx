@@ -203,13 +203,21 @@ export function BoardPageClient({
   return (
     <div className="flex h-full">
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Project Tabs — always show, single project also shown */}
-        <div className="px-6 pt-3 pb-1">
-          <ProjectTabs
-            projects={projects}
-            activeProjectId={projectId}
-            onSelect={(id) => router.push(`/workspaces/${workspaceId}?projectId=${id}`, { scroll: false })}
-          />
+        {/* Project Tabs + version timeline entry (project-level nav) */}
+        <div className="flex items-center justify-between gap-2 px-6 pt-3 pb-1">
+          <div className="min-w-0 flex-1">
+            <ProjectTabs
+              projects={projects}
+              activeProjectId={projectId}
+              onSelect={(id) => router.push(`/workspaces/${workspaceId}?projectId=${id}`, { scroll: false })}
+            />
+          </div>
+          <Link href={`/workspaces/${workspaceId}/projects/${projectId}/versions`} className="shrink-0">
+            <Button variant="outline" className="h-8 gap-1.5 text-xs text-muted-foreground">
+              <GitBranch className="h-3.5 w-3.5" />
+              {t("version.timeline")}
+            </Button>
+          </Link>
         </div>
 
         {/* Stats */}
@@ -218,28 +226,18 @@ export function BoardPageClient({
           runningTasks={boardTasks.filter((t) => t.status === "IN_PROGRESS").length}
         />
 
-        {/* Filters + Version Timeline button */}
-        <div className="flex items-center gap-2 pr-4">
-          <div className="flex-1">
-            <BoardFilters
-              searchQuery={searchQuery}
-              onSearchChange={handleSearchChange}
-              versions={versions}
-              versionFilter={versionFilter}
-              onVersionFilterChange={setVersionFilter}
-              onCreateTask={() => {
-                setEditingTask(null);
-                setShowCreateDialog(true);
-              }}
-            />
-          </div>
-          <Link href={`/workspaces/${workspaceId}/projects/${projectId}/versions`}>
-            <Button variant="outline" className="h-8 gap-1.5 text-xs text-muted-foreground">
-              <GitBranch className="h-3.5 w-3.5" />
-              {t("version.timeline")}
-            </Button>
-          </Link>
-        </div>
+        {/* Filters */}
+        <BoardFilters
+          searchQuery={searchQuery}
+          onSearchChange={handleSearchChange}
+          versions={versions}
+          versionFilter={versionFilter}
+          onVersionFilterChange={setVersionFilter}
+          onCreateTask={() => {
+            setEditingTask(null);
+            setShowCreateDialog(true);
+          }}
+        />
 
         {/* Kanban Board */}
         <div className="flex-1 min-h-0 overflow-hidden p-4">
