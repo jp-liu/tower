@@ -2,8 +2,6 @@
 
 import { useState, useCallback, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { GitBranch } from "lucide-react";
 import { BoardStats } from "@/components/board/board-stats";
 import { BoardFilters } from "@/components/board/board-filters";
 import { KanbanBoard } from "@/components/board/kanban-board";
@@ -14,12 +12,10 @@ import { createTask, updateTaskStatus, updateTask, deleteTask, toggleTaskPinned 
 import { startPtyExecution } from "@/actions/agent-actions";
 import { getVersionsForPicker } from "@/actions/version-actions";
 import { ProjectTabs } from "@/components/board/project-tabs";
-import { Button } from "@/components/ui/button";
 import type { TaskStatus, Priority } from "@prisma/client";
 import { TOWER_LABEL_NAME } from "@/lib/constants";
 import type { TaskWithLabels } from "@/types";
 import { toast } from "sonner";
-import { useI18n } from "@/lib/i18n";
 
 
 interface LabelOption {
@@ -67,7 +63,6 @@ export function BoardPageClient({
   openTaskId,
 }: BoardPageClientProps) {
   const router = useRouter();
-  const { t } = useI18n();
   const [, startTransition] = useTransition();
   const [searchQuery, setSearchQuery] = useState("");
   const [versionFilter, setVersionFilter] = useState<string>("all"); // "all" | "backlog" | versionId
@@ -203,21 +198,13 @@ export function BoardPageClient({
   return (
     <div className="flex h-full">
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Project Tabs + version timeline entry (project-level nav) */}
-        <div className="flex items-center justify-between gap-2 px-6 pt-3 pb-1">
-          <div className="min-w-0 flex-1">
-            <ProjectTabs
-              projects={projects}
-              activeProjectId={projectId}
-              onSelect={(id) => router.push(`/workspaces/${workspaceId}?projectId=${id}`, { scroll: false })}
-            />
-          </div>
-          <Link href={`/workspaces/${workspaceId}/projects/${projectId}/versions`} className="shrink-0">
-            <Button variant="outline" className="h-8 gap-1.5 text-xs text-muted-foreground">
-              <GitBranch className="h-3.5 w-3.5" />
-              {t("version.timeline")}
-            </Button>
-          </Link>
+        {/* Project Tabs */}
+        <div className="px-6 pt-3 pb-1">
+          <ProjectTabs
+            projects={projects}
+            activeProjectId={projectId}
+            onSelect={(id) => router.push(`/workspaces/${workspaceId}?projectId=${id}`, { scroll: false })}
+          />
         </div>
 
         {/* Stats */}
@@ -233,6 +220,7 @@ export function BoardPageClient({
           versions={versions}
           versionFilter={versionFilter}
           onVersionFilterChange={setVersionFilter}
+          versionsHref={`/workspaces/${workspaceId}/projects/${projectId}/versions`}
           onCreateTask={() => {
             setEditingTask(null);
             setShowCreateDialog(true);

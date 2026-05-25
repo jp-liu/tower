@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Plus, Search, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ interface BoardFiltersProps {
   versions?: VersionOption[];
   versionFilter?: string; // "all" | "backlog" | versionId
   onVersionFilterChange?: (value: string) => void;
+  versionsHref?: string;
   onCreateTask: () => void;
 }
 
@@ -32,6 +34,7 @@ export function BoardFilters({
   versions = [],
   versionFilter = "all",
   onVersionFilterChange,
+  versionsHref,
   onCreateTask,
 }: BoardFiltersProps) {
   const { t } = useI18n();
@@ -81,16 +84,26 @@ export function BoardFilters({
         />
       </div>
 
-      {/* Action on the right */}
-      <Button
-        data-tour="create-task"
-        variant="outline"
-        className="ml-auto gap-1.5 border-border text-xs text-muted-foreground hover:border-primary/30 hover:text-primary"
-        onClick={onCreateTask}
-      >
-        <Plus className="h-3.5 w-3.5" />
-        {t("board.newTask")}
-      </Button>
+      {/* Actions on the right: version timeline + new task */}
+      <div className="ml-auto flex items-center gap-2">
+        {versionsHref && (
+          <Link href={versionsHref}>
+            <Button variant="outline" className="h-8 gap-1.5 text-xs text-muted-foreground">
+              <GitBranch className="h-3.5 w-3.5" />
+              {t("version.timeline")}
+            </Button>
+          </Link>
+        )}
+        <Button
+          data-tour="create-task"
+          variant="outline"
+          className="gap-1.5 border-border text-xs text-muted-foreground hover:border-primary/30 hover:text-primary"
+          onClick={onCreateTask}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          {t("board.newTask")}
+        </Button>
+      </div>
     </div>
   );
 }
