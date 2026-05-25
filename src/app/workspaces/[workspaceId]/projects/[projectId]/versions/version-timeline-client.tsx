@@ -276,7 +276,7 @@ export function VersionTimelineClient({
       </div>
 
       {/* Scrollable timeline body */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="px-6 py-6">
           <div className="mx-auto max-w-3xl">
             {/* Empty state */}
