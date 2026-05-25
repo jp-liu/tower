@@ -119,39 +119,44 @@ export function TaskRow({ task, onOpenDetail }: TaskRowProps) {
           </span>
         ))}
         <span className="flex-1" />
+        {/* Right cluster — fixed-width columns so they align across rows */}
         {/* Priority */}
-        <span className={`rounded-[5px] px-1.5 py-px text-[10.5px] font-bold ${PRIORITY_CLASSES[task.priority] ?? PRIORITY_CLASSES.LOW}`}>
-          {task.priority}
+        <span className="flex w-16 flex-none justify-center">
+          <span className={`rounded-[5px] px-1.5 py-px text-[10.5px] font-bold ${PRIORITY_CLASSES[task.priority] ?? PRIORITY_CLASSES.LOW}`}>
+            {task.priority}
+          </span>
         </span>
         {/* Separator */}
         <span className="h-3 w-px bg-border flex-none" />
-        {/* Status label */}
-        <span className="flex items-center gap-1">
+        {/* Status */}
+        <span className="flex w-[72px] flex-none items-center gap-1.5">
           <span className={`h-1.5 w-1.5 flex-none rounded-full ${STATUS_DOT_COLOR[task.status] ?? "bg-slate-400"}`} />
-          <span className="text-[10.5px] text-muted-foreground">
+          <span className="truncate text-[10.5px] text-muted-foreground">
             {t(`version.taskStatus.${task.status}` as Parameters<typeof t>[0])}
           </span>
         </span>
         {/* Separator */}
         <span className="h-3 w-px bg-border flex-none" />
         {/* Detail button */}
-        {onOpenDetail && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-muted-foreground"
-                  onClick={(e) => { e.stopPropagation(); onOpenDetail(task.id); }}
-                />
-              }
-            >
-              <PanelRight className="h-3.5 w-3.5" />
-            </TooltipTrigger>
-            <TooltipContent>{t("version.detail")}</TooltipContent>
-          </Tooltip>
-        )}
+        <span className="flex w-6 flex-none justify-center">
+          {onOpenDetail && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground"
+                    onClick={(e) => { e.stopPropagation(); onOpenDetail(task.id); }}
+                  />
+                }
+              >
+                <PanelRight className="h-3.5 w-3.5" />
+              </TooltipTrigger>
+              <TooltipContent>{t("version.detail")}</TooltipContent>
+            </Tooltip>
+          )}
+        </span>
       </button>
 
       {/* Expandable leaf: resources + notes */}
