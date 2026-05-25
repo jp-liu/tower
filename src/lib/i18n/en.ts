@@ -63,6 +63,8 @@ export const en: Translations = {
   "board.searchPlaceholder": "Search tasks...",
   "board.inProgressFilter": "In Progress",
   "board.inReviewFilter": "In Review",
+  "board.allVersions": "All Versions",
+  "board.backlogFilter": "No Version",
   "board.contextMenu.changeStatus": "Change Status",
   "board.contextMenu.launch": "Launch Task",
   "board.contextMenu.goToDetail": "Go to Detail",

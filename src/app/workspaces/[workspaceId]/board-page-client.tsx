@@ -70,6 +70,7 @@ export function BoardPageClient({
   const { t } = useI18n();
   const [, startTransition] = useTransition();
   const [searchQuery, setSearchQuery] = useState("");
+  const [versionFilter, setVersionFilter] = useState<string>("all"); // "all" | "backlog" | versionId
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createDefaultStatus, setCreateDefaultStatus] = useState<TaskStatus>("TODO");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(openTaskId ?? null);
@@ -179,13 +180,25 @@ export function BoardPageClient({
     (t) => !t.labels?.some((tl) => tl.label.name === TOWER_LABEL_NAME && tl.label.isBuiltin)
   );
 
-  const filteredTasks = searchQuery.trim()
-    ? boardTasks.filter((t) => {
-        const q = searchQuery.toLowerCase();
-        return t.title.toLowerCase().includes(q) ||
-          (t.description?.toLowerCase().includes(q) ?? false);
-      })
-    : boardTasks;
+  const filteredTasks = boardTasks.filter((t) => {
+    // Version filter: "all" = no filter, "backlog" = unassigned, else specific versionId
+    if (versionFilter === "backlog") {
+      if (t.versionId) return false;
+    } else if (versionFilter !== "all") {
+      if (t.versionId !== versionFilter) return false;
+    }
+    // Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      if (
+        !t.title.toLowerCase().includes(q) &&
+        !(t.description?.toLowerCase().includes(q) ?? false)
+      ) {
+        return false;
+      }
+    }
+    return true;
+  });
 
   return (
     <div className="flex h-full">
@@ -211,6 +224,9 @@ export function BoardPageClient({
             <BoardFilters
               searchQuery={searchQuery}
               onSearchChange={handleSearchChange}
+              versions={versions}
+              versionFilter={versionFilter}
+              onVersionFilterChange={setVersionFilter}
               onCreateTask={() => {
                 setEditingTask(null);
                 setShowCreateDialog(true);

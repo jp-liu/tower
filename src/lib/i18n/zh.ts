@@ -68,6 +68,8 @@ export const zh = {
   "board.searchPlaceholder": "搜索任务...",
   "board.inProgressFilter": "执行中",
   "board.inReviewFilter": "待评审",
+  "board.allVersions": "全部版本",
+  "board.backlogFilter": "未分配版本",
   "board.contextMenu.changeStatus": "更改状态",
   "board.contextMenu.launch": "启动任务",
   "board.contextMenu.goToDetail": "查看详情",
