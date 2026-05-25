@@ -6,6 +6,8 @@ const DIFF_MAX_BUFFER = 20 * 1024 * 1024;
 
 /** 取某分支（或 ref）的 HEAD commit；失败返回 null。 */
 export function getBranchHead(cwd: string, branch: string): string | null {
+  // git branch names never start with "-"; reject so the arg can't be read as a flag
+  if (!branch || branch.startsWith("-")) return null;
   try {
     const out = execFileSync("git", ["rev-parse", branch], { cwd, encoding: "utf-8", timeout: GIT_TIMEOUT });
     const hash = out.trim();

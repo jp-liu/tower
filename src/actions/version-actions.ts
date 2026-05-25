@@ -87,19 +87,21 @@ export async function assignTaskVersion(taskId: string, versionId: string | null
 export async function releaseVersion(versionId: string, nextVersionId: string) {
   const version = await db.version.findUnique({
     where: { id: versionId },
-    select: { id: true, projectId: true, baseBranch: true, project: { select: { localPath: true } } },
+    select: { id: true, projectId: true, status: true, baseBranch: true, project: { select: { localPath: true } } },
   });
   if (!version) throw new Error("版本不存在");
+  if (version.status === "RELEASED") throw new Error("该版本已发布");
 
   let releaseCommit: string | null = null;
   if (version.baseBranch && version.project?.localPath) {
     releaseCommit = getBranchHead(version.project.localPath, version.baseBranch);
   }
 
-  const next = await db.version.findUnique({ where: { id: nextVersionId }, select: { id: true, projectId: true } });
+  const next = await db.version.findUnique({ where: { id: nextVersionId }, select: { id: true, projectId: true, status: true } });
   if (!next) throw new Error("目标版本不存在");
   if (next.projectId !== version.projectId) throw new Error("目标版本必须属于同一项目");
   if (next.id === versionId) throw new Error("目标版本不能是正在发布的版本本身");
+  if (next.status === "RELEASED") throw new Error("目标版本已发布，不能作为下一个当前版本");
 
   await db.$transaction(async (tx) => {
     await tx.version.update({

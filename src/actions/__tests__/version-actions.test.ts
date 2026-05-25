@@ -152,4 +152,18 @@ describe("releaseVersion", () => {
       .mockResolvedValueOnce({ id: "v2", projectId: "OTHER" });
     await expect(releaseVersion("v1", "v2")).rejects.toThrow("同一项目");
   });
+
+  it("rejects releasing an already-released version", async () => {
+    (db.version.findUnique as any).mockResolvedValueOnce({
+      id: "v1", projectId: "p1", status: "RELEASED", baseBranch: "main", project: { localPath: "/repo" },
+    });
+    await expect(releaseVersion("v1", "v2")).rejects.toThrow("已发布");
+  });
+
+  it("rejects a released next version", async () => {
+    (db.version.findUnique as any)
+      .mockResolvedValueOnce({ id: "v1", projectId: "p1", status: "ACTIVE", baseBranch: "main", project: { localPath: "/repo" } })
+      .mockResolvedValueOnce({ id: "v2", projectId: "p1", status: "RELEASED" });
+    await expect(releaseVersion("v1", "v2")).rejects.toThrow("目标版本已发布");
+  });
 });

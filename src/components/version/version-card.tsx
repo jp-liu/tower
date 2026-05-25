@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { BOARD_COLUMNS } from "@/lib/constants";
+import { BOARD_COLUMNS, PRIORITY_CONFIG } from "@/lib/constants";
 import { VersionTypeBadge, VersionStatusBadge } from "@/components/version/version-badges";
 import { useI18n } from "@/lib/i18n";
 import type { getProjectVersions } from "@/actions/version-actions";
@@ -53,12 +53,6 @@ const STATUS_DOT_COLOR: Record<string, string> = Object.fromEntries(
   BOARD_COLUMNS.map((c) => [c.id, c.color]),
 );
 
-const PRIORITY_CLASSES: Record<string, string> = {
-  CRITICAL: "text-rose-300 bg-rose-500/20 border border-rose-500/30",
-  HIGH: "text-rose-300 bg-rose-500/20 border border-rose-500/30",
-  MEDIUM: "text-amber-300 bg-amber-500/20 border border-amber-500/30",
-  LOW: "text-slate-300 bg-slate-500/20 border border-slate-500/30",
-};
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -122,7 +116,7 @@ export function TaskRow({ task, onOpenDetail }: TaskRowProps) {
         {/* Right cluster — fixed-width columns so they align across rows */}
         {/* Priority */}
         <span className="flex w-16 flex-none justify-center">
-          <span className={`rounded-[5px] px-1.5 py-px text-[10.5px] font-bold ${PRIORITY_CLASSES[task.priority] ?? PRIORITY_CLASSES.LOW}`}>
+          <span className={`rounded-[5px] px-1.5 py-px text-[10.5px] font-bold ${PRIORITY_CONFIG[task.priority]?.color ?? PRIORITY_CONFIG.LOW.color}`}>
             {task.priority}
           </span>
         </span>

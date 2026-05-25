@@ -112,7 +112,7 @@ function TimelineRow({
         <div
           className={[
             "w-px flex-none",
-            isFirst ? "h-6" : "h-6",
+            isFirst ? "h-0" : "h-6",
             dashed
               ? "bg-[repeating-linear-gradient(to_bottom,var(--border)_0_4px,transparent_4px_8px)]"
               : "bg-border",
