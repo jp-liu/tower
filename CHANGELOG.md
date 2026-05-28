@@ -1,3 +1,14 @@
+# [0.2.15](/compare/v0.2.14...v0.2.15) (2026-05-28)
+
+
+### Bug Fixes
+
+* **monaco:** serve Monaco assets through `/api/internal/monaco/[...path]/` directly from `~/.tower/extensions/node_modules/monaco-editor/min/vs/` — no more copy-to-`public/vs` step. Next.js standalone bakes its static asset manifest at build time, so files we copied into `public/vs` at runtime weren't being served — `loader.config` got a 404 and the editor sat at "Loading editor…" forever
+* **extensions:** `npm install --prefix=$EXT_ROOT` to force install into `~/.tower/extensions/` and ignore any user-level `~/.npmrc prefix=` override that would otherwise hoist the install elsewhere and leave the workspace empty (this is why "first install succeeded, refresh said not installed" — npm wasn't actually putting files where check() looked)
+* **extensions:** install errors now surface npm's `stdout`/`stderr` so the next failure mode is diagnosable from the toast instead of needing to attach the server log
+
+
+
 # [0.2.14](/compare/v0.2.13...v0.2.14) (2026-05-28)
 
 

@@ -46,11 +46,11 @@ describe("monaco extension — check", () => {
     expect(status.installed).toBe(false);
   });
 
-  it("returns installed:false when public/vs/loader.js is missing", async () => {
+  it("returns installed:false when monaco-editor/min/vs/loader.js is missing", async () => {
     const fs = await import("fs");
     (fs.existsSync as unknown as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
       // package.json exists, loader.js missing
-      return !String(p).includes("public/vs/loader.js");
+      return !String(p).includes("min/vs/loader.js");
     });
 
     const ext = await loadMonaco();
@@ -71,7 +71,7 @@ describe("monaco extension — check", () => {
 });
 
 describe("monaco extension — install", () => {
-  it("install runs npm install then inline-copies vs assets to public/vs", async () => {
+  it("install runs npm install — no public/vs copy needed (API route serves files in place)", async () => {
     const cp = await import("child_process");
     (cp.execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
       (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
@@ -86,15 +86,16 @@ describe("monaco extension — install", () => {
     expect(result.success).toBe(true);
     expect(cp.execFile).toHaveBeenCalledTimes(1);
     expect((cp.execFile as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe("npm");
-    expect((cp.execFile as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]).toEqual(["install", "monaco-editor"]);
-    expect(fs.cpSync).toHaveBeenCalledWith(
-      expect.stringContaining("monaco-editor/min/vs"),
-      expect.stringContaining("public/vs"),
-      expect.objectContaining({ recursive: true })
+    expect((cp.execFile as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]).toEqual(
+      expect.arrayContaining(["install", "monaco-editor"]),
     );
+    // No cpSync — `/api/internal/monaco/[...]` streams files from node_modules directly.
+    expect(fs.cpSync).not.toHaveBeenCalled();
   });
 
-  it("install reports failure when pnpm succeeds but vs source is missing", async () => {
+  it("install reports failure when npm succeeds but package.json is missing", async () => {
+    // Simulate: npm install "succeeds" but doesn't actually drop the package
+    // anywhere we can find — e.g. user has `prefix=` in ~/.npmrc hoisting it.
     const cp = await import("child_process");
     (cp.execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
       (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
@@ -107,14 +108,14 @@ describe("monaco extension — install", () => {
     const ext = await loadMonaco();
     const result = await ext.install();
     expect(result.success).toBe(false);
-    expect(result.error).toMatch(/min\/vs not found/);
+    expect(result.error).toMatch(/doesn't exist|npmrc/i);
   });
 
-  it("install returns success:false when pnpm fails", async () => {
+  it("install returns success:false when npm fails", async () => {
     const cp = await import("child_process");
     (cp.execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
       (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
-        cb(new Error("pnpm: registry timeout"));
+        cb(new Error("npm: registry timeout"));
       }
     );
 
@@ -126,7 +127,7 @@ describe("monaco extension — install", () => {
 });
 
 describe("monaco extension — uninstall", () => {
-  it("uninstall removes public/vs then runs npm uninstall", async () => {
+  it("uninstall runs npm uninstall (no public/vs cleanup needed)", async () => {
     const fs = await import("fs");
     (fs.existsSync as unknown as ReturnType<typeof vi.fn>).mockReturnValue(true);
     const cp = await import("child_process");
@@ -139,13 +140,9 @@ describe("monaco extension — uninstall", () => {
     const ext = await loadMonaco();
     const result = await ext.uninstall!();
     expect(result.success).toBe(true);
-    expect(fs.rmSync).toHaveBeenCalledWith(
-      expect.stringContaining("vs"),
-      expect.objectContaining({ recursive: true, force: true })
-    );
     expect(cp.execFile).toHaveBeenCalledWith(
       "npm",
-      ["uninstall", "monaco-editor"],
+      expect.arrayContaining(["uninstall", "monaco-editor"]),
       expect.any(Object),
       expect.any(Function)
     );

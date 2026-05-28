@@ -10,11 +10,11 @@ function execFileP(
   cmd: string,
   args: string[],
   opts: { timeout: number; cwd?: string; shell?: boolean }
-): Promise<{ stdout: string }> {
+): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    execFile(cmd, args, opts, (err, stdout) => {
+    execFile(cmd, args, opts, (err, stdout, stderr) => {
       if (err) reject(err);
-      else resolve({ stdout: stdout as string });
+      else resolve({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
     });
   });
 }
@@ -101,34 +101,60 @@ async function check(): Promise<ExtensionStatus> {
 async function install(): Promise<ExtensionResult> {
   try {
     ensureExtensionWorkspace();
-    await execFileP("npm", ["install", "@vscode/ripgrep"], npmOpts(120_000));
+    // `--prefix=EXT_ROOT` forces npm to install into our workspace and ignore
+    // any user-level `~/.npmrc prefix=` that would otherwise hoist the install
+    // to a global location and leave EXT_ROOT empty.
+    const { stdout, stderr } = await execFileP(
+      "npm",
+      ["install", "--prefix", EXT_ROOT, "--no-audit", "--no-fund", "@vscode/ripgrep"],
+      npmOpts(120_000),
+    );
     // Clear cached rg path so next searchCode call re-resolves.
     try {
       const { clearRgPathCache } = await import("@/actions/search-code-actions");
       await clearRgPathCache();
     } catch {
-      // Best-effort — if module load fails, the cache will refresh at server restart.
+      // Best-effort — cache will refresh at server restart if module load fails.
     }
     // Verify the binary actually exists — npm install succeeds even if the
     // package's postinstall (binary download) fails silently.
+    const pkgEntry = path.join(EXT_ROOT, "node_modules", "@vscode", "ripgrep");
+    if (!existsSync(pkgEntry)) {
+      return {
+        success: false,
+        error:
+          `npm install reported success but ${pkgEntry} doesn't exist. ` +
+          `Check ~/.npmrc for a prefix= override. ` +
+          `npm stdout: ${(stdout || "").slice(-300)} stderr: ${(stderr || "").slice(-300)}`,
+      };
+    }
     const verified = await detectPackageBinary();
     if (!verified) {
       return {
         success: false,
         error:
-          "@vscode/ripgrep installed but the rg binary is missing — postinstall download likely failed. Check network access to GitHub releases (the package downloads its native binary on install).",
+          "@vscode/ripgrep installed but the rg binary is missing — postinstall download likely failed. " +
+          "Check network access to GitHub releases (the package downloads its native binary on install).",
       };
     }
-    return { success: true, message: "Installed @vscode/ripgrep" };
+    return { success: true, message: `Installed @vscode/ripgrep at ${pkgEntry}` };
   } catch (err) {
-    return { success: false, error: (err as Error).message };
+    const e = err as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
+    const parts: string[] = [e.message];
+    if (e.stdout) parts.push(`stdout: ${String(e.stdout).slice(-300)}`);
+    if (e.stderr) parts.push(`stderr: ${String(e.stderr).slice(-300)}`);
+    return { success: false, error: parts.join(" | ") };
   }
 }
 
 async function uninstall(): Promise<ExtensionResult> {
   try {
     ensureExtensionWorkspace();
-    await execFileP("npm", ["uninstall", "@vscode/ripgrep"], npmOpts(60_000));
+    await execFileP(
+      "npm",
+      ["uninstall", "--prefix", EXT_ROOT, "@vscode/ripgrep"],
+      npmOpts(60_000),
+    );
     // Clear cached rg path so next searchCode attempt detects absence.
     try {
       const { clearRgPathCache } = await import("@/actions/search-code-actions");

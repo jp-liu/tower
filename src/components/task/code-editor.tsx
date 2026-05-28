@@ -27,9 +27,13 @@ type GuardInfo =
   | { kind: "oversized"; size: number; limit: number }
   | { kind: "binary"; size: number };
 
-// Load Monaco from local public/vs (copied from node_modules by postinstall script)
+// Load Monaco from `/api/internal/monaco/*`, which streams files straight from
+// `~/.tower/extensions/node_modules/monaco-editor/min/vs/`. Going through an
+// API route (instead of Next.js's static `public/vs/`) is what lets the editor
+// pick up extensions installed at runtime — the standalone build's static
+// asset manifest is frozen at build time.
 loader.config({
-  paths: { vs: "/vs" },
+  paths: { vs: "/api/internal/monaco" },
 });
 
 // Dynamic import prevents SSR crash (D-01)

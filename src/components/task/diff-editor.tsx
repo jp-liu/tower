@@ -6,9 +6,10 @@ import { loader } from "@monaco-editor/react";
 import { useTheme } from "next-themes";
 import { normalizeLF } from "@/lib/git-diff";
 
-// Load Monaco from local public/vs (copied from node_modules by postinstall script)
+// Same as code-editor.tsx: route Monaco loader through `/api/internal/monaco/*`
+// so runtime-installed extensions are visible.
 loader.config({
-  paths: { vs: "/vs" },
+  paths: { vs: "/api/internal/monaco" },
 });
 
 const MonacoDiffEditor = dynamic(

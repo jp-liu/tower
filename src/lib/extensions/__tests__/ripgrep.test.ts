@@ -142,7 +142,7 @@ describe("ripgrep extension — dual-track check", () => {
     expect(result.success).toBe(true);
     expect(cp.execFile).toHaveBeenCalledWith(
       "npm",
-      ["install", "@vscode/ripgrep"],
+      expect.arrayContaining(["install", "@vscode/ripgrep"]),
       expect.any(Object),
       expect.any(Function)
     );
