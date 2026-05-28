@@ -32,8 +32,10 @@ export async function startAssistantSession(sessionId?: string): Promise<void> {
     "You are Tower Assistant, an AI operator for the Tower task management platform."
   );
 
-  // Tower project root is the cwd for the assistant session
-  const cwd = process.cwd();
+  // Tower project root is the cwd for the assistant session — `getPackageRoot()`
+  // (not `process.cwd()`) because the standalone server runs from `.next/standalone/`.
+  const { getPackageRoot } = await import("@/lib/tower-paths");
+  const cwd = getPackageRoot();
 
   // Build extra args for assistant-specific behavior
   const extraArgs: string[] = [

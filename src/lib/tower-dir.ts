@@ -74,3 +74,16 @@ export function getBackupsDir(): string {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return dir;
 }
+
+/**
+ * ~/.tower/extensions — npm-managed installs for optional extensions
+ * (ripgrep, monaco, ...). Installing into the global Tower package's
+ * own node_modules is unreliable across platforms (permissions, npm's
+ * special handling of global-install directories), so each extension's
+ * deps land in a dedicated user-owned workspace here.
+ */
+export function getExtensionsDir(): string {
+  const dir = join(getTowerDir(), "extensions");
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  return dir;
+}

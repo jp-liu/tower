@@ -2,8 +2,10 @@
 
 import { execFile, execFileSync } from "child_process";
 import { existsSync } from "fs";
+import path from "path";
 import { z } from "zod";
 import { getConfigValue } from "@/actions/config-actions";
+import { getExtensionsDir } from "@/lib/tower-dir";
 
 export type SearchErrorKind =
   | "timeout"
@@ -12,22 +14,37 @@ export type SearchErrorKind =
   | "aborted"
   | "unknown";
 
-/** Resolve rg binary: bundled @vscode/ripgrep → system rg fallback.
- * Verifies the binary file actually exists — package import succeeding
- * isn't enough (postinstall download may have failed silently). */
+/** Resolve rg binary: extension install in `~/.tower/extensions/` first,
+ * system rg fallback. Verifies the binary file actually exists — the
+ * `@vscode/ripgrep` package may install while its postinstall download
+ * silently fails, leaving `rgPath` pointing at a missing file. */
 function resolveRgPath(): string {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pkgPath = (require("@vscode/ripgrep") as { rgPath: string }).rgPath;
-    if (pkgPath && existsSync(pkgPath)) return pkgPath;
+    const pkgEntry = path.join(getExtensionsDir(), "node_modules", "@vscode", "ripgrep");
+    if (existsSync(pkgEntry)) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pkgPath = (require(pkgEntry) as { rgPath: string }).rgPath;
+      if (pkgPath && existsSync(pkgPath)) return pkgPath;
+    }
   } catch {
-    // package not installed — fall through to system fallback
+    // extension workspace doesn't have it — fall through to system fallback
   }
   try {
     const sysPath = execFileSync("which", ["rg"], { encoding: "utf-8" }).trim();
     if (sysPath && existsSync(sysPath)) return sysPath;
   } catch {
-    // which failed
+    // which failed (e.g. Windows without WSL) — fall through
+  }
+  // Windows fallback: `where rg`
+  if (process.platform === "win32") {
+    try {
+      const sysPath = execFileSync("where", ["rg"], { encoding: "utf-8" })
+        .split(/\r?\n/)[0]
+        .trim();
+      if (sysPath && existsSync(sysPath)) return sysPath;
+    } catch {
+      // not on PATH
+    }
   }
   throw new Error("ripgrep not found: install @vscode/ripgrep or system rg");
 }

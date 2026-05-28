@@ -1,7 +1,8 @@
 import { Search } from "lucide-react";
 import { execFile } from "child_process";
-import { existsSync } from "fs";
-import { getPackageRoot } from "@/lib/tower-paths";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
+import path from "path";
+import { getExtensionsDir } from "@/lib/tower-dir";
 import type { Extension, ExtensionStatus, ExtensionResult } from "../types";
 
 /** Promisify wrapper that always calls through the live execFile reference */
@@ -18,13 +19,28 @@ function execFileP(
   });
 }
 
-/** npm options: run from package root so deps land in the right node_modules,
- *  and on Windows use shell:true so `npm.cmd` resolves (Node refuses to
- *  execFile `.cmd` shims since CVE-2024-27980). */
+// `~/.tower/extensions/` — npm-installs land here, not in the global Tower
+// package's node_modules. See lib/tower-dir.ts:getExtensionsDir for why.
+const EXT_ROOT = getExtensionsDir();
+
+/** Ensure `~/.tower/extensions/package.json` exists so `npm install` knows
+ *  to drop deps into a sibling `node_modules/`. */
+function ensureExtensionWorkspace(): void {
+  const pkgJson = path.join(EXT_ROOT, "package.json");
+  if (!existsSync(pkgJson)) {
+    mkdirSync(EXT_ROOT, { recursive: true });
+    writeFileSync(
+      pkgJson,
+      JSON.stringify({ name: "tower-extensions", version: "1.0.0", private: true }, null, 2),
+    );
+  }
+}
+
+/** npm options: install from the extensions workspace, Windows-safe. */
 function npmOpts(timeout: number) {
   return {
     timeout,
-    cwd: getPackageRoot(),
+    cwd: EXT_ROOT,
     shell: process.platform === "win32",
   };
 }
@@ -41,11 +57,14 @@ async function runVersion(rgPath: string): Promise<string | undefined> {
 
 async function detectPackageBinary(): Promise<string | null> {
   try {
-    const mod = await import("@vscode/ripgrep");
-    const rgPath = (mod as { rgPath?: string }).rgPath;
+    // Resolve from the extensions workspace explicitly — the global Tower
+    // package's own node_modules might not contain `@vscode/ripgrep` (we
+    // install to `~/.tower/extensions/` instead).
+    const pkgEntry = path.join(EXT_ROOT, "node_modules", "@vscode", "ripgrep");
+    if (!existsSync(pkgEntry)) return null;
+    const mod = (await import(/* @vite-ignore */ pkgEntry)) as { rgPath?: string };
+    const rgPath = mod.rgPath;
     if (!rgPath) return null;
-    // The package may be installed but its postinstall (binary download) failed.
-    // Verify the binary file actually exists before reporting installed.
     if (!existsSync(rgPath)) return null;
     return rgPath;
   } catch {
@@ -81,6 +100,7 @@ async function check(): Promise<ExtensionStatus> {
 
 async function install(): Promise<ExtensionResult> {
   try {
+    ensureExtensionWorkspace();
     await execFileP("npm", ["install", "@vscode/ripgrep"], npmOpts(120_000));
     // Clear cached rg path so next searchCode call re-resolves.
     try {
@@ -107,6 +127,7 @@ async function install(): Promise<ExtensionResult> {
 
 async function uninstall(): Promise<ExtensionResult> {
   try {
+    ensureExtensionWorkspace();
     await execFileP("npm", ["uninstall", "@vscode/ripgrep"], npmOpts(60_000));
     // Clear cached rg path so next searchCode attempt detects absence.
     try {

@@ -1,3 +1,15 @@
+# [0.2.13](/compare/v0.2.12...v0.2.13) (2026-05-28)
+
+
+### Bug Fixes
+
+* **extensions:** install npm deps into `~/.tower/extensions/` (own workspace) instead of the global Tower package's own `node_modules` — system-managed install paths cause silent install failures and refresh shows "not installed" minutes after a successful install. Resolves "monaco-editor/min/vs not found after install" and ripgrep binary-missing failures on Windows + global-install macOS
+* **extensions/monaco:** restore `process.cwd()/public/vs` for the public-asset destination so Next.js standalone actually serves the loader (the previous switch to `TOWER_PACKAGE_ROOT/public/vs` placed it outside the static dir Next.js reads at runtime)
+* **assistant:** resolve `dist/mcp-server.cjs` from `TOWER_PACKAGE_ROOT`, not `process.cwd()` — the standalone server chdirs into `.next/standalone/` where `dist/` doesn't exist, so the embedded assistant was wired to a non-existent MCP entry. Mac "MCP 未安装" and Windows "Assistant encountered an error" both come from the same broken path
+* **search:** ripgrep system fallback now also tries `where rg` on Windows (was POSIX-only `which`)
+
+
+
 # [0.2.12](/compare/v0.2.11...v0.2.12) (2026-05-28)
 
 

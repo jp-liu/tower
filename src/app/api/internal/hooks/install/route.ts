@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireLocalhost } from "@/lib/internal-api-guard";
 import * as path from "node:path";
 import { ClaudeCliAdapter } from "@/lib/ai/adapters/cli/claude-cli-adapter";
+import { getPackageRoot } from "@/lib/tower-paths";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
   if (blocked) return blocked;
 
   const installed = await claudeAdapter.isHooksInstalled();
-  const hookPath = path.join(process.cwd(), "scripts", "post-tool-hook.js");
+  const hookPath = path.join(getPackageRoot(), "scripts", "post-tool-hook.js");
 
   return NextResponse.json({
     installed,

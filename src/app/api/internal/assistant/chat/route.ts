@@ -76,7 +76,11 @@ export async function POST(request: NextRequest) {
         const hasAttachments = safeAttachmentFilenames.length > 0;
 
         // Build MCP server config inline — avoids relying on settings.json discovery
-        const projectRoot = process.cwd().replace(/\\/g, "/");
+        // `getPackageRoot()` (not `process.cwd()`) because the standalone server
+        // chdirs into `.next/standalone/` at boot, where `dist/mcp-server.cjs`
+        // doesn't exist — it lives at the package root.
+        const { getPackageRoot } = await import("@/lib/tower-paths");
+        const projectRoot = getPackageRoot().replace(/\\/g, "/");
         const dbUrl =
           process.env.DATABASE_URL ||
           `file:${getTowerDbPath().replace(/\\/g, "/")}`;
