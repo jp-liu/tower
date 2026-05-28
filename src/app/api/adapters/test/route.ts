@@ -7,6 +7,7 @@ import {
   installAllForProvider,
   type ProviderInstallReport,
 } from "@/lib/ai/install-orchestrator";
+import { providerRegistry } from "@/lib/ai/providers";
 import {
   markProviderConnected,
   markProviderDisconnected,
@@ -57,6 +58,22 @@ export async function POST(request: NextRequest) {
         );
       }
       resolvedCwd = cwd;
+    }
+
+    // Pre-flight: rewrite any stale Tower hook paths in the provider's
+    // settings file. Older versions (0.2.5/0.2.6) wrote `.next/standalone/
+    // scripts/*.js` paths that don't exist on the user's disk; if we let the
+    // hello probe run against those, Claude on Windows hangs after
+    // `hook_started` and the probe never reaches the install step below
+    // (which is where the upsert would normally fix it). Repair-only: no new
+    // hook entries are added.
+    if (provider) {
+      try {
+        const adapter = providerRegistry.get(provider)?.cli?.adapter;
+        await adapter?.repairHookPaths?.();
+      } catch {
+        // Best-effort — proceed with the probe even if repair fails.
+      }
     }
 
     const testResult: TestResult = await testEnvironment(resolvedCwd, provider);

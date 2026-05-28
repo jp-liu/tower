@@ -35,7 +35,13 @@ export async function register() {
           try {
             if (!(await adapter.isAvailable())) continue;
             const already = await adapter.isMcpInstalled("tower", { scope: "user" }).catch(() => false);
-            if (already) continue;
+            if (already) {
+              // MCP already wired, but hook command paths may still be stale
+              // (broken `.next/standalone/scripts/...` from 0.2.5/0.2.6).
+              // Refresh only existing entries — never adds new ones.
+              await adapter.repairHookPaths?.().catch(() => {});
+              continue;
+            }
             const report = await installAllForProvider(provider.name, apiUrl);
             if (report.ok) {
               console.error(`[init-tower] Auto-installed Tower MCP for ${provider.name} (user scope)`);

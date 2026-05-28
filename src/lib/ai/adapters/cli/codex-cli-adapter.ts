@@ -117,6 +117,45 @@ export class CodexCliAdapter implements CliAdapter {
   }
 
   /**
+   * Repair stale Tower hook paths in-place — `~/.codex/hooks.toml` may still
+   * contain entries that 0.2.5/0.2.6 wrote with broken paths under
+   * `.next/standalone/scripts/`. Rewrite ONLY existing entries to the
+   * current `TOWER_PACKAGE_ROOT`; never adds new ones.
+   */
+  async repairHookPaths(): Promise<void> {
+    try {
+      const hooks = this.readHooks();
+      const root = getPackageRoot().replace(/\\/g, "/");
+      const map: Array<[string, string]> = [
+        ["SessionStart", "session-start-hook.js"],
+        ["PostToolUse", "post-tool-hook.js"],
+        ["Stop", "stop-hook.js"],
+      ];
+      let changed = false;
+      for (const [event, filename] of map) {
+        const entries = this.getHookArray(hooks, event);
+        const idx = entries.findIndex((e) =>
+          e?.hooks?.some?.((h: { command?: string }) => h.command?.includes(filename))
+        );
+        if (idx < 0) continue;
+        const wantedPath = path.join(root, "scripts", filename).replace(/\\/g, "/");
+        const wantedCmd = `node "${wantedPath}"`;
+        const hookCmd = entries[idx]?.hooks?.[0];
+        if (!hookCmd || hookCmd.command === wantedCmd) continue;
+        hookCmd.command = wantedCmd;
+        hooks[event] = entries;
+        changed = true;
+      }
+      if (changed) {
+        this.writeHooks(hooks);
+        this.ensureHooksFeatureEnabled();
+      }
+    } catch {
+      // Best-effort — never throw out of a repair call.
+    }
+  }
+
+  /**
    * Install-or-refresh a hook entry. Removes any existing entries that
    * reference our `filename` (caters for stale paths from older Tower versions
    * that wrote `process.cwd()/scripts/...` from inside `.next/standalone/`)

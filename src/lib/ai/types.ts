@@ -114,6 +114,13 @@ export interface CliAdapter {
    *  Embed the prompt inline (no stdin pipe) — Windows libuv crashes when
    *  cmd.exe-wrapped children with piped stdin exit too quickly. */
   buildHelloProbeArgs(prompt: string): { command: string; args: string[] };
+
+  /** Rewrite stale Tower hook command paths in the provider's settings file
+   *  to the current `TOWER_PACKAGE_ROOT`. Does NOT install new hook entries —
+   *  only refreshes ones that already exist. Used to self-heal users whose
+   *  hooks were written by pre-0.2.7 versions with broken `process.cwd()` paths.
+   *  Optional; adapters that don't manage hooks via file paths can omit it. */
+  repairHookPaths?(): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------

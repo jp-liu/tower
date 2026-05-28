@@ -1,3 +1,12 @@
+# [0.2.10](/compare/v0.2.9...v0.2.10) (2026-05-28)
+
+
+### Bug Fixes
+
+* **hooks:** auto-repair stale hook paths on app boot and before every Test Connection probe — `repairHookPaths()` rewrites command paths in `~/.claude/settings.json` / `~/.codex/hooks.toml` to the current `TOWER_PACKAGE_ROOT` for entries that already exist (never adds new ones). Fixes the chicken-and-egg case where the hello probe would hang on broken hook paths from 0.2.5/0.2.6 before the install step that would normally upsert them. Users no longer need to edit settings files by hand
+
+
+
 # [0.2.9](/compare/v0.2.8...v0.2.9) (2026-05-28)
 
 
