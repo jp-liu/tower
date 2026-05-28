@@ -1,3 +1,29 @@
+# [0.2.0](/compare/v0.1.21...v0.2.0) (2026-05-28)
+
+
+### Features
+
+* **preview:** live frontend preview module — preset detection, dev-server session lifecycle, WS log streaming, embedded panel
+* **preview:** 3-level (task/project/preset) config with source indicators + presets for uni-app, Vue CLI, CRA
+* **version:** 版本时间线 — 版本管理 + 按版本归纳任务
+* **mcp:** auto-install Tower MCP to each CLI user scope at boot
+* **settings:** folder picker and {path} toggle for git path rules
+
+
+### Bug Fixes
+
+* **worktree:** symlink node_modules for task subPath; skip stray root node_modules without package.json
+* **task:** keep Monaco mounted to avoid "InstantiationService has been disposed"
+* **task:** skip detail drawer when returning from studio (tower) task
+* **preview:** graceful stop with lifecycle logs and SIGKILL fallback
+
+
+### CI
+
+* run test suite on pull requests to main; skip environment-coupled smoke tests in CI
+
+
+
 # [0.1.0](/compare/v1.0.0...v0.1.0) (2026-03-26)
 
 
