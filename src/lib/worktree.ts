@@ -133,6 +133,12 @@ function symlinkNodeModules(
   const prefixes = subPath ? ["", subPath] : [""];
 
   for (const prefix of prefixes) {
+    // Only link dependency dirs for locations that are real Node projects
+    // (have a package.json). A repo root with no package.json may still carry
+    // a stray node_modules; linking it would shadow the subPath app's deps via
+    // Node's upward module resolution.
+    if (!existsSync(path.join(projectRoot, prefix, "package.json"))) continue;
+
     for (const dir of dirs) {
       const rel = prefix ? path.join(prefix, dir) : dir;
       const source = path.join(projectRoot, rel);
