@@ -1,3 +1,12 @@
+# [0.2.6](/compare/v0.2.5...v0.2.6) (2026-05-28)
+
+
+### Bug Fixes
+
+* **ai-providers:** ship `skills/` in the npm package and resolve skill/hook/MCP paths from `TOWER_PACKAGE_ROOT` instead of `process.cwd()` — Test Connection now produces a usable connection (Settings → Test Connection no longer reports installed but the slot resolver throws `CLI_NOT_FOUND` because `skillsInstalled` was silently false)
+
+
+
 # [0.2.5](/compare/v0.2.4...v0.2.5) (2026-05-28)
 
 

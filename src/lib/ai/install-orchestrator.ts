@@ -15,6 +15,7 @@ import type { CliAdapter, InstallResult, McpServerConfig } from "./types";
 import { providerRegistry } from "./providers";
 import { getTowerDbPath, getTowerDir } from "../tower-dir";
 import { migrateLegacyTowerMcp, type MigrationReport } from "./migrate-legacy-mcp";
+import { getPackageRoot } from "../tower-paths";
 
 /**
  * Skill content is identical across dev/prod (same SKILL.md). Always use
@@ -71,7 +72,7 @@ export interface ProviderInstallReport {
  * land as distinct entries in the user's `claude mcp list`.
  */
 export function buildTowerMcpConfig(): McpServerConfig {
-  const root = process.cwd().replace(/\\/g, "/");
+  const root = getPackageRoot().replace(/\\/g, "/");
   const dbUrl =
     process.env.DATABASE_URL || `file:${getTowerDbPath().replace(/\\/g, "/")}`;
   const builtPath = `${root}/dist/mcp-server.cjs`;
@@ -96,7 +97,7 @@ export function buildTowerMcpConfig(): McpServerConfig {
 
 /** Absolute path to the Tower skill source dir inside this repo. */
 export function getTowerSkillSourceDir(): string {
-  return path.join(process.cwd(), "skills", TOWER_SKILL_NAME);
+  return path.join(getPackageRoot(), "skills", TOWER_SKILL_NAME);
 }
 
 /**

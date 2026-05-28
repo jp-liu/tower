@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { resolveCommandPathSync } from "@/lib/platform";
+import { getPackageRoot } from "@/lib/tower-paths";
 import type {
   CliAdapter,
   CliSpawnOptions,
@@ -77,7 +78,7 @@ export class ClaudeCliAdapter implements CliAdapter {
     try {
       const settings = this.readSettings();
       const hooks = (settings["hooks"] as Record<string, unknown>) ?? {};
-      const root = process.cwd().replace(/\\/g, "/");
+      const root = getPackageRoot().replace(/\\/g, "/");
       let changed = false;
 
       // SessionStart hook — reports sessionId

@@ -284,6 +284,9 @@ async function cmdStart() {
   // Next.js standalone server reads HOSTNAME (not HOST) for binding.
   process.env.HOSTNAME = HOST;
   // PORT is already set early in this script.
+  // Export the package root so code that needs `skills/`, `scripts/`, etc.
+  // can find them — `process.cwd()` won't work once we chdir below.
+  process.env.TOWER_PACKAGE_ROOT = PROJECT_ROOT;
 
   log(`Tower starting on http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
 

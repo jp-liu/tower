@@ -17,6 +17,7 @@ import { join } from "path";
 import { getAssistantDir, getTowerDbPath } from "./tower-dir";
 import type { McpServerConfig } from "./ai/types";
 import { getTowerMcpName } from "./ai/install-orchestrator";
+import { getPackageRoot } from "./tower-paths";
 
 const CLAUDE_MD_CONTENT = `# Tower Assistant
 
@@ -40,7 +41,7 @@ const CLAUDE_MD_CONTENT = `# Tower Assistant
 export function ensureTowerDir(): string {
   const assistantDir = getAssistantDir();
   const claudeMd = join(assistantDir, "CLAUDE.md");
-  const root = process.cwd();
+  const root = getPackageRoot();
   const skillSrc = join(root, "skills", "tower", "SKILL.md");
   const skillDestDir = join(assistantDir, ".claude", "skills", "tower");
   const skillDest = join(skillDestDir, "SKILL.md");
@@ -126,7 +127,7 @@ function cleanupLegacyAssistantMcp(assistantDir: string): void {
  * coupling to the provider integration code path that runs after test-connect.
  */
 function buildTowerMcpConfig(): McpServerConfig {
-  const root = process.cwd().replace(/\\/g, "/");
+  const root = getPackageRoot().replace(/\\/g, "/");
   const dbUrl =
     process.env.DATABASE_URL || `file:${getTowerDbPath().replace(/\\/g, "/")}`;
   const builtPath = `${root}/dist/mcp-server.cjs`;
