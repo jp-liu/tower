@@ -9,7 +9,11 @@ const fs = require("fs");
 const path = require("path");
 
 const packageRoot = path.join(__dirname, "..");
-const serverDir = path.join(packageRoot, ".next", "server");
+const candidateServerDirs = [
+  path.join(packageRoot, ".next", "server"),
+  path.join(packageRoot, ".next", "standalone", ".next", "server"),
+];
+const serverDirs = candidateServerDirs.filter((p) => fs.existsSync(p));
 const supportedPackages = [
   "@prisma/client",
   "node-pty",
@@ -17,7 +21,7 @@ const supportedPackages = [
   "ws",
 ];
 
-if (!fs.existsSync(serverDir)) {
+if (serverDirs.length === 0) {
   process.exit(0);
 }
 
@@ -128,7 +132,7 @@ function linkHashedPackage(pkg, hash) {
   }
 }
 
-const jsFiles = collectJsFiles(serverDir);
+const jsFiles = serverDirs.flatMap((dir) => collectJsFiles(dir));
 const references = detectHashedReferences(jsFiles);
 let createdAny = false;
 

@@ -14,13 +14,13 @@
  *   -H, --host <host>    Server host (default: 0.0.0.0)
  */
 
-import { existsSync, readFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname, resolve } from "path";
 import { execFileSync, spawnSync } from "child_process";
-import { createServer } from "http";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import { parseArgs } from "node:util";
 import { homedir } from "os";
+import { createHash } from "crypto";
 import { createRequire } from "module";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -149,6 +149,28 @@ function needsInit() {
   return !existsSync(DB_PATH);
 }
 
+const STATE_FILE = join(TOWER_DIR, ".tower-state.json");
+
+function getSchemaHash() {
+  return createHash("sha256")
+    .update(readFileSync(join(PROJECT_ROOT, "prisma", "schema.prisma")))
+    .digest("hex")
+    .slice(0, 16);
+}
+
+function readState() {
+  if (!existsSync(STATE_FILE)) return {};
+  try {
+    return JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
+function writeState(state) {
+  writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+}
+
 function ensureDirs() {
   for (const dir of [TOWER_DIR, DB_DIR, join(TOWER_DIR, "storage"), join(TOWER_DIR, "assistant"), join(TOWER_DIR, "logs")]) {
     if (!existsSync(dir)) {
@@ -185,7 +207,40 @@ async function initDatabase() {
   log("Initializing full-text search...");
   run(tsxBin, ["prisma/init-fts.ts"]);
 
+  writeState({ ...readState(), schemaHash: getSchemaHash() });
   log("Initialization complete!");
+}
+
+/**
+ * Idempotent schema migration for upgraders.
+ *
+ * `tower init` only runs when the DB file is absent — users upgrading from an
+ * older version retain a stale schema and hit "no such column" errors
+ * (issue #6). Gate on a hash of `prisma/schema.prisma` so we only pay the
+ * `db push` cost when the schema actually changed.
+ *
+ * `--accept-data-loss` is needed because `notes_fts*` FTS5 shadow tables are
+ * outside the Prisma schema; they get dropped here and rebuilt by init-fts.
+ */
+function ensureSchemaCurrent() {
+  const currentHash = getSchemaHash();
+  const state = readState();
+  if (state.schemaHash === currentHash) return;
+
+  const prismaBin = resolveBin("prisma", "prisma");
+  const tsxBin = resolveBin("tsx", "tsx");
+
+  log("Schema changed — migrating database (this only runs on upgrade)...");
+  run(prismaBin, ["db", "push", "--skip-generate", "--accept-data-loss"]);
+
+  log("Updating builtin labels and defaults...");
+  run(tsxBin, ["scripts/init-db.ts"]);
+
+  log("Rebuilding full-text search index...");
+  run(tsxBin, ["prisma/init-fts.ts"]);
+
+  writeState({ ...state, schemaHash: currentHash });
+  log("Schema migration complete.");
 }
 
 // ─── Commands ───
@@ -200,49 +255,31 @@ async function cmdStart() {
 
   if (needsInit()) {
     await initDatabase();
+  } else {
+    ensureSchemaCurrent();
   }
 
-  // Next.js resolves paths relative to process.cwd().
-  // On Windows, if cwd is on a different drive (e.g. C:\) than the package
-  // (e.g. E:\), path.resolve produces an invalid concatenation.
-  // Fix: set cwd to PROJECT_ROOT before starting Next.js.
-  process.chdir(PROJECT_ROOT);
+  const standaloneDir = join(PROJECT_ROOT, ".next", "standalone");
+  const standaloneServer = join(standaloneDir, "server.js");
 
-  // Use Next.js programmatic API (same approach as nextra, tldraw)
-  const next = (await import("next")).default;
-  const app = next({
-    dev: false,
-    dir: PROJECT_ROOT,
-    quiet: false,
-  });
+  if (!existsSync(standaloneServer)) {
+    logError(`Standalone server not found at ${standaloneServer}`);
+    logError(`The build must run with output: "standalone" in next.config.ts.`);
+    process.exit(1);
+  }
 
-  const handle = app.getRequestHandler();
-  await app.prepare();
+  // Next.js standalone server reads HOSTNAME (not HOST) for binding.
+  process.env.HOSTNAME = HOST;
+  // PORT is already set early in this script.
 
-  const server = createServer(handle);
-  let shuttingDown = false;
+  log(`Tower starting on http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
 
-  const shutdown = (signal) => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    log(`Received ${signal}, shutting down...`);
+  // Standalone server expects its own directory as cwd so that
+  // `.next/server/`, traced `node_modules/`, and the copied
+  // `public/` resolve correctly.
+  process.chdir(standaloneDir);
 
-    const forceExitTimer = setTimeout(() => {
-      process.exit(0);
-    }, 2000);
-    forceExitTimer.unref();
-
-    server.close(() => {
-      process.exit(0);
-    });
-  };
-
-  process.once("SIGINT", () => shutdown("SIGINT"));
-  process.once("SIGTERM", () => shutdown("SIGTERM"));
-
-  server.listen(PORT, HOST, () => {
-    log(`Tower running on http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
-  });
+  await import(pathToFileURL(standaloneServer).href);
 }
 
 // ─── Dispatch ───

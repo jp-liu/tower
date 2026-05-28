@@ -1,3 +1,13 @@
+# [0.2.4](/compare/v0.2.3...v0.2.4) (2026-05-28)
+
+
+### Bug Fixes
+
+* **boot:** auto-migrate database schema on upgrade — gated by `prisma/schema.prisma` hash, so existing users no longer have to run `prisma db push` manually after `tower-studio` updates (issue #6)
+* **fts:** repopulate the notes search index from `ProjectNote` when it's empty — avoids broken note search after schema migrations drop the FTS5 shadow tables
+
+
+
 # [0.2.0](/compare/v0.1.21...v0.2.0) (2026-05-28)
 
 
