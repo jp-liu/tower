@@ -345,9 +345,12 @@ export class ClaudeCliAdapter implements CliAdapter {
     try {
       const { execFile } = await import("child_process");
       const { promisify } = await import("util");
+      const { resolveSpawnTarget } = await import("@/lib/platform");
       const execFileAsync = promisify(execFile);
-      const cmd = this.resolveCommand();
-      const { stdout } = await execFileAsync(cmd, ["--version"], { timeout: 5000 });
+      // Wrap `.cmd`/`.bat` shims via cmd.exe on Windows — Node refuses to
+      // execFile them directly since CVE-2024-27980.
+      const target = await resolveSpawnTarget(this.resolveCommand(), ["--version"]);
+      const { stdout } = await execFileAsync(target.command, target.args, { timeout: 5000 });
       return stdout.trim() || null;
     } catch {
       return null;
@@ -374,10 +377,10 @@ export class ClaudeCliAdapter implements CliAdapter {
     return { envVar: "ANTHROPIC_API_KEY", required: false };
   }
 
-  buildHelloProbeArgs(): { command: string; args: string[] } {
+  buildHelloProbeArgs(prompt: string): { command: string; args: string[] } {
     return {
       command: this.resolveCommand(),
-      args: ["--print", "-", "--output-format", "stream-json", "--verbose"],
+      args: ["--print", prompt, "--output-format", "stream-json", "--verbose"],
     };
   }
 

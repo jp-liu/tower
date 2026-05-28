@@ -415,7 +415,7 @@ async function testWithAdapter(
   });
 
   // Check 4: hello probe (from adapter)
-  const probeSpec = adapter.buildHelloProbeArgs();
+  const probeSpec = adapter.buildHelloProbeArgs("Respond with just the word hello");
   const probeId = `${providerName}-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   try {
     const probe = await runChildProcess(
@@ -425,7 +425,6 @@ async function testWithAdapter(
       {
         cwd,
         env: {},
-        stdin: "Respond with just the word hello",
         timeoutSec: 45,
         graceSec: 5,
         onLog: async () => {},

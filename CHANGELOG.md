@@ -1,3 +1,13 @@
+# [0.2.7](/compare/v0.2.6...v0.2.7) (2026-05-28)
+
+
+### Bug Fixes
+
+* **windows:** drop stdin from the hello probe — pass the prompt inline via `--print <text>` / `codex exec <text>` instead of `--print -`. Windows libuv crashes (`Assertion failed: !(handle->flags & UV_HANDLE_CLOSING) ... async.c:76`) when a cmd.exe-wrapped child with a piped stdin exits quickly
+* **windows:** wrap `.cmd`/`.bat` shims via `cmd.exe` for the version probe too — Node refuses to `execFile` them directly since CVE-2024-27980, which was silently turning every Test Connection on Windows into "Version: unknown"
+
+
+
 # [0.2.6](/compare/v0.2.5...v0.2.6) (2026-05-28)
 
 

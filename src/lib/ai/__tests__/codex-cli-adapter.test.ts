@@ -249,11 +249,10 @@ describe("CodexCliAdapter", () => {
   });
 
   describe("buildHelloProbeArgs", () => {
-    it("returns codex exec - for non-interactive probe", () => {
-      const probe = adapter.buildHelloProbeArgs();
+    it("returns codex exec <prompt> for non-interactive probe", () => {
+      const probe = adapter.buildHelloProbeArgs("say hi");
       expect(probe.command).toMatch(/codex$/);
-      expect(probe.args).toContain("exec");
-      expect(probe.args).toContain("-");
+      expect(probe.args).toEqual(["exec", "say hi"]);
     });
   });
 

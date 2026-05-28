@@ -111,8 +111,9 @@ export interface CliAdapter {
   getApiKeyInfo(): { envVar: string; required: boolean };
 
   /** Build the command + args for a non-interactive hello probe.
-   *  The probe should accept a prompt via stdin and return text on stdout. */
-  buildHelloProbeArgs(): { command: string; args: string[] };
+   *  Embed the prompt inline (no stdin pipe) — Windows libuv crashes when
+   *  cmd.exe-wrapped children with piped stdin exit too quickly. */
+  buildHelloProbeArgs(prompt: string): { command: string; args: string[] };
 }
 
 // ---------------------------------------------------------------------------
