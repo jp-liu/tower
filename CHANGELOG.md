@@ -1,3 +1,13 @@
+# [0.2.14](/compare/v0.2.13...v0.2.14) (2026-05-28)
+
+
+### Refactor
+
+* **assistant:** drop the inline `mcpServers` config in `/api/internal/assistant/chat/route.ts` — Tower MCP is already installed at user scope on every boot by `instrumentation.ts`, and the Claude SDK auto-discovers it. Keeping a second copy of the config inline meant `dist/mcp-server.cjs` path had to stay correct in two places. Now there's only one source of truth (the user-scope CLI install)
+* **init-tower:** delete the now-unused `buildTowerMcpConfig()` helper; the legacy-cleanup path only needs the MCP name, which `getTowerMcpName()` already gives us
+
+
+
 # [0.2.13](/compare/v0.2.12...v0.2.13) (2026-05-28)
 
 

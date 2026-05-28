@@ -4,8 +4,7 @@ import { buildAttachmentPrompt } from "@/lib/build-multimodal-prompt";
 import { getAssistantCacheRoot } from "@/lib/file-utils";
 import { ClaudeCliAdapter } from "@/lib/ai/adapters/cli/claude-cli-adapter";
 import { db } from "@/lib/db";
-import { getTowerDbPath } from "@/lib/tower-dir";
-import { existsSync } from "fs";
+import { getTowerMcpName } from "@/lib/ai/install-orchestrator";
 import { ATTACHMENT_SUBPATH_RE, MAX_ATTACHMENTS } from "@/lib/attachment-utils";
 
 const claudeAdapter = new ClaudeCliAdapter();
@@ -75,36 +74,21 @@ export async function POST(request: NextRequest) {
 
         const hasAttachments = safeAttachmentFilenames.length > 0;
 
-        // Build MCP server config inline — avoids relying on settings.json discovery
-        // `getPackageRoot()` (not `process.cwd()`) because the standalone server
-        // chdirs into `.next/standalone/` at boot, where `dist/mcp-server.cjs`
-        // doesn't exist — it lives at the package root.
-        const { getPackageRoot } = await import("@/lib/tower-paths");
-        const projectRoot = getPackageRoot().replace(/\\/g, "/");
-        const dbUrl =
-          process.env.DATABASE_URL ||
-          `file:${getTowerDbPath().replace(/\\/g, "/")}`;
-
+        // Tower MCP is installed once at user scope by `instrumentation.ts` on
+        // boot (and refreshed by Test Connection). Don't pass `mcpServers`
+        // inline here — Claude SDK auto-discovers the user-scope entry, and
+        // duplicating the config means we'd have to keep the `dist/mcp-server.cjs`
+        // path correct in two places.
         const options: Record<string, unknown> = {
           // Disable all built-in tools — assistant is a task operator, not a coding assistant.
           // Only allow Read when attachments are present (to read the provided files).
           tools: hasAttachments ? ["Read"] : [],
-          allowedTools: ["mcp__tower__*", "Read"],
+          allowedTools: [`mcp__${getTowerMcpName()}__*`, "Read"],
           // Streaming — receive text_delta chunks as they arrive
           includePartialMessages: true,
           // .tower/ directory has its own CLAUDE.md with assistant persona
           cwd: towerDir,
           pathToClaudeCodeExecutable: claudePath,
-          // Pass Tower MCP server config directly — more reliable than settings.json
-          mcpServers: {
-            tower: (() => {
-              const builtPath = `${projectRoot}/dist/mcp-server.cjs`;
-              if (existsSync(builtPath)) {
-                return { type: "stdio" as const, command: "node", args: [builtPath], env: { DATABASE_URL: dbUrl } };
-              }
-              return { type: "stdio" as const, command: `${projectRoot}/node_modules/.bin/tsx`, args: [`${projectRoot}/src/mcp/index.ts`], env: { DATABASE_URL: dbUrl } };
-            })(),
-          },
         };
 
         // Resume previous session if sessionId provided

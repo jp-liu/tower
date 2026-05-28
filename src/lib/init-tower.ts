@@ -14,8 +14,7 @@
 
 import { existsSync, mkdirSync, copyFileSync, writeFileSync, readFileSync } from "fs";
 import { join } from "path";
-import { getAssistantDir, getTowerDbPath } from "./tower-dir";
-import type { McpServerConfig } from "./ai/types";
+import { getAssistantDir } from "./tower-dir";
 import { getTowerMcpName } from "./ai/install-orchestrator";
 import { getPackageRoot } from "./tower-paths";
 
@@ -102,7 +101,7 @@ function cleanupLegacyAssistantMcp(assistantDir: string): void {
   const mcpFile = join(assistantDir, ".mcp.json");
   if (existsSync(mcpFile)) {
     try {
-      const towerName = buildTowerMcpConfig().name;
+      const towerName = getTowerMcpName();
       const mcpJson = JSON.parse(readFileSync(mcpFile, "utf-8")) as Record<string, unknown>;
       const mcpServers = (mcpJson["mcpServers"] as Record<string, unknown>) ?? {};
       if (towerName in mcpServers) {
@@ -119,37 +118,4 @@ function cleanupLegacyAssistantMcp(assistantDir: string): void {
       // best-effort
     }
   }
-}
-
-/**
- * Build the Tower MCP server config for the embedded assistant. Kept here
- * (instead of imported from install-orchestrator) so this file has zero
- * coupling to the provider integration code path that runs after test-connect.
- */
-function buildTowerMcpConfig(): McpServerConfig {
-  const root = getPackageRoot().replace(/\\/g, "/");
-  const dbUrl =
-    process.env.DATABASE_URL || `file:${getTowerDbPath().replace(/\\/g, "/")}`;
-  const builtPath = `${root}/dist/mcp-server.cjs`;
-  // Match the user-scope name so the assistant's project-scope MCP and the
-  // user-scope CLI install refer to the same logical server. (Project scope
-  // overrides user scope in Claude — both pointing at the same env-bound DB
-  // means there's no surprise when the assistant runs.)
-  const name = getTowerMcpName();
-
-  if (existsSync(builtPath)) {
-    return {
-      name,
-      command: "node",
-      args: [builtPath],
-      env: { DATABASE_URL: dbUrl },
-    };
-  }
-
-  return {
-    name,
-    command: `${root}/node_modules/.bin/tsx`,
-    args: [`${root}/src/mcp/index.ts`],
-    env: { DATABASE_URL: dbUrl },
-  };
 }
