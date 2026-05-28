@@ -14,9 +14,10 @@ model Workspace {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  projects Project[]
-  labels   Label[]
-  prompts  AgentPrompt[]
+  projects     Project[]
+  labels       Label[]
+  prompts      AgentPrompt[]
+  versionTypes VersionType[]
 }
 
 model Project {
@@ -41,6 +42,7 @@ model Project {
   repositories Repository[]
   notes        ProjectNote[]
   assets       ProjectAsset[]
+  versions     Version[]
 
   @@index([workspaceId])
 }
@@ -83,6 +85,7 @@ model Task {
   previewCommandOverride String?
   previewPortOverride    Int?
   projectId   String
+  versionId   String?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
@@ -92,9 +95,11 @@ model Task {
   labels     TaskLabel[]
   notes      ProjectNote[]
   assets     ProjectAsset[]
+  version    Version?        @relation(fields: [versionId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
   @@index([status])
+  @@index([versionId])
 }
 
 model TaskExecution {
@@ -157,6 +162,45 @@ model Repository {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
+}
+
+model Version {
+  id            String        @id @default(cuid())
+  number        String
+  name          String
+  typeId        String?
+  status        VersionStatus @default(PLANNED)
+  isCurrent     Boolean       @default(false)
+  baseBranch    String?
+  baseCommit    String?
+  releaseCommit String?
+  startDate     DateTime?
+  targetDate    DateTime?
+  releasedAt    DateTime?
+  description   String?
+  order         Int           @default(0)
+  projectId     String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type    VersionType? @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  tasks   Task[]
+
+  @@index([projectId])
+  @@index([isCurrent])
+  @@index([typeId])
+}
+
+model VersionType {
+  id          String    @id @default(cuid())
+  name        String
+  workspaceId String
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  versions    Version[]
+
+  @@index([workspaceId])
 }
 
 model ProjectNote {
@@ -314,4 +358,10 @@ enum MessageRole {
 enum ProjectCategory {
   FRONTEND
   BACKEND
+}
+
+enum VersionStatus {
+  PLANNED
+  ACTIVE
+  RELEASED
 }

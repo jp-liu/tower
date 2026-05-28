@@ -20,6 +20,7 @@ export async function createTask(data: {
   labelIds?: string[];
   baseBranch?: string;
   subPath?: string;
+  versionId?: string;
 }) {
   const v = createTaskSchema.parse(data);
   const task = await db.task.create({
@@ -31,6 +32,7 @@ export async function createTask(data: {
       status: (v.status as TaskStatus) ?? "TODO",
       baseBranch: v.baseBranch ?? null,
       subPath: v.subPath ?? null,
+      versionId: v.versionId ?? null,
     },
   });
   // Set labels
@@ -107,6 +109,7 @@ export async function updateTask(
     subPath?: string;
     previewCommandOverride?: string | null;
     previewPortOverride?: number | null;
+    versionId?: string | null;
   }
 ) {
   const v = updateTaskSchema.parse(data);

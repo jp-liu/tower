@@ -10,6 +10,7 @@ import { RepoSidebar } from "@/components/repository/repo-sidebar";
 import { TaskDetailPanel } from "@/components/task/task-detail-panel";
 import { createTask, updateTaskStatus, updateTask, deleteTask, toggleTaskPinned } from "@/actions/task-actions";
 import { startPtyExecution } from "@/actions/agent-actions";
+import { getVersionsForPicker } from "@/actions/version-actions";
 import { ProjectTabs } from "@/components/board/project-tabs";
 import type { TaskStatus, Priority } from "@prisma/client";
 import { TOWER_LABEL_NAME } from "@/lib/constants";
@@ -44,6 +45,14 @@ interface BoardPageClientProps {
   openTaskId?: string;
 }
 
+type VersionPickerItem = {
+  id: string;
+  number: string;
+  name: string;
+  isCurrent: boolean;
+  status: string;
+};
+
 export function BoardPageClient({
   workspaceId,
   projectId,
@@ -56,12 +65,21 @@ export function BoardPageClient({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [searchQuery, setSearchQuery] = useState("");
+  const [versionFilter, setVersionFilter] = useState<string>("all"); // "all" | "backlog" | versionId
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createDefaultStatus, setCreateDefaultStatus] = useState<TaskStatus>("TODO");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(openTaskId ?? null);
+  const [versions, setVersions] = useState<VersionPickerItem[]>([]);
   // Derive selectedTask from initialTasks so router.refresh auto-syncs status
   const selectedTask = selectedTaskId ? initialTasks.find((t) => t.id === selectedTaskId) ?? null : null;
   const [editingTask, setEditingTask] = useState<TaskWithLabels | null>(null);
+
+  // Fetch versions for the active project (for the version picker in create dialog)
+  useEffect(() => {
+    getVersionsForPicker(projectId).then(setVersions).catch(() => setVersions([]));
+  }, [projectId]);
+
+  const defaultVersionId = versions.find((v) => v.isCurrent)?.id ?? null;
 
   const refreshData = useCallback(() => {
     startTransition(() => {
@@ -91,7 +109,7 @@ export function BoardPageClient({
   }, [refreshData]);
 
   const handleCreateTask = useCallback(
-    async (data: { title: string; description: string; priority: Priority; status: TaskStatus; labelIds: string[]; baseBranch?: string; subPath?: string }) => {
+    async (data: { title: string; description: string; priority: Priority; status: TaskStatus; labelIds: string[]; baseBranch?: string; subPath?: string; versionId?: string | null }) => {
       await createTask({
         title: data.title,
         description: data.description,
@@ -101,13 +119,14 @@ export function BoardPageClient({
         labelIds: data.labelIds,
         baseBranch: data.baseBranch,
         subPath: data.subPath,
+        versionId: data.versionId ?? undefined,
       });
       refreshData();
     },
     [projectId, refreshData]
   );
 
-  const handleUpdateTask = useCallback(async (taskId: string, data: { title: string; description: string; priority: Priority; labelIds: string[]; subPath?: string }) => {
+  const handleUpdateTask = useCallback(async (taskId: string, data: { title: string; description: string; priority: Priority; labelIds: string[]; subPath?: string; versionId?: string | null }) => {
     await updateTask(taskId, { ...data, labelIds: data.labelIds });
     setEditingTask(null);
     refreshData();
@@ -156,18 +175,30 @@ export function BoardPageClient({
     (t) => !t.labels?.some((tl) => tl.label.name === TOWER_LABEL_NAME && tl.label.isBuiltin)
   );
 
-  const filteredTasks = searchQuery.trim()
-    ? boardTasks.filter((t) => {
-        const q = searchQuery.toLowerCase();
-        return t.title.toLowerCase().includes(q) ||
-          (t.description?.toLowerCase().includes(q) ?? false);
-      })
-    : boardTasks;
+  const filteredTasks = boardTasks.filter((t) => {
+    // Version filter: "all" = no filter, "backlog" = unassigned, else specific versionId
+    if (versionFilter === "backlog") {
+      if (t.versionId) return false;
+    } else if (versionFilter !== "all") {
+      if (t.versionId !== versionFilter) return false;
+    }
+    // Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      if (
+        !t.title.toLowerCase().includes(q) &&
+        !(t.description?.toLowerCase().includes(q) ?? false)
+      ) {
+        return false;
+      }
+    }
+    return true;
+  });
 
   return (
     <div className="flex h-full">
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Project Tabs — always show, single project also shown */}
+        {/* Project Tabs */}
         <div className="px-6 pt-3 pb-1">
           <ProjectTabs
             projects={projects}
@@ -186,6 +217,10 @@ export function BoardPageClient({
         <BoardFilters
           searchQuery={searchQuery}
           onSearchChange={handleSearchChange}
+          versions={versions}
+          versionFilter={versionFilter}
+          onVersionFilterChange={setVersionFilter}
+          versionsHref={`/workspaces/${workspaceId}/projects/${projectId}/versions`}
           onCreateTask={() => {
             setEditingTask(null);
             setShowCreateDialog(true);
@@ -229,6 +264,8 @@ export function BoardPageClient({
           labels={labels.filter((l) => !(l.name === TOWER_LABEL_NAME && l.isBuiltin))}
           projectType={project.type}
           projectLocalPath={project.localPath}
+          versions={versions}
+          defaultVersionId={defaultVersionId}
         />
       </div>
 
