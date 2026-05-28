@@ -76,12 +76,13 @@ describe("createWorktree", () => {
     expect(result).toEqual({ worktreePath: expectedWorktreePath, worktreeBranch: expectedBranch });
   });
 
-  it("symlinks node_modules for both repo root and subPath", async () => {
+  it("symlinks node_modules for both repo root and subPath when both have package.json", async () => {
     mockedExecFileSync.mockReturnValue("" as never);
-    // Source dependency dirs exist; targets do not (lstatSync throws)
-    mockedExistsSync.mockImplementation((p) =>
-      String(p).endsWith("node_modules")
-    );
+    // Both root and web are real projects (package.json) with node_modules
+    mockedExistsSync.mockImplementation((p) => {
+      const s = String(p);
+      return s.endsWith("node_modules") || s.endsWith("package.json");
+    });
     mockedLstatSync.mockImplementation(() => {
       throw new Error("ENOENT");
     });
@@ -90,6 +91,27 @@ describe("createWorktree", () => {
 
     const symlinkTargets = mockedSymlinkSync.mock.calls.map((c) => String(c[1]));
     expect(symlinkTargets).toContain(`${expectedWorktreePath}/node_modules`);
+    expect(symlinkTargets).toContain(`${expectedWorktreePath}/web/node_modules`);
+  });
+
+  it("skips the stray root node_modules when the repo root has no package.json", async () => {
+    mockedExecFileSync.mockReturnValue("" as never);
+    // Monorepo-style: only the subPath (web) is a real project. The root has a
+    // stray node_modules but no package.json, so it must NOT be linked.
+    mockedExistsSync.mockImplementation((p) => {
+      const s = String(p);
+      if (s === `${LOCAL_PATH}/package.json`) return false;
+      if (s === `${LOCAL_PATH}/web/package.json`) return true;
+      return s.endsWith("node_modules");
+    });
+    mockedLstatSync.mockImplementation(() => {
+      throw new Error("ENOENT");
+    });
+
+    await createWorktree(LOCAL_PATH, TASK_ID, BASE_BRANCH, "web");
+
+    const symlinkTargets = mockedSymlinkSync.mock.calls.map((c) => String(c[1]));
+    expect(symlinkTargets).not.toContain(`${expectedWorktreePath}/node_modules`);
     expect(symlinkTargets).toContain(`${expectedWorktreePath}/web/node_modules`);
   });
 
