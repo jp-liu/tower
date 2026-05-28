@@ -83,41 +83,23 @@ export class CodexCliAdapter implements CliAdapter {
     try {
       const hooks = this.readHooks();
       const root = getPackageRoot().replace(/\\/g, "/");
+      const sessionStart = path.join(root, "scripts", "session-start-hook.js").replace(/\\/g, "/");
+      const postTool = path.join(root, "scripts", "post-tool-hook.js").replace(/\\/g, "/");
+      const stop = path.join(root, "scripts", "stop-hook.js").replace(/\\/g, "/");
       let changed = false;
 
-      // SessionStart hook — reports sessionId
-      const sessionStartEntries = this.getHookArray(hooks, "SessionStart");
-      if (!this.hasHook(sessionStartEntries, "session-start-hook.js")) {
-        const hookPath = path.join(root, "scripts", "session-start-hook.js").replace(/\\/g, "/");
-        sessionStartEntries.push({
-          hooks: [{ command: `node "${hookPath}"`, timeout: 5, type: "command" }],
-        });
-        hooks["SessionStart"] = sessionStartEntries;
-        changed = true;
-      }
+      changed = this.upsertHook(hooks, "SessionStart", "session-start-hook.js", {
+        hooks: [{ command: `node "${sessionStart}"`, timeout: 5, type: "command" }],
+      }) || changed;
 
-      // PostToolUse hook — auto-uploads files
-      const postToolEntries = this.getHookArray(hooks, "PostToolUse");
-      if (!this.hasHook(postToolEntries, "post-tool-hook.js")) {
-        const hookPath = path.join(root, "scripts", "post-tool-hook.js").replace(/\\/g, "/");
-        postToolEntries.push({
-          hooks: [{ command: `node "${hookPath}"`, timeout: 10, type: "command" }],
-          matcher: "Write|Edit|MultiEdit",
-        });
-        hooks["PostToolUse"] = postToolEntries;
-        changed = true;
-      }
+      changed = this.upsertHook(hooks, "PostToolUse", "post-tool-hook.js", {
+        hooks: [{ command: `node "${postTool}"`, timeout: 10, type: "command" }],
+        matcher: "Write|Edit|MultiEdit",
+      }) || changed;
 
-      // Stop hook — notifies Tower when agent finishes
-      const stopEntries = this.getHookArray(hooks, "Stop");
-      if (!this.hasHook(stopEntries, "stop-hook.js")) {
-        const hookPath = path.join(root, "scripts", "stop-hook.js").replace(/\\/g, "/");
-        stopEntries.push({
-          hooks: [{ command: `node "${hookPath}"`, timeout: 5, type: "command" }],
-        });
-        hooks["Stop"] = stopEntries;
-        changed = true;
-      }
+      changed = this.upsertHook(hooks, "Stop", "stop-hook.js", {
+        hooks: [{ command: `node "${stop}"`, timeout: 5, type: "command" }],
+      }) || changed;
 
       if (changed) {
         this.writeHooks(hooks);
@@ -132,6 +114,37 @@ export class CodexCliAdapter implements CliAdapter {
         error: err instanceof Error ? err.message : String(err),
       };
     }
+  }
+
+  /**
+   * Install-or-refresh a hook entry. Removes any existing entries that
+   * reference our `filename` (caters for stale paths from older Tower versions
+   * that wrote `process.cwd()/scripts/...` from inside `.next/standalone/`)
+   * and pushes the freshly-built entry. Returns true when settings changed.
+   */
+  private upsertHook(
+    hooks: Record<string, unknown>,
+    event: string,
+    filename: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    entry: any,
+  ): boolean {
+    const entries = this.getHookArray(hooks, event);
+    const wanted = entry?.hooks?.[0]?.command as string | undefined;
+
+    const existingIndex = entries.findIndex((e) =>
+      e?.hooks?.some?.((h: { command?: string }) => h.command?.includes(filename))
+    );
+
+    if (existingIndex >= 0) {
+      const current = entries[existingIndex]?.hooks?.[0]?.command as string | undefined;
+      if (current === wanted) return false;
+      entries.splice(existingIndex, 1);
+    }
+
+    entries.push(entry);
+    hooks[event] = entries;
+    return true;
   }
 
   async uninstallHooks(): Promise<InstallResult> {

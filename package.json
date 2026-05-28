@@ -1,6 +1,6 @@
 {
   "name": "tower-studio",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "AI Task Orchestration Platform — Kanban + Terminal + Code Editor + MCP",
   "bin": {
     "tower": "bin/tower.mjs"
@@ -23,7 +23,6 @@
     "scripts/stop-hook.js",
     "dist/mcp-server.cjs",
     "skills/",
-    "src/mcp/",
     "next.config.ts",
     "tsconfig.json"
   ],

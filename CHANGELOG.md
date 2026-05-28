@@ -1,3 +1,13 @@
+# [0.2.8](/compare/v0.2.7...v0.2.8) (2026-05-28)
+
+
+### Bug Fixes
+
+* **hooks:** upsert (not just insert) — rewrite stale Claude/Codex hook paths in `~/.claude/settings.json` and `~/.codex/hooks.toml` when their command embeds an old `.next/standalone/scripts/...` path. Self-heals upgraders whose hooks were written by 0.2.5/0.2.6 before `TOWER_PACKAGE_ROOT` landed
+* **package:** drop `src/mcp/` from `files` — the runtime uses `dist/mcp-server.cjs` (bundled by esbuild), so the source tree was dead weight and accidentally shipped `__tests__/` too
+
+
+
 # [0.2.7](/compare/v0.2.6...v0.2.7) (2026-05-28)
 
 
