@@ -1,6 +1,6 @@
 {
   "name": "tower-studio",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "AI Task Orchestration Platform — Kanban + Terminal + Code Editor + MCP",
   "bin": {
     "tower": "bin/tower.mjs"
@@ -10,6 +10,7 @@
     ".next/standalone/",
     "prisma/schema.prisma",
     "prisma/init-fts.ts",
+    "prisma/pre-migration.sql",
     "scripts/init-db.ts",
     "scripts/generate-prisma-client.js",
     "scripts/link-prisma.js",

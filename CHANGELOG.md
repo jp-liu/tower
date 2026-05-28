@@ -1,3 +1,12 @@
+# [0.2.5](/compare/v0.2.4...v0.2.5) (2026-05-28)
+
+
+### Bug Fixes
+
+* **boot:** drop FTS5 shadow tables and checkpoint WAL before `db push` — fixes "no such table: notes_fts_config" mid-migration crash on upgrade
+
+
+
 # [0.2.4](/compare/v0.2.3...v0.2.4) (2026-05-28)
 
 

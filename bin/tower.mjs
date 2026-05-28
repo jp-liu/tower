@@ -231,6 +231,19 @@ function ensureSchemaCurrent() {
   const tsxBin = resolveBin("tsx", "tsx");
 
   log("Schema changed — migrating database (this only runs on upgrade)...");
+
+  // FTS5 shadow tables (`notes_fts_config`, `_data`, `_idx`, …) live outside
+  // `schema.prisma`; `db push` tries to drop them individually and crashes
+  // ("no such table: notes_fts_config") when WAL holds a stale view or the
+  // shadows are partially missing. Drop the virtual table up-front so Prisma
+  // sees a clean slate, then init-fts rebuilds the index below.
+  log("Clearing FTS5 index before schema migration...");
+  run(prismaBin, [
+    "db", "execute",
+    "--file", "prisma/pre-migration.sql",
+    "--schema", "prisma/schema.prisma",
+  ]);
+
   run(prismaBin, ["db", "push", "--skip-generate", "--accept-data-loss"]);
 
   log("Updating builtin labels and defaults...");
