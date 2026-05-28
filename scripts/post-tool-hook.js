@@ -25,53 +25,38 @@ const DEFAULT_TYPES = ["png", "jpg", "jpeg", "gif", "webp", "svg", "pdf", "md", 
 const FILE_WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit"]);
 
 function main() {
-  const taskId = process.env.TOWER_TASK_ID;
-  if (!taskId) {
-    process.exit(0);
-  }
-
-  const apiUrl = process.env.TOWER_API_URL;
-  if (!apiUrl) {
-    process.exit(0);
-  }
-
-  // SECURITY: Only talk to localhost — refuse remote servers
-  try {
-    const parsed = new URL(apiUrl);
-    if (!["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)) {
-      process.exit(0);
-    }
-  } catch {
-    process.exit(0);
-  }
-
-  // Read stdin with timeout
+  // Always drain stdin first — Claude Code writes the hook payload there
+  // and if we exit before reading it, Windows libuv can crash the parent
+  // process on the now-orphaned write side of the pipe.
   let input = "";
-  const timeout = setTimeout(() => {
-    // Stdin timeout — exit silently
-    process.exit(0);
-  }, 10000);
+  const timeout = setTimeout(() => process.exit(0), 10000);
 
   process.stdin.setEncoding("utf8");
-  process.stdin.on("data", (chunk) => {
-    input += chunk;
-  });
+  process.stdin.on("data", (chunk) => { input += chunk; });
+  process.stdin.on("error", () => { clearTimeout(timeout); process.exit(0); });
+  if (process.stdin.isTTY) { clearTimeout(timeout); process.exit(0); }
 
   process.stdin.on("end", () => {
     clearTimeout(timeout);
+
+    const taskId = process.env.TOWER_TASK_ID;
+    if (!taskId) process.exit(0);
+
+    const apiUrl = process.env.TOWER_API_URL;
+    if (!apiUrl) process.exit(0);
+
+    // SECURITY: Only talk to localhost — refuse remote servers
+    try {
+      const parsed = new URL(apiUrl);
+      if (!["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)) {
+        process.exit(0);
+      }
+    } catch {
+      process.exit(0);
+    }
+
     processInput(input, taskId, apiUrl);
   });
-
-  process.stdin.on("error", () => {
-    clearTimeout(timeout);
-    process.exit(0);
-  });
-
-  // If stdin is not a pipe (e.g., running interactively), exit
-  if (process.stdin.isTTY) {
-    clearTimeout(timeout);
-    process.exit(0);
-  }
 }
 
 function processInput(input, taskId, apiUrl) {

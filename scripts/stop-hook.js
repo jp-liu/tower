@@ -18,30 +18,35 @@ const http = require("http");
 const https = require("https");
 
 function main() {
-  const taskId = process.env.TOWER_TASK_ID;
-  if (!taskId) process.exit(0);
-
-  const apiUrl = process.env.TOWER_API_URL;
-  if (!apiUrl) process.exit(0);
-
-  // SECURITY: Only talk to localhost
-  try {
-    const parsed = new URL(apiUrl);
-    if (!["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)) {
-      process.exit(0);
-    }
-  } catch {
-    process.exit(0);
-  }
-
+  // Always drain stdin first — Claude Code writes the hook payload there
+  // and if we exit before reading it, Windows libuv can crash the parent
+  // process on the now-orphaned write side of the pipe.
   let input = "";
   const timeout = setTimeout(() => process.exit(0), 5000);
 
   process.stdin.setEncoding("utf8");
   process.stdin.on("data", (chunk) => { input += chunk; });
+  process.stdin.on("error", () => { clearTimeout(timeout); process.exit(0); });
+  if (process.stdin.isTTY) { clearTimeout(timeout); process.exit(0); }
 
   process.stdin.on("end", () => {
     clearTimeout(timeout);
+
+    const taskId = process.env.TOWER_TASK_ID;
+    if (!taskId) process.exit(0);
+
+    const apiUrl = process.env.TOWER_API_URL;
+    if (!apiUrl) process.exit(0);
+
+    // SECURITY: Only talk to localhost
+    try {
+      const parsed = new URL(apiUrl);
+      if (!["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)) {
+        process.exit(0);
+      }
+    } catch {
+      process.exit(0);
+    }
 
     let data;
     try { data = JSON.parse(input); } catch { process.exit(0); }
@@ -70,9 +75,6 @@ function main() {
     req.write(payload);
     req.end();
   });
-
-  process.stdin.on("error", () => { clearTimeout(timeout); process.exit(0); });
-  if (process.stdin.isTTY) { clearTimeout(timeout); process.exit(0); }
 }
 
 main();

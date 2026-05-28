@@ -204,6 +204,66 @@ function parseJson(value: string): Record<string, unknown> | null {
   }
 }
 
+/**
+ * Extract a useful summary from probe stdout when the expected "hello" word
+ * isn't found. Tries stream-json parsing first (every line is a JSON event:
+ * `assistant`, `result`, `hook_started/completed/failed`, ...), falling back
+ * to a raw 800-char preview for non-JSON output. Without this, users see only
+ * the first 120 bytes — typically just `{"type":"system","subtype":"hook_started"...`,
+ * which hides whatever actually went wrong.
+ */
+function buildProbeMismatchMessage(command: string, output: string): string {
+  const events: Record<string, unknown>[] = [];
+  for (const line of output.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const json = parseJson(trimmed);
+    if (json) events.push(json);
+  }
+
+  if (events.length > 0) {
+    const hookFailures = events
+      .filter((e) => e.subtype === "hook_failed" || e.subtype === "hook_error")
+      .map((e) => `${e.hook_name ?? "hook"}: ${e.error ?? e.message ?? "failed"}`);
+
+    const assistantText = events
+      .filter((e) => e.type === "assistant" || e.type === "result")
+      .map((e) => extractText(e))
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+
+    const parts: string[] = [];
+    if (hookFailures.length) parts.push(`hook errors: ${hookFailures.join("; ")}`);
+    if (assistantText) parts.push(`assistant said: ${assistantText.slice(0, 400)}`);
+    if (parts.length === 0) {
+      // Stream-json parsed but no assistant message — claude likely cut off
+      // before responding. Surface the last event so we can diagnose.
+      const last = events[events.length - 1];
+      parts.push(`last event: ${JSON.stringify(last).slice(0, 400)}`);
+    }
+    return `${command} probe ran but missing "hello" — ${parts.join("; ")}`;
+  }
+
+  return `${command} probe ran but returned unexpected output: ${output.slice(0, 800)}`;
+}
+
+function extractText(event: Record<string, unknown>): string {
+  // Claude stream-json: { type: "assistant", message: { content: [{ type: "text", text: "…" }, …] } }
+  const msg = event.message as Record<string, unknown> | undefined;
+  const content = msg?.content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((c) => (c as Record<string, unknown>).type === "text")
+      .map((c) => String((c as Record<string, unknown>).text ?? ""))
+      .join(" ");
+  }
+  // Codex / fallback shapes
+  if (typeof event.result === "string") return event.result;
+  if (typeof event.text === "string") return event.text;
+  return "";
+}
+
 function parseClaudeStreamJson(stdout: string) {
   let sessionId: string | null = null;
   let model = "";
@@ -445,7 +505,7 @@ async function testWithAdapter(
         passed: hasHello,
         message: hasHello
           ? `${command} hello probe succeeded`
-          : `${command} probe ran but returned unexpected output: ${output.slice(0, 120)}`,
+          : buildProbeMismatchMessage(command, output),
       });
     } else {
       const stderrLine =

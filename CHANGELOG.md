@@ -1,3 +1,13 @@
+# [0.2.9](/compare/v0.2.8...v0.2.9) (2026-05-28)
+
+
+### Bug Fixes
+
+* **hooks:** drain stdin in all three hook scripts (`session-start`, `post-tool`, `stop`) before any early exit — Claude Code writes its payload to the hook's stdin, and exiting before reading drops the write side mid-stream. On Windows libuv races on the orphaned pipe and Claude either crashes or hangs after the `hook_started` event without emitting `hook_completed`
+* **cli-test:** parse stream-json output when the hello probe is missing the literal "hello" — surface hook failures, the assistant's actual response, or the last event instead of a 120-char raw-bytes preview that almost never contains anything useful
+
+
+
 # [0.2.8](/compare/v0.2.7...v0.2.8) (2026-05-28)
 
 
