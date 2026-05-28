@@ -309,12 +309,26 @@ export class ClaudeCliAdapter implements CliAdapter {
 
       const existing = await fs.promises.lstat(target).catch(() => null);
       if (existing) {
-        if (existing.isSymbolicLink()) {
-          const current = await fs.promises.readlink(target);
-          if (path.resolve(current) === path.resolve(sourceDir)) {
-            return { ok: true, method: "symlink", detail: `${target} → ${sourceDir} (already)` };
+        // Windows junctions show up as both `isSymbolicLink` and `isDirectory`,
+        // so accept either form when checking for a link we own.
+        if (existing.isSymbolicLink() || (process.platform === "win32" && existing.isDirectory())) {
+          try {
+            const current = await fs.promises.readlink(target);
+            if (path.resolve(current) === path.resolve(sourceDir)) {
+              return { ok: true, method: "symlink", detail: `${target} → ${sourceDir} (already)` };
+            }
+            await fs.promises.unlink(target);
+          } catch {
+            // Not a readlink-able entry (real dir on win32) — refuse to overwrite.
+            if (!existing.isSymbolicLink()) {
+              return {
+                ok: false,
+                method: "symlink",
+                detail: target,
+                error: `Refusing to overwrite non-symlink at ${target}`,
+              };
+            }
           }
-          await fs.promises.unlink(target);
         } else {
           // Real directory / file at target — refuse to overwrite user data.
           return {
@@ -326,7 +340,12 @@ export class ClaudeCliAdapter implements CliAdapter {
         }
       }
 
-      await fs.promises.symlink(sourceDir, target, "dir");
+      // On Windows, `type: "dir"` needs Admin / Developer Mode / Symlink
+      // privilege; `type: "junction"` is an NTFS reparse point that any
+      // user can create and behaves identically for the read-only scan
+      // Claude does over `~/.claude/skills/`. POSIX always uses `dir`.
+      const linkType = process.platform === "win32" ? "junction" : "dir";
+      await fs.promises.symlink(sourceDir, target, linkType);
       return { ok: true, method: "symlink", detail: `${target} → ${sourceDir}` };
     } catch (err) {
       return {

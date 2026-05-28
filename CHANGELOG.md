@@ -1,3 +1,13 @@
+# [0.2.11](/compare/v0.2.10...v0.2.11) (2026-05-28)
+
+
+### Bug Fixes
+
+* **windows:** install skill via NTFS junction instead of a `dir` symlink — `fs.symlink(..., "dir")` requires Administrator / Developer Mode privilege on Windows and silently fails for normal users, leaving `skillsInstalled: false` and locking them out via the connection gate. Junctions are unprivileged and behave identically for the read-only directory scan Claude/Codex do over `~/.<provider>/skills/`
+* **providers:** loosen the "connected" gate to require only `testOk` (hello probe passed). MCP/hooks/skill install flags are still recorded and shown in Settings, but they no longer block slot resolution — a working CLI is enough to launch a terminal. Stops the lockout when a non-essential integration trips up on an environmental issue
+
+
+
 # [0.2.10](/compare/v0.2.9...v0.2.10) (2026-05-28)
 
 

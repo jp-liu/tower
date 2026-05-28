@@ -92,23 +92,23 @@ export async function markProviderDisconnected(
 }
 
 /**
- * "Connected" = (a) hello probe passed AND (b) every required integration
- * installed. Slots only see providers that pass this bar.
+ * "Connected" = the hello probe passed. We used to also require
+ * `mcpInstalled && hooksInstalled && skillsInstalled`, but that's overkill:
+ * a working CLI is enough to launch a terminal session, and on Windows the
+ * skill symlink / hook write commonly fails for environmental reasons
+ * (admin rights, AV interference) — those shouldn't lock the user out of
+ * a CLI that otherwise works. The Settings UI still surfaces per-integration
+ * install status so users see what's degraded.
  */
 export async function isProviderConnected(provider: string): Promise<boolean> {
   const row = await db.providerConnection.findUnique({ where: { provider } });
   if (!row) return false;
-  return row.testOk && row.mcpInstalled && row.hooksInstalled && row.skillsInstalled;
+  return row.testOk;
 }
 
 export async function getConnectedProviders(): Promise<string[]> {
   const rows = await db.providerConnection.findMany({
-    where: {
-      testOk: true,
-      mcpInstalled: true,
-      hooksInstalled: true,
-      skillsInstalled: true,
-    },
+    where: { testOk: true },
     select: { provider: true },
     orderBy: { provider: "asc" },
   });

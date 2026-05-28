@@ -103,14 +103,14 @@ describe("provider-connection-actions", () => {
       expect(await isProviderConnected("claude")).toBe(true);
     });
 
-    it("returns false when test passed but mcp install failed", async () => {
+    it("returns true even when an integration install partially failed (CLI itself works)", async () => {
       mockDb.providerConnection.findUnique.mockResolvedValue({
         testOk: true,
         mcpInstalled: false,
         hooksInstalled: true,
         skillsInstalled: true,
       });
-      expect(await isProviderConnected("claude")).toBe(false);
+      expect(await isProviderConnected("claude")).toBe(true);
     });
 
     it("returns false when probe failed regardless of installs", async () => {
@@ -125,7 +125,7 @@ describe("provider-connection-actions", () => {
   });
 
   describe("getConnectedProviders", () => {
-    it("queries with all flags set to true", async () => {
+    it("queries by testOk alone — install flags surface in Settings, not as a gate", async () => {
       mockDb.providerConnection.findMany.mockResolvedValue([
         { provider: "claude" },
         { provider: "codex" },
@@ -133,12 +133,7 @@ describe("provider-connection-actions", () => {
       const list = await getConnectedProviders();
       expect(list).toEqual(["claude", "codex"]);
       const call = mockDb.providerConnection.findMany.mock.calls[0][0];
-      expect(call.where).toEqual({
-        testOk: true,
-        mcpInstalled: true,
-        hooksInstalled: true,
-        skillsInstalled: true,
-      });
+      expect(call.where).toEqual({ testOk: true });
     });
   });
 });
