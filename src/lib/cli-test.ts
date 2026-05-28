@@ -248,6 +248,22 @@ function buildProbeMismatchMessage(command: string, output: string): string {
   return `${command} probe ran but returned unexpected output: ${output.slice(0, 800)}`;
 }
 
+/** Walk stream-json events and return the concatenated assistant/result text. */
+function extractAssistantText(output: string): string {
+  const parts: string[] = [];
+  for (const line of output.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const json = parseJson(trimmed);
+    if (!json) continue;
+    if (json.type === "assistant" || json.type === "result") {
+      const text = extractText(json);
+      if (text) parts.push(text);
+    }
+  }
+  return parts.join(" ").trim();
+}
+
 function extractText(event: Record<string, unknown>): string {
   // Claude stream-json: { type: "assistant", message: { content: [{ type: "text", text: "…" }, …] } }
   const msg = event.message as Record<string, unknown> | undefined;
@@ -499,12 +515,17 @@ async function testWithAdapter(
       });
     } else if ((probe.exitCode ?? 1) === 0) {
       const output = probe.stdout.trim();
-      const hasHello = /\bhello\b/i.test(output);
+      const assistantText = extractAssistantText(output);
+      // Pass as long as the model actually responded with text. Earlier
+      // versions required a literal "hello", but real models freely say
+      // "Hey!" / "Sure!" / "Hi there" — locking those out was just noise
+      // around a CLI that genuinely works.
+      const passed = assistantText.length > 0;
       checks.push({
         name: `${providerName}_hello_probe`,
-        passed: hasHello,
-        message: hasHello
-          ? `${command} hello probe succeeded`
+        passed,
+        message: passed
+          ? `${command} hello probe succeeded (model replied: ${assistantText.slice(0, 80)})`
           : buildProbeMismatchMessage(command, output),
       });
     } else {

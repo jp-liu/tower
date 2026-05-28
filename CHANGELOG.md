@@ -1,3 +1,13 @@
+# [0.2.12](/compare/v0.2.11...v0.2.12) (2026-05-28)
+
+
+### Bug Fixes
+
+* **probe:** pass on any non-empty assistant text, not a literal "hello" — models that respond with "Hey!" / "Sure!" / "Hi there" no longer falsely fail Test Connection while the underlying CLI is fully working
+* **extensions:** switch ripgrep + monaco installers from `pnpm` to `npm` and run from `TOWER_PACKAGE_ROOT` — end-user machines (especially Windows) rarely have pnpm on PATH, so `spawn pnpm ENOENT` was breaking optional extension install. Windows now spawns `npm.cmd` via `shell: true` to satisfy Node's CVE-2024-27980 mitigation
+
+
+
 # [0.2.11](/compare/v0.2.10...v0.2.11) (2026-05-28)
 
 

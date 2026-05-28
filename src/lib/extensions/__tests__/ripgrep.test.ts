@@ -79,7 +79,7 @@ describe("ripgrep extension — dual-track check", () => {
     expect(status.installed).toBe(false);
   });
 
-  it("install runs pnpm add @vscode/ripgrep and returns success", async () => {
+  it("install runs npm install @vscode/ripgrep and returns success", async () => {
     // Need @vscode/ripgrep mock for the post-install verification step
     vi.doMock("@vscode/ripgrep", () => ({
       rgPath: "/repo/node_modules/@vscode/ripgrep/bin/rg",
@@ -95,8 +95,8 @@ describe("ripgrep extension — dual-track check", () => {
     const result = await ext.install();
     expect(result.success).toBe(true);
     expect(cp.execFile).toHaveBeenCalledWith(
-      "pnpm",
-      ["add", "@vscode/ripgrep"],
+      "npm",
+      ["install", "@vscode/ripgrep"],
       expect.any(Object),
       expect.any(Function)
     );

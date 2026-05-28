@@ -71,7 +71,7 @@ describe("monaco extension — check", () => {
 });
 
 describe("monaco extension — install", () => {
-  it("install runs pnpm add then inline-copies vs assets to public/vs", async () => {
+  it("install runs npm install then inline-copies vs assets to public/vs", async () => {
     const cp = await import("child_process");
     (cp.execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
       (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
@@ -85,8 +85,8 @@ describe("monaco extension — install", () => {
     const result = await ext.install();
     expect(result.success).toBe(true);
     expect(cp.execFile).toHaveBeenCalledTimes(1);
-    expect((cp.execFile as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe("pnpm");
-    expect((cp.execFile as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]).toEqual(["add", "monaco-editor"]);
+    expect((cp.execFile as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe("npm");
+    expect((cp.execFile as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]).toEqual(["install", "monaco-editor"]);
     expect(fs.cpSync).toHaveBeenCalledWith(
       expect.stringContaining("monaco-editor/min/vs"),
       expect.stringContaining("public/vs"),
@@ -126,7 +126,7 @@ describe("monaco extension — install", () => {
 });
 
 describe("monaco extension — uninstall", () => {
-  it("uninstall removes public/vs then runs pnpm remove", async () => {
+  it("uninstall removes public/vs then runs npm uninstall", async () => {
     const fs = await import("fs");
     (fs.existsSync as unknown as ReturnType<typeof vi.fn>).mockReturnValue(true);
     const cp = await import("child_process");
@@ -144,8 +144,8 @@ describe("monaco extension — uninstall", () => {
       expect.objectContaining({ recursive: true, force: true })
     );
     expect(cp.execFile).toHaveBeenCalledWith(
-      "pnpm",
-      ["remove", "monaco-editor"],
+      "npm",
+      ["uninstall", "monaco-editor"],
       expect.any(Object),
       expect.any(Function)
     );

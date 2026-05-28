@@ -1,13 +1,14 @@
 import { Search } from "lucide-react";
 import { execFile } from "child_process";
 import { existsSync } from "fs";
+import { getPackageRoot } from "@/lib/tower-paths";
 import type { Extension, ExtensionStatus, ExtensionResult } from "../types";
 
 /** Promisify wrapper that always calls through the live execFile reference */
 function execFileP(
   cmd: string,
   args: string[],
-  opts: { timeout: number }
+  opts: { timeout: number; cwd?: string; shell?: boolean }
 ): Promise<{ stdout: string }> {
   return new Promise((resolve, reject) => {
     execFile(cmd, args, opts, (err, stdout) => {
@@ -15,6 +16,17 @@ function execFileP(
       else resolve({ stdout: stdout as string });
     });
   });
+}
+
+/** npm options: run from package root so deps land in the right node_modules,
+ *  and on Windows use shell:true so `npm.cmd` resolves (Node refuses to
+ *  execFile `.cmd` shims since CVE-2024-27980). */
+function npmOpts(timeout: number) {
+  return {
+    timeout,
+    cwd: getPackageRoot(),
+    shell: process.platform === "win32",
+  };
 }
 
 async function runVersion(rgPath: string): Promise<string | undefined> {
@@ -69,7 +81,7 @@ async function check(): Promise<ExtensionStatus> {
 
 async function install(): Promise<ExtensionResult> {
   try {
-    await execFileP("pnpm", ["add", "@vscode/ripgrep"], { timeout: 120_000 });
+    await execFileP("npm", ["install", "@vscode/ripgrep"], npmOpts(120_000));
     // Clear cached rg path so next searchCode call re-resolves.
     try {
       const { clearRgPathCache } = await import("@/actions/search-code-actions");
@@ -77,14 +89,14 @@ async function install(): Promise<ExtensionResult> {
     } catch {
       // Best-effort — if module load fails, the cache will refresh at server restart.
     }
-    // Verify the binary actually exists — pnpm add succeeds even if the
+    // Verify the binary actually exists — npm install succeeds even if the
     // package's postinstall (binary download) fails silently.
     const verified = await detectPackageBinary();
     if (!verified) {
       return {
         success: false,
         error:
-          "@vscode/ripgrep installed but the rg binary is missing — postinstall download likely failed. Try running `pnpm install` manually or check network access to GitHub releases.",
+          "@vscode/ripgrep installed but the rg binary is missing — postinstall download likely failed. Check network access to GitHub releases (the package downloads its native binary on install).",
       };
     }
     return { success: true, message: "Installed @vscode/ripgrep" };
@@ -95,7 +107,7 @@ async function install(): Promise<ExtensionResult> {
 
 async function uninstall(): Promise<ExtensionResult> {
   try {
-    await execFileP("pnpm", ["remove", "@vscode/ripgrep"], { timeout: 60_000 });
+    await execFileP("npm", ["uninstall", "@vscode/ripgrep"], npmOpts(60_000));
     // Clear cached rg path so next searchCode attempt detects absence.
     try {
       const { clearRgPathCache } = await import("@/actions/search-code-actions");

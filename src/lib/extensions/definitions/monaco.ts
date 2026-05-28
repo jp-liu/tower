@@ -3,19 +3,33 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { cpSync, existsSync, readFileSync, rmSync } from "fs";
 import path from "path";
+import { getPackageRoot } from "@/lib/tower-paths";
 import type { Extension, ExtensionStatus, ExtensionResult } from "../types";
 
 const execFileAsync = promisify(execFile);
 
-const MONACO_PKG = path.join(process.cwd(), "node_modules", "monaco-editor", "package.json");
-const MONACO_VS_SRC = path.join(process.cwd(), "node_modules", "monaco-editor", "min", "vs");
-const PUBLIC_VS_LOADER = path.join(process.cwd(), "public", "vs", "loader.js");
-const PUBLIC_VS = path.join(process.cwd(), "public", "vs");
+// Resolve from the package root, not `process.cwd()` — in the standalone
+// runtime cwd is `.next/standalone/`, where node_modules/public live one
+// level up. `getPackageRoot()` reads TOWER_PACKAGE_ROOT exported by bin/tower.mjs.
+const MONACO_PKG = path.join(getPackageRoot(), "node_modules", "monaco-editor", "package.json");
+const MONACO_VS_SRC = path.join(getPackageRoot(), "node_modules", "monaco-editor", "min", "vs");
+const PUBLIC_VS_LOADER = path.join(getPackageRoot(), "public", "vs", "loader.js");
+const PUBLIC_VS = path.join(getPackageRoot(), "public", "vs");
+
+/** npm options: run from package root, and on Windows use shell:true so
+ *  `npm.cmd` resolves (Node refuses to execFile `.cmd` since CVE-2024-27980). */
+function npmOpts(timeout: number) {
+  return {
+    timeout,
+    cwd: getPackageRoot(),
+    shell: process.platform === "win32",
+  };
+}
 
 /** Copy monaco-editor/min/vs → public/vs so the editor loads locally without CDN. */
 function copyAssetsToPublic(): void {
   if (!existsSync(MONACO_VS_SRC)) {
-    throw new Error("monaco-editor/min/vs not found after install — pnpm add may have failed silently");
+    throw new Error("monaco-editor/min/vs not found after install — npm install may have failed silently");
   }
   cpSync(MONACO_VS_SRC, PUBLIC_VS, { recursive: true });
 }
@@ -42,7 +56,7 @@ async function check(): Promise<ExtensionStatus> {
 
 async function install(): Promise<ExtensionResult> {
   try {
-    await execFileAsync("pnpm", ["add", "monaco-editor"], { timeout: 180_000 });
+    await execFileAsync("npm", ["install", "monaco-editor"], npmOpts(180_000));
     copyAssetsToPublic();
     return { success: true, message: "Installed Monaco editor + assets" };
   } catch (err) {
@@ -55,7 +69,7 @@ async function uninstall(): Promise<ExtensionResult> {
     if (existsSync(PUBLIC_VS)) {
       rmSync(PUBLIC_VS, { recursive: true, force: true });
     }
-    await execFileAsync("pnpm", ["remove", "monaco-editor"], { timeout: 60_000 });
+    await execFileAsync("npm", ["uninstall", "monaco-editor"], npmOpts(60_000));
     return { success: true, message: "Removed Monaco editor + assets" };
   } catch (err) {
     return { success: false, error: (err as Error).message };
