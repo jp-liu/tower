@@ -2,10 +2,8 @@
 
 import { execFile, execFileSync } from "child_process";
 import { existsSync } from "fs";
-import path from "path";
 import { z } from "zod";
 import { getConfigValue } from "@/actions/config-actions";
-import { getExtensionsDir } from "@/lib/tower-dir";
 
 export type SearchErrorKind =
   | "timeout"
@@ -14,39 +12,19 @@ export type SearchErrorKind =
   | "aborted"
   | "unknown";
 
-/** Resolve rg binary: extension install in `~/.tower/extensions/` first,
- * system rg fallback. Verifies the binary file actually exists — the
- * `@vscode/ripgrep` package may install while its postinstall download
- * silently fails, leaving `rgPath` pointing at a missing file. */
+/** Resolve rg binary from the user's PATH. We don't auto-install ripgrep
+ * anymore (see lib/extensions/definitions/ripgrep.ts) — users install it via
+ * brew/winget/apt and we just detect it. */
 function resolveRgPath(): string {
+  const finder = process.platform === "win32" ? "where" : "which";
   try {
-    const pkgEntry = path.join(getExtensionsDir(), "node_modules", "@vscode", "ripgrep");
-    if (existsSync(pkgEntry)) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pkgPath = (require(pkgEntry) as { rgPath: string }).rgPath;
-      if (pkgPath && existsSync(pkgPath)) return pkgPath;
-    }
+    const stdout = execFileSync(finder, ["rg"], { encoding: "utf-8", timeout: 3000 });
+    const firstLine = stdout.split(/\r?\n/)[0]?.trim();
+    if (firstLine && existsSync(firstLine)) return firstLine;
   } catch {
-    // extension workspace doesn't have it — fall through to system fallback
+    // not on PATH
   }
-  try {
-    const sysPath = execFileSync("which", ["rg"], { encoding: "utf-8" }).trim();
-    if (sysPath && existsSync(sysPath)) return sysPath;
-  } catch {
-    // which failed (e.g. Windows without WSL) — fall through
-  }
-  // Windows fallback: `where rg`
-  if (process.platform === "win32") {
-    try {
-      const sysPath = execFileSync("where", ["rg"], { encoding: "utf-8" })
-        .split(/\r?\n/)[0]
-        .trim();
-      if (sysPath && existsSync(sysPath)) return sysPath;
-    } catch {
-      // not on PATH
-    }
-  }
-  throw new Error("ripgrep not found: install @vscode/ripgrep or system rg");
+  throw new Error("ripgrep not found on PATH — install via brew/winget/apt and try again");
 }
 
 let _rgPath: string | undefined;

@@ -976,6 +976,8 @@ export const zh = {
   "settings.extensions.uninstalling": "卸载中...",
   "settings.extensions.recheck": "重新检测",
   "settings.extensions.visitHomepage": "访问官网",
+  "settings.extensions.installViaHomepage": "前往官网安装",
+  "settings.extensions.manualInstallHint": "此依赖是原生二进制，跨平台自动下载不可靠。推荐通过系统包管理器安装（macOS：brew install ripgrep；Windows：winget install BurntSushi.ripgrep；Linux：apt/dnf/pacman install ripgrep），或从官网下载预编译版本。装好后点「重新检测」。",
   "settings.extensions.installSuccess": "已安装 {name}",
   "settings.extensions.installFailed": "安装 {name} 失败",
   "settings.extensions.uninstallSuccess": "已卸载 {name}",

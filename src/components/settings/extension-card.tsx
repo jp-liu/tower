@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2, Circle, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 import { useExtension } from "@/lib/extensions/client";
 import type { ExtensionMetadata } from "@/lib/extensions/types";
@@ -131,6 +132,24 @@ export function ExtensionCard({ extension }: ExtensionCardProps) {
               )}
             </Button>
           </>
+        ) : extension.manualInstall ? (
+          // Native binary extensions (ripgrep): don't auto-install. Point the
+          // user at the project homepage and let them use their OS package
+          // manager. The button itself opens the homepage so a misclick on
+          // "Install" still does something useful.
+          <Tooltip>
+            <TooltipTrigger
+              render={(props) => (
+                <Button variant="default" onClick={handleOpenHomepage} {...props}>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  {t("settings.extensions.installViaHomepage")}
+                </Button>
+              )}
+            />
+            <TooltipContent className="max-w-xs text-xs leading-relaxed">
+              {t("settings.extensions.manualInstallHint")}
+            </TooltipContent>
+          </Tooltip>
         ) : (
           <Button
             variant="default"

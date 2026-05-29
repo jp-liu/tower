@@ -960,6 +960,8 @@ export const en: Translations = {
   "settings.extensions.uninstalling": "Uninstalling...",
   "settings.extensions.recheck": "Recheck",
   "settings.extensions.visitHomepage": "Visit homepage",
+  "settings.extensions.installViaHomepage": "Install from homepage",
+  "settings.extensions.manualInstallHint": "This dependency is a native binary; cross-platform auto-download is unreliable. We recommend installing via your OS package manager (macOS: brew install ripgrep; Windows: winget install BurntSushi.ripgrep; Linux: apt/dnf/pacman install ripgrep), or grab a prebuilt binary from the homepage. Click \"Recheck\" once installed.",
   "settings.extensions.installSuccess": "Installed {name}",
   "settings.extensions.installFailed": "Failed to install {name}",
   "settings.extensions.uninstallSuccess": "Uninstalled {name}",

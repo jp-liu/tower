@@ -1,3 +1,14 @@
+# [0.2.16](/compare/v0.2.15...v0.2.16) (2026-05-29)
+
+
+### Bug Fixes
+
+* **monaco:** drop the `npm install` install path entirely. We now download the `monaco-editor` tarball directly from npmmirror and extract it (with the existing `tar` dep) into `~/.tower/extensions/monaco/`. Removes the whole class of failures around `~/.npmrc prefix=` overrides, npm CLI absence, `npm.cmd` CVE-2024-27980 wrapping on Windows, and untrusted postinstall scripts. The Monaco API route (`/api/internal/monaco/[...path]`) now streams from the new path
+* **ripgrep:** stop pretending we can auto-install a native Rust binary. The "Install" button is replaced with "Install from homepage" + a tooltip explaining why (GitHub releases unreliable in restricted networks, no domestic mirror), pointing users at `brew install ripgrep` / `winget install BurntSushi.ripgrep` / `apt install ripgrep`. `check()` keeps detecting the binary on PATH so installing it manually still flips the badge to ✓
+* **search:** ripgrep resolution in code search now only looks at the user's PATH (with `where` on Windows + `which` on POSIX). The dead `@vscode/ripgrep` import path is gone, along with the dependency itself
+
+
+
 # [0.2.15](/compare/v0.2.14...v0.2.15) (2026-05-28)
 
 

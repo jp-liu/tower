@@ -26,6 +26,13 @@ export interface ExtensionMetadata {
   icon: LucideIcon;
   sizeMB: number;
   homepageUrl: string;
+  /**
+   * When true, Tower will NOT auto-install this extension. The UI shows
+   * an info tooltip on the install button pointing users to homepageUrl.
+   * Use for native binaries (ripgrep) where cross-platform auto-download
+   * is unreliable in restricted networks.
+   */
+  manualInstall?: boolean;
 }
 
 /**

@@ -53,13 +53,9 @@ export async function GET(
     }
   }
 
-  const monacoRoot = path.join(
-    getExtensionsDir(),
-    "node_modules",
-    "monaco-editor",
-    "min",
-    "vs",
-  );
+  // Layout is the tarball-extracted form (see lib/extensions/definitions/monaco.ts):
+  //   ~/.tower/extensions/monaco/min/vs/<path>
+  const monacoRoot = path.join(getExtensionsDir(), "monaco", "min", "vs");
   const filePath = path.join(monacoRoot, ...segments);
 
   // Defence in depth — make sure the resolved path stays under monacoRoot.

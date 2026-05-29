@@ -1,96 +1,54 @@
 import { Search } from "lucide-react";
-import { execFile } from "child_process";
-import { existsSync, mkdirSync, writeFileSync } from "fs";
-import path from "path";
-import { getExtensionsDir } from "@/lib/tower-dir";
+import { execFile, execFileSync } from "child_process";
+import { existsSync } from "fs";
 import type { Extension, ExtensionStatus, ExtensionResult } from "../types";
 
-/** Promisify wrapper that always calls through the live execFile reference */
+/**
+ * ripgrep is a Rust binary. Auto-downloading it cross-platform from inside
+ * Tower is fragile (GitHub releases get rate-limited / blocked in CN, and
+ * there's no reliable domestic mirror). We instead detect a pre-installed
+ * `rg` on PATH and, if absent, surface a homepage link so the user can
+ * install it via their OS package manager (brew / winget / apt / etc.).
+ */
+
 function execFileP(
   cmd: string,
   args: string[],
-  opts: { timeout: number; cwd?: string; shell?: boolean }
-): Promise<{ stdout: string; stderr: string }> {
+  opts: { timeout: number },
+): Promise<{ stdout: string }> {
   return new Promise((resolve, reject) => {
-    execFile(cmd, args, opts, (err, stdout, stderr) => {
+    execFile(cmd, args, opts, (err, stdout) => {
       if (err) reject(err);
-      else resolve({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
+      else resolve({ stdout: String(stdout ?? "") });
     });
   });
-}
-
-// `~/.tower/extensions/` — npm-installs land here, not in the global Tower
-// package's node_modules. See lib/tower-dir.ts:getExtensionsDir for why.
-const EXT_ROOT = getExtensionsDir();
-
-/** Ensure `~/.tower/extensions/package.json` exists so `npm install` knows
- *  to drop deps into a sibling `node_modules/`. */
-function ensureExtensionWorkspace(): void {
-  const pkgJson = path.join(EXT_ROOT, "package.json");
-  if (!existsSync(pkgJson)) {
-    mkdirSync(EXT_ROOT, { recursive: true });
-    writeFileSync(
-      pkgJson,
-      JSON.stringify({ name: "tower-extensions", version: "1.0.0", private: true }, null, 2),
-    );
-  }
-}
-
-/** npm options: install from the extensions workspace, Windows-safe. */
-function npmOpts(timeout: number) {
-  return {
-    timeout,
-    cwd: EXT_ROOT,
-    shell: process.platform === "win32",
-  };
 }
 
 async function runVersion(rgPath: string): Promise<string | undefined> {
   try {
     const { stdout } = await execFileP(rgPath, ["--version"], { timeout: 3000 });
-    // Output: "ripgrep 14.1.1 ..."
+    // First line looks like `ripgrep 14.1.1 (rev abc1234)`
     return stdout.split("\n")[0]?.replace(/^ripgrep\s+/, "").split(" ")[0] || undefined;
   } catch {
     return undefined;
   }
 }
 
-async function detectPackageBinary(): Promise<string | null> {
+/** Resolve `rg` on the user's PATH. Uses `which` on POSIX, `where` on Win. */
+function detectSystemBinary(): string | null {
+  const finder = process.platform === "win32" ? "where" : "which";
   try {
-    // Resolve from the extensions workspace explicitly — the global Tower
-    // package's own node_modules might not contain `@vscode/ripgrep` (we
-    // install to `~/.tower/extensions/` instead).
-    const pkgEntry = path.join(EXT_ROOT, "node_modules", "@vscode", "ripgrep");
-    if (!existsSync(pkgEntry)) return null;
-    const mod = (await import(/* @vite-ignore */ pkgEntry)) as { rgPath?: string };
-    const rgPath = mod.rgPath;
-    if (!rgPath) return null;
-    if (!existsSync(rgPath)) return null;
-    return rgPath;
+    const stdout = execFileSync(finder, ["rg"], { encoding: "utf-8", timeout: 3000 });
+    const firstLine = stdout.split(/\r?\n/)[0]?.trim();
+    if (firstLine && existsSync(firstLine)) return firstLine;
   } catch {
-    return null;
+    // not on PATH
   }
-}
-
-async function detectSystemBinary(): Promise<string | null> {
-  try {
-    const { stdout } = await execFileP("which", ["rg"], { timeout: 3000 });
-    const path = stdout.trim();
-    if (!path || !existsSync(path)) return null;
-    return path;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 async function check(): Promise<ExtensionStatus> {
-  // Dual-track: package binary first, then system PATH
-  const packagePath = await detectPackageBinary();
-  if (packagePath) {
-    const version = await runVersion(packagePath);
-    return { installed: true, path: packagePath, version };
-  }
-  const systemPath = await detectSystemBinary();
+  const systemPath = detectSystemBinary();
   if (systemPath) {
     const version = await runVersion(systemPath);
     return { installed: true, path: systemPath, version };
@@ -98,74 +56,18 @@ async function check(): Promise<ExtensionStatus> {
   return { installed: false };
 }
 
+/**
+ * We don't auto-install ripgrep. The button instead returns a structured
+ * message that the Settings UI surfaces as platform-specific install
+ * commands plus the homepage link. See `extension-card.tsx` for the
+ * fallback rendering.
+ */
 async function install(): Promise<ExtensionResult> {
-  try {
-    ensureExtensionWorkspace();
-    // `--prefix=EXT_ROOT` forces npm to install into our workspace and ignore
-    // any user-level `~/.npmrc prefix=` that would otherwise hoist the install
-    // to a global location and leave EXT_ROOT empty.
-    const { stdout, stderr } = await execFileP(
-      "npm",
-      ["install", "--prefix", EXT_ROOT, "--no-audit", "--no-fund", "@vscode/ripgrep"],
-      npmOpts(120_000),
-    );
-    // Clear cached rg path so next searchCode call re-resolves.
-    try {
-      const { clearRgPathCache } = await import("@/actions/search-code-actions");
-      await clearRgPathCache();
-    } catch {
-      // Best-effort — cache will refresh at server restart if module load fails.
-    }
-    // Verify the binary actually exists — npm install succeeds even if the
-    // package's postinstall (binary download) fails silently.
-    const pkgEntry = path.join(EXT_ROOT, "node_modules", "@vscode", "ripgrep");
-    if (!existsSync(pkgEntry)) {
-      return {
-        success: false,
-        error:
-          `npm install reported success but ${pkgEntry} doesn't exist. ` +
-          `Check ~/.npmrc for a prefix= override. ` +
-          `npm stdout: ${(stdout || "").slice(-300)} stderr: ${(stderr || "").slice(-300)}`,
-      };
-    }
-    const verified = await detectPackageBinary();
-    if (!verified) {
-      return {
-        success: false,
-        error:
-          "@vscode/ripgrep installed but the rg binary is missing — postinstall download likely failed. " +
-          "Check network access to GitHub releases (the package downloads its native binary on install).",
-      };
-    }
-    return { success: true, message: `Installed @vscode/ripgrep at ${pkgEntry}` };
-  } catch (err) {
-    const e = err as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
-    const parts: string[] = [e.message];
-    if (e.stdout) parts.push(`stdout: ${String(e.stdout).slice(-300)}`);
-    if (e.stderr) parts.push(`stderr: ${String(e.stderr).slice(-300)}`);
-    return { success: false, error: parts.join(" | ") };
-  }
-}
-
-async function uninstall(): Promise<ExtensionResult> {
-  try {
-    ensureExtensionWorkspace();
-    await execFileP(
-      "npm",
-      ["uninstall", "--prefix", EXT_ROOT, "@vscode/ripgrep"],
-      npmOpts(60_000),
-    );
-    // Clear cached rg path so next searchCode attempt detects absence.
-    try {
-      const { clearRgPathCache } = await import("@/actions/search-code-actions");
-      await clearRgPathCache();
-    } catch {
-      // Best-effort
-    }
-    return { success: true, message: "Removed @vscode/ripgrep" };
-  } catch (err) {
-    return { success: false, error: (err as Error).message };
-  }
+  return {
+    success: false,
+    error: "ripgrep is a native binary and must be installed via your OS package manager. " +
+      "See the install commands below or open the official site.",
+  };
 }
 
 export const ripgrepExtension: Extension = {
@@ -175,7 +77,7 @@ export const ripgrepExtension: Extension = {
   icon: Search,
   sizeMB: 5,
   homepageUrl: "https://github.com/BurntSushi/ripgrep#installation",
+  manualInstall: true,
   check,
   install,
-  uninstall,
 };

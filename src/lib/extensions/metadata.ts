@@ -18,6 +18,7 @@ const EXTENSION_METADATA: Record<ExtensionId, ExtensionMetadata> = {
     icon: Search,
     sizeMB: 5,
     homepageUrl: "https://github.com/BurntSushi/ripgrep#installation",
+    manualInstall: true,
   },
   monaco: {
     id: "monaco",
