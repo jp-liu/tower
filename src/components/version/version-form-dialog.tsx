@@ -289,12 +289,15 @@ export function VersionFormDialog({
                   data-testid="version-branch-selector"
                 >
                   <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className={`flex-1 truncate text-left text-xs ${baseBranch ? "font-mono" : "text-muted-foreground"}`}>
+                  <span
+                    className={`flex-1 truncate text-left text-xs ${baseBranch ? "font-mono" : "text-muted-foreground"}`}
+                    title={baseBranch || undefined}
+                  >
                     {baseBranch || t("version.field.noBranch")}
                   </span>
                   <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
                 </PopoverTrigger>
-                <PopoverContent className="p-0" align="start">
+                <PopoverContent className="w-[min(32rem,90vw)] p-0" align="start">
                   <Command>
                     <CommandInput placeholder={t("task.branchSearch")} />
                     <CommandList>
@@ -316,7 +319,7 @@ export function VersionFormDialog({
                             onSelect={() => { setBaseBranch(branch); setBranchOpen(false); }}
                           >
                             <GitBranch className="mr-2 h-3 w-3 shrink-0 text-muted-foreground" />
-                            <span className="flex-1 truncate font-mono">{branch}</span>
+                            <span className="flex-1 truncate font-mono" title={branch}>{branch}</span>
                             {branch === baseBranch && <Check className="ml-auto h-3 w-3 shrink-0 text-primary" />}
                           </CommandItem>
                         ))}

@@ -109,8 +109,8 @@ export function BoardPageClient({
   }, [refreshData]);
 
   const handleCreateTask = useCallback(
-    async (data: { title: string; description: string; priority: Priority; status: TaskStatus; labelIds: string[]; baseBranch?: string; subPath?: string; versionId?: string | null }) => {
-      await createTask({
+    async (data: { title: string; description: string; priority: Priority; status: TaskStatus; labelIds: string[]; baseBranch?: string; subPath?: string; versionId?: string | null; autoStart?: boolean }) => {
+      const created = await createTask({
         title: data.title,
         description: data.description,
         projectId,
@@ -122,8 +122,16 @@ export function BoardPageClient({
         versionId: data.versionId ?? undefined,
       });
       refreshData();
+      if (data.autoStart && created?.id) {
+        try {
+          await startPtyExecution(created.id, "");
+          router.push(`/workspaces/${workspaceId}/tasks/${created.id}`);
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : String(err));
+        }
+      }
     },
-    [projectId, refreshData]
+    [projectId, refreshData, router, workspaceId]
   );
 
   const handleUpdateTask = useCallback(async (taskId: string, data: { title: string; description: string; priority: Priority; labelIds: string[]; subPath?: string; versionId?: string | null }) => {

@@ -95,11 +95,17 @@ export function TaskOverviewDrawer({
     labelIds: string[];
     baseBranch?: string;
     subPath?: string;
+    autoStart?: boolean;
   }) => {
     if (!task?.project) return;
     try {
+      // autoStart from the dialog isn't honored here yet — duplicate flow
+      // intentionally keeps the same "create-but-don't-start" semantics it
+      // had before #9; revisit if the user asks for it.
+      const { autoStart: _autoStart, ...rest } = data;
+      void _autoStart;
       await createTask({
-        ...data,
+        ...rest,
         projectId: task.project.id,
       });
       toast.success(t("taskDrawer.duplicateSuccess"));

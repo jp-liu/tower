@@ -16,12 +16,13 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname, resolve } from "path";
-import { execFileSync, spawnSync } from "child_process";
+import { execFileSync, spawn, spawnSync } from "child_process";
 import { fileURLToPath, pathToFileURL } from "url";
 import { parseArgs } from "node:util";
 import { homedir } from "os";
 import { createHash } from "crypto";
 import { createRequire } from "module";
+import { createConnection } from "net";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -43,6 +44,7 @@ const { values: flags, positionals } = parseArgs({
   options: {
     port:    { type: "string", short: "p" },
     host:    { type: "string", short: "H" },
+    "no-open": { type: "boolean" },
     help:    { type: "boolean", short: "h" },
     version: { type: "boolean", short: "v" },
   },
@@ -71,6 +73,7 @@ if (flags.help) {
   Options:
     -p, --port <port>   Server port (default: 3000)
     -H, --host <host>   Server host (default: 0.0.0.0)
+    --no-open           Don't auto-open the browser on start
     -h, --help          Show help
     -v, --version       Show version
   `);
@@ -295,7 +298,60 @@ async function cmdStart() {
   // `public/` resolve correctly.
   process.chdir(standaloneDir);
 
+  const browserUrl = `http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`;
+  scheduleBrowserOpen(browserUrl);
+
   await import(pathToFileURL(standaloneServer).href);
+}
+
+/**
+ * Open the URL in the user's default browser once the HTTP port accepts
+ * connections. Polls in the background so it never blocks server startup.
+ *
+ * Disabled when:
+ *   - `--no-open` flag passed
+ *   - $TOWER_NO_OPEN / $CI / $NO_BROWSER set
+ *   - stdout isn't a TTY (e.g. piped, daemonised, container w/o terminal)
+ */
+function scheduleBrowserOpen(url) {
+  if (flags["no-open"]) return;
+  if (process.env.TOWER_NO_OPEN || process.env.CI || process.env.NO_BROWSER) return;
+  if (!process.stdout.isTTY) return;
+
+  const deadline = Date.now() + 15_000;
+  const probeHost = HOST === "0.0.0.0" ? "127.0.0.1" : HOST;
+
+  const tryProbe = () => {
+    const sock = createConnection({ host: probeHost, port: PORT });
+    sock.once("connect", () => {
+      sock.end();
+      openBrowser(url);
+    });
+    sock.once("error", () => {
+      sock.destroy();
+      if (Date.now() < deadline) {
+        setTimeout(tryProbe, 250);
+      }
+    });
+  };
+  setTimeout(tryProbe, 250).unref?.();
+}
+
+function openBrowser(url) {
+  const platform = process.platform;
+  const opener =
+    platform === "darwin" ? { cmd: "open", args: [url] } :
+    platform === "win32"  ? { cmd: "cmd", args: ["/c", "start", "", url] } :
+                            { cmd: "xdg-open", args: [url] };
+  try {
+    const child = spawn(opener.cmd, opener.args, { stdio: "ignore", detached: true });
+    child.on("error", () => {
+      log(`Open ${url} in your browser to view Tower.`);
+    });
+    child.unref();
+  } catch {
+    log(`Open ${url} in your browser to view Tower.`);
+  }
 }
 
 // ─── Dispatch ───

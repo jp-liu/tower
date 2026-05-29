@@ -96,9 +96,9 @@ export function CreateBranchDialog({
                 onClick={() => setShowBaseList(!showBaseList)}
                 className="flex w-full items-center justify-between rounded-lg border border-border bg-muted/50 px-3 py-2 text-left transition-colors hover:bg-accent"
               >
-                <div className="flex items-center gap-2">
-                  <GitBranch className="h-3 w-3 text-emerald-400" />
-                  <span className="font-mono text-xs text-foreground">{baseBranch}</span>
+                <div className="flex min-w-0 items-center gap-2">
+                  <GitBranch className="h-3 w-3 shrink-0 text-emerald-400" />
+                  <span className="truncate font-mono text-xs text-foreground" title={baseBranch}>{baseBranch}</span>
                 </div>
                 <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${showBaseList ? "rotate-180" : ""}`} />
               </button>
@@ -127,7 +127,7 @@ export function CreateBranchDialog({
                         }`}
                       >
                         <GitBranch className="h-3 w-3 shrink-0" />
-                        <span className="truncate font-mono text-xs">{b}</span>
+                        <span className="truncate font-mono text-xs" title={b}>{b}</span>
                         {b === baseBranch && <Check className="h-3 w-3 ml-auto shrink-0" />}
                       </button>
                     ))}

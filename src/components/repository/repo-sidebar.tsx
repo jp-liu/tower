@@ -779,7 +779,7 @@ function UnifiedBranchDropdown({
         >
           <div className="flex items-center gap-2 min-w-0">
             <GitBranch className="h-3 w-3 shrink-0 text-emerald-400" />
-            <span className="truncate font-mono text-xs text-foreground">{currentBranch || "—"}</span>
+            <span className="truncate font-mono text-xs text-foreground" title={currentBranch || undefined}>{currentBranch || "—"}</span>
           </div>
           <ChevronDown className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
         </button>
@@ -820,7 +820,7 @@ function UnifiedBranchDropdown({
                         }`}
                       >
                         <GitBranch className="h-3 w-3 shrink-0" />
-                        <span className="truncate font-mono text-xs">{b}</span>
+                        <span className="truncate font-mono text-xs" title={b}>{b}</span>
                         {isActive && <Check className="h-3 w-3 ml-auto shrink-0" />}
                       </button>
                     );
@@ -840,7 +840,7 @@ function UnifiedBranchDropdown({
                       className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-secondary-foreground transition-colors hover:bg-accent"
                     >
                       <Globe className="h-3 w-3 shrink-0 text-sky-400" />
-                      <span className="truncate font-mono text-xs">{b}</span>
+                      <span className="truncate font-mono text-xs" title={b}>{b}</span>
                     </button>
                   ))}
                 </>

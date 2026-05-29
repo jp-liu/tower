@@ -133,4 +133,14 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "string",
     label: "Assistant Communication Mode",
   },
+  "task.defaultUseWorktree": {
+    defaultValue: true,
+    type: "boolean",
+    label: "Default: Use Worktree",
+  },
+  "task.defaultAutoStart": {
+    defaultValue: false,
+    type: "boolean",
+    label: "Default: Auto-start Execution",
+  },
 };

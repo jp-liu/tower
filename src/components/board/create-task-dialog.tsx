@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/command";
 import { useI18n } from "@/lib/i18n";
 import { getProjectBranches, fetchRemoteBranches, getCurrentBranch } from "@/actions/git-actions";
+import { getConfigValues } from "@/actions/config-actions";
 import type { Task, Priority, TaskStatus } from "@prisma/client";
 
 interface LabelOption {
@@ -63,6 +64,7 @@ interface CreateTaskDialogProps {
     baseBranch?: string;
     subPath?: string;
     versionId?: string | null;
+    autoStart?: boolean;
   }) => void;
   onUpdate?: (taskId: string, data: {
     title: string;
@@ -121,8 +123,27 @@ export function CreateTaskDialog({
   const [selectedBranch, setSelectedBranch] = useState<string>("");
   const [branchOpen, setBranchOpen] = useState(false);
   const [useWorktree, setUseWorktree] = useState(true);
+  const [autoStart, setAutoStart] = useState(false);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const { t } = useI18n();
+
+  // Load task creation defaults (worktree / auto-start) from system config.
+  // Runs once when the dialog opens in *create* mode — edit mode never starts
+  // executions or toggles worktree, so it doesn't need to refresh these.
+  useEffect(() => {
+    if (!open || editTask) return;
+    let cancelled = false;
+    getConfigValues(["task.defaultUseWorktree", "task.defaultAutoStart"])
+      .then((cfg) => {
+        if (cancelled) return;
+        const wt = cfg["task.defaultUseWorktree"];
+        const as = cfg["task.defaultAutoStart"];
+        if (typeof wt === "boolean") setUseWorktree(wt);
+        if (typeof as === "boolean") setAutoStart(as);
+      })
+      .catch(() => { /* keep hard-coded defaults */ });
+    return () => { cancelled = true; };
+  }, [open, editTask]);
 
   const isEditing = !!editTask;
   const isGitProject = !!projectLocalPath;
@@ -230,6 +251,7 @@ export function CreateTaskDialog({
         ...(isGitProject && useWorktree && selectedBranch ? { baseBranch: selectedBranch } : {}),
         ...(subPath.trim() ? { subPath: subPath.trim() } : {}),
         versionId: selectedVersionId,
+        autoStart,
       });
     }
     setTitle("");
@@ -324,10 +346,15 @@ export function CreateTaskDialog({
                     data-testid="branch-selector"
                   >
                     <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <span className="flex-1 truncate text-left text-xs">{selectedBranch || t("task.branchNone")}</span>
+                    <span
+                      className="flex-1 truncate text-left text-xs"
+                      title={selectedBranch || undefined}
+                    >
+                      {selectedBranch || t("task.branchNone")}
+                    </span>
                     <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
                   </PopoverTrigger>
-                  <PopoverContent className="p-0" align="start">
+                  <PopoverContent className="w-[min(32rem,90vw)] p-0" align="start">
                     <Command>
                       <CommandInput placeholder={t("task.branchSearch")} />
                       <CommandList>
@@ -340,7 +367,7 @@ export function CreateTaskDialog({
                               onSelect={() => { setSelectedBranch(branch); setBranchOpen(false); }}
                             >
                               <GitBranch className="h-3 w-3 text-muted-foreground shrink-0 mr-2" />
-                              <span className="flex-1 truncate font-mono">{branch}</span>
+                              <span className="flex-1 truncate font-mono" title={branch}>{branch}</span>
                               {branch === selectedBranch && <Check className="h-3 w-3 text-primary shrink-0 ml-auto" />}
                             </CommandItem>
                           ))}
@@ -368,6 +395,26 @@ export function CreateTaskDialog({
                       }`}
                     >
                       {val ? t("task.worktreeYes") : t("task.worktreeNo")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Auto-start toggle */}
+              <div className="mt-2 flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground">{t("task.autoStartLabel")}</Label>
+                <div className="flex gap-1">
+                  {([true, false] as const).map((val) => (
+                    <button
+                      key={String(val)}
+                      type="button"
+                      onClick={() => setAutoStart(val)}
+                      className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                        autoStart === val
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {val ? t("task.autoStartYes") : t("task.autoStartNo")}
                     </button>
                   ))}
                 </div>

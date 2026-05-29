@@ -265,6 +265,8 @@ type SystemForm = {
   maxUploadMb: number;
   maxConcurrent: number;
   maxReadableMb: number;
+  taskDefaultUseWorktree: boolean;
+  taskDefaultAutoStart: boolean;
 };
 type GitParamsForm = { timeoutSec: number };
 type SearchForm = {
@@ -340,6 +342,8 @@ export function SettingsPage() {
     maxUploadMb: 50,
     maxConcurrent: 3,
     maxReadableMb: 5,
+    taskDefaultUseWorktree: true,
+    taskDefaultAutoStart: false,
   });
   const [gitParamsForm, setGitParamsForm] = useState<GitParamsForm>({
     timeoutSec: 30,
@@ -446,6 +450,8 @@ export function SettingsPage() {
       "system.maxUploadBytes",
       "system.maxConcurrentExecutions",
       "system.maxReadableFileBytes",
+      "task.defaultUseWorktree",
+      "task.defaultAutoStart",
       "git.timeoutSec",
       "search.resultLimit",
       "search.allModeCap",
@@ -465,6 +471,14 @@ export function SettingsPage() {
         maxConcurrent:
           (cfg["system.maxConcurrentExecutions"] as number) ?? 3,
         maxReadableMb: Math.round(maxReadableBytes / 1024 / 1024),
+        taskDefaultUseWorktree:
+          typeof cfg["task.defaultUseWorktree"] === "boolean"
+            ? (cfg["task.defaultUseWorktree"] as boolean)
+            : true,
+        taskDefaultAutoStart:
+          typeof cfg["task.defaultAutoStart"] === "boolean"
+            ? (cfg["task.defaultAutoStart"] as boolean)
+            : false,
       });
       setGitParamsForm({
         timeoutSec: (cfg["git.timeoutSec"] as number) ?? 30,
@@ -621,6 +635,14 @@ export function SettingsPage() {
     await setConfigValue(
       "system.maxReadableFileBytes",
       systemForm.maxReadableMb * 1024 * 1024
+    );
+    await setConfigValue(
+      "task.defaultUseWorktree",
+      systemForm.taskDefaultUseWorktree
+    );
+    await setConfigValue(
+      "task.defaultAutoStart",
+      systemForm.taskDefaultAutoStart
     );
   };
 
@@ -1563,6 +1585,62 @@ export function SettingsPage() {
                 />
                 <span className="text-sm text-muted-foreground">MB</span>
               </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <label className="text-sm font-medium">
+                  {t("settings.config.system.taskDefaultWorktree")}
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.config.system.taskDefaultWorktreeHint")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setSystemForm((f) => ({
+                    ...f,
+                    taskDefaultUseWorktree: !f.taskDefaultUseWorktree,
+                  }))
+                }
+                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                  systemForm.taskDefaultUseWorktree
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {systemForm.taskDefaultUseWorktree
+                  ? t("task.worktreeYes")
+                  : t("task.worktreeNo")}
+              </button>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <label className="text-sm font-medium">
+                  {t("settings.config.system.taskDefaultAutoStart")}
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.config.system.taskDefaultAutoStartHint")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setSystemForm((f) => ({
+                    ...f,
+                    taskDefaultAutoStart: !f.taskDefaultAutoStart,
+                  }))
+                }
+                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                  systemForm.taskDefaultAutoStart
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {systemForm.taskDefaultAutoStart
+                  ? t("task.autoStartYes")
+                  : t("task.autoStartNo")}
+              </button>
             </div>
           </div>
           <Button onClick={handleSaveSystem} className="rounded-lg">
