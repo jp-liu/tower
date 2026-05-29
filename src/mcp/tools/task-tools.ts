@@ -3,6 +3,7 @@ import { execFileSync } from "child_process";
 import { copyFileSync, existsSync, statSync, mkdirSync } from "fs";
 import { basename, extname, join, resolve } from "path";
 import { db } from "../db";
+import { readConfigValue } from "@/lib/config-reader";
 import { stripCacheUuidSuffix, isAssistantCachePath, guessMimeType } from "@/lib/file-utils";
 
 // Derive project root from this file's location (src/mcp/tools/ → ../../..)
@@ -41,7 +42,13 @@ export const taskTools = {
   },
 
   create_task: {
-    description: "Create a new task in a project. Priority defaults to MEDIUM, status defaults to TODO. Set useWorktree=true for branch isolation. Set autoStart=true (default) to immediately start execution. Pass references as file paths to attach as project assets.",
+    description:
+      "Create a new task in a project. Priority defaults to MEDIUM, status defaults to TODO. " +
+      "useWorktree (branch isolation) and autoStart (run immediately after create) default to the user's saved preference; " +
+      "pass either explicitly to override for this one task. " +
+      "If the defaults have never been set, the FIRST call (without explicit useWorktree/autoStart) returns { needsDefaultsSetup: true } instead of creating the task — ask the user their preference, call set_task_defaults once, then call create_task again. " +
+      "Pass versionId to file the task under a project version (use list_versions to discover options). " +
+      "Pass references as file paths to attach as project assets.",
     schema: z.object({
       projectId: z.string(),
       title: z.string(),
@@ -50,9 +57,10 @@ export const taskTools = {
       status: TaskStatus.optional().default("TODO"),
       labelIds: z.array(z.string()).optional(),
       subPath: z.string().optional(),
-      useWorktree: z.boolean().optional().default(false),
-      baseBranch: z.string().optional().describe("Base branch for worktree checkout. Only used when useWorktree=true. If omitted, auto-detects the project's current branch."),
-      autoStart: z.boolean().optional().default(true),
+      versionId: z.string().optional().describe("Version to assign the task to. Use list_versions to find valid IDs for the project. Omit for backlog (no version)."),
+      useWorktree: z.boolean().optional().describe("Use a Git worktree for branch isolation. Omit to use the user's saved default; pass explicitly to override this task."),
+      baseBranch: z.string().optional().describe("Base branch for worktree checkout. Only used when useWorktree resolves to true. If omitted, auto-detects the project's current branch."),
+      autoStart: z.boolean().optional().describe("Start execution immediately after creating. Omit to use the user's saved default; pass explicitly to override this task."),
       references: z.array(z.string()).max(20).optional(),
     }),
     handler: async (args: {
@@ -63,14 +71,52 @@ export const taskTools = {
       status?: string;
       labelIds?: string[];
       subPath?: string;
+      versionId?: string;
       useWorktree?: boolean;
       baseBranch?: string;
       autoStart?: boolean;
       references?: string[];
     }) => {
+      // Resolve worktree / auto-start: explicit arg wins, else fall back to the
+      // user's saved global default. On the very first MCP create_task where
+      // neither default has been confirmed AND the caller didn't specify, ask
+      // the calling AI to collect the user's preference (MCP can't prompt the
+      // human directly), save it via set_task_defaults, then retry.
+      const explicitWorktree = args.useWorktree !== undefined;
+      const explicitAutoStart = args.autoStart !== undefined;
+      const defaultsConfigured = await readConfigValue<boolean>("task.mcpDefaultsConfigured", false);
+      if (!defaultsConfigured && !explicitWorktree && !explicitAutoStart) {
+        return {
+          needsDefaultsSetup: true,
+          task: null,
+          message:
+            "首次通过 MCP 创建任务，尚未设置默认偏好。请向用户确认两个选择：" +
+            "(1) 以后新建任务是否默认使用 Git worktree 隔离？" +
+            "(2) 是否默认创建后自动启动执行？" +
+            "拿到选择后调用 set_task_defaults({ useWorktree, autoStart }) 保存（只需一次，以后不再询问），然后重新调用 create_task。" +
+            "若某个任务需要特殊处理，可在 create_task 里直接显式传 useWorktree / autoStart 覆盖默认。",
+        };
+      }
+      const useWorktree = explicitWorktree
+        ? (args.useWorktree as boolean)
+        : await readConfigValue<boolean>("task.defaultUseWorktree", true);
+      const autoStart = explicitAutoStart
+        ? (args.autoStart as boolean)
+        : await readConfigValue<boolean>("task.defaultAutoStart", false);
+
+      // Validate versionId belongs to the project (ignore mismatches → backlog)
+      let versionId: string | null = null;
+      if (args.versionId) {
+        const v = await db.version.findFirst({
+          where: { id: args.versionId, projectId: args.projectId },
+          select: { id: true },
+        });
+        versionId = v?.id ?? null;
+      }
+
       // Determine baseBranch: explicit param > auto-detect from project's current git branch
       let baseBranch: string | null = null;
-      if (args.useWorktree) {
+      if (useWorktree) {
         if (args.baseBranch) {
           baseBranch = args.baseBranch;
         } else {
@@ -95,6 +141,8 @@ export const taskTools = {
           priority: (args.priority ?? "MEDIUM") as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
           status: (args.status ?? "TODO") as "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED",
           baseBranch,
+          versionId,
+          subPath: args.subPath ?? null,
         },
       });
 
@@ -173,7 +221,7 @@ export const taskTools = {
       //   - Next.js server unreachable (wrong port / not running)
       //   - Concurrency limit hit (system.maxConcurrentExecutions)
       //   - Project missing localPath
-      if (args.autoStart) {
+      if (autoStart) {
         const PORT = process.env.PORT ?? "3000";
         const prompt = args.title;
         try {
@@ -268,6 +316,41 @@ export const taskTools = {
     handler: async (args: { taskId: string }) => {
       await db.task.delete({ where: { id: args.taskId } });
       return { deleted: true, taskId: args.taskId };
+    },
+  },
+
+  set_task_defaults: {
+    description:
+      "Save the user's default behavior for new tasks: useWorktree (Git worktree branch isolation) and autoStart (run immediately after create). " +
+      "Call this once after asking the user their preference — subsequent create_task calls without an explicit useWorktree/autoStart use these defaults and won't prompt again. Applies globally to all projects.",
+    schema: z.object({
+      useWorktree: z.boolean(),
+      autoStart: z.boolean(),
+    }),
+    handler: async (args: { useWorktree: boolean; autoStart: boolean }) => {
+      const set = (key: string, value: unknown) =>
+        db.systemConfig.upsert({
+          where: { key },
+          create: { key, value: JSON.stringify(value) },
+          update: { value: JSON.stringify(value) },
+        });
+      await set("task.defaultUseWorktree", args.useWorktree);
+      await set("task.defaultAutoStart", args.autoStart);
+      await set("task.mcpDefaultsConfigured", true);
+      return { ok: true, useWorktree: args.useWorktree, autoStart: args.autoStart };
+    },
+  },
+
+  list_versions: {
+    description:
+      "List a project's active versions (excludes RELEASED) for assigning a task via create_task's versionId. Returns id, number, name, status, isCurrent.",
+    schema: z.object({ projectId: z.string() }),
+    handler: async (args: { projectId: string }) => {
+      return db.version.findMany({
+        where: { projectId: args.projectId, status: { not: "RELEASED" } },
+        select: { id: true, number: true, name: true, status: true, isCurrent: true },
+        orderBy: [{ isCurrent: "desc" }, { order: "asc" }, { createdAt: "desc" }],
+      });
     },
   },
 };
