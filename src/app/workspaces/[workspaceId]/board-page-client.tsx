@@ -8,13 +8,16 @@ import { KanbanBoard } from "@/components/board/kanban-board";
 import { CreateTaskDialog } from "@/components/board/create-task-dialog";
 import { RepoSidebar } from "@/components/repository/repo-sidebar";
 import { TaskDetailPanel } from "@/components/task/task-detail-panel";
-import { createTask, updateTaskStatus, updateTask, deleteTask, toggleTaskPinned } from "@/actions/task-actions";
+import { createTask, updateTaskStatus, updateTask, deleteTask, toggleTaskPinned, checkWorktreeClean } from "@/actions/task-actions";
 import { startPtyExecution } from "@/actions/agent-actions";
 import { getVersionsForPicker } from "@/actions/version-actions";
 import { ProjectTabs } from "@/components/board/project-tabs";
+import { TaskMergeConfirmDialog } from "@/components/task/task-merge-confirm-dialog";
+import { TaskCancelConfirmDialog } from "@/components/task/task-cancel-confirm-dialog";
 import type { TaskStatus, Priority } from "@prisma/client";
 import { TOWER_LABEL_NAME } from "@/lib/constants";
 import type { TaskWithLabels } from "@/types";
+import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 
 
@@ -63,6 +66,7 @@ export function BoardPageClient({
   openTaskId,
 }: BoardPageClientProps) {
   const router = useRouter();
+  const { t } = useI18n();
   const [, startTransition] = useTransition();
   const [searchQuery, setSearchQuery] = useState("");
   const [versionFilter, setVersionFilter] = useState<string>("all"); // "all" | "backlog" | versionId
@@ -73,6 +77,16 @@ export function BoardPageClient({
   // Derive selectedTask from initialTasks so router.refresh auto-syncs status
   const selectedTask = selectedTaskId ? initialTasks.find((t) => t.id === selectedTaskId) ?? null : null;
   const [editingTask, setEditingTask] = useState<TaskWithLabels | null>(null);
+  const [mergeDialog, setMergeDialog] = useState<{
+    task: TaskWithLabels;
+    commitLog: string[];
+    commitCount: number;
+  } | null>(null);
+  const [cancelDialog, setCancelDialog] = useState<{
+    task: TaskWithLabels;
+    files: string[];
+    commitLog: string[];
+  } | null>(null);
 
   // Fetch versions for the active project (for the version picker in create dialog)
   useEffect(() => {
@@ -103,10 +117,91 @@ export function BoardPageClient({
     setSearchQuery(query);
   }, []);
 
+  // Run the same completion checks as the task detail panel's "Complete" button
+  // (worktree clean check, merge dialog, cancel suggestion).
+  // Returns false when the status change should NOT be persisted by the caller.
+  const tryCompleteTask = useCallback(async (taskId: string) => {
+    const task = initialTasks.find((x) => x.id === taskId);
+    if (!task) return;
+    try {
+      const result = await checkWorktreeClean(taskId);
+
+      if (result.hasWorktree && !result.clean) {
+        toast.error(t("taskPage.uncommittedChanges", { count: String(result.files.length) }));
+        refreshData();
+        return;
+      }
+
+      if (result.hasWorktree && result.clean && !result.hasCommits) {
+        toast.error(t("taskPage.noChangesToComplete"), {
+          action: {
+            label: t("taskPage.markAsCancelled"),
+            onClick: () => {
+              updateTaskStatus(taskId, "CANCELLED")
+                .then(() => {
+                  toast.success(t("taskPage.taskCancelled"));
+                  refreshData();
+                })
+                .catch(() => toast.error("Failed to cancel task"));
+            },
+          },
+        });
+        refreshData();
+        return;
+      }
+
+      if (result.hasWorktree && result.hasCommits) {
+        setMergeDialog({ task, commitLog: result.commitLog, commitCount: result.commitLog.length });
+        refreshData();
+        return;
+      }
+
+      // No worktree — just mark DONE
+      await updateTaskStatus(taskId, "DONE");
+      toast.success(t("taskPage.taskCompleted"));
+      refreshData();
+    } catch {
+      toast.error("Failed to complete task");
+      refreshData();
+    }
+  }, [initialTasks, refreshData, t]);
+
+  // Cancelled deletes the worktree dir + task branch — irreversible.
+  // Always confirm for worktree-mode tasks (even if clean), because re-activating
+  // the task only creates a fresh worktree/branch; the original cannot be restored.
+  // Direct-mode tasks (no worktree) have nothing to clean — cancel directly.
+  const tryCancelTask = useCallback(async (taskId: string) => {
+    const task = initialTasks.find((x) => x.id === taskId);
+    if (!task) return;
+    try {
+      const result = await checkWorktreeClean(taskId);
+      if (!result.hasWorktree) {
+        // No worktree to clean — safe to cancel directly
+        await updateTaskStatus(taskId, "CANCELLED");
+        toast.success(t("taskPage.taskCancelled"));
+        refreshData();
+        return;
+      }
+      setCancelDialog({ task, files: result.files, commitLog: result.commitLog });
+      refreshData(); // roll back optimistic drag while user decides
+    } catch {
+      toast.error("Failed to cancel task");
+      refreshData();
+    }
+  }, [initialTasks, refreshData, t]);
+
   const handleTaskMove = useCallback(async (taskId: string, newStatus: TaskStatus) => {
+    if (newStatus === "DONE") {
+      await tryCompleteTask(taskId);
+      return;
+    }
+    if (newStatus === "CANCELLED") {
+      await tryCancelTask(taskId);
+      return;
+    }
     await updateTaskStatus(taskId, newStatus);
     refreshData();
-  }, [refreshData]);
+  }, [refreshData, tryCompleteTask, tryCancelTask]);
 
   const handleCreateTask = useCallback(
     async (data: { title: string; description: string; priority: Priority; status: TaskStatus; labelIds: string[]; baseBranch?: string; subPath?: string; versionId?: string | null; autoStart?: boolean }) => {
@@ -163,9 +258,17 @@ export function BoardPageClient({
   }, [router, workspaceId]);
 
   const handleContextMenuStatusChange = useCallback(async (taskId: string, status: TaskStatus) => {
+    if (status === "DONE") {
+      await tryCompleteTask(taskId);
+      return;
+    }
+    if (status === "CANCELLED") {
+      await tryCancelTask(taskId);
+      return;
+    }
     await updateTaskStatus(taskId, status);
     refreshData();
-  }, [refreshData]);
+  }, [refreshData, tryCompleteTask, tryCancelTask]);
 
   const handleAddTaskToColumn = useCallback((status: TaskStatus) => {
     setCreateDefaultStatus(status);
@@ -289,6 +392,45 @@ export function BoardPageClient({
         <RepoSidebar project={project} workspaceId={workspaceId} />
       )}
 
+      {/* Merge confirm dialog — triggered by board context-menu DONE / drag-to-DONE */}
+      {mergeDialog && (
+        <TaskMergeConfirmDialog
+          open
+          onOpenChange={(open) => { if (!open) setMergeDialog(null); }}
+          taskId={mergeDialog.task.id}
+          taskTitle={mergeDialog.task.title}
+          baseBranch={mergeDialog.task.baseBranch ?? "main"}
+          fileCount={0}
+          commitCount={mergeDialog.commitCount}
+          commitLog={mergeDialog.commitLog}
+          onMergeComplete={() => {
+            setMergeDialog(null);
+            toast.success(t("taskPage.taskCompleted"));
+            refreshData();
+          }}
+        />
+      )}
+
+      {/* Cancel confirm dialog — triggered for any worktree-mode task */}
+      {cancelDialog && (
+        <TaskCancelConfirmDialog
+          open
+          onOpenChange={(open) => { if (!open) setCancelDialog(null); }}
+          taskTitle={cancelDialog.task.title}
+          uncommittedFiles={cancelDialog.files}
+          commitLog={cancelDialog.commitLog}
+          onConfirm={() => {
+            const taskId = cancelDialog.task.id;
+            setCancelDialog(null);
+            updateTaskStatus(taskId, "CANCELLED")
+              .then(() => {
+                toast.success(t("taskPage.taskCancelled"));
+                refreshData();
+              })
+              .catch(() => toast.error("Failed to cancel task"));
+          }}
+        />
+      )}
     </div>
   );
 }

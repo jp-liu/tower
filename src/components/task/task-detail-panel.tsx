@@ -202,7 +202,20 @@ export function TaskDetailPanel({
 
       // Has worktree but no commits and no uncommitted files → nothing was done
       if (result.hasWorktree && result.clean && !result.hasCommits) {
-        toast.error(t("taskPage.noChangesToComplete"));
+        toast.error(t("taskPage.noChangesToComplete"), {
+          action: {
+            label: t("taskPage.markAsCancelled"),
+            onClick: () => {
+              updateTaskStatus(task.id, "CANCELLED")
+                .then(() => {
+                  setTaskStatus("CANCELLED");
+                  toast.success(t("taskPage.taskCancelled"));
+                  router.refresh();
+                })
+                .catch(() => toast.error("Failed to cancel task"));
+            },
+          },
+        });
         return;
       }
 
