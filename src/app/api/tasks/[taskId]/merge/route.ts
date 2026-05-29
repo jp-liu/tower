@@ -151,6 +151,14 @@ export async function POST(
       data: { status: "DONE" },
     });
 
+    // Kill PTY first so the live process doesn't end up with a deleted cwd
+    try {
+      const { destroySession } = await import("@/lib/pty/session-store");
+      destroySession(taskId);
+    } catch (error) {
+      console.error("[merge] PTY session destroy failed:", error);
+    }
+
     // Best-effort worktree cleanup
     try {
       await removeWorktree(localPath, taskId);
