@@ -1,3 +1,13 @@
+# [0.2.17](/compare/v0.2.16...v0.2.17) (2026-05-29)
+
+
+### Bug Fixes
+
+* **ripgrep detect:** fall back to well-known install paths (`/opt/homebrew/bin/rg`, `/usr/local/bin/rg`, scoop/winget/choco/ProgramFiles on Windows, `~/.cargo/bin/rg`, `~/.local/bin/rg`, `/snap/bin/rg`, MacPorts) when `which`/`where rg` returns nothing. Tower processes inherit a snapshot of PATH at launch — if the user installs ripgrep via brew after starting Tower, PATH lookup misses it even though the binary is right there
+* **rg install tooltip:** restructure the manual-install tooltip into a proper line-by-line layout — three rows (macOS / Win / Linux) each with the package-manager command in monospace. Was previously one long sentence that rendered as a wall of text with parentheses
+
+
+
 # [0.2.16](/compare/v0.2.15...v0.2.16) (2026-05-29)
 
 

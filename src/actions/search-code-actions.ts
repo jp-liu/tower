@@ -2,6 +2,8 @@
 
 import { execFile, execFileSync } from "child_process";
 import { existsSync } from "fs";
+import os from "os";
+import path from "path";
 import { z } from "zod";
 import { getConfigValue } from "@/actions/config-actions";
 
@@ -12,9 +14,44 @@ export type SearchErrorKind =
   | "aborted"
   | "unknown";
 
-/** Resolve rg binary from the user's PATH. We don't auto-install ripgrep
- * anymore (see lib/extensions/definitions/ripgrep.ts) — users install it via
- * brew/winget/apt and we just detect it. */
+/** Resolve rg binary from the user's PATH, falling back to well-known install
+ * locations (brew, scoop, winget, MacPorts, cargo, ...). We don't
+ * auto-install ripgrep anymore — see lib/extensions/definitions/ripgrep.ts. */
+function knownRgPaths(): string[] {
+  const home = os.homedir();
+  switch (process.platform) {
+    case "darwin":
+      return [
+        "/opt/homebrew/bin/rg",
+        "/usr/local/bin/rg",
+        "/opt/local/bin/rg",
+        path.join(home, ".cargo/bin/rg"),
+      ];
+    case "linux":
+      return [
+        "/usr/bin/rg",
+        "/usr/local/bin/rg",
+        "/snap/bin/rg",
+        path.join(home, ".local/bin/rg"),
+        path.join(home, ".cargo/bin/rg"),
+      ];
+    case "win32": {
+      const localApp = process.env["LOCALAPPDATA"] ?? "";
+      const programFiles = process.env["ProgramFiles"] ?? "C:\\Program Files";
+      const userProfile = process.env["USERPROFILE"] ?? home;
+      return [
+        path.join(localApp, "Microsoft", "WinGet", "Links", "rg.exe"),
+        path.join(userProfile, "scoop", "shims", "rg.exe"),
+        path.join(localApp, "Programs", "scoop", "shims", "rg.exe"),
+        "C:\\ProgramData\\chocolatey\\bin\\rg.exe",
+        path.join(programFiles, "ripgrep", "rg.exe"),
+      ];
+    }
+    default:
+      return [];
+  }
+}
+
 function resolveRgPath(): string {
   const finder = process.platform === "win32" ? "where" : "which";
   try {
@@ -22,7 +59,10 @@ function resolveRgPath(): string {
     const firstLine = stdout.split(/\r?\n/)[0]?.trim();
     if (firstLine && existsSync(firstLine)) return firstLine;
   } catch {
-    // not on PATH
+    // not on PATH — try known locations
+  }
+  for (const candidate of knownRgPaths()) {
+    if (existsSync(candidate)) return candidate;
   }
   throw new Error("ripgrep not found on PATH — install via brew/winget/apt and try again");
 }

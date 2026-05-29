@@ -1,6 +1,8 @@
 import { Search } from "lucide-react";
 import { execFile, execFileSync } from "child_process";
 import { existsSync } from "fs";
+import os from "os";
+import path from "path";
 import type { Extension, ExtensionStatus, ExtensionResult } from "../types";
 
 /**
@@ -34,7 +36,55 @@ async function runVersion(rgPath: string): Promise<string | undefined> {
   }
 }
 
-/** Resolve `rg` on the user's PATH. Uses `which` on POSIX, `where` on Win. */
+/**
+ * Common install locations to fall back to when `which/where rg` comes up
+ * empty. Tower processes can have a different PATH than the user's
+ * interactive shell — most often when:
+ *   - Tower was started before brew/winget put rg on PATH (env snapshot
+ *     captured at launch doesn't pick up subsequent shell-config changes)
+ *   - On macOS, brew on Apple Silicon installs into /opt/homebrew/bin/
+ *     which only lands in PATH after .zshrc sources its eval line. A
+ *     tower binary launched outside that shell won't see it.
+ *
+ * If the binary exists at any of these known paths we accept it even
+ * though `which` said no — the file is right there.
+ */
+function getKnownInstallPaths(): string[] {
+  const home = os.homedir();
+  switch (process.platform) {
+    case "darwin":
+      return [
+        "/opt/homebrew/bin/rg",   // Apple Silicon brew
+        "/usr/local/bin/rg",      // Intel brew
+        "/opt/local/bin/rg",      // MacPorts
+        path.join(home, ".cargo/bin/rg"),
+      ];
+    case "linux":
+      return [
+        "/usr/bin/rg",
+        "/usr/local/bin/rg",
+        "/snap/bin/rg",
+        path.join(home, ".local/bin/rg"),
+        path.join(home, ".cargo/bin/rg"),
+      ];
+    case "win32": {
+      const localApp = process.env["LOCALAPPDATA"] ?? "";
+      const programFiles = process.env["ProgramFiles"] ?? "C:\\Program Files";
+      const userProfile = process.env["USERPROFILE"] ?? home;
+      return [
+        path.join(localApp, "Microsoft", "WinGet", "Links", "rg.exe"),
+        path.join(userProfile, "scoop", "shims", "rg.exe"),
+        path.join(localApp, "Programs", "scoop", "shims", "rg.exe"),
+        "C:\\ProgramData\\chocolatey\\bin\\rg.exe",
+        path.join(programFiles, "ripgrep", "rg.exe"),
+      ];
+    }
+    default:
+      return [];
+  }
+}
+
+/** Resolve `rg`: PATH first, then known install locations. */
 function detectSystemBinary(): string | null {
   const finder = process.platform === "win32" ? "where" : "which";
   try {
@@ -42,7 +92,10 @@ function detectSystemBinary(): string | null {
     const firstLine = stdout.split(/\r?\n/)[0]?.trim();
     if (firstLine && existsSync(firstLine)) return firstLine;
   } catch {
-    // not on PATH
+    // not on PATH — try known locations next
+  }
+  for (const candidate of getKnownInstallPaths()) {
+    if (existsSync(candidate)) return candidate;
   }
   return null;
 }

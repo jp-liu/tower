@@ -38,15 +38,41 @@ describe("ripgrep extension", () => {
     expect(status.version).toBe("14.1.1");
   });
 
-  it("check() reports not installed when `which rg` throws", async () => {
+  it("check() reports not installed when `which rg` throws and no known fallback path exists", async () => {
     const cp = await import("child_process");
     (cp.execFileSync as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => {
       throw new Error("not found");
     });
+    // The fallback path scan would otherwise find /opt/homebrew/bin/rg on
+    // the dev machine — force existsSync to false so we exercise the
+    // "nothing anywhere" branch.
+    const fs = await import("fs");
+    (fs.existsSync as unknown as ReturnType<typeof vi.fn>).mockReturnValue(false);
 
     const ext = await loadRipgrep();
     const status = await ext.check();
     expect(status.installed).toBe(false);
+  });
+
+  it("check() falls back to a known install path when `which rg` returns nothing", async () => {
+    const cp = await import("child_process");
+    (cp.execFileSync as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      throw new Error("not found"); // which/where
+    }).mockImplementation(() => "ripgrep 14.1.1\n"); // version probe via execFile
+    (cp.execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
+        cb(null, "ripgrep 14.1.1\n");
+      }
+    );
+    // First known path exists, rest don't matter.
+    const fs = await import("fs");
+    let hits = 0;
+    (fs.existsSync as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ++hits === 1);
+
+    const ext = await loadRipgrep();
+    const status = await ext.check();
+    expect(status.installed).toBe(true);
+    expect(status.path).toMatch(/rg$/);
   });
 
   it("install() never auto-installs — returns a manual-install hint", async () => {

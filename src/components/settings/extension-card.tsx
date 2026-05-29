@@ -146,8 +146,23 @@ export function ExtensionCard({ extension }: ExtensionCardProps) {
                 </Button>
               )}
             />
-            <TooltipContent className="max-w-xs text-xs leading-relaxed">
-              {t("settings.extensions.manualInstallHint")}
+            <TooltipContent className="w-80 max-w-[80vw] text-xs leading-relaxed">
+              <p>{t("settings.extensions.manualInstallHintIntro")}</p>
+              <ul className="mt-2 space-y-1">
+                <li className="flex gap-2">
+                  <span className="w-12 shrink-0 text-muted-foreground">macOS</span>
+                  <code className="rounded bg-background/60 px-1.5 py-0.5 font-mono text-[11px]">brew install ripgrep</code>
+                </li>
+                <li className="flex gap-2">
+                  <span className="w-12 shrink-0 text-muted-foreground">Win</span>
+                  <code className="rounded bg-background/60 px-1.5 py-0.5 font-mono text-[11px]">winget install BurntSushi.ripgrep</code>
+                </li>
+                <li className="flex gap-2">
+                  <span className="w-12 shrink-0 text-muted-foreground">Linux</span>
+                  <code className="rounded bg-background/60 px-1.5 py-0.5 font-mono text-[11px]">apt/dnf/pacman install ripgrep</code>
+                </li>
+              </ul>
+              <p className="mt-2 text-muted-foreground">{t("settings.extensions.manualInstallHintAfter")}</p>
             </TooltipContent>
           </Tooltip>
         ) : (
