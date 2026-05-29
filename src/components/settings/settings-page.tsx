@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
+import { toast } from "sonner";
+import { ALLOWED_EDITOR_COMMANDS } from "@/lib/open-targets";
 import { useI18n } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
@@ -44,6 +46,7 @@ import {
   setConfigValue,
   getConfigValues,
   getAvailableTerminalApps,
+  getAvailableEditors,
 } from "@/actions/config-actions";
 import {
   getPrompts,
@@ -56,7 +59,7 @@ import { getAvailableProviders } from "@/actions/ai-config-actions";
 import type { TestResult } from "@/lib/cli-test";
 import type { ProviderAvailability } from "@/lib/ai/types";
 import type { AgentPrompt } from "@prisma/client";
-import type { DetectedTerminalApp } from "@/lib/platform";
+import type { DetectedTerminalApp, DetectedEditor } from "@/lib/platform";
 import type { GitPathRule } from "@/lib/git-url";
 import { BackupSection } from "./backup-section";
 import { ExtensionsSection } from "./extensions-section";
@@ -301,6 +304,8 @@ export function SettingsPage() {
   const [mounted, setMounted] = useState(false);
   const [terminalApp, setTerminalApp] = useState("Terminal");
   const [detectedApps, setDetectedApps] = useState<DetectedTerminalApp[]>([]);
+  const [editorCommand, setEditorCommand] = useState("");
+  const [detectedEditors, setDetectedEditors] = useState<DetectedEditor[]>([]);
   const [idleTimeout, setIdleTimeout] = useState(180);
 
   // ── AI Tools state ─────────────────────────────────────────────
@@ -381,6 +386,8 @@ export function SettingsPage() {
     getConfigValue<string>("terminal.app", "Terminal").then(setTerminalApp);
     getConfigValue<number>("terminal.idleTimeoutSec", 180).then(setIdleTimeout);
     getAvailableTerminalApps().then(setDetectedApps);
+    getConfigValue<string>("editor.command", "").then(setEditorCommand);
+    getAvailableEditors().then(setDetectedEditors);
   }, []);
 
   // AI Tools — providers from the registry + default adapter from localStorage
@@ -510,6 +517,17 @@ export function SettingsPage() {
   // =========================================================================
   async function handleSaveTerminalApp() {
     await setConfigValue("terminal.app", terminalApp);
+  }
+
+  async function handleSaveEditor() {
+    const cmd = editorCommand.trim();
+    // Empty = auto-pick the first detected editor at open time.
+    if (cmd && !(ALLOWED_EDITOR_COMMANDS as readonly string[]).includes(cmd)) {
+      toast.error(t("settings.editor.invalid", { cmd }));
+      return;
+    }
+    if (cmd !== editorCommand) setEditorCommand(cmd);
+    await setConfigValue("editor.command", cmd);
   }
 
   async function handleSaveIdleTimeout() {
@@ -918,6 +936,52 @@ export function SettingsPage() {
               onChange={(e) => setTerminalApp(e.target.value)}
               onBlur={handleSaveTerminalApp}
               placeholder={t("settings.terminal.placeholder")}
+              className="h-9 w-64 rounded-lg border border-border/50 bg-muted/30 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            />
+          </div>
+        </div>
+
+        {/* Editor */}
+        <div className="py-4 border-b border-border/50">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1 pr-4">
+              <div className="text-sm font-medium">
+                {t("settings.editor.label")}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {t("settings.editor.desc")}
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-col gap-2">
+            {detectedEditors.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {detectedEditors.map((ed) => (
+                  <button
+                    key={ed.command}
+                    type="button"
+                    onClick={() => {
+                      setEditorCommand(ed.command);
+                      void setConfigValue("editor.command", ed.command);
+                    }}
+                    className={cn(
+                      "rounded-lg border px-3.5 py-1.5 text-xs font-medium transition-all duration-200 cursor-pointer",
+                      editorCommand === ed.command
+                        ? "border-foreground bg-accent text-foreground font-medium"
+                        : "border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                    )}
+                  >
+                    {ed.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            <input
+              type="text"
+              value={editorCommand}
+              onChange={(e) => setEditorCommand(e.target.value)}
+              onBlur={handleSaveEditor}
+              placeholder={t("settings.editor.placeholder")}
               className="h-9 w-64 rounded-lg border border-border/50 bg-muted/30 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             />
           </div>

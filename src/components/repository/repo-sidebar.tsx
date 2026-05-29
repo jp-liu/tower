@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   ChevronDown, ChevronRight, Search, Plus,
   GitBranch, Globe, FileText, Pencil, FolderOpen, GitCommitVertical,
-  Check, AlertCircle, Loader2, Sparkles, RefreshCw, Trash2,
+  Check, AlertCircle, Loader2, Sparkles, RefreshCw, Trash2, FolderSearch, Code,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { updateProject, createProject, deleteProject, getRecentLocalProjects, getOrCreateTowerTaskId } from "@/actions/workspace-actions";
+import { openInFileManager, openInEditor } from "@/actions/preview-actions";
 import { analyzeProjectDirectory } from "@/actions/project-actions";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
@@ -302,25 +303,59 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
           </div>
         )}
         {project.localPath && (
-          <Button
-            variant="outline"
-            className="mt-3 w-full h-8 gap-1.5 text-xs"
-            disabled={isOpeningStudio}
-            onClick={async () => {
-              setIsOpeningStudio(true);
-              try {
-                const taskId = await getOrCreateTowerTaskId(project.id);
-                router.push(`/workspaces/${workspaceId}/tasks/${taskId}`);
-              } catch {
-                toast.error(t("git.openStudioFailed"));
-              } finally {
-                setIsOpeningStudio(false);
-              }
-            }}
-          >
-            {isOpeningStudio ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
-            {t("git.openStudio")}
-          </Button>
+          <div className="mt-3 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                className="h-8 gap-1.5 text-xs"
+                onClick={async () => {
+                  try {
+                    await openInFileManager(project.localPath!);
+                  } catch (err) {
+                    console.error("openInFileManager failed:", err);
+                    toast.error(t("git.openInFileManagerFailed"));
+                  }
+                }}
+              >
+                <FolderSearch className="h-3.5 w-3.5" />
+                {t("git.openInFileManager")}
+              </Button>
+              <Button
+                variant="outline"
+                className="h-8 gap-1.5 text-xs"
+                onClick={async () => {
+                  try {
+                    await openInEditor(project.localPath!);
+                  } catch (err) {
+                    console.error("openInEditor failed:", err);
+                    toast.error(t("git.openInEditorFailed"));
+                  }
+                }}
+              >
+                <Code className="h-3.5 w-3.5" />
+                {t("git.openInEditor")}
+              </Button>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full h-8 gap-1.5 text-xs"
+              disabled={isOpeningStudio}
+              onClick={async () => {
+                setIsOpeningStudio(true);
+                try {
+                  const taskId = await getOrCreateTowerTaskId(project.id);
+                  router.push(`/workspaces/${workspaceId}/tasks/${taskId}`);
+                } catch {
+                  toast.error(t("git.openStudioFailed"));
+                } finally {
+                  setIsOpeningStudio(false);
+                }
+              }}
+            >
+              {isOpeningStudio ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
+              {t("git.openStudio")}
+            </Button>
+          </div>
         )}
       </div>
 

@@ -85,6 +85,11 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "string",
     label: "Default Terminal App",
   },
+  "editor.command": {
+    defaultValue: "",
+    type: "string",
+    label: "Default Editor Command",
+  },
   "terminal.wsPort": {
     defaultValue: 3001,
     type: "number",
