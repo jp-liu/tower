@@ -456,38 +456,46 @@ export function CreateTaskDialog({
               </div>
             </div>
           )}
-          {/* Version Picker — only shown when versions are provided */}
-          {versions && versions.length > 0 && (
+          {/* Version Picker — always shown in create mode (discoverability);
+              in edit mode only when the project has versions. When the project
+              has no versions yet, show a hint instead of an empty dropdown. */}
+          {(!isEditing || (versions && versions.length > 0)) && (
             <div className="space-y-2">
               <Label>{t("version.picker.label")}</Label>
-              <Select
-                value={selectedVersionId ?? "__none__"}
-                onValueChange={(val) => setSelectedVersionId(val === "__none__" ? null : val)}
-              >
-                <SelectTrigger>
-                  <span className="truncate text-sm">
-                    {selectedVersionId
-                      ? (() => {
-                          const v = versions.find((ver) => ver.id === selectedVersionId);
-                          if (!v) return t("version.picker.none");
-                          return v.isCurrent
-                            ? `${v.number} · ${v.name} · ${t("version.currentShort")}`
-                            : `${v.number} · ${v.name}`;
-                        })()
-                      : t("version.picker.none")}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">{t("version.picker.none")}</SelectItem>
-                  {versions.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.isCurrent
-                        ? `${v.number} · ${v.name} · ${t("version.currentShort")}`
-                        : `${v.number} · ${v.name}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {versions && versions.length > 0 ? (
+                <Select
+                  value={selectedVersionId ?? "__none__"}
+                  onValueChange={(val) => setSelectedVersionId(val === "__none__" ? null : val)}
+                >
+                  <SelectTrigger>
+                    <span className="truncate text-sm">
+                      {selectedVersionId
+                        ? (() => {
+                            const v = versions.find((ver) => ver.id === selectedVersionId);
+                            if (!v) return t("version.picker.none");
+                            return v.isCurrent
+                              ? `${v.number} · ${v.name} · ${t("version.currentShort")}`
+                              : `${v.number} · ${v.name}`;
+                          })()
+                        : t("version.picker.none")}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">{t("version.picker.none")}</SelectItem>
+                    {versions.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.isCurrent
+                          ? `${v.number} · ${v.name} · ${t("version.currentShort")}`
+                          : `${v.number} · ${v.name}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                  {t("version.picker.empty")}
+                </p>
+              )}
             </div>
           )}
         </div>

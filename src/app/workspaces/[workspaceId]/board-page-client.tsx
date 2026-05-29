@@ -216,17 +216,20 @@ export function BoardPageClient({
         subPath: data.subPath,
         versionId: data.versionId ?? undefined,
       });
-      refreshData();
+      // Auto-start runs the PTY in the background, then opens the board task
+      // panel (right side) so the terminal is visible — without navigating to
+      // the full detail page.
       if (data.autoStart && created?.id) {
         try {
           await startPtyExecution(created.id, "");
-          router.push(`/workspaces/${workspaceId}/tasks/${created.id}`);
+          setSelectedTaskId(created.id);
         } catch (err) {
           toast.error(err instanceof Error ? err.message : String(err));
         }
       }
+      refreshData();
     },
-    [projectId, refreshData, router, workspaceId]
+    [projectId, refreshData]
   );
 
   const handleUpdateTask = useCallback(async (taskId: string, data: { title: string; description: string; priority: Priority; labelIds: string[]; subPath?: string; versionId?: string | null }) => {

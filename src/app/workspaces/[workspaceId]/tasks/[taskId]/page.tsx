@@ -19,6 +19,9 @@ function serializeTask(task: Awaited<ReturnType<typeof fetchTask>>) {
     baseBranch: task.baseBranch,
     subPath: task.subPath,
     projectId: task.projectId,
+    version: task.version
+      ? { id: task.version.id, number: task.version.number, name: task.version.name }
+      : null,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
     project: task.project
@@ -41,6 +44,7 @@ async function fetchTask(taskId: string) {
     include: {
       project: true,
       labels: { include: { label: true } },
+      version: { select: { id: true, number: true, name: true } },
     },
   });
 }

@@ -21,7 +21,7 @@ import type { Task, TaskExecution } from "@prisma/client";
 import { useI18n } from "@/lib/i18n";
 
 interface TaskDetailPanelProps {
-  task: Task;
+  task: Task & { version?: { id: string; number: string; name: string } | null };
   workspaceId: string;
   projectLocalPath?: string | null;
   onClose: () => void;
@@ -268,8 +268,17 @@ export function TaskDetailPanel({
         description={t("taskDetail.panelDescription")}
         branch={`task/${task.id}`}
         baseBranch={task.baseBranch}
+        version={task.version ?? null}
         hasConversation={false}
         updatedAt={task.updatedAt}
+        openDir={
+          activeWorktreePath ??
+          (projectLocalPath
+            ? task.subPath
+              ? `${projectLocalPath}/${task.subPath}`
+              : projectLocalPath
+            : null)
+        }
         onBack={onClose}
       />
 

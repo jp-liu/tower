@@ -7,6 +7,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import Link from "next/link";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { TaskVersionTag } from "@/components/version/version-badges";
 import { TaskDiffView } from "@/components/task/task-diff-view";
 import { TaskMergeConfirmDialog } from "@/components/task/task-merge-confirm-dialog";
 import { FileTree } from "@/components/task/file-tree";
@@ -41,6 +42,7 @@ interface TaskPageClientProps {
     baseBranch: string | null;
     subPath: string | null;
     projectId: string;
+    version: { id: string; number: string; name: string } | null;
     createdAt: string;
     updatedAt: string;
     project: { id: string; name: string; type: string; localPath: string | null; projectType: string; previewCommand: string | null; previewPort: number | null } | null;
@@ -352,6 +354,9 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                 <GitBranch className="h-2.5 w-2.5" />
                 {task.baseBranch ?? latestExecution?.worktreeBranch}
               </Badge>
+            )}
+            {task.version && (
+              <TaskVersionTag number={task.version.number} name={task.version.name} showName />
             )}
             {fileRootPath && (
               <div className="ml-auto flex items-center gap-0.5">

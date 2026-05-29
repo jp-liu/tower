@@ -3,8 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { toast } from "sonner";
-import { ALLOWED_EDITOR_COMMANDS } from "@/lib/open-targets";
 import { useI18n } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
@@ -306,7 +304,6 @@ export function SettingsPage() {
   const [detectedApps, setDetectedApps] = useState<DetectedTerminalApp[]>([]);
   const [editorCommand, setEditorCommand] = useState("");
   const [detectedEditors, setDetectedEditors] = useState<DetectedEditor[]>([]);
-  const [idleTimeout, setIdleTimeout] = useState(180);
 
   // ── AI Tools state ─────────────────────────────────────────────
   const [providers, setProviders] = useState<ProviderAvailability[]>([]);
@@ -384,11 +381,34 @@ export function SettingsPage() {
   // General config load
   useEffect(() => {
     getConfigValue<string>("terminal.app", "Terminal").then(setTerminalApp);
-    getConfigValue<number>("terminal.idleTimeoutSec", 180).then(setIdleTimeout);
     getAvailableTerminalApps().then(setDetectedApps);
     getConfigValue<string>("editor.command", "").then(setEditorCommand);
     getAvailableEditors().then(setDetectedEditors);
   }, []);
+
+  // Normalize legacy values: if terminal.app was saved as a display name
+  // (e.g. "iTerm2") instead of its canonical value ("iTerm"), migrate it once
+  // the detected list is available — otherwise the input shows the name while
+  // the buttons/open logic use the value, and nothing highlights until clicked.
+  useEffect(() => {
+    if (detectedApps.length === 0 || !terminalApp) return;
+    if (detectedApps.some((a) => a.value === terminalApp)) return; // already canonical
+    const byName = detectedApps.find((a) => a.name === terminalApp);
+    if (byName) {
+      setTerminalApp(byName.value);
+      void setConfigValue("terminal.app", byName.value);
+    }
+  }, [detectedApps, terminalApp]);
+
+  useEffect(() => {
+    if (detectedEditors.length === 0 || !editorCommand) return;
+    if (detectedEditors.some((e) => e.command === editorCommand)) return;
+    const byName = detectedEditors.find((e) => e.name === editorCommand);
+    if (byName) {
+      setEditorCommand(byName.command);
+      void setConfigValue("editor.command", byName.command);
+    }
+  }, [detectedEditors, editorCommand]);
 
   // AI Tools — providers from the registry + default adapter from localStorage
   useEffect(() => {
@@ -515,26 +535,6 @@ export function SettingsPage() {
   // =========================================================================
   // HANDLERS — General
   // =========================================================================
-  async function handleSaveTerminalApp() {
-    await setConfigValue("terminal.app", terminalApp);
-  }
-
-  async function handleSaveEditor() {
-    const cmd = editorCommand.trim();
-    // Empty = auto-pick the first detected editor at open time.
-    if (cmd && !(ALLOWED_EDITOR_COMMANDS as readonly string[]).includes(cmd)) {
-      toast.error(t("settings.editor.invalid", { cmd }));
-      return;
-    }
-    if (cmd !== editorCommand) setEditorCommand(cmd);
-    await setConfigValue("editor.command", cmd);
-  }
-
-  async function handleSaveIdleTimeout() {
-    const sec = Math.max(180, idleTimeout);
-    setIdleTimeout(sec);
-    await setConfigValue("terminal.idleTimeoutSec", sec);
-  }
 
   // =========================================================================
   // HANDLERS — AI Tools
@@ -654,6 +654,9 @@ export function SettingsPage() {
       "system.maxReadableFileBytes",
       systemForm.maxReadableMb * 1024 * 1024
     );
+  };
+
+  const handleSaveTask = async () => {
     await setConfigValue(
       "task.defaultUseWorktree",
       systemForm.taskDefaultUseWorktree
@@ -662,6 +665,9 @@ export function SettingsPage() {
       "task.defaultAutoStart",
       systemForm.taskDefaultAutoStart
     );
+    // Saving the task defaults also confirms them, so MCP's first-run
+    // create_task won't prompt the calling AI again.
+    await setConfigValue("task.mcpDefaultsConfigured", true);
   };
 
   const handleSaveGitParams = async () => {
@@ -895,112 +901,107 @@ export function SettingsPage() {
           />
         </SettingRow>
 
-        {/* Terminal App */}
+        {/* Terminal App — show all known apps; disable + tooltip the uninstalled ones */}
         <div className="py-4 border-b border-border/50">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 flex-1 pr-4">
-              <div className="text-sm font-medium">
-                {t("settings.terminal.label")}
-              </div>
-              <div className="text-xs text-muted-foreground mt-0.5">
-                {t("settings.terminal.desc")}
-              </div>
+          <div className="min-w-0 flex-1 pr-4">
+            <div className="text-sm font-medium">
+              {t("settings.terminal.label")}
+            </div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {t("settings.terminal.desc")}
             </div>
           </div>
-          <div className="mt-3 flex flex-col gap-2">
-            {detectedApps.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {detectedApps.map((app) => (
-                  <button
-                    key={app.value}
-                    type="button"
-                    onClick={() => {
-                      setTerminalApp(app.value);
-                      void setConfigValue("terminal.app", app.value);
-                    }}
-                    className={cn(
-                      "rounded-lg border px-3.5 py-1.5 text-xs font-medium transition-all duration-200 cursor-pointer",
-                      terminalApp === app.value
-                        ? "border-foreground bg-accent text-foreground font-medium"
-                        : "border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                    )}
-                  >
-                    {app.name}
-                  </button>
-                ))}
-              </div>
-            )}
-            <input
-              type="text"
-              value={terminalApp}
-              onChange={(e) => setTerminalApp(e.target.value)}
-              onBlur={handleSaveTerminalApp}
-              placeholder={t("settings.terminal.placeholder")}
-              className="h-9 w-64 rounded-lg border border-border/50 bg-muted/30 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-            />
-          </div>
+          {detectedApps.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {detectedApps.map((app) => {
+                const selected = terminalApp === app.value;
+                const className = cn(
+                  "rounded-lg border px-3.5 py-1.5 text-xs font-medium transition-all duration-200",
+                  !app.installed
+                    ? "cursor-not-allowed border-dashed border-border/60 text-muted-foreground/40"
+                    : selected
+                      ? "border-foreground bg-accent text-foreground font-medium cursor-pointer"
+                      : "border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground cursor-pointer"
+                );
+                const onPick = () => {
+                  if (!app.installed) return;
+                  setTerminalApp(app.value);
+                  void setConfigValue("terminal.app", app.value);
+                };
+                if (app.installed) {
+                  return (
+                    <button key={app.value} type="button" onClick={onPick} className={className}>
+                      {app.name}
+                    </button>
+                  );
+                }
+                return (
+                  <Tooltip key={app.value}>
+                    <TooltipTrigger
+                      render={
+                        <button type="button" onClick={onPick} className={className}>
+                          {app.name}
+                        </button>
+                      }
+                    />
+                    <TooltipContent side="top">{t("settings.app.notInstalled")}</TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Editor */}
+        {/* Editor — show all known editors; disable + tooltip the uninstalled ones */}
         <div className="py-4 border-b border-border/50">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 flex-1 pr-4">
-              <div className="text-sm font-medium">
-                {t("settings.editor.label")}
-              </div>
-              <div className="text-xs text-muted-foreground mt-0.5">
-                {t("settings.editor.desc")}
-              </div>
+          <div className="min-w-0 flex-1 pr-4">
+            <div className="text-sm font-medium">
+              {t("settings.editor.label")}
+            </div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {t("settings.editor.desc")}
             </div>
           </div>
-          <div className="mt-3 flex flex-col gap-2">
-            {detectedEditors.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {detectedEditors.map((ed) => (
-                  <button
-                    key={ed.command}
-                    type="button"
-                    onClick={() => {
-                      setEditorCommand(ed.command);
-                      void setConfigValue("editor.command", ed.command);
-                    }}
-                    className={cn(
-                      "rounded-lg border px-3.5 py-1.5 text-xs font-medium transition-all duration-200 cursor-pointer",
-                      editorCommand === ed.command
-                        ? "border-foreground bg-accent text-foreground font-medium"
-                        : "border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                    )}
-                  >
-                    {ed.name}
-                  </button>
-                ))}
-              </div>
-            )}
-            <input
-              type="text"
-              value={editorCommand}
-              onChange={(e) => setEditorCommand(e.target.value)}
-              onBlur={handleSaveEditor}
-              placeholder={t("settings.editor.placeholder")}
-              className="h-9 w-64 rounded-lg border border-border/50 bg-muted/30 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-            />
-          </div>
+          {detectedEditors.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {detectedEditors.map((ed) => {
+                const selected = editorCommand === ed.command;
+                const className = cn(
+                  "rounded-lg border px-3.5 py-1.5 text-xs font-medium transition-all duration-200",
+                  !ed.installed
+                    ? "cursor-not-allowed border-dashed border-border/60 text-muted-foreground/40"
+                    : selected
+                      ? "border-foreground bg-accent text-foreground font-medium cursor-pointer"
+                      : "border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground cursor-pointer"
+                );
+                const onPick = () => {
+                  if (!ed.installed) return;
+                  setEditorCommand(ed.command);
+                  void setConfigValue("editor.command", ed.command);
+                };
+                if (ed.installed) {
+                  return (
+                    <button key={ed.command} type="button" onClick={onPick} className={className}>
+                      {ed.name}
+                    </button>
+                  );
+                }
+                return (
+                  <Tooltip key={ed.command}>
+                    <TooltipTrigger
+                      render={
+                        <button type="button" onClick={onPick} className={className}>
+                          {ed.name}
+                        </button>
+                      }
+                    />
+                    <TooltipContent side="top">{t("settings.app.notInstalled")}</TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </div>
+          )}
         </div>
-
-        {/* Idle timeout */}
-        <SettingRow
-          label={t("settings.terminal.idleTimeout")}
-          description={t("settings.terminal.idleTimeoutDesc")}
-        >
-          <input
-            type="number"
-            value={idleTimeout}
-            onChange={(e) => setIdleTimeout(Number(e.target.value))}
-            onBlur={handleSaveIdleTimeout}
-            min={180}
-            className="h-9 w-28 rounded-lg border border-border/50 bg-muted/30 px-3 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-          />
-        </SettingRow>
       </div>
     );
   }
@@ -1650,6 +1651,23 @@ export function SettingsPage() {
                 <span className="text-sm text-muted-foreground">MB</span>
               </div>
             </div>
+          </div>
+          <Button onClick={handleSaveSystem} className="rounded-lg">
+            {t("common.save")}
+          </Button>
+        </div>
+
+        {/* ── Task Defaults ─────────────────────────────────────── */}
+        <div className="rounded-xl border border-border bg-muted/50 p-5 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold">
+              {t("settings.config.task.title")}
+            </h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t("settings.config.task.desc")}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex items-center gap-4">
               <div className="flex-1 min-w-0">
                 <label className="text-sm font-medium">
@@ -1707,7 +1725,7 @@ export function SettingsPage() {
               </button>
             </div>
           </div>
-          <Button onClick={handleSaveSystem} className="rounded-lg">
+          <Button onClick={handleSaveTask} className="rounded-lg">
             {t("common.save")}
           </Button>
         </div>
