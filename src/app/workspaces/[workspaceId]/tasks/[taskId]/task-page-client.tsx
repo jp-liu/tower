@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal, Square, CheckCircle2, Search, GitPullRequestArrow, Network } from "lucide-react";
+import { ArrowLeft, GitBranch, Loader2, FolderTree, GitCompare, Eye, Terminal, Square, CheckCircle2, Search, GitPullRequestArrow, Network, FolderSearch, Code } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import Link from "next/link";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { startPtyExecution, stopPtyExecution, resumePtyExecution, continueLatestPtyExecution, getTaskExecutions } from "@/actions/agent-actions";
 import { updateTaskStatus, checkWorktreeClean, commitWorktreeChanges } from "@/actions/task-actions";
+import { openInFileManager, openInEditor, openInTerminal } from "@/actions/preview-actions";
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "@/components/task/execution-timeline";
 import { useI18n } from "@/lib/i18n";
@@ -351,6 +352,76 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                 <GitBranch className="h-2.5 w-2.5" />
                 {task.baseBranch ?? latestExecution?.worktreeBranch}
               </Badge>
+            )}
+            {fileRootPath && (
+              <div className="ml-auto flex items-center gap-0.5">
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground"
+                        onClick={async () => {
+                          try {
+                            await openInFileManager(fileRootPath);
+                          } catch (err) {
+                            console.error("openInFileManager failed:", err);
+                            toast.error(t("git.openInFileManagerFailed"));
+                          }
+                        }}
+                      >
+                        <FolderSearch className="h-3.5 w-3.5" />
+                      </Button>
+                    }
+                  />
+                  <TooltipContent side="bottom">{t("git.openInFileManager")}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground"
+                        onClick={async () => {
+                          try {
+                            await openInEditor(fileRootPath);
+                          } catch (err) {
+                            console.error("openInEditor failed:", err);
+                            toast.error(t("git.openInEditorFailed"));
+                          }
+                        }}
+                      >
+                        <Code className="h-3.5 w-3.5" />
+                      </Button>
+                    }
+                  />
+                  <TooltipContent side="bottom">{t("git.openInEditor")}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground"
+                        onClick={async () => {
+                          try {
+                            await openInTerminal(fileRootPath);
+                          } catch (err) {
+                            console.error("openInTerminal failed:", err);
+                            toast.error(t("git.openInTerminalFailed"));
+                          }
+                        }}
+                      >
+                        <Terminal className="h-3.5 w-3.5" />
+                      </Button>
+                    }
+                  />
+                  <TooltipContent side="bottom">{t("git.openInTerminal")}</TooltipContent>
+                </Tooltip>
+              </div>
             )}
           </div>
           {/* 1px transparent border aligns with right panel's sub-tab border */}

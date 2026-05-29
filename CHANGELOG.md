@@ -1,3 +1,12 @@
+# [0.2.18](/compare/v0.2.17...v0.2.18) (2026-05-29)
+
+
+### Chore
+
+* **release:** version bump for a clean retry — no functional changes since 0.2.17
+
+
+
 # [0.2.17](/compare/v0.2.16...v0.2.17) (2026-05-29)
 
 

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   ChevronDown, ChevronRight, Search, Plus,
   GitBranch, Globe, FileText, Pencil, FolderOpen, GitCommitVertical,
-  Check, AlertCircle, Loader2, Sparkles, RefreshCw, Trash2, FolderSearch, Code,
+  Check, AlertCircle, Loader2, Sparkles, RefreshCw, Trash2, FolderSearch, Code, Terminal,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { updateProject, createProject, deleteProject, getRecentLocalProjects, getOrCreateTowerTaskId } from "@/actions/workspace-actions";
-import { openInFileManager, openInEditor } from "@/actions/preview-actions";
+import { openInFileManager, openInEditor, openInTerminal } from "@/actions/preview-actions";
 import { analyzeProjectDirectory } from "@/actions/project-actions";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
@@ -303,11 +303,12 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
           </div>
         )}
         {project.localPath && (
-          <div className="mt-3 space-y-2">
-            <div className="grid grid-cols-2 gap-2">
+          <div className="mt-3 space-y-1.5">
+            {/* Open externally */}
+            <div className="flex flex-col">
               <Button
-                variant="outline"
-                className="h-8 gap-1.5 text-xs"
+                variant="ghost"
+                className="w-full h-8 justify-start gap-2 px-2 text-xs text-muted-foreground"
                 onClick={async () => {
                   try {
                     await openInFileManager(project.localPath!);
@@ -317,12 +318,12 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
                   }
                 }}
               >
-                <FolderSearch className="h-3.5 w-3.5" />
+                <FolderSearch className="h-3.5 w-3.5 shrink-0" />
                 {t("git.openInFileManager")}
               </Button>
               <Button
-                variant="outline"
-                className="h-8 gap-1.5 text-xs"
+                variant="ghost"
+                className="w-full h-8 justify-start gap-2 px-2 text-xs text-muted-foreground"
                 onClick={async () => {
                   try {
                     await openInEditor(project.localPath!);
@@ -332,13 +333,29 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
                   }
                 }}
               >
-                <Code className="h-3.5 w-3.5" />
+                <Code className="h-3.5 w-3.5 shrink-0" />
                 {t("git.openInEditor")}
               </Button>
+              <Button
+                variant="ghost"
+                className="w-full h-8 justify-start gap-2 px-2 text-xs text-muted-foreground"
+                onClick={async () => {
+                  try {
+                    await openInTerminal(project.localPath!);
+                  } catch (err) {
+                    console.error("openInTerminal failed:", err);
+                    toast.error(t("git.openInTerminalFailed"));
+                  }
+                }}
+              >
+                <Terminal className="h-3.5 w-3.5 shrink-0" />
+                {t("git.openInTerminal")}
+              </Button>
             </div>
+            {/* Primary action — open the in-app workbench */}
             <Button
               variant="outline"
-              className="w-full h-8 gap-1.5 text-xs"
+              className="w-full h-9 gap-1.5 text-xs"
               disabled={isOpeningStudio}
               onClick={async () => {
                 setIsOpeningStudio(true);

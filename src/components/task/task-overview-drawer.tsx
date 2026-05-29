@@ -15,9 +15,10 @@ import { useI18n } from "@/lib/i18n";
 import { createTask, getTaskOverview } from "@/actions/task-actions";
 import type { TaskOverviewData } from "@/actions/task-actions";
 import { getLabelsForWorkspace } from "@/actions/label-actions";
+import { openInFileManager, openInEditor, openInTerminal } from "@/actions/preview-actions";
 import { CreateTaskDialog } from "@/components/board/create-task-dialog";
 import { BOARD_COLUMNS, PRIORITY_CONFIG } from "@/lib/constants";
-import { Calendar, Copy, Package, PlayCircle } from "lucide-react";
+import { Calendar, Copy, Package, PlayCircle, FolderSearch, Code, Terminal } from "lucide-react";
 import { TaskFileChanges } from "@/components/task/task-file-changes";
 import { toast } from "sonner";
 
@@ -70,6 +71,15 @@ export function TaskOverviewDrawer({
     : null;
   const priorityConfig = task ? PRIORITY_CONFIG[task.priority] : null;
   const lastExecution = task?.executions?.[0] ?? null;
+
+  // Directory to open in file manager / editor: prefer the worktree (where the
+  // task actually ran), else the project dir (+ subPath for mono-repos).
+  const openDir = (() => {
+    if (lastExecution?.worktreePath) return lastExecution.worktreePath;
+    const local = task?.project?.localPath;
+    if (!local) return null;
+    return task?.subPath ? `${local}/${task.subPath}` : local;
+  })();
 
   const lastExecGitStats = (() => {
     const raw = lastExecution?.gitStats;
@@ -246,6 +256,58 @@ export function TaskOverviewDrawer({
                   </p>
                 )}
               </section>
+
+              {/* Open in file manager / editor — uses the task's worktree dir
+                  (or project dir + subPath). Hidden for tasks with no local path. */}
+              {openDir && (
+                <section className="flex flex-col">
+                  <Button
+                    variant="ghost"
+                    className="w-full h-8 justify-start gap-2 px-2 text-xs text-muted-foreground"
+                    onClick={async () => {
+                      try {
+                        await openInFileManager(openDir);
+                      } catch (err) {
+                        console.error("openInFileManager failed:", err);
+                        toast.error(t("git.openInFileManagerFailed"));
+                      }
+                    }}
+                  >
+                    <FolderSearch className="h-3.5 w-3.5 shrink-0" />
+                    {t("git.openInFileManager")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full h-8 justify-start gap-2 px-2 text-xs text-muted-foreground"
+                    onClick={async () => {
+                      try {
+                        await openInEditor(openDir);
+                      } catch (err) {
+                        console.error("openInEditor failed:", err);
+                        toast.error(t("git.openInEditorFailed"));
+                      }
+                    }}
+                  >
+                    <Code className="h-3.5 w-3.5 shrink-0" />
+                    {t("git.openInEditor")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full h-8 justify-start gap-2 px-2 text-xs text-muted-foreground"
+                    onClick={async () => {
+                      try {
+                        await openInTerminal(openDir);
+                      } catch (err) {
+                        console.error("openInTerminal failed:", err);
+                        toast.error(t("git.openInTerminalFailed"));
+                      }
+                    }}
+                  >
+                    <Terminal className="h-3.5 w-3.5 shrink-0" />
+                    {t("git.openInTerminal")}
+                  </Button>
+                </section>
+              )}
 
               {/* Duplicate action — opens create-task dialog with current task's
                   data prefilled. Avoids the worktree-recycle pitfalls of true rerun. */}
