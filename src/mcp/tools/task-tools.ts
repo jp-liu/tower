@@ -3,7 +3,7 @@ import { execFileSync } from "child_process";
 import { copyFileSync, existsSync, statSync, mkdirSync } from "fs";
 import { basename, extname, join, resolve } from "path";
 import { db } from "../db";
-import { stripCacheUuidSuffix, isAssistantCachePath } from "@/lib/file-utils";
+import { stripCacheUuidSuffix, isAssistantCachePath, guessMimeType } from "@/lib/file-utils";
 
 // Derive project root from this file's location (src/mcp/tools/ → ../../..)
 // This avoids depending on process.cwd() which varies when MCP is spawned from .tower/
@@ -144,6 +144,7 @@ export const taskTools = {
                 filename,
                 path: dest,
                 size: stat.size,
+                mimeType: guessMimeType(filename),
                 projectId: args.projectId,
                 taskId: task.id,
                 description: `Reference: ${basename(filePath)}`,

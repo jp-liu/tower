@@ -63,6 +63,31 @@ const MEANINGLESS_STEMS = new Set([
   "clipboard", "paste", "untitled",
 ]);
 
+const EXT_MIME_MAP: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+  bmp: "image/bmp",
+  ico: "image/x-icon",
+  avif: "image/avif",
+  pdf: "application/pdf",
+  md: "text/markdown",
+  txt: "text/plain",
+  json: "application/json",
+};
+
+/**
+ * Best-effort MIME type from a filename's extension. Returns undefined when
+ * unknown so callers can leave the column null rather than guessing wrong.
+ */
+export function guessMimeType(filename: string): string | undefined {
+  const ext = path.extname(filename).slice(1).toLowerCase();
+  return EXT_MIME_MAP[ext];
+}
+
 export function buildCacheFilename(originalName: string, ext: string): string {
   const stem = path.basename(originalName, path.extname(originalName));
   const uuid8 = crypto.randomUUID().replace(/-/g, "").slice(0, 8);

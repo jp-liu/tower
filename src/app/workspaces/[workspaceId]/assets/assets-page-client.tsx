@@ -11,7 +11,7 @@ import { AssetUpload } from "@/components/assets/asset-upload";
 import { ImageLightbox } from "@/components/assets/image-lightbox";
 import { TextPreviewDialog } from "@/components/assets/text-preview-dialog";
 import { TaskOverviewDrawer } from "@/components/task/task-overview-drawer";
-import { localPathToApiUrl } from "@/lib/file-serve-client";
+import { localPathToApiUrl, isImageAsset } from "@/lib/file-serve-client";
 import { toast } from "sonner";
 import type { AssetItemType } from "@/components/assets/asset-item";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
@@ -77,7 +77,7 @@ export function AssetsPageClient({
   const [previewAsset, setPreviewAsset] = useState<AssetItemType | null>(null);
 
   const previewType = previewAsset
-    ? previewAsset.mimeType?.startsWith("image/")
+    ? isImageAsset(previewAsset.filename, previewAsset.mimeType)
       ? "image"
       : /\.(txt|md|json)$/i.test(previewAsset.filename)
         ? "text"
@@ -86,7 +86,7 @@ export function AssetsPageClient({
 
   // Image-only asset list, in same order as the AssetList renders, for lightbox prev/next
   const imageAssets = assets
-    .filter((a) => a.mimeType?.startsWith("image/"))
+    .filter((a) => isImageAsset(a.filename, a.mimeType))
     .map((a) => ({
       id: a.id,
       url: localPathToApiUrl(a.path),
@@ -97,7 +97,7 @@ export function AssetsPageClient({
     : -1;
 
   const handlePreview = (asset: AssetItemType) => {
-    const isImage = asset.mimeType?.startsWith("image/");
+    const isImage = isImageAsset(asset.filename, asset.mimeType);
     const isText = /\.(txt|md|json)$/i.test(asset.filename);
     if (isImage || isText) {
       setPreviewAsset(asset);

@@ -2,7 +2,7 @@
 
 import { FileText, Eye, FolderOpen, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { localPathToApiUrl } from "@/lib/file-serve-client";
+import { localPathToApiUrl, isImageAsset } from "@/lib/file-serve-client";
 import { useI18n } from "@/lib/i18n";
 
 export interface AssetItemType {
@@ -44,7 +44,7 @@ function formatDate(date: Date): string {
 export function AssetItem({ asset, onPreview, onReveal, onDelete, onTaskClick }: AssetItemProps) {
   const { t } = useI18n();
   const url = localPathToApiUrl(asset.path);
-  const isImage = asset.mimeType?.startsWith("image/");
+  const isImage = isImageAsset(asset.filename, asset.mimeType);
 
   return (
     <div className="flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/20">
