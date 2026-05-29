@@ -22,11 +22,18 @@ vi.mock("@/actions/config-actions", () => ({
   getConfigValue: vi.fn(async (_k: string, def: number) => def),
 }));
 
-import { searchCode } from "@/actions/search-code-actions";
+import { searchCode, clearRgPathCache } from "@/actions/search-code-actions";
 import { getConfigValue } from "@/actions/config-actions";
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
+  // Re-arm rg-path resolution: clearAllMocks wipes call history, and on Linux
+  // (CI) knownRgPaths() is empty, so resolveRgPath relies entirely on the
+  // `which rg` mock. Reset the implementation + clear the module-level path
+  // cache so every test resolves rg deterministically, regardless of whether
+  // the CI runner actually has ripgrep installed.
+  mockExecFileSync.mockReturnValue("/opt/homebrew/bin/rg\n");
+  await clearRgPathCache();
   // Reset config mock to default-pass-through behaviour each test
   (getConfigValue as ReturnType<typeof vi.fn>).mockImplementation(
     async (_k: string, def: number) => def
