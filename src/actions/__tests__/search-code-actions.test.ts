@@ -16,14 +16,18 @@ vi.mock("child_process", () => ({
 
 // Mock fs.existsSync so resolveRgPath's binary-existence check passes
 // regardless of whether rg is actually installed on the runner.
-vi.mock("fs", async () => {
-  const actual = await vi.importActual<typeof import("fs")>("fs");
-  return { ...actual, existsSync: mockExistsSync };
-});
-vi.mock("node:fs", async () => {
-  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
-  return { ...actual, existsSync: mockExistsSync };
-});
+// NOTE: must be a SYNCHRONOUS factory (like the child_process mock). The async
+// `importActual` variant did NOT replace existsSync on CI, so resolveRgPath ran
+// the real existsSync — passing locally (rg present) but failing on CI.
+// search-code-actions only uses fs.existsSync, so a minimal mock is safe.
+vi.mock("fs", () => ({
+  existsSync: mockExistsSync,
+  default: { existsSync: mockExistsSync },
+}));
+vi.mock("node:fs", () => ({
+  existsSync: mockExistsSync,
+  default: { existsSync: mockExistsSync },
+}));
 
 // Mock getConfigValue so timeout is deterministic per-test
 vi.mock("@/actions/config-actions", () => ({
@@ -34,19 +38,22 @@ import { searchCode, clearRgPathCache } from "@/actions/search-code-actions";
 import { getConfigValue } from "@/actions/config-actions";
 
 beforeEach(async () => {
-  vi.clearAllMocks();
-  // Re-arm rg-path resolution: clearAllMocks wipes call history, and on Linux
-  // (CI) knownRgPaths() is empty, so resolveRgPath relies entirely on the
-  // `which rg` mock. Reset the implementation + clear the module-level path
-  // cache so every test resolves rg deterministically, regardless of whether
-  // the CI runner actually has ripgrep installed.
-  mockExecFileSync.mockReturnValue("/opt/homebrew/bin/rg\n");
-  mockExistsSync.mockReturnValue(true);
-  await clearRgPathCache();
-  // Reset config mock to default-pass-through behaviour each test
+  // Deterministic reset: clearAllMocks does NOT clear implementations, and
+  // mockReturnValue does NOT override an existing mockImplementation — so on CI
+  // (different vitest behavior / test order) execFileSync/existsSync could end
+  // up returning the wrong thing and resolveRgPath would reject the rg path
+  // ("ripgrep not found"). mockReset() wipes calls + impl + once-queue, then we
+  // set explicit implementations so rg resolution is identical everywhere.
+  mockExecFile.mockReset();
+  mockExecFileSync.mockReset();
+  mockExecFileSync.mockImplementation(() => "/opt/homebrew/bin/rg\n");
+  mockExistsSync.mockReset();
+  mockExistsSync.mockImplementation(() => true);
+  (getConfigValue as ReturnType<typeof vi.fn>).mockReset();
   (getConfigValue as ReturnType<typeof vi.fn>).mockImplementation(
     async (_k: string, def: number) => def
   );
+  await clearRgPathCache();
 });
 
 // Helper: build a valid rg JSON match line
