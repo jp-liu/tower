@@ -26,6 +26,13 @@ export const metadata: Metadata = {
   description: "AI task orchestration and multi-project management platform",
 };
 
+// Layout reads per-user SQLite state (workspaces, onboarding.username, extension paths).
+// Without force-dynamic, `next build` prerenders it on the publisher's machine and bakes
+// that state into .next/server/app/*.rsc — users then see the publisher's name flash
+// before hydration replaces it with theirs.
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export default async function RootLayout({
   children,
 }: Readonly<{
