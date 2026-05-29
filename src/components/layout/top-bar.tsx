@@ -4,6 +4,20 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { Search, Settings, Plus, Command, Globe, FolderOpen, Bot, Sun, Moon } from "lucide-react";
+
+// GitHub mark — lucide-react dropped brand icons in v0.488+, inline SVG instead.
+function GithubMark({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M12 .5C5.65.5.5 5.65.5 12.02c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56v-2c-3.2.7-3.87-1.36-3.87-1.36-.52-1.34-1.27-1.7-1.27-1.7-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.68 1.25 3.34.96.1-.74.4-1.25.72-1.54-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.79 0c2.2-1.49 3.18-1.18 3.18-1.18.62 1.58.23 2.75.11 3.04.74.81 1.18 1.83 1.18 3.09 0 4.42-2.69 5.4-5.25 5.69.41.36.78 1.05.78 2.12v3.14c0 .31.21.68.79.56A11.52 11.52 0 0 0 23.5 12.02C23.5 5.65 18.35.5 12 .5Z" />
+    </svg>
+  );
+}
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -195,6 +209,26 @@ export function TopBar({ onCreateProject, username }: TopBarProps) {
               )}
             </TooltipTrigger>
             <TooltipContent>{t("settings.theme")}</TooltipContent>
+          </Tooltip>
+
+          {/* GitHub repo — issue feedback entry */}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() =>
+                    window.open("https://github.com/jp-liu/tower", "_blank", "noopener,noreferrer")
+                  }
+                  className="text-muted-foreground"
+                  aria-label={t("topbar.github")}
+                />
+              }
+            >
+              <GithubMark className="h-4 w-4" />
+            </TooltipTrigger>
+            <TooltipContent>{t("topbar.github")}</TooltipContent>
           </Tooltip>
 
           {/* Divider */}
