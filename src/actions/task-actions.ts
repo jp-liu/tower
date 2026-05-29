@@ -85,6 +85,18 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
     }).catch(() => {});
   }
 
+  // Terminal states: kill PTY before any filesystem cleanup so the live
+  // process doesn't end up with a deleted cwd (zombie). Must run BEFORE
+  // removeWorktree below.
+  if (status === "DONE" || status === "CANCELLED") {
+    try {
+      const { destroySession } = await import("@/lib/pty/session-store");
+      destroySession(taskId);
+    } catch (error) {
+      log.error("PTY session destroy failed", error, { taskId });
+    }
+  }
+
   // LC-01: Auto-cleanup worktree on CANCELLED (per D-03, D-04: only for GIT projects)
   if (status === "CANCELLED" && task.project?.localPath) {
     try {
@@ -141,11 +153,19 @@ export async function toggleTaskPinned(taskId: string) {
 }
 
 export async function deleteTask(taskId: string) {
-  // Clean up worktree + PTY session before deleting DB record
   const task = await db.task.findUnique({
     where: { id: taskId },
     include: { project: true },
   });
+
+  // Kill PTY first — removeWorktree --force would otherwise yank the cwd
+  // from under the live process and leave it as a zombie.
+  try {
+    const { destroySession } = await import("@/lib/pty/session-store");
+    destroySession(taskId);
+  } catch {
+    // best-effort
+  }
 
   if (task?.project?.localPath) {
     try {
@@ -153,14 +173,6 @@ export async function deleteTask(taskId: string) {
     } catch {
       // best-effort cleanup
     }
-  }
-
-  // Kill any running PTY session
-  try {
-    const { destroySession } = await import("@/lib/pty/session-store");
-    destroySession(taskId);
-  } catch {
-    // best-effort
   }
 
   await db.task.delete({ where: { id: taskId } });
