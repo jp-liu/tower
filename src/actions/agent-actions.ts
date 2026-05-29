@@ -22,6 +22,7 @@ export interface ActiveExecutionInfo {
   workspaceId: string;
   workspaceName: string;
   worktreePath: string | null;
+  subPath: string | null;
   startedAt: string | null; // ISO string for serialization
 }
 
@@ -713,6 +714,7 @@ export async function getActiveExecutionsAcrossWorkspaces(): Promise<ActiveExecu
     workspaceId: e.task.project.workspace.id,
     workspaceName: e.task.project.workspace.name,
     worktreePath: e.worktreePath,
+    subPath: e.task.subPath ?? null,
     startedAt: e.startedAt?.toISOString() ?? null,
   }));
 }

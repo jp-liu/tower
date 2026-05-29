@@ -72,9 +72,13 @@ export function MissionCard({
   const formattedTime = `${minutes}m ${seconds}s`;
 
   async function handleOpenInTerminal() {
-    if (!execution.projectLocalPath) return;
+    // Mirror startPtyExecution's cwd resolution (agent-actions.ts:538-539):
+    // base = worktreePath ?? project.localPath, then append subPath if set.
+    const base = execution.worktreePath ?? execution.projectLocalPath;
+    if (!base) return;
+    const target = execution.subPath ? `${base}/${execution.subPath}` : base;
     try {
-      await openInTerminal(execution.projectLocalPath);
+      await openInTerminal(target);
     } catch {
       toast.error(t("preview.terminalError"));
     }
