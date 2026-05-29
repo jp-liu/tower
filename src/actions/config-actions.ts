@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { CONFIG_DEFAULTS } from "@/lib/config-defaults";
 import { matchGitPathRule, gitUrlToLocalPath, type GitPathRule } from "@/lib/git-url";
-import { detectShells, detectTerminalApps, type DetectedShell, type DetectedTerminalApp } from "@/lib/platform";
+import { detectShells, detectTerminalApps, detectEditors, type DetectedShell, type DetectedTerminalApp, type DetectedEditor } from "@/lib/platform";
 import { getActiveWsPort } from "@/lib/pty/ws-server";
 
 export async function getConfigValue<T>(key: string, defaultValue: T): Promise<T> {
@@ -65,6 +65,10 @@ export async function getAvailableShells(): Promise<DetectedShell[]> {
 
 export async function getAvailableTerminalApps(): Promise<DetectedTerminalApp[]> {
   return detectTerminalApps();
+}
+
+export async function getAvailableEditors(): Promise<DetectedEditor[]> {
+  return detectEditors();
 }
 
 export async function getPlatformInfo(): Promise<{ platform: NodeJS.Platform }> {

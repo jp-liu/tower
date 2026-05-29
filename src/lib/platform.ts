@@ -528,3 +528,52 @@ export async function detectTerminalApps(
 
   return [];
 }
+
+export interface DetectedEditor {
+  /** Display name, e.g. "VS Code", "Cursor" */
+  name: string;
+  /** CLI command on PATH, e.g. "code", "cursor" — passed to openInEditor */
+  command: string;
+}
+
+/**
+ * Editor CLIs Tower knows how to launch, in preference order. Every `command`
+ * MUST be present in ALLOWED_EDITOR_COMMANDS (open-targets.ts) — that list is
+ * the spawn allowlist; this one adds display names + detection order. The
+ * invariant is enforced by a unit test (open-targets.test.ts drift guard).
+ *
+ * GUI editors only: terminal editors (vim/nvim/emacs) need a TTY, so opening a
+ * folder in them from a button can't work and would block the launcher.
+ */
+export const KNOWN_EDITORS: Array<{ name: string; command: string }> = [
+  { name: "VS Code", command: "code" },
+  { name: "VS Code Insiders", command: "code-insiders" },
+  { name: "Cursor", command: "cursor" },
+  { name: "Windsurf", command: "windsurf" },
+  { name: "Zed", command: "zed" },
+  { name: "Sublime Text", command: "subl" },
+  { name: "IntelliJ IDEA", command: "idea" },
+  { name: "WebStorm", command: "webstorm" },
+  { name: "PyCharm", command: "pycharm" },
+  { name: "GoLand", command: "goland" },
+  { name: "RubyMine", command: "rubymine" },
+  { name: "PhpStorm", command: "phpstorm" },
+  { name: "CLion", command: "clion" },
+  { name: "Rider", command: "rider" },
+];
+
+/**
+ * Detect installed editor CLIs by probing PATH for each known command.
+ * Returns them in KNOWN_EDITORS order so the first hit is a sensible default.
+ */
+export async function detectEditors(
+  platform: NodeJS.Platform = process.platform,
+): Promise<DetectedEditor[]> {
+  const results: DetectedEditor[] = [];
+  for (const e of KNOWN_EDITORS) {
+    if (await resolveCommandPath(e.command, { platform })) {
+      results.push({ name: e.name, command: e.command });
+    }
+  }
+  return results;
+}

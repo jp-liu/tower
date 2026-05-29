@@ -422,3 +422,56 @@ export async function openInTerminal(worktreePath: string): Promise<void> {
     }
   }
 }
+
+// ─── openInFileManager — reveal a directory in the OS file manager ───────────
+// Command building (incl. absolute-path guard) lives in open-targets.ts and is
+// unit-tested; this layer only spawns. execFileSync with an args array — no
+// shell interpolation (security constraint).
+
+export async function openInFileManager(dirPath: string): Promise<void> {
+  if (!dirPath || !isAbsolute(dirPath)) {
+    throw new Error("openInFileManager requires an absolute path");
+  }
+  const { buildFileManagerCommand } = await import("@/lib/open-targets");
+  const { command, args } = buildFileManagerCommand(process.platform, dirPath);
+  execFileSync(command, args);
+}
+
+// ─── openInEditor — open a directory as a project in the configured editor ───
+// Primary path: spawn the editor CLI (allowlisted in open-targets.ts). When the
+// CLI binary isn't resolvable on PATH, fall back to the editor's URL scheme.
+// `editor.command` empty → auto-pick the first detected editor.
+
+export async function openInEditor(dirPath: string): Promise<void> {
+  if (!dirPath || !isAbsolute(dirPath)) {
+    throw new Error("openInEditor requires an absolute path");
+  }
+
+  const { buildEditorCommand, buildEditorUrlOpenCommand } = await import("@/lib/open-targets");
+  const { resolveCommandPath, resolveSpawnTarget, detectEditors } = await import("@/lib/platform");
+
+  let editorCommand = await readConfigValue<string>("editor.command", "");
+  if (!editorCommand) {
+    const detected = await detectEditors();
+    if (detected.length === 0) {
+      throw new Error("No editor configured and none detected on PATH");
+    }
+    editorCommand = detected[0].command;
+  }
+
+  // Validate + build via the allowlisted pure builder (throws if disallowed).
+  const cli = buildEditorCommand(process.platform, editorCommand, dirPath);
+
+  // Prefer the CLI when its binary resolves on PATH.
+  const resolved = await resolveCommandPath(cli.command);
+  if (resolved) {
+    // Wrap .cmd/.bat shims through cmd.exe on Windows (Node CVE-2024-27980).
+    const target = await resolveSpawnTarget(cli.command, cli.args);
+    execFileSync(target.command, target.args);
+    return;
+  }
+
+  // CLI not on PATH — fall back to the editor's URL scheme if it has one.
+  const url = buildEditorUrlOpenCommand(process.platform, editorCommand, dirPath);
+  execFileSync(url.command, url.args);
+}
