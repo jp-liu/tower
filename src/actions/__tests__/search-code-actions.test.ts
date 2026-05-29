@@ -3,6 +3,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // vi.hoisted required for child_process mock in jsdom vitest environment
 const mockExecFile = vi.hoisted(() => vi.fn());
 const mockExecFileSync = vi.hoisted(() => vi.fn(() => "/opt/homebrew/bin/rg\n"));
+// Hoisted so beforeEach can re-arm it — on CI `clearAllMocks` can wipe an
+// inline mock's implementation, leaving existsSync returning undefined and
+// making resolveRgPath reject the (real-absent) rg path.
+const mockExistsSync = vi.hoisted(() => vi.fn(() => true));
 
 vi.mock("child_process", () => ({
   default: { execFile: mockExecFile, execFileSync: mockExecFileSync },
@@ -10,11 +14,15 @@ vi.mock("child_process", () => ({
   execFileSync: mockExecFileSync,
 }));
 
-// Mock fs.existsSync so resolveRgPath's binary-existence check passes.
-// The real @vscode/ripgrep package may resolve to a broken path on this machine.
+// Mock fs.existsSync so resolveRgPath's binary-existence check passes
+// regardless of whether rg is actually installed on the runner.
 vi.mock("fs", async () => {
   const actual = await vi.importActual<typeof import("fs")>("fs");
-  return { ...actual, existsSync: vi.fn(() => true) };
+  return { ...actual, existsSync: mockExistsSync };
+});
+vi.mock("node:fs", async () => {
+  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+  return { ...actual, existsSync: mockExistsSync };
 });
 
 // Mock getConfigValue so timeout is deterministic per-test
@@ -33,6 +41,7 @@ beforeEach(async () => {
   // cache so every test resolves rg deterministically, regardless of whether
   // the CI runner actually has ripgrep installed.
   mockExecFileSync.mockReturnValue("/opt/homebrew/bin/rg\n");
+  mockExistsSync.mockReturnValue(true);
   await clearRgPathCache();
   // Reset config mock to default-pass-through behaviour each test
   (getConfigValue as ReturnType<typeof vi.fn>).mockImplementation(
