@@ -28,6 +28,7 @@ export const en: Translations = {
   "topbar.newProject": "New Project",
   "topbar.importProject": "Import Project",
   "topbar.searchPlaceholder": "Search tasks, projects, repos, notes, assets...",
+  "topbar.github": "GitHub",
   "project.name": "Project Name",
   "project.alias": "Alias",
   "project.description": "Description",
