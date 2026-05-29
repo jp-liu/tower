@@ -33,15 +33,14 @@ export async function register() {
           const adapter = provider.cli?.adapter;
           if (!adapter) continue;
           try {
+            // Stale-path repair is independent of CLI availability and MCP
+            // status: settings.json may still list hooks from a previous
+            // Tower install even if the CLI binary is gone from PATH right
+            // now (issue #8). Refresh only existing entries — never adds new.
+            await adapter.repairHookPaths?.().catch(() => {});
             if (!(await adapter.isAvailable())) continue;
             const already = await adapter.isMcpInstalled("tower", { scope: "user" }).catch(() => false);
-            if (already) {
-              // MCP already wired, but hook command paths may still be stale
-              // (broken `.next/standalone/scripts/...` from 0.2.5/0.2.6).
-              // Refresh only existing entries — never adds new ones.
-              await adapter.repairHookPaths?.().catch(() => {});
-              continue;
-            }
+            if (already) continue;
             const report = await installAllForProvider(provider.name, apiUrl);
             if (report.ok) {
               console.error(`[init-tower] Auto-installed Tower MCP for ${provider.name} (user scope)`);
