@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
-  ChevronDown, ChevronRight, Search, Plus,
+  ChevronDown, ChevronRight,
   GitBranch, Globe, FileText, Pencil, FolderOpen, GitCommitVertical,
-  Check, AlertCircle, Loader2, Sparkles, RefreshCw, Trash2, FolderSearch, Code, Terminal,
+  AlertCircle, Loader2, Sparkles, Trash2, FolderSearch, Code, Terminal,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -20,9 +20,9 @@ import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { CreateBranchDialog } from "./create-branch-dialog";
 import { GitLogPanel } from "./git-log-panel";
 import { GitStashPanel } from "./git-stash-panel";
+import { EditorGitPanel } from "@/components/task/editor-git-panel";
 
 interface ProjectSidebarProps {
   project: {
@@ -96,7 +96,6 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
   const [gitInfo, setGitInfo] = useState<GitInfo | null>(null);
   const [gitLoading, setGitLoading] = useState(false);
   const [initLoading, setInitLoading] = useState(false);
-  const [showCreateBranch, setShowCreateBranch] = useState(false);
 
   const showToast = (msg: string) => {
     toast.info(msg);
@@ -141,26 +140,6 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
       showToast(t("git.initFailed"));
     } finally {
       setInitLoading(false);
-    }
-  };
-
-  const handleSwitchBranch = async (branch: string) => {
-    if (!project.localPath) return;
-    try {
-      const res = await fetch("/api/git", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "checkout", path: project.localPath, branch }),
-      });
-      if (res.ok) {
-        showToast(`${t("git.switchSuccess")} ${branch}`);
-        await loadGitInfo();
-      } else {
-        const err = await res.json();
-        showToast(`${t("git.switchFailed")}: ${err.error}`);
-      }
-    } catch {
-      showToast(t("git.switchFailed"));
     }
   };
 
@@ -420,30 +399,19 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
                 </Button>
               </div>
             ) : gitInfo?.isGit ? (
-              /* Git repo — show current branch + dropdown selectors */
+              /* Git repo — full git panel (branch + changed files + sync + stash actions) */
               <div className="space-y-3">
-                {/* Current branch + actions + branch selector */}
-                <UnifiedBranchDropdown
-                  localBranches={gitInfo.branches ?? []}
-                  remoteBranches={(gitInfo.remoteBranches ?? []).filter((b) => !gitInfo.branches?.includes(b))}
-                  currentBranch={gitInfo.currentBranch ?? ""}
-                  onSwitch={handleSwitchBranch}
-                  onFetch={async () => {
-                    if (!project.localPath) return;
-                    await fetch("/api/git", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ action: "fetch", path: project.localPath }),
-                    });
-                    await loadGitInfo();
-                  }}
-                  onCreateBranch={() => setShowCreateBranch(true)}
-                />
+                {/* Reuses EditorGitPanel in project mode — full set of actions:
+                    branch switch, fetch, create branch, stage/unstage/discard,
+                    commit, pull/push, pull-from/push-to, stash save/pop. */}
+                <div className="rounded-lg border border-border overflow-hidden h-[560px] flex flex-col">
+                  <EditorGitPanel localPath={project.localPath!} mode="project" />
+                </div>
 
-                {/* Commit log */}
+                {/* Commit log (full history list) */}
                 <GitLogPanel commits={gitInfo.commits ?? []} />
 
-                {/* Stash */}
+                {/* Stash list */}
                 <GitStashPanel
                   localPath={project.localPath!}
                   stashes={gitInfo.stashes ?? []}
@@ -674,22 +642,6 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Create Branch Dialog */}
-      {gitInfo?.isGit && (
-        <CreateBranchDialog
-          open={showCreateBranch}
-          onOpenChange={setShowCreateBranch}
-          branches={gitInfo.branches ?? []}
-          currentBranch={gitInfo.currentBranch ?? ""}
-          localPath={project.localPath!}
-          onCreated={async () => {
-            await loadGitInfo();
-            showToast(t("git.createSuccess"));
-          }}
-          onError={(msg) => showToast(`${t("git.createFailed")}: ${msg}`)}
-        />
-      )}
-
       {/* Delete Project Confirmation Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={(open) => {
         setShowDeleteDialog(open);
@@ -750,158 +702,4 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
   );
 }
 
-// ── Unified Branch Dropdown with Local/Remote groups + Fetch ──
-function UnifiedBranchDropdown({
-  localBranches,
-  remoteBranches,
-  currentBranch,
-  onSwitch,
-  onFetch,
-  onCreateBranch,
-}: {
-  localBranches: string[];
-  remoteBranches: string[];
-  currentBranch: string;
-  onSwitch: (branch: string) => void;
-  onFetch: () => Promise<void>;
-  onCreateBranch: () => void;
-}) {
-  const { t } = useI18n();
-  const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState("");
-  const [fetching, setFetching] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open]);
-
-  const lc = filter.toLowerCase();
-  const filteredLocal = localBranches.filter((b) => b.toLowerCase().includes(lc));
-  const filteredRemote = remoteBranches.filter((b) => b.toLowerCase().includes(lc));
-  const hasResults = filteredLocal.length > 0 || filteredRemote.length > 0;
-
-  const handleFetch = async () => {
-    setFetching(true);
-    try {
-      await onFetch();
-    } finally {
-      setFetching(false);
-    }
-  };
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{t("git.currentBranch")}</p>
-        <div className="flex items-center gap-0.5">
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={handleFetch}
-            disabled={fetching}
-            className="text-muted-foreground"
-            aria-label="Fetch"
-          >
-            <RefreshCw className={`h-3 w-3 ${fetching ? "animate-spin" : ""}`} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={onCreateBranch}
-            className="text-muted-foreground"
-            aria-label={t("git.createBranch")}
-          >
-            <Plus className="h-3 w-3" />
-          </Button>
-        </div>
-      </div>
-      {/* Branch dropdown */}
-      <div className="relative" ref={dropdownRef}>
-        <button
-          onClick={() => { setOpen(!open); setFilter(""); }}
-          className="flex w-full items-center justify-between rounded-lg border border-border bg-muted/50 px-3 py-2 text-left transition-colors hover:bg-accent"
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <GitBranch className="h-3 w-3 shrink-0 text-emerald-400" />
-            <span className="truncate font-mono text-xs text-foreground" title={currentBranch || undefined}>{currentBranch || "—"}</span>
-          </div>
-          <ChevronDown className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
-        </button>
-
-        {open && (
-          <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-lg border border-border bg-popover shadow-xl">
-            {/* Search */}
-            <div className="border-b border-border p-1.5">
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                <input
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
-                  placeholder="Filter..."
-                  autoFocus
-                  className="h-7 w-full rounded-md bg-muted/50 pl-7 pr-2 text-xs text-foreground placeholder-muted-foreground outline-none focus:ring-1 focus:ring-ring"
-                />
-              </div>
-            </div>
-            <div className="max-h-60 overflow-auto py-1">
-              {!hasResults && (
-                <p className="px-3 py-2 text-xs text-muted-foreground">No branches found</p>
-              )}
-              {/* Local branches group */}
-              {filteredLocal.length > 0 && (
-                <>
-                  <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    {t("git.localBranches")}
-                  </p>
-                  {filteredLocal.map((b) => {
-                    const isActive = b === currentBranch;
-                    return (
-                      <button
-                        key={`local-${b}`}
-                        onClick={() => { if (!isActive) onSwitch(b); setOpen(false); }}
-                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors ${
-                          isActive ? "bg-emerald-500/10 text-emerald-400" : "text-secondary-foreground hover:bg-accent"
-                        }`}
-                      >
-                        <GitBranch className="h-3 w-3 shrink-0" />
-                        <span className="truncate font-mono text-xs" title={b}>{b}</span>
-                        {isActive && <Check className="h-3 w-3 ml-auto shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </>
-              )}
-              {/* Remote branches group */}
-              {filteredRemote.length > 0 && (
-                <>
-                  <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    {t("git.remoteBranches")}
-                  </p>
-                  {filteredRemote.map((b) => (
-                    <button
-                      key={`remote-${b}`}
-                      onClick={() => { onSwitch(b); setOpen(false); }}
-                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-secondary-foreground transition-colors hover:bg-accent"
-                    >
-                      <Globe className="h-3 w-3 shrink-0 text-sky-400" />
-                      <span className="truncate font-mono text-xs" title={b}>{b}</span>
-                    </button>
-                  ))}
-                </>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 

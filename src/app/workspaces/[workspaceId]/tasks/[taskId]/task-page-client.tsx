@@ -619,10 +619,11 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                       />
                     </TabsContent>
                   )}
-                  {/* Git sub-tab — always available */}
+                  {/* Git sub-tab — task mode: branch is read-only, no fetch / create / push / pull / stash */}
                   <TabsContent value="git" className="flex-1 min-h-0 overflow-hidden mt-0">
                     <EditorGitPanel
                       localPath={fileRootPath ?? task.project?.localPath ?? ""}
+                      mode="task"
                       onFileSelect={(relativePath, originalContent, rootPath) => {
                         setDiffFileRequest({ relativePath, originalContent, rootPath });
                       }}

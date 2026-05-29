@@ -48,6 +48,10 @@ export interface EditorGitPanelProps {
     originalContent: string,
     rootPath: string
   ) => void;
+  // "task" hides branch switching, fetch, create-branch, pull/push, stash —
+  // task work happens on a fixed task/<id> branch and shouldn't trigger
+  // arbitrary branch ops. Project-level git operations live in RepoSidebar.
+  mode?: "task" | "project";
 }
 
 const STATUS_ICON: Record<string, typeof File> = {
@@ -128,7 +132,8 @@ function buildFileTree(files: ChangedFile[]): TreeNode[] {
 
 // ── Main component ──
 
-export function EditorGitPanel({ localPath, onFileSelect }: EditorGitPanelProps) {
+export function EditorGitPanel({ localPath, onFileSelect, mode = "project" }: EditorGitPanelProps) {
+  const isTaskMode = mode === "task";
   const { t } = useI18n();
   const [gitInfo, setGitInfo] = useState<GitInfoData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -364,8 +369,26 @@ export function EditorGitPanel({ localPath, onFileSelect }: EditorGitPanelProps)
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* ── Branch selector ── */}
+      {/* ── Branch selector / read-only display ── */}
       <div className="shrink-0 px-2 pt-2 pb-1 flex items-center gap-1">
+        {isTaskMode ? (
+          // Task mode: read-only branch label; full name in tooltip when truncated
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <div className="flex flex-1 min-w-0 items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1.5">
+                  <GitBranch className="h-3 w-3 shrink-0 text-emerald-400" />
+                  <span className="truncate font-mono text-xs text-foreground">
+                    {gitInfo?.currentBranch || "—"}
+                  </span>
+                </div>
+              }
+            />
+            <TooltipContent side="bottom" className="font-mono text-xs">
+              {gitInfo?.currentBranch || "—"}
+            </TooltipContent>
+          </Tooltip>
+        ) : (
         <div className="relative flex-1 min-w-0" ref={branchRef}>
           <button
             onClick={() => { setBranchOpen(!branchOpen); setBranchFilter(""); }}
@@ -445,27 +468,32 @@ export function EditorGitPanel({ localPath, onFileSelect }: EditorGitPanelProps)
             </div>
           )}
         </div>
-        <Tooltip>
-          <TooltipTrigger
-            onClick={handleFetch}
-            disabled={fetching}
-            className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="Fetch"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${fetching ? "animate-spin" : ""}`} />
-          </TooltipTrigger>
-          <TooltipContent side="bottom">Fetch</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            onClick={openCreateBranchDialog}
-            className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            aria-label={t("git.createBranch")}
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </TooltipTrigger>
-          <TooltipContent side="bottom">{t("git.createBranch")}</TooltipContent>
-        </Tooltip>
+        )}
+        {!isTaskMode && (
+          <>
+            <Tooltip>
+              <TooltipTrigger
+                onClick={handleFetch}
+                disabled={fetching}
+                className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Fetch"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${fetching ? "animate-spin" : ""}`} />
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Fetch</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                onClick={openCreateBranchDialog}
+                className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                aria-label={t("git.createBranch")}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{t("git.createBranch")}</TooltipContent>
+            </Tooltip>
+          </>
+        )}
       </div>
 
       {/* ── Commit message ── */}
@@ -540,85 +568,89 @@ export function EditorGitPanel({ localPath, onFileSelect }: EditorGitPanelProps)
                 </DropdownMenuItem>
               </DropdownMenuGroup>
 
-              <DropdownMenuSeparator />
+              {!isTaskMode && (
+                <>
+                  <DropdownMenuSeparator />
 
-              {/* Pull / Push / Fetch */}
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>{t("git.sync")}</DropdownMenuLabel>
-                <DropdownMenuItem onClick={() => handlePull()} disabled={pulling}>
-                  <ArrowDown className="h-3.5 w-3.5 mr-2" />
-                  {t("git.pull")}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handlePush()} disabled={pushing}>
-                  <ArrowUp className="h-3.5 w-3.5 mr-2" />
-                  {t("git.push")}
-                </DropdownMenuItem>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger disabled={pulling}>
-                    <ArrowDown className="h-3.5 w-3.5 mr-2" />
-                    {t("git.pullFrom")}...
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="max-h-60 overflow-y-auto">
-                    {/* Current branch first */}
-                    <DropdownMenuItem onClick={() => handlePull()}>
-                      <GitBranch className="h-3 w-3 mr-2 text-emerald-400" />
-                      {gitInfo.currentBranch}
-                      {gitInfo.behind > 0 && <span className="ml-auto text-[10px] text-muted-foreground">↓{gitInfo.behind}</span>}
+                  {/* Pull / Push / Fetch */}
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>{t("git.sync")}</DropdownMenuLabel>
+                    <DropdownMenuItem onClick={() => handlePull()} disabled={pulling}>
+                      <ArrowDown className="h-3.5 w-3.5 mr-2" />
+                      {t("git.pull")}
                     </DropdownMenuItem>
-                    {gitInfo.remoteBranches
-                      .filter((b) => b !== gitInfo.currentBranch)
-                      .map((b) => (
-                        <DropdownMenuItem key={b} onClick={() => handlePull(b)}>
-                          <GitBranch className="h-3 w-3 mr-2 text-sky-400" />
-                          {b}
-                        </DropdownMenuItem>
-                      ))}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger disabled={pushing}>
-                    <ArrowUp className="h-3.5 w-3.5 mr-2" />
-                    {t("git.pushTo")}...
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="max-h-60 overflow-y-auto">
-                    <DropdownMenuItem onClick={() => handlePush()}>
-                      <GitBranch className="h-3 w-3 mr-2 text-emerald-400" />
-                      {gitInfo.currentBranch}
-                      {gitInfo.ahead > 0 && <span className="ml-auto text-[10px] text-muted-foreground">↑{gitInfo.ahead}</span>}
+                    <DropdownMenuItem onClick={() => handlePush()} disabled={pushing}>
+                      <ArrowUp className="h-3.5 w-3.5 mr-2" />
+                      {t("git.push")}
                     </DropdownMenuItem>
-                    {gitInfo.remoteBranches
-                      .filter((b) => b !== gitInfo.currentBranch)
-                      .map((b) => (
-                        <DropdownMenuItem key={b} onClick={() => handlePush(b)}>
-                          <GitBranch className="h-3 w-3 mr-2 text-sky-400" />
-                          {b}
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger disabled={pulling}>
+                        <ArrowDown className="h-3.5 w-3.5 mr-2" />
+                        {t("git.pullFrom")}...
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent className="max-h-60 overflow-y-auto">
+                        {/* Current branch first */}
+                        <DropdownMenuItem onClick={() => handlePull()}>
+                          <GitBranch className="h-3 w-3 mr-2 text-emerald-400" />
+                          {gitInfo.currentBranch}
+                          {gitInfo.behind > 0 && <span className="ml-auto text-[10px] text-muted-foreground">↓{gitInfo.behind}</span>}
                         </DropdownMenuItem>
-                      ))}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                <DropdownMenuItem onClick={handleFetch} disabled={fetching}>
-                  <RefreshCw className={`h-3.5 w-3.5 mr-2 ${fetching ? "animate-spin" : ""}`} />
-                  {t("git.fetchAll")}
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
+                        {gitInfo.remoteBranches
+                          .filter((b) => b !== gitInfo.currentBranch)
+                          .map((b) => (
+                            <DropdownMenuItem key={b} onClick={() => handlePull(b)}>
+                              <GitBranch className="h-3 w-3 mr-2 text-sky-400" />
+                              {b}
+                            </DropdownMenuItem>
+                          ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger disabled={pushing}>
+                        <ArrowUp className="h-3.5 w-3.5 mr-2" />
+                        {t("git.pushTo")}...
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent className="max-h-60 overflow-y-auto">
+                        <DropdownMenuItem onClick={() => handlePush()}>
+                          <GitBranch className="h-3 w-3 mr-2 text-emerald-400" />
+                          {gitInfo.currentBranch}
+                          {gitInfo.ahead > 0 && <span className="ml-auto text-[10px] text-muted-foreground">↑{gitInfo.ahead}</span>}
+                        </DropdownMenuItem>
+                        {gitInfo.remoteBranches
+                          .filter((b) => b !== gitInfo.currentBranch)
+                          .map((b) => (
+                            <DropdownMenuItem key={b} onClick={() => handlePush(b)}>
+                              <GitBranch className="h-3 w-3 mr-2 text-sky-400" />
+                              {b}
+                            </DropdownMenuItem>
+                          ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuItem onClick={handleFetch} disabled={fetching}>
+                      <RefreshCw className={`h-3.5 w-3.5 mr-2 ${fetching ? "animate-spin" : ""}`} />
+                      {t("git.fetchAll")}
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
 
-              <DropdownMenuSeparator />
+                  <DropdownMenuSeparator />
 
-              {/* Stash */}
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>{t("git.stash")}</DropdownMenuLabel>
-                <DropdownMenuItem
-                  onClick={handleStashSave}
-                  disabled={gitInfo.changedFiles.length === 0}
-                >
-                  <Archive className="h-3.5 w-3.5 mr-2" />
-                  {t("git.stashSave")}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleStashPop}>
-                  <ArrowUpFromLine className="h-3.5 w-3.5 mr-2" />
-                  {t("git.stashPopLatest")}
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
+                  {/* Stash */}
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>{t("git.stash")}</DropdownMenuLabel>
+                    <DropdownMenuItem
+                      onClick={handleStashSave}
+                      disabled={gitInfo.changedFiles.length === 0}
+                    >
+                      <Archive className="h-3.5 w-3.5 mr-2" />
+                      {t("git.stashSave")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleStashPop}>
+                      <ArrowUpFromLine className="h-3.5 w-3.5 mr-2" />
+                      {t("git.stashPopLatest")}
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </>
+              )}
 
               <DropdownMenuSeparator />
 
