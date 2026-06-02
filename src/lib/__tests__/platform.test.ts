@@ -452,17 +452,26 @@ describe("platform utilities", () => {
       vi.restoreAllMocks();
     });
 
-    it("detects macOS terminal apps via /Applications", async () => {
+    it("returns the full macOS list with an installed flag per app", async () => {
       const fsModule = await import("node:fs");
       vi.spyOn(fsModule.promises, "access").mockImplementation(async (p) => {
-        if (String(p).includes("Terminal.app")) return undefined;
+        // Only Terminal.app exists; everything else is "not installed".
+        if (String(p).includes("/Terminal.app")) return undefined;
         throw new Error("ENOENT");
       });
 
       const { detectTerminalApps } = await import("@/lib/platform");
       const result = await detectTerminalApps("darwin");
 
-      expect(result).toEqual([{ name: "Terminal", value: "Terminal" }]);
+      expect(result).toEqual([
+        { name: "Terminal", value: "Terminal", installed: true },
+        { name: "iTerm2", value: "iTerm", installed: false },
+        { name: "Warp", value: "Warp", installed: false },
+        { name: "Alacritty", value: "Alacritty", installed: false },
+        { name: "WezTerm", value: "WezTerm", installed: false },
+        { name: "kitty", value: "kitty", installed: false },
+        { name: "Hyper", value: "Hyper", installed: false },
+      ]);
     });
 
     it("returns empty array for linux", async () => {

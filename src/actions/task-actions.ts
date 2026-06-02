@@ -228,6 +228,7 @@ export async function getArchivedTasks(projectId: string) {
     },
     include: {
       labels: { include: { label: true } },
+      version: { select: { id: true, number: true, name: true } },
       executions: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -348,6 +349,7 @@ export async function getTaskOverview(taskId: string) {
     where: { id: taskId },
     include: {
       labels: { include: { label: true } },
+      version: { select: { id: true, number: true, name: true } },
       project: {
         select: { id: true, name: true, type: true, localPath: true, workspaceId: true },
       },

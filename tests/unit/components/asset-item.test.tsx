@@ -9,6 +9,9 @@ vi.mock("@/lib/file-serve-client", () => ({
     const m = p.match(/data\/assets\/([^/]+)\/([^/]+)$/);
     return m ? `/api/files/assets/${m[1]}/${m[2]}` : p;
   },
+  isImageAsset: (filename: string, mimeType?: string | null) =>
+    (mimeType?.startsWith("image/") ?? false) ||
+    /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i.test(filename),
 }));
 
 afterEach(() => {

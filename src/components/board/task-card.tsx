@@ -2,8 +2,9 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { MoreHorizontal, Pencil, Trash2, Pin } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Pin, GitBranch } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PRIORITY_CONFIG } from "@/lib/constants";
+import { TaskVersionTag } from "@/components/version/version-badges";
 import { useI18n } from "@/lib/i18n";
 import type { TaskWithLabels } from "@/types";
 
@@ -42,6 +44,8 @@ export function TaskCard({ task, onClick, onEdit, onDelete, onTogglePin, onConte
   };
 
   const priorityConfig = PRIORITY_CONFIG[task.priority];
+  // worktree 模式标识：创建任务时只有勾选 worktree 才会写入 baseBranch
+  const isWorktree = !!task.baseBranch;
 
   return (
     <div
@@ -108,28 +112,64 @@ export function TaskCard({ task, onClick, onEdit, onDelete, onTogglePin, onConte
         </p>
       )}
 
-      <div className="mt-2.5">
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         <Badge variant="secondary" className={`text-[10px] font-semibold ${priorityConfig.color}`}>
           {priorityConfig.label}
         </Badge>
+        {task.labels?.map((tl) => (
+          <span
+            key={tl.label.id}
+            className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+            style={{
+              backgroundColor: tl.label.color + "20",
+              color: tl.label.color,
+            }}
+          >
+            {tl.label.name}
+          </span>
+        ))}
+        {(isWorktree || task.version) && (
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            {isWorktree && (
+              <Tooltip disableHoverablePopup>
+                <TooltipTrigger
+                  render={
+                    <span
+                      className="inline-flex cursor-default items-center rounded-md border border-border bg-muted px-1 py-0.5 text-muted-foreground"
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      <GitBranch className="h-2.5 w-2.5 shrink-0" />
+                    </span>
+                  }
+                />
+                <TooltipContent side="top">
+                  {t("board.card.worktree", { branch: task.baseBranch ?? "" })}
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {task.version && (
+              <Tooltip disableHoverablePopup>
+                <TooltipTrigger
+                  render={
+                    <span
+                      className="cursor-default"
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      <TaskVersionTag number={task.version.number} title="" />
+                    </span>
+                  }
+                />
+                <TooltipContent side="top">
+                  {t("board.card.version", {
+                    number: task.version.number,
+                    name: task.version.name,
+                  })}
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        )}
       </div>
-
-      {task.labels && task.labels.length > 0 && (
-        <div className="mt-1.5 flex flex-wrap gap-1">
-          {task.labels.map((tl) => (
-            <span
-              key={tl.label.id}
-              className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
-              style={{
-                backgroundColor: tl.label.color + "20",
-                color: tl.label.color,
-              }}
-            >
-              {tl.label.name}
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

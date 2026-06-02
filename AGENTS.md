@@ -38,7 +38,7 @@ System modules for GSD phase scoping. Use the **Slug** as the commit scope (e.g.
 | Missions | `missions` | 多任务监控面板、网格布局 |
 | Search | `search` | 全局搜索、代码搜索、FTS |
 | Settings | `settings` | 系统配置、CLI Profile、Agent 配置 |
-| MCP | `mcp` | MCP Server、23 个工具、stdio 传输 |
+| MCP | `mcp` | MCP Server、25 个工具、stdio 传输 |
 | Git | `git` | Git 操作、Worktree、Diff、Merge |
 | Assets & Notes | `assets` | 项目资产上传、笔记系统 |
 | AI | `ai` | Claude SDK、CLI Adapter、执行总结、Prompt 管理 |
@@ -137,7 +137,7 @@ Replace `<project-root>` with the absolute path to this repository.
 
 ## Available MCP Tools
 
-23 tools across 7 categories.
+25 tools across 7 categories.
 
 ### Workspace Tools (`src/mcp/tools/workspace-tools.ts`)
 
@@ -162,10 +162,12 @@ Replace `<project-root>` with the absolute path to this repository.
 | Tool | Description | Key Params |
 |------|-------------|------------|
 | `list_tasks` | List tasks in a project, ordered by `order` then `createdAt`; includes labels | `projectId`, `status?` |
-| `create_task` | Create a task with optional labels | `projectId`, `title`, `description?`, `priority?`, `status?`, `labelIds?`, `useWorktree?`, `baseBranch?`, `autoStart?`, `references?` |
+| `create_task` | Create a task with optional labels/version. `useWorktree`/`autoStart` default to the saved global preference; first call without them (and before defaults set) returns `{ needsDefaultsSetup: true }` instead of creating | `projectId`, `title`, `description?`, `priority?`, `status?`, `labelIds?`, `versionId?`, `useWorktree?`, `baseBranch?`, `autoStart?`, `references?` |
 | `update_task` | Update title, description, priority, and/or labels (replaces all labels) | `taskId`, `title?`, `description?`, `priority?`, `labelIds?` |
 | `move_task` | Move task to a different status column | `taskId`, `status` |
 | `delete_task` | Delete a task | `taskId` |
+| `set_task_defaults` | Save global defaults for new tasks (worktree isolation + auto-start). Call once after asking the user; marks defaults as configured | `useWorktree`, `autoStart` |
+| `list_versions` | List a project's active versions (excludes RELEASED) for `create_task`'s `versionId` | `projectId` |
 
 ### Label Tools (`src/mcp/tools/label-tools.ts`)
 

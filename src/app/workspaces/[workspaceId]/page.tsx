@@ -32,6 +32,7 @@ export default async function WorkspaceBoardPage({ params, searchParams }: Props
               labels: {
                 include: { label: true },
               },
+              version: { select: { id: true, number: true, name: true } },
               _count: { select: { executions: true } },
             },
           },

@@ -52,6 +52,7 @@ vi.mock("fs", () => ({
 vi.mock("@/lib/file-utils", () => ({
   stripCacheUuidSuffix: vi.fn((filename: string) => filename.replace(/-[0-9a-f]{8}(\.[^.]+)$/i, "$1")),
   isAssistantCachePath: vi.fn(),
+  guessMimeType: vi.fn(() => "image/png"),
 }));
 
 import { db } from "../../db";

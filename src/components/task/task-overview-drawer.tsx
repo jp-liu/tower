@@ -20,6 +20,7 @@ import { CreateTaskDialog } from "@/components/board/create-task-dialog";
 import { BOARD_COLUMNS, PRIORITY_CONFIG } from "@/lib/constants";
 import { Calendar, Copy, Package, PlayCircle, FolderSearch, Code, Terminal } from "lucide-react";
 import { TaskFileChanges } from "@/components/task/task-file-changes";
+import { TaskVersionTag } from "@/components/version/version-badges";
 import { toast } from "sonner";
 
 interface TaskOverviewDrawerProps {
@@ -153,6 +154,13 @@ export function TaskOverviewDrawer({
                 >
                   {priorityConfig.label}
                 </Badge>
+              )}
+              {task.version && (
+                <TaskVersionTag
+                  number={task.version.number}
+                  name={task.version.name}
+                  showName
+                />
               )}
             </div>
           )}

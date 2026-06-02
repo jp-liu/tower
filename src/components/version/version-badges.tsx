@@ -1,5 +1,6 @@
 "use client";
 
+import { Milestone } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 // Custom version types have no stored color; assign a deterministic dark-safe
@@ -47,6 +48,36 @@ export function VersionTypeBadge({ name }: { name: string | null }) {
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${typeBadgeColor(name)}`}
     >
       {name}
+    </span>
+  );
+}
+
+/**
+ * Compact tag showing which version a task belongs to. Used on board cards
+ * (number only), task drawer, detail page, and archive (number + name).
+ */
+export function TaskVersionTag({
+  number,
+  name,
+  showName = false,
+  className = "",
+  title,
+}: {
+  number: string;
+  name?: string | null;
+  showName?: boolean;
+  className?: string;
+  /** Override the native tooltip text (defaults to "number · name") */
+  title?: string;
+}) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground ${className}`}
+      title={title ?? (name ? `${number} · ${name}` : number)}
+    >
+      <Milestone className="h-2.5 w-2.5 shrink-0" />
+      <span className="font-mono">{number}</span>
+      {showName && name ? <span className="max-w-[140px] truncate">{name}</span> : null}
     </span>
   );
 }

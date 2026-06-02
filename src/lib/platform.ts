@@ -486,6 +486,8 @@ export interface DetectedTerminalApp {
   name: string;
   /** Value for macOS `open -a` or Windows executable path */
   value: string;
+  /** Whether the app is actually installed/detected on this system */
+  installed: boolean;
 }
 
 /** Well-known macOS terminal GUI applications. */
@@ -508,11 +510,12 @@ export async function detectTerminalApps(
   platform: NodeJS.Platform = process.platform,
 ): Promise<DetectedTerminalApp[]> {
   if (platform === "darwin") {
+    // Return the FULL known list with an `installed` flag so the UI can show
+    // every option and disable the ones that aren't installed.
     const results: DetectedTerminalApp[] = [];
     for (const t of MAC_TERMINAL_APPS) {
-      if (await pathExists(`/Applications/${t.bundleName}.app`, platform)) {
-        results.push({ name: t.name, value: t.bundleName });
-      }
+      const installed = await pathExists(`/Applications/${t.bundleName}.app`, platform);
+      results.push({ name: t.name, value: t.bundleName, installed });
     }
     return results;
   }
@@ -521,7 +524,7 @@ export async function detectTerminalApps(
     const results: DetectedTerminalApp[] = [];
     const wtPath = await resolveCommandPath("wt", { platform });
     if (wtPath) {
-      results.push({ name: "Windows Terminal", value: wtPath });
+      results.push({ name: "Windows Terminal", value: wtPath, installed: true });
     }
     return results;
   }
@@ -534,6 +537,8 @@ export interface DetectedEditor {
   name: string;
   /** CLI command on PATH, e.g. "code", "cursor" — passed to openInEditor */
   command: string;
+  /** Whether the command was found on PATH on this system */
+  installed: boolean;
 }
 
 /**
@@ -569,11 +574,12 @@ export const KNOWN_EDITORS: Array<{ name: string; command: string }> = [
 export async function detectEditors(
   platform: NodeJS.Platform = process.platform,
 ): Promise<DetectedEditor[]> {
+  // Return the FULL known list with an `installed` flag so the UI can show
+  // every editor and disable the ones whose CLI isn't on PATH.
   const results: DetectedEditor[] = [];
   for (const e of KNOWN_EDITORS) {
-    if (await resolveCommandPath(e.command, { platform })) {
-      results.push({ name: e.name, command: e.command });
-    }
+    const installed = !!(await resolveCommandPath(e.command, { platform }));
+    results.push({ name: e.name, command: e.command, installed });
   }
   return results;
 }

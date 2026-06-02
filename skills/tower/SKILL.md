@@ -55,15 +55,22 @@ Use Tower tools when the user wants to:
 1. Call `list_workspaces` to find the target workspace
 2. Call `list_projects` with workspaceId to find the target project
 3. Ask user to confirm the project (or infer from context)
-4. **Worktree mode**: default is direct mode (no branch isolation). If user says "use worktree", "-w", or "branch isolation", set `useWorktree: true`. Optionally pass `baseBranch` to specify which branch to check out from (e.g. `baseBranch: "develop"`). If `baseBranch` is omitted, the project's current git branch is auto-detected.
-5. **SubPath detection**: check the project description for directory structure hints (e.g. "monorepo: packages/web, packages/api"). If the task clearly belongs to a subdirectory, set `subPath` (e.g. "packages/web"). If unclear, omit it — it's optional.
-6. **References (any files/images)**: ALL user-provided files — including pasted screenshots, uploaded images, and local file paths — should be passed as `references: ["/path/to/file"]` on `create_task`. The tool copies files into the project asset library automatically.
+4. **Worktree / auto-start defaults**: `create_task`'s `useWorktree` (branch isolation) and `autoStart` (run right after create) follow the user's saved **global** preference.
+   - On the FIRST `create_task` where neither default has been set AND you didn't pass them explicitly, the tool does **not** create the task — it returns `{ needsDefaultsSetup: true, message }`. When you see that:
+     - Ask the user two things: (a) default to Git **worktree** isolation for new tasks? (b) **auto-start** execution right after creating?
+     - Call `set_task_defaults({ useWorktree, autoStart })` once to save it (you'll never be asked again).
+     - Then call `create_task` again — it now succeeds using the saved defaults.
+   - **Per-task override**: if the user wants this one task to differ (e.g. "don't use worktree", "just create, don't start"), pass `useWorktree` / `autoStart` explicitly on `create_task`. Explicit args always win over the saved default and also skip the first-run prompt.
+   - When `useWorktree` resolves to true, optionally pass `baseBranch` to choose the checkout branch (e.g. `baseBranch: "develop"`); if omitted, the project's current git branch is auto-detected.
+5. **Version (optional)**: to file the task under a project version, call `list_versions` with the projectId, let the user pick, and pass `versionId`. Omit for backlog (no version).
+6. **SubPath detection**: check the project description for directory structure hints (e.g. "monorepo: packages/web, packages/api"). If the task clearly belongs to a subdirectory, set `subPath` (e.g. "packages/web"). If unclear, omit it — it's optional.
+7. **References (any files/images)**: ALL user-provided files — including pasted screenshots, uploaded images, and local file paths — should be passed as `references: ["/path/to/file"]` on `create_task`. The tool copies files into the project asset library automatically.
    - **Local file paths**: pass directly (e.g. `references: ["/path/to/doc.md", "/path/to/design.png"]`)
    - **Pasted images with known paths**: if the platform provides file paths for pasted media (e.g. OpenClaw's `{{MediaPaths}}`, Claude Code temp files), pass those paths directly — they are local files
    - **Base64 only (no file path)**: if you only have base64 data with no local path, upload first via `manage_assets` with `action: "upload"`, `projectId`, `base64`, `mimeType`. Get back `{ id: assetId, path }`. Then pass the returned `path` in `references` — `create_task` will automatically copy and link the asset, no separate `link_task` needed
    - **`link_task` only for retroactive linking**: use `manage_assets` with `action: "link_task"` only when you need to associate existing assets with an already-created task (e.g. user wants to add references after task creation)
-7. Call `create_task` with projectId, title, and optional description/priority/labelIds/subPath/useWorktree/baseBranch/references
-8. `autoStart` defaults to true — task will be created and immediately started. If user says "don't start", "just create", or "-nostart", set `autoStart: false`
+8. Call `create_task` with projectId, title, and optional description/priority/labelIds/subPath/versionId/useWorktree/baseBranch/references
+9. After creating: if `autoStart` resolved to true the task starts immediately (check the response's `execution` field — `autoStart` intent does not guarantee it actually started); otherwise the task stays TODO.
 
 ### "Start a task" / "Run this task" / "Execute task ..."
 

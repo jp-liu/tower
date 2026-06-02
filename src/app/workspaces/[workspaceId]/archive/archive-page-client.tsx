@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n";
 import { SubPageNav } from "@/components/layout/sub-page-nav";
 import { getArchivedTasks } from "@/actions/task-actions";
 import { TaskOverviewDrawer } from "@/components/task/task-overview-drawer";
+import { TaskVersionTag } from "@/components/version/version-badges";
 import type { TaskStatus } from "@prisma/client";
 
 interface SimpleProject {
@@ -40,6 +41,7 @@ interface ArchivedTask {
   priority: string;
   createdAt: Date;
   updatedAt: Date;
+  version: { id: string; number: string; name: string } | null;
   labels: LabelItem[];
   executions: ExecutionItem[];
 }
@@ -214,6 +216,14 @@ export function ArchivePageClient({
                           >
                             {isDone ? t("archive.status.done") : t("archive.status.cancelled")}
                           </span>
+                          {task.version && (
+                            <TaskVersionTag
+                              number={task.version.number}
+                              name={task.version.name}
+                              showName
+                              className="shrink-0"
+                            />
+                          )}
                         </div>
                         {task.labels.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap gap-1">

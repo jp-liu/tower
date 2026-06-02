@@ -10,6 +10,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { updateProject, createProject, deleteProject, getRecentLocalProjects, getOrCreateTowerTaskId } from "@/actions/workspace-actions";
@@ -270,66 +271,75 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
           </span>
         </div>
         {project.localPath && (
-          <div className="mt-3 flex items-start gap-2 rounded-md bg-muted/50 px-2.5 py-2 text-xs">
-            <FolderOpen className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
-            <span className="break-all font-mono text-secondary-foreground">{project.localPath}</span>
-          </div>
-        )}
-        {project.gitUrl && (
-          <div className="mt-2 flex items-start gap-2 rounded-md bg-muted/50 px-2.5 py-2 text-xs">
-            <Globe className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
-            <span className="break-all text-secondary-foreground">{project.gitUrl}</span>
-          </div>
-        )}
-        {project.localPath && (
           <div className="mt-3 space-y-1.5">
-            {/* Open externally */}
-            <div className="flex flex-col">
-              <Button
-                variant="ghost"
-                className="w-full h-8 justify-start gap-2 px-2 text-xs text-muted-foreground"
-                onClick={async () => {
-                  try {
-                    await openInFileManager(project.localPath!);
-                  } catch (err) {
-                    console.error("openInFileManager failed:", err);
-                    toast.error(t("git.openInFileManagerFailed"));
+            {/* Open externally — icon buttons */}
+            <div className="flex items-center gap-1">
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground"
+                      onClick={async () => {
+                        try {
+                          await openInFileManager(project.localPath!);
+                        } catch (err) {
+                          console.error("openInFileManager failed:", err);
+                          toast.error(t("git.openInFileManagerFailed"));
+                        }
+                      }}
+                    >
+                      <FolderSearch className="h-4 w-4" />
+                    </Button>
                   }
-                }}
-              >
-                <FolderSearch className="h-3.5 w-3.5 shrink-0" />
-                {t("git.openInFileManager")}
-              </Button>
-              <Button
-                variant="ghost"
-                className="w-full h-8 justify-start gap-2 px-2 text-xs text-muted-foreground"
-                onClick={async () => {
-                  try {
-                    await openInEditor(project.localPath!);
-                  } catch (err) {
-                    console.error("openInEditor failed:", err);
-                    toast.error(t("git.openInEditorFailed"));
+                />
+                <TooltipContent>{t("git.openInFileManager")}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground"
+                      onClick={async () => {
+                        try {
+                          await openInEditor(project.localPath!);
+                        } catch (err) {
+                          console.error("openInEditor failed:", err);
+                          toast.error(t("git.openInEditorFailed"));
+                        }
+                      }}
+                    >
+                      <Code className="h-4 w-4" />
+                    </Button>
                   }
-                }}
-              >
-                <Code className="h-3.5 w-3.5 shrink-0" />
-                {t("git.openInEditor")}
-              </Button>
-              <Button
-                variant="ghost"
-                className="w-full h-8 justify-start gap-2 px-2 text-xs text-muted-foreground"
-                onClick={async () => {
-                  try {
-                    await openInTerminal(project.localPath!);
-                  } catch (err) {
-                    console.error("openInTerminal failed:", err);
-                    toast.error(t("git.openInTerminalFailed"));
+                />
+                <TooltipContent>{t("git.openInEditor")}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground"
+                      onClick={async () => {
+                        try {
+                          await openInTerminal(project.localPath!);
+                        } catch (err) {
+                          console.error("openInTerminal failed:", err);
+                          toast.error(t("git.openInTerminalFailed"));
+                        }
+                      }}
+                    >
+                      <Terminal className="h-4 w-4" />
+                    </Button>
                   }
-                }}
-              >
-                <Terminal className="h-3.5 w-3.5 shrink-0" />
-                {t("git.openInTerminal")}
-              </Button>
+                />
+                <TooltipContent>{t("git.openInTerminal")}</TooltipContent>
+              </Tooltip>
             </div>
             {/* Primary action — open the in-app workbench */}
             <Button
@@ -533,16 +543,9 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">{t("project.localPath")}</label>
-              <div className="mt-1.5 flex gap-2">
-                <Input
-                  value={editLocalPath}
-                  onChange={(e) => setEditLocalPath(e.target.value)}
-                  placeholder={t("project.localPathPlaceholder")}
-                  className="flex-1 font-mono text-xs"
-                />
-                <Button variant="outline" onClick={() => setShowFolderBrowser(true)} className="h-8 shrink-0">
-                  {t("folder.browse")}
-                </Button>
+              {/* Read-only — changing a project's path is not supported; re-import or create a new project instead */}
+              <div className="mt-1.5 break-all rounded-md border border-border bg-muted/50 px-3 py-2 font-mono text-xs text-muted-foreground">
+                {editLocalPath || "—"}
               </div>
             </div>
           </div>

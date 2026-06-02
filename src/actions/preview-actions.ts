@@ -452,7 +452,7 @@ export async function openInEditor(dirPath: string): Promise<void> {
 
   let editorCommand = await readConfigValue<string>("editor.command", "");
   if (!editorCommand) {
-    const detected = await detectEditors();
+    const detected = (await detectEditors()).filter((e) => e.installed);
     if (detected.length === 0) {
       throw new Error("No editor configured and none detected on PATH");
     }

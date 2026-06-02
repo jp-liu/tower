@@ -148,4 +148,12 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "boolean",
     label: "Default: Auto-start Execution",
   },
+  // Whether the MCP task defaults (worktree / auto-start) have been confirmed by
+  // the user once. Until true, the first MCP create_task with no explicit
+  // useWorktree/autoStart asks the calling AI to collect the user's preference.
+  "task.mcpDefaultsConfigured": {
+    defaultValue: false,
+    type: "boolean",
+    label: "MCP Task Defaults Configured",
+  },
 };

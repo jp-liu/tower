@@ -24,8 +24,12 @@ export type WorkspaceWithProjects = Workspace & {
   projects: ProjectWithRelations[];
 };
 
+export type TaskVersionRef = { id: string; number: string; name: string } | null;
+
 export type TaskWithLabels = Task & {
   labels: (TaskLabel & { label: Label })[];
+  /** Present when the query includes the version relation (board, etc.) */
+  version?: TaskVersionRef;
 };
 
 export type BoardColumn = {
