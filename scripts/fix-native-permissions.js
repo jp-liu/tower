@@ -14,6 +14,13 @@ const EXECUTABLES = [
   "node_modules/node-pty/prebuilds/darwin-x64/spawn-helper",
   "node_modules/node-pty/prebuilds/linux-arm64/spawn-helper",
   "node_modules/node-pty/prebuilds/linux-x64/spawn-helper",
+  // @vscode/ripgrep bundled `rg` binary (per-platform optionalDependency).
+  // Only the current platform's package is installed; the rest are skipped.
+  "node_modules/@vscode/ripgrep-darwin-arm64/bin/rg",
+  "node_modules/@vscode/ripgrep-darwin-x64/bin/rg",
+  "node_modules/@vscode/ripgrep-linux-arm64/bin/rg",
+  "node_modules/@vscode/ripgrep-linux-arm/bin/rg",
+  "node_modules/@vscode/ripgrep-linux-x64/bin/rg",
 ];
 
 let fixed = 0;

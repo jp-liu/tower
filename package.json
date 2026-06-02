@@ -61,6 +61,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",
     "@prisma/client": "^6.19.2",
+    "@vscode/ripgrep": "1.18.0",
     "node-pty": "^1.1.0",
     "prisma": "^6.19.2",
     "tsx": "^4.21.0",

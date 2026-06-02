@@ -11,9 +11,17 @@ vi.mock("fs", async () => {
   return { ...actual, existsSync: vi.fn(() => true) };
 });
 
+// Default: no bundled binary, so the system-detection branches are exercised.
+// Individual tests override this to test the bundled-first path.
+const mockResolveBundledRgPath = vi.hoisted(() => vi.fn(async (): Promise<string | null> => null));
+vi.mock("../rg-resolve", () => ({
+  resolveBundledRgPath: mockResolveBundledRgPath,
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.resetModules();
+  mockResolveBundledRgPath.mockImplementation(async () => null);
 });
 
 async function loadRipgrep() {
@@ -22,6 +30,22 @@ async function loadRipgrep() {
 }
 
 describe("ripgrep extension", () => {
+  it("check() prefers the bundled @vscode/ripgrep binary when present", async () => {
+    mockResolveBundledRgPath.mockImplementation(async () => "/bundled/@vscode/ripgrep/bin/rg");
+    const cp = await import("child_process");
+    (cp.execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
+        cb(null, "ripgrep 15.0.0\n");
+      }
+    );
+
+    const ext = await loadRipgrep();
+    const status = await ext.check();
+    expect(status.installed).toBe(true);
+    expect(status.path).toBe("/bundled/@vscode/ripgrep/bin/rg");
+    expect(status.version).toBe("15.0.0");
+  });
+
   it("check() reports installed when `which rg` returns a path", async () => {
     const cp = await import("child_process");
     (cp.execFileSync as unknown as ReturnType<typeof vi.fn>).mockReturnValue("/opt/homebrew/bin/rg\n");

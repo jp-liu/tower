@@ -34,6 +34,16 @@ vi.mock("@/actions/config-actions", () => ({
   getConfigValue: vi.fn(async (_k: string, def: number) => def),
 }));
 
+// Mock the bundled-rg resolver so tests are hermetic — they don't depend on
+// the real @vscode/ripgrep package / platform binary being present on the
+// runner. searchCode prefers the bundled path, so this is what execFile gets.
+const mockResolveBundledRgPath = vi.hoisted(() =>
+  vi.fn(async () => "/bundled/@vscode/ripgrep/bin/rg")
+);
+vi.mock("@/lib/extensions/rg-resolve", () => ({
+  resolveBundledRgPath: mockResolveBundledRgPath,
+}));
+
 import { searchCode, clearRgPathCache } from "@/actions/search-code-actions";
 import { getConfigValue } from "@/actions/config-actions";
 
@@ -49,6 +59,8 @@ beforeEach(async () => {
   mockExecFileSync.mockImplementation(() => "/opt/homebrew/bin/rg\n");
   mockExistsSync.mockReset();
   mockExistsSync.mockImplementation(() => true);
+  mockResolveBundledRgPath.mockReset();
+  mockResolveBundledRgPath.mockImplementation(async () => "/bundled/@vscode/ripgrep/bin/rg");
   (getConfigValue as ReturnType<typeof vi.fn>).mockReset();
   (getConfigValue as ReturnType<typeof vi.fn>).mockImplementation(
     async (_k: string, def: number) => def
