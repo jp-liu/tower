@@ -1090,4 +1090,7 @@ export const en: Translations = {
   "version.taskStatus.DONE": "Done",
   "version.taskStatus.CANCELLED": "Cancelled",
   "version.detail": "Detail",
+  "common.copy": "Copy",
+  "common.copied": "Copied",
+  "common.copyFailed": "Copy failed",
 };

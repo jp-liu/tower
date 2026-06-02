@@ -1106,4 +1106,7 @@ export const zh = {
   "version.taskStatus.DONE": "已完成",
   "version.taskStatus.CANCELLED": "已取消",
   "version.detail": "详情",
+  "common.copy": "复制",
+  "common.copied": "已复制",
+  "common.copyFailed": "复制失败",
 } as const;

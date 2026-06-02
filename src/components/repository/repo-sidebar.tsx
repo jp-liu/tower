@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   ChevronDown, ChevronRight,
-  GitBranch, Globe, FileText, Pencil, FolderOpen, GitCommitVertical,
+  GitBranch, FileText, Pencil, FolderOpen, GitCommitVertical,
   AlertCircle, Loader2, Sparkles, Trash2, FolderSearch, Code, Terminal,
+  Copy, Check,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -57,6 +58,60 @@ interface GitInfo {
   remoteUrl?: string;
   commits?: { hash: string; shortHash: string; message: string; author: string; date: string }[];
   stashes?: { index: number; message: string }[];
+}
+
+// ---------------------------------------------------------------------------
+// CopyableBox — a read-only value box with a copy-to-clipboard icon button.
+// Mirrors the copy pattern used in assistant-chat-bubble / commit-action-menu.
+// ---------------------------------------------------------------------------
+
+function CopyableBox({ value, ariaLabel }: { value: string; ariaLabel: string }) {
+  const { t } = useI18n();
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = value;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      toast.success(t("common.copied"));
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error(t("common.copyFailed"));
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-1 rounded-md border border-border bg-muted/50 pl-3 pr-1 py-1.5">
+      <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground" title={value}>
+        {value}
+      </span>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="shrink-0 text-muted-foreground"
+              aria-label={ariaLabel}
+              onClick={handleCopy}
+            >
+              {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+            </Button>
+          }
+        />
+        <TooltipContent>{copied ? t("common.copied") : t("common.copy")}</TooltipContent>
+      </Tooltip>
+    </div>
+  );
 }
 
 export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
@@ -270,6 +325,17 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
             )}
           </span>
         </div>
+        {/* Path & Git URL — read-only with copy-to-clipboard */}
+        {(project.localPath || project.gitUrl) && (
+          <div className="mt-3 space-y-1.5">
+            {project.localPath && (
+              <CopyableBox value={project.localPath} ariaLabel={t("project.localPath")} />
+            )}
+            {project.gitUrl && (
+              <CopyableBox value={project.gitUrl} ariaLabel={t("project.gitUrl")} />
+            )}
+          </div>
+        )}
         {project.localPath && (
           <div className="mt-3 space-y-1.5">
             {/* Open externally — icon buttons */}
