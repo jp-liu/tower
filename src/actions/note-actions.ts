@@ -75,13 +75,16 @@ export async function getProjectNotes(
       taskId: null,
       ...(options?.category ? { category: options.category } : {}),
     },
-    orderBy: { updatedAt: "desc" },
+    // Secondary `id desc` makes ordering deterministic when two notes share
+    // the same millisecond `updatedAt` (otherwise SQLite's tie order is
+    // unspecified, causing intermittent ordering).
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
   });
 }
 
 export async function getTaskNotes(taskId: string) {
   return db.projectNote.findMany({
     where: { taskId },
-    orderBy: { updatedAt: "desc" },
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
   });
 }

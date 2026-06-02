@@ -239,6 +239,9 @@ describe("manage_notes action=list", () => {
       title: "Note A",
       content: "a",
     });
+    // Ensure a distinct `updatedAt` millisecond so the two notes don't tie on
+    // the timestamp (the `id desc` secondary sort is the deterministic fallback).
+    await new Promise((resolve) => setTimeout(resolve, 5));
     await manageNotesHandler({
       action: "create",
       projectId: testProjectId,
