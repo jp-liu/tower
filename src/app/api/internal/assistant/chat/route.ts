@@ -84,6 +84,16 @@ export async function POST(request: NextRequest) {
           // Only allow Read when attachments are present (to read the provided files).
           tools: hasAttachments ? ["Read"] : [],
           allowedTools: [`mcp__${getTowerMcpName()}__*`, "Read"],
+          // Execute tool calls without prompting. The assistant runs headless
+          // over a localhost-only SSE route with no interactive permission UI
+          // and no `canUseTool` callback, so in the default permission mode the
+          // CLI's auto-mode classifier denies write MCP tools (create/delete
+          // task, etc.) and resolves the turn to "No response requested." —
+          // the model describes the work but never invokes the tools (#10).
+          // The available toolset is already strictly limited to Tower MCP
+          // tools (+ Read for attachments), so bypassing prompts is safe here.
+          permissionMode: "bypassPermissions",
+          allowDangerouslySkipPermissions: true,
           // Streaming — receive text_delta chunks as they arrive
           includePartialMessages: true,
           // .tower/ directory has its own CLAUDE.md with assistant persona
