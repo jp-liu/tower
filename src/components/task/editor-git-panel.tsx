@@ -396,13 +396,13 @@ export function EditorGitPanel({ localPath, onFileSelect, mode = "project" }: Ed
           >
             <div className="flex items-center gap-1.5 min-w-0">
               <GitBranch className="h-3 w-3 shrink-0 text-emerald-400" />
-              <span className="truncate font-mono text-xs text-foreground">{gitInfo?.currentBranch || "—"}</span>
+              <span className="truncate font-mono text-xs text-foreground" title={gitInfo?.currentBranch || undefined}>{gitInfo?.currentBranch || "—"}</span>
             </div>
             <ChevronDown className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${branchOpen ? "rotate-180" : ""}`} />
           </button>
 
           {branchOpen && (
-            <div className="absolute left-0 right-0 top-full z-30 mt-1 rounded-lg border border-border bg-popover shadow-xl">
+            <div className="absolute left-0 top-full z-30 mt-1 min-w-full w-max max-w-[320px] rounded-lg border border-border bg-popover shadow-xl">
               <div className="border-b border-border p-1.5">
                 <div className="relative">
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
@@ -435,7 +435,7 @@ export function EditorGitPanel({ localPath, onFileSelect, mode = "project" }: Ed
                         }`}
                       >
                         <GitBranch className="h-3 w-3 shrink-0" />
-                        <span className="truncate font-mono text-xs">{b}</span>
+                        <span className="truncate font-mono text-xs" title={b}>{b}</span>
                         {isActive && <Check className="h-3 w-3 ml-auto shrink-0" />}
                       </button>
                     );
@@ -458,7 +458,7 @@ export function EditorGitPanel({ localPath, onFileSelect, mode = "project" }: Ed
                       className="flex w-full items-center gap-2 px-3 py-1 text-left text-secondary-foreground transition-colors hover:bg-accent"
                     >
                       <Globe className="h-3 w-3 shrink-0 text-sky-400" />
-                      <span className="truncate font-mono text-xs">{b}</span>
+                      <span className="truncate font-mono text-xs" title={b}>{b}</span>
                     </button>
                   ))}
                 {filteredBranches.length === 0 && (
