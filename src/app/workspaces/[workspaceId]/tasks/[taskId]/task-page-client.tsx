@@ -20,7 +20,7 @@ import { PreviewPanel } from "@/components/task/preview-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
-import { startPtyExecution, stopPtyExecution, resumePtyExecution, continueLatestPtyExecution, getTaskExecutions } from "@/actions/agent-actions";
+import { startPtyExecutionSafe, stopPtyExecution, resumePtyExecution, continueLatestPtyExecution, getTaskExecutions } from "@/actions/agent-actions";
 import { updateTaskStatus, checkWorktreeClean, commitWorktreeChanges } from "@/actions/task-actions";
 import { openInFileManager, openInEditor, openInTerminal } from "@/actions/preview-actions";
 import { getPrompts } from "@/actions/prompt-actions";
@@ -199,13 +199,18 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     setIsExecuting(true);
     removePortal(task.id);
     try {
-      const { worktreePath } = await startPtyExecution(task.id, "", selectedPromptId, null, isTowerTask);
-      setActiveWorktreePath(worktreePath);
+      const result = await startPtyExecutionSafe(task.id, "", selectedPromptId, null, isTowerTask);
+      if (!result.ok) {
+        setIsExecuting(false);
+        toast.error(result.error || t("terminal.startFailed"));
+        return;
+      }
+      setActiveWorktreePath(result.worktreePath ?? null);
     } catch (err) {
       setIsExecuting(false);
-      toast.error(err instanceof Error ? err.message : String(err));
+      toast.error(err instanceof Error && err.message ? err.message : t("terminal.startFailed"));
     }
-  }, [task.id, isExecuting, selectedPromptId, removePortal, isTowerTask]);
+  }, [task.id, isExecuting, selectedPromptId, removePortal, isTowerTask, t]);
 
   const handleSessionEnd = useCallback((exitCode: number) => {
     setIsExecuting(false);

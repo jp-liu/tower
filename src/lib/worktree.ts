@@ -36,6 +36,21 @@ export async function createWorktree(
   const worktreePath = path.join(localPath, ".worktrees", "task-" + taskId);
   const worktreeBranch = "task/" + taskId;
 
+  // Validate that the local path exists and is a git repository before
+  // running any git command — otherwise execFileSync throws a raw shell
+  // error ("Command failed: git ...") that is opaque to the user.
+  if (!existsSync(localPath)) {
+    throw new Error(`项目本地路径不存在：${localPath}`);
+  }
+  try {
+    execFileSync(
+      "git", ["rev-parse", "--is-inside-work-tree"],
+      { cwd: localPath, encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
+    );
+  } catch {
+    throw new Error(`项目本地路径不是 Git 仓库，无法创建 worktree：${localPath}`);
+  }
+
   // Ensure .worktrees directory exists
   await mkdir(path.join(localPath, ".worktrees"), { recursive: true });
 

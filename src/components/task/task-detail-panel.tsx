@@ -10,7 +10,7 @@ import { TaskMetadata } from "./task-metadata";
 import { TaskDiffView } from "./task-diff-view";
 import { TaskMergeConfirmDialog } from "./task-merge-confirm-dialog";
 import { TerminalOutlet, useTerminalPortal } from "./terminal-portal";
-import { getTaskExecutions, startPtyExecution, stopPtyExecution, resumePtyExecution, continueLatestPtyExecution } from "@/actions/agent-actions";
+import { getTaskExecutions, startPtyExecutionSafe, stopPtyExecution, resumePtyExecution, continueLatestPtyExecution } from "@/actions/agent-actions";
 import { updateTaskStatus, checkWorktreeClean, commitWorktreeChanges } from "@/actions/task-actions";
 import { toast } from "sonner";
 import { getPrompts } from "@/actions/prompt-actions";
@@ -123,14 +123,19 @@ export function TaskDetailPanel({
     setIsExecuting(true);
     removePortal(task.id);
     try {
-      const { worktreePath } = await startPtyExecution(task.id, "", selectedPromptId);
-      setActiveWorktreePath(worktreePath);
+      const result = await startPtyExecutionSafe(task.id, "", selectedPromptId);
+      if (!result.ok) {
+        setIsExecuting(false);
+        toast.error(result.error || t("terminal.startFailed"));
+        return;
+      }
+      setActiveWorktreePath(result.worktreePath ?? null);
       setTaskStatus("IN_PROGRESS");
     } catch (err) {
       setIsExecuting(false);
-      toast.error(err instanceof Error ? err.message : String(err));
+      toast.error(err instanceof Error && err.message ? err.message : t("terminal.startFailed"));
     }
-  }, [task.id, isExecuting, selectedPromptId]);
+  }, [task.id, isExecuting, selectedPromptId, t]);
 
   const handleSessionEnd = useCallback(
     (exitCode: number) => {

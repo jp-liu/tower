@@ -646,6 +646,7 @@ export const en: Translations = {
   "terminal.stopHint": "Consider asking AI to commit before stopping",
   "terminal.promptPlaceholder": "Enter task prompt...",
   "terminal.launch": "Launch Terminal",
+  "terminal.startFailed": "Failed to launch terminal. Check the project local path and Git configuration.",
   "terminal.readyToLaunch": "Click to launch terminal and start task execution",
   "execution.success": "Success",
   "execution.failed": "Failed",

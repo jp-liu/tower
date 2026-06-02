@@ -661,6 +661,7 @@ export const zh = {
   "terminal.stopHint": "停止前建议在终端中让 AI 生成 commit",
   "terminal.promptPlaceholder": "输入任务提示词...",
   "terminal.launch": "启动终端",
+  "terminal.startFailed": "启动终端失败，请检查项目本地路径与 Git 配置",
   "terminal.readyToLaunch": "点击启动终端开始执行任务",
   "execution.success": "成功",
   "execution.failed": "失败",

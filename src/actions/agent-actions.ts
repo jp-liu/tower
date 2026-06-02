@@ -689,6 +689,40 @@ export async function startPtyExecution(
   return { executionId: execution.id, worktreePath: resolvedWorktreePath ?? baseCwd ?? null };
 }
 
+export interface StartPtyResult {
+  ok: boolean;
+  executionId?: string;
+  worktreePath?: string | null;
+  error?: string;
+}
+
+/**
+ * UI-facing wrapper around {@link startPtyExecution}.
+ *
+ * Server Actions that throw have their error message redacted by the React
+ * RSC layer in production (the generic "An error occurred in the Server
+ * Components render" message). UI callers cannot recover the real cause from
+ * a thrown error, so this wrapper catches the failure, logs the full detail
+ * on the server, and returns a structured envelope whose `error` string is
+ * safe to surface to the user.
+ */
+export async function startPtyExecutionSafe(
+  taskId: string,
+  prompt: string,
+  selectedPromptId?: string | null,
+  callbackUrl?: string | null,
+  cleanStart?: boolean
+): Promise<StartPtyResult> {
+  try {
+    const result = await startPtyExecution(taskId, prompt, selectedPromptId, callbackUrl, cleanStart);
+    return { ok: true, ...result };
+  } catch (err) {
+    log.error("startPtyExecution failed", { taskId, error: err instanceof Error ? err.stack ?? err.message : String(err) });
+    const message = err instanceof Error && err.message ? err.message : String(err);
+    return { ok: false, error: message };
+  }
+}
+
 export async function getActiveExecutionsAcrossWorkspaces(): Promise<ActiveExecutionInfo[]> {
   const executions = await db.taskExecution.findMany({
     where: { status: "RUNNING" },

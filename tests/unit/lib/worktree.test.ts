@@ -52,6 +52,13 @@ function findCall(args: string[]): boolean {
 }
 
 describe("createWorktree", () => {
+  beforeEach(() => {
+    // localPath exists and is a git repo by default (the new precondition
+    // guard in createWorktree validates both before running git commands).
+    mockedExistsSync.mockReturnValue(true);
+    mockedExecFileSync.mockReturnValue("" as never);
+  });
+
   it("creates a new worktree when branch does not exist", async () => {
     mockedExecFileSync.mockReturnValue("" as never);
 
@@ -81,6 +88,7 @@ describe("createWorktree", () => {
     // Both root and web are real projects (package.json) with node_modules
     mockedExistsSync.mockImplementation((p) => {
       const s = String(p);
+      if (s === LOCAL_PATH) return true; // git repo precondition
       return s.endsWith("node_modules") || s.endsWith("package.json");
     });
     mockedLstatSync.mockImplementation(() => {
@@ -100,6 +108,7 @@ describe("createWorktree", () => {
     // stray node_modules but no package.json, so it must NOT be linked.
     mockedExistsSync.mockImplementation((p) => {
       const s = String(p);
+      if (s === LOCAL_PATH) return true; // git repo precondition
       if (s === `${LOCAL_PATH}/package.json`) return false;
       if (s === `${LOCAL_PATH}/web/package.json`) return true;
       return s.endsWith("node_modules");
@@ -152,6 +161,7 @@ describe("createWorktree", () => {
   it("throws with descriptive message when git worktree add fails", async () => {
     mockedExecFileSync.mockImplementation((cmd: string, args?: readonly string[]) => {
       const argsArr = args as string[] | undefined;
+      if (argsArr?.[0] === "rev-parse" && argsArr?.[1] === "--is-inside-work-tree") return "true" as never;
       if (argsArr?.[0] === "worktree" && argsArr?.[1] === "list") return "" as never;
       if (argsArr?.[0] === "branch" && argsArr?.[1] === "--list") return "" as never;
       throw new Error("fatal: 'main' is not a commit and a branch 'task/clxabc123def' cannot be created from it");
@@ -160,6 +170,32 @@ describe("createWorktree", () => {
     await expect(createWorktree(LOCAL_PATH, TASK_ID, BASE_BRANCH)).rejects.toThrow(
       "fatal: 'main' is not a commit"
     );
+  });
+
+  it("throws a friendly error when the local path does not exist", async () => {
+    mockedExistsSync.mockReturnValue(false);
+
+    await expect(createWorktree(LOCAL_PATH, TASK_ID, BASE_BRANCH)).rejects.toThrow(
+      /项目本地路径不存在/
+    );
+    // Must not have attempted any git command
+    expect(findCall(["git", "worktree", "list", "--porcelain"])).toBe(false);
+  });
+
+  it("throws a friendly error when the local path is not a git repository", async () => {
+    mockedExistsSync.mockReturnValue(true);
+    mockedExecFileSync.mockImplementation((cmd: string, args?: readonly string[]) => {
+      const argsArr = args as string[] | undefined;
+      if (argsArr?.[0] === "rev-parse" && argsArr?.[1] === "--is-inside-work-tree") {
+        throw new Error("fatal: not a git repository");
+      }
+      return "" as never;
+    });
+
+    await expect(createWorktree(LOCAL_PATH, TASK_ID, BASE_BRANCH)).rejects.toThrow(
+      /不是 Git 仓库/
+    );
+    expect(findCall(["git", "worktree", "list", "--porcelain"])).toBe(false);
   });
 });
 
