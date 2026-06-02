@@ -258,7 +258,7 @@ export function TaskNotesPanel({ taskId, projectId }: TaskNotesPanelProps) {
             {assets.map((asset) => {
               const canPreview = isPreviewable(asset);
               return (
-                <div key={asset.id} className="group flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
+                <div key={asset.id} className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
                   <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <button
                     type="button"
@@ -270,7 +270,7 @@ export function TaskNotesPanel({ taskId, projectId }: TaskNotesPanelProps) {
                     {asset.filename}
                   </button>
                   <span className="shrink-0 text-[10px] text-muted-foreground">{formatSize(asset.size)}</span>
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
+                  <div className="flex items-center gap-0.5">
                     {canPreview && (
                       <Button
                         variant="ghost"
