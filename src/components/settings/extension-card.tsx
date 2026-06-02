@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, Circle, ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { CheckCircle2, Check, Circle, Copy, Download, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useI18n } from "@/lib/i18n";
 import { useExtension } from "@/lib/extensions/client";
 import type { ExtensionMetadata } from "@/lib/extensions/types";
@@ -11,6 +11,55 @@ import { toast } from "sonner";
 
 interface ExtensionCardProps {
   extension: ExtensionMetadata;
+}
+
+/** One platform's install command, shown stacked (label above, command below)
+ * with a click-to-copy button. Lives in a Popover so the pointer can move in
+ * and the text can be selected/copied (a hover Tooltip dismisses on leave). */
+const RIPGREP_INSTALL_COMMANDS: { os: string; cmd: string }[] = [
+  { os: "macOS", cmd: "brew install ripgrep" },
+  { os: "Windows", cmd: "winget install BurntSushi.ripgrep" },
+  { os: "Linux", cmd: "sudo apt install ripgrep" },
+];
+
+function CopyCommand({ cmd }: { cmd: string }) {
+  const { t } = useI18n();
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(cmd);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = cmd;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      toast.success(t("common.copied"));
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error(t("common.copyFailed"));
+    }
+  };
+
+  return (
+    <div className="flex items-start gap-1 rounded-md bg-background/60 pl-2 pr-1 py-1 ring-1 ring-border/60">
+      <code className="min-w-0 flex-1 break-all font-mono text-[11px] leading-relaxed">{cmd}</code>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        className="shrink-0 text-muted-foreground"
+        aria-label={t("common.copy")}
+        onClick={handleCopy}
+      >
+        {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+      </Button>
+    </div>
+  );
 }
 
 export function ExtensionCard({ extension }: ExtensionCardProps) {
@@ -137,34 +186,36 @@ export function ExtensionCard({ extension }: ExtensionCardProps) {
           // user at the project homepage and let them use their OS package
           // manager. The button itself opens the homepage so a misclick on
           // "Install" still does something useful.
-          <Tooltip>
-            <TooltipTrigger
+          <Popover>
+            <PopoverTrigger
               render={(props) => (
-                <Button variant="default" onClick={handleOpenHomepage} {...props}>
-                  <ExternalLink className="h-3.5 w-3.5" />
+                <Button variant="default" {...props}>
+                  <Download className="h-3.5 w-3.5" />
                   {t("settings.extensions.installViaHomepage")}
                 </Button>
               )}
             />
-            <TooltipContent className="w-80 max-w-[80vw] text-xs leading-relaxed">
+            <PopoverContent align="start" className="w-80 max-w-[90vw] gap-2 text-xs leading-relaxed">
               <p>{t("settings.extensions.manualInstallHintIntro")}</p>
-              <ul className="mt-2 space-y-1">
-                <li className="flex gap-2">
-                  <span className="w-12 shrink-0 text-muted-foreground">macOS</span>
-                  <code className="rounded bg-background/60 px-1.5 py-0.5 font-mono text-[11px]">brew install ripgrep</code>
-                </li>
-                <li className="flex gap-2">
-                  <span className="w-12 shrink-0 text-muted-foreground">Win</span>
-                  <code className="rounded bg-background/60 px-1.5 py-0.5 font-mono text-[11px]">winget install BurntSushi.ripgrep</code>
-                </li>
-                <li className="flex gap-2">
-                  <span className="w-12 shrink-0 text-muted-foreground">Linux</span>
-                  <code className="rounded bg-background/60 px-1.5 py-0.5 font-mono text-[11px]">apt/dnf/pacman install ripgrep</code>
-                </li>
-              </ul>
-              <p className="mt-2 text-muted-foreground">{t("settings.extensions.manualInstallHintAfter")}</p>
-            </TooltipContent>
-          </Tooltip>
+              <div className="space-y-2">
+                {RIPGREP_INSTALL_COMMANDS.map(({ os, cmd }) => (
+                  <div key={os} className="flex flex-col gap-1">
+                    <span className="text-[11px] font-medium text-muted-foreground">{os}</span>
+                    <CopyCommand cmd={cmd} />
+                  </div>
+                ))}
+              </div>
+              <p className="text-muted-foreground">{t("settings.extensions.manualInstallHintAfter")}</p>
+              <button
+                type="button"
+                onClick={handleOpenHomepage}
+                className="flex items-center gap-1 self-start text-[11px] text-primary underline-offset-2 hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                {t("settings.extensions.visitHomepage")}
+              </button>
+            </PopoverContent>
+          </Popover>
         ) : (
           <Button
             variant="default"
