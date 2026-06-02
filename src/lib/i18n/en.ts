@@ -11,6 +11,7 @@ export const en: Translations = {
   "sidebar.manageLabels": "Manage Labels",
   "sidebar.deleteConfirm": "Delete workspace \"{name}\"? All projects and tasks will be deleted.",
   "sidebar.lastWorkspaceError": "At least one workspace must be kept",
+  "sidebar.reorderError": "Failed to save workspace order",
   "sidebar.settings": "Settings",
   "workspace.create": "New Workspace",
   "workspace.edit": "Edit Workspace",

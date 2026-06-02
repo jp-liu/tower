@@ -14,6 +14,10 @@ export const updateWorkspaceSchema = z.object({
   description: z.string().max(500).optional(),
 });
 
+export const reorderWorkspacesSchema = z
+  .array(cuid)
+  .min(1, "At least one workspace id is required");
+
 // ── Project schemas ──
 export const createProjectSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),

@@ -40,7 +40,7 @@ export default async function RootLayout({
 }>) {
   const [workspaces, onboardingStatus, extensionStatus] = await Promise.all([
     db.workspace.findMany({
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ order: "asc" }, { updatedAt: "desc" }],
       select: { id: true, name: true, description: true, updatedAt: true },
     }),
     getOnboardingStatus(),

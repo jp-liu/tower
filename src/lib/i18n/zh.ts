@@ -10,6 +10,7 @@ export const zh = {
   "sidebar.manageLabels": "管理标签",
   "sidebar.deleteConfirm": "确认删除工作空间「{name}」？所有项目和任务将被删除。",
   "sidebar.lastWorkspaceError": "至少需要保留一个工作空间",
+  "sidebar.reorderError": "工作空间排序保存失败",
   "sidebar.settings": "配置",
   // Workspace dialog
   "workspace.create": "新建工作空间",

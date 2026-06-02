@@ -18,6 +18,7 @@ vi.mock("@/lib/db", () => ({
       findFirst: vi.fn(),
       findMany: vi.fn(),
     },
+    $transaction: vi.fn((ops: unknown[]) => Promise.resolve(ops)),
   },
 }));
 
@@ -35,6 +36,7 @@ import {
   createWorkspace,
   updateWorkspace,
   deleteWorkspace,
+  reorderWorkspaces,
   createProject,
   getWorkspacesWithRecentTasks,
 } from "@/actions/workspace-actions";
@@ -55,6 +57,7 @@ const mockDb = db as unknown as {
     findFirst: ReturnType<typeof vi.fn>;
     findMany: ReturnType<typeof vi.fn>;
   };
+  $transaction: ReturnType<typeof vi.fn>;
 };
 
 describe("workspace-actions", () => {
@@ -174,6 +177,38 @@ describe("workspace-actions", () => {
 
       await expect(deleteWorkspace("ws1")).rejects.toThrow("Cannot delete the last workspace");
       expect(mockDb.workspace.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("reorderWorkspaces", () => {
+    it("updates each workspace order to its index in a transaction", async () => {
+      mockDb.workspace.findMany.mockResolvedValue([{ id: "a" }, { id: "b" }, { id: "c" }]);
+      mockDb.workspace.update.mockImplementation((args: unknown) => args);
+
+      await reorderWorkspaces(["c", "a", "b"]);
+
+      expect(mockDb.$transaction).toHaveBeenCalledOnce();
+      expect(mockDb.workspace.update).toHaveBeenNthCalledWith(1, { where: { id: "c" }, data: { order: 0 } });
+      expect(mockDb.workspace.update).toHaveBeenNthCalledWith(2, { where: { id: "a" }, data: { order: 1 } });
+      expect(mockDb.workspace.update).toHaveBeenNthCalledWith(3, { where: { id: "b" }, data: { order: 2 } });
+      expect(revalidatePath).toHaveBeenCalledWith("/workspaces");
+    });
+
+    it("throws on empty input (Zod)", async () => {
+      await expect(reorderWorkspaces([])).rejects.toThrow();
+      expect(mockDb.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("throws on duplicate ids", async () => {
+      await expect(reorderWorkspaces(["a", "a"])).rejects.toThrow(/Duplicate/);
+      expect(mockDb.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("throws when an id does not exist", async () => {
+      mockDb.workspace.findMany.mockResolvedValue([{ id: "a" }, { id: "b" }]);
+
+      await expect(reorderWorkspaces(["a", "ghost"])).rejects.toThrow(/Unknown workspace id/);
+      expect(mockDb.$transaction).not.toHaveBeenCalled();
     });
   });
 

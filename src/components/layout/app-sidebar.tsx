@@ -28,10 +28,25 @@ import {
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createWorkspace, updateWorkspace, deleteWorkspace } from "@/actions/workspace-actions";
+import { createWorkspace, updateWorkspace, deleteWorkspace, reorderWorkspaces } from "@/actions/workspace-actions";
 import { getLabelsForWorkspace, createLabel, deleteLabel } from "@/actions/label-actions";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  arrayMove,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 const WORKSPACE_ICONS: string[] = ["\u{1F4CB}","\u{1F680}","\u{1F3AF}","\u{1F4A1}","\u{1F527}","\u{1F4E6}","\u{1F3A8}","\u{1F4CA}","\u{1F52C}","\u{1F31F}","\u{1F4DD}","\u{1F3D7}\uFE0F"];
 
@@ -64,6 +79,39 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
   const [dialogName, setDialogName] = useState("");
   const [dialogIcon, setDialogIcon] = useState(WORKSPACE_ICONS[0]);
   const [editingWsId, setEditingWsId] = useState<string | null>(null);
+
+  // Local order state for optimistic drag-reorder; synced when server props change.
+  const [orderedWorkspaces, setOrderedWorkspaces] = useState<WorkspaceItem[]>(workspaces);
+  useEffect(() => {
+    setOrderedWorkspaces(workspaces);
+  }, [workspaces]);
+
+  // Click isn't swallowed: drag only starts after pointer moves 8px (matches board pattern).
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+
+      const oldIndex = orderedWorkspaces.findIndex((w) => w.id === active.id);
+      const newIndex = orderedWorkspaces.findIndex((w) => w.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      const reordered = arrayMove(orderedWorkspaces, oldIndex, newIndex);
+      setOrderedWorkspaces(reordered); // optimistic
+
+      reorderWorkspaces(reordered.map((w) => w.id))
+        .then(() => router.refresh())
+        .catch(() => {
+          setOrderedWorkspaces(workspaces); // revert on failure
+          toast.error(t("sidebar.reorderError"));
+        });
+    },
+    [orderedWorkspaces, workspaces, router, t]
+  );
 
   const activeWorkspaceId = pathname.split("/workspaces/")[1]?.split("/")[0];
 
@@ -323,64 +371,32 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
       {/* Workspace List */}
       <ScrollArea className="relative z-10 mt-2 flex-1 min-h-0">
         <div className="px-2 py-1">
-        {workspaces.map((ws) => {
-          const isActive = activeWorkspaceId === ws.id;
-          const icon = getIcon(ws);
-
-          return (
-            <div
-              key={ws.id}
-              className={`group relative flex items-center rounded-lg transition-all ${
-                isActive ? "bg-accent ring-1 ring-primary/15" : "hover:bg-accent/60"
-              }`}
-            >
-              <button
-                onClick={() => { if (!isActive) router.push(`/workspaces/${ws.id}`); }}
-                className={`flex flex-1 items-center gap-2.5 px-3 py-2.5 text-left ${isActive ? "cursor-default" : "cursor-pointer"}`}
-              >
-                <span className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-sm">
-                  {WORKSPACE_ICONS.includes(icon) ? icon : <span className="text-xs font-semibold text-muted-foreground">{icon}</span>}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className={`truncate text-sm font-medium ${isActive ? "text-foreground" : "text-secondary-foreground"}`}>
-                    {ws.name}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground">{formatTime(ws.updatedAt)}</div>
-                </div>
-              </button>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <button
-                      className="mr-2 rounded-md p-1 text-muted-foreground opacity-0 transition-all hover:bg-background hover:text-foreground group-hover:opacity-100"
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  }
-                >
-                  <MoreHorizontal className="h-3.5 w-3.5" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" side="right">
-                  <DropdownMenuItem onClick={() => openEditDialog(ws)}>
-                    <Pencil className="mr-2 h-3.5 w-3.5" />
-                    {t("sidebar.rename")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => openLabelManager(ws.id)}>
-                    <Tag className="mr-2 h-3.5 w-3.5" />
-                    {t("sidebar.manageLabels")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className={workspaces.length <= 1 ? "text-muted-foreground opacity-50" : "text-rose-400"}
-                    disabled={workspaces.length <= 1}
-                    onClick={() => handleDelete(ws.id, ws.name)}
-                  >
-                    <Trash2 className="mr-2 h-3.5 w-3.5" />
-                    {t("sidebar.delete")}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          );
-        })}
+        <DndContext
+          id="workspace-sidebar"
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={orderedWorkspaces.map((ws) => ws.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {orderedWorkspaces.map((ws) => (
+              <SortableWorkspaceItem
+                key={ws.id}
+                ws={ws}
+                isActive={activeWorkspaceId === ws.id}
+                icon={getIcon(ws)}
+                disableDelete={orderedWorkspaces.length <= 1}
+                t={t}
+                onSelect={() => { if (activeWorkspaceId !== ws.id) router.push(`/workspaces/${ws.id}`); }}
+                onEdit={() => openEditDialog(ws)}
+                onManageLabels={() => openLabelManager(ws.id)}
+                onDelete={() => handleDelete(ws.id, ws.name)}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
         </div>
       </ScrollArea>
 
@@ -469,6 +485,97 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
         />
       )}
     </aside>
+  );
+}
+
+// Drag-sortable workspace row (expanded sidebar).
+// Drag listeners live on the row; a 5px activation distance ensures a plain click
+// selects the workspace and the dropdown trigger still works.
+function SortableWorkspaceItem({
+  ws,
+  isActive,
+  icon,
+  disableDelete,
+  t,
+  onSelect,
+  onEdit,
+  onManageLabels,
+  onDelete,
+}: {
+  ws: WorkspaceItem;
+  isActive: boolean;
+  icon: string;
+  disableDelete: boolean;
+  t: ReturnType<typeof useI18n>["t"];
+  onSelect: () => void;
+  onEdit: () => void;
+  onManageLabels: () => void;
+  onDelete: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: ws.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`group relative flex touch-none items-center rounded-lg transition-all ${
+        isActive ? "bg-accent ring-1 ring-primary/15" : "hover:bg-accent/60"
+      }`}
+    >
+      <button
+        onClick={onSelect}
+        className={`flex flex-1 items-center gap-2.5 px-3 py-2.5 text-left ${isActive ? "cursor-default" : "cursor-pointer"}`}
+      >
+        <span className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-sm">
+          {WORKSPACE_ICONS.includes(icon) ? icon : <span className="text-xs font-semibold text-muted-foreground">{icon}</span>}
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className={`truncate text-sm font-medium ${isActive ? "text-foreground" : "text-secondary-foreground"}`}>
+            {ws.name}
+          </div>
+          <div className="text-[11px] text-muted-foreground">{formatTime(ws.updatedAt)}</div>
+        </div>
+      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              className="mr-2 rounded-md p-1 text-muted-foreground opacity-0 transition-all hover:bg-background hover:text-foreground group-hover:opacity-100"
+              onClick={(e) => e.stopPropagation()}
+            />
+          }
+        >
+          <MoreHorizontal className="h-3.5 w-3.5" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" side="right">
+          <DropdownMenuItem onClick={onEdit}>
+            <Pencil className="mr-2 h-3.5 w-3.5" />
+            {t("sidebar.rename")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onManageLabels}>
+            <Tag className="mr-2 h-3.5 w-3.5" />
+            {t("sidebar.manageLabels")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className={disableDelete ? "text-muted-foreground opacity-50" : "text-rose-400"}
+            disabled={disableDelete}
+            onClick={onDelete}
+          >
+            <Trash2 className="mr-2 h-3.5 w-3.5" />
+            {t("sidebar.delete")}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 

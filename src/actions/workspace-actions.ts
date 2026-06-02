@@ -5,7 +5,7 @@ import { readdir } from "node:fs/promises";
 import path from "path";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
-import { createWorkspaceSchema, updateWorkspaceSchema, createProjectSchema, updateProjectSchema } from "@/lib/schemas";
+import { createWorkspaceSchema, updateWorkspaceSchema, reorderWorkspacesSchema, createProjectSchema, updateProjectSchema } from "@/lib/schemas";
 import { expandHome } from "@/lib/git-url";
 import { detectPreset } from "@/lib/preview/detector";
 
@@ -55,6 +55,42 @@ export async function updateWorkspace(id: string, data: { name?: string; descrip
   });
   revalidatePath("/workspaces");
   return workspace;
+}
+
+/**
+ * Persist a new sidebar ordering for workspaces.
+ * `orderedIds` is the full list of workspace ids in their desired top-to-bottom order.
+ * Each workspace's `order` is set to its index. Validates that every id refers to an
+ * existing workspace and that the list matches the full set (no missing/extra ids).
+ */
+export async function reorderWorkspaces(orderedIds: string[]) {
+  const ids = reorderWorkspacesSchema.parse(orderedIds);
+
+  // Reject duplicate ids in the payload.
+  if (new Set(ids).size !== ids.length) {
+    throw new Error("Duplicate workspace ids in reorder request");
+  }
+
+  // Validate against existing workspaces — the payload must be the complete set.
+  const existing = await db.workspace.findMany({ select: { id: true } });
+  const existingIds = new Set(existing.map((w) => w.id));
+  for (const id of ids) {
+    if (!existingIds.has(id)) {
+      throw new Error("Unknown workspace id in reorder request");
+    }
+  }
+  if (ids.length !== existingIds.size) {
+    throw new Error("Reorder request must include every workspace");
+  }
+
+  // Persist atomically: each workspace's order = its index in the list.
+  await db.$transaction(
+    ids.map((id, index) =>
+      db.workspace.update({ where: { id }, data: { order: index } })
+    )
+  );
+
+  revalidatePath("/workspaces");
 }
 
 export async function deleteWorkspace(id: string) {
