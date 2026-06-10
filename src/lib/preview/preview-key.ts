@@ -15,9 +15,12 @@ export function getPreviewCwd(ctx: {
   projectLocalPath: string | null;
   subPath: string | null;
 }): string | null {
-  if (ctx.worktreePath) return ctx.worktreePath;
-  if (!ctx.projectLocalPath) return null;
-  return ctx.subPath ? join(ctx.projectLocalPath, ctx.subPath) : ctx.projectLocalPath;
+  // Mirror agent-actions cwd resolution: base is the worktree (when the task
+  // ran in one) else the project root, and subPath is appended in BOTH cases
+  // so a monorepo/sub-app dev server runs where its package.json actually lives.
+  const base = ctx.worktreePath ?? ctx.projectLocalPath;
+  if (!base) return null;
+  return ctx.subPath ? join(base, ctx.subPath) : base;
 }
 
 export function getEffectiveCommand(ctx: {
