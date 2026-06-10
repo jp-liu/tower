@@ -210,11 +210,22 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch (err: unknown) {
-        if (process.env.NODE_ENV !== "production") {
-          const detail = err instanceof Error ? err.message : String(err);
-          console.error("[assistant-chat] ERROR:", detail);
-        }
-        send({ type: "error", content: "Assistant encountered an error. Please try again." });
+        // Always log the full error server-side — this is a localhost-only
+        // internal route, so the logs are private. Suppressing in production
+        // (the standalone build) left Windows users with no way to diagnose
+        // failures beyond the generic client message.
+        const detail = err instanceof Error ? err.message : String(err);
+        console.error(
+          "[assistant-chat] ERROR:",
+          detail,
+          err instanceof Error && err.stack ? `\n${err.stack}` : ""
+        );
+        // Surface the real reason to the (localhost) client so it shows up in
+        // the chat bubble and can be reported directly.
+        send({
+          type: "error",
+          content: `Assistant encountered an error: ${detail}`,
+        });
       } finally {
         send({ type: "done" });
         controller.close();
