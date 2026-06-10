@@ -69,6 +69,11 @@ export async function createWorktree(
   );
 
   if (alreadyExists) {
+    // Reuse path: still (re)ensure node_modules links. The worktree may have
+    // been created before deps were installed or before subPath was set, so
+    // the link could be missing. symlinkNodeModules is idempotent — it skips
+    // targets that already exist.
+    symlinkNodeModules(localPath, worktreePath, subPath);
     return { worktreePath, worktreeBranch };
   }
 
