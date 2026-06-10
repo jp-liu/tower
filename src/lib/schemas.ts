@@ -62,7 +62,7 @@ export const updateTaskSchema = z.object({
   subPath: z.string().max(500).optional(),
   previewCommandOverride: z.string().max(500).nullable().optional(),
   previewPortOverride: z.number().int().min(1).max(65535).nullable().optional(),
-  versionId: cuid.optional(),
+  versionId: cuid.nullable().optional(),
 });
 
 export const taskStatusSchema = z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"]);
