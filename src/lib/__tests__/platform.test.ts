@@ -274,6 +274,57 @@ describe("platform utilities", () => {
   });
 
   // =========================================================================
+  // resolveSdkExecutable
+  // =========================================================================
+  describe("resolveSdkExecutable", () => {
+    it("returns command unchanged on non-Windows", async () => {
+      const { resolveSdkExecutable } = await import("@/lib/platform");
+      expect(resolveSdkExecutable("/usr/local/bin/claude", "darwin")).toBe(
+        "/usr/local/bin/claude"
+      );
+    });
+
+    it("returns native .exe unchanged on Windows", async () => {
+      const { resolveSdkExecutable } = await import("@/lib/platform");
+      expect(resolveSdkExecutable("C:\\bin\\claude.exe", "win32")).toBe(
+        "C:\\bin\\claude.exe"
+      );
+    });
+
+    it("rewrites a .cmd shim to its underlying cli.js on Windows", async () => {
+      const shim = [
+        "@ECHO off",
+        "SETLOCAL",
+        "CALL :find_dp0",
+        'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\node_modules\\@anthropic-ai\\claude-code\\cli.js" %*',
+      ].join("\n");
+      const { resolveSdkExecutable } = await import("@/lib/platform");
+      const result = resolveSdkExecutable(
+        "D:\\software\\nvm4w\\nodejs\\claude.cmd",
+        "win32",
+        () => shim
+      );
+      expect(result).toBe(
+        "D:\\software\\nvm4w\\nodejs\\node_modules\\@anthropic-ai\\claude-code\\cli.js"
+      );
+    });
+
+    it("falls back to the original .cmd when the shim has no js target", async () => {
+      const { resolveSdkExecutable } = await import("@/lib/platform");
+      const result = resolveSdkExecutable("C:\\bin\\claude.cmd", "win32", () => "@echo off\r\nclaude %*");
+      expect(result).toBe("C:\\bin\\claude.cmd");
+    });
+
+    it("falls back to the original .cmd when the shim is unreadable", async () => {
+      const { resolveSdkExecutable } = await import("@/lib/platform");
+      const result = resolveSdkExecutable("C:\\bin\\claude.cmd", "win32", () => {
+        throw new Error("ENOENT");
+      });
+      expect(result).toBe("C:\\bin\\claude.cmd");
+    });
+  });
+
+  // =========================================================================
   // resolveSpawnTarget (async)
   // =========================================================================
   describe("resolveSpawnTarget", () => {

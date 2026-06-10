@@ -11,7 +11,7 @@
  *   - No side-effects on import — all state is passed as arguments.
  */
 
-import { constants as fsConstants, promises as fs } from "node:fs";
+import { constants as fsConstants, promises as fs, readFileSync } from "node:fs";
 import { execSync, execFileSync } from "node:child_process";
 import path from "node:path";
 
@@ -264,6 +264,48 @@ export function resolveCommandPathSync(
     // Command not found in PATH — return as-is, let caller handle
   }
 
+  return command;
+}
+
+/**
+ * Resolve a Claude CLI command into a path that `@anthropic-ai/claude-agent-sdk`
+ * can spawn directly.
+ *
+ * The SDK treats any `pathToClaudeCodeExecutable` that does NOT end in a JS
+ * extension (.js/.mjs/.cjs/...) as a native binary and spawns it directly with
+ * no shell. On Windows the resolved `claude` command is usually an npm `.cmd`
+ * shim, and spawning a `.cmd` without a shell throws EINVAL on modern Node —
+ * which is why the assistant (SDK path) fails while task terminals (PTY path,
+ * wrapped via `wrapForPlatform`) work.
+ *
+ * When we detect a Windows `.cmd`/`.bat` shim, parse it to recover the
+ * underlying `cli.js` path and return that — the SDK then runs `node cli.js`,
+ * which works. For native `.exe` installs or non-Windows platforms the input
+ * is returned unchanged, so this is a no-op everywhere else.
+ */
+export function resolveSdkExecutable(
+  command: string,
+  platform: NodeJS.Platform = process.platform,
+  readFile: (p: string) => string = (p) => readFileSync(p, "utf-8"),
+): string {
+  if (!isWindows(platform)) return command;
+
+  const ext = path.extname(command).toLowerCase();
+  if (ext !== ".cmd" && ext !== ".bat") return command;
+
+  try {
+    const shim = readFile(command);
+    // npm cmd-shims reference the target script relative to %dp0% (the shim's
+    // own directory), e.g.:
+    //   "%_prog%"  "%dp0%\node_modules\@anthropic-ai\claude-code\cli.js" %*
+    const match = shim.match(/%~?dp0%[\\/]?([^"]+?\.(?:js|mjs|cjs))/i);
+    if (match) {
+      const rel = match[1].replace(/\//g, "\\");
+      return path.win32.resolve(path.win32.dirname(command), rel);
+    }
+  } catch {
+    // Unreadable shim — fall back to the original command.
+  }
   return command;
 }
 

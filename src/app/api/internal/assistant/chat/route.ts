@@ -3,6 +3,7 @@ import { requireLocalhost } from "@/lib/internal-api-guard";
 import { buildAttachmentPrompt } from "@/lib/build-multimodal-prompt";
 import { getAssistantCacheRoot } from "@/lib/file-utils";
 import { ClaudeCliAdapter } from "@/lib/ai/adapters/cli/claude-cli-adapter";
+import { resolveSdkExecutable } from "@/lib/platform";
 import { db } from "@/lib/db";
 import { getTowerMcpName } from "@/lib/ai/install-orchestrator";
 import { ATTACHMENT_SUBPATH_RE, MAX_ATTACHMENTS } from "@/lib/attachment-utils";
@@ -66,7 +67,11 @@ export async function POST(request: NextRequest) {
       try {
         const { query } = await import("@anthropic-ai/claude-agent-sdk");
 
-        const claudePath = claudeAdapter.resolveCommand();
+        // The SDK spawns this path directly (no shell). On Windows the resolved
+        // `claude` command is a `.cmd` shim, which spawn() rejects with EINVAL —
+        // resolveSdkExecutable rewrites it to the underlying cli.js so the SDK
+        // runs `node cli.js`. No-op on macOS/Linux and for native `.exe` installs.
+        const claudePath = resolveSdkExecutable(claudeAdapter.resolveCommand());
 
         // Ensure .tower/ exists (runtime guard — handles deletion while server is running)
         const { ensureTowerDir } = await import("@/lib/init-tower");
