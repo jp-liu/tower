@@ -480,7 +480,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
                 {/* Reuses EditorGitPanel in project mode — full set of actions:
                     branch switch, fetch, create branch, stage/unstage/discard,
                     commit, pull/push, pull-from/push-to, stash save/pop. */}
-                <div className="rounded-lg border border-border overflow-hidden h-[560px] flex flex-col">
+                <div className="overflow-hidden h-[560px] flex flex-col">
                   <EditorGitPanel localPath={project.localPath!} mode="project" />
                 </div>
 
