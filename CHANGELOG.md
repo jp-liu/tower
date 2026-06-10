@@ -1,3 +1,13 @@
+## [0.2.20](https://github.com/jp-liu/tower/compare/v0.2.19...v0.2.20) (2026-06-10)
+
+
+### Bug Fixes
+
+* **git:** worktree 复用时也重建 node_modules 软链 ([f0e2856](https://github.com/jp-liu/tower/commit/f0e2856014989e371b3c0b54a457608e897388c8))
+* **preview:** 预览 cwd 在 worktree 下也拼接 subPath ([3e409a0](https://github.com/jp-liu/tower/commit/3e409a07a1f64649ed3dc43fc3516ec9f6edeac2))
+
+
+
 ## [0.2.19](https://github.com/jp-liu/tower/compare/v0.2.18...v0.2.19) (2026-06-09)
 
 
