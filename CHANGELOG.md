@@ -1,3 +1,35 @@
+## [0.2.20](https://github.com/jp-liu/tower/compare/v0.2.19...v0.2.20) (2026-06-10)
+
+
+### Bug Fixes
+
+* **git:** worktree 复用时也重建 node_modules 软链 ([f0e2856](https://github.com/jp-liu/tower/commit/f0e2856014989e371b3c0b54a457608e897388c8))
+* **preview:** 预览 cwd 在 worktree 下也拼接 subPath ([3e409a0](https://github.com/jp-liu/tower/commit/3e409a07a1f64649ed3dc43fc3516ec9f6edeac2))
+
+
+
+## [0.2.19](https://github.com/jp-liu/tower/compare/v0.2.18...v0.2.19) (2026-06-09)
+
+
+### Bug Fixes
+
+* **assets:** 笔记列表排序在毫秒并列时不确定，修复 CI 间歇失败 ([7c92596](https://github.com/jp-liu/tower/commit/7c92596228b519213bae5ed117ac1e5f13c7ef4a))
+* **assistant:** AI 助手只描述不执行工具调用 ([#10](https://github.com/jp-liu/tower/issues/10)) ([f6888e3](https://github.com/jp-liu/tower/commit/f6888e392bb70fd0cf12e50f5aff7cca254a51b6))
+* **layout:** root layout 标记 force-dynamic，避免 build 时把发布者本地数据烤进 RSC 产物 ([2448f99](https://github.com/jp-liu/tower/commit/2448f9934ecbc3c8033a6e2f7d87e2d573d99dc1))
+* **terminal:** 启动终端报错被 RSC 脱敏成通用错误 ([#6](https://github.com/jp-liu/tower/issues/6)) ([a973cc6](https://github.com/jp-liu/tower/commit/a973cc61ea99441536ac6160c880d700ab293a23))
+* **test:** search-code fs mock 改同步 factory，修复 CI existsSync 失效 ([dc46f87](https://github.com/jp-liu/tower/commit/dc46f87298efcf060cf7f03d7f38a53accf11a7d))
+
+
+### Features
+
+* **board,task,settings:** 版本展示、任务体验与设置页改进 ([84bab87](https://github.com/jp-liu/tower/commit/84bab872fd123e9ecdb943b9997d3e5c3f06cfb2))
+* **git:** 分支下拉显示完整分支名 ([#7](https://github.com/jp-liu/tower/issues/7)) ([c020c6f](https://github.com/jp-liu/tower/commit/c020c6f6684c83c9ee9527dfc91426ab80f6b196))
+* **mcp,skill:** create_task 版本/默认行为，修复 subPath 丢失 ([7cd4e40](https://github.com/jp-liu/tower/commit/7cd4e40d98cb306687bbf52ab2fb1c09dc6c01a1))
+* **notes:** 任务面板附件支持预览和在文件夹中显示，对齐资源页 ([fe116f3](https://github.com/jp-liu/tower/commit/fe116f3887f2094b0bf0e6b4c02636332e997cdb))
+* **project:** 项目卡片路径/Git URL 支持一键复制 ([#11](https://github.com/jp-liu/tower/issues/11)) ([927f9c1](https://github.com/jp-liu/tower/commit/927f9c1cba94444d43d9ff9cab43eaef9908f5a1))
+* **search:** 内置 ripgrep，代码搜索开箱即用 ([e273f8d](https://github.com/jp-liu/tower/commit/e273f8d4a7dc48350f3dd616e3a4f633c8031435))
+* **settings:** rg 安装提示改为可复制 Popover ([ff500e0](https://github.com/jp-liu/tower/commit/ff500e033a9d0dc3ae0e44b38344f38f50de6d97))
+* **workspace:** 侧边栏工作空间拖拽排序 ([#9](https://github.com/jp-liu/tower/issues/9)) ([43a8a87](https://github.com/jp-liu/tower/commit/43a8a87626119ec6779d13f57b37a00c04aa0f79))
 # [0.2.18](/compare/v0.2.17...v0.2.18) (2026-05-29)
 
 

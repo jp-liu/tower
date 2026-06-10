@@ -4,13 +4,15 @@ import { existsSync } from "fs";
 import os from "os";
 import path from "path";
 import type { Extension, ExtensionStatus, ExtensionResult } from "../types";
+import { resolveBundledRgPath } from "../rg-resolve";
 
 /**
- * ripgrep is a Rust binary. Auto-downloading it cross-platform from inside
- * Tower is fragile (GitHub releases get rate-limited / blocked in CN, and
- * there's no reliable domestic mirror). We instead detect a pre-installed
- * `rg` on PATH and, if absent, surface a homepage link so the user can
- * install it via their OS package manager (brew / winget / apt / etc.).
+ * ripgrep is a Rust binary. We bundle it via `@vscode/ripgrep`, whose
+ * per-platform binary ships as an npm optionalDependency — so it installs
+ * from the configured registry (CN mirror-friendly) without hitting GitHub
+ * and code search works out of the box. We still fall back to a system `rg`
+ * on PATH (and known install locations), and if neither is present the
+ * Settings UI surfaces install commands the user can copy.
  */
 
 function execFileP(
@@ -101,6 +103,12 @@ function detectSystemBinary(): string | null {
 }
 
 async function check(): Promise<ExtensionStatus> {
+  // Prefer the bundled @vscode/ripgrep binary, then a system install.
+  const bundled = await resolveBundledRgPath();
+  if (bundled) {
+    const version = await runVersion(bundled);
+    return { installed: true, path: bundled, version };
+  }
   const systemPath = detectSystemBinary();
   if (systemPath) {
     const version = await runVersion(systemPath);

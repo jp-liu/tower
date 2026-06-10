@@ -6,6 +6,7 @@ import os from "os";
 import path from "path";
 import { z } from "zod";
 import { getConfigValue } from "@/actions/config-actions";
+import { resolveBundledRgPath } from "@/lib/extensions/rg-resolve";
 
 export type SearchErrorKind =
   | "timeout"
@@ -52,7 +53,12 @@ function knownRgPaths(): string[] {
   }
 }
 
-function resolveRgPath(): string {
+async function resolveRgPath(): Promise<string> {
+  // 1. Bundled binary (@vscode/ripgrep) — works without the user installing rg.
+  const bundled = await resolveBundledRgPath();
+  if (bundled) return bundled;
+
+  // 2. System PATH
   const finder = process.platform === "win32" ? "where" : "which";
   try {
     const stdout = execFileSync(finder, ["rg"], { encoding: "utf-8", timeout: 3000 });
@@ -61,6 +67,7 @@ function resolveRgPath(): string {
   } catch {
     // not on PATH — try known locations
   }
+  // 3. Well-known install locations
   for (const candidate of knownRgPaths()) {
     if (existsSync(candidate)) return candidate;
   }
@@ -68,8 +75,8 @@ function resolveRgPath(): string {
 }
 
 let _rgPath: string | undefined;
-function getRgPath(): string {
-  if (!_rgPath) _rgPath = resolveRgPath();
+async function getRgPath(): Promise<string> {
+  if (!_rgPath) _rgPath = await resolveRgPath();
   return _rgPath;
 }
 
@@ -79,7 +86,7 @@ function getRgPath(): string {
 
 export async function checkRgAvailable(): Promise<{ available: boolean; platform: string }> {
   try {
-    getRgPath();
+    await getRgPath();
     return { available: true, platform: process.platform };
   } catch {
     return { available: false, platform: process.platform };
@@ -260,7 +267,7 @@ export async function searchCode(
   // 3. Resolve rg path; not_installed is a categorical error
   let rgPath: string;
   try {
-    rgPath = getRgPath();
+    rgPath = await getRgPath();
   } catch (err) {
     return {
       matches: [],
