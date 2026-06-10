@@ -77,7 +77,7 @@ async function waitForServer(pid) {
 
 async function main() {
   console.log(`[release:smoke] Building ${pkg.name}@${pkg.version}`);
-  run("pnpm", ["build:clean"]);
+  run("pnpm", ["build"]);
 
   console.log("[release:smoke] Packing tarball");
   const tarball = execFileSync("npm", ["pack", "--cache", cacheDir], {
