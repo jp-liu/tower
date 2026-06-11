@@ -434,6 +434,14 @@ export async function openInFileManager(dirPath: string): Promise<void> {
   }
   const { buildFileManagerCommand } = await import("@/lib/open-targets");
   const { command, args } = buildFileManagerCommand(process.platform, dirPath);
+  if (process.platform === "win32") {
+    // explorer.exe returns exit code 1 even on success, so execFileSync would
+    // throw on a perfectly good open. Fire-and-forget instead — it's a real
+    // .exe (no EINVAL risk) and its exit code is meaningless.
+    const { spawn } = await import("node:child_process");
+    spawn(command, args, { detached: true, stdio: "ignore" }).unref();
+    return;
+  }
   execFileSync(command, args);
 }
 

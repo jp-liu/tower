@@ -71,7 +71,13 @@ export async function POST(request: NextRequest) {
         // `claude` command is a `.cmd` shim, which spawn() rejects with EINVAL —
         // resolveSdkExecutable rewrites it to the underlying cli.js so the SDK
         // runs `node cli.js`. No-op on macOS/Linux and for native `.exe` installs.
-        const claudePath = resolveSdkExecutable(claudeAdapter.resolveCommand());
+        const rawClaudeCmd = claudeAdapter.resolveCommand();
+        const claudePath = resolveSdkExecutable(rawClaudeCmd);
+        // Log the resolved CLI path — a Windows `spawn EINVAL` means a `.cmd`
+        // reached the SDK (it can't be rewritten to a node-runnable cli.js).
+        console.error(
+          `[assistant-chat] claude exec — raw=${rawClaudeCmd} resolved=${claudePath}`
+        );
 
         // Ensure .tower/ exists (runtime guard — handles deletion while server is running)
         const { ensureTowerDir } = await import("@/lib/init-tower");

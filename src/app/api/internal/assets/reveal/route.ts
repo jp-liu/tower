@@ -66,7 +66,10 @@ export async function POST(request: NextRequest) {
     } else if (platform === "linux") {
       await execFile("xdg-open", [path.dirname(resolvedPath)]);
     } else if (platform === "win32") {
-      await execFile("explorer", ["/select,", resolvedPath]);
+      // explorer.exe returns exit code 1 even on success → execFile would
+      // reject a working reveal. Fire-and-forget; it's a real .exe.
+      const { spawn } = await import("node:child_process");
+      spawn("explorer", ["/select,", resolvedPath], { detached: true, stdio: "ignore" }).unref();
     } else {
       return NextResponse.json(
         { error: "Unsupported platform" },

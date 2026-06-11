@@ -298,28 +298,51 @@ describe("platform utilities", () => {
         "CALL :find_dp0",
         'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\node_modules\\@anthropic-ai\\claude-code\\cli.js" %*',
       ].join("\n");
+      const cliJs =
+        "D:\\software\\nvm4w\\nodejs\\node_modules\\@anthropic-ai\\claude-code\\cli.js";
       const { resolveSdkExecutable } = await import("@/lib/platform");
       const result = resolveSdkExecutable(
         "D:\\software\\nvm4w\\nodejs\\claude.cmd",
         "win32",
-        () => shim
+        () => shim,
+        (p) => p === cliJs // resolved cli.js exists
       );
-      expect(result).toBe(
-        "D:\\software\\nvm4w\\nodejs\\node_modules\\@anthropic-ai\\claude-code\\cli.js"
-      );
+      expect(result).toBe(cliJs);
     });
 
-    it("falls back to the original .cmd when the shim has no js target", async () => {
+    it("falls back to conventional npm cli.js when the shim regex misses", async () => {
+      const cliJs = "D:\\nvm\\v22\\node_modules\\@anthropic-ai\\claude-code\\cli.js";
       const { resolveSdkExecutable } = await import("@/lib/platform");
-      const result = resolveSdkExecutable("C:\\bin\\claude.cmd", "win32", () => "@echo off\r\nclaude %*");
+      const result = resolveSdkExecutable(
+        "D:\\nvm\\v22\\claude.cmd",
+        "win32",
+        () => "@echo off\r\nclaude %*", // no js reference in shim
+        (p) => p === cliJs // but the conventional path exists
+      );
+      expect(result).toBe(cliJs);
+    });
+
+    it("falls back to the original .cmd when no js entry exists anywhere", async () => {
+      const { resolveSdkExecutable } = await import("@/lib/platform");
+      const result = resolveSdkExecutable(
+        "C:\\bin\\claude.cmd",
+        "win32",
+        () => "@echo off\r\nclaude %*",
+        () => false // neither parsed nor conventional path exists
+      );
       expect(result).toBe("C:\\bin\\claude.cmd");
     });
 
     it("falls back to the original .cmd when the shim is unreadable", async () => {
       const { resolveSdkExecutable } = await import("@/lib/platform");
-      const result = resolveSdkExecutable("C:\\bin\\claude.cmd", "win32", () => {
-        throw new Error("ENOENT");
-      });
+      const result = resolveSdkExecutable(
+        "C:\\bin\\claude.cmd",
+        "win32",
+        () => {
+          throw new Error("ENOENT");
+        },
+        () => false
+      );
       expect(result).toBe("C:\\bin\\claude.cmd");
     });
   });

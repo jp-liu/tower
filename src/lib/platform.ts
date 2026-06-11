@@ -11,7 +11,7 @@
  *   - No side-effects on import — all state is passed as arguments.
  */
 
-import { constants as fsConstants, promises as fs, readFileSync } from "node:fs";
+import { constants as fsConstants, promises as fs, readFileSync, existsSync } from "node:fs";
 import { execSync, execFileSync } from "node:child_process";
 import path from "node:path";
 
@@ -287,25 +287,44 @@ export function resolveSdkExecutable(
   command: string,
   platform: NodeJS.Platform = process.platform,
   readFile: (p: string) => string = (p) => readFileSync(p, "utf-8"),
+  fileExists: (p: string) => boolean = (p) => existsSync(p),
 ): string {
   if (!isWindows(platform)) return command;
 
+  // Only .cmd/.bat shims are the problem — the SDK spawns the path directly and
+  // Node rejects spawning a .cmd without a shell (EINVAL). .exe / extensionless
+  // paths are returned untouched.
   const ext = path.extname(command).toLowerCase();
   if (ext !== ".cmd" && ext !== ".bat") return command;
 
+  const dir = path.win32.dirname(command);
+
+  // (1) Parse the npm cmd-shim for the JS entry it launches, e.g.
+  //     "%_prog%"  "%dp0%\node_modules\@anthropic-ai\claude-code\cli.js" %*
   try {
     const shim = readFile(command);
-    // npm cmd-shims reference the target script relative to %dp0% (the shim's
-    // own directory), e.g.:
-    //   "%_prog%"  "%dp0%\node_modules\@anthropic-ai\claude-code\cli.js" %*
     const match = shim.match(/%~?dp0%[\\/]?([^"]+?\.(?:js|mjs|cjs))/i);
     if (match) {
-      const rel = match[1].replace(/\//g, "\\");
-      return path.win32.resolve(path.win32.dirname(command), rel);
+      const resolved = path.win32.resolve(dir, match[1].replace(/\//g, "\\"));
+      if (fileExists(resolved)) return resolved;
     }
   } catch {
-    // Unreadable shim — fall back to the original command.
+    // Unreadable shim — fall through to the conventional-layout guess.
   }
+
+  // (2) Conventional npm-global layout: <shim dir>\node_modules\@anthropic-ai\
+  //     claude-code\cli.js. Covers shims whose format the regex above misses.
+  const guess = path.win32.join(
+    dir,
+    "node_modules",
+    "@anthropic-ai",
+    "claude-code",
+    "cli.js"
+  );
+  if (fileExists(guess)) return guess;
+
+  // No JS entry found — return the original (the SDK will surface the EINVAL,
+  // and the assistant route logs the resolved path for diagnosis).
   return command;
 }
 
