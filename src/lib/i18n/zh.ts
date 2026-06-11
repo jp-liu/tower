@@ -285,6 +285,7 @@ export const zh = {
   "folder.selectCurrent": "选择当前",
   "folder.selectPath": "选择路径",
   "folder.empty": "此目录下没有文件夹",
+  "folder.noDrives": "未检测到磁盘盘符",
   "folder.browse": "浏览",
   "folder.newFolder": "新建文件夹",
   "folder.newFolderPlaceholder": "文件夹名称",

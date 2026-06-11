@@ -321,6 +321,11 @@ export function FolderBrowserDialog({
               </div>
             )}
             {/* Windows drive list */}
+            {showDrives && (!data?.drives || data.drives.length === 0) && (
+              <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                {t("folder.noDrives")}
+              </div>
+            )}
             {showDrives && data?.drives && data.drives.map((drive) => (
               <button
                 key={drive.path}

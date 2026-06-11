@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { execSync } from "child_process";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,6 +41,18 @@ function getWindowsDrives(currentPath?: string): { name: string; path: string; i
       // Drive does not exist or is not accessible
     }
   }
+  // Secondary probe: if existence checks found nothing (some hardened Windows
+  // setups block stat on drive roots), ask the OS directly. `wmic` exists on
+  // older Windows; PowerShell's Get-PSDrive covers Win11 where wmic is gone.
+  if (drives.length === 0) {
+    for (const letter of enumerateDrivesViaShell()) {
+      if (!seen.has(letter)) {
+        drives.push({ name: `${letter}:`, path: `${letter}:\\`, isGit: false });
+        seen.add(letter);
+      }
+    }
+  }
+
   // Fallback: always include the drive of the path we're currently browsing, so
   // the switcher is never empty even if probing missed it.
   const m = /^([A-Za-z]):/.exec(currentPath ?? "");
@@ -50,6 +63,26 @@ function getWindowsDrives(currentPath?: string): { name: string; path: string; i
     }
   }
   return drives;
+}
+
+/** Ask Windows for its filesystem drive letters. Best-effort; returns []. */
+function enumerateDrivesViaShell(): string[] {
+  const letters = new Set<string>();
+  const tryCmd = (cmd: string) => {
+    try {
+      const out = execSync(cmd, { encoding: "utf-8", timeout: 4000, stdio: ["ignore", "pipe", "ignore"] });
+      for (const match of out.matchAll(/([A-Za-z]):/g)) {
+        letters.add(match[1].toUpperCase());
+      }
+    } catch {
+      // command unavailable — try the next one
+    }
+  };
+  tryCmd("wmic logicaldisk get caption");
+  if (letters.size === 0) {
+    tryCmd('powershell -NoProfile -Command "Get-PSDrive -PSProvider FileSystem | %% { $_.Name + \':\' }"');
+  }
+  return [...letters];
 }
 
 export async function GET(request: NextRequest) {

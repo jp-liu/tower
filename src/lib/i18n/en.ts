@@ -271,6 +271,7 @@ export const en: Translations = {
   "folder.selectCurrent": "Select Current",
   "folder.selectPath": "Select Path",
   "folder.empty": "No folders in this directory",
+  "folder.noDrives": "No drives detected",
   "folder.browse": "Browse",
   "folder.newFolder": "New Folder",
   "folder.newFolderPlaceholder": "Folder name",
