@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { requireLocalhost } from "@/lib/internal-api-guard";
-import { resolveAssetPath, MIME_MAP } from "@/lib/file-serve";
+import { resolveAssetFile, MIME_MAP } from "@/lib/file-serve";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,9 +23,9 @@ export async function GET(
     return NextResponse.json({ error: "Invalid path" }, { status: 400 });
   }
 
-  const { resolved, error } = resolveAssetPath(projectId, filename);
-  if (error || !resolved) {
-    return NextResponse.json({ error: "Invalid path" }, { status: 400 });
+  const resolved = await resolveAssetFile(projectId, filename);
+  if (!resolved) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   let bytes: Buffer;

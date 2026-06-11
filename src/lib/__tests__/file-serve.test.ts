@@ -175,4 +175,21 @@ describe("localPathToApiUrl", () => {
   it("returns input unchanged for empty string", () => {
     expect(localPathToApiUrl("")).toBe("");
   });
+
+  it("converts a Windows backslash storage path (otherwise breaks on Windows)", () => {
+    const result = localPathToApiUrl(
+      "C:\\Users\\bob\\.tower\\storage\\assets\\abc123\\file.png"
+    );
+    expect(result).toBe("/api/files/assets/abc123/file.png");
+  });
+
+  it("converts a relocated storage root (no 'storage'/'data' segment)", () => {
+    const result = localPathToApiUrl("/mnt/d/TowerFiles/assets/abc123/file.png");
+    expect(result).toBe("/api/files/assets/abc123/file.png");
+  });
+
+  it("converts a Windows relocated-drive path", () => {
+    const result = localPathToApiUrl("D:\\TowerFiles\\assets\\abc123\\doc.md");
+    expect(result).toBe("/api/files/assets/abc123/doc.md");
+  });
 });

@@ -31,12 +31,24 @@ export async function POST(request: NextRequest) {
 
   const { getStorageDir } = await import("@/lib/tower-dir");
   const dataRoot = getStorageDir();
-  const resolvedPath = path.resolve(dataRoot, bodyPath);
+  let resolvedPath = path.resolve(dataRoot, bodyPath);
   const assetsRoot = path.resolve(dataRoot, "assets/");
 
-  // Security: prevent directory traversal outside data/assets/
-  if (!resolvedPath.startsWith(assetsRoot + path.sep) && resolvedPath !== assetsRoot) {
-    return NextResponse.json({ error: "Invalid path" }, { status: 400 });
+  // Allowed if inside the current storage assets dir (fast path) OR if the path
+  // is recorded on a ProjectAsset — the file may live under a legacy/relocated
+  // storage root the current reconstruction doesn't cover. The DB is the source
+  // of truth for what's a legitimate, app-created asset to reveal.
+  const underCurrentStorage =
+    resolvedPath.startsWith(assetsRoot + path.sep) || resolvedPath === assetsRoot;
+  if (!underCurrentStorage) {
+    const { isRegisteredAssetPath } = await import("@/lib/file-serve");
+    const registered =
+      (await isRegisteredAssetPath(bodyPath)) ||
+      (await isRegisteredAssetPath(resolvedPath));
+    if (!registered) {
+      return NextResponse.json({ error: "Invalid path" }, { status: 400 });
+    }
+    resolvedPath = path.resolve(bodyPath);
   }
 
   // Verify file exists

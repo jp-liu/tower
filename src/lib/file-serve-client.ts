@@ -20,9 +20,15 @@ export function isImageAsset(filename: string, mimeType?: string | null): boolea
 }
 
 export function localPathToApiUrl(src: string): string {
-  // Match assets/{projectId}/{filename} under storage/ (.tower/storage/assets/...)
-  // Also supports legacy data/assets/ paths for backward compatibility
-  const match = src.match(/(?:^|\/)(?:storage|data)\/assets\/([^/]+)\/([^/]+)$/);
+  // Normalize Windows backslashes first — otherwise the forward-slash regex
+  // never matches a Windows asset path (C:\...\storage\assets\...) and every
+  // asset preview on Windows breaks.
+  const normalized = src.replace(/\\/g, "/");
+  // Match assets/{projectId}/{filename} under any storage root: the canonical
+  // `storage/assets/...`, the legacy `data/assets/...`, or a relocated root —
+  // we anchor on the `/assets/<projectId>/<filename>` tail, which is stable
+  // regardless of where the storage directory lives.
+  const match = normalized.match(/\/assets\/([^/]+)\/([^/]+)$/);
   if (match) {
     return `/api/files/assets/${match[1]}/${match[2]}`;
   }
