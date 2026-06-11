@@ -153,8 +153,11 @@ export async function GET(request: NextRequest) {
       isWindows: isWin,
       // Surfaced in the client's "no drives" empty state so a single screenshot
       // is self-diagnosing (which platform the server sees, how many drives it
-      // detected) — saves round-trips chasing the terminal log.
+      // detected) — saves round-trips chasing the terminal log. `diag` is a
+      // build marker: if a screenshot doesn't show the current marker, the
+      // running server is NOT this build (stale publish/install/restart).
       platform: process.platform,
+      diag: "drivefix-4",
       // Include drive list on Windows for cross-drive navigation
       ...(isWin ? { drives } : {}),
     });

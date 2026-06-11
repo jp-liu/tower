@@ -27,6 +27,7 @@ interface BrowseResult {
   drives?: FolderEntry[];
   isWindows?: boolean;
   platform?: string;
+  diag?: string;
 }
 
 interface FolderBrowserDialogProps {
@@ -326,7 +327,7 @@ export function FolderBrowserDialog({
               <div className="flex flex-col items-center justify-center gap-1 py-8 text-sm text-muted-foreground">
                 <span>{t("folder.noDrives")}</span>
                 <span className="text-[10px] opacity-60">
-                  platform={data?.platform ?? "?"} · drives={data?.drives?.length ?? 0} · {data?.currentPath ?? "?"}
+                  {data?.diag ?? "old-build"} · platform={data?.platform ?? "?"} · drives={data?.drives?.length ?? 0} · {data?.currentPath ?? "?"}
                 </span>
               </div>
             )}
