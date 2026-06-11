@@ -26,6 +26,7 @@ interface BrowseResult {
   folders: FolderEntry[];
   drives?: FolderEntry[];
   isWindows?: boolean;
+  platform?: string;
 }
 
 interface FolderBrowserDialogProps {
@@ -322,8 +323,11 @@ export function FolderBrowserDialog({
             )}
             {/* Windows drive list */}
             {showDrives && (!data?.drives || data.drives.length === 0) && (
-              <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                {t("folder.noDrives")}
+              <div className="flex flex-col items-center justify-center gap-1 py-8 text-sm text-muted-foreground">
+                <span>{t("folder.noDrives")}</span>
+                <span className="text-[10px] opacity-60">
+                  platform={data?.platform ?? "?"} · drives={data?.drives?.length ?? 0} · {data?.currentPath ?? "?"}
+                </span>
               </div>
             )}
             {showDrives && data?.drives && data.drives.map((drive) => (

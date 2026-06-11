@@ -151,6 +151,10 @@ export async function GET(request: NextRequest) {
       // isWindows drives the switcher button's visibility on the client (so it
       // shows on Windows regardless of how many drives were detected).
       isWindows: isWin,
+      // Surfaced in the client's "no drives" empty state so a single screenshot
+      // is self-diagnosing (which platform the server sees, how many drives it
+      // detected) — saves round-trips chasing the terminal log.
+      platform: process.platform,
       // Include drive list on Windows for cross-drive navigation
       ...(isWin ? { drives } : {}),
     });
