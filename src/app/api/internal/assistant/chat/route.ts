@@ -5,7 +5,7 @@ import { getAssistantCacheRoot } from "@/lib/file-utils";
 import { ClaudeCliAdapter } from "@/lib/ai/adapters/cli/claude-cli-adapter";
 import { resolveSdkExecutable } from "@/lib/platform";
 import { db } from "@/lib/db";
-import { getTowerMcpName } from "@/lib/ai/install-orchestrator";
+import { buildTowerMcpConfig } from "@/lib/ai/install-orchestrator";
 import { ATTACHMENT_SUBPATH_RE, MAX_ATTACHMENTS } from "@/lib/attachment-utils";
 
 const claudeAdapter = new ClaudeCliAdapter();
@@ -79,16 +79,27 @@ export async function POST(request: NextRequest) {
 
         const hasAttachments = safeAttachmentFilenames.length > 0;
 
-        // Tower MCP is installed once at user scope by `instrumentation.ts` on
-        // boot (and refreshed by Test Connection). Don't pass `mcpServers`
-        // inline here — Claude SDK auto-discovers the user-scope entry, and
-        // duplicating the config means we'd have to keep the `dist/mcp-server.cjs`
-        // path correct in two places.
+        // Pass the Tower MCP config INLINE rather than relying on the user-scope
+        // `claude mcp add` entry that instrumentation.ts installs on boot. That
+        // entry is skipped-if-present (isMcpInstalled → true), so an upgraded or
+        // stale install keeps a broken command path: the SDK then connects 0
+        // tools, and the model — unable to call create_task — just narrates
+        // ("立即创建", toolUses=0) or starts doing the work itself. buildTowerMcpConfig
+        // is the single source of truth for the path, so this isn't duplication;
+        // it makes the assistant self-contained and immune to user-config drift.
+        const towerMcp = buildTowerMcpConfig();
         const options: Record<string, unknown> = {
+          mcpServers: {
+            [towerMcp.name]: {
+              command: towerMcp.command,
+              args: towerMcp.args,
+              env: towerMcp.env,
+            },
+          },
           // Disable all built-in tools — assistant is a task operator, not a coding assistant.
           // Only allow Read when attachments are present (to read the provided files).
           tools: hasAttachments ? ["Read"] : [],
-          allowedTools: [`mcp__${getTowerMcpName()}__*`, "Read"],
+          allowedTools: [`mcp__${towerMcp.name}__*`, "Read"],
           // Execute tool calls without prompting. The assistant runs headless
           // over a localhost-only SSE route with no interactive permission UI
           // and no `canUseTool` callback, so in the default permission mode the
@@ -211,7 +222,26 @@ export async function POST(request: NextRequest) {
 
             // System messages — tool results, status, etc.
             case "system": {
-              const sysMsg = msg as { subtype?: string; tool_name?: string; content?: string };
+              const sysMsg = msg as {
+                subtype?: string;
+                tool_name?: string;
+                content?: string;
+                tools?: string[];
+                mcp_servers?: { name: string; status: string }[];
+              };
+              // The init message reports which MCP servers connected and which
+              // tools are available. If Tower MCP failed to connect, the model
+              // has no create_task tool and can only narrate — log it so that
+              // failure mode is obvious instead of silent.
+              if (sysMsg.subtype === "init") {
+                const servers = (sysMsg.mcp_servers ?? [])
+                  .map((s) => `${s.name}:${s.status}`)
+                  .join(",");
+                console.error(
+                  `[assistant-chat] session init — mcpServers=[${servers}] ` +
+                    `toolCount=${sysMsg.tools?.length ?? 0}`
+                );
+              }
               if (sysMsg.subtype === "tool_result") {
                 send({
                   type: "tool_result",
