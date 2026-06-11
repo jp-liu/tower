@@ -3,22 +3,22 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { getStorageDir } from "./tower-dir";
 
-const DATA_ROOT = getStorageDir();
-
+// Resolve the storage root per call (not cached at module load) so a Settings
+// relocation takes effect without restarting the server.
 function assertWithinDataRoot(resolved: string): void {
-  if (!resolved.startsWith(DATA_ROOT + path.sep)) {
+  if (!resolved.startsWith(getStorageDir() + path.sep)) {
     throw new Error("Path traversal detected");
   }
 }
 
 export function getAssetsDir(projectId: string): string {
-  const dir = path.join(DATA_ROOT, "assets", projectId);
+  const dir = path.join(getStorageDir(), "assets", projectId);
   assertWithinDataRoot(dir);
   return dir;
 }
 
 export function getCacheDir(taskId: string): string {
-  const dir = path.join(DATA_ROOT, "cache", taskId);
+  const dir = path.join(getStorageDir(), "cache", taskId);
   assertWithinDataRoot(dir);
   return dir;
 }
@@ -46,14 +46,14 @@ export type CacheFileType = "images" | "files";
 export function getAssistantCacheDir(type: CacheFileType = "images"): string {
   const now = new Date();
   const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const dir = path.join(DATA_ROOT, "cache", "assistant", ym, type);
+  const dir = path.join(getStorageDir(), "cache", "assistant", ym, type);
   assertWithinDataRoot(dir);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
 
 export function getAssistantCacheRoot(): string {
-  const dir = path.join(DATA_ROOT, "cache", "assistant");
+  const dir = path.join(getStorageDir(), "cache", "assistant");
   assertWithinDataRoot(dir);
   return dir;
 }

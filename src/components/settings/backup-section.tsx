@@ -36,6 +36,7 @@ import {
   setBackupDir,
 } from "@/actions/backup-actions";
 import type { BackupInfo } from "@/lib/backup";
+import { getStorageLocation, setStorageLocation, type StorageLocation } from "@/actions/storage-actions";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -60,6 +61,8 @@ export function BackupSection() {
   const [backups, setBackups] = useState<BackupInfo[]>([]);
   const [backupDir, setBackupDirState] = useState("");
   const [showFolderBrowser, setShowFolderBrowser] = useState(false);
+  const [storageLoc, setStorageLoc] = useState<StorageLocation | null>(null);
+  const [showStorageBrowser, setShowStorageBrowser] = useState(false);
   const [loading, setLoading] = useState(true);
   const [operating, setOperating] = useState<string | null>(null);
 
@@ -75,9 +78,14 @@ export function BackupSection() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [list, dir] = await Promise.all([listBackupFiles(), getBackupDir()]);
+      const [list, dir, storage] = await Promise.all([
+        listBackupFiles(),
+        getBackupDir(),
+        getStorageLocation(),
+      ]);
       setBackups(list);
       setBackupDirState(dir);
+      setStorageLoc(storage);
     } finally {
       setLoading(false);
     }
@@ -142,6 +150,35 @@ export function BackupSection() {
     } catch {
       toast.error(t("settings.backup.dirError"));
     }
+  };
+
+  const relocateStorage = async (newPath: string) => {
+    setOperating("storage");
+    try {
+      const res = await setStorageLocation({ newPath });
+      if (!res.ok) {
+        toast.error(res.error || t("settings.storage.moveError"));
+        return;
+      }
+      toast.success(t("settings.storage.moveSuccess", { count: String(res.moved ?? 0) }));
+      await loadData();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t("settings.storage.moveError"));
+    } finally {
+      setOperating(null);
+    }
+  };
+
+  const handleSelectStorageDir = async (path: string) => {
+    setShowStorageBrowser(false);
+    if (!confirm(t("settings.storage.moveConfirm"))) return;
+    await relocateStorage(path);
+  };
+
+  const handleResetStorageDir = async () => {
+    if (!storageLoc || storageLoc.isDefault) return;
+    if (!confirm(t("settings.storage.resetConfirm"))) return;
+    await relocateStorage(storageLoc.default);
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -222,6 +259,44 @@ export function BackupSection() {
           open={showFolderBrowser}
           onOpenChange={setShowFolderBrowser}
           onSelect={handleSelectDir}
+        />
+      </div>
+
+      <div>
+        <h3 className="text-base font-semibold">{t("settings.storage.sectionTitle")}</h3>
+        <p className="mt-1 text-xs text-muted-foreground">{t("settings.storage.hint")}</p>
+        <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+          <span>{t("settings.storage.current")}:</span>
+          <code className="rounded bg-muted px-2 py-0.5 text-xs">{storageLoc?.current ?? "…"}</code>
+          {storageLoc?.isDefault && (
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              {t("settings.storage.defaultBadge")}
+            </span>
+          )}
+          <Button
+            variant="ghost"
+            onClick={() => setShowStorageBrowser(true)}
+            disabled={operating === "storage"}
+            className="text-xs text-muted-foreground"
+          >
+            {operating === "storage" ? <Loader2 className="h-3 w-3 animate-spin" /> : t("settings.storage.change")}
+          </Button>
+          {storageLoc && !storageLoc.isDefault && (
+            <Button
+              variant="ghost"
+              onClick={handleResetStorageDir}
+              disabled={operating === "storage"}
+              className="text-xs text-muted-foreground"
+            >
+              {t("settings.storage.reset")}
+            </Button>
+          )}
+        </div>
+
+        <FolderBrowserDialog
+          open={showStorageBrowser}
+          onOpenChange={setShowStorageBrowser}
+          onSelect={handleSelectStorageDir}
         />
       </div>
 

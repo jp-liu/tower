@@ -1,8 +1,6 @@
 import * as path from "node:path";
 import { getStorageDir } from "./tower-dir";
 
-const DATA_ROOT = getStorageDir();
-
 export const MIME_MAP: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -20,8 +18,9 @@ export function resolveAssetPath(
   projectId: string,
   filename: string
 ): { resolved: string | null; error: string | null } {
-  const resolved = path.resolve(DATA_ROOT, "assets", projectId, filename);
-  const safePrefix = path.resolve(DATA_ROOT, "assets") + path.sep;
+  const dataRoot = getStorageDir();
+  const resolved = path.resolve(dataRoot, "assets", projectId, filename);
+  const safePrefix = path.resolve(dataRoot, "assets") + path.sep;
   if (!resolved.startsWith(safePrefix)) {
     return { resolved: null, error: "Invalid path" };
   }

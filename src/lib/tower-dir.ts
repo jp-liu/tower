@@ -21,7 +21,7 @@
 
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { mkdirSync, existsSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 
 let _dir: string | undefined;
 
@@ -47,9 +47,48 @@ export function getTowerDbPath(): string {
   return join(getDatabaseDir(), "tower.db");
 }
 
-/** ~/.tower/storage — root for assets + cache */
+/** Default storage root inside the Tower data dir. */
+export function getDefaultStorageDir(): string {
+  return join(getTowerDir(), "storage");
+}
+
+/**
+ * Pointer file recording a user-chosen storage location. Lives in the (small,
+ * fixed) data dir so it's always readable even when storage itself moves to
+ * another drive. Plain text holding an absolute path; absent = use default.
+ */
+function getStoragePointerFile(): string {
+  return join(getTowerDir(), "storage-location");
+}
+
+/** Read the configured storage override, or null if none/unreadable. */
+export function readStoragePointer(): string | null {
+  try {
+    const p = readFileSync(getStoragePointerFile(), "utf-8").trim();
+    return p.length > 0 ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Persist (or clear, when passed null) the storage location override. */
+export function writeStoragePointer(dir: string | null): void {
+  const file = getStoragePointerFile();
+  if (dir === null) {
+    rmSync(file, { force: true });
+    return;
+  }
+  writeFileSync(file, dir, "utf-8");
+}
+
+/**
+ * Storage root for assets + cache. Resolved fresh on every call (no caching)
+ * so a relocation via Settings takes effect without restarting the server.
+ * Priority: TOWER_STORAGE_DIR env → pointer file → default (~/.tower/storage).
+ */
 export function getStorageDir(): string {
-  const dir = join(getTowerDir(), "storage");
+  const override = process.env.TOWER_STORAGE_DIR || readStoragePointer();
+  const dir = override && override.length > 0 ? override : getDefaultStorageDir();
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return dir;
 }
