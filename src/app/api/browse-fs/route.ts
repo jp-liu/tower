@@ -53,14 +53,24 @@ function getWindowsDrives(currentPath?: string): { name: string; path: string; i
     }
   }
 
-  // Fallback: always include the drive of the path we're currently browsing, so
-  // the switcher is never empty even if probing missed it.
-  const m = /^([A-Za-z]):/.exec(currentPath ?? "");
-  if (m) {
-    const letter = m[1].toUpperCase();
-    if (!seen.has(letter)) {
-      drives.unshift({ name: `${letter}:`, path: `${letter}:\\`, isGit: false });
+  // Hard fallback: derive a drive letter from the path we're browsing, then the
+  // home directory, then "C:" as a last resort. Guarantees the list is never
+  // empty on Windows even if every probe above failed.
+  const addLetter = (letter: string | undefined) => {
+    if (!letter) return;
+    const up = letter.toUpperCase();
+    if (!seen.has(up)) {
+      drives.unshift({ name: `${up}:`, path: `${up}:\\`, isGit: false });
+      seen.add(up);
     }
+  };
+  if (drives.length === 0) {
+    addLetter(/^([A-Za-z]):/.exec(currentPath ?? "")?.[1]);
+    addLetter(/^([A-Za-z]):/.exec(os.homedir())?.[1]);
+    addLetter("C");
+  } else {
+    // Probing succeeded — still make sure the current drive is present/first.
+    addLetter(/^([A-Za-z]):/.exec(currentPath ?? "")?.[1]);
   }
   return drives;
 }
@@ -126,7 +136,11 @@ export async function GET(request: NextRequest) {
 
     const drives = isWin ? getWindowsDrives(resolved) : undefined;
     if (isWin) {
-      console.error(`[browse-fs] win=true drives=${drives?.length ?? 0} path=${resolved}`);
+      console.error(
+        `[browse-fs] platform=${process.platform} drives=${drives?.length ?? 0} ` +
+          `letters=[${(drives ?? []).map((d) => d.name).join(",")}] ` +
+          `path=${resolved} home=${os.homedir()}`
+      );
     }
 
     return NextResponse.json({
