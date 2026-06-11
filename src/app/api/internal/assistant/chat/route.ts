@@ -7,6 +7,7 @@ import { resolveSdkExecutable } from "@/lib/platform";
 import { db } from "@/lib/db";
 import { buildTowerMcpConfig } from "@/lib/ai/install-orchestrator";
 import { ATTACHMENT_SUBPATH_RE, MAX_ATTACHMENTS } from "@/lib/attachment-utils";
+import { readConfigValue } from "@/lib/config-reader";
 
 const claudeAdapter = new ClaudeCliAdapter();
 
@@ -127,6 +128,22 @@ export async function POST(request: NextRequest) {
           // .tower/ directory has its own CLAUDE.md with assistant persona
           cwd: towerDir,
           pathToClaudeCodeExecutable: claudePath,
+        };
+
+        // Raise the CLI's per-response output ceiling. The Agent SDK spawns the
+        // Claude Code CLI, which caps a single response at CLAUDE_CODE_MAX_OUTPUT_TOKENS
+        // (default 64000). Headless `query()` runs the whole agent loop in one go,
+        // so a long turn (e.g. summarizing a big task) can blow past 64K and the SDK
+        // throws a terminal "response exceeded the 64000 output token maximum" — the
+        // interactive terminal never hits this because its turns stay bounded.
+        // `env` REPLACES process.env for the subprocess, so spread it first.
+        const maxOutputTokens = await readConfigValue<number>(
+          "assistant.maxOutputTokens",
+          128000
+        );
+        options.env = {
+          ...process.env,
+          CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(maxOutputTokens),
         };
 
         // Resume previous session if sessionId provided
@@ -296,11 +313,14 @@ export async function POST(request: NextRequest) {
           err instanceof Error && err.stack ? `\n${err.stack}` : ""
         );
         // Surface the real reason to the (localhost) client so it shows up in
-        // the chat bubble and can be reported directly.
-        send({
-          type: "error",
-          content: `Assistant encountered an error: ${detail}`,
-        });
+        // the chat bubble and can be reported directly. Give the output-cap
+        // error an actionable message — it means the model wanted to emit more
+        // than the current model's per-response limit (64K on Sonnet/Haiku,
+        // 128K on Opus); the fix is a shorter ask or a higher-output model.
+        const friendly = /output token maximum|max_output_tokens/i.test(detail)
+          ? "回复内容超出了模型单次输出上限。请把问题拆小一些，或在设置里把 assistant.maxOutputTokens 调整为所用模型支持的上限（Sonnet/Haiku 最高 64K，Opus 最高 128K）。"
+          : `Assistant encountered an error: ${detail}`;
+        send({ type: "error", content: friendly });
       } finally {
         send({ type: "done" });
         controller.close();
