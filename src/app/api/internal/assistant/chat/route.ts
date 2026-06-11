@@ -130,13 +130,29 @@ export async function POST(request: NextRequest) {
           pathToClaudeCodeExecutable: claudePath,
         };
 
-        // Raise the CLI's per-response output ceiling. The Agent SDK spawns the
-        // Claude Code CLI, which caps a single response at CLAUDE_CODE_MAX_OUTPUT_TOKENS
-        // (default 64000). Headless `query()` runs the whole agent loop in one go,
-        // so a long turn (e.g. summarizing a big task) can blow past 64K and the SDK
-        // throws a terminal "response exceeded the 64000 output token maximum" — the
-        // interactive terminal never hits this because its turns stay bounded.
-        // `env` REPLACES process.env for the subprocess, so spread it first.
+        // The assistant is a task operator: parse intent → call one Tower MCP
+        // tool → confirm in a sentence or two. It is NOT a reasoning agent, so
+        // the SDK default `effort: "high"` is wrong here — on Opus-class models
+        // high effort + adaptive thinking can emit a huge *thinking* trace for a
+        // trivial request, and thinking tokens count toward the per-response
+        // output cap. That is the real reason a turn whose final reply is only a
+        // few hundred chars can still blow past 64K output tokens: the model
+        // "thinks" past the ceiling before it ever writes the short answer.
+        // Low effort keeps thinking minimal and replies terse; `maxTurns` bounds
+        // the agent loop so a confused turn can't spin indefinitely.
+        const effort = await readConfigValue<"low" | "medium" | "high">(
+          "assistant.effort",
+          "low"
+        );
+        const maxTurns = await readConfigValue<number>("assistant.maxTurns", 30);
+        options.effort = effort;
+        options.maxTurns = maxTurns;
+
+        // Safety net: raise the CLI's per-response output ceiling too. With low
+        // effort this should never be hit, but if a future config bumps effort
+        // back up, 128K (Opus/Fable ceiling) gives more headroom than the 64K
+        // default. `env` REPLACES process.env for the subprocess — spread first
+        // so the CLI keeps PATH and friends.
         const maxOutputTokens = await readConfigValue<number>(
           "assistant.maxOutputTokens",
           128000
@@ -233,13 +249,18 @@ export async function POST(request: NextRequest) {
                 session_id?: string;
                 num_turns?: number;
                 is_error?: boolean;
+                usage?: { output_tokens?: number; input_tokens?: number };
               };
               // Always log the turn outcome so "it never does anything" reports
               // are diagnosable: a tool-less turn that still resolves "success"
               // points at the model/prompt; an error subtype points at the CLI.
+              // output_tokens (which includes the thinking trace) tells us whether
+              // a turn is ballooning — a few-hundred-char reply should be well
+              // under ~2K; tens of thousands means runaway thinking or a loop.
               console.error(
                 `[assistant-chat] turn done — subtype=${resultMsg.subtype ?? "?"} ` +
                   `toolUses=${toolUseCount} numTurns=${resultMsg.num_turns ?? "?"} ` +
+                  `outputTokens=${resultMsg.usage?.output_tokens ?? "?"} ` +
                   `firstTurn=${!body.sessionId}`
               );
               if (resultMsg.subtype?.includes("error") || resultMsg.is_error) {
