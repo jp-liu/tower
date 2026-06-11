@@ -80,17 +80,24 @@ export async function POST(request: NextRequest) {
         const hasAttachments = safeAttachmentFilenames.length > 0;
 
         // Pass the Tower MCP config INLINE rather than relying on the user-scope
-        // `claude mcp add` entry that instrumentation.ts installs on boot. That
-        // entry is skipped-if-present (isMcpInstalled → true), so an upgraded or
-        // stale install keeps a broken command path: the SDK then connects 0
-        // tools, and the model — unable to call create_task — just narrates
-        // ("立即创建", toolUses=0) or starts doing the work itself. buildTowerMcpConfig
-        // is the single source of truth for the path, so this isn't duplication;
-        // it makes the assistant self-contained and immune to user-config drift.
+        // `claude mcp add` entry. That entry is skipped-if-present
+        // (isMcpInstalled → true), so a stale install keeps a broken command
+        // path and the SDK connects 0 tools — the model then just narrates or
+        // does the work itself.
+        //
+        // CRITICAL: use a DISTINCT server name (not the user's "tower"). The SDK
+        // merges inline mcpServers with the user-scope config it auto-discovers;
+        // if the user already has a global "tower" entry, an inline server of
+        // the same name collides — tool registration becomes flaky, so some
+        // sessions get the tools and some don't ("connected globally but not
+        // injected into this session"). A dedicated name sidesteps the clash and
+        // gives the assistant its own reliable instance. allowedTools is scoped
+        // to it, so the user's global tower/tower-dev tools stay out of the way.
         const towerMcp = buildTowerMcpConfig();
+        const assistantMcpName = `${towerMcp.name}-assistant`;
         const options: Record<string, unknown> = {
           mcpServers: {
-            [towerMcp.name]: {
+            [assistantMcpName]: {
               command: towerMcp.command,
               args: towerMcp.args,
               env: towerMcp.env,
@@ -99,7 +106,7 @@ export async function POST(request: NextRequest) {
           // Disable all built-in tools — assistant is a task operator, not a coding assistant.
           // Only allow Read when attachments are present (to read the provided files).
           tools: hasAttachments ? ["Read"] : [],
-          allowedTools: [`mcp__${towerMcp.name}__*`, "Read"],
+          allowedTools: [`mcp__${assistantMcpName}__*`, "Read"],
           // Execute tool calls without prompting. The assistant runs headless
           // over a localhost-only SSE route with no interactive permission UI
           // and no `canUseTool` callback, so in the default permission mode the
