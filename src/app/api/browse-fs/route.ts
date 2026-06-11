@@ -22,7 +22,10 @@ function isBlockedPath(resolved: string): boolean {
  * On Windows, return drive letters (C:\, D:\, etc.) as top-level navigation.
  * This allows users to switch between drives in the folder browser.
  */
-function getWindowsDrives(currentPath?: string): { name: string; path: string; isGit: boolean }[] {
+function getWindowsDrives(
+  currentPath?: string,
+  trace?: string[]
+): { name: string; path: string; isGit: boolean }[] {
   const drives: { name: string; path: string; isGit: boolean }[] = [];
   const seen = new Set<string>();
   // Probe drive letters A-Z. Use existsSync (existence) rather than
@@ -41,11 +44,14 @@ function getWindowsDrives(currentPath?: string): { name: string; path: string; i
       // Drive does not exist or is not accessible
     }
   }
+  trace?.push(`probe=${drives.length}`);
   // Secondary probe: if existence checks found nothing (some hardened Windows
   // setups block stat on drive roots), ask the OS directly. `wmic` exists on
   // older Windows; PowerShell's Get-PSDrive covers Win11 where wmic is gone.
   if (drives.length === 0) {
-    for (const letter of enumerateDrivesViaShell()) {
+    const shell = enumerateDrivesViaShell();
+    trace?.push(`shell=${shell.length}`);
+    for (const letter of shell) {
       if (!seen.has(letter)) {
         drives.push({ name: `${letter}:`, path: `${letter}:\\`, isGit: false });
         seen.add(letter);
@@ -68,10 +74,12 @@ function getWindowsDrives(currentPath?: string): { name: string; path: string; i
     addLetter(/^([A-Za-z]):/.exec(currentPath ?? "")?.[1]);
     addLetter(/^([A-Za-z]):/.exec(os.homedir())?.[1]);
     addLetter("C");
+    trace?.push(`fb=ran(cp=${currentPath ?? ""})`);
   } else {
-    // Probing succeeded — still make sure the current drive is present/first.
     addLetter(/^([A-Za-z]):/.exec(currentPath ?? "")?.[1]);
+    trace?.push("fb=skip");
   }
+  trace?.push(`final=${drives.length}`);
   return drives;
 }
 
@@ -134,12 +142,13 @@ export async function GET(request: NextRequest) {
       ? resolved === parentPath // drive root: C:\ → dirname is C:\
       : resolved === "/";
 
-    const drives = isWin ? getWindowsDrives(resolved) : undefined;
+    const driveTrace: string[] = [];
+    const drives = isWin ? getWindowsDrives(resolved, driveTrace) : undefined;
     if (isWin) {
       console.error(
         `[browse-fs] platform=${process.platform} drives=${drives?.length ?? 0} ` +
           `letters=[${(drives ?? []).map((d) => d.name).join(",")}] ` +
-          `path=${resolved} home=${os.homedir()}`
+          `trace=[${driveTrace.join(" ")}] path=${resolved} home=${os.homedir()}`
       );
     }
 
@@ -157,7 +166,7 @@ export async function GET(request: NextRequest) {
       // build marker: if a screenshot doesn't show the current marker, the
       // running server is NOT this build (stale publish/install/restart).
       platform: process.platform,
-      diag: "drivefix-4",
+      diag: `drivefix-5 ${driveTrace.join(" ")}`,
       // Include drive list on Windows for cross-drive navigation
       ...(isWin ? { drives } : {}),
     });
