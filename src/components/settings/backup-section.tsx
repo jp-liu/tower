@@ -242,27 +242,6 @@ export function BackupSection() {
       )}
 
       <div>
-        <h3 className="text-base font-semibold">{t("settings.backup.sectionTitle")}</h3>
-        <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
-          <span>{t("settings.backup.dir")}:</span>
-          <code className="rounded bg-muted px-2 py-0.5 text-xs">{backupDir}</code>
-          <Button
-            variant="ghost"
-            onClick={() => setShowFolderBrowser(true)}
-            className="text-xs text-muted-foreground"
-          >
-            {t("settings.backup.dirChange")}
-          </Button>
-        </div>
-
-        <FolderBrowserDialog
-          open={showFolderBrowser}
-          onOpenChange={setShowFolderBrowser}
-          onSelect={handleSelectDir}
-        />
-      </div>
-
-      <div>
         <h3 className="text-base font-semibold">{t("settings.storage.sectionTitle")}</h3>
         <p className="mt-1 text-xs text-muted-foreground">{t("settings.storage.hint")}</p>
         <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
@@ -297,6 +276,27 @@ export function BackupSection() {
           open={showStorageBrowser}
           onOpenChange={setShowStorageBrowser}
           onSelect={handleSelectStorageDir}
+        />
+      </div>
+
+      <div>
+        <h3 className="text-base font-semibold">{t("settings.backup.sectionTitle")}</h3>
+        <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+          <span>{t("settings.backup.dir")}:</span>
+          <code className="rounded bg-muted px-2 py-0.5 text-xs">{backupDir}</code>
+          <Button
+            variant="ghost"
+            onClick={() => setShowFolderBrowser(true)}
+            className="text-xs text-muted-foreground"
+          >
+            {t("settings.backup.dirChange")}
+          </Button>
+        </div>
+
+        <FolderBrowserDialog
+          open={showFolderBrowser}
+          onOpenChange={setShowFolderBrowser}
+          onSelect={handleSelectDir}
         />
       </div>
 
