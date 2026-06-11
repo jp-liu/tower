@@ -36,21 +36,21 @@ export function GitLogPanel({ commits }: GitLogPanelProps) {
   if (commits.length === 0) return null;
 
   return (
-    <div>
+    <div className="border-b border-border">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center justify-between py-1"
+        className="flex w-full items-center gap-1 px-2 py-1.5 hover:bg-accent/50 transition-colors"
       >
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          {t("git.commitLog")}
-        </p>
         {expanded
-          ? <ChevronDown className="h-3 w-3 text-muted-foreground" />
-          : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+          ? <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+          : <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />}
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {t("git.commitLog")} ({commits.length})
+        </p>
       </button>
 
       {expanded && (
-        <div className="mt-1.5 space-y-0.5 max-h-64 overflow-y-auto">
+        <div className="mt-0.5 mb-1.5 space-y-0.5 max-h-64 overflow-y-auto">
           {commits.map((c) => (
             <div
               key={c.hash}
