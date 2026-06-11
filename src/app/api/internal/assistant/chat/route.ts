@@ -5,7 +5,7 @@ import { getAssistantCacheRoot } from "@/lib/file-utils";
 import { ClaudeCliAdapter } from "@/lib/ai/adapters/cli/claude-cli-adapter";
 import { resolveSdkExecutable } from "@/lib/platform";
 import { db } from "@/lib/db";
-import { getTowerMcpName } from "@/lib/ai/install-orchestrator";
+import { buildTowerMcpConfig } from "@/lib/ai/install-orchestrator";
 import { ATTACHMENT_SUBPATH_RE, MAX_ATTACHMENTS } from "@/lib/attachment-utils";
 
 const claudeAdapter = new ClaudeCliAdapter();
@@ -85,20 +85,33 @@ export async function POST(request: NextRequest) {
 
         const hasAttachments = safeAttachmentFilenames.length > 0;
 
-        // Tower MCP is maintained in ONE place: the user-scope entry that
-        // instrumentation.ts installs via `claude mcp add` on boot (the same
-        // "tower" you see in `claude mcp list`). We deliberately do NOT inline a
-        // second copy here — per the Claude Agent SDK docs, user-scope MCP from
-        // ~/.claude.json loads regardless of cwd, so the embedded assistant
-        // already sees it. (An earlier inline copy named "tower" collided with
-        // the global one and made tool loading flaky; the fix is to not inline
-        // at all, not to add a third config surface.)
-        const towerMcpName = getTowerMcpName();
+        // Inject Tower MCP INLINE (not via the user-scope ~/.claude.json entry).
+        // Proven by probe: the SDK *waits* for inline `mcpServers` to connect
+        // before the model's turn (status "connected" at init), whereas
+        // filesystem-discovered servers are left "pending" and the turn starts
+        // without them → 0 tools (the flaky "some sessions have tools, some
+        // don't"). buildTowerMcpConfig() is the single programmatic source of
+        // truth for command/path/DB — this is not hand-maintained duplication.
+        //
+        // Distinct name (`<base>-assistant`) + strictMcpConfig avoids any clash
+        // with the user's global tower/tower-dev and skips connecting their
+        // other (slow, pending) global servers entirely — the assistant gets
+        // exactly one dedicated, reliably-connected Tower instance.
+        const towerMcp = buildTowerMcpConfig();
+        const assistantMcpName = `${towerMcp.name}-assistant`;
         const options: Record<string, unknown> = {
+          mcpServers: {
+            [assistantMcpName]: {
+              command: towerMcp.command,
+              args: towerMcp.args,
+              env: towerMcp.env,
+            },
+          },
+          strictMcpConfig: true,
           // Disable all built-in tools — assistant is a task operator, not a coding assistant.
           // Only allow Read when attachments are present (to read the provided files).
           tools: hasAttachments ? ["Read"] : [],
-          allowedTools: [`mcp__${towerMcpName}__*`, "Read"],
+          allowedTools: [`mcp__${assistantMcpName}__*`, "Read"],
           // Execute tool calls without prompting. The assistant runs headless
           // over a localhost-only SSE route with no interactive permission UI
           // and no `canUseTool` callback, so in the default permission mode the
