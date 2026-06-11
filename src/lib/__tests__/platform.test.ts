@@ -223,6 +223,69 @@ describe("platform utilities", () => {
   });
 
   // =========================================================================
+  // resolveEditorBinary — PATH probe + known-install-path fallback
+  // =========================================================================
+
+  describe("resolveEditorBinary", () => {
+    beforeEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    const onlyPath = (allow: string) => (async (p: string) =>
+      p === allow ? undefined : Promise.reject(new Error("ENOENT"))) as never;
+
+    it("falls back to the macOS app bundle when the CLI isn't on PATH", async () => {
+      const bundle = "/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl";
+      const fsModule = await import("node:fs");
+      vi.spyOn(fsModule.promises, "access").mockImplementation(onlyPath(bundle));
+
+      const { resolveEditorBinary } = await import("@/lib/platform");
+      const result = await resolveEditorBinary("subl", {
+        env: env({ PATH: "/usr/bin" }),
+        platform: "darwin",
+      });
+      expect(result).toBe(bundle);
+    });
+
+    it("returns null when neither PATH nor a known install path has the editor", async () => {
+      const fsModule = await import("node:fs");
+      vi.spyOn(fsModule.promises, "access").mockRejectedValue(new Error("ENOENT"));
+
+      const { resolveEditorBinary } = await import("@/lib/platform");
+      const result = await resolveEditorBinary("subl", {
+        env: env({ PATH: "/usr/bin" }),
+        platform: "darwin",
+      });
+      expect(result).toBeNull();
+    });
+
+    it("prefers the PATH hit over the fallback path", async () => {
+      const fsModule = await import("node:fs");
+      vi.spyOn(fsModule.promises, "access").mockResolvedValue(undefined);
+
+      const { resolveEditorBinary } = await import("@/lib/platform");
+      const result = await resolveEditorBinary("subl", {
+        env: env({ PATH: "/usr/local/bin" }),
+        platform: "darwin",
+      });
+      expect(result).toBe(path.join("/usr/local/bin", "subl"));
+    });
+
+    it("expands %VAR% in Windows fallback paths", async () => {
+      const exe = "C:\\Program Files\\Sublime Text\\subl.exe";
+      const fsModule = await import("node:fs");
+      vi.spyOn(fsModule.promises, "access").mockImplementation(onlyPath(exe));
+
+      const { resolveEditorBinary } = await import("@/lib/platform");
+      const result = await resolveEditorBinary("subl", {
+        env: env({ PATH: "C:\\nodejs", PATHEXT: ".EXE", ProgramFiles: "C:\\Program Files" }),
+        platform: "win32",
+      });
+      expect(result).toBe(exe);
+    });
+  });
+
+  // =========================================================================
   // resolveCommandPathSync
   // =========================================================================
   describe("resolveCommandPathSync", () => {
