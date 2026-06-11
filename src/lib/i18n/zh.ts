@@ -144,6 +144,7 @@ export const zh = {
   "sidebar.right.browseRepo": "浏览磁盘上的仓库",
   "sidebar.right.createRepo": "在磁盘上创建新仓库",
   "sidebar.right.recent": "最近",
+  "sidebar.right.resize": "拖动调整宽度",
   "sidebar.right.other": "其他",
   "sidebar.right.browseWip": "浏览磁盘仓库功能开发中",
   "sidebar.right.createWip": "创建仓库功能开发中",

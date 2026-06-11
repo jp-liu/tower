@@ -135,6 +135,7 @@ export const en: Translations = {
   "sidebar.right.browseRepo": "Browse local repos",
   "sidebar.right.createRepo": "Create new repo",
   "sidebar.right.recent": "Recent",
+  "sidebar.right.resize": "Drag to resize",
   "sidebar.right.other": "Other",
   "sidebar.right.browseWip": "Browse repos - coming soon",
   "sidebar.right.createWip": "Create repo - coming soon",
