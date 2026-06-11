@@ -144,6 +144,11 @@ export async function POST(request: NextRequest) {
           options: options as Parameters<typeof query>[0]["options"],
         });
 
+        // Diagnostic counters — let us tell apart "the model never tried to call
+        // a tool" (prompt/model issue) from "a tool was called but failed"
+        // (permission/runtime issue) when users report "it never does anything".
+        let toolUseCount = 0;
+
         for await (const msg of q) {
           switch (msg.type) {
             case "assistant": {
@@ -169,6 +174,7 @@ export async function POST(request: NextRequest) {
               }
 
               for (const tool of toolBlocks) {
+                toolUseCount += 1;
                 const t = tool as { type: string; name?: string; input?: unknown };
                 send({
                   type: "tool_use",
@@ -181,8 +187,22 @@ export async function POST(request: NextRequest) {
             }
 
             case "result": {
-              const resultMsg = msg as { subtype?: string; error?: string; session_id?: string };
-              if (resultMsg.subtype?.includes("error")) {
+              const resultMsg = msg as {
+                subtype?: string;
+                error?: string;
+                session_id?: string;
+                num_turns?: number;
+                is_error?: boolean;
+              };
+              // Always log the turn outcome so "it never does anything" reports
+              // are diagnosable: a tool-less turn that still resolves "success"
+              // points at the model/prompt; an error subtype points at the CLI.
+              console.error(
+                `[assistant-chat] turn done — subtype=${resultMsg.subtype ?? "?"} ` +
+                  `toolUses=${toolUseCount} numTurns=${resultMsg.num_turns ?? "?"} ` +
+                  `firstTurn=${!body.sessionId}`
+              );
+              if (resultMsg.subtype?.includes("error") || resultMsg.is_error) {
                 send({ type: "error", content: resultMsg.error ?? "Execution error" });
               }
               send({ type: "done", sessionId: resultMsg.session_id });
