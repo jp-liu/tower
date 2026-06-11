@@ -19,7 +19,12 @@ export function AssistantMarkdown({
 }) {
   return (
     <Streamdown
-      className="text-sm leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+      // Streamdown wraps tables in an overflow-x-auto container and makes <th>
+      // nowrap, but leaves <td> wrapping — so with its w-full table the cells
+      // squeeze/wrap instead of the table overflowing and scrolling. Make <td>
+      // nowrap too: columns size to content, the table exceeds the bubble width,
+      // and the existing wrapper scrolls horizontally.
+      className="text-sm leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_td]:whitespace-nowrap"
       mode={isStreaming ? "streaming" : "static"}
       animated
       isAnimating={isStreaming}
