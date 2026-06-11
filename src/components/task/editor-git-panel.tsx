@@ -371,7 +371,10 @@ export function EditorGitPanel({ localPath, onFileSelect, mode = "project" }: Ed
     : allBranches;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    // Task mode fills its bounded parent and scrolls internally; project mode
+    // (embedded in the repo sidebar) sizes to content and lets the sidebar
+    // scroll, so the commit-log / stash sections below sit flush against it.
+    <div className={isTaskMode ? "flex flex-col h-full overflow-hidden" : "flex flex-col"}>
       {/* ── Branch selector / read-only display ── */}
       <div className="shrink-0 px-2 pt-2 pb-1 flex items-center gap-1">
         {isTaskMode ? (
@@ -668,7 +671,7 @@ export function EditorGitPanel({ localPath, onFileSelect, mode = "project" }: Ed
       </div>
 
       {/* ── File sections ── */}
-      <ScrollArea className="flex-1 min-h-0">
+      <ChangesContainer scroll={isTaskMode}>
         {/* Staged */}
         <FileSection
           label={t("git.stagedChanges")}
@@ -708,7 +711,7 @@ export function EditorGitPanel({ localPath, onFileSelect, mode = "project" }: Ed
             <p className="text-xs text-muted-foreground">{t("git.noChanges")}</p>
           </div>
         )}
-      </ScrollArea>
+      </ChangesContainer>
 
       {/* Create Branch Dialog — reuse shared component */}
       <CreateBranchDialog
@@ -725,6 +728,13 @@ export function EditorGitPanel({ localPath, onFileSelect, mode = "project" }: Ed
       />
     </div>
   );
+}
+
+// Task mode scrolls internally within a bounded parent; project mode flows so
+// the sidebar scrolls and sections below sit flush against the change list.
+function ChangesContainer({ scroll, children }: { scroll: boolean; children: React.ReactNode }) {
+  if (scroll) return <ScrollArea className="flex-1 min-h-0">{children}</ScrollArea>;
+  return <div>{children}</div>;
 }
 
 // ── File section (Staged / Unstaged) ──

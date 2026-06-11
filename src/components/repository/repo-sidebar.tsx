@@ -479,8 +479,15 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
               <div className="space-y-3">
                 {/* Reuses EditorGitPanel in project mode — full set of actions:
                     branch switch, fetch, create branch, stage/unstage/discard,
-                    commit, pull/push, pull-from/push-to, stash save/pop. */}
-                <div className="overflow-hidden h-[560px] flex flex-col">
+                    commit, pull/push, pull-from/push-to, stash save/pop.
+
+                    No fixed height: a hard h-[560px] reserved space even when
+                    the changes section was collapsed, leaving a blank gap (with
+                    a stray scrollbar) above the commit-log / stash sections.
+                    Letting the panel size to its content makes those sections
+                    sit directly below it; the sidebar's own overflow-y-auto
+                    handles long change lists. */}
+                <div className="flex flex-col">
                   <EditorGitPanel localPath={project.localPath!} mode="project" />
                 </div>
 
