@@ -35,7 +35,24 @@ const CLAUDE_MD_CONTENT = `# Tower Assistant
 - 简洁明了，不要冗长的解释
 - 主动使用工具查询信息，而不是猜测
 - 当用户问"你能做什么"时，只列出 Tower MCP 工具提供的能力
+
+## 行动准则（最重要）
+
+- **说到就做，绝不只announce不action**：一旦信息足够，就在**同一轮回复里直接调用对应的 MCP 工具**完成操作。
+- **严禁**只回复「我现在立即创建」「好的，立即创建」「马上为你处理」这类话却不实际发出工具调用。这种回复等于没做事，会让用户反复追问。
+- 信息不足时（例如缺项目、缺必填项），**直接提出具体问题**问用户，而不是含糊地说「我来创建」。
+- 创建任务时如果工具返回 \`needsDefaultsSetup: true\`，**立刻**向用户询问两件事（是否默认用 Git worktree 隔离、是否创建后自动开始执行），拿到答复就调用 \`set_task_defaults\` 保存，然后**再次调用** \`create_task\`——不要停在「我来创建」这句话上。
+- 用户催你（如「创建了吗？」「快创建」）时，说明上一轮你没真正调用工具——这一轮必须立即发出工具调用，而不是再次口头答应。
 `;
+
+/** Read a file as UTF-8, returning null if it doesn't exist or can't be read. */
+function safeRead(p: string): string | null {
+  try {
+    return readFileSync(p, "utf-8");
+  } catch {
+    return null;
+  }
+}
 
 export function ensureTowerDir(): string {
   const assistantDir = getAssistantDir();
@@ -45,19 +62,25 @@ export function ensureTowerDir(): string {
   const skillDestDir = join(assistantDir, ".claude", "skills", "tower");
   const skillDest = join(skillDestDir, "SKILL.md");
 
-  // Assistant CLAUDE.md
-  if (!existsSync(claudeMd)) {
+  // Assistant CLAUDE.md — refresh when missing or stale. These files are
+  // Tower-owned (not a user customization point), so we overwrite on content
+  // change. Write-once would strand upgraders on an old persona — e.g. the
+  // "act, don't just announce" rules below would never reach existing installs.
+  if (!existsSync(claudeMd) || safeRead(claudeMd) !== CLAUDE_MD_CONTENT) {
     writeFileSync(claudeMd, CLAUDE_MD_CONTENT, "utf-8");
-    console.error(`[init-tower] Created ${claudeMd}`);
+    console.error(`[init-tower] Wrote ${claudeMd}`);
   }
 
   // Assistant skill — file copy is intentional here (not symlink). The
-  // assistant's config dir is Tower-owned and short-lived per session, so
-  // a stable copy avoids surprises if the user moves the repo.
-  if (existsSync(skillSrc) && !existsSync(skillDest)) {
-    mkdirSync(skillDestDir, { recursive: true });
-    copyFileSync(skillSrc, skillDest);
-    console.error(`[init-tower] Copied SKILL.md → ${skillDestDir}`);
+  // assistant's config dir is Tower-owned, so we refresh the copy whenever the
+  // bundled SKILL.md changes; otherwise upgraders keep running the old skill.
+  if (existsSync(skillSrc)) {
+    const bundled = safeRead(skillSrc);
+    if (bundled !== null && (!existsSync(skillDest) || safeRead(skillDest) !== bundled)) {
+      mkdirSync(skillDestDir, { recursive: true });
+      copyFileSync(skillSrc, skillDest);
+      console.error(`[init-tower] Copied SKILL.md → ${skillDestDir}`);
+    }
   }
 
   // Legacy cleanup: prior Tower versions wrote MCP config to project-scope

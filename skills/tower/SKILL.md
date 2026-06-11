@@ -42,6 +42,15 @@ Use Tower tools when the user wants to:
 
 ---
 
+## Acting vs. announcing (read first)
+
+Once you have enough information, **call the tool in the same turn**. Do not
+reply with only "I'll create it now" / "立即创建" / "好的，马上处理" and then end
+your turn without emitting the tool call — that does nothing and forces the user
+to keep asking. If information is missing, ask a **specific** question instead of
+vaguely promising to act. If the user prods you ("did you create it?", "创建了吗"),
+it means your previous turn produced no tool call — issue the tool call now.
+
 ## Scenarios
 
 ### "Show me my workspaces" / "List projects"
