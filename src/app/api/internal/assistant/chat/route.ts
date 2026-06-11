@@ -103,6 +103,15 @@ export async function POST(request: NextRequest) {
               env: towerMcp.env,
             },
           },
+          // strictMcpConfig: use ONLY the inline server above — don't also
+          // discover the user's filesystem MCP config (~/.claude.json). Per the
+          // Claude Agent SDK docs, filesystem MCP servers load regardless of
+          // settingSources unless this is set, so without it the assistant
+          // session also spawns the user's global tower/tower-dev — the source
+          // of the same-name collision and the flaky "tools present in some
+          // sessions, absent in others" behavior. With it, the assistant has
+          // exactly one dedicated, reliable Tower MCP instance.
+          strictMcpConfig: true,
           // Disable all built-in tools — assistant is a task operator, not a coding assistant.
           // Only allow Read when attachments are present (to read the provided files).
           tools: hasAttachments ? ["Read"] : [],
