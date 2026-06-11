@@ -21,17 +21,32 @@ function isBlockedPath(resolved: string): boolean {
  * On Windows, return drive letters (C:\, D:\, etc.) as top-level navigation.
  * This allows users to switch between drives in the folder browser.
  */
-function getWindowsDrives(): { name: string; path: string; isGit: boolean }[] {
+function getWindowsDrives(currentPath?: string): { name: string; path: string; isGit: boolean }[] {
   const drives: { name: string; path: string; isGit: boolean }[] = [];
-  // Check drive letters A-Z
+  const seen = new Set<string>();
+  // Probe drive letters A-Z. Use existsSync (existence) rather than
+  // accessSync(R_OK): on some Windows setups the readability check throws for a
+  // perfectly browsable drive root, which left the drive list empty and hid the
+  // switcher button entirely.
   for (let code = 65; code <= 90; code++) {
     const letter = String.fromCharCode(code);
     const drivePath = `${letter}:\\`;
     try {
-      fs.accessSync(drivePath, fs.constants.R_OK);
-      drives.push({ name: `${letter}:`, path: drivePath, isGit: false });
+      if (fs.existsSync(drivePath)) {
+        drives.push({ name: `${letter}:`, path: drivePath, isGit: false });
+        seen.add(letter);
+      }
     } catch {
       // Drive does not exist or is not accessible
+    }
+  }
+  // Fallback: always include the drive of the path we're currently browsing, so
+  // the switcher is never empty even if probing missed it.
+  const m = /^([A-Za-z]):/.exec(currentPath ?? "");
+  if (m) {
+    const letter = m[1].toUpperCase();
+    if (!seen.has(letter)) {
+      drives.unshift({ name: `${letter}:`, path: `${letter}:\\`, isGit: false });
     }
   }
   return drives;
@@ -76,13 +91,21 @@ export async function GET(request: NextRequest) {
       ? resolved === parentPath // drive root: C:\ → dirname is C:\
       : resolved === "/";
 
+    const drives = isWin ? getWindowsDrives(resolved) : undefined;
+    if (isWin) {
+      console.error(`[browse-fs] win=true drives=${drives?.length ?? 0} path=${resolved}`);
+    }
+
     return NextResponse.json({
       currentPath: resolved,
       parentPath: isAtRoot ? "__DRIVES__" : parentPath,
       homePath: os.homedir(),
       folders,
+      // isWindows drives the switcher button's visibility on the client (so it
+      // shows on Windows regardless of how many drives were detected).
+      isWindows: isWin,
       // Include drive list on Windows for cross-drive navigation
-      ...(isWin ? { drives: getWindowsDrives() } : {}),
+      ...(isWin ? { drives } : {}),
     });
   } catch {
     return NextResponse.json(

@@ -25,6 +25,7 @@ interface BrowseResult {
   homePath: string;
   folders: FolderEntry[];
   drives?: FolderEntry[];
+  isWindows?: boolean;
 }
 
 interface FolderBrowserDialogProps {
@@ -232,7 +233,7 @@ export function FolderBrowserDialog({
               </TooltipTrigger>
               <TooltipContent side="bottom" sideOffset={4}>Parent</TooltipContent>
             </Tooltip>
-            {data?.drives && data.drives.length > 0 && (
+            {data?.isWindows && (
               <Tooltip>
                 <TooltipTrigger
                   render={
