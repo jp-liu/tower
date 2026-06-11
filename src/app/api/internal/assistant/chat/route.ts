@@ -123,8 +123,16 @@ export async function POST(request: NextRequest) {
           } catch { /* ignore parse errors */ }
         }
 
-        // Prepend /tower to every message to load the Tower skill into context.
-        const prompt = `${identityPrefix}/tower ${body.message}`;
+        // Load the Tower skill via `/tower`, but ONLY on the first turn (no
+        // sessionId). On resumed turns the skill is already in context, and
+        // re-issuing the `/tower` slash command every message made the model
+        // treat each follow-up as a fresh skill-load — it would reply with a
+        // short acknowledgement ("立即创建") and end the turn without ever
+        // emitting the tool call. Plain follow-up text keeps the agent loop
+        // going so it actually invokes the MCP tool.
+        const prompt = body.sessionId
+          ? `${identityPrefix}${body.message}`
+          : `${identityPrefix}/tower ${body.message}`;
 
         // Append attachment file paths so Claude can Read them (AI-01)
         const finalPrompt = hasAttachments
