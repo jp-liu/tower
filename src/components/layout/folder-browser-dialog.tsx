@@ -195,7 +195,7 @@ export function FolderBrowserDialog({
               <input
                 value={filterText}
                 onChange={(e) => setFilterText(e.target.value)}
-                placeholder="Filter folders and files..."
+                placeholder={t("folder.filterPlaceholder")}
                 className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-3 text-sm text-foreground placeholder-muted-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
               />
             </div>
@@ -216,7 +216,7 @@ export function FolderBrowserDialog({
               >
                 <Home className="h-3.5 w-3.5" />
               </TooltipTrigger>
-              <TooltipContent side="bottom" sideOffset={4}>Home</TooltipContent>
+              <TooltipContent side="bottom" sideOffset={4}>{t("folder.home")}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger
@@ -231,7 +231,7 @@ export function FolderBrowserDialog({
               >
                 <ChevronUp className="h-3.5 w-3.5" />
               </TooltipTrigger>
-              <TooltipContent side="bottom" sideOffset={4}>Parent</TooltipContent>
+              <TooltipContent side="bottom" sideOffset={4}>{t("folder.parent")}</TooltipContent>
             </Tooltip>
             {data?.isWindows && (
               <Tooltip>
@@ -247,7 +247,7 @@ export function FolderBrowserDialog({
                 >
                   <HardDrive className="h-3.5 w-3.5" />
                 </TooltipTrigger>
-                <TooltipContent side="bottom" sideOffset={4}>Drives</TooltipContent>
+                <TooltipContent side="bottom" sideOffset={4}>{t("folder.drives")}</TooltipContent>
               </Tooltip>
             )}
             <Tooltip>
