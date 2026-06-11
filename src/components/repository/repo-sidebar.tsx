@@ -325,15 +325,10 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
             )}
           </span>
         </div>
-        {/* Path & Git URL — read-only with copy-to-clipboard */}
-        {(project.localPath || project.gitUrl) && (
+        {/* Git URL — read-only with copy-to-clipboard (local path is opened via the buttons below) */}
+        {project.gitUrl && (
           <div className="mt-3 space-y-1.5">
-            {project.localPath && (
-              <CopyableBox value={project.localPath} ariaLabel={t("project.localPath")} />
-            )}
-            {project.gitUrl && (
-              <CopyableBox value={project.gitUrl} ariaLabel={t("project.gitUrl")} />
-            )}
+            <CopyableBox value={project.gitUrl} ariaLabel={t("project.gitUrl")} />
           </div>
         )}
         {project.localPath && (
@@ -476,7 +471,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
               </div>
             ) : gitInfo?.isGit ? (
               /* Git repo — full git panel (branch + changed files + sync + stash actions) */
-              <div className="space-y-3">
+              <div>
                 {/* Reuses EditorGitPanel in project mode — full set of actions:
                     branch switch, fetch, create branch, stage/unstage/discard,
                     commit, pull/push, pull-from/push-to, stash save/pop.

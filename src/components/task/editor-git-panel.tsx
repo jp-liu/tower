@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   File, FilePlus, FileMinus, FileQuestion, FileEdit,
   Loader2, ArrowDown, ArrowUp, Check, ChevronRight, ChevronDown,
@@ -15,6 +15,7 @@ import {
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { CreateBranchDialog } from "@/components/repository/create-branch-dialog";
 import { useI18n } from "@/lib/i18n";
@@ -147,18 +148,6 @@ export function EditorGitPanel({ localPath, onFileSelect, mode = "project" }: Ed
   const [fetching, setFetching] = useState(false);
   const [branchOpen, setBranchOpen] = useState(false);
   const [branchFilter, setBranchFilter] = useState("");
-  const branchRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!branchOpen) return;
-    function handleClick(e: MouseEvent) {
-      if (branchRef.current && !branchRef.current.contains(e.target as Node)) {
-        setBranchOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [branchOpen]);
   const [showCreateBranch, setShowCreateBranch] = useState(false);
 
   const loadGitInfo = useCallback(async () => {
@@ -395,85 +384,83 @@ export function EditorGitPanel({ localPath, onFileSelect, mode = "project" }: Ed
             </TooltipContent>
           </Tooltip>
         ) : (
-        <div className="relative flex-1 min-w-0" ref={branchRef}>
-          <button
-            onClick={() => { setBranchOpen(!branchOpen); setBranchFilter(""); }}
-            className="flex w-full items-center justify-between rounded-md border border-border bg-muted/50 px-2 py-1.5 text-left transition-colors hover:bg-accent"
-          >
+        <Popover open={branchOpen} onOpenChange={(open) => { setBranchOpen(open); if (open) setBranchFilter(""); }}>
+          <PopoverTrigger className="flex flex-1 min-w-0 items-center justify-between rounded-md border border-border bg-muted/50 px-2 py-1.5 text-left transition-colors hover:bg-accent">
             <div className="flex items-center gap-1.5 min-w-0">
               <GitBranch className="h-3 w-3 shrink-0 text-emerald-400" />
               <span className="truncate font-mono text-xs text-foreground" title={gitInfo?.currentBranch || undefined}>{gitInfo?.currentBranch || "—"}</span>
             </div>
             <ChevronDown className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${branchOpen ? "rotate-180" : ""}`} />
-          </button>
-
-          {branchOpen && (
-            <div className="absolute left-0 top-full z-30 mt-1 min-w-full w-max max-w-[320px] rounded-lg border border-border bg-popover shadow-xl">
-              <div className="border-b border-border p-1.5">
-                <div className="relative">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                  <input
-                    value={branchFilter}
-                    onChange={(e) => setBranchFilter(e.target.value)}
-                    placeholder="Filter..."
-                    autoFocus
-                    className="h-7 w-full rounded-md bg-muted/50 pl-7 pr-2 text-xs text-foreground placeholder-muted-foreground outline-none focus:ring-1 focus:ring-ring"
-                  />
-                </div>
-              </div>
-              <div className="max-h-48 overflow-auto py-1">
-                {/* Local branches */}
-                {(gitInfo?.branches ?? []).filter((b) => b.toLowerCase().includes(branchFilter.toLowerCase())).length > 0 && (
-                  <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    {t("git.localBranches")}
-                  </p>
-                )}
-                {(gitInfo?.branches ?? [])
-                  .filter((b) => b.toLowerCase().includes(branchFilter.toLowerCase()))
-                  .map((b) => {
-                    const isActive = b === gitInfo?.currentBranch;
-                    return (
-                      <button
-                        key={`local-${b}`}
-                        onClick={() => { if (!isActive) handleSwitchBranch(b); else setBranchOpen(false); }}
-                        className={`flex w-full items-center gap-2 px-3 py-1 text-left transition-colors ${
-                          isActive ? "bg-emerald-500/10 text-emerald-400" : "text-secondary-foreground hover:bg-accent"
-                        }`}
-                      >
-                        <GitBranch className="h-3 w-3 shrink-0" />
-                        <span className="truncate font-mono text-xs" title={b}>{b}</span>
-                        {isActive && <Check className="h-3 w-3 ml-auto shrink-0" />}
-                      </button>
-                    );
-                  })}
-                {/* Remote branches */}
-                {(gitInfo?.remoteBranches ?? [])
-                  .filter((b) => !gitInfo?.branches?.includes(b))
-                  .filter((b) => b.toLowerCase().includes(branchFilter.toLowerCase())).length > 0 && (
-                  <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    {t("git.remoteBranches")}
-                  </p>
-                )}
-                {(gitInfo?.remoteBranches ?? [])
-                  .filter((b) => !gitInfo?.branches?.includes(b))
-                  .filter((b) => b.toLowerCase().includes(branchFilter.toLowerCase()))
-                  .map((b) => (
-                    <button
-                      key={`remote-${b}`}
-                      onClick={() => handleSwitchBranch(b)}
-                      className="flex w-full items-center gap-2 px-3 py-1 text-left text-secondary-foreground transition-colors hover:bg-accent"
-                    >
-                      <Globe className="h-3 w-3 shrink-0 text-sky-400" />
-                      <span className="truncate font-mono text-xs" title={b}>{b}</span>
-                    </button>
-                  ))}
-                {filteredBranches.length === 0 && (
-                  <p className="px-3 py-2 text-xs text-muted-foreground">No branches found</p>
-                )}
+          </PopoverTrigger>
+          <PopoverContent
+            align="start"
+            sideOffset={4}
+            className="w-max min-w-[var(--anchor-width)] max-w-[320px] gap-0 overflow-hidden p-0"
+          >
+            <div className="border-b border-border p-1.5">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                <input
+                  value={branchFilter}
+                  onChange={(e) => setBranchFilter(e.target.value)}
+                  placeholder="Filter..."
+                  autoFocus
+                  className="h-7 w-full rounded-md bg-muted/50 pl-7 pr-2 text-xs text-foreground placeholder-muted-foreground outline-none focus:ring-1 focus:ring-ring"
+                />
               </div>
             </div>
-          )}
-        </div>
+            <div className="max-h-48 overflow-auto py-1">
+              {/* Local branches */}
+              {(gitInfo?.branches ?? []).filter((b) => b.toLowerCase().includes(branchFilter.toLowerCase())).length > 0 && (
+                <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("git.localBranches")}
+                </p>
+              )}
+              {(gitInfo?.branches ?? [])
+                .filter((b) => b.toLowerCase().includes(branchFilter.toLowerCase()))
+                .map((b) => {
+                  const isActive = b === gitInfo?.currentBranch;
+                  return (
+                    <button
+                      key={`local-${b}`}
+                      onClick={() => { if (!isActive) handleSwitchBranch(b); else setBranchOpen(false); }}
+                      className={`flex w-full items-center gap-2 px-3 py-1 text-left transition-colors ${
+                        isActive ? "bg-emerald-500/10 text-emerald-400" : "text-secondary-foreground hover:bg-accent"
+                      }`}
+                    >
+                      <GitBranch className="h-3 w-3 shrink-0" />
+                      <span className="truncate font-mono text-xs" title={b}>{b}</span>
+                      {isActive && <Check className="h-3 w-3 ml-auto shrink-0" />}
+                    </button>
+                  );
+                })}
+              {/* Remote branches */}
+              {(gitInfo?.remoteBranches ?? [])
+                .filter((b) => !gitInfo?.branches?.includes(b))
+                .filter((b) => b.toLowerCase().includes(branchFilter.toLowerCase())).length > 0 && (
+                <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("git.remoteBranches")}
+                </p>
+              )}
+              {(gitInfo?.remoteBranches ?? [])
+                .filter((b) => !gitInfo?.branches?.includes(b))
+                .filter((b) => b.toLowerCase().includes(branchFilter.toLowerCase()))
+                .map((b) => (
+                  <button
+                    key={`remote-${b}`}
+                    onClick={() => handleSwitchBranch(b)}
+                    className="flex w-full items-center gap-2 px-3 py-1 text-left text-secondary-foreground transition-colors hover:bg-accent"
+                  >
+                    <Globe className="h-3 w-3 shrink-0 text-sky-400" />
+                    <span className="truncate font-mono text-xs" title={b}>{b}</span>
+                  </button>
+                ))}
+              {filteredBranches.length === 0 && (
+                <p className="px-3 py-2 text-xs text-muted-foreground">No branches found</p>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
         )}
         {!isTaskMode && (
           <>

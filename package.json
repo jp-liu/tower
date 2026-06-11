@@ -1,6 +1,6 @@
 {
   "name": "tower-studio",
-  "version": "0.2.26",
+  "version": "0.2.27",
   "description": "AI Task Orchestration Platform — Kanban + Terminal + Code Editor + MCP",
   "bin": {
     "tower": "bin/tower.mjs"
