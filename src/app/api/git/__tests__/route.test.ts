@@ -7,7 +7,8 @@ import { execFileSync } from "child_process";
 import simpleGit from "simple-git";
 import { NextRequest } from "next/server";
 import { POST, GET } from "../route";
-import { parseBlamePorcelain } from "../route";
+import { parseBlamePorcelain, mapStatus } from "../route";
+import type { StatusResult } from "simple-git";
 
 // Helper to build a POST request
 function makePost(body: object): NextRequest {
@@ -569,6 +570,35 @@ describe("POST /api/git commit-file-content", () => {
 // ---------------------------------------------------------------------------
 // parseBlamePorcelain unit tests (fixture-based, no real git needed)
 // ---------------------------------------------------------------------------
+describe("mapStatus — Tower worktree filtering", () => {
+  function emptyStatus(overrides: Partial<StatusResult>): StatusResult {
+    return {
+      not_added: [], conflicted: [], created: [], deleted: [], modified: [],
+      renamed: [], files: [], staged: [], ahead: 0, behind: 0,
+      current: null, tracking: null, detached: false,
+      isClean: () => false,
+      ...overrides,
+    } as unknown as StatusResult;
+  }
+
+  it("drops .worktrees/ entries from changedFiles and untracked count", () => {
+    const s = emptyStatus({
+      not_added: ["src/app.ts", ".worktrees/task-abc/", ".worktrees/task-def/"],
+    });
+    const { changedFiles, summary } = mapStatus(s);
+    expect(changedFiles.map((c) => c.file)).toEqual(["src/app.ts"]);
+    expect(changedFiles.some((c) => c.file.startsWith(".worktrees"))).toBe(false);
+    expect(summary.untracked).toBe(1);
+  });
+
+  it("keeps normal untracked files untouched", () => {
+    const s = emptyStatus({ not_added: ["a.ts", "dir/b.ts"] });
+    const { changedFiles, summary } = mapStatus(s);
+    expect(changedFiles).toHaveLength(2);
+    expect(summary.untracked).toBe(2);
+  });
+});
+
 describe("parseBlamePorcelain — unit", () => {
   // Minimal two-line porcelain fixture: two different shas, metadata for each
   const FIXTURE = [

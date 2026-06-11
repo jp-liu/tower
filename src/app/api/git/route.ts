@@ -47,7 +47,16 @@ function sanitizeFilePaths(files: unknown): string[] {
   });
 }
 
-function mapStatus(s: StatusResult) {
+// Tower stores task worktrees under `<repo>/.worktrees/`. Git reports each
+// nested worktree dir as untracked (`?? .worktrees/task-xxx/`), which polluted
+// the changes panel with noise and — because the trailing slash split into an
+// empty path segment — rendered as blank-named "U" entries. These are never a
+// user-facing change, so drop them from status entirely.
+function isTowerWorktreePath(p: string): boolean {
+  return p === ".worktrees" || p.startsWith(".worktrees/");
+}
+
+export function mapStatus(s: StatusResult) {
   const changedFiles: { file: string; status: string; staged: boolean }[] = [];
 
   for (const f of s.staged) {
@@ -76,13 +85,16 @@ function mapStatus(s: StatusResult) {
     }
   }
 
+  const visibleFiles = changedFiles.filter((c) => !isTowerWorktreePath(c.file));
+  const untrackedVisible = s.not_added.filter((f) => !isTowerWorktreePath(f)).length;
+
   return {
     summary: {
       modified: s.modified.length,
       staged: s.staged.length + s.created.filter((f) => !s.not_added.includes(f)).length + s.deleted.length,
-      untracked: s.not_added.length,
+      untracked: untrackedVisible,
     },
-    changedFiles,
+    changedFiles: visibleFiles,
   };
 }
 

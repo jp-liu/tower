@@ -85,7 +85,10 @@ function buildFileTree(files: ChangedFile[]): TreeNode[] {
   const root: TreeNode = { name: "", path: "", isDir: true, children: [] };
 
   for (const f of files) {
-    const parts = f.file.split("/");
+    // Drop empty segments so a trailing slash (e.g. an untracked directory
+    // reported as "dir/") never yields a blank-named leaf node.
+    const parts = f.file.split("/").filter(Boolean);
+    if (parts.length === 0) continue;
     let current = root;
 
     for (let i = 0; i < parts.length; i++) {
