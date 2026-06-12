@@ -283,10 +283,11 @@ export function resolveCommandPathSync(
  * which is why the assistant (SDK path) fails while task terminals (PTY path,
  * wrapped via `wrapForPlatform`) work.
  *
- * When we detect a Windows `.cmd`/`.bat` shim, parse it to recover the
- * underlying `cli.js` path and return that — the SDK then runs `node cli.js`,
- * which works. For native `.exe` installs or non-Windows platforms the input
- * is returned unchanged, so this is a no-op everywhere else.
+ * When we detect a Windows `.cmd`/`.bat` shim, parse it to recover the real
+ * target and return that: a `cli.js` entry (classic npm install → the SDK runs
+ * `node cli.js`) or a native `bin\claude.exe` entry (the newer native install →
+ * the SDK spawns the .exe directly, no EINVAL). Non-Windows platforms and inputs
+ * that aren't a .cmd/.bat are returned unchanged.
  */
 export function resolveSdkExecutable(
   command: string,
@@ -305,32 +306,56 @@ export function resolveSdkExecutable(
   const dir = path.win32.dirname(command);
   let shimSnippet = "";
 
-  // (1) Parse the npm cmd-shim for the JS entry it launches. Match ANY quoted
-  //     path ending in .js/.cjs/.mjs, then expand %dp0%/%~dp0% (the shim's own
-  //     dir) and resolve. e.g. "%dp0%\node_modules\@anthropic-ai\claude-code\cli.js"
+  // Expand the shim's %dp0%/%~dp0% (its own dir) and resolve to absolute.
+  const expand = (raw: string): string => {
+    const p = raw.replace(/%~?dp0%/gi, dir).replace(/\//g, "\\");
+    return path.win32.isAbsolute(p) ? path.win32.normalize(p) : path.win32.resolve(dir, p);
+  };
+
+  // (1) Parse the shim for the entry it actually launches.
   try {
     const shim = readFile(command);
     shimSnippet = shim.replace(/\s+/g, " ").slice(0, 400);
-    const match = shim.match(/"([^"]*\.(?:c?js|mjs))"/i);
-    if (match) {
-      let p = match[1].replace(/%~?dp0%/gi, dir).replace(/\//g, "\\");
-      const resolved = path.win32.isAbsolute(p) ? path.win32.normalize(p) : path.win32.resolve(dir, p);
+
+    // (1a) Prefer a JS entry — the classic npm cmd-shim runs `node …\cli.js`.
+    //      Returning the .js makes the SDK run `node cli.js`.
+    //      e.g. "%dp0%\node_modules\@anthropic-ai\claude-code\cli.js"
+    const jsMatch = shim.match(/"([^"]*\.(?:c?js|mjs))"/i);
+    if (jsMatch) {
+      const resolved = expand(jsMatch[1]);
       if (fileExists(resolved)) return resolved;
       console.error(`[resolveSdkExecutable] parsed cli="${resolved}" but it doesn't exist`);
+    }
+
+    // (1b) Otherwise a native .exe entry — the newer native install ships a
+    //      `bin\claude.exe` and the .cmd just execs it. The SDK spawns a real
+    //      .exe directly (no EINVAL). Skip node.exe: in the JS-shim variant that
+    //      is the runtime used to launch cli.js, not the CLI itself.
+    for (const m of shim.matchAll(/"([^"]*\.exe)"/gi)) {
+      const resolved = expand(m[1]);
+      if (path.win32.basename(resolved).toLowerCase() === "node.exe") continue;
+      if (fileExists(resolved)) return resolved;
     }
   } catch (e) {
     console.error(`[resolveSdkExecutable] shim read failed: ${e instanceof Error ? e.message : e}`);
   }
 
-  // (2) Conventional npm-global layout: <shim dir>\node_modules\@anthropic-ai\
-  //     claude-code\cli.js. Covers shims whose format the parse above misses.
-  const guess = path.win32.join(dir, "node_modules", "@anthropic-ai", "claude-code", "cli.js");
-  if (fileExists(guess)) return guess;
+  // (2) Conventional layouts the parse may miss — cli.js (npm) or the native
+  //     bin\<name>.exe — under the shim dir's claude-code package.
+  const pkgDir = path.win32.join(dir, "node_modules", "@anthropic-ai", "claude-code");
+  const base = path.win32.basename(command, path.win32.extname(command));
+  const guesses = [
+    path.win32.join(pkgDir, "cli.js"),
+    path.win32.join(pkgDir, "bin", `${base}.exe`),
+  ];
+  for (const g of guesses) {
+    if (fileExists(g)) return g;
+  }
 
-  // No JS entry found — return the original (the SDK will surface EINVAL). Log
-  // the shim + candidates so the failure is diagnosable in one shot.
+  // Nothing runnable found — return the original (the SDK will surface EINVAL).
+  // Log the shim + candidates so the failure is diagnosable in one shot.
   console.error(
-    `[resolveSdkExecutable] could not convert ${command} → guess="${guess}" exists=${fileExists(guess)} shim="${shimSnippet}"`
+    `[resolveSdkExecutable] could not convert ${command} → guesses=${JSON.stringify(guesses)} shim="${shimSnippet}"`
   );
   return command;
 }

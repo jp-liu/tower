@@ -373,6 +373,49 @@ describe("platform utilities", () => {
       expect(result).toBe(cliJs);
     });
 
+    it("rewrites a .cmd shim to its native bin/claude.exe (native install)", async () => {
+      // The newer native install's .cmd execs a real bin\claude.exe — no cli.js.
+      const shim = [
+        "@ECHO off",
+        "GOTO start",
+        ":find_dp0",
+        "SET dp0=%~dp0",
+        "EXIT /b",
+        ":start",
+        "SETLOCAL",
+        "CALL :find_dp0",
+        '"%dp0%\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe"   %*',
+      ].join("\n");
+      const exe =
+        "D:\\nodejs\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe";
+      const { resolveSdkExecutable } = await import("@/lib/platform");
+      const result = resolveSdkExecutable(
+        "D:\\nodejs\\claude.cmd",
+        "win32",
+        () => shim,
+        (p) => p === exe
+      );
+      expect(result).toBe(exe);
+    });
+
+    it("prefers cli.js over the quoted node.exe in a classic JS shim", async () => {
+      // The classic JS shim also quotes "%dp0%\\node.exe" — must NOT return that.
+      const shim = [
+        "@ECHO off",
+        'IF EXIST "%dp0%\\node.exe" ( SET "_prog=%dp0%\\node.exe" )',
+        '"%_prog%"  "%dp0%\\node_modules\\@anthropic-ai\\claude-code\\cli.js" %*',
+      ].join("\n");
+      const cliJs = "D:\\nodejs\\node_modules\\@anthropic-ai\\claude-code\\cli.js";
+      const { resolveSdkExecutable } = await import("@/lib/platform");
+      const result = resolveSdkExecutable(
+        "D:\\nodejs\\claude.cmd",
+        "win32",
+        () => shim,
+        (p) => p === cliJs || p === "D:\\nodejs\\node.exe" // both exist
+      );
+      expect(result).toBe(cliJs);
+    });
+
     it("falls back to conventional npm cli.js when the shim regex misses", async () => {
       const cliJs = "D:\\nvm\\v22\\node_modules\\@anthropic-ai\\claude-code\\cli.js";
       const { resolveSdkExecutable } = await import("@/lib/platform");
