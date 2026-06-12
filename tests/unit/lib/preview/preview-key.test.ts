@@ -72,14 +72,16 @@ describe("getPreviewCwd", () => {
     ).toBeNull();
   });
 
-  it("worktree overrides subPath (worktree wins)", () => {
+  it("appends subPath onto the worktree base (monorepo sub-app)", () => {
+    // subPath is appended in BOTH worktree and non-worktree cases so a
+    // monorepo sub-app dev server runs where its package.json actually lives.
     expect(
       getPreviewCwd({
         worktreePath: "/wt/abc",
         projectLocalPath: "/repo",
         subPath: "apps/h5",
       })
-    ).toBe("/wt/abc");
+    ).toBe("/wt/abc/apps/h5");
   });
 });
 

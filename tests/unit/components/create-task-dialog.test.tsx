@@ -27,6 +27,13 @@ vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 
+// Mock config so the dialog uses its hard-coded defaults (useWorktree=true)
+// instead of reading the real DB — otherwise a saved defaultUseWorktree=false
+// flips worktree off and drops baseBranch from onSubmit, making this flaky.
+vi.mock("@/actions/config-actions", () => ({
+  getConfigValues: vi.fn().mockResolvedValue({}),
+}));
+
 import { getProjectBranches } from "@/actions/git-actions";
 
 const mockedGetProjectBranches = vi.mocked(getProjectBranches);
