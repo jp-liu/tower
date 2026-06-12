@@ -73,6 +73,7 @@ export function FolderBrowserDialog({
       const result: BrowseResult = await res.json();
       setData(result);
       setManualPath(result.currentPath);
+      return result;
     } catch {
       setError("Failed to browse filesystem");
     } finally {
@@ -82,7 +83,11 @@ export function FolderBrowserDialog({
 
   useEffect(() => {
     if (open) {
-      browse();
+      // On Windows, open straight to the drive list ("This PC" behavior) rather
+      // than the home directory — matches how Explorer's folder pickers start.
+      browse().then((result) => {
+        if (result?.isWindows) setShowDrives(true);
+      });
       setTimeout(() => inputRef.current?.focus(), 200);
     }
   }, [open, browse]);
@@ -211,7 +216,15 @@ export function FolderBrowserDialog({
                   <Button
                     variant="outline"
                     size="icon-sm"
-                    onClick={() => data?.homePath && browse(data.homePath)}
+                    onClick={() => {
+                      // Windows: Home goes to the drive list ("This PC"), not
+                      // the user's home dir — matches Explorer. Elsewhere, home dir.
+                      if (data?.isWindows) {
+                        setShowDrives(true);
+                      } else if (data?.homePath) {
+                        browse(data.homePath);
+                      }
+                    }}
                     className="shrink-0 text-muted-foreground"
                   />
                 }
