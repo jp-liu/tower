@@ -298,33 +298,35 @@ export function resolveSdkExecutable(
   if (ext !== ".cmd" && ext !== ".bat") return command;
 
   const dir = path.win32.dirname(command);
+  let shimSnippet = "";
 
-  // (1) Parse the npm cmd-shim for the JS entry it launches, e.g.
-  //     "%_prog%"  "%dp0%\node_modules\@anthropic-ai\claude-code\cli.js" %*
+  // (1) Parse the npm cmd-shim for the JS entry it launches. Match ANY quoted
+  //     path ending in .js/.cjs/.mjs, then expand %dp0%/%~dp0% (the shim's own
+  //     dir) and resolve. e.g. "%dp0%\node_modules\@anthropic-ai\claude-code\cli.js"
   try {
     const shim = readFile(command);
-    const match = shim.match(/%~?dp0%[\\/]?([^"]+?\.(?:js|mjs|cjs))/i);
+    shimSnippet = shim.replace(/\s+/g, " ").slice(0, 400);
+    const match = shim.match(/"([^"]*\.(?:c?js|mjs))"/i);
     if (match) {
-      const resolved = path.win32.resolve(dir, match[1].replace(/\//g, "\\"));
+      let p = match[1].replace(/%~?dp0%/gi, dir).replace(/\//g, "\\");
+      const resolved = path.win32.isAbsolute(p) ? path.win32.normalize(p) : path.win32.resolve(dir, p);
       if (fileExists(resolved)) return resolved;
+      console.error(`[resolveSdkExecutable] parsed cli="${resolved}" but it doesn't exist`);
     }
-  } catch {
-    // Unreadable shim — fall through to the conventional-layout guess.
+  } catch (e) {
+    console.error(`[resolveSdkExecutable] shim read failed: ${e instanceof Error ? e.message : e}`);
   }
 
   // (2) Conventional npm-global layout: <shim dir>\node_modules\@anthropic-ai\
-  //     claude-code\cli.js. Covers shims whose format the regex above misses.
-  const guess = path.win32.join(
-    dir,
-    "node_modules",
-    "@anthropic-ai",
-    "claude-code",
-    "cli.js"
-  );
+  //     claude-code\cli.js. Covers shims whose format the parse above misses.
+  const guess = path.win32.join(dir, "node_modules", "@anthropic-ai", "claude-code", "cli.js");
   if (fileExists(guess)) return guess;
 
-  // No JS entry found — return the original (the SDK will surface the EINVAL,
-  // and the assistant route logs the resolved path for diagnosis).
+  // No JS entry found — return the original (the SDK will surface EINVAL). Log
+  // the shim + candidates so the failure is diagnosable in one shot.
+  console.error(
+    `[resolveSdkExecutable] could not convert ${command} → guess="${guess}" exists=${fileExists(guess)} shim="${shimSnippet}"`
+  );
   return command;
 }
 
