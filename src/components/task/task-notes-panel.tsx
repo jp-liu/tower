@@ -9,6 +9,7 @@ import { getTaskAssets, uploadAsset, deleteAsset } from "@/actions/asset-actions
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ImageLightbox } from "@/components/assets/image-lightbox";
 import { TextPreviewDialog } from "@/components/assets/text-preview-dialog";
+import { NotePreviewDialog } from "@/components/notes/note-preview-dialog";
 import { localPathToApiUrl, isImageAsset } from "@/lib/file-serve-client";
 import { toast } from "sonner";
 
@@ -45,6 +46,7 @@ export function TaskNotesPanel({ taskId, projectId }: TaskNotesPanelProps) {
   const [noteContent, setNoteContent] = useState("");
   const [uploading, setUploading] = useState(false);
   const [previewAsset, setPreviewAsset] = useState<AssetItem | null>(null);
+  const [previewNote, setPreviewNote] = useState<NoteItem | null>(null);
 
   useEffect(() => {
     getTaskNotes(taskId).then(setNotes);
@@ -202,24 +204,40 @@ export function TaskNotesPanel({ taskId, projectId }: TaskNotesPanelProps) {
             {notes.map((note) => (
               <div key={note.id} className="group rounded-md border border-border bg-card p-3">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <h4 className="text-sm font-medium truncate">{note.title}</h4>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewNote(note)}
+                    className="min-w-0 flex-1 cursor-pointer text-left"
+                    title={t("taskPage.previewNote")}
+                  >
+                    <h4 className="text-sm font-medium truncate hover:underline">{note.title}</h4>
                     {note.content && (
                       <p className="mt-1 text-xs text-muted-foreground line-clamp-3 whitespace-pre-wrap">{note.content}</p>
                     )}
                     <p className="mt-1 text-[10px] text-muted-foreground">
                       {new Date(note.createdAt).toLocaleString()}
                     </p>
+                  </button>
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => setPreviewNote(note)}
+                      className="text-muted-foreground hover:bg-accent"
+                      title={t("taskPage.previewNote")}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => handleDeleteNote(note.id)}
+                      className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      title={t("taskPage.deleteNote")}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    onClick={() => handleDeleteNote(note.id)}
-                    className="shrink-0 text-muted-foreground opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                    title={t("taskPage.deleteNote")}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
                 </div>
               </div>
             ))}
@@ -335,6 +353,11 @@ export function TaskNotesPanel({ taskId, projectId }: TaskNotesPanelProps) {
         filename={previewAsset?.filename ?? ""}
         open={previewType === "text"}
         onOpenChange={(open) => { if (!open) setPreviewAsset(null); }}
+      />
+      <NotePreviewDialog
+        note={previewNote}
+        open={previewNote !== null}
+        onOpenChange={(open) => { if (!open) setPreviewNote(null); }}
       />
     </>
   );

@@ -454,6 +454,8 @@ export const zh = {
   "taskPage.noAttachments": "暂无附件",
   "taskPage.deleteNote": "删除",
   "taskPage.deleteAttachment": "删除",
+  "taskPage.previewNote": "预览备注",
+  "taskPage.noteEmpty": "此备注暂无内容",
   "taskPage.noteSaved": "备注已保存",
   "taskPage.viewDetails": "查看详情",
   "taskPage.noChanges": "暂无变更",

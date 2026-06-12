@@ -439,6 +439,8 @@ export const en: Translations = {
   "taskPage.noAttachments": "No attachments yet",
   "taskPage.deleteNote": "Delete",
   "taskPage.deleteAttachment": "Delete",
+  "taskPage.previewNote": "Preview note",
+  "taskPage.noteEmpty": "This note has no content yet",
   "taskPage.noteSaved": "Note saved",
   "taskPage.viewDetails": "View Details",
   "taskPage.noChanges": "No changes to display",
