@@ -7,6 +7,7 @@ import path from "path";
 import { z } from "zod";
 import { getConfigValue } from "@/actions/config-actions";
 import { resolveBundledRgPath } from "@/lib/extensions/rg-resolve";
+import { isWindows } from "@/lib/platform";
 
 export type SearchErrorKind =
   | "timeout"
@@ -59,7 +60,10 @@ async function resolveRgPath(): Promise<string> {
   if (bundled) return bundled;
 
   // 2. System PATH
-  const finder = process.platform === "win32" ? "where" : "which";
+  // isWindows() (cross-module call), NOT inline `process.platform === "win32"`:
+  // Turbopack's minifier const-folds the inline form to the build OS and would
+  // collapse this ternary to "which" only, breaking rg lookup on Windows.
+  const finder = isWindows() ? "where" : "which";
   try {
     const stdout = execFileSync(finder, ["rg"], { encoding: "utf-8", timeout: 3000 });
     const firstLine = stdout.split(/\r?\n/)[0]?.trim();

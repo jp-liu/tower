@@ -434,7 +434,12 @@ export async function openInFileManager(dirPath: string): Promise<void> {
   }
   const { buildFileManagerCommand } = await import("@/lib/open-targets");
   const { command, args } = buildFileManagerCommand(process.platform, dirPath);
-  if (process.platform === "win32") {
+  // isWindows() (cross-module call), NOT inline `process.platform === "win32"`:
+  // Turbopack const-folds the inline form to the build OS and would delete this
+  // whole branch, so on Windows explorer.exe would hit execFileSync and throw on
+  // its exit-code-1 success. The dynamic import keeps the check truly runtime.
+  const { isWindows } = await import("@/lib/platform");
+  if (isWindows()) {
     // explorer.exe returns exit code 1 even on success, so execFileSync would
     // throw on a perfectly good open. Fire-and-forget instead — it's a real
     // .exe (no EINVAL risk) and its exit code is meaningless.

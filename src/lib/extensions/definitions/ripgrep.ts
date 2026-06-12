@@ -5,6 +5,7 @@ import os from "os";
 import path from "path";
 import type { Extension, ExtensionStatus, ExtensionResult } from "../types";
 import { resolveBundledRgPath } from "../rg-resolve";
+import { isWindows } from "@/lib/platform";
 
 /**
  * ripgrep is a Rust binary. We bundle it via `@vscode/ripgrep`, whose
@@ -88,7 +89,10 @@ function getKnownInstallPaths(): string[] {
 
 /** Resolve `rg`: PATH first, then known install locations. */
 function detectSystemBinary(): string | null {
-  const finder = process.platform === "win32" ? "where" : "which";
+  // isWindows() (cross-module call), NOT inline `process.platform === "win32"`:
+  // the inline form gets const-folded to the build OS by Turbopack, collapsing
+  // this to "which" only and breaking rg detection on Windows.
+  const finder = isWindows() ? "where" : "which";
   try {
     const stdout = execFileSync(finder, ["rg"], { encoding: "utf-8", timeout: 3000 });
     const firstLine = stdout.split(/\r?\n/)[0]?.trim();

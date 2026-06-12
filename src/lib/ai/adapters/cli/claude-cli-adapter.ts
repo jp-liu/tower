@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { resolveCommandPathSync } from "@/lib/platform";
+import { isWindows, resolveCommandPathSync } from "@/lib/platform";
 import { getPackageRoot } from "@/lib/tower-paths";
 import type {
   CliAdapter,
@@ -311,7 +311,7 @@ export class ClaudeCliAdapter implements CliAdapter {
       if (existing) {
         // Windows junctions show up as both `isSymbolicLink` and `isDirectory`,
         // so accept either form when checking for a link we own.
-        if (existing.isSymbolicLink() || (process.platform === "win32" && existing.isDirectory())) {
+        if (existing.isSymbolicLink() || (isWindows() && existing.isDirectory())) {
           try {
             const current = await fs.promises.readlink(target);
             if (path.resolve(current) === path.resolve(sourceDir)) {
@@ -344,7 +344,7 @@ export class ClaudeCliAdapter implements CliAdapter {
       // privilege; `type: "junction"` is an NTFS reparse point that any
       // user can create and behaves identically for the read-only scan
       // Claude does over `~/.claude/skills/`. POSIX always uses `dir`.
-      const linkType = process.platform === "win32" ? "junction" : "dir";
+      const linkType = isWindows() ? "junction" : "dir";
       await fs.promises.symlink(sourceDir, target, linkType);
       return { ok: true, method: "symlink", detail: `${target} → ${sourceDir}` };
     } catch (err) {
@@ -461,7 +461,7 @@ export class ClaudeCliAdapter implements CliAdapter {
    *  Public so claude-session.ts can reuse instead of duplicating findClaudeBinary(). */
   resolveCommand(): string {
     if (process.env.CLAUDE_CODE_PATH) return process.env.CLAUDE_CODE_PATH;
-    if (process.platform === "win32") {
+    if (isWindows()) {
       const native = resolveCommandPathSync("claude-code");
       if (native !== "claude-code") return native;
     }
