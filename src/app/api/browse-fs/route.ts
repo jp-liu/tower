@@ -98,7 +98,19 @@ function enumerateDrivesViaShell(): string[] {
   };
   tryCmd("wmic logicaldisk get caption");
   if (letters.size === 0) {
-    tryCmd('powershell -NoProfile -Command "Get-PSDrive -PSProvider FileSystem | %% { $_.Name + \':\' }"');
+    // NOTE: spell out ForEach-Object — do NOT use the `%` alias. `%%` is only
+    // collapsed to `%` inside .bat/.cmd files; passed straight to execSync the
+    // shell hands PowerShell a literal `%%`, which errors, so this fallback
+    // silently never worked. -NonInteractive prevents a hang waiting on input.
+    tryCmd(
+      'powershell -NoProfile -NonInteractive -Command "Get-PSDrive -PSProvider FileSystem | ForEach-Object { $_.Name + \':\' }"'
+    );
+  }
+  if (letters.size === 0) {
+    // Last resort for locked-down machines where the above are blocked.
+    tryCmd(
+      'powershell -NoProfile -NonInteractive -Command "Get-CimInstance Win32_LogicalDisk | ForEach-Object { $_.DeviceID }"'
+    );
   }
   return [...letters];
 }
