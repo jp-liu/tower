@@ -65,6 +65,11 @@ export async function POST(request: NextRequest) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
       }
 
+      // Hoisted so the catch can name the resolved CLI path in its error message
+      // — a spawn failure here means this path couldn't be launched on the host.
+      let rawClaudeCmd = "";
+      let claudePath = "";
+
       try {
         const { query } = await import("@anthropic-ai/claude-agent-sdk");
 
@@ -72,8 +77,8 @@ export async function POST(request: NextRequest) {
         // `claude` command is a `.cmd` shim, which spawn() rejects with EINVAL —
         // resolveSdkExecutable rewrites it to the underlying cli.js so the SDK
         // runs `node cli.js`. No-op on macOS/Linux and for native `.exe` installs.
-        const rawClaudeCmd = claudeAdapter.resolveCommand();
-        const claudePath = resolveSdkExecutable(rawClaudeCmd);
+        rawClaudeCmd = claudeAdapter.resolveCommand();
+        claudePath = resolveSdkExecutable(rawClaudeCmd);
         // Log the resolved CLI path — a Windows `spawn EINVAL` means a `.cmd`
         // reached the SDK (it can't be rewritten to a node-runnable cli.js).
         console.error(
@@ -338,8 +343,16 @@ export async function POST(request: NextRequest) {
         // error an actionable message — it means the model wanted to emit more
         // than the current model's per-response limit (64K on Sonnet/Haiku,
         // 128K on Opus); the fix is a shorter ask or a higher-output model.
+        // A spawn failure (ENOENT/EINVAL/spawn …) means the Claude CLI path we
+        // resolved couldn't be launched on this machine — almost always Claude
+        // Code isn't installed / not on PATH, or its shim layout couldn't be
+        // rewritten to a node-runnable cli.js. Name the resolved path so the
+        // user can act without digging through server logs.
+        const isSpawnFailure = /\bspawn\b|ENOENT|EINVAL/i.test(detail);
         const friendly = /output token maximum|max_output_tokens/i.test(detail)
           ? "回复内容超出了模型单次输出上限。请把问题拆小一些，或在设置里把 assistant.maxOutputTokens 调整为所用模型支持的上限（Sonnet/Haiku 最高 64K，Opus 最高 128K）。"
+          : isSpawnFailure
+          ? `无法启动 Claude CLI（raw=${rawClaudeCmd || "?"} resolved=${claudePath || "?"}）。请确认本机已安装 Claude Code 且能在命令行执行 \`claude --version\`；若已安装但仍失败，可设置环境变量 CLAUDE_CODE_PATH 指向 claude 的 cli.js。原始错误：${detail}`
           : `Assistant encountered an error: ${detail}`;
         send({ type: "error", content: friendly });
       } finally {
