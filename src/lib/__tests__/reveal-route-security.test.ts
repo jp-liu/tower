@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Security tests for /api/internal/assets/reveal
  *
