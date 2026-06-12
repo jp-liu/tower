@@ -219,6 +219,94 @@ describe("captureExecutionSummary", () => {
     expect(callData.data.exitCode).toBe(42);
   });
 
+  // Helper: collect the `git` argument arrays passed to execFileSync
+  function gitCallArgs(): string[][] {
+    return mockExecFileSync.mock.calls.map((c) => c[1] as string[]);
+  }
+
+  describe("forkCommit scoping (summary cross-talk regression)", () => {
+    const FORK = "fork0000commit";
+
+    it("scopes git log/diff to forkCommit..HEAD and never calls merge-base", async () => {
+      mockExistsSync.mockReturnValue(true);
+      setupGitMocks();
+
+      await captureExecutionSummary(EXEC_ID, TASK_ID, 0, "out", WORKTREE, FORK);
+
+      const calls = gitCallArgs();
+      // No merge-base lookup when forkCommit is known
+      expect(calls.some((a) => a[0] === "merge-base")).toBe(false);
+      // log + diff use the forkCommit..HEAD range
+      expect(calls).toContainEqual(["log", "--oneline", `${FORK}..HEAD`]);
+      expect(calls).toContainEqual(["diff", "--stat", `${FORK}..HEAD`]);
+    });
+
+    it("isolates two executions sharing one directory by their own forkCommit", async () => {
+      mockExistsSync.mockReturnValue(true);
+      setupGitMocks();
+
+      const FORK_A = "aaaa1111";
+      const FORK_B = "bbbb2222";
+
+      // Two tasks run in the SAME directory (direct mode) — different forks
+      await captureExecutionSummary("exec-A", "task-A", 0, "out A", WORKTREE, FORK_A);
+      await captureExecutionSummary("exec-B", "task-B", 0, "out B", WORKTREE, FORK_B);
+
+      const ranges = gitCallArgs()
+        .filter((a) => a[0] === "log" && a[1] === "--oneline")
+        .map((a) => a[2]);
+      // Each execution's log is bounded by its OWN fork — no shared range leaks
+      expect(ranges).toContain(`${FORK_A}..HEAD`);
+      expect(ranges).toContain(`${FORK_B}..HEAD`);
+    });
+
+    it("does NOT fall back to `log -3` shared history when no forkCommit and no merge-base", async () => {
+      mockExistsSync.mockReturnValue(true);
+      // git repo valid, but merge-base fails for every base branch
+      mockExecFileSync.mockImplementation((_cmd: unknown, args: unknown) => {
+        const a = args as string[];
+        if (a[0] === "rev-parse" && a[1] === "--git-dir") {
+          return ".git" as unknown as ReturnType<typeof execFileSync>;
+        }
+        if (a[0] === "merge-base") throw new Error("unknown revision");
+        // a `log -3` here would be the cross-talk fallback we removed
+        return "" as unknown as ReturnType<typeof execFileSync>;
+      });
+
+      await captureExecutionSummary(EXEC_ID, TASK_ID, 0, "out", WORKTREE, null);
+
+      const calls = gitCallArgs();
+      expect(calls).not.toContainEqual(["log", "--oneline", "-3"]);
+      const callData = mockUpdate.mock.calls[0][0];
+      expect(callData.data.gitLog).toBeNull();
+      expect(callData.data.gitStats).toBeNull();
+      // fallback summary must stay null too (was the visible 串台 text)
+      expect(callData.data.summary).toBeNull();
+    });
+
+    it("forwards forkCommit so different tasks in a shared dir never reuse the same range", async () => {
+      // Regression guard: a null forkCommit on `main` previously produced
+      // `log -3` (shared tip) for every task. With scoping it yields no range.
+      mockExistsSync.mockReturnValue(true);
+      mockExecFileSync.mockImplementation((_cmd: unknown, args: unknown) => {
+        const a = args as string[];
+        if (a[0] === "rev-parse" && a[1] === "--git-dir") {
+          return ".git" as unknown as ReturnType<typeof execFileSync>;
+        }
+        // On `main`, merge-base(HEAD, main) === HEAD → empty range
+        if (a[0] === "merge-base") return "HEADSHA" as unknown as ReturnType<typeof execFileSync>;
+        if (a[0] === "log") return "" as unknown as ReturnType<typeof execFileSync>;
+        if (a[0] === "diff") return "" as unknown as ReturnType<typeof execFileSync>;
+        return "" as unknown as ReturnType<typeof execFileSync>;
+      });
+
+      await captureExecutionSummary(EXEC_ID, TASK_ID, 0, "out", WORKTREE, null);
+
+      const calls = gitCallArgs();
+      expect(calls).not.toContainEqual(["log", "--oneline", "-3"]);
+    });
+  });
+
   it("handles git command failure gracefully — git data is null, does not throw", async () => {
     mockExistsSync.mockReturnValue(true);
     // rev-parse throws — not a git repo

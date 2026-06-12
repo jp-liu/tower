@@ -135,7 +135,7 @@ export async function stopPtyExecution(taskId: string): Promise<void> {
     const summaryPath = execution.worktreePath || task?.project?.localPath || null;
     const { captureExecutionSummary } = await import("@/lib/execution-summary");
     await captureExecutionSummary(
-      execution.id, taskId, 0, terminalBuffer, summaryPath
+      execution.id, taskId, 0, terminalBuffer, summaryPath, execution.forkCommit
     );
   }
 
@@ -269,7 +269,7 @@ export async function resumePtyExecution(
       // Use worktreePath if available, otherwise fall back to project localPath (direct mode)
       const summaryPath = prevExec.worktreePath || task.project!.localPath;
       const { captureExecutionSummary } = await import("@/lib/execution-summary");
-      await captureExecutionSummary(execution.id, taskId, exitCode, terminalBuffer, summaryPath);
+      await captureExecutionSummary(execution.id, taskId, exitCode, terminalBuffer, summaryPath, execution.forkCommit);
 
       // Dispatch task completion event for notification system (Phase 65)
       const { dispatchTaskCompletionEvent } = await import("@/actions/onboarding-actions");
@@ -396,7 +396,7 @@ export async function continueLatestPtyExecution(
 
       const summaryPath = latestExec?.worktreePath || task.project!.localPath;
       const { captureExecutionSummary } = await import("@/lib/execution-summary");
-      await captureExecutionSummary(execution.id, taskId, exitCode, terminalBuffer, summaryPath);
+      await captureExecutionSummary(execution.id, taskId, exitCode, terminalBuffer, summaryPath, latestExec?.forkCommit ?? null);
 
       // Dispatch task completion event for notification system (Phase 65)
       const { dispatchTaskCompletionEvent } = await import("@/actions/onboarding-actions");
@@ -555,6 +555,9 @@ export async function startPtyExecution(
   // 7b. Record forkCommit
   // Worktree mode: merge-base between baseBranch and HEAD
   // Direct mode: current HEAD commit (baseline for diff)
+  // Captured into an outer variable so the onExit summary can scope the git
+  // range to THIS task's own commits (prevents summary cross-talk in direct mode).
+  let resolvedForkCommit: string | null = null;
   if (task.project.localPath) {
     try {
       const { execFileSync } = await import("child_process");
@@ -571,6 +574,7 @@ export async function startPtyExecution(
         ).trim();
       }
       if (forkCommit) {
+        resolvedForkCommit = forkCommit;
         await db.taskExecution.update({
           where: { id: execution.id },
           data: { forkCommit },
@@ -655,7 +659,8 @@ export async function startPtyExecution(
         taskId,
         exitCode,
         terminalBuffer,
-        summaryPath
+        summaryPath,
+        resolvedForkCommit
       );
 
       // Dispatch task completion event for notification system (Phase 65)

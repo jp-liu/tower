@@ -50,30 +50,38 @@ function getMergeBase(cwd: string): string | null {
   return null;
 }
 
-function captureGitLog(cwd: string): string | null {
+/**
+ * Resolve the "before" boundary for this execution's git range.
+ *
+ * Prefer the execution's own `forkCommit` (HEAD recorded when the task started) —
+ * it is a stable per-execution key that isolates THIS task's commits even when
+ * multiple tasks share one working directory (direct / non-worktree mode).
+ *
+ * Fall back to the base-branch merge-base only when no forkCommit was recorded
+ * (legacy executions). We deliberately do NOT fall back to `log -3` / `HEAD~20`:
+ * those grab whatever sits at the shared tip and leak commits from other tasks
+ * that ran in the same directory (summary 串台).
+ */
+function resolveGitBase(cwd: string, forkCommit: string | null): string | null {
+  if (forkCommit) return forkCommit;
+  return getMergeBase(cwd);
+}
+
+function captureGitLog(cwd: string, forkCommit: string | null): string | null {
   try {
-    const mergeBase = getMergeBase(cwd);
-    if (mergeBase) {
-      const log = runGit(["log", "--oneline", `${mergeBase}..HEAD`], cwd);
-      if (log) return log;
-    }
-    // Fallback: last 3 commits
-    return runGit(["log", "--oneline", "-3"], cwd) || null;
+    const base = resolveGitBase(cwd, forkCommit);
+    if (!base) return null;
+    return runGit(["log", "--oneline", `${base}..HEAD`], cwd) || null;
   } catch {
     return null;
   }
 }
 
-function captureGitStats(cwd: string): GitStats | null {
+function captureGitStats(cwd: string, forkCommit: string | null): GitStats | null {
   try {
-    let diffOutput: string;
-    const mergeBase = getMergeBase(cwd);
-    if (mergeBase) {
-      diffOutput = runGit(["diff", "--stat", `${mergeBase}..HEAD`], cwd);
-    } else {
-      // Fallback
-      diffOutput = runGit(["diff", "--stat", "HEAD~20", "HEAD"], cwd);
-    }
+    const base = resolveGitBase(cwd, forkCommit);
+    if (!base) return null;
+    const diffOutput = runGit(["diff", "--stat", `${base}..HEAD`], cwd);
     if (!diffOutput) return null;
     return parseDiffStat(diffOutput);
   } catch {
@@ -143,10 +151,16 @@ export async function captureExecutionSummary(
   _taskId: string,
   exitCode: number,
   terminalBuffer: string,
-  worktreePath: string | null
+  worktreePath: string | null,
+  /**
+   * HEAD recorded when this execution started. Used to scope the git range to
+   * THIS task's own commits — critical in direct (non-worktree) mode where many
+   * tasks share one working directory. Null for legacy executions.
+   */
+  forkCommit: string | null = null
 ): Promise<void> {
   try {
-    console.error(`[captureExecutionSummary] Starting: exec=${executionId.slice(0, 8)} exit=${exitCode} buffer=${terminalBuffer.length}chars worktree=${worktreePath}`);
+    console.error(`[captureExecutionSummary] Starting: exec=${executionId.slice(0, 8)} exit=${exitCode} buffer=${terminalBuffer.length}chars worktree=${worktreePath} fork=${forkCommit?.slice(0, 8) ?? "none"}`);
 
     let gitLog: string | null = null;
     let gitStats: GitStats | null = null;
@@ -158,8 +172,8 @@ export async function captureExecutionSummary(
         // Verify it's a git repo
         runGit(["rev-parse", "--git-dir"], worktreePath);
 
-        gitLog = captureGitLog(worktreePath);
-        gitStats = captureGitStats(worktreePath);
+        gitLog = captureGitLog(worktreePath, forkCommit);
+        gitStats = captureGitStats(worktreePath, forkCommit);
 
         // Fill in commit count from gitLog
         if (gitStats && gitLog) {
