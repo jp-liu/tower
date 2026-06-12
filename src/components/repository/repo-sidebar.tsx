@@ -219,8 +219,10 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
       navigateToProject(existing.workspaceId, existing.id);
       return;
     }
-    // Not found → open create dialog
-    const folderName = selectedPath.split("/").filter(Boolean).pop() ?? "";
+    // Not found → open create dialog. Split on BOTH separators and trim trailing
+    // ones so Windows paths (`D:\a\b\proj`) yield "proj", not the whole path.
+    const folderName =
+      selectedPath.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop() ?? "";
     setBrowsePath(selectedPath);
     setBrowseCreateName(folderName);
     setBrowseCreateAlias("");

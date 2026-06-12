@@ -86,8 +86,11 @@ export function ImportProjectDialog({
     setSafetyWarning("");
     setIsSamePath(false);
 
-    // Derive default project name from folder basename
-    const basename = selectedPath.split("/").filter(Boolean).pop() ?? "";
+    // Derive default project name from folder basename. Split on BOTH separators
+    // and trim trailing ones — Windows paths use `\`, so split("/") alone returns
+    // the whole "D:\a\b\proj" as one segment and the name becomes the full path.
+    const basename =
+      selectedPath.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop() ?? "";
     setProjectName(basename);
 
     // Auto-detect git remote

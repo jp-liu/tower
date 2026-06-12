@@ -262,6 +262,16 @@ const EMPTY_FORM: RuleEditState = {
   priority: 0,
 };
 
+/**
+ * Normalize a base path for git clone-path templates to forward slashes.
+ * A Windows folder pick comes back as `D:\code`, but the template machinery
+ * joins `/`-based segments ({path}, {owner}, {repo}), producing mixed
+ * `D:\code/owner/repo`. Git on Windows accepts `/` natively, so canonicalize
+ * the whole thing to `/` and strip any trailing separators (both kinds).
+ */
+const normalizeTemplateBasePath = (p: string): string =>
+  p.replace(/\\/g, "/").replace(/\/+$/, "");
+
 type SystemForm = {
   maxUploadMb: number;
   maxConcurrent: number;
@@ -763,7 +773,7 @@ export function SettingsPage() {
   const handleAddRule = async () => {
     if (!addRuleForm.host.trim() || !addRuleForm.localPathTemplate.trim())
       return;
-    const basePath = addRuleForm.localPathTemplate.trim().replace(/\/+$/, "");
+    const basePath = normalizeTemplateBasePath(addRuleForm.localPathTemplate.trim());
     const template = useFullPath ? `${basePath}/{path}` : basePath;
     const newRule: GitPathRule = {
       id: crypto.randomUUID(),
@@ -800,7 +810,7 @@ export function SettingsPage() {
   const handleEditRuleSave = async (ruleId: string) => {
     if (!editRuleForm.host.trim() || !editRuleForm.localPathTemplate.trim())
       return;
-    const basePath = editRuleForm.localPathTemplate.trim().replace(/\/+$/, "");
+    const basePath = normalizeTemplateBasePath(editRuleForm.localPathTemplate.trim());
     const template = editUseFullPath ? `${basePath}/{path}` : basePath;
     const updated = rules.map((r) =>
       r.id === ruleId
@@ -2304,10 +2314,13 @@ export function SettingsPage() {
         open={pickerTarget !== null}
         onOpenChange={(o) => { if (!o) setPickerTarget(null); }}
         onSelect={(selectedPath) => {
+          // Serialize the Windows `\` pick to `/` so the field shows a clean,
+          // template-consistent path immediately (no mixed `D:\code/owner`).
+          const normalized = normalizeTemplateBasePath(selectedPath);
           if (pickerTarget === "add") {
-            setAddRuleForm((f) => ({ ...f, localPathTemplate: selectedPath }));
+            setAddRuleForm((f) => ({ ...f, localPathTemplate: normalized }));
           } else if (pickerTarget === "edit") {
-            setEditRuleForm((f) => ({ ...f, localPathTemplate: selectedPath }));
+            setEditRuleForm((f) => ({ ...f, localPathTemplate: normalized }));
           }
           setPickerTarget(null);
         }}
