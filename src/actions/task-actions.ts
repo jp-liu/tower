@@ -83,6 +83,14 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
     import("@/lib/execution-summary").then(({ captureTaskDreaming }) => {
       captureTaskDreaming(taskId).catch(() => {});
     }).catch(() => {});
+
+    // Auto-generate a change overview note ("任务笔记"). This DONE path is only
+    // reached by direct/no-worktree tasks (worktree+commits go through the
+    // merge route), which keep their worktree — so fire-and-forget is safe;
+    // there is no cleanup race here.
+    import("@/lib/task-overview").then(({ captureTaskOverview }) => {
+      captureTaskOverview(taskId).catch(() => {});
+    }).catch(() => {});
   }
 
   // Terminal states: kill PTY before any filesystem cleanup so the live
@@ -94,6 +102,19 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
       destroySession(taskId);
     } catch (error) {
       log.error("PTY session destroy failed", error, { taskId });
+    }
+  }
+
+  // Capture a change overview BEFORE the worktree is removed, so a cancelled
+  // task's partial work is preserved as a "任务笔记" note — useful experience
+  // when the task is later restarted. Awaited (only the fast git-gather part)
+  // so it runs before removeWorktree yanks the diff source. Never blocks cancel.
+  if (status === "CANCELLED" && task.project?.localPath) {
+    try {
+      const { captureTaskOverview } = await import("@/lib/task-overview");
+      await captureTaskOverview(taskId, { kind: "cancelled" });
+    } catch (error) {
+      log.error("Task overview capture failed", error, { taskId });
     }
   }
 

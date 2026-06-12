@@ -22,5 +22,5 @@ export const TOWER_LABEL_COLOR = "#8b5cf6"; // purple
 export const AGENTS = ["CLAUDE_CODE", "MINIMAX"] as const;
 export type AgentType = (typeof AGENTS)[number];
 
-export const NOTE_CATEGORIES_PRESET = ["账号", "环境", "需求", "备忘"] as const;
+export const NOTE_CATEGORIES_PRESET = ["账号", "环境", "需求", "备忘", "任务笔记"] as const;
 export type NoteCategoryPreset = (typeof NOTE_CATEGORIES_PRESET)[number];

@@ -159,6 +159,16 @@ export async function POST(
       console.error("[merge] PTY session destroy failed:", error);
     }
 
+    // Generate the task change overview note BEFORE worktree cleanup, while the
+    // diff/files are still resolvable. Only the git data-gathering is awaited;
+    // the AI summary + note write run in the background. Never blocks merge.
+    try {
+      const { captureTaskOverview } = await import("@/lib/task-overview");
+      await captureTaskOverview(taskId);
+    } catch (error) {
+      console.error("[merge] Task overview capture failed:", error);
+    }
+
     // Best-effort worktree cleanup
     try {
       await removeWorktree(localPath, taskId);
