@@ -15,13 +15,43 @@ import { useI18n } from "@/lib/i18n";
 import { createTask, getTaskOverview } from "@/actions/task-actions";
 import type { TaskOverviewData } from "@/actions/task-actions";
 import { getLabelsForWorkspace } from "@/actions/label-actions";
+import { getTaskNotes } from "@/actions/note-actions";
+import { getTaskAssets } from "@/actions/asset-actions";
 import { openInFileManager, openInEditor, openInTerminal } from "@/actions/preview-actions";
 import { CreateTaskDialog } from "@/components/board/create-task-dialog";
+import { NotePreviewDialog } from "@/components/notes/note-preview-dialog";
+import { ImageLightbox } from "@/components/assets/image-lightbox";
+import { TextPreviewDialog } from "@/components/assets/text-preview-dialog";
+import { localPathToApiUrl, isImageAsset } from "@/lib/file-serve-client";
 import { BOARD_COLUMNS, PRIORITY_CONFIG } from "@/lib/constants";
-import { Calendar, Copy, Package, PlayCircle, FolderSearch, Code, Terminal } from "lucide-react";
+import { Calendar, Copy, Package, PlayCircle, FolderSearch, Code, Terminal, FileText, Eye, Paperclip, FolderOpen } from "lucide-react";
 import { TaskFileChanges } from "@/components/task/task-file-changes";
 import { TaskVersionTag } from "@/components/version/version-badges";
 import { toast } from "sonner";
+
+interface DrawerNote {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+}
+
+interface DrawerAsset {
+  id: string;
+  filename: string;
+  path: string;
+  mimeType: string | null;
+  size: number | null;
+}
+
+const TEXT_PREVIEW_PATTERN = /\.(txt|md|json)$/i;
+
+function formatSize(bytes: number | null): string {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
 
 interface TaskOverviewDrawerProps {
   open: boolean;
@@ -41,12 +71,41 @@ export function TaskOverviewDrawer({
   const [labels, setLabels] = useState<
     { id: string; name: string; color: string; isBuiltin: boolean }[]
   >([]);
+  const [notes, setNotes] = useState<DrawerNote[]>([]);
+  const [previewNote, setPreviewNote] = useState<DrawerNote | null>(null);
+  const [assets, setAssets] = useState<DrawerAsset[]>([]);
+  const [previewAsset, setPreviewAsset] = useState<DrawerAsset | null>(null);
 
   useEffect(() => {
     if (!taskId || !open) {
       setTask(null);
+      setNotes([]);
+      setAssets([]);
       return;
     }
+    // Notes bound to this task — surfaces auto-generated overviews / insights
+    // and any manual task notes right inside the asset's task drawer.
+    getTaskNotes(taskId)
+      .then((rows) =>
+        setNotes(
+          rows.map((n) => ({ id: n.id, title: n.title, content: n.content, category: n.category }))
+        )
+      )
+      .catch(() => setNotes([]));
+    // Assets bound to this task — list the actual resources, not just a count.
+    getTaskAssets(taskId)
+      .then((rows) =>
+        setAssets(
+          rows.map((a) => ({
+            id: a.id,
+            filename: a.filename,
+            path: a.path,
+            mimeType: a.mimeType,
+            size: a.size,
+          }))
+        )
+      )
+      .catch(() => setAssets([]));
     startTransition(async () => {
       const data = await getTaskOverview(taskId);
       if (data) {
@@ -92,6 +151,48 @@ export function TaskOverviewDrawer({
       return null;
     }
   })();
+
+  const isAssetPreviewable = (asset: DrawerAsset) =>
+    isImageAsset(asset.filename, asset.mimeType) || TEXT_PREVIEW_PATTERN.test(asset.filename);
+
+  const handleAssetPreview = (asset: DrawerAsset) => {
+    if (isAssetPreviewable(asset)) {
+      setPreviewAsset(asset);
+    } else {
+      toast.info(t("assets.previewNotSupported"));
+    }
+  };
+
+  const handleAssetReveal = async (asset: DrawerAsset) => {
+    try {
+      const res = await fetch("/api/internal/assets/reveal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: asset.path }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || t("git.openInFileManagerFailed"));
+      }
+    } catch {
+      toast.error(t("git.openInFileManagerFailed"));
+    }
+  };
+
+  const assetPreviewType = previewAsset
+    ? isImageAsset(previewAsset.filename, previewAsset.mimeType)
+      ? "image"
+      : TEXT_PREVIEW_PATTERN.test(previewAsset.filename)
+        ? "text"
+        : null
+    : null;
+
+  const imageAssets = assets
+    .filter((a) => isImageAsset(a.filename, a.mimeType))
+    .map((a) => ({ id: a.id, url: localPathToApiUrl(a.path), filename: a.filename }));
+  const currentImageIndex = previewAsset
+    ? imageAssets.findIndex((a) => a.id === previewAsset.id)
+    : -1;
 
   const handleDuplicate = () => {
     if (!task) return;
@@ -217,11 +318,95 @@ export function TaskOverviewDrawer({
                 </span>
               </section>
 
-              {/* Resource count */}
-              <section className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Package className="h-3.5 w-3.5" />
-                <span>{t("taskDrawer.resources")}</span>
-                <span className="text-foreground">{task._count.assets}</span>
+              {/* Resources (assets) bound to this task */}
+              <section>
+                <h4 className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                  <Package className="h-3.5 w-3.5" />
+                  {t("taskDrawer.resources")}
+                  <span className="text-foreground">{task._count.assets}</span>
+                </h4>
+                {assets.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {assets.map((asset) => {
+                      const canPreview = isAssetPreviewable(asset);
+                      return (
+                        <div
+                          key={asset.id}
+                          className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5"
+                        >
+                          <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <button
+                            type="button"
+                            onClick={() => handleAssetPreview(asset)}
+                            disabled={!canPreview}
+                            className={`min-w-0 flex-1 truncate text-left text-sm ${canPreview ? "cursor-pointer hover:underline" : "cursor-default"}`}
+                            title={canPreview ? t("assets.preview") : asset.filename}
+                          >
+                            {asset.filename}
+                          </button>
+                          <span className="shrink-0 text-[10px] text-muted-foreground">{formatSize(asset.size)}</span>
+                          <div className="flex items-center gap-0.5">
+                            {canPreview && (
+                              <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                onClick={() => handleAssetPreview(asset)}
+                                className="shrink-0 text-muted-foreground hover:bg-accent"
+                                title={t("assets.preview")}
+                              >
+                                <Eye className="h-3 w-3" />
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              onClick={() => handleAssetReveal(asset)}
+                              className="shrink-0 text-muted-foreground hover:bg-accent"
+                              title={t("assets.revealInFinder")}
+                            >
+                              <FolderOpen className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{t("taskDrawer.noResources")}</p>
+                )}
+              </section>
+
+              {/* Notes bound to this task */}
+              <section>
+                <h4 className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5" />
+                  {t("taskDrawer.notes")}
+                </h4>
+                {notes.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {notes.map((note) => (
+                      <button
+                        key={note.id}
+                        type="button"
+                        onClick={() => setPreviewNote(note)}
+                        className="group/note flex w-full items-start gap-2 rounded-md border border-border p-2 text-left transition-colors hover:bg-accent/40"
+                        title={t("taskDrawer.previewNote")}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{note.title}</p>
+                          {note.content && (
+                            <p className="mt-0.5 line-clamp-2 whitespace-pre-wrap text-xs text-muted-foreground">
+                              {note.content}
+                            </p>
+                          )}
+                        </div>
+                        <Eye className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/note:opacity-100" />
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{t("taskDrawer.noNotes")}</p>
+                )}
               </section>
 
               {/* File changes */}
@@ -354,6 +539,40 @@ export function TaskOverviewDrawer({
           }}
         />
       )}
+
+      <NotePreviewDialog
+        note={previewNote}
+        open={previewNote !== null}
+        onOpenChange={(o) => { if (!o) setPreviewNote(null); }}
+      />
+      <ImageLightbox
+        imageUrl={
+          assetPreviewType === "image" && currentImageIndex >= 0
+            ? imageAssets[currentImageIndex].url
+            : null
+        }
+        filename={
+          assetPreviewType === "image" && currentImageIndex >= 0
+            ? imageAssets[currentImageIndex].filename
+            : ""
+        }
+        open={assetPreviewType === "image"}
+        onOpenChange={(o) => { if (!o) setPreviewAsset(null); }}
+        assets={imageAssets.map(({ url, filename }) => ({ url, filename }))}
+        currentIndex={currentImageIndex >= 0 ? currentImageIndex : undefined}
+        onIndexChange={(nextIndex) => {
+          const target = imageAssets[nextIndex];
+          if (!target) return;
+          const orig = assets.find((a) => a.id === target.id);
+          if (orig) setPreviewAsset(orig);
+        }}
+      />
+      <TextPreviewDialog
+        url={assetPreviewType === "text" && previewAsset ? localPathToApiUrl(previewAsset.path) : null}
+        filename={previewAsset?.filename ?? ""}
+        open={assetPreviewType === "text"}
+        onOpenChange={(o) => { if (!o) setPreviewAsset(null); }}
+      />
     </Sheet>
   );
 }

@@ -9,9 +9,11 @@ interface NoteListProps {
   notes: NoteItem[];
   onEdit: (note: NoteItem) => void;
   onDelete: (noteId: string) => void;
+  onPreview?: (note: NoteItem) => void;
+  onTaskClick?: (taskId: string) => void;
 }
 
-export function NoteList({ notes, onEdit, onDelete }: NoteListProps) {
+export function NoteList({ notes, onEdit, onDelete, onPreview, onTaskClick }: NoteListProps) {
   const { t } = useI18n();
 
   if (notes.length === 0) {
@@ -23,7 +25,14 @@ export function NoteList({ notes, onEdit, onDelete }: NoteListProps) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {notes.map((note) => (
-        <NoteCard key={note.id} note={note} onEdit={onEdit} onDelete={onDelete} />
+        <NoteCard
+          key={note.id}
+          note={note}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onPreview={onPreview}
+          onTaskClick={onTaskClick}
+        />
       ))}
     </div>
   );
