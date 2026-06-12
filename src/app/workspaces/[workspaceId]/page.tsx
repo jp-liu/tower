@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { getLabelsForWorkspace } from "@/actions/label-actions";
+import { getArchiveDelayDays } from "@/actions/config-actions";
+import { visibleTaskWhere } from "@/lib/task-archive";
 import { BoardPageClient } from "./board-page-client";
 
 interface Props {
@@ -12,8 +14,7 @@ export default async function WorkspaceBoardPage({ params, searchParams }: Props
   const { workspaceId } = await params;
   const { projectId: selectedProjectId, taskId: openTaskId } = await searchParams;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const archiveDelayDays = await getArchiveDelayDays();
 
   const workspace = await db.workspace.findUnique({
     where: { id: workspaceId },
@@ -21,12 +22,7 @@ export default async function WorkspaceBoardPage({ params, searchParams }: Props
       projects: {
         include: {
           tasks: {
-            where: {
-              OR: [
-                { status: { notIn: ["DONE", "CANCELLED"] } },
-                { status: { in: ["DONE", "CANCELLED"] }, updatedAt: { gte: today } },
-              ],
-            },
+            where: visibleTaskWhere(archiveDelayDays),
             orderBy: [{ pinned: "desc" }, { order: "asc" }, { createdAt: "desc" }],
             include: {
               labels: {

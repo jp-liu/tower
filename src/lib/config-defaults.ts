@@ -60,6 +60,11 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "number",
     label: "Code Search Timeout (seconds)",
   },
+  "board.archiveDelayDays": {
+    defaultValue: 7,
+    type: "number",
+    label: "Archive Delay (days)",
+  },
   "missions.grid.minCols": {
     defaultValue: 1,
     type: "number",

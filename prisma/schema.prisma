@@ -89,6 +89,7 @@ model Task {
   versionId   String?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
+  doneAt      DateTime?  // 进入 DONE 的时间戳，用于「归档期限」判定（离开 DONE 时清空）
 
   project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   executions TaskExecution[]

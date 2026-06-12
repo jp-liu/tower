@@ -2,6 +2,11 @@
 
 import { db } from "@/lib/db";
 import { CONFIG_DEFAULTS } from "@/lib/config-defaults";
+import {
+  ARCHIVE_DELAY_KEY,
+  DEFAULT_ARCHIVE_DELAY_DAYS,
+  normalizeArchiveDelayDays,
+} from "@/lib/task-archive";
 import { matchGitPathRule, gitUrlToLocalPath, type GitPathRule } from "@/lib/git-url";
 import { detectShells, detectTerminalApps, detectEditors, type DetectedShell, type DetectedTerminalApp, type DetectedEditor } from "@/lib/platform";
 import { getActiveWsPort } from "@/lib/pty/ws-server";
@@ -24,6 +29,12 @@ export async function setConfigValue(key: string, value: unknown): Promise<void>
   });
   // Note: revalidatePath("/settings") omitted — settings page is a client component,
   // revalidatePath has no effect. Real reactivity is Phase 14 (CFG-02).
+}
+
+/** 读取「归档期限（天）」配置，规整到 [0, 365]，非法值回退默认值。 */
+export async function getArchiveDelayDays(): Promise<number> {
+  const raw = await getConfigValue<number>(ARCHIVE_DELAY_KEY, DEFAULT_ARCHIVE_DELAY_DAYS);
+  return normalizeArchiveDelayDays(raw);
 }
 
 export async function resolveGitLocalPath(url: string): Promise<string> {

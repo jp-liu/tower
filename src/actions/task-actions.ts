@@ -7,6 +7,8 @@ import { removeWorktree } from "@/lib/worktree";
 import { z } from "zod";
 import { createTaskSchema, updateTaskSchema, taskStatusSchema } from "@/lib/schemas";
 import { logger } from "@/lib/logger";
+import { visibleTaskWhere, archivedTaskWhere } from "@/lib/task-archive";
+import { getArchiveDelayDays } from "@/actions/config-actions";
 import type { TaskStatus, Priority } from "@prisma/client";
 
 const log = logger.create("task-actions");
@@ -49,7 +51,8 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
   taskStatusSchema.parse(status);
   const task = await db.task.update({
     where: { id: taskId },
-    data: { status },
+    // 进入 DONE 记录时间戳作为归档基准；离开 DONE 清空（编辑已完成任务不会重置倒计时）。
+    data: { status, doneAt: status === "DONE" ? new Date() : null },
     include: { project: true },
   });
 
@@ -201,18 +204,11 @@ export async function deleteTask(taskId: string) {
 }
 
 export async function getProjectTasks(projectId: string) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
+  const days = await getArchiveDelayDays();
   return db.task.findMany({
     where: {
       projectId,
-      OR: [
-        // Active tasks: always show
-        { status: { notIn: ["DONE", "CANCELLED"] } },
-        // DONE/CANCELLED: only show if updated today
-        { status: { in: ["DONE", "CANCELLED"] }, updatedAt: { gte: today } },
-      ],
+      ...visibleTaskWhere(days),
     },
     orderBy: [{ pinned: "desc" }, { order: "asc" }, { createdAt: "desc" }],
   });
@@ -238,14 +234,11 @@ export async function searchTasks(query: string) {
 }
 
 export async function getArchivedTasks(projectId: string) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
+  const days = await getArchiveDelayDays();
   return db.task.findMany({
     where: {
       projectId,
-      status: { in: ["DONE", "CANCELLED"] },
-      updatedAt: { lt: today },
+      ...archivedTaskWhere(days),
     },
     include: {
       labels: { include: { label: true } },
@@ -387,14 +380,11 @@ export async function getTaskOverview(taskId: string) {
 export type TaskOverviewData = NonNullable<Awaited<ReturnType<typeof getTaskOverview>>>;
 
 export async function getArchivedTaskCount(projectId: string) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
+  const days = await getArchiveDelayDays();
   return db.task.count({
     where: {
       projectId,
-      status: { in: ["DONE", "CANCELLED"] },
-      updatedAt: { lt: today },
+      ...archivedTaskWhere(days),
     },
   });
 }
