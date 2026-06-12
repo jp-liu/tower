@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { execSync } from "child_process";
+import { isWindows } from "@/lib/platform";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,7 +13,13 @@ const BLOCKED_PATHS_UNIX = ["/proc", "/sys", "/dev", "/boot", "/sbin"];
 const BLOCKED_PATHS_WIN = ["C:\\Windows", "C:\\$Recycle.Bin"];
 
 function isBlockedPath(resolved: string): boolean {
-  const isWin = process.platform === "win32";
+  // NB: call the cross-module helper, NOT inline `process.platform === "win32"`.
+  // Turbopack's production minifier constant-folds an inline `process.platform`
+  // comparison to the BUILD machine's OS (false on macOS/Linux) and then
+  // dead-code-eliminates every Windows-only branch — which silently stripped the
+  // entire drive-letter detection from published builds. A cross-module call is
+  // opaque to that fold, so it stays a genuine runtime check on the user's OS.
+  const isWin = isWindows();
   const blocked = isWin ? BLOCKED_PATHS_WIN : BLOCKED_PATHS_UNIX;
   const normalized = isWin ? resolved.toLowerCase() : resolved;
   return blocked.some((b) => normalized.startsWith(isWin ? b.toLowerCase() : b));
@@ -148,7 +155,13 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => a.name.localeCompare(b.name));
 
     // On Windows, when at a drive root (e.g. C:\), parentPath should show drive list
-    const isWin = process.platform === "win32";
+    // NB: call the cross-module helper, NOT inline `process.platform === "win32"`.
+  // Turbopack's production minifier constant-folds an inline `process.platform`
+  // comparison to the BUILD machine's OS (false on macOS/Linux) and then
+  // dead-code-eliminates every Windows-only branch — which silently stripped the
+  // entire drive-letter detection from published builds. A cross-module call is
+  // opaque to that fold, so it stays a genuine runtime check on the user's OS.
+  const isWin = isWindows();
     const parentPath = path.dirname(resolved);
     const isAtRoot = isWin
       ? resolved === parentPath // drive root: C:\ → dirname is C:\
