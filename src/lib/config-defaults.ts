@@ -100,6 +100,16 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "number",
     label: "Idle Timeout (seconds)",
   },
+  "terminal.fontSize": {
+    defaultValue: 13,
+    type: "number",
+    label: "Terminal Font Size",
+  },
+  "terminal.fontFamily": {
+    defaultValue: "Menlo, Monaco, 'Courier New', monospace",
+    type: "string",
+    label: "Terminal Font Family",
+  },
   "assistant.systemPrompt": {
     defaultValue: [
       "You are Tower Assistant — the built-in AI operator for the Tower task management platform.",

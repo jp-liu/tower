@@ -6,7 +6,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { useTheme } from "next-themes";
 import { useI18n } from "@/lib/i18n";
-import { getActualWsPort } from "@/actions/config-actions";
+import { getActualWsPort, getConfigValues } from "@/actions/config-actions";
 import "@xterm/xterm/css/xterm.css";
 
 export interface TaskTerminalProps {
@@ -105,6 +105,19 @@ export function TaskTerminal({
     let cancelled = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let sessionEnded = false;
+
+    // Apply the user-configured terminal font (settings → Terminal), then refit.
+    // Created with defaults above; override here so 2K/4K users can size it up.
+    getConfigValues(["terminal.fontSize", "terminal.fontFamily"])
+      .then((cfg) => {
+        if (cancelled) return;
+        const fontSize = Number(cfg["terminal.fontSize"]);
+        const fontFamily = cfg["terminal.fontFamily"];
+        if (Number.isFinite(fontSize) && fontSize > 0) terminal.options.fontSize = fontSize;
+        if (typeof fontFamily === "string" && fontFamily.trim()) terminal.options.fontFamily = fontFamily;
+        try { fitAddon.fit(); } catch { /* container detaching */ }
+      })
+      .catch(() => { /* keep defaults */ });
 
     function connectWs(wsPort: number) {
       if (cancelled || sessionEnded) return;

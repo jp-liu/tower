@@ -304,6 +304,10 @@ export function SettingsPage() {
   const [detectedApps, setDetectedApps] = useState<DetectedTerminalApp[]>([]);
   const [editorCommand, setEditorCommand] = useState("");
   const [detectedEditors, setDetectedEditors] = useState<DetectedEditor[]>([]);
+  const [terminalFontSize, setTerminalFontSize] = useState(13);
+  const [terminalFontFamily, setTerminalFontFamily] = useState(
+    "Menlo, Monaco, 'Courier New', monospace"
+  );
 
   // ── AI Tools state ─────────────────────────────────────────────
   const [providers, setProviders] = useState<ProviderAvailability[]>([]);
@@ -384,6 +388,8 @@ export function SettingsPage() {
     getAvailableTerminalApps().then(setDetectedApps);
     getConfigValue<string>("editor.command", "").then(setEditorCommand);
     getAvailableEditors().then(setDetectedEditors);
+    getConfigValue<number>("terminal.fontSize", 13).then(setTerminalFontSize);
+    getConfigValue<string>("terminal.fontFamily", "Menlo, Monaco, 'Courier New', monospace").then(setTerminalFontFamily);
   }, []);
 
   // Normalize legacy values: if terminal.app was saved as a display name
@@ -950,6 +956,51 @@ export function SettingsPage() {
               })}
             </div>
           )}
+        </div>
+
+        {/* Terminal font — size + family (helps on 2K/4K displays) */}
+        <div className="py-4 border-b border-border/50">
+          <div className="min-w-0 flex-1 pr-4">
+            <div className="text-sm font-medium">{t("settings.terminalFont.label")}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {t("settings.terminalFont.desc")}
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              {t("settings.terminalFont.size")}
+              <input
+                type="number"
+                min={8}
+                max={40}
+                value={terminalFontSize}
+                onChange={(e) => {
+                  const v = Math.max(8, Math.min(40, Math.round(Number(e.target.value) || 13)));
+                  setTerminalFontSize(v);
+                  void setConfigValue("terminal.fontSize", v);
+                }}
+                className="h-8 w-20 rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+              />
+            </label>
+            <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-muted-foreground">
+              {t("settings.terminalFont.family")}
+              <input
+                type="text"
+                value={terminalFontFamily}
+                placeholder="Menlo, Monaco, 'Courier New', monospace"
+                onChange={(e) => setTerminalFontFamily(e.target.value)}
+                onBlur={(e) => {
+                  const v = e.target.value.trim() || "Menlo, Monaco, 'Courier New', monospace";
+                  setTerminalFontFamily(v);
+                  void setConfigValue("terminal.fontFamily", v);
+                }}
+                className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 font-mono text-xs text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+              />
+            </label>
+          </div>
+          <div className="mt-1.5 text-[11px] text-muted-foreground/70">
+            {t("settings.terminalFont.hint")}
+          </div>
         </div>
 
         {/* Editor — show all known editors; disable + tooltip the uninstalled ones */}

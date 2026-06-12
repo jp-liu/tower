@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { useTheme } from "next-themes";
-import { getActualWsPort } from "@/actions/config-actions";
+import { getActualWsPort, getConfigValues } from "@/actions/config-actions";
 import { PREVIEW_TASK_ID } from "@/lib/preview/ws-constants";
 import "@xterm/xterm/css/xterm.css";
 
@@ -66,6 +66,19 @@ export function PreviewLogTerminal({
 
     let aborted = false;
     let ws: WebSocket | null = null;
+
+    // Apply the user-configured terminal font (settings → Terminal), then refit.
+    getConfigValues(["terminal.fontSize", "terminal.fontFamily"])
+      .then((cfg) => {
+        if (aborted) return;
+        const fontSize = Number(cfg["terminal.fontSize"]);
+        const fontFamily = cfg["terminal.fontFamily"];
+        if (Number.isFinite(fontSize) && fontSize > 0) terminal.options.fontSize = fontSize;
+        if (typeof fontFamily === "string" && fontFamily.trim()) terminal.options.fontFamily = fontFamily;
+        try { fitAddon.fit(); } catch { /* container detaching */ }
+      })
+      .catch(() => { /* keep defaults */ });
+
     void (async () => {
       const wsPort = await getActualWsPort();
       if (aborted) return;
