@@ -9,6 +9,16 @@ import { db } from "@/lib/db";
 import { requireLocalhost, validateTaskId } from "@/lib/internal-api-guard";
 import { readConfigValue } from "@/lib/config-reader";
 import { ensureAssetsDir } from "@/lib/file-utils";
+import { deriveSourceKey, hashFile, buildAssetFilename } from "@/lib/asset-dedup";
+
+/** Prisma unique-constraint violation (lost concurrent insert race). */
+function isUniqueConstraintError(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { code?: string }).code === "P2002"
+  );
+}
 
 const CUID_RE = /^c[a-z0-9]{20,30}$/;
 
@@ -135,20 +145,61 @@ export async function POST(request: NextRequest) {
   // Ensure target directory exists
   const assetsDir = ensureAssetsDir(projectId);
 
-  // Handle filename collision
-  let filename = path.basename(filePath);
-  let destPath = path.join(assetsDir, filename);
+  // Stable identity + content hash for idempotent dedup. The PostToolUse hook
+  // fires on every Write/Edit, so the same file is uploaded many times during a
+  // task. Keying by (projectId, sourceKey) collapses those onto ONE asset
+  // instead of accumulating `<name>-<Date.now()>.<ext>` copies.
+  const sourceKey = deriveSourceKey(resolvedFile, projectRoot);
+  const contentHash = hashFile(resolvedFile);
+  const mimeType = MIME_MAP[ext] || "application/octet-stream";
 
+  // Re-upload of a file we already captured → update in place (or skip).
+  const existing = await db.projectAsset.findUnique({
+    where: { projectId_sourceKey: { projectId, sourceKey } },
+  });
+
+  if (existing) {
+    if (existing.contentHash === contentHash) {
+      // Identical content already on record → idempotent no-op.
+      return NextResponse.json({
+        success: true,
+        assetId: existing.id,
+        deduped: true,
+      });
+    }
+    // Content changed → overwrite the same on-disk file, keep one record.
+    try {
+      await copyFile(resolvedFile, existing.path);
+    } catch (err) {
+      return NextResponse.json(
+        { error: `Failed to copy file: ${err instanceof Error ? err.message : "unknown"}` },
+        { status: 500 }
+      );
+    }
+    const updated = await db.projectAsset.update({
+      where: { id: existing.id },
+      data: { contentHash, size: fileStat.size, mimeType, taskId },
+    });
+    return NextResponse.json({
+      success: true,
+      assetId: updated.id,
+      updated: true,
+    });
+  }
+
+  // First time we see this source file. Use the basename as-is; only when a
+  // DIFFERENT file already occupies that name do we disambiguate — with a
+  // deterministic sourceKey hash, never a timestamp.
+  let filename = path.posix.basename(sourceKey);
+  let destPath = path.join(assetsDir, filename);
   if (existsSync(destPath)) {
-    const stem = path.basename(filename, path.extname(filename));
-    const timestamp = Date.now();
-    filename = `${stem}-${timestamp}.${ext}`;
+    filename = buildAssetFilename(sourceKey, ext, true);
     destPath = path.join(assetsDir, filename);
   }
 
   // Copy file
   try {
-    await copyFile(filePath, destPath);
+    await copyFile(resolvedFile, destPath);
   } catch (err) {
     return NextResponse.json(
       { error: `Failed to copy file: ${err instanceof Error ? err.message : "unknown"}` },
@@ -157,17 +208,41 @@ export async function POST(request: NextRequest) {
   }
 
   // Create DB record
-  const mimeType = MIME_MAP[ext] || "application/octet-stream";
-  const asset = await db.projectAsset.create({
-    data: {
-      filename,
-      path: destPath,
-      mimeType,
-      size: fileStat.size,
-      projectId,
-      taskId,
-    },
-  });
-
-  return NextResponse.json({ success: true, assetId: asset.id });
+  try {
+    const asset = await db.projectAsset.create({
+      data: {
+        filename,
+        path: destPath,
+        mimeType,
+        size: fileStat.size,
+        projectId,
+        taskId,
+        sourceKey,
+        contentHash,
+      },
+    });
+    return NextResponse.json({ success: true, assetId: asset.id });
+  } catch (err) {
+    // Lost a concurrent race on the (projectId, sourceKey) unique key — the
+    // winning request already created the record; update it in place instead
+    // of surfacing a 500 or creating a duplicate.
+    if (isUniqueConstraintError(err)) {
+      const winner = await db.projectAsset.findUnique({
+        where: { projectId_sourceKey: { projectId, sourceKey } },
+      });
+      if (winner) {
+        await copyFile(resolvedFile, winner.path).catch(() => {});
+        const updated = await db.projectAsset.update({
+          where: { id: winner.id },
+          data: { contentHash, size: fileStat.size, mimeType, taskId },
+        });
+        return NextResponse.json({
+          success: true,
+          assetId: updated.id,
+          updated: true,
+        });
+      }
+    }
+    throw err;
+  }
 }

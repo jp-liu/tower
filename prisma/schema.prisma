@@ -234,11 +234,17 @@ model ProjectAsset {
   description String?  @default("")
   projectId   String
   taskId      String?
+  // 自动上传去重：sourceKey 是来源文件的稳定逻辑标识（剥离 worktree 前缀的项目相对路径），
+  // contentHash 是内容 sha256。同一文件再次写入按 (projectId, sourceKey) 就地更新，
+  // 内容未变则幂等跳过 —— 避免每次编辑都追加时间戳生成新资产。旧记录二者为 null。
+  sourceKey   String?
+  contentHash String?
   createdAt   DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   task    Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
+  @@unique([projectId, sourceKey])
   @@index([projectId])
   @@index([taskId])
 }
