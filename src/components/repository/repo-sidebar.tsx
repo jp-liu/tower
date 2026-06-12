@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useResizableWidth } from "@/hooks/use-resizable-width";
 import {
   ChevronDown, ChevronRight,
   GitBranch, FileText, Pencil, FolderOpen, GitCommitVertical,
@@ -117,6 +118,14 @@ function CopyableBox({ value, ariaLabel }: { value: string; ariaLabel: string })
 export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
   const { t, locale } = useI18n();
   const router = useRouter();
+  // Drag-to-resize width (min/max px, persisted) — see issue #14.
+  const { width, isDragging, startResize } = useResizableWidth({
+    storageKey: "tower:repo-sidebar-width",
+    defaultWidth: 288, // matches the previous w-72
+    minWidth: 240,
+    maxWidth: 560,
+    edge: "left", // handle sits on the left edge of this right-docked panel
+  });
   const [gitExpanded, setGitExpanded] = useState(true);
   const [browseExpanded, setBrowseExpanded] = useState(true);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -270,8 +279,23 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
   };
 
   return (
-    <aside className="relative w-72 flex-shrink-0 overflow-y-auto border-l border-border bg-sidebar">
+    <aside
+      className="relative flex-shrink-0 border-l border-border bg-sidebar"
+      style={{ width }}
+    >
+      {/* Drag handle — left edge. Mirrors the detail-page splitter style:
+          thin bar, col-resize cursor, highlights on hover / while dragging. */}
+      <div
+        onPointerDown={startResize}
+        className={`absolute left-0 top-0 z-20 h-full w-1 -translate-x-1/2 cursor-col-resize transition-colors hover:bg-primary/20 ${
+          isDragging ? "bg-primary/40" : "bg-transparent"
+        }`}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={t("sidebar.right.resize")}
+      />
 
+      <div className="h-full overflow-y-auto">
       {/* ── Project Details ── */}
       <div className="border-b border-border p-4">
         <div className="flex items-start justify-between">
@@ -555,6 +579,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
             )}
           </div>
         )}
+      </div>
       </div>
 
       {/* ── Edit Project Dialog ── */}
