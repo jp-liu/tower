@@ -456,30 +456,32 @@ export async function openInEditor(dirPath: string): Promise<void> {
   }
 
   const { buildEditorCommand, buildEditorUrlOpenCommand } = await import("@/lib/open-targets");
-  const { resolveCommandPath, resolveSpawnTarget, detectEditors } = await import("@/lib/platform");
+  const { resolveEditorBinary, resolveSpawnTarget, detectEditors } = await import("@/lib/platform");
 
   let editorCommand = await readConfigValue<string>("editor.command", "");
   if (!editorCommand) {
     const detected = (await detectEditors()).filter((e) => e.installed);
     if (detected.length === 0) {
-      throw new Error("No editor configured and none detected on PATH");
+      throw new Error("No editor configured and none detected");
     }
     editorCommand = detected[0].command;
   }
 
-  // Validate + build via the allowlisted pure builder (throws if disallowed).
+  // Validate against the allowlist (throws if disallowed); cli.args is [dirPath].
   const cli = buildEditorCommand(process.platform, editorCommand, dirPath);
 
-  // Prefer the CLI when its binary resolves on PATH.
-  const resolved = await resolveCommandPath(cli.command);
-  if (resolved) {
+  // Resolve the binary via PATH, then known install locations (so an editor
+  // whose CLI shim isn't on PATH — e.g. Sublime's `subl` on macOS — still
+  // launches from its .app bundle / default install path).
+  const binary = await resolveEditorBinary(cli.command);
+  if (binary) {
     // Wrap .cmd/.bat shims through cmd.exe on Windows (Node CVE-2024-27980).
-    const target = await resolveSpawnTarget(cli.command, cli.args);
+    const target = await resolveSpawnTarget(binary, cli.args);
     execFileSync(target.command, target.args);
     return;
   }
 
-  // CLI not on PATH — fall back to the editor's URL scheme if it has one.
+  // Not on PATH and no known install path — fall back to the URL scheme if any.
   const url = buildEditorUrlOpenCommand(process.platform, editorCommand, dirPath);
   execFileSync(url.command, url.args);
 }

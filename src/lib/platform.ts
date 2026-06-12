@@ -629,17 +629,119 @@ export const KNOWN_EDITORS: Array<{ name: string; command: string }> = [
 ];
 
 /**
- * Detect installed editor CLIs by probing PATH for each known command.
- * Returns them in KNOWN_EDITORS order so the first hit is a sensible default.
+ * Known non-PATH install locations per editor command, by platform. Used as a
+ * fallback when the CLI isn't on PATH — many GUI editors install the .app /
+ * .exe but never add their CLI shim to PATH (Sublime Text on macOS is the
+ * classic case: the `subl` symlink must be created manually).
+ *
+ * macOS: the launcher binary inside the .app bundle (accepts a folder arg).
+ * Windows: the default per-user / per-machine install paths. `%VAR%` tokens are
+ * expanded from the environment. Paths the editor doesn't install to a stable
+ * default (notably JetBrains on Windows, where Toolbox versions the directory)
+ * are intentionally omitted — those still rely on PATH.
+ */
+const EDITOR_FALLBACK_PATHS: Record<string, Partial<Record<NodeJS.Platform, string[]>>> = {
+  code: {
+    darwin: ["/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"],
+    win32: [
+      "%LOCALAPPDATA%\\Programs\\Microsoft VS Code\\bin\\code.cmd",
+      "%ProgramFiles%\\Microsoft VS Code\\bin\\code.cmd",
+    ],
+  },
+  "code-insiders": {
+    darwin: ["/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code-insiders"],
+    win32: [
+      "%LOCALAPPDATA%\\Programs\\Microsoft VS Code Insiders\\bin\\code-insiders.cmd",
+      "%ProgramFiles%\\Microsoft VS Code Insiders\\bin\\code-insiders.cmd",
+    ],
+  },
+  cursor: {
+    darwin: ["/Applications/Cursor.app/Contents/Resources/app/bin/cursor"],
+    win32: ["%LOCALAPPDATA%\\Programs\\cursor\\resources\\app\\bin\\cursor.cmd"],
+  },
+  windsurf: {
+    darwin: ["/Applications/Windsurf.app/Contents/Resources/app/bin/windsurf"],
+    win32: ["%LOCALAPPDATA%\\Programs\\Windsurf\\bin\\windsurf.cmd"],
+  },
+  zed: {
+    darwin: ["/Applications/Zed.app/Contents/MacOS/cli"],
+  },
+  subl: {
+    darwin: ["/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl"],
+    win32: [
+      "%ProgramFiles%\\Sublime Text\\subl.exe",
+      "%ProgramFiles%\\Sublime Text 3\\subl.exe",
+    ],
+  },
+  idea: {
+    darwin: [
+      "/Applications/IntelliJ IDEA.app/Contents/MacOS/idea",
+      "/Applications/IntelliJ IDEA CE.app/Contents/MacOS/idea",
+    ],
+  },
+  webstorm: { darwin: ["/Applications/WebStorm.app/Contents/MacOS/webstorm"] },
+  pycharm: {
+    darwin: [
+      "/Applications/PyCharm.app/Contents/MacOS/pycharm",
+      "/Applications/PyCharm CE.app/Contents/MacOS/pycharm",
+    ],
+  },
+  goland: { darwin: ["/Applications/GoLand.app/Contents/MacOS/goland"] },
+  rubymine: { darwin: ["/Applications/RubyMine.app/Contents/MacOS/rubymine"] },
+  phpstorm: { darwin: ["/Applications/PhpStorm.app/Contents/MacOS/phpstorm"] },
+  clion: { darwin: ["/Applications/CLion.app/Contents/MacOS/clion"] },
+  rider: { darwin: ["/Applications/Rider.app/Contents/MacOS/rider"] },
+};
+
+/** Expand `%VAR%` tokens in a Windows path from the given environment. */
+function expandWindowsEnv(p: string, env: NodeJS.ProcessEnv): string {
+  return p.replace(/%([^%]+)%/g, (whole, name: string) => {
+    const direct = env[name];
+    if (direct !== undefined) return direct;
+    // Windows env keys are case-insensitive; fall back to a case-folded lookup.
+    const key = Object.keys(env).find((k) => k.toLowerCase() === name.toLowerCase());
+    return key ? env[key] ?? whole : whole;
+  });
+}
+
+/**
+ * Resolve an editor command to an absolute binary path. Tries PATH first, then
+ * the known platform-specific install locations (EDITOR_FALLBACK_PATHS) so an
+ * editor whose CLI shim isn't on PATH is still detected and launchable.
+ * Returns null when neither the PATH probe nor any fallback path exists.
+ */
+export async function resolveEditorBinary(
+  command: string,
+  opts: ResolveCommandOptions = {},
+): Promise<string | null> {
+  const platform = opts.platform ?? process.platform;
+  const env = opts.env ?? process.env;
+
+  const onPath = await resolveCommandPath(command, opts);
+  if (onPath) return onPath;
+
+  const candidates = EDITOR_FALLBACK_PATHS[command]?.[platform] ?? [];
+  for (const raw of candidates) {
+    const candidate = isWindows(platform) ? expandWindowsEnv(raw, env) : raw;
+    if (await pathExists(candidate, platform)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Detect installed editors. Probes PATH for each known command, then falls back
+ * to known install locations (EDITOR_FALLBACK_PATHS) so GUI editors whose CLI
+ * isn't on PATH still show as installed. Returns them in KNOWN_EDITORS order so
+ * the first hit is a sensible default.
  */
 export async function detectEditors(
   platform: NodeJS.Platform = process.platform,
 ): Promise<DetectedEditor[]> {
   // Return the FULL known list with an `installed` flag so the UI can show
-  // every editor and disable the ones whose CLI isn't on PATH.
+  // every editor and disable the ones that aren't found.
   const results: DetectedEditor[] = [];
   for (const e of KNOWN_EDITORS) {
-    const installed = !!(await resolveCommandPath(e.command, { platform }));
+    const installed = !!(await resolveEditorBinary(e.command, { platform }));
     results.push({ name: e.name, command: e.command, installed });
   }
   return results;

@@ -7,6 +7,7 @@ import { resolveSdkExecutable } from "@/lib/platform";
 import { db } from "@/lib/db";
 import { buildTowerMcpConfig } from "@/lib/ai/install-orchestrator";
 import { ATTACHMENT_SUBPATH_RE, MAX_ATTACHMENTS } from "@/lib/attachment-utils";
+import { readConfigValue } from "@/lib/config-reader";
 
 const claudeAdapter = new ClaudeCliAdapter();
 
@@ -129,6 +130,38 @@ export async function POST(request: NextRequest) {
           pathToClaudeCodeExecutable: claudePath,
         };
 
+        // The assistant is a task operator: parse intent → call one Tower MCP
+        // tool → confirm in a sentence or two. It is NOT a reasoning agent, so
+        // the SDK default `effort: "high"` is wrong here — on Opus-class models
+        // high effort + adaptive thinking can emit a huge *thinking* trace for a
+        // trivial request, and thinking tokens count toward the per-response
+        // output cap. That is the real reason a turn whose final reply is only a
+        // few hundred chars can still blow past 64K output tokens: the model
+        // "thinks" past the ceiling before it ever writes the short answer.
+        // Low effort keeps thinking minimal and replies terse; `maxTurns` bounds
+        // the agent loop so a confused turn can't spin indefinitely.
+        const effort = await readConfigValue<"low" | "medium" | "high">(
+          "assistant.effort",
+          "low"
+        );
+        const maxTurns = await readConfigValue<number>("assistant.maxTurns", 30);
+        options.effort = effort;
+        options.maxTurns = maxTurns;
+
+        // Safety net: raise the CLI's per-response output ceiling too. With low
+        // effort this should never be hit, but if a future config bumps effort
+        // back up, 128K (Opus/Fable ceiling) gives more headroom than the 64K
+        // default. `env` REPLACES process.env for the subprocess — spread first
+        // so the CLI keeps PATH and friends.
+        const maxOutputTokens = await readConfigValue<number>(
+          "assistant.maxOutputTokens",
+          128000
+        );
+        options.env = {
+          ...process.env,
+          CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(maxOutputTokens),
+        };
+
         // Resume previous session if sessionId provided
         if (body.sessionId) {
           (options as Record<string, unknown>).resume = body.sessionId;
@@ -216,13 +249,18 @@ export async function POST(request: NextRequest) {
                 session_id?: string;
                 num_turns?: number;
                 is_error?: boolean;
+                usage?: { output_tokens?: number; input_tokens?: number };
               };
               // Always log the turn outcome so "it never does anything" reports
               // are diagnosable: a tool-less turn that still resolves "success"
               // points at the model/prompt; an error subtype points at the CLI.
+              // output_tokens (which includes the thinking trace) tells us whether
+              // a turn is ballooning — a few-hundred-char reply should be well
+              // under ~2K; tens of thousands means runaway thinking or a loop.
               console.error(
                 `[assistant-chat] turn done — subtype=${resultMsg.subtype ?? "?"} ` +
                   `toolUses=${toolUseCount} numTurns=${resultMsg.num_turns ?? "?"} ` +
+                  `outputTokens=${resultMsg.usage?.output_tokens ?? "?"} ` +
                   `firstTurn=${!body.sessionId}`
               );
               if (resultMsg.subtype?.includes("error") || resultMsg.is_error) {
@@ -296,11 +334,14 @@ export async function POST(request: NextRequest) {
           err instanceof Error && err.stack ? `\n${err.stack}` : ""
         );
         // Surface the real reason to the (localhost) client so it shows up in
-        // the chat bubble and can be reported directly.
-        send({
-          type: "error",
-          content: `Assistant encountered an error: ${detail}`,
-        });
+        // the chat bubble and can be reported directly. Give the output-cap
+        // error an actionable message — it means the model wanted to emit more
+        // than the current model's per-response limit (64K on Sonnet/Haiku,
+        // 128K on Opus); the fix is a shorter ask or a higher-output model.
+        const friendly = /output token maximum|max_output_tokens/i.test(detail)
+          ? "回复内容超出了模型单次输出上限。请把问题拆小一些，或在设置里把 assistant.maxOutputTokens 调整为所用模型支持的上限（Sonnet/Haiku 最高 64K，Opus 最高 128K）。"
+          : `Assistant encountered an error: ${detail}`;
+        send({ type: "error", content: friendly });
       } finally {
         send({ type: "done" });
         controller.close();
