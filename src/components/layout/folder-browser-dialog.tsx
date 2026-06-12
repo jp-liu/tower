@@ -248,23 +248,6 @@ export function FolderBrowserDialog({
               </TooltipTrigger>
               <TooltipContent side="bottom" sideOffset={4}>{t("folder.parent")}</TooltipContent>
             </Tooltip>
-            {data?.isWindows && (
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      variant={showDrives ? "default" : "outline"}
-                      size="icon-sm"
-                      onClick={() => setShowDrives((v) => !v)}
-                      className="shrink-0 text-muted-foreground"
-                    />
-                  }
-                >
-                  <HardDrive className="h-3.5 w-3.5" />
-                </TooltipTrigger>
-                <TooltipContent side="bottom" sideOffset={4}>{t("folder.drives")}</TooltipContent>
-              </Tooltip>
-            )}
             <Tooltip>
               <TooltipTrigger
                 render={
