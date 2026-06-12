@@ -213,7 +213,11 @@ export async function resolveCommandPath(
 export type ExecSyncFn = (cmd: string) => string;
 
 const defaultExecSync: ExecSyncFn = (cmd) =>
-  execSync(cmd, { encoding: "utf-8", timeout: 5000 });
+  // Suppress stderr: Windows `where` prints a localized "not found" line (GBK on
+  // zh-CN, e.g. "信息: 用提供的模式无法找到文件。") to stderr when the command is
+  // absent. With inherited stderr that leaks to the console as mojibake. The
+  // not-found case is already handled via the thrown non-zero exit below.
+  execSync(cmd, { encoding: "utf-8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] });
 
 /**
  * Sync command resolution — uses `where` (Windows) or `which` (Unix).
@@ -244,6 +248,7 @@ export function resolveCommandPathSync(
       const resolved = execFileSync("which", [command], {
         encoding: "utf-8",
         timeout: 5000,
+        stdio: ["ignore", "pipe", "ignore"],
       }).trim();
       if (resolved) return resolved;
     } catch {

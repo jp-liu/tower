@@ -65,7 +65,9 @@ async function resolveRgPath(): Promise<string> {
   // collapse this ternary to "which" only, breaking rg lookup on Windows.
   const finder = isWindows() ? "where" : "which";
   try {
-    const stdout = execFileSync(finder, ["rg"], { encoding: "utf-8", timeout: 3000 });
+    // stdio ignore stderr: Windows `where` prints a localized (GBK) "not found"
+    // line to stderr that otherwise leaks to the console as mojibake.
+    const stdout = execFileSync(finder, ["rg"], { encoding: "utf-8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] });
     const firstLine = stdout.split(/\r?\n/)[0]?.trim();
     if (firstLine && existsSync(firstLine)) return firstLine;
   } catch {
