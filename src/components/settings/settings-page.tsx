@@ -276,6 +276,7 @@ type SystemForm = {
   maxUploadMb: number;
   maxConcurrent: number;
   maxReadableMb: number;
+  archiveDelayDays: number;
   taskDefaultUseWorktree: boolean;
   taskDefaultAutoStart: boolean;
 };
@@ -358,6 +359,7 @@ export function SettingsPage() {
     maxUploadMb: 50,
     maxConcurrent: 3,
     maxReadableMb: 5,
+    archiveDelayDays: 7,
     taskDefaultUseWorktree: true,
     taskDefaultAutoStart: false,
   });
@@ -493,6 +495,7 @@ export function SettingsPage() {
       "system.maxUploadBytes",
       "system.maxConcurrentExecutions",
       "system.maxReadableFileBytes",
+      "board.archiveDelayDays",
       "task.defaultUseWorktree",
       "task.defaultAutoStart",
       "git.timeoutSec",
@@ -514,6 +517,8 @@ export function SettingsPage() {
         maxConcurrent:
           (cfg["system.maxConcurrentExecutions"] as number) ?? 3,
         maxReadableMb: Math.round(maxReadableBytes / 1024 / 1024),
+        archiveDelayDays:
+          (cfg["board.archiveDelayDays"] as number) ?? 7,
         taskDefaultUseWorktree:
           typeof cfg["task.defaultUseWorktree"] === "boolean"
             ? (cfg["task.defaultUseWorktree"] as boolean)
@@ -669,6 +674,10 @@ export function SettingsPage() {
     await setConfigValue(
       "system.maxReadableFileBytes",
       systemForm.maxReadableMb * 1024 * 1024
+    );
+    await setConfigValue(
+      "board.archiveDelayDays",
+      systemForm.archiveDelayDays
     );
   };
 
@@ -1710,6 +1719,34 @@ export function SettingsPage() {
                   className="w-24 text-right rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
                 />
                 <span className="text-sm text-muted-foreground">MB</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <label className="text-sm font-medium">
+                  {t("settings.config.system.archiveDelay")}
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.config.system.archiveDelayHint")}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={systemForm.archiveDelayDays}
+                  onChange={(e) =>
+                    setSystemForm((f) => ({
+                      ...f,
+                      archiveDelayDays: Number(e.target.value),
+                    }))
+                  }
+                  className="w-24 text-right rounded-lg border-border/50 bg-muted/30 focus:ring-2 focus:ring-amber-500/30"
+                />
+                <span className="text-sm text-muted-foreground">
+                  {t("settings.config.system.archiveDelayUnit")}
+                </span>
               </div>
             </div>
           </div>
