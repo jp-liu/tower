@@ -72,15 +72,22 @@ export async function getProjectNotes(
   return db.projectNote.findMany({
     where: {
       projectId,
-      taskId: null,
+      // No taskId filter: notes bind to project (and optionally a task) just
+      // like assets do. Task-linked notes — including auto-generated task
+      // overviews / session insights — must surface in the Notes page too, so
+      // they are no longer hidden here. The task linkage is exposed via the
+      // `task` relation below (badge + drawer), mirroring the Assets page.
       ...(options?.category ? { category: options.category } : {}),
     },
     // Secondary `id desc` makes ordering deterministic when two notes share
     // the same millisecond `updatedAt` (otherwise SQLite's tie order is
     // unspecified, causing intermittent ordering).
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+    include: { task: { select: { id: true, title: true } } },
   });
 }
+
+export type ProjectNoteWithTask = Awaited<ReturnType<typeof getProjectNotes>>[number];
 
 export async function getTaskNotes(taskId: string) {
   return db.projectNote.findMany({

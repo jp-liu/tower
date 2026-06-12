@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, useCallback } from "react";
-import { Archive, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Archive, CheckCircle2, XCircle, Loader2, Search } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { useI18n } from "@/lib/i18n";
 import { SubPageNav } from "@/components/layout/sub-page-nav";
@@ -89,9 +89,15 @@ export function ArchivePageClient({
   const [projectId, setProjectId] = useState<string | null>(initialProjectId);
   const [tasks, setTasks] = useState<ArchivedTask[]>(initialTasks);
   const [drawerTaskId, setDrawerTaskId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const ws = allWorkspaces.find((w) => w.id === wsId);
   const projects = ws?.projects ?? [];
+
+  const query = searchQuery.trim().toLowerCase();
+  const filteredTasks = query
+    ? tasks.filter((task) => task.title.toLowerCase().includes(query))
+    : tasks;
 
   const reload = useCallback(
     (pid: string | null) => {
@@ -151,8 +157,18 @@ export function ArchivePageClient({
             </SelectContent>
           </Select>
         )}
-        <span className="ml-auto rounded-full bg-muted px-2.5 py-0.5 text-[11px] text-muted-foreground">
-          {tasks.length} {t("archive.tasksCount")}
+        <div className="relative ml-auto">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t("archive.searchPlaceholder")}
+            className="h-8 w-48 rounded-md border border-border bg-background pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
+        <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] text-muted-foreground">
+          {filteredTasks.length} {t("archive.tasksCount")}
         </span>
       </div>
 
@@ -164,19 +180,19 @@ export function ArchivePageClient({
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
             </div>
           )}
-          {tasks.length === 0 ? (
+          {filteredTasks.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 py-16 text-center">
               <Archive className="h-10 w-10 text-muted-foreground/30" />
               <p className="text-sm font-medium text-muted-foreground">
-                {t("archive.noTasks")}
+                {query ? t("archive.noSearchResults") : t("archive.noTasks")}
               </p>
               <p className="text-xs text-muted-foreground/60">
-                {t("archive.noTasksDesc")}
+                {query ? t("archive.noSearchResultsDesc") : t("archive.noTasksDesc")}
               </p>
             </div>
           ) : (
             <div className="space-y-2">
-              {tasks.map((task) => {
+              {filteredTasks.map((task) => {
                 const isDone = task.status === "DONE";
                 const lastExecution = task.executions[0];
                 return (

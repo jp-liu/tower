@@ -191,8 +191,11 @@ describe("note-actions", () => {
   });
 
   describe("getProjectNotes", () => {
-    it("queries with projectId filter and taskId: null", async () => {
-      const mockNotes = [{ id: "n1", title: "Note 1", projectId: "p1", taskId: null }];
+    it("queries by projectId WITHOUT a taskId filter (task-bound notes must surface too)", async () => {
+      const mockNotes = [
+        { id: "n1", title: "Note 1", projectId: "p1", taskId: null, task: null },
+        { id: "n2", title: "Task overview", projectId: "p1", taskId: "t1", task: { id: "t1", title: "T" } },
+      ];
       mockDb.projectNote.findMany.mockResolvedValue(mockNotes);
 
       const result = await getProjectNotes("p1");
@@ -200,7 +203,17 @@ describe("note-actions", () => {
       expect(result).toEqual(mockNotes);
       const callArgs = mockDb.projectNote.findMany.mock.calls[0][0];
       expect(callArgs.where.projectId).toBe("p1");
-      expect(callArgs.where.taskId).toBeNull();
+      // taskId must NOT be constrained — both project-level and task-bound notes return.
+      expect(callArgs.where.taskId).toBeUndefined();
+    });
+
+    it("includes the linked task (id + title) for the task badge", async () => {
+      mockDb.projectNote.findMany.mockResolvedValue([]);
+
+      await getProjectNotes("p1");
+
+      const callArgs = mockDb.projectNote.findMany.mock.calls[0][0];
+      expect(callArgs.include).toEqual({ task: { select: { id: true, title: true } } });
     });
 
     it("includes category filter when category option is provided", async () => {

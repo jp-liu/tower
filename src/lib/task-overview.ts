@@ -227,10 +227,11 @@ export async function captureTaskOverview(
           content,
           category: TASK_OVERVIEW_CATEGORY,
           projectId: captured.projectId,
-          // taskId stays null so the note surfaces in the project Notes page
-          // (getProjectNotes filters taskId:null). The task linkage lives as a
-          // text backlink in the note body instead.
-          taskId: null,
+          // Bind to the task so the note surfaces both in the project Notes page
+          // (getProjectNotes no longer filters by taskId) and inside the task's
+          // overview drawer (getTaskNotes). A text backlink in the body remains
+          // as a human-readable reference.
+          taskId: captured.taskId,
         },
       });
       await syncNoteToFts(db, { id: note.id, title: note.title, content: note.content });

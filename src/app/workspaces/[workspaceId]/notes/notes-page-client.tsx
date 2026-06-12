@@ -1,17 +1,19 @@
 "use client";
 
 import { useState, useTransition, useCallback } from "react";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, Search } from "lucide-react";
 import { SubPageNav } from "@/components/layout/sub-page-nav";
-import type { ProjectNote } from "@prisma/client";
 import { useI18n } from "@/lib/i18n";
 import { NOTE_CATEGORIES_PRESET } from "@/lib/constants";
 import { createNote, updateNote, deleteNote, getProjectNotes } from "@/actions/note-actions";
+import type { ProjectNoteWithTask } from "@/actions/note-actions";
 import { CategoryFilter } from "@/components/notes/category-filter";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { NoteList } from "@/components/notes/note-list";
 import { NoteEditor } from "@/components/notes/note-editor";
+import { NotePreviewDialog } from "@/components/notes/note-preview-dialog";
+import { TaskOverviewDrawer } from "@/components/task/task-overview-drawer";
 import type { NoteItem } from "@/components/notes/note-card";
 
 interface SimpleProject {
@@ -30,7 +32,7 @@ interface NotesPageClientProps {
   allWorkspaces: SimpleWorkspace[];
   initialWorkspaceId: string;
   initialProjectId: string | null;
-  initialNotes: ProjectNote[];
+  initialNotes: ProjectNoteWithTask[];
 }
 
 export function NotesPageClient({
@@ -47,8 +49,13 @@ export function NotesPageClient({
   const [listProjectId, setListProjectId] = useState<string | null>(initialProjectId);
 
   // Data state
-  const [notes, setNotes] = useState<ProjectNote[]>(initialNotes);
+  const [notes, setNotes] = useState<ProjectNoteWithTask[]>(initialNotes);
   const [activeCategory, setActiveCategory] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Full-content preview dialog (fixes truncated display) + linked-task drawer
+  const [previewNote, setPreviewNote] = useState<NoteItem | null>(null);
+  const [drawerTaskId, setDrawerTaskId] = useState<string | null>(null);
 
   // Form state (independent from list view)
   const [editingNote, setEditingNote] = useState<NoteItem | null>(null);
@@ -167,12 +174,20 @@ export function NotesPageClient({
   };
 
   // Filtered notes
-  const filteredNotes: NoteItem[] =
-    activeCategory === "all"
-      ? notes.map((n) => ({ ...n, updatedAt: new Date(n.updatedAt) }))
-      : notes
-          .filter((n) => n.category === activeCategory)
-          .map((n) => ({ ...n, updatedAt: new Date(n.updatedAt) }));
+  const toNoteItem = (n: ProjectNoteWithTask): NoteItem => ({
+    id: n.id,
+    title: n.title,
+    content: n.content,
+    category: n.category,
+    updatedAt: new Date(n.updatedAt),
+    taskId: n.taskId,
+    taskTitle: n.task?.title ?? null,
+  });
+  const query = searchQuery.trim().toLowerCase();
+  const filteredNotes: NoteItem[] = notes
+    .filter((n) => activeCategory === "all" || n.category === activeCategory)
+    .filter((n) => !query || n.title.toLowerCase().includes(query))
+    .map(toNoteItem);
 
   const showForm = isCreating || editingNote !== null;
 
@@ -209,13 +224,25 @@ export function NotesPageClient({
           </Select>
         )}
         {!showForm && (
-          <Button
-            onClick={handleNewNote}
-            className="ml-auto bg-primary/10 text-primary ring-1 ring-primary/20 hover:bg-primary/15"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span>{t("notes.newNote")}</span>
-          </Button>
+          <>
+            <div className="relative ml-auto">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t("notes.searchPlaceholder")}
+                className="h-8 w-48 rounded-md border border-border bg-background pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+            <Button
+              onClick={handleNewNote}
+              className="bg-primary/10 text-primary ring-1 ring-primary/20 hover:bg-primary/15"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>{t("notes.newNote")}</span>
+            </Button>
+          </>
         )}
       </div>
 
@@ -326,12 +353,25 @@ export function NotesPageClient({
                   notes={filteredNotes}
                   onEdit={handleEditNote}
                   onDelete={handleDelete}
+                  onPreview={setPreviewNote}
+                  onTaskClick={setDrawerTaskId}
                 />
               )}
             </div>
           </div>
         )}
       </div>
+
+      <NotePreviewDialog
+        note={previewNote}
+        open={previewNote !== null}
+        onOpenChange={(o) => { if (!o) setPreviewNote(null); }}
+      />
+      <TaskOverviewDrawer
+        open={drawerTaskId !== null}
+        onOpenChange={(o) => { if (!o) setDrawerTaskId(null); }}
+        taskId={drawerTaskId}
+      />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, useCallback } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import { SubPageNav } from "@/components/layout/sub-page-nav";
 import { useI18n } from "@/lib/i18n";
 import { deleteAsset, getProjectAssets } from "@/actions/asset-actions";
@@ -50,6 +50,7 @@ export function AssetsPageClient({
 
   // Data state
   const [assets, setAssets] = useState<ProjectAssetWithTask[]>(initialAssets);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Task drawer state
   const [drawerTaskId, setDrawerTaskId] = useState<string | null>(null);
@@ -84,8 +85,14 @@ export function AssetsPageClient({
         : null
     : null;
 
+  // Client-side filter by filename (matches the loaded project's asset list).
+  const query = searchQuery.trim().toLowerCase();
+  const filteredAssets = query
+    ? assets.filter((a) => a.filename.toLowerCase().includes(query))
+    : assets;
+
   // Image-only asset list, in same order as the AssetList renders, for lightbox prev/next
-  const imageAssets = assets
+  const imageAssets = filteredAssets
     .filter((a) => isImageAsset(a.filename, a.mimeType))
     .map((a) => ({
       id: a.id,
@@ -183,14 +190,22 @@ export function AssetsPageClient({
             </SelectContent>
           </Select>
         )}
-        <div className="ml-auto">
-          <AssetUpload
-            allWorkspaces={allWorkspaces}
-            initialWsId={listWsId}
-            initialProjectId={listProjectId}
-            onUploaded={handleUploaded}
+        <div className="relative ml-auto">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t("assets.searchPlaceholder")}
+            className="h-8 w-48 rounded-md border border-border bg-background pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
+        <AssetUpload
+          allWorkspaces={allWorkspaces}
+          initialWsId={listWsId}
+          initialProjectId={listProjectId}
+          onUploaded={handleUploaded}
+        />
       </div>
 
       {/* Content */}
@@ -208,7 +223,7 @@ export function AssetsPageClient({
               </div>
             ) : (
               <AssetList
-                assets={assets.map((a) => ({
+                assets={filteredAssets.map((a) => ({
                   ...a,
                   taskId: a.task?.id ?? null,
                   taskTitle: a.task?.title ?? null,
