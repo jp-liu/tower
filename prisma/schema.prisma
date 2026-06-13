@@ -329,6 +329,15 @@ model ProviderConnection {
   updatedAt       DateTime @updatedAt
 }
 
+/// Ledger of one-shot data migrations applied to THIS database (see
+/// scripts/run-migrations.ts + scripts/migrations/). Bound to the DB so the
+/// "already migrated" record can never drift from the data it describes.
+model AppliedMigration {
+  /// Migration id = filename without extension, e.g. "0001-insight-category".
+  id        String   @id
+  appliedAt DateTime @default(now())
+}
+
 enum ProjectType {
   NORMAL
   GIT

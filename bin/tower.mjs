@@ -269,11 +269,8 @@ async function cmdMigrate() {
 async function cmdStart() {
   ensurePrismaClientGenerated();
 
-  if (needsInit()) {
-    await initDatabase();
-  } else {
-    ensureSchemaCurrent();
-  }
+  // ── Lifecycle: pre-start ── (schema sync + one-shot data migrations)
+  await preStart();
 
   const standaloneDir = join(PROJECT_ROOT, ".next", "standalone");
   const standaloneServer = join(standaloneDir, "server.js");
@@ -299,25 +296,55 @@ async function cmdStart() {
   process.chdir(standaloneDir);
 
   const browserUrl = `http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`;
-  scheduleBrowserOpen(browserUrl);
+
+  // ── Lifecycle: post-start ── (fires once the server accepts connections)
+  postStart(browserUrl);
 
   await import(pathToFileURL(standaloneServer).href);
 }
 
 /**
- * Open the URL in the user's default browser once the HTTP port accepts
- * connections. Polls in the background so it never blocks server startup.
- *
- * Disabled when:
- *   - `--no-open` flag passed
- *   - $TOWER_NO_OPEN / $CI / $NO_BROWSER set
- *   - stdout isn't a TTY (e.g. piped, daemonised, container w/o terminal)
+ * Pre-start lifecycle phase — everything that must finish before the HTTP
+ * server boots. Schema is synced first so data migrations can rely on new
+ * columns and the AppliedMigration ledger table existing.
  */
-function scheduleBrowserOpen(url) {
-  if (flags["no-open"]) return;
-  if (process.env.TOWER_NO_OPEN || process.env.CI || process.env.NO_BROWSER) return;
-  if (!process.stdout.isTTY) return;
+async function preStart() {
+  if (needsInit()) {
+    await initDatabase();
+  } else {
+    ensureSchemaCurrent();
+  }
+  runPendingMigrations();
+}
 
+/**
+ * Run one-shot data migrations (scripts/migrations/) that haven't been applied
+ * to this database yet. Delegated to a tsx runner that tracks applied ids in
+ * the AppliedMigration table. A migration failure is non-fatal (logged +
+ * retried next start) — see scripts/run-migrations.ts.
+ */
+function runPendingMigrations() {
+  const tsxBin = resolveBin("tsx", "tsx");
+  run(tsxBin, ["scripts/run-migrations.ts"]);
+}
+
+/**
+ * Post-start lifecycle phase — runs once the server is accepting connections.
+ * Currently opens the browser; this is the place to add future "server is
+ * live" actions.
+ */
+function postStart(url) {
+  onServerReady(() => {
+    if (shouldOpenBrowser()) openBrowser(url);
+  });
+}
+
+/**
+ * Invoke `onReady` once the HTTP port accepts connections. Polls in the
+ * background (up to 15s) so it never blocks server startup. This is the
+ * primitive behind the post-start lifecycle phase.
+ */
+function onServerReady(onReady) {
   const deadline = Date.now() + 15_000;
   const probeHost = HOST === "0.0.0.0" ? "127.0.0.1" : HOST;
 
@@ -325,7 +352,7 @@ function scheduleBrowserOpen(url) {
     const sock = createConnection({ host: probeHost, port: PORT });
     sock.once("connect", () => {
       sock.end();
-      openBrowser(url);
+      onReady();
     });
     sock.once("error", () => {
       sock.destroy();
@@ -335,6 +362,19 @@ function scheduleBrowserOpen(url) {
     });
   };
   setTimeout(tryProbe, 250).unref?.();
+}
+
+/**
+ * Whether to auto-open the browser. Disabled when:
+ *   - `--no-open` flag passed
+ *   - $TOWER_NO_OPEN / $CI / $NO_BROWSER set
+ *   - stdout isn't a TTY (e.g. piped, daemonised, container w/o terminal)
+ */
+function shouldOpenBrowser() {
+  if (flags["no-open"]) return false;
+  if (process.env.TOWER_NO_OPEN || process.env.CI || process.env.NO_BROWSER) return false;
+  if (!process.stdout.isTTY) return false;
+  return true;
 }
 
 function openBrowser(url) {

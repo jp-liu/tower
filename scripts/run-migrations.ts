@@ -1,0 +1,73 @@
+/**
+ * One-shot data migration runner (pre-start lifecycle phase).
+ *
+ * Runs every file in scripts/migrations/ that hasn't been applied to THIS
+ * database yet, in filename order, exactly once. Applied ids are recorded in
+ * the `AppliedMigration` table (DB-bound ledger — see schema.prisma), so the
+ * record can never drift from the data it describes (dev DB and prod DB each
+ * carry their own ledger).
+ *
+ * Each migration file exports `up(prisma)`:
+ *   export async function up(prisma) { ... }   // must be idempotent
+ *
+ * Failure policy: a failing migration is logged and retried on the next start;
+ * later migrations are NOT run (they may depend on it). The process still exits
+ * 0 so a single bad migration never bricks startup. Only an unrecoverable error
+ * (e.g. DB unreachable) exits non-zero.
+ *
+ * Invoked by bin/tower.mjs pre-start, and available in dev via `pnpm db:migrate`.
+ * Requires the schema to be current (the AppliedMigration table must exist) —
+ * bin/tower.mjs guarantees this by running schema sync first.
+ */
+
+import { PrismaClient } from "@prisma/client";
+import { existsSync, readdirSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath, pathToFileURL } from "url";
+
+const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "migrations");
+
+async function main() {
+  if (!existsSync(MIGRATIONS_DIR)) return;
+
+  const files = readdirSync(MIGRATIONS_DIR)
+    .filter((f) => /^\d.*\.(ts|mjs|js)$/.test(f))
+    .sort();
+  if (files.length === 0) return;
+
+  const prisma = new PrismaClient();
+  try {
+    const appliedRows = await prisma.appliedMigration.findMany({ select: { id: true } });
+    const applied = new Set(appliedRows.map((r) => r.id));
+
+    for (const file of files) {
+      const id = file.replace(/\.(ts|mjs|js)$/, "");
+      if (applied.has(id)) continue;
+
+      try {
+        const mod = await import(pathToFileURL(join(MIGRATIONS_DIR, file)).href);
+        const up = mod.up ?? mod.default;
+        if (typeof up !== "function") {
+          console.error(`[migrate] ${id}: no up()/default export — skipping`);
+          continue;
+        }
+        console.log(`[migrate] applying ${id}...`);
+        await up(prisma);
+        await prisma.appliedMigration.create({ data: { id } });
+        console.log(`[migrate] ${id} done`);
+      } catch (err) {
+        // Stop here — later migrations may depend on this one. Not recorded, so
+        // it retries on next start. Non-fatal: don't block server startup.
+        console.error(`[migrate] ${id} FAILED (will retry next start):`, err);
+        break;
+      }
+    }
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+main().catch((err) => {
+  console.error("[migrate] runner failed:", err);
+  process.exit(1);
+});
