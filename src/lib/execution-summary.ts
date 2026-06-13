@@ -2,6 +2,7 @@ import { execFileSync } from "child_process";
 import { existsSync } from "fs";
 import { db } from "@/lib/db";
 import { generateSummaryFromLog, generateDreamingInsight, type DreamingResult } from "@/lib/claude-session";
+import { SESSION_INSIGHT_CATEGORY } from "@/lib/constants";
 
 const TERMINAL_LOG_MAX = 10 * 1024; // 10 KB
 
@@ -281,7 +282,7 @@ export async function captureTaskDreaming(taskId: string): Promise<void> {
       data: {
         title: dream.noteTitle || dream.summary.slice(0, 50),
         content: formatDreamingContent(dream),
-        category: "session-insight",
+        category: SESSION_INSIGHT_CATEGORY,
         projectId: task.projectId,
         taskId,
       },

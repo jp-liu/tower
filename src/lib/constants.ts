@@ -22,5 +22,17 @@ export const TOWER_LABEL_COLOR = "#8b5cf6"; // purple
 export const AGENTS = ["CLAUDE_CODE", "MINIMAX"] as const;
 export type AgentType = (typeof AGENTS)[number];
 
-export const NOTE_CATEGORIES_PRESET = ["账号", "环境", "需求", "备忘", "任务笔记"] as const;
+/** Category for auto-generated task change-overview notes (Done / Cancelled). */
+export const TASK_OVERVIEW_CATEGORY = "任务笔记";
+/** Category for auto-generated session-insight ("dreaming") notes on task DONE. */
+export const SESSION_INSIGHT_CATEGORY = "经验洞见";
+
+export const NOTE_CATEGORIES_PRESET = [
+  "账号",
+  "环境",
+  "需求",
+  "备忘",
+  TASK_OVERVIEW_CATEGORY,
+  SESSION_INSIGHT_CATEGORY,
+] as const;
 export type NoteCategoryPreset = (typeof NOTE_CATEGORIES_PRESET)[number];

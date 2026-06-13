@@ -23,6 +23,7 @@ import { syncNoteToFts } from "@/lib/fts";
 import { aiQuery } from "@/lib/claude-session";
 import { resolveTaskDiffSource } from "@/lib/task-diff-resolver";
 import { parseDiffOutput, type DiffFile } from "@/lib/diff-parser";
+import { TASK_OVERVIEW_CATEGORY } from "@/lib/constants";
 import {
   buildFallbackSummary,
   buildNoteTitle,
@@ -31,10 +32,6 @@ import {
   type TaskAsset,
   type TaskChangeData,
 } from "@/lib/task-overview-format";
-
-/** Note category for auto-generated task overviews. Keep in sync with
- *  NOTE_CATEGORIES_PRESET in src/lib/constants.ts. */
-export const TASK_OVERVIEW_CATEGORY = "任务笔记";
 
 const DIFF_TEXT_MAX = 12 * 1024; // 12 KB of raw diff fed to the AI prompt
 const FILE_LIST_PROMPT_MAX = 60; // files listed in the AI prompt

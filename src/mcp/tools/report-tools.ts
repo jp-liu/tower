@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { db } from "../db";
+import { SESSION_INSIGHT_CATEGORY } from "../../lib/constants";
 
 const PRIORITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
@@ -82,10 +83,10 @@ export const reportTools = {
         }
       }
 
-      // Query session-insight notes created that day
+      // Query session-insight ("会话洞见") notes created that day
       const insightNotes = await db.projectNote.findMany({
         where: {
-          category: "session-insight",
+          category: SESSION_INSIGHT_CATEGORY,
           createdAt: { gte: date, lt: nextDay },
         },
         include: {
