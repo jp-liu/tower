@@ -14,6 +14,8 @@ import { NotificationPermissionBanner } from "@/components/notifications/notific
 import { useNotificationListener } from "@/components/notifications/use-notification-listener";
 import { getConfigValue } from "@/actions/config-actions";
 import { GuidedTour } from "@/components/onboarding/guided-tour";
+import { CommandPalette } from "@/components/shortcuts/command-palette";
+import { ShortcutHelpDialog } from "@/components/shortcuts/shortcut-help-dialog";
 
 interface CreateProjectData {
   name: string;
@@ -140,6 +142,8 @@ function LayoutInner({
         </div>
         {dialogPanel}
         {showTour && <GuidedTour onComplete={handleTourComplete} />}
+        <CommandPalette />
+        <ShortcutHelpDialog />
       </>
     );
   }
@@ -162,6 +166,8 @@ function LayoutInner({
       </div>
       {dialogPanel}
       {showTour && <GuidedTour onComplete={handleTourComplete} />}
+      <CommandPalette />
+      <ShortcutHelpDialog />
     </>
   );
 }

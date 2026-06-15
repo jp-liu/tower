@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { SHORTCUT_KEYS, useShortcut } from "@/lib/shortcuts";
+import { useUiDialogStore } from "@/stores/ui-dialog-store";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { Search, Settings, Plus, Command, Globe, FolderOpen, Bot, Sun, Moon } from "lucide-react";
@@ -118,17 +120,25 @@ export function TopBar({ onCreateProject, username }: TopBarProps) {
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showImportProject, setShowImportProject] = useState(false);
 
-  // Cmd+K / Ctrl+K keyboard shortcut
+  // Global search shortcut (⌘K / Ctrl+K) via the shortcut framework.
+  useShortcut(SHORTCUT_KEYS.search, () => setShowSearch(true), {
+    scope: "global",
+    description: t("shortcuts.search"),
+    group: t("shortcuts.group.global"),
+  });
+
+  // Bridge: the command palette opens these dialogs via the ui-dialog store.
+  const createProjectOpen = useUiDialogStore((s) => s.createProjectOpen);
+  const importProjectOpen = useUiDialogStore((s) => s.importProjectOpen);
+  const setCreateProjectOpen = useUiDialogStore((s) => s.setCreateProjectOpen);
+  const setImportProjectOpen = useUiDialogStore((s) => s.setImportProjectOpen);
+
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setShowSearch(true);
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
+    if (createProjectOpen) setShowCreateProject(true);
+  }, [createProjectOpen]);
+  useEffect(() => {
+    if (importProjectOpen) setShowImportProject(true);
+  }, [importProjectOpen]);
 
   return (
     <>
@@ -284,14 +294,20 @@ export function TopBar({ onCreateProject, username }: TopBarProps) {
       {/* Create Project Dialog */}
       <CreateProjectDialog
         open={showCreateProject}
-        onOpenChange={setShowCreateProject}
+        onOpenChange={(open) => {
+          setShowCreateProject(open);
+          if (!open) setCreateProjectOpen(false);
+        }}
         onCreateProject={onCreateProject}
       />
 
       {/* Import Project Dialog */}
       <ImportProjectDialog
         open={showImportProject}
-        onOpenChange={setShowImportProject}
+        onOpenChange={(open) => {
+          setShowImportProject(open);
+          if (!open) setImportProjectOpen(false);
+        }}
         onCreateProject={onCreateProject}
       />
     </>
