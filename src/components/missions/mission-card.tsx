@@ -17,6 +17,7 @@ import { useI18n } from "@/lib/i18n";
 import { openInTerminal } from "@/actions/preview-actions";
 import { toast } from "sonner";
 import type { ActiveExecutionInfo } from "@/actions/agent-actions";
+import type { TerminalControls } from "@/components/task/task-terminal";
 
 const TaskTerminal = dynamic(
   () => import("@/components/task/task-terminal").then((m) => m.TaskTerminal),
@@ -29,6 +30,16 @@ interface MissionCardProps {
   removeReason?: "stopped" | "completed";
   onStop: (taskId: string) => void;
   onSessionEnd?: (taskId: string, exitCode: number) => void;
+  /** Zero-based position within the visible grid (for hint badge number). */
+  index: number;
+  /** Navigation overlay visible in "nav"; "input" hides it. */
+  mode: "nav" | "input";
+  /** Highlighted as the current selection (nav mode only). */
+  isSelected: boolean;
+  /** Register/unregister the terminal's imperative controls by taskId. */
+  onRegisterControls: (taskId: string, controls: TerminalControls | null) => void;
+  /** Request focusing this pane (overlay click). */
+  onRequestFocus: (taskId: string) => void;
 }
 
 export function MissionCard({
@@ -37,6 +48,11 @@ export function MissionCard({
   removeReason,
   onStop,
   onSessionEnd,
+  index,
+  mode,
+  isSelected,
+  onRegisterControls,
+  onRequestFocus,
 }: MissionCardProps) {
   const { t } = useI18n();
   const router = useRouter();
@@ -88,6 +104,7 @@ export function MissionCard({
     <div
       ref={setNodeRef}
       style={style}
+      data-pane-index={index}
       className="border border-border rounded-lg overflow-hidden flex flex-col transition-opacity duration-300"
       {...attributes}
     >
@@ -194,13 +211,45 @@ export function MissionCard({
       </div>
 
       {/* Terminal area */}
-      <div className="flex-1 overflow-hidden">
+      <div className="relative flex-1 overflow-hidden">
         <TaskTerminal
           taskId={execution.taskId}
           worktreePath={execution.worktreePath ?? execution.projectLocalPath}
           onSessionEnd={(exitCode) => onSessionEnd?.(execution.taskId, exitCode)}
           useCanvasRenderer
+          onReady={(c) => onRegisterControls(execution.taskId, c)}
         />
+
+        {/* Navigation-mode hint overlay — covers only the terminal area, not the header */}
+        {mode === "nav" && (
+          <button
+            type="button"
+            aria-label={t("missions.hint.label")}
+            onClick={() => onRequestFocus(execution.taskId)}
+            className={[
+              "absolute inset-0 z-20 flex items-center justify-center",
+              "cursor-pointer transition-opacity",
+              "bg-background/60 dark:bg-black/50",
+              isSelected ? "ring-2 ring-inset ring-primary" : "",
+            ].join(" ")}
+          >
+            {/* Pane number badge — only shown for the first 9 panes (1–9 jump keys) */}
+            {index < 9 && (
+              <span
+                className={[
+                  "flex h-14 w-14 items-center justify-center rounded-md",
+                  "text-2xl font-semibold tabular-nums",
+                  "border transition-colors",
+                  isSelected
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-muted/80 text-foreground border-border",
+                ].join(" ")}
+              >
+                {index + 1}
+              </span>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );

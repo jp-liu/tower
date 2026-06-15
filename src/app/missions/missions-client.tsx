@@ -37,6 +37,14 @@ import {
 import { MissionCard } from "@/components/missions/mission-card";
 import { TaskPickerDialog } from "@/components/missions/task-picker-dialog";
 import { mergeMissions } from "@/components/missions/merge-missions";
+import { Badge } from "@/components/ui/badge";
+import { useShortcut, SHORTCUT_KEYS } from "@/lib/shortcuts";
+import {
+  wrapIndex,
+  moveSelection as moveSelectionIndex,
+  type MoveDirection,
+} from "@/components/missions/pane-navigation";
+import type { TerminalControls } from "@/components/task/task-terminal";
 import { toast } from "sonner";
 
 export function MissionsClient({
@@ -69,6 +77,31 @@ export function MissionsClient({
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [filterWsId, setFilterWsId] = useState<string>("");
   const launchBtnRef = useRef<HTMLButtonElement>(null);
+
+  // --- Keyboard pane navigation state ---
+  const [mode, setMode] = useState<"nav" | "input">("nav");
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  // Imperative terminal controls keyed by taskId; updated as panes mount/unmount.
+  const controlsRef = useRef<Map<string, TerminalControls>>(new Map());
+  // orderedControls + length, rebuilt every render from visibleCards order.
+  // Held in refs so the (stable) shortcut/focusin handlers always read current values.
+  const orderedControlsRef = useRef<TerminalControls[]>([]);
+  const gridColsRef = useRef(2);
+  const selectedIndexRef = useRef(selectedIndex);
+  selectedIndexRef.current = selectedIndex;
+  const visibleCardsRef = useRef<ActiveExecutionInfo[]>([]);
+
+  const onRegisterControls = useCallback(
+    (taskId: string, controls: TerminalControls | null) => {
+      if (controls) {
+        controlsRef.current.set(taskId, controls);
+      } else {
+        controlsRef.current.delete(taskId);
+      }
+    },
+    []
+  );
 
   // removingIds: Map<executionId, "stopped" | "completed"> — tracks fading cards with their reason
   const [removingIds, setRemovingIds] = useState<Map<string, "stopped" | "completed">>(
@@ -225,6 +258,133 @@ export function MissionsClient({
       .catch(() => {});
   }, []);
 
+  // --- Pane navigation actions (stable; read live state via refs) ---
+
+  // Focus pane i → enter input mode + mark it selected. No-op if out of range.
+  const focusPane = useCallback((i: number) => {
+    const controls = orderedControlsRef.current;
+    if (i < 0 || i >= controls.length) return;
+    controls[i]?.focus();
+    setSelectedIndex(i);
+    setMode("input");
+  }, []);
+
+  // Blur current pane → back to navigation mode (overlay reappears).
+  const exitToNav = useCallback(() => {
+    orderedControlsRef.current[selectedIndexRef.current]?.blur();
+    setMode("nav");
+  }, []);
+
+  const focusSelected = useCallback(() => {
+    focusPane(selectedIndexRef.current);
+  }, [focusPane]);
+
+  // Cycle focus to next/prev pane (wrap), staying in input mode.
+  const nextPane = useCallback(() => {
+    const len = orderedControlsRef.current.length;
+    if (len === 0) return;
+    focusPane(wrapIndex(selectedIndexRef.current, len, 1));
+  }, [focusPane]);
+
+  const prevPane = useCallback(() => {
+    const len = orderedControlsRef.current.length;
+    if (len === 0) return;
+    focusPane(wrapIndex(selectedIndexRef.current, len, -1));
+  }, [focusPane]);
+
+  // Move highlight only (no focus); ensure overlay is visible.
+  const moveHighlight = useCallback((dir: MoveDirection) => {
+    const len = orderedControlsRef.current.length;
+    if (len === 0) return;
+    setMode("nav");
+    setSelectedIndex((cur) =>
+      moveSelectionIndex(cur, gridColsRef.current, len, dir)
+    );
+  }, []);
+
+  // Cycle selection only (wrap), staying in nav mode.
+  const cycleSelection = useCallback((dir: 1 | -1) => {
+    const len = orderedControlsRef.current.length;
+    if (len === 0) return;
+    setMode("nav");
+    setSelectedIndex((cur) => wrapIndex(cur, len, dir));
+  }, []);
+
+  const onRequestFocus = useCallback(
+    (taskId: string) => {
+      const i = visibleCardsRef.current.findIndex((c) => c.taskId === taskId);
+      if (i >= 0) focusPane(i);
+    },
+    [focusPane]
+  );
+
+  // --- Shortcut registrations (scope "missions"; mounted only on /missions) ---
+
+  // 1–9 jump → focus pane (digit read from event.key).
+  useShortcut([...SHORTCUT_KEYS.missionsJump], (e) => {
+    const n = Number(e.key);
+    if (Number.isInteger(n) && n >= 1) focusPane(n - 1);
+  }, { scope: "missions", description: t("shortcuts.missions.jump") });
+
+  // Arrows → move highlight (nav).
+  useShortcut([...SHORTCUT_KEYS.missionsArrows], (e) => {
+    const dir =
+      e.key === "ArrowUp" ? "up"
+        : e.key === "ArrowDown" ? "down"
+          : e.key === "ArrowLeft" ? "left"
+            : "right";
+    moveHighlight(dir);
+  }, { scope: "missions", description: t("shortcuts.missions.moveSel") });
+
+  // Tab / Shift+Tab → cycle selection (nav, wrap).
+  useShortcut(SHORTCUT_KEYS.missionsCycle, () => cycleSelection(1), {
+    scope: "missions",
+    description: t("shortcuts.missions.cyclePane"),
+  });
+  useShortcut(SHORTCUT_KEYS.missionsCycleBack, () => cycleSelection(-1), {
+    scope: "missions",
+    description: t("shortcuts.missions.cyclePane"),
+  });
+
+  // Enter → focus selected pane.
+  useShortcut(SHORTCUT_KEYS.missionsFocus, () => focusSelected(), {
+    scope: "missions",
+    description: t("shortcuts.missions.focusSel"),
+  });
+
+  // $mod+] / $mod+ArrowRight → next pane; $mod+[ / $mod+ArrowLeft → prev pane.
+  useShortcut([...SHORTCUT_KEYS.missionsNext], () => nextPane(), {
+    scope: "missions",
+    description: t("shortcuts.missions.nextPane"),
+  });
+  useShortcut([...SHORTCUT_KEYS.missionsPrev], () => prevPane(), {
+    scope: "missions",
+    description: t("shortcuts.missions.prevPane"),
+  });
+
+  // $mod+Escape → back to navigation mode.
+  useShortcut(SHORTCUT_KEYS.missionsExit, () => exitToNav(), {
+    scope: "missions",
+    description: t("shortcuts.missions.exitToNav"),
+  });
+
+  // Mouse → input mode: detect focus entering a pane via focusin on the grid.
+  useEffect(() => {
+    const el = gridContainerRef.current;
+    if (!el) return;
+    const onFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement | null;
+      const card = target?.closest<HTMLElement>("[data-pane-index]");
+      if (!card) return;
+      const i = Number(card.dataset.paneIndex);
+      if (!Number.isInteger(i)) return;
+      setSelectedIndex(i);
+      setMode("input");
+    };
+    el.addEventListener("focusin", onFocusIn);
+    return () => el.removeEventListener("focusin", onFocusIn);
+  }, []);
+
   // Derive deduplicated workspace list from current cards for filter
   const workspaceOptions = Array.from(
     new Map(cards.map((c) => [c.workspaceId, c.workspaceName])).entries()
@@ -235,6 +395,22 @@ export function MissionsClient({
     ? cards.filter((c) => c.workspaceId === filterWsId)
     : cards;
 
+  // Keep refs used by stable handlers in sync with current render.
+  visibleCardsRef.current = visibleCards;
+  orderedControlsRef.current = visibleCards
+    .map((c) => controlsRef.current.get(c.taskId))
+    .filter((c): c is TerminalControls => Boolean(c));
+  gridColsRef.current = gridCols;
+
+  // Clamp selectedIndex whenever the visible set shrinks so it stays in range.
+  useEffect(() => {
+    setSelectedIndex((cur) => {
+      const len = visibleCards.length;
+      if (len === 0) return 0;
+      return Math.min(cur, len - 1);
+    });
+  }, [visibleCards.length]);
+
   // Running task IDs set (for picker to mark already-monitored tasks)
   const runningTaskIds = new Set(cards.map((c) => c.taskId));
 
@@ -243,6 +419,18 @@ export function MissionsClient({
       {/* Toolbar */}
       <div className="header-sm shrink-0 px-4 flex items-center gap-3">
         <h1 className="text-base font-semibold">{t("missions.pageTitle")}</h1>
+
+        {/* Mode tag — navigation vs input */}
+        <Badge
+          variant={mode === "input" ? "default" : "secondary"}
+          className={
+            mode === "input"
+              ? "shrink-0"
+              : "shrink-0 bg-muted text-muted-foreground"
+          }
+        >
+          {mode === "input" ? t("missions.mode.input") : t("missions.mode.nav")}
+        </Badge>
 
         {/* Workspace filter — right of title */}
         <Select value={filterWsId} onValueChange={(v) => setFilterWsId(v ?? "")}>
@@ -318,7 +506,7 @@ export function MissionsClient({
                   gridAutoRows: rowHeight,
                 }}
               >
-                {visibleCards.map((c) => (
+                {visibleCards.map((c, i) => (
                   <MissionCard
                     key={c.executionId}
                     execution={c}
@@ -326,6 +514,11 @@ export function MissionsClient({
                     removeReason={removingIds.get(c.executionId)}
                     onStop={handleStop}
                     onSessionEnd={handleSessionEnd}
+                    index={i}
+                    mode={mode}
+                    isSelected={selectedIndex === i && mode === "nav"}
+                    onRegisterControls={onRegisterControls}
+                    onRequestFocus={onRequestFocus}
                   />
                 ))}
               </div>

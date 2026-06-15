@@ -9,12 +9,23 @@ import { useI18n } from "@/lib/i18n";
 import { getActualWsPort, getConfigValues } from "@/actions/config-actions";
 import "@xterm/xterm/css/xterm.css";
 
+/** Imperative control handle exposed once the terminal is created/opened. */
+export interface TerminalControls {
+  focus: () => void;
+  blur: () => void;
+}
+
 export interface TaskTerminalProps {
   taskId: string;
   worktreePath?: string | null;
   onSessionEnd?: (exitCode: number) => void;
   /** Force canvas renderer instead of WebGL. Use when many terminals coexist (portal system). */
   useCanvasRenderer?: boolean;
+  /**
+   * Terminal ready/destroy callback exposing imperative controls (null on teardown).
+   * Used instead of ref forwarding since this component is loaded via next/dynamic.
+   */
+  onReady?: (controls: TerminalControls | null) => void;
 }
 
 type WsStatus = "connecting" | "connected" | "disconnected";
@@ -33,6 +44,7 @@ export function TaskTerminal({
   worktreePath,
   onSessionEnd,
   useCanvasRenderer = false,
+  onReady,
 }: TaskTerminalProps) {
   const { t } = useI18n();
   const { resolvedTheme } = useTheme();
@@ -45,6 +57,8 @@ export function TaskTerminal({
   // Stable refs for callbacks — avoids useEffect re-run on prop change
   const onSessionEndRef = useRef(onSessionEnd);
   onSessionEndRef.current = onSessionEnd;
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
 
   const [wsStatus, setWsStatus] = useState<WsStatus>("connecting");
   const [connectedVisible, setConnectedVisible] = useState(false);
@@ -187,8 +201,15 @@ export function TaskTerminal({
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
 
+    // Expose imperative controls to parent (callback-prop avoids dynamic ref forwarding).
+    onReadyRef.current?.({
+      focus: () => terminal.focus(),
+      blur: () => terminal.blur(),
+    });
+
     return () => {
       cancelled = true;
+      onReadyRef.current?.(null);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       dataDisposable?.dispose();
       webglAddon?.dispose();
