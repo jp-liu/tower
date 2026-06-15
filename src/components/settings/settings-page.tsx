@@ -28,6 +28,7 @@ import {
   Bell,
   HardDrive,
   Package,
+  Keyboard,
   X,
   Plus,
   Star,
@@ -61,6 +62,7 @@ import type { DetectedTerminalApp, DetectedEditor } from "@/lib/platform";
 import type { GitPathRule } from "@/lib/git-url";
 import { BackupSection } from "./backup-section";
 import { ExtensionsSection } from "./extensions-section";
+import { KeyboardShortcutsSection } from "./keyboard-shortcuts-section";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
@@ -183,6 +185,13 @@ const SECTIONS = [
     descKey: "settings.backup.navDesc" as const,
     icon: HardDrive,
     accent: "cyan",
+  },
+  {
+    id: "keyboard-shortcuts",
+    labelKey: "settings.keyboardShortcuts" as const,
+    descKey: "settings.keyboardShortcutsDesc" as const,
+    icon: Keyboard,
+    accent: "violet",
   },
 ] as const;
 
@@ -2227,6 +2236,8 @@ export function SettingsPage() {
         return <BackupSection />;
       case "extensions":
         return <ExtensionsSection />;
+      case "keyboard-shortcuts":
+        return <KeyboardShortcutsSection />;
     }
   }
 
