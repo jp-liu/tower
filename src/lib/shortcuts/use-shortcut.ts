@@ -57,7 +57,12 @@ function depKey(bindings: ShortcutBinding[]): string {
 export function useShortcut(...args: UseShortcutArgs): void {
   const bindings = toBindings(args);
   const bindingsRef = useRef(bindings);
-  bindingsRef.current = bindings;
+  // Sync the latest handlers/options into the ref (declared before the
+  // registration effect so it runs first) — lets registered handlers call the
+  // freshest closures without re-registering on every render.
+  useEffect(() => {
+    bindingsRef.current = bindings;
+  });
 
   const register = useShortcutStore((s) => s.register);
   const unregister = useShortcutStore((s) => s.unregister);
@@ -79,6 +84,5 @@ export function useShortcut(...args: UseShortcutArgs): void {
     return () => {
       for (const id of ids) unregister(id);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, register, unregister]);
 }
