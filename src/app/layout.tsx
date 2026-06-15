@@ -5,6 +5,7 @@ import { LayoutClient } from "@/components/layout/layout-client";
 import { I18nProvider } from "@/lib/i18n";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { ExtensionProvider } from "@/lib/extensions/context";
+import { ShortcutProvider } from "@/lib/shortcuts";
 import { Toaster } from "@/components/ui/sonner";
 import { db } from "@/lib/db";
 import { getOnboardingStatus } from "@/actions/onboarding-actions";
@@ -60,12 +61,14 @@ export default async function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <TooltipProvider>
             <I18nProvider>
-              <ExtensionProvider initialStatus={extensionStatus}>
-                <LayoutClient workspaces={workspaces} isFirstRun={onboardingStatus.isFirstRun} username={onboardingStatus.username}>
-                  {children}
-                </LayoutClient>
-                <Toaster richColors position="top-right" />
-              </ExtensionProvider>
+              <ShortcutProvider>
+                <ExtensionProvider initialStatus={extensionStatus}>
+                  <LayoutClient workspaces={workspaces} isFirstRun={onboardingStatus.isFirstRun} username={onboardingStatus.username}>
+                    {children}
+                  </LayoutClient>
+                  <Toaster richColors position="top-right" />
+                </ExtensionProvider>
+              </ShortcutProvider>
             </I18nProvider>
           </TooltipProvider>
         </ThemeProvider>
