@@ -10,9 +10,10 @@ export type ShortcutScope = "global" | "missions" | (string & {});
 export interface ShortcutBinding {
   /**
    * tinykeys syntax, e.g. "$mod+k" | "Control+]" | "1" | "?".
-   * May be an array to bind several keys to the same handler.
+   * May be an array to bind several keys to the same handler. Accepts
+   * `readonly` arrays so `as const` constants (SHORTCUT_KEYS) pass directly.
    */
-  keys: string | string[];
+  keys: string | readonly string[];
   /**
    * Invoked when a bound key fires. The raw KeyboardEvent is passed through so
    * the handler can read `e.key` (e.g. to share one handler across digits 1–9).

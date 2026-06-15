@@ -7,7 +7,7 @@ import type { ShortcutBinding } from "./types";
 type ShortcutOptions = Omit<ShortcutBinding, "keys" | "handler">;
 
 type UseShortcutArgs =
-  | [keys: string | string[], handler: (event: KeyboardEvent) => void, opts?: ShortcutOptions]
+  | [keys: string | readonly string[], handler: (event: KeyboardEvent) => void, opts?: ShortcutOptions]
   | [bindings: ShortcutBinding | ShortcutBinding[]];
 
 /** Normalize the overloaded call signatures into a list of bindings. */
@@ -21,10 +21,10 @@ function toBindings(args: UseShortcutArgs): ShortcutBinding[] {
     }
     const handler = args[1] as (event: KeyboardEvent) => void;
     const opts = (args[2] as ShortcutOptions | undefined) ?? {};
-    return [{ keys: first as string | string[], handler, ...opts }];
+    return [{ keys: first as string | readonly string[], handler, ...opts }];
   }
-  // useShortcut(binding) | useShortcut([binding, ...])
-  return Array.isArray(first) ? (first as ShortcutBinding[]) : [first];
+  // Array-of-bindings is handled above; only a single ShortcutBinding remains.
+  return [first as ShortcutBinding];
 }
 
 /**

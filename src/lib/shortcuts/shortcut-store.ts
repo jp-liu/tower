@@ -10,8 +10,8 @@ function nextId(): string {
   return `sc_${idCounter}`;
 }
 
-function normalizeKeys(keys: string | string[]): string[] {
-  return Array.isArray(keys) ? [...keys] : [keys];
+function normalizeKeys(keys: string | readonly string[]): string[] {
+  return Array.isArray(keys) ? [...keys] : [keys as string];
 }
 
 /** Parse each key binding string once and cache the presses. */
