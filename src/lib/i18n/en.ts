@@ -1140,6 +1140,7 @@ export const en: Translations = {
   "shortcuts.group.missions": "Mission Control",
   "shortcuts.search": "Global search",
   "shortcuts.commandPalette": "Command palette",
+  "shortcuts.assistant": "Toggle AI assistant",
   "shortcuts.openHelp": "Keyboard shortcuts help",
   "shortcuts.missions.jump": "Jump to pane N",
   "shortcuts.missions.nextPane": "Next terminal",

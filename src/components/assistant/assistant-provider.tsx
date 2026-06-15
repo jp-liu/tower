@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { toast } from "sonner";
+import { useActionShortcut } from "@/lib/shortcuts";
 import { getConfigValue } from "@/actions/config-actions";
 import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
 import type { ChatMessage, MessageRole } from "@/hooks/use-assistant-chat";
@@ -240,17 +241,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     }
   }, [isOpen, isStarting, closeAssistant, openAssistant]);
 
-  // Keyboard shortcut: Cmd+L / Ctrl+L
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "l") {
-        e.preventDefault();
-        toggleAssistant();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [toggleAssistant]);
+  // Keyboard shortcut: toggle the AI assistant (default ⌘L / Ctrl+L).
+  useActionShortcut("global.assistant", () => toggleAssistant());
 
   // -------------------------------------------------------------------------
   // Chat message sender — lives at provider level for persistence

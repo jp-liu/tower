@@ -20,7 +20,7 @@ import {
   CommandItem,
 } from "@/components/ui/command";
 import { useI18n } from "@/lib/i18n";
-import { SHORTCUT_KEYS, useShortcut } from "@/lib/shortcuts";
+import { useActionShortcut } from "@/lib/shortcuts";
 import { useCommandPaletteStore } from "@/stores/command-palette-store";
 import { useUiDialogStore } from "@/stores/ui-dialog-store";
 import { useShortcutHelpStore } from "@/stores/shortcut-help-store";
@@ -43,11 +43,7 @@ export function CommandPalette() {
   const setImportProjectOpen = useUiDialogStore((s) => s.setImportProjectOpen);
   const toggleHelp = useShortcutHelpStore((s) => s.toggle);
 
-  useShortcut(SHORTCUT_KEYS.commandPalette, () => toggle(), {
-    scope: "global",
-    description: t("shortcuts.commandPalette"),
-    group: t("shortcuts.group.global"),
-  });
+  useActionShortcut("global.commandPalette", () => toggle());
 
   // Close the palette before running the action so focus returns cleanly.
   const run = (action: () => void) => {

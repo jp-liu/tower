@@ -1156,6 +1156,7 @@ export const zh = {
   "shortcuts.group.missions": "任务控制台",
   "shortcuts.search": "全局搜索",
   "shortcuts.commandPalette": "命令面板",
+  "shortcuts.assistant": "切换 AI 助手",
   "shortcuts.openHelp": "快捷键帮助",
   "shortcuts.missions.jump": "跳到第 N 个窗格",
   "shortcuts.missions.nextPane": "下一个终端",

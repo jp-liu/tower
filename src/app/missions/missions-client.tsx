@@ -38,7 +38,7 @@ import { MissionCard } from "@/components/missions/mission-card";
 import { TaskPickerDialog } from "@/components/missions/task-picker-dialog";
 import { mergeMissions } from "@/components/missions/merge-missions";
 import { Badge } from "@/components/ui/badge";
-import { useShortcut, SHORTCUT_KEYS } from "@/lib/shortcuts";
+import { useActionShortcut } from "@/lib/shortcuts";
 import {
   wrapIndex,
   moveSelection as moveSelectionIndex,
@@ -321,52 +321,34 @@ export function MissionsClient({
   // --- Shortcut registrations (scope "missions"; mounted only on /missions) ---
 
   // 1–9 jump → focus pane (digit read from event.key).
-  useShortcut([...SHORTCUT_KEYS.missionsJump], (e) => {
+  useActionShortcut("missions.jump", (e) => {
     const n = Number(e.key);
     if (Number.isInteger(n) && n >= 1) focusPane(n - 1);
-  }, { scope: "missions", description: t("shortcuts.missions.jump") });
+  });
 
   // Arrows → move highlight (nav).
-  useShortcut([...SHORTCUT_KEYS.missionsArrows], (e) => {
+  useActionShortcut("missions.moveSelection", (e) => {
     const dir =
       e.key === "ArrowUp" ? "up"
         : e.key === "ArrowDown" ? "down"
           : e.key === "ArrowLeft" ? "left"
             : "right";
     moveHighlight(dir);
-  }, { scope: "missions", description: t("shortcuts.missions.moveSel") });
+  });
 
   // Tab / Shift+Tab → cycle selection (nav, wrap).
-  useShortcut(SHORTCUT_KEYS.missionsCycle, () => cycleSelection(1), {
-    scope: "missions",
-    description: t("shortcuts.missions.cyclePane"),
-  });
-  useShortcut(SHORTCUT_KEYS.missionsCycleBack, () => cycleSelection(-1), {
-    scope: "missions",
-    description: t("shortcuts.missions.cyclePane"),
-  });
+  useActionShortcut("missions.cycle", () => cycleSelection(1));
+  useActionShortcut("missions.cycleBack", () => cycleSelection(-1));
 
   // Enter → focus selected pane.
-  useShortcut(SHORTCUT_KEYS.missionsFocus, () => focusSelected(), {
-    scope: "missions",
-    description: t("shortcuts.missions.focusSel"),
-  });
+  useActionShortcut("missions.focus", () => focusSelected());
 
   // $mod+] / $mod+ArrowRight → next pane; $mod+[ / $mod+ArrowLeft → prev pane.
-  useShortcut([...SHORTCUT_KEYS.missionsNext], () => nextPane(), {
-    scope: "missions",
-    description: t("shortcuts.missions.nextPane"),
-  });
-  useShortcut([...SHORTCUT_KEYS.missionsPrev], () => prevPane(), {
-    scope: "missions",
-    description: t("shortcuts.missions.prevPane"),
-  });
+  useActionShortcut("missions.next", () => nextPane());
+  useActionShortcut("missions.prev", () => prevPane());
 
-  // $mod+Escape → back to navigation mode.
-  useShortcut(SHORTCUT_KEYS.missionsExit, () => exitToNav(), {
-    scope: "missions",
-    description: t("shortcuts.missions.exitToNav"),
-  });
+  // Control+; → back to navigation mode.
+  useActionShortcut("missions.exit", () => exitToNav());
 
   // Mouse → input mode: detect focus entering a pane via focusin on the grid.
   useEffect(() => {

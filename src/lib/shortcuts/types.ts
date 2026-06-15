@@ -11,7 +11,7 @@ export interface ShortcutBinding {
   /**
    * tinykeys syntax, e.g. "$mod+k" | "Control+]" | "1" | "?".
    * May be an array to bind several keys to the same handler. Accepts
-   * `readonly` arrays so `as const` constants (SHORTCUT_KEYS) pass directly.
+   * `readonly` arrays so `as const` constants (e.g. action `defaultKeys`) pass directly.
    */
   keys: string | readonly string[];
   /**

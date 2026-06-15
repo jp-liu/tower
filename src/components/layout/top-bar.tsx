@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { SHORTCUT_KEYS, useShortcut } from "@/lib/shortcuts";
+import { useActionShortcut } from "@/lib/shortcuts";
 import { useUiDialogStore } from "@/stores/ui-dialog-store";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -120,12 +120,8 @@ export function TopBar({ onCreateProject, username }: TopBarProps) {
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showImportProject, setShowImportProject] = useState(false);
 
-  // Global search shortcut (⌘K / Ctrl+K) via the shortcut framework.
-  useShortcut(SHORTCUT_KEYS.search, () => setShowSearch(true), {
-    scope: "global",
-    description: t("shortcuts.search"),
-    group: t("shortcuts.group.global"),
-  });
+  // Global search shortcut (⌘K / Ctrl+K) via the action registry.
+  useActionShortcut("global.search", () => setShowSearch(true));
 
   // Bridge: the command palette opens these dialogs via the ui-dialog store.
   const createProjectOpen = useUiDialogStore((s) => s.createProjectOpen);
