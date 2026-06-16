@@ -417,8 +417,10 @@ export function MissionsClient({
           <TooltipTrigger
             render={
               <Button
-                variant={mode === "input" ? "default" : "secondary"}
-                className="h-8 gap-1.5 shrink-0"
+                variant="ghost"
+                className={`h-7 gap-1.5 px-2 shrink-0 text-xs font-medium text-muted-foreground ${
+                  mode === "nav" ? "bg-accent text-foreground" : ""
+                }`}
                 onClick={toggleMode}
                 disabled={visibleCards.length === 0}
               />
