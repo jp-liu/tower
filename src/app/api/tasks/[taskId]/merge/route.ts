@@ -145,10 +145,11 @@ export async function POST(
       }
     }
 
-    // Update status to DONE
+    // Update status to DONE — stamp doneAt as the archive-delay baseline
+    // (same as updateTaskStatus; without it the task would archive immediately).
     await db.task.update({
       where: { id: parsed.data },
-      data: { status: "DONE" },
+      data: { status: "DONE", doneAt: new Date() },
     });
 
     // Kill PTY first so the live process doesn't end up with a deleted cwd
