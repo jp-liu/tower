@@ -267,7 +267,7 @@ export const en: Translations = {
   "workspace.selectDesc": "Choose a workspace from the sidebar",
   "workspace.createError": "Failed to create workspace, please try again",
   "board.noProject": "No projects yet. Click \"New Project\" to create one.",
-  "board.tipText": "Reuse existing drag, detail, and task creation pipeline",
+  "board.tipText": "Drag tasks to reorder",
   "board.tipDesc": "Align workspace entry with prototype first, then add Settings, Skills, Plugins.",
   "folder.selectFolder": "Select Folder",
   "folder.selectGitRepo": "Select Git Repository",

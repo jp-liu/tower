@@ -280,7 +280,7 @@ export const zh = {
   "workspace.createError": "创建工作区失败，请重试",
   // Empty state
   "board.noProject": "该工作空间没有项目，请点击顶部「新建项目」创建",
-  "board.tipText": "复用现有拖拽、详情和任务创建链路",
+  "board.tipText": "可以拖拽任务进行排序",
   "board.tipDesc": "先把工作台入口对齐原型，再逐步补 Settings、Skills、Plugins。",
   // Folder browser
   "folder.selectFolder": "选择文件夹",

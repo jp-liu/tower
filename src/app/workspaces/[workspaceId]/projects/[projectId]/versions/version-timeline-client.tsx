@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Plus, Archive, ChevronRight, ArrowLeft, Settings2 } from "lucide-react";
@@ -13,6 +13,7 @@ import { ReleaseVersionDialog } from "@/components/version/release-version-dialo
 import { VersionDiffDialog } from "@/components/version/version-diff-dialog";
 import { TaskOverviewDrawer } from "@/components/task/task-overview-drawer";
 import { useI18n } from "@/lib/i18n";
+import { setLastProjectId } from "@/lib/workspace-last-project";
 import type { getProjectVersions } from "@/actions/version-actions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -167,6 +168,12 @@ export function VersionTimelineClient({
   const { t } = useI18n();
   const router = useRouter();
 
+  // 进入时间线时记忆当前项目，复用看板的「上次选中项目」逻辑，
+  // 这样返回看板（及之后从侧边栏切回该工作区）都能恢复到这个项目而非第一个。
+  useEffect(() => {
+    setLastProjectId(workspaceId, project.id);
+  }, [workspaceId, project.id]);
+
   // Dialog state
   const [formOpen, setFormOpen] = useState(false);
   const [editVersion, setEditVersion] = useState<EditVersionShape | null>(null);
@@ -249,7 +256,7 @@ export function VersionTimelineClient({
       {/* Page header */}
       <div className="header-xl flex shrink-0 items-center gap-4 border-b px-6">
         <Link
-          href={`/workspaces/${workspaceId}`}
+          href={`/workspaces/${workspaceId}?projectId=${project.id}`}
           className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
