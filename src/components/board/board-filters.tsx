@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Plus, Search, GitBranch } from "lucide-react";
+import { Plus, Search, GitBranch, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -10,6 +10,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 
 interface VersionOption {
@@ -84,8 +85,20 @@ export function BoardFilters({
         />
       </div>
 
-      {/* Actions on the right: version timeline + new task */}
+      {/* Actions on the right: tip + version timeline + new task */}
       <div className="ml-auto flex items-center gap-2">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button variant="ghost" size="icon" className="text-muted-foreground">
+                <Lightbulb className="h-4 w-4" />
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom" className="max-w-xs">
+            {t("board.tipText")}
+          </TooltipContent>
+        </Tooltip>
         {versionsHref && (
           <Link href={versionsHref}>
             <Button variant="outline" className="h-8 gap-1.5 text-xs text-muted-foreground">

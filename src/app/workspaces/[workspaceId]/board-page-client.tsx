@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { BoardStats } from "@/components/board/board-stats";
 import { BoardFilters } from "@/components/board/board-filters";
 import { KanbanBoard } from "@/components/board/kanban-board";
 import { CreateTaskDialog } from "@/components/board/create-task-dialog";
@@ -43,7 +42,7 @@ interface BoardPageClientProps {
   workspaceId: string;
   projectId: string;
   project: ProjectInfo;
-  projects: Array<{ id: string; name: string; alias: string | null }>;
+  projects: Array<{ id: string; name: string; alias: string | null; totalTasks: number; runningTasks: number }>;
   initialTasks: TaskWithLabels[];
   labels: LabelOption[];
   openTaskId?: string;
@@ -327,13 +326,7 @@ export function BoardPageClient({
           />
         </div>
 
-        {/* Stats */}
-        <BoardStats
-          totalTasks={boardTasks.length}
-          runningTasks={boardTasks.filter((t) => t.status === "IN_PROGRESS").length}
-        />
-
-        {/* Filters */}
+        {/* Filters + inline stats */}
         <BoardFilters
           searchQuery={searchQuery}
           onSearchChange={handleSearchChange}

@@ -2,11 +2,117 @@
 
 import { useRef, useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { useI18n } from "@/lib/i18n";
+
+interface Project {
+  id: string;
+  name: string;
+  alias: string | null;
+  totalTasks: number;
+  runningTasks: number;
+}
 
 interface ProjectTabsProps {
-  projects: Array<{ id: string; name: string; alias: string | null }>;
+  projects: Project[];
   activeProjectId: string;
   onSelect: (projectId: string) => void;
+}
+
+const TAB_WIDTH = "w-[212px]";
+
+function ProjectTab({
+  project,
+  isActive,
+  onSelect,
+}: {
+  project: Project;
+  isActive: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const { t } = useI18n();
+  const total = project.totalTasks;
+  const running = project.runningTasks;
+  const pct = total > 0 ? Math.round((running / total) * 100) : 0;
+
+  const button = (
+    <button
+      onClick={() => { if (!isActive) onSelect(project.id); }}
+      className={`group flex ${TAB_WIDTH} shrink-0 items-center gap-2 rounded-lg border-b-2 px-3 py-1.5 text-left transition-colors ${
+        isActive
+          ? "border-primary bg-primary/10 ring-1 ring-primary/20 cursor-default"
+          : "border-transparent hover:bg-accent cursor-pointer"
+      }`}
+    >
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span
+          className={`w-full truncate text-sm font-medium leading-tight ${
+            isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+          }`}
+        >
+          {project.name}
+        </span>
+        {project.alias && (
+          <span className="w-full truncate text-[11px] font-normal leading-tight text-muted-foreground/70">
+            {project.alias}
+          </span>
+        )}
+      </span>
+
+      {/* running / total badge */}
+      <span className="flex shrink-0 items-baseline rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] font-semibold leading-none">
+        <span className="text-amber-500 dark:text-amber-400">{running}</span>
+        <span className="mx-px text-muted-foreground/50">/</span>
+        <span className="text-muted-foreground">{total}</span>
+      </span>
+    </button>
+  );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={button} />
+      <TooltipContent
+        side="bottom"
+        hideArrow
+        className="flex w-[268px] max-w-none flex-col items-stretch gap-0 rounded-xl border border-border bg-card p-3.5 text-foreground shadow-lg"
+      >
+        <div className="text-[13px] font-bold leading-snug break-words">{project.name}</div>
+        {project.alias && (
+          <div className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground break-words">
+            {project.alias}
+          </div>
+        )}
+
+        <div className="my-2.5 h-px bg-border" />
+
+        {/* running */}
+        <div className="mb-2 flex items-center gap-2">
+          <span className="size-2 shrink-0 rounded-full bg-amber-500 dark:bg-amber-400" />
+          <span className="text-[13px] font-semibold">{t("board.running")}</span>
+          <span className="text-[11px] text-muted-foreground">{t("board.runningDesc")}</span>
+          <span className="ml-auto font-mono text-[15px] font-bold text-amber-500 dark:text-amber-400">{running}</span>
+        </div>
+
+        {/* total */}
+        <div className="flex items-center gap-2">
+          <span className="size-2 shrink-0 rounded-full bg-sky-500 dark:bg-sky-400" />
+          <span className="text-[13px] font-semibold">{t("board.overview")}</span>
+          <span className="text-[11px] text-muted-foreground">{t("board.totalDesc")}</span>
+          <span className="ml-auto font-mono text-[15px] font-bold">{total}</span>
+        </div>
+
+        {/* progress: running share of total */}
+        <div className="mt-2.5 h-[5px] overflow-hidden rounded-full bg-sky-500/15 dark:bg-sky-400/15">
+          <div
+            className="h-full rounded-full bg-amber-500 dark:bg-amber-400"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+
+        <div className="mt-2.5 text-[10px] text-muted-foreground">{t("board.badgeFormatHint")}</div>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 export function ProjectTabs({ projects, activeProjectId, onSelect }: ProjectTabsProps) {
@@ -57,27 +163,14 @@ export function ProjectTabs({ projects, activeProjectId, onSelect }: ProjectTabs
         className="flex items-center gap-1.5 overflow-x-auto scrollbar-none px-1 py-1"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        {projects.map((p) => {
-          const isActive = activeProjectId === p.id;
-          return (
-            <button
-              key={p.id}
-              onClick={() => { if (!isActive) onSelect(p.id); }}
-              className={`shrink-0 rounded-lg border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-                isActive
-                  ? "border-primary bg-primary/10 text-primary ring-1 ring-primary/20 cursor-default"
-                  : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
-              }`}
-            >
-              <span>{p.name}</span>
-              {p.alias && (
-                <span className="ml-1.5 text-xs text-muted-foreground font-normal">
-                  {p.alias}
-                </span>
-              )}
-            </button>
-          );
-        })}
+        {projects.map((p) => (
+          <ProjectTab
+            key={p.id}
+            project={p}
+            isActive={activeProjectId === p.id}
+            onSelect={onSelect}
+          />
+        ))}
       </div>
 
       {showRightArrow && (

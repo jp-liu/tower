@@ -69,7 +69,13 @@ export default async function WorkspaceBoardPage({ params, searchParams }: Props
         gitUrl: project.gitUrl,
         localPath: project.localPath,
       }}
-      projects={workspace.projects.map((p) => ({ id: p.id, name: p.name, alias: p.alias }))}
+      projects={workspace.projects.map((p) => ({
+        id: p.id,
+        name: p.name,
+        alias: p.alias,
+        totalTasks: p.tasks.length,
+        runningTasks: p.tasks.filter((t) => t.status === "IN_PROGRESS").length,
+      }))}
       initialTasks={tasks}
       labels={labels.map((l) => ({ id: l.id, name: l.name, color: l.color, isBuiltin: l.isBuiltin }))}
       openTaskId={openTaskId}
