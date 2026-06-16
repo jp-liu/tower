@@ -36,20 +36,44 @@ function renderToken(token: string, mac: boolean): string {
       return "Esc";
     case "Enter":
       return "↵";
+    case "Tab":
+      return "Tab";
     default:
+      // event.code digit bindings (e.g. "Digit1") → bare number "1".
+      if (/^Digit[0-9]$/.test(token)) return token.slice(5);
       return ARROW_SYMBOLS[token] ?? token;
   }
 }
 
-/** Convert a list of tinykeys binding strings to human-readable combos. */
-export function renderKeys(keys: string[]): string[] {
+/** Split a single tinykeys combo into its rendered, human-readable tokens. */
+export function renderComboTokens(combo: string): string[] {
   const mac = isMac();
-  return keys.map((combo) =>
-    combo
-      .split("+")
-      .map((token) => renderToken(token, mac))
-      .join(mac ? "" : "+")
-  );
+  return combo.split("+").map((token) => renderToken(token, mac));
+}
+
+/**
+ * Collapse a run of bindings that differ only by a trailing digit 1..N into a
+ * single range binding (e.g. `["1".."9"]` → `["1–9"]`, `["Alt+Digit1"..]` →
+ * `["Alt+1–9"]`). Keeps the list unchanged when it isn't a clean 1..N run.
+ */
+export function compactKeyList(keys: string[]): string[] {
+  if (keys.length < 3) return keys;
+  const parsed = keys.map((k) => {
+    const m = /^(.*?)(?:Digit)?([1-9])$/.exec(k);
+    return m ? { prefix: m[1], digit: Number(m[2]) } : null;
+  });
+  if (parsed.some((p) => p === null)) return keys;
+  const prefix = parsed[0]!.prefix;
+  const ok =
+    parsed.every((p) => p!.prefix === prefix) &&
+    parsed.every((p, i) => p!.digit === i + 1);
+  if (!ok) return keys;
+  return [`${prefix}1–${parsed[parsed.length - 1]!.digit}`];
+}
+
+/** Convert a list of tinykeys binding strings to human-readable combos (`+`-joined). */
+export function renderKeys(keys: string[]): string[] {
+  return keys.map((combo) => renderComboTokens(combo).join("+"));
 }
 
 export interface ShortcutHelpGroup {

@@ -79,7 +79,11 @@ export function MissionsClient({
   const launchBtnRef = useRef<HTMLButtonElement>(null);
 
   // --- Keyboard pane navigation state ---
-  const [mode, setMode] = useState<"nav" | "input">("nav");
+  // Start in "input" mode: panes auto-focus their terminal on mount, so opening
+  // Missions should land directly in a focused terminal — NOT flash the nav
+  // overlay (white border + number) before the terminal grabs focus. The user
+  // enters nav mode explicitly via the "exit to nav" shortcut (Ctrl+;).
+  const [mode, setMode] = useState<"nav" | "input">("input");
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   // Imperative terminal controls keyed by taskId; updated as panes mount/unmount.

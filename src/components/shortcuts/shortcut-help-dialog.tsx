@@ -14,9 +14,9 @@ import {
   useActionShortcut,
   useKeymapStore,
   resolveKeysFrom,
-  renderKeys,
   type ShortcutAction,
 } from "@/lib/shortcuts";
+import { KeyCombo } from "@/components/shortcuts/key-combo";
 import { useShortcutHelpStore } from "@/stores/shortcut-help-store";
 
 /** Order in which groups appear in the cheatsheet. */
@@ -85,15 +85,8 @@ export function ShortcutHelpDialog() {
                     className="flex items-center justify-between gap-4 rounded-md px-2 py-1.5 text-sm"
                   >
                     <span className="truncate">{shortcut.description}</span>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {renderKeys(shortcut.keys).map((combo, i) => (
-                        <kbd
-                          key={i}
-                          className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px]"
-                        >
-                          {combo}
-                        </kbd>
-                      ))}
+                    <div className="flex shrink-0 items-center">
+                      <KeyCombo keys={shortcut.keys} />
                     </div>
                   </div>
                 ))}

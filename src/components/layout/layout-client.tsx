@@ -16,6 +16,7 @@ import { getConfigValue } from "@/actions/config-actions";
 import { GuidedTour } from "@/components/onboarding/guided-tour";
 import { CommandPalette } from "@/components/shortcuts/command-palette";
 import { ShortcutHelpDialog } from "@/components/shortcuts/shortcut-help-dialog";
+import { useActionShortcut } from "@/lib/shortcuts";
 
 interface CreateProjectData {
   name: string;
@@ -49,6 +50,15 @@ function LayoutInner({
   const pathname = usePathname();
   const router = useRouter();
   const { isOpen, displayMode, closeAssistant } = useAssistant();
+
+  // Global navigation shortcut (mounted app-wide except onboarding).
+  // Alt+1..9 → jump to the Nth workspace (event.code: Digit1..Digit9).
+  useActionShortcut("global.gotoWorkspace", (e) => {
+    const m = /^Digit([1-9])$/.exec(e.code);
+    if (!m) return;
+    const ws = workspaces[Number(m[1]) - 1];
+    if (ws) router.push(`/workspaces/${ws.id}`);
+  });
 
   // Redirect to onboarding page on first run
   useEffect(() => {

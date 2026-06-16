@@ -1,6 +1,12 @@
 export { ShortcutProvider } from "./shortcut-provider";
 export { useShortcut } from "./use-shortcut";
-export { useShortcutHelp, renderKeys, isMac } from "./use-shortcut-help";
+export {
+  useShortcutHelp,
+  renderKeys,
+  renderComboTokens,
+  compactKeyList,
+  isMac,
+} from "./use-shortcut-help";
 export type { ShortcutHelpGroup } from "./use-shortcut-help";
 export {
   useShortcutStore,

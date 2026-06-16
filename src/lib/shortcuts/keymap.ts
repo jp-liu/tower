@@ -12,14 +12,15 @@ export type ShortcutActionId =
   | "global.commandPalette"
   | "global.help"
   | "global.assistant"
+  | "global.gotoWorkspace"
+  | "missions.exit"
   | "missions.jump"
   | "missions.moveSelection"
   | "missions.cycle"
   | "missions.cycleBack"
   | "missions.focus"
   | "missions.next"
-  | "missions.prev"
-  | "missions.exit";
+  | "missions.prev";
 
 export interface ShortcutAction {
   /** Stable identifier — used as the override key and registration key. */
@@ -70,6 +71,37 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
     group: "global",
     scope: "global",
     configurable: true,
+  },
+  {
+    id: "global.gotoWorkspace",
+    // Alt+1..9 → switch to the Nth workspace. Bound via event.code (DigitN) so
+    // it works on macOS where Option+number emits special characters.
+    defaultKeys: [
+      "Alt+Digit1",
+      "Alt+Digit2",
+      "Alt+Digit3",
+      "Alt+Digit4",
+      "Alt+Digit5",
+      "Alt+Digit6",
+      "Alt+Digit7",
+      "Alt+Digit8",
+      "Alt+Digit9",
+    ],
+    descriptionKey: "shortcuts.gotoWorkspace",
+    group: "global",
+    scope: "global",
+    configurable: false,
+    allowInInput: true,
+  },
+  // --- Mission Control pane navigation (display order matches the help panel) ---
+  {
+    id: "missions.exit",
+    defaultKeys: ["Control+;"],
+    descriptionKey: "shortcuts.missions.exitToNav",
+    group: "missions",
+    scope: "missions",
+    configurable: true,
+    allowInInput: true,
   },
   {
     id: "missions.jump",
@@ -124,15 +156,6 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
     id: "missions.prev",
     defaultKeys: ["$mod+[", "$mod+ArrowLeft"],
     descriptionKey: "shortcuts.missions.prevPane",
-    group: "missions",
-    scope: "missions",
-    configurable: true,
-    allowInInput: true,
-  },
-  {
-    id: "missions.exit",
-    defaultKeys: ["Control+;"],
-    descriptionKey: "shortcuts.missions.exitToNav",
     group: "missions",
     scope: "missions",
     configurable: true,

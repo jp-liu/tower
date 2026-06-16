@@ -6,12 +6,12 @@ import { RotateCcw } from "lucide-react";
 import {
   SHORTCUT_ACTIONS,
   getAction,
-  renderKeys,
   serializeKeyEvent,
   useKeymapStore,
   type ShortcutAction,
   type ShortcutActionId,
 } from "@/lib/shortcuts";
+import { KeyCombo } from "@/components/shortcuts/key-combo";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,23 +40,9 @@ const HIDDEN_ACTION_IDS: ReadonlySet<ShortcutActionId> = new Set([
   "missions.cycleBack",
 ]);
 
-/** Render a list of tinykeys bindings as `<kbd>` chip groups. */
+/** Render a list of tinykeys bindings as polished key caps. */
 function KeyChips({ keys }: { keys: string[] }) {
-  const rendered = renderKeys(keys);
-  return (
-    <span className="inline-flex items-center gap-1">
-      {rendered.map((combo, i) => (
-        <span key={`${combo}-${i}`} className="inline-flex items-center gap-1">
-          {i > 0 && (
-            <span className="text-[11px] text-muted-foreground/50">/</span>
-          )}
-          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px]">
-            {combo}
-          </kbd>
-        </span>
-      ))}
-    </span>
-  );
+  return <KeyCombo keys={keys} />;
 }
 
 export function KeyboardShortcutsSection() {
