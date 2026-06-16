@@ -95,7 +95,7 @@ function CollapsibleDescription({ text }: { text: string }) {
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="mt-1 text-xs font-medium text-primary hover:underline"
+          className="mt-1 text-xs font-medium text-sky-600 hover:underline dark:text-sky-400"
         >
           {expanded
             ? t("taskDrawer.collapseDescription")
