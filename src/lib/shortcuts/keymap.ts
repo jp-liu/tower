@@ -13,6 +13,10 @@ export type ShortcutActionId =
   | "global.help"
   | "global.assistant"
   | "global.gotoWorkspace"
+  | "panels.taskManager"
+  | "panels.assets"
+  | "panels.notes"
+  | "panels.archive"
   | "missions.exit"
   | "missions.jump"
   | "missions.moveSelection"
@@ -30,7 +34,7 @@ export interface ShortcutAction {
   /** i18n key for the human-readable description. */
   descriptionKey: string;
   /** Help-panel / settings group. */
-  group: "global" | "missions";
+  group: "global" | "panels" | "missions";
   /** Dispatch scope (route scopes outrank "global" on the same key). */
   scope: "global" | "missions";
   /** `false` => fixed binding, shown read-only in settings. */
@@ -92,6 +96,41 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
     scope: "global",
     configurable: false,
     allowInInput: true,
+  },
+  // --- Bottom-left panel entries (mounted app-wide so they work on detail pages too) ---
+  // Defaults use Ctrl+Cmd on macOS ($mod = Cmd, Control = Ctrl). The extra
+  // Control distinguishes them from the bare $mod combos above (e.g. $mod+k).
+  {
+    id: "panels.taskManager",
+    defaultKeys: ["$mod+Control+j"],
+    descriptionKey: "shortcuts.panels.taskManager",
+    group: "panels",
+    scope: "global",
+    configurable: true,
+  },
+  {
+    id: "panels.assets",
+    defaultKeys: ["$mod+Control+k"],
+    descriptionKey: "shortcuts.panels.assets",
+    group: "panels",
+    scope: "global",
+    configurable: true,
+  },
+  {
+    id: "panels.notes",
+    defaultKeys: ["$mod+Control+l"],
+    descriptionKey: "shortcuts.panels.notes",
+    group: "panels",
+    scope: "global",
+    configurable: true,
+  },
+  {
+    id: "panels.archive",
+    defaultKeys: ["$mod+Control+;"],
+    descriptionKey: "shortcuts.panels.archive",
+    group: "panels",
+    scope: "global",
+    configurable: true,
   },
   // --- Mission Control pane navigation (display order matches the help panel) ---
   {

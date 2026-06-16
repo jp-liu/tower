@@ -32,6 +32,7 @@ import {
 /** Display order for groups. */
 const GROUP_ORDER: ReadonlyArray<ShortcutAction["group"]> = [
   "global",
+  "panels",
   "missions",
 ];
 

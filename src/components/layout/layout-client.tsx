@@ -51,13 +51,30 @@ function LayoutInner({
   const router = useRouter();
   const { isOpen, displayMode, closeAssistant } = useAssistant();
 
-  // Global navigation shortcut (mounted app-wide except onboarding).
+  // Global navigation shortcuts — mounted here at the app-wide layout level (not
+  // in AppSidebar, which is unmounted on task-detail / sub-pages). This keeps
+  // them live everywhere; router.push naturally leaves the current detail route.
   // Alt+1..9 → jump to the Nth workspace (event.code: Digit1..Digit9).
   useActionShortcut("global.gotoWorkspace", (e) => {
     const m = /^Digit([1-9])$/.exec(e.code);
     if (!m) return;
     const ws = workspaces[Number(m[1]) - 1];
     if (ws) router.push(`/workspaces/${ws.id}`);
+  });
+
+  // Bottom-left panel entries. Resolve the active workspace from the path
+  // (works on detail/sub routes too), falling back to the first workspace.
+  const activeWorkspaceId = pathname.split("/workspaces/")[1]?.split("/")[0];
+  const panelWorkspaceId = activeWorkspaceId || workspaces[0]?.id;
+  useActionShortcut("panels.taskManager", () => router.push("/missions"));
+  useActionShortcut("panels.assets", () => {
+    if (panelWorkspaceId) router.push(`/workspaces/${panelWorkspaceId}/assets`);
+  });
+  useActionShortcut("panels.notes", () => {
+    if (panelWorkspaceId) router.push(`/workspaces/${panelWorkspaceId}/notes`);
+  });
+  useActionShortcut("panels.archive", () => {
+    if (panelWorkspaceId) router.push(`/workspaces/${panelWorkspaceId}/archive`);
   });
 
   // Redirect to onboarding page on first run

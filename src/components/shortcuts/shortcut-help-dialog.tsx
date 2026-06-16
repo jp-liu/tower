@@ -20,7 +20,7 @@ import { KeyCombo } from "@/components/shortcuts/key-combo";
 import { useShortcutHelpStore } from "@/stores/shortcut-help-store";
 
 /** Order in which groups appear in the cheatsheet. */
-const GROUP_ORDER: ShortcutAction["group"][] = ["global", "missions"];
+const GROUP_ORDER: ShortcutAction["group"][] = ["global", "panels", "missions"];
 
 /** `Shift+Tab` is covered by the `Tab` row — don't list it separately. */
 const HIDDEN_ACTIONS = new Set(["missions.cycleBack"]);
