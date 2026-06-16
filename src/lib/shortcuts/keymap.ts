@@ -184,7 +184,8 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
   },
   {
     id: "missions.next",
-    defaultKeys: ["$mod+]", "$mod+ArrowRight"],
+    // Only $mod+ArrowRight — $mod+] is left to the browser (forward navigation).
+    defaultKeys: ["$mod+ArrowRight"],
     descriptionKey: "shortcuts.missions.nextPane",
     group: "missions",
     scope: "missions",
@@ -193,7 +194,8 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
   },
   {
     id: "missions.prev",
-    defaultKeys: ["$mod+[", "$mod+ArrowLeft"],
+    // Only $mod+ArrowLeft — $mod+[ is left to the browser (back navigation).
+    defaultKeys: ["$mod+ArrowLeft"],
     descriptionKey: "shortcuts.missions.prevPane",
     group: "missions",
     scope: "missions",

@@ -8,6 +8,29 @@
 export type MoveDirection = "up" | "down" | "left" | "right";
 
 /**
+ * Shortcut characters for the pane selector, in order: digits 1–9, then A–Z.
+ * Index 0 → "1", … index 8 → "9", index 9 → "A", … index 34 → "Z".
+ * Panes beyond index 34 have no quick-select key (mouse click still works).
+ */
+export const PANE_SHORTCUT_CHARS = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+/** The shortcut label for a pane index, or `null` when out of the labelled range. */
+export function paneShortcutLabel(index: number): string | null {
+  if (index < 0 || index >= PANE_SHORTCUT_CHARS.length) return null;
+  return PANE_SHORTCUT_CHARS[index];
+}
+
+/**
+ * Map a pressed key (e.g. "3", "a", "A") to its pane index, or `null` when the
+ * key is not a valid selector character. Letters are case-insensitive.
+ */
+export function paneIndexFromShortcutKey(key: string): number | null {
+  if (key.length !== 1) return null;
+  const i = PANE_SHORTCUT_CHARS.indexOf(key.toUpperCase());
+  return i === -1 ? null : i;
+}
+
+/**
  * Wrap-around index step. Moving forward past the end wraps to 0; moving
  * backward past 0 wraps to the last index.
  */

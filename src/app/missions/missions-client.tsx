@@ -19,8 +19,14 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Rocket } from "lucide-react";
+import { Rocket, Keyboard } from "lucide-react";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 import { GridPresetPicker } from "@/components/missions/grid-preset-picker";
+import { PaneSelectorDialog } from "@/components/missions/pane-selector-dialog";
 import {
   DndContext,
   closestCenter,
@@ -37,7 +43,6 @@ import {
 import { MissionCard } from "@/components/missions/mission-card";
 import { TaskPickerDialog } from "@/components/missions/task-picker-dialog";
 import { mergeMissions } from "@/components/missions/merge-missions";
-import { Badge } from "@/components/ui/badge";
 import { useActionShortcut } from "@/lib/shortcuts";
 import {
   wrapIndex,
@@ -94,7 +99,6 @@ export function MissionsClient({
   const gridColsRef = useRef(2);
   const selectedIndexRef = useRef(selectedIndex);
   selectedIndexRef.current = selectedIndex;
-  const visibleCardsRef = useRef<ActiveExecutionInfo[]>([]);
 
   const onRegisterControls = useCallback(
     (taskId: string, controls: TerminalControls | null) => {
@@ -265,12 +269,17 @@ export function MissionsClient({
   // --- Pane navigation actions (stable; read live state via refs) ---
 
   // Focus pane i → enter input mode + mark it selected. No-op if out of range.
+  // Also scrolls the pane into view (no animation) so off-screen panes become
+  // visible when selected from the picker / jump keys.
   const focusPane = useCallback((i: number) => {
     const controls = orderedControlsRef.current;
     if (i < 0 || i >= controls.length) return;
     controls[i]?.focus();
     setSelectedIndex(i);
     setMode("input");
+    gridContainerRef.current
+      ?.querySelector<HTMLElement>(`[data-pane-index="${i}"]`)
+      ?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
   }, []);
 
   // Blur current pane → back to navigation mode (overlay reappears).
@@ -282,6 +291,12 @@ export function MissionsClient({
   const focusSelected = useCallback(() => {
     focusPane(selectedIndexRef.current);
   }, [focusPane]);
+
+  // Toggle button: input → open the pane picker (nav); nav → focus current pane.
+  const toggleMode = useCallback(() => {
+    if (mode === "input") exitToNav();
+    else focusSelected();
+  }, [mode, exitToNav, focusSelected]);
 
   // Cycle focus to next/prev pane (wrap), staying in input mode.
   const nextPane = useCallback(() => {
@@ -313,14 +328,6 @@ export function MissionsClient({
     setMode("nav");
     setSelectedIndex((cur) => wrapIndex(cur, len, dir));
   }, []);
-
-  const onRequestFocus = useCallback(
-    (taskId: string) => {
-      const i = visibleCardsRef.current.findIndex((c) => c.taskId === taskId);
-      if (i >= 0) focusPane(i);
-    },
-    [focusPane]
-  );
 
   // --- Shortcut registrations (scope "missions"; mounted only on /missions) ---
 
@@ -382,7 +389,6 @@ export function MissionsClient({
     : cards;
 
   // Keep refs used by stable handlers in sync with current render.
-  visibleCardsRef.current = visibleCards;
   orderedControlsRef.current = visibleCards
     .map((c) => controlsRef.current.get(c.taskId))
     .filter((c): c is TerminalControls => Boolean(c));
@@ -406,17 +412,25 @@ export function MissionsClient({
       <div className="header-sm shrink-0 px-4 flex items-center gap-3">
         <h1 className="text-base font-semibold">{t("missions.pageTitle")}</h1>
 
-        {/* Mode tag — navigation vs input */}
-        <Badge
-          variant={mode === "input" ? "default" : "secondary"}
-          className={
-            mode === "input"
-              ? "shrink-0"
-              : "shrink-0 bg-muted text-muted-foreground"
-          }
-        >
-          {mode === "input" ? t("missions.mode.input") : t("missions.mode.nav")}
-        </Badge>
+        {/* Mode toggle — click to open the pane picker (nav) / return to typing */}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant={mode === "input" ? "default" : "secondary"}
+                className="h-8 gap-1.5 shrink-0"
+                onClick={toggleMode}
+                disabled={visibleCards.length === 0}
+              />
+            }
+          >
+            <Keyboard className="h-3.5 w-3.5" />
+            {mode === "input" ? t("missions.mode.input") : t("missions.mode.nav")}
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">
+            {t("missions.mode.toggleHint")}
+          </TooltipContent>
+        </Tooltip>
 
         {/* Workspace filter — right of title */}
         <Select value={filterWsId} onValueChange={(v) => setFilterWsId(v ?? "")}>
@@ -501,10 +515,7 @@ export function MissionsClient({
                     onStop={handleStop}
                     onSessionEnd={handleSessionEnd}
                     index={i}
-                    mode={mode}
-                    isSelected={selectedIndex === i && mode === "nav"}
                     onRegisterControls={onRegisterControls}
-                    onRequestFocus={onRequestFocus}
                   />
                 ))}
               </div>
@@ -512,6 +523,15 @@ export function MissionsClient({
           </DndContext>
         )}
       </div>
+
+      {/* Navigation mode — centered pane picker (replaces per-pane overlay) */}
+      <PaneSelectorDialog
+        open={mode === "nav"}
+        panes={visibleCards}
+        selectedIndex={selectedIndex}
+        onSelect={focusPane}
+        onClose={focusSelected}
+      />
     </div>
   );
 }

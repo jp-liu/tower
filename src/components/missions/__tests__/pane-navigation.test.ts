@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { wrapIndex, moveSelection } from "../pane-navigation";
+import {
+  wrapIndex,
+  moveSelection,
+  paneShortcutLabel,
+  paneIndexFromShortcutKey,
+} from "../pane-navigation";
 
 describe("wrapIndex", () => {
   it("steps forward within range", () => {
@@ -96,6 +101,50 @@ describe("moveSelection", () => {
         expect(r).toBeGreaterThanOrEqual(0);
         expect(r).toBeLessThan(len);
       }
+    }
+  });
+});
+
+describe("paneShortcutLabel", () => {
+  it("maps 0–8 to digits 1–9", () => {
+    expect(paneShortcutLabel(0)).toBe("1");
+    expect(paneShortcutLabel(8)).toBe("9");
+  });
+
+  it("maps 9–34 to letters A–Z", () => {
+    expect(paneShortcutLabel(9)).toBe("A");
+    expect(paneShortcutLabel(34)).toBe("Z");
+  });
+
+  it("returns null beyond the labelled range and for negatives", () => {
+    expect(paneShortcutLabel(35)).toBeNull();
+    expect(paneShortcutLabel(-1)).toBeNull();
+  });
+});
+
+describe("paneIndexFromShortcutKey", () => {
+  it("maps digits 1–9 to indexes 0–8", () => {
+    expect(paneIndexFromShortcutKey("1")).toBe(0);
+    expect(paneIndexFromShortcutKey("9")).toBe(8);
+  });
+
+  it("maps letters (case-insensitive) to indexes 9–34", () => {
+    expect(paneIndexFromShortcutKey("A")).toBe(9);
+    expect(paneIndexFromShortcutKey("a")).toBe(9);
+    expect(paneIndexFromShortcutKey("z")).toBe(34);
+  });
+
+  it("returns null for non-selector keys", () => {
+    expect(paneIndexFromShortcutKey("0")).toBeNull();
+    expect(paneIndexFromShortcutKey("-")).toBeNull();
+    expect(paneIndexFromShortcutKey("Enter")).toBeNull();
+    expect(paneIndexFromShortcutKey("")).toBeNull();
+  });
+
+  it("round-trips with paneShortcutLabel", () => {
+    for (let i = 0; i < 35; i++) {
+      const label = paneShortcutLabel(i)!;
+      expect(paneIndexFromShortcutKey(label)).toBe(i);
     }
   });
 });
