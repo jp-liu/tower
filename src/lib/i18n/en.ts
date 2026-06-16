@@ -846,6 +846,8 @@ export const en: Translations = {
   "taskDrawer.noNotes": "No notes yet",
   "taskDrawer.noResources": "No resources yet",
   "taskDrawer.previewNote": "View full content",
+  "taskDrawer.expandDescription": "Show all",
+  "taskDrawer.collapseDescription": "Show less",
   "taskDrawer.duplicate": "Duplicate as new task",
   "taskDrawer.duplicateSuccess": "Task duplicated",
   "taskDrawer.duplicateFailed": "Failed to duplicate task",

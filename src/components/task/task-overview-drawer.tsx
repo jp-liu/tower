@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   Sheet,
   SheetContent,
@@ -57,12 +57,60 @@ interface TaskOverviewDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   taskId: string | null;
+  /**
+   * Hide the "open in file manager / editor / terminal" actions. Archived tasks
+   * have their worktree dirs removed, so these actions point at nothing.
+   */
+  hideEnvActions?: boolean;
+}
+
+/**
+ * Description that clamps to 5 lines and offers an expand/collapse toggle when
+ * the content actually overflows. Overflow is measured once on mount (collapsed
+ * state) — re-mount via `key` on the caller side when the task changes.
+ */
+function CollapsibleDescription({ text }: { text: string }) {
+  const { t } = useI18n();
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const ref = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // Measured while line-clamp-5 is applied (expanded starts false), so a
+    // taller scrollHeight means there are hidden lines worth a toggle.
+    setOverflowing(el.scrollHeight > el.clientHeight + 1);
+  }, []);
+
+  return (
+    <div>
+      <p
+        ref={ref}
+        className={`text-sm text-foreground whitespace-pre-wrap ${expanded ? "" : "line-clamp-5"}`}
+      >
+        {text}
+      </p>
+      {overflowing && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1 text-xs font-medium text-primary hover:underline"
+        >
+          {expanded
+            ? t("taskDrawer.collapseDescription")
+            : t("taskDrawer.expandDescription")}
+        </button>
+      )}
+    </div>
+  );
 }
 
 export function TaskOverviewDrawer({
   open,
   onOpenChange,
   taskId,
+  hideEnvActions = false,
 }: TaskOverviewDrawerProps) {
   const { t } = useI18n();
   const [task, setTask] = useState<TaskOverviewData | null>(null);
@@ -273,15 +321,19 @@ export function TaskOverviewDrawer({
               {t("assets.loading")}
             </div>
           ) : task ? (
-            <div className="p-4 space-y-4">
+            <div className="p-4 pb-8 space-y-4">
               {/* Description */}
               <section>
                 <h4 className="text-xs font-medium text-muted-foreground mb-1">
                   {t("taskDrawer.description")}
                 </h4>
-                <p className="text-sm text-foreground whitespace-pre-wrap">
-                  {task.description || t("taskDrawer.noDescription")}
-                </p>
+                {task.description ? (
+                  <CollapsibleDescription key={task.id} text={task.description} />
+                ) : (
+                  <p className="text-sm text-foreground whitespace-pre-wrap">
+                    {t("taskDrawer.noDescription")}
+                  </p>
+                )}
               </section>
 
               {/* Labels */}
@@ -451,8 +503,9 @@ export function TaskOverviewDrawer({
               </section>
 
               {/* Open in file manager / editor — uses the task's worktree dir
-                  (or project dir + subPath). Hidden for tasks with no local path. */}
-              {openDir && (
+                  (or project dir + subPath). Hidden for tasks with no local path,
+                  and for archived tasks (hideEnvActions) whose worktree is gone. */}
+              {openDir && !hideEnvActions && (
                 <section className="flex flex-col">
                   <Button
                     variant="ghost"

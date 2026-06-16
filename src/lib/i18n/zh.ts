@@ -861,6 +861,8 @@ export const zh = {
   "taskDrawer.noNotes": "暂无笔记",
   "taskDrawer.noResources": "暂无资源",
   "taskDrawer.previewNote": "查看全文",
+  "taskDrawer.expandDescription": "展开查看全部",
+  "taskDrawer.collapseDescription": "收起",
   "taskDrawer.duplicate": "复制并新建任务",
   "taskDrawer.duplicateSuccess": "已复制为新任务",
   "taskDrawer.duplicateFailed": "复制任务失败",

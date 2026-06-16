@@ -295,6 +295,7 @@ export function ArchivePageClient({
         open={!!drawerTaskId}
         onOpenChange={(o) => { if (!o) setDrawerTaskId(null); }}
         taskId={drawerTaskId}
+        hideEnvActions
       />
     </div>
   );
