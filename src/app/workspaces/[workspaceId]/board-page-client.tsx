@@ -11,6 +11,7 @@ import { TaskDetailPanel } from "@/components/task/task-detail-panel";
 import { createTask, updateTaskStatus, updateTask, deleteTask, toggleTaskPinned, checkWorktreeClean } from "@/actions/task-actions";
 import { startPtyExecution } from "@/actions/agent-actions";
 import { getVersionsForPicker } from "@/actions/version-actions";
+import { setLastProjectId } from "@/lib/workspace-last-project";
 import { ProjectTabs } from "@/components/board/project-tabs";
 import { TaskMergeConfirmDialog } from "@/components/task/task-merge-confirm-dialog";
 import { TaskCancelConfirmDialog } from "@/components/task/task-cancel-confirm-dialog";
@@ -92,6 +93,11 @@ export function BoardPageClient({
   useEffect(() => {
     getVersionsForPicker(projectId).then(setVersions).catch(() => setVersions([]));
   }, [projectId]);
+
+  // 记忆当前工作区高亮的项目，供下次切回该工作区时恢复（覆盖 tab 切换、详情页返回等场景）。
+  useEffect(() => {
+    setLastProjectId(workspaceId, projectId);
+  }, [workspaceId, projectId]);
 
   const defaultVersionId = versions.find((v) => v.isCurrent)?.id ?? null;
 

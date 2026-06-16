@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createWorkspace, updateWorkspace, deleteWorkspace, reorderWorkspaces } from "@/actions/workspace-actions";
 import { getLabelsForWorkspace, createLabel, deleteLabel } from "@/actions/label-actions";
+import { getLastProjectId } from "@/lib/workspace-last-project";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 import {
@@ -114,6 +115,16 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
   );
 
   const activeWorkspaceId = pathname.split("/workspaces/")[1]?.split("/")[0];
+
+  // 切换工作区时恢复该工作区上次高亮的项目（无记录则由服务端默认到第一个项目）。
+  const navigateToWorkspace = useCallback(
+    (wsId: string) => {
+      if (activeWorkspaceId === wsId) return;
+      const lastProjectId = getLastProjectId(wsId);
+      router.push(lastProjectId ? `/workspaces/${wsId}?projectId=${lastProjectId}` : `/workspaces/${wsId}`);
+    },
+    [activeWorkspaceId, router]
+  );
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
@@ -201,7 +212,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
                 <TooltipTrigger
                   render={
                     <button
-                      onClick={() => { if (!isActive) router.push(`/workspaces/${ws.id}`); }}
+                      onClick={() => navigateToWorkspace(ws.id)}
                       className={`flex h-9 w-9 items-center justify-center rounded-lg transition-all ${
                         isActive
                           ? "ring-1 ring-primary/20 text-foreground cursor-default"
@@ -389,7 +400,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
                 icon={getIcon(ws)}
                 disableDelete={orderedWorkspaces.length <= 1}
                 t={t}
-                onSelect={() => { if (activeWorkspaceId !== ws.id) router.push(`/workspaces/${ws.id}`); }}
+                onSelect={() => navigateToWorkspace(ws.id)}
                 onEdit={() => openEditDialog(ws)}
                 onManageLabels={() => openLabelManager(ws.id)}
                 onDelete={() => handleDelete(ws.id, ws.name)}
