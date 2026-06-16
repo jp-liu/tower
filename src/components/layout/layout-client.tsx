@@ -17,6 +17,7 @@ import { GuidedTour } from "@/components/onboarding/guided-tour";
 import { CommandPalette } from "@/components/shortcuts/command-palette";
 import { ShortcutHelpDialog } from "@/components/shortcuts/shortcut-help-dialog";
 import { useActionShortcut } from "@/lib/shortcuts";
+import { getLastProjectId } from "@/lib/workspace-last-project";
 
 interface CreateProjectData {
   name: string;
@@ -59,7 +60,12 @@ function LayoutInner({
     const m = /^Digit([1-9])$/.exec(e.code);
     if (!m) return;
     const ws = workspaces[Number(m[1]) - 1];
-    if (ws) router.push(`/workspaces/${ws.id}`);
+    if (!ws) return;
+    // Mirror the sidebar's normal switch: restore the workspace's last-highlighted
+    // project so Alt+N behaves identically to clicking it (falls back to the first
+    // project server-side when there's no record).
+    const lastProjectId = getLastProjectId(ws.id);
+    router.push(lastProjectId ? `/workspaces/${ws.id}?projectId=${lastProjectId}` : `/workspaces/${ws.id}`);
   });
 
   // Bottom-left panel entries. Resolve the active workspace from the path
