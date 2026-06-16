@@ -184,32 +184,36 @@ export async function POST(request: NextRequest) {
           } catch { /* ignore parse errors */ }
         }
 
-        // Load the Tower skill via `/tower`, but ONLY on the first turn (no
-        // sessionId). On resumed turns the skill is already in context, and
-        // re-issuing the `/tower` slash command every message made the model
-        // treat each follow-up as a fresh skill-load — it would reply with a
-        // short acknowledgement ("立即创建") and end the turn without ever
-        // emitting the tool call. Plain follow-up text keeps the agent loop
-        // going so it actually invokes the MCP tool.
-        const prompt = body.sessionId
-          ? `${identityPrefix}${body.message}`
-          : `${identityPrefix}/tower ${body.message}`;
+        // Always re-issue `/tower` so the skill (and its required output
+        // formats) stays in context on every turn. Without it, follow-up
+        // turns drift away from the skill's conventions — e.g. the task
+        // creation confirmation format becomes inconsistent across sessions.
+        const prompt = `${identityPrefix}/tower ${body.message}`;
 
         // Append attachment file paths so Claude can Read them (AI-01)
         const finalPrompt = hasAttachments
           ? buildAttachmentPrompt(prompt, safeAttachmentFilenames, getAssistantCacheRoot())
           : prompt;
 
-        const q = query({
-          prompt: finalPrompt,
-          options: options as Parameters<typeof query>[0]["options"],
-        });
-
         // Diagnostic counters — let us tell apart "the model never tried to call
         // a tool" (prompt/model issue) from "a tool was called but failed"
         // (permission/runtime issue) when users report "it never does anything".
         let toolUseCount = 0;
 
+        // Build a query, optionally resuming a prior CLI session. Kept as a
+        // factory so we can transparently retry WITHOUT resume if that session
+        // no longer exists (server restart, cleared CLI history, stale UI id).
+        const makeQuery = (withResume: boolean) => {
+          const runOptions = { ...options };
+          if (!withResume) delete (runOptions as Record<string, unknown>).resume;
+          return query({
+            prompt: finalPrompt,
+            options: runOptions as Parameters<typeof query>[0]["options"],
+          });
+        };
+
+        // Consume a query's message stream, forwarding each chunk to the client.
+        const consume = async (q: ReturnType<typeof query>) => {
         for await (const msg of q) {
           switch (msg.type) {
             case "assistant": {
@@ -325,6 +329,26 @@ export async function POST(request: NextRequest) {
             default:
               // Ignore other message types (status, auth, hooks, etc.)
               break;
+          }
+        }
+        };
+
+        // Run; if resuming a now-missing session, fall back to a fresh one so a
+        // restarted server / cleared CLI history doesn't dead-end the user. The
+        // "no conversation found" error is thrown before any chunk streams, so
+        // the retry can't produce duplicate output.
+        try {
+          await consume(makeQuery(Boolean(body.sessionId)));
+        } catch (runErr: unknown) {
+          const runDetail = runErr instanceof Error ? runErr.message : String(runErr);
+          if (body.sessionId && /no conversation found|no session found|session id/i.test(runDetail)) {
+            console.error(
+              `[assistant-chat] resume failed for sessionId=${body.sessionId} (${runDetail}); retrying as a fresh session`
+            );
+            toolUseCount = 0;
+            await consume(makeQuery(false));
+          } else {
+            throw runErr;
           }
         }
       } catch (err: unknown) {
