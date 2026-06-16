@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import { NoteList } from "@/components/notes/note-list";
 import { NoteEditor } from "@/components/notes/note-editor";
 import { NotePreviewDialog } from "@/components/notes/note-preview-dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { TaskOverviewDrawer } from "@/components/task/task-overview-drawer";
 import type { NoteItem } from "@/components/notes/note-card";
 
@@ -334,30 +335,32 @@ export function NotesPageClient({
           </div>
         ) : (
           /* ── List view ── */
-          <div className="space-y-4">
+          <div className="flex flex-col flex-1 min-h-0 gap-4">
             <CategoryFilter active={activeCategory} onSelect={setActiveCategory} />
 
-            <div className={`relative ${isPending ? "opacity-40 pointer-events-none" : ""} transition-opacity`}>
-              {isPending && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center">
-                  <Loader2 className="size-5 animate-spin text-muted-foreground" />
-                </div>
-              )}
-              {listProjects.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-                  <p className="text-sm font-medium text-muted-foreground">{t("notes.noProject")}</p>
-                  <p className="text-xs text-muted-foreground/60">{t("notes.noProjectHint")}</p>
-                </div>
-              ) : (
-                <NoteList
-                  notes={filteredNotes}
-                  onEdit={handleEditNote}
-                  onDelete={handleDelete}
-                  onPreview={setPreviewNote}
-                  onTaskClick={setDrawerTaskId}
-                />
-              )}
-            </div>
+            <ScrollArea className="flex-1 min-h-0">
+              <div className={`relative ${isPending ? "opacity-40 pointer-events-none" : ""} transition-opacity`}>
+                {isPending && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center">
+                    <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+                {listProjects.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+                    <p className="text-sm font-medium text-muted-foreground">{t("notes.noProject")}</p>
+                    <p className="text-xs text-muted-foreground/60">{t("notes.noProjectHint")}</p>
+                  </div>
+                ) : (
+                  <NoteList
+                    notes={filteredNotes}
+                    onEdit={handleEditNote}
+                    onDelete={handleDelete}
+                    onPreview={setPreviewNote}
+                    onTaskClick={setDrawerTaskId}
+                  />
+                )}
+              </div>
+            </ScrollArea>
           </div>
         )}
       </div>
