@@ -35,7 +35,7 @@
     "release": "pnpm build && npm pack",
     "release:smoke": "node scripts/release-smoke.js",
     "release:publish": "pnpm build && npm publish",
-    "start": "next start",
+    "start": "node bin/tower.mjs",
     "lint": "eslint",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
