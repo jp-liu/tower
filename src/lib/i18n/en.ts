@@ -798,6 +798,9 @@ export const en: Translations = {
   "assistant.newSession": "New Session",
   "assistant.sessionList": "Sessions",
   "assistant.deleteSession": "Delete",
+  "assistant.renameSession": "Rename",
+  "assistant.renameSessionTitle": "Rename Session",
+  "assistant.renameSessionPlaceholder": "Enter session name",
   "assistant.noSessions": "No previous sessions",
   // Project migration (Phase 57)
   "project.migrate": "Migrate to canonical path",

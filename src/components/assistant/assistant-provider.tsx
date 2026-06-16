@@ -19,6 +19,7 @@ import {
   getSessions,
   addSession,
   deleteSession,
+  updateSession,
   getActiveSessionId,
   setActiveSessionId,
   buildSessionTitle,
@@ -48,6 +49,7 @@ interface AssistantContextValue {
   createNewSession: () => void;
   switchSession: (sessionId: string) => void;
   removeSession: (sessionId: string) => void;
+  renameSession: (sessionId: string, title: string) => void;
   refreshSessions: () => Promise<void>;
 }
 
@@ -216,6 +218,13 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       createNewSession();
     }
   }, [activeSessionId, createNewSession]);
+
+  const renameSession = useCallback((sessionId: string, title: string) => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    updateSession(sessionId, { title: trimmed });
+    setSessions(getSessions());
+  }, []);
 
   const openAssistant = useCallback(async () => {
     setIsStarting(true);
@@ -489,7 +498,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         isOpen, isStarting, displayMode, worktreePath,
         toggleAssistant, closeAssistant,
         chatMessages, chatStatus, isChatThinking, isLoadingHistory, sendChatMessage, cancelChat,
-        sessions, activeSessionId, createNewSession, switchSession, removeSession, refreshSessions,
+        sessions, activeSessionId, createNewSession, switchSession, removeSession, renameSession, refreshSessions,
       }}
     >
       {children}

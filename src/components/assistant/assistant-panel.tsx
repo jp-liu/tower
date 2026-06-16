@@ -1,7 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Bot, ChevronDown, Plus, Trash2, X } from "lucide-react";
+import { useState } from "react";
+import { Bot, ChevronDown, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -10,6 +11,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { useAssistant } from "./assistant-provider";
 import { useI18n } from "@/lib/i18n";
 
@@ -23,7 +32,7 @@ const DynamicChat = dynamic(
 );
 
 /**
- * Format a date string as relative time (e.g. "2 hours ago").
+ * Format a date string as relative time (e.g. "2h ago").
  */
 function formatRelativeTime(isoString: string): string {
   const now = Date.now();
@@ -48,8 +57,29 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
     createNewSession,
     switchSession,
     removeSession,
+    renameSession,
   } = useAssistant();
   const { t } = useI18n();
+
+  // Rename dialog state
+  const [renameTarget, setRenameTarget] = useState<{ id: string; title: string } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  const openRenameDialog = (id: string, currentTitle: string) => {
+    setRenameTarget({ id, title: currentTitle });
+    setRenameValue(currentTitle);
+  };
+
+  const closeRenameDialog = () => {
+    setRenameTarget(null);
+    setRenameValue("");
+  };
+
+  const confirmRename = () => {
+    if (!renameTarget || !renameValue.trim()) return;
+    renameSession(renameTarget.id, renameValue);
+    closeRenameDialog();
+  };
 
   const containerClass =
     mode === "sidebar"
@@ -77,7 +107,7 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
                 <span className="truncate">{activeTitle}</span>
                 <ChevronDown className="h-3 w-3 shrink-0" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent side="bottom" align="end" sideOffset={4}>
+              <DropdownMenuContent side="bottom" align="end" sideOffset={4} className="w-[280px]">
                 {sessions.length === 0 ? (
                   <div className="px-2 py-4 text-xs text-muted-foreground text-center">
                     {t("assistant.noSessions")}
@@ -86,15 +116,26 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
                   sessions.map((session) => (
                     <DropdownMenuItem
                       key={session.id}
-                      className="flex items-center justify-between gap-2 pr-1"
+                      className="flex items-center justify-between gap-1 pr-1"
                       onClick={() => switchSession(session.id)}
                     >
-                      <div className="flex flex-col gap-0.5 min-w-0">
-                        <span className="text-xs truncate max-w-[140px]">{session.title}</span>
+                      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                        <span className="text-xs truncate">{session.title}</span>
                         <span className="text-[10px] text-muted-foreground">
                           {formatRelativeTime(session.updatedAt)}
                         </span>
                       </div>
+                      <Button
+                        variant="ghost"
+                        className="h-6 w-6 p-0 shrink-0 opacity-50 hover:opacity-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openRenameDialog(session.id, session.title);
+                        }}
+                        aria-label={t("assistant.renameSession")}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
                       <Button
                         variant="ghost"
                         className="h-6 w-6 p-0 shrink-0 opacity-50 hover:opacity-100 hover:text-destructive"
@@ -144,6 +185,35 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
       <div className="flex-1 overflow-hidden">
         {isOpen ? <DynamicChat /> : null}
       </div>
+
+      {/* Rename session dialog */}
+      <Dialog open={renameTarget !== null} onOpenChange={(open) => { if (!open) closeRenameDialog(); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("assistant.renameSessionTitle")}</DialogTitle>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                confirmRename();
+              }
+            }}
+            placeholder={t("assistant.renameSessionPlaceholder")}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={closeRenameDialog}>
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={confirmRename} disabled={!renameValue.trim()}>
+              {t("common.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

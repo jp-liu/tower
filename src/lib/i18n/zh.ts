@@ -813,6 +813,9 @@ export const zh = {
   "assistant.newSession": "新会话",
   "assistant.sessionList": "会话列表",
   "assistant.deleteSession": "删除",
+  "assistant.renameSession": "重命名",
+  "assistant.renameSessionTitle": "重命名会话",
+  "assistant.renameSessionPlaceholder": "输入会话名称",
   "assistant.noSessions": "暂无历史会话",
   // Project migration (Phase 57)
   "project.migrate": "迁移到规范路径",
