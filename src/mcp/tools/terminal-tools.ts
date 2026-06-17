@@ -70,19 +70,22 @@ export const terminalTools = {
 
   send_task_terminal_input: {
     description:
-      "Send text input to a running task's PTY terminal. The text is forwarded directly to the Claude CLI process. Include \\n for Enter key.",
+      "Send text input to a running task's PTY terminal (e.g. the Claude CLI). By default the message is submitted: trailing newlines are trimmed and a real carriage return is appended so the TUI input box actually sends it. Pass submit:false to only fill the input box without submitting (the text is forwarded verbatim).",
     schema: z.object({
       taskId: z.string(),
       text: z.string().min(1).max(10000),
+      submit: z.boolean().optional(),
     }),
-    handler: async (args: { taskId: string; text: string }) => {
+    handler: async (args: { taskId: string; text: string; submit?: boolean }) => {
       const err = validateMcpTaskId(args.taskId);
       if (err) return { error: err, taskId: args.taskId };
       const tid = encodeURIComponent(args.taskId);
+      const submit = args.submit ?? true;
+      const payload = submit ? args.text.replace(/\n+$/, "") + "\r" : args.text;
       const response = await bridgeFetch(`/${tid}/input`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: args.text }),
+        body: JSON.stringify({ text: payload }),
       });
 
       if (response.status === 404) {
