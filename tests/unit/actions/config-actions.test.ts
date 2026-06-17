@@ -12,6 +12,9 @@ let getConfigValueFn: <T>(key: string, defaultValue: T) => Promise<T>;
 let setConfigValueFn: (key: string, value: unknown) => Promise<void>;
 let getConfigValuesFn: (keys: string[]) => Promise<Record<string, unknown>>;
 let resolveGitLocalPathFn: (url: string) => Promise<string>;
+let resolveGitLocalPathWithSourceFn: (
+  url: string
+) => Promise<{ path: string; source: "rule" | "fallback" | "empty" }>;
 
 beforeAll(async () => {
   await testDb.$connect();
@@ -22,6 +25,7 @@ beforeAll(async () => {
   setConfigValueFn = mod.setConfigValue;
   getConfigValuesFn = mod.getConfigValues;
   resolveGitLocalPathFn = mod.resolveGitLocalPath;
+  resolveGitLocalPathWithSourceFn = mod.resolveGitLocalPathWithSource;
 });
 
 afterAll(async () => {
@@ -166,5 +170,49 @@ describe("resolveGitLocalPath", () => {
     // URL is github.com, rule is for gitlab.com — should fall back
     const result = await resolveGitLocalPathFn("https://github.com/jp-liu/test-repo");
     expect(result).toContain("project/i/test-repo");
+  });
+});
+
+describe("resolveGitLocalPathWithSource", () => {
+  it("reports source 'empty' for blank input", async () => {
+    expect(await resolveGitLocalPathWithSourceFn("")).toEqual({ path: "", source: "empty" });
+    expect(await resolveGitLocalPathWithSourceFn("   ")).toEqual({ path: "", source: "empty" });
+  });
+
+  it("reports source 'fallback' when no rules are configured", async () => {
+    const result = await resolveGitLocalPathWithSourceFn("https://github.com/jp-liu/test-repo");
+    expect(result.source).toBe("fallback");
+    expect(result.path).toContain("project/i/test-repo");
+  });
+
+  it("reports source 'rule' when a configured rule matches", async () => {
+    await setConfigValueFn("git.pathMappingRules", [
+      {
+        id: "rule-1",
+        host: "github.com",
+        ownerMatch: "jp-liu",
+        localPathTemplate: "~/custom/path/{repo}",
+        priority: 0,
+      },
+    ]);
+
+    const result = await resolveGitLocalPathWithSourceFn("https://github.com/jp-liu/test-repo");
+    const home = (await import("os")).default.homedir();
+    expect(result).toEqual({ path: `${home}/custom/path/test-repo`, source: "rule" });
+  });
+
+  it("reports source 'fallback' when rules exist but none match the URL", async () => {
+    await setConfigValueFn("git.pathMappingRules", [
+      {
+        id: "rule-1",
+        host: "gitlab.com",
+        ownerMatch: "*",
+        localPathTemplate: "~/gitlab/{repo}",
+        priority: 0,
+      },
+    ]);
+
+    const result = await resolveGitLocalPathWithSourceFn("https://github.com/jp-liu/test-repo");
+    expect(result.source).toBe("fallback");
   });
 });

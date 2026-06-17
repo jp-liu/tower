@@ -37,17 +37,39 @@ export async function getArchiveDelayDays(): Promise<number> {
   return normalizeArchiveDelayDays(raw);
 }
 
-export async function resolveGitLocalPath(url: string): Promise<string> {
+/**
+ * Where a resolved local path came from:
+ * - `rule`     — matched a user-defined git.pathMappingRules entry
+ * - `fallback` — no rule matched (or none configured); derived from the
+ *                built-in default convention (gitUrlToLocalPath)
+ * - `empty`    — no URL provided
+ */
+export type GitLocalPathSource = "rule" | "fallback" | "empty";
+
+/**
+ * Resolve a git URL to a local path AND report whether a user rule actually
+ * matched. Lets the UI distinguish "your rule decided this" from "we guessed
+ * with the default convention" — without that signal, an empty rule set looks
+ * identical to a working one whenever the default happens to agree.
+ */
+export async function resolveGitLocalPathWithSource(
+  url: string
+): Promise<{ path: string; source: GitLocalPathSource }> {
   const trimmed = url.trim();
-  if (!trimmed) return "";
+  if (!trimmed) return { path: "", source: "empty" };
   try {
     const rules = await getConfigValue<GitPathRule[]>("git.pathMappingRules", []);
     const matched = matchGitPathRule(trimmed, rules);
-    if (matched) return matched;
-    return gitUrlToLocalPath(trimmed);
+    if (matched) return { path: matched, source: "rule" };
+    return { path: gitUrlToLocalPath(trimmed), source: "fallback" };
   } catch {
-    return gitUrlToLocalPath(trimmed);
+    return { path: gitUrlToLocalPath(trimmed), source: "fallback" };
   }
+}
+
+export async function resolveGitLocalPath(url: string): Promise<string> {
+  const { path } = await resolveGitLocalPathWithSource(url);
+  return path;
 }
 
 export async function getConfigValues(keys: string[]): Promise<Record<string, unknown>> {

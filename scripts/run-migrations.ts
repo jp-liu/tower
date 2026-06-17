@@ -37,6 +37,18 @@ async function main() {
 
   const prisma = new PrismaClient();
   try {
+    // Ensure the ledger table exists before reading it. In prod bin/tower.mjs
+    // syncs the schema first, but dev never ran a schema sync that included this
+    // table — and DBs created before AppliedMigration was added simply lack it.
+    // Create it additively via raw SQL (idempotent, FTS-safe — never touches the
+    // notes_fts virtual tables that make `prisma db push` hang). No-op when the
+    // table already exists, so prod behaviour is unchanged.
+    await prisma.$executeRawUnsafe(
+      `CREATE TABLE IF NOT EXISTS "AppliedMigration" (` +
+        `"id" TEXT NOT NULL PRIMARY KEY, ` +
+        `"appliedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)`
+    );
+
     const appliedRows = await prisma.appliedMigration.findMany({ select: { id: true } });
     const applied = new Set(appliedRows.map((r) => r.id));
 
