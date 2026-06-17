@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
-import { CLIAdapterTester } from "@/components/settings/cli-adapter-tester";
+import { WizardStepCliTest } from "@/components/onboarding/wizard-step-cli-test";
 import { useI18n } from "@/lib/i18n";
 import { setConfigValue } from "@/actions/config-actions";
 import type { Locale } from "@/lib/i18n";
@@ -387,18 +387,11 @@ export default function OnboardingPage() {
                   </p>
                 </div>
 
-                <CLIAdapterTester
-                  adapterType="claude_code"
-                  adapterLabel="Claude CLI"
-                  provider="claude"
-                  onResult={(r) => setCliResults((prev) => ({ ...prev, claude: r }))}
-                />
-                <CLIAdapterTester
-                  adapterType="codex_cli"
-                  adapterLabel="Codex CLI"
-                  provider="codex"
-                  hideHeader
-                  onResult={(r) => setCliResults((prev) => ({ ...prev, codex: r }))}
+                <WizardStepCliTest
+                  results={cliResults}
+                  onResult={(provider, r) =>
+                    setCliResults((prev) => ({ ...prev, [provider]: r }))
+                  }
                 />
 
                 <div className="flex items-center justify-between pt-3">
