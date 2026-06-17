@@ -82,7 +82,7 @@ export function useNotificationListener(enabled: boolean) {
             // Claude finished a reply turn → notify with workspace/project trace.
             notify(
               event.taskTitle,
-              `${event.workspaceName} / ${event.projectName}：${t("notification.taskReplied")}`
+              `${event.projectName}：${t("notification.taskReplied")}`
             );
           } else {
             // Completion event (manual stop / natural completion)
