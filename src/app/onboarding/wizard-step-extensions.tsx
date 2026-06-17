@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Loader2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useI18n } from "@/lib/i18n";
 import { listExtensionMetadata } from "@/lib/extensions/metadata";
 import { installExtension } from "@/actions/extension-actions";
@@ -87,14 +88,17 @@ export function WizardStepExtensions({ username, onComplete }: WizardStepExtensi
           return (
             <label
               key={ext.id}
-              className="flex items-start gap-3 rounded-lg border border-border bg-background p-3 cursor-pointer hover:bg-accent/50 transition-colors"
+              className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                checked
+                  ? "border-primary/40 bg-primary/5 hover:bg-primary/10"
+                  : "border-border bg-background hover:bg-accent/50"
+              }`}
             >
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={checked}
-                onChange={() => toggle(ext.id)}
+                onCheckedChange={() => toggle(ext.id)}
                 disabled={installing}
-                className="mt-0.5 h-4 w-4 cursor-pointer accent-primary"
+                className="mt-0.5"
               />
               <div className="flex flex-1 items-start gap-3 min-w-0">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
