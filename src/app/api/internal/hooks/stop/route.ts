@@ -11,6 +11,8 @@ export interface StopEvent {
   taskTitle: string;
   sessionId: string;
   workspaceId: string;
+  workspaceName: string;
+  projectName: string;
   type: "stop";
   timestamp: string;
 }
@@ -37,7 +39,13 @@ export async function POST(request: NextRequest) {
     select: {
       id: true,
       title: true,
-      project: { select: { workspaceId: true } },
+      project: {
+        select: {
+          name: true,
+          workspaceId: true,
+          workspace: { select: { name: true } },
+        },
+      },
     },
   });
 
@@ -50,6 +58,8 @@ export async function POST(request: NextRequest) {
     taskTitle: task.title,
     sessionId: sessionId ?? "",
     workspaceId: task.project.workspaceId,
+    workspaceName: task.project.workspace.name,
+    projectName: task.project.name,
     type: "stop",
     timestamp: new Date().toISOString(),
   };

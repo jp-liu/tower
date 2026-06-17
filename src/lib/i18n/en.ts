@@ -952,6 +952,7 @@ export const en: Translations = {
   "notification.dismiss": "Dismiss",
   "notification.taskCompleted": "Task completed",
   "notification.taskFailed": "Task failed",
+  "notification.taskReplied": "Reply complete",
   // Onboarding wizard (Phase 67)
   "onboarding.title": "Welcome to Tower",
   "onboarding.step1.title": "Set Your Username",

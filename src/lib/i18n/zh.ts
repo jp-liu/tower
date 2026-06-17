@@ -968,6 +968,7 @@ export const zh = {
   "notification.dismiss": "忽略",
   "notification.taskCompleted": "任务已完成",
   "notification.taskFailed": "任务失败",
+  "notification.taskReplied": "已回复完毕",
   // Onboarding wizard (Phase 67)
   "onboarding.title": "欢迎使用 Tower",
   "onboarding.step1.title": "设置用户名",

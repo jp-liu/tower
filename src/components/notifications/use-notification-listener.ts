@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
 import { getActualWsPort } from "@/actions/config-actions";
@@ -11,6 +10,8 @@ interface StopEvent {
   taskTitle: string;
   sessionId: string;
   workspaceId: string;
+  workspaceName: string;
+  projectName: string;
   type: "stop";
   timestamp: string;
 }
@@ -31,13 +32,10 @@ function isStopEvent(e: NotificationEvent): e is StopEvent {
 }
 
 export function useNotificationListener(enabled: boolean) {
-  const router = useRouter();
-  const routerRef = useRef(router);
   const enabledRef = useRef(enabled);
   const { t } = useI18n();
   const tRef = useRef(t);
 
-  routerRef.current = router;
   enabledRef.current = enabled;
   tRef.current = t;
 
@@ -47,6 +45,24 @@ export function useNotificationListener(enabled: boolean) {
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
+
+    // Shared notifier: desktop Notification when permission granted, otherwise a
+    // green success toast. The notification is informational only — no click
+    // navigation (clicking keeps the browser's default behavior).
+    function notify(title: string, body: string) {
+      if (
+        typeof window !== "undefined" &&
+        "Notification" in window &&
+        window.Notification.permission === "granted"
+      ) {
+        new window.Notification(title, {
+          body,
+          icon: "/web-app-manifest-192x192.png",
+        });
+      } else {
+        toast.success(title, { description: body });
+      }
+    }
 
     async function connect() {
       if (cancelled) return;
@@ -61,37 +77,21 @@ export function useNotificationListener(enabled: boolean) {
         if (!enabledRef.current) return;
         try {
           const event = JSON.parse(e.data) as NotificationEvent;
+          const t = tRef.current;
           if (isStopEvent(event)) {
-            toast.success(event.taskTitle, {
-              description: tRef.current("notification.taskCompleted"),
-              duration: 8000,
-            });
+            // Claude finished a reply turn → notify with workspace/project trace.
+            notify(
+              event.taskTitle,
+              `${event.workspaceName} / ${event.projectName}：${t("notification.taskReplied")}`
+            );
           } else {
-            // Completion event
-            if (
-              typeof window !== "undefined" &&
-              "Notification" in window &&
-              window.Notification.permission === "granted"
-            ) {
-              const n = new window.Notification("Tower", {
-                body: event.taskTitle,
-                icon: "/web-app-manifest-192x192.png",
-              });
-              n.onclick = () => {
-                window.focus();
-                routerRef.current.push(
-                  `/workspaces/${event.workspaceId}/tasks/${event.taskId}`
-                );
-                n.close();
-              };
-            } else {
-              toast.info(event.taskTitle, {
-                description:
-                  event.status === "COMPLETED"
-                    ? tRef.current("notification.taskCompleted")
-                    : tRef.current("notification.taskFailed"),
-              });
-            }
+            // Completion event (manual stop / natural completion)
+            notify(
+              event.taskTitle,
+              event.status === "COMPLETED"
+                ? t("notification.taskCompleted")
+                : t("notification.taskFailed")
+            );
           }
         } catch {
           // Ignore malformed messages

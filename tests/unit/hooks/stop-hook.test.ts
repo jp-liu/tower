@@ -42,7 +42,9 @@ describe("Stop hook API", () => {
       title: "Test Task",
       projectId: "cproj1234567890123456",
       project: {
+        name: "Test Project",
         workspaceId: "cws12345678901234567",
+        workspace: { name: "Test Workspace" },
       },
     });
 
@@ -82,7 +84,9 @@ describe("Stop hook API", () => {
       title: "Test Task",
       projectId: "cproj1234567890123456",
       project: {
+        name: "Test Project",
         workspaceId: "cws12345678901234567",
+        workspace: { name: "Test Workspace" },
       },
     });
 
@@ -102,6 +106,8 @@ describe("Stop hook API", () => {
       expect.objectContaining({
         taskId: "ctask123456789012345",
         type: "stop",
+        projectName: "Test Project",
+        workspaceName: "Test Workspace",
       })
     );
   });

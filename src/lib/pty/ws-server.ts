@@ -23,9 +23,29 @@ const KEEPALIVE_EXITED_MS = 5 * 60 * 1000;        // 5 minutes
 // (e.g. task detail panel + Mission Control viewing the same task)
 const sessionClients = new Map<string, Set<WebSocket>>();
 
-// Global notification channel — clients connected with taskId=__notifications__
+// Global notification channel — clients connected with taskId=__notifications__.
+// The client Set lives on globalThis (see getNotificationClients below) so that
+// the WS server module instance and any separately-loaded module instance
+// (standalone builds load ws-server twice: once for the WS server, once inside
+// the API route bundle) share ONE registry. Mirrors globalThis.__previewSessions.
 const NOTIFICATION_CHANNEL = "__notifications__";
-const notificationClients = new Set<WebSocket>();
+
+function getNotificationClients(): Set<WebSocket> {
+  if (!g.__notificationClients) {
+    g.__notificationClients = new Set<WebSocket>();
+  }
+  return g.__notificationClients;
+}
+
+/** Register a notification client (called by the WS connection handler). */
+export function addNotificationClient(ws: WebSocket): void {
+  getNotificationClients().add(ws);
+}
+
+/** Unregister a notification client (on WS close/error). */
+export function removeNotificationClient(ws: WebSocket): void {
+  getNotificationClients().delete(ws);
+}
 
 // PREVIEW_TASK_ID / parsePreviewWsParams / PreviewWsParams live in a separate
 // module so client bundles can import them without dragging node-pty into the
@@ -39,7 +59,7 @@ import { parsePreviewWsParams } from "@/lib/preview/ws-constants";
  */
 export function broadcastNotification(payload: object): void {
   const msg = JSON.stringify(payload);
-  for (const client of notificationClients) {
+  for (const client of getNotificationClients()) {
     if (client.readyState === WebSocket.OPEN) {
       client.send(msg);
     }
@@ -87,6 +107,7 @@ function isPortInUse(port: number): Promise<boolean> {
 const g = globalThis as typeof globalThis & {
   __wss?: InstanceType<typeof WebSocketServer>;
   __wsPort?: number;
+  __notificationClients?: Set<WebSocket>;
 };
 
 /** Get the actual WebSocket port the server is listening on. */
@@ -233,9 +254,9 @@ export async function startWsServer(): Promise<void> {
 
     // Notification channel — lightweight listener for global events (stop, completion)
     if (taskId === NOTIFICATION_CHANNEL) {
-      notificationClients.add(ws);
-      ws.on("close", () => notificationClients.delete(ws));
-      ws.on("error", () => notificationClients.delete(ws));
+      addNotificationClient(ws);
+      ws.on("close", () => removeNotificationClient(ws));
+      ws.on("error", () => removeNotificationClient(ws));
       return;
     }
 
