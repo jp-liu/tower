@@ -29,7 +29,7 @@
     "tsconfig.json"
   ],
   "scripts": {
-    "predev": "node scripts/ensure-dev-db.js && pnpm mcp:build",
+    "predev": "node scripts/ensure-dev-db.js && pnpm db:migrate && pnpm mcp:build",
     "dev": "next dev --webpack -p 9022",
     "build": "pnpm mcp:build && rm -rf .next && next build && find .next -name '*.map' -delete && cp -R .next/static .next/standalone/.next/ && cp -R public .next/standalone/ && node scripts/prune-standalone-natives.js",
     "release": "pnpm build && npm pack",

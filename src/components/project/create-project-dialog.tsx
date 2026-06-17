@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 import { toCloneUrl, parseGitUrl } from "@/lib/git-url";
-import { resolveGitLocalPath } from "@/actions/config-actions";
+import { resolveGitLocalPathWithSource, type GitLocalPathSource } from "@/actions/config-actions";
 import { analyzeProjectDirectory } from "@/actions/project-actions";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import { toast } from "sonner";
@@ -48,6 +48,7 @@ export function CreateProjectDialog({
   const [gitUrl, setGitUrl] = useState("");
   const [localPath, setLocalPath] = useState("");
   const [localPathManual, setLocalPathManual] = useState(false);
+  const [pathSource, setPathSource] = useState<GitLocalPathSource>("empty");
   const [projectType, setProjectType] = useState<"FRONTEND" | "BACKEND">("FRONTEND");
   const [cloneStatus, setCloneStatus] = useState<"idle" | "cloning" | "success" | "error">("idle");
   const [cloneError, setCloneError] = useState("");
@@ -61,6 +62,7 @@ export function CreateProjectDialog({
     setGitUrl("");
     setLocalPath("");
     setLocalPathManual(false);
+    setPathSource("empty");
     setProjectType("FRONTEND");
     setCloneStatus("idle");
     setCloneError("");
@@ -94,8 +96,9 @@ export function CreateProjectDialog({
 
     // Auto-resolve local path
     if (!localPathManual) {
-      const path = await resolveGitLocalPath(value);
+      const { path, source } = await resolveGitLocalPathWithSource(value);
       setLocalPath(path);
+      setPathSource(source);
     }
   };
 
@@ -210,6 +213,15 @@ export function CreateProjectDialog({
                   {t("project.tildeWarning")}
                 </p>
               )}
+              {!localPathManual &&
+                pathSource === "fallback" &&
+                gitUrl.trim() &&
+                localPath.trim() && (
+                  <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <AlertCircle className="h-3 w-3 shrink-0" />
+                    {t("project.gitPathFallbackHint")}
+                  </p>
+                )}
 
               {/* Clone button */}
               {gitUrl.trim() && localPath.trim() && (

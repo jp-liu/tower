@@ -1424,6 +1424,9 @@ export function SettingsPage() {
                 <p className="text-sm text-muted-foreground">
                   {t("settings.config.git.noRules")}
                 </p>
+                <p className="mt-1.5 text-xs text-muted-foreground/80">
+                  {t("settings.config.git.noRulesFallback")}
+                </p>
               </div>
             ) : (
               <ul className="divide-y rounded-xl border border-border bg-card">
