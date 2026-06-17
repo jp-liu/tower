@@ -111,12 +111,25 @@ export function MissionCard({
           <GripVertical className="h-3.5 w-3.5" />
         </button>
 
-        {/* Breadcrumb */}
-        <span className="text-[11px] text-muted-foreground truncate flex-1">
-          {execution.workspaceName} &#x203A;{" "}
-          {execution.projectAlias || execution.projectName} &#x203A;{" "}
-          <span className="text-foreground font-semibold">{execution.taskTitle}</span>
-        </span>
+        {/* Breadcrumb — workspace › project prefix is capped to a relative
+            max-width and truncated so a long alias can't swallow the task title
+            or shove the right-side status/controls. Full names show on hover. */}
+        <div className="flex items-center gap-1 min-w-0 flex-1 text-[11px] text-muted-foreground">
+          <span
+            className="truncate max-w-[45%] shrink-0"
+            title={`${execution.workspaceName} › ${execution.projectAlias || execution.projectName}`}
+          >
+            {execution.workspaceName} &#x203A;{" "}
+            {execution.projectAlias || execution.projectName}
+          </span>
+          <span className="shrink-0">&#x203A;</span>
+          <span
+            className="text-foreground font-semibold truncate min-w-0 flex-1"
+            title={execution.taskTitle}
+          >
+            {execution.taskTitle}
+          </span>
+        </div>
 
         {/* Status badge */}
         {isRemoving ? (

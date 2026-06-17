@@ -128,8 +128,11 @@ export function PaneSelectorDialog({
                       : "border-border",
                   ].join(" ")}
                 >
-                  {/* Breadcrumb */}
-                  <span className="truncate text-[11px] text-muted-foreground">
+                  {/* Breadcrumb — truncate long alias, full name on hover */}
+                  <span
+                    className="block w-full truncate text-[11px] text-muted-foreground"
+                    title={`${pane.workspaceName} › ${pane.projectAlias || pane.projectName}`}
+                  >
                     {pane.workspaceName} &#x203A;{" "}
                     {pane.projectAlias || pane.projectName}
                   </span>
