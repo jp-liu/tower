@@ -1,5 +1,5 @@
 import { execFileSync } from "child_process";
-import { existsSync, symlinkSync, lstatSync } from "fs";
+import { existsSync, symlinkSync, lstatSync, readdirSync, mkdirSync, type Dirent } from "fs";
 import { mkdir } from "fs/promises";
 import path from "path";
 import os from "os";
@@ -29,8 +29,7 @@ export interface WorktreeResult {
 export async function createWorktree(
   localPathRaw: string,
   taskId: string,
-  baseBranch: string,
-  subPath?: string | null
+  baseBranch: string
 ): Promise<WorktreeResult> {
   const localPath = expandHome(localPathRaw);
   const worktreePath = path.join(localPath, ".worktrees", "task-" + taskId);
@@ -70,10 +69,9 @@ export async function createWorktree(
 
   if (alreadyExists) {
     // Reuse path: still (re)ensure node_modules links. The worktree may have
-    // been created before deps were installed or before subPath was set, so
-    // the link could be missing. symlinkNodeModules is idempotent — it skips
-    // targets that already exist.
-    symlinkNodeModules(localPath, worktreePath, subPath);
+    // been created before deps were installed, so the links could be missing.
+    // symlinkNodeModules is idempotent — it skips targets that already exist.
+    symlinkNodeModules(localPath, worktreePath);
     return { worktreePath, worktreeBranch };
   }
 
@@ -124,47 +122,86 @@ export async function createWorktree(
   }
 
   // Symlink node_modules from main project to worktree (avoids reinstalling deps)
-  symlinkNodeModules(localPath, worktreePath, subPath);
+  symlinkNodeModules(localPath, worktreePath);
 
   return { worktreePath, worktreeBranch };
 }
 
+/** Directories that are never descended into when scanning for package.json. */
+const SCAN_SKIP_DIRS = new Set(["node_modules", ".git", ".worktrees"]);
+/** Guards against pathological recursion; real monorepos nest only a few levels. */
+const MAX_SCAN_DEPTH = 8;
+
 /**
- * Creates a symlink for node_modules (and other common dependency dirs) from
- * the main project to the worktree directory. This avoids requiring users to
- * reinstall dependencies in every worktree.
+ * Recursively finds every directory under `root` that directly contains a
+ * `package.json`, returned as paths relative to `root` ("" = the root itself).
  *
- * Handles both the repo root and the task's subPath (monorepo packages keep
- * their own node_modules under e.g. `web/node_modules`), so a subPath task
- * gets its dependencies linked at the location its dev server actually runs.
- *
- * Only creates symlinks for directories that exist in the source and do NOT
- * already exist in the target.
+ * Skips `node_modules` (and other VCS/worktree dirs) entirely — it neither
+ * descends into them nor reports package.json files found inside them — and
+ * ignores dot-directories, which are never real workspace packages.
  */
-function symlinkNodeModules(
-  projectRoot: string,
-  worktreePath: string,
-  subPath?: string | null
-): void {
+function findPackageDirs(root: string): string[] {
+  const results: string[] = [];
+
+  const walk = (absDir: string, rel: string, depth: number): void => {
+    if (existsSync(path.join(absDir, "package.json"))) {
+      results.push(rel);
+    }
+    if (depth >= MAX_SCAN_DEPTH) return;
+
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(absDir, { withFileTypes: true }) as Dirent[];
+    } catch {
+      return; // unreadable dir — skip silently
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const name = entry.name;
+      if (SCAN_SKIP_DIRS.has(name) || name.startsWith(".")) continue;
+      walk(
+        path.join(absDir, name),
+        rel ? path.join(rel, name) : name,
+        depth + 1
+      );
+    }
+  };
+
+  walk(root, "", 0);
+  return results;
+}
+
+/**
+ * Creates symlinks for node_modules (and the Next.js `.next` cache) from the
+ * main project to the worktree, so worktrees don't require reinstalling deps.
+ *
+ * Scans the whole source repo for every directory containing a `package.json`
+ * — front-end, back-end, and nested monorepo packages alike — and links each
+ * one's dependency dirs at the matching location in the worktree. This makes
+ * no assumption about project type (front/back); a package.json is enough.
+ *
+ * Idempotent and best-effort: a missing source dir is skipped (and logged for
+ * node_modules), an already-present target is left untouched, and any single
+ * symlink failure is logged without aborting the rest.
+ */
+function symlinkNodeModules(projectRoot: string, worktreePath: string): void {
   const log = logger.create("worktree");
-  // Common dependency directories that should be shared
+  // Dependency/cache directories that should be shared into the worktree.
   const dirs = ["node_modules", ".next"];
-  // Relative prefixes to check: repo root always, plus the subPath if set
-  const prefixes = subPath ? ["", subPath] : [""];
 
-  for (const prefix of prefixes) {
-    // Only link dependency dirs for locations that are real Node projects
-    // (have a package.json). A repo root with no package.json may still carry
-    // a stray node_modules; linking it would shadow the subPath app's deps via
-    // Node's upward module resolution.
-    if (!existsSync(path.join(projectRoot, prefix, "package.json"))) continue;
-
+  for (const pkgDir of findPackageDirs(projectRoot)) {
     for (const dir of dirs) {
-      const rel = prefix ? path.join(prefix, dir) : dir;
+      const rel = pkgDir ? path.join(pkgDir, dir) : dir;
       const source = path.join(projectRoot, rel);
       const target = path.join(worktreePath, rel);
 
-      if (!existsSync(source)) continue;
+      if (!existsSync(source)) {
+        if (dir === "node_modules") {
+          log.info(`Skipped ${rel} — source not installed`, { source });
+        }
+        continue;
+      }
 
       // Skip if target already exists (real dir or existing symlink)
       try {
@@ -175,6 +212,9 @@ function symlinkNodeModules(
       }
 
       try {
+        // The package dir is git-tracked so the worktree usually has it, but
+        // ensure the parent exists before linking to stay robust.
+        mkdirSync(path.dirname(target), { recursive: true });
         symlinkSync(source, target, "junction"); // "junction" works on Windows too
         log.info(`Symlinked ${rel}`, { from: source, to: target });
       } catch (err) {

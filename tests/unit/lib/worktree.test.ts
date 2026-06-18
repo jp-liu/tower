@@ -16,11 +16,13 @@ vi.mock("fs", () => ({
   existsSync: vi.fn(),
   symlinkSync: vi.fn(),
   lstatSync: vi.fn(),
+  readdirSync: vi.fn(),
+  mkdirSync: vi.fn(),
 }));
 
 import { execFileSync } from "child_process";
 import { mkdir } from "fs/promises";
-import { existsSync, symlinkSync, lstatSync } from "fs";
+import { existsSync, symlinkSync, lstatSync, readdirSync, mkdirSync } from "fs";
 import { createWorktree, removeWorktree } from "@/lib/worktree";
 
 const mockedExecFileSync = vi.mocked(execFileSync);
@@ -28,6 +30,13 @@ const mockedMkdir = vi.mocked(mkdir);
 const mockedExistsSync = vi.mocked(existsSync);
 const mockedSymlinkSync = vi.mocked(symlinkSync);
 const mockedLstatSync = vi.mocked(lstatSync);
+const mockedReaddirSync = vi.mocked(readdirSync);
+const mockedMkdirSync = vi.mocked(mkdirSync);
+
+/** Build fake withFileTypes Dirent entries (all directories) for readdirSync. */
+function dirents(names: string[]): never {
+  return names.map((name) => ({ name, isDirectory: () => true })) as never;
+}
 
 const LOCAL_PATH = "/home/user/myproject";
 const TASK_ID = "clxabc123def";
@@ -40,6 +49,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockedMkdir.mockResolvedValue(undefined);
   mockedExecFileSync.mockReturnValue("" as never);
+  // Default: empty repo tree (no nested package dirs) so unrelated tests
+  // don't trip over the directory walk in symlinkNodeModules.
+  mockedReaddirSync.mockReturnValue(dirents([]));
+  mockedMkdirSync.mockReturnValue(undefined as never);
 });
 
 function findCall(args: string[]): boolean {
@@ -83,45 +96,140 @@ describe("createWorktree", () => {
     expect(result).toEqual({ worktreePath: expectedWorktreePath, worktreeBranch: expectedBranch });
   });
 
-  it("symlinks node_modules for both repo root and subPath when both have package.json", async () => {
+  it("symlinks node_modules for every directory that contains a package.json", async () => {
     mockedExecFileSync.mockReturnValue("" as never);
-    // Both root and web are real projects (package.json) with node_modules
+    // Repo tree: root + apps/web + packages/server are real Node projects; docs is not.
+    mockedReaddirSync.mockImplementation((p) => {
+      const s = String(p);
+      if (s === LOCAL_PATH) return dirents(["apps", "packages", "docs", "node_modules", ".git"]);
+      if (s === `${LOCAL_PATH}/apps`) return dirents(["web"]);
+      if (s === `${LOCAL_PATH}/packages`) return dirents(["server"]);
+      return dirents([]);
+    });
+    // package.json present at root, apps/web, packages/server; node_modules present at each.
     mockedExistsSync.mockImplementation((p) => {
       const s = String(p);
       if (s === LOCAL_PATH) return true; // git repo precondition
-      return s.endsWith("node_modules") || s.endsWith("package.json");
+      if (s.endsWith("package.json")) {
+        return (
+          s === `${LOCAL_PATH}/package.json` ||
+          s === `${LOCAL_PATH}/apps/web/package.json` ||
+          s === `${LOCAL_PATH}/packages/server/package.json`
+        );
+      }
+      return s.endsWith("node_modules"); // every package dir has node_modules in source
     });
     mockedLstatSync.mockImplementation(() => {
-      throw new Error("ENOENT");
+      throw new Error("ENOENT"); // nothing exists in the worktree yet
     });
 
-    await createWorktree(LOCAL_PATH, TASK_ID, BASE_BRANCH, "web");
+    await createWorktree(LOCAL_PATH, TASK_ID, BASE_BRANCH);
 
     const symlinkTargets = mockedSymlinkSync.mock.calls.map((c) => String(c[1]));
     expect(symlinkTargets).toContain(`${expectedWorktreePath}/node_modules`);
-    expect(symlinkTargets).toContain(`${expectedWorktreePath}/web/node_modules`);
+    expect(symlinkTargets).toContain(`${expectedWorktreePath}/apps/web/node_modules`);
+    expect(symlinkTargets).toContain(`${expectedWorktreePath}/packages/server/node_modules`);
+    // docs has no package.json — must not be linked
+    expect(symlinkTargets).not.toContain(`${expectedWorktreePath}/docs/node_modules`);
   });
 
-  it("skips the stray root node_modules when the repo root has no package.json", async () => {
+  it("links subpackage node_modules even when the repo root has no package.json", async () => {
     mockedExecFileSync.mockReturnValue("" as never);
-    // Monorepo-style: only the subPath (web) is a real project. The root has a
-    // stray node_modules but no package.json, so it must NOT be linked.
+    // Monorepo with no root package.json: only packages/server is a real project.
+    mockedReaddirSync.mockImplementation((p) => {
+      const s = String(p);
+      if (s === LOCAL_PATH) return dirents(["packages", "node_modules"]);
+      if (s === `${LOCAL_PATH}/packages`) return dirents(["server"]);
+      return dirents([]);
+    });
     mockedExistsSync.mockImplementation((p) => {
       const s = String(p);
       if (s === LOCAL_PATH) return true; // git repo precondition
       if (s === `${LOCAL_PATH}/package.json`) return false;
-      if (s === `${LOCAL_PATH}/web/package.json`) return true;
+      if (s === `${LOCAL_PATH}/packages/server/package.json`) return true;
+      if (s.endsWith("package.json")) return false;
       return s.endsWith("node_modules");
     });
     mockedLstatSync.mockImplementation(() => {
       throw new Error("ENOENT");
     });
 
-    await createWorktree(LOCAL_PATH, TASK_ID, BASE_BRANCH, "web");
+    await createWorktree(LOCAL_PATH, TASK_ID, BASE_BRANCH);
 
     const symlinkTargets = mockedSymlinkSync.mock.calls.map((c) => String(c[1]));
     expect(symlinkTargets).not.toContain(`${expectedWorktreePath}/node_modules`);
-    expect(symlinkTargets).toContain(`${expectedWorktreePath}/web/node_modules`);
+    expect(symlinkTargets).toContain(`${expectedWorktreePath}/packages/server/node_modules`);
+  });
+
+  it("does not recurse into node_modules directories", async () => {
+    mockedExecFileSync.mockReturnValue("" as never);
+    mockedReaddirSync.mockImplementation((p) => {
+      const s = String(p);
+      if (s === LOCAL_PATH) return dirents(["node_modules"]);
+      // A nested package inside node_modules would be returned here if walked.
+      if (s === `${LOCAL_PATH}/node_modules`) return dirents(["some-dep"]);
+      return dirents([]);
+    });
+    mockedExistsSync.mockImplementation((p) => {
+      const s = String(p);
+      if (s === LOCAL_PATH) return true;
+      if (s === `${LOCAL_PATH}/package.json`) return true;
+      return s.endsWith("node_modules") || s.endsWith("package.json");
+    });
+    mockedLstatSync.mockImplementation(() => {
+      throw new Error("ENOENT");
+    });
+
+    await createWorktree(LOCAL_PATH, TASK_ID, BASE_BRANCH);
+
+    // readdirSync must never be called on the node_modules directory itself.
+    const readdirPaths = mockedReaddirSync.mock.calls.map((c) => String(c[0]));
+    expect(readdirPaths).not.toContain(`${LOCAL_PATH}/node_modules`);
+    const symlinkTargets = mockedSymlinkSync.mock.calls.map((c) => String(c[1]));
+    expect(symlinkTargets).not.toContain(`${expectedWorktreePath}/node_modules/some-dep/node_modules`);
+  });
+
+  it("skips a package dir whose source node_modules is missing without throwing", async () => {
+    mockedExecFileSync.mockReturnValue("" as never);
+    mockedReaddirSync.mockImplementation((p) => {
+      const s = String(p);
+      if (s === LOCAL_PATH) return dirents(["apps"]);
+      if (s === `${LOCAL_PATH}/apps`) return dirents(["web"]);
+      return dirents([]);
+    });
+    // Both root and apps/web have package.json, but neither has node_modules in source.
+    mockedExistsSync.mockImplementation((p) => {
+      const s = String(p);
+      if (s === LOCAL_PATH) return true;
+      return s.endsWith("package.json");
+    });
+    mockedLstatSync.mockImplementation(() => {
+      throw new Error("ENOENT");
+    });
+
+    await expect(createWorktree(LOCAL_PATH, TASK_ID, BASE_BRANCH)).resolves.toEqual({
+      worktreePath: expectedWorktreePath,
+      worktreeBranch: expectedBranch,
+    });
+    // No source node_modules anywhere — nothing linked.
+    expect(mockedSymlinkSync).not.toHaveBeenCalled();
+  });
+
+  it("is idempotent — skips symlink when the worktree target already exists", async () => {
+    mockedExecFileSync.mockReturnValue("" as never);
+    mockedReaddirSync.mockReturnValue(dirents([]));
+    mockedExistsSync.mockImplementation((p) => {
+      const s = String(p);
+      if (s === LOCAL_PATH) return true;
+      if (s === `${LOCAL_PATH}/package.json`) return true;
+      return s.endsWith("node_modules");
+    });
+    // Target already exists in the worktree — lstatSync succeeds.
+    mockedLstatSync.mockReturnValue({} as never);
+
+    await createWorktree(LOCAL_PATH, TASK_ID, BASE_BRANCH);
+
+    expect(mockedSymlinkSync).not.toHaveBeenCalled();
   });
 
   it("reuses existing worktree when git worktree list contains target path", async () => {
