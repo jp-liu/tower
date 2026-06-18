@@ -45,7 +45,10 @@ export function destroySession(taskId: string): void {
     clearTimeout(session.disconnectTimer);
     session.disconnectTimer = null;
   }
-  session.kill();
+  // Kill the whole process group (claude CLI + its MCP/LSP children), not just
+  // the immediate child — otherwise those children orphan and leak as residual
+  // node processes. SIGTERM → SIGKILL escalation handled inside killTree().
+  session.killTree();
 }
 
 /** D-08: Called on SIGTERM — kills all sessions */

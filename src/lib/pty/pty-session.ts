@@ -174,4 +174,68 @@ export class PtySession {
     }
     this.killed = true;
   }
+
+  /**
+   * Kill the ENTIRE process group, not just the immediate child.
+   *
+   * node-pty's `kill()` does `process.kill(this.pid, signal)` — it signals only
+   * the spawned process (the claude CLI). But claude spawns its own children
+   * (MCP servers, language servers) that inherit claude's process group (node-pty
+   * runs the child as a setsid session leader, so pgid === claude's pid). Signalling
+   * only claude leaves those children orphaned (reparented to pid 1) when claude is
+   * force-killed or crashes — the "残留 node 进程" the user observes.
+   *
+   * Signalling the negative pid (`-pid`) targets the whole process group, reaping
+   * claude + all its descendants. SIGTERM first for graceful shutdown, then a
+   * SIGKILL escalation after `graceMs` for anything that ignores it (hung dev
+   * servers, stuck MCP processes).
+   *
+   * On Windows there is no POSIX process group; node-pty's conpty/winpty backend
+   * already terminates the whole job object tree, so we fall back to a plain kill.
+   */
+  killTree(graceMs = 3000): void {
+    if (this.killed) return;
+    this.killed = true;
+    // Clear idle timer when session is killed
+    if (this._idleTimer) {
+      clearTimeout(this._idleTimer);
+      this._idleTimer = null;
+    }
+
+    const pid = this._pty.pid;
+
+    if (process.platform === "win32") {
+      // conpty/winpty terminates the whole process tree on kill
+      try {
+        this._pty.kill();
+      } catch {
+        // Already dead — safe to ignore
+      }
+      return;
+    }
+
+    try {
+      // Negative pid → signal the whole process group (claude + descendants)
+      process.kill(-pid, "SIGTERM");
+    } catch {
+      // Group already gone, or kill not permitted — fall back to single kill
+      try {
+        this._pty.kill();
+      } catch {
+        // Already dead — safe to ignore
+      }
+      return;
+    }
+
+    // Escalate to SIGKILL for any process that ignored SIGTERM. Unref so this
+    // timer never keeps the Node event loop (or the parent process) alive.
+    const t = setTimeout(() => {
+      try {
+        process.kill(-pid, "SIGKILL");
+      } catch {
+        // Already dead — safe to ignore
+      }
+    }, graceMs);
+    t.unref?.();
+  }
 }

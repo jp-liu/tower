@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Mock node-pty to avoid native addon in test environment
 const mockPty = {
+  pid: 4242,
   onData: vi.fn(),
   onExit: vi.fn(),
   write: vi.fn(),
@@ -166,6 +167,62 @@ describe("PtySession", () => {
       });
       expect(() => session.kill()).not.toThrow();
       expect(session.killed).toBe(true);
+    });
+  });
+
+  describe("killTree (process group reap)", () => {
+    const realPlatform = process.platform;
+    let killSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      // process.kill must never signal a real pid in tests
+      killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      killSpy.mockRestore();
+      Object.defineProperty(process, "platform", { value: realPlatform });
+    });
+
+    it("signals the whole process group with SIGTERM (negative pid)", () => {
+      Object.defineProperty(process, "platform", { value: "linux" });
+      session.killTree();
+      expect(killSpy).toHaveBeenCalledWith(-4242, "SIGTERM");
+      expect(session.killed).toBe(true);
+    });
+
+    it("escalates to a group SIGKILL after the grace period", () => {
+      Object.defineProperty(process, "platform", { value: "linux" });
+      session.killTree(3000);
+      expect(killSpy).not.toHaveBeenCalledWith(-4242, "SIGKILL");
+      vi.advanceTimersByTime(3000);
+      expect(killSpy).toHaveBeenCalledWith(-4242, "SIGKILL");
+    });
+
+    it("is idempotent — a second call does nothing", () => {
+      Object.defineProperty(process, "platform", { value: "linux" });
+      session.killTree();
+      killSpy.mockClear();
+      session.killTree();
+      expect(killSpy).not.toHaveBeenCalled();
+    });
+
+    it("falls back to node-pty single kill when the group kill throws", () => {
+      Object.defineProperty(process, "platform", { value: "linux" });
+      killSpy.mockImplementation(() => {
+        throw new Error("ESRCH");
+      });
+      session.killTree();
+      expect(mockPty.kill).toHaveBeenCalledTimes(1);
+    });
+
+    it("uses node-pty kill on Windows (no POSIX process groups)", () => {
+      Object.defineProperty(process, "platform", { value: "win32" });
+      session.killTree();
+      expect(killSpy).not.toHaveBeenCalled();
+      expect(mockPty.kill).toHaveBeenCalledTimes(1);
     });
   });
 });
