@@ -57,12 +57,27 @@ export async function POST(request: NextRequest) {
   }
 
   // System prompt is defined in .tower/CLAUDE.md — CLI auto-discovers it from cwd
+
+  // Shared between start() and cancel() so a client disconnect (panel closed,
+  // session switched, new message, navigation, transport teardown) can both
+  // stop further writes AND abort the SDK. Without this, a disconnect mid-stream
+  // makes send()'s enqueue throw "Invalid state: Controller is already closed"
+  // and leaves the Claude CLI subprocess running headless (zombie turn).
+  let streamClosed = false;
+  const sdkAbort = new AbortController();
+
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
 
       function send(data: Record<string, unknown>) {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        if (streamClosed) return;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        } catch {
+          // Client vanished between the guard and the enqueue — stop writing.
+          streamClosed = true;
+        }
       }
 
       // Hoisted so the catch can name the resolved CLI path in its error message
@@ -152,6 +167,10 @@ export async function POST(request: NextRequest) {
         const maxTurns = await readConfigValue<number>("assistant.maxTurns", 30);
         options.effort = effort;
         options.maxTurns = maxTurns;
+        // Cancel the underlying Claude CLI turn when the client disconnects
+        // (see streamClosed/cancel()). Stops the agent loop promptly and kills
+        // the subprocess instead of letting it run to completion unseen.
+        options.abortController = sdkAbort;
 
         // Safety net: raise the CLI's per-response output ceiling too. With low
         // effort this should never be hit, but if a future config bumps effort
@@ -240,10 +259,18 @@ export async function POST(request: NextRequest) {
 
               for (const tool of toolBlocks) {
                 toolUseCount += 1;
-                const t = tool as { type: string; name?: string; input?: unknown };
+                const t = tool as { type: string; id?: string; name?: string; input?: unknown };
+                // Diagnostic: the real (完整入参) tool invocation. Pairs with the
+                // earlier tool_start (调起) via the same block id. If this logs
+                // but no matching tool_result/turn-done follows, the turn hung
+                // while waiting on the MCP tool to return.
+                console.error(
+                  `[assistant-chat] tool_use — name=${t.name ?? "?"} id=${t.id ?? "?"} toolUses=${toolUseCount}`
+                );
                 send({
                   type: "tool_use",
                   content: t.name ?? "unknown",
+                  toolId: t.id,
                   toolInput: t.input,
                   sessionId: msg.session_id,
                 });
@@ -302,6 +329,7 @@ export async function POST(request: NextRequest) {
                 );
               }
               if (sysMsg.subtype === "tool_result") {
+                console.error(`[assistant-chat] tool_result(system) — name=${sysMsg.tool_name ?? "?"}`);
                 send({
                   type: "tool_result",
                   content: sysMsg.tool_name ?? "tool",
@@ -311,17 +339,41 @@ export async function POST(request: NextRequest) {
               break;
             }
 
+            // Tool results are fed back to the model as a user message whose
+            // content holds tool_result blocks. Logging them lets us tell apart
+            // "tool was called but never returned" (hang inside the MCP/SDK
+            // layer — no log here) from "result returned but the model didn't
+            // continue" (log here, but no following turn-done).
+            case "user": {
+              const userMsg = msg as {
+                message?: { content?: Array<{ type?: string; tool_use_id?: string }> };
+              };
+              const results = (userMsg.message?.content ?? []).filter(
+                (b) => b?.type === "tool_result"
+              );
+              if (results.length > 0) {
+                console.error(
+                  `[assistant-chat] tool_result(user) — count=${results.length} ` +
+                    `ids=${results.map((r) => r.tool_use_id ?? "?").join(",")}`
+                );
+              }
+              break;
+            }
+
             case "stream_event": {
               // SDKPartialAssistantMessage — per official docs:
               // msg.event is a RawMessageStreamEvent from the Claude API
               // msg.event.type === "content_block_delta" && msg.event.delta.type === "text_delta"
-              const streamEvent = (msg as { event: { type: string; delta?: { type: string; text?: string }; content_block?: { type: string; name?: string } }; session_id: string });
+              const streamEvent = (msg as { event: { type: string; delta?: { type: string; text?: string }; content_block?: { type: string; id?: string; name?: string } }; session_id: string });
               const evt = streamEvent.event;
 
               if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta" && evt.delta.text) {
                 send({ type: "text_delta", content: evt.delta.text, sessionId: streamEvent.session_id });
               } else if (evt.type === "content_block_start" && evt.content_block?.type === "tool_use") {
-                send({ type: "tool_start", content: evt.content_block.name ?? "tool", sessionId: streamEvent.session_id });
+                // 调起 (placeholder). Carries the same block id as the later
+                // tool_use so the client merges them into ONE card instead of
+                // rendering two identical entries.
+                send({ type: "tool_start", content: evt.content_block.name ?? "tool", toolId: evt.content_block.id, sessionId: streamEvent.session_id });
               }
               break;
             }
@@ -352,6 +404,13 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch (err: unknown) {
+        // Client disconnected and we aborted the SDK ourselves — benign. The
+        // sink is gone so there's nothing to surface; don't log it as an error
+        // (it previously showed up as the scary "Controller is already closed").
+        if (streamClosed || sdkAbort.signal.aborted) {
+          console.error("[assistant-chat] client disconnected — turn aborted before completion");
+          return;
+        }
         // Always log the full error server-side — this is a localhost-only
         // internal route, so the logs are private. Suppressing in production
         // (the standalone build) left Windows users with no way to diagnose
@@ -381,8 +440,21 @@ export async function POST(request: NextRequest) {
         send({ type: "error", content: friendly });
       } finally {
         send({ type: "done" });
-        controller.close();
+        streamClosed = true;
+        // May already be closed by cancel() (client disconnect) — don't throw.
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
+        }
       }
+    },
+    cancel() {
+      // The client went away (panel closed, session switched, new message,
+      // navigation, or transport teardown). Stop writing and abort the SDK so
+      // the Claude CLI subprocess doesn't keep running headless.
+      streamClosed = true;
+      sdkAbort.abort();
     },
   });
 

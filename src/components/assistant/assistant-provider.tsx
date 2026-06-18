@@ -98,6 +98,7 @@ interface SSEEvent {
   type: "text" | "text_delta" | "tool_use" | "tool_start" | "tool_result" | "error" | "done";
   content?: string;
   sessionId?: string;
+  toolId?: string;
   toolInput?: unknown;
   toolOutput?: string;
 }
@@ -238,8 +239,11 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const closeAssistant = useCallback(() => {
     setIsOpen(false);
-    // Abort any in-flight chat request
+    // Abort any in-flight chat request — and settle status to idle so reopening
+    // the panel doesn't show a stuck "thinking" state for a turn that's gone.
     abortRef.current?.abort();
+    abortRef.current = null;
+    setChatStatus("idle");
   }, []);
 
   const toggleAssistant = useCallback(() => {
@@ -383,7 +387,9 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
               break;
             }
             case "tool_start": {
-              // Tool call starting — show indicator (streaming)
+              // 调起 — placeholder card while the tool's input streams in. The
+              // real 真正调用 (tool_use) arrives next and upgrades THIS card in
+              // place (matched by toolId), so a single call renders as one card.
               const filtered = msgsRef.current.filter((m) => m.id !== thinkingId);
               if (assistantMsgId) {
                 msgsRef.current = filtered.map((m) =>
@@ -393,26 +399,66 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
               } else {
                 msgsRef.current = filtered;
               }
-              msgsRef.current = [...msgsRef.current, {
-                id: nextId(), role: "tool" as MessageRole,
-                content: `Calling ${event.content ?? "tool"}...`,
-                toolName: event.content,
-                isStreaming: true,
-              }];
+              // Defensive de-dupe: never create a second placeholder for a
+              // toolId we already have a card for.
+              const dupe = event.toolId
+                ? msgsRef.current.some((m) => m.role === "tool" && m.toolId === event.toolId)
+                : false;
+              if (!dupe) {
+                msgsRef.current = [...msgsRef.current, {
+                  id: nextId(), role: "tool" as MessageRole,
+                  content: `Calling ${event.content ?? "tool"}...`,
+                  toolName: event.content,
+                  toolId: event.toolId,
+                  isStreaming: true,
+                }];
+              }
               flushChat();
               break;
             }
             case "tool_use": {
+              // 真正调用 — full input. Upgrade the matching 调起 placeholder
+              // rather than appending a duplicate. Match by toolId; fall back to
+              // the most recent streaming placeholder with the same name when no
+              // id is present.
               const filtered = msgsRef.current.filter((m) => m.id !== thinkingId);
               const updated = assistantMsgId
                 ? filtered.map((m) => m.id === assistantMsgId ? { ...m, isStreaming: false } : m)
                 : filtered;
               assistantMsgId = null;
-              msgsRef.current = [...updated, {
-                id: nextId(), role: "tool" as MessageRole,
-                content: JSON.stringify(event.toolInput ?? {}, null, 2),
-                toolName: event.content,
-              }];
+
+              const jsonInput = JSON.stringify(event.toolInput ?? {}, null, 2);
+              let matchIdx = -1;
+              if (event.toolId) {
+                matchIdx = updated.findIndex(
+                  (m) => m.role === "tool" && m.toolId === event.toolId
+                );
+              }
+              if (matchIdx === -1) {
+                for (let i = updated.length - 1; i >= 0; i--) {
+                  const m = updated[i];
+                  if (m.role === "tool" && m.isStreaming && m.toolName === event.content) {
+                    matchIdx = i;
+                    break;
+                  }
+                }
+              }
+
+              if (matchIdx !== -1) {
+                msgsRef.current = updated.map((m, i) =>
+                  i === matchIdx
+                    ? { ...m, content: jsonInput, toolName: event.content, toolId: event.toolId ?? m.toolId, isStreaming: false }
+                    : m
+                );
+              } else {
+                msgsRef.current = [...updated, {
+                  id: nextId(), role: "tool" as MessageRole,
+                  content: jsonInput,
+                  toolName: event.content,
+                  toolId: event.toolId,
+                  isStreaming: false,
+                }];
+              }
               flushChat();
               break;
             }
@@ -435,12 +481,13 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
               break;
             }
             case "done": {
-              if (assistantMsgId) {
-                msgsRef.current = msgsRef.current.map((m) =>
-                  m.id === assistantMsgId ? { ...m, isStreaming: false } : m
-                );
-              }
-              msgsRef.current = msgsRef.current.filter((m) => m.id !== thinkingId);
+              // Finalize: drop the thinking indicator and clear any lingering
+              // streaming flag (assistant text AND tool placeholders) so nothing
+              // is left visually "in progress" after the turn ends.
+              msgsRef.current = msgsRef.current
+                .filter((m) => m.id !== thinkingId)
+                .map((m) => (m.isStreaming ? { ...m, isStreaming: false } : m));
+              assistantMsgId = null;
               flushChat();
               setChatStatus("idle");
               break;
@@ -466,25 +513,23 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     }
   }, [flushChat, refreshSessions]);
 
-  // Cancel in-flight request, remove the last user message + assistant response,
-  // and return the user message text so the UI can restore it to the input box.
+  // Cancel the in-flight request but PRESERVE completed records. Stopping must
+  // not discard work already done — e.g. a task the assistant already created,
+  // its tool card, and any text it streamed. We only drop the transient
+  // "thinking" indicator and clear the streaming flag on whatever was mid-flight
+  // so it settles as a finished bubble. Returns null: nothing is restored to the
+  // input box because the conversation (incl. the user message) stays in place.
   const cancelChat = useCallback((): string | null => {
     abortRef.current?.abort();
     abortRef.current = null;
 
-    // Find the last user message to restore
-    const lastUserMsg = [...msgsRef.current].reverse().find((m) => m.role === "user");
-    const restoredText = lastUserMsg?.content ?? null;
-
-    if (lastUserMsg) {
-      // Remove everything from the last user message onward (user + thinking + assistant partial)
-      const lastUserIdx = msgsRef.current.lastIndexOf(lastUserMsg);
-      msgsRef.current = msgsRef.current.slice(0, lastUserIdx);
-      setChatMessages([...msgsRef.current]);
-    }
+    msgsRef.current = msgsRef.current
+      .filter((m) => m.role !== "thinking")
+      .map((m) => (m.isStreaming ? { ...m, isStreaming: false } : m));
+    setChatMessages([...msgsRef.current]);
 
     setChatStatus("idle");
-    return restoredText;
+    return null;
   }, []);
 
   const lastMsg = chatMessages[chatMessages.length - 1];

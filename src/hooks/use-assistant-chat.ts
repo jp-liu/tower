@@ -15,6 +15,9 @@ export interface ChatMessage {
   role: MessageRole;
   content: string;
   toolName?: string;
+  /** Claude tool-block id — pairs the 调起 (tool_start) placeholder with its
+   *  真正调用 (tool_use) so they render as a single card, not two. */
+  toolId?: string;
   isStreaming?: boolean;
   /** Sub-paths of attachments (images and text files) sent with this message. */
   attachmentFilenames?: string[];
