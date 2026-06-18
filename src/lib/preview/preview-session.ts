@@ -54,11 +54,11 @@ export class PreviewSession {
   private readyWatcher: ReadyWatcher | null = null;
   private cancelRequested = false;
   private pendingAutoStart = false;
-  private forceKillTimer: ReturnType<typeof setTimeout> | null = null;
 
   private outputListeners = new Map<string, (data: string) => void>();
   private stateListeners = new Map<string, (state: PreviewState) => void>();
   private subscribers = new Map<string, { taskId: string }>();
+  private internalListenerSeq = 0;
 
   constructor(public readonly opts: PreviewSessionOpts) {}
 
@@ -190,31 +190,19 @@ export class PreviewSession {
       return;
     }
 
-    // Graceful shutdown: SIGTERM → wait → SIGKILL fallback
+    // Graceful shutdown: SIGTERM the whole process GROUP, then escalate to a
+    // group SIGKILL after the grace period (handled inside killTree). Dev
+    // servers (vite/webpack/next) spawn worker children that share the leader's
+    // process group — killing only the leader orphans those workers as residual
+    // node processes, so we must reap the group.
     this.injectLog("Stopping (SIGTERM)...");
     this.status = "stopping";
     this.broadcastState();
     try {
-      this.pty.kill("SIGTERM");
+      this.pty.killTree();
     } catch {
       // best-effort
     }
-
-    // Force-kill if process doesn't exit within 3s — dev servers with
-    // worker children (webpack, vite) may ignore SIGTERM. handlePtyExit
-    // clears this timer when the process actually dies.
-    if (this.forceKillTimer) clearTimeout(this.forceKillTimer);
-    this.forceKillTimer = setTimeout(() => {
-      this.forceKillTimer = null;
-      if (this.pty && !this.pty.killed) {
-        this.injectLog("Process not responding — forcing SIGKILL.");
-        try {
-          this.pty.forceKill();
-        } catch {
-          // best-effort
-        }
-      }
-    }, 3000);
   }
 
   /**
@@ -287,11 +275,6 @@ export class PreviewSession {
       this.readyWatcher.stop();
       this.readyWatcher = null;
     }
-    // Clear pending force-kill — process exited on its own
-    if (this.forceKillTimer) {
-      clearTimeout(this.forceKillTimer);
-      this.forceKillTimer = null;
-    }
     if (wasCancel) {
       this.injectLog(`Stopped (exit code ${exitCode}).`);
       this.status = "stopped";
@@ -333,8 +316,12 @@ export class PreviewSession {
     this.broadcastState();
   }
 
+  /**
+   * Register an internal state observer (used by tests and embedders). Keyed by
+   * a monotonic counter — deterministic and HMR/GC-friendly, unlike a random key.
+   */
   onStateChange(fn: (s: PreviewState) => void): void {
-    this.stateListeners.set(`__internal-${Math.random()}`, fn);
+    this.stateListeners.set(`__internal-${this.internalListenerSeq++}`, fn);
   }
 
   private broadcastState(): void {
