@@ -23,6 +23,7 @@ import {
 import type { PreviewPreset } from "@/lib/preview/preset-types";
 import { detectPreset } from "@/lib/preview/detector";
 import { readConfigValue } from "@/lib/config-reader";
+import { wrapShellCommand } from "@/lib/platform";
 
 interface PreviewStateResp {
   previewKey: string;
@@ -55,6 +56,21 @@ function parseCommandLine(cmd: string, port: number): {
 } {
   const replaced = cmd.replace(/\{port\}/g, String(port));
   const tokens = shellParse(replaced);
+
+  // shell-quote emits non-string tokens for shell operators (`&&`, `||`, `;`,
+  // `|`, redirections) and globs. When any are present, the command must run
+  // through a shell so they're interpreted — e.g. `cd ./web && pnpm dev` runs
+  // serially instead of being passed as broken args to a single binary.
+  // node-pty execs directly without a shell, so we wrap explicitly.
+  const needsShell = tokens.some((tok) => typeof tok !== "string");
+  if (needsShell) {
+    // Inline `KEY=val` assignments are handled by the shell itself; the cwd is
+    // passed to pty.spawn separately so `cd ./sub` is relative to that root.
+    return wrapShellCommand(replaced);
+  }
+
+  // Single command — exec the binary directly (no shell), extracting leading
+  // `KEY=value` env assignments into envOverrides. Preserves prior behavior.
   const env: Record<string, string> = {};
   const parts: string[] = [];
   for (const tok of tokens) {

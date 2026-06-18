@@ -568,6 +568,39 @@ describe("platform utilities", () => {
   });
 
   // =========================================================================
+  // wrapShellCommand
+  // =========================================================================
+  describe("wrapShellCommand", () => {
+    it("wraps a command line with /bin/sh -c on Unix", async () => {
+      const { wrapShellCommand } = await import("@/lib/platform");
+      const result = wrapShellCommand("cd ./web && pnpm dev", "darwin");
+      expect(result.command).toBe("/bin/sh");
+      expect(result.args).toEqual(["-c", "cd ./web && pnpm dev"]);
+    });
+
+    it("preserves the full command line verbatim (operators kept)", async () => {
+      const { wrapShellCommand } = await import("@/lib/platform");
+      const result = wrapShellCommand("a && b || c ; d | e", "linux");
+      expect(result.args[1]).toBe("a && b || c ; d | e");
+    });
+
+    it("wraps with cmd.exe /d /s /c on Windows", async () => {
+      const { wrapShellCommand } = await import("@/lib/platform");
+      const result = wrapShellCommand("cd web && pnpm dev", "win32", {
+        ComSpec: "C:\\Windows\\System32\\cmd.exe",
+      } as unknown as NodeJS.ProcessEnv);
+      expect(result.command).toBe("C:\\Windows\\System32\\cmd.exe");
+      expect(result.args).toEqual(["/d", "/s", "/c", "cd web && pnpm dev"]);
+    });
+
+    it("falls back to cmd.exe when ComSpec is unset on Windows", async () => {
+      const { wrapShellCommand } = await import("@/lib/platform");
+      const result = wrapShellCommand("dir && echo done", "win32", {} as unknown as NodeJS.ProcessEnv);
+      expect(result.command).toBe("cmd.exe");
+    });
+  });
+
+  // =========================================================================
   // detectTerminals
   // =========================================================================
   // =========================================================================

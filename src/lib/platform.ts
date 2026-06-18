@@ -396,6 +396,33 @@ export function resolveSpawnTargetSync(
   return wrapForPlatform(resolved, args, process.env, platform);
 }
 
+/**
+ * Wrap a full command line so it runs through a shell.
+ *
+ * node-pty's spawn execs the binary directly — it does NOT invoke a shell — so
+ * a command line containing operators (`&&`, `||`, `;`, `|`, redirections,
+ * globs) must be handed to `sh -c "…"` (Unix) or `cmd.exe /d /s /c "…"`
+ * (Windows) for those operators to be interpreted instead of passed as literal
+ * args.
+ *
+ * The working directory is supplied to `pty.spawn` separately, so a leading
+ * `cd ./sub` inside `commandLine` is resolved relative to that cwd (i.e. the
+ * project/worktree root the preview spawns in).
+ */
+export function wrapShellCommand(
+  commandLine: string,
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): SpawnTarget {
+  if (isWindows(platform)) {
+    const shell = env.ComSpec || "cmd.exe";
+    return { command: shell, args: ["/d", "/s", "/c", commandLine] };
+  }
+  // /bin/sh guarantees POSIX `&&`/`||`/`;` parsing regardless of the user's
+  // login shell. `-c` runs non-interactively without sourcing rc files.
+  return { command: "/bin/sh", args: ["-c", commandLine] };
+}
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
