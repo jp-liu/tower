@@ -79,7 +79,16 @@ export function useNotificationListener(enabled: boolean) {
           const event = JSON.parse(e.data) as NotificationEvent;
           const t = tRef.current;
           if (isStopEvent(event)) {
-            // Claude finished a reply turn → notify with workspace/project trace.
+            // Claude finished a reply turn. Only nudge the user when the page is
+            // hidden (backgrounded) — a foreground notification would just
+            // interrupt the user who is already watching this task.
+            if (
+              typeof document === "undefined" ||
+              document.visibilityState !== "hidden"
+            ) {
+              return;
+            }
+            // Notify with workspace/project trace.
             notify(
               event.taskTitle,
               `${event.projectName}：${t("notification.taskReplied")}`
