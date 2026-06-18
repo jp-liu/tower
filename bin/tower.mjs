@@ -35,8 +35,17 @@ const DB_DIR = join(TOWER_DIR, "database");
 const DB_PATH = join(DB_DIR, "tower.db");
 const DB_URL = `file:${DB_PATH}`;
 
-// Set DATABASE_URL before anything else
+// Pin the resolved data dir + DB URL before anything else. DATABASE_URL pins
+// Prisma to this dir; TOWER_DATA_DIR is pinned to the SAME resolved value so a
+// later loader cannot inject a stray one. Next's standalone server runs
+// loadEnvConfig() on boot, which reads the project-root .env — and this repo's
+// .env carries a dev override (TOWER_DATA_DIR=~/.tower-dev). loadEnvConfig never
+// overrides an already-set var, so pinning here keeps `pnpm start` on the
+// production dir. Without it, getTowerMcpName() reads the leaked .env value and
+// the assistant MCP resolves to the dev name (`tower-dev-assistant`) even though
+// the server (and its DB) are running in production mode.
 process.env.DATABASE_URL = DB_URL;
+process.env.TOWER_DATA_DIR = TOWER_DIR;
 
 // ─── Parse CLI args ───
 const { values: flags, positionals } = parseArgs({
