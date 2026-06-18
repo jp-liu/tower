@@ -168,7 +168,7 @@ describe("terminal-tools", () => {
   });
 
   describe("send_task_terminal_input", () => {
-    it("POSTs to /{taskId}/input and submits with a real CR by default", async () => {
+    it("POSTs to /{taskId}/input forwarding text + submit:true by default", async () => {
       mockFetch.mockResolvedValue(mockFetchResponse(200, {}));
 
       const result = await terminalTools.send_task_terminal_input.handler({
@@ -180,24 +180,13 @@ describe("terminal-tools", () => {
       const [url, init] = mockFetch.mock.calls[0];
       expect(url).toContain(`/api/internal/terminal/${VALID_TASK_ID}/input`);
       expect(init.method).toBe("POST");
-      expect(JSON.parse(init.body)).toEqual({ text: "hello\r" });
+      // The tool forwards the raw text + submit flag; the bridge route owns the CR logic.
+      expect(JSON.parse(init.body)).toEqual({ text: "hello", submit: true });
 
       expect(result).toMatchObject({ ok: true, taskId: VALID_TASK_ID });
     });
 
-    it("trims trailing newlines and appends a single CR to avoid double submit", async () => {
-      mockFetch.mockResolvedValue(mockFetchResponse(200, {}));
-
-      await terminalTools.send_task_terminal_input.handler({
-        taskId: VALID_TASK_ID,
-        text: "hello\n\n",
-      });
-
-      const [, init] = mockFetch.mock.calls[0];
-      expect(JSON.parse(init.body)).toEqual({ text: "hello\r" });
-    });
-
-    it("preserves interior newlines and submits with a trailing CR", async () => {
+    it("forwards the text untouched — newline normalization happens in the route", async () => {
       mockFetch.mockResolvedValue(mockFetchResponse(200, {}));
 
       await terminalTools.send_task_terminal_input.handler({
@@ -206,10 +195,10 @@ describe("terminal-tools", () => {
       });
 
       const [, init] = mockFetch.mock.calls[0];
-      expect(JSON.parse(init.body)).toEqual({ text: "line1\nline2\r" });
+      expect(JSON.parse(init.body)).toEqual({ text: "line1\nline2\n", submit: true });
     });
 
-    it("forwards text verbatim when submit is false", async () => {
+    it("forwards submit:false so the route fills the box without submitting", async () => {
       mockFetch.mockResolvedValue(mockFetchResponse(200, {}));
 
       await terminalTools.send_task_terminal_input.handler({
@@ -219,7 +208,7 @@ describe("terminal-tools", () => {
       });
 
       const [, init] = mockFetch.mock.calls[0];
-      expect(JSON.parse(init.body)).toEqual({ text: "hello\n" });
+      expect(JSON.parse(init.body)).toEqual({ text: "hello\n", submit: false });
     });
 
     it("returns 'No active terminal session' error on 404", async () => {

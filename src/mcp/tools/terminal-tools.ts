@@ -81,11 +81,12 @@ export const terminalTools = {
       if (err) return { error: err, taskId: args.taskId };
       const tid = encodeURIComponent(args.taskId);
       const submit = args.submit ?? true;
-      const payload = submit ? args.text.replace(/\n+$/, "") + "\r" : args.text;
+      // Submit semantics live in the bridge route: it trims trailing newlines and
+      // delivers a standalone CR as a separate keystroke so the TUI actually submits.
       const response = await bridgeFetch(`/${tid}/input`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: payload }),
+        body: JSON.stringify({ text: args.text, submit }),
       });
 
       if (response.status === 404) {
