@@ -1,5 +1,6 @@
 import { PtySession } from "./pty-session";
 import { resolveSpawnTargetSync } from "@/lib/platform";
+import { recordSessionPid, clearSessionPid } from "./orphan-reaper";
 
 // D-04: globalThis singleton — survives HMR/module re-evaluation in Next.js dev mode.
 // Without this, ws-server.ts (loaded once via instrumentation) and agent-actions.ts
@@ -22,14 +23,18 @@ export function createSession(
   onIdle?: () => void,
   idleThresholdMs?: number
 ): PtySession {
-  // Destroy any existing session for this taskId before creating new one
-  destroySession(taskId);
+  // Kill any existing session for this taskId before creating a new one. We do
+  // NOT clear its pid file here — recordSessionPid below overwrites it, which
+  // avoids a clear/record race on the same path during same-task re-creation.
+  teardownSession(taskId);
 
   // Resolve command for cross-platform PTY spawning (handles .cmd/.bat on Windows)
   const { command: resolvedCommand, args: resolvedArgs } = resolveSpawnTargetSync(command, args);
 
   const session = new PtySession(taskId, resolvedCommand, resolvedArgs, cwd, onData, onExit, envOverrides, onIdle, idleThresholdMs);
   sessions.set(taskId, session);
+  // Persist pid so a hard Tower crash can reap this group on next boot.
+  void recordSessionPid(taskId, session.pid);
   return session;
 }
 
@@ -37,18 +42,29 @@ export function getSession(taskId: string): PtySession | undefined {
   return sessions.get(taskId);
 }
 
-export function destroySession(taskId: string): void {
+/**
+ * Remove a session from the registry and kill its whole process group (claude
+ * CLI + its MCP/LSP children) — killing only the immediate child would orphan
+ * those descendants as residual node processes. SIGTERM → SIGKILL escalation is
+ * handled inside killTree(). Returns the session if one existed.
+ */
+function teardownSession(taskId: string): PtySession | undefined {
   const session = sessions.get(taskId);
-  if (!session) return;
+  if (!session) return undefined;
   sessions.delete(taskId);
   if (session.disconnectTimer) {
     clearTimeout(session.disconnectTimer);
     session.disconnectTimer = null;
   }
-  // Kill the whole process group (claude CLI + its MCP/LSP children), not just
-  // the immediate child — otherwise those children orphan and leak as residual
-  // node processes. SIGTERM → SIGKILL escalation handled inside killTree().
   session.killTree();
+  return session;
+}
+
+export function destroySession(taskId: string): void {
+  if (teardownSession(taskId)) {
+    // Clean teardown — drop the persisted pid so the boot reaper ignores it.
+    void clearSessionPid(taskId);
+  }
 }
 
 /** D-08: Called on SIGTERM — kills all sessions */

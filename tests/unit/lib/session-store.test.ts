@@ -12,12 +12,19 @@ const mockPty = {
 vi.mock("node-pty", () => ({
   spawn: vi.fn(() => ({
     ...mockPty,
+    pid: 4242,
     onData: vi.fn(),
     onExit: vi.fn(),
     write: vi.fn(),
     resize: vi.fn(),
     kill: vi.fn(),
   })),
+}));
+
+// Avoid real $TMPDIR pid-file I/O from createSession/destroySession
+vi.mock("@/lib/pty/orphan-reaper", () => ({
+  recordSessionPid: vi.fn(),
+  clearSessionPid: vi.fn(),
 }));
 
 import {
@@ -49,7 +56,7 @@ describe("session-store", () => {
 
     it("destroys existing session before creating new one for same taskId", () => {
       const session1 = createSession("task-3", "bash", [], "/tmp", vi.fn(), vi.fn());
-      const killSpy = vi.spyOn(session1, "kill");
+      const killSpy = vi.spyOn(session1, "killTree");
 
       createSession("task-3", "bash", [], "/tmp", vi.fn(), vi.fn());
       expect(killSpy).toHaveBeenCalled();
@@ -74,9 +81,9 @@ describe("session-store", () => {
       expect(getSession("task-5")).toBeUndefined();
     });
 
-    it("kills the PTY", () => {
+    it("kills the PTY process group", () => {
       const session = createSession("task-6", "bash", [], "/tmp", vi.fn(), vi.fn());
-      const killSpy = vi.spyOn(session, "kill");
+      const killSpy = vi.spyOn(session, "killTree");
       destroySession("task-6");
       expect(killSpy).toHaveBeenCalled();
     });
@@ -97,8 +104,8 @@ describe("session-store", () => {
     it("destroys all sessions", () => {
       const s1 = createSession("task-a", "bash", [], "/tmp", vi.fn(), vi.fn());
       const s2 = createSession("task-b", "bash", [], "/tmp", vi.fn(), vi.fn());
-      const kill1 = vi.spyOn(s1, "kill");
-      const kill2 = vi.spyOn(s2, "kill");
+      const kill1 = vi.spyOn(s1, "killTree");
+      const kill2 = vi.spyOn(s2, "killTree");
 
       destroyAllSessions();
 

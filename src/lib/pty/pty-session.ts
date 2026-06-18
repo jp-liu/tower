@@ -146,6 +146,12 @@ export class PtySession {
     return this._idleFired;
   }
 
+  /** OS pid of the spawned process (claude CLI). Used to persist for orphan
+   *  reaping across Tower restarts and to target the process group on kill. */
+  get pid(): number {
+    return this._pty.pid;
+  }
+
   /** D-06: double-kill guard. Accepts optional signal (default SIGTERM). */
   kill(signal?: string): void {
     if (this.killed) return;

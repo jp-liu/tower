@@ -7,6 +7,10 @@ const log = logger.create("instrumentation");
 /**
  * Mark stale RUNNING executions as FAILED at server startup.
  * These are orphaned from a previous server crash or restart.
+ *
+ * Also reap any orphaned CLI process groups left behind by a hard crash —
+ * the DB rows are marked FAILED here, but the OS processes they spawned only
+ * die if we explicitly kill their groups (see orphan-reaper.ts).
  */
 export async function cleanupStaleExecutions() {
   try {
@@ -20,6 +24,16 @@ export async function cleanupStaleExecutions() {
     }
   } catch (error) {
     log.error("Stale execution cleanup failed", error);
+  }
+
+  try {
+    const { reapOrphanedProcesses } = await import("@/lib/pty/orphan-reaper");
+    const killed = await reapOrphanedProcesses();
+    if (killed > 0) {
+      log.warn(`Reaped ${killed} orphaned CLI process group(s) from a previous run`);
+    }
+  } catch (error) {
+    log.error("Orphan process reaping failed", error);
   }
 }
 
