@@ -75,6 +75,15 @@ export function buildTowerMcpConfig(): McpServerConfig {
   const root = getPackageRoot().replace(/\\/g, "/");
   const dbUrl =
     process.env.DATABASE_URL || `file:${getTowerDbPath().replace(/\\/g, "/")}`;
+  // Pin TOWER_DATA_DIR alongside DATABASE_URL. The MCP process is spawned by the
+  // user's CLI (claude/codex) and does NOT inherit Tower's runtime env, so
+  // without this getTowerDir() would fall back to ~/.tower at MCP runtime —
+  // mismatching the registering server's data dir (dev: ~/.tower-dev, or a
+  // custom TOWER_DATA_DIR). That mismatch is what made create_task write assets
+  // to the wrong storage root. Storage relocation stays dynamic: getStorageDir()
+  // still reads the pointer file under this data dir at runtime, so a custom
+  // Settings path keeps working without re-registering the MCP server.
+  const env = { DATABASE_URL: dbUrl, TOWER_DATA_DIR: getTowerDir() };
   const builtPath = `${root}/dist/mcp-server.cjs`;
   const name = getTowerMcpName();
 
@@ -83,7 +92,7 @@ export function buildTowerMcpConfig(): McpServerConfig {
       name,
       command: "node",
       args: [builtPath],
-      env: { DATABASE_URL: dbUrl },
+      env,
     };
   }
 
@@ -91,7 +100,7 @@ export function buildTowerMcpConfig(): McpServerConfig {
     name,
     command: `${root}/node_modules/.bin/tsx`,
     args: [`${root}/src/mcp/index.ts`],
-    env: { DATABASE_URL: dbUrl },
+    env,
   };
 }
 

@@ -46,19 +46,19 @@ vi.mock("fs", () => ({
   existsSync: vi.fn(),
   statSync: vi.fn(),
   copyFileSync: vi.fn(),
-  mkdirSync: vi.fn(),
 }));
 
 vi.mock("@/lib/file-utils", () => ({
   stripCacheUuidSuffix: vi.fn((filename: string) => filename.replace(/-[0-9a-f]{8}(\.[^.]+)$/i, "$1")),
   isAssistantCachePath: vi.fn(),
   guessMimeType: vi.fn(() => "image/png"),
+  ensureAssetsDir: vi.fn(() => "/mock/.tower/storage/assets/proj1"),
 }));
 
 import { db } from "../../db";
 import { execFileSync } from "child_process";
-import { existsSync, statSync, copyFileSync, mkdirSync } from "fs";
-import { stripCacheUuidSuffix, isAssistantCachePath } from "@/lib/file-utils";
+import { existsSync, statSync, copyFileSync } from "fs";
+import { stripCacheUuidSuffix, isAssistantCachePath, ensureAssetsDir } from "@/lib/file-utils";
 import { taskTools } from "../task-tools";
 
 const mockDb = db as {
@@ -85,7 +85,7 @@ const mockExecFileSync = execFileSync as ReturnType<typeof vi.fn>;
 const mockExistsSync = existsSync as ReturnType<typeof vi.fn>;
 const mockStatSync = statSync as ReturnType<typeof vi.fn>;
 const mockCopyFileSync = copyFileSync as ReturnType<typeof vi.fn>;
-const mockMkdirSync = mkdirSync as ReturnType<typeof vi.fn>;
+const mockEnsureAssetsDir = ensureAssetsDir as ReturnType<typeof vi.fn>;
 const mockIsAssistantCachePath = isAssistantCachePath as ReturnType<typeof vi.fn>;
 const mockStripCacheUuidSuffix = stripCacheUuidSuffix as ReturnType<typeof vi.fn>;
 
@@ -221,6 +221,58 @@ describe("task-tools", () => {
           }),
         })
       );
+    });
+
+    it("resolves the assets dir via ensureAssetsDir (Tower storage root), not a cwd/install-relative path", async () => {
+      const createdTask = { id: "task1", title: "With Ref", description: "desc" };
+      mockDb.task.create.mockResolvedValue(createdTask);
+      mockDb.task.update.mockResolvedValue({ ...createdTask });
+      mockDb.projectAsset.create.mockResolvedValue({});
+      mockEnsureAssetsDir.mockReturnValue("/mock/.tower/storage/assets/proj1");
+
+      mockExistsSync.mockImplementation((p: string) => p === "/tmp/ref.png");
+      mockStatSync.mockReturnValue({ isFile: () => true, size: 1024 });
+      mockIsAssistantCachePath.mockReturnValue(false);
+
+      await taskTools.create_task.handler({
+        projectId: "proj1",
+        title: "With Ref",
+        references: ["/tmp/ref.png"],
+        autoStart: false,
+      });
+
+      expect(mockEnsureAssetsDir).toHaveBeenCalledWith("proj1");
+      // Destination must live under the resolved storage root, never under
+      // an install/cwd-relative "data/assets" path.
+      const dest = mockCopyFileSync.mock.calls[0][1] as string;
+      expect(dest).toContain("/mock/.tower/storage/assets/proj1");
+      expect(dest).not.toContain("data/assets");
+    });
+
+    it("surfaces a failure (not a silent skip) when copying a reference throws", async () => {
+      const createdTask = { id: "task1", title: "Bad Ref", description: null };
+      mockDb.task.create.mockResolvedValue(createdTask);
+      mockDb.task.update.mockResolvedValue({ ...createdTask });
+      mockEnsureAssetsDir.mockReturnValue("/mock/.tower/storage/assets/proj1");
+
+      mockExistsSync.mockImplementation((p: string) => p === "/tmp/ref.png");
+      mockStatSync.mockReturnValue({ isFile: () => true, size: 1024 });
+      mockIsAssistantCachePath.mockReturnValue(false);
+      mockCopyFileSync.mockImplementation(() => {
+        throw new Error("EACCES: permission denied");
+      });
+
+      const result = await taskTools.create_task.handler({
+        projectId: "proj1",
+        title: "Bad Ref",
+        references: ["/tmp/ref.png"],
+        autoStart: false,
+      }) as { attachmentFailures?: { reference: string; error: string }[] };
+
+      expect(result.attachmentFailures).toBeDefined();
+      expect(result.attachmentFailures).toHaveLength(1);
+      expect(result.attachmentFailures![0].reference).toBe("/tmp/ref.png");
+      expect(result.attachmentFailures![0].error).toContain("EACCES");
     });
 
     it("uses counter suffix for cache file collision", async () => {

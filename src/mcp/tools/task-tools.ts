@@ -1,14 +1,10 @@
 import { z } from "zod";
 import { execFileSync } from "child_process";
-import { copyFileSync, existsSync, statSync, mkdirSync } from "fs";
-import { basename, extname, join, resolve } from "path";
+import { copyFileSync, existsSync, statSync } from "fs";
+import { basename, extname, join } from "path";
 import { db } from "../db";
 import { readConfigValue } from "@/lib/config-reader";
-import { stripCacheUuidSuffix, isAssistantCachePath, guessMimeType } from "@/lib/file-utils";
-
-// Derive project root from this file's location (src/mcp/tools/ → ../../..)
-// This avoids depending on process.cwd() which varies when MCP is spawned from .tower/
-const MCP_PROJECT_ROOT = resolve(__dirname, "../../..");
+import { stripCacheUuidSuffix, isAssistantCachePath, guessMimeType, ensureAssetsDir } from "@/lib/file-utils";
 
 const TaskStatus = z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"]);
 const Priority = z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
@@ -152,65 +148,97 @@ export const taskTools = {
         });
       }
 
-      // Copy reference files to assets and create ProjectAsset records
+      // Copy reference files to assets and create ProjectAsset records.
+      // The assets dir is resolved via ensureAssetsDir → getStorageDir(), which
+      // honours the user's custom storage location (Settings) and always lands
+      // inside the Tower data dir (~/.tower/storage/assets). Never derive it
+      // from cwd/__dirname — a global install would point at the read-only
+      // install directory (e.g. /usr/local/lib/.../data/assets).
       const attachedFiles: string[] = [];
+      const attachmentFailures: { reference: string; error: string }[] = [];
       let updatedDesc: string | null = null;
       if (args.references && args.references.length > 0) {
-        const assetsDir = join(MCP_PROJECT_ROOT, "data", "assets", args.projectId);
-        mkdirSync(assetsDir, { recursive: true });
-
-        for (const filePath of args.references) {
-          try {
-            if (!existsSync(filePath)) continue;
-            const stat = statSync(filePath);
-            if (!stat.isFile()) continue;
-
-            const isCache = isAssistantCachePath(filePath);
-            let filename = isCache
-              ? stripCacheUuidSuffix(basename(filePath))
-              : basename(filePath);
-            // Avoid overwriting existing assets
-            if (existsSync(join(assetsDir, filename))) {
-              const ext = extname(filename);
-              const base = basename(filename, ext);
-              if (isCache) {
-                // Use counter suffix for readable cache asset names: "设计稿 (1).png"
-                let counter = 1;
-                while (existsSync(join(assetsDir, `${base} (${counter})${ext}`))) {
-                  counter++;
-                }
-                filename = `${base} (${counter})${ext}`;
-              } else {
-                filename = `${base}-${Date.now()}${ext}`;
-              }
-            }
-            const dest = join(assetsDir, filename);
-            copyFileSync(filePath, dest);
-
-            await db.projectAsset.create({
-              data: {
-                filename,
-                path: dest,
-                size: stat.size,
-                mimeType: guessMimeType(filename),
-                projectId: args.projectId,
-                taskId: task.id,
-                description: `Reference: ${basename(filePath)}`,
-              },
-            });
-            attachedFiles.push(filename);
-          } catch {
-            // Skip files that can't be copied
+        let assetsDir: string | null = null;
+        try {
+          assetsDir = ensureAssetsDir(args.projectId);
+        } catch (e) {
+          // Storage root unwritable/unresolvable — surface it instead of
+          // silently dropping every attachment.
+          const error = e instanceof Error ? e.message : String(e);
+          for (const filePath of args.references) {
+            attachmentFailures.push({ reference: filePath, error });
           }
         }
 
-        // Append reference info to task description with full absolute paths
-        if (attachedFiles.length > 0) {
-          const refText = attachedFiles.map((f) => `- ${join(assetsDir, f)}`).join("\n");
-          updatedDesc = (task.description ?? "") + `\n\nAttached references:\n${refText}`;
-          await db.task.update({ where: { id: task.id }, data: { description: updatedDesc } });
+        if (assetsDir) {
+          const dir = assetsDir; // narrowed to string for the loop body
+          for (const filePath of args.references) {
+            try {
+              if (!existsSync(filePath)) {
+                attachmentFailures.push({ reference: filePath, error: "源文件不存在" });
+                continue;
+              }
+              const stat = statSync(filePath);
+              if (!stat.isFile()) {
+                attachmentFailures.push({ reference: filePath, error: "不是文件" });
+                continue;
+              }
+
+              const isCache = isAssistantCachePath(filePath);
+              let filename = isCache
+                ? stripCacheUuidSuffix(basename(filePath))
+                : basename(filePath);
+              // Avoid overwriting existing assets
+              if (existsSync(join(dir, filename))) {
+                const ext = extname(filename);
+                const base = basename(filename, ext);
+                if (isCache) {
+                  // Use counter suffix for readable cache asset names: "设计稿 (1).png"
+                  let counter = 1;
+                  while (existsSync(join(dir, `${base} (${counter})${ext}`))) {
+                    counter++;
+                  }
+                  filename = `${base} (${counter})${ext}`;
+                } else {
+                  filename = `${base}-${Date.now()}${ext}`;
+                }
+              }
+              const dest = join(dir, filename);
+              copyFileSync(filePath, dest);
+
+              await db.projectAsset.create({
+                data: {
+                  filename,
+                  path: dest,
+                  size: stat.size,
+                  mimeType: guessMimeType(filename),
+                  projectId: args.projectId,
+                  taskId: task.id,
+                  description: `Reference: ${basename(filePath)}`,
+                },
+              });
+              attachedFiles.push(filename);
+            } catch (e) {
+              // Record the reason rather than silently dropping the attachment.
+              attachmentFailures.push({
+                reference: filePath,
+                error: e instanceof Error ? e.message : String(e),
+              });
+            }
+          }
+
+          // Append reference info to task description with full absolute paths
+          if (attachedFiles.length > 0) {
+            const refText = attachedFiles.map((f) => `- ${join(dir, f)}`).join("\n");
+            updatedDesc = (task.description ?? "") + `\n\nAttached references:\n${refText}`;
+            await db.task.update({ where: { id: task.id }, data: { description: updatedDesc } });
+          }
         }
       }
+
+      // Attachment outcomes ride along on every return path so the assistant
+      // reports the real result instead of guessing why an image didn't land.
+      const attachmentInfo = attachmentFailures.length > 0 ? { attachmentFailures } : {};
 
       // Auto-start execution if requested — pass title as prompt since
       // startPtyExecution already injects task description as context.
@@ -232,7 +260,7 @@ export const taskTools = {
           });
           if (res.ok) {
             const execData = await res.json();
-            return { ...task, execution: execData };
+            return { ...task, ...attachmentInfo, execution: execData };
           }
           let errMsg = `HTTP ${res.status}`;
           try {
@@ -241,17 +269,18 @@ export const taskTools = {
           } catch {
             /* response body wasn't JSON; keep status code */
           }
-          return { ...task, execution: null, executionError: errMsg };
+          return { ...task, ...attachmentInfo, execution: null, executionError: errMsg };
         } catch (err) {
           return {
             ...task,
+            ...attachmentInfo,
             execution: null,
             executionError: err instanceof Error ? err.message : String(err),
           };
         }
       }
 
-      return task;
+      return { ...task, ...attachmentInfo };
     },
   },
 
