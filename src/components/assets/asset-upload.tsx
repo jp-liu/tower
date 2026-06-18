@@ -44,6 +44,12 @@ export function AssetUpload({
 
   const uploadWs = allWorkspaces.find((ws) => ws.id === uploadWsId);
   const uploadProjects = uploadWs?.projects ?? [];
+  const selectedProject = uploadProjects.find((p) => p.id === uploadProjectId);
+  const selectedProjectDisplay = selectedProject
+    ? selectedProject.alias
+      ? `${selectedProject.name} (${selectedProject.alias})`
+      : selectedProject.name
+    : (uploadProjectId ?? "");
 
   const handleOpen = () => {
     setUploadWsId(initialWsId);
@@ -123,12 +129,16 @@ export function AssetUpload({
               <div className="flex items-center gap-3">
                 <label className="text-xs text-muted-foreground w-16 shrink-0">{t("assets.workspace")}</label>
                 <Select value={uploadWsId} onValueChange={(v) => handleWsChange(v ?? "")}>
-                  <SelectTrigger className="flex-1 text-xs">
-                    <span className="truncate">{uploadWs?.name ?? uploadWsId}</span>
+                  <SelectTrigger className="flex-1 min-w-0 text-xs">
+                    <span className="min-w-0 flex-1 truncate text-left" title={uploadWs?.name ?? uploadWsId}>
+                      {uploadWs?.name ?? uploadWsId}
+                    </span>
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-w-[var(--anchor-width)]">
                     {allWorkspaces.map((ws) => (
-                      <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
+                      <SelectItem key={ws.id} value={ws.id} title={ws.name}>
+                        <span className="block truncate">{ws.name}</span>
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -139,17 +149,17 @@ export function AssetUpload({
                 <label className="text-xs text-muted-foreground w-16 shrink-0">{t("assets.project")}</label>
                 {uploadProjects.length > 0 ? (
                   <Select value={uploadProjectId ?? ""} onValueChange={(v: string | null) => setUploadProjectId(v ?? "")}>
-                    <SelectTrigger className="flex-1 text-xs">
-                      <span className="truncate">
-                        {(() => { const p = uploadProjects.find((x) => x.id === uploadProjectId); return p ? (p.alias ? `${p.name} (${p.alias})` : p.name) : uploadProjectId; })()}
+                    <SelectTrigger className="flex-1 min-w-0 text-xs">
+                      <span className="min-w-0 flex-1 truncate text-left" title={selectedProjectDisplay}>
+                        {selectedProjectDisplay}
                       </span>
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="max-w-[var(--anchor-width)]">
                       {uploadProjects.map((p) => {
                         const display = p.alias ? `${p.name} (${p.alias})` : p.name;
                         return (
-                          <SelectItem key={p.id} value={p.id}>
-                            {display}
+                          <SelectItem key={p.id} value={p.id} title={display}>
+                            <span className="block truncate">{display}</span>
                           </SelectItem>
                         );
                       })}
