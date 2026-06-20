@@ -283,7 +283,13 @@ export function MissionsClient({
   }, []);
 
   // Blur current pane → back to navigation mode (overlay reappears).
+  // Blur whatever actually holds focus, not just the selected pane: when Ctrl+;
+  // is pressed from an outside input (e.g. the assistant textarea), that input
+  // keeps DOM focus otherwise, so keystrokes land in it and the form-field guard
+  // drops the bare-key nav shortcuts (arrows / digits / Enter / Tab).
   const exitToNav = useCallback(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) active.blur();
     orderedControlsRef.current[selectedIndexRef.current]?.blur();
     setMode("nav");
   }, []);
