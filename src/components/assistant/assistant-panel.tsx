@@ -113,7 +113,10 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
                     {t("assistant.noSessions")}
                   </div>
                 ) : (
-                  sessions.map((session) => (
+                  // Cap the visible height to ~10 rows and scroll the rest, so a
+                  // long history stays compact. "新会话" below stays pinned.
+                  <div className="max-h-[min(440px,50vh)] overflow-y-auto">
+                  {sessions.map((session) => (
                     <DropdownMenuItem
                       key={session.id}
                       className="flex items-center justify-between gap-1 pr-1"
@@ -148,7 +151,8 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </DropdownMenuItem>
-                  ))
+                  ))}
+                  </div>
                 )}
                 {sessions.length > 0 && <DropdownMenuSeparator />}
                 <DropdownMenuItem onClick={createNewSession}>
@@ -192,16 +196,13 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
           <DialogHeader>
             <DialogTitle>{t("assistant.renameSessionTitle")}</DialogTitle>
           </DialogHeader>
+          {/* No Enter-to-submit: typing CJK via IME (or mixed CN/EN) often
+              fires Enter to confirm composition or mid-input, which would save
+              a half-typed title. Require an explicit Save click instead. */}
           <Input
             autoFocus
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                confirmRename();
-              }
-            }}
             placeholder={t("assistant.renameSessionPlaceholder")}
           />
           <DialogFooter>
