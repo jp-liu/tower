@@ -50,7 +50,7 @@ interface AssistantContextValue {
   switchSession: (sessionId: string) => void;
   removeSession: (sessionId: string) => void;
   renameSession: (sessionId: string, title: string) => void;
-  refreshSessions: () => Promise<void>;
+  refreshSessions: () => Promise<AssistantSession[]>;
 }
 
 const AssistantContext = createContext<AssistantContextValue | null>(null);
@@ -139,9 +139,35 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { refreshConfig(); }, [refreshConfig]);
 
-  // Session list from localStorage registry (not SDK — avoids cross-project leakage)
-  const refreshSessions = useCallback(async () => {
-    setSessions(getSessions());
+  // Session list — enumerated from the durable on-disk SDK store (source of
+  // truth), with the localStorage registry overlaid for user-renamed titles.
+  // Listing from disk is what recovers conversations whose localStorage pointer
+  // was lost (interrupted first turn, cleared storage, different origin, >cap).
+  // Returns the resolved list so callers (mount hydration) can act on it.
+  const refreshSessions = useCallback(async (): Promise<AssistantSession[]> => {
+    const local = getSessions();
+    try {
+      const res = await fetch("/api/internal/assistant/sessions");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.sessions)) {
+          const localTitle = new Map(local.map((s) => [s.id, s.title] as const));
+          const merged: AssistantSession[] = (data.sessions as AssistantSession[]).map(
+            (d) => {
+              const overlay = localTitle.get(d.id);
+              return overlay ? { ...d, title: overlay } : d;
+            }
+          );
+          setSessions(merged);
+          return merged;
+        }
+      }
+    } catch {
+      // Disk listing failed — fall back to the localStorage registry so the
+      // dropdown still works offline / if the SDK import fails.
+    }
+    setSessions(local);
+    return local;
   }, []);
 
   // Fetch history messages for a session from SDK via API
@@ -177,15 +203,34 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Load sessions on mount
+  // Hydrate on mount from the durable on-disk store. The stored localStorage
+  // pointer is only a hint: honor it when it still resolves to a real session,
+  // otherwise fall back to the most-recent conversation on disk. This is what
+  // restores history after a reload when the pointer was never written or was
+  // lost (interrupted first turn, cleared storage, different origin, >cap) —
+  // the conversations were always on disk; only the client index had drifted.
   useEffect(() => {
-    refreshSessions();
-    const activeId = getActiveSessionId();
-    if (activeId) {
-      setActiveSessionIdState(activeId);
-      sessionIdRef.current = activeId;
-      loadSessionHistory(activeId);
-    }
+    let cancelled = false;
+    (async () => {
+      const merged = await refreshSessions();
+      if (cancelled) return;
+      const stored = getActiveSessionId();
+      const chosen =
+        stored && merged.some((s) => s.id === stored)
+          ? stored
+          : merged[0]?.id ?? null;
+      if (!chosen) return;
+      setActiveSessionIdState(chosen);
+      sessionIdRef.current = chosen;
+      // Mark as an existing session so the next message isn't mis-treated as a
+      // first message (which would try to mint a new session record).
+      sessionCreatedRef.current = true;
+      setActiveSessionId(chosen);
+      loadSessionHistory(chosen);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [refreshSessions, loadSessionHistory]);
 
   const createNewSession = useCallback(() => {
@@ -213,18 +258,42 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, [loadSessionHistory]);
 
   const removeSession = useCallback((sessionId: string) => {
+    // Optimistic: drop the localStorage overlay + list entry for a snappy UI.
     deleteSession(sessionId);
-    setSessions(getSessions());
+    setSessions((prev) => prev.filter((s) => s.id !== sessionId));
     if (activeSessionId === sessionId) {
       createNewSession();
     }
-  }, [activeSessionId, createNewSession]);
+    // Durable delete from the on-disk store — otherwise disk-as-truth would
+    // resurrect the session on the next list/hydrate. Reconcile after it lands.
+    void fetch(
+      `/api/internal/assistant/sessions?sessionId=${encodeURIComponent(sessionId)}`,
+      { method: "DELETE" }
+    )
+      .catch(() => {})
+      .finally(() => {
+        void refreshSessions();
+      });
+  }, [activeSessionId, createNewSession, refreshSessions]);
 
   const renameSession = useCallback((sessionId: string, title: string) => {
     const trimmed = title.trim();
     if (!trimmed) return;
+    // Optimistic overlay update.
     updateSession(sessionId, { title: trimmed });
-    setSessions(getSessions());
+    setSessions((prev) =>
+      prev.map((s) => (s.id === sessionId ? { ...s, title: trimmed } : s))
+    );
+    // Persist to the on-disk store (customTitle) so the rename survives
+    // localStorage loss / a different origin.
+    void fetch(
+      `/api/internal/assistant/sessions?sessionId=${encodeURIComponent(sessionId)}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: trimmed }),
+      }
+    ).catch(() => {});
   }, []);
 
   const openAssistant = useCallback(async () => {
