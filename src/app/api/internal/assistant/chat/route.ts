@@ -8,11 +8,30 @@ import { db } from "@/lib/db";
 import { buildTowerMcpConfig } from "@/lib/ai/install-orchestrator";
 import { ATTACHMENT_SUBPATH_RE, MAX_ATTACHMENTS } from "@/lib/attachment-utils";
 import { readConfigValue } from "@/lib/config-reader";
+import {
+  classifyResultOutcome,
+  shouldRetryFreshOnResume,
+  isStaleResumeError,
+} from "@/lib/ai/assistant-turn";
 
 const claudeAdapter = new ClaudeCliAdapter();
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+/**
+ * Thrown from the consume loop when a resume attempt errors before streaming
+ * any content (stale CLI session). Signals the outer handler to retry as a
+ * fresh session WITHOUT surfacing the transient error to the user — the SDK
+ * sometimes reports the dead session as an error `result` rather than (or
+ * before) throwing, so we can't rely on the thrown-error path alone.
+ */
+class ResumeRetryNeeded extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ResumeRetryNeeded";
+  }
+}
 
 /**
  * POST /api/internal/assistant/chat
@@ -219,6 +238,12 @@ export async function POST(request: NextRequest) {
         // (permission/runtime issue) when users report "it never does anything".
         let toolUseCount = 0;
 
+        // Whether the current attempt has forwarded any visible content (text or
+        // a tool call) to the client. A stale-session resume errors BEFORE
+        // streaming anything; if content already streamed, an error is a genuine
+        // mid-turn failure that must be surfaced, not silently retried.
+        let streamedContent = false;
+
         // Build a query, optionally resuming a prior CLI session. Kept as a
         // factory so we can transparently retry WITHOUT resume if that session
         // no longer exists (server restart, cleared CLI history, stale UI id).
@@ -232,7 +257,13 @@ export async function POST(request: NextRequest) {
         };
 
         // Consume a query's message stream, forwarding each chunk to the client.
-        const consume = async (q: ReturnType<typeof query>) => {
+        // `isResumeAttempt` guards the stale-session fallback: an error result on
+        // a resume attempt (before any content streams) is suppressed and the
+        // outer handler retries as a fresh session instead of flashing an error.
+        const consume = async (
+          q: ReturnType<typeof query>,
+          { isResumeAttempt }: { isResumeAttempt: boolean }
+        ) => {
         for await (const msg of q) {
           switch (msg.type) {
             case "assistant": {
@@ -250,6 +281,7 @@ export async function POST(request: NextRequest) {
               );
 
               if (text) {
+                streamedContent = true;
                 send({
                   type: "text",
                   content: text,
@@ -259,6 +291,7 @@ export async function POST(request: NextRequest) {
 
               for (const tool of toolBlocks) {
                 toolUseCount += 1;
+                streamedContent = true;
                 const t = tool as { type: string; id?: string; name?: string; input?: unknown };
                 // Diagnostic: the real (完整入参) tool invocation. Pairs with the
                 // earlier tool_start (调起) via the same block id. If this logs
@@ -299,7 +332,17 @@ export async function POST(request: NextRequest) {
                   `outputTokens=${resultMsg.usage?.output_tokens ?? "?"} ` +
                   `firstTurn=${!body.sessionId}`
               );
-              if (resultMsg.subtype?.includes("error") || resultMsg.is_error) {
+              const outcome = classifyResultOutcome(resultMsg.subtype, resultMsg.is_error);
+              if (
+                shouldRetryFreshOnResume({ isResumeAttempt, outcome, streamedContent })
+              ) {
+                // Stale resume — the CLI session is gone. The SDK surfaced it as
+                // an error result (generic/empty message) rather than throwing.
+                // Bail WITHOUT emitting error/done so the outer handler retries
+                // as a fresh session and the user never sees a transient error.
+                throw new ResumeRetryNeeded(resultMsg.error ?? "resume execution error");
+              }
+              if (outcome === "error") {
                 send({ type: "error", content: resultMsg.error ?? "Execution error" });
               }
               send({ type: "done", sessionId: resultMsg.session_id });
@@ -368,6 +411,7 @@ export async function POST(request: NextRequest) {
               const evt = streamEvent.event;
 
               if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta" && evt.delta.text) {
+                streamedContent = true;
                 send({ type: "text_delta", content: evt.delta.text, sessionId: streamEvent.session_id });
               } else if (evt.type === "content_block_start" && evt.content_block?.type === "tool_use") {
                 // 调起 (placeholder). Carries the same block id as the later
@@ -386,19 +430,26 @@ export async function POST(request: NextRequest) {
         };
 
         // Run; if resuming a now-missing session, fall back to a fresh one so a
-        // restarted server / cleared CLI history doesn't dead-end the user. The
-        // "no conversation found" error is thrown before any chunk streams, so
-        // the retry can't produce duplicate output.
+        // restarted server / cleared CLI history doesn't dead-end the user. A
+        // dead session surfaces with no streamed output first — either thrown
+        // ("no conversation found …") or as an error `result` (caught inside
+        // consume and re-thrown as ResumeRetryNeeded). Both retry transparently,
+        // so neither the transient error nor any duplicate output reaches the user.
+        const isResume = Boolean(body.sessionId);
         try {
-          await consume(makeQuery(Boolean(body.sessionId)));
+          await consume(makeQuery(isResume), { isResumeAttempt: isResume });
         } catch (runErr: unknown) {
           const runDetail = runErr instanceof Error ? runErr.message : String(runErr);
-          if (body.sessionId && /no conversation found|no session found|session id/i.test(runDetail)) {
+          const staleResume =
+            runErr instanceof ResumeRetryNeeded ||
+            (isResume && isStaleResumeError(runDetail));
+          if (staleResume) {
             console.error(
               `[assistant-chat] resume failed for sessionId=${body.sessionId} (${runDetail}); retrying as a fresh session`
             );
             toolUseCount = 0;
-            await consume(makeQuery(false));
+            streamedContent = false;
+            await consume(makeQuery(false), { isResumeAttempt: false });
           } else {
             throw runErr;
           }
