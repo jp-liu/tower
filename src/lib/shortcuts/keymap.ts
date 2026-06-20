@@ -12,7 +12,6 @@ export type ShortcutActionId =
   | "global.commandPalette"
   | "global.help"
   | "global.assistant"
-  | "global.focusAssistant"
   | "global.gotoWorkspace"
   | "panels.taskManager"
   | "panels.assets"
@@ -76,18 +75,6 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
     group: "global",
     scope: "global",
     configurable: true,
-  },
-  {
-    // Move focus INTO the assistant input from anywhere (incl. a focused
-    // mission terminal). Opens the panel first if it's closed. Pairs with
-    // missions' Ctrl+; (which moves focus OUT to navigation mode).
-    id: "global.focusAssistant",
-    defaultKeys: ["Control+'"],
-    descriptionKey: "shortcuts.focusAssistant",
-    group: "global",
-    scope: "global",
-    configurable: true,
-    allowInInput: true,
   },
   {
     id: "global.gotoWorkspace",

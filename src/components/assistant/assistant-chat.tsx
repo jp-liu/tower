@@ -318,6 +318,7 @@ export function AssistantChat() {
           {/* Block 3: textarea */}
           <Textarea
             ref={inputRef}
+            data-assistant-input
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
