@@ -1163,6 +1163,7 @@ export const en: Translations = {
   "shortcuts.search": "Global search",
   "shortcuts.commandPalette": "Command palette",
   "shortcuts.assistant": "Toggle AI assistant",
+  "shortcuts.focusAssistant": "Jump to the assistant input (opens the panel if closed)",
   "shortcuts.openHelp": "Keyboard shortcuts help",
   "shortcuts.gotoWorkspace": "Switch to the Nth workspace",
   "shortcuts.missions.exitToNav": "Enter navigation mode (press this first, then use the keys below to switch panes)",

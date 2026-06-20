@@ -1179,6 +1179,7 @@ export const zh = {
   "shortcuts.search": "全局搜索",
   "shortcuts.commandPalette": "命令面板",
   "shortcuts.assistant": "切换 AI 助手",
+  "shortcuts.focusAssistant": "跳到助手输入框（面板关闭时自动打开）",
   "shortcuts.openHelp": "快捷键帮助",
   "shortcuts.gotoWorkspace": "切换到第 N 个工作区",
   "shortcuts.missions.exitToNav": "进入导航模式（先按此键，再用下面的按键切换窗格）",

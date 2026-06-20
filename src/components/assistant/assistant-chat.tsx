@@ -50,6 +50,7 @@ export function AssistantChat() {
     isLoadingHistory,
     sendChatMessage: sendMessage,
     cancelChat,
+    inputFocusSignal,
   } = useAssistant();
 
   const {
@@ -66,6 +67,12 @@ export function AssistantChat() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Re-focus on demand (Ctrl+' while the panel is already open). Skip the
+  // initial 0 so this doesn't double up with the mount focus above.
+  useEffect(() => {
+    if (inputFocusSignal > 0) inputRef.current?.focus();
+  }, [inputFocusSignal]);
 
   const mountedRef = useRef(false);
   const lastContentLen = messages[messages.length - 1]?.content.length ?? 0;

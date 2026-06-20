@@ -36,6 +36,9 @@ interface AssistantContextValue {
   worktreePath: string | null;
   toggleAssistant: () => void;
   closeAssistant: () => void;
+  focusAssistantInput: () => void;
+  /** Bumped to request the chat input take focus while already mounted. */
+  inputFocusSignal: number;
   // Chat state — persisted at provider level so it survives route changes
   chatMessages: ChatMessage[];
   chatStatus: "idle" | "connecting" | "streaming" | "error";
@@ -110,6 +113,7 @@ interface SSEEvent {
 export function AssistantProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [inputFocusSignal, setInputFocusSignal] = useState(0);
   const [displayMode, setDisplayMode] = useState<"sidebar" | "dialog">("sidebar");
   const [worktreePath, setWorktreePath] = useState<string | null>(null);
 
@@ -323,8 +327,22 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     }
   }, [isOpen, isStarting, closeAssistant, openAssistant]);
 
+  // Move focus into the assistant input. If the panel is closed, open it — the
+  // freshly-mounted chat auto-focuses its textarea on mount. If it's already
+  // open, bump a signal the mounted chat watches to (re)focus the input.
+  const focusAssistantInput = useCallback(() => {
+    if (isOpen || isStarting) {
+      setInputFocusSignal((n) => n + 1);
+    } else {
+      void openAssistant();
+    }
+  }, [isOpen, isStarting, openAssistant]);
+
   // Keyboard shortcut: toggle the AI assistant (default ⌘L / Ctrl+L).
   useActionShortcut("global.assistant", () => toggleAssistant());
+
+  // Keyboard shortcut: jump focus into the assistant input (default Ctrl+').
+  useActionShortcut("global.focusAssistant", () => focusAssistantInput());
 
   // -------------------------------------------------------------------------
   // Chat message sender — lives at provider level for persistence
@@ -610,7 +628,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     <AssistantContext.Provider
       value={{
         isOpen, isStarting, displayMode, worktreePath,
-        toggleAssistant, closeAssistant,
+        toggleAssistant, closeAssistant, focusAssistantInput, inputFocusSignal,
         chatMessages, chatStatus, isChatThinking, isLoadingHistory, sendChatMessage, cancelChat,
         sessions, activeSessionId, createNewSession, switchSession, removeSession, renameSession, refreshSessions,
       }}
