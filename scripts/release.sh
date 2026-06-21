@@ -104,4 +104,9 @@ if [ "$PUSH" -eq 1 ]; then
 fi
 
 printf '\n\033[1;32m✓ 发布完成: tower-studio@%s\033[0m\n' "$NEW_VER"
-[ "$PUSH" -eq 0 ] && echo "  (未 push, 需要时手动: git push && git push origin v$NEW_VER, 或加 --push)"
+# 注意: 不要用 `[ ... ] && echo` 作为脚本最后一条命令 —— 条件为假时它返回 1,
+# 会让整个脚本以退出码 1 结束 (假失败), 即便发布全部成功.
+if [ "$PUSH" -eq 0 ]; then
+  echo "  (未 push, 需要时手动: git push && git push origin v$NEW_VER, 或加 --push)"
+fi
+exit 0
