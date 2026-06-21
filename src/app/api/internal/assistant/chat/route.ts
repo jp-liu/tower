@@ -244,6 +244,12 @@ export async function POST(request: NextRequest) {
         // mid-turn failure that must be surfaced, not silently retried.
         let streamedContent = false;
 
+        // Tool count reported by the SDK `init` snapshot. -1 = not seen yet.
+        // 0 means the dedicated Tower MCP server didn't connect in time (shows
+        // up as `mcpServers=[…:pending]`), so the model has no tools and can
+        // only narrate — we use this to give an empty turn an actionable hint.
+        let initToolCount = -1;
+
         // Build a query, optionally resuming a prior CLI session. Kept as a
         // factory so we can transparently retry WITHOUT resume if that session
         // no longer exists (server restart, cleared CLI history, stale UI id).
@@ -344,6 +350,17 @@ export async function POST(request: NextRequest) {
               }
               if (outcome === "error") {
                 send({ type: "error", content: resultMsg.error ?? "Execution error" });
+              } else if (!streamedContent) {
+                // Turn "succeeded" but the model emitted no text and called no
+                // tool (only a tiny thinking trace). Without a bubble the user
+                // sees total silence and assumes a hang. Surface a hint instead
+                // — and when the tools never loaded (MCP connect timed out),
+                // say so, since a retry usually connects on the next turn.
+                const hint =
+                  initToolCount === 0
+                    ? "助手工具未能及时加载（MCP 连接超时），本轮没有执行任何操作。请再发送一次试试。"
+                    : "助手本轮没有返回内容，请重试或换一种说法。";
+                send({ type: "text", content: hint, sessionId: resultMsg.session_id });
               }
               send({ type: "done", sessionId: resultMsg.session_id });
               break;
@@ -366,9 +383,10 @@ export async function POST(request: NextRequest) {
                 const servers = (sysMsg.mcp_servers ?? [])
                   .map((s) => `${s.name}:${s.status}`)
                   .join(",");
+                initToolCount = sysMsg.tools?.length ?? 0;
                 console.error(
                   `[assistant-chat] session init — mcpServers=[${servers}] ` +
-                    `toolCount=${sysMsg.tools?.length ?? 0}`
+                    `toolCount=${initToolCount}`
                 );
               }
               if (sysMsg.subtype === "tool_result") {
