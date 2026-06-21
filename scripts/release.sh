@@ -9,7 +9,7 @@
 #   ./scripts/release.sh --push     # 发布后顺带 git push
 #   ./scripts/release.sh patch --push
 #
-# 流程: 检查干净 -> pull -> bump 版本 -> 修 esbuild shim -> build -> npm publish -> 校验 -> commit
+# 流程: 检查干净 -> pull -> bump 版本 -> 修 esbuild shim -> build -> npm publish -> 校验 -> commit -> tag -> (可选)push
 #
 # 内置约定 (可用环境变量覆盖):
 #   RELEASE_PROXY     发布代理        默认 http://127.0.0.1:7897  (本地 Clash; 切勿用 31165, 会重置大 PUT)
@@ -88,11 +88,20 @@ git add package.json
 git commit -m "chore(release): $NEW_VER"
 echo "  已提交 chore(release): $NEW_VER"
 
-# --- 9. (可选) push ---
+# --- 8.5 打 git tag (指向 release commit) ---
+step "git tag v$NEW_VER"
+if git rev-parse "v$NEW_VER" >/dev/null 2>&1; then
+  die "tag v$NEW_VER 已存在, 请检查 (可能上次发布残留)"
+fi
+git tag -a "v$NEW_VER" -m "tower-studio v$NEW_VER"
+echo "  已打 tag v$NEW_VER"
+
+# --- 9. (可选) push (含 tag) ---
 if [ "$PUSH" -eq 1 ]; then
-  step "git push"
+  step "git push (含 tag)"
   git push
+  git push origin "v$NEW_VER"
 fi
 
 printf '\n\033[1;32m✓ 发布完成: tower-studio@%s\033[0m\n' "$NEW_VER"
-[ "$PUSH" -eq 0 ] && echo "  (未 push, 需要时手动 git push 或加 --push)"
+[ "$PUSH" -eq 0 ] && echo "  (未 push, 需要时手动: git push && git push origin v$NEW_VER, 或加 --push)"
