@@ -19,6 +19,22 @@ const claudeAdapter = new ClaudeCliAdapter();
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+/** Local `YYYY-MM-DD HH:mm:ss` stamp — interleaved turns are otherwise hard to
+ *  tell apart in the server log. Local time (not ISO/UTC) for readability. */
+function stamp(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+    `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  );
+}
+
+/** Timestamped server log for the assistant chat turn. */
+function clog(message: string): void {
+  console.error(`[${stamp()}] [assistant-chat] ${message}`);
+}
+
 /**
  * Thrown from the consume loop when a resume attempt errors before streaming
  * any content (stale CLI session). Signals the outer handler to retry as a
@@ -30,6 +46,21 @@ class ResumeRetryNeeded extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ResumeRetryNeeded";
+  }
+}
+
+/**
+ * Thrown from the consume loop at `init` when the dedicated Tower MCP server
+ * reported 0 tools (it didn't finish connecting before the turn started —
+ * intermittent under SQLite contention when other agents hammer the same DB).
+ * A tool-less turn can only narrate ("I'll create the task…") while doing
+ * nothing, so we abort BEFORE any output streams and re-spawn once, which
+ * almost always reconnects. Bounded to a single retry.
+ */
+class ToolsUnavailableRetry extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ToolsUnavailableRetry";
   }
 }
 
@@ -83,7 +114,10 @@ export async function POST(request: NextRequest) {
   // makes send()'s enqueue throw "Invalid state: Controller is already closed"
   // and leaves the Claude CLI subprocess running headless (zombie turn).
   let streamClosed = false;
-  const sdkAbort = new AbortController();
+  // One AbortController per attempt — replaced before each retry so the aborted
+  // attempt's CLI + MCP subprocess is killed without disarming the retry's.
+  // `cancel()` (client disconnect) aborts whichever is current.
+  let activeAbort = new AbortController();
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -115,9 +149,7 @@ export async function POST(request: NextRequest) {
         claudePath = resolveSdkExecutable(rawClaudeCmd);
         // Log the resolved CLI path — a Windows `spawn EINVAL` means a `.cmd`
         // reached the SDK (it can't be rewritten to a node-runnable cli.js).
-        console.error(
-          `[assistant-chat] claude exec — raw=${rawClaudeCmd} resolved=${claudePath}`
-        );
+        clog(`claude exec — raw=${rawClaudeCmd} resolved=${claudePath}`);
 
         // Ensure .tower/ exists (runtime guard — handles deletion while server is running)
         const { ensureTowerDir } = await import("@/lib/init-tower");
@@ -186,10 +218,10 @@ export async function POST(request: NextRequest) {
         const maxTurns = await readConfigValue<number>("assistant.maxTurns", 30);
         options.effort = effort;
         options.maxTurns = maxTurns;
-        // Cancel the underlying Claude CLI turn when the client disconnects
-        // (see streamClosed/cancel()). Stops the agent loop promptly and kills
-        // the subprocess instead of letting it run to completion unseen.
-        options.abortController = sdkAbort;
+        // The per-attempt abortController is attached inside makeQuery() (it
+        // changes across retries). Aborting it cancels the underlying Claude CLI
+        // turn — on client disconnect (see cancel()) and between retries — so no
+        // CLI/MCP subprocess is left running headless.
 
         // Safety net: raise the CLI's per-response output ceiling too. With low
         // effort this should never be hit, but if a future config bumps effort
@@ -256,11 +288,18 @@ export async function POST(request: NextRequest) {
         const makeQuery = (withResume: boolean) => {
           const runOptions = { ...options };
           if (!withResume) delete (runOptions as Record<string, unknown>).resume;
+          // Attach the CURRENT attempt's abortController (rotated before each
+          // retry) so aborting one attempt doesn't disarm the next.
+          (runOptions as Record<string, unknown>).abortController = activeAbort;
           return query({
             prompt: finalPrompt,
             options: runOptions as Parameters<typeof query>[0]["options"],
           });
         };
+
+        // Tools-not-ready retry happens at most once per request (see
+        // ToolsUnavailableRetry). Tracked across attempts in the loop below.
+        let toolsRetried = false;
 
         // Consume a query's message stream, forwarding each chunk to the client.
         // `isResumeAttempt` guards the stale-session fallback: an error result on
@@ -303,9 +342,7 @@ export async function POST(request: NextRequest) {
                 // earlier tool_start (调起) via the same block id. If this logs
                 // but no matching tool_result/turn-done follows, the turn hung
                 // while waiting on the MCP tool to return.
-                console.error(
-                  `[assistant-chat] tool_use — name=${t.name ?? "?"} id=${t.id ?? "?"} toolUses=${toolUseCount}`
-                );
+                clog(`tool_use — name=${t.name ?? "?"} id=${t.id ?? "?"} toolUses=${toolUseCount}`);
                 send({
                   type: "tool_use",
                   content: t.name ?? "unknown",
@@ -332,8 +369,8 @@ export async function POST(request: NextRequest) {
               // output_tokens (which includes the thinking trace) tells us whether
               // a turn is ballooning — a few-hundred-char reply should be well
               // under ~2K; tens of thousands means runaway thinking or a loop.
-              console.error(
-                `[assistant-chat] turn done — subtype=${resultMsg.subtype ?? "?"} ` +
+              clog(
+                `turn done — subtype=${resultMsg.subtype ?? "?"} ` +
                   `toolUses=${toolUseCount} numTurns=${resultMsg.num_turns ?? "?"} ` +
                   `outputTokens=${resultMsg.usage?.output_tokens ?? "?"} ` +
                   `firstTurn=${!body.sessionId}`
@@ -384,13 +421,19 @@ export async function POST(request: NextRequest) {
                   .map((s) => `${s.name}:${s.status}`)
                   .join(",");
                 initToolCount = sysMsg.tools?.length ?? 0;
-                console.error(
-                  `[assistant-chat] session init — mcpServers=[${servers}] ` +
-                    `toolCount=${initToolCount}`
+                clog(
+                  `session init — mcpServers=[${servers}] toolCount=${initToolCount}`
                 );
+                // No tools = the Tower MCP didn't connect in time. Abort now
+                // (before the model narrates a no-op turn) and re-spawn once.
+                if (initToolCount === 0 && !toolsRetried) {
+                  throw new ToolsUnavailableRetry(
+                    `MCP not connected at init (servers=[${servers}])`
+                  );
+                }
               }
               if (sysMsg.subtype === "tool_result") {
-                console.error(`[assistant-chat] tool_result(system) — name=${sysMsg.tool_name ?? "?"}`);
+                clog(`tool_result(system) — name=${sysMsg.tool_name ?? "?"}`);
                 send({
                   type: "tool_result",
                   content: sysMsg.tool_name ?? "tool",
@@ -413,8 +456,8 @@ export async function POST(request: NextRequest) {
                 (b) => b?.type === "tool_result"
               );
               if (results.length > 0) {
-                console.error(
-                  `[assistant-chat] tool_result(user) — count=${results.length} ` +
+                clog(
+                  `tool_result(user) — count=${results.length} ` +
                     `ids=${results.map((r) => r.tool_use_id ?? "?").join(",")}`
                 );
               }
@@ -453,22 +496,46 @@ export async function POST(request: NextRequest) {
         // ("no conversation found …") or as an error `result` (caught inside
         // consume and re-thrown as ResumeRetryNeeded). Both retry transparently,
         // so neither the transient error nor any duplicate output reaches the user.
-        const isResume = Boolean(body.sessionId);
-        try {
-          await consume(makeQuery(isResume), { isResumeAttempt: isResume });
-        } catch (runErr: unknown) {
-          const runDetail = runErr instanceof Error ? runErr.message : String(runErr);
-          const staleResume =
-            runErr instanceof ResumeRetryNeeded ||
-            (isResume && isStaleResumeError(runDetail));
-          if (staleResume) {
-            console.error(
-              `[assistant-chat] resume failed for sessionId=${body.sessionId} (${runDetail}); retrying as a fresh session`
-            );
+        // Attempt loop with two transparent, each-at-most-once retries:
+        //  - tools not ready: init reported 0 tools (MCP didn't connect in time
+        //    under DB contention). Re-spawn, KEEPING the resume flag — we aborted
+        //    at init before any output, so nothing duplicates.
+        //  - stale resume: the CLI session is gone. Re-run as a FRESH session so
+        //    a restarted server / cleared CLI history doesn't dead-end the user.
+        // Both surface with no streamed output first; neither the transient error
+        // nor duplicate output reaches the user.
+        let attemptResume = Boolean(body.sessionId);
+        let usedResumeFallback = false;
+        for (;;) {
+          try {
             toolUseCount = 0;
             streamedContent = false;
-            await consume(makeQuery(false), { isResumeAttempt: false });
-          } else {
+            initToolCount = -1;
+            await consume(makeQuery(attemptResume), { isResumeAttempt: attemptResume });
+            break;
+          } catch (runErr: unknown) {
+            // Kill the aborted attempt's CLI + MCP before re-running, and arm a
+            // fresh controller for the next attempt.
+            activeAbort.abort();
+            activeAbort = new AbortController();
+
+            if (runErr instanceof ToolsUnavailableRetry && !toolsRetried) {
+              toolsRetried = true;
+              clog(`${runErr.message}; re-spawning once to reconnect MCP`);
+              continue;
+            }
+            const runDetail = runErr instanceof Error ? runErr.message : String(runErr);
+            const staleResume =
+              runErr instanceof ResumeRetryNeeded ||
+              (attemptResume && isStaleResumeError(runDetail));
+            if (staleResume && !usedResumeFallback) {
+              usedResumeFallback = true;
+              attemptResume = false;
+              clog(
+                `resume failed for sessionId=${body.sessionId} (${runDetail}); retrying as a fresh session`
+              );
+              continue;
+            }
             throw runErr;
           }
         }
@@ -476,8 +543,8 @@ export async function POST(request: NextRequest) {
         // Client disconnected and we aborted the SDK ourselves — benign. The
         // sink is gone so there's nothing to surface; don't log it as an error
         // (it previously showed up as the scary "Controller is already closed").
-        if (streamClosed || sdkAbort.signal.aborted) {
-          console.error("[assistant-chat] client disconnected — turn aborted before completion");
+        if (streamClosed || activeAbort.signal.aborted) {
+          clog("client disconnected — turn aborted before completion");
           return;
         }
         // Always log the full error server-side — this is a localhost-only
@@ -485,10 +552,8 @@ export async function POST(request: NextRequest) {
         // (the standalone build) left Windows users with no way to diagnose
         // failures beyond the generic client message.
         const detail = err instanceof Error ? err.message : String(err);
-        console.error(
-          "[assistant-chat] ERROR:",
-          detail,
-          err instanceof Error && err.stack ? `\n${err.stack}` : ""
+        clog(
+          `ERROR: ${detail}${err instanceof Error && err.stack ? `\n${err.stack}` : ""}`
         );
         // Surface the real reason to the (localhost) client so it shows up in
         // the chat bubble and can be reported directly. Give the output-cap
@@ -523,7 +588,7 @@ export async function POST(request: NextRequest) {
       // navigation, or transport teardown). Stop writing and abort the SDK so
       // the Claude CLI subprocess doesn't keep running headless.
       streamClosed = true;
-      sdkAbort.abort();
+      activeAbort.abort();
     },
   });
 
