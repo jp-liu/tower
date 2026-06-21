@@ -1,8 +1,12 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight, FolderOpen, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
+import { getOrCreateTowerTaskId } from "@/actions/workspace-actions";
 import { useI18n } from "@/lib/i18n";
 
 interface Project {
@@ -16,6 +20,7 @@ interface Project {
 interface ProjectTabsProps {
   projects: Project[];
   activeProjectId: string;
+  workspaceId: string;
   onSelect: (projectId: string) => void;
 }
 
@@ -24,16 +29,36 @@ const TAB_WIDTH = "w-[212px]";
 function ProjectTab({
   project,
   isActive,
+  workspaceId,
   onSelect,
 }: {
   project: Project;
   isActive: boolean;
+  workspaceId: string;
   onSelect: (id: string) => void;
 }) {
   const { t } = useI18n();
+  const router = useRouter();
   const total = project.totalTasks;
   const running = project.runningTasks;
   const pct = total > 0 ? Math.round((running / total) * 100) : 0;
+
+  // Mirror the tooltip's open state so the tab stays highlighted while the
+  // pointer is over the (portalled) tooltip — CSS :hover can't cross the portal.
+  const [open, setOpen] = useState(false);
+  const [isOpeningStudio, setIsOpeningStudio] = useState(false);
+
+  const openStudio = async () => {
+    setIsOpeningStudio(true);
+    try {
+      const taskId = await getOrCreateTowerTaskId(project.id);
+      router.push(`/workspaces/${workspaceId}/tasks/${taskId}`);
+    } catch {
+      toast.error(t("git.openStudioFailed"));
+    } finally {
+      setIsOpeningStudio(false);
+    }
+  };
 
   const button = (
     <button
@@ -41,13 +66,13 @@ function ProjectTab({
       className={`group flex ${TAB_WIDTH} shrink-0 items-center gap-2 rounded-lg border-b-2 px-3 py-1.5 text-left transition-colors ${
         isActive
           ? "border-primary bg-primary/10 ring-1 ring-primary/20 cursor-default"
-          : "border-transparent hover:bg-accent cursor-pointer"
+          : `border-transparent cursor-pointer ${open ? "bg-accent" : "hover:bg-accent"}`
       }`}
     >
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span
           className={`w-full truncate text-sm font-medium leading-tight ${
-            isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+            isActive ? "text-primary" : open ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
           }`}
         >
           {project.name}
@@ -69,19 +94,36 @@ function ProjectTab({
   );
 
   return (
-    <Tooltip>
+    <Tooltip onOpenChange={setOpen}>
       <TooltipTrigger render={button} />
       <TooltipContent
         side="bottom"
         hideArrow
         className="flex w-[268px] max-w-none flex-col items-stretch gap-0 rounded-xl border border-border bg-card p-3.5 text-foreground shadow-lg"
       >
-        <div className="text-[13px] font-bold leading-snug break-words">{project.name}</div>
-        {project.alias && (
-          <div className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground break-words">
-            {project.alias}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-bold leading-snug break-words">{project.name}</div>
+            {project.alias && (
+              <div className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground break-words">
+                {project.alias}
+              </div>
+            )}
           </div>
-        )}
+          <Button
+            variant="outline"
+            disabled={isOpeningStudio}
+            onClick={openStudio}
+            className="h-7 shrink-0 gap-1 px-2 text-[11px]"
+          >
+            {isOpeningStudio ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <FolderOpen className="h-3.5 w-3.5" />
+            )}
+            {t("git.openStudio")}
+          </Button>
+        </div>
 
         <div className="my-2.5 h-px bg-border" />
 
@@ -115,7 +157,7 @@ function ProjectTab({
   );
 }
 
-export function ProjectTabs({ projects, activeProjectId, onSelect }: ProjectTabsProps) {
+export function ProjectTabs({ projects, activeProjectId, workspaceId, onSelect }: ProjectTabsProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
@@ -168,6 +210,7 @@ export function ProjectTabs({ projects, activeProjectId, onSelect }: ProjectTabs
             key={p.id}
             project={p}
             isActive={activeProjectId === p.id}
+            workspaceId={workspaceId}
             onSelect={onSelect}
           />
         ))}

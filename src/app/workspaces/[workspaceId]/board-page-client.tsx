@@ -322,6 +322,7 @@ export function BoardPageClient({
           <ProjectTabs
             projects={projects}
             activeProjectId={projectId}
+            workspaceId={workspaceId}
             onSelect={(id) => router.push(`/workspaces/${workspaceId}?projectId=${id}`, { scroll: false })}
           />
         </div>

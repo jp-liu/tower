@@ -1,7 +1,11 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { ProjectTabs } from "@/components/board/project-tabs";
 import { I18nProvider } from "@/lib/i18n";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
 afterEach(() => {
   cleanup();
@@ -15,7 +19,7 @@ const projects = [
 function renderTabs() {
   return render(
     <I18nProvider>
-      <ProjectTabs projects={projects} activeProjectId="p1" onSelect={() => {}} />
+      <ProjectTabs projects={projects} activeProjectId="p1" workspaceId="w1" onSelect={() => {}} />
     </I18nProvider>
   );
 }
