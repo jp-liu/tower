@@ -23,7 +23,7 @@ features:
     details: xterm.js + Claude CLI for real-time interactive execution with auto-generated summaries
   - icon: 🔧
     title: MCP Toolchain
-    details: 24 MCP tools across 7 categories for seamless external AI agent integration
+    details: 31 MCP tools across 9 categories for seamless external AI agent integration
   - icon: ✏️
     title: Code Editor
     details: Monaco Editor with multi-tab editing, syntax highlighting, and Ctrl+S save

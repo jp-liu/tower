@@ -38,7 +38,7 @@ System modules for GSD phase scoping. Use the **Slug** as the commit scope (e.g.
 | Missions | `missions` | 多任务监控面板、网格布局 |
 | Search | `search` | 全局搜索、代码搜索、FTS |
 | Settings | `settings` | 系统配置、CLI Profile、Agent 配置 |
-| MCP | `mcp` | MCP Server、25 个工具、stdio 传输 |
+| MCP | `mcp` | MCP Server、31 个工具、stdio 传输 |
 | Git | `git` | Git 操作、Worktree、Diff、Merge |
 | Assets & Notes | `assets` | 项目资产上传、笔记系统 |
 | AI | `ai` | Claude SDK、CLI Adapter、执行总结、Prompt 管理 |
@@ -137,7 +137,7 @@ Replace `<project-root>` with the absolute path to this repository.
 
 ## Available MCP Tools
 
-25 tools across 7 categories.
+31 tools across 9 categories.
 
 ### Workspace Tools (`src/mcp/tools/workspace-tools.ts`)
 
@@ -184,13 +184,29 @@ Replace `<project-root>` with the absolute path to this repository.
 |------|-------------|------------|
 | `search` | Search tasks, projects, or repositories by query string | `query`, `category?` (`task`\|`project`\|`repository`) |
 
+### Knowledge Tools (`src/mcp/tools/knowledge-tools.ts`)
+
+| Tool | Description | Key Params |
+|------|-------------|------------|
+| `identify_project` | Resolve a project by partial name, alias, or description; returns matches sorted by confidence score (0–1, min 0.3) | `query`, `workspaceId?` |
+
+### Notes & Assets Tools (`src/mcp/tools/note-asset-tools.ts`)
+
+| Tool | Description | Key Params |
+|------|-------------|------------|
+| `manage_notes` | CRUD + search over a project's notes (FTS-indexed). One tool, multiple actions | `action` (`create`\|`update`\|`delete`\|`get`\|`list`\|`search`), `projectId?`, `noteId?`, `title?`, `content?`, `query?` |
+| `manage_assets` | Manage project assets (files, images, screenshots). `upload` saves base64 (pasted images), `add` moves a file from `sourcePath`, `link_task` attaches assets to a task after creation | `action` (`add`\|`upload`\|`delete`\|`list`\|`get`\|`link_task`), `projectId?`, `assetId?`, `assetIds?`, `taskId?`, `sourcePath?`, `base64?` |
+
 ### Terminal Tools (`src/mcp/tools/terminal-tools.ts`)
 
 | Tool | Description | Key Params |
 |------|-------------|------------|
+| `start_task_execution` | Start a Claude CLI PTY session for a task; sends `prompt` as the initial instruction and flips status to IN_PROGRESS. Returns `executionId` and `worktreePath` (worktree mode) | `taskId`, `prompt?` |
 | `get_task_terminal_output` | Get recent terminal output lines from a running task's PTY session | `taskId`, `lines?` (default 50, max 500) |
-| `send_task_terminal_input` | Send text input to a running task's PTY terminal (include `\n` for Enter) | `taskId`, `text` |
+| `send_task_terminal_input` | Send text input to a running task's PTY terminal. Submits by default (trailing newlines trimmed, a standalone CR appended so the TUI sends it); pass `submit: false` to only fill the input box | `taskId`, `text`, `submit?` |
 | `get_task_execution_status` | Get execution status (running/idle/exited) with output snippet | `taskId` |
+| `stop_task_execution` | Close a task's terminal (same as the Stop button — kills the PTY session, finalizes the execution, moves the task to IN_REVIEW). Identify by exact `taskId` or fuzzy `taskName`. Ambiguous name → returns `needsSelection` with candidates instead of stopping; unique match or exact ID → closes directly. No active terminal is a no-op and still reports success | `taskId?`, `taskName?` |
+| `resume_task_execution` | Start a task's terminal so a related task can bring up a sibling before messaging it. Defaults to resuming the latest history session (Continue/Retry button); no prior runs → fresh start with task context (Launch button); already running → no-op (`mode: already_running`). Identify by exact `taskId` or fuzzy `taskName` (ambiguous → `needsSelection`). Returns `mode` (`continued`\|`started`\|`already_running`) + `executionId`. Follow with `send_task_terminal_input` to send the message | `taskId?`, `taskName?` |
 
 ### Report Tools (`src/mcp/tools/report-tools.ts`)
 
@@ -293,7 +309,7 @@ For AI working directly in the Next.js codebase, use these server actions (all i
 - **PTY sessions**: Keyed by `taskId` — one active session per task. Use `startPtyExecution` to create, `resumePtyExecution` to resume with a `sessionId`, `stopPtyExecution` to kill.
 - **CliProfile**: Only one default profile (`isDefault: true`). `baseArgs` and `envVars` are JSON strings — parse before use.
 - **Environment injection**: `AI_MANAGER_TASK_ID` and `CALLBACK_URL` are injected into every PTY session environment. Never mutate `process.env` — use `envOverrides`.
-- **Internal HTTP bridge**: `/api/internal/terminal/[taskId]/buffer` (GET) and `/api/internal/terminal/[taskId]/input` (POST) — localhost-only routes for cross-process PTY access. MCP tools use these since MCP stdio processes cannot share in-memory PTY sessions.
+- **Internal HTTP bridge**: `/api/internal/terminal/[taskId]/buffer` (GET), `/input`, `/start`, `/stop`, and `/resume` (POST) — localhost-only routes for cross-process PTY access. MCP tools use these since MCP stdio processes cannot share in-memory PTY sessions.
 
 ---
 
@@ -320,6 +336,8 @@ To dispatch and monitor tasks programmatically, use MCP tools in this workflow:
 4. **Send input:** `send_task_terminal_input` to interact with the running Claude CLI
 5. **Check completion:** Poll `get_task_execution_status` — `terminalStatus: "exited"` means done
 6. **Resume if needed:** `resumePtyExecution(taskId, sessionId)` to continue a previous session
+7. **Launch a sibling terminal:** `resume_task_execution` (by `taskId` or fuzzy `taskName`) to bring up a related task's terminal — resumes its latest session by default — then `send_task_terminal_input` to notify it
+8. **Close a sub-task terminal:** `stop_task_execution` (by `taskId` or fuzzy `taskName`) to close a finished sub-task's terminal without opening Mission Control
 
 **ActiveExecutionInfo type** (returned by `getActiveExecutionsAcrossWorkspaces`):
 ```typescript

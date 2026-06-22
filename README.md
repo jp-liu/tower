@@ -135,6 +135,27 @@ Create task → Click Execute → TODO auto-transitions to IN_PROGRESS
 - Project types: FRONTEND / BACKEND (controls preview availability)
 - Git Path Mapping rules: auto-resolve local paths by host + owner
 
+### Mission Control
+
+- `/missions` dashboard monitors every running task execution across all workspaces with embedded live terminals
+- Grid layout presets (1×1 … 3×3) persisted locally; workspace filter dropdown
+- **Launch task** opens a search dialog — fuzzy-search tasks, browse by workspace → project, or pick from recent; launch new or resume a previous session
+- Dual navigation: *input* mode (type into a pane) and *nav* mode (centered pane selector with `1–9 / A–Z` quick-select), toggle with `Ctrl+;`
+
+### AI Assistant
+
+- Built-in chat powered by the Claude Agent SDK with SSE streaming and multimodal (image) input
+- Acts as a task-management operator — creates and moves tasks, searches, and reports through Tower's MCP tools
+- Chat history sourced from on-disk transcripts; resilient resume with automatic fallback and MCP re-spawn on disconnect
+
+### Version Timeline
+
+- Group tasks under project versions and review work release-by-release; unversioned tasks stay in the backlog
+
+### Notes & Assets
+
+- Per-project notes (full-text searchable) and asset uploads (files, images, pasted screenshots), manageable from the UI or via MCP tools
+
 ### Settings
 
 | Category | Options |
@@ -166,18 +187,19 @@ Tower exposes an MCP Server for external AI agents:
 }
 ```
 
-### Available Tools (24)
+### Available Tools (31)
 
 | Category | Tools |
 |----------|-------|
 | Workspace | list_workspaces, create_workspace, update_workspace, delete_workspace |
 | Project | list_projects, create_project, update_project, delete_project |
-| Task | list_tasks, create_task, update_task, delete_task, move_task |
+| Task | list_tasks, create_task, update_task, move_task, delete_task, set_task_defaults, list_versions |
 | Label | list_labels, create_label, delete_label, set_task_labels |
 | Search | search (global search across tasks/projects/repos) |
-| Terminal | get_task_terminal_output, send_task_terminal_input, get_task_execution_status |
 | Knowledge | identify_project |
 | Notes/Assets | manage_notes, manage_assets |
+| Terminal | start_task_execution, get_task_terminal_output, send_task_terminal_input, get_task_execution_status, stop_task_execution, resume_task_execution |
+| Report | daily_summary, daily_todo |
 
 ## Development Commands
 

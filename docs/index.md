@@ -23,7 +23,7 @@ features:
     details: xterm.js + Claude CLI，实时交互执行任务，自动生成总结与洞察
   - icon: 🔧
     title: MCP 工具链
-    details: 24 个 MCP 工具，7 大类别，支持外部 AI Agent 无缝调用
+    details: 31 个 MCP 工具，9 大类别，支持外部 AI Agent 无缝调用
   - icon: ✏️
     title: 代码编辑器
     details: Monaco Editor，多标签编辑，语法高亮，Ctrl+S 保存

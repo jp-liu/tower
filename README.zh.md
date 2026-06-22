@@ -135,6 +135,27 @@ Workspace（工作空间）
 - 项目类型：FRONTEND / BACKEND（影响预览功能可用性）
 - Git Path Mapping 规则：按 host + owner 自动推算本地路径
 
+### Mission Control 任务监控
+
+- `/missions` 面板跨工作区监控所有运行中的任务执行，每张卡片内嵌实时终端
+- 网格布局预设（1×1 … 3×3）本地持久化，支持按工作区筛选
+- 点击「启动任务」打开搜索弹窗 — 模糊搜索任务、按「工作区 → 项目」浏览或从最近任务挑选；可启动新执行或恢复历史会话
+- 双导航模式：input（直接在窗格打字）与 nav（居中窗格选择器，`1–9 / A–Z` 快捷定位），`Ctrl+;` 切换
+
+### AI 助手
+
+- 内置聊天，基于 Claude Agent SDK，SSE 流式 + 多模态（图片）输入
+- 定位为「任务管理操作员」—— 通过 Tower MCP 工具创建/移动任务、搜索、生成报告
+- 会话历史以磁盘 transcript 为准；resume 失效自动降级重试，MCP 断开自动重连
+
+### 版本时间线
+
+- 将任务归纳到项目版本，按版本回顾工作；未指定版本的任务进入 backlog
+
+### 笔记与资产
+
+- 按项目维护笔记（支持全文搜索）与资产上传（文件、图片、粘贴截图），UI 或 MCP 工具均可管理
+
 ### 设置
 
 | 分类 | 配置项 |
@@ -166,18 +187,19 @@ Tower 提供 MCP Server，可被外部 AI Agent 调用：
 }
 ```
 
-### 可用工具（24 个）
+### 可用工具（31 个）
 
 | 分类 | 工具 |
 |------|------|
 | Workspace | list_workspaces, create_workspace, update_workspace, delete_workspace |
 | Project | list_projects, create_project, update_project, delete_project |
-| Task | list_tasks, create_task, update_task, delete_task, move_task |
+| Task | list_tasks, create_task, update_task, move_task, delete_task, set_task_defaults, list_versions |
 | Label | list_labels, create_label, delete_label, set_task_labels |
 | Search | search（全局搜索任务/项目/仓库） |
-| Terminal | get_task_terminal_output, send_task_terminal_input, get_task_execution_status |
 | Knowledge | identify_project |
 | Notes/Assets | manage_notes, manage_assets |
+| Terminal | start_task_execution, get_task_terminal_output, send_task_terminal_input, get_task_execution_status, stop_task_execution, resume_task_execution |
+| Report | daily_summary, daily_todo |
 
 ## 开发命令
 
