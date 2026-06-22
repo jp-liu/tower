@@ -735,6 +735,8 @@ export const en: Translations = {
   "missions.fullPicker.searchPlaceholder": "Search tasks by title…",
   "missions.fullPicker.clearSearch": "Clear search",
   "missions.fullPicker.noSearchResults": "No matching tasks",
+  "missions.picker.prevPage": "Previous page",
+  "missions.picker.nextPage": "Next page",
   "missions.gridCustom": "Custom",
   "missions.gridCols": "Cols",
   "missions.gridRows": "Rows",

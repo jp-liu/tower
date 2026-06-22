@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Fuse from "fuse.js";
 import { useI18n } from "@/lib/i18n";
-import { getWorkspacesWithRecentTasks } from "@/actions/workspace-actions";
-import { getProjectTasks } from "@/actions/task-actions";
+import { getWorkspacesWithActiveTasks } from "@/actions/workspace-actions";
 import { startPtyExecution, resumePtyExecution } from "@/actions/agent-actions";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -16,16 +15,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectTrigger,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
-import { ChevronRight, Play, RotateCcw, Search, X as XIcon } from "lucide-react";
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Play,
+  RotateCcw,
+  Search,
+  X as XIcon,
+} from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 type TaskStatus = "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED";
 type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+const PAGE_SIZE = 10;
 
 interface TaskItem {
   id: string;
@@ -54,7 +58,6 @@ interface TaskPickerProps {
   onOpenChange: (open: boolean) => void;
   onLaunched: (taskId: string) => void;
   runningTaskIds?: Set<string>;
-  anchorRef?: React.RefObject<HTMLElement | null>;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -149,106 +152,162 @@ function TaskRow({
   );
 }
 
-/** Full task selector Dialog — opened from popover footer */
-function FullTaskDialog({
+interface FlatTaskRow {
+  task: TaskItem;
+  workspaceName: string;
+  projectName: string;
+  projectId: string;
+}
+
+export function TaskPickerDialog({
   open,
   onOpenChange,
-  onLaunchNew,
-  onResume,
-  runningTaskIds,
-  launchingId,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onLaunchNew: (taskId: string) => void;
-  onResume: (taskId: string, sessionId: string) => void;
-  runningTaskIds: Set<string>;
-  launchingId: string | null;
-}) {
+  onLaunched,
+  runningTaskIds = new Set(),
+}: TaskPickerProps) {
   const { t } = useI18n();
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
-  const [selectedWsId, setSelectedWsId] = useState("");
-  const [selectedProjectId, setSelectedProjectId] = useState("");
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [launchingId, setLaunchingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [expandedWs, setExpandedWs] = useState<Set<string>>(new Set());
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [page, setPage] = useState(0);
 
+  // Only workspaces/projects that have at least one active task
+  const visibleWorkspaces = useMemo(
+    () =>
+      workspaces
+        .map((ws) => ({
+          ...ws,
+          projects: ws.projects.filter((p) => p._count.tasks > 0),
+        }))
+        .filter((ws) => ws.projects.length > 0),
+    [workspaces]
+  );
+
+  // Load all active tasks when opened; default-expand & select the first project
   useEffect(() => {
     if (!open) return;
-    setSelectedWsId("");
-    setSelectedProjectId("");
-    setTasks([]);
+    setLoading(true);
     setSearchQuery("");
-    getWorkspacesWithRecentTasks(100)
-      .then(setWorkspaces)
-      .catch(() => toast.error(t("missions.error.launchFailed")));
+    setPage(0);
+    getWorkspacesWithActiveTasks()
+      .then((data) => {
+        setWorkspaces(data);
+        const firstWs = data
+          .map((ws) => ({ ...ws, projects: ws.projects.filter((p) => p._count.tasks > 0) }))
+          .find((ws) => ws.projects.length > 0);
+        setExpandedWs(firstWs ? new Set([firstWs.id]) : new Set());
+        setSelectedProjectId(firstWs?.projects[0]?.id ?? "");
+      })
+      .catch(() => toast.error(t("missions.error.launchFailed")))
+      .finally(() => setLoading(false));
   }, [open, t]);
 
-  useEffect(() => {
-    if (!selectedProjectId) { setTasks([]); return; }
-    getProjectTasks(selectedProjectId)
-      .then((all) => {
-        setTasks(
-          all.filter(
-            (tk) => tk.status === "TODO" || tk.status === "IN_PROGRESS" || tk.status === "IN_REVIEW"
-          ) as TaskItem[]
-        );
-      })
-      .catch(() => toast.error(t("missions.error.launchFailed")));
-  }, [selectedProjectId, t]);
+  const toggleWs = useCallback((id: string) => {
+    setExpandedWs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
-  // Flatten all active tasks across workspaces (for Fuse + result rendering)
-  interface FlatTaskRow {
-    task: TaskItem;
-    workspaceName: string;
-    projectName: string;
-  }
+  const selectProject = useCallback((id: string) => {
+    setSelectedProjectId(id);
+    setPage(0);
+  }, []);
+
+  // Flatten all active tasks across workspaces (for Fuse search)
   const allTasks = useMemo<FlatTaskRow[]>(() => {
     const rows: FlatTaskRow[] = [];
-    for (const ws of workspaces) {
+    for (const ws of visibleWorkspaces) {
       for (const proj of ws.projects) {
         for (const tk of proj.tasks) {
-          if (tk.status === "TODO" || tk.status === "IN_PROGRESS" || tk.status === "IN_REVIEW") {
-            rows.push({
-              task: tk,
-              workspaceName: ws.name,
-              projectName: proj.alias ?? proj.name,
-            });
-          }
+          rows.push({
+            task: tk,
+            workspaceName: ws.name,
+            projectName: proj.alias ?? proj.name,
+            projectId: proj.id,
+          });
         }
       }
     }
     return rows;
-  }, [workspaces]);
+  }, [visibleWorkspaces]);
 
   const fuse = useMemo(
-    () =>
-      new Fuse(allTasks, {
-        keys: ["task.title"],
-        threshold: 0.4,
-        distance: 200,
-      }),
+    () => new Fuse(allTasks, { keys: ["task.title"], threshold: 0.4, distance: 200 }),
     [allTasks]
   );
 
-  const searchResults = useMemo<FlatTaskRow[]>(() => {
-    const q = searchQuery.trim();
-    if (!q) return [];
-    return fuse.search(q, { limit: 30 }).map((r) => r.item);
-  }, [fuse, searchQuery]);
-
   const isSearching = searchQuery.trim().length > 0;
 
-  const selectedWs = workspaces.find((w) => w.id === selectedWsId);
-  const projects = selectedWs?.projects ?? [];
+  // Search results grouped by project (preserve relevance order of first hit)
+  const searchGroups = useMemo(() => {
+    const q = searchQuery.trim();
+    if (!q) return [];
+    const hits = fuse.search(q).map((r) => r.item);
+    const order: string[] = [];
+    const map = new Map<string, { workspaceName: string; projectName: string; tasks: TaskItem[] }>();
+    for (const row of hits) {
+      let group = map.get(row.projectId);
+      if (!group) {
+        group = { workspaceName: row.workspaceName, projectName: row.projectName, tasks: [] };
+        map.set(row.projectId, group);
+        order.push(row.projectId);
+      }
+      group.tasks.push(row.task);
+    }
+    return order.map((id) => ({ id, ...map.get(id)! }));
+  }, [fuse, searchQuery]);
+
+  // Currently selected project + its paginated tasks
+  const selectedProject = useMemo(
+    () => allTasks.length ? visibleWorkspaces.flatMap((ws) => ws.projects).find((p) => p.id === selectedProjectId) : undefined,
+    [visibleWorkspaces, selectedProjectId, allTasks.length]
+  );
+  const projectTasks = selectedProject?.tasks ?? [];
+  const totalPages = Math.max(1, Math.ceil(projectTasks.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pagedTasks = projectTasks.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
+  const handleLaunchNew = useCallback(async (taskId: string) => {
+    try {
+      setLaunchingId(taskId);
+      await startPtyExecution(taskId, "");
+      onLaunched(taskId);
+      onOpenChange(false);
+    } catch {
+      toast.error(t("missions.error.launchFailed"));
+    } finally {
+      setLaunchingId(null);
+    }
+  }, [onLaunched, onOpenChange, t]);
+
+  const handleResume = useCallback(async (taskId: string, sessionId: string) => {
+    try {
+      setLaunchingId(taskId);
+      await resumePtyExecution(taskId, sessionId);
+      onLaunched(taskId);
+      onOpenChange(false);
+    } catch {
+      toast.error(t("missions.error.launchFailed"));
+    } finally {
+      setLaunchingId(null);
+    }
+  }, [onLaunched, onOpenChange, t]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[80vh]">
-        <DialogHeader>
-          <DialogTitle>{t("missions.fullPickerTitle")}</DialogTitle>
+      <DialogContent className="sm:max-w-3xl flex h-[80vh] max-h-[640px] flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b px-4 py-3">
+          <DialogTitle>{t("missions.launchTask")}</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-2 shrink-0">
-          {/* Search input row */}
+
+        {/* Search row */}
+        <div className="shrink-0 border-b px-4 py-3">
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -270,272 +329,152 @@ function FullTaskDialog({
               </Button>
             )}
           </div>
-          {/* Workspace/Project Selects — hidden when searching */}
-          {!isSearching && (
-            <div className="flex items-center gap-2">
-              <Select value={selectedWsId} onValueChange={(v) => { setSelectedWsId(v ?? ""); setSelectedProjectId(""); }}>
-                <SelectTrigger id="full-picker-ws" className="w-48 h-8">
-                  <span className="truncate">
-                    {workspaces.find((w) => w.id === selectedWsId)?.name ?? t("missions.launcher.selectWorkspace")}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  {workspaces.map((ws) => (
-                    <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={selectedProjectId} onValueChange={(v) => setSelectedProjectId(v ?? "")} disabled={!selectedWsId}>
-                <SelectTrigger id="full-picker-proj" className="w-48 h-8">
-                  <span className="truncate">
-                    {projects.find((p) => p.id === selectedProjectId)?.name ?? t("missions.launcher.selectProject")}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.alias ?? p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
         </div>
-        <ScrollArea className="max-h-[60vh] -mx-2">
-          {isSearching ? (
-            searchResults.length === 0 ? (
+
+        {/* Body */}
+        {loading ? (
+          <div className="flex flex-1 items-center justify-center text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        ) : visibleWorkspaces.length === 0 ? (
+          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+            {t("missions.noAvailableTasks")}
+          </div>
+        ) : isSearching ? (
+          /* Search mode — full width grouped results, no sidebar */
+          <ScrollArea className="flex-1 min-h-0">
+            {searchGroups.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">
                 {t("missions.fullPicker.noSearchResults")}
               </p>
             ) : (
-              searchResults.map((row) => (
-                <div key={row.task.id}>
-                  <div className="px-3 pt-2 pb-0.5 text-[11px] text-muted-foreground">
-                    {row.workspaceName} · {row.projectName}
-                  </div>
-                  <TaskRow
-                    task={row.task}
-                    isRunning={runningTaskIds.has(row.task.id)}
-                    launchingId={launchingId}
-                    onLaunchNew={onLaunchNew}
-                    onResume={onResume}
-                    t={t}
-                  />
-                </div>
-              ))
-            )
-          ) : tasks.length === 0 && selectedProjectId ? (
-            <p className="text-sm text-muted-foreground text-center py-8">{t("missions.launcher.noTasks")}</p>
-          ) : tasks.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">{t("missions.fullPickerHint")}</p>
-          ) : (
-            tasks.map((task) => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                isRunning={runningTaskIds.has(task.id)}
-                launchingId={launchingId}
-                onLaunchNew={onLaunchNew}
-                onResume={onResume}
-                t={t}
-              />
-            ))
-          )}
-        </ScrollArea>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-export function TaskPickerDialog({
-  open,
-  onOpenChange,
-  onLaunched,
-  runningTaskIds = new Set(),
-  anchorRef,
-}: TaskPickerProps) {
-  const { t } = useI18n();
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [launchingId, setLaunchingId] = useState<string | null>(null);
-  const [fullDialogOpen, setFullDialogOpen] = useState(false);
-  const [collapsedWs, setCollapsedWs] = useState<Set<string>>(new Set());
-
-  // Load data when opened
-  useEffect(() => {
-    if (!open) return;
-    setLoading(true);
-    getWorkspacesWithRecentTasks(5)
-      .then(setWorkspaces)
-      .catch(() => toast.error(t("missions.error.launchFailed")))
-      .finally(() => setLoading(false));
-  }, [open, t]);
-
-  // Only workspaces that have at least one project with tasks
-  const visibleWorkspaces = useMemo(
-    () => workspaces.filter((ws) => ws.projects.some((p) => p._count.tasks > 0)),
-    [workspaces]
-  );
-
-  const toggleWs = useCallback((id: string) => {
-    setCollapsedWs((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  // Click-outside to close (fallback for when hover doesn't apply)
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      const target = e.target as Node;
-      if (popoverRef.current && !popoverRef.current.contains(target)) {
-        if (anchorRef?.current && anchorRef.current.contains(target)) return;
-        onOpenChange(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open, onOpenChange, anchorRef]);
-
-  const handleLaunchNew = useCallback(async (taskId: string) => {
-    try {
-      setLaunchingId(taskId);
-      await startPtyExecution(taskId, "");
-      onLaunched(taskId);
-      onOpenChange(false);
-      setFullDialogOpen(false);
-    } catch {
-      toast.error(t("missions.error.launchFailed"));
-    } finally {
-      setLaunchingId(null);
-    }
-  }, [onLaunched, onOpenChange, t]);
-
-  const handleResume = useCallback(async (taskId: string, sessionId: string) => {
-    try {
-      setLaunchingId(taskId);
-      await resumePtyExecution(taskId, sessionId);
-      onLaunched(taskId);
-      onOpenChange(false);
-      setFullDialogOpen(false);
-    } catch {
-      toast.error(t("missions.error.launchFailed"));
-    } finally {
-      setLaunchingId(null);
-    }
-  }, [onLaunched, onOpenChange, t]);
-
-  const handleOpenFullDialog = useCallback(() => {
-    onOpenChange(false);
-    setFullDialogOpen(true);
-  }, [onOpenChange]);
-
-  if (!open && !fullDialogOpen) return null;
-
-  return (
-    <>
-      {/* Quick picker popover */}
-      {open && (
-        <div
-          ref={popoverRef}
-          className="absolute right-0 z-50 mt-1 grid max-h-[480px] w-[28rem] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
-        >
-          {/* Header */}
-          <div className="px-3 py-2 border-b border-border">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              {t("missions.pickerTitle")}
-            </p>
-          </div>
-
-          {/* Tree list */}
-          <ScrollArea>
-            {loading ? (
-              <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                Loading...
-              </div>
-            ) : visibleWorkspaces.length === 0 ? (
-              <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                {t("missions.noAvailableTasks")}
-              </div>
-            ) : (
-              visibleWorkspaces.map((ws) => {
-                const isCollapsed = collapsedWs.has(ws.id);
-                const visibleProjects = ws.projects.filter((p) => p._count.tasks > 0);
-                return (
-                  <div key={ws.id}>
-                    {/* Workspace header — collapsible */}
-                    <Button
-                      variant="ghost"
-                      onClick={() => toggleWs(ws.id)}
-                      className="flex h-auto w-full justify-start gap-1.5 rounded-none border-b border-border/50 px-3 py-1.5 hover:bg-accent"
-                    >
-                      <ChevronRight
-                        className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${isCollapsed ? "" : "rotate-90"}`}
+              <div className="py-1">
+                {searchGroups.map((group) => (
+                  <div key={group.id}>
+                    <div className="px-3 pt-2 pb-1 text-[11px] font-medium text-muted-foreground">
+                      {group.workspaceName} · {group.projectName}
+                    </div>
+                    {group.tasks.map((task) => (
+                      <TaskRow
+                        key={task.id}
+                        task={task}
+                        isRunning={runningTaskIds.has(task.id)}
+                        launchingId={launchingId}
+                        onLaunchNew={handleLaunchNew}
+                        onResume={handleResume}
+                        t={t}
                       />
-                      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                        {ws.name}
-                      </span>
-                    </Button>
-
-                    {!isCollapsed && (
-                      <div className="ml-[19px] mt-0.5 border-l border-border/50">
-                        {visibleProjects.map((project) => (
-                          <div key={project.id} className="py-0.5">
-                            {/* Project header */}
-                            <div className="pl-3 pt-1.5 pb-1">
-                              <span className="text-xs font-medium text-foreground">
-                                {project.alias ?? project.name}
-                              </span>
-                            </div>
-                            {/* Tasks */}
-                            <div className="pl-3">
-                              {project.tasks.map((task) => (
-                                <TaskRow
-                                  key={task.id}
-                                  task={task}
-                                  isRunning={runningTaskIds.has(task.id)}
-                                  launchingId={launchingId}
-                                  onLaunchNew={handleLaunchNew}
-                                  onResume={handleResume}
-                                  t={t}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    ))}
                   </div>
-                );
-              })
+                ))}
+              </div>
             )}
           </ScrollArea>
+        ) : (
+          /* Browse mode — sidebar (workspace › project tree) + paginated task list */
+          <div className="flex flex-1 min-h-0">
+            <aside className="w-52 shrink-0 border-r">
+              <ScrollArea className="h-full">
+                <div className="py-1">
+                  {visibleWorkspaces.map((ws) => {
+                    const isExpanded = expandedWs.has(ws.id);
+                    return (
+                      <div key={ws.id}>
+                        <Button
+                          variant="ghost"
+                          onClick={() => toggleWs(ws.id)}
+                          className="flex h-auto w-full justify-start gap-1 rounded-none px-2 py-1.5 hover:bg-accent"
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          )}
+                          <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            {ws.name}
+                          </span>
+                        </Button>
+                        {isExpanded &&
+                          ws.projects.map((project) => {
+                            const isSelected = project.id === selectedProjectId;
+                            return (
+                              <Button
+                                key={project.id}
+                                variant="ghost"
+                                onClick={() => selectProject(project.id)}
+                                className={`flex h-auto w-full justify-start gap-2 rounded-none py-1.5 pl-7 pr-2 hover:bg-accent ${isSelected ? "bg-accent" : ""}`}
+                              >
+                                <span className="min-w-0 flex-1 truncate text-left text-xs font-medium">
+                                  {project.alias ?? project.name}
+                                </span>
+                                <span className="shrink-0 text-[10px] text-muted-foreground">
+                                  {project._count.tasks}
+                                </span>
+                              </Button>
+                            );
+                          })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            </aside>
 
-          {/* Footer — clickable to open full dialog */}
-          <div className="border-t border-border">
-            <Button
-              variant="ghost"
-              className="w-full rounded-none text-xs text-primary font-medium"
-              onClick={handleOpenFullDialog}
-            >
-              {t("missions.showMoreTasks")}
-            </Button>
+            <div className="flex min-w-0 flex-1 flex-col">
+              <ScrollArea className="flex-1 min-h-0">
+                {pagedTasks.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    {t("missions.launcher.noTasks")}
+                  </p>
+                ) : (
+                  <div className="py-1">
+                    {pagedTasks.map((task) => (
+                      <TaskRow
+                        key={task.id}
+                        task={task}
+                        isRunning={runningTaskIds.has(task.id)}
+                        launchingId={launchingId}
+                        onLaunchNew={handleLaunchNew}
+                        onResume={handleResume}
+                        t={t}
+                      />
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+
+              {/* Pagination footer */}
+              {projectTasks.length > 0 && (
+                <div className="flex shrink-0 items-center justify-center gap-3 border-t px-3 py-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    disabled={safePage <= 0}
+                    aria-label={t("missions.picker.prevPage")}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {safePage + 1} / {totalPages}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                    disabled={safePage >= totalPages - 1}
+                    aria-label={t("missions.picker.nextPage")}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* Full task selector dialog */}
-      <FullTaskDialog
-        open={fullDialogOpen}
-        onOpenChange={setFullDialogOpen}
-        onLaunchNew={handleLaunchNew}
-        onResume={handleResume}
-        runningTaskIds={runningTaskIds}
-        launchingId={launchingId}
-      />
-    </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

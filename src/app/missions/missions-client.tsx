@@ -81,7 +81,6 @@ export function MissionsClient({
   });
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [filterWsId, setFilterWsId] = useState<string>("");
-  const launchBtnRef = useRef<HTMLButtonElement>(null);
 
   // --- Keyboard pane navigation state ---
   // Start in "input" mode: panes auto-focus their terminal on mount, so opening
@@ -464,22 +463,16 @@ export function MissionsClient({
         {/* Grid preset picker — visual grid icons */}
         <GridPresetPicker value={presetId} customValue={customGrid} onChange={handlePresetChange} />
 
-        {/* Launch task button — click to toggle popover */}
-        <div className="relative">
-          <Button
-            ref={launchBtnRef}
-            onClick={() => setLauncherOpen((v) => !v)}
-          >
-            {t("missions.launchTask")}
-          </Button>
-          <TaskPickerDialog
-            open={launcherOpen}
-            onOpenChange={setLauncherOpen}
-            onLaunched={handleLaunched}
-            runningTaskIds={runningTaskIds}
-            anchorRef={launchBtnRef}
-          />
-        </div>
+        {/* Launch task button — opens the task search dialog */}
+        <Button onClick={() => setLauncherOpen(true)}>
+          {t("missions.launchTask")}
+        </Button>
+        <TaskPickerDialog
+          open={launcherOpen}
+          onOpenChange={setLauncherOpen}
+          onLaunched={handleLaunched}
+          runningTaskIds={runningTaskIds}
+        />
       </div>
 
       {/* Grid area */}

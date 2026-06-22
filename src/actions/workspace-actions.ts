@@ -297,6 +297,59 @@ export async function getWorkspacesWithRecentTasks(limit = 3) {
   });
 }
 
+/**
+ * Like getWorkspacesWithRecentTasks but returns ALL active (TODO/IN_PROGRESS/IN_REVIEW)
+ * tasks per project — no per-project limit. Used by the Missions task picker dialog,
+ * which paginates and searches client-side. The dataset is bounded (completed/cancelled
+ * tasks are excluded), so a single fetch is cheap.
+ */
+export async function getWorkspacesWithActiveTasks() {
+  return db.workspace.findMany({
+    select: {
+      id: true,
+      name: true,
+      projects: {
+        select: {
+          id: true,
+          name: true,
+          alias: true,
+          tasks: {
+            where: {
+              status: { in: ["TODO", "IN_PROGRESS", "IN_REVIEW"] },
+              NOT: { labels: { some: { label: { name: "Tower", isBuiltin: true } } } },
+            },
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              priority: true,
+              executions: {
+                where: { sessionId: { not: null } },
+                select: { sessionId: true },
+                orderBy: { createdAt: "desc" },
+                take: 1,
+              },
+            },
+            orderBy: { updatedAt: "desc" },
+          },
+          _count: {
+            select: {
+              tasks: {
+                where: {
+                  status: { in: ["TODO", "IN_PROGRESS", "IN_REVIEW"] },
+                  NOT: { labels: { some: { label: { name: "Tower", isBuiltin: true } } } },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+}
+
 export async function getRecentLocalProjects(limit = 10) {
   return db.project.findMany({
     where: { localPath: { not: null } },

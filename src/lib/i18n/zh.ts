@@ -750,6 +750,8 @@ export const zh = {
   "missions.fullPicker.searchPlaceholder": "搜索任务标题…",
   "missions.fullPicker.clearSearch": "清除搜索",
   "missions.fullPicker.noSearchResults": "未找到匹配的任务",
+  "missions.picker.prevPage": "上一页",
+  "missions.picker.nextPage": "下一页",
   "missions.gridCustom": "自定义",
   "missions.gridCols": "列",
   "missions.gridRows": "行",
