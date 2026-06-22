@@ -101,29 +101,12 @@ function ProjectTab({
         hideArrow
         className="flex w-[268px] max-w-none flex-col items-stretch gap-0 rounded-xl border border-border bg-card p-3.5 text-foreground shadow-lg"
       >
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-bold leading-snug break-words">{project.name}</div>
-            {project.alias && (
-              <div className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground break-words">
-                {project.alias}
-              </div>
-            )}
+        <div className="text-[13px] font-bold leading-snug break-words">{project.name}</div>
+        {project.alias && (
+          <div className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground break-words">
+            {project.alias}
           </div>
-          <Button
-            variant="outline"
-            disabled={isOpeningStudio}
-            onClick={openStudio}
-            className="h-7 shrink-0 gap-1 px-2 text-[11px]"
-          >
-            {isOpeningStudio ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <FolderOpen className="h-3.5 w-3.5" />
-            )}
-            {t("git.openStudio")}
-          </Button>
-        </div>
+        )}
 
         <div className="my-2.5 h-px bg-border" />
 
@@ -151,7 +134,22 @@ function ProjectTab({
           />
         </div>
 
-        <div className="mt-2.5 text-[10px] text-muted-foreground">{t("board.badgeFormatHint")}</div>
+        <div className="mt-2.5 flex items-center justify-between gap-2">
+          <span className="text-[10px] text-muted-foreground">{t("board.badgeFormatHint")}</span>
+          <Button
+            variant="outline"
+            disabled={isOpeningStudio}
+            onClick={openStudio}
+            className="h-6 shrink-0 gap-1 px-2 text-[11px]"
+          >
+            {isOpeningStudio ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <FolderOpen className="h-3 w-3" />
+            )}
+            {t("git.openStudio")}
+          </Button>
+        </div>
       </TooltipContent>
     </Tooltip>
   );
