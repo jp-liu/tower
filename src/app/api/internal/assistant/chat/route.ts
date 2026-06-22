@@ -65,6 +65,33 @@ class ToolsUnavailableRetry extends Error {
 }
 
 /**
+ * Thrown from the consume loop when the model itself is rejected before any
+ * output streams — "selected model … may not exist or you may not have access"
+ * (a gated model id, or one this account/login can't use). Signals the outer
+ * handler to retry once with a known-good fallback model.
+ */
+class ModelUnavailableRetry extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ModelUnavailableRetry";
+  }
+}
+
+/** Known-good model to fall back to when the configured/inherited one is
+ *  unavailable. The assistant is a terse task operator, so Sonnet is the right
+ *  tier and is broadly available across accounts. */
+const FALLBACK_MODEL = "sonnet";
+
+/** Whether an SDK/CLI error string indicates the requested model is unusable
+ *  (unknown id, or no access for this account/login) — e.g. the gated
+ *  `claude-fable-5` reaching an account without access. */
+function isModelUnavailableError(detail: string): boolean {
+  return /may not exist or you may not have access|selected model|model[_ ]?not[_ ]?found|unknown model|invalid model|model .*(not available|not found|does not exist)/i.test(
+    detail
+  );
+}
+
+/**
  * POST /api/internal/assistant/chat
  *
  * Accepts { message: string, sessionId?: string } and streams Claude Agent SDK
@@ -137,6 +164,9 @@ export async function POST(request: NextRequest) {
       // — a spawn failure here means this path couldn't be launched on the host.
       let rawClaudeCmd = "";
       let claudePath = "";
+      // The model actually requested on the latest attempt — hoisted so the
+      // catch can name it in a model-unavailable error message.
+      let attemptedModel = "";
 
       try {
         const { query } = await import("@anthropic-ai/claude-agent-sdk");
@@ -237,6 +267,22 @@ export async function POST(request: NextRequest) {
           CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(maxOutputTokens),
         };
 
+        // Pin the assistant's model explicitly. Tower historically passed NO
+        // model, so the CLI fell back to its own default — which on some
+        // machines/accounts resolves to a gated model (e.g. claude-fable-5)
+        // the login has no access to, failing the turn at the first message
+        // with "selected model … may not exist or you may not have access".
+        // Default to a broadly-available tier; the assistant is a terse task
+        // operator, so Sonnet fits. Set assistant.model to "" to inherit the
+        // CLI default, or to "opus"/"haiku"/a full model id to override.
+        const configuredModel = await readConfigValue<string>(
+          "assistant.model",
+          "sonnet"
+        );
+        // Mutable: the model-unavailable fallback rewrites this to FALLBACK_MODEL
+        // for the retry. Empty string → inherit the CLI default.
+        let modelOverride = configuredModel.trim();
+
         // Resume previous session if sessionId provided
         if (body.sessionId) {
           (options as Record<string, unknown>).resume = body.sessionId;
@@ -288,6 +334,14 @@ export async function POST(request: NextRequest) {
         const makeQuery = (withResume: boolean) => {
           const runOptions = { ...options };
           if (!withResume) delete (runOptions as Record<string, unknown>).resume;
+          // Pin (or inherit) the model. Empty config → inherit the CLI default.
+          if (modelOverride) {
+            (runOptions as Record<string, unknown>).model = modelOverride;
+            attemptedModel = modelOverride;
+          } else {
+            delete (runOptions as Record<string, unknown>).model;
+            attemptedModel = "(CLI 默认)";
+          }
           // Attach the CURRENT attempt's abortController (rotated before each
           // retry) so aborting one attempt doesn't disarm the next.
           (runOptions as Record<string, unknown>).abortController = activeAbort;
@@ -300,6 +354,8 @@ export async function POST(request: NextRequest) {
         // Tools-not-ready retry happens at most once per request (see
         // ToolsUnavailableRetry). Tracked across attempts in the loop below.
         let toolsRetried = false;
+        // Model-unavailable fallback happens at most once per request.
+        let modelRetried = false;
 
         // Consume a query's message stream, forwarding each chunk to the client.
         // `isResumeAttempt` guards the stale-session fallback: an error result on
@@ -386,6 +442,19 @@ export async function POST(request: NextRequest) {
                 throw new ResumeRetryNeeded(resultMsg.error ?? "resume execution error");
               }
               if (outcome === "error") {
+                const errDetail = resultMsg.error ?? "";
+                if (
+                  !streamedContent &&
+                  !modelRetried &&
+                  attemptedModel !== FALLBACK_MODEL &&
+                  isModelUnavailableError(errDetail)
+                ) {
+                  // Model rejected before any output (no access / unknown id).
+                  // Bail WITHOUT emitting error/done so the outer handler retries
+                  // once with a known-good fallback model instead of flashing an
+                  // error for a turn the user can still get answered.
+                  throw new ModelUnavailableRetry(errDetail);
+                }
                 send({ type: "error", content: resultMsg.error ?? "Execution error" });
               } else if (!streamedContent) {
                 // Turn "succeeded" but the model emitted no text and called no
@@ -525,6 +594,25 @@ export async function POST(request: NextRequest) {
               continue;
             }
             const runDetail = runErr instanceof Error ? runErr.message : String(runErr);
+            // Model rejected (no access / unknown id) — retry once with a
+            // known-good fallback model so a gated CLI default (e.g.
+            // claude-fable-5) or a mis-set assistant.model doesn't dead-end the
+            // turn. The model error surfaces with no streamed output first
+            // (either thrown as ModelUnavailableRetry or matched here), so the
+            // re-run doesn't duplicate anything.
+            if (
+              !modelRetried &&
+              attemptedModel !== FALLBACK_MODEL &&
+              (runErr instanceof ModelUnavailableRetry ||
+                isModelUnavailableError(runDetail))
+            ) {
+              modelRetried = true;
+              modelOverride = FALLBACK_MODEL;
+              clog(
+                `model ${attemptedModel} unavailable (${runDetail}); retrying with fallback model ${FALLBACK_MODEL}`
+              );
+              continue;
+            }
             const staleResume =
               runErr instanceof ResumeRetryNeeded ||
               (attemptResume && isStaleResumeError(runDetail));
@@ -568,6 +656,8 @@ export async function POST(request: NextRequest) {
         const isSpawnFailure = /\bspawn\b|ENOENT|EINVAL/i.test(detail);
         const friendly = /output token maximum|max_output_tokens/i.test(detail)
           ? "回复内容超出了模型单次输出上限。请把问题拆小一些，或在设置里把 assistant.maxOutputTokens 调整为所用模型支持的上限（Sonnet/Haiku 最高 64K，Opus 最高 128K）。"
+          : isModelUnavailableError(detail)
+          ? `助手所用模型不可用（${attemptedModel || "?"}）：该模型可能不存在，或当前账号 / Claude 登录无权访问它。助手用哪个模型由配置项 assistant.model 决定（默认 sonnet）；留空则继承 Claude CLI 的默认模型（受 ANTHROPIC_MODEL 环境变量或 ~/.claude 设置里的 model 影响）。请把 assistant.model 设为账号有权限的模型（如 sonnet / opus / haiku），或修正 Claude CLI 的默认模型。原始错误：${detail}`
           : isSpawnFailure
           ? `无法启动 Claude CLI（raw=${rawClaudeCmd || "?"} resolved=${claudePath || "?"}）。请确认本机已安装 Claude Code 且能在命令行执行 \`claude --version\`；若已安装但仍失败，可设置环境变量 CLAUDE_CODE_PATH 指向 claude 的 cli.js。原始错误：${detail}`
           : `Assistant encountered an error: ${detail}`;
