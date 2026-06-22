@@ -6,6 +6,10 @@ vi.mock("../../db", () => ({
     taskExecution: {
       findFirst: vi.fn(),
     },
+    task: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -16,9 +20,13 @@ global.fetch = mockFetch;
 import { db } from "../../db";
 import { terminalTools } from "../terminal-tools";
 
-const mockDb = db as {
+const mockDb = db as unknown as {
   taskExecution: {
     findFirst: ReturnType<typeof vi.fn>;
+  };
+  task: {
+    findUnique: ReturnType<typeof vi.fn>;
+    findMany: ReturnType<typeof vi.fn>;
   };
 };
 
@@ -237,6 +245,211 @@ describe("terminal-tools", () => {
         error: "Terminal session has exited",
         taskId: VALID_TASK_ID,
       });
+    });
+  });
+
+  describe("stop_task_execution", () => {
+    it("returns error when neither taskId nor taskName is given", async () => {
+      const result = await terminalTools.stop_task_execution.handler({});
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ error: expect.stringContaining("Provide") });
+    });
+
+    it("returns error for invalid taskId without hitting the bridge", async () => {
+      const result = await terminalTools.stop_task_execution.handler({ taskId: "nope" });
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ error: expect.stringContaining("Invalid taskId") });
+    });
+
+    it("returns 'Task not found' when taskId does not resolve", async () => {
+      mockDb.task.findUnique.mockResolvedValue(null);
+      const result = await terminalTools.stop_task_execution.handler({ taskId: VALID_TASK_ID });
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ error: "Task not found", taskId: VALID_TASK_ID });
+    });
+
+    it("stops by taskId and reports wasRunning from the bridge", async () => {
+      mockDb.task.findUnique.mockResolvedValue({ id: VALID_TASK_ID, title: "Build feature" });
+      mockFetch.mockResolvedValue(mockFetchResponse(200, { ok: true, wasRunning: true }));
+
+      const result = await terminalTools.stop_task_execution.handler({ taskId: VALID_TASK_ID });
+
+      const [url, init] = mockFetch.mock.calls[0];
+      expect(url).toContain(`/api/internal/terminal/${VALID_TASK_ID}/stop`);
+      expect(init.method).toBe("POST");
+      expect(result).toMatchObject({
+        ok: true,
+        taskId: VALID_TASK_ID,
+        title: "Build feature",
+        wasRunning: true,
+        message: "Terminal closed",
+      });
+    });
+
+    it("reports a no-op (success) when no terminal was running", async () => {
+      mockDb.task.findUnique.mockResolvedValue({ id: VALID_TASK_ID, title: "Idle task" });
+      mockFetch.mockResolvedValue(mockFetchResponse(200, { ok: true, wasRunning: false }));
+
+      const result = await terminalTools.stop_task_execution.handler({ taskId: VALID_TASK_ID });
+
+      expect(result).toMatchObject({
+        ok: true,
+        wasRunning: false,
+        message: expect.stringContaining("nothing to close"),
+      });
+    });
+
+    it("returns 'No task found' when name search is empty", async () => {
+      mockDb.task.findMany.mockResolvedValue([]);
+      const result = await terminalTools.stop_task_execution.handler({ taskName: "ghost" });
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ error: expect.stringContaining("No task found"), taskName: "ghost" });
+    });
+
+    it("stops directly on a unique fuzzy name match", async () => {
+      mockDb.task.findMany.mockResolvedValue([
+        {
+          id: VALID_TASK_ID,
+          title: "Migrate auth module",
+          status: "IN_PROGRESS",
+          project: { name: "Tower", workspace: { name: "Main" } },
+        },
+      ]);
+      mockFetch.mockResolvedValue(mockFetchResponse(200, { ok: true, wasRunning: true }));
+
+      const result = await terminalTools.stop_task_execution.handler({ taskName: "auth" });
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain(`/api/internal/terminal/${VALID_TASK_ID}/stop`);
+      expect(result).toMatchObject({ ok: true, taskId: VALID_TASK_ID, title: "Migrate auth module" });
+    });
+
+    it("returns candidates (needsSelection) without stopping on an ambiguous name", async () => {
+      mockDb.task.findMany.mockResolvedValue([
+        { id: "caaaaaaaaaaaaaaaaaaaaaaaaa", title: "Fix login bug", status: "IN_PROGRESS", project: { name: "P1", workspace: { name: "W" } } },
+        { id: "cbbbbbbbbbbbbbbbbbbbbbbbbb", title: "Fix login redirect", status: "TODO", project: { name: "P2", workspace: { name: "W" } } },
+      ]);
+
+      const result = await terminalTools.stop_task_execution.handler({ taskName: "login" }) as {
+        needsSelection: boolean;
+        candidates: { taskId: string; title: string; status: string; project: string }[];
+      };
+
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(result.needsSelection).toBe(true);
+      expect(result.candidates).toHaveLength(2);
+      expect(result.candidates[0]).toMatchObject({ taskId: "caaaaaaaaaaaaaaaaaaaaaaaaa", title: "Fix login bug", status: "IN_PROGRESS", project: "P1" });
+    });
+
+    it("disambiguates multiple fuzzy matches via a single exact title match", async () => {
+      mockDb.task.findMany.mockResolvedValue([
+        { id: "caaaaaaaaaaaaaaaaaaaaaaaaa", title: "Deploy", status: "IN_PROGRESS", project: { name: "P1", workspace: { name: "W" } } },
+        { id: "cbbbbbbbbbbbbbbbbbbbbbbbbb", title: "Deploy staging", status: "TODO", project: { name: "P2", workspace: { name: "W" } } },
+      ]);
+      mockFetch.mockResolvedValue(mockFetchResponse(200, { ok: true, wasRunning: false }));
+
+      const result = await terminalTools.stop_task_execution.handler({ taskName: "deploy" });
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain("/caaaaaaaaaaaaaaaaaaaaaaaaa/stop");
+      expect(result).toMatchObject({ ok: true, taskId: "caaaaaaaaaaaaaaaaaaaaaaaaa" });
+    });
+  });
+
+  describe("resume_task_execution", () => {
+    it("returns error when neither taskId nor taskName is given", async () => {
+      const result = await terminalTools.resume_task_execution.handler({});
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ error: expect.stringContaining("Provide") });
+    });
+
+    it("returns 'Task not found' when taskId does not resolve", async () => {
+      mockDb.task.findUnique.mockResolvedValue(null);
+      const result = await terminalTools.resume_task_execution.handler({ taskId: VALID_TASK_ID });
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ error: "Task not found", taskId: VALID_TASK_ID });
+    });
+
+    it("launches by taskId, POSTs to /resume and reports the mode", async () => {
+      mockDb.task.findUnique.mockResolvedValue({ id: VALID_TASK_ID, title: "Notify B" });
+      mockFetch.mockResolvedValue(
+        mockFetchResponse(200, { ok: true, mode: "continued", executionId: "exec9", worktreePath: "/tmp/wt" })
+      );
+
+      const result = await terminalTools.resume_task_execution.handler({ taskId: VALID_TASK_ID });
+
+      const [url, init] = mockFetch.mock.calls[0];
+      expect(url).toContain(`/api/internal/terminal/${VALID_TASK_ID}/resume`);
+      expect(init.method).toBe("POST");
+      expect(result).toMatchObject({
+        ok: true,
+        taskId: VALID_TASK_ID,
+        title: "Notify B",
+        mode: "continued",
+        executionId: "exec9",
+        worktreePath: "/tmp/wt",
+        message: "Terminal resumed from latest history",
+      });
+    });
+
+    it("reports a no-op when the terminal is already running", async () => {
+      mockDb.task.findUnique.mockResolvedValue({ id: VALID_TASK_ID, title: "Already up" });
+      mockFetch.mockResolvedValue(
+        mockFetchResponse(200, { ok: true, mode: "already_running", executionId: "exec1", worktreePath: null })
+      );
+
+      const result = await terminalTools.resume_task_execution.handler({ taskId: VALID_TASK_ID });
+
+      expect(result).toMatchObject({
+        ok: true,
+        mode: "already_running",
+        message: expect.stringContaining("already running"),
+      });
+    });
+
+    it("reports a fresh start for a task with no history", async () => {
+      mockDb.task.findUnique.mockResolvedValue({ id: VALID_TASK_ID, title: "First run" });
+      mockFetch.mockResolvedValue(
+        mockFetchResponse(200, { ok: true, mode: "started", executionId: "exec2", worktreePath: null })
+      );
+
+      const result = await terminalTools.resume_task_execution.handler({ taskId: VALID_TASK_ID });
+
+      expect(result).toMatchObject({ ok: true, mode: "started", message: "Terminal started fresh" });
+    });
+
+    it("launches directly on a unique fuzzy name match", async () => {
+      mockDb.task.findMany.mockResolvedValue([
+        {
+          id: VALID_TASK_ID,
+          title: "Build pipeline",
+          status: "TODO",
+          project: { name: "Tower", workspace: { name: "Main" } },
+        },
+      ]);
+      mockFetch.mockResolvedValue(mockFetchResponse(200, { ok: true, mode: "started", executionId: "e", worktreePath: null }));
+
+      const result = await terminalTools.resume_task_execution.handler({ taskName: "pipeline" });
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain(`/api/internal/terminal/${VALID_TASK_ID}/resume`);
+      expect(result).toMatchObject({ ok: true, taskId: VALID_TASK_ID, title: "Build pipeline" });
+    });
+
+    it("returns candidates (needsSelection) without launching on an ambiguous name", async () => {
+      mockDb.task.findMany.mockResolvedValue([
+        { id: "caaaaaaaaaaaaaaaaaaaaaaaaa", title: "Sync data up", status: "TODO", project: { name: "P1", workspace: { name: "W" } } },
+        { id: "cbbbbbbbbbbbbbbbbbbbbbbbbb", title: "Sync data down", status: "TODO", project: { name: "P2", workspace: { name: "W" } } },
+      ]);
+
+      const result = await terminalTools.resume_task_execution.handler({ taskName: "sync" }) as {
+        needsSelection: boolean;
+        candidates: unknown[];
+      };
+
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(result.needsSelection).toBe(true);
+      expect(result.candidates).toHaveLength(2);
     });
   });
 

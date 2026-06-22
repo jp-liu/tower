@@ -421,6 +421,51 @@ export async function continueLatestPtyExecution(
 }
 
 /**
+ * Ensure a task's terminal is running, mirroring the task-detail buttons.
+ *
+ * - Live PTY session already up → no-op, returns `already_running`.
+ * - Task has prior executions → resume the latest history (the Continue/Retry
+ *   button — `continueLatestPtyExecution`), returns `continued`.
+ * - No history → fresh start with task context (the Launch button), returns `started`.
+ *
+ * Used by the `resume_task_execution` MCP tool so a related task can bring up a
+ * sibling's terminal before sending it a message.
+ */
+export async function continueOrStartTaskExecution(
+  taskId: string
+): Promise<{
+  mode: "already_running" | "continued" | "started";
+  executionId: string | null;
+  worktreePath: string | null;
+}> {
+  // Already running? Respect the one-active-PTY-per-task constraint — don't restart.
+  const { getSession } = await import("@/lib/pty/session-store");
+  const session = getSession(taskId);
+  if (session && !session.killed) {
+    const exec = await db.taskExecution.findFirst({
+      where: { taskId, status: "RUNNING" },
+      orderBy: { createdAt: "desc" },
+    });
+    return {
+      mode: "already_running",
+      executionId: exec?.id ?? null,
+      worktreePath: exec?.worktreePath ?? null,
+    };
+  }
+
+  // Has history → resume latest (Continue/Retry). Otherwise fresh start (Launch).
+  const historyCount = await db.taskExecution.count({ where: { taskId } });
+  if (historyCount > 0) {
+    const r = await continueLatestPtyExecution(taskId);
+    return { mode: "continued", executionId: r.executionId, worktreePath: r.worktreePath };
+  }
+
+  // Fresh start mirrors the Launch button: empty prompt, task context injected.
+  const r = await startPtyExecution(taskId, "");
+  return { mode: "started", executionId: r.executionId, worktreePath: r.worktreePath };
+}
+
+/**
  * INT-01: Create a TaskExecution row and spawn Claude CLI in PTY mode.
  *
  * This replaces the SSE stream route for terminal-based execution (Phase 26).

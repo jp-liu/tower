@@ -14,6 +14,84 @@ function validateMcpTaskId(taskId: string): string | null {
   return null;
 }
 
+type TaskCandidate = {
+  taskId: string;
+  title: string;
+  status: string;
+  project: string;
+  workspace: string;
+};
+
+type ResolvedTarget =
+  | { targetId: string; targetTitle: string }
+  | { error: string; taskId?: string; taskName?: string }
+  | { needsSelection: true; message: string; candidates: TaskCandidate[] };
+
+/**
+ * Resolve a task from an exact `taskId` or a fuzzy `taskName`, shared by the
+ * stop/resume terminal tools. Returns `{ targetId, targetTitle }` on a unique
+ * hit, an `error` object when nothing matches, or `needsSelection` + candidates
+ * when a name is ambiguous (so the caller can pick one rather than guessing).
+ */
+async function resolveTaskTarget(args: {
+  taskId?: string;
+  taskName?: string;
+}): Promise<ResolvedTarget> {
+  const name = args.taskName?.trim();
+  if (!args.taskId && !name) {
+    return { error: "Provide either taskId or taskName" };
+  }
+
+  if (args.taskId) {
+    const err = validateMcpTaskId(args.taskId);
+    if (err) return { error: err, taskId: args.taskId };
+    const task = await db.task.findUnique({
+      where: { id: args.taskId },
+      select: { id: true, title: true },
+    });
+    if (!task) return { error: "Task not found", taskId: args.taskId };
+    return { targetId: task.id, targetTitle: task.title };
+  }
+
+  // Fuzzy name search — list candidates rather than guessing on ambiguity.
+  const matches = await db.task.findMany({
+    where: { title: { contains: name } },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      project: { select: { name: true, workspace: { select: { name: true } } } },
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 20,
+  });
+
+  if (matches.length === 0) {
+    return { error: "No task found matching the given name", taskName: name };
+  }
+
+  // Resolve to a single task when unambiguous: one fuzzy hit, or exactly one
+  // exact (case-insensitive) title match among several fuzzy hits.
+  const exact = matches.filter((m) => m.title.toLowerCase() === name!.toLowerCase());
+  const resolved = matches.length === 1 ? matches[0] : exact.length === 1 ? exact[0] : null;
+
+  if (!resolved) {
+    return {
+      needsSelection: true,
+      message: `Multiple tasks match "${name}". Call again with one of these taskId values.`,
+      candidates: matches.map((m) => ({
+        taskId: m.id,
+        title: m.title,
+        status: m.status,
+        project: m.project.name,
+        workspace: m.project.workspace.name,
+      })),
+    };
+  }
+
+  return { targetId: resolved.id, targetTitle: resolved.title };
+}
+
 export const terminalTools = {
   start_task_execution: {
     description:
@@ -102,6 +180,101 @@ export const terminalTools = {
       }
 
       return { error: "Bridge request failed", status: response.status };
+    },
+  },
+
+  stop_task_execution: {
+    description:
+      "Stop (close) a task's terminal/PTY session — the same action as the Stop button. " +
+      "Identify the task either by exact `taskId` or by a fuzzy `taskName`. " +
+      "If the terminal is running it is closed; if it was never started this is a no-op. Both cases report success. " +
+      "When `taskName` matches multiple tasks it does NOT stop any of them — it returns `needsSelection` with the candidate list (id, title, status, project) so you can pick one and call again with that `taskId`. " +
+      "A unique name match or an exact `taskId` is closed directly.",
+    schema: z.object({
+      taskId: z.string().optional(),
+      taskName: z.string().optional(),
+    }),
+    handler: async (args: { taskId?: string; taskName?: string }) => {
+      const target = await resolveTaskTarget(args);
+      if (!("targetId" in target)) return target;
+      const { targetId, targetTitle } = target;
+
+      // Close via the internal bridge — reuses the Stop button logic (stopPtyExecution).
+      const tid = encodeURIComponent(targetId);
+      const response = await bridgeFetch(`/${tid}/stop`, { method: "POST" });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        return {
+          error: (errData as Record<string, unknown>).error ?? "Failed to stop terminal",
+          status: response.status,
+          taskId: targetId,
+        };
+      }
+
+      const data = (await response.json().catch(() => ({}))) as { wasRunning?: boolean };
+      const wasRunning = data.wasRunning ?? false;
+      return {
+        ok: true,
+        taskId: targetId,
+        title: targetTitle,
+        wasRunning,
+        message: wasRunning
+          ? "Terminal closed"
+          : "No active terminal for this task — nothing to close",
+      };
+    },
+  },
+
+  resume_task_execution: {
+    description:
+      "Start (launch) a task's terminal so you can interact with it — e.g. when a related task needs to notify a sibling that hasn't been started yet. " +
+      "By default it resumes the latest history session (the Continue/Retry button); a task with no prior runs is started fresh with its task context (the Launch button). " +
+      "If a terminal is already running this is a no-op and reports `mode: already_running`. " +
+      "Identify the task by exact `taskId` or fuzzy `taskName` (ambiguous name → `needsSelection` with candidates; unique match or exact id → started directly). " +
+      "After it is running, use `send_task_terminal_input` to send the actual message.",
+    schema: z.object({
+      taskId: z.string().optional(),
+      taskName: z.string().optional(),
+    }),
+    handler: async (args: { taskId?: string; taskName?: string }) => {
+      const target = await resolveTaskTarget(args);
+      if (!("targetId" in target)) return target;
+      const { targetId, targetTitle } = target;
+
+      // Launch via the internal bridge — reuses the Continue/Retry + Launch button logic.
+      const tid = encodeURIComponent(targetId);
+      const response = await bridgeFetch(`/${tid}/resume`, { method: "POST" });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        return {
+          error: (errData as Record<string, unknown>).error ?? "Failed to start terminal",
+          status: response.status,
+          taskId: targetId,
+        };
+      }
+
+      const data = (await response.json().catch(() => ({}))) as {
+        mode?: "already_running" | "continued" | "started";
+        executionId?: string | null;
+        worktreePath?: string | null;
+      };
+      const mode = data.mode ?? "started";
+      const messages: Record<string, string> = {
+        already_running: "Terminal already running — ready for input",
+        continued: "Terminal resumed from latest history",
+        started: "Terminal started fresh",
+      };
+      return {
+        ok: true,
+        taskId: targetId,
+        title: targetTitle,
+        mode,
+        executionId: data.executionId ?? null,
+        worktreePath: data.worktreePath ?? null,
+        message: messages[mode] ?? "Terminal started",
+      };
     },
   },
 
