@@ -20,6 +20,7 @@ When creating a task, you can set a base branch for Git worktree isolation — e
 - **Labels**: Assigned from the workspace's label pool. Label assignment is a full replacement — pass the complete set of desired labels each time.
 - **Worktree isolation**: When `useWorktree` is enabled and a `baseBranch` is specified, each task execution runs in a separate Git worktree with its own branch.
 - **Execution lifecycle**: Each task can have multiple execution records tracking agent runs, with session IDs for resumption support.
+- **Version grouping**: Tasks can be filed under a project version (Version Timeline) for organizing and reviewing work by release; tasks without a version go to the backlog. Over MCP, use `list_versions` to discover versions and `create_task`'s `versionId` to assign one.
 
 ## Data Model
 
@@ -67,7 +68,7 @@ Task (id, title, description?, status, priority, order)
 
 ### MCP Tools (`src/mcp/tools/task-tools.ts`)
 
-- `list_tasks` / `create_task` / `update_task` / `move_task` / `delete_task`
+- `list_tasks` / `create_task` / `update_task` / `move_task` / `delete_task` / `set_task_defaults` / `list_versions`
 
 ### Label Subsystem
 

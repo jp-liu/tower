@@ -1,6 +1,6 @@
 ---
 title: Board
-description: Kanban board UI with drag-and-drop, filtering, and statistics
+description: Kanban board UI with drag-and-drop, filtering, and a project tab bar
 ---
 
 # Board Module
@@ -16,9 +16,10 @@ The Kanban board visualizes tasks across 5 status columns: TODO, IN_PROGRESS, IN
 - **Drag-and-drop**: Powered by dnd-kit. Dragging across columns triggers a status update; dragging within a column updates the `order` field.
 - **Context menu**: Right-click any card for quick actions — move to a different status, start or resume execution, open in detail view, or delete.
 - **Filtering**: Filter the board by one or more labels, priority levels, or both. Filters apply across all columns simultaneously.
-- **Statistics panel**: Shows task counts per status and overall progress at a glance.
+- **Column count badges**: Each column header shows its task count; the board top stays compact with a unified tooltip instead of separate stat cards.
 - **Pinning**: Pinned tasks always appear at the top of their column regardless of order value.
 - **Archive view**: Completed and cancelled tasks can be viewed in a separate archive page.
+- **Project tab bar**: Switch projects via horizontal tabs at the top of the board. Hovering a tab opens a tooltip with the badge-format hint and an **Open Studio** entry (opens the project's working directory in an external IDE/terminal); the project column stays highlighted while the pointer is over the tooltip.
 
 ## File Reference
 
@@ -29,8 +30,11 @@ The Kanban board visualizes tasks across 5 status columns: TODO, IN_PROGRESS, IN
 | `kanban-board.tsx` | Main board container |
 | `board-column.tsx` | Status column |
 | `task-card.tsx` | Task card |
+| `task-card-context-menu.tsx` | Task card right-click menu |
 | `board-filters.tsx` | Filters (labels, priority) |
-| `board-stats.tsx` | Statistics panel |
+| `project-tabs.tsx` | Top project tab bar (tab switch + tooltip + Open Studio) |
+| `create-task-dialog.tsx` | New-task dialog |
+| `column-tasks-dialog.tsx` | Full single-column task list dialog |
 
 ### Pages
 

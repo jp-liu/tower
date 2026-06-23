@@ -19,6 +19,7 @@ description: 看板 UI，Kanban 列展示任务卡片，支持拖拽排序和筛
 - **任务卡片**：每张卡片显示标题、描述摘要、优先级徽章、标签列表
 - **置顶功能**：置顶的任务始终显示在所在列的顶部，不受排序影响
 - **归档视图**：已完成和已取消的任务可以在归档页面查看
+- **项目标签栏**：看板顶部以 Tab 形式横向切换项目，悬停弹出 Tooltip 展示徽章格式提示与「启动工作台」入口（一键在外部 IDE/终端打开项目工作目录）；指针移到 Tooltip 上时所在项目列保持高亮
 
 ## 详细说明
 
@@ -41,8 +42,11 @@ description: 看板 UI，Kanban 列展示任务卡片，支持拖拽排序和筛
 | `kanban-board.tsx` | 看板主容器 |
 | `board-column.tsx` | 状态列 |
 | `task-card.tsx` | 任务卡片 |
+| `task-card-context-menu.tsx` | 任务卡片右键菜单 |
 | `board-filters.tsx` | 筛选器（标签、优先级） |
-| `board-stats.tsx` | 统计面板 |
+| `project-tabs.tsx` | 顶部项目标签栏（Tab 切换 + Tooltip + 启动工作台） |
+| `create-task-dialog.tsx` | 新建任务对话框 |
+| `column-tasks-dialog.tsx` | 单列任务全量查看对话框 |
 
 ### 页面
 

@@ -11,14 +11,15 @@ description: AI assistant chat system with streaming and multimodal support
 
 The built-in AI assistant is powered by the Claude Agent SDK with streaming chat support. It acts as a "task management operator" — rather than writing code directly, it manages workspaces, projects, and tasks through Tower's MCP tools. You can ask the assistant to create tasks, move them between statuses, search across projects, generate summaries, and more.
 
-The assistant supports image uploads for multimodal conversations and maintains chat history that is automatically saved. Sessions can be resumed later to continue where you left off.
+The assistant supports image uploads for multimodal conversations. Chat history is sourced from on-disk transcripts (localStorage is only an index), so reopening the assistant reliably restores past conversations without losing records.
 
 ## Details
 
 - **Streaming responses**: Chat responses arrive via Server-Sent Events (SSE), so you see the assistant's reply as it is generated in real time.
 - **MCP tool integration**: The assistant has access to all Tower MCP tools, allowing it to perform actions like creating workspaces, listing tasks, or checking terminal output on your behalf.
 - **Multimodal input**: Upload images alongside text messages. Images are processed and included in the conversation context for the AI to reference.
-- **Session management**: Each conversation is a session with a unique ID. Sessions persist across page navigations and can be resumed from the session list.
+- **Session management**: Each conversation is a session with a unique ID. Sessions persist across page navigations and can be resumed or renamed (rename requires an explicit save) from the session list.
+- **Resilience & fallback**: If a session can no longer be resumed, the assistant transparently falls back to a fresh session and retries, suppressing the leftover error bubble. When a turn succeeds but the model returns no text, a hint bubble is shown so the turn is never silently empty. A disconnected MCP server is automatically re-spawned once, SSE stream drops no longer crash the chat, and MCP tool cards no longer double-render.
 - **Message format conversion**: Internal SDK message formats are converted to a UI-friendly format for display, handling tool calls, thinking blocks, and rich content.
 
 ## File Reference

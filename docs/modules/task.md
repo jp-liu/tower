@@ -18,6 +18,7 @@ description: Tower 的核心工作单元，支持标签、执行记录、消息�
 - **基础分支设置**：可以指定 Git 基础分支，任务执行时自动创建 Worktree 在独立分支中工作，不影响主分支
 - **执行任务**：点击执行后自动创建 PTY 终端会话，Claude CLI 在独立环境中运行任务
 - **执行摘要**：任务完成后自动生成执行摘要（50 字简述）和 Dreaming 洞察（结构化 JSON），洞察自动保存为笔记
+- **版本归纳**：任务可归属到项目版本（Version Timeline），按版本组织与回顾；未指定版本的任务进入 backlog。MCP 侧通过 `list_versions` 查询可用版本、`create_task` 的 `versionId` 指定归属
 
 ## 详细说明
 
@@ -73,7 +74,7 @@ Task (id, title, description?, status, priority, order)
 
 ### MCP Tools (`src/mcp/tools/task-tools.ts`)
 
-- `list_tasks` / `create_task` / `update_task` / `move_task` / `delete_task`
+- `list_tasks` / `create_task` / `update_task` / `move_task` / `delete_task` / `set_task_defaults` / `list_versions`
 
 ## 约束
 
