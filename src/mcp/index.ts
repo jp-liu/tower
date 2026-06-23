@@ -1,3 +1,6 @@
+// Pin TOWER_DATA_DIR before anything imports @prisma/client (which auto-loads
+// the repo's dev .env). Keep this as the FIRST import — see env-guard.ts.
+import "./env-guard";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createServer } from "./server";
 import { initDb } from "./db";
