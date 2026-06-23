@@ -185,10 +185,18 @@ function findPackageDirs(root: string): string[] {
  * node_modules), an already-present target is left untouched, and any single
  * symlink failure is logged without aborting the rest.
  */
+/**
+ * Dependency/cache directory names that Tower symlinks into a worktree (per
+ * package dir) instead of reinstalling. These are the only entries
+ * `symlinkNodeModules` ever creates, so they are also the only ones the
+ * status filters below treat as Tower-injected noise.
+ */
+export const WORKTREE_LINKED_DIRS = ["node_modules", ".next"] as const;
+
 function symlinkNodeModules(projectRoot: string, worktreePath: string): void {
   const log = logger.create("worktree");
   // Dependency/cache directories that should be shared into the worktree.
-  const dirs = ["node_modules", ".next"];
+  const dirs = WORKTREE_LINKED_DIRS;
 
   for (const pkgDir of findPackageDirs(projectRoot)) {
     for (const dir of dirs) {
@@ -261,4 +269,44 @@ export async function removeWorktree(
       { cwd: localPath, encoding: "utf-8", timeout: 5000 }
     );
   }
+}
+
+/**
+ * True if a repo-relative path (as emitted by `git status`) points at a
+ * Tower-injected dependency symlink (`node_modules` / `.next`) inside the
+ * worktree.
+ *
+ * Why this exists: Tower symlinks these dirs into every worktree package (see
+ * `symlinkNodeModules`). A `.gitignore` rule written with a trailing slash
+ * (`node_modules/`) matches *directories only* — but git treats a symlink as a
+ * file, so the rule never matches the link and git reports it as untracked.
+ * Those entries are not user changes and must not count toward "worktree dirty".
+ * Tower's own repo escapes this because its `.gitignore` uses `/node_modules`
+ * (no slash), which does match the symlink.
+ *
+ * The on-disk symlink check keeps this conservative: a real (non-symlink)
+ * directory or file that merely shares the name is left untouched.
+ */
+export function isTowerLinkedDir(relPath: string, worktreeRoot: string): boolean {
+  const cleaned = relPath.replace(/[/\\]+$/, "");
+  const base = path.basename(cleaned);
+  if (!(WORKTREE_LINKED_DIRS as readonly string[]).includes(base)) return false;
+  try {
+    return lstatSync(path.join(worktreeRoot, cleaned)).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Drops untracked (`??`) `git status --porcelain` entries that are
+ * Tower-injected dependency symlinks. Tracked changes (staged/modified/etc.)
+ * are always preserved, as are genuinely untracked files the user created.
+ */
+export function stripTowerLinkedStatus(porcelainLines: string[], worktreeRoot: string): string[] {
+  return porcelainLines.filter((line) => {
+    if (!line.startsWith("??")) return true; // keep all tracked changes
+    const relPath = line.slice(2).trim(); // "?? path" → "path"
+    return !isTowerLinkedDir(relPath, worktreeRoot);
+  });
 }

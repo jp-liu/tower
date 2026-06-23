@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { setTaskLabels } from "@/actions/label-actions";
-import { removeWorktree } from "@/lib/worktree";
+import { removeWorktree, stripTowerLinkedStatus } from "@/lib/worktree";
 import { z } from "zod";
 import { createTaskSchema, updateTaskSchema, taskStatusSchema } from "@/lib/schemas";
 import { logger } from "@/lib/logger";
@@ -286,7 +286,11 @@ export async function checkWorktreeClean(taskId: string): Promise<{
       "git", ["status", "--porcelain"],
       { cwd, encoding: "utf-8", timeout: 5000 }
     ).trim();
-    const files = status ? status.split("\n").map((l) => l.trim()).filter(Boolean) : [];
+    const rawFiles = status ? status.split("\n").map((l) => l.trim()).filter(Boolean) : [];
+    // Drop Tower-injected dependency symlinks (node_modules/.next): a `.gitignore`
+    // written as `node_modules/` (trailing slash) matches dirs only, so git
+    // reports the symlink as untracked and would otherwise block completion.
+    const files = stripTowerLinkedStatus(rawFiles, cwd);
     const clean = files.length === 0;
 
     // Check if there are commits on the task branch beyond the fork point
