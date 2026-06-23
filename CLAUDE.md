@@ -30,4 +30,9 @@ Workspace → Project → Task → Execution
 - 国际化：所有用户可见文本用 `t("key")`，zh/en 双语
 - Next.js 15+ 异步 params：`const { id } = await params`
 - App Router routes：`export const runtime = "nodejs"` + `export const dynamic = "force-dynamic"`
-- 数据库：SQLite 单文件，Prisma ORM，配置在 `.env` 的 `DATABASE_URL`
+- 数据库：SQLite 单文件，Prisma ORM。**DB 位置由数据根目录派生**（`getTowerDbPath()`），不读 `DATABASE_URL` env
+- 数据根目录（dev/prod 隔离）：
+  - 运行时一律走 `getTowerDir()`/`getStorageDir()`（`src/lib/tower-dir.ts`），DB 与存储同根，永不分家
+  - 环境选择**不放进 `.env`**（Prisma 运行时会自动加载 `.env` 并串进所有进程，含 MCP）：dev 由 `pnpm dev`/`db:*` 脚本指向 `~/.tower-dev`，prod 由 `bin/tower.mjs` pin `~/.tower`
+  - MCP 进程额外有 `src/mcp/env-guard.ts` 在 Prisma 加载前兜底 pin `TOWER_DATA_DIR`
+  - 构建产物隔离：dev 用 `.next-dev`（`NEXT_DISTDIR`），prod 用 `.next`

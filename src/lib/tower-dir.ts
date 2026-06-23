@@ -47,6 +47,17 @@ export function getTowerDbPath(): string {
   return join(getDatabaseDir(), "tower.db");
 }
 
+/**
+ * DB file path WITHOUT the mkdir side effect — for building the Prisma
+ * datasource URL at client construction (i.e. import) time. Reads the env
+ * directly (no getTowerDir, so no directory is created). The directory itself is
+ * ensured by getDatabaseDir() inside initDb(), before the first connect.
+ */
+export function getTowerDbFilePath(): string {
+  const root = process.env.TOWER_DATA_DIR || join(homedir(), ".tower");
+  return join(root, "database", "tower.db");
+}
+
 /** Default storage root inside the Tower data dir. */
 export function getDefaultStorageDir(): string {
   return join(getTowerDir(), "storage");

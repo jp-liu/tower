@@ -5,6 +5,8 @@ import * as path from "node:path";
 // Mock tower-dir to return a predictable path
 vi.mock("../tower-dir", () => ({
   getStorageDir: () => "/mock/tower/storage",
+  getTowerDbFilePath: () => "/mock/tower/database/tower.db",
+  getDatabaseDir: () => "/mock/tower/database",
 }));
 
 import { resolveAssetPath, MIME_MAP } from "../file-serve";

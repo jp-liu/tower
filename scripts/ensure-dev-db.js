@@ -7,14 +7,14 @@ const { existsSync } = require("fs");
 const { execFileSync } = require("child_process");
 const { resolve } = require("path");
 
-// Read DATABASE_URL from .env manually (dotenv may not be loaded yet)
-const dotenvPath = resolve(__dirname, "..", ".env");
-const envContent = existsSync(dotenvPath) ? require("fs").readFileSync(dotenvPath, "utf-8") : "";
-const dbUrlMatch = envContent.match(/^DATABASE_URL\s*=\s*"?file:([^"\n]+)"?/m);
+// DATABASE_URL is injected by the `predev` npm script (the dev data dir). Env
+// selection lives in package.json, NOT in .env — see .env for why.
+const dbUrlEnv = process.env.DATABASE_URL || "";
+const dbUrlMatch = dbUrlEnv.match(/^file:(.+)$/);
 const dbPath = dbUrlMatch ? dbUrlMatch[1] : "";
 
 if (!dbPath) {
-  console.log("[ensure-dev-db] No DATABASE_URL found in .env, skipping");
+  console.log("[ensure-dev-db] No DATABASE_URL in env, skipping");
   process.exit(0);
 }
 
