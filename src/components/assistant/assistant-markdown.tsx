@@ -24,7 +24,13 @@ export function AssistantMarkdown({
       // squeeze/wrap instead of the table overflowing and scrolling. Make <td>
       // nowrap too: columns size to content, the table exceeds the bubble width,
       // and the existing wrapper scrolls horizontally.
-      className="text-sm leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_td]:whitespace-nowrap"
+      //
+      // break-words: long unbroken words/URLs in body text wrap at the bubble
+      // edge instead of overflowing. Inline <code> (paths like
+      // /Users/.../assets/...) has no wrapping by default — force wrap + break-all
+      // so it stays inside the bubble. The `:not(pre)>code` guard excludes fenced
+      // code blocks, which keep their own overflow-x-auto horizontal scroll.
+      className="text-sm leading-relaxed break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_td]:whitespace-nowrap [&_:not(pre)>code]:whitespace-pre-wrap [&_:not(pre)>code]:break-all"
       mode={isStreaming ? "streaming" : "static"}
       animated
       isAnimating={isStreaming}
