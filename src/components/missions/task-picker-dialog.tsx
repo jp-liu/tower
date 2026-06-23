@@ -18,6 +18,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  LayoutDashboard,
   Loader2,
   Play,
   RotateCcw,
@@ -36,7 +37,14 @@ interface TaskItem {
   title: string;
   status: TaskStatus;
   priority: TaskPriority;
+  // Non-empty only for the project's Tower workbench task.
+  labels?: Array<{ labelId: string }>;
   executions?: Array<{ sessionId: string | null }>;
+}
+
+/** The project workbench task carries the builtin "Tower" label. */
+function isWorkbenchTask(task: TaskItem): boolean {
+  return (task.labels?.length ?? 0) > 0;
 }
 
 interface ProjectItem {
@@ -152,6 +160,67 @@ function TaskRow({
   );
 }
 
+/** Pinned workbench bar — the project's Tower task with Continue / New actions. */
+function WorkbenchBar({
+  task,
+  isRunning,
+  launchingId,
+  onLaunchNew,
+  onResume,
+  t,
+}: {
+  task: TaskItem;
+  isRunning: boolean;
+  launchingId: string | null;
+  onLaunchNew: (taskId: string) => void;
+  onResume: (taskId: string, sessionId: string) => void;
+  t: ReturnType<typeof useI18n>["t"];
+}) {
+  const lastSessionId = task.executions?.[0]?.sessionId;
+  const isLaunching = launchingId === task.id;
+
+  return (
+    <div className="shrink-0 border-b bg-muted/40 px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <LayoutDashboard className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="truncate text-xs font-medium">{t("missions.workbench.title")}</span>
+        </div>
+        {isRunning ? (
+          <span className="text-[10px] italic text-muted-foreground">
+            {t("missions.alreadyMonitored")}
+          </span>
+        ) : (
+          <div className="flex items-center gap-1">
+            {lastSessionId && (
+              <Button
+                variant="outline"
+                className="h-6 px-2 text-xs"
+                onClick={() => onResume(task.id, lastSessionId)}
+                disabled={isLaunching}
+                title={t("missions.continueSession")}
+              >
+                <RotateCcw className="h-3 w-3 mr-1" />
+                {t("missions.continueLabel")}
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              className="h-6 px-2 text-xs"
+              onClick={() => onLaunchNew(task.id)}
+              disabled={isLaunching}
+              title={t("missions.launchNew")}
+            >
+              <Play className="h-3 w-3 mr-1" />
+              {isLaunching ? "..." : t("missions.launchNewLabel")}
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface FlatTaskRow {
   task: TaskItem;
   workspaceName: string;
@@ -174,13 +243,14 @@ export function TaskPickerDialog({
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [page, setPage] = useState(0);
 
-  // Only workspaces/projects that have at least one active task
+  // Workspaces/projects with at least one task to show — a regular active task
+  // or the pinned workbench task (every project carries one).
   const visibleWorkspaces = useMemo(
     () =>
       workspaces
         .map((ws) => ({
           ...ws,
-          projects: ws.projects.filter((p) => p._count.tasks > 0),
+          projects: ws.projects.filter((p) => p.tasks.length > 0),
         }))
         .filter((ws) => ws.projects.length > 0),
     [workspaces]
@@ -196,7 +266,7 @@ export function TaskPickerDialog({
       .then((data) => {
         setWorkspaces(data);
         const firstWs = data
-          .map((ws) => ({ ...ws, projects: ws.projects.filter((p) => p._count.tasks > 0) }))
+          .map((ws) => ({ ...ws, projects: ws.projects.filter((p) => p.tasks.length > 0) }))
           .find((ws) => ws.projects.length > 0);
         setExpandedWs(firstWs ? new Set([firstWs.id]) : new Set());
         setSelectedProjectId(firstWs?.projects[0]?.id ?? "");
@@ -268,7 +338,15 @@ export function TaskPickerDialog({
     () => allTasks.length ? visibleWorkspaces.flatMap((ws) => ws.projects).find((p) => p.id === selectedProjectId) : undefined,
     [visibleWorkspaces, selectedProjectId, allTasks.length]
   );
-  const projectTasks = selectedProject?.tasks ?? [];
+  // Split the pinned workbench task out of the paginated regular task list.
+  const workbenchTask = useMemo(
+    () => selectedProject?.tasks.find(isWorkbenchTask),
+    [selectedProject]
+  );
+  const projectTasks = useMemo(
+    () => selectedProject?.tasks.filter((tk) => !isWorkbenchTask(tk)) ?? [],
+    [selectedProject]
+  );
   const totalPages = Math.max(1, Math.ceil(projectTasks.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages - 1);
   const pagedTasks = projectTasks.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
@@ -421,6 +499,17 @@ export function TaskPickerDialog({
             </aside>
 
             <div className="flex min-w-0 flex-1 flex-col">
+              {/* Pinned workbench — stays fixed above the scrolling task table */}
+              {workbenchTask && (
+                <WorkbenchBar
+                  task={workbenchTask}
+                  isRunning={runningTaskIds.has(workbenchTask.id)}
+                  launchingId={launchingId}
+                  onLaunchNew={handleLaunchNew}
+                  onResume={handleResume}
+                  t={t}
+                />
+              )}
               <ScrollArea className="flex-1 min-h-0">
                 {pagedTasks.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-8">

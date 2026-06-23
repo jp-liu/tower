@@ -730,6 +730,7 @@ export const en: Translations = {
   "missions.continueLabel": "Continue",
   "missions.launchNew": "Start new terminal",
   "missions.launchNewLabel": "New",
+  "missions.workbench.title": "Workbench",
   "missions.fullPickerTitle": "Select Task",
   "missions.fullPickerHint": "Select a workspace and project to see tasks",
   "missions.fullPicker.searchPlaceholder": "Search tasks by title…",

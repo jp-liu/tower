@@ -315,14 +315,25 @@ export async function getWorkspacesWithActiveTasks() {
           alias: true,
           tasks: {
             where: {
-              status: { in: ["TODO", "IN_PROGRESS", "IN_REVIEW"] },
-              NOT: { labels: { some: { label: { name: "Tower", isBuiltin: true } } } },
+              // Active tasks OR the project's Tower workbench task (always
+              // launchable, regardless of its status). The dialog pins the
+              // workbench separately and lists the rest as regular tasks.
+              OR: [
+                { status: { in: ["TODO", "IN_PROGRESS", "IN_REVIEW"] } },
+                { labels: { some: { label: { name: "Tower", isBuiltin: true } } } },
+              ],
             },
             select: {
               id: true,
               title: true,
               status: true,
               priority: true,
+              // Non-empty only for the Tower workbench task — lets the client
+              // tell the workbench apart from regular tasks without extra payload.
+              labels: {
+                where: { label: { name: "Tower", isBuiltin: true } },
+                select: { labelId: true },
+              },
               executions: {
                 where: { sessionId: { not: null } },
                 select: { sessionId: true },
@@ -334,6 +345,7 @@ export async function getWorkspacesWithActiveTasks() {
           },
           _count: {
             select: {
+              // Regular (non-workbench) active task count for the sidebar badge.
               tasks: {
                 where: {
                   status: { in: ["TODO", "IN_PROGRESS", "IN_REVIEW"] },

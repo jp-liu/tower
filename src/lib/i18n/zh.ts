@@ -745,6 +745,7 @@ export const zh = {
   "missions.continueLabel": "继续",
   "missions.launchNew": "启动新终端",
   "missions.launchNewLabel": "新建",
+  "missions.workbench.title": "工作台",
   "missions.fullPickerTitle": "选择任务",
   "missions.fullPickerHint": "选择工作区和项目查看任务",
   "missions.fullPicker.searchPlaceholder": "搜索任务标题…",
