@@ -44,7 +44,7 @@ System modules for GSD phase scoping. Use the **Slug** as the commit scope (e.g.
 | AI | `ai` | Claude SDK、CLI Adapter、执行总结、Prompt 管理 |
 | I18n | `i18n` | 国际化、zh/en 双语 |
 
-Detailed module documentation: [`docs/`](docs/README.md)
+Detailed module documentation (VitePress site): [`docs/modules/`](docs/modules/) (中文) · [`docs/en/modules/`](docs/en/modules/) (English)
 
 ---
 
