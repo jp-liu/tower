@@ -5,8 +5,10 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { useTheme } from "next-themes";
+import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
 import { getActualWsPort, getConfigValues } from "@/actions/config-actions";
+import { formatPathForInjection } from "@/lib/pty/paste-image";
 import "@xterm/xterm/css/xterm.css";
 
 /** Imperative control handle exposed once the terminal is created/opened. */
@@ -91,6 +93,67 @@ export function TaskTerminal({
     if (helperTextarea) {
       helperTextarea.style.opacity = "0";
     }
+
+    // Image paste support. xterm only forwards clipboard *text*; an image blob is
+    // dropped and the Ctrl+V keystroke never reaches the Claude CLI. We intercept
+    // the paste in capture phase (before xterm's textarea handler), upload the
+    // image to a host file, and inject its path as terminal input so the CLI can
+    // read it. Non-image pastes fall through to xterm's normal text handling.
+    const pasteHost = containerRef.current;
+    const handleImagePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      let file: File | null = null;
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (it.kind === "file" && it.type.startsWith("image/")) {
+          file = it.getAsFile();
+          break;
+        }
+      }
+      if (!file) return; // not an image — let xterm paste the text
+      e.preventDefault();
+      e.stopPropagation();
+      void uploadAndInjectImage(file);
+    };
+
+    async function uploadAndInjectImage(file: File) {
+      const toastId = toast.loading(t("terminal.pasteImageUploading"));
+      try {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        });
+        const base64 = dataUrl.split(",")[1] ?? "";
+        const resp = await fetch(
+          `/api/internal/terminal/${encodeURIComponent(taskId)}/paste-image`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mime: file.type, base64, name: file.name }),
+          }
+        );
+        const result = (await resp.json().catch(() => null)) as { path?: string } | null;
+        if (!resp.ok || !result?.path) {
+          toast.error(t("terminal.pasteImageFailed"), { id: toastId });
+          return;
+        }
+        const socket = wsRef.current;
+        if (socket?.readyState !== WebSocket.OPEN) {
+          toast.error(t("terminal.pasteImageFailed"), { id: toastId });
+          return;
+        }
+        socket.send(formatPathForInjection(result.path));
+        terminalRef.current?.focus();
+        toast.success(t("terminal.pasteImageInserted"), { id: toastId });
+      } catch {
+        toast.error(t("terminal.pasteImageFailed"), { id: toastId });
+      }
+    }
+
+    pasteHost.addEventListener("paste", handleImagePaste, true);
 
     // Attempt WebGL addon (GPU-accelerated renderer)
     // Skip WebGL when many terminals may coexist (portal system) —
@@ -210,6 +273,7 @@ export function TaskTerminal({
     return () => {
       cancelled = true;
       onReadyRef.current?.(null);
+      pasteHost.removeEventListener("paste", handleImagePaste, true);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       dataDisposable?.dispose();
       webglAddon?.dispose();
