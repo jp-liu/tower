@@ -357,7 +357,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
             {(task.baseBranch || latestExecution?.worktreeBranch) && (
               <Badge variant="secondary" className="gap-1 border border-border bg-muted font-mono text-[10px] text-muted-foreground">
                 <GitBranch className="h-2.5 w-2.5" />
-                {task.baseBranch ?? latestExecution?.worktreeBranch}
+                {task.baseBranch ?? latestExecution?.worktreeBranch} · worktree
               </Badge>
             )}
             {task.version && (
