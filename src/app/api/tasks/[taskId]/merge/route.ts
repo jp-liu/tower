@@ -5,6 +5,7 @@ import { execFileSync } from "child_process";
 import { revalidatePath } from "next/cache";
 import { checkConflicts } from "@/lib/diff-parser";
 import { removeWorktree } from "@/lib/worktree";
+import { mergeBranchIntoBase } from "@/lib/git-merge";
 
 export async function POST(
   _request: NextRequest,
@@ -51,7 +52,6 @@ export async function POST(
     });
 
     const worktreeBranch = latestExecution?.worktreeBranch ?? `task/${taskId}`;
-    const worktreePath = latestExecution?.worktreePath;
     const localPath = task.project.localPath;
 
     // Pre-merge conflict check
@@ -81,54 +81,14 @@ export async function POST(
       // Best effort — diff will fallback gracefully
     }
 
-    // Record current branch before merge
-    const originalBranch = execFileSync(
-      "git", ["rev-parse", "--abbrev-ref", "HEAD"],
-      { ...gitOpts, cwd: localPath }
-    ).trim();
-    const needsCheckout = originalBranch !== task.baseBranch;
-
-    // Stash uncommitted changes (safety for checkout)
-    const mainStatus = execFileSync(
-      "git", ["status", "--porcelain"],
-      { ...gitOpts, cwd: localPath }
-    ).trim();
-    const hadStash = mainStatus.split("\n").some(
-      (line) => line.trim() !== "" && !line.startsWith("??")
-    );
-    if (hadStash) {
-      execFileSync("git", ["stash", "push", "-m", "tower-merge-temp"], { ...gitOpts, cwd: localPath });
-    }
-
-    let commitHash: string;
-    try {
-      // Checkout baseBranch if not already on it
-      if (needsCheckout) {
-        execFileSync("git", ["checkout", task.baseBranch], { ...gitOpts, cwd: localPath });
-      }
-
-      // Merge the task branch (normal merge, preserves commit history)
-      execFileSync("git", ["merge", worktreeBranch, "--no-edit"], { ...gitOpts, cwd: localPath });
-
-      // Get the merge commit hash
-      commitHash = execFileSync(
-        "git", ["rev-parse", "--short", "HEAD"],
-        { ...gitOpts, cwd: localPath }
-      ).trim();
-    } finally {
-      // Switch back to original branch before popping stash
-      // Stash was created on originalBranch, must pop on the same branch
-      if (needsCheckout) {
-        try {
-          execFileSync("git", ["checkout", originalBranch], { ...gitOpts, cwd: localPath });
-        } catch {
-          // Best effort — stay on baseBranch if checkout fails
-        }
-      }
-      if (hadStash) {
-        execFileSync("git", ["stash", "pop"], { ...gitOpts, cwd: localPath });
-      }
-    }
+    // Merge the task branch into the base branch. Autostash/branch-restore
+    // cleanup is handled (and made non-fatal) inside the helper, so a clean
+    // working tree no longer mis-reports as "Merge failed".
+    const { commitHash } = mergeBranchIntoBase({
+      localPath,
+      baseBranch: task.baseBranch,
+      worktreeBranch,
+    });
 
     // Record mergeCommit and branchTipCommit on the execution
     if (latestExecution && commitHash) {
