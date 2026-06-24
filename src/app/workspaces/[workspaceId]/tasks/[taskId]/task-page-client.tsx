@@ -346,7 +346,9 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
                 </>
               )}
               <span className="shrink-0">/</span>
-              <span className="min-w-0 truncate font-semibold text-foreground" title={task.title}>{task.title}</span>
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <div className="truncate font-semibold text-foreground" title={task.title}>{task.title}</div>
+              </div>
             </div>
           </div>
           {/* Status + branch badges */}
