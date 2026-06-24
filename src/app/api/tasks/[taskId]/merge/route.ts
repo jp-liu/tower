@@ -5,6 +5,7 @@ import { execFileSync } from "child_process";
 import { revalidatePath } from "next/cache";
 import { checkConflicts } from "@/lib/diff-parser";
 import { removeWorktree } from "@/lib/worktree";
+import { runGit, assertMainRepoReady, describeGitError } from "@/lib/git-merge";
 
 export async function POST(
   _request: NextRequest,
@@ -97,7 +98,19 @@ export async function POST(
       (line) => line.trim() !== "" && !line.startsWith("??")
     );
     if (hadStash) {
-      execFileSync("git", ["stash", "push", "-m", "tower-merge-temp"], { ...gitOpts, cwd: localPath });
+      // Preflight: a stale index.lock or an in-progress merge/rebase makes
+      // `git stash push` fail with an opaque "Command failed". Detect these
+      // up front and report an actionable error instead.
+      assertMainRepoReady(localPath);
+      try {
+        // runGit surfaces git's real stderr instead of "Command failed: …".
+        runGit(["stash", "push", "-m", "tower-merge-temp"], localPath, gitOpts.timeout);
+      } catch (err) {
+        throw new Error(
+          `暂存主仓库工作区改动失败（git stash push）：${describeGitError(err)}。` +
+            `请在 ${localPath} 执行 git status / git stash list 检查工作区状态后重试。`
+        );
+      }
     }
 
     let commitHash: string;
