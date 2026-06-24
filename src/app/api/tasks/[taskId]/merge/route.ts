@@ -81,9 +81,12 @@ export async function POST(
       // Best effort — diff will fallback gracefully
     }
 
-    // Merge the task branch into the base branch. Autostash/branch-restore
-    // cleanup is handled (and made non-fatal) inside the helper, so a clean
-    // working tree no longer mis-reports as "Merge failed".
+    // Merge the task branch into the base branch. The helper handles the
+    // autostash dance: it preflights for index.lock / mid-merge / mid-rebase,
+    // surfaces git's real stderr on a failed `git stash push`, only pops a
+    // stash it actually created, and treats branch-restore/pop cleanup as
+    // non-fatal — so a clean working tree no longer mis-reports as
+    // "Merge failed".
     const { commitHash } = mergeBranchIntoBase({
       localPath,
       baseBranch: task.baseBranch,
