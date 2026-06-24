@@ -163,11 +163,11 @@ Replace `<project-root>` with the absolute path to this repository.
 |------|-------------|------------|
 | `list_tasks` | List tasks in a project, ordered by `order` then `createdAt`; includes labels | `projectId`, `status?` |
 | `create_task` | Create a task with optional labels/version. `useWorktree`/`autoStart` default to the saved global preference; first call without them (and before defaults set) returns `{ needsDefaultsSetup: true }` instead of creating | `projectId`, `title`, `description?`, `priority?`, `status?`, `labelIds?`, `versionId?`, `useWorktree?`, `baseBranch?`, `autoStart?`, `references?` |
-| `update_task` | Update title, description, priority, and/or labels (replaces all labels) | `taskId`, `title?`, `description?`, `priority?`, `labelIds?` |
+| `update_task` | Update title, description, priority, labels (replaces all labels), and/or version (`versionId`: assign to a version, or `null`/`""` to move back to backlog) | `taskId`, `title?`, `description?`, `priority?`, `labelIds?`, `versionId?` |
 | `move_task` | Move task to a different status column | `taskId`, `status` |
 | `delete_task` | Delete a task | `taskId` |
 | `set_task_defaults` | Save global defaults for new tasks (worktree isolation + auto-start). Call once after asking the user; marks defaults as configured | `useWorktree`, `autoStart` |
-| `list_versions` | List a project's active versions (excludes RELEASED) for `create_task`'s `versionId` | `projectId` |
+| `list_versions` | List a project's active versions (excludes RELEASED) for `create_task`'s or `update_task`'s `versionId` | `projectId` |
 
 ### Label Tools (`src/mcp/tools/label-tools.ts`)
 

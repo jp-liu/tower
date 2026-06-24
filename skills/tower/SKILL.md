@@ -103,6 +103,12 @@ it means your previous turn produced no tool call — issue the tool call now.
 
 1. Call `move_task` with taskId and the target status (DONE, CANCELLED, etc.)
 
+### "Edit a task" / "Change its title/description/priority/labels/version"
+
+1. Call `update_task` with `taskId` plus any of: `title`, `description`, `priority`, `labelIds`, `subPath`, `versionId`. Only the fields you pass are changed.
+2. **Labels** (`labelIds`): full replace, not a merge — pass the complete desired set (omit to leave labels untouched).
+3. **Version** (`versionId`): to move a task into a version, call `list_versions` with the task's projectId, let the user pick, then pass `versionId`. To move the task back to the **backlog** (no version), pass `versionId: null` (or an empty string). A `versionId` that doesn't belong to the task's project is ignored and the task falls back to backlog. Omit `versionId` entirely to leave the version unchanged.
+
 ### "Search for ..." / "Find tasks about ..."
 
 1. Call `search` with the query string

@@ -5,6 +5,10 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 const mockTx = {
   task: {
     update: vi.fn(),
+    findUnique: vi.fn(),
+  },
+  version: {
+    findFirst: vi.fn(),
   },
   taskLabel: {
     deleteMany: vi.fn(),
@@ -441,6 +445,74 @@ describe("task-tools", () => {
         ],
       });
       expect(callOrder).toEqual(["deleteMany", "createMany"]);
+    });
+
+    it("assigns versionId after validating it belongs to the task's project", async () => {
+      mockTx.task.findUnique.mockResolvedValue({ projectId: "proj1" });
+      mockTx.version.findFirst.mockResolvedValue({ id: "ver1" });
+      mockTx.task.update.mockResolvedValue({ id: "task1", versionId: "ver1" });
+
+      await taskTools.update_task.handler({ taskId: "task1", versionId: "ver1" });
+
+      expect(mockTx.version.findFirst).toHaveBeenCalledWith({
+        where: { id: "ver1", projectId: "proj1" },
+        select: { id: true },
+      });
+      expect(mockTx.task.update).toHaveBeenCalledWith({
+        where: { id: "task1" },
+        data: { versionId: "ver1" },
+      });
+    });
+
+    it("clears versionId (moves to backlog) when null is passed", async () => {
+      mockTx.task.update.mockResolvedValue({ id: "task1", versionId: null });
+
+      await taskTools.update_task.handler({ taskId: "task1", versionId: null });
+
+      // No project/version lookup needed when clearing
+      expect(mockTx.task.findUnique).not.toHaveBeenCalled();
+      expect(mockTx.version.findFirst).not.toHaveBeenCalled();
+      expect(mockTx.task.update).toHaveBeenCalledWith({
+        where: { id: "task1" },
+        data: { versionId: null },
+      });
+    });
+
+    it("clears versionId when an empty string is passed", async () => {
+      mockTx.task.update.mockResolvedValue({ id: "task1", versionId: null });
+
+      await taskTools.update_task.handler({ taskId: "task1", versionId: "" });
+
+      expect(mockTx.version.findFirst).not.toHaveBeenCalled();
+      expect(mockTx.task.update).toHaveBeenCalledWith({
+        where: { id: "task1" },
+        data: { versionId: null },
+      });
+    });
+
+    it("falls back to backlog when versionId belongs to a different project", async () => {
+      mockTx.task.findUnique.mockResolvedValue({ projectId: "proj1" });
+      mockTx.version.findFirst.mockResolvedValue(null); // mismatch
+      mockTx.task.update.mockResolvedValue({ id: "task1", versionId: null });
+
+      await taskTools.update_task.handler({ taskId: "task1", versionId: "ver-other" });
+
+      expect(mockTx.task.update).toHaveBeenCalledWith({
+        where: { id: "task1" },
+        data: { versionId: null },
+      });
+    });
+
+    it("leaves versionId untouched when not provided", async () => {
+      mockTx.task.update.mockResolvedValue({ id: "task1", title: "Renamed" });
+
+      await taskTools.update_task.handler({ taskId: "task1", title: "Renamed" });
+
+      expect(mockTx.version.findFirst).not.toHaveBeenCalled();
+      expect(mockTx.task.update).toHaveBeenCalledWith({
+        where: { id: "task1" },
+        data: { title: "Renamed" },
+      });
     });
   });
 

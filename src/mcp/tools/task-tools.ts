@@ -285,7 +285,9 @@ export const taskTools = {
   },
 
   update_task: {
-    description: "Update a task's title, description, priority, labels, and/or subPath. If labelIds is provided, replaces all existing labels.",
+    description:
+      "Update a task's title, description, priority, labels, subPath, and/or version. If labelIds is provided, replaces all existing labels. " +
+      "Pass versionId to file the task under a project version (use list_versions to discover options); pass null or an empty string to move it back to the backlog (no version).",
     schema: z.object({
       taskId: z.string(),
       title: z.string().optional(),
@@ -293,6 +295,7 @@ export const taskTools = {
       priority: Priority.optional(),
       labelIds: z.array(z.string()).optional(),
       subPath: z.string().optional(),
+      versionId: z.string().nullable().optional().describe("Version to assign the task to. Use list_versions to find valid IDs for the project. Pass null or \"\" to move the task to the backlog (no version)."),
     }),
     handler: async (args: {
       taskId: string;
@@ -301,13 +304,40 @@ export const taskTools = {
       priority?: string;
       labelIds?: string[];
       subPath?: string;
+      versionId?: string | null;
     }) => {
-      const { labelIds, taskId, ...updateData } = args;
+      const { labelIds, taskId, versionId, ...updateData } = args;
+      const versionProvided = "versionId" in args;
 
       return db.$transaction(async (tx) => {
+        // Resolve the version change before updating. A version must belong to
+        // the task's own project; an empty/null value (or a mismatch) clears it
+        // → task moves back to the backlog.
+        let versionData: { versionId?: string | null } = {};
+        if (versionProvided) {
+          let resolved: string | null = null;
+          if (versionId) {
+            const current = await tx.task.findUnique({
+              where: { id: taskId },
+              select: { projectId: true },
+            });
+            if (current) {
+              const v = await tx.version.findFirst({
+                where: { id: versionId, projectId: current.projectId },
+                select: { id: true },
+              });
+              resolved = v?.id ?? null;
+            }
+          }
+          versionData = { versionId: resolved };
+        }
+
         const task = await tx.task.update({
           where: { id: taskId },
-          data: updateData as { title?: string; description?: string; priority?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"; subPath?: string },
+          data: {
+            ...(updateData as { title?: string; description?: string; priority?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"; subPath?: string }),
+            ...versionData,
+          },
         });
 
         if (labelIds !== undefined) {
@@ -372,7 +402,7 @@ export const taskTools = {
 
   list_versions: {
     description:
-      "List a project's active versions (excludes RELEASED) for assigning a task via create_task's versionId. Returns id, number, name, status, isCurrent.",
+      "List a project's active versions (excludes RELEASED) for assigning a task via create_task's or update_task's versionId. Returns id, number, name, status, isCurrent.",
     schema: z.object({ projectId: z.string() }),
     handler: async (args: { projectId: string }) => {
       return db.version.findMany({
