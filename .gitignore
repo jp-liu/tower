@@ -20,6 +20,7 @@
 /.next/
 /.next
 /.next-dev
+/.worktrees/
 /out/
 
 # production
