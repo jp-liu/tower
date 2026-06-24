@@ -5,6 +5,7 @@ import path from "path";
 import os from "os";
 import simpleGit, { type StatusResult } from "simple-git";
 import { parseUnifiedDiff } from "@/lib/git-diff";
+import { isTowerLinkedDir } from "@/lib/worktree";
 
 function expandHome(p: string): string {
   if (p.startsWith("~/") || p === "~") {
@@ -56,7 +57,7 @@ function isTowerWorktreePath(p: string): boolean {
   return p === ".worktrees" || p.startsWith(".worktrees/");
 }
 
-export function mapStatus(s: StatusResult) {
+export function mapStatus(s: StatusResult, repoRoot?: string) {
   const changedFiles: { file: string; status: string; staged: boolean }[] = [];
 
   for (const f of s.staged) {
@@ -85,8 +86,14 @@ export function mapStatus(s: StatusResult) {
     }
   }
 
-  const visibleFiles = changedFiles.filter((c) => !isTowerWorktreePath(c.file));
-  const untrackedVisible = s.not_added.filter((f) => !isTowerWorktreePath(f)).length;
+  // Inside a worktree, Tower symlinks node_modules/.next per package. When the
+  // repo's .gitignore uses a trailing-slash rule (`node_modules/`) it matches
+  // dirs only, so git reports those symlinks as untracked — pure noise here.
+  const isNoise = (file: string): boolean =>
+    isTowerWorktreePath(file) || (!!repoRoot && isTowerLinkedDir(file, repoRoot));
+
+  const visibleFiles = changedFiles.filter((c) => !isNoise(c.file));
+  const untrackedVisible = s.not_added.filter((f) => !isNoise(f)).length;
 
   return {
     summary: {
@@ -193,7 +200,7 @@ export async function GET(request: NextRequest) {
       .map((b) => b.replace("remotes/origin/", ""))
       .filter((b) => b !== "HEAD");
 
-    const { summary: statusSummary, changedFiles } = mapStatus(status);
+    const { summary: statusSummary, changedFiles } = mapStatus(status, topLevel);
 
     const remoteUrl = remotes.find((r) => r.name === "origin")?.refs?.fetch ?? "";
 
