@@ -630,10 +630,21 @@ export async function startPtyExecution(
   }
 
   // 7c. Build system prompt additions
+  // 内置系统声明（所有任务都带，默认见 config-defaults.ts，可被 SystemConfig 覆盖）在前，
+  // 再 merge 任务自选的 AgentPrompt（在后），最后附用户名。
   let appendSystemPrompt = "";
+  const { CONFIG_DEFAULTS } = await import("@/lib/config-defaults");
+  const systemDirective = await readConfigValue<string>(
+    "task.systemDirective",
+    CONFIG_DEFAULTS["task.systemDirective"].defaultValue as string
+  );
+  if (systemDirective) {
+    appendSystemPrompt += systemDirective;
+  }
   if (instructionsFile) {
     const { readFile } = await import("fs/promises");
-    appendSystemPrompt += await readFile(instructionsFile, "utf-8");
+    const selected = await readFile(instructionsFile, "utf-8");
+    appendSystemPrompt += (appendSystemPrompt ? "\n\n" : "") + selected;
   }
   const usernameVal = await readConfigValue<string>("onboarding.username", "");
   if (usernameVal) {

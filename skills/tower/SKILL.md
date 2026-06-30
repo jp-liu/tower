@@ -255,6 +255,23 @@ section so we can always trace **why** a task exists and **who** asked for it.
 hard locators (chat id / message id / link) verbatim — they are what makes the
 task traceable later.
 
+#### Parent task derivation (派生子任务)
+
+If `TOWER_TASK_ID` is set in your environment (run `echo $TOWER_TASK_ID` to check),
+you are operating **inside a Tower task terminal** — so any task you create here is
+a **child task derived from the current (parent) task**. Render its source as:
+
+```
+## 来源
+
+- 渠道：父任务派生
+- 父任务：{当前任务标题，知道就填}（id: $TOWER_TASK_ID）
+```
+
+Tower also records this link structurally on the new task's `parentTaskId`
+automatically (used for parent→child completion notifications) — this `## 来源`
+is just the human-readable mirror. The id alone is enough if you don't know the title.
+
 #### Bridge metadata contract (`<task-source>` block)
 
 External bridges (Feishu/Lark, etc.) inject a machine-readable block into the

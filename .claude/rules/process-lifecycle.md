@@ -39,3 +39,9 @@
 - 创建后立即 `pty.resize(200, 50)` — 避免 dev server 因 80 列窄宽换行打断 readyRegex 匹配。
 - SIGTERM / SIGINT / SIGHUP 钩子注册时用 `globalThis.__previewSignalHandlersRegistered` flag 防重复。
 - `sessions` Map 挂在 `globalThis.__previewSessions` 上，HMR-safe。
+
+## Hook Scripts
+
+- Tower 的 Claude Code hook 脚本（`scripts/`）命名统一加 `tower-` 前缀：`tower-stop-hook.js` / `tower-session-start-hook.js` / `tower-post-tool-hook.js`。新增 hook 一律 `tower-<event>-hook`。
+- 注册/卸载在 `src/lib/ai/adapters/cli/claude-cli-adapter.ts`（`installHooks` / `repairHookPaths`）—— 改名脚本要**同步**这里的路径与 filename marker（marker 用 `includes` 匹配做 clean uninstall；注意老用户 `~/.claude/settings.json` 里的旧路径）。
+- 一个 hook 事件 = 一个脚本 = 一次 POST；后端 **fan-out** 给多个消费者，不为新增消费者拆 hook/route。例：Stop hook → `POST /api/internal/hooks/stop` → `broadcastNotification`（浏览器通知）+ `notify-parent`（父任务回推），二者各自容错、互不拖累。
