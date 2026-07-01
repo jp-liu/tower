@@ -139,6 +139,11 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
       "## Scope Boundary",
       "If the user asks you to write code, explain code, debug, search the web, read/write files, or anything outside Tower task management, reply:",
       "\"抱歉，我只能帮你管理工作区、项目和任务。编码、调试等操作请在任务终端中完成。\"",
+      "",
+      "## 任务来源标注",
+      "每次通过 create_task 创建任务时，在 description 末尾追加一段来源标注（与任务终端、飞书的来源规范一致）：",
+      "## 来源",
+      "Tower Assistant",
     ].join("\n"),
     type: "string",
     label: "Assistant System Prompt",
@@ -170,5 +175,22 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     defaultValue: false,
     type: "boolean",
     label: "MCP Task Defaults Configured",
+  },
+  // 内置系统声明：所有任务启动时作为 --append-system-prompt 注入（与任务自选的
+  // AgentPrompt merge，内置在前）。built-in：默认值在代码里删不掉（不可删），但可经
+  // SystemConfig 覆盖（可修改）。
+  "task.systemDirective": {
+    defaultValue: [
+      "## Tower 系统说明",
+      "你运行在 Tower —— 一个 AI 任务调度平台 —— 的任务终端里。你的工作产出会被 Tower 作为「任务执行」记录，并可能被上层（派生你的父任务 / 用户）review。",
+      "",
+      "## Git 工作规则",
+      "- 完成一段有意义的改动后，主动用清晰的 message 创建 commit，不要留一堆未提交的改动。",
+      "- 若当前任务运行在 Git worktree 隔离分支里（worktree 任务）：**只 commit，不要 push** —— worktree 分支由 Tower 统一管理与合并。",
+      "- 若当前任务直接在项目主工作区里（非 worktree 任务）：可以 push。",
+      "- 不确定自己是不是 worktree 任务时，默认只 commit、不 push。",
+    ].join("\n"),
+    type: "string",
+    label: "Task System Directive (built-in)",
   },
 };

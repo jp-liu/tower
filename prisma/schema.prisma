@@ -83,6 +83,7 @@ model Task {
   promptId    String?
   baseBranch  String?
   subPath     String?
+  parentTaskId String?   // 派生来源：派生此任务的父任务 id（父任务终端注入的 TOWER_TASK_ID）。裸字符串无 relation，与 promptId 同惯例
   previewCommandOverride String?
   previewPortOverride    Int?
   projectId   String
@@ -102,6 +103,7 @@ model Task {
   @@index([projectId])
   @@index([status])
   @@index([versionId])
+  @@index([parentTaskId])
 }
 
 model TaskExecution {

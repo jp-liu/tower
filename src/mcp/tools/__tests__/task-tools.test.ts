@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { vi, describe, it, expect, beforeEach } from "vitest";
+import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 // Mock db BEFORE imports — vi.mock is hoisted but we need the mock available
 const mockTx = {
@@ -20,6 +20,7 @@ vi.mock("../../db", () => ({
   db: {
     task: {
       findMany: vi.fn(),
+      findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
@@ -68,6 +69,7 @@ import { taskTools } from "../task-tools";
 const mockDb = db as {
   task: {
     findMany: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
@@ -396,6 +398,39 @@ describe("task-tools", () => {
       });
 
       expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    // ─── parent task binding（结构化父子关系；来源文案归 tower skill，handler 不碰）──
+    describe("parent task binding", () => {
+      afterEach(() => {
+        vi.unstubAllEnvs();
+      });
+
+      it("binds parentTaskId when TOWER_TASK_ID resolves to an existing task", async () => {
+        vi.stubEnv("TOWER_TASK_ID", "parent-1");
+        mockDb.task.findUnique.mockResolvedValue({ id: "parent-1" });
+        mockDb.task.create.mockResolvedValue({ id: "t1", title: "T" });
+        await taskTools.create_task.handler({ projectId: "p1", title: "T", autoStart: false });
+        expect(mockDb.task.create).toHaveBeenCalledWith({
+          data: expect.objectContaining({ parentTaskId: "parent-1" }),
+        });
+      });
+
+      it("leaves parentTaskId null when there is no TOWER_TASK_ID", async () => {
+        vi.stubEnv("TOWER_TASK_ID", "");
+        mockDb.task.create.mockResolvedValue({ id: "t1", title: "T" });
+        await taskTools.create_task.handler({ projectId: "p1", title: "T", autoStart: false });
+        const call = mockDb.task.create.mock.calls[0][0] as { data: { parentTaskId: string | null } };
+        expect(call.data.parentTaskId).toBeNull();
+      });
+
+      it("never appends a 来源 section — tower skill owns description source", async () => {
+        vi.stubEnv("TOWER_TASK_ID", "");
+        mockDb.task.create.mockResolvedValue({ id: "t1", title: "T" });
+        await taskTools.create_task.handler({ projectId: "p1", title: "T", description: "原始", autoStart: false });
+        const call = mockDb.task.create.mock.calls[0][0] as { data: { description?: string } };
+        expect(call.data.description).toBe("原始");
+      });
     });
   });
 
