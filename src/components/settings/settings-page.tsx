@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useI18n } from "@/lib/i18n";
+import { toast } from "sonner";
 import type { Locale } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +55,12 @@ import {
   deletePrompt,
   setDefaultPrompt,
 } from "@/actions/prompt-actions";
+import {
+  getBuiltinPrompts,
+  saveSystemDirective,
+  resetSystemDirective,
+  type BuiltinPromptsData,
+} from "@/actions/builtin-prompt-actions";
 import { getAvailableProviders } from "@/actions/ai-config-actions";
 import type { TestResult } from "@/lib/cli-test";
 import type { ProviderAvailability } from "@/lib/ai/types";
@@ -345,6 +352,10 @@ export function SettingsPage() {
   const [promptName, setPromptName] = useState("");
   const [promptDescription, setPromptDescription] = useState("");
   const [promptContent, setPromptContent] = useState("");
+  // 内置提示语：系统声明（可编辑）+ 子任务回推引导语（只读）
+  const [builtinPrompts, setBuiltinPrompts] = useState<BuiltinPromptsData | null>(null);
+  const [directiveDraft, setDirectiveDraft] = useState("");
+  const [savingDirective, setSavingDirective] = useState(false);
 
   // ── System Config state ────────────────────────────────────────
   const [rules, setRules] = useState<GitPathRule[]>([]);
@@ -447,6 +458,14 @@ export function SettingsPage() {
   // Prompts load
   useEffect(() => {
     getPrompts().then(setPrompts);
+  }, []);
+
+  // 内置提示语 load
+  useEffect(() => {
+    getBuiltinPrompts().then((b) => {
+      setBuiltinPrompts(b);
+      setDirectiveDraft(b.systemDirective);
+    });
   }, []);
 
   // System config load
@@ -667,6 +686,32 @@ export function SettingsPage() {
     },
     [router]
   );
+
+  const handleSaveDirective = useCallback(async () => {
+    setSavingDirective(true);
+    try {
+      await saveSystemDirective(directiveDraft);
+      const b = await getBuiltinPrompts();
+      setBuiltinPrompts(b);
+      setDirectiveDraft(b.systemDirective);
+      toast.success(t("settings.prompts.builtin.saved"));
+    } finally {
+      setSavingDirective(false);
+    }
+  }, [directiveDraft, t]);
+
+  const handleResetDirective = useCallback(async () => {
+    setSavingDirective(true);
+    try {
+      const def = await resetSystemDirective();
+      const b = await getBuiltinPrompts();
+      setBuiltinPrompts(b);
+      setDirectiveDraft(def);
+      toast.info(t("settings.prompts.builtin.resetDone"));
+    } finally {
+      setSavingDirective(false);
+    }
+  }, [t]);
 
   // =========================================================================
   // HANDLERS — System Config
@@ -1201,6 +1246,74 @@ export function SettingsPage() {
 
     return (
       <div className="space-y-4">
+        {/* 内置提示语：系统声明（可编辑不可删）+ 子任务回推引导语（只读） */}
+        {builtinPrompts && (
+          <div className="space-y-4 rounded-xl border border-border/50 p-4">
+            <div>
+              <h3 className="text-sm font-medium">{t("settings.prompts.builtin.title")}</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t("settings.prompts.builtin.desc")}
+              </p>
+            </div>
+
+            {/* 系统声明 — 可编辑 */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm">{t("settings.prompts.builtin.systemTitle")}</Label>
+                {builtinPrompts.systemDirectiveIsCustom && (
+                  <Badge variant="secondary" className="rounded-full text-xs">
+                    {t("settings.prompts.builtin.modified")}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("settings.prompts.builtin.systemDesc")}
+              </p>
+              <Textarea
+                value={directiveDraft}
+                onChange={(e) => setDirectiveDraft(e.target.value)}
+                rows={8}
+                className="font-mono text-xs"
+              />
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleResetDirective}
+                  disabled={savingDirective || !builtinPrompts.systemDirectiveIsCustom}
+                >
+                  {t("settings.prompts.builtin.resetDefault")}
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={handleSaveDirective}
+                  disabled={savingDirective || directiveDraft === builtinPrompts.systemDirective}
+                >
+                  {t("settings.prompts.save")}
+                </Button>
+              </div>
+            </div>
+
+            {/* 子任务回推引导语 — 只读 */}
+            <div className="space-y-2 border-t border-border/50 pt-4">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm">{t("settings.prompts.builtin.childTitle")}</Label>
+                <Badge variant="outline" className="rounded-full text-xs">
+                  {t("settings.prompts.builtin.readonly")}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("settings.prompts.builtin.childDesc")}
+              </p>
+              <Textarea
+                value={builtinPrompts.childReviewPrompt}
+                readOnly
+                rows={8}
+                className="font-mono text-xs bg-muted/40 cursor-default"
+              />
+            </div>
+          </div>
+        )}
+
         {/* Create button */}
         <div className="flex justify-end">
           <Button
