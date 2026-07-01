@@ -358,7 +358,10 @@ export async function getWorkspacesWithActiveTasks() {
         orderBy: { createdAt: "asc" },
       },
     },
-    orderBy: { updatedAt: "desc" },
+    // Match the sidebar's ordering (layout.tsx): honor the manual drag-reorder
+    // `order` field first, falling back to most-recently-updated. Keeps the
+    // task picker's workspace list consistent with the sidebar.
+    orderBy: [{ order: "asc" }, { updatedAt: "desc" }],
   });
 }
 
