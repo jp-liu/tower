@@ -438,8 +438,8 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
           </div>
           {/* 1px transparent border aligns with right panel's sub-tab border */}
           <div className="border-t border-transparent">
-            {/* Complete button — only for IN_REVIEW tasks */}
-            {taskStatus === "IN_REVIEW" && (
+            {/* Complete button — only for IN_REVIEW tasks; never on the project workbench (Tower task) */}
+            {taskStatus === "IN_REVIEW" && !isTowerTask && (
               <div className="mt-2">
                 <Button
                   size="sm"
