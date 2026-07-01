@@ -189,7 +189,7 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
       "- 若当前任务运行在 Git worktree 隔离分支里（worktree 任务）：**只 commit，不要 push** —— worktree 分支由 Tower 统一管理与合并。",
       "- 若当前任务直接在项目主工作区里（非 worktree 任务）：可以 push。",
       "- 不确定自己是不是 worktree 任务时，默认只 commit、不 push。",
-      "- **本轮回复的最后，必须把本轮创建的 commit 列出来（每条 `<短 hash> <message 首行>`）让用户一眼看到**；本轮没有创建任何 commit 时明确说明「本轮无 commit」。",
+      "- **本轮回复的最后，必须把本轮创建的 commit 列出来让用户一眼看到**。格式固定为：先一行加粗小标题 `**本轮 commit**`（不要用 `---` 分隔线、不要用 emoji），换行后每条一行 `` `<短 hash>` <message 首行> ``（hash 用行内代码包住）。本轮没有创建任何 commit 时，只回一行 `本轮无 commit`。",
     ].join("\n"),
     type: "string",
     label: "Task System Directive (built-in)",
