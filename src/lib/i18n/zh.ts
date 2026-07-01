@@ -199,6 +199,8 @@ export const zh = {
   "settings.prompts.default": "默认",
   "settings.prompts.empty": "暂无提示词",
   "settings.prompts.emptyHint": "点击上方按钮创建第一个提示词",
+  "settings.prompts.custom.title": "自定义提示语",
+  "settings.prompts.custom.desc": "你自己创建的 prompt 模板。",
   "settings.prompts.builtin.title": "内置提示语",
   "settings.prompts.builtin.desc": "Tower 内置的系统级提示语，与你自定义的提示词模板分开管理。",
   "settings.prompts.builtin.systemTitle": "任务系统声明",

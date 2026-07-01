@@ -11,6 +11,12 @@ paths:
 - All Button and SelectTrigger use **default size** (`h-8` = 32px). Never use `size="sm"`.
 - Inputs, selects, and buttons that sit side by side must use the same height.
 
+## Card / Container Backgrounds
+
+- 卡片 / 区块容器**必须带背景色 `bg-card`**（灰底），不要只写 `border` 不写 `bg-*` —— 透明容器在纯黑页面背景下几乎只剩边框、看不清、没分量。
+- 参考：设置页 Extensions 卡片、Prompts 内置/自定义区块都用 `rounded-xl border bg-card p-4`。
+- 容器内再嵌的小提示 / 代码预览块用 `bg-muted/30` 与外层区分。
+
 ## Dialog (shadcn)
 
 - `DialogContent` ships with `sm:max-w-sm` (≈ 384px) baked into its default class list.

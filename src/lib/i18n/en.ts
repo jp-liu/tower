@@ -188,6 +188,8 @@ export const en: Translations = {
   "settings.prompts.default": "Default",
   "settings.prompts.empty": "No prompts yet",
   "settings.prompts.emptyHint": "Click the button above to create your first prompt",
+  "settings.prompts.custom.title": "Custom Prompts",
+  "settings.prompts.custom.desc": "Prompt templates you created yourself.",
   "settings.prompts.builtin.title": "Built-in Prompts",
   "settings.prompts.builtin.desc": "Tower's built-in system-level prompts, managed separately from your custom prompt templates.",
   "settings.prompts.builtin.systemTitle": "Task System Directive",

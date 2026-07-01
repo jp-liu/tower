@@ -40,6 +40,8 @@ import {
   CheckCircle2,
   XCircle,
   FolderOpen,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   getConfigValue,
@@ -53,7 +55,6 @@ import {
   createPrompt,
   updatePrompt,
   deletePrompt,
-  setDefaultPrompt,
 } from "@/actions/prompt-actions";
 import {
   getBuiltinPrompts,
@@ -677,16 +678,6 @@ export function SettingsPage() {
     router.refresh();
   }, [deletePromptId, router]);
 
-  const handleSetDefaultPrompt = useCallback(
-    async (promptId: string) => {
-      await setDefaultPrompt(promptId);
-      const updated = await getPrompts();
-      setPrompts(updated);
-      router.refresh();
-    },
-    [router]
-  );
-
   const handleSaveDirective = useCallback(async () => {
     setSavingDirective(true);
     try {
@@ -914,6 +905,15 @@ export function SettingsPage() {
   const handleClose = useCallback(() => {
     router.back();
   }, [router]);
+
+  // 顶部 tab 栏：项目多了会横向溢出，鼠标在可点击 tab 上难滚动 —— 左右箭头各滚一个 tab 宽度。
+  const scrollTabs = useCallback((dir: "left" | "right") => {
+    const c = tabsRef.current;
+    if (!c) return;
+    const firstTab = c.querySelector<HTMLElement>("[data-section]");
+    const step = firstTab ? firstTab.offsetWidth + 4 : 140;
+    c.scrollBy({ left: dir === "left" ? -step : step, behavior: "smooth" });
+  }, []);
 
   useEffect(() => {
     const container = tabsRef.current;
@@ -1248,7 +1248,7 @@ export function SettingsPage() {
       <div className="space-y-4">
         {/* 内置提示语：系统声明（可编辑不可删）+ 子任务回推引导语（只读） */}
         {builtinPrompts && (
-          <div className="space-y-4 rounded-xl border border-border/50 p-4">
+          <div className="space-y-4 rounded-xl border border-border/50 bg-card p-4">
             <div>
               <h3 className="text-sm font-medium">{t("settings.prompts.builtin.title")}</h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -1314,93 +1314,67 @@ export function SettingsPage() {
           </div>
         )}
 
-        {/* Create button */}
-        <div className="flex justify-end">
-          <Button
-            onClick={openCreatePromptDialog}
-            variant="default"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            {t("settings.prompts.newPrompt")}
-          </Button>
-        </div>
-
-        {/* Prompt list — table-like rows */}
-        {prompts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center rounded-lg border border-dashed border-border/50">
-            <p className="text-muted-foreground">
-              {t("settings.prompts.empty")}
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t("settings.prompts.emptyHint")}
-            </p>
+        {/* 自定义提示语 — 用一个容器区块包起来，与上方内置区块对称、更有分量 */}
+        <div className="rounded-xl border border-border/50 bg-card p-4 space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <h3 className="text-sm font-medium">{t("settings.prompts.custom.title")}</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t("settings.prompts.custom.desc")}
+              </p>
+            </div>
+            <Button onClick={openCreatePromptDialog} variant="default" className="shrink-0">
+              <Plus className="h-4 w-4 mr-2" />
+              {t("settings.prompts.newPrompt")}
+            </Button>
           </div>
-        ) : (
-          <div className="rounded-xl border border-border/50 divide-y divide-border/50">
-            {prompts.map((prompt) => (
-              <div
-                key={prompt.id}
-                className="flex items-center justify-between px-4 py-3.5 hover:bg-muted/30 transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-sm font-medium truncate">
-                      {prompt.name}
-                    </h4>
-                    {prompt.isDefault && (
-                      <Badge
-                        variant="secondary"
-                        className="shrink-0 rounded-full text-xs"
-                      >
-                        <Star className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
-                        {t("settings.prompts.default")}
-                      </Badge>
+
+          {prompts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center rounded-lg border border-dashed border-border/50">
+              <p className="text-muted-foreground">{t("settings.prompts.empty")}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t("settings.prompts.emptyHint")}
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border/50 divide-y divide-border/50">
+              {prompts.map((prompt) => (
+                <div
+                  key={prompt.id}
+                  className="flex items-center justify-between px-4 py-3.5 hover:bg-muted/30 transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-medium truncate">{prompt.name}</h4>
+                    {prompt.description && (
+                      <p className="mt-0.5 text-xs text-muted-foreground truncate">
+                        {prompt.description}
+                      </p>
                     )}
                   </div>
-                  {prompt.description && (
-                    <p className="mt-0.5 text-xs text-muted-foreground truncate">
-                      {prompt.description}
-                    </p>
-                  )}
+                  <div className="flex items-center gap-1 shrink-0 ml-4">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => openEditPromptDialog(prompt)}
+                      title={t("settings.prompts.editPrompt")}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setDeletePromptId(prompt.id)}
+                      className="text-destructive"
+                      title={t("settings.prompts.delete")}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0 ml-4">
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => handleSetDefaultPrompt(prompt.id)}
-                    title={t("settings.prompts.setDefault")}
-                  >
-                    <Star
-                      className={cn(
-                        "h-4 w-4",
-                        prompt.isDefault
-                          ? "fill-yellow-400 text-yellow-400"
-                          : "text-muted-foreground"
-                      )}
-                    />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => openEditPromptDialog(prompt)}
-                    title={t("settings.prompts.editPrompt")}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => setDeletePromptId(prompt.id)}
-                    className="text-destructive"
-                    title={t("settings.prompts.delete")}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Create/Edit Dialog */}
         <Dialog open={promptDialogOpen} onOpenChange={setPromptDialogOpen}>
@@ -2386,7 +2360,20 @@ export function SettingsPage() {
           </div>
 
           {/* Horizontal tab navigation */}
-          <div ref={tabsRef} className="relative flex gap-1 overflow-x-auto">
+          <div className="relative flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => scrollTabs("left")}
+              className="shrink-0"
+              aria-label="scroll tabs left"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div
+              ref={tabsRef}
+              className="relative flex flex-1 gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+            >
             {SECTIONS.map((section) => {
               const Icon = section.icon;
               const isActive = activeSection === section.id;
@@ -2433,6 +2420,16 @@ export function SettingsPage() {
                 width: indicatorStyle.width,
               }}
             />
+            </div>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => scrollTabs("right")}
+              className="shrink-0"
+              aria-label="scroll tabs right"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </div>
