@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   if (blocked) return blocked;
 
   const installed = await claudeAdapter.isHooksInstalled();
-  const hookPath = path.join(getPackageRoot(), "scripts", "post-tool-hook.js");
+  const hookPath = path.join(getPackageRoot(), "scripts", "tower-post-tool-hook.js");
 
   return NextResponse.json({
     installed,

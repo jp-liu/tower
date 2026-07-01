@@ -79,9 +79,9 @@ export class ClaudeCliAdapter implements CliAdapter {
       const settings = this.readSettings();
       const hooks = (settings["hooks"] as Record<string, unknown>) ?? {};
       const root = getPackageRoot().replace(/\\/g, "/");
-      const sessionStart = path.join(root, "scripts", "session-start-hook.js").replace(/\\/g, "/");
-      const postTool = path.join(root, "scripts", "post-tool-hook.js").replace(/\\/g, "/");
-      const stop = path.join(root, "scripts", "stop-hook.js").replace(/\\/g, "/");
+      const sessionStart = path.join(root, "scripts", "tower-session-start-hook.js").replace(/\\/g, "/");
+      const postTool = path.join(root, "scripts", "tower-post-tool-hook.js").replace(/\\/g, "/");
+      const stop = path.join(root, "scripts", "tower-stop-hook.js").replace(/\\/g, "/");
       let changed = false;
 
       changed = this.upsertHook(hooks, "SessionStart", "session-start-hook.js", {
@@ -125,19 +125,22 @@ export class ClaudeCliAdapter implements CliAdapter {
       const settings = this.readSettings();
       const hooks = (settings["hooks"] as Record<string, unknown>) ?? {};
       const root = getPackageRoot().replace(/\\/g, "/");
-      const map: Array<[string, string]> = [
-        ["SessionStart", "session-start-hook.js"],
-        ["PostToolUse", "post-tool-hook.js"],
-        ["Stop", "stop-hook.js"],
+      // [event, matchName(短名 marker，includes 同时匹配旧 stop-hook.js 与新
+      //  tower-stop-hook.js), wantedName(改名后的目标文件)]。短名匹配让老用户
+      //  settings.json 里的旧 entry 在下次 repair 时自动迁移到 tower- 前缀（幂等）。
+      const map: Array<[string, string, string]> = [
+        ["SessionStart", "session-start-hook.js", "tower-session-start-hook.js"],
+        ["PostToolUse", "post-tool-hook.js", "tower-post-tool-hook.js"],
+        ["Stop", "stop-hook.js", "tower-stop-hook.js"],
       ];
       let changed = false;
-      for (const [event, filename] of map) {
+      for (const [event, matchName, wantedName] of map) {
         const entries = this.getHookArray(hooks, event);
         const idx = entries.findIndex((e) =>
-          e?.hooks?.some?.((h: { command?: string }) => h.command?.includes(filename))
+          e?.hooks?.some?.((h: { command?: string }) => h.command?.includes(matchName))
         );
         if (idx < 0) continue;
-        const wantedPath = path.join(root, "scripts", filename).replace(/\\/g, "/");
+        const wantedPath = path.join(root, "scripts", wantedName).replace(/\\/g, "/");
         const wantedCmd = `node "${wantedPath}"`;
         const hookCmd = entries[idx]?.hooks?.[0];
         if (!hookCmd || hookCmd.command === wantedCmd) continue;
