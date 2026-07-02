@@ -18,6 +18,8 @@ Tower **不发送、不接收平台消息**，也不维护「任务 ↔ 会话/�
 | **tower-ask（出站）** | 任务 agent | 按下面的格式把问题/进度**用平台 MCP 发出去**，再调 `ask_human`/`notify_human` 让 Tower 记录 + park。 |
 | **bridge（入站）** | 常驻的 MCP agent（bot / OpenClaw / …） | 收平台上人的回复 → 认出 taskId → 用 `reply_to_ask(taskId, text)` 送回任务。非任务类（创建/查询）用普通 MCP 工具处理。 |
 
+> `tower-loop` / `tower-ask` / `bridge` 只是本文档里对**角色/流程**的称呼，**不是可 `/调用` 的 skill**，也不用去找同名工具。它们描述的是"谁在什么时候按什么规则做"。
+
 ---
 
 ## 出站：怎么把消息发给人
@@ -52,10 +54,17 @@ Tower **不发送、不接收平台消息**，也不维护「任务 ↔ 会话/�
    - `gateway=openclaw` / `hermes`（网关转下游）：
      > 用 **openclaw** 通过 **微信** 发给「后端值班群」：登录页改造需要你拍板…… `[[tower:task=cxxx]]`
 
-   —— `downstream` 决定"通过什么"，目的地（群/人）由消息正文给出。
+   —— `downstream` 决定"通过什么"，目的地（群/人）由消息正文给出。**若只知道名称（群名/人名）而无平台 id，
+   先用平台 MCP 按名称查出 id 再发**（同「测试」按钮的逻辑）。
 
-4. **调 Tower 记录 + park**：`ask_human(taskId, question)` 或 `notify_human(taskId, message)`。
-   Tower 只记一条日志行并 park —— **不会再重复发送**。
+4. **发送成功后再调 Tower 记录**：
+   - `ask_human(taskId, question)` —— **记录 + park**（结束本回合，等人回复）。
+   - `notify_human(taskId, message)` —— **只记录、不 park、不结束回合**（发完继续干）。
+   - 这两个工具**只在 Tower 内留档，本身不外发**；顺序必须是「第 1–3 步先经平台 MCP 发出去 → 确认成功 → 再调它们」。
+
+### 失败与幂等
+- **平台发送失败**时**不要**调 `ask_human`（否则任务被 park 却没人收到问题、永久卡死）—— 重试，或把问题留在 `/harness` 面板后停下等人。
+- 同一任务同一时刻只有一条待回复 ask（`ask_human` 会自动取消旧的 OPEN ask），`[[tower:task=<id>]]` 口令即幂等键；`reply_to_ask` 对已应答的 ask 幂等、不会重复注入。
 
 > 记录的 `content` 应与你发出去的正文一致（口令可省略在记录里），这样 `/harness` 日志里「问了什么」才准确。
 

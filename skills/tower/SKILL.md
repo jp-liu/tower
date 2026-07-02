@@ -39,6 +39,7 @@ Use Tower tools when the user wants to:
 - Organize tasks with labels or status changes
 - Get daily work summary or pending todo list
 - Check what was done today or what's left to do
+- **Run or relay unattended tasks** — when `TOWER_UNATTENDED=1`, or you need to push an `ask_human` / `notify_human` to a person, or relay a human's reply back into a parked task (`reply_to_ask`): read [`references/unattended-messaging.md`](references/unattended-messaging.md) for the send/receive contract.
 
 ---
 
