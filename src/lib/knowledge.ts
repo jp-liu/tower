@@ -164,9 +164,12 @@ export async function queryProjectKnowledge(
   const anchor = await db.project.findUnique({ where: { id: projectId } });
   if (!anchor) throw new Error(`Project not found: ${projectId}`);
 
-  // 产品组：同 productKey 的兄弟项目一起检索（前后端）。
+  // 产品组：同 productKey 的兄弟项目一起检索（前后端）。限定同 workspace——
+  // 不同 workspace 碰巧用同名 productKey 不应互相串数据。
   const group = anchor.productKey
-    ? await db.project.findMany({ where: { productKey: anchor.productKey } })
+    ? await db.project.findMany({
+        where: { productKey: anchor.productKey, workspaceId: anchor.workspaceId },
+      })
     : [anchor];
 
   const result: KnowledgeResult = {
