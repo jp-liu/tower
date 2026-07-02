@@ -18,6 +18,16 @@ vi.mock("@/lib/pty/ws-server", () => ({
   broadcastNotification: mockBroadcastNotification,
 }));
 
+const mockDestroySession = vi.fn();
+vi.mock("@/lib/pty/session-store", () => ({
+  destroySession: mockDestroySession,
+}));
+
+const mockNotifyParent = vi.fn();
+vi.mock("@/lib/derive/notify-parent", () => ({
+  notifyParentOnChildStop: mockNotifyParent,
+}));
+
 // Mock the db
 vi.mock("@/lib/db", () => ({
   db: {
@@ -25,6 +35,10 @@ vi.mock("@/lib/db", () => ({
       findUnique: vi.fn(),
     },
     taskExecution: {
+      findFirst: vi.fn(),
+    },
+    // Harness park 分叉查询 PENDING（默认 undefined → 无 pending，走正常 fan-out 流程）
+    humanInputRequest: {
       findFirst: vi.fn(),
     },
   },
@@ -110,5 +124,40 @@ describe("Stop hook API", () => {
         workspaceName: "Test Workspace",
       })
     );
+  });
+
+  it("有 PENDING 请求时 park：destroySession 且不回推父任务", async () => {
+    const { db } = await import("@/lib/db");
+    (db.task.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "ctask123456789012345",
+      title: "Test Task",
+      projectId: "cproj1234567890123456",
+      project: {
+        name: "Test Project",
+        workspaceId: "cws12345678901234567",
+        workspace: { name: "Test Workspace" },
+      },
+    });
+    // 该任务有等待人回复的 PENDING → 走 park 分叉
+    (db.humanInputRequest.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "creq12345678901234567",
+      status: "PENDING",
+    });
+
+    const { POST } = await import("@/app/api/internal/hooks/stop/route");
+    const request = new Request("http://localhost:3000/api/internal/hooks/stop", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId: "ctask123456789012345", sessionId: "s1" }),
+    });
+
+    const response = await POST(request as never);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.parked).toBe(true);
+    expect(mockDestroySession).toHaveBeenCalledWith("ctask123456789012345");
+    // park 不是完成事件 → 不回推父任务
+    expect(mockNotifyParent).not.toHaveBeenCalled();
   });
 });
