@@ -62,13 +62,36 @@
 ## 2. Codex 适配器的真实 bug（盲写 vs 0.142.5）
 
 1. **`--full-auto` 不存在（P0，阻塞）** — `codex-cli-adapter.ts:32` fresh-start `args.push("--full-auto")`。真实 CLI 无此 flag，PTY 一启动 codex 报未知参数直接退出。
-   - 修法：改用 `--dangerously-bypass-approvals-and-sandbox`（等价 Claude 的 `--dangerously-skip-permissions`，Tower 终端本就是自动执行语义）。
-2. **模型列表过时（P1）** — `CODEX_MODELS`（:15）与 `providers/codex.ts:15` 均为旧 OpenAI 模型名。修为 `["gpt-5.5","gpt-5.4","gpt-5.4-mini"]`；或留空数组让 codex 用账号默认（resolver 仅在列表非空时校验 model）。
-   - 备注：codex 默认模型由用户 `~/.codex/config.toml` / 账号决定，Tower 不指定 `-m` 时用默认最稳。倾向**默认不传 `-m`**，UI 模型下拉可选、留空=账号默认。
-3. **hello probe（P2，待实测）** — `buildHelloProbeArgs` 返回 `codex exec "<prompt>"`（无 bypass）。`codex exec` 非交互、默认 read-only，理论上直接应答；但若因 approval/sandbox 挂起，需补 `--dangerously-bypass-approvals-and-sandbox` 或 `-a never`。**先按现状实测，挂了再补。**
-4. **hook 事件名大小写** — adapter 写 PascalCase，实测 codex 已接受（生成了 `[hooks.state]`）。**无需改**，仅记录。
+   - 修法：改用 `--dangerously-bypass-approvals-and-sandbox`（对齐 Claude adapter 的 `--dangerously-skip-permissions` 语义，见 §2.5 决策 D1）。
+2. **resume 路径同样坏（P1，codex 审查发现）** — `codex-cli-adapter.ts:24` resume 分支提前返回，只有 `resume <id>` / `resume --last`，**不带自治标志、不带 `extraArgs`**。对照 `claude-cli-adapter.ts:20-26`：Claude 先无条件拼 `--dangerously-skip-permissions` + `extraArgs`，**再**进 resume/continue/fresh 分支。Codex 必须照此结构，否则 resume 出来的会话会卡审批、丢 `--model` 等 extraArgs。
+   - 修法：把全局标志（bypass）+ `extraArgs` 提到分支之前，与 Claude 一致。resume 分支**不追加 prompt**（终端 resume 是交互式续跑，与 Claude 一致）。
+3. **模型列表过时（P1）** — `CODEX_MODELS`（:15）与 `providers/codex.ts:15` 均为旧 OpenAI 模型名。**决定：置空数组**（见 §2.5 决策 D2）。codex 不传 `-m` 时用账号默认；resolver 仅在列表非空时校验 model，空列表即避免误报「模型不可用」。
+4. **hook 事件名大小写** — adapter 写 PascalCase，实测 codex 已接受（config.toml 生成了 `[hooks.state]`）。**无需改**，仅记录 + 顺手把 adapter 里 "Codex CLI 1.x" 过时注释更正为 0.142.x。
+5. **hello probe stdin（codex 审查提出，经查非 bug）** — `codex exec` 会读 stdin，未关会挂（本机实测：裸 shell 里 `codex exec "x"` 卡在 "Reading additional input from stdin..."）。但 Tower 的 probe 走 `cli-test.ts` 的 `runProcess`，`stdio: [..."ignore"..., "pipe","pipe"]`（probe 不传 stdin → stdin=`ignore`=/dev/null 已关）→ **不会挂，无需改**。终端 PTY 路径 stdin 是 TTY（交互模式），也不受影响。仅记录该坑，防未来有人给 probe 加 stdin 时踩雷。
 
 ---
+
+## 2.5 Codex 审查结论与采纳（2026-07-02，codex-cli 0.142.5, medium effort）
+
+把设计文档 + 两个 adapter 文件交给 codex 独立审查，7 条发现的处置：
+
+| # | codex 发现 | 采纳 |
+|---|-----------|------|
+| P1 | resume 路径没带自治标志/extraArgs | **采纳** → §2 bug 2，修 |
+| P1 | 延后 query 迁移在 codex-only 下 summary 会失败 | **部分采纳**：经查 summary/dreaming 是 fire-and-forget + try/catch 只记日志（`execution-summary.ts:222-228`，dreaming「never throws」），**不阻断任务流**，属优雅降级。→ 决策 D3：MVP 接受降级，UI 明示「summary/dreaming/analysis 暂固定 Claude」，Phase B 迁移。 |
+| P1 | hello probe 不保证关 stdin | **查证非 bug**（probe 走 `stdio:ignore`）→ §2 记录 5，不改 |
+| P2 | 优先 `-a never --sandbox workspace-write` 而非全 bypass | **不采纳（决策 D1）**，理由见下，但**标注给用户裁决** |
+| P2 | prompt 前加 `--`、防 `-a/-s` 冲突 | **不采纳（YAGNI）**：Claude adapter 不用 `--` 且稳定运行多版本；Tower 终端 extraArgs 不含 `-a/-s`，任务标题不以 `-` 开头。未验证的 `--` 反而可能破坏交互模式。记录为「考虑过，延后」 |
+| P2 | 模型列表置空 | **采纳（决策 D2）** |
+| P3 | 更新 "Codex 1.x" 过时注释 | **采纳** → §2 bug 4 |
+
+**决策 D1 — 终端权限用 `--dangerously-bypass-approvals-and-sandbox`（全 bypass），不用 `-a never --sandbox workspace-write`。**
+- 理由：Tower 终端的既定契约 = Claude 的 `--dangerously-skip-permissions`（全 YOLO）。codex 的 `workspace-write` 沙箱默认**禁网络**，会直接掐断 dev agent 的 `pnpm install` / 起 dev server / 访问 workspace 外路径等常规操作，导致 codex 终端体验**劣于** Claude 终端。全 bypass 才能行为对齐、无摩擦。
+- 但这是**安全取舍**，codex 的顾虑成立（bypass 完全关沙箱=agent 有主机全权）。**实现里用单一常量 + `ponytail:` 注释标注更安全的替代**，改用 `-a never -s workspace-write` 只需一行。**留给用户明早裁决**（§7 待决项）。
+
+**决策 D2 — codex `models.cli = []`（空）。** 账号默认最稳，避免硬编码模型名随 codex 版本/账号漂移导致的误报。UI 模型下拉对 codex 显示「账号默认」。
+
+**决策 D3 — query 插槽（summary/dreaming/analysis）MVP 保持 Claude，明示不迁移。** 前两者 fire-and-forget 降级安全；analysis 是项目导入时 awaited 的独立流程，不由「跑 codex 任务」触发，MVP 不涉及。UI 插槽面板对这 4 个插槽灰显 + 注明，避免用户误以为已生效。
 
 ## 3. 方案：MVP = Codex 终端端到端可用
 
@@ -83,10 +106,13 @@
 
 ### 3.2 Phase A 改动清单
 
-**改动 1：修 Codex 适配器（§2 的 1、2）**
-- `codex-cli-adapter.ts:32`：`--full-auto` → `--dangerously-bypass-approvals-and-sandbox`。
-- `codex-cli-adapter.ts:15` `CODEX_MODELS` 与 `providers/codex.ts:15` `models.cli`：更新为真实模型或留空。
-- 更新对应单测 `__tests__/codex-cli-adapter.test.ts` 的 spawn 断言。
+**改动 1：修 Codex 适配器（§2 的 bug 1/2/3/4）**
+- `buildSpawnArgs` 重构成 Claude adapter 同构：先无条件 `args.push("--dangerously-bypass-approvals-and-sandbox")` + `extraArgs`，**再**进 `resumeSessionId` / `continueLatest` / fresh 分支。
+  - fresh：`--full-auto` 删除（bug 1）；prompt 作位置参数追加。
+  - resume：`resume <id>` / `resume --last`，**不追加 prompt**（bug 2，与 Claude 一致）。
+- `CODEX_MODELS`（:15）与 `providers/codex.ts:15` `models.cli`：**置空 `[]`**（决策 D2）；`getModels()` 返回 `[]`。
+- 更正 adapter 里 "Codex CLI 1.x" 注释为 0.142.x（bug 4）。
+- 更新单测 `__tests__/codex-cli-adapter.test.ts` 的 spawn 断言（fresh + resume 两条）。
 
 **改动 2：能力插槽 Settings UI（新面板）**
 - 新组件 `src/components/settings/capability-slots-panel.tsx`：
@@ -138,3 +164,10 @@
 ## 6. 端到端验证记录
 
 （实现后回填）
+
+---
+
+## 7. 待用户裁决（明早）
+
+1. **终端权限强度（决策 D1）** — 当前实现用全 bypass（`--dangerously-bypass-approvals-and-sandbox`），对齐 Claude 的全 YOLO，无摩擦但 agent 有主机全权。codex 审查建议更保守的 `-a never -s workspace-write`（保留沙箱，但默认禁网络可能掐断 pnpm install / dev server）。代码里已用常量 + 注释标好切换点，改一行即可。**倾向保持全 bypass（与 Claude 一致），请确认。**
+2. **Phase B 是否排期** — query 插槽迁移（summary/dreaming/analysis/assistant 走 `resolveQueryAdapter`）+ assistant 多 provider。建议你在场时逐个实测再做。
