@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getSignalDir } from "@/lib/tower-dir";
 
 /**
  * Orphan process reaping across Tower restarts.
@@ -24,7 +24,7 @@ import { join } from "node:path";
  * If verification fails we skip the kill and just drop the stale file.
  */
 
-const SIGNAL_DIR = join(tmpdir(), "tower-signals");
+const SIGNAL_DIR = getSignalDir();
 const PID_PREFIX = "pid-";
 
 /** Substrings that identify a process as a CLI Tower spawned (see security.md allowlist). */

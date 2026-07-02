@@ -11,6 +11,7 @@ import { cancelOpenAsks } from "@/lib/harness/harness-message";
 import { writeFile, rm, mkdtemp, mkdir } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import { getSignalDir } from "@/lib/tower-dir";
 
 export interface ActiveExecutionInfo {
   executionId: string;
@@ -29,7 +30,7 @@ export interface ActiveExecutionInfo {
 
 const log = logger.create("agent-actions");
 
-const SIGNAL_DIR = join(tmpdir(), "tower-signals");
+const SIGNAL_DIR = getSignalDir();
 
 async function writeExitSignal(taskId: string, exitCode: number): Promise<void> {
   try {

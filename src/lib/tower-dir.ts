@@ -20,7 +20,8 @@
  */
 
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 import { mkdirSync, existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 
 let _dir: string | undefined;
@@ -56,6 +57,22 @@ export function getTowerDbPath(): string {
 export function getTowerDbFilePath(): string {
   const root = process.env.TOWER_DATA_DIR || join(homedir(), ".tower");
   return join(root, "database", "tower.db");
+}
+
+/**
+ * Signal file directory, isolated per data root: $TMPDIR/tower-signals/<hash>.
+ *
+ * PTY pid files (orphan reaper) and exit signals live here. It sits in $TMPDIR
+ * (not the data dir) so a reboot clears it, but MUST be keyed by TOWER_DATA_DIR
+ * so a parallel prod (~/.tower) and dev (~/.tower-dev) never share it — otherwise
+ * one instance's orphan reaper reads the other's live pid files and SIGKILLs its
+ * running terminals. Reads the env directly (no getTowerDir → no dir creation);
+ * callers mkdir this path themselves with 0700. Returns the path only.
+ */
+export function getSignalDir(): string {
+  const root = process.env.TOWER_DATA_DIR || join(homedir(), ".tower");
+  const hash = createHash("sha256").update(root).digest("hex").slice(0, 16);
+  return join(tmpdir(), "tower-signals", hash);
 }
 
 /** Default storage root inside the Tower data dir. */
