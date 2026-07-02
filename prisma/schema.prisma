@@ -34,6 +34,11 @@ model Project {
   previewPort    Int?
   previewPreset  String?
   previewInstallCommand String?
+  // 知识库：productKey 把同一产品的多个仓库（如前后端 a/b）归一组——填同值即成组，
+  // 问答时自动把兄弟项目一起纳入检索。knowledgeDir 是 repo 内知识库目录（相对 localPath），
+  // 留空则用约定默认（见 src/lib/knowledge.ts DEFAULT_KNOWLEDGE_DIR）。
+  productKey     String?
+  knowledgeDir   String?
   workspaceId    String
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -44,8 +49,25 @@ model Project {
   notes        ProjectNote[]
   assets       ProjectAsset[]
   versions     Version[]
+  facts        ProjectFact[]
 
   @@index([workspaceId])
+  @@index([productKey])
+}
+
+// 结构化「事实卡」：机器拿不到、需人工/AI 填的项目级 key-value（生产环境路径、
+// CICD 路径、域名等）。知识库问答的精确命中源之一。key 在项目内唯一（upsert）。
+model ProjectFact {
+  id        String   @id @default(cuid())
+  projectId String
+  key       String
+  value     String
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, key])
+  @@index([projectId])
 }
 
 model Label {

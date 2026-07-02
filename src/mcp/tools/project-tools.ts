@@ -49,15 +49,28 @@ export const projectTools = {
   },
 
   update_project: {
-    description: "Update an existing project's name, localPath, and/or description.",
+    description:
+      "Update an existing project's name, localPath, description, and/or knowledge-base settings. " +
+      "productKey groups repos of one product (e.g. front/back ends share a value) so ask_project_knowledge " +
+      "searches them together. knowledgeDir overrides the in-repo knowledge directory (default docs/知识库).",
     schema: z.object({
       projectId: z.string(),
       name: z.string().optional(),
       alias: z.string().optional().describe("Short alias for the project"),
       localPath: z.string().optional(),
       description: z.string().optional(),
+      productKey: z.string().optional().describe("Product group key; projects sharing it are searched together"),
+      knowledgeDir: z.string().optional().describe("In-repo knowledge dir relative to localPath (default docs/知识库)"),
     }),
-    handler: async (args: { projectId: string; name?: string; alias?: string; localPath?: string; description?: string }) => {
+    handler: async (args: {
+      projectId: string;
+      name?: string;
+      alias?: string;
+      localPath?: string;
+      description?: string;
+      productKey?: string;
+      knowledgeDir?: string;
+    }) => {
       const { projectId, ...data } = args;
       return db.project.update({
         where: { id: projectId },
