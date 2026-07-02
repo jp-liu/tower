@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
-import { Plus, Trash2, Pencil, Check, Loader2, Info, Copy, ExternalLink, Send } from "lucide-react";
+import { Plus, Trash2, Pencil, Check, Loader2, Info, Copy, ExternalLink, Send, CircleCheck, CircleX, CircleDot, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,6 +23,7 @@ export interface NotifyTarget {
   id: string;
   gateway: string;
   downstream: string;
+  active: boolean; // 单选：仅生效的这条被 agent 用于外推
 }
 
 const GATEWAYS = ["feishu", "openclaw", "hermes"];
@@ -74,11 +75,14 @@ export function HarnessTargetsSection() {
   useEffect(() => {
     getConfigValue<NotifyTarget[]>("harness.targets", [])
       .then((v) => {
-        const rows = (Array.isArray(v) ? v : []).map((r) => ({
+        const rows: NotifyTarget[] = (Array.isArray(v) ? v : []).map((r) => ({
           id: r.id ?? crypto.randomUUID(),
           gateway: GATEWAYS.includes(r.gateway) ? r.gateway : "feishu",
           downstream: r.downstream ?? "feishu",
+          active: !!r.active,
         }));
+        // 保证有渠道时恰好一个生效（无则默认第一条）。
+        if (rows.length > 0 && !rows.some((r) => r.active)) rows[0].active = true;
         setTargets(rows);
         setCustomIds(
           new Set(rows.filter((r) => r.downstream && !KNOWN_DS.includes(r.downstream)).map((r) => r.id))
@@ -92,13 +96,24 @@ export function HarnessTargetsSection() {
 
   const addTarget = () => {
     const id = crypto.randomUUID();
-    setTargets((ts) => [...ts, { id, gateway: "feishu", downstream: "feishu" }]);
+    // 第一条自动生效。
+    setTargets((ts) => [...ts, { id, gateway: "feishu", downstream: "feishu", active: ts.length === 0 }]);
     setEditingId(id);
     setTestResult(null);
   };
 
+  // 单选生效：设一条为生效，其余取消。
+  const setActive = (id: string) =>
+    setTargets((ts) => ts.map((x) => ({ ...x, active: x.id === id })));
+
   const removeTarget = (id: string) => {
-    setTargets((ts) => ts.filter((x) => x.id !== id));
+    setTargets((ts) => {
+      const wasActive = ts.find((x) => x.id === id)?.active;
+      const rest = ts.filter((x) => x.id !== id);
+      // 删掉生效的那条 → 让第一条剩余的生效。
+      if (wasActive && rest.length > 0 && !rest.some((x) => x.active)) rest[0].active = true;
+      return rest;
+    });
     if (editingId === id) setEditingId(null);
   };
 
@@ -293,14 +308,22 @@ export function HarnessTargetsSection() {
                     </Button>
                   </div>
                   {testResult && (
-                    <p
-                      className={`whitespace-pre-wrap break-words rounded bg-muted/40 px-2 py-1 text-xs ${
+                    <div
+                      className={`flex items-start gap-1.5 rounded bg-muted/40 px-2 py-1 text-xs ${
                         testResult.ok ? "text-emerald-500" : "text-rose-400"
                       }`}
                     >
-                      {testResult.ok ? "✅ SENT " : "❌ "}
-                      {testResult.output}
-                    </p>
+                      {testResult.ok ? (
+                        <CircleCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      ) : (
+                        <CircleX className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      )}
+                      <span className="whitespace-pre-wrap break-words">
+                        {testResult.ok
+                          ? t("settings.harness.testOk")
+                          : `${t("settings.harness.testFail")}：${testResult.output}`}
+                      </span>
+                    </div>
                   )}
                 </div>
               </Field>
@@ -319,9 +342,24 @@ export function HarnessTargetsSection() {
           ) : (
             <div
               key={tgt.id}
-              className="flex items-center gap-3 rounded-lg border bg-muted/20 px-3 py-2"
+              className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 ${
+                tgt.active ? "border-primary/40 bg-primary/5" : "bg-muted/20"
+              }`}
             >
+              <button
+                type="button"
+                onClick={() => setActive(tgt.id)}
+                title={t("settings.harness.setActive")}
+                className={tgt.active ? "text-primary" : "text-muted-foreground hover:text-foreground"}
+              >
+                {tgt.active ? <CircleDot className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
+              </button>
               <span className="truncate text-sm text-foreground">{summaryOf(tgt)}</span>
+              {tgt.active && (
+                <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary ring-1 ring-primary/25">
+                  {t("settings.harness.active")}
+                </span>
+              )}
               <div className="ml-auto flex items-center gap-1">
                 <Button
                   variant="ghost"

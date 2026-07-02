@@ -669,16 +669,18 @@ export async function startPtyExecution(
   // 无人值守：把已配置的发送渠道（harness.targets）注入系统提示 —— 否则 agent 不知道 tower-ask 该走
   // 哪条「网关→下游」。目的地(群/人)仍在消息里说明；正文必带 [[tower:task=<id>]] 口令。
   if (task.unattended) {
-    const targets = await readConfigValue<Array<{ gateway?: string; downstream?: string }>>(
+    const targets = await readConfigValue<Array<{ gateway?: string; downstream?: string; active?: boolean }>>(
       "harness.targets",
       []
     );
     const usable = Array.isArray(targets) ? targets.filter((x) => x?.gateway) : [];
-    const block =
-      usable.length > 0
-        ? `## 无人值守发送渠道\n需外推 ask_human/notify_human 时，从下列已配置渠道选一条，用对应平台 MCP 发送（目的地在消息里说明，正文带 [[tower:task=<taskId>]] 口令）：\n` +
-          usable.map((x) => `- 网关 ${x.gateway}${x.downstream ? ` → 下游 ${x.downstream}` : ""}`).join("\n")
-        : `## 无人值守发送渠道\n当前未配置任何发送渠道。调用 ask_human 时提示用户去「设置 → 通知 → 无人值守发送渠道」配置；在此之前问题仅在 /harness 面板可见，无法外推。`;
+    // 只用「生效」的那一条（单选）；未标生效则退回第一条。绝不群发所有渠道。
+    const chosen = usable.find((x) => x.active) ?? usable[0];
+    const block = chosen
+      ? `## 无人值守发送渠道\n需外推 ask_human/notify_human 时，**只用**这条生效渠道，通过对应平台 MCP 发送` +
+        `（目的地在消息里说明，正文带 [[tower:task=<taskId>]] 口令）：\n` +
+        `- 网关 ${chosen.gateway}${chosen.downstream ? ` → 下游 ${chosen.downstream}` : ""}`
+      : `## 无人值守发送渠道\n当前未配置任何发送渠道。调用 ask_human 时提示用户去「设置 → 通知 → 无人值守发送渠道」配置；在此之前问题仅在 /harness 面板可见，无法外推。`;
     appendSystemPrompt += (appendSystemPrompt ? "\n\n" : "") + block;
   }
 
