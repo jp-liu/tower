@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireLocalhost, validateTaskId } from "@/lib/internal-api-guard";
-import { getPendingRequest } from "@/lib/harness/human-input";
+import { getOpenAsk } from "@/lib/harness/harness-message";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,11 +17,11 @@ export async function GET(request: NextRequest) {
   const idErr = validateTaskId(taskId);
   if (idErr) return idErr;
 
-  const pending = await getPendingRequest(taskId);
+  const pending = await getOpenAsk(taskId);
   return NextResponse.json({
     taskId,
     pending: !!pending,
     requestId: pending?.id ?? null,
-    question: pending?.question ?? null,
+    question: pending?.content ?? null,
   });
 }

@@ -7,7 +7,7 @@
 export type OutboundKind = "ask" | "notify" | "done" | "failed";
 
 export interface OutboundMessage {
-  /** 回流对齐用。ask 时 = HumanInputRequest.id；notify/done/failed 可为 taskId 等。 */
+  /** 回流对齐用 = HarnessMessage.id（ask/notify/done/failed 均用消息行 id）。 */
   correlationId: string;
   taskId: string;
   kind: OutboundKind;

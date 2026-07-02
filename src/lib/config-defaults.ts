@@ -258,4 +258,10 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "object",
     label: "Harness Default Sink (fallback channel binding)",
   },
+  // 待回复 ask 的 TTL 兜底：超过这么多天仍 OPEN 的 ask 被周期 sweep 转 EXPIRED。
+  "harness.pendingTtlDays": {
+    defaultValue: 14,
+    type: "number",
+    label: "Harness Pending Ask TTL (days)",
+  },
 };

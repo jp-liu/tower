@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireLocalhost, validateTaskId } from "@/lib/internal-api-guard";
 import { db } from "@/lib/db";
-import { notifyForTask } from "@/lib/harness/notify/dispatch";
+import { emitHarnessMessage } from "@/lib/harness/notify/dispatch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,14 +37,13 @@ export async function POST(request: NextRequest) {
   });
   if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
 
-  const { notified } = await notifyForTask({
+  const { messageId, notified } = await emitHarnessMessage({
     taskId,
     unattended: task.unattended,
     kind: "notify",
     title: task.title,
     body: message,
-    correlationId: taskId,
   });
 
-  return NextResponse.json({ ok: true, notified });
+  return NextResponse.json({ ok: true, messageId, notified });
 }

@@ -97,6 +97,8 @@ model Task {
   // ask_human 通知回流绑定：渠道 id（如 "feishu"）+ 目标地址（JSON 字符串，如 {"chatId":"oc_..","threadId":"om_.."}）
   notifyChannel String?
   notifyTarget  String?
+  // 入站回复反查键：出站成功后写 "<channel>:<locator>"，供 /reply 用 {channel,locator} 反查 taskId
+  notifyThreadRef String?
 
   project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   executions TaskExecution[]
@@ -104,13 +106,14 @@ model Task {
   labels     TaskLabel[]
   notes      ProjectNote[]
   assets     ProjectAsset[]
-  humanInputs HumanInputRequest[]
+  harnessMessages HarnessMessage[]
   version    Version?        @relation(fields: [versionId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
   @@index([status])
   @@index([versionId])
   @@index([parentTaskId])
+  @@index([notifyThreadRef])
 }
 
 model TaskExecution {
@@ -146,26 +149,45 @@ model TaskExecution {
   @@index([insightNoteId])
 }
 
-// 无人值守：agent 调 ask_human 时落一条 PENDING，人回复后转 ANSWERED；park/resume 闭环的持久化载体。
-model HumanInputRequest {
-  id          String   @id @default(cuid())
-  taskId      String
-  executionId String?
-  question    String
-  status      HumanInputStatus @default(PENDING)
-  answer      String?
-  createdAt   DateTime @default(now())
-  answeredAt  DateTime?
+// 无人值守：一张表记所有 harness→人 的消息（ask/notify/done/failed）。
+// - kind='ask' 是 park/resume 闭环载体，带生命周期 state：OPEN→ANSWERED|CANCELLED|IGNORED|EXPIRED。
+// - notify/done/failed 是日志行，出生即 CLOSED，不参与「待回复」过滤。
+// - 不变量：待回复 = kind='ask' AND state='OPEN'。
+// - notifyStatus 与 state 解耦：发送失败(FAILED)不影响记录仍 OPEN（UI 兜底可见 + 可重发）。
+model HarnessMessage {
+  id           String   @id @default(cuid())
+  taskId       String
+  executionId  String?
+  kind         String   // "ask" | "notify" | "done" | "failed"（映射 OutboundKind）
+  channel      String?  // 派发渠道 id（"feishu"…）；未派发/UI-only 为 null
+  targetRef    String?  // 送达定位符（locator，JSON 字符串，如 {"chatId","threadId"} 或 message_id）
+  content      String
+  notifyStatus HarnessNotifyStatus @default(PENDING)
+  sentAt       DateTime?
+  replyText    String?
+  repliedAt    DateTime?
+  state        HarnessState @default(OPEN)
+  createdAt    DateTime @default(now())
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
-  @@index([taskId, status])
+  @@index([taskId, kind, state])
+  @@index([state])
 }
 
-enum HumanInputStatus {
+enum HarnessNotifyStatus {
   PENDING
+  SENT
+  FAILED
+}
+
+enum HarnessState {
+  OPEN
   ANSWERED
   CANCELLED
+  IGNORED
+  EXPIRED
+  CLOSED
 }
 
 model TaskMessage {

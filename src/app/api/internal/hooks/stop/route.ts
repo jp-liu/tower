@@ -3,7 +3,7 @@ import { requireLocalhost } from "@/lib/internal-api-guard";
 import { db } from "@/lib/db";
 import { broadcastNotification } from "@/lib/pty/ws-server";
 import { notifyParentOnChildStop } from "@/lib/derive/notify-parent";
-import { getPendingRequest } from "@/lib/harness/human-input";
+import { getOpenAsk } from "@/lib/harness/harness-message";
 import { destroySession } from "@/lib/pty/session-store";
 
 export const runtime = "nodejs";
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
   // Harness park 分叉：这次回合结束若是「等人回复」（有 PENDING 请求）而非「做完」，
   // 就 kill 掉空闲 PTY 省资源即返回。execution 已在 ask_human 时置 PAUSED → onExit guard
   // 会跳过 finalize / IN_REVIEW，保留 sessionId 供 resume；且不回推父任务（不是完成事件）。
-  const pending = await getPendingRequest(task.id);
+  const pending = await getOpenAsk(task.id);
   if (pending) {
     destroySession(task.id);
     return NextResponse.json({ ok: true, parked: true });

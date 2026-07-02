@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireLocalhost, validateTaskId } from "@/lib/internal-api-guard";
 import { db } from "@/lib/db";
-import { answerHumanInputRequest, getPendingRequest } from "@/lib/harness/human-input";
+import { getOpenAsk, getLatestAsk, answerOpenAsk } from "@/lib/harness/harness-message";
 import { continueOrStartTaskExecution } from "@/actions/agent-actions";
 import { logger } from "@/lib/logger";
 
@@ -13,61 +13,91 @@ export const dynamic = "force-dynamic";
 const PORT = process.env.PORT ?? "3000";
 
 /**
- * 唯一入站回复出口。渠道 adapter（飞书 bot 等）把人的回复归一化成 { taskId, text } POST 到这里。
+ * 唯一入站回复出口。渠道 adapter（飞书 bot / 通知中心页面）把人的回复归一化后 POST 到这里。
  *
- * 流程：标 ANSWERED → resume 会话（复用 Continue 原语，already-running 为 no-op）→
- * 等 CLI TUI 就绪后把答案注入终端（轮询 /input，未就绪 404 时退避重试）。
+ * 归属：优先 { taskId, text }；否则 { channel, locator, text } 由 Tower 反查 taskId
+ * （靠出站时写入的 Task.notifyThreadRef = "<channel>:<locator>"）。
+ *
+ * 流程：定位 OPEN ask → 幂等应答（并发只第一条生效）→ 复位 PAUSED→RUNNING → resume（复用
+ * Continue 原语）→ 等就绪后注入答案（fresh start 时带上原问题上下文）。
  */
 export async function POST(request: NextRequest) {
   const blocked = requireLocalhost(request);
   if (blocked) return blocked;
 
-  let body: { taskId?: string; text?: string };
+  let body: { taskId?: string; channel?: string; locator?: string; text?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { taskId, text } = body;
-  if (!taskId || typeof taskId !== "string") {
-    return NextResponse.json({ error: "taskId required" }, { status: 400 });
-  }
-  const idErr = validateTaskId(taskId);
-  if (idErr) return idErr;
+  const { text } = body;
   if (!text || typeof text !== "string") {
     return NextResponse.json({ error: "text required" }, { status: 400 });
   }
 
-  const pending = await getPendingRequest(taskId);
-  if (!pending) return NextResponse.json({ error: "No pending request" }, { status: 409 });
+  // ── 归属：taskId 直给，或经 {channel,locator} 反查 ──
+  let taskId: string | null = null;
+  if (body.taskId) {
+    const idErr = validateTaskId(body.taskId);
+    if (idErr) return idErr;
+    taskId = body.taskId;
+  } else if (body.channel && body.locator) {
+    const found = await db.task.findFirst({
+      where: { notifyThreadRef: `${body.channel}:${body.locator}` },
+      select: { id: true },
+    });
+    taskId = found?.id ?? null;
+    if (!taskId) {
+      return NextResponse.json({ error: "No task bound to this channel/locator" }, { status: 404 });
+    }
+  } else {
+    return NextResponse.json({ error: "taskId or {channel,locator} required" }, { status: 400 });
+  }
 
-  // 把 park 时置 PAUSED 的 execution 复位为 RUNNING。这一步在 resume 之前：
-  // - 若 PTY 还活着（人回复早于 stop hook fire）→ continueOrStartTaskExecution 会走
-  //   already_running 分支、不碰 execution 状态；此处复位保证它日后自然退出时 onExit guard
-  //   放行、能 finalize（否则永久卡 PAUSED）。
-  // - 若 PTY 已被 park kill → continueLatestPtyExecution 会把 RUNNING 的旧行清成 FAILED 并
-  //   新建 RUNNING 驱动，此处复位顺带消除了残留的孤儿 PAUSED 行。
+  // ── 定位 OPEN ask + 幂等应答 ──
+  let question: string | null = null;
+  const open = await getOpenAsk(taskId);
+  if (open) {
+    const answered = await answerOpenAsk(taskId, text);
+    if (!answered) {
+      // 并发回复：另一条已抢先应答并在 resume，本条去重返回，避免二次注入。
+      return NextResponse.json({ ok: true, deduped: true });
+    }
+    question = open.content;
+  } else {
+    // 无 OPEN ask：可能是「已应答但 resume 未完成」的重试，或回复落到非 ask（不当答案）。
+    const latest = await getLatestAsk(taskId);
+    if (!latest || latest.state !== "ANSWERED") {
+      return NextResponse.json({ error: "No open ask for this task" }, { status: 409 });
+    }
+    question = latest.content; // resume 重试：带回原问题上下文
+  }
+
+  // 复位 park 时的 PAUSED execution → RUNNING：保证即便 resume 走 already_running 分支，
+  // 该 execution 日后自然退出时 onExit guard 也放行、能 finalize（否则永久卡 PAUSED）。
   await db.taskExecution.updateMany({
     where: { taskId, status: "PAUSED" },
     data: { status: "RUNNING", endedAt: null },
   });
 
-  // resume 先于标 ANSWERED：resume 抛错时保留 PENDING，人可经同一入口重试，不把回复"吃掉"。
+  // resume 先于「消费」：resume 抛错时 ask 已是 ANSWERED，人可经同一入口重试（走上面的 resume 重试分支）。
   let mode: string;
   try {
     const r = await continueOrStartTaskExecution(taskId);
     mode = r.mode;
   } catch (err) {
-    log.error("resume failed on reply — pending kept for retry", err, { taskId });
+    log.error("resume failed on reply — ask kept ANSWERED for retry", err, { taskId });
     return NextResponse.json({ error: "resume failed" }, { status: 500 });
   }
 
-  await answerHumanInputRequest(taskId, text);
+  // fresh start（无历史会话可续）时，新 agent 不知道在答什么 → 注入答案带上原问题上下文。
+  const injectText =
+    mode === "started" && question ? `[针对你之前的提问：${question}]\n${text}` : text;
 
-  // 会话拉起需数秒；等就绪后注入答案（轮询 /input 桥直到 session 活）。
-  const injected = await injectWhenReady(taskId, text);
-  return NextResponse.json({ ok: true, injected, mode });
+  const injected = await injectWhenReady(taskId, injectText);
+  return NextResponse.json({ ok: true, taskId, mode, injected });
 }
 
 // resume 后 PTY session 对象几乎立刻存在（/input 会马上 200），但 Claude CLI 的 TUI 需要

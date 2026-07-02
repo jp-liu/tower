@@ -1,25 +1,33 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 vi.mock("@/lib/db", () => ({
-  db: { task: { findUnique: vi.fn() } },
+  db: { task: { findUnique: vi.fn(), update: vi.fn() } },
 }));
 vi.mock("@/lib/config-reader", () => ({ readConfigValue: vi.fn() }));
 vi.mock("../notify/init", () => ({ ensureNotifyChannels: vi.fn() }));
 vi.mock("../notify/registry", () => ({ dispatchNotification: vi.fn() }));
+vi.mock("../harness-message", () => ({
+  recordHarnessMessage: vi.fn(),
+  markNotifyStatus: vi.fn(),
+}));
 
 import { db } from "@/lib/db";
 import { readConfigValue } from "@/lib/config-reader";
 import { dispatchNotification } from "../notify/registry";
+import { markNotifyStatus } from "../harness-message";
 import { resolveNotifyBinding } from "../notify/resolve-binding";
-import { notifyForTask } from "../notify/dispatch";
+import { dispatchHarnessMessage } from "../notify/dispatch";
 
-const mockDb = db as unknown as { task: { findUnique: ReturnType<typeof vi.fn> } };
+const mockDb = db as unknown as {
+  task: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+};
 const mockRead = readConfigValue as unknown as ReturnType<typeof vi.fn>;
 const mockDispatch = dispatchNotification as unknown as ReturnType<typeof vi.fn>;
+const mockMark = markNotifyStatus as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockRead.mockResolvedValue(null); // default sink absent unless overridden
+  mockRead.mockResolvedValue(null);
 });
 
 describe("resolveNotifyBinding", () => {
@@ -31,7 +39,7 @@ describe("resolveNotifyBinding", () => {
     });
     const b = await resolveNotifyBinding("t1");
     expect(b).toEqual({ channel: "feishu", target: { chatId: "oc_self" } });
-    expect(mockDb.task.findUnique).toHaveBeenCalledTimes(1); // 命中即停，不再上溯
+    expect(mockDb.task.findUnique).toHaveBeenCalledTimes(1);
   });
 
   it("自身无绑定 → 沿 parentTaskId 上溯到祖先绑定", async () => {
@@ -80,65 +88,78 @@ describe("resolveNotifyBinding", () => {
   });
 });
 
-describe("notifyForTask gating", () => {
+describe("dispatchHarnessMessage", () => {
   const base = {
+    messageId: "h1",
     taskId: "t1",
     kind: "ask" as const,
     title: "T",
     body: "B",
-    correlationId: "r1",
   };
+  const noWait = { retryDelaysMs: [0, 0, 0] };
 
-  it("非 unattended → 不派发", async () => {
-    const r = await notifyForTask({ ...base, unattended: false });
+  it("非 unattended → 不派发、不标状态", async () => {
+    const r = await dispatchHarnessMessage({ ...base, unattended: false }, noWait);
     expect(r.notified).toBe(false);
     expect(r.reason).toBe("not_unattended");
     expect(mockDispatch).not.toHaveBeenCalled();
+    expect(mockMark).not.toHaveBeenCalled();
   });
 
-  it("全局 DND 开启 → 不派发", async () => {
-    mockRead.mockResolvedValueOnce(true); // harness.dnd = true
-    const r = await notifyForTask({ ...base, unattended: true });
+  it("全局 DND → 不派发", async () => {
+    mockRead.mockResolvedValueOnce(true);
+    const r = await dispatchHarnessMessage({ ...base, unattended: true }, noWait);
     expect(r.notified).toBe(false);
     expect(r.reason).toBe("dnd");
     expect(mockDispatch).not.toHaveBeenCalled();
   });
 
-  it("unattended + 有绑定 + dispatch 成功 → notified true", async () => {
+  it("无绑定 → 标 FAILED，reason no_binding", async () => {
+    mockRead.mockResolvedValueOnce(false); // dnd
+    mockDb.task.findUnique.mockResolvedValueOnce({ notifyChannel: null, notifyTarget: null, parentTaskId: null });
+    mockRead.mockResolvedValueOnce(null); // sink absent
+    const r = await dispatchHarnessMessage({ ...base, unattended: true }, noWait);
+    expect(r.notified).toBe(false);
+    expect(r.reason).toBe("no_binding");
+    expect(mockMark).toHaveBeenCalledWith("h1", "FAILED");
+  });
+
+  it("发送成功 → 标 SENT + 写反查键 notifyThreadRef", async () => {
+    mockRead.mockResolvedValueOnce(false); // dnd
+    mockDb.task.findUnique.mockResolvedValueOnce({
+      notifyChannel: "feishu",
+      notifyTarget: JSON.stringify({ chatId: "oc_1", threadId: "om_9" }),
+      parentTaskId: null,
+    });
+    mockDispatch.mockResolvedValueOnce(true);
+    const r = await dispatchHarnessMessage({ ...base, unattended: true }, noWait);
+    expect(r.notified).toBe(true);
+    expect(mockMark).toHaveBeenCalledWith("h1", "SENT", expect.objectContaining({ channel: "feishu" }));
+    // 反查键用 threadId 优先
+    expect(mockDb.task.update).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: { notifyThreadRef: "feishu:om_9" },
+    });
+  });
+
+  it("发送连续失败 3 次 → 标 FAILED，retry 用满次数", async () => {
     mockRead.mockResolvedValueOnce(false); // dnd
     mockDb.task.findUnique.mockResolvedValueOnce({
       notifyChannel: "feishu",
       notifyTarget: JSON.stringify({ chatId: "oc_1" }),
       parentTaskId: null,
     });
-    mockDispatch.mockResolvedValueOnce(true);
-    const r = await notifyForTask({ ...base, unattended: true });
-    expect(r.notified).toBe(true);
-    expect(mockDispatch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        channel: "feishu",
-        target: { chatId: "oc_1" },
-        msg: expect.objectContaining({ kind: "ask", correlationId: "r1" }),
-      })
-    );
-  });
-
-  it("unattended 但无绑定 → notified false, reason no_binding", async () => {
-    mockRead.mockResolvedValueOnce(false); // dnd
-    mockDb.task.findUnique.mockResolvedValueOnce({
-      notifyChannel: null,
-      notifyTarget: null,
-      parentTaskId: null,
-    });
-    mockRead.mockResolvedValueOnce(null); // default sink absent
-    const r = await notifyForTask({ ...base, unattended: true });
+    mockDispatch.mockResolvedValue(false);
+    const r = await dispatchHarnessMessage({ ...base, unattended: true }, noWait);
     expect(r.notified).toBe(false);
-    expect(r.reason).toBe("no_binding");
+    expect(r.reason).toBe("dispatch_failed");
+    expect(mockDispatch).toHaveBeenCalledTimes(3);
+    expect(mockMark).toHaveBeenLastCalledWith("h1", "FAILED", expect.objectContaining({ channel: "feishu" }));
   });
 
-  it("底层抛错（如 config/DB 读失败）→ 吞掉返回 notified false，绝不抛（park 路径不能被打断）", async () => {
-    mockRead.mockRejectedValueOnce(new Error("db down")); // 读 dnd 就炸
-    const r = await notifyForTask({ ...base, unattended: true });
+  it("底层抛错 → 吞掉，标 FAILED，返回 error（记录路径不能被打断）", async () => {
+    mockRead.mockRejectedValueOnce(new Error("db down"));
+    const r = await dispatchHarnessMessage({ ...base, unattended: true }, noWait);
     expect(r.notified).toBe(false);
     expect(r.reason).toBe("error");
   });

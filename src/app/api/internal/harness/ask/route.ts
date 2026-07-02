@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireLocalhost, validateTaskId } from "@/lib/internal-api-guard";
 import { db } from "@/lib/db";
-import { createHumanInputRequest } from "@/lib/harness/human-input";
-import { notifyForTask } from "@/lib/harness/notify/dispatch";
+import { createAskMessage } from "@/lib/harness/harness-message";
+import { dispatchHarnessMessage } from "@/lib/harness/notify/dispatch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,21 +43,23 @@ export async function POST(request: NextRequest) {
   });
   if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
 
-  const { requestId } = await createHumanInputRequest({
+  // 先记录 ask(OPEN) + park（one-pending：内部会先取消旧 OPEN ask）。记录先于发送。
+  const { messageId } = await createAskMessage({
     taskId,
     executionId: task.executions[0]?.id ?? null,
     question,
   });
 
-  // 通知只在无人值守时外推；非无人值守仅记录 pending（UI 可见），人经 UI 回复。
-  const { notified } = await notifyForTask({
+  // 通知只在无人值守时外推；非无人值守仅记录（UI 可见），人经通知中心/UI 回复。
+  // dispatch 全 best-effort：发送成败都不影响已记录的 park。
+  const { notified } = await dispatchHarnessMessage({
+    messageId,
     taskId,
     unattended: task.unattended,
     kind: "ask",
     title: task.title,
     body: question,
-    correlationId: requestId,
   });
 
-  return NextResponse.json({ ok: true, requestId, notified });
+  return NextResponse.json({ ok: true, requestId: messageId, notified });
 }

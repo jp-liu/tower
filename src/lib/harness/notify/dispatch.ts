@@ -1,35 +1,63 @@
+import { db } from "@/lib/db";
 import { readConfigValue } from "@/lib/config-reader";
 import { ensureNotifyChannels } from "./init";
 import { dispatchNotification } from "./registry";
-import { resolveNotifyBinding } from "./resolve-binding";
+import { resolveNotifyBinding, type NotifyBinding } from "./resolve-binding";
+import { recordHarnessMessage, markNotifyStatus } from "../harness-message";
 import { logger } from "@/lib/logger";
 import type { OutboundKind } from "./types";
 
 const log = logger.create("notify-dispatch");
+
+// 发送重试退避（3 次）。测试可经 opts.retryDelaysMs 传 [0,0,0] 免等。
+const RETRY_DELAYS_MS = [500, 1500, 3000];
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export interface NotifyResult {
   notified: boolean;
   reason?: string;
 }
 
+/** feishu 类 locator：优先 threadId，回退 chatId。用于反查键与 targetRef。 */
+function locatorOf(target: unknown): string | null {
+  const t = target as { threadId?: string; chatId?: string } | null;
+  return t?.threadId || t?.chatId || null;
+}
+
+/** 出站成功后写任务反查键 `<channel>:<locator>`，供 /reply 用 {channel,locator} 反查 taskId。best-effort。 */
+async function writeNotifyThreadRef(taskId: string, binding: NotifyBinding): Promise<void> {
+  const locator = locatorOf(binding.target);
+  if (!locator) return;
+  const ref = `${binding.channel}:${locator}`;
+  try {
+    await db.task.update({ where: { id: taskId }, data: { notifyThreadRef: ref } });
+  } catch {
+    // best-effort — 反查键写失败不影响发送
+  }
+}
+
 /**
- * 统一的对人派发闸门 —— ask / notify / done / failed 都经这里。
+ * 派发一条**已记录**的 HarnessMessage 到人（ask/notify/done/failed 通用）。
  *
- * 门禁：`unattended` 关 → 不推（仅 UI 可见）；全局 `harness.dnd` 开 → 一律不推。
- * 通过后按升级链解析绑定（自身 → 祖先 → 默认 sink）并派发。
+ * 门禁：`unattended` 关 → 不推（记录仍在，UI 可见）；全局 `harness.dnd` 开 → 一律不推。
+ * 通过后按升级链解析绑定（自身→祖先→默认 sink），发送失败退避重试 3 次，最终把 notifyStatus
+ * 标 SENT/FAILED（与 state 解耦：FAILED 不改 state，UI 仍可见并可重发）。
  *
- * **全程 best-effort：整个函数绝不抛错。** config / DB / adapter 任一环节失败都吞掉返回
- * `{ notified: false }` —— 关键在于 `/ask` 已经 park（落 PENDING + PAUSED）成功，通知推没推成
- * 都不能反过来让 `/ask` 500，否则 agent 收到 error 可能不停下、甚至重复 ask 建多条 PENDING。
+ * **全程 best-effort：绝不抛错。** 关键在于记录（park/日志）已落库，通知推没推成都不能反过来
+ * 让 /ask 等调用方 500（否则 agent 收 error 可能不停、重复 ask）。
  */
-export async function notifyForTask(args: {
-  taskId: string;
-  unattended: boolean;
-  kind: OutboundKind;
-  title: string;
-  body: string;
-  correlationId: string;
-}): Promise<NotifyResult> {
+export async function dispatchHarnessMessage(
+  args: {
+    messageId: string;
+    taskId: string;
+    unattended: boolean;
+    kind: OutboundKind;
+    title: string;
+    body: string;
+  },
+  opts?: { retryDelaysMs?: number[] }
+): Promise<NotifyResult> {
   if (!args.unattended) return { notified: false, reason: "not_unattended" };
 
   try {
@@ -38,25 +66,82 @@ export async function notifyForTask(args: {
 
     await ensureNotifyChannels();
     const binding = await resolveNotifyBinding(args.taskId);
-    if (!binding) return { notified: false, reason: "no_binding" };
+    if (!binding) {
+      await markNotifyStatus(args.messageId, "FAILED");
+      return { notified: false, reason: "no_binding" };
+    }
 
-    const ok = await dispatchNotification({
-      channel: binding.channel,
-      target: binding.target,
-      msg: {
-        correlationId: args.correlationId,
-        taskId: args.taskId,
-        kind: args.kind,
-        title: args.title,
-        body: args.body,
-      },
-    });
-    return { notified: ok, reason: ok ? undefined : "dispatch_failed" };
+    const delays = opts?.retryDelaysMs ?? RETRY_DELAYS_MS;
+    const targetRef = JSON.stringify(binding.target);
+    let ok = false;
+    for (let attempt = 0; attempt < delays.length; attempt++) {
+      ok = await dispatchNotification({
+        channel: binding.channel,
+        target: binding.target,
+        msg: {
+          correlationId: args.messageId,
+          taskId: args.taskId,
+          kind: args.kind,
+          title: args.title,
+          body: args.body,
+        },
+      });
+      if (ok) break;
+      if (attempt < delays.length - 1) await sleep(delays[attempt]);
+    }
+
+    if (ok) {
+      await markNotifyStatus(args.messageId, "SENT", { channel: binding.channel, targetRef });
+      await writeNotifyThreadRef(args.taskId, binding);
+      return { notified: true };
+    }
+    await markNotifyStatus(args.messageId, "FAILED", { channel: binding.channel, targetRef });
+    return { notified: false, reason: "dispatch_failed" };
   } catch (e) {
-    log.error("notifyForTask failed (swallowed — park/completion path must not break)", e, {
+    log.error("dispatchHarnessMessage failed (swallowed — record path must not break)", e, {
       taskId: args.taskId,
       kind: args.kind,
     });
+    try {
+      await markNotifyStatus(args.messageId, "FAILED");
+    } catch {
+      /* ignore */
+    }
     return { notified: false, reason: "error" };
   }
+}
+
+/**
+ * 记录 + 派发一条 notify/done/failed 日志消息（一步到位）。ask 不走这里 —— 它要先 park、
+ * 走 {@link createAskMessage} + 单独 {@link dispatchHarnessMessage}。
+ */
+export async function emitHarnessMessage(
+  args: {
+    taskId: string;
+    executionId?: string | null;
+    unattended: boolean;
+    kind: Exclude<OutboundKind, "ask">;
+    title: string;
+    body: string;
+  },
+  opts?: { retryDelaysMs?: number[] }
+): Promise<{ messageId: string; notified: boolean }> {
+  const { messageId } = await recordHarnessMessage({
+    taskId: args.taskId,
+    executionId: args.executionId ?? null,
+    kind: args.kind,
+    content: args.body,
+  });
+  const { notified } = await dispatchHarnessMessage(
+    {
+      messageId,
+      taskId: args.taskId,
+      unattended: args.unattended,
+      kind: args.kind,
+      title: args.title,
+      body: args.body,
+    },
+    opts
+  );
+  return { messageId, notified };
 }

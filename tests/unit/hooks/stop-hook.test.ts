@@ -37,8 +37,8 @@ vi.mock("@/lib/db", () => ({
     taskExecution: {
       findFirst: vi.fn(),
     },
-    // Harness park 分叉查询 PENDING（默认 undefined → 无 pending，走正常 fan-out 流程）
-    humanInputRequest: {
+    // Harness park 分叉查询 OPEN ask（默认 undefined → 无 pending，走正常 fan-out 流程）
+    harnessMessage: {
       findFirst: vi.fn(),
     },
   },
@@ -138,10 +138,11 @@ describe("Stop hook API", () => {
         workspace: { name: "Test Workspace" },
       },
     });
-    // 该任务有等待人回复的 PENDING → 走 park 分叉
-    (db.humanInputRequest.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({
+    // 该任务有等待人回复的 OPEN ask → 走 park 分叉
+    (db.harnessMessage.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "creq12345678901234567",
-      status: "PENDING",
+      kind: "ask",
+      state: "OPEN",
     });
 
     const { POST } = await import("@/app/api/internal/hooks/stop/route");

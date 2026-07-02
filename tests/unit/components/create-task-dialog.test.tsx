@@ -73,6 +73,7 @@ const mockEditTask: Task = {
   unattended: false,
   notifyChannel: null,
   notifyTarget: null,
+  notifyThreadRef: null,
   versionId: null,
   createdAt: new Date("2026-01-01"),
   updatedAt: new Date("2026-01-01"),
