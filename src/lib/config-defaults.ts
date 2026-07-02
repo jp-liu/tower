@@ -220,4 +220,35 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "string",
     label: "Task System Directive (built-in)",
   },
+
+  // ── 无人值守 harness ──────────────────────────────────────────────
+  // 飞书出站凭据（服务端主动发消息用；留空则不注册飞书渠道）。也可走 env HARNESS_FEISHU_*。
+  "harness.feishu.appId": {
+    defaultValue: "",
+    type: "string",
+    label: "Harness Feishu App ID",
+  },
+  "harness.feishu.appSecret": {
+    defaultValue: "",
+    type: "string",
+    label: "Harness Feishu App Secret",
+  },
+  "harness.feishu.domain": {
+    defaultValue: "https://open.xfchat.iflytek.com",
+    type: "string",
+    label: "Harness Feishu Domain",
+  },
+  // 全局静音总闸：为 true 时所有 ask/notify/done/failed 一律不外推（仅 UI 可见）。
+  "harness.dnd": {
+    defaultValue: false,
+    type: "boolean",
+    label: "Harness Do-Not-Disturb (global mute)",
+  },
+  // 默认 sink：任务自身与祖先链都没有 notify 绑定时的兜底目标（Tower 飞书群）。
+  // 形如 { "channel": "feishu", "target": { "chatId": "oc_...", "threadId": "om_..." } }
+  "harness.defaultSink": {
+    defaultValue: null,
+    type: "object",
+    label: "Harness Default Sink (fallback channel binding)",
+  },
 };

@@ -17,6 +17,10 @@ export function registerChannel(ch: NotifyChannel): void {
   channels.set(ch.id, ch);
 }
 
+export function hasChannel(id: string): boolean {
+  return channels.has(id);
+}
+
 /** 仅测试用：清空注册表。 */
 export function __resetChannels(): void {
   channels.clear();

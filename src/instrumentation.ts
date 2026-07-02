@@ -18,6 +18,17 @@ export async function register() {
     const { ensureTowerDir } = await import("@/lib/init-tower");
     ensureTowerDir();
 
+    // Harness: register unattended notify channels (feishu) if credentials present.
+    // Idempotent + self-healing — dispatch paths re-ensure lazily too. Fire-and-forget.
+    void (async () => {
+      try {
+        const { ensureNotifyChannels } = await import("@/lib/harness/notify/init");
+        await ensureNotifyChannels();
+      } catch (err) {
+        console.error("[harness] notify channel init failed:", err);
+      }
+    })();
+
     // Auto-install Tower MCP into every available CLI's user-scope config.
     // Idempotent — skips providers whose CLI isn't installed or whose user-
     // scope MCP entry already matches. Runs after ensureTowerDir so any
