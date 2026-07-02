@@ -25,7 +25,6 @@
     "scripts/tower-stop-hook.js",
     "dist/mcp-server.cjs",
     "skills/",
-    "next.config.ts",
     "tsconfig.json"
   ],
   "scripts": {
