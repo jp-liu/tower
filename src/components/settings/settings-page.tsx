@@ -35,6 +35,7 @@ import {
   Star,
   Trash2,
   Edit,
+  Eye,
   Save,
   Loader2,
   CheckCircle2,
@@ -71,6 +72,7 @@ import type { GitPathRule } from "@/lib/git-url";
 import { BackupSection } from "./backup-section";
 import { ExtensionsSection } from "./extensions-section";
 import { KeyboardShortcutsSection } from "./keyboard-shortcuts-section";
+import { HarnessTargetsSection } from "./harness-targets-section";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
@@ -357,6 +359,9 @@ export function SettingsPage() {
   const [builtinPrompts, setBuiltinPrompts] = useState<BuiltinPromptsData | null>(null);
   const [directiveDraft, setDirectiveDraft] = useState("");
   const [savingDirective, setSavingDirective] = useState(false);
+  // 内置提示语只在弹窗里看/编辑完整内容，列表处只展示 3 行预览
+  const [directiveDialogOpen, setDirectiveDialogOpen] = useState(false);
+  const [childDialogOpen, setChildDialogOpen] = useState(false);
 
   // ── System Config state ────────────────────────────────────────
   const [rules, setRules] = useState<GitPathRule[]>([]);
@@ -685,6 +690,7 @@ export function SettingsPage() {
       const b = await getBuiltinPrompts();
       setBuiltinPrompts(b);
       setDirectiveDraft(b.systemDirective);
+      setDirectiveDialogOpen(false);
       toast.success(t("settings.prompts.builtin.saved"));
     } finally {
       setSavingDirective(false);
@@ -1256,60 +1262,60 @@ export function SettingsPage() {
               </p>
             </div>
 
-            {/* 系统声明 — 可编辑 */}
+            {/* 系统声明 — 3 行预览，点「编辑」弹窗查看/编辑完整内容 */}
             <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label className="text-sm">{t("settings.prompts.builtin.systemTitle")}</Label>
-                {builtinPrompts.systemDirectiveIsCustom && (
-                  <Badge variant="secondary" className="rounded-full text-xs">
-                    {t("settings.prompts.builtin.modified")}
-                  </Badge>
-                )}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm">{t("settings.prompts.builtin.systemTitle")}</Label>
+                  {builtinPrompts.systemDirectiveIsCustom && (
+                    <Badge variant="secondary" className="rounded-full text-xs">
+                      {t("settings.prompts.builtin.modified")}
+                    </Badge>
+                  )}
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setDirectiveDraft(builtinPrompts.systemDirective);
+                    setDirectiveDialogOpen(true);
+                  }}
+                >
+                  <Edit className="h-4 w-4" />
+                  {t("settings.prompts.builtin.edit")}
+                </Button>
               </div>
               <p className="text-xs text-muted-foreground">
                 {t("settings.prompts.builtin.systemDesc")}
               </p>
-              <Textarea
-                value={directiveDraft}
-                onChange={(e) => setDirectiveDraft(e.target.value)}
-                rows={8}
-                className="font-mono text-xs"
-              />
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  onClick={handleResetDirective}
-                  disabled={savingDirective || !builtinPrompts.systemDirectiveIsCustom}
-                >
-                  {t("settings.prompts.builtin.resetDefault")}
-                </Button>
-                <Button
-                  variant="default"
-                  onClick={handleSaveDirective}
-                  disabled={savingDirective || directiveDraft === builtinPrompts.systemDirective}
-                >
-                  {t("settings.prompts.save")}
-                </Button>
+              <div className="rounded-lg border border-border/50 bg-muted/30 p-3">
+                <p className="line-clamp-3 whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">
+                  {builtinPrompts.systemDirective}
+                </p>
               </div>
             </div>
 
-            {/* 子任务回推引导语 — 只读 */}
+            {/* 子任务回推引导语 — 3 行预览，点「查看」弹窗看完整内容（只读） */}
             <div className="space-y-2 border-t border-border/50 pt-4">
-              <div className="flex items-center gap-2">
-                <Label className="text-sm">{t("settings.prompts.builtin.childTitle")}</Label>
-                <Badge variant="outline" className="rounded-full text-xs">
-                  {t("settings.prompts.builtin.readonly")}
-                </Badge>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm">{t("settings.prompts.builtin.childTitle")}</Label>
+                  <Badge variant="outline" className="rounded-full text-xs">
+                    {t("settings.prompts.builtin.readonly")}
+                  </Badge>
+                </div>
+                <Button variant="outline" onClick={() => setChildDialogOpen(true)}>
+                  <Eye className="h-4 w-4" />
+                  {t("settings.prompts.builtin.view")}
+                </Button>
               </div>
               <p className="text-xs text-muted-foreground">
                 {t("settings.prompts.builtin.childDesc")}
               </p>
-              <Textarea
-                value={builtinPrompts.childReviewPrompt}
-                readOnly
-                rows={8}
-                className="font-mono text-xs bg-muted/40 cursor-default"
-              />
+              <div className="rounded-lg border border-border/50 bg-muted/30 p-3">
+                <p className="line-clamp-3 whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">
+                  {builtinPrompts.childReviewPrompt}
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -1376,9 +1382,64 @@ export function SettingsPage() {
           )}
         </div>
 
+        {/* 系统声明 — 编辑弹窗（完整内容，可编辑 / 恢复默认） */}
+        <Dialog open={directiveDialogOpen} onOpenChange={setDirectiveDialogOpen}>
+          <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{t("settings.prompts.builtin.systemTitle")}</DialogTitle>
+              <DialogDescription>
+                {t("settings.prompts.builtin.systemDesc")}
+              </DialogDescription>
+            </DialogHeader>
+            <Textarea
+              value={directiveDraft}
+              onChange={(e) => setDirectiveDraft(e.target.value)}
+              className="max-h-[60vh] min-h-[50vh] font-mono text-xs"
+            />
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={handleResetDirective}
+                disabled={savingDirective || !builtinPrompts?.systemDirectiveIsCustom}
+              >
+                {t("settings.prompts.builtin.resetDefault")}
+              </Button>
+              <Button
+                variant="default"
+                onClick={handleSaveDirective}
+                disabled={savingDirective || directiveDraft === builtinPrompts?.systemDirective}
+              >
+                {t("settings.prompts.save")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* 子任务回推引导语 — 只读查看弹窗（完整内容） */}
+        <Dialog open={childDialogOpen} onOpenChange={setChildDialogOpen}>
+          <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{t("settings.prompts.builtin.childTitle")}</DialogTitle>
+              <DialogDescription>
+                {t("settings.prompts.builtin.childDesc")}
+              </DialogDescription>
+            </DialogHeader>
+            <Textarea
+              value={builtinPrompts?.childReviewPrompt ?? ""}
+              readOnly
+              className="max-h-[60vh] min-h-[50vh] font-mono text-xs bg-muted/40 cursor-default"
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setChildDialogOpen(false)}>
+                {t("settings.prompts.close")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* Create/Edit Dialog */}
         <Dialog open={promptDialogOpen} onOpenChange={setPromptDialogOpen}>
-          <DialogContent>
+          <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {editingPrompt
@@ -1427,8 +1488,7 @@ export function SettingsPage() {
                   value={promptContent}
                   onChange={(e) => setPromptContent(e.target.value)}
                   placeholder={t("settings.prompts.promptContentPlaceholder")}
-                  rows={8}
-                  className="mt-1.5 font-mono text-sm"
+                  className="mt-1.5 max-h-[55vh] min-h-[40vh] font-mono text-sm"
                 />
               </div>
             </div>
@@ -2288,21 +2348,29 @@ export function SettingsPage() {
 
   function renderNotifications() {
     return (
-      <div className="divide-y divide-border/50">
-        <div className="flex items-center justify-between py-4">
-          <div>
-            <div className="text-sm font-medium">
-              {t("settings.notifications.enable")}
+      <div className="space-y-4">
+        {/* 系统任务通知 */}
+        <div className="rounded-xl border bg-card p-4 space-y-3">
+          <h3 className="text-sm font-semibold">
+            {t("settings.notifications.systemCategory")}
+          </h3>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-sm font-medium">
+                {t("settings.notifications.enable")}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {t("settings.notifications.enableDesc")}
+              </div>
             </div>
-            <div className="text-xs text-muted-foreground mt-0.5">
-              {t("settings.notifications.enableDesc")}
-            </div>
+            <Switch
+              checked={notifEnabled}
+              onCheckedChange={handleToggleNotif}
+            />
           </div>
-          <Switch
-            checked={notifEnabled}
-            onCheckedChange={handleToggleNotif}
-          />
         </div>
+        {/* 无人值守通知 */}
+        <HarnessTargetsSection />
       </div>
     );
   }

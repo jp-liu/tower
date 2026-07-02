@@ -92,12 +92,17 @@ model Task {
   updatedAt   DateTime   @updatedAt
   doneAt      DateTime?  // 进入 DONE 的时间戳，用于「归档期限」判定（离开 DONE 时清空）
 
+  // 无人值守：开启后 agent 遇阻塞主动 ask_human/notify_human（经 tower-ask 技能用平台 MCP 外推）；
+  // 关闭则只在 /harness 面板内显示等待。Tower 只记录+park/resume，不发消息、不存平台绑定。
+  unattended    Boolean   @default(false)
+
   project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   executions TaskExecution[]
   messages   TaskMessage[]
   labels     TaskLabel[]
   notes      ProjectNote[]
   assets     ProjectAsset[]
+  harnessMessages HarnessMessage[]
   version    Version?        @relation(fields: [versionId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
@@ -137,6 +142,36 @@ model TaskExecution {
 
   @@index([taskId])
   @@index([insightNoteId])
+}
+
+// 无人值守：一张表记所有 harness→人 的消息（ask/notify/done/failed）—— 纯记录/日志，Tower 不发送。
+// - kind='ask' 是 park/resume 闭环载体，带生命周期 state：OPEN→ANSWERED|CANCELLED|IGNORED|EXPIRED。
+// - notify/done/failed 是日志行，出生即 CLOSED，不参与「待回复」过滤。
+// - 不变量：待回复 = kind='ask' AND state='OPEN'。回复内容记在 replyText（reply_to_ask 写入）。
+model HarnessMessage {
+  id           String   @id @default(cuid())
+  taskId       String
+  executionId  String?
+  kind         String   // "ask" | "notify" | "done" | "failed"（映射 OutboundKind）
+  content      String
+  replyText    String?
+  repliedAt    DateTime?
+  state        HarnessState @default(OPEN)
+  createdAt    DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, kind, state])
+  @@index([state])
+}
+
+enum HarnessState {
+  OPEN
+  ANSWERED
+  CANCELLED
+  IGNORED
+  EXPIRED
+  CLOSED
 }
 
 model TaskMessage {

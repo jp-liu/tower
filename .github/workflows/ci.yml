@@ -18,8 +18,12 @@ jobs:
     name: test
     runs-on: ubuntu-latest
     env:
-      # Tests hit a real SQLite file (preview-actions / search / fts suites).
-      DATABASE_URL: "file:./prisma/ci.db"
+      # 集成测试有两个 Prisma client 各自定库，二者必须指向同一个 schema-完整库：
+      #   - 测试自建的 testDb 读 DATABASE_URL；
+      #   - app 的 @/lib/db 读 getTowerDbPath() = $TOWER_DATA_DIR/database/tower.db（不读 DATABASE_URL）。
+      # 故把两者对齐到同一文件。
+      TOWER_DATA_DIR: "${{ github.workspace }}/.tower-ci"
+      DATABASE_URL: "file:${{ github.workspace }}/.tower-ci/database/tower.db"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,9 +44,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Set up test database
+        # 直接调 prisma/tsx，让它们用 job 的 DATABASE_URL（= app db 派生的同一文件）。
+        # 不走 pnpm db:push / db:init-fts —— 那两个脚本把 DATABASE_URL 硬编码成本地 ~/.tower-dev。
         run: |
-          pnpm db:push
-          pnpm db:init-fts
+          mkdir -p "$TOWER_DATA_DIR/database"
+          pnpm exec prisma db push --skip-generate --accept-data-loss
+          pnpm exec tsx prisma/init-fts.ts
 
       - name: Test
         run: pnpm test:run

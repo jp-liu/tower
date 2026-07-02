@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   Archive, Plus, Pencil, Trash2,
-  MoreHorizontal, ChevronsLeft, Tag, FileText, FolderOpen, Gauge,
+  MoreHorizontal, ChevronsLeft, Tag, FileText, FolderOpen, Gauge, BellRing,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -263,6 +263,23 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
             </TooltipTrigger>
             <TooltipContent side="right" sideOffset={8}>{t("missions.navLabel")}</TooltipContent>
           </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  onClick={() => router.push("/harness")}
+                  className={`rounded-lg p-2 transition-colors ${
+                    pathname === "/harness"
+                      ? "text-foreground bg-accent"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  }`}
+                />
+              }
+            >
+              <BellRing className="h-4 w-4" />
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={8}>{t("harness.navLabel")}</TooltipContent>
+          </Tooltip>
           {(() => {
             const wsId = activeWorkspaceId || workspaces[0]?.id;
             if (!wsId) return null;
@@ -422,6 +439,17 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
       >
         <Gauge className="h-3.5 w-3.5" />
         <span>{t("missions.navLabel")}</span>
+      </Link>
+      <Link
+        href="/harness"
+        className={`relative z-10 flex items-center gap-2 border-t border-border px-4 py-3 text-[11px] cursor-pointer transition-colors ${
+          pathname === "/harness"
+            ? "text-foreground"
+            : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        <BellRing className="h-3.5 w-3.5" />
+        <span>{t("harness.navLabel")}</span>
       </Link>
       {(() => {
         const wsId = activeWorkspaceId || workspaces[0]?.id;

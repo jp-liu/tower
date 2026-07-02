@@ -70,6 +70,7 @@ const mockEditTask: Task = {
   doneAt: null,
   previewCommandOverride: null,
   previewPortOverride: null,
+  unattended: false,
   versionId: null,
   createdAt: new Date("2026-01-01"),
   updatedAt: new Date("2026-01-01"),

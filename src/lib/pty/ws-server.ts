@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { IncomingMessage } from "http";
 import { getSession, destroySession } from "./session-store";
+import { stripDeviceQueries } from "./strip-device-queries";
 import { readConfigValue } from "@/lib/config-reader";
 import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
 import { getPreviewSession } from "@/lib/preview/session-store";
@@ -388,10 +389,26 @@ function wireSession(session: import("./pty-session").PtySession, ws: WebSocket,
     }
   });
 
-  // Replay buffer for this new client
+  // Replay buffer for this new client.
+  //
+  // CRITICAL: strip terminal query/report-request sequences before replay. The raw
+  // buffer contains queries the TUI (Claude CLI) emitted earlier (cursor-position
+  // reports, Device Attributes, etc.). Replayed verbatim into a fresh xterm, xterm
+  // auto-answers each one and the answers loop back through terminal.onData → this
+  // server's `session.write()` as phantom PTY input the user never typed — which has
+  // been observed to trigger Claude's `/clear` and wipe the session context. Query
+  // requests render nothing, so stripping them is visually lossless.
+  // See strip-device-queries.ts for the full rationale.
   const buffer = session.getBuffer();
   if (buffer && ws.readyState === WebSocket.OPEN) {
-    ws.send(buffer);
+    const safeBuffer = stripDeviceQueries(buffer);
+    if (safeBuffer.length !== buffer.length) {
+      console.error(
+        `[ws-server] Stripped ${buffer.length - safeBuffer.length} bytes of device-query ` +
+          `sequences from replay for task ${taskId} (prevents phantom PTY input on reconnect)`
+      );
+    }
+    ws.send(safeBuffer);
   }
 
   // Set up exit listener — notify ALL connected clients

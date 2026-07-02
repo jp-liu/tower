@@ -115,6 +115,30 @@ export async function dispatchTaskCompletionEvent(
     // Broadcast via WebSocket to all notification clients
     const { broadcastNotification } = await import("@/lib/pty/ws-server");
     broadcastNotification({ ...payload, type: "completion" });
+
+    // Harness done/failed 回执：任务自然结束（非 park —— park 时 execution 是 PAUSED，
+    // onExit guard 早退，根本到不了这里）。无人值守下只**记一条日志行**（供 /harness 面板可见）；
+    // 真正外推给人由 agent 经 tower-ask/notify 技能用平台 MCP 完成，Tower 不发消息。
+    void (async () => {
+      try {
+        const { db } = await import("@/lib/db");
+        const { recordHarnessMessage } = await import("@/lib/harness/harness-message");
+        const task = await db.task.findUnique({
+          where: { id: payload.taskId },
+          select: { unattended: true },
+        });
+        if (!task?.unattended) return;
+        const isDone = payload.status === "COMPLETED";
+        await recordHarnessMessage({
+          taskId: payload.taskId,
+          executionId: payload.executionId,
+          kind: isDone ? "done" : "failed",
+          content: isDone ? "任务已完成，进入待审阅。" : "任务执行失败，请查看终端。",
+        });
+      } catch {
+        // Best-effort — 回执失败不影响主流程
+      }
+    })();
   } catch {
     // Best-effort: notifications are non-critical
   }

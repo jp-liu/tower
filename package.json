@@ -30,7 +30,7 @@
   ],
   "scripts": {
     "predev": "TOWER_DATA_DIR=\"$HOME/.tower-dev\" DATABASE_URL=\"file:$HOME/.tower-dev/database/tower.db\" node scripts/ensure-dev-db.js && pnpm db:migrate && pnpm mcp:build",
-    "dev": "NEXT_DISTDIR=.next-dev TOWER_DATA_DIR=\"$HOME/.tower-dev\" DATABASE_URL=\"file:$HOME/.tower-dev/database/tower.db\" next dev --webpack -p 9022",
+    "dev": "NEXT_DISTDIR=.next-dev TOWER_DATA_DIR=\"$HOME/.tower-dev\" DATABASE_URL=\"file:$HOME/.tower-dev/database/tower.db\" env -u TURBOPACK next dev --webpack -p 9022",
     "build": "pnpm mcp:build && rm -rf .next && next build && find .next -name '*.map' -delete && cp -R .next/static .next/standalone/.next/ && cp -R public .next/standalone/ && node scripts/prune-standalone-natives.js",
     "release": "pnpm build && npm pack",
     "release:smoke": "node scripts/release-smoke.js",

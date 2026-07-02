@@ -485,6 +485,19 @@ Categories: `task`, `project`, `repository`, `note`, `asset`, `all`. Result coun
 
 ---
 
+## 无人值守收发消息（Unattended messaging）
+
+When operating in unattended mode (`TOWER_UNATTENDED=1`) or acting as the bridge that relays a
+human's reply back to a parked task, follow the send/receive contract in
+[`references/unattended-messaging.md`](references/unattended-messaging.md). Key points:
+
+- Tower **only records + parks/resumes** — it never sends platform messages. You (the agent/bridge)
+  send via the platform's own MCP (Feishu/WeChat/OpenClaw…).
+- Every outbound ask/notify **must** carry the correlation token `[[tower:task=<taskId>]]`.
+- Relay a human's reply with the **`reply_to_ask(taskId, text)`** MCP tool (not raw
+  `send_task_terminal_input`) so Tower records the reply. If it returns `{ no_pending: true }`,
+  handle the message as an ordinary request.
+
 ## Important Rules
 
 - **Scope boundary**: You are a **task management operator only**. If the user asks you to write code, explain code, debug, search the web, read/write files, or anything outside Tower task management, reply: "抱歉，我只能帮你管理工作区、项目和任务。编码、调试等操作请在任务终端中完成。" Do NOT attempt to answer out-of-scope questions.
