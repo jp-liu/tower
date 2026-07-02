@@ -21,6 +21,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useScrollOverflow } from "@/hooks/use-scroll-overflow";
 import {
   Settings,
   Cpu,
@@ -935,6 +936,11 @@ export function SettingsPage() {
       width: tabRect.width,
     });
   }, [activeSection]);
+
+  // tab 栏横向溢出检测 —— 溢出才显示滚动箭头（左右按 scrollLeft 分别判断）。复用共享 hook；
+  // deps 挂 locale：中英文标签宽度不同。
+  const { canScrollLeft: canScrollTabsLeft, canScrollRight: canScrollTabsRight } =
+    useScrollOverflow(tabsRef, [locale]);
 
   const activeConfig = SECTIONS.find((s) => s.id === activeSection);
   const accentStyle = activeConfig
@@ -2429,15 +2435,17 @@ export function SettingsPage() {
 
           {/* Horizontal tab navigation */}
           <div className="relative flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => scrollTabs("left")}
-              className="shrink-0"
-              aria-label="scroll tabs left"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
+            {canScrollTabsLeft && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => scrollTabs("left")}
+                className="shrink-0"
+                aria-label="scroll tabs left"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            )}
             <div
               ref={tabsRef}
               className="relative flex flex-1 gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden"
@@ -2489,15 +2497,17 @@ export function SettingsPage() {
               }}
             />
             </div>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => scrollTabs("right")}
-              className="shrink-0"
-              aria-label="scroll tabs right"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+            {canScrollTabsRight && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => scrollTabs("right")}
+                className="shrink-0"
+                aria-label="scroll tabs right"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
       </div>
