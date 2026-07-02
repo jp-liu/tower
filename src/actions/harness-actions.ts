@@ -95,7 +95,9 @@ export async function testHarnessTarget(input: {
       { cwd: getTowerDir(), timeout: 120_000, maxBuffer: 1024 * 1024, env: process.env }
     );
     const out = (stdout || "").trim();
-    return { ok: /\bSENT\b/i.test(out), output: out || "（无输出）" };
+    // 成功 = 含 SENT 且不含 FAIL（避免「FAILED: not SENT」被误判成功）。
+    const ok = /\bSENT\b/i.test(out) && !/\bFAIL/i.test(out);
+    return { ok, output: out || "（无输出）" };
   } catch (e) {
     const err = e as { stdout?: string; stderr?: string; message?: string };
     const out = (err.stdout || err.stderr || err.message || String(e)).trim();

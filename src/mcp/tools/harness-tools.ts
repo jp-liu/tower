@@ -102,7 +102,8 @@ export const harnessTools = {
       const res = await fetch(`${BRIDGE}/reply`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ taskId: args.taskId, text: args.text }),
+        // allowRetry:false —— 只应答仍 OPEN 的问题；答后的新消息返回 no_pending 交 bridge 按普通消息处理。
+        body: JSON.stringify({ taskId: args.taskId, text: args.text, allowRetry: false }),
       });
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
 

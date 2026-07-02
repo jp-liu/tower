@@ -24,12 +24,15 @@ export async function POST(request: NextRequest) {
   const blocked = requireLocalhost(request);
   if (blocked) return blocked;
 
-  let body: { taskId?: string; text?: string };
+  let body: { taskId?: string; text?: string; allowRetry?: boolean };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
+  // allowRetry：无 OPEN ask 但最近一条已 ANSWERED 时，是否把本次当「resume 重试」再注入一遍。
+  // 应用内回复(UI)默认 true；bridge(reply_to_ask)传 false —— 答后的新消息应作普通消息处理，别误重发。
+  const allowRetry = body.allowRetry !== false;
 
   const { text } = body;
   if (!text || typeof text !== "string") {
@@ -55,8 +58,9 @@ export async function POST(request: NextRequest) {
     question = open.content;
   } else {
     // 无 OPEN ask：可能是「已应答但 resume 未完成」的重试，或回复落到非 ask（不当答案）。
+    // bridge(allowRetry=false)：不做重试 —— 答后的消息一律当无待回复(409)，交调用方按普通消息处理。
     const latest = await getLatestAsk(taskId);
-    if (!latest || latest.state !== "ANSWERED") {
+    if (!allowRetry || !latest || latest.state !== "ANSWERED") {
       return NextResponse.json({ error: "No open ask for this task" }, { status: 409 });
     }
     question = latest.content; // resume 重试：带回原问题上下文

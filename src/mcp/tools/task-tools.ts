@@ -58,11 +58,7 @@ export const taskTools = {
       baseBranch: z.string().optional().describe("Base branch for worktree checkout. Only used when useWorktree resolves to true. If omitted, auto-detects the project's current branch."),
       autoStart: z.boolean().optional().describe("Start execution immediately after creating. Omit to use the user's saved default; pass explicitly to override this task."),
       references: z.array(z.string()).max(20).optional(),
-      unattended: z.boolean().optional().describe("Run in unattended mode — the task's ask_human / notify_human / done-failed receipts are pushed to the operator's channel. Defaults false."),
-      notify: z
-        .object({ channel: z.string(), target: z.record(z.string(), z.any()) })
-        .optional()
-        .describe("Origin channel binding for ask_human callbacks, e.g. { channel:'feishu', target:{ chatId, threadId } }. Used to route notifications back to where the task came from."),
+      unattended: z.boolean().optional().describe("Run in unattended mode — the task's agent uses tower-ask to push ask_human / notify_human / done-failed to a configured channel (Settings → Notifications). Defaults false."),
     }),
     handler: async (args: {
       projectId: string;
@@ -78,7 +74,6 @@ export const taskTools = {
       autoStart?: boolean;
       references?: string[];
       unattended?: boolean;
-      notify?: { channel: string; target: Record<string, unknown> };
     }) => {
       // Resolve worktree / auto-start: explicit arg wins, else fall back to the
       // user's saved global default. On the very first MCP create_task where
@@ -165,8 +160,6 @@ export const taskTools = {
           subPath: args.subPath ?? null,
           parentTaskId: resolvedParentId,
           unattended: args.unattended ?? false,
-          notifyChannel: args.notify?.channel ?? null,
-          notifyTarget: args.notify ? JSON.stringify(args.notify.target) : null,
         },
       });
 
