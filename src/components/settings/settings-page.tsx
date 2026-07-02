@@ -2349,20 +2349,27 @@ export function SettingsPage() {
   function renderNotifications() {
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between border-b border-border/50 py-4">
-          <div>
-            <div className="text-sm font-medium">
-              {t("settings.notifications.enable")}
+        {/* 系统任务通知 */}
+        <div className="rounded-xl border bg-card p-4 space-y-3">
+          <h3 className="text-sm font-semibold">
+            {t("settings.notifications.systemCategory")}
+          </h3>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-sm font-medium">
+                {t("settings.notifications.enable")}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {t("settings.notifications.enableDesc")}
+              </div>
             </div>
-            <div className="text-xs text-muted-foreground mt-0.5">
-              {t("settings.notifications.enableDesc")}
-            </div>
+            <Switch
+              checked={notifEnabled}
+              onCheckedChange={handleToggleNotif}
+            />
           </div>
-          <Switch
-            checked={notifEnabled}
-            onCheckedChange={handleToggleNotif}
-          />
         </div>
+        {/* 无人值守通知 */}
         <HarnessTargetsSection />
       </div>
     );

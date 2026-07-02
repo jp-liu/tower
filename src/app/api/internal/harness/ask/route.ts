@@ -49,5 +49,10 @@ export async function POST(request: NextRequest) {
     question,
   });
 
-  return NextResponse.json({ ok: true, requestId: messageId });
+  // 没配置任何发送渠道 → 提示 agent 引导用户去设置页配置（问题仍在 /harness 面板可见可回复）。
+  const { readConfigValue } = await import("@/lib/config-reader");
+  const targets = await readConfigValue<unknown[]>("harness.targets", []);
+  const noChannelConfigured = !Array.isArray(targets) || targets.length === 0;
+
+  return NextResponse.json({ ok: true, requestId: messageId, noChannelConfigured });
 }

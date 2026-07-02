@@ -231,8 +231,9 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
   // ── 无人值守 harness ──────────────────────────────────────────────
   // Tower 只记录 ask/notify/done/failed（/harness 面板可见），**不发送消息**：外推给人由 agent
   // 经 tower-ask 技能用平台 MCP（飞书/微信/…）完成。故这里不再有平台凭据/渠道绑定配置。
-  // 多平台通知目标注册表：无人值守下 agent（tower-ask 技能）据此决定把消息发到哪个渠道 / 网关下游。
-  // 每项形如 { id, label, platform: "feishu"|"openclaw", address, downstream? }。Tower 只存不发。
+  // 无人值守发送渠道注册表：agent（tower-ask 技能）据此决定走哪条「网关→下游」把消息发出去。
+  // 每项形如 { id, label, gateway: "feishu"|"openclaw"|"hermes", downstream: "wechat"|"feishu"|... }
+  // （downstream 也可是自定义文本）。目的地(群/人)在发送时由消息说明，不在此预设。Tower 只存不发。
   "harness.targets": {
     defaultValue: [],
     type: "object",

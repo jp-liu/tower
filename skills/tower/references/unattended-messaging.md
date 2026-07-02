@@ -37,17 +37,31 @@ Tower **不发送、不接收平台消息**，也不维护「任务 ↔ 会话/�
 
    漏了口令 = 人的回复无法归属 = 任务永久卡死。
 
-3. **用平台 MCP 发出去**
-   发给「操作者配置的渠道」。若渠道是 **OpenClaw 网关**，把下游渠道写进消息，例如：
+3. **用一条「网关 → 下游」渠道把它发出去**
+   渠道来自设置里的注册表（`harness.targets`），每条含 `gateway`（feishu/openclaw/hermes）+
+   `downstream`（wechat/feishu/qq/… 或自定义）。**发到哪个群/人在消息里说清楚**（注册表不预设目的地）。
+   按网关措辞：
 
-   > 请通过**微信**渠道发给「后端值班群」：登录页改造需要你拍板……`[[tower:task=cxxx]]`
+   **统一消息模板（填空）**：
 
-   （下游渠道名来自多平台目标配置里的 OpenClaw 卡片，如「微信」。）
+   ```
+   【发送目标】<群组 或 人员>｜【消息】<正文>｜[[tower:task=<taskId>]]
+   ```
+
+   - `gateway=feishu` → 用飞书 MCP 直发：`mcp__feishu__im_v1_message_create` 到 `<发送目标>`，正文带口令。
+   - `gateway=openclaw` / `hermes`（网关转下游）：
+     > 用 **openclaw** 通过 **微信** 发给「后端值班群」：登录页改造需要你拍板…… `[[tower:task=cxxx]]`
+
+   —— `downstream` 决定"通过什么"，目的地（群/人）由消息正文给出。
 
 4. **调 Tower 记录 + park**：`ask_human(taskId, question)` 或 `notify_human(taskId, message)`。
    Tower 只记一条日志行并 park —— **不会再重复发送**。
 
 > 记录的 `content` 应与你发出去的正文一致（口令可省略在记录里），这样 `/harness` 日志里「问了什么」才准确。
+
+> **没有配置任何渠道时**（`harness.targets` 为空，`ask_human` 会返回 `noChannelConfigured: true`）：
+> **不要臆造发送**。直接告诉用户「请到 **设置 → 通知 → 无人值守发送渠道** 配置一个渠道，否则无法外发对应消息」。
+> 问题仍已记录、在 `/harness` 面板可见可回复，只是不会推到外部渠道。
 
 ---
 

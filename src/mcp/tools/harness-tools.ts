@@ -35,13 +35,25 @@ export const harnessTools = {
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) return { error: data?.error ?? "ask failed", status: res.status };
 
-      return {
+      const base = {
         parked: true,
         requestId: data.requestId,
         message:
           "Question recorded and task parked. Your turn is over — stop now and wait. " +
           "You will be resumed with the human's answer as your next message.",
       };
+      // 没有配置任何发送渠道 → 无法外推。告诉 agent 引导用户去设置页配置。
+      if (data.noChannelConfigured) {
+        return {
+          ...base,
+          noChannelConfigured: true,
+          message:
+            "Question recorded (visible in Tower's /harness panel) and task parked, but NO notify " +
+            "channel is configured, so it cannot be pushed to any external channel. Before stopping, " +
+            "tell the user: 请到「设置 → 通知 → 无人值守发送渠道」配置一个渠道，否则无法外发。",
+        };
+      }
+      return base;
     },
   },
 
