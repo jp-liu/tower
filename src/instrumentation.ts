@@ -18,6 +18,38 @@ export async function register() {
     const { ensureTowerDir } = await import("@/lib/init-tower");
     ensureTowerDir();
 
+    // Harness: register unattended notify channels (feishu) if credentials present.
+    // Idempotent + self-healing — dispatch paths re-ensure lazily too. Fire-and-forget.
+    void (async () => {
+      try {
+        const { ensureNotifyChannels } = await import("@/lib/harness/notify/init");
+        await ensureNotifyChannels();
+      } catch (err) {
+        console.error("[harness] notify channel init failed:", err);
+      }
+    })();
+
+    // Harness TTL sweep: expire long-open asks so they don't linger forever if a task
+    // dies without cleanup. Run once at boot + every 6h. globalThis flag guards against
+    // duplicate intervals across HMR reloads.
+    const gSweep = globalThis as typeof globalThis & { __harnessSweepStarted?: boolean };
+    if (!gSweep.__harnessSweepStarted) {
+      gSweep.__harnessSweepStarted = true;
+      const runSweep = async () => {
+        try {
+          const { readConfigValue } = await import("@/lib/config-reader");
+          const { sweepExpiredAsks } = await import("@/lib/harness/harness-message");
+          const ttlDays = await readConfigValue<number>("harness.pendingTtlDays", 14);
+          const n = await sweepExpiredAsks(ttlDays);
+          if (n > 0) console.error(`[harness] TTL sweep expired ${n} stale open ask(s)`);
+        } catch (err) {
+          console.error("[harness] TTL sweep failed:", err);
+        }
+      };
+      void runSweep();
+      setInterval(() => void runSweep(), 6 * 60 * 60 * 1000);
+    }
+
     // Auto-install Tower MCP into every available CLI's user-scope config.
     // Idempotent — skips providers whose CLI isn't installed or whose user-
     // scope MCP entry already matches. Runs after ensureTowerDir so any

@@ -8,6 +8,7 @@ import { knowledgeTools } from "./tools/knowledge-tools";
 import { noteAssetTools } from "./tools/note-asset-tools";
 import { terminalTools } from "./tools/terminal-tools";
 import { reportTools } from "./tools/report-tools";
+import { harnessTools } from "./tools/harness-tools";
 
 export function createServer(): McpServer {
   const server = new McpServer({ name: "tower", version: "0.1.0" });
@@ -22,6 +23,7 @@ export function createServer(): McpServer {
     ...noteAssetTools,
     ...terminalTools,
     ...reportTools,
+    ...harnessTools,
   };
 
   for (const [name, tool] of Object.entries(allTools)) {

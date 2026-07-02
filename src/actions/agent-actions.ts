@@ -7,6 +7,7 @@ import { createSession } from "@/lib/pty/session-store";
 import { logger } from "@/lib/logger";
 import { readConfigValue } from "@/lib/config-reader";
 import { resolveCliAdapter } from "@/lib/ai/capability-resolver";
+import { cancelOpenAsks } from "@/lib/harness/harness-message";
 import { writeFile, rm, mkdtemp, mkdir } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -100,6 +101,8 @@ export async function stopTaskExecution(executionId: string, status: "COMPLETED"
  * and updates the execution status to COMPLETED.
  */
 export async function stopPtyExecution(taskId: string): Promise<void> {
+  // Harness 清理：任务被停 → 该任务任何待回复 ask 作废（CANCELLED）。best-effort。
+  await cancelOpenAsks(taskId).catch(() => {});
   const { destroySession, getSession } = await import("@/lib/pty/session-store");
 
   // Capture buffer before destroying
@@ -160,6 +163,8 @@ export async function resumePtyExecution(
   taskId: string,
   previousSessionId: string
 ): Promise<{ executionId: string; worktreePath: string | null }> {
+  // Harness 清理：人工重启会话 → 作废旧的待回复 ask（/reply 已先应答，故此处对其为 no-op）。
+  await cancelOpenAsks(taskId).catch(() => {});
   const task = await db.task.findUnique({
     where: { id: taskId },
     include: { project: true },
@@ -222,6 +227,8 @@ export async function resumePtyExecution(
     ],
     envOverrides: adapterEnv,
   });
+
+  if (task.unattended) spawnResult.env.TOWER_UNATTENDED = "1";
 
   const SESSION_ERROR_RE = /no conversation found with session id|unknown session|session .* not found/i;
 
@@ -301,6 +308,9 @@ export async function resumePtyExecution(
 export async function continueLatestPtyExecution(
   taskId: string
 ): Promise<{ executionId: string; worktreePath: string | null }> {
+  // Harness 清理：人工重启（Continue 按钮）→ 作废旧的待回复 ask。
+  // 经 /reply 走这里时该任务已无 OPEN ask（先应答再 resume），故对答复流程为 no-op。
+  await cancelOpenAsks(taskId).catch(() => {});
   const task = await db.task.findUnique({
     where: { id: taskId },
     include: { project: true },
@@ -369,6 +379,8 @@ export async function continueLatestPtyExecution(
     ],
     envOverrides: adapterEnv,
   });
+
+  if (task.unattended) spawnResult.env.TOWER_UNATTENDED = "1";
 
   createSession(
     taskId,
@@ -485,6 +497,9 @@ export async function startPtyExecution(
   /** When true, skip injecting task context — start a clean CLI session */
   cleanStart?: boolean
 ): Promise<{ executionId: string; worktreePath: string | null }> {
+  // Harness 清理：全新/重启一段执行 → 作废旧的待回复 ask（fresh start 由 /reply 走时任务无历史，
+  // 此处也无 OPEN 可清）。best-effort。
+  await cancelOpenAsks(taskId).catch(() => {});
   // 1. Load task with project
   const task = await db.task.findUnique({
     where: { id: taskId },
@@ -667,6 +682,9 @@ export async function startPtyExecution(
       callbackUrl: callbackUrl ?? undefined,
     }),
   });
+
+  // 无人值守：让运行中的 agent 知道自己处于无人值守模式（据此主动用 ask_human/notify_human）。
+  if (task.unattended) spawnResult.env.TOWER_UNATTENDED = "1";
 
   // 9. Create PTY session — onData is a no-op; ws-server.ts wires the real
   //    broadcaster via setDataListener when the WebSocket client connects
