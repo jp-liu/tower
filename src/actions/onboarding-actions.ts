@@ -115,6 +115,31 @@ export async function dispatchTaskCompletionEvent(
     // Broadcast via WebSocket to all notification clients
     const { broadcastNotification } = await import("@/lib/pty/ws-server");
     broadcastNotification({ ...payload, type: "completion" });
+
+    // Harness done/failed 回执：任务自然结束（非 park —— park 时 execution 是 PAUSED，
+    // onExit guard 早退，根本到不了这里）。无人值守且有 notify 绑定时推一条完成/失败回执。
+    void (async () => {
+      try {
+        const { db } = await import("@/lib/db");
+        const { notifyForTask } = await import("@/lib/harness/notify/dispatch");
+        const task = await db.task.findUnique({
+          where: { id: payload.taskId },
+          select: { unattended: true },
+        });
+        if (!task?.unattended) return;
+        const isDone = payload.status === "COMPLETED";
+        await notifyForTask({
+          taskId: payload.taskId,
+          unattended: true,
+          kind: isDone ? "done" : "failed",
+          title: payload.taskTitle,
+          body: isDone ? "任务已完成，进入待审阅。" : "任务执行失败，请查看终端。",
+          correlationId: payload.executionId,
+        });
+      } catch {
+        // Best-effort — 回执失败不影响主流程
+      }
+    })();
   } catch {
     // Best-effort: notifications are non-critical
   }
