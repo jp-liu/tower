@@ -111,6 +111,23 @@ export async function dispatchHarnessMessage(
   }
 }
 
+/** 重发一条已记录的消息（通知中心「重发」按钮用）。按当前绑定重新投递并刷新 notifyStatus。 */
+export async function resendHarnessMessage(messageId: string): Promise<NotifyResult> {
+  const row = await db.harnessMessage.findUnique({
+    where: { id: messageId },
+    include: { task: { select: { title: true, unattended: true } } },
+  });
+  if (!row) return { notified: false, reason: "not_found" };
+  return dispatchHarnessMessage({
+    messageId: row.id,
+    taskId: row.taskId,
+    unattended: row.task.unattended,
+    kind: row.kind as OutboundKind,
+    title: row.task.title,
+    body: row.content,
+  });
+}
+
 /**
  * 记录 + 派发一条 notify/done/failed 日志消息（一步到位）。ask 不走这里 —— 它要先 park、
  * 走 {@link createAskMessage} + 单独 {@link dispatchHarnessMessage}。
