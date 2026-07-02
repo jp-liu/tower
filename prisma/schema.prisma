@@ -92,12 +92,19 @@ model Task {
   updatedAt   DateTime   @updatedAt
   doneAt      DateTime?  // 进入 DONE 的时间戳，用于「归档期限」判定（离开 DONE 时清空）
 
+  // 无人值守：开启后 ask_human / notify_human / done-failed 回执会主动推通知；关闭则只在 UI 内显示等待，不打扰
+  unattended    Boolean   @default(false)
+  // ask_human 通知回流绑定：渠道 id（如 "feishu"）+ 目标地址（JSON 字符串，如 {"chatId":"oc_..","threadId":"om_.."}）
+  notifyChannel String?
+  notifyTarget  String?
+
   project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   executions TaskExecution[]
   messages   TaskMessage[]
   labels     TaskLabel[]
   notes      ProjectNote[]
   assets     ProjectAsset[]
+  humanInputs HumanInputRequest[]
   version    Version?        @relation(fields: [versionId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
@@ -137,6 +144,28 @@ model TaskExecution {
 
   @@index([taskId])
   @@index([insightNoteId])
+}
+
+// 无人值守：agent 调 ask_human 时落一条 PENDING，人回复后转 ANSWERED；park/resume 闭环的持久化载体。
+model HumanInputRequest {
+  id          String   @id @default(cuid())
+  taskId      String
+  executionId String?
+  question    String
+  status      HumanInputStatus @default(PENDING)
+  answer      String?
+  createdAt   DateTime @default(now())
+  answeredAt  DateTime?
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, status])
+}
+
+enum HumanInputStatus {
+  PENDING
+  ANSWERED
+  CANCELLED
 }
 
 model TaskMessage {
