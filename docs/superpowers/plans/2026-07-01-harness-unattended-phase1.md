@@ -23,6 +23,28 @@
 
 ---
 
+## 讨论定稿(2026-07-02,刘俊平拍板)
+
+**① ask_human 粒度**:两档都做进 Phase 1 —— `ask_human`(阻塞 park)+ `notify_human`(非阻塞、agent 继续)。另加系统发的 `done/failed` 完成回执(闭环)。软否决窗口留 Phase 2。
+
+**② 无人值守作用域**:**任务层主控,运行时可翻**;全局/项目只做新任务默认种子;加一个**全局 DND 总闸**盖过所有 on。**升级链**:子任务沿祖先链向上找 notify 绑定(呼应现有派生中枢"子任务回馈父任务"),找不到落到**默认 sink = Tower 飞书群**。
+
+**③ 成本防跑飞**:CLI 模式扣不准 token,**先不做真计量,但预留口子**——抽象 `BudgetGuard` 接口,Phase 1 实现用「最大回合数/最大时长」代理,后续加 **api-token 计量实现**只换实现不改调用点。铁律不变:所有防线终点是**升级问人**,不静默杀/放弃/无限重试。重试上限默认 3,看门狗看「输出静默」默认 15 分钟(Phase 3)。**权限模式**(无人值守启动不卡 CLI 权限弹窗、危险操作走 ask_human)Phase 1 就进。
+
+**④ 通知收敛**:一任务一飞书话题(thread)+ `reply_in_thread`;消息头带任务名 + `[[reply:id]]` 兜底;`ask`/`failed` 带 @(响),`progress`/`done` 不带 @(静)。
+
+**对本 plan 的增量**(在下方 Task 里体现):
+- Task 5 增加 `notify_human` 工具(非阻塞,只 dispatch,不建 PENDING、不 park)。
+- 新增 `done/failed` 完成回执:接到任务结束(onExit IN_REVIEW / 失败)时,unattended 且有 notify 绑定 → dispatch 一条 kind=done/failed。
+- 新增 `resolveNotifyBinding(taskId)`:先看自身 notifyChannel/Target,无则沿 `parentTaskId` 向上找,仍无则用全局默认 sink(Tower 群 chatId,存 `harness.defaultSink` 配置)。
+- 新增配置键 `harness.dnd`(全局静音)、`harness.defaultSink`(默认飞书群 chatId/threadId)。ask/notify/done dispatch 前判断 `unattended && !dnd`。
+- 新增 `src/lib/harness/budget.ts` 的 `BudgetGuard` 接口 + `TurnTimeBudgetGuard` 代理实现(超限 → 转 ask_human,不杀)。
+- 启动参数:unattended 执行强制非阻塞权限模式(`acceptEdits` 或 bypass + 精选禁用清单),见 `startPtyExecution`。
+- 系统声明(Task System Directive)追加「无人值守段」:何时用 ask_human vs notify_human、遇危险操作走 ask_human、CLI 不得卡在权限弹窗。
+- 飞书 adapter 出站用 `reply_in_thread`(有 threadId 时),按 kind 决定是否 @。
+
+---
+
 ## File Structure
 
 **新建(Tower 侧):**
