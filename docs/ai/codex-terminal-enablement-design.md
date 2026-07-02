@@ -161,9 +161,21 @@
 
 ---
 
-## 6. 端到端验证记录
+## 6. 端到端验证记录（2026-07-02）
 
-（实现后回填）
+**已验证（绿）：**
+1. **单测** — `codex-cli-adapter.test.ts` 25/25 通过（fresh + resume 两条 spawn 断言按新行为更新）。
+2. **typecheck** — 全量 `tsc --noEmit`：我改的 5 个文件零错误；仅 14 条 pre-existing 测试文件类型错（Prisma mock cast，与本次无关）。
+3. **真实 CLI（codex-cli 0.142.5，本机）** — `--dangerously-bypass-approvals-and-sandbox` 在 fresh 与 `resume` 位置均解析通过；`codex exec "hi"`（关 stdin）秒回、且 Tower hooks 实际触发（`hook: SessionStart/Stop Completed`）；`tower` MCP 已注册。
+4. **resolve→spawn 全链路（tsx 脚本 + dev DB）** — seed「codex 已连接」+ 设 terminal 插槽=codex，跑真实 `resolveCliAdapter("terminal")`：
+   - 插槽空 → `provider=claude`，`claude --dangerously-skip-permissions <prompt>`（默认不变，老用户零感知）✓
+   - 插槽=codex → `provider=codex`，fresh=`codex --dangerously-bypass-approvals-and-sandbox <prompt>`，resume=`codex --dangerously-bypass-approvals-and-sandbox --model gpt-5.5 resume <id>`（extraArgs 在 resume 子命令前，bug 2 修复生效）✓ **PASS**
+
+**未验证（受阻，非本次改动引入）：**
+- **浏览器级实测（Test Connection 按钮 → 插槽 UI → 真起 PTY 任务）** — dev server 编译失败：`@xterm/xterm/css/xterm.css` webpack CSS loader 解析报错（`Module parse failed (38:0) .xterm {`，trace：`layout-client → terminal-portal → task-terminal → xterm.css`），导致所有路由含 API 全 500。**与本次改动无关**（未碰 xterm/终端/CSS），在 main 上同样会崩，属独立的 dev 构建问题，建议单独排查。
+- 为补偿：已在 **dev DB seed** 好 codex 连接 + terminal→codex，明早 dev 起来（构建问题解决后）即可在 Settings 直接看到 codex 已选中、并起任务实测。
+
+**结论**：后端链路（adapter 修复 + resolver 选路 + 插槽落库）端到端 PASS；仅浏览器 UI 冒烟因 pre-existing 构建问题待补。
 
 ---
 
