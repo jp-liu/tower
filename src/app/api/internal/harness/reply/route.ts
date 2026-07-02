@@ -13,10 +13,9 @@ export const dynamic = "force-dynamic";
 const PORT = process.env.PORT ?? "3000";
 
 /**
- * 唯一入站回复出口。渠道 adapter（飞书 bot / 通知中心页面）把人的回复归一化后 POST 到这里。
- *
- * 归属：优先 { taskId, text }；否则 { channel, locator, text } 由 Tower 反查 taskId
- * （靠出站时写入的 Task.notifyThreadRef = "<channel>:<locator>"）。
+ * 入站回复出口。bridge（bot / OpenClaw…，经 reply_to_ask 工具）或通知中心页面把人的回复
+ * 带上 taskId POST 到这里。归属由调用方给 taskId —— Tower 不存「平台线程↔任务」绑定，
+ * 那张映射表在 bridge 侧（靠出站消息里的 [[tower:task=<id>]] 口令维护）。
  *
  * 流程：定位 OPEN ask → 幂等应答（并发只第一条生效）→ 复位 PAUSED→RUNNING → resume（复用
  * Continue 原语）→ 等就绪后注入答案（fresh start 时带上原问题上下文）。
@@ -25,7 +24,7 @@ export async function POST(request: NextRequest) {
   const blocked = requireLocalhost(request);
   if (blocked) return blocked;
 
-  let body: { taskId?: string; channel?: string; locator?: string; text?: string };
+  let body: { taskId?: string; text?: string };
   try {
     body = await request.json();
   } catch {
@@ -37,24 +36,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "text required" }, { status: 400 });
   }
 
-  // ── 归属：taskId 直给，或经 {channel,locator} 反查 ──
-  let taskId: string | null = null;
-  if (body.taskId) {
-    const idErr = validateTaskId(body.taskId);
-    if (idErr) return idErr;
-    taskId = body.taskId;
-  } else if (body.channel && body.locator) {
-    const found = await db.task.findFirst({
-      where: { notifyThreadRef: `${body.channel}:${body.locator}` },
-      select: { id: true },
-    });
-    taskId = found?.id ?? null;
-    if (!taskId) {
-      return NextResponse.json({ error: "No task bound to this channel/locator" }, { status: 404 });
-    }
-  } else {
-    return NextResponse.json({ error: "taskId or {channel,locator} required" }, { status: 400 });
+  if (!body.taskId) {
+    return NextResponse.json({ error: "taskId required" }, { status: 400 });
   }
+  const idErr = validateTaskId(body.taskId);
+  if (idErr) return idErr;
+  const taskId = body.taskId;
 
   // ── 定位 OPEN ask + 幂等应答 ──
   let question: string | null = null;

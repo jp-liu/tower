@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireLocalhost, validateTaskId } from "@/lib/internal-api-guard";
 import { db } from "@/lib/db";
-import { emitHarnessMessage } from "@/lib/harness/notify/dispatch";
+import { recordHarnessMessage } from "@/lib/harness/harness-message";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * notify_human 桥：非阻塞进度汇报。不建 PENDING、不 park、不结束回合 —— agent 继续跑。
- * 只在无人值守（且未 DND）下把一条 progress 推到操作者渠道。
+ * notify_human 桥：非阻塞进度汇报。不 park、不结束回合 —— agent 继续跑。
+ * Tower 只**记一条日志行**（供 /harness 面板可见）；真正外推给人由 agent 用平台 MCP 完成。
  */
 export async function POST(request: NextRequest) {
   const blocked = requireLocalhost(request);
@@ -33,17 +33,15 @@ export async function POST(request: NextRequest) {
 
   const task = await db.task.findUnique({
     where: { id: taskId },
-    select: { title: true, unattended: true },
+    select: { unattended: true },
   });
   if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
 
-  const { messageId, notified } = await emitHarnessMessage({
+  const { messageId } = await recordHarnessMessage({
     taskId,
-    unattended: task.unattended,
     kind: "notify",
-    title: task.title,
-    body: message,
+    content: message,
   });
 
-  return NextResponse.json({ ok: true, messageId, notified });
+  return NextResponse.json({ ok: true, messageId });
 }

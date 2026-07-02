@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
-import type { OutboundKind } from "./notify/types";
+
+/** harness→人 消息的种类。ask 参与 park/resume 生命周期；其余是纯日志行。 */
+export type OutboundKind = "ask" | "notify" | "done" | "failed";
 
 export type HarnessState =
   | "OPEN"
@@ -9,12 +11,10 @@ export type HarnessState =
   | "IGNORED"
   | "EXPIRED"
   | "CLOSED";
-export type HarnessNotifyStatus = "PENDING" | "SENT" | "FAILED";
 
 /**
- * 记一条 harness→人 的消息。state 由 kind 决定：ask 出生 OPEN（进入 park/resume 生命周期），
- * notify/done/failed 出生即 CLOSED（纯日志行，不参与「待回复」过滤）。
- * notifyStatus 一律从 PENDING 起步，发送后由 {@link markNotifyStatus} 更新（记录≠发送）。
+ * 记一条 harness→人 的消息（纯记录，Tower 不发送）。state 由 kind 决定：ask 出生 OPEN
+ * （进入 park/resume 生命周期），notify/done/failed 出生即 CLOSED（纯日志行，不参与「待回复」过滤）。
  */
 export async function recordHarnessMessage(args: {
   taskId: string;
@@ -30,7 +30,6 @@ export async function recordHarnessMessage(args: {
       kind: args.kind,
       content: args.content,
       state,
-      notifyStatus: "PENDING",
     },
   });
   return { messageId: row.id };
@@ -106,23 +105,6 @@ export async function cancelOpenAsks(taskId: string): Promise<number> {
   return res.count;
 }
 
-/** 发送后更新投递状态（与 state 解耦）。 */
-export async function markNotifyStatus(
-  messageId: string,
-  status: HarnessNotifyStatus,
-  extra?: { channel?: string; targetRef?: string; sentAt?: Date }
-): Promise<void> {
-  await db.harnessMessage.update({
-    where: { id: messageId },
-    data: {
-      notifyStatus: status,
-      ...(status === "SENT" ? { sentAt: extra?.sentAt ?? new Date() } : {}),
-      ...(extra?.channel !== undefined ? { channel: extra.channel } : {}),
-      ...(extra?.targetRef !== undefined ? { targetRef: extra.targetRef } : {}),
-    },
-  });
-}
-
 /** UI「dismiss」：删除一条 info（notify/done/failed）日志行。 */
 export async function dismissMessage(messageId: string): Promise<void> {
   await db.harnessMessage.delete({ where: { id: messageId } });
@@ -139,8 +121,8 @@ export async function sweepExpiredAsks(ttlDays: number): Promise<number> {
 }
 
 export interface ListHarnessFilter {
-  /** "pending" = 待回复; "failed" = 发送失败; "answered" = 已回复; "all" = 全部 */
-  view?: "pending" | "failed" | "answered" | "all";
+  /** "pending" = 待回复; "answered" = 已回复; "all" = 全部 */
+  view?: "pending" | "answered" | "all";
   limit?: number;
 }
 
@@ -150,11 +132,9 @@ export async function listHarnessMessages(filter: ListHarnessFilter = {}) {
   const where: Prisma.HarnessMessageWhereInput =
     view === "pending"
       ? { kind: "ask", state: "OPEN" }
-      : view === "failed"
-        ? { notifyStatus: "FAILED" }
-        : view === "answered"
-          ? { kind: "ask", state: "ANSWERED" }
-          : {};
+      : view === "answered"
+        ? { kind: "ask", state: "ANSWERED" }
+        : {};
   return db.harnessMessage.findMany({
     where,
     orderBy: { createdAt: "desc" },

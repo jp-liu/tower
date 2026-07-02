@@ -10,12 +10,11 @@ import {
   replyHarnessAsk,
   ignoreHarnessAsk,
   dismissHarnessMessage,
-  resendHarnessMessage_action,
   type HarnessMessageView,
   type HarnessView,
 } from "@/actions/harness-actions";
 
-const VIEWS: HarnessView[] = ["pending", "failed", "answered", "all"];
+const VIEWS: HarnessView[] = ["pending", "answered", "all"];
 
 const KIND_KEY = {
   ask: "harness.kind.ask",
@@ -24,10 +23,9 @@ const KIND_KEY = {
   failed: "harness.kind.failed",
 } as const;
 
-// 状态徽标配色（spec ④）：待回复 amber、失败 red、已回复 emerald、通知/完成 muted。
+// 状态徽标配色：待回复 amber、已回复 emerald、通知/完成 muted。
 const STATUS_COLORS = {
   pending: "bg-amber-500/15 text-amber-500 ring-amber-500/25",
-  failed: "bg-rose-500/15 text-rose-400 ring-rose-500/25",
   answered: "bg-emerald-500/15 text-emerald-500 ring-emerald-500/25",
   muted: "bg-muted text-muted-foreground ring-border",
 } as const;
@@ -39,7 +37,6 @@ function badgeOf(m: HarnessMessageView): BadgeKind {
     if (m.state === "ANSWERED") return "answered";
     if (m.state === "OPEN") return "pending";
   }
-  if (m.notifyStatus === "FAILED") return "failed";
   return "muted";
 }
 
@@ -152,14 +149,6 @@ function HarnessCard({
 
   const isOpenAsk = m.kind === "ask" && m.state === "OPEN";
   const isInfo = m.kind !== "ask";
-  const isFailed = m.notifyStatus === "FAILED";
-
-  const delivery =
-    m.notifyStatus === "SENT"
-      ? t("harness.meta.delivered")
-      : m.notifyStatus === "FAILED"
-        ? t("harness.meta.notDelivered")
-        : t("harness.meta.notSent");
 
   const doReply = () => {
     if (!reply.trim()) return;
@@ -187,14 +176,6 @@ function HarnessCard({
       onChanged();
     });
 
-  const doResend = () =>
-    startTransition(async () => {
-      const r = await resendHarnessMessage_action(m.id);
-      if (r.ok) toast.success(t("harness.toast.resent"));
-      else toast.error(t("harness.toast.resendFailed"));
-      onChanged();
-    });
-
   return (
     <div className={`relative flex flex-col rounded-xl border bg-card p-4 ${pending ? "opacity-50" : ""}`}>
       {/* 头：任务名 + 状态徽标 */}
@@ -209,19 +190,11 @@ function HarnessCard({
         </span>
       </div>
 
-      {/* 元行：kind · 时间 · 渠道送达标 */}
+      {/* 元行：kind · 时间 */}
       <div className="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground">
         <span>{t(KIND_KEY[m.kind as keyof typeof KIND_KEY] ?? "harness.kind.notify")}</span>
         <span>·</span>
         <span>{relTime(m.createdAt)}</span>
-        {m.channel && (
-          <>
-            <span>·</span>
-            <span>
-              {m.channel} {delivery}
-            </span>
-          </>
-        )}
       </div>
 
       {/* 正文：发送内容 */}
@@ -257,11 +230,6 @@ function HarnessCard({
             <Button variant="outline" onClick={doIgnore} disabled={pending} className="text-muted-foreground">
               {t("harness.action.ignore")}
             </Button>
-            {isFailed && (
-              <Button variant="outline" onClick={doResend} disabled={pending} className="text-muted-foreground">
-                {t("harness.action.resend")}
-              </Button>
-            )}
           </div>
         </div>
       )}
@@ -271,11 +239,6 @@ function HarnessCard({
           <Button variant="outline" onClick={doDismiss} disabled={pending} className="text-muted-foreground">
             {t("harness.action.dismiss")}
           </Button>
-          {isFailed && (
-            <Button variant="outline" onClick={doResend} disabled={pending} className="text-muted-foreground">
-              {t("harness.action.resend")}
-            </Button>
-          )}
         </div>
       )}
     </div>

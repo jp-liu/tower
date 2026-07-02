@@ -7,22 +7,18 @@ import {
   dismissMessage,
   type ListHarnessFilter,
 } from "@/lib/harness/harness-message";
-import { resendHarnessMessage } from "@/lib/harness/notify/dispatch";
 
-export type HarnessView = "pending" | "failed" | "answered" | "all";
+export type HarnessView = "pending" | "answered" | "all";
 
 export interface HarnessMessageView {
   id: string;
   taskId: string;
   taskTitle: string;
   kind: string;
-  channel: string | null;
   content: string;
-  notifyStatus: string;
   state: string;
   replyText: string | null;
   repliedAt: string | null;
-  sentAt: string | null;
   createdAt: string;
 }
 
@@ -34,13 +30,10 @@ export async function getHarnessMessages(view: HarnessView = "pending"): Promise
     taskId: r.taskId,
     taskTitle: r.task?.title ?? "",
     kind: r.kind,
-    channel: r.channel,
     content: r.content,
-    notifyStatus: r.notifyStatus,
     state: r.state,
     replyText: r.replyText,
     repliedAt: r.repliedAt ? r.repliedAt.toISOString() : null,
-    sentAt: r.sentAt ? r.sentAt.toISOString() : null,
     createdAt: r.createdAt.toISOString(),
   }));
 }
@@ -78,8 +71,3 @@ export async function dismissHarnessMessage(messageId: string): Promise<{ ok: bo
   return { ok: true };
 }
 
-export async function resendHarnessMessage_action(messageId: string): Promise<{ ok: boolean; error?: string }> {
-  const r = await resendHarnessMessage(messageId);
-  revalidatePath("/harness");
-  return { ok: r.notified, error: r.notified ? undefined : r.reason };
-}

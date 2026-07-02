@@ -23,7 +23,6 @@ import {
   answerOpenAsk,
   ignoreAsk,
   cancelOpenAsks,
-  markNotifyStatus,
   sweepExpiredAsks,
 } from "../harness-message";
 
@@ -47,7 +46,7 @@ describe("recordHarnessMessage", () => {
     const { messageId } = await recordHarnessMessage({ taskId: "t1", kind: "ask", content: "Q" });
     expect(messageId).toBe("h1");
     expect(m.harnessMessage.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ kind: "ask", state: "OPEN", notifyStatus: "PENDING", content: "Q" }),
+      data: expect.objectContaining({ kind: "ask", state: "OPEN", content: "Q" }),
     });
   });
 
@@ -125,7 +124,7 @@ describe("answerOpenAsk (幂等)", () => {
   });
 });
 
-describe("ignoreAsk / cancelOpenAsks / markNotifyStatus / sweepExpiredAsks", () => {
+describe("ignoreAsk / cancelOpenAsks / sweepExpiredAsks", () => {
   it("ignoreAsk 只把 OPEN 的那条转 IGNORED", async () => {
     m.harnessMessage.updateMany.mockResolvedValue({ count: 1 });
     await ignoreAsk("h1");
@@ -139,15 +138,6 @@ describe("ignoreAsk / cancelOpenAsks / markNotifyStatus / sweepExpiredAsks", () 
     m.harnessMessage.updateMany.mockResolvedValue({ count: 2 });
     const n = await cancelOpenAsks("t1");
     expect(n).toBe(2);
-  });
-
-  it("markNotifyStatus 写 notifyStatus 及可选 sentAt/channel/targetRef", async () => {
-    m.harnessMessage.update.mockResolvedValue({});
-    await markNotifyStatus("h1", "SENT", { channel: "feishu", targetRef: '{"chatId":"oc"}' });
-    expect(m.harnessMessage.update).toHaveBeenCalledWith({
-      where: { id: "h1" },
-      data: expect.objectContaining({ notifyStatus: "SENT", channel: "feishu", targetRef: '{"chatId":"oc"}' }),
-    });
   });
 
   it("sweepExpiredAsks 把超期 OPEN ask 转 EXPIRED", async () => {

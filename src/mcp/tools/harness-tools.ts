@@ -38,9 +38,8 @@ export const harnessTools = {
       return {
         parked: true,
         requestId: data.requestId,
-        notified: data.notified,
         message:
-          "Question posted and task parked. Your turn is over — stop now and wait. " +
+          "Question recorded and task parked. Your turn is over — stop now and wait. " +
           "You will be resumed with the human's answer as your next message.",
       };
     },
@@ -68,7 +67,38 @@ export const harnessTools = {
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) return { error: data?.error ?? "notify failed", status: res.status };
 
-      return { ok: true, notified: data.notified };
+      return { ok: true, messageId: data.messageId };
+    },
+  },
+
+  reply_to_ask: {
+    description:
+      "Deliver a human's reply back to a task that is PARKED waiting on ask_human, then RESUME it. " +
+      "Use this (not send_task_terminal_input) when relaying an operator's answer from a channel " +
+      "(Feishu/WeChat/etc.) so Tower records what was replied and shows the full round-trip in its log. " +
+      "It marks the open question as answered, resumes the task's session, and injects the reply as the " +
+      "task's next message. If the task has NO pending question, it does nothing and returns { no_pending: true } — " +
+      "in that case treat the message as an ordinary request and handle it normally (create_task / search / etc.).",
+    schema: z.object({
+      taskId: z.string().describe("The task that is parked waiting for a reply (its TOWER_TASK_ID)"),
+      text: z.string().min(1).max(8000).describe("The human's reply to inject into the task"),
+    }),
+    handler: async (args: { taskId: string; text: string }) => {
+      const err = validateMcpTaskId(args.taskId);
+      if (err) return { error: err, taskId: args.taskId };
+
+      const res = await fetch(`${BRIDGE}/reply`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ taskId: args.taskId, text: args.text }),
+      });
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+      // 409 = 该任务没有待回复的 ask —— 不是错误，告诉调用方按普通消息处理。
+      if (res.status === 409) return { no_pending: true, taskId: args.taskId };
+      if (!res.ok) return { error: data?.error ?? "reply failed", status: res.status };
+
+      return { ok: true, taskId: args.taskId, mode: data.mode, injected: data.injected, deduped: data.deduped };
     },
   },
 };

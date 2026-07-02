@@ -72,6 +72,7 @@ import type { GitPathRule } from "@/lib/git-url";
 import { BackupSection } from "./backup-section";
 import { ExtensionsSection } from "./extensions-section";
 import { KeyboardShortcutsSection } from "./keyboard-shortcuts-section";
+import { HarnessTargetsSection } from "./harness-targets-section";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
@@ -2347,8 +2348,8 @@ export function SettingsPage() {
 
   function renderNotifications() {
     return (
-      <div className="divide-y divide-border/50">
-        <div className="flex items-center justify-between py-4">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between border-b border-border/50 py-4">
           <div>
             <div className="text-sm font-medium">
               {t("settings.notifications.enable")}
@@ -2362,6 +2363,7 @@ export function SettingsPage() {
             onCheckedChange={handleToggleNotif}
           />
         </div>
+        <HarnessTargetsSection />
       </div>
     );
   }

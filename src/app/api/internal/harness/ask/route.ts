@@ -2,15 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireLocalhost, validateTaskId } from "@/lib/internal-api-guard";
 import { db } from "@/lib/db";
 import { createAskMessage } from "@/lib/harness/harness-message";
-import { dispatchHarnessMessage } from "@/lib/harness/notify/dispatch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * ask_human 桥：落一条 PENDING、把 RUNNING execution 置 PAUSED（park），
- * 并在无人值守下把问题推到操作者渠道。MCP 是独立 stdio 进程，拿不到 Next 内存里的
- * DB/PTY/渠道，所以走这个进程内桥（与 terminal-tools 一致）。
+ * ask_human 桥：记一条 ask(OPEN) + 把 RUNNING execution 置 PAUSED（park）。
+ * Tower **只记录不发送** —— 真正把问题推给人由 agent 经 tower-ask 技能用平台 MCP 完成。
+ * MCP 是独立 stdio 进程，拿不到 Next 内存里的 DB/PTY，所以走这个进程内桥（与 terminal-tools 一致）。
  */
 export async function POST(request: NextRequest) {
   const blocked = requireLocalhost(request);
@@ -36,30 +35,19 @@ export async function POST(request: NextRequest) {
   const task = await db.task.findUnique({
     where: { id: taskId },
     select: {
-      title: true,
       unattended: true,
       executions: { where: { status: "RUNNING" }, select: { id: true }, take: 1 },
     },
   });
   if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
 
-  // 先记录 ask(OPEN) + park（one-pending：内部会先取消旧 OPEN ask）。记录先于发送。
+  // 记录 ask(OPEN) + park（one-pending：内部会先取消旧 OPEN ask）。Tower 不发送 ——
+  // 问题外推由 agent 经 tower-ask 技能用平台 MCP 完成；无论如何这条 OPEN ask 在 /harness 面板可见、可回复。
   const { messageId } = await createAskMessage({
     taskId,
     executionId: task.executions[0]?.id ?? null,
     question,
   });
 
-  // 通知只在无人值守时外推；非无人值守仅记录（UI 可见），人经通知中心/UI 回复。
-  // dispatch 全 best-effort：发送成败都不影响已记录的 park。
-  const { notified } = await dispatchHarnessMessage({
-    messageId,
-    taskId,
-    unattended: task.unattended,
-    kind: "ask",
-    title: task.title,
-    body: question,
-  });
-
-  return NextResponse.json({ ok: true, requestId: messageId, notified });
+  return NextResponse.json({ ok: true, requestId: messageId });
 }

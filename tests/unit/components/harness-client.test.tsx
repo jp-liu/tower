@@ -9,7 +9,6 @@ vi.mock("@/actions/harness-actions", () => ({
   replyHarnessAsk: vi.fn(),
   ignoreHarnessAsk: vi.fn(),
   dismissHarnessMessage: vi.fn(),
-  resendHarnessMessage_action: vi.fn(),
 }));
 
 import { HarnessClient } from "@/app/harness/harness-client";
@@ -21,13 +20,10 @@ const openAsk: HarnessMessageView = {
   taskId: "ctask123456789012345",
   taskTitle: "登录页重构",
   kind: "ask",
-  channel: "feishu",
   content: "用方案 A 还是方案 B?",
-  notifyStatus: "SENT",
   state: "OPEN",
   replyText: null,
   repliedAt: null,
-  sentAt: new Date("2026-07-02T02:00:00Z").toISOString(),
   createdAt: new Date("2026-07-02T02:00:00Z").toISOString(),
 };
 
@@ -49,11 +45,10 @@ function renderClient(initial: HarnessMessageView[]) {
 }
 
 describe("HarnessClient", () => {
-  it("渲染页头、四个过滤 chips", () => {
+  it("渲染页头、三个过滤 chips", () => {
     renderClient([]);
     expect(screen.getByText("通知中心")).toBeInTheDocument();
     expect(screen.getByText("待回复")).toBeInTheDocument(); // chip
-    expect(screen.getByText("发送失败")).toBeInTheDocument();
     expect(screen.getByText("已回复")).toBeInTheDocument();
     expect(screen.getByText("全部")).toBeInTheDocument();
   });

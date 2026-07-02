@@ -229,34 +229,14 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
   },
 
   // ── 无人值守 harness ──────────────────────────────────────────────
-  // 飞书出站凭据（服务端主动发消息用；留空则不注册飞书渠道）。也可走 env HARNESS_FEISHU_*。
-  "harness.feishu.appId": {
-    defaultValue: "",
-    type: "string",
-    label: "Harness Feishu App ID",
-  },
-  "harness.feishu.appSecret": {
-    defaultValue: "",
-    type: "string",
-    label: "Harness Feishu App Secret",
-  },
-  "harness.feishu.domain": {
-    defaultValue: "https://open.xfchat.iflytek.com",
-    type: "string",
-    label: "Harness Feishu Domain",
-  },
-  // 全局静音总闸：为 true 时所有 ask/notify/done/failed 一律不外推（仅 UI 可见）。
-  "harness.dnd": {
-    defaultValue: false,
-    type: "boolean",
-    label: "Harness Do-Not-Disturb (global mute)",
-  },
-  // 默认 sink：任务自身与祖先链都没有 notify 绑定时的兜底目标（Tower 飞书群）。
-  // 形如 { "channel": "feishu", "target": { "chatId": "oc_...", "threadId": "om_..." } }
-  "harness.defaultSink": {
-    defaultValue: null,
+  // Tower 只记录 ask/notify/done/failed（/harness 面板可见），**不发送消息**：外推给人由 agent
+  // 经 tower-ask 技能用平台 MCP（飞书/微信/…）完成。故这里不再有平台凭据/渠道绑定配置。
+  // 多平台通知目标注册表：无人值守下 agent（tower-ask 技能）据此决定把消息发到哪个渠道 / 网关下游。
+  // 每项形如 { id, label, platform: "feishu"|"openclaw", address, downstream? }。Tower 只存不发。
+  "harness.targets": {
+    defaultValue: [],
     type: "object",
-    label: "Harness Default Sink (fallback channel binding)",
+    label: "Harness Notify Targets (multi-platform registry)",
   },
   // 待回复 ask 的 TTL 兜底：超过这么多天仍 OPEN 的 ask 被周期 sweep 转 EXPIRED。
   "harness.pendingTtlDays": {

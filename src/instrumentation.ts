@@ -18,17 +18,6 @@ export async function register() {
     const { ensureTowerDir } = await import("@/lib/init-tower");
     ensureTowerDir();
 
-    // Harness: register unattended notify channels (feishu) if credentials present.
-    // Idempotent + self-healing — dispatch paths re-ensure lazily too. Fire-and-forget.
-    void (async () => {
-      try {
-        const { ensureNotifyChannels } = await import("@/lib/harness/notify/init");
-        await ensureNotifyChannels();
-      } catch (err) {
-        console.error("[harness] notify channel init failed:", err);
-      }
-    })();
-
     // Harness TTL sweep: expire long-open asks so they don't linger forever if a task
     // dies without cleanup. Run once at boot + every 6h. globalThis flag guards against
     // duplicate intervals across HMR reloads.
