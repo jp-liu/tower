@@ -135,4 +135,11 @@ describe("notifyForTask gating", () => {
     expect(r.notified).toBe(false);
     expect(r.reason).toBe("no_binding");
   });
+
+  it("底层抛错（如 config/DB 读失败）→ 吞掉返回 notified false，绝不抛（park 路径不能被打断）", async () => {
+    mockRead.mockRejectedValueOnce(new Error("db down")); // 读 dnd 就炸
+    const r = await notifyForTask({ ...base, unattended: true });
+    expect(r.notified).toBe(false);
+    expect(r.reason).toBe("error");
+  });
 });
