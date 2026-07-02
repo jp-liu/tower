@@ -16,7 +16,7 @@
 
 import type { PrismaClient } from "@prisma/client";
 import { promises as fs } from "fs";
-import { join, relative } from "path";
+import { join, relative, resolve, sep } from "path";
 import { searchNotes } from "./fts";
 
 /** 约定默认知识库目录（相对 localPath）。项目可用 Project.knowledgeDir 覆盖。 */
@@ -28,6 +28,7 @@ const MAX_SNIPPETS_PER_FILE = 8;
 const MAX_MATCHED_FILES = 8;
 const INDEX_HEAD_LINES = 60; // 索引文件当路由表，带前 N 行
 const MAX_TASKS_PER_VERSION = 40;
+const MAX_VERSIONS = 20; // 优先当前版本（isCurrent desc），防长期项目 payload 膨胀
 
 export interface KnowledgeResult {
   query: string;
@@ -62,16 +63,23 @@ export interface KnowledgeResult {
   warnings: string[];
 }
 
-/** 把查询拆成检索词：空白分词 + 保留原短语。CJK 短语直接子串匹配。 */
+/**
+ * 把查询拆成检索词：整串（≥2 字）+ 空白分词 + CJK 2-gram 兜底。
+ * 中文无空格复合词（"生产环境路径"）split 不出子 token，只靠整串会漏匹配知识行；
+ * 对每段连续 CJK 追加 2-gram（生产/产环/环境/境路/路径）提升召回，纯 JS 零依赖。
+ */
 export function queryTerms(query: string): string[] {
   const q = query.trim();
   if (!q) return [];
-  const tokens = q
-    .split(/\s+/)
-    .map((t) => t.trim())
-    .filter((t) => t.length >= 2);
-  const terms = new Set<string>([q.toLowerCase()]);
-  for (const t of tokens) terms.add(t.toLowerCase());
+  const terms = new Set<string>();
+  if (q.length >= 2) terms.add(q.toLowerCase());
+  for (const t of q.split(/\s+/)) {
+    const tok = t.trim().toLowerCase();
+    if (tok.length >= 2) terms.add(tok);
+  }
+  for (const run of q.match(/[一-龥]{2,}/g) ?? []) {
+    for (let i = 0; i + 2 <= run.length; i++) terms.add(run.slice(i, i + 2));
+  }
   return [...terms];
 }
 
@@ -198,6 +206,7 @@ export async function queryProjectKnowledge(
     const versions = await db.version.findMany({
       where: { projectId: p.id },
       orderBy: [{ isCurrent: "desc" }, { order: "asc" }, { createdAt: "desc" }],
+      take: MAX_VERSIONS,
       include: {
         tasks: {
           take: MAX_TASKS_PER_VERSION,
@@ -248,7 +257,14 @@ export async function queryProjectKnowledge(
       warnings.push(`${p.name}: 无 localPath，跳过知识文件检索`);
       continue;
     }
-    const dir = join(p.localPath, p.knowledgeDir || DEFAULT_KNOWLEDGE_DIR);
+    // knowledgeDir 收敛在 repo 内：值来自 update_project(外部编排器可调)，
+    // join(localPath, "../..") 会逃出去读主机任意 .md，故 resolve 后校验包含关系。
+    const base = resolve(p.localPath);
+    const dir = resolve(base, p.knowledgeDir || DEFAULT_KNOWLEDGE_DIR);
+    if (dir !== base && !dir.startsWith(base + sep)) {
+      warnings.push(`${p.name}: knowledgeDir 越出 repo，已忽略`);
+      continue;
+    }
     // 单次扫描：索引文件（路由表）与查询词无关，总是收集；命中片段按 terms 匹配。
     const { files, indexes } = await scanKnowledgeDir(dir, terms);
     for (const f of files) {

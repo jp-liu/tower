@@ -14,6 +14,11 @@ describe("queryTerms", () => {
   it("blank → empty", () => {
     expect(queryTerms("   ")).toEqual([]);
   });
+  it("无空格 CJK 复合词切 2-gram 兜底召回", () => {
+    const t = queryTerms("生产环境路径");
+    expect(t).toContain("生产环境路径"); // 整串
+    expect(t).toEqual(expect.arrayContaining(["生产", "环境", "路径"])); // bigram
+  });
 });
 
 describe("scanKnowledgeDir", () => {
