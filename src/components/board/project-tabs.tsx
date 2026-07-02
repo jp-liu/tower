@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, FolderOpen, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useScrollOverflow } from "@/hooks/use-scroll-overflow";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { getOrCreateTowerTaskId } from "@/actions/workspace-actions";
@@ -157,29 +158,9 @@ function ProjectTab({
 
 export function ProjectTabs({ projects, activeProjectId, workspaceId, onSelect }: ProjectTabsProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [showLeftArrow, setShowLeftArrow] = useState(false);
-  const [showRightArrow, setShowRightArrow] = useState(false);
-
-  const checkOverflow = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    setShowLeftArrow(el.scrollLeft > 0);
-    setShowRightArrow(el.scrollLeft < el.scrollWidth - el.clientWidth - 1);
-  };
-
-  useEffect(() => {
-    checkOverflow();
-    const el = scrollRef.current;
-    if (el) {
-      el.addEventListener("scroll", checkOverflow);
-      const observer = new ResizeObserver(checkOverflow);
-      observer.observe(el);
-      return () => {
-        el.removeEventListener("scroll", checkOverflow);
-        observer.disconnect();
-      };
-    }
-  }, [projects]);
+  // 横向溢出检测复用共享 hook（见 use-scroll-overflow）；projects 变化时重测。
+  const { canScrollLeft: showLeftArrow, canScrollRight: showRightArrow } =
+    useScrollOverflow(scrollRef, [projects]);
 
   const scroll = (direction: "left" | "right") => {
     const el = scrollRef.current;
