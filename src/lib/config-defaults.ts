@@ -215,7 +215,7 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
       "- 危险 / 不可逆操作（删数据库、删大目录、`rm -rf`、`drop table`、对外发布 / 部署）先说明并征得确认再执行。",
       "",
       "## 本轮 commit 回显",
-      "- **每轮回复的最后，必须把本轮创建的 commit 列出来让用户一眼看到**。格式固定：先一行加粗小标题 `**本轮 commit**`（不要用 `---` 分隔线、不要用 emoji），换行后每条一行 `` `<短 hash>` <message 首行> ``（hash 用行内代码包住）。本轮没有创建任何 commit 时，只回一行 `本轮无 commit`。",
+      "- **每轮回复的最后，必须把本轮创建的 commit 列出来让用户一眼看到**。格式固定：先一行加粗小标题 `**本轮 commit**`（不要用 `---` 分隔线、不要用 emoji），换行后每条 commit 单独一行、以 `- ` 开头，形如 `` - `<短 hash>` <message 首行> ``（hash 用行内代码包住）。本轮没有创建任何 commit 时，只回一行 `本轮无 commit`。",
     ].join("\n"),
     type: "string",
     label: "Task System Directive (built-in)",
