@@ -223,6 +223,8 @@ export async function resumePtyExecution(
     envOverrides: adapterEnv,
   });
 
+  if (task.unattended) spawnResult.env.TOWER_UNATTENDED = "1";
+
   const SESSION_ERROR_RE = /no conversation found with session id|unknown session|session .* not found/i;
 
   createSession(
@@ -369,6 +371,8 @@ export async function continueLatestPtyExecution(
     ],
     envOverrides: adapterEnv,
   });
+
+  if (task.unattended) spawnResult.env.TOWER_UNATTENDED = "1";
 
   createSession(
     taskId,
@@ -667,6 +671,9 @@ export async function startPtyExecution(
       callbackUrl: callbackUrl ?? undefined,
     }),
   });
+
+  // 无人值守：让运行中的 agent 知道自己处于无人值守模式（据此主动用 ask_human/notify_human）。
+  if (task.unattended) spawnResult.env.TOWER_UNATTENDED = "1";
 
   // 9. Create PTY session — onData is a no-op; ws-server.ts wires the real
   //    broadcaster via setDataListener when the WebSocket client connects
