@@ -49,54 +49,71 @@ describe("CodexCliAdapter", () => {
       cwd: "/project",
     };
 
-    it("builds fresh start args with --full-auto and prompt as last argument", () => {
+    const BYPASS = "--dangerously-bypass-approvals-and-sandbox";
+
+    it("builds fresh start args with bypass flag first and prompt last", () => {
       const result = adapter.buildSpawnArgs(baseOpts);
       expect(result.command).toMatch(/codex$/);
-      expect(result.args[0]).toBe("--full-auto");
+      expect(result.args[0]).toBe(BYPASS);
       expect(result.args[result.args.length - 1]).toBe("Fix the bug");
+      expect(result.args).not.toContain("resume");
       expect(result.initialInput).toBeUndefined();
     });
 
-    it("builds resume args with `resume <id>` subcommand (no --full-auto)", () => {
+    it("builds resume args with bypass flag then `resume <id>` (no prompt)", () => {
       const result = adapter.buildSpawnArgs({
         ...baseOpts,
         resumeSessionId: "session-abc-123",
       });
-      expect(result.args[0]).toBe("resume");
-      expect(result.args[1]).toBe("session-abc-123");
-      expect(result.args).not.toContain("--full-auto");
+      // Autonomy flag applies to resumed sessions too (mirrors Claude adapter).
+      expect(result.args[0]).toBe(BYPASS);
+      expect(result.args).toContain("resume");
+      const resumeIdx = result.args.indexOf("resume");
+      expect(result.args[resumeIdx + 1]).toBe("session-abc-123");
       expect(result.args).not.toContain("Fix the bug");
     });
 
-    it("builds continue args with `resume --last` (no --full-auto)", () => {
+    it("builds continue args with bypass flag then `resume --last` (no prompt)", () => {
       const result = adapter.buildSpawnArgs({
         ...baseOpts,
         continueLatest: true,
       });
-      expect(result.args[0]).toBe("resume");
-      expect(result.args[1]).toBe("--last");
-      expect(result.args).not.toContain("--full-auto");
+      expect(result.args[0]).toBe(BYPASS);
+      const resumeIdx = result.args.indexOf("resume");
+      expect(resumeIdx).toBeGreaterThanOrEqual(0);
+      expect(result.args[resumeIdx + 1]).toBe("--last");
       expect(result.args).not.toContain("Fix the bug");
     });
 
-    it("includes --full-auto by default on fresh start", () => {
+    it("includes the bypass flag by default on fresh start", () => {
       const result = adapter.buildSpawnArgs(baseOpts);
-      expect(result.args).toContain("--full-auto");
+      expect(result.args).toContain(BYPASS);
     });
 
-    it("merges extraArgs into args on fresh start", () => {
+    it("merges extraArgs after bypass flag, before prompt, on fresh start", () => {
       const result = adapter.buildSpawnArgs({
         ...baseOpts,
-        extraArgs: ["--model", "o3"],
+        extraArgs: ["--model", "gpt-5.5"],
       });
       expect(result.args).toContain("--model");
-      expect(result.args).toContain("o3");
-      // extraArgs should come after --full-auto but before prompt
-      const fullAutoIdx = result.args.indexOf("--full-auto");
+      expect(result.args).toContain("gpt-5.5");
+      const bypassIdx = result.args.indexOf(BYPASS);
       const modelIdx = result.args.indexOf("--model");
       const promptIdx = result.args.indexOf("Fix the bug");
-      expect(modelIdx).toBeGreaterThan(fullAutoIdx);
+      expect(modelIdx).toBeGreaterThan(bypassIdx);
       expect(promptIdx).toBeGreaterThan(modelIdx);
+    });
+
+    it("merges extraArgs before the resume subcommand", () => {
+      const result = adapter.buildSpawnArgs({
+        ...baseOpts,
+        resumeSessionId: "sess-1",
+        extraArgs: ["--model", "gpt-5.5"],
+      });
+      const modelIdx = result.args.indexOf("--model");
+      const resumeIdx = result.args.indexOf("resume");
+      expect(modelIdx).toBeGreaterThan(-1);
+      expect(resumeIdx).toBeGreaterThan(modelIdx);
     });
 
     it("merges envOverrides into env", () => {
@@ -112,7 +129,7 @@ describe("CodexCliAdapter", () => {
         ...baseOpts,
         prompt: "",
       });
-      expect(result.args).toContain("--full-auto");
+      expect(result.args).toContain(BYPASS);
       expect(result.args).not.toContain("");
     });
   });
