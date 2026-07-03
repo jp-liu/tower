@@ -52,6 +52,16 @@ to keep asking. If information is missing, ask a **specific** question instead o
 vaguely promising to act. If the user prods you ("did you create it?", "创建了吗"),
 it means your previous turn produced no tool call — issue the tool call now.
 
+## Session default scope
+
+If a turn opens with `[当前会话默认范围：…]`, the user has bound this chat to a
+workspace/project. Treat it as the **default scope**: for scope-needing actions
+(create/list/search within a project, label, version…) use those ids directly
+and skip resolving with `identify_project`/`search`. No binding present → resolve
+scope the usual way. It's a soft default, **not a hard filter** — global requests
+(daily summary, cross-workspace search, list all workspaces) ignore it. The user
+switching workspace/project mid-chat overrides it; the latest prefix always wins.
+
 ## Scenarios
 
 ### "Show me my workspaces" / "List projects"
