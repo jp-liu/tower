@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { GitBranch, Loader2, Check, AlertCircle, Sparkles, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -12,6 +12,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
@@ -28,20 +29,28 @@ interface CreateProjectData {
   gitUrl?: string;
   localPath?: string;
   projectType?: "FRONTEND" | "BACKEND";
+  workspaceId?: string;
 }
 
 interface CreateProjectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreateProject?: (data: CreateProjectData) => Promise<{ id: string } | void> | { id: string } | void;
+  /** Workspaces to choose from; the dialog picks a target workspace instead of inheriting the active one. */
+  workspaces?: Array<{ id: string; name: string }>;
+  /** Preselected workspace (the currently highlighted one). */
+  defaultWorkspaceId?: string;
 }
 
 export function CreateProjectDialog({
   open,
   onOpenChange,
   onCreateProject,
+  workspaces = [],
+  defaultWorkspaceId,
 }: CreateProjectDialogProps) {
   const { t, locale } = useI18n();
+  const [workspaceId, setWorkspaceId] = useState(defaultWorkspaceId ?? "");
   const [projectName, setProjectName] = useState("");
   const [projectAlias, setProjectAlias] = useState("");
   const [projectDesc, setProjectDesc] = useState("");
@@ -67,7 +76,14 @@ export function CreateProjectDialog({
     setCloneStatus("idle");
     setCloneError("");
     setIsAnalyzing(false);
+    setWorkspaceId(defaultWorkspaceId ?? "");
   };
+
+  // Default the target workspace to the currently highlighted one each time the
+  // dialog opens (defaultWorkspaceId follows the URL/active workspace).
+  useEffect(() => {
+    if (open) setWorkspaceId(defaultWorkspaceId ?? "");
+  }, [open, defaultWorkspaceId]);
 
   const handleAnalyze = async () => {
     if (!localPath.trim() || isAnalyzing || cloneStatus !== "success") return;
@@ -149,6 +165,7 @@ export function CreateProjectDialog({
         gitUrl: gitUrl.trim() || undefined,
         localPath: localPath.trim() || undefined,
         projectType,
+        workspaceId: workspaceId || undefined,
       });
       resetForm();
       onOpenChange(false);
@@ -167,6 +184,25 @@ export function CreateProjectDialog({
             <DialogTitle>{t("topbar.newProject")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Target workspace — pick explicitly to avoid creating in the wrong one */}
+            {workspaces.length > 0 && (
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">{t("project.workspace")}</label>
+                <Select value={workspaceId} onValueChange={(v) => setWorkspaceId(v ?? "")}>
+                  <SelectTrigger className="mt-1.5 w-full">
+                    <span className="truncate">
+                      {workspaces.find((w) => w.id === workspaceId)?.name ?? t("project.workspacePlaceholder")}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {workspaces.map((w) => (
+                      <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Git URL — primary input */}
             <div>
               <label className="text-xs font-medium text-muted-foreground">{t("project.gitUrl")}</label>

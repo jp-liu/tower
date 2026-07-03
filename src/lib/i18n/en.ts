@@ -31,6 +31,8 @@ export const en: Translations = {
   "topbar.searchPlaceholder": "Search tasks, projects, repos, notes, assets...",
   "topbar.github": "GitHub",
   "project.name": "Project Name",
+  "project.workspace": "Workspace",
+  "project.workspacePlaceholder": "Select workspace",
   "project.alias": "Alias",
   "project.description": "Description",
   "project.gitUrl": "Git Repository URL",

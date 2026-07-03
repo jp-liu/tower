@@ -34,6 +34,8 @@ export const zh = {
   "topbar.github": "GitHub",
   // Project creation
   "project.name": "项目名称",
+  "project.workspace": "工作区",
+  "project.workspacePlaceholder": "选择工作区",
   "project.alias": "项目别名",
   "project.description": "项目描述",
   "project.gitUrl": "Git 仓库地址",
