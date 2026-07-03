@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { FolderOpen, AlertCircle, Info, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -12,6 +12,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -28,20 +29,26 @@ export interface CreateProjectData {
   gitUrl?: string;
   localPath?: string;
   projectType?: "FRONTEND" | "BACKEND";
+  workspaceId?: string;
 }
 
 interface ImportProjectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreateProject?: (data: CreateProjectData) => Promise<{ id: string } | void> | { id: string } | void;
+  workspaces?: Array<{ id: string; name: string }>;
+  defaultWorkspaceId?: string;
 }
 
 export function ImportProjectDialog({
   open,
   onOpenChange,
   onCreateProject,
+  workspaces = [],
+  defaultWorkspaceId,
 }: ImportProjectDialogProps) {
   const { t, locale } = useI18n();
+  const [workspaceId, setWorkspaceId] = useState(defaultWorkspaceId ?? "");
   const [projectName, setProjectName] = useState("");
   const [projectAlias, setProjectAlias] = useState("");
   const [projectDesc, setProjectDesc] = useState("");
@@ -75,7 +82,13 @@ export function ImportProjectDialog({
     setSafetyWarning("");
     setIsSamePath(false);
     setIsAnalyzing(false);
+    setWorkspaceId(defaultWorkspaceId ?? "");
   };
+
+  // Default the target workspace to the currently highlighted one on open.
+  useEffect(() => {
+    if (open) setWorkspaceId(defaultWorkspaceId ?? "");
+  }, [open, defaultWorkspaceId]);
 
   const handleFolderSelect = async (selectedPath: string) => {
     setLocalPath(selectedPath);
@@ -178,6 +191,7 @@ export function ImportProjectDialog({
       gitUrl: gitUrl.trim() || undefined,
       localPath: localPath.trim() || undefined,
       projectType,
+      workspaceId: workspaceId || undefined,
     };
 
     // Create project first
@@ -233,6 +247,25 @@ export function ImportProjectDialog({
             <DialogTitle>{t("topbar.importProject")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Target workspace — pick explicitly to avoid importing into the wrong one */}
+            {workspaces.length > 0 && (
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">{t("project.workspace")}</label>
+                <Select value={workspaceId} onValueChange={(v) => setWorkspaceId(v ?? "")}>
+                  <SelectTrigger className="mt-1.5 w-full">
+                    <span className="truncate">
+                      {workspaces.find((w) => w.id === workspaceId)?.name ?? t("project.workspacePlaceholder")}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {workspaces.map((w) => (
+                      <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Browse folder — primary action */}
             <div>
               <label className="text-xs font-medium text-muted-foreground">{t("project.localPath")}</label>

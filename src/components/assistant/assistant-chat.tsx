@@ -24,7 +24,8 @@ import {
   type PendingAttachment,
 } from "@/hooks/use-attachment-upload";
 import { ImageStrip, FileStrip } from "./attachment-strip";
-import { ImagePreviewModal } from "./image-preview-modal";
+import { ImageLightbox } from "@/components/assets/image-lightbox";
+import { TextPreviewDialog } from "@/components/assets/text-preview-dialog";
 import {
   ALLOWED_IMAGE_EXTS,
   ALLOWED_TEXT_EXTS,
@@ -63,6 +64,7 @@ export function AssistantChat() {
   const [previewAttachment, setPreviewAttachment] =
     useState<PendingAttachment | null>(null);
   const [messagePreviewUrl, setMessagePreviewUrl] = useState<string | null>(null);
+  const [textPreview, setTextPreview] = useState<{ url: string; filename: string } | null>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -74,13 +76,17 @@ export function AssistantChat() {
     if (inputFocusSignal > 0) inputRef.current?.focus();
   }, [inputFocusSignal]);
 
-  const mountedRef = useRef(false);
+  // 切 session 会先清空 messages 再异步灌入历史，全程走 isLoadingHistory。
+  // 加载期间及加载完首帧都直接定位（instant），只有同一 session 内新增消息
+  // / 流式回复时才用平滑滚动。wasLoadingRef 让历史加载后的那一帧也 instant。
+  const wasLoadingRef = useRef(false);
   const lastContentLen = messages[messages.length - 1]?.content.length ?? 0;
   useEffect(() => {
-    const behavior = mountedRef.current ? "smooth" : "instant";
+    const behavior =
+      isLoadingHistory || wasLoadingRef.current ? "instant" : "smooth";
+    wasLoadingRef.current = isLoadingHistory;
     messagesEndRef.current?.scrollIntoView({ behavior });
-    mountedRef.current = true;
-  }, [messages.length, lastContentLen]);
+  }, [messages.length, lastContentLen, isLoadingHistory]);
 
   // ---- Handlers --------------------------------------------------------------
 
@@ -275,6 +281,7 @@ export function AssistantChat() {
                 key={m.id}
                 message={m}
                 onImagePreview={(url) => setMessagePreviewUrl(url)}
+                onFilePreview={(url, filename) => setTextPreview({ url, filename })}
               />
             ))
           )}
@@ -313,6 +320,14 @@ export function AssistantChat() {
           <FileStrip
             pendingAttachments={pendingAttachments}
             onRemove={removeAttachment}
+            onPreview={(att: PendingAttachment) => {
+              if (att.filename) {
+                setTextPreview({
+                  url: `/api/internal/cache/${att.filename}`,
+                  filename: att.file.name,
+                });
+              }
+            }}
           />
 
           {/* Block 3: textarea */}
@@ -400,18 +415,28 @@ export function AssistantChat() {
         </div>
       </div>
 
-      <ImagePreviewModal
+      <ImageLightbox
         imageUrl={previewAttachment?.blobUrl ?? null}
+        filename={previewAttachment?.filename ?? ""}
         open={previewAttachment !== null && previewAttachment.kind === "image"}
         onOpenChange={(open) => {
           if (!open) setPreviewAttachment(null);
         }}
       />
-      <ImagePreviewModal
+      <ImageLightbox
         imageUrl={messagePreviewUrl}
+        filename={messagePreviewUrl?.split("/").pop()?.split("?")[0] ?? ""}
         open={messagePreviewUrl !== null}
         onOpenChange={(open) => {
           if (!open) setMessagePreviewUrl(null);
+        }}
+      />
+      <TextPreviewDialog
+        url={textPreview?.url ?? null}
+        filename={textPreview?.filename ?? ""}
+        open={textPreview !== null}
+        onOpenChange={(open) => {
+          if (!open) setTextPreview(null);
         }}
       />
     </div>

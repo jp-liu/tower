@@ -26,6 +26,7 @@ interface CreateProjectData {
   gitUrl?: string;
   localPath?: string;
   projectType?: "FRONTEND" | "BACKEND";
+  workspaceId?: string;
 }
 
 interface LayoutClientProps {
@@ -163,7 +164,7 @@ function LayoutInner({
         {showNotifBanner && <NotificationPermissionBanner onDismiss={() => setShowNotifBanner(false)} />}
         <div className="flex h-screen overflow-hidden">
           <div className="flex flex-1 flex-col overflow-hidden">
-            <TopBar onCreateProject={handleCreateProject} username={username} />
+            <TopBar onCreateProject={handleCreateProject} username={username} workspaces={workspaces} defaultWorkspaceId={activeWorkspaceId} />
             <div className="flex flex-1 overflow-hidden">
               {/* Push sidebar: flex sibling of main, inside content area below TopBar */}
               {sidebarPanel}
@@ -187,7 +188,7 @@ function LayoutInner({
       <div className="flex h-screen overflow-hidden">
         <AppSidebar workspaces={workspaces} />
         <div className="flex flex-1 flex-col overflow-hidden">
-          <TopBar onCreateProject={handleCreateProject} username={username} />
+          <TopBar onCreateProject={handleCreateProject} username={username} workspaces={workspaces} defaultWorkspaceId={activeWorkspaceId} />
           <div className="flex flex-1 overflow-hidden">
             {/* Push sidebar: flex sibling of main, inside content area below TopBar (per RESEARCH.md Pattern 2) */}
             {sidebarPanel}
@@ -211,7 +212,8 @@ export function LayoutClient({ workspaces, isFirstRun, username, children }: Lay
   const activeWorkspaceId = pathname.split("/workspaces/")[1]?.split("/")[0];
 
   const handleCreateProject = async (data: CreateProjectData): Promise<{ id: string } | void> => {
-    const workspaceId = activeWorkspaceId || (workspaces.length > 0 ? workspaces[0].id : null);
+    // Dialog's explicit workspace pick wins; fall back to the active/first workspace.
+    const workspaceId = data.workspaceId || activeWorkspaceId || (workspaces.length > 0 ? workspaces[0].id : null);
     if (!workspaceId) {
       const ws = await createWorkspace({ name: "Default Workspace" });
       const project = await createProject({ ...data, workspaceId: ws.id });

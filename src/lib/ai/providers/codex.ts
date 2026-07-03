@@ -11,8 +11,10 @@ export function createCodexProvider(): ProviderDefinition {
       adapter: new CodexCliAdapter(),
     },
     // api adapter uses OpenAI SDK — will be added in Phase 2
+    // cli models empty on purpose — let ~/.codex account default win; see
+    // CODEX_MODELS note in codex-cli-adapter.ts.
     models: {
-      cli: ["o4-mini", "o3", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "codex-mini-latest"],
+      cli: [],
       api: [],
     },
   };

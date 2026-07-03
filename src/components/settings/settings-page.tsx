@@ -65,6 +65,7 @@ import {
   type BuiltinPromptsData,
 } from "@/actions/builtin-prompt-actions";
 import { getAvailableProviders } from "@/actions/ai-config-actions";
+import { CapabilitySlotsSection } from "@/components/settings/capability-slots-section";
 import type { TestResult } from "@/lib/cli-test";
 import type { ProviderAvailability } from "@/lib/ai/types";
 import type { AgentPrompt } from "@prisma/client";
@@ -1144,6 +1145,7 @@ export function SettingsPage() {
 
   function renderAiTools() {
     return (
+      <div className="space-y-4">
       <ul className="divide-y rounded-xl border border-border bg-card">
         {providers.map((provider) => {
           const isDefault = defaultAdapter === provider.name;
@@ -1248,6 +1250,8 @@ export function SettingsPage() {
           );
         })}
       </ul>
+        <CapabilitySlotsSection />
+      </div>
     );
   }
 
