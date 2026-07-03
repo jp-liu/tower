@@ -82,6 +82,14 @@ class ModelUnavailableRetry extends Error {
  *  tier and is broadly available across accounts. */
 const FALLBACK_MODEL = "sonnet";
 
+// Compact re-anchor for resumed turns — the full tower skill is loaded once via
+// `/tower` on the fresh run and stays in the session transcript, so resumed turns
+// only need to re-point the model at its output conventions, not reload it.
+const SKILL_REMINDER =
+  "[沿用 tower skill 约定：新建/改任务的 description 用 Markdown 模板 " +
+  "## 目标 / ## 需求 / ## 参考 / ## 备注 / ## 来源（末节 ## 来源 必带，无来源写「无」）；" +
+  "查询结果按 skill 的 Display Templates 输出。]";
+
 /** Whether an SDK/CLI error string indicates the requested model is unusable
  *  (unknown id, or no access for this account/login) — e.g. the gated
  *  `claude-fable-5` reaching an account without access. */
@@ -303,16 +311,24 @@ export async function POST(request: NextRequest) {
           } catch { /* ignore parse errors */ }
         }
 
-        // Always re-issue `/tower` so the skill (and its required output
-        // formats) stays in context on every turn. Without it, follow-up
-        // turns drift away from the skill's conventions — e.g. the task
-        // creation confirmation format becomes inconsistent across sessions.
-        const prompt = `${identityPrefix}/tower ${body.message}`;
-
-        // Append attachment file paths so Claude can Read them (AI-01)
-        const finalPrompt = hasAttachments
-          ? buildAttachmentPrompt(prompt, safeAttachmentFilenames, getAssistantCacheRoot())
-          : prompt;
+        // Skill loading: `/tower` loads the whole SKILL.md. Re-issuing it every
+        // turn used to be how we kept the skill's output conventions in context,
+        // but with session resume that re-injects all of SKILL.md on every turn —
+        // measured ~19× duplication in one long session, which bloats context and
+        // (at low effort) drowns the mid-skill format rules. Instead: load the
+        // full skill ONCE on a fresh run via `/tower`, and on resumed turns send
+        // only a compact reminder that re-anchors the conventions — the full skill
+        // is already in the resumed session's transcript.
+        const buildPrompt = (isResuming: boolean) => {
+          // A stale-resume retry (withResume=false) is effectively a fresh
+          // session, so it must reload `/tower` even though a sessionId was sent.
+          const skillPart = isResuming ? `${SKILL_REMINDER}\n\n` : "/tower ";
+          const p = `${identityPrefix}${skillPart}${body.message}`;
+          // Append attachment file paths so Claude can Read them (AI-01)
+          return hasAttachments
+            ? buildAttachmentPrompt(p, safeAttachmentFilenames, getAssistantCacheRoot())
+            : p;
+        };
 
         // Diagnostic counters — let us tell apart "the model never tried to call
         // a tool" (prompt/model issue) from "a tool was called but failed"
@@ -348,8 +364,11 @@ export async function POST(request: NextRequest) {
           // Attach the CURRENT attempt's abortController (rotated before each
           // retry) so aborting one attempt doesn't disarm the next.
           (runOptions as Record<string, unknown>).abortController = activeAbort;
+          // Resuming = we have a prior session AND this attempt keeps resume on.
+          // The stale-resume retry drops resume → fresh run → reload the skill.
+          const isResuming = Boolean(body.sessionId) && withResume;
           return query({
-            prompt: finalPrompt,
+            prompt: buildPrompt(isResuming),
             options: runOptions as Parameters<typeof query>[0]["options"],
           });
         };
