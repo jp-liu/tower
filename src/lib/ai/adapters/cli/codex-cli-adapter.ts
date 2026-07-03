@@ -12,32 +12,43 @@ import type {
   McpServerConfig,
 } from "../../types";
 
-const CODEX_MODELS = ["o4-mini", "o3", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "codex-mini-latest"];
+// Model list intentionally empty: concrete Codex model names are version-,
+// rollout- and account-dependent (o3 → gpt-5.x churn), and the capability
+// resolver only validates `model` when this list is non-empty. Empty = let the
+// user's ~/.codex account default win and skip false "model not available"
+// errors. Surface real models in the UI later by reading ~/.codex/models_cache.json.
+const CODEX_MODELS: string[] = [];
 
 export class CodexCliAdapter implements CliAdapter {
 
   buildSpawnArgs(opts: CliSpawnOptions): CliSpawnResult {
-    // Codex uses subcommands: `codex resume <id>` / `codex resume --last`
-    // Fresh start: `codex --full-auto [extraArgs] "prompt"`
-    const args: string[] = [];
+    // Mirror ClaudeCliAdapter (claude-cli-adapter.ts): the autonomy flag and any
+    // extraArgs (e.g. --model) must apply to fresh AND resumed sessions, so they
+    // go first — before the fresh/resume/continue branch. Verified on codex-cli
+    // 0.142.x: the bypass flag parses both as a global pre-subcommand option and
+    // directly on `codex resume`.
+    //
+    // ponytail: full bypass == Claude's --dangerously-skip-permissions (Tower
+    // terminal is the "agent runs autonomously" surface). Safer alternative if
+    // unrestricted host access is a concern: replace the one flag below with
+    // "-a","never","-s","workspace-write" — keeps the sandbox, but note codex's
+    // workspace-write defaults to NO network, which breaks pnpm install / dev
+    // servers. One-line switch; decision deferred to the user (see design doc §7).
+    const args: string[] = ["--dangerously-bypass-approvals-and-sandbox"];
+
+    if (opts.extraArgs?.length) {
+      args.push(...opts.extraArgs);
+    }
 
     if (opts.resumeSessionId) {
-      // `codex resume <sessionId>`
+      // `codex [flags] resume <sessionId>` — interactive resume, no prompt appended
       args.push("resume", opts.resumeSessionId);
     } else if (opts.continueLatest) {
-      // `codex resume --last`
+      // `codex [flags] resume --last`
       args.push("resume", "--last");
-    } else {
-      // Fresh start: `codex --full-auto [extraArgs] "prompt"`
-      args.push("--full-auto");
-
-      if (opts.extraArgs?.length) {
-        args.push(...opts.extraArgs);
-      }
-
-      if (opts.prompt) {
-        args.push(opts.prompt);
-      }
+    } else if (opts.prompt) {
+      // Fresh start: `codex [flags] "<prompt>"` (interactive TUI, prompt positional)
+      args.push(opts.prompt);
     }
 
     const env: Record<string, string> = {
@@ -72,9 +83,11 @@ export class CodexCliAdapter implements CliAdapter {
   // ===========================================================================
   // Hooks — METHOD: file write to ~/.codex/hooks.json + [features] flag in config.toml
   //
-  // Codex CLI 1.x exposes no `codex hook add` subcommand (verified via
-  // `codex --help`). We write hooks.json and toggle `[features] codex_hooks=true`
-  // in config.toml. Hook entries we create are always invocations of OUR scripts
+  // Codex CLI 0.142.x exposes no `codex hook add` subcommand (verified via
+  // `codex --help`; there is only `--dangerously-bypass-hook-trust`). We write
+  // hooks.json and toggle `[features] codex_hooks=true` in config.toml — verified
+  // live: codex accepts our PascalCase hooks.json and records [hooks.state].
+  // Hook entries we create are always invocations of OUR scripts
   // (session-start-hook.js, post-tool-hook.js, stop-hook.js) — that filename
   // string is the marker for clean uninstall. Re-check on every Codex release.
   // ===========================================================================
@@ -282,7 +295,7 @@ export class CodexCliAdapter implements CliAdapter {
   // ===========================================================================
   // Skills — METHOD: symlink to ~/.codex/skills/<name>
   //
-  // Codex CLI 1.x added experimental skills support (Dec 2025) via a directory
+  // Codex CLI 0.142.x supports skills via a directory
   // scan of $CODEX_HOME/skills (default ~/.codex/skills). No `codex skill add`
   // command exists. We symlink so source edits in <repo>/skills propagate, and
   // we can safely identify our installs (lstat → isSymbolicLink + readlink).

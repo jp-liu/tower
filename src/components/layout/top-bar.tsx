@@ -42,11 +42,14 @@ interface CreateProjectData {
   gitUrl?: string;
   localPath?: string;
   projectType?: "FRONTEND" | "BACKEND";
+  workspaceId?: string;
 }
 
 interface TopBarProps {
   onCreateProject?: (data: CreateProjectData) => Promise<{ id: string } | void> | { id: string } | void;
   username?: string | null;
+  workspaces?: Array<{ id: string; name: string }>;
+  defaultWorkspaceId?: string;
 }
 
 export function getInitials(name: string): string {
@@ -111,7 +114,7 @@ function useThemeTransition() {
   return { resolvedTheme, toggleTheme, triggerRef };
 }
 
-export function TopBar({ onCreateProject, username }: TopBarProps) {
+export function TopBar({ onCreateProject, username, workspaces, defaultWorkspaceId }: TopBarProps) {
   const { t, locale, setLocale } = useI18n();
   const { isOpen: assistantOpen, toggleAssistant } = useAssistant();
   const { resolvedTheme, toggleTheme, triggerRef } = useThemeTransition();
@@ -295,6 +298,8 @@ export function TopBar({ onCreateProject, username }: TopBarProps) {
           if (!open) setCreateProjectOpen(false);
         }}
         onCreateProject={onCreateProject}
+        workspaces={workspaces}
+        defaultWorkspaceId={defaultWorkspaceId}
       />
 
       {/* Import Project Dialog */}
@@ -305,6 +310,8 @@ export function TopBar({ onCreateProject, username }: TopBarProps) {
           if (!open) setImportProjectOpen(false);
         }}
         onCreateProject={onCreateProject}
+        workspaces={workspaces}
+        defaultWorkspaceId={defaultWorkspaceId}
       />
     </>
   );

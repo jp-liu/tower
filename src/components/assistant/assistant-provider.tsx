@@ -16,14 +16,25 @@ import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
 import type { ChatMessage, MessageRole } from "@/hooks/use-assistant-chat";
 import {
   type AssistantSession,
+  type SessionBinding,
   getSessions,
   addSession,
   deleteSession,
   updateSession,
   getActiveSessionId,
   setActiveSessionId,
+  getBinding,
+  setBinding as persistBinding,
   buildSessionTitle,
 } from "@/lib/assistant-sessions";
+import { getWorkspacesWithProjects } from "@/actions/workspace-actions";
+
+/** Cascading workspace → project options for the binding dropdowns. */
+export interface WorkspaceTreeItem {
+  id: string;
+  name: string;
+  projects: { id: string; name: string; alias: string | null }[];
+}
 
 // ---------------------------------------------------------------------------
 // Context types
@@ -45,6 +56,10 @@ interface AssistantContextValue {
   isLoadingHistory: boolean;
   sendChatMessage: (text: string, options?: { attachmentFilenames?: string[] }) => void;
   cancelChat: () => string | null;
+  // Session default scope binding (soft default — global requests ignore it)
+  binding: SessionBinding;
+  setSessionBinding: (binding: SessionBinding) => void;
+  workspaceTree: WorkspaceTreeItem[];
   // Session management
   sessions: AssistantSession[];
   activeSessionId: string | null;
@@ -129,6 +144,29 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [activeSessionId, setActiveSessionIdState] = useState<string | null>(null);
   // Track whether the current session record has been created
   const sessionCreatedRef = useRef(false);
+
+  // Session default scope binding. `binding` drives the dropdowns; `bindingRef`
+  // mirrors it so the sendChatMessage closure reads the latest selection without
+  // being re-created on every change. `workspaceTree` feeds the cascading menus.
+  const [binding, setBindingState] = useState<SessionBinding>({});
+  const bindingRef = useRef<SessionBinding>({});
+  useEffect(() => { bindingRef.current = binding; }, [binding]);
+  const [workspaceTree, setWorkspaceTree] = useState<WorkspaceTreeItem[]>([]);
+
+  useEffect(() => {
+    getWorkspacesWithProjects()
+      .then((tree) => setWorkspaceTree(tree as WorkspaceTreeItem[]))
+      .catch(() => { /* dropdowns just stay empty */ });
+  }, []);
+
+  // User picked a workspace/project in the dropdowns. Persist under the current
+  // sessionId when one exists; for a brand-new session (id not yet minted) it's
+  // held in state and persisted when the first sessionId arrives (see sender).
+  const setSessionBinding = useCallback((next: SessionBinding) => {
+    setBindingState(next);
+    const sid = sessionIdRef.current;
+    if (sid) persistBinding(sid, next);
+  }, []);
 
   const flushChat = useCallback(() => {
     setChatMessages([...msgsRef.current]);
@@ -229,6 +267,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       // first message (which would try to mint a new session record).
       sessionCreatedRef.current = true;
       setActiveSessionId(chosen);
+      setBindingState(getBinding(chosen));
       loadSessionHistory(chosen);
     })();
     return () => {
@@ -242,6 +281,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     sessionCreatedRef.current = false;
     setActiveSessionIdState(null);
     setActiveSessionId(null);
+    // A fresh session starts with no scope — the user picks one if they want.
+    setBindingState({});
     msgsRef.current = [];
     setChatMessages([]);
     setChatStatus("idle");
@@ -253,6 +294,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     sessionCreatedRef.current = true;
     setActiveSessionIdState(sessionId);
     setActiveSessionId(sessionId);
+    // Restore this session's saved scope into the dropdowns.
+    setBindingState(getBinding(sessionId));
     // Clear then load history from SDK
     msgsRef.current = [];
     setChatMessages([]);
@@ -385,6 +428,12 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           message: text,
           sessionId: sessionIdRef.current,
           attachmentFilenames: options?.attachmentFilenames ?? [],
+          // Session default scope — sent every turn so a mid-session switch takes
+          // effect immediately. Empty binding → fields undefined → backend no-op.
+          workspaceId: bindingRef.current.workspaceId,
+          workspaceName: bindingRef.current.workspaceName,
+          projectId: bindingRef.current.projectId,
+          projectName: bindingRef.current.projectName,
         }),
         signal: controller.signal,
       });
@@ -424,6 +473,11 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
               setSessions(getSessions());
               setActiveSessionIdState(event.sessionId);
               setActiveSessionId(event.sessionId);
+              // Migrate the scope chosen before the session had an id onto the
+              // real sessionId, so it's restored when the user revisits it.
+              if (bindingRef.current.workspaceId || bindingRef.current.projectId) {
+                persistBinding(event.sessionId, bindingRef.current);
+              }
               // Migrate cached images from the pre-session (null) key to the real sessionId
               if (options?.attachmentFilenames?.length) {
                 cacheMessageAttachments(event.sessionId, 0, options.attachmentFilenames);
@@ -628,6 +682,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         isOpen, isStarting, displayMode, worktreePath,
         toggleAssistant, closeAssistant, inputFocusSignal,
         chatMessages, chatStatus, isChatThinking, isLoadingHistory, sendChatMessage, cancelChat,
+        binding, setSessionBinding, workspaceTree,
         sessions, activeSessionId, createNewSession, switchSession, removeSession, renameSession, refreshSessions,
       }}
     >

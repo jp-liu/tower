@@ -15,10 +15,11 @@ model Workspace {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  projects     Project[]
-  labels       Label[]
-  prompts      AgentPrompt[]
-  versionTypes VersionType[]
+  projects      Project[]
+  labels        Label[]
+  prompts       AgentPrompt[]
+  versionTypes  VersionType[]
+  productGroups ProductGroup[]
 }
 
 model Project {
@@ -34,18 +35,58 @@ model Project {
   previewPort    Int?
   previewPreset  String?
   previewInstallCommand String?
+  // 知识库：groupId 把同一产品的多个仓库（前后端/trace/需求）归入一个 ProductGroup，
+  // 问答时自动把同组兄弟项目一起纳入检索。knowledgeDir 是 repo 内知识库目录（相对 localPath），
+  // 留空则用约定默认（见 src/lib/knowledge.ts DEFAULT_KNOWLEDGE_DIR）。
+  groupId        String?
+  knowledgeDir   String?
   workspaceId    String
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group        ProductGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   tasks        Task[]
   repositories Repository[]
   notes        ProjectNote[]
   assets       ProjectAsset[]
   versions     Version[]
+  facts        ProjectFact[]
 
   @@index([workspaceId])
+  @@index([groupId])
+}
+
+/// 产品组：把同一产品的多个仓库（前后端 / trace 静态知识库 / 需求）归为一组。
+/// 组内成员的知识（repo 知识目录 + 事实卡 + 版本/commit + 笔记）在问答时一起检索。
+model ProductGroup {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  workspaceId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projects  Project[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+// 结构化「事实卡」：机器拿不到、需人工/AI 填的项目级 key-value（生产环境路径、
+// CICD 路径、域名等）。知识库问答的精确命中源之一。key 在项目内唯一（upsert）。
+model ProjectFact {
+  id        String   @id @default(cuid())
+  projectId String
+  key       String
+  value     String
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, key])
+  @@index([projectId])
 }
 
 model Label {

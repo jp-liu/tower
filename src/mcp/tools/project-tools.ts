@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { db } from "../db";
 
 export const projectTools = {
@@ -49,20 +50,99 @@ export const projectTools = {
   },
 
   update_project: {
-    description: "Update an existing project's name, localPath, and/or description.",
+    description:
+      "Update an existing project's name, localPath, description, and/or knowledge-base settings. " +
+      "groupId assigns the project to a ProductGroup (repos of one product — front/back/trace/需求 — in " +
+      "the same group are searched together by ask_project_knowledge); pass \"\" to remove from its group. " +
+      "Use list_product_groups to discover group ids. knowledgeDir overrides the in-repo knowledge directory (default docs/知识库).",
     schema: z.object({
       projectId: z.string(),
       name: z.string().optional(),
       alias: z.string().optional().describe("Short alias for the project"),
       localPath: z.string().optional(),
       description: z.string().optional(),
+      groupId: z.string().optional().describe('ProductGroup id to assign; "" to remove from group. Discover ids via list_product_groups.'),
+      knowledgeDir: z.string().optional().describe("In-repo knowledge dir relative to localPath (default docs/知识库)"),
     }),
-    handler: async (args: { projectId: string; name?: string; alias?: string; localPath?: string; description?: string }) => {
-      const { projectId, ...data } = args;
-      return db.project.update({
-        where: { id: projectId },
-        data,
+    handler: async (args: {
+      projectId: string;
+      name?: string;
+      alias?: string;
+      localPath?: string;
+      description?: string;
+      groupId?: string;
+      knowledgeDir?: string;
+    }) => {
+      const { projectId, groupId, ...rest } = args;
+      const data: Record<string, unknown> = { ...rest };
+      // "" → detach from group (null); an id → attach. Omitted → leave unchanged.
+      if (groupId !== undefined) {
+        const normalized = groupId === "" ? null : groupId;
+        // Guard: a group's members must all share one workspace — the knowledge
+        // aggregator groups purely by groupId (no workspace filter), so a
+        // cross-workspace assignment would leak knowledge across workspaces.
+        if (normalized) {
+          const [project, group] = await Promise.all([
+            db.project.findUnique({ where: { id: projectId }, select: { workspaceId: true } }),
+            db.productGroup.findUnique({ where: { id: normalized }, select: { workspaceId: true } }),
+          ]);
+          if (!project) throw new Error("Project not found");
+          if (!group) throw new Error("Product group not found");
+          if (group.workspaceId !== project.workspaceId) {
+            throw new Error("Group and project belong to different workspaces");
+          }
+        }
+        data.groupId = normalized;
+      }
+      return db.project.update({ where: { id: projectId }, data });
+    },
+  },
+
+  list_product_groups: {
+    description:
+      "List a workspace's product groups (with member projects) so you can pick a groupId for update_project. " +
+      "A product group ties together the repos of one product (front/back/trace/需求) for knowledge Q&A.",
+    schema: z.object({
+      workspaceId: z.string(),
+    }),
+    handler: async (args: { workspaceId: string }) => {
+      const groups = await db.productGroup.findMany({
+        where: { workspaceId: args.workspaceId },
+        orderBy: { name: "asc" },
+        include: { projects: { select: { id: true, name: true, alias: true } } },
       });
+      return groups.map((g) => ({
+        id: g.id,
+        name: g.name,
+        description: g.description,
+        projects: g.projects,
+      }));
+    },
+  },
+
+  create_product_group: {
+    description:
+      "Create a product group in a workspace (name unique per workspace). Returns the new group's id; " +
+      "assign member projects to it with update_project's groupId. Groups tie together the repos of one " +
+      "product (front/back/trace/需求) so ask_project_knowledge searches them together.",
+    schema: z.object({
+      workspaceId: z.string(),
+      name: z.string().describe("Group name, unique within the workspace"),
+      description: z.string().optional(),
+    }),
+    handler: async (args: { workspaceId: string; name: string; description?: string }) => {
+      const name = args.name.trim();
+      if (!name) throw new Error("Group name is required");
+      try {
+        return await db.productGroup.create({
+          data: { name, description: args.description?.trim() || null, workspaceId: args.workspaceId },
+        });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+          throw new Error(`Product group "${name}" already exists in this workspace`);
+        }
+        throw e;
+      }
     },
   },
 

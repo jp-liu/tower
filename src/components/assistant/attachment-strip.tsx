@@ -113,7 +113,8 @@ export function ImageStrip({ pendingAttachments, onRemove, onPreview }: StripPro
 export function FileStrip({
   pendingAttachments,
   onRemove,
-}: Omit<StripProps, "onPreview">) {
+  onPreview,
+}: StripProps) {
   const { t } = useI18n();
   const files = pendingAttachments.filter((a) => a.kind === "text");
   if (files.length === 0) return null;
@@ -121,7 +122,7 @@ export function FileStrip({
   return (
     <div className="flex flex-row flex-wrap items-center gap-2 px-3 py-2 border-b border-border/60">
       {files.map((item) => (
-        <FileTile key={item.id} item={item} onRemove={onRemove} t={t} />
+        <FileTile key={item.id} item={item} onRemove={onRemove} onPreview={onPreview} t={t} />
       ))}
     </div>
   );
@@ -198,8 +199,15 @@ function ImageTile({
  * file-type icon (felt visually heavy in chat). The × on the left doubles as
  * the remove control; the vertical divider gives a small visual seam.
  */
-function FileTile({ item, onRemove, t }: TileProps) {
+function FileTile({
+  item,
+  onRemove,
+  onPreview,
+  t,
+}: TileProps & { onPreview: (a: PendingAttachment) => void }) {
   const display = middleTruncate(item.file.name, 22);
+  // Preview only once uploaded — TextPreviewDialog fetches the server url.
+  const canPreview = item.status === "done";
 
   return (
     <div
@@ -220,9 +228,15 @@ function FileTile({ item, onRemove, t }: TileProps) {
         <X className="h-3 w-3" />
       </button>
       <div className="h-4 w-px bg-border shrink-0" />
-      <span className="px-2 text-xs text-foreground tabular-nums whitespace-nowrap">
+      <button
+        type="button"
+        disabled={!canPreview}
+        onClick={() => canPreview && onPreview(item)}
+        className="min-w-0 flex-1 px-2 text-left text-xs text-foreground tabular-nums truncate enabled:cursor-pointer enabled:hover:text-primary"
+        title={item.file.name}
+      >
         {display}
-      </span>
+      </button>
 
       {item.status === "uploading" && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden">
