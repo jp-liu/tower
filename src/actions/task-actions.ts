@@ -130,7 +130,16 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
     }
   }
 
-  revalidatePath("/workspaces");
+  // Status is already persisted above — this cache invalidation is a
+  // fire-and-forget side effect. When called from the standalone MCP server
+  // (move_task) there's no Next.js generation store, so revalidatePath throws
+  // "Invariant: static generation store missing". Never let that failure make
+  // a successful status transition report as an error to the caller.
+  try {
+    revalidatePath("/workspaces");
+  } catch (error) {
+    log.error("revalidatePath failed (non-fatal)", error, { taskId });
+  }
   return task;
 }
 
