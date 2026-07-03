@@ -74,13 +74,17 @@ export function AssistantChat() {
     if (inputFocusSignal > 0) inputRef.current?.focus();
   }, [inputFocusSignal]);
 
-  const mountedRef = useRef(false);
+  // 切 session 会先清空 messages 再异步灌入历史，全程走 isLoadingHistory。
+  // 加载期间及加载完首帧都直接定位（instant），只有同一 session 内新增消息
+  // / 流式回复时才用平滑滚动。wasLoadingRef 让历史加载后的那一帧也 instant。
+  const wasLoadingRef = useRef(false);
   const lastContentLen = messages[messages.length - 1]?.content.length ?? 0;
   useEffect(() => {
-    const behavior = mountedRef.current ? "smooth" : "instant";
+    const behavior =
+      isLoadingHistory || wasLoadingRef.current ? "instant" : "smooth";
+    wasLoadingRef.current = isLoadingHistory;
     messagesEndRef.current?.scrollIntoView({ behavior });
-    mountedRef.current = true;
-  }, [messages.length, lastContentLen]);
+  }, [messages.length, lastContentLen, isLoadingHistory]);
 
   // ---- Handlers --------------------------------------------------------------
 
