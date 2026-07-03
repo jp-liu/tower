@@ -1,13 +1,16 @@
 /**
  * 产品组一等实体：ProductGroup 表 + Project.groupId，取代平级字符串 Project.productKey。
  *
- * - ProductGroup: 同工作区内 name 唯一；删组只解绑成员（Project.groupId ON DELETE SET NULL）。
- * - 数据迁移：把现有 distinct (workspaceId, productKey) 建成组并回填成员 groupId。
- * - 收尾：删 Project.productKey 列（SQLite 3.35+ 支持 DROP COLUMN；旧版本则留孤儿列，
- *   Prisma 忽略 schema 外的多余列，无害）。
+ * 加性 raw SQL —— 绝不碰 notes_fts 虚表。幂等：建表/建索引用 IF NOT EXISTS，加列先 PRAGMA 查。
  *
- * 加性 raw SQL —— 绝不碰 notes_fts 虚表。幂等：建表/建索引用 IF NOT EXISTS，
- * 加列先 PRAGMA 查，数据迁移用 WHERE NOT EXISTS 防重复。
+ * 为什么没有 productKey→组的数据回填：
+ *   1. productKey 从未发布（无真实数据）。
+ *   2. Tower 升级生命周期（bin/tower.mjs preStart）**先** `db push --accept-data-loss`
+ *      按新 schema 同步、**再**跑本迁移。新 schema 已删 productKey，故 db push 会先
+ *      把该列连数据一起丢掉——等本迁移执行时 productKey 早已不存在，回填必成死代码。
+ *   迁移只负责把 groupId/ProductGroup 幂等建出来（供不走 db push 的 dev/迁移路径），
+ *   并清掉遗留的 productKey 列。删组时的「成员解绑」由 group-actions 在应用层做
+ *   （ADD COLUMN 不带外键，不能靠 DB 级 onDelete: SetNull）。
  *
  * Table/column names hardcoded on purpose — a migration is a point-in-time snapshot.
  */
@@ -50,27 +53,10 @@ export async function up(prisma: PrismaClient): Promise<void> {
     `CREATE INDEX IF NOT EXISTS "Project_groupId_idx" ON "Project"("groupId")`
   );
 
-  // 3. 数据迁移：现有 productKey → 建组 + 回填（仅当 productKey 列还在时）
+  // 3. 清掉遗留 productKey 列（先删其索引）。无回填——见文件头说明。
+  //    SQLite <3.35 不支持 DROP COLUMN → 留孤儿列，Prisma 忽略，无害。
+  await prisma.$executeRawUnsafe(`DROP INDEX IF EXISTS "Project_productKey_idx"`);
   if (await hasColumn(prisma, "Project", "productKey")) {
-    // 每个 distinct (workspaceId, productKey) 建一个组（用 SQLite randomblob 生成 id）
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "ProductGroup" ("id", "name", "workspaceId", "createdAt", "updatedAt") ` +
-        `SELECT lower(hex(randomblob(16))), d."productKey", d."workspaceId", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP ` +
-        `FROM (SELECT DISTINCT "workspaceId", "productKey" FROM "Project" ` +
-        `      WHERE "productKey" IS NOT NULL AND "productKey" != '') d ` +
-        `WHERE NOT EXISTS (SELECT 1 FROM "ProductGroup" g ` +
-        `      WHERE g."workspaceId" = d."workspaceId" AND g."name" = d."productKey")`
-    );
-    // 回填成员 groupId
-    await prisma.$executeRawUnsafe(
-      `UPDATE "Project" SET "groupId" = (` +
-        `  SELECT g."id" FROM "ProductGroup" g ` +
-        `  WHERE g."workspaceId" = "Project"."workspaceId" AND g."name" = "Project"."productKey") ` +
-        `WHERE "productKey" IS NOT NULL AND "productKey" != '' AND "groupId" IS NULL`
-    );
-
-    // 4. 删旧列（先删其索引）。SQLite <3.35 不支持 DROP COLUMN → 留孤儿列，无害。
-    await prisma.$executeRawUnsafe(`DROP INDEX IF EXISTS "Project_productKey_idx"`);
     try {
       await prisma.$executeRawUnsafe(`ALTER TABLE "Project" DROP COLUMN "productKey"`);
       console.log("  dropped Project.productKey");

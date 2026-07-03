@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { db } from "../db";
 
 export const projectTools = {
@@ -116,6 +117,32 @@ export const projectTools = {
         description: g.description,
         projects: g.projects,
       }));
+    },
+  },
+
+  create_product_group: {
+    description:
+      "Create a product group in a workspace (name unique per workspace). Returns the new group's id; " +
+      "assign member projects to it with update_project's groupId. Groups tie together the repos of one " +
+      "product (front/back/trace/需求) so ask_project_knowledge searches them together.",
+    schema: z.object({
+      workspaceId: z.string(),
+      name: z.string().describe("Group name, unique within the workspace"),
+      description: z.string().optional(),
+    }),
+    handler: async (args: { workspaceId: string; name: string; description?: string }) => {
+      const name = args.name.trim();
+      if (!name) throw new Error("Group name is required");
+      try {
+        return await db.productGroup.create({
+          data: { name, description: args.description?.trim() || null, workspaceId: args.workspaceId },
+        });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+          throw new Error(`Product group "${name}" already exists in this workspace`);
+        }
+        throw e;
+      }
     },
   },
 

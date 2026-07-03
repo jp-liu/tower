@@ -71,10 +71,15 @@ export async function updateProductGroup(
   }
 }
 
-/** 删组。成员项目仅解绑（schema onDelete: SetNull），不删项目本身。 */
+/** 删组。成员项目仅解绑（groupId=null），不删项目本身。
+ *  显式清成员——不依赖 DB 级 onDelete: SetNull：迁移路径(ADD COLUMN)的库没建外键，
+ *  且 SQLite 默认不强制外键，靠 DB cascade 会留孤儿 groupId、继续被分到一组。 */
 export async function deleteProductGroup(id: string) {
   try {
-    await db.productGroup.delete({ where: { id } });
+    await db.$transaction([
+      db.project.updateMany({ where: { groupId: id }, data: { groupId: null } }),
+      db.productGroup.delete({ where: { id } }),
+    ]);
     revalidatePath("/workspaces");
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") {
