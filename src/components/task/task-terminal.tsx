@@ -33,6 +33,49 @@ export interface TaskTerminalProps {
 type WsStatus = "connecting" | "connected" | "disconnected";
 
 /**
+ * Fit the terminal to its container and push the new size to the PTY — but ONLY
+ * when the container is actually laid out (real, positive dimensions) and the
+ * size actually changed.
+ *
+ * Why the guard matters (fixes intermittent "terminal went blank / only a few
+ * lines left after switching pages"): this terminal lives inside a
+ * react-reverse-portal node that gets **removed from the DOM** whenever its
+ * OutPortal unmounts on navigation (`parent.replaceChild(placeholder, node)`).
+ * A detached / zero-height container makes FitAddon.proposeDimensions() fall
+ * back to its hard `2×1` minimum, so an unguarded `fit()` silently shrinks the
+ * PTY to 2 cols × 1 row. The Claude CLI reacts to that SIGWINCH by clearing its
+ * viewport and repainting only the current frame — wiping the visible
+ * scrollback. On return the container regains its real size and everything
+ * re-expands, but the history is already gone until a manual refresh replays it.
+ *
+ * Skipping fit while detached (offsetWidth/Height === 0) keeps the live
+ * scrollback intact, and deduping the resize means returning to a same-sized
+ * view never disturbs the running TUI at all.
+ */
+function fitTerminalToPty(
+  container: HTMLElement | null,
+  fitAddon: FitAddon | null,
+  terminal: Terminal | null,
+  ws: WebSocket | null,
+  lastSent: { current: { cols: number; rows: number } | null }
+): void {
+  if (!container || !fitAddon || !terminal) return;
+  // Container not laid out (detached portal node, display:none, mid-transition).
+  // Fitting now would collapse the PTY to FitAddon's 2×1 minimum — bail.
+  if (container.offsetWidth === 0 || container.offsetHeight === 0) return;
+  try {
+    fitAddon.fit();
+  } catch {
+    return; // container detaching mid-call
+  }
+  if (ws?.readyState !== WebSocket.OPEN) return; // can't notify the PTY yet
+  const { cols, rows } = terminal;
+  if (lastSent.current?.cols === cols && lastSent.current?.rows === rows) return;
+  lastSent.current = { cols, rows };
+  ws.send(JSON.stringify({ type: "resize", cols, rows }));
+}
+
+/**
  * TaskTerminal — xterm.js browser terminal connected to WebSocket PTY server.
  *
  * Uses manual bidirectional I/O (terminal.onData → ws.send, ws.onmessage → terminal.write)
@@ -55,6 +98,8 @@ export function TaskTerminal({
   const terminalRef = useRef<Terminal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  // Last cols/rows we told the PTY — dedup so a same-sized re-fit never disturbs the TUI.
+  const lastSentSizeRef = useRef<{ cols: number; rows: number } | null>(null);
 
   // Stable refs for callbacks — avoids useEffect re-run on prop change
   const onSessionEndRef = useRef(onSessionEnd);
@@ -173,7 +218,7 @@ export function TaskTerminal({
       }
     }
 
-    fitAddon.fit();
+    fitTerminalToPty(containerRef.current, fitAddon, terminal, null, lastSentSizeRef);
     terminal.focus();
 
     // Fetch WS port from config, then connect (with auto-reconnect)
@@ -192,7 +237,7 @@ export function TaskTerminal({
         const fontFamily = cfg["terminal.fontFamily"];
         if (Number.isFinite(fontSize) && fontSize > 0) terminal.options.fontSize = fontSize;
         if (typeof fontFamily === "string" && fontFamily.trim()) terminal.options.fontFamily = fontFamily;
-        try { fitAddon.fit(); } catch { /* container detaching */ }
+        fitTerminalToPty(containerRef.current, fitAddon, terminal, wsRef.current, lastSentSizeRef);
       })
       .catch(() => { /* keep defaults */ });
 
@@ -205,7 +250,7 @@ export function TaskTerminal({
       ws = socket;
 
       socket.addEventListener("open", () => {
-        socket.send(JSON.stringify({ type: "resize", cols: terminal.cols, rows: terminal.rows }));
+        fitTerminalToPty(containerRef.current, fitAddon, terminal, socket, lastSentSizeRef);
         terminal.focus();
         setWsStatus("connected");
         setConnectedVisible(true);
@@ -291,33 +336,18 @@ export function TaskTerminal({
   useEffect(() => {
     if (!worktreePath || !containerRef.current) return;
 
-    // Initial fit after portal re-mount (e.g. drawer → detail page)
-    const fit = fitAddonRef.current;
-    const ws = wsRef.current;
-    const term = terminalRef.current;
-    if (fit && term) {
-      // Use rAF to ensure container has its final layout dimensions
-      requestAnimationFrame(() => {
-        fit.fit();
-        if (ws?.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
-        }
-      });
-    }
+    // Initial fit after portal re-mount (e.g. drawer → detail page).
+    // Use rAF to ensure the container has its final layout dimensions.
+    requestAnimationFrame(() => {
+      fitTerminalToPty(containerRef.current, fitAddonRef.current, terminalRef.current, wsRef.current, lastSentSizeRef);
+    });
 
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
     const el = containerRef.current;
     const resizeObserver = new ResizeObserver(() => {
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
-        const f = fitAddonRef.current;
-        const w = wsRef.current;
-        const t = terminalRef.current;
-        if (!f || !t) return;
-        f.fit();
-        if (w?.readyState === WebSocket.OPEN) {
-          w.send(JSON.stringify({ type: "resize", cols: t.cols, rows: t.rows }));
-        }
+        fitTerminalToPty(containerRef.current, fitAddonRef.current, terminalRef.current, wsRef.current, lastSentSizeRef);
       }, 100);
     });
     resizeObserver.observe(el);
