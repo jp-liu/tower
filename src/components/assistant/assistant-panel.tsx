@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useAssistant } from "./assistant-provider";
+import { AssistantBindingBar } from "./assistant-binding-bar";
 import { useI18n } from "@/lib/i18n";
 
 interface AssistantPanelProps {
@@ -184,6 +185,9 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
           <X className="h-4 w-4" />
         </Button>
       </div>
+
+      {/* Session default scope pickers */}
+      <AssistantBindingBar />
 
       {/* Body — chat only */}
       <div className="flex-1 overflow-hidden">

@@ -115,7 +115,18 @@ export async function POST(request: NextRequest) {
   const blocked = requireLocalhost(request);
   if (blocked) return blocked;
 
-  let body: { message: string; sessionId?: string; attachmentFilenames?: string[] };
+  let body: {
+    message: string;
+    sessionId?: string;
+    attachmentFilenames?: string[];
+    // Session default scope binding (soft default, not a hard filter). Names are
+    // sent alongside ids purely to render a human-readable prefix — the model
+    // still calls tools by id.
+    workspaceId?: string;
+    workspaceName?: string;
+    projectId?: string;
+    projectName?: string;
+  };
   try {
     body = await request.json();
   } catch {
@@ -311,6 +322,28 @@ export async function POST(request: NextRequest) {
           } catch { /* ignore parse errors */ }
         }
 
+        // Session default scope — the workspace/project the user bound this chat
+        // to in the UI. A SOFT default ("默认范围"), NOT a hard filter: global
+        // requests (daily summary, cross-workspace search, list all workspaces)
+        // ignore it — the tower skill spells this out. Sent EVERY turn (unlike
+        // the first-turn-only identityPrefix) because the user can switch project
+        // mid-session and the latest selection must win. No binding → empty
+        // string, degrading to the plain external-caller behavior.
+        const bindingPrefix = (() => {
+          const parts: string[] = [];
+          if (body.workspaceId) {
+            parts.push(`工作区「${body.workspaceName ?? body.workspaceId}」(id=${body.workspaceId})`);
+          }
+          if (body.projectId) {
+            parts.push(`项目「${body.projectName ?? body.projectId}」(id=${body.projectId})`);
+          }
+          if (parts.length === 0) return "";
+          return (
+            `[当前会话默认范围：${parts.join("｜")}。需要范围的操作默认用它；` +
+            `日报/跨区搜索/列所有工作区等全局请求忽略它。用户明确切换才变。]\n\n`
+          );
+        })();
+
         // Skill loading: `/tower` loads the whole SKILL.md. Re-issuing it every
         // turn used to be how we kept the skill's output conventions in context,
         // but with session resume that re-injects all of SKILL.md on every turn —
@@ -323,7 +356,7 @@ export async function POST(request: NextRequest) {
           // A stale-resume retry (withResume=false) is effectively a fresh
           // session, so it must reload `/tower` even though a sessionId was sent.
           const skillPart = isResuming ? `${SKILL_REMINDER}\n\n` : "/tower ";
-          const p = `${identityPrefix}${skillPart}${body.message}`;
+          const p = `${identityPrefix}${bindingPrefix}${skillPart}${body.message}`;
           // Append attachment file paths so Claude can Read them (AI-01)
           return hasAttachments
             ? buildAttachmentPrompt(p, safeAttachmentFilenames, getAssistantCacheRoot())
