@@ -126,7 +126,7 @@ function LayoutInner({
   }
 
   const isTaskDetailPage = /\/workspaces\/[^/]+\/tasks\/[^/]+/.test(pathname);
-  const isSubPage = /\/workspaces\/[^/]+\/(notes|assets|archive)/.test(pathname);
+  const isSubPage = /\/workspaces\/[^/]+\/(notes|assets|archive|groups)/.test(pathname);
 
   // Sidebar panel — rendered as flex sibling of main for push layout (UX-02)
   const sidebarPanel =

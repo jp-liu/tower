@@ -20,6 +20,8 @@ import { toCloneUrl, parseGitUrl } from "@/lib/git-url";
 import { resolveGitLocalPathWithSource, type GitLocalPathSource } from "@/actions/config-actions";
 import { analyzeProjectDirectory } from "@/actions/project-actions";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
+import { GroupSelect } from "@/components/project/group-select";
+import { setProjectGroup } from "@/actions/group-actions";
 import { toast } from "sonner";
 
 interface CreateProjectData {
@@ -51,6 +53,7 @@ export function CreateProjectDialog({
 }: CreateProjectDialogProps) {
   const { t, locale } = useI18n();
   const [workspaceId, setWorkspaceId] = useState(defaultWorkspaceId ?? "");
+  const [groupId, setGroupId] = useState("");
   const [projectName, setProjectName] = useState("");
   const [projectAlias, setProjectAlias] = useState("");
   const [projectDesc, setProjectDesc] = useState("");
@@ -77,12 +80,16 @@ export function CreateProjectDialog({
     setCloneError("");
     setIsAnalyzing(false);
     setWorkspaceId(defaultWorkspaceId ?? "");
+    setGroupId("");
   };
 
   // Default the target workspace to the currently highlighted one each time the
   // dialog opens (defaultWorkspaceId follows the URL/active workspace).
   useEffect(() => {
-    if (open) setWorkspaceId(defaultWorkspaceId ?? "");
+    if (open) {
+      setWorkspaceId(defaultWorkspaceId ?? "");
+      setGroupId("");
+    }
   }, [open, defaultWorkspaceId]);
 
   const handleAnalyze = async () => {
@@ -158,7 +165,7 @@ export function CreateProjectDialog({
 
   const handleCreate = async () => {
     if (projectName.trim()) {
-      await onCreateProject?.({
+      const result = await onCreateProject?.({
         name: projectName.trim(),
         alias: projectAlias.trim() || undefined,
         description: projectDesc.trim() || undefined,
@@ -167,6 +174,14 @@ export function CreateProjectDialog({
         projectType,
         workspaceId: workspaceId || undefined,
       });
+      // Attach to a product group after the project exists (needs its id).
+      if (groupId && result && "id" in result) {
+        try {
+          await setProjectGroup(result.id, groupId);
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : t("group.createError"));
+        }
+      }
       resetForm();
       onOpenChange(false);
     }
@@ -188,7 +203,7 @@ export function CreateProjectDialog({
             {workspaces.length > 0 && (
               <div>
                 <label className="text-xs font-medium text-muted-foreground">{t("project.workspace")}</label>
-                <Select value={workspaceId} onValueChange={(v) => setWorkspaceId(v ?? "")}>
+                <Select value={workspaceId} onValueChange={(v) => { setWorkspaceId(v ?? ""); setGroupId(""); }}>
                   <SelectTrigger className="mt-1.5 w-full">
                     <span className="truncate">
                       {workspaces.find((w) => w.id === workspaceId)?.name ?? t("project.workspacePlaceholder")}
@@ -200,6 +215,14 @@ export function CreateProjectDialog({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+
+            {/* Product group — cascades on the chosen workspace */}
+            {workspaceId && (
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">{t("project.group")}</label>
+                <GroupSelect workspaceId={workspaceId} value={groupId} onChange={setGroupId} />
               </div>
             )}
 

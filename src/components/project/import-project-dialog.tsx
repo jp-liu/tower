@@ -14,6 +14,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
+import { GroupSelect } from "@/components/project/group-select";
+import { setProjectGroup } from "@/actions/group-actions";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
@@ -49,6 +51,7 @@ export function ImportProjectDialog({
 }: ImportProjectDialogProps) {
   const { t, locale } = useI18n();
   const [workspaceId, setWorkspaceId] = useState(defaultWorkspaceId ?? "");
+  const [groupId, setGroupId] = useState("");
   const [projectName, setProjectName] = useState("");
   const [projectAlias, setProjectAlias] = useState("");
   const [projectDesc, setProjectDesc] = useState("");
@@ -83,11 +86,15 @@ export function ImportProjectDialog({
     setIsSamePath(false);
     setIsAnalyzing(false);
     setWorkspaceId(defaultWorkspaceId ?? "");
+    setGroupId("");
   };
 
   // Default the target workspace to the currently highlighted one on open.
   useEffect(() => {
-    if (open) setWorkspaceId(defaultWorkspaceId ?? "");
+    if (open) {
+      setWorkspaceId(defaultWorkspaceId ?? "");
+      setGroupId("");
+    }
   }, [open, defaultWorkspaceId]);
 
   const handleFolderSelect = async (selectedPath: string) => {
@@ -197,6 +204,15 @@ export function ImportProjectDialog({
     // Create project first
     const result = await onCreateProject?.(createData);
 
+    // Attach to a product group after the project exists (needs its id).
+    if (groupId && result && "id" in result) {
+      try {
+        await setProjectGroup(result.id, groupId);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : t("group.createError"));
+      }
+    }
+
     // If migration is enabled and we have a project ID
     if (migrateEnabled && targetPath && targetPath !== localPath && result && "id" in result) {
       setMigrating(true);
@@ -251,7 +267,7 @@ export function ImportProjectDialog({
             {workspaces.length > 0 && (
               <div>
                 <label className="text-xs font-medium text-muted-foreground">{t("project.workspace")}</label>
-                <Select value={workspaceId} onValueChange={(v) => setWorkspaceId(v ?? "")}>
+                <Select value={workspaceId} onValueChange={(v) => { setWorkspaceId(v ?? ""); setGroupId(""); }}>
                   <SelectTrigger className="mt-1.5 w-full">
                     <span className="truncate">
                       {workspaces.find((w) => w.id === workspaceId)?.name ?? t("project.workspacePlaceholder")}
@@ -263,6 +279,14 @@ export function ImportProjectDialog({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+
+            {/* Product group — cascades on the chosen workspace */}
+            {workspaceId && (
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">{t("project.group")}</label>
+                <GroupSelect workspaceId={workspaceId} value={groupId} onChange={setGroupId} />
               </div>
             )}
 
