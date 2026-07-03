@@ -12,7 +12,7 @@
 //   3. 版本/commit  Version + Task + TaskExecution        （版本数、需求点、前后端 commit、changelog）
 //   4. DB 笔记   ProjectNote (notes_fts)                  （任务派生轻笔记，FTS）
 //
-// productKey 同组的兄弟项目（前后端）自动一起检索。
+// 同一 ProductGroup（groupId）的兄弟项目（前后端/trace/需求）自动一起检索。
 
 import type { PrismaClient } from "@prisma/client";
 import { promises as fs } from "fs";
@@ -35,7 +35,7 @@ export interface KnowledgeResult {
   projects: Array<{
     projectId: string;
     name: string;
-    productKey: string | null;
+    groupId: string | null;
     knowledgeDir: string;
     localPath: string | null;
   }>;
@@ -159,7 +159,7 @@ export async function scanKnowledgeDir(
 }
 
 /**
- * 聚合一个项目（含 productKey 同组兄弟）的知识，供调用方 LLM 组织答案。
+ * 聚合一个项目（含同 ProductGroup 的兄弟）的知识，供调用方 LLM 组织答案。
  */
 export async function queryProjectKnowledge(
   db: PrismaClient,
@@ -172,12 +172,10 @@ export async function queryProjectKnowledge(
   const anchor = await db.project.findUnique({ where: { id: projectId } });
   if (!anchor) throw new Error(`Project not found: ${projectId}`);
 
-  // 产品组：同 productKey 的兄弟项目一起检索（前后端）。限定同 workspace——
-  // 不同 workspace 碰巧用同名 productKey 不应互相串数据。
-  const group = anchor.productKey
-    ? await db.project.findMany({
-        where: { productKey: anchor.productKey, workspaceId: anchor.workspaceId },
-      })
+  // 产品组：同 groupId 的兄弟项目一起检索（前后端/trace/需求）。groupId 指向的
+  // ProductGroup 本身归属某 workspace，成员天然同区，无需再按 workspace 过滤。
+  const group = anchor.groupId
+    ? await db.project.findMany({ where: { groupId: anchor.groupId } })
     : [anchor];
 
   const result: KnowledgeResult = {
@@ -185,7 +183,7 @@ export async function queryProjectKnowledge(
     projects: group.map((p) => ({
       projectId: p.id,
       name: p.name,
-      productKey: p.productKey,
+      groupId: p.groupId,
       knowledgeDir: p.knowledgeDir || DEFAULT_KNOWLEDGE_DIR,
       localPath: p.localPath,
     })),

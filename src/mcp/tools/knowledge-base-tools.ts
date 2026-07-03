@@ -44,7 +44,7 @@ export const knowledgeBaseTools = {
       "(1) in-repo knowledge markdown under <localPath>/<knowledgeDir> (default docs/知识库), " +
       "(2) structured fact cards (production/CICD paths etc.), " +
       "(3) versions + their tasks' merge commits (changelog / front-back commits), " +
-      "(4) DB notes (FTS). Projects sharing a productKey (e.g. front/back ends) are searched together. " +
+      "(4) DB notes (FTS). Projects in the same product group (front/back/trace/需求) are searched together. " +
       "Returns raw aggregated material with source citations — the CALLER composes the final answer from it. " +
       "Identify the project by exact id, or fuzzy name/alias (ambiguous → returns needsSelection).",
     schema: z.object({

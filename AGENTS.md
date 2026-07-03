@@ -38,7 +38,7 @@ System modules for GSD phase scoping. Use the **Slug** as the commit scope (e.g.
 | Missions | `missions` | 多任务监控面板、网格布局 |
 | Search | `search` | 全局搜索、代码搜索、FTS |
 | Settings | `settings` | 系统配置、CLI Profile、Agent 配置 |
-| MCP | `mcp` | MCP Server、33 个工具、stdio 传输 |
+| MCP | `mcp` | MCP Server、34 个工具、stdio 传输 |
 | Git | `git` | Git 操作、Worktree、Diff、Merge |
 | Assets & Notes | `assets` | 项目资产上传、笔记系统 |
 | AI | `ai` | Claude SDK、CLI Adapter、执行总结、Prompt 管理 |
@@ -137,7 +137,7 @@ Replace `<project-root>` with the absolute path to this repository.
 
 ## Available MCP Tools
 
-33 tools across 10 categories.
+34 tools across 10 categories.
 
 ### Workspace Tools (`src/mcp/tools/workspace-tools.ts`)
 
@@ -154,7 +154,8 @@ Replace `<project-root>` with the absolute path to this repository.
 |------|-------------|------------|
 | `list_projects` | List projects in a workspace; includes task and repository counts | `workspaceId` |
 | `create_project` | Create a project; type auto-set to GIT if gitUrl provided | `workspaceId`, `name`, `gitUrl?`, `localPath?` |
-| `update_project` | Update name, localPath, description, and knowledge-base settings (`productKey` groups repos of one product; `knowledgeDir` overrides the in-repo knowledge dir) | `projectId`, `name?`, `localPath?`, `description?`, `productKey?`, `knowledgeDir?` |
+| `update_project` | Update name, localPath, description, and knowledge-base settings (`groupId` assigns the project to a ProductGroup so repos of one product are searched together — `""` detaches; `knowledgeDir` overrides the in-repo knowledge dir) | `projectId`, `name?`, `localPath?`, `description?`, `groupId?`, `knowledgeDir?` |
+| `list_product_groups` | List a workspace's product groups (with member projects) to discover a `groupId` for `update_project` | `workspaceId` |
 | `delete_project` | Delete a project (cascades to tasks) | `projectId` |
 
 ### Task Tools (`src/mcp/tools/task-tools.ts`)
@@ -194,7 +195,7 @@ Replace `<project-root>` with the absolute path to this repository.
 
 | Tool | Description | Key Params |
 |------|-------------|------------|
-| `ask_project_knowledge` | Answer a question about a project by aggregating four sources: in-repo knowledge markdown (`<localPath>/<knowledgeDir>`, default `docs/知识库`), structured fact cards, versions + their tasks' merge commits, and DB notes (FTS). Projects sharing a `productKey` (front/back ends) are searched together. Returns raw aggregated material with citations — the **caller** composes the answer. Project by exact id or fuzzy name/alias (ambiguous → `needsSelection`) | `project`, `question`, `workspaceId?` |
+| `ask_project_knowledge` | Answer a question about a project by aggregating four sources: in-repo knowledge markdown (`<localPath>/<knowledgeDir>`, default `docs/知识库`), structured fact cards, versions + their tasks' merge commits, and DB notes (FTS). Projects in the same product group (front/back/trace/需求) are searched together. Returns raw aggregated material with citations — the **caller** composes the answer. Project by exact id or fuzzy name/alias (ambiguous → `needsSelection`) | `project`, `question`, `workspaceId?` |
 | `manage_project_facts` | Manage a project's structured fact cards (key-value): production/CICD paths, domains, other machine-underivable facts. Precise-match source for `ask_project_knowledge` | `action` (`set`\|`delete`\|`list`), `projectId`, `key?`, `value?` |
 
 ### Notes & Assets Tools (`src/mcp/tools/note-asset-tools.ts`)

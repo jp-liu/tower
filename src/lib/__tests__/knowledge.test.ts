@@ -58,15 +58,15 @@ describe("scanKnowledgeDir", () => {
   });
 });
 
-describe("queryProjectKnowledge — 聚合与 productKey 分组", () => {
-  // 前后端两项目共享 productKey，各带版本 3.2 + 其 mergeCommit + 事实卡。
+describe("queryProjectKnowledge — 聚合与产品组分组", () => {
+  // 前后端两项目同属一个 ProductGroup（groupId），各带版本 3.2 + 其 mergeCommit + 事实卡。
   // localPath 留空 → 跳过文件扫描（本用例专测 DB 聚合，不碰磁盘）。
   const web = {
-    id: "p_web", name: "acme-web", productKey: "acme", workspaceId: "ws1",
+    id: "p_web", name: "acme-web", groupId: "g_acme", workspaceId: "ws1",
     localPath: null, knowledgeDir: null,
   };
   const api = {
-    id: "p_api", name: "acme-api", productKey: "acme", workspaceId: "ws1",
+    id: "p_api", name: "acme-api", groupId: "g_acme", workspaceId: "ws1",
     localPath: null, knowledgeDir: null,
   };
   const versionsByProject: Record<string, unknown[]> = {
@@ -92,8 +92,8 @@ describe("queryProjectKnowledge — 聚合与 productKey 分组", () => {
     project: {
       findUnique: async ({ where }: { where: { id: string } }) =>
         where.id === "p_web" ? web : where.id === "p_api" ? api : null,
-      findMany: async ({ where }: { where: { productKey: string; workspaceId: string } }) =>
-        [web, api].filter((p) => p.productKey === where.productKey && p.workspaceId === where.workspaceId),
+      findMany: async ({ where }: { where: { groupId: string } }) =>
+        [web, api].filter((p) => p.groupId === where.groupId),
     },
     projectFact: {
       findMany: async ({ where }: { where: { projectId: string } }) => factsByProject[where.projectId] ?? [],
@@ -105,7 +105,7 @@ describe("queryProjectKnowledge — 聚合与 productKey 分组", () => {
     $queryRawUnsafe: async () => [],
   } as unknown as PrismaClient;
 
-  it("同 productKey 的前后端项目一起检索，版本 commit 按项目分开", async () => {
+  it("同产品组的前后端项目一起检索，版本 commit 按项目分开", async () => {
     const res = await queryProjectKnowledge(db, "p_web", "版本 3.2 commit");
 
     // 前后端两项目都进组
@@ -123,8 +123,8 @@ describe("queryProjectKnowledge — 聚合与 productKey 分组", () => {
     expect(factKeys).toContain("CICD路径");
   });
 
-  it("无 productKey 时只查自己，不牵连兄弟", async () => {
-    const solo = { ...web, productKey: null };
+  it("无产品组时只查自己，不牵连兄弟", async () => {
+    const solo = { ...web, groupId: null };
     const soloDb = {
       ...(db as unknown as Record<string, unknown>),
       project: {
