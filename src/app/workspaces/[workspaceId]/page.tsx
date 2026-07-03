@@ -68,6 +68,7 @@ export default async function WorkspaceBoardPage({ params, searchParams }: Props
         type: project.type,
         gitUrl: project.gitUrl,
         localPath: project.localPath,
+        groupId: project.groupId,
       }}
       projects={workspace.projects.map((p) => ({
         id: p.id,

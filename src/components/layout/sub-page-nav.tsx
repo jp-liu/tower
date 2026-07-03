@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, FileText, FolderOpen, Archive } from "lucide-react";
+import { ArrowLeft, FileText, FolderOpen, Archive, Boxes } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 interface SubPageNavProps {
@@ -13,6 +13,7 @@ const tabs = [
   { key: "notes", icon: FileText },
   { key: "assets", icon: FolderOpen },
   { key: "archive", icon: Archive },
+  { key: "groups", icon: Boxes },
 ] as const;
 
 export function SubPageNav({ workspaceId }: SubPageNavProps) {
@@ -45,7 +46,7 @@ export function SubPageNav({ workspaceId }: SubPageNavProps) {
             }`}
           >
             <Icon className="h-3.5 w-3.5" />
-            <span>{t(`sidebar.${tab.key}` as "sidebar.notes" | "sidebar.assets" | "sidebar.archive")}</span>
+            <span>{t(`sidebar.${tab.key}` as "sidebar.notes" | "sidebar.assets" | "sidebar.archive" | "sidebar.groups")}</span>
           </Link>
         );
       })}

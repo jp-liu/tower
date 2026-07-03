@@ -26,6 +26,8 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { GitLogPanel } from "./git-log-panel";
 import { GitStashPanel } from "./git-stash-panel";
 import { EditorGitPanel } from "@/components/task/editor-git-panel";
+import { GroupSelect } from "@/components/project/group-select";
+import { setProjectGroup } from "@/actions/group-actions";
 
 interface ProjectSidebarProps {
   project: {
@@ -37,6 +39,7 @@ interface ProjectSidebarProps {
     gitUrl: string | null;
     localPath: string | null;
     projectType?: string | null;
+    groupId?: string | null;
   };
   workspaceId: string;
 }
@@ -139,6 +142,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
   const [editDesc, setEditDesc] = useState(project.description ?? "");
   const [editLocalPath, setEditLocalPath] = useState(project.localPath ?? "");
   const [editProjectType, setEditProjectType] = useState<"FRONTEND" | "BACKEND">((project.projectType as "FRONTEND" | "BACKEND") ?? "FRONTEND");
+  const [editGroupId, setEditGroupId] = useState(project.groupId ?? "");
 
   // Recent local projects
   const [recentProjects, setRecentProjects] = useState<Array<{ id: string; name: string; alias: string | null; localPath: string | null; workspaceId: string; type: string }>>([]);
@@ -273,6 +277,10 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
         localPath: editLocalPath.trim() || undefined,
         projectType: editProjectType,
       });
+      // Product group lives in a separate action; only touch it when changed.
+      if (editGroupId !== (project.groupId ?? "")) {
+        await setProjectGroup(project.id, editGroupId || null);
+      }
       router.refresh();
       setShowEditDialog(false);
     } catch (e: unknown) {
@@ -316,6 +324,7 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
                 setEditAlias(project.alias ?? "");
                 setEditDesc(project.description ?? "");
                 setEditLocalPath(project.localPath ?? "");
+                setEditGroupId(project.groupId ?? "");
                 setShowEditDialog(true);
               }}
               className="text-muted-foreground"
@@ -611,6 +620,10 @@ export function RepoSidebar({ project, workspaceId }: ProjectSidebarProps) {
             <div>
               <label className="text-xs font-medium text-muted-foreground">{t("project.alias")}</label>
               <Input value={editAlias} onChange={(e) => setEditAlias(e.target.value)} className="mt-1.5" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">{t("project.group")}</label>
+              <GroupSelect workspaceId={workspaceId} value={editGroupId} onChange={setEditGroupId} />
             </div>
             <div>
               <div className="flex items-center justify-between">

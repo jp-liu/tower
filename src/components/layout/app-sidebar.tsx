@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
-  Archive, Plus, Pencil, Trash2,
+  Archive, Plus, Pencil, Trash2, Boxes,
   MoreHorizontal, ChevronsLeft, Tag, FileText, FolderOpen, Gauge, BellRing,
 } from "lucide-react";
 import {
@@ -336,6 +336,23 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
                   </TooltipTrigger>
                   <TooltipContent side="right" sideOffset={8}>{t("sidebar.archive")}</TooltipContent>
                 </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        onClick={() => router.push(`/workspaces/${wsId}/groups`)}
+                        className={`rounded-lg p-2 transition-colors ${
+                          pathname.includes("/groups")
+                            ? "text-foreground bg-accent"
+                            : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                        }`}
+                      />
+                    }
+                  >
+                    <Boxes className="h-4 w-4" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>{t("sidebar.groups")}</TooltipContent>
+                </Tooltip>
               </>
             );
           })()}
@@ -476,6 +493,13 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
             >
               <Archive className="h-3.5 w-3.5" />
               <span>{t("sidebar.archive")}</span>
+            </Link>
+            <Link
+              href={`/workspaces/${wsId}/groups`}
+              className="relative z-10 flex items-center gap-2 px-4 py-3 text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+            >
+              <Boxes className="h-3.5 w-3.5" />
+              <span>{t("sidebar.groups")}</span>
             </Link>
           </>
         );

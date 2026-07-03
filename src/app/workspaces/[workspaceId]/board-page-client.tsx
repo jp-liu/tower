@@ -36,6 +36,7 @@ interface ProjectInfo {
   type: string;
   gitUrl: string | null;
   localPath: string | null;
+  groupId: string | null;
 }
 
 interface BoardPageClientProps {
