@@ -79,7 +79,7 @@ it means your previous turn produced no tool call — issue the tool call now.
    - **Pasted images with known paths**: if the platform provides file paths for pasted media (e.g. OpenClaw's `{{MediaPaths}}`, Claude Code temp files), pass those paths directly — they are local files
    - **Base64 only (no file path)**: if you only have base64 data with no local path, upload first via `manage_assets` with `action: "upload"`, `projectId`, `base64`, `mimeType`. Get back `{ id: assetId, path }`. Then pass the returned `path` in `references` — `create_task` will automatically copy and link the asset, no separate `link_task` needed
    - **`link_task` only for retroactive linking**: use `manage_assets` with `action: "link_task"` only when you need to associate existing assets with an already-created task (e.g. user wants to add references after task creation)
-8. **Source (`## 来源`)** — ALWAYS append a `## 来源` section to the task `description` (see **Task Source** below for the full spec). If the incoming prompt carries no source info, it is literally `## 来源\n无`. If it does (especially a `<task-source>` block injected by a bridge like Feishu), standardize it into a detailed, traceable record.
+8. **Source (`## 来源`)** — ALWAYS end the `description` with a `## 来源` section (it's the last section of the description format — see **Task Description Format** for the rule and [references/task-source.md](references/task-source.md) for the full rendering). No source info → literally `## 来源\n无`. Source present (a `<task-source>` bridge block or `TOWER_TASK_ID`) → standardize into a detailed, traceable record.
 9. Call `create_task` with projectId, title, and optional description/priority/labelIds/subPath/versionId/useWorktree/baseBranch/references
 10. After creating: if `autoStart` resolved to true the task starts immediately (check the response's `execution` field — `autoStart` intent does not guarantee it actually started); otherwise the task stays TODO.
 
@@ -185,6 +185,9 @@ The `description` field supports Markdown. **Never copy the user's raw message a
 
 ## 备注
 - <constraints, edge cases, things to watch out for>
+
+## 来源
+无
 ```
 
 Rules:
@@ -193,6 +196,14 @@ Rules:
 - Extract actionable requirements from the user's natural language
 - Omit sections that have no content (e.g. skip 备注 if nothing to note)
 - If user provides file paths, put them in 参考 section AND in `references` parameter
+- **`## 来源` is mandatory and always the LAST section** — it traces *why* the task
+  exists and *who* asked. Every creation path (助手 / 飞书 / 父子派生 / 终端) ends here:
+  - **No source info** → write exactly `## 来源` + `无` (as shown above).
+  - **Source present** → standardize into a human-readable record, then read
+    [references/task-source.md](references/task-source.md) for the exact rendering.
+    Two triggers: `TOWER_TASK_ID` set (parent-derived child) or a `<task-source>`
+    block (bridge like Feishu). Keep hard locators (chat/msg id, link) verbatim; if
+    a `<task-source>` block is present, DROP the raw block from the description.
 
 ---
 
@@ -239,30 +250,6 @@ Note: the response does not include workspace name. Use the workspace name from 
 |----|------|--------|----------|--------|
 | {id (first 8 chars)} | {title} | {status} | {priority} | {labels} |
 ```
-
-### Task Source (`## 来源`)
-
-Every task created through this skill MUST end its `description` with a `## 来源`
-section so we can always trace **why** a task exists and **who** asked for it.
-
-**No source info in the prompt** → write exactly:
-
-```
-## 来源
-无
-```
-
-**Source info present** → standardize it into a human-readable record, then read
-[references/task-source.md](references/task-source.md) for the exact rendering. Two cases trigger it:
-
-- **`TOWER_TASK_ID` set** (you're inside a Tower task terminal) → the new task is a
-  child derived from the current one; render 渠道：父任务派生.
-- **`<task-source>` block present** (injected by a bridge like Feishu) → parse it,
-  render the standardized `## 来源`, and DROP the raw block from the description.
-
-Keep the hard locators (chat id / message id / link) verbatim — they are what makes
-the task traceable later. The full field contract and rendered templates live in
-[references/task-source.md](references/task-source.md).
 
 ### Task Creation Confirmation
 
