@@ -12,7 +12,7 @@
  * src/lib/ai/install-orchestrator.ts and .notes/ai-provider-integration.md.
  */
 
-import { existsSync, mkdirSync, copyFileSync, writeFileSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, cpSync, writeFileSync, readFileSync } from "fs";
 import { join } from "path";
 import { getAssistantDir } from "./tower-dir";
 import { getTowerMcpName } from "./ai/install-orchestrator";
@@ -71,15 +71,21 @@ export function ensureTowerDir(): string {
     console.error(`[init-tower] Wrote ${claudeMd}`);
   }
 
-  // Assistant skill — file copy is intentional here (not symlink). The
-  // assistant's config dir is Tower-owned, so we refresh the copy whenever the
-  // bundled SKILL.md changes; otherwise upgraders keep running the old skill.
+  // Assistant skill — directory copy (not symlink). The assistant's config dir
+  // is Tower-owned, so we refresh the whole skill dir (SKILL.md + references/*)
+  // whenever the bundled SKILL.md changes or the copy is missing; otherwise
+  // upgraders keep running the old skill. We must copy references/ too: SKILL.md
+  // links to references/*.md that the assistant Reads on demand — splitting the
+  // heavy, situational sections out keeps the per-turn `/tower` reload lean.
+  const skillSrcDir = join(root, "skills", "tower");
   if (existsSync(skillSrc)) {
     const bundled = safeRead(skillSrc);
-    if (bundled !== null && (!existsSync(skillDest) || safeRead(skillDest) !== bundled)) {
+    const refsDest = join(skillDestDir, "references");
+    const stale = !existsSync(skillDest) || safeRead(skillDest) !== bundled;
+    if (bundled !== null && (stale || !existsSync(refsDest))) {
       mkdirSync(skillDestDir, { recursive: true });
-      copyFileSync(skillSrc, skillDest);
-      console.error(`[init-tower] Copied SKILL.md → ${skillDestDir}`);
+      cpSync(skillSrcDir, skillDestDir, { recursive: true });
+      console.error(`[init-tower] Copied tower skill (+references) → ${skillDestDir}`);
     }
   }
 

@@ -210,9 +210,12 @@ export async function POST(request: NextRequest) {
             },
           },
           strictMcpConfig: true,
-          // Disable all built-in tools — assistant is a task operator, not a coding assistant.
-          // Only allow Read when attachments are present (to read the provided files).
-          tools: hasAttachments ? ["Read"] : [],
+          // Disable built-in tools — assistant is a task operator, not a coding
+          // assistant — except Read. Read is always on so the model can (a) read
+          // pasted attachments and (b) open the tower skill's on-demand reference
+          // docs (references/*.md) that were split out of SKILL.md to keep the
+          // per-turn `/tower` reload lean. Read-only, so no write surface leaks.
+          tools: ["Read"],
           allowedTools: [`mcp__${assistantMcpName}__*`, "Read"],
           // Execute tool calls without prompting. The assistant runs headless
           // over a localhost-only SSE route with no interactive permission UI
