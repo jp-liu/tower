@@ -24,7 +24,7 @@ import {
   type PendingAttachment,
 } from "@/hooks/use-attachment-upload";
 import { ImageStrip, FileStrip } from "./attachment-strip";
-import { ImagePreviewModal } from "./image-preview-modal";
+import { ImageLightbox } from "@/components/assets/image-lightbox";
 import {
   ALLOWED_IMAGE_EXTS,
   ALLOWED_TEXT_EXTS,
@@ -400,15 +400,17 @@ export function AssistantChat() {
         </div>
       </div>
 
-      <ImagePreviewModal
+      <ImageLightbox
         imageUrl={previewAttachment?.blobUrl ?? null}
+        filename={previewAttachment?.filename ?? ""}
         open={previewAttachment !== null && previewAttachment.kind === "image"}
         onOpenChange={(open) => {
           if (!open) setPreviewAttachment(null);
         }}
       />
-      <ImagePreviewModal
+      <ImageLightbox
         imageUrl={messagePreviewUrl}
+        filename={messagePreviewUrl?.split("/").pop()?.split("?")[0] ?? ""}
         open={messagePreviewUrl !== null}
         onOpenChange={(open) => {
           if (!open) setMessagePreviewUrl(null);
