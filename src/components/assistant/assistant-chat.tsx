@@ -25,6 +25,7 @@ import {
 } from "@/hooks/use-attachment-upload";
 import { ImageStrip, FileStrip } from "./attachment-strip";
 import { ImageLightbox } from "@/components/assets/image-lightbox";
+import { TextPreviewDialog } from "@/components/assets/text-preview-dialog";
 import {
   ALLOWED_IMAGE_EXTS,
   ALLOWED_TEXT_EXTS,
@@ -63,6 +64,7 @@ export function AssistantChat() {
   const [previewAttachment, setPreviewAttachment] =
     useState<PendingAttachment | null>(null);
   const [messagePreviewUrl, setMessagePreviewUrl] = useState<string | null>(null);
+  const [textPreview, setTextPreview] = useState<{ url: string; filename: string } | null>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -275,6 +277,7 @@ export function AssistantChat() {
                 key={m.id}
                 message={m}
                 onImagePreview={(url) => setMessagePreviewUrl(url)}
+                onFilePreview={(url, filename) => setTextPreview({ url, filename })}
               />
             ))
           )}
@@ -313,6 +316,14 @@ export function AssistantChat() {
           <FileStrip
             pendingAttachments={pendingAttachments}
             onRemove={removeAttachment}
+            onPreview={(att: PendingAttachment) => {
+              if (att.filename) {
+                setTextPreview({
+                  url: `/api/internal/cache/${att.filename}`,
+                  filename: att.file.name,
+                });
+              }
+            }}
           />
 
           {/* Block 3: textarea */}
@@ -414,6 +425,14 @@ export function AssistantChat() {
         open={messagePreviewUrl !== null}
         onOpenChange={(open) => {
           if (!open) setMessagePreviewUrl(null);
+        }}
+      />
+      <TextPreviewDialog
+        url={textPreview?.url ?? null}
+        filename={textPreview?.filename ?? ""}
+        open={textPreview !== null}
+        onOpenChange={(open) => {
+          if (!open) setTextPreview(null);
         }}
       />
     </div>
