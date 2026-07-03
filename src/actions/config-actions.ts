@@ -9,7 +9,12 @@ import {
 } from "@/lib/task-archive";
 import { matchGitPathRule, gitUrlToLocalPath, type GitPathRule } from "@/lib/git-url";
 import { detectShells, detectTerminalApps, detectEditors, type DetectedShell, type DetectedTerminalApp, type DetectedEditor } from "@/lib/platform";
-import { getActiveWsPort } from "@/lib/pty/ws-server";
+// NOTE: `@/lib/pty/ws-server` is imported lazily inside getActualWsPort (below),
+// not statically — it transitively pulls node-pty, whose native prebuild fails
+// to load in the esbuild-bundled MCP server (dist/mcp-server.cjs). A static
+// import here poisons every consumer of config-actions (e.g. task-actions →
+// updateTaskStatus / move_task), crashing them at module-eval before any DB
+// work runs. Keep the node-pty dependency out of the import graph.
 
 export async function getConfigValue<T>(key: string, defaultValue: T): Promise<T> {
   const row = await db.systemConfig.findUnique({ where: { key } });
@@ -113,6 +118,7 @@ export async function getPlatformInfo(): Promise<{ platform: NodeJS.Platform }> 
  * May differ from config if the preferred port was occupied.
  */
 export async function getActualWsPort(): Promise<number> {
+  const { getActiveWsPort } = await import("@/lib/pty/ws-server");
   const active = getActiveWsPort();
   if (active !== null) return active;
   // Fallback to configured value if server hasn't started yet
