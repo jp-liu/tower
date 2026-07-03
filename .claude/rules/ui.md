@@ -17,6 +17,21 @@ paths:
 - 参考：设置页 Extensions 卡片、Prompts 内置/自定义区块都用 `rounded-xl border bg-card p-4`。
 - 容器内再嵌的小提示 / 代码预览块用 `bg-muted/30` 与外层区分。
 
+## 文件预览（图片 + 文本，全局统一）
+
+- **全局所有"点击文件看内容"只用资源页那一套两件，禁止再自建第三套**（不许 `<img>` 点击放大、`<a target="_blank">` 新标签打开、或另起 modal/Dialog）：
+  - 图片 → `src/components/assets/image-lightbox.tsx` 的 `ImageLightbox`：滚轮缩放（0.1×–8×）、拖拽平移、键盘（Esc/←→/+−/0）、缩放百分比 + 复位、多图画廊，`createPortal` 全屏 overlay。
+  - 文本 → `src/components/assets/text-preview-dialog.tsx` 的 `TextPreviewDialog`：内部 `fetch(url)` 自己加载，`md` 走 Streamdown、`json` 美化、其余纯文本，1MB 上限。
+- 两者 props 形状一致，都传 url：`imageUrl|url / filename / open / onOpenChange`。
+  ```tsx
+  <ImageLightbox imageUrl={url} filename={name ?? ""} open={url !== null}
+    onOpenChange={(o) => { if (!o) setUrl(null); }} />
+  <TextPreviewDialog url={url} filename={name} open={url !== null}
+    onOpenChange={(o) => { if (!o) setUrl(null); }} />
+  ```
+- 类型分派各调用点自行 mount 对应组件（现状：assets-page / task-overview-drawer / task-notes-panel / assistant-chat 都是各自挂）。判定：图片以 `isImageAsset(filename, mimeType)`（`@/lib/file-serve-client`）为准，其余可读文本交给 `TextPreviewDialog`。**支持类型以这两件组件为唯一口径，不要在各调用点再各写一套扩展名白名单。**
+- 已接入：资源页、任务笔记、任务概览抽屉、助手聊天区（图片 + 文本）。新增预览需求直接引这两件，不复制第二套。
+
 ## Dialog (shadcn)
 
 - `DialogContent` ships with `sm:max-w-sm` (≈ 384px) baked into its default class list.

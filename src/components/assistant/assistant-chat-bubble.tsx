@@ -15,6 +15,7 @@ import { AssistantMarkdown } from "./assistant-markdown";
 interface AssistantChatBubbleProps {
   message: ChatMessage;
   onImagePreview?: (url: string) => void;
+  onFilePreview?: (url: string, filename: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,21 +106,26 @@ function MessageImage({
 // User bubble
 // ---------------------------------------------------------------------------
 
-function MessageFile({ filename }: { filename: string }) {
+function MessageFile({
+  filename,
+  onPreview,
+}: {
+  filename: string;
+  onPreview?: (url: string, filename: string) => void;
+}) {
   const url = `/api/internal/cache/${filename}`;
   // Display name: strip path + uuid suffix. The cache route enforces auth.
   const baseName = filename.split("/").pop() ?? filename;
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
+    <button
+      type="button"
+      onClick={() => onPreview?.(url, baseName)}
       className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-primary-foreground/10 text-primary-foreground hover:bg-primary-foreground/20 transition-colors max-w-[180px]"
       title={baseName}
     >
       <FileText className="size-3.5 shrink-0" />
       <span className="text-xs truncate">{baseName}</span>
-    </a>
+    </button>
   );
 }
 
@@ -127,10 +133,12 @@ function UserBubble({
   content,
   attachmentFilenames,
   onImagePreview,
+  onFilePreview,
 }: {
   content: string;
   attachmentFilenames?: string[];
   onImagePreview?: (url: string) => void;
+  onFilePreview?: (url: string, filename: string) => void;
 }) {
   const images: string[] = [];
   const files: string[] = [];
@@ -165,7 +173,7 @@ function UserBubble({
         {files.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
             {files.map((filename) => (
-              <MessageFile key={filename} filename={filename} />
+              <MessageFile key={filename} filename={filename} onPreview={onFilePreview} />
             ))}
           </div>
         )}
@@ -298,7 +306,7 @@ function ToolBubble({ content, toolName }: { content: string; toolName?: string 
 // Main export
 // ---------------------------------------------------------------------------
 
-export function AssistantChatBubble({ message, onImagePreview }: AssistantChatBubbleProps) {
+export function AssistantChatBubble({ message, onImagePreview, onFilePreview }: AssistantChatBubbleProps) {
   switch (message.role) {
     case "user":
       return (
@@ -306,6 +314,7 @@ export function AssistantChatBubble({ message, onImagePreview }: AssistantChatBu
           content={message.content}
           attachmentFilenames={message.attachmentFilenames}
           onImagePreview={onImagePreview}
+          onFilePreview={onFilePreview}
         />
       );
     case "assistant":
