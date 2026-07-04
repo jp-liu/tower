@@ -59,6 +59,7 @@ export const en: Translations = {
   "group.saved": "Saved",
   "group.createdToast": "Group created",
   "sidebar.groups": "Product Groups",
+  "sidebar.more": "More",
   "project.description": "Description",
   "project.gitUrl": "Git Repository URL",
   "project.gitUrlHint": "Optional, local path will be auto-inferred",

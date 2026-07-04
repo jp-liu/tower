@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   Archive, Plus, Pencil, Trash2, Boxes,
   MoreHorizontal, ChevronsLeft, Tag, FileText, FolderOpen, Gauge, BellRing,
+  Menu, Settings,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -13,6 +14,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
@@ -280,82 +286,12 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
             </TooltipTrigger>
             <TooltipContent side="right" sideOffset={8}>{t("harness.navLabel")}</TooltipContent>
           </Tooltip>
-          {(() => {
-            const wsId = activeWorkspaceId || workspaces[0]?.id;
-            if (!wsId) return null;
-            return (
-              <>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button
-                        onClick={() => router.push(`/workspaces/${wsId}/notes`)}
-                        className={`rounded-lg p-2 transition-colors ${
-                          pathname.includes("/notes")
-                            ? "text-foreground bg-accent"
-                            : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                        }`}
-                      />
-                    }
-                  >
-                    <FileText className="h-4 w-4" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right" sideOffset={8}>{t("sidebar.notes")}</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button
-                        onClick={() => router.push(`/workspaces/${wsId}/assets`)}
-                        className={`rounded-lg p-2 transition-colors ${
-                          pathname.includes("/assets")
-                            ? "text-foreground bg-accent"
-                            : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                        }`}
-                      />
-                    }
-                  >
-                    <FolderOpen className="h-4 w-4" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right" sideOffset={8}>{t("sidebar.assets")}</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button
-                        onClick={() => router.push(`/workspaces/${wsId}/archive`)}
-                        className={`rounded-lg p-2 transition-colors ${
-                          pathname.includes("/archive")
-                            ? "text-foreground bg-accent"
-                            : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                        }`}
-                      />
-                    }
-                  >
-                    <Archive className="h-4 w-4" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right" sideOffset={8}>{t("sidebar.archive")}</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button
-                        onClick={() => router.push(`/workspaces/${wsId}/groups`)}
-                        className={`rounded-lg p-2 transition-colors ${
-                          pathname.includes("/groups")
-                            ? "text-foreground bg-accent"
-                            : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                        }`}
-                      />
-                    }
-                  >
-                    <Boxes className="h-4 w-4" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right" sideOffset={8}>{t("sidebar.groups")}</TooltipContent>
-                </Tooltip>
-              </>
-            );
-          })()}
+          <SidebarNavMenu
+            wsId={activeWorkspaceId || workspaces[0]?.id}
+            pathname={pathname}
+            t={t}
+            collapsed
+          />
         </div>
 
         <WorkspaceDialog
@@ -468,42 +404,12 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
         <BellRing className="h-3.5 w-3.5" />
         <span>{t("harness.navLabel")}</span>
       </Link>
-      {(() => {
-        const wsId = activeWorkspaceId || workspaces[0]?.id;
-        if (!wsId) return null;
-        return (
-          <>
-            <Link
-              href={`/workspaces/${wsId}/notes`}
-              className="relative z-10 flex items-center gap-2 border-t border-border px-4 py-3 text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
-            >
-              <FileText className="h-3.5 w-3.5" />
-              <span>{t("sidebar.notes")}</span>
-            </Link>
-            <Link
-              href={`/workspaces/${wsId}/assets`}
-              className="relative z-10 flex items-center gap-2 px-4 py-3 text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
-            >
-              <FolderOpen className="h-3.5 w-3.5" />
-              <span>{t("sidebar.assets")}</span>
-            </Link>
-            <Link
-              href={`/workspaces/${wsId}/archive`}
-              className="relative z-10 flex items-center gap-2 px-4 py-3 text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
-            >
-              <Archive className="h-3.5 w-3.5" />
-              <span>{t("sidebar.archive")}</span>
-            </Link>
-            <Link
-              href={`/workspaces/${wsId}/groups`}
-              className="relative z-10 flex items-center gap-2 px-4 py-3 text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
-            >
-              <Boxes className="h-3.5 w-3.5" />
-              <span>{t("sidebar.groups")}</span>
-            </Link>
-          </>
-        );
-      })()}
+      <SidebarNavMenu
+        wsId={activeWorkspaceId || workspaces[0]?.id}
+        pathname={pathname}
+        t={t}
+        collapsed={false}
+      />
 
       {/* Create Dialog */}
       <WorkspaceDialog
@@ -548,6 +454,83 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
         />
       )}
     </aside>
+  );
+}
+
+// Bottom-left nav "more" menu: a hamburger that pops a grouped panel to the
+// right. Missions + Notifications stay outside; secondary pages live here.
+// Grouped bottom-to-top: Settings · [divider] · Notes/Assets/Archive ·
+// [divider] · Product Groups. Same panel for collapsed + expanded views.
+function SidebarNavMenu({
+  wsId,
+  pathname,
+  t,
+  collapsed,
+}: {
+  wsId: string | undefined;
+  pathname: string;
+  t: ReturnType<typeof useI18n>["t"];
+  collapsed: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const wsItems = wsId
+    ? [
+        { href: `/workspaces/${wsId}/groups`, icon: Boxes, label: t("sidebar.groups"), active: pathname.includes("/groups") },
+        null,
+        { href: `/workspaces/${wsId}/notes`, icon: FileText, label: t("sidebar.notes"), active: pathname.includes("/notes") },
+        { href: `/workspaces/${wsId}/assets`, icon: FolderOpen, label: t("sidebar.assets"), active: pathname.includes("/assets") },
+        { href: `/workspaces/${wsId}/archive`, icon: Archive, label: t("sidebar.archive"), active: pathname.includes("/archive") },
+        null,
+      ]
+    : [];
+  const items: (null | { href: string; icon: typeof Boxes; label: string; active: boolean })[] = [
+    ...wsItems,
+    { href: "/settings", icon: Settings, label: t("settings.title"), active: pathname.startsWith("/settings") },
+  ];
+
+  const trigger = collapsed ? (
+    <button
+      aria-label={t("sidebar.more")}
+      className={`rounded-lg p-2 transition-colors ${
+        open ? "text-foreground bg-accent" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+      }`}
+    />
+  ) : (
+    <button
+      aria-label={t("sidebar.more")}
+      className="relative z-10 flex w-full items-center gap-2 border-t border-border px-4 py-3 text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+    />
+  );
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger openOnHover delay={120} closeDelay={250} render={trigger}>
+        <Menu className={collapsed ? "h-4 w-4" : "h-3.5 w-3.5"} />
+        {!collapsed && <span>{t("sidebar.more")}</span>}
+      </PopoverTrigger>
+      <PopoverContent side="right" align="end" sideOffset={8} className="w-52 gap-0.5 p-1.5">
+        {items.map((item, i) =>
+          item === null ? (
+            <div key={`sep-${i}`} className="my-1 h-px bg-border" />
+          ) : (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setOpen(false)}
+              className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors ${
+                item.active
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              }`}
+            >
+              <item.icon className="h-4 w-4 shrink-0" />
+              <span>{item.label}</span>
+            </Link>
+          )
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 

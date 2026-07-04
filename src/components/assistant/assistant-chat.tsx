@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 import { useAssistant } from "./assistant-provider";
+import { AssistantBindingBar } from "./assistant-binding-bar";
 import { AssistantChatBubble } from "./assistant-chat-bubble";
 import {
   useAttachmentUpload,
@@ -289,23 +290,22 @@ export function AssistantChat() {
         </div>
       </ScrollArea>
 
-      {/* Input area — wrapper container with attachment strip + textarea + toolbar */}
+      {/* Scope pickers — sit directly above the composer */}
+      <AssistantBindingBar />
+
+      {/* Composer — edge-to-edge input (no nested box); the binding bar above
+          carries the single divider from the message list */}
       <div
-        className="border-t border-border bg-sidebar p-4"
+        className={`relative bg-sidebar transition-colors ${
+          isDraggingOver ? "ring-3 ring-inset ring-primary/40" : ""
+        }`}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <div
-          className={`relative rounded-lg border bg-background transition-colors ${
-            isDraggingOver
-              ? "border-primary ring-3 ring-primary/40"
-              : "border-border focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
-          }`}
-        >
           {isDraggingOver && (
-            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-primary/10 text-xs font-medium text-primary">
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-primary/10 text-xs font-medium text-primary">
               {t("assistant.dropToUpload")}
             </div>
           )}
@@ -339,12 +339,12 @@ export function AssistantChat() {
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             placeholder={t("assistant.inputPlaceholder")}
-            className="min-h-[72px] max-h-[120px] resize-none rounded-none border-0 focus-visible:ring-0 focus-visible:border-0 bg-transparent dark:bg-transparent text-sm"
+            className="min-h-[72px] max-h-[160px] w-full resize-none rounded-none border-0 focus-visible:ring-0 focus-visible:border-0 bg-transparent dark:bg-transparent px-4 pt-3 text-sm"
             rows={3}
           />
 
           {/* Block 4: action bar */}
-          <div className="flex items-center justify-between px-2 pb-2 border-t border-border/60 pt-2">
+          <div className="flex items-center justify-between px-3 pb-2 pt-1">
             <input
               ref={fileInputRef}
               type="file"
@@ -412,7 +412,6 @@ export function AssistantChat() {
               </Button>
             )}
           </div>
-        </div>
       </div>
 
       <ImageLightbox
