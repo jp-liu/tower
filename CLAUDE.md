@@ -27,7 +27,7 @@ Workspace → Project → Task → Execution
 
 ## Key Conventions
 
-- Git commit：一律用 **conventional commits** 格式（`feat`/`fix`/`refactor`/`docs`/`chore`/`perf`… + 可选 `(scope)`），**message 用英文书写**（type 前缀不变，仅描述语言改英文）
+- Git commit: always use **conventional commits** (`feat`/`fix`/`refactor`/`docs`/`chore`/`perf`… + optional `(scope)`), and **write the message in English** (type prefix unchanged, only the description is English)
 - 国际化：所有用户可见文本用 `t("key")`，zh/en 双语
 - Next.js 15+ 异步 params：`const { id } = await params`
 - App Router routes：`export const runtime = "nodejs"` + `export const dynamic = "force-dynamic"`
