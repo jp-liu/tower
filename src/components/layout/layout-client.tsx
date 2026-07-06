@@ -53,9 +53,9 @@ function LayoutInner({
   const router = useRouter();
   const { isOpen, displayMode, closeAssistant } = useAssistant();
 
-  // Global navigation shortcuts — mounted here at the app-wide layout level (not
-  // in AppSidebar, which is unmounted on task-detail / sub-pages). This keeps
-  // them live everywhere; router.push naturally leaves the current detail route.
+  // Global navigation shortcuts — mounted here at the app-wide layout level so
+  // they stay live on every route (AppSidebar is only visually hidden on
+  // detail/sub pages, but these live at the layout level regardless).
   // Alt+1..9 → jump to the Nth workspace (event.code: Digit1..Digit9).
   useActionShortcut("global.gotoWorkspace", (e) => {
     const m = /^Digit([1-9])$/.exec(e.code);
@@ -158,41 +158,28 @@ function LayoutInner({
       </Dialog>
     ) : null;
 
-  if (isTaskDetailPage || isSubPage) {
-    return (
-      <>
-        {showNotifBanner && <NotificationPermissionBanner onDismiss={() => setShowNotifBanner(false)} />}
-        <div className="flex h-screen overflow-hidden">
-          <div className="flex flex-1 flex-col overflow-hidden">
-            <TopBar onCreateProject={handleCreateProject} username={username} workspaces={workspaces} defaultWorkspaceId={activeWorkspaceId} />
-            <div className="flex flex-1 overflow-hidden">
-              {/* Push sidebar: flex sibling of main, inside content area below TopBar */}
-              {sidebarPanel}
-              <main className="flex-1 overflow-hidden bg-background">
-                <ErrorBoundary>{children}</ErrorBoundary>
-              </main>
-            </div>
-          </div>
-        </div>
-        {dialogPanel}
-        {showTour && <GuidedTour onComplete={handleTourComplete} />}
-        <CommandPalette />
-        <ShortcutHelpDialog />
-      </>
-    );
-  }
+  // Detail/sub pages hide the sidebar and let their own inner scroll container
+  // handle overflow. Both cases render the SAME tree — only className differs —
+  // so React never unmounts <main>{children} (or the assistant panel / portaled
+  // terminals) across route changes. See project_layoutinner_double_tree memory.
+  const hideSidebar = isTaskDetailPage || isSubPage;
 
   return (
     <>
       {showNotifBanner && <NotificationPermissionBanner onDismiss={() => setShowNotifBanner(false)} />}
       <div className="flex h-screen overflow-hidden">
-        <AppSidebar workspaces={workspaces} />
+        {/* Always mounted; `display:none` when hidden removes it from layout, a11y
+            tree, and tab order. `contents` when visible keeps <aside> as the direct
+            flex child (no extra layout box). */}
+        <div className={hideSidebar ? "hidden" : "contents"}>
+          <AppSidebar workspaces={workspaces} />
+        </div>
         <div className="flex flex-1 flex-col overflow-hidden">
           <TopBar onCreateProject={handleCreateProject} username={username} workspaces={workspaces} defaultWorkspaceId={activeWorkspaceId} />
           <div className="flex flex-1 overflow-hidden">
             {/* Push sidebar: flex sibling of main, inside content area below TopBar (per RESEARCH.md Pattern 2) */}
             {sidebarPanel}
-            <main className="flex-1 overflow-auto bg-background">
+            <main className={`flex-1 bg-background ${hideSidebar ? "overflow-hidden" : "overflow-auto"}`}>
               <ErrorBoundary>{children}</ErrorBoundary>
             </main>
           </div>
