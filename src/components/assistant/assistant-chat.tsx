@@ -92,11 +92,18 @@ export function AssistantChat() {
   // 切 session 会先清空 messages 再异步灌入历史，全程走 isLoadingHistory。
   // 加载期间及加载完首帧都直接定位（instant），只有同一 session 内新增消息
   // / 流式回复时才用平滑滚动。wasLoadingRef 让历史加载后的那一帧也 instant。
+  // 路由切换会让面板整棵卸载重挂（LayoutInner 对详情/普通页返回不同树），
+  // 重挂首帧必须 instant，否则会出现「换页触发滚动动画」的误伤。
   const wasLoadingRef = useRef(false);
+  const didMountScrollRef = useRef(false);
   const lastContentLen = messages[messages.length - 1]?.content.length ?? 0;
   useEffect(() => {
+    const isMountFrame = !didMountScrollRef.current;
+    didMountScrollRef.current = true;
     const behavior =
-      isLoadingHistory || wasLoadingRef.current ? "instant" : "smooth";
+      isMountFrame || isLoadingHistory || wasLoadingRef.current
+        ? "instant"
+        : "smooth";
     wasLoadingRef.current = isLoadingHistory;
     messagesEndRef.current?.scrollIntoView({ behavior });
   }, [messages.length, lastContentLen, isLoadingHistory]);
