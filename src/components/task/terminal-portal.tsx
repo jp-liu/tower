@@ -43,6 +43,8 @@ interface TerminalInstance {
    * handed the already-live controls instead of waiting for a fire that won't come.
    */
   controls: TerminalControls | null;
+  /** How many outlets are currently projecting this node. >0 ⇒ visible ⇒ never evicted. */
+  mountCount: number;
 }
 
 interface TerminalPortalContextValue {
@@ -64,15 +66,15 @@ export function useTerminalPortal() {
   return ctx;
 }
 
-// Max number of terminal instances kept alive simultaneously.
-// Oldest unused instances are evicted when this limit is exceeded.
-//
-// Must cover a full Mission Control grid (up to 3×3 = 9 panes) PLUS a few
-// task-detail visits, otherwise navigating missions → detail → missions would
-// evict live panes and force a lossy WS replay — the very bug this persistence
-// prevents. ponytail: flat cap of 16; custom mega-grids beyond that degrade to
-// replay on nav (logged below), acceptable for a rare edge case.
-const MAX_PORTAL_INSTANCES = 16;
+// Soft cap on IDLE (currently-unprojected) terminal instances kept warm for fast
+// re-navigation. Terminals that are actively projected (mountCount > 0) are NEVER
+// evicted — Mission Control renders one per running task and evicting a visible
+// one would blank its terminal. So this only bounds the off-screen cache: how many
+// terminals stay live after you leave their view (e.g. missions panes kept warm
+// during a missions → detail → missions detour). 12 comfortably covers a 3×3 grid
+// plus a detail visit; beyond that the oldest idle ones replay from the WS buffer
+// on return (logged below).
+const MAX_PORTAL_INSTANCES = 12;
 
 export function TerminalPortalProvider({ children }: { children: ReactNode }) {
   const instancesRef = useRef(new Map<string, TerminalInstance>());
@@ -89,14 +91,22 @@ export function TerminalPortalProvider({ children }: { children: ReactNode }) {
       return existing;
     }
 
-    // Evict oldest instances if at capacity
-    while (instancesRef.current.size >= MAX_PORTAL_INSTANCES && accessOrderRef.current.length > 0) {
-      const oldestId = accessOrderRef.current.shift()!;
-      instancesRef.current.delete(oldestId);
-      console.warn(
-        `[terminal-portal] evicted terminal ${oldestId} (over ${MAX_PORTAL_INSTANCES} cap) — ` +
-          `its history will replay from the WS buffer on next view`
-      );
+    // Evict the oldest IDLE instances (mountCount === 0) when over capacity.
+    // Skip anything currently projected — evicting a visible terminal would blank
+    // it. If every instance is visible, the cache simply grows past the soft cap
+    // (all of them are genuinely in use), which is correct.
+    if (instancesRef.current.size >= MAX_PORTAL_INSTANCES) {
+      for (const id of [...accessOrderRef.current]) {
+        if (instancesRef.current.size < MAX_PORTAL_INSTANCES) break;
+        const inst = instancesRef.current.get(id);
+        if (!inst || inst.mountCount > 0) continue;
+        instancesRef.current.delete(id);
+        accessOrderRef.current = accessOrderRef.current.filter((x) => x !== id);
+        console.warn(
+          `[terminal-portal] evicted idle terminal ${id} (over ${MAX_PORTAL_INSTANCES} cap) — ` +
+            `its history will replay from the WS buffer on next view`
+        );
+      }
     }
 
     const portalNode = createHtmlPortalNode({
@@ -109,6 +119,7 @@ export function TerminalPortalProvider({ children }: { children: ReactNode }) {
       onSessionEnd: { current: null },
       onReady: { current: null },
       controls: null,
+      mountCount: 0,
     };
     instancesRef.current.set(taskId, instance);
     accessOrderRef.current.push(taskId);
@@ -190,10 +201,16 @@ export function TerminalOutlet({
     onReadyRef.current = onReady;
   });
 
-  // Create/get portal instance — clear stale instance immediately when taskId changes
+  // Create/get portal instance — clear stale instance immediately when taskId changes.
+  // Track projection via mountCount so the provider never evicts a visible terminal.
   useEffect(() => {
-    setInstance(getPortal(taskId, worktreePath));
-    return () => setInstance(null);
+    const inst = getPortal(taskId, worktreePath);
+    inst.mountCount++;
+    setInstance(inst);
+    return () => {
+      inst.mountCount--;
+      setInstance(null);
+    };
   }, [taskId, worktreePath, getPortal]);
 
   // Register session-end callback

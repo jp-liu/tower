@@ -19,6 +19,32 @@ import type { ActiveExecutionInfo } from "@/actions/agent-actions";
 import type { TerminalControls } from "@/components/task/task-terminal";
 import { TerminalOutlet } from "@/components/task/terminal-portal";
 
+/**
+ * Live "Xm Ys" running-time counter, isolated in its own component so the 1s
+ * tick re-renders only this <span> — not the whole MissionCard (which carries
+ * useSortable + the terminal OutPortal). With up to 16 panes that's 16 tiny
+ * text updates/sec instead of 16 full card reconciliations/sec.
+ */
+function ElapsedTime({ startedAt, paused }: { startedAt: string | null; paused: boolean }) {
+  const [elapsed, setElapsed] = useState(() =>
+    startedAt ? Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000) : 0
+  );
+  useEffect(() => {
+    if (paused) return;
+    const interval = setInterval(() => {
+      setElapsed(startedAt ? Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000) : 0);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [startedAt, paused]);
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = elapsed % 60;
+  return (
+    <span className="text-[11px] text-muted-foreground ml-1 shrink-0">
+      {minutes}m {seconds}s
+    </span>
+  );
+}
+
 interface MissionCardProps {
   execution: ActiveExecutionInfo;
   isRemoving: boolean;
@@ -50,28 +76,6 @@ export function MissionCard({
     transition,
     opacity: isRemoving ? 0 : 1,
   };
-
-  const [elapsed, setElapsed] = useState(() =>
-    execution.startedAt
-      ? Math.floor((Date.now() - new Date(execution.startedAt).getTime()) / 1000)
-      : 0
-  );
-
-  useEffect(() => {
-    if (isRemoving) return;
-    const interval = setInterval(() => {
-      setElapsed(
-        execution.startedAt
-          ? Math.floor((Date.now() - new Date(execution.startedAt).getTime()) / 1000)
-          : 0
-      );
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [execution.startedAt, isRemoving]);
-
-  const minutes = Math.floor(elapsed / 60);
-  const seconds = elapsed % 60;
-  const formattedTime = `${minutes}m ${seconds}s`;
 
   async function handleOpenInTerminal() {
     // Mirror startPtyExecution's cwd resolution (agent-actions.ts:538-539):
@@ -145,10 +149,8 @@ export function MissionCard({
           </Badge>
         )}
 
-        {/* Running time */}
-        <span className="text-[11px] text-muted-foreground ml-1 shrink-0">
-          {formattedTime}
-        </span>
+        {/* Running time — isolated so its 1s tick doesn't re-render the card */}
+        <ElapsedTime startedAt={execution.startedAt} paused={isRemoving} />
 
         {/* Open in terminal — only when project has a localPath */}
         {execution.projectLocalPath && (
