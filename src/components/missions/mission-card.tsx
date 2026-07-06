@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -18,11 +17,7 @@ import { openInTerminal } from "@/actions/preview-actions";
 import { toast } from "sonner";
 import type { ActiveExecutionInfo } from "@/actions/agent-actions";
 import type { TerminalControls } from "@/components/task/task-terminal";
-
-const TaskTerminal = dynamic(
-  () => import("@/components/task/task-terminal").then((m) => m.TaskTerminal),
-  { ssr: false, loading: () => <div className="h-full w-full bg-[#0a0a0a] animate-pulse" /> }
-);
+import { TerminalOutlet } from "@/components/task/terminal-portal";
 
 interface MissionCardProps {
   execution: ActiveExecutionInfo;
@@ -214,13 +209,15 @@ export function MissionCard({
         </Tooltip>
       </div>
 
-      {/* Terminal area */}
+      {/* Terminal area — portal-backed so it survives route changes (missions →
+          task detail → missions). Without persistence the terminal is disposed
+          on every navigation and its history/statusline is lost to a lossy WS
+          replay; the portal keeps the live xterm alive above LayoutInner. */}
       <div className="relative flex-1 overflow-hidden">
-        <TaskTerminal
+        <TerminalOutlet
           taskId={execution.taskId}
-          worktreePath={execution.worktreePath ?? execution.projectLocalPath}
+          worktreePath={execution.worktreePath ?? execution.projectLocalPath ?? ""}
           onSessionEnd={(exitCode) => onSessionEnd?.(execution.taskId, exitCode)}
-          useCanvasRenderer
           onReady={(c) => onRegisterControls(execution.taskId, c)}
         />
       </div>

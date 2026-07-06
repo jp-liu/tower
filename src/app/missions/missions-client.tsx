@@ -41,6 +41,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { MissionCard } from "@/components/missions/mission-card";
+import { useTerminalPortal } from "@/components/task/terminal-portal";
 import { TaskPickerDialog } from "@/components/missions/task-picker-dialog";
 import { mergeMissions } from "@/components/missions/merge-missions";
 import { useActionShortcut } from "@/lib/shortcuts";
@@ -58,6 +59,7 @@ export function MissionsClient({
   initialExecutions: ActiveExecutionInfo[];
 }) {
   const { t } = useI18n();
+  const { removePortal } = useTerminalPortal();
   const [cards, setCards] = useState<ActiveExecutionInfo[]>(initialExecutions);
   const [presetId, setPresetId] = useState<string>(() => {
     if (typeof window !== "undefined") {
@@ -121,6 +123,13 @@ export function MissionsClient({
     removingIdsRef.current = removingIds;
   }, [removingIds]);
 
+  // Ref mirror of cards so the fade-out timer can resolve a card's taskId without
+  // reading state inside a setCards updater (which must stay pure).
+  const cardsRef = useRef(cards);
+  useEffect(() => {
+    cardsRef.current = cards;
+  }, [cards]);
+
   // Fade timer registry
   const fadeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -179,6 +188,11 @@ export function MissionsClient({
       if (removingIdsRef.current.has(executionId)) return;
       setRemovingIds((prev) => new Map([...prev, [executionId, reason]]));
       const timer = setTimeout(() => {
+        // Drop the persistent terminal so a future run of the same task (same
+        // taskId) gets a fresh terminal instead of this now-dead one. Done here
+        // (async callback), not inside the setCards updater which must stay pure.
+        const card = cardsRef.current.find((c) => c.executionId === executionId);
+        if (card) removePortal(card.taskId);
         setCards((prev) => prev.filter((c) => c.executionId !== executionId));
         setRemovingIds((prev) => {
           const next = new Map(prev);
@@ -189,7 +203,7 @@ export function MissionsClient({
       }, 500);
       fadeTimers.current.set(executionId, timer);
     },
-    [] // No removingIds dependency — uses ref instead
+    [removePortal] // removePortal is stable; no removingIds dep — uses ref instead
   );
 
   // Polling every 4s (per D-10) — stable deps, uses ref for removingIds (avoids stale closure + interval teardown)
