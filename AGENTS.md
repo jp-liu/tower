@@ -25,7 +25,7 @@ Workspaces are top-level containers. Each workspace holds multiple Projects and 
 
 ## Modules
 
-System modules for GSD phase scoping. Use the **Slug** as the commit scope (e.g. `feat(terminal-08.01): ...`).
+System modules for GSD phase scoping. Use the **Slug** as the commit scope (e.g. `feat(terminal-08.01): ...`). Commit messages are written in **English** (conventional-commit type prefix unchanged; only the description is English).
 
 | Module | Slug | Description |
 |--------|------|-------------|
