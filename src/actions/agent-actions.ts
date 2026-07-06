@@ -785,6 +785,21 @@ export async function startPtyExecution(
       if (tempDir) {
         await rm(tempDir, { recursive: true, force: true }).catch(() => {});
       }
+
+      // Headless-started tasks (MCP / orchestrator, no browser WS ever attached)
+      // never receive the ws-close keepalive that destroys an exited session — so
+      // the killed session (+ its 50KB ring buffer + pid file) would leak in the
+      // sessions Map forever. Schedule the same exited-keepalive here. Guarded by
+      // !disconnectTimer so we don't double-schedule when a browser IS attached
+      // (its ws-close path already set one); destroySession is idempotent and
+      // wireSession clears the timer if a browser attaches within the window.
+      if (session && !session.disconnectTimer) {
+        const { destroySession } = await import("@/lib/pty/session-store");
+        const KEEPALIVE_EXITED_MS = 5 * 60 * 1000; // mirror ws-server.ts
+        const timer = setTimeout(() => destroySession(taskId), KEEPALIVE_EXITED_MS);
+        timer.unref?.();
+        session.disconnectTimer = timer;
+      }
     },
     spawnResult.env,
     undefined,
