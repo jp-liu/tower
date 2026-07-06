@@ -77,6 +77,18 @@ export function AssistantChat() {
     if (inputFocusSignal > 0) inputRef.current?.focus();
   }, [inputFocusSignal]);
 
+  // Auto-grow the input with content (up to the max-h-[160px] cap). We size it
+  // in JS instead of CSS `field-sizing: content` because Chrome flickers the
+  // cursor (pointer ↔ I-beam) while hovering a field-sizing textarea — the
+  // element re-lays-out on every pointer-move. See the `!field-sizing-fixed`
+  // override on the Textarea below.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [inputValue]);
+
   // 切 session 会先清空 messages 再异步灌入历史，全程走 isLoadingHistory。
   // 加载期间及加载完首帧都直接定位（instant），只有同一 session 内新增消息
   // / 流式回复时才用平滑滚动。wasLoadingRef 让历史加载后的那一帧也 instant。
@@ -297,8 +309,8 @@ export function AssistantChat() {
           carries the single divider from the message list */}
       <div
         className={`relative bg-sidebar transition-colors ${
-          isDraggingOver ? "ring-3 ring-inset ring-primary/40" : ""
-        }`}
+          pendingAttachments.length > 0 ? "border-t border-border/60" : ""
+        } ${isDraggingOver ? "ring-3 ring-inset ring-primary/40" : ""}`}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -339,7 +351,7 @@ export function AssistantChat() {
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             placeholder={t("assistant.inputPlaceholder")}
-            className="min-h-[72px] max-h-[160px] w-full resize-none rounded-none border-0 focus-visible:ring-0 focus-visible:border-0 bg-transparent dark:bg-transparent px-4 pt-3 text-sm"
+            className="!field-sizing-fixed min-h-[72px] max-h-[160px] w-full resize-none rounded-none border-0 focus-visible:ring-0 focus-visible:border-0 bg-transparent dark:bg-transparent px-4 pt-3 text-sm"
             rows={3}
           />
 
