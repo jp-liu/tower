@@ -49,6 +49,26 @@ export async function createTask(data: {
 
 export async function updateTaskStatus(taskId: string, status: TaskStatus) {
   taskStatusSchema.parse(status);
+
+  // Worktree completion: a worktree task reaching DONE runs the unified return
+  // flow (merge into base + tear down worktree) BEFORE the status flip, so a
+  // merge conflict / uncommitted changes abort (throw) without marking the task
+  // done. Applies to every trigger — UI merge route, MCP move_task, orchestrator
+  // — so completion leaves zero residue no matter who calls it. Returns
+  // completed:false for direct tasks (no worktree on disk) → fall through.
+  let worktreeCompleted = false;
+  if (status === "DONE") {
+    const pre = await db.task.findUnique({
+      where: { id: taskId },
+      include: { project: true },
+    });
+    if (pre?.baseBranch && pre.project?.localPath) {
+      const { completeWorktreeReturn } = await import("@/lib/task-completion");
+      const outcome = await completeWorktreeReturn(taskId, pre.project.localPath, pre.baseBranch);
+      worktreeCompleted = outcome.completed;
+    }
+  }
+
   const task = await db.task.update({
     where: { id: taskId },
     // 进入 DONE 记录时间戳作为归档基准；离开 DONE 清空（编辑已完成任务不会重置倒计时）。
@@ -56,8 +76,10 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
     include: { project: true },
   });
 
-  // Direct mode DONE: record current HEAD as mergeCommit for diff archive
-  if (status === "DONE" && !task.baseBranch && task.project?.localPath) {
+  // Direct mode DONE: record current HEAD as mergeCommit for diff archive.
+  // Worktree tasks record their merge commit inside completeWorktreeReturn, so
+  // skip here when that already ran.
+  if (status === "DONE" && !worktreeCompleted && !task.baseBranch && task.project?.localPath) {
     try {
       const { execFileSync } = await import("child_process");
       const headCommit = execFileSync(
@@ -87,19 +109,21 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
       captureTaskDreaming(taskId).catch(() => {});
     }).catch(() => {});
 
-    // Auto-generate a change overview note ("任务笔记"). This DONE path is only
-    // reached by direct/no-worktree tasks (worktree+commits go through the
-    // merge route), which keep their worktree — so fire-and-forget is safe;
-    // there is no cleanup race here.
-    import("@/lib/task-overview").then(({ captureTaskOverview }) => {
-      captureTaskOverview(taskId).catch(() => {});
-    }).catch(() => {});
+    // Auto-generate a change overview note ("任务笔记"). Worktree completion
+    // already captured this before tearing down the worktree; only direct
+    // tasks (which keep their tree) still need it here — fire-and-forget is
+    // safe as there is no cleanup race for them.
+    if (!worktreeCompleted) {
+      import("@/lib/task-overview").then(({ captureTaskOverview }) => {
+        captureTaskOverview(taskId).catch(() => {});
+      }).catch(() => {});
+    }
   }
 
   // Terminal states: kill PTY before any filesystem cleanup so the live
   // process doesn't end up with a deleted cwd (zombie). Must run BEFORE
-  // removeWorktree below.
-  if (status === "DONE" || status === "CANCELLED") {
+  // removeWorktree below. Worktree completion already killed it.
+  if ((status === "DONE" && !worktreeCompleted) || status === "CANCELLED") {
     try {
       const { destroySession } = await import("@/lib/pty/session-store");
       destroySession(taskId);

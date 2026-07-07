@@ -193,7 +193,7 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
       "",
       "## Git 工作规则",
       "- 完成一段有意义的改动后，主动用清晰的 message 创建 commit（约定式：feat / fix / refactor / docs / chore…），不要留一堆未提交的改动。",
-      "- 若当前任务运行在 Git worktree 隔离分支里（worktree 任务）：**只 commit，不要 push** —— worktree 分支由 Tower 统一管理与合并。",
+      "- 若当前任务运行在 Git worktree 隔离分支里（worktree 任务）：**只 commit，绝不 push `task/…` 分支到远程** —— worktree 分支由 Tower 在本地统一合并回 base 并清理（完成任务时本地 merge，不经远程 PR）。把 `task/…` 推到远程只会留下 Tower 返程流程清不掉的残留分支，需要人工 `git push origin --delete` 才能收拾。",
       "- 若当前任务直接在项目主工作区里（非 worktree 任务）：可以 push。",
       "- 不确定自己是不是 worktree 任务时，默认只 commit、不 push。",
       "",

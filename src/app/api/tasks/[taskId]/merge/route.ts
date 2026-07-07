@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { execFileSync } from "child_process";
-import { revalidatePath } from "next/cache";
-import { checkConflicts } from "@/lib/diff-parser";
-import { removeWorktree } from "@/lib/worktree";
-import { mergeBranchIntoBase } from "@/lib/git-merge";
+import { updateTaskStatus } from "@/actions/task-actions";
+import { MergeConflictError, WorktreeDirtyError } from "@/lib/task-completion";
 
 export async function POST(
   _request: NextRequest,
@@ -46,104 +43,27 @@ export async function POST(
       );
     }
 
-    const latestExecution = await db.taskExecution.findFirst({
-      where: { taskId: parsed.data, status: "COMPLETED" },
-      orderBy: { createdAt: "desc" },
-    });
+    // Delegate to the unified completion flow. updateTaskStatus(DONE) runs
+    // completeWorktreeReturn (merge into base + worktree teardown) for worktree
+    // tasks, then flips status — the same path MCP move_task takes. It throws on
+    // conflict / dirty worktree, which we map to the codes the merge dialog UI
+    // expects.
+    await updateTaskStatus(taskId, "DONE");
 
-    const worktreeBranch = latestExecution?.worktreeBranch ?? `task/${taskId}`;
-    const localPath = task.project.localPath;
-
-    // Pre-merge conflict check
-    const { hasConflicts, conflictFiles } = checkConflicts(
-      localPath,
-      task.baseBranch,
-      worktreeBranch
-    );
-
-    if (hasConflicts) {
+    return NextResponse.json({ success: true, message: "Merge completed" });
+  } catch (error) {
+    if (error instanceof MergeConflictError) {
       return NextResponse.json(
-        { error: "Merge conflicts detected", conflictFiles },
+        { error: "Merge conflicts detected", conflictFiles: error.conflictFiles },
         { status: 409 }
       );
     }
-
-    const gitOpts = { encoding: "utf-8" as const, timeout: 30000 };
-
-    // Record the branch tip BEFORE merge — used for accurate post-merge diff
-    let branchTipCommit: string | undefined;
-    try {
-      branchTipCommit = execFileSync(
-        "git", ["rev-parse", worktreeBranch],
-        { ...gitOpts, cwd: localPath }
-      ).trim();
-    } catch {
-      // Best effort — diff will fallback gracefully
+    if (error instanceof WorktreeDirtyError) {
+      return NextResponse.json(
+        { error: "Worktree has uncommitted changes", files: error.files },
+        { status: 400 }
+      );
     }
-
-    // Merge the task branch into the base branch. The helper handles the
-    // autostash dance: it preflights for index.lock / mid-merge / mid-rebase,
-    // surfaces git's real stderr on a failed `git stash push`, only pops a
-    // stash it actually created, and treats branch-restore/pop cleanup as
-    // non-fatal — so a clean working tree no longer mis-reports as
-    // "Merge failed".
-    const { commitHash } = mergeBranchIntoBase({
-      localPath,
-      baseBranch: task.baseBranch,
-      worktreeBranch,
-    });
-
-    // Record mergeCommit and branchTipCommit on the execution
-    if (latestExecution && commitHash) {
-      try {
-        await db.taskExecution.update({
-          where: { id: latestExecution.id },
-          data: {
-            mergeCommit: commitHash,
-            ...(branchTipCommit ? { branchTipCommit } : {}),
-          },
-        });
-      } catch {
-        // Best effort — diff will fallback gracefully
-      }
-    }
-
-    // Update status to DONE — stamp doneAt as the archive-delay baseline
-    // (same as updateTaskStatus; without it the task would archive immediately).
-    await db.task.update({
-      where: { id: parsed.data },
-      data: { status: "DONE", doneAt: new Date() },
-    });
-
-    // Kill PTY first so the live process doesn't end up with a deleted cwd
-    try {
-      const { destroySession } = await import("@/lib/pty/session-store");
-      destroySession(taskId);
-    } catch (error) {
-      console.error("[merge] PTY session destroy failed:", error);
-    }
-
-    // Generate the task change overview note BEFORE worktree cleanup, while the
-    // diff/files are still resolvable. Only the git data-gathering is awaited;
-    // the AI summary + note write run in the background. Never blocks merge.
-    try {
-      const { captureTaskOverview } = await import("@/lib/task-overview");
-      await captureTaskOverview(taskId);
-    } catch (error) {
-      console.error("[merge] Task overview capture failed:", error);
-    }
-
-    // Best-effort worktree cleanup
-    try {
-      await removeWorktree(localPath, taskId);
-    } catch (error) {
-      console.error("[merge] Worktree cleanup failed:", error);
-    }
-
-    revalidatePath("/workspaces");
-
-    return NextResponse.json({ success: true, message: "Squash merge completed" });
-  } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[merge] Merge failed:", message);
     return NextResponse.json(

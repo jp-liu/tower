@@ -5,11 +5,16 @@ import path from "path";
 import os from "os";
 import { logger } from "@/lib/logger";
 
-function expandHome(p: string): string {
+export function expandHome(p: string): string {
   if (p.startsWith("~/") || p === "~") {
     return path.join(os.homedir(), p.slice(1));
   }
   return p;
+}
+
+/** Absolute path of a task's worktree dir under `<localPath>/.worktrees`. */
+export function worktreePathFor(localPathRaw: string, taskId: string): string {
+  return path.join(expandHome(localPathRaw), ".worktrees", "task-" + taskId);
 }
 
 export interface WorktreeResult {
