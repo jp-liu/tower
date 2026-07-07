@@ -196,6 +196,7 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
       "- 若当前任务运行在 Git worktree 隔离分支里（worktree 任务）：**只 commit，绝不 push `task/…` 分支到远程** —— worktree 分支由 Tower 在本地统一合并回 base 并清理（完成任务时本地 merge，不经远程 PR）。把 `task/…` 推到远程只会留下 Tower 返程流程清不掉的残留分支，需要人工 `git push origin --delete` 才能收拾。",
       "- 若当前任务直接在项目主工作区里（非 worktree 任务）：可以 push。",
       "- 不确定自己是不是 worktree 任务时，默认只 commit、不 push。",
+      "- **完成任务遇到合并冲突时可自助**：Tower 完成任务会把 `task/…` 分支合并回 base，若报「合并到 base 存在冲突」，根因通常是 base 有了新提交。此时**在当前 worktree 里**执行 `git merge <base 分支>`（如 `git merge main`）把 base 合进来、解决冲突并提交，然后重新完成任务即可——**不要去主仓库解冲突**（那违反 worktree 纪律，合并动作由 Tower 在主仓库完成）。",
       "",
       "## 并发与协作（多任务可能同改一个仓库）",
       "- Tower 常同时跑多个任务、甚至同一仓库多个 worktree。**只 stage / commit 你这轮亲手改的文件**，一律 `git add <明确路径>`；禁止 `git add .` / `-A` / `-u` / `git commit -a`，别把别的窗口或用户手动的改动一并提交。",

@@ -11,15 +11,30 @@ const log = logger.create("task-completion");
 /** Thrown when a worktree has uncommitted changes — merging would lose them. */
 export class WorktreeDirtyError extends Error {
   constructor(public files: string[]) {
-    super("Worktree has uncommitted changes");
+    // Actionable for the agent running in this worktree (the MCP layer only
+    // surfaces error.message): commit or ignore, then retry — don't discard.
+    const list = files.length ? `：${files.join(", ")}` : "";
+    super(
+      `工作区有未提交的改动${list}。请在当前 worktree 里提交这些改动` +
+        `（无需上传的文件请加入 .gitignore），然后重新完成任务。`
+    );
     this.name = "WorktreeDirtyError";
   }
 }
 
 /** Thrown when the task branch conflicts with base — merge cannot proceed. */
 export class MergeConflictError extends Error {
-  constructor(public conflictFiles: string[]) {
-    super("Merge conflicts detected");
+  constructor(public conflictFiles: string[], baseBranch?: string) {
+    // The merge into base happens in the MAIN repo, which an agent must not
+    // touch — but it CAN resolve the conflict inside its own worktree by
+    // merging base in. Spell that out so the agent can self-serve, since the
+    // MCP layer only surfaces error.message (conflictFiles is dropped).
+    const list = conflictFiles.length ? `：${conflictFiles.join(", ")}` : "";
+    const hint = baseBranch
+      ? `请在当前 worktree 里执行 \`git merge ${baseBranch}\` 合并 base，` +
+        `解决冲突并提交后，重新完成任务（不要去主仓库操作）。`
+      : "";
+    super(`合并到 base 存在冲突${list}。${hint}`);
     this.name = "MergeConflictError";
   }
 }
@@ -74,7 +89,7 @@ export async function completeWorktreeReturn(
   // Pre-merge conflict check — abort before mutating the main working tree.
   const { hasConflicts, conflictFiles } = checkConflicts(localPath, baseBranch, worktreeBranch);
   if (hasConflicts) {
-    throw new MergeConflictError(conflictFiles);
+    throw new MergeConflictError(conflictFiles, baseBranch);
   }
 
   // Record the branch tip BEFORE merge — used for an accurate post-merge diff.

@@ -21,7 +21,7 @@ vi.mock("@/lib/db", () => ({
 vi.mock("@/lib/pty/session-store", () => ({ destroySession: vi.fn() }));
 vi.mock("@/lib/task-overview", () => ({ captureTaskOverview: vi.fn(async () => {}) }));
 
-import { completeWorktreeReturn, WorktreeDirtyError } from "@/lib/task-completion";
+import { completeWorktreeReturn, WorktreeDirtyError, MergeConflictError } from "@/lib/task-completion";
 
 const TASK_ID = "ctaskcompletion0000000001";
 
@@ -50,6 +50,19 @@ function addWorktree(repo: string, withCommit: boolean): string {
   }
   return wt;
 }
+
+describe("completion error messages are actionable for the agent", () => {
+  it("MergeConflictError names files + tells the agent to merge base in the worktree", () => {
+    const e = new MergeConflictError(["src/a.ts"], "main");
+    expect(e.message).toContain("src/a.ts");
+    expect(e.message).toContain("git merge main");
+  });
+  it("WorktreeDirtyError names files + points to commit / .gitignore", () => {
+    const e = new WorktreeDirtyError(["tmp.log"]);
+    expect(e.message).toContain("tmp.log");
+    expect(e.message).toContain(".gitignore");
+  });
+});
 
 describe("completeWorktreeReturn", () => {
   let repo: string;
