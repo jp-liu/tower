@@ -24,9 +24,13 @@ export async function POST(
     if (!task) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
-    if (task.status !== "IN_REVIEW") {
+    // Reject only terminal states. Completion runs through the unified flow
+    // (which kills the PTY + refuses on a dirty worktree), so merging a still-
+    // running task is safe — this lets Mission Control complete a RUNNING card
+    // directly, and keeps the merge dialog's Cancel non-destructive.
+    if (task.status === "DONE" || task.status === "CANCELLED") {
       return NextResponse.json(
-        { error: "Task must be in IN_REVIEW status to merge" },
+        { error: "Task is already completed or cancelled" },
         { status: 400 }
       );
     }

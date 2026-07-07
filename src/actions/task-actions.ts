@@ -296,6 +296,7 @@ export async function checkWorktreeClean(taskId: string): Promise<{
   lastCommitMessage: string | null;
   commitLog: string[];
   hasWorktree: boolean;
+  baseBranch: string;
 }> {
   const { execFileSync } = await import("child_process");
   const { existsSync } = await import("fs");
@@ -306,12 +307,13 @@ export async function checkWorktreeClean(taskId: string): Promise<{
     orderBy: { createdAt: "desc" },
   });
 
+  const baseBranch = task?.baseBranch || "main";
+
   if (!execution?.worktreePath || !existsSync(execution.worktreePath)) {
-    return { clean: true, files: [], hasCommits: false, lastCommitMessage: null, commitLog: [], hasWorktree: false };
+    return { clean: true, files: [], hasCommits: false, lastCommitMessage: null, commitLog: [], hasWorktree: false, baseBranch };
   }
 
   const cwd = execution.worktreePath;
-  const baseBranch = task?.baseBranch || "main";
 
   try {
     // Check uncommitted files
@@ -355,9 +357,9 @@ export async function checkWorktreeClean(taskId: string): Promise<{
       // ignore — fallback to no commits
     }
 
-    return { clean, files, hasCommits, lastCommitMessage, commitLog, hasWorktree: true };
+    return { clean, files, hasCommits, lastCommitMessage, commitLog, hasWorktree: true, baseBranch };
   } catch {
-    return { clean: true, files: [], hasCommits: false, lastCommitMessage: null, commitLog: [], hasWorktree: true };
+    return { clean: true, files: [], hasCommits: false, lastCommitMessage: null, commitLog: [], hasWorktree: true, baseBranch };
   }
 }
 

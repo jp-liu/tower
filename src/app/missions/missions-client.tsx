@@ -7,6 +7,9 @@ import {
   getActiveExecutionsAcrossWorkspaces,
   stopPtyExecution,
 } from "@/actions/agent-actions";
+import { checkWorktreeClean, updateTaskStatus } from "@/actions/task-actions";
+import { TaskMergeConfirmDialog } from "@/components/task/task-merge-confirm-dialog";
+import { MissionCompleteCommitDialog } from "@/components/missions/mission-complete-commit-dialog";
 import {
   GRID_PRESETS,
   DEFAULT_PRESET_ID,
@@ -116,6 +119,19 @@ export function MissionsClient({
   const [removingIds, setRemovingIds] = useState<Map<string, "stopped" | "completed">>(
     new Map()
   );
+  // Complete flow dialogs (mirrors the board's tryCompleteTask: dirty → commit,
+  // clean+commits → merge confirm). Keyed on the card's execution so success can
+  // fade the right card out.
+  const [mergeDialog, setMergeDialog] = useState<{
+    execution: ActiveExecutionInfo;
+    commitLog: string[];
+    commitCount: number;
+    baseBranch: string;
+  } | null>(null);
+  const [commitDialog, setCommitDialog] = useState<{
+    execution: ActiveExecutionInfo;
+    files: string[];
+  } | null>(null);
   // Ref mirror to avoid stale closures in polling and startFadeOut callbacks
   const removingIdsRef = useRef(removingIds);
   // Keep ref in sync with state
@@ -249,6 +265,63 @@ export function MissionsClient({
         });
       } catch {
         toast.error(t("missions.error.stopFailed"));
+      }
+    },
+    [startFadeOut, t]
+  );
+
+  // handleComplete — same completion logic as the board's "Complete": inspect
+  // the worktree, then route to commit / merge-confirm / cancel-suggestion /
+  // direct-DONE. The merge + worktree teardown happens inside those flows
+  // (updateTaskStatus / merge route), which also kill the PTY. On success the
+  // card fades out as "completed".
+  const handleComplete = useCallback(
+    async (execution: ActiveExecutionInfo) => {
+      const taskId = execution.taskId;
+      try {
+        const result = await checkWorktreeClean(taskId);
+
+        // Uncommitted changes → commit them first (never discarded).
+        if (result.hasWorktree && !result.clean) {
+          setCommitDialog({ execution, files: result.files });
+          return;
+        }
+
+        // Clean but nothing was done → offer to cancel instead.
+        if (result.hasWorktree && result.clean && !result.hasCommits) {
+          toast.error(t("taskPage.noChangesToComplete"), {
+            action: {
+              label: t("taskPage.markAsCancelled"),
+              onClick: () => {
+                updateTaskStatus(taskId, "CANCELLED")
+                  .then(() => {
+                    startFadeOut(execution.executionId, "stopped");
+                    toast.success(t("taskPage.taskCancelled"));
+                  })
+                  .catch(() => toast.error(t("missions.error.stopFailed")));
+              },
+            },
+          });
+          return;
+        }
+
+        // Clean with commits → confirm the merge (shows commit log, handles conflicts).
+        if (result.hasWorktree && result.hasCommits) {
+          setMergeDialog({
+            execution,
+            commitLog: result.commitLog,
+            commitCount: result.commitLog.length,
+            baseBranch: result.baseBranch,
+          });
+          return;
+        }
+
+        // No worktree (direct task) → just mark DONE.
+        await updateTaskStatus(taskId, "DONE");
+        startFadeOut(execution.executionId, "completed");
+        toast.success(t("taskPage.taskCompleted"));
+      } catch {
+        toast.error(t("missions.error.completeFailed"));
       }
     },
     [startFadeOut, t]
@@ -528,6 +601,7 @@ export function MissionsClient({
                     isRemoving={removingIds.has(c.executionId)}
                     removeReason={removingIds.get(c.executionId)}
                     onStop={handleStop}
+                    onComplete={handleComplete}
                     onSessionEnd={handleSessionEnd}
                     index={i}
                     onRegisterControls={onRegisterControls}
@@ -547,6 +621,40 @@ export function MissionsClient({
         onSelect={focusPane}
         onClose={focusSelected}
       />
+
+      {/* Complete flow — dirty worktree → commit, then merge confirm */}
+      {commitDialog && (
+        <MissionCompleteCommitDialog
+          open
+          onOpenChange={(open) => { if (!open) setCommitDialog(null); }}
+          taskId={commitDialog.execution.taskId}
+          files={commitDialog.files}
+          onCommitted={() => {
+            const execution = commitDialog.execution;
+            setCommitDialog(null);
+            // Now clean with commits → resume the flow (opens the merge confirm).
+            handleComplete(execution);
+          }}
+        />
+      )}
+
+      {mergeDialog && (
+        <TaskMergeConfirmDialog
+          open
+          onOpenChange={(open) => { if (!open) setMergeDialog(null); }}
+          taskId={mergeDialog.execution.taskId}
+          taskTitle={mergeDialog.execution.taskTitle}
+          baseBranch={mergeDialog.baseBranch}
+          fileCount={0}
+          commitCount={mergeDialog.commitCount}
+          commitLog={mergeDialog.commitLog}
+          onMergeComplete={() => {
+            startFadeOut(mergeDialog.execution.executionId, "completed");
+            setMergeDialog(null);
+            toast.success(t("taskPage.taskCompleted"));
+          }}
+        />
+      )}
     </div>
   );
 }

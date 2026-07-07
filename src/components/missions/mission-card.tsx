@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, ArrowUpRight, X, TerminalSquare } from "lucide-react";
+import { GripVertical, ArrowUpRight, X, TerminalSquare, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -50,6 +50,8 @@ interface MissionCardProps {
   isRemoving: boolean;
   removeReason?: "stopped" | "completed";
   onStop: (taskId: string) => void;
+  /** Complete the task — run the merge/return flow (commit-clean → merge → cleanup). */
+  onComplete: (execution: ActiveExecutionInfo) => void;
   onSessionEnd?: (taskId: string, exitCode: number) => void;
   /** Zero-based position within the visible grid (used for pane focus/scroll). */
   index: number;
@@ -62,6 +64,7 @@ export function MissionCard({
   isRemoving,
   removeReason,
   onStop,
+  onComplete,
   onSessionEnd,
   index,
   onRegisterControls,
@@ -190,6 +193,24 @@ export function MissionCard({
             <ArrowUpRight className="h-3.5 w-3.5" />
           </TooltipTrigger>
           <TooltipContent>{t("missions.openFullView")}</TooltipContent>
+        </Tooltip>
+
+        {/* Complete button — merge/return flow */}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="ml-1 shrink-0 text-emerald-500 hover:text-emerald-500"
+                onClick={() => onComplete(execution)}
+                disabled={isRemoving}
+              />
+            }
+          >
+            <Check className="h-3.5 w-3.5" />
+          </TooltipTrigger>
+          <TooltipContent>{t("missions.completeTask")}</TooltipContent>
         </Tooltip>
 
         {/* Stop button */}
