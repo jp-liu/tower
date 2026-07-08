@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 import { useAssistant } from "./assistant-provider";
+import { AssistantBindingBar } from "./assistant-binding-bar";
 import { AssistantChatBubble } from "./assistant-chat-bubble";
 import {
   useAttachmentUpload,
@@ -76,14 +77,33 @@ export function AssistantChat() {
     if (inputFocusSignal > 0) inputRef.current?.focus();
   }, [inputFocusSignal]);
 
+  // Auto-grow the input with content (up to the max-h-[160px] cap). We size it
+  // in JS instead of CSS `field-sizing: content` because Chrome flickers the
+  // cursor (pointer ↔ I-beam) while hovering a field-sizing textarea — the
+  // element re-lays-out on every pointer-move. See the `!field-sizing-fixed`
+  // override on the Textarea below.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [inputValue]);
+
   // 切 session 会先清空 messages 再异步灌入历史，全程走 isLoadingHistory。
   // 加载期间及加载完首帧都直接定位（instant），只有同一 session 内新增消息
   // / 流式回复时才用平滑滚动。wasLoadingRef 让历史加载后的那一帧也 instant。
+  // 路由切换会让面板整棵卸载重挂（LayoutInner 对详情/普通页返回不同树），
+  // 重挂首帧必须 instant，否则会出现「换页触发滚动动画」的误伤。
   const wasLoadingRef = useRef(false);
+  const didMountScrollRef = useRef(false);
   const lastContentLen = messages[messages.length - 1]?.content.length ?? 0;
   useEffect(() => {
+    const isMountFrame = !didMountScrollRef.current;
+    didMountScrollRef.current = true;
     const behavior =
-      isLoadingHistory || wasLoadingRef.current ? "instant" : "smooth";
+      isMountFrame || isLoadingHistory || wasLoadingRef.current
+        ? "instant"
+        : "smooth";
     wasLoadingRef.current = isLoadingHistory;
     messagesEndRef.current?.scrollIntoView({ behavior });
   }, [messages.length, lastContentLen, isLoadingHistory]);
@@ -289,23 +309,22 @@ export function AssistantChat() {
         </div>
       </ScrollArea>
 
-      {/* Input area — wrapper container with attachment strip + textarea + toolbar */}
+      {/* Scope pickers — sit directly above the composer */}
+      <AssistantBindingBar />
+
+      {/* Composer — edge-to-edge input (no nested box); the binding bar above
+          carries the single divider from the message list */}
       <div
-        className="border-t border-border bg-sidebar p-4"
+        className={`relative bg-sidebar transition-colors ${
+          pendingAttachments.length > 0 ? "border-t border-border/60" : ""
+        } ${isDraggingOver ? "ring-3 ring-inset ring-primary/40" : ""}`}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <div
-          className={`relative rounded-lg border bg-background transition-colors ${
-            isDraggingOver
-              ? "border-primary ring-3 ring-primary/40"
-              : "border-border focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
-          }`}
-        >
           {isDraggingOver && (
-            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-primary/10 text-xs font-medium text-primary">
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-primary/10 text-xs font-medium text-primary">
               {t("assistant.dropToUpload")}
             </div>
           )}
@@ -339,12 +358,12 @@ export function AssistantChat() {
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             placeholder={t("assistant.inputPlaceholder")}
-            className="min-h-[72px] max-h-[120px] resize-none rounded-none border-0 focus-visible:ring-0 focus-visible:border-0 bg-transparent dark:bg-transparent text-sm"
+            className="!field-sizing-fixed min-h-[72px] max-h-[160px] w-full resize-none rounded-none border-0 focus-visible:ring-0 focus-visible:border-0 bg-transparent dark:bg-transparent px-4 pt-3 text-sm"
             rows={3}
           />
 
           {/* Block 4: action bar */}
-          <div className="flex items-center justify-between px-2 pb-2 border-t border-border/60 pt-2">
+          <div className="flex items-center justify-between px-3 pb-2 pt-1">
             <input
               ref={fileInputRef}
               type="file"
@@ -412,7 +431,6 @@ export function AssistantChat() {
               </Button>
             )}
           </div>
-        </div>
       </div>
 
       <ImageLightbox

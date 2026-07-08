@@ -16,6 +16,7 @@ import {
   type HtmlPortalNode,
 } from "react-reverse-portal";
 import dynamic from "next/dynamic";
+import type { TerminalControls } from "@/components/task/task-terminal";
 
 const TaskTerminal = dynamic(
   () => import("@/components/task/task-terminal").then((m) => ({ default: m.TaskTerminal })),
@@ -34,6 +35,16 @@ interface TerminalInstance {
   taskId: string;
   worktreePath: string;
   onSessionEnd: { current: ((exitCode: number) => void) | null };
+  /** Imperative-controls callback — Mission Control panes use it for keyboard focus/blur. */
+  onReady: { current: ((controls: TerminalControls | null) => void) | null };
+  /**
+   * Latest controls the (persistent) TaskTerminal handed up. Cached because the
+   * terminal fires onReady only once at creation; a re-mounted outlet must be
+   * handed the already-live controls instead of waiting for a fire that won't come.
+   */
+  controls: TerminalControls | null;
+  /** How many outlets are currently projecting this node. >0 ⇒ visible ⇒ never evicted. */
+  mountCount: number;
 }
 
 interface TerminalPortalContextValue {
@@ -43,6 +54,8 @@ interface TerminalPortalContextValue {
   removePortal: (taskId: string) => void;
   /** Register session-end callback for a task */
   setOnSessionEnd: (taskId: string, fn: ((exitCode: number) => void) | null) => void;
+  /** Register terminal-ready (imperative controls) callback for a task */
+  setOnReady: (taskId: string, fn: ((controls: TerminalControls | null) => void) | null) => void;
 }
 
 const TerminalPortalContext = createContext<TerminalPortalContextValue | null>(null);
@@ -53,9 +66,15 @@ export function useTerminalPortal() {
   return ctx;
 }
 
-// Max number of terminal instances kept alive simultaneously.
-// Oldest unused instances are evicted when this limit is exceeded.
-const MAX_PORTAL_INSTANCES = 3;
+// Soft cap on IDLE (currently-unprojected) terminal instances kept warm for fast
+// re-navigation. Terminals that are actively projected (mountCount > 0) are NEVER
+// evicted — Mission Control renders one per running task and evicting a visible
+// one would blank its terminal. So this only bounds the off-screen cache: how many
+// terminals stay live after you leave their view (e.g. missions panes kept warm
+// during a missions → detail → missions detour). 12 comfortably covers a 3×3 grid
+// plus a detail visit; beyond that the oldest idle ones replay from the WS buffer
+// on return (logged below).
+const MAX_PORTAL_INSTANCES = 12;
 
 export function TerminalPortalProvider({ children }: { children: ReactNode }) {
   const instancesRef = useRef(new Map<string, TerminalInstance>());
@@ -72,10 +91,22 @@ export function TerminalPortalProvider({ children }: { children: ReactNode }) {
       return existing;
     }
 
-    // Evict oldest instances if at capacity
-    while (instancesRef.current.size >= MAX_PORTAL_INSTANCES && accessOrderRef.current.length > 0) {
-      const oldestId = accessOrderRef.current.shift()!;
-      instancesRef.current.delete(oldestId);
+    // Evict the oldest IDLE instances (mountCount === 0) when over capacity.
+    // Skip anything currently projected — evicting a visible terminal would blank
+    // it. If every instance is visible, the cache simply grows past the soft cap
+    // (all of them are genuinely in use), which is correct.
+    if (instancesRef.current.size >= MAX_PORTAL_INSTANCES) {
+      for (const id of [...accessOrderRef.current]) {
+        if (instancesRef.current.size < MAX_PORTAL_INSTANCES) break;
+        const inst = instancesRef.current.get(id);
+        if (!inst || inst.mountCount > 0) continue;
+        instancesRef.current.delete(id);
+        accessOrderRef.current = accessOrderRef.current.filter((x) => x !== id);
+        console.warn(
+          `[terminal-portal] evicted idle terminal ${id} (over ${MAX_PORTAL_INSTANCES} cap) — ` +
+            `its history will replay from the WS buffer on next view`
+        );
+      }
     }
 
     const portalNode = createHtmlPortalNode({
@@ -86,6 +117,9 @@ export function TerminalPortalProvider({ children }: { children: ReactNode }) {
       taskId,
       worktreePath,
       onSessionEnd: { current: null },
+      onReady: { current: null },
+      controls: null,
+      mountCount: 0,
     };
     instancesRef.current.set(taskId, instance);
     accessOrderRef.current.push(taskId);
@@ -104,6 +138,16 @@ export function TerminalPortalProvider({ children }: { children: ReactNode }) {
     if (inst) inst.onSessionEnd.current = fn;
   }, []);
 
+  const setOnReady = useCallback((taskId: string, fn: ((controls: TerminalControls | null) => void) | null) => {
+    const inst = instancesRef.current.get(taskId);
+    if (!inst) return;
+    inst.onReady.current = fn;
+    // A persistent terminal fires onReady once (at creation). A newly-mounted
+    // outlet registering later must be handed the already-live controls now,
+    // otherwise it never receives them and its keyboard controls stay dead.
+    if (fn && inst.controls) fn(inst.controls);
+  }, []);
+
   // Render all terminal instances via InPortal (they stay alive even when OutPortal unmounts)
   const portals = Array.from(instancesRef.current.values()).map((inst) => (
     <InPortal key={inst.taskId} node={inst.portalNode}>
@@ -111,13 +155,18 @@ export function TerminalPortalProvider({ children }: { children: ReactNode }) {
         taskId={inst.taskId}
         worktreePath={inst.worktreePath}
         onSessionEnd={(code) => inst.onSessionEnd.current?.(code)}
+        onReady={(controls) => {
+          // Cache so a re-mounted outlet can be handed live controls (see setOnReady).
+          inst.controls = controls;
+          inst.onReady.current?.(controls);
+        }}
         useCanvasRenderer
       />
     </InPortal>
   ));
 
   return (
-    <TerminalPortalContext.Provider value={{ getPortal, removePortal, setOnSessionEnd }}>
+    <TerminalPortalContext.Provider value={{ getPortal, removePortal, setOnSessionEnd, setOnReady }}>
       {children}
       {portals}
     </TerminalPortalContext.Provider>
@@ -132,18 +181,36 @@ export function TerminalOutlet({
   taskId,
   worktreePath,
   onSessionEnd,
+  onReady,
 }: {
   taskId: string;
   worktreePath: string;
   onSessionEnd?: (exitCode: number) => void;
+  /** Imperative-controls callback (Mission Control keyboard focus/blur). */
+  onReady?: (controls: TerminalControls | null) => void;
 }) {
-  const { getPortal, setOnSessionEnd } = useTerminalPortal();
+  const { getPortal, setOnSessionEnd, setOnReady } = useTerminalPortal();
   const [instance, setInstance] = useState<TerminalInstance | null>(null);
 
-  // Create/get portal instance — clear stale instance immediately when taskId changes
+  // Latest onReady via ref — callers pass an inline callback that changes every
+  // render, so register a STABLE forwarding wrapper once (per taskId) instead of
+  // re-registering (and momentarily dropping controls) on every render. Synced in
+  // an effect (not during render) since the wrapper only reads it after commit.
+  const onReadyRef = useRef(onReady);
   useEffect(() => {
-    setInstance(getPortal(taskId, worktreePath));
-    return () => setInstance(null);
+    onReadyRef.current = onReady;
+  });
+
+  // Create/get portal instance — clear stale instance immediately when taskId changes.
+  // Track projection via mountCount so the provider never evicts a visible terminal.
+  useEffect(() => {
+    const inst = getPortal(taskId, worktreePath);
+    inst.mountCount++;
+    setInstance(inst);
+    return () => {
+      inst.mountCount--;
+      setInstance(null);
+    };
   }, [taskId, worktreePath, getPortal]);
 
   // Register session-end callback
@@ -151,6 +218,17 @@ export function TerminalOutlet({
     setOnSessionEnd(taskId, onSessionEnd ?? null);
     return () => setOnSessionEnd(taskId, null);
   }, [taskId, onSessionEnd, setOnSessionEnd]);
+
+  // Register terminal-ready (imperative controls) callback via a stable wrapper.
+  // On unmount, hand a null through so a consumer that keyed controls by taskId
+  // (Mission Control) drops the stale entry.
+  useEffect(() => {
+    setOnReady(taskId, (controls) => onReadyRef.current?.(controls));
+    return () => {
+      onReadyRef.current?.(null);
+      setOnReady(taskId, null);
+    };
+  }, [taskId, setOnReady]);
 
   if (!instance) return null;
   return <OutPortal node={instance.portalNode} />;

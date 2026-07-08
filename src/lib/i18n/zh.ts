@@ -62,6 +62,7 @@ export const zh = {
   "group.saved": "已保存",
   "group.createdToast": "已创建分组",
   "sidebar.groups": "产品组",
+  "sidebar.more": "更多",
   "project.description": "项目描述",
   "project.gitUrl": "Git 仓库地址",
   "project.gitUrlHint": "可选，输入后自动推断本地路径",

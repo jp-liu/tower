@@ -27,6 +27,7 @@ Workspace → Project → Task → Execution
 
 ## Key Conventions
 
+- Write in English: **all developer-facing text is English** — code comments, commit messages, log/error strings, identifiers, and internal docs. Exception: user-facing UI copy still goes through i18n (`t("key")`, zh/en). Git commits use **conventional commits** (`feat`/`fix`/`refactor`/`docs`/`chore`/`perf`… + optional `(scope)`); English description, type prefix unchanged
 - 国际化：所有用户可见文本用 `t("key")`，zh/en 双语
 - Next.js 15+ 异步 params：`const { id } = await params`
 - App Router routes：`export const runtime = "nodejs"` + `export const dynamic = "force-dynamic"`

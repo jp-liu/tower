@@ -55,7 +55,7 @@ export function AssistantBindingBar() {
   };
 
   return (
-    <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border bg-sidebar">
+    <div className="flex items-center gap-2 px-4 py-1.5 border-t border-border bg-sidebar">
       <Select value={binding.workspaceId || NONE} onValueChange={onWorkspaceChange}>
         <SelectTrigger className="h-7 flex-1 min-w-0 text-xs">
           <span className="truncate">

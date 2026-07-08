@@ -1,11 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Boxes, Plus, Pencil, Trash2, X, Loader2 } from "lucide-react";
+import { Boxes, Plus, Pencil, Trash2, X, Loader2, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { SubPageNav } from "@/components/layout/sub-page-nav";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
@@ -146,8 +154,22 @@ export function GroupsPageClient({ workspaceId, initialGroups, allProjects }: Gr
 
       {/* Action bar */}
       <div className="header-sm flex items-center gap-3 px-6 py-2">
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-1.5">
           <span className="text-sm font-medium text-foreground">{t("group.manageTitle")}</span>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label={t("group.manageDesc")}
+                  className="text-muted-foreground/60 transition-colors hover:text-foreground"
+                />
+              }
+            >
+              <Lightbulb className="h-3.5 w-3.5" />
+            </TooltipTrigger>
+            <TooltipContent side="right" className="max-w-xs">{t("group.manageDesc")}</TooltipContent>
+          </Tooltip>
         </div>
         <Button
           onClick={() => { setCreating(true); setNewName(""); setNewDesc(""); }}
@@ -158,50 +180,51 @@ export function GroupsPageClient({ workspaceId, initialGroups, allProjects }: Gr
         </Button>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto px-6 py-4">
-        <p className="mb-4 text-xs text-muted-foreground">{t("group.manageDesc")}</p>
-
-        {/* Inline create form */}
-        {creating && (
-          <div className="mb-4 rounded-xl border bg-card p-4">
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">{t("group.name")}</label>
-                <Input
-                  autoFocus
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCreate(); } }}
-                  placeholder={t("group.namePlaceholder")}
-                  className="mt-1.5"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">{t("group.desc")}</label>
-                <Textarea
-                  value={newDesc}
-                  onChange={(e) => setNewDesc(e.target.value)}
-                  rows={2}
-                  placeholder={t("group.descPlaceholder")}
-                  className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring resize-none"
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setCreating(false)}>{t("common.cancel")}</Button>
-                <Button
-                  onClick={handleCreate}
-                  disabled={!newName.trim() || savingNew}
-                  className="bg-primary/10 text-primary ring-1 ring-primary/25 hover:bg-primary/20"
-                >
-                  {savingNew ? <Loader2 className="h-4 w-4 animate-spin" /> : t("common.create")}
-                </Button>
-              </div>
+      {/* Create dialog — narrow, centered like other dialogs */}
+      <Dialog open={creating} onOpenChange={(o) => { if (!o) setCreating(false); }} disablePointerDismissal>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("group.create")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">{t("group.name")}</label>
+              <Input
+                autoFocus
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCreate(); } }}
+                placeholder={t("group.namePlaceholder")}
+                className="mt-1.5"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">{t("group.desc")}</label>
+              <Textarea
+                value={newDesc}
+                onChange={(e) => setNewDesc(e.target.value)}
+                rows={2}
+                placeholder={t("group.descPlaceholder")}
+                className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring resize-none"
+              />
             </div>
           </div>
-        )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreating(false)}>{t("common.cancel")}</Button>
+            <Button
+              onClick={handleCreate}
+              disabled={!newName.trim() || savingNew}
+              className="bg-primary/10 text-primary ring-1 ring-primary/25 hover:bg-primary/20"
+            >
+              {savingNew ? <Loader2 className="h-4 w-4 animate-spin" /> : t("common.create")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-        {groups.length === 0 && !creating ? (
+      {/* Content */}
+      <div className="flex-1 overflow-auto px-6 py-4">
+        {groups.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
             <Boxes className="h-10 w-10 text-muted-foreground/30" />
             <p className="text-sm font-medium text-muted-foreground">{t("group.empty")}</p>

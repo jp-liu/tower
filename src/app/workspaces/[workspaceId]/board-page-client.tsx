@@ -108,15 +108,27 @@ export function BoardPageClient({
   }, [router]);
 
   // Auto-poll for external changes (MCP task creation, etc.)
-  // Pause polling while create/edit dialog is open to prevent form reset
+  // Pause polling while create/edit dialog is open to prevent form reset.
+  // Skip refreshes while the tab is backgrounded — router.refresh() refetches the
+  // whole RSC tree, so polling a hidden tab burns CPU for nothing on low-end
+  // machines. Refresh once on return so the board is immediately fresh.
   useEffect(() => {
     if (showCreateDialog) return;
-    const timer = setInterval(() => {
+    const tick = () => {
+      if (document.visibilityState === "hidden") return;
       startTransition(() => {
         router.refresh();
       });
-    }, 5000);
-    return () => clearInterval(timer);
+    };
+    const timer = setInterval(tick, 5000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [router, showCreateDialog]);
 
   const handleSearchChange = useCallback((query: string) => {

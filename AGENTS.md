@@ -25,7 +25,7 @@ Workspaces are top-level containers. Each workspace holds multiple Projects and 
 
 ## Modules
 
-System modules for GSD phase scoping. Use the **Slug** as the commit scope (e.g. `feat(terminal-08.01): ...`).
+System modules for GSD phase scoping. Use the **Slug** as the commit scope (e.g. `feat(terminal-08.01): ...`). Commit messages are written in **English** (conventional-commit type prefix unchanged; only the description is English).
 
 | Module | Slug | Description |
 |--------|------|-------------|
@@ -54,11 +54,13 @@ Detailed module documentation (VitePress site): [`docs/modules/`](docs/modules/)
 
 ```
 Workspace (id, name, description?)
-  ├── Project[] (id, name, alias?, description?, type, gitUrl?, localPath?)
-  │     └── Task[] (id, title, description?, status, priority, order)
-  │           ├── TaskLabel[] → Label
-  │           ├── TaskExecution[]
-  │           └── TaskMessage[]
+  ├── ProductGroup[] (id, name, description?)   // groups repos of one product for shared knowledge search
+  ├── Project[] (id, name, alias?, description?, type, gitUrl?, localPath?, groupId?, knowledgeDir?)
+  │     ├── Task[] (id, title, description?, status, priority, order)
+  │     │     ├── TaskLabel[] → Label
+  │     │     ├── TaskExecution[]
+  │     │     └── TaskMessage[]
+  │     └── ProjectFact[] (key, value)          // structured fact cards for knowledge base
   └── Label[] (id, name, color, isBuiltin)
 ```
 
@@ -66,14 +68,28 @@ Workspace (id, name, description?)
 
 **Workspace**
 - `id` (cuid), `name`, `description?`
-- Has many: `projects`, `labels`
+- Has many: `projects`, `labels`, `productGroups`
+
+**ProductGroup**
+- `id` (cuid), `name`, `description?`
+- `workspaceId` (FK → Workspace, cascade delete)
+- `@@unique([workspaceId, name])` — group name is unique per workspace
+- Has many: `projects`
+- Purpose: groups the multiple repos of one product (e.g. frontend / backend / trace static-knowledge / requirements) so `ask_project_knowledge` searches all members together. A group's members must all live in the same workspace (enforced in the app layer).
 
 **Project**
 - `id` (cuid), `name`, `alias?`, `description?`
 - `type`: `NORMAL` | `GIT` — derived from whether `gitUrl` is set
 - `gitUrl?`, `localPath?`
+- `groupId?` (FK → ProductGroup, `onDelete: SetNull`) — the product group this project belongs to
+- `knowledgeDir?` — overrides the in-repo knowledge dir (default `docs/知识库`)
 - `workspaceId` (FK → Workspace, cascade delete)
-- Has many: `tasks`, `repositories`
+- Has many: `tasks`, `repositories`, `facts`
+
+**ProjectFact**
+- `id` (cuid), `projectId`, `key`, `value`
+- `@@unique([projectId, key])` — one value per key per project (upsert)
+- Structured key-value fact cards (production/CICD paths, domains, other machine-underivable facts). Precise-match source for `ask_project_knowledge`; managed via `manage_project_facts`.
 
 **Task**
 - `id` (cuid), `title`, `description?`
@@ -239,13 +255,25 @@ For AI working directly in the Next.js codebase, use these server actions (all i
 | `createWorkspace` | `({ name, description? }) → Workspace` |
 | `updateWorkspace` | `(id, { name?, description? }) → Workspace` |
 | `deleteWorkspace` | `(id) → void` |
-| `createProject` | `({ name, alias?, description?, gitUrl?, localPath?, workspaceId }) → Project` |
+| `createProject` | `({ name, alias?, description?, gitUrl?, localPath?, workspaceId, projectType?, previewCommand? }) → Project` — does **not** take `groupId`; assign the group afterward with `setProjectGroup` |
 | `updateProject` | `(id, { name?, alias?, description?, localPath? }) → Project` |
 | `deleteProject` | `(id) → void` |
 | `getProjectByLocalPath` | `(localPath) → Project \| null` |
 | `getRecentLocalProjects` | `(limit?) → Project[]` |
 | `getWorkspacesWithProjects` | `() → { id, name, projects: { id, name, alias }[] }[]` |
 | `getWorkspacesWithRecentTasks` | `(limit?) → { id, name, projects: { id, name, alias, tasks: Task[], _count }[] }[]` — includes recent tasks per project with last sessionId for resume |
+
+### `group-actions.ts`
+
+Product-group CRUD and project↔group assignment. A group's members must all live in the same workspace — the assignment actions enforce this (the knowledge layer aggregates purely by `groupId`, so a cross-workspace member would leak knowledge across workspaces).
+
+| Function | Signature |
+|----------|-----------|
+| `getProductGroups` | `(workspaceId) → ProductGroup[]` — ordered by name, includes member projects (id/name/alias) |
+| `createProductGroup` | `({ name, description?, workspaceId }) → ProductGroup` — name unique per workspace |
+| `updateProductGroup` | `(id, { name?, description? }) → ProductGroup` |
+| `deleteProductGroup` | `(id) → void` — unbinds all members (`groupId = null`) then deletes; member projects are kept |
+| `setProjectGroup` | `(projectId, groupId \| null) → void` — join a group or detach (`null`); rejects cross-workspace assignment |
 
 ### `task-actions.ts`
 
@@ -314,6 +342,7 @@ For AI working directly in the Next.js codebase, use these server actions (all i
 - **Builtin labels**: Labels with `isBuiltin: true` are global (no `workspaceId`). Do not delete them — enforce this check before calling `deleteLabel`.
 - **Task order**: The `order` field controls Kanban card position within a status column. Lower values appear higher. Always preserve existing order values when creating tasks unless explicitly reordering.
 - **Project type**: `type` is derived from `gitUrl` — always `GIT` when `gitUrl` is set, `NORMAL` otherwise. Do not set type independently.
+- **Product groups**: A group and its member projects must share one workspace — assignment (`setProjectGroup` / `update_project` with `groupId`) rejects cross-workspace pairs. Group assignment is a **separate step** after creation: neither `createProject` nor `create_project` accepts `groupId`. Deleting a group unbinds (does not delete) its members. `""` (MCP) / `null` (action) detaches a project.
 - **Label replacement**: `set_task_labels` / `setTaskLabels` / `update_task` with `labelIds` all perform a full replace, not a merge. Pass the complete desired set.
 - **PTY sessions**: Keyed by `taskId` — one active session per task. Use `startPtyExecution` to create, `resumePtyExecution` to resume with a `sessionId`, `stopPtyExecution` to kill.
 - **CliProfile**: Only one default profile (`isDefault: true`). `baseArgs` and `envVars` are JSON strings — parse before use.

@@ -74,6 +74,21 @@ export class PreviewSession {
     return new Set([...this.subscribers.values()].map((v) => v.taskId));
   }
 
+  /**
+   * Safe to drop from the registry: the dev-server process has exited
+   * (stopped/error, no live pty), nobody is watching, and no auto-start is
+   * pending. Running sessions stay (long-lived by design — reopen keeps them);
+   * only dead, unwatched ones are evictable so their ring buffer stops leaking.
+   */
+  get isEvictable(): boolean {
+    return (
+      this.pty === null &&
+      (this.status === "stopped" || this.status === "error") &&
+      this.subscribers.size === 0 &&
+      !this.pendingAutoStart
+    );
+  }
+
   getBuffer(): string[] {
     return [...this.ringBuffer];
   }
