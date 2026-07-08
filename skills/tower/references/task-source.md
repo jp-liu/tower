@@ -1,80 +1,112 @@
-# Task Source (`## 来源`) — detailed rendering
+# Task Source (`## 来源`)
 
-Read this when the incoming prompt carries real source info — a parent-task
-derivation (`TOWER_TASK_ID` set) or a `<task-source>` bridge block. For the
-common "no source" case you don't need this file: just write `## 来源\n无`.
+**Tower renders `## 来源` server-side** — you usually don't hand-format it. The
+`create_task` handler guarantees the section regardless of what you send:
+
+- **No source** → it appends `## 来源\n无`. You can omit the section entirely.
+- **Parent-derived** (`TOWER_TASK_ID` set) → it appends the parent-derivation
+  source AND records `parentTaskId` structurally. Just create the task.
+- **Bridge block** (`<task-source>…</task-source>`) → **pass the block through
+  verbatim inside `description`**. The handler strips the raw block and renders a
+  channel-generic `## 来源`. Do NOT hand-strip or reformat it — passing it
+  through is enough and more reliable.
+
+This file documents the block format and the rendering the server produces, so
+you understand what lands in the task. Read it only when a prompt carries a
+`<task-source>` block or you want to hand-render the parent case.
 
 ## Parent task derivation (派生子任务)
 
-If `TOWER_TASK_ID` is set in your environment (run `echo $TOWER_TASK_ID` to check),
-you are operating **inside a Tower task terminal** — so any task you create here is
-a **child task derived from the current (parent) task**. Render its source as:
+If `TOWER_TASK_ID` is set (run `echo $TOWER_TASK_ID`), you are inside a Tower task
+terminal, so any task you create is a child of the current task. The server
+renders:
 
 ```
 ## 来源
 
 - 渠道：父任务派生
-- 父任务：{当前任务标题，知道就填}（id: $TOWER_TASK_ID）
+- 父任务：{父任务标题}（id: $TOWER_TASK_ID）
 ```
 
-Tower also records this link structurally on the new task's `parentTaskId`
-automatically (used for parent→child completion notifications) — this `## 来源`
-is just the human-readable mirror. The id alone is enough if you don't know the title.
+`parentTaskId` is also recorded structurally (used for parent→child completion
+notifications). The id alone is enough if the title is unknown.
 
 ## Bridge metadata contract (`<task-source>` block)
 
-External bridges (Feishu/Lark, etc.) inject a machine-readable block into the
-message. When you see it, parse it, render the standardized `## 来源`, and then
-DROP the raw block from the description (don't store the tags):
+External bridges (Feishu/WeChat/OpenClaw…) inject a machine-readable block into
+the message. **Pass it through verbatim in `description`** — the server parses it
+and renders the standardized `## 来源`, dropping the raw block:
 
 ```
 <task-source>
-channel: feishu                      # 渠道 (feishu | openclaw | manual | ...)
-chat_name: 南京招生报名讨论群          # 群显示名
-chat_id: oc_xxxxxxxx                 # 群 ID（硬定位符，必带）
-occurred_at: 2026-06-16 17:49 +08:00 # 讨论/触发时间，带时区（用于进群后定位到具体那条）
-chat_link: https://applink.feishu.cn/client/chat/open?openChatId=oc_xxxxxxxx  # 打开「群」的链接（群级，飞书无法精确到单条消息）
-trigger_message_id: om_xxxxxxxx      # 触发那条消息的 ID（不可点，但唯一绑定该消息，必带；用于程序回读/去重/兜底）
-thread_root_id: om_yyyyyyyy          # （可选）话题根消息 ID
-participants:                        # 参与者：显示名 + open_id + 角色
+channel: feishu                      # platform enum — see the channel map below
+chat_name: 南京招生报名讨论群          # group display name
+chat_id: oc_xxxxxxxx                 # group ID (hard anchor, keep)
+occurred_at: 2026-06-16 17:49 +08:00 # trigger time with timezone
+chat_link: https://applink.feishu.cn/client/chat/open?openChatId=oc_xxxxxxxx
+trigger_message_id: om_xxxxxxxx      # the triggering message ID (hard anchor, keep)
+thread_root_id: om_yyyyyyyy          # (optional) thread root message ID
+bridge: hermes                       # (optional) transport bot — see "记平台不记搬运工"
+participants:                        # display name + open_id + role
   - name: 张斯佳, open_id: ou_aaa, role: 讨论
-  - name: 张瑶,   open_id: ou_bbb, role: 讨论
   - name: 刘俊平, open_id: ou_ccc, role: 确认
-transcript: |                        # 相关消息原文（按时间）—— 人真正要看的内容，必带
-  17:49 张斯佳：有线下核验点，但无可预约时间，这里需要加提示么？
-  17:5x 张瑶：建议合并提示语「目前暂无线下审核点或没有可预约的时间…」
+transcript: |                        # the actual message text people read (keep)
+  17:49 张斯佳：有线下核验点，无可预约时间，需要加提示么？
   17:5x 刘俊平：可以处理
-summary: 线下核验点无可预约时间，确认合并提示语后处理   # （可选）一句话结论；缺省时由模型从 transcript 推
+summary: 线下核验点无可预约时间，确认合并提示语后处理   # (optional) one-line conclusion
 </task-source>
 ```
 
-Roles are not required to be pre-computed by the bridge — if `role` is missing,
-infer it from the `transcript` (谁提出 / 谁讨论 / 谁拍板"可以处理"). If a
-`summary` is absent, derive it from the `transcript`.
+### Channel map (渠道 → 渲染前缀)
 
-**Feishu reality** — `chat_link` only opens the **group**, not a single message.
-So the practical "go back and find it" combo is **群链接 + occurred_at + transcript**:
-open the group, jump to that time, the transcript is the actual content. Label the
-link line **打开群** (never "原始消息") so nobody expects a one-click jump to the
-exact message. `trigger_message_id` is kept as the only hard anchor to that
-message (not clickable — for programmatic re-read / dedup / fallback).
+`channel` is a platform **enum**; the server maps it to a localized prefix.
+Unknown channels fall back to the raw value.
 
-## Rendered `## 来源` format
+| `channel` | Rendered prefix |
+|-----------|-----------------|
+| `feishu`  | 飞书群          |
+| `lark`    | Lark 群         |
+| `wechat`  | 微信群          |
+| `wecom`   | 企业微信群      |
+| `openclaw`| OpenClaw        |
+| `manual`  | 手动创建        |
+
+### 记平台不记搬运工 (channel vs bridge)
+
+`channel` is the **real platform where the discussion happened** (WeChat/Feishu).
+The **transport bot** that carried the message into Tower (hermes / openclaw) is a
+separate, optional `bridge` field — it renders as a secondary `传输` line, never
+as the main channel. Swapping the bot doesn't change the source meaning.
+
+> **Scope note:** injecting the correct `channel`/`bridge` is each bridge bot's job
+> (in its own repo). Tower only guarantees parse/render for **any** channel.
+
+## Rendered `## 来源` (what the server produces)
 
 ```
 ## 来源
 
 - 渠道：飞书群「{chat_name}」
+- 传输：{bridge}                     # only when bridge is present
 - 时间：{occurred_at}
-- 参与者：{讨论者们}（讨论），{确认者}（确认可处理）
+- 参与者：{name1、name2、…}
 - 讨论要点：{summary}
 - 打开群：{chat_link}
-- 溯源 ID：chat={chat_id} · msg={trigger_message_id}{ thread_root_id 时追加 · thread={thread_root_id}}
+- 溯源 ID：chat={chat_id} · msg={trigger_message_id}{ · thread={thread_root_id}}
 
 讨论摘录（按时间）：
 {transcript}
 ```
 
-Only render lines whose data is present (e.g. omit `打开群` if there is no
-`chat_link`). Always keep `chat_id` + `trigger_message_id` (hard anchors) and the
-`讨论摘录`/`transcript` (the content humans actually read).
+Only lines whose data is present are emitted. `chat_id` + `trigger_message_id`
+(hard anchors) and the `transcript` (what humans read) are the fields that matter.
+
+**Feishu reality** — `chat_link` opens the **group**, not a single message. The
+practical "go back and find it" combo is 群链接 + occurred_at + transcript. The
+line is labelled **打开群** (never "原始消息"). `trigger_message_id` is the only
+hard anchor to the exact message (not clickable — for programmatic re-read/dedup).
+
+Role inference (谁提出/讨论/拍板) and summary derivation from the transcript are
+**soft** — the server does not compute them. If you want a richer `参与者`/`讨论要点`
+than the raw fields, render `## 来源` yourself and drop the block; the server keeps
+your section and only strips the raw block.
