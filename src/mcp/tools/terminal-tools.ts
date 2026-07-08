@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { db } from "../db";
+import { getOpenAsk } from "@/lib/harness/harness-message";
 
 const PORT = process.env.PORT ?? "3000";
 const BRIDGE_BASE = `http://localhost:${PORT}/api/internal/terminal`;
@@ -157,6 +158,27 @@ export const terminalTools = {
     handler: async (args: { taskId: string; text: string; submit?: boolean }) => {
       const err = validateMcpTaskId(args.taskId);
       if (err) return { error: err, taskId: args.taskId };
+
+      // Protocol guardrail: a task parked on an ask_human question has its
+      // terminal closed and is waiting on a structured reply. Raw input here
+      // would bypass the ask lifecycle (never marks the ask answered, never
+      // resumes the session). Redirect the caller to reply_to_ask instead of
+      // sending — this is a real server-side rule, not a display preference.
+      const openAsk = await getOpenAsk(args.taskId);
+      if (openAsk) {
+        return {
+          redirected: true,
+          reason: "pending_ask",
+          taskId: args.taskId,
+          requestId: openAsk.id,
+          question: openAsk.content,
+          message:
+            "This task is parked on an ask_human question. Deliver the human's reply with " +
+            "reply_to_ask(taskId, text) so Tower marks the ask answered and resumes the task — " +
+            "do NOT use send_task_terminal_input for a parked task.",
+        };
+      }
+
       const tid = encodeURIComponent(args.taskId);
       const submit = args.submit ?? true;
       // Submit semantics live in the bridge route: it trims trailing newlines and

@@ -400,20 +400,30 @@ describe("task-tools", () => {
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    // ─── parent task binding（结构化父子关系；来源文案归 tower skill，handler 不碰）──
-    describe("parent task binding", () => {
+    // ─── parent task binding + server-side source（硬规则：handler 保证 ## 来源）──
+    describe("parent task binding & source", () => {
       afterEach(() => {
         vi.unstubAllEnvs();
       });
 
       it("binds parentTaskId when TOWER_TASK_ID resolves to an existing task", async () => {
         vi.stubEnv("TOWER_TASK_ID", "parent-1");
-        mockDb.task.findUnique.mockResolvedValue({ id: "parent-1" });
+        mockDb.task.findUnique.mockResolvedValue({ id: "parent-1", title: "父" });
         mockDb.task.create.mockResolvedValue({ id: "t1", title: "T" });
         await taskTools.create_task.handler({ projectId: "p1", title: "T", autoStart: false });
         expect(mockDb.task.create).toHaveBeenCalledWith({
           data: expect.objectContaining({ parentTaskId: "parent-1" }),
         });
+      });
+
+      it("appends the parent-derivation source when derived from a parent task", async () => {
+        vi.stubEnv("TOWER_TASK_ID", "parent-1");
+        mockDb.task.findUnique.mockResolvedValue({ id: "parent-1", title: "父任务标题" });
+        mockDb.task.create.mockResolvedValue({ id: "t1", title: "T" });
+        await taskTools.create_task.handler({ projectId: "p1", title: "T", description: "## 目标\nx", autoStart: false });
+        const call = mockDb.task.create.mock.calls[0][0] as { data: { description?: string } };
+        expect(call.data.description).toContain("- 渠道：父任务派生");
+        expect(call.data.description).toContain("- 父任务：父任务标题（id: parent-1）");
       });
 
       it("leaves parentTaskId null when there is no TOWER_TASK_ID", async () => {
@@ -424,12 +434,22 @@ describe("task-tools", () => {
         expect(call.data.parentTaskId).toBeNull();
       });
 
-      it("never appends a 来源 section — tower skill owns description source", async () => {
+      it("silently appends `## 来源\\n无` when a described task has no source (never rejects)", async () => {
         vi.stubEnv("TOWER_TASK_ID", "");
         mockDb.task.create.mockResolvedValue({ id: "t1", title: "T" });
-        await taskTools.create_task.handler({ projectId: "p1", title: "T", description: "原始", autoStart: false });
+        await taskTools.create_task.handler({ projectId: "p1", title: "T", description: "原始需求", autoStart: false });
         const call = mockDb.task.create.mock.calls[0][0] as { data: { description?: string } };
-        expect(call.data.description).toBe("原始");
+        expect(call.data.description).toBe("原始需求\n\n## 来源\n\n无");
+      });
+
+      it("strips a raw <task-source> block from the stored description", async () => {
+        vi.stubEnv("TOWER_TASK_ID", "");
+        mockDb.task.create.mockResolvedValue({ id: "t1", title: "T" });
+        const desc = "## 目标\nx\n\n<task-source>\nchannel: feishu\nchat_name: 招生群\nchat_id: oc_1\n</task-source>";
+        await taskTools.create_task.handler({ projectId: "p1", title: "T", description: desc, autoStart: false });
+        const call = mockDb.task.create.mock.calls[0][0] as { data: { description?: string } };
+        expect(call.data.description).not.toContain("<task-source>");
+        expect(call.data.description).toContain("- 渠道：飞书群「招生群」");
       });
     });
   });

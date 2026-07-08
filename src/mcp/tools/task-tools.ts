@@ -5,6 +5,7 @@ import { basename, extname, join } from "path";
 import { db } from "../db";
 import { readConfigValue } from "@/lib/config-reader";
 import { stripCacheUuidSuffix, isAssistantCachePath, guessMimeType, ensureAssetsDir } from "@/lib/file-utils";
+import { resolveTaskSource } from "./task-source";
 
 const TaskStatus = z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"]);
 const Priority = z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
@@ -134,24 +135,27 @@ export const taskTools = {
       // 派生关系：若本次 create_task 由某个 Tower 任务终端发起，MCP 子进程会继承父任务
       // 注入的 TOWER_TASK_ID（已实测可达）→ 自动绑定 parentTaskId（结构化父子关系，
       // 完成回推用）。
-      //
-      // 注意：description 的「## 来源」文案【完全交给 tower skill】（skills/tower/SKILL.md
-      // 有完整规范：飞书 <task-source> 解析、渠道、群链接、溯源 ID 等）。handler 绝不自己
-      // 写 ## 来源，避免与 skill 的来源记录重复、覆盖飞书的详细信息。
       const envParentTaskId = process.env.TOWER_TASK_ID || null;
-      let resolvedParentId: string | null = null;
+      let resolvedParent: { id: string; title: string } | null = null;
       if (envParentTaskId) {
         const parent = await db.task.findUnique({
           where: { id: envParentTaskId },
-          select: { id: true },
+          select: { id: true, title: true },
         });
-        if (parent) resolvedParentId = envParentTaskId;
+        if (parent) resolvedParent = parent;
       }
+      const resolvedParentId = resolvedParent?.id ?? null;
+
+      // Source is a HARD server-side rule, not left to the model: strip any raw
+      // <task-source> bridge block, render a channel-generic `## 来源`, add the
+      // parent-derivation source for child tasks, and fall back to `## 来源\n无`
+      // for a described task with no external source. See ./task-source.ts.
+      const description = resolveTaskSource(args.description, resolvedParent);
 
       const task = await db.task.create({
         data: {
           title: args.title,
-          description: args.description,
+          description,
           projectId: args.projectId,
           priority: (args.priority ?? "MEDIUM") as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
           status: (args.status ?? "TODO") as "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED",

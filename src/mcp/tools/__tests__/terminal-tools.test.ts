@@ -13,12 +13,20 @@ vi.mock("../../db", () => ({
   },
 }));
 
+// Mock the harness pending-ask lookup used by the send guardrail
+vi.mock("@/lib/harness/harness-message", () => ({
+  getOpenAsk: vi.fn(),
+}));
+
 // Mock global.fetch before any imports
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
 import { db } from "../../db";
+import { getOpenAsk } from "@/lib/harness/harness-message";
 import { terminalTools } from "../terminal-tools";
+
+const mockGetOpenAsk = getOpenAsk as ReturnType<typeof vi.fn>;
 
 const mockDb = db as unknown as {
   taskExecution: {
@@ -50,6 +58,8 @@ describe("terminal-tools", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: no pending ask, so the send guardrail is inert.
+    mockGetOpenAsk.mockResolvedValue(null);
   });
 
   describe("CUID validation", () => {
@@ -244,6 +254,25 @@ describe("terminal-tools", () => {
       expect(result).toMatchObject({
         error: "Terminal session has exited",
         taskId: VALID_TASK_ID,
+      });
+    });
+
+    it("redirects to reply_to_ask (does NOT send) when the task is parked on an ask", async () => {
+      mockGetOpenAsk.mockResolvedValue({ id: "ask-1", content: "Which branch?" });
+
+      const result = await terminalTools.send_task_terminal_input.handler({
+        taskId: VALID_TASK_ID,
+        text: "use main",
+      });
+
+      // The guardrail must short-circuit before touching the terminal bridge.
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        redirected: true,
+        reason: "pending_ask",
+        taskId: VALID_TASK_ID,
+        requestId: "ask-1",
+        question: "Which branch?",
       });
     });
   });
