@@ -777,6 +777,7 @@ export const zh = {
   "missions.completeTask": "完成任务",
   "missions.completeCommitTitle": "提交后完成",
   "missions.completeCommitDesc": "有 {count} 个改动尚未提交。填写提交说明，提交后将合并回主分支并完成任务。",
+  "missions.completeCommitExcluded": "{count} 个未勾选的文件将被丢弃，不会提交。",
   "missions.completeCommitPlaceholder": "提交说明（如 feat: xxx）",
   "missions.completeCommitSubmit": "提交并完成",
   "missions.openFullView": "查看详情",

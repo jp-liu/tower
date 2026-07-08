@@ -378,7 +378,14 @@ export async function checkWorktreeClean(taskId: string): Promise<{
   }
 }
 
-export async function commitWorktreeChanges(taskId: string, message: string): Promise<{ hash: string }> {
+export async function commitWorktreeChanges(
+  taskId: string,
+  message: string,
+  // Repo-relative paths to stage. Omit/empty = stage everything (legacy behavior).
+  // Deselected files are discarded after the commit so the worktree is clean for
+  // the merge step (which force-removes the worktree anyway, so they'd be lost either way).
+  files?: string[],
+): Promise<{ hash: string }> {
   const { execFileSync } = await import("child_process");
   const { existsSync } = await import("fs");
 
@@ -393,17 +400,29 @@ export async function commitWorktreeChanges(taskId: string, message: string): Pr
 
   const cwd = execution.worktreePath;
 
-  // Stage all changes
-  execFileSync("git", ["add", "-A"], { cwd, timeout: 10000 });
+  // Stage the selected files (or everything when no subset was given)
+  if (files && files.length > 0) {
+    execFileSync("git", ["add", "--", ...files], { cwd, timeout: 10000 });
+  } else {
+    execFileSync("git", ["add", "-A"], { cwd, timeout: 10000 });
+  }
 
-  // Check if there's anything staged
-  const status = execFileSync("git", ["status", "--porcelain"], { cwd, encoding: "utf-8", timeout: 5000 }).trim();
-  if (!status) {
+  // Check if there's anything staged (deselected-but-unstaged files don't count)
+  const staged = execFileSync("git", ["diff", "--cached", "--name-only"], { cwd, encoding: "utf-8", timeout: 5000 }).trim();
+  if (!staged) {
     throw new Error("No changes to commit");
   }
 
   // Commit with the provided message
   execFileSync("git", ["commit", "-m", message], { cwd, encoding: "utf-8", timeout: 15000 });
+
+  // Discard whatever the user left unstaged so the worktree is clean for the merge
+  // step (restores tracked edits, removes untracked; gitignored symlinks are kept).
+  const leftover = execFileSync("git", ["status", "--porcelain"], { cwd, encoding: "utf-8", timeout: 5000 }).trim();
+  if (leftover) {
+    execFileSync("git", ["checkout", "--", "."], { cwd, timeout: 10000 });
+    execFileSync("git", ["clean", "-fd"], { cwd, timeout: 10000 });
+  }
 
   // Get the commit hash
   const hash = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd, encoding: "utf-8", timeout: 5000 }).trim();

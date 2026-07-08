@@ -762,6 +762,7 @@ export const en: Translations = {
   "missions.completeTask": "Complete Task",
   "missions.completeCommitTitle": "Commit & Complete",
   "missions.completeCommitDesc": "{count} change(s) are not committed. Enter a commit message; they'll be committed, merged into the base branch, and the task completed.",
+  "missions.completeCommitExcluded": "{count} unchecked file(s) will be discarded, not committed.",
   "missions.completeCommitPlaceholder": "Commit message (e.g. feat: xxx)",
   "missions.completeCommitSubmit": "Commit & Complete",
   "missions.openFullView": "Open full view",
