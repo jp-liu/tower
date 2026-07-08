@@ -203,11 +203,11 @@ description as one unstructured paragraph. Always restructure it into this forma
 无
 ```
 
-**Bad example (do NOT do this)** — the user says *"接口 /school/detail 的操作人要展示人名而不是 id"* and you write:
+**Bad example (do NOT do this)** — a single unstructured paragraph with no sections:
 
-> `description = "接口 /school/detail 中操作人字段返回的是用户 id，需改为展示姓名，需关联用户表转换后返回。"`
+> `description = "把某个列表接口返回的字段 A 换成字段 B，需要联表查询后再返回。"`
 
-That is a single unstructured paragraph with no sections — **rejected**. The correct version splits it into `## 目标` / `## 需求`, adds `## 参考` for the endpoint, and ends with `## 来源`.
+**Rejected.** Even for a one-line request, split it into `## 目标` + `## 需求` (bullet points), put any endpoint/file in `## 参考`, and always end with `## 来源`.
 
 Rules:
 - `title` should be short (under 30 chars), summarizing the task

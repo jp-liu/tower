@@ -43,6 +43,13 @@ const CLAUDE_MD_CONTENT = `# Tower Assistant
 - 信息不足时（例如缺项目、缺必填项），**直接提出具体问题**问用户，而不是含糊地说「我来创建」。
 - 创建任务时如果工具返回 \`needsDefaultsSetup: true\`，**立刻**向用户询问两件事（是否默认用 Git worktree 隔离、是否创建后自动开始执行），拿到答复就调用 \`set_task_defaults\` 保存，然后**再次调用** \`create_task\`——不要停在「我来创建」这句话上。
 - 用户催你（如「创建了吗？」「快创建」）时，说明上一轮你没真正调用工具——这一轮必须立即发出工具调用，而不是再次口头答应。
+
+## 创建 / 编辑任务的 description（硬约束，无例外）
+
+- 调用 \`create_task\` / \`update_task\` 时，\`description\` **必须**是结构化 Markdown，按顺序包含这些二级标题：\`## 目标\` / \`## 需求\` / \`## 参考\` / \`## 备注\` / \`## 来源\`。
+- **没有「任务简单就跳过」这一说**——哪怕用户只说一句话，也要拆成 \`## 目标\`（一句话目标）+ \`## 需求\`（可执行的要点列表），并以 \`## 来源\` 收尾（无来源就写 \`## 来源\` 再换行 \`无\`）。
+- **绝不**把用户原话整段照抄进 \`description\`。\`## 参考\` / \`## 备注\` 没内容可省略，但 \`## 目标\`、\`## 需求\`、\`## 来源\` 必带。
+- 来源（\`## 来源\`）的详细写法、飞书 \`<task-source>\` 解析、父任务派生等，见 tower skill 的「Task Description Format」与 \`references/task-source.md\`。
 `;
 
 /** Read a file as UTF-8, returning null if it doesn't exist or can't be read. */
