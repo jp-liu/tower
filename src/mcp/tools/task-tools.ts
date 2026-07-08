@@ -5,6 +5,7 @@ import { basename, extname, join } from "path";
 import { db } from "../db";
 import { readConfigValue } from "@/lib/config-reader";
 import { stripCacheUuidSuffix, isAssistantCachePath, guessMimeType, ensureAssetsDir } from "@/lib/file-utils";
+import { renderTaskCreated } from "./display";
 
 const TaskStatus = z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"]);
 const Priority = z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
@@ -270,29 +271,23 @@ export const taskTools = {
       // reports the real result instead of guessing why an image didn't land.
       const attachmentInfo = attachmentFailures.length > 0 ? { attachmentFailures } : {};
 
-      // Deterministic confirmation card — the tower skill's "Task Creation
-      // Confirmation" template rendered SERVER-SIDE, so every MCP caller
-      // (assistant, OpenClaw, Feishu bot, CLI) can show one consistent card
-      // verbatim instead of each re-deriving the format from the skill (or, as
-      // reported, dumping a hard-to-scan paragraph). It's a strong ready-to-use
-      // suggestion, not a hard mandate — a remote client can still ignore it,
-      // but copying the ready text is the path of least resistance.
-      const priorityEmoji: Record<string, string> = {
-        CRITICAL: "🔴", HIGH: "🟠", MEDIUM: "🟡", LOW: "⚪",
-      };
-      const buildDisplay = (exec: { started: boolean; error?: string }): string => {
-        const lines = [
-          `✅ Task created: **${task.title}**`,
-          `- Project: ${project?.name ?? args.projectId}${project?.alias ? ` (${project.alias})` : ""}`,
-          `- Priority: ${priorityEmoji[task.priority] ?? ""} ${task.priority}`,
-          `- Status: ${task.status}`,
-          `- Worktree: ${useWorktree ? "yes" : "no"}`,
-        ];
-        if (useWorktree && baseBranch) lines.push(`- Base branch: ${baseBranch}`);
-        if (exec.started) lines.push("⚡ Execution started");
-        else if (exec.error) lines.push(`⚠️ Auto-start failed: ${exec.error}`);
-        return lines.join("\n");
-      };
+      // Deterministic confirmation card — rendered SERVER-SIDE via the shared
+      // display module (single source of truth for MCP result cards) so every
+      // caller (assistant, OpenClaw, Feishu bot, CLI) shows one consistent card
+      // instead of re-deriving it from the skill and (as reported) flattening it
+      // into a hard-to-scan paragraph.
+      const buildDisplay = (exec: { started: boolean; error?: string }): string =>
+        renderTaskCreated({
+          title: task.title,
+          projectName: project?.name ?? null,
+          projectAlias: project?.alias ?? null,
+          projectId: args.projectId,
+          priority: task.priority,
+          status: task.status,
+          useWorktree,
+          baseBranch,
+          execution: exec,
+        });
 
       // Auto-start execution if requested — pass title as prompt since
       // startPtyExecution already injects task description as context.

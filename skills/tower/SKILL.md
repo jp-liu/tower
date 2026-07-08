@@ -228,7 +228,25 @@ Rules:
 
 ## Display Templates
 
-All query results MUST follow these templates. Do NOT invent your own format. When results are empty, output "No {items} found." (e.g. "No tasks found.", "No workspaces found.").
+Two kinds of result, two rules:
+
+1. **Server-rendered cards** — `create_task`, `start_task_execution`,
+   `get_task_execution_status`, `get_task_terminal_output` return a ready
+   `display` field. **Show `response.display` verbatim** — it's already
+   formatted server-side. The matching template below just documents what
+   `display` contains (fallback only if `display` is somehow absent).
+2. **Model-rendered tables** — `list_*`, `daily_summary`, `daily_todo`, `search`
+   return arrays/structured data with NO `display` field. YOU render them using
+   the templates below. Do NOT invent your own format.
+
+When results are empty, output "No {items} found." (e.g. "No tasks found.").
+
+> **Maintenance note (for developers):** each result format has exactly one home.
+> Server-rendered cards live in `src/mcp/tools/display.ts` (change the format
+> there, once — every caller updates). Model-rendered table formats live in this
+> skill. No format is written in both places, so the two never drift. When adding
+> a `display` to a new tool, move its template's role here from "you render" to
+> "show `display` verbatim".
 
 ### Priority Markers
 

@@ -141,12 +141,16 @@ describe("terminal-tools", () => {
       const [url] = mockFetch.mock.calls[0];
       expect(url).toContain(`/api/internal/terminal/${VALID_TASK_ID}/buffer?lines=20`);
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         taskId: VALID_TASK_ID,
         lines: ["line1", "line2"],
         total: 2,
         killed: false,
       });
+      // Server-rendered card shown to the user verbatim
+      expect((result as { display?: string }).display).toContain(
+        `📺 Terminal — ${VALID_TASK_ID} (2 total lines, showing last 2)`
+      );
     });
 
     it("returns 'No active terminal session' error on 404", async () => {

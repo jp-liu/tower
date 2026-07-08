@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { db } from "../db";
+import { renderStartExecution, renderExecutionStatus, renderTerminalOutput } from "./display";
 
 const PORT = process.env.PORT ?? "3000";
 const BRIDGE_BASE = `http://localhost:${PORT}/api/internal/terminal`;
@@ -95,7 +96,7 @@ async function resolveTaskTarget(args: {
 export const terminalTools = {
   start_task_execution: {
     description:
-      "Start a Claude CLI terminal session for a task. The prompt is sent as the initial instruction. The task status will change to IN_PROGRESS. Returns executionId and worktreePath (if worktree mode).",
+      "Start a Claude CLI terminal session for a task. The prompt is sent as the initial instruction. The task status will change to IN_PROGRESS. Returns executionId and worktreePath (if worktree mode), plus a ready-to-show `display` card — present `display` to the user verbatim.",
     schema: z.object({
       taskId: z.string(),
       prompt: z.string().optional(),
@@ -112,7 +113,15 @@ export const terminalTools = {
 
       if (response.ok) {
         const data = await response.json();
-        return { ok: true, ...data };
+        return {
+          ok: true,
+          ...data,
+          display: renderStartExecution({
+            taskId: args.taskId,
+            executionId: data.executionId,
+            worktreePath: data.worktreePath,
+          }),
+        };
       }
 
       const errData = await response.json().catch(() => ({}));
@@ -122,7 +131,7 @@ export const terminalTools = {
 
   get_task_terminal_output: {
     description:
-      "Get recent terminal output lines from a running task's PTY session. Returns the last N lines (default 50, max 500).",
+      "Get recent terminal output lines from a running task's PTY session. Returns the last N lines (default 50, max 500), plus a ready-to-show `display` card — present `display` to the user verbatim.",
     schema: z.object({
       taskId: z.string(),
       lines: z.number().int().min(1).max(500).optional(),
@@ -139,7 +148,13 @@ export const terminalTools = {
 
       if (response.ok) {
         const data = await response.json() as { taskId: string; lines: string[]; total: number; killed: boolean };
-        return { taskId: data.taskId, lines: data.lines, total: data.total, killed: data.killed };
+        return {
+          taskId: data.taskId,
+          lines: data.lines,
+          total: data.total,
+          killed: data.killed,
+          display: renderTerminalOutput({ taskId: data.taskId, lines: data.lines, total: data.total }),
+        };
       }
 
       return { error: "Bridge request failed", status: response.status };
@@ -280,7 +295,7 @@ export const terminalTools = {
 
   get_task_execution_status: {
     description:
-      "Get the execution status of a task including whether its terminal is running, idle, or exited. Also returns a snippet of recent output.",
+      "Get the execution status of a task including whether its terminal is running, idle, or exited. Also returns a snippet of recent output, plus a ready-to-show `display` card — present `display` to the user verbatim.",
     schema: z.object({
       taskId: z.string(),
     }),
@@ -325,6 +340,15 @@ export const terminalTools = {
         startedAt: execution.startedAt,
         endedAt: execution.endedAt,
         outputSnippet,
+        display: renderExecutionStatus({
+          taskId: args.taskId,
+          executionId: execution.id,
+          executionStatus: execution.status,
+          terminalStatus,
+          startedAt: execution.startedAt,
+          endedAt: execution.endedAt,
+          outputSnippet,
+        }),
       };
     },
   },
