@@ -179,7 +179,10 @@ TODO → IN_PROGRESS → IN_REVIEW → DONE
 
 ## Task Description Format
 
-The `description` field supports Markdown. **Never copy the user's raw message as-is.** Always restructure it into a clear, actionable format:
+The `description` field supports Markdown. This template is **MANDATORY for every
+task — there is no "simple task" exception.** Even a one-line request gets the
+sections. **Never copy the user's raw message as-is**, and never emit the
+description as one unstructured paragraph. Always restructure it into this format:
 
 ```markdown
 ## 目标
@@ -199,6 +202,12 @@ The `description` field supports Markdown. **Never copy the user's raw message a
 ## 来源
 无
 ```
+
+**Bad example (do NOT do this)** — the user says *"接口 /school/detail 的操作人要展示人名而不是 id"* and you write:
+
+> `description = "接口 /school/detail 中操作人字段返回的是用户 id，需改为展示姓名，需关联用户表转换后返回。"`
+
+That is a single unstructured paragraph with no sections — **rejected**. The correct version splits it into `## 目标` / `## 需求`, adds `## 参考` for the endpoint, and ends with `## 来源`.
 
 Rules:
 - `title` should be short (under 30 chars), summarizing the task

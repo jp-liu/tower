@@ -40,6 +40,13 @@ export const taskTools = {
   create_task: {
     description:
       "Create a new task in a project. Priority defaults to MEDIUM, status defaults to TODO. " +
+      "REQUIRED description format — this applies to EVERY task with no 'simple task' exception: " +
+      "`description` MUST be structured Markdown with these H2 sections, in order — " +
+      "`## 目标` / `## 需求` / `## 参考` / `## 备注` / `## 来源`. NEVER paste the user's raw message as one plain paragraph. " +
+      "`## 目标`, `## 需求` and the trailing `## 来源` are mandatory (write `## 来源` then `无` when there is no source); " +
+      "omit `## 参考` / `## 备注` only when genuinely empty. " +
+      "BAD (do not do this): description = \"接口 X 的操作人字段返回的是 id，需改为姓名…\" (one unstructured paragraph, no sections). " +
+      "See the tower skill's 'Task Description Format' for the full rules and the `## 来源` rendering. " +
       "useWorktree (branch isolation) and autoStart (run immediately after create) default to the user's saved preference; " +
       "pass either explicitly to override for this one task. " +
       "If the defaults have never been set, the FIRST call (without explicit useWorktree/autoStart) returns { needsDefaultsSetup: true } instead of creating the task — ask the user their preference, call set_task_defaults once, then call create_task again. " +
@@ -308,6 +315,7 @@ export const taskTools = {
   update_task: {
     description:
       "Update a task's title, description, priority, labels, subPath, and/or version. If labelIds is provided, replaces all existing labels. " +
+      "When you pass description, it MUST keep the structured Markdown template — `## 目标` / `## 需求` / `## 参考` / `## 备注` / `## 来源` (来源 last and mandatory) — never overwrite it with a raw one-paragraph message. See the tower skill's 'Task Description Format'. " +
       "Pass versionId to file the task under a project version (use list_versions to discover options); pass null or an empty string to move it back to the backlog (no version).",
     schema: z.object({
       taskId: z.string(),
