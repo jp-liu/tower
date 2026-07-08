@@ -962,6 +962,8 @@ export const zh = {
   "assistant.binding.allWorkspaces": "全部工作区",
   "assistant.binding.allProjects": "全部项目",
   "assistant.binding.pickWorkspaceFirst": "先选工作区",
+  "assistant.binding.allVersions": "全部版本",
+  "assistant.binding.pickProjectFirst": "先选项目",
   // Project migration (Phase 57)
   "project.migrate": "迁移到规范路径",
   "project.migrateHint": "将项目文件夹移动到 Git 路径规则推导的位置",

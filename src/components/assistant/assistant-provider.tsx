@@ -434,6 +434,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           workspaceName: bindingRef.current.workspaceName,
           projectId: bindingRef.current.projectId,
           projectName: bindingRef.current.projectName,
+          versionId: bindingRef.current.versionId,
+          versionName: bindingRef.current.versionName,
         }),
         signal: controller.signal,
       });

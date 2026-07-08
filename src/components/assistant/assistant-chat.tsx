@@ -309,11 +309,10 @@ export function AssistantChat() {
         </div>
       </ScrollArea>
 
-      {/* Scope pickers — sit directly above the composer */}
-      <AssistantBindingBar />
-
-      {/* Composer — edge-to-edge input (no nested box); the binding bar above
-          carries the single divider from the message list */}
+      {/* Composer — edge-to-edge input (no nested box). Order top→bottom:
+          attachments → scope pickers → textarea → action bar. The topmost
+          visible block carries the divider from the message list (the wrapper
+          border-t when attachments are present, else the binding bar's own). */}
       <div
         className={`relative bg-sidebar transition-colors ${
           pendingAttachments.length > 0 ? "border-t border-border/60" : ""
@@ -349,7 +348,10 @@ export function AssistantChat() {
             }}
           />
 
-          {/* Block 3: textarea */}
+          {/* Block 3: scope pickers (workspace / project / version) */}
+          <AssistantBindingBar />
+
+          {/* Block 4: textarea */}
           <Textarea
             ref={inputRef}
             data-assistant-input
@@ -362,7 +364,7 @@ export function AssistantChat() {
             rows={3}
           />
 
-          {/* Block 4: action bar */}
+          {/* Block 5: action bar */}
           <div className="flex items-center justify-between px-3 pb-2 pt-1">
             <input
               ref={fileInputRef}

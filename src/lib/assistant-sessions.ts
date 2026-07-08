@@ -19,6 +19,10 @@ export interface SessionBinding {
   workspaceName?: string;
   projectId?: string;
   projectName?: string;
+  // Version is only meaningful with a project. Cleared whenever the project
+  // changes/clears. Fed into create_task as the default versionId.
+  versionId?: string;
+  versionName?: string;
 }
 
 /** Read the binding for a session (empty object if none / storage unavailable). */

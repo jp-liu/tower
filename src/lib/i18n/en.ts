@@ -947,6 +947,8 @@ export const en: Translations = {
   "assistant.binding.allWorkspaces": "All workspaces",
   "assistant.binding.allProjects": "All projects",
   "assistant.binding.pickWorkspaceFirst": "Pick a workspace first",
+  "assistant.binding.allVersions": "All versions",
+  "assistant.binding.pickProjectFirst": "Pick a project first",
   // Project migration (Phase 57)
   "project.migrate": "Migrate to canonical path",
   "project.migrateHint": "Move project folder to the location derived from Git path rules",

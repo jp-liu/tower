@@ -126,6 +126,8 @@ export async function POST(request: NextRequest) {
     workspaceName?: string;
     projectId?: string;
     projectName?: string;
+    versionId?: string;
+    versionName?: string;
   };
   try {
     body = await request.json();
@@ -337,9 +339,15 @@ export async function POST(request: NextRequest) {
           if (body.projectId) {
             parts.push(`项目「${body.projectName ?? body.projectId}」(id=${body.projectId})`);
           }
+          if (body.versionId) {
+            parts.push(`版本「${body.versionName ?? body.versionId}」(id=${body.versionId})`);
+          }
           if (parts.length === 0) return "";
+          const versionHint = body.versionId
+            ? `新建任务(create_task)默认带上该版本 versionId=${body.versionId}，除非用户另外指定版本。`
+            : "";
           return (
-            `[当前会话默认范围：${parts.join("｜")}。需要范围的操作默认用它；` +
+            `[当前会话默认范围：${parts.join("｜")}。需要范围的操作默认用它；${versionHint}` +
             `日报/跨区搜索/列所有工作区等全局请求忽略它。用户明确切换才变。]\n\n`
           );
         })();

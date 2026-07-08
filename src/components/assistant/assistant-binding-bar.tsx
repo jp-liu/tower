@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Select,
   SelectContent,
@@ -8,15 +9,20 @@ import {
 } from "@/components/ui/select";
 import { useI18n } from "@/lib/i18n";
 import { useAssistant } from "./assistant-provider";
+import { getVersionsForPicker } from "@/actions/version-actions";
 
 // Sentinel for the "no selection" option — Base UI Select can't take "" as an
 // item value, so we map this token to an empty binding field.
 const NONE = "__none__";
 
+type VersionOption = { id: string; number: string; name: string | null };
+
 /**
- * Workspace + project scope pickers for the active chat session. Cascading:
- * the project list is scoped to the chosen workspace. Both are optional — the
- * binding is a soft default, not a hard filter (global requests ignore it).
+ * Workspace + project + version scope pickers for the active chat session.
+ * Cascading: project list is scoped to the chosen workspace; version list is
+ * scoped to the chosen project (excludes RELEASED, same as list_versions). All
+ * optional — the binding is a soft default, not a hard filter (global requests
+ * ignore it). A picked version is fed into create_task as the default versionId.
  */
 export function AssistantBindingBar() {
   const { binding, setSessionBinding, workspaceTree } = useAssistant();
@@ -25,9 +31,23 @@ export function AssistantBindingBar() {
   const workspace = workspaceTree.find((w) => w.id === binding.workspaceId);
   const projects = workspace?.projects ?? [];
 
+  // Versions for the bound project. Refetched whenever the project changes.
+  const [versions, setVersions] = useState<VersionOption[]>([]);
+  useEffect(() => {
+    if (!binding.projectId) {
+      setVersions([]);
+      return;
+    }
+    let cancelled = false;
+    getVersionsForPicker(binding.projectId)
+      .then((vs) => { if (!cancelled) setVersions(vs); })
+      .catch(() => { if (!cancelled) setVersions([]); });
+    return () => { cancelled = true; };
+  }, [binding.projectId]);
+
   const onWorkspaceChange = (v: string | null) => {
     if (!v || v === NONE) {
-      // Clearing the workspace also clears the project (it belonged to it).
+      // Clearing the workspace also clears the project + version.
       setSessionBinding({});
       return;
     }
@@ -37,6 +57,7 @@ export function AssistantBindingBar() {
   };
 
   const onProjectChange = (v: string | null) => {
+    // Switching/clearing the project always drops the version binding.
     if (!v || v === NONE) {
       setSessionBinding({
         workspaceId: binding.workspaceId,
@@ -51,6 +72,29 @@ export function AssistantBindingBar() {
       workspaceName: binding.workspaceName,
       projectId: proj.id,
       projectName: proj.name,
+    });
+  };
+
+  const onVersionChange = (v: string | null) => {
+    if (!v || v === NONE) {
+      setSessionBinding({
+        workspaceId: binding.workspaceId,
+        workspaceName: binding.workspaceName,
+        projectId: binding.projectId,
+        projectName: binding.projectName,
+      });
+      return;
+    }
+    const ver = versions.find((x) => x.id === v);
+    if (!ver) return;
+    const label = ver.name ? `${ver.number} ${ver.name}` : ver.number;
+    setSessionBinding({
+      workspaceId: binding.workspaceId,
+      workspaceName: binding.workspaceName,
+      projectId: binding.projectId,
+      projectName: binding.projectName,
+      versionId: ver.id,
+      versionName: label,
     });
   };
 
@@ -90,6 +134,29 @@ export function AssistantBindingBar() {
           {projects.map((p) => (
             <SelectItem key={p.id} value={p.id}>
               {p.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={binding.versionId || NONE}
+        onValueChange={onVersionChange}
+        disabled={!binding.projectId}
+      >
+        <SelectTrigger className="h-7 flex-1 min-w-0 text-xs" disabled={!binding.projectId}>
+          <span className="truncate">
+            {binding.versionName ??
+              (binding.projectId
+                ? t("assistant.binding.allVersions")
+                : t("assistant.binding.pickProjectFirst"))}
+          </span>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NONE}>{t("assistant.binding.allVersions")}</SelectItem>
+          {versions.map((v) => (
+            <SelectItem key={v.id} value={v.id}>
+              {v.name ? `${v.number} ${v.name}` : v.number}
             </SelectItem>
           ))}
         </SelectContent>
