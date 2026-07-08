@@ -48,14 +48,27 @@ const DOCS: Record<string, string> = {
   hermes: "https://hermes-agent.nousresearch.com/docs/",
 };
 
-// 丢给 AI 的一键配置提示词。
+// 丢给 AI 的一键配置提示词（默认走飞书；OpenClaw / Hermes 见末尾）。
+// 与「飞书助理机器人」同事上手文档里的创建提示词保持一致 —— 同一个应用可同时用于无人值守通知与飞书助理。
 const SETUP_PROMPT = [
-  "帮我把 Tower 无人值守的通知渠道配置好，步骤：",
-  "1. 用 playwright 打开对应平台的开放后台，注册/创建一个自建应用（机器人）。文档：飞书开放平台 https://open.feishu.cn/ ；OpenClaw https://docs.openclaw.ai/ ；Hermes https://hermes-agent.nousresearch.com/docs/ 。",
-  "2. 拿到 appId / appSecret（或 webhook 地址 / token），开通「发送消息」权限。",
-  "3. 建议**新建一个唯一名称的专属群组**（如「Tower 无人值守通知」），把机器人加进去 —— 避免同名群/人导致发错。记下群 id（或我的用户 id）。",
-  "4. 把凭据配置到对应平台的 MCP（如飞书 MCP 的 config），确保能调用它发送消息。",
-  "5. 在 Tower「设置 → 通知 → 无人值守发送渠道」加一条对应网关的渠道，点「测试」验证能收到消息。",
+  "你有 Playwright（浏览器自动化）能力。帮我在飞书创建一个自建应用（机器人），用于 Tower 的无人值守通知与飞书助理。请一步步来；遇到需要我登录/扫码/人工确认的地方，停下来让我操作，我弄好再继续。",
+  "",
+  "平台地址：公网飞书 https://open.feishu.cn/ （公司/私有化飞书换成你们自己的内网开放平台地址）。用 Playwright 打开它，让我登录（企业管理员或开发者账号）。控制台页面可能有 WAF，但你是真实浏览器，正常访问即可。",
+  "",
+  "步骤：",
+  "1. 创建企业自建应用：名字填「Tower 助理」，随便传个图标。",
+  "2. 开启机器人能力：应用内「添加应用能力」→ 启用「机器人」。（不开这个，机器人进不了群、发不了消息。）",
+  "3. 开通权限（「权限管理」逐个搜索并勾选，名称各版本略有差异，按含义找）：",
+  "   必需：im:message（读写单聊/群消息）、im:message.group_msg（读群里全部消息，机器人收到 @ 靠它）、im:chat（获取群信息）、im:chat.members:read（读群成员、识别「谁 @ 我」）。",
+  "   可选：task:task、wiki:wiki:readonly / wiki:node:read / wiki:node:retrieve、docx:document:readonly、drive:drive:readonly（要建飞书待办、读飞书文档/知识库才需要）。",
+  "4. 发布版本：改完权限必须「创建版本 → 申请发布 / 上线」，否则权限不生效（最容易忘的一步）。等发布成功。",
+  "5. 取凭据：到「凭证与基础信息」，复制 App ID（cli_ 开头）和 App Secret；并取机器人自己的 open_id（botOpenId，拿不到就标「待补」）。",
+  "6. 建议新建一个唯一名称的专属群（如「Tower 通知」），把机器人加进去，记下群 id —— 避免同名群/人导致发错。",
+  "7. 把 appId / appSecret / domain 配到飞书 MCP，并在 Tower「设置 → 通知 → 无人值守发送渠道」加一条渠道，点「测试」验证能收到消息。",
+  "",
+  "避坑：① 域名别搞反 —— 公司飞书和公网飞书是两套、凭据不通用；② 只「建了应用」不等于能用，必须开机器人能力 + 发布版本 + 拉进群三样齐；③ 别用 curl 直接抓控制台页面（有 WAF 会 403），用浏览器（Playwright）操作。",
+  "",
+  "（换 OpenClaw / Hermes 等其它网关：参考各自文档 https://docs.openclaw.ai/ · https://hermes-agent.nousresearch.com/docs/ ，拿到 token / webhook 后同样在 Tower 加渠道并测试。）",
 ].join("\n");
 
 export function HarnessTargetsSection() {
