@@ -171,7 +171,27 @@ describe("task-tools", () => {
           status: "TODO",
         }),
       });
-      expect(result).toEqual(createdTask);
+      expect(result).toMatchObject(createdTask);
+    });
+
+    it("returns a ready-to-show display card rendered from the tower skill template", async () => {
+      const createdTask = { id: "task1", title: "My Task", priority: "HIGH", status: "TODO" };
+      mockDb.task.create.mockResolvedValue(createdTask);
+      mockDb.project.findUnique.mockResolvedValue({ name: "南京招生报名", alias: "enrollment-static", localPath: null });
+
+      const result = (await taskTools.create_task.handler({
+        projectId: "proj1",
+        title: "My Task",
+        priority: "HIGH",
+        useWorktree: false,
+        autoStart: false,
+      })) as { display?: string };
+
+      expect(result.display).toContain("✅ Task created: **My Task**");
+      expect(result.display).toContain("- Project: 南京招生报名 (enrollment-static)");
+      expect(result.display).toContain("- Priority: 🟠 HIGH");
+      expect(result.display).toContain("- Status: TODO");
+      expect(result.display).toContain("- Worktree: no");
     });
 
     it("creates TaskLabel records when labelIds provided", async () => {
@@ -315,7 +335,7 @@ describe("task-tools", () => {
     it("auto-detects baseBranch via git when useWorktree=true and no baseBranch given", async () => {
       const createdTask = { id: "task1", title: "Worktree Task" };
       mockDb.task.create.mockResolvedValue(createdTask);
-      mockDb.project.findUnique.mockResolvedValue({ localPath: "/home/user/project" });
+      mockDb.project.findUnique.mockResolvedValue({ name: "P", alias: null, localPath: "/home/user/project" });
       mockExecFileSync.mockReturnValue("main\n");
 
       await taskTools.create_task.handler({
@@ -327,7 +347,7 @@ describe("task-tools", () => {
 
       expect(mockDb.project.findUnique).toHaveBeenCalledWith({
         where: { id: "proj1" },
-        select: { localPath: true },
+        select: { name: true, alias: true, localPath: true },
       });
       expect(mockExecFileSync).toHaveBeenCalledWith(
         "git",
@@ -353,8 +373,9 @@ describe("task-tools", () => {
         autoStart: false,
       });
 
+      // Explicit baseBranch → no git detection. project.findUnique is still
+      // called (project meta feeds the display card), but execFileSync is not.
       expect(mockExecFileSync).not.toHaveBeenCalled();
-      expect(mockDb.project.findUnique).not.toHaveBeenCalled();
       expect(mockDb.task.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ baseBranch: "feature/my-branch" }),

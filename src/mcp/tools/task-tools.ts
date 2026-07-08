@@ -42,6 +42,7 @@ export const taskTools = {
       "Create a new task in a project. Priority defaults to MEDIUM, status defaults to TODO. " +
       "`description` MUST follow the tower skill's 'Task Description Format' — structured Markdown with the H2 sections " +
       "`## 目标` / `## 需求` / `## 参考` / `## 备注` / `## 来源` (mandatory for every task, no 'simple task' exception; never a raw one-paragraph copy of the user's message). Load the tower skill for the full rules. " +
+      "The response includes a `display` field — a ready-to-show Markdown confirmation card. Present that `display` to the user verbatim instead of composing your own summary. " +
       "useWorktree (branch isolation) and autoStart (run immediately after create) default to the user's saved preference; " +
       "pass either explicitly to override for this one task. " +
       "If the defaults have never been set, the FIRST call (without explicit useWorktree/autoStart) returns { needsDefaultsSetup: true } instead of creating the task — ask the user their preference, call set_task_defaults once, then call create_task again. " +
@@ -115,12 +116,18 @@ export const taskTools = {
       }
 
       // Determine baseBranch: explicit param > auto-detect from project's current git branch
+      // Fetch project meta once — name/alias for the display card below,
+      // localPath for worktree base-branch autodetect.
+      const project = await db.project.findUnique({
+        where: { id: args.projectId },
+        select: { name: true, alias: true, localPath: true },
+      });
+
       let baseBranch: string | null = null;
       if (useWorktree) {
         if (args.baseBranch) {
           baseBranch = args.baseBranch;
         } else {
-          const project = await db.project.findUnique({ where: { id: args.projectId }, select: { localPath: true } });
           if (project?.localPath) {
             try {
               baseBranch = execFileSync("git", ["branch", "--show-current"], {
@@ -263,6 +270,30 @@ export const taskTools = {
       // reports the real result instead of guessing why an image didn't land.
       const attachmentInfo = attachmentFailures.length > 0 ? { attachmentFailures } : {};
 
+      // Deterministic confirmation card — the tower skill's "Task Creation
+      // Confirmation" template rendered SERVER-SIDE, so every MCP caller
+      // (assistant, OpenClaw, Feishu bot, CLI) can show one consistent card
+      // verbatim instead of each re-deriving the format from the skill (or, as
+      // reported, dumping a hard-to-scan paragraph). It's a strong ready-to-use
+      // suggestion, not a hard mandate — a remote client can still ignore it,
+      // but copying the ready text is the path of least resistance.
+      const priorityEmoji: Record<string, string> = {
+        CRITICAL: "🔴", HIGH: "🟠", MEDIUM: "🟡", LOW: "⚪",
+      };
+      const buildDisplay = (exec: { started: boolean; error?: string }): string => {
+        const lines = [
+          `✅ Task created: **${task.title}**`,
+          `- Project: ${project?.name ?? args.projectId}${project?.alias ? ` (${project.alias})` : ""}`,
+          `- Priority: ${priorityEmoji[task.priority] ?? ""} ${task.priority}`,
+          `- Status: ${task.status}`,
+          `- Worktree: ${useWorktree ? "yes" : "no"}`,
+        ];
+        if (useWorktree && baseBranch) lines.push(`- Base branch: ${baseBranch}`);
+        if (exec.started) lines.push("⚡ Execution started");
+        else if (exec.error) lines.push(`⚠️ Auto-start failed: ${exec.error}`);
+        return lines.join("\n");
+      };
+
       // Auto-start execution if requested — pass title as prompt since
       // startPtyExecution already injects task description as context.
       //
@@ -283,7 +314,7 @@ export const taskTools = {
           });
           if (res.ok) {
             const execData = await res.json();
-            return { ...task, ...attachmentInfo, execution: execData };
+            return { ...task, ...attachmentInfo, execution: execData, display: buildDisplay({ started: true }) };
           }
           let errMsg = `HTTP ${res.status}`;
           try {
@@ -292,18 +323,20 @@ export const taskTools = {
           } catch {
             /* response body wasn't JSON; keep status code */
           }
-          return { ...task, ...attachmentInfo, execution: null, executionError: errMsg };
+          return { ...task, ...attachmentInfo, execution: null, executionError: errMsg, display: buildDisplay({ started: false, error: errMsg }) };
         } catch (err) {
+          const execErr = err instanceof Error ? err.message : String(err);
           return {
             ...task,
             ...attachmentInfo,
             execution: null,
-            executionError: err instanceof Error ? err.message : String(err),
+            executionError: execErr,
+            display: buildDisplay({ started: false, error: execErr }),
           };
         }
       }
 
-      return { ...task, ...attachmentInfo };
+      return { ...task, ...attachmentInfo, display: buildDisplay({ started: false }) };
     },
   },
 

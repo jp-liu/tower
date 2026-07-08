@@ -272,9 +272,14 @@ Note: the response does not include workspace name. Use the workspace name from 
 
 ### Task Creation Confirmation
 
-After `create_task` succeeds, render based on the **response** (not the input
-parameter — `autoStart: true` does NOT mean execution actually started; check
-`response.execution` and `response.executionError`):
+**Prefer `response.display`**: `create_task` returns a ready-rendered `display`
+field (this exact card, filled in server-side). Show it to the user **verbatim** —
+don't re-derive the format. The template below documents what `display` contains
+and is the fallback only if `display` is somehow absent.
+
+Render based on the **response** (not the input parameter — `autoStart: true` does
+NOT mean execution actually started; check `response.execution` and
+`response.executionError`):
 
 ```
 ✅ Task created: **{title}**
