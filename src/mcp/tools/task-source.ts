@@ -28,6 +28,11 @@ export function channelLabel(channel: string, chatName?: string | null): string 
 }
 
 const TASK_SOURCE_RE = /<task-source>([\s\S]*?)<\/task-source>/i;
+// Global variant used only for stripping. TASK_SOURCE_RE (non-global) captures
+// the FIRST block for rendering, but a bare `.replace()` with it removes just
+// that first match — any additional <task-source> blocks would stay stored raw,
+// breaking the never-store-raw guarantee. Strip with the global one.
+const TASK_SOURCE_STRIP_RE = /<task-source>[\s\S]*?<\/task-source>/gi;
 const SOURCE_SECTION_RE = /(^|\n)##\s*来源\s*(\n|$)/;
 
 export function hasSourceSection(description: string): boolean {
@@ -158,7 +163,7 @@ export function resolveTaskSource(
 ): string | undefined {
   const match = description ? TASK_SOURCE_RE.exec(description) : null;
   if (match && description) {
-    const stripped = description.replace(TASK_SOURCE_RE, "").replace(/\n{3,}/g, "\n\n").trim();
+    const stripped = description.replace(TASK_SOURCE_STRIP_RE, "").replace(/\n{3,}/g, "\n\n").trim();
     if (hasSourceSection(stripped)) return stripped;
     const data = parseTaskSourceBlock(match[1]);
     return data ? appendSection(stripped, renderBridgeSource(data)) : appendSection(stripped, "## 来源\n\n无");

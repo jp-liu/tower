@@ -152,4 +152,14 @@ describe("resolveTaskSource", () => {
     expect(out).toContain("## 来源\n无");
     expect(out).not.toContain("飞书群");
   });
+
+  it("strips EVERY <task-source> block, not just the first (never store raw)", () => {
+    const desc = `## 目标\nx\n\n<task-source>\nchannel: feishu\nchat_id: oc_1\n</task-source>\n\n<task-source>\nchannel: wechat\nchat_id: oc_2\n</task-source>`;
+    const out = resolveTaskSource(desc, null)!;
+    // No raw block of any kind survives — the second block must not leak through.
+    expect(out).not.toContain("<task-source>");
+    expect(out).not.toContain("oc_2");
+    // The first (intended) block is the one rendered into `## 来源`.
+    expect(out).toContain("- 溯源 ID：chat=oc_1");
+  });
 });
