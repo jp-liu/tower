@@ -2,6 +2,13 @@
 
 All query results MUST follow these templates. Do NOT invent your own format. When results are empty, output "No {items} found." (e.g. "No tasks found.", "No workspaces found.").
 
+**Server-rendered cards — show `response.display` verbatim.** `create_task`,
+`start_task_execution`, `get_task_execution_status`, and `get_task_terminal_output`
+return a ready-formatted `display` string in their response. Present that `display`
+to the user as-is instead of re-deriving the format — the templates for those four
+below just document what `display` already contains (fallback only if it's absent).
+Everything else here (list/search/daily tables) you render yourself from the data.
+
 ## Priority Markers
 
 Use consistently across all templates: 🔴 CRITICAL · 🟠 HIGH · 🟡 MEDIUM · ⚪ LOW

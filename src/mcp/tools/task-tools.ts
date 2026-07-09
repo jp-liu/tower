@@ -6,6 +6,7 @@ import { db } from "../db";
 import { readConfigValue } from "@/lib/config-reader";
 import { stripCacheUuidSuffix, isAssistantCachePath, guessMimeType, ensureAssetsDir } from "@/lib/file-utils";
 import { resolveTaskSource } from "./task-source";
+import { renderTaskCreated } from "./display";
 
 const TaskStatus = z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"]);
 const Priority = z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
@@ -41,6 +42,9 @@ export const taskTools = {
   create_task: {
     description:
       "Create a new task in a project. Priority defaults to MEDIUM, status defaults to TODO. " +
+      "`description` MUST follow the tower skill's 'Task Description Format' — structured Markdown with the H2 sections " +
+      "`## 目标` / `## 需求` / `## 参考` / `## 备注` / `## 来源` (mandatory for every task, no 'simple task' exception; never a raw one-paragraph copy of the user's message). Load the tower skill for the full rules. " +
+      "The response includes a `display` field — a ready-to-show Markdown confirmation card. Present that `display` to the user verbatim instead of composing your own summary. " +
       "useWorktree (branch isolation) and autoStart (run immediately after create) default to the user's saved preference; " +
       "pass either explicitly to override for this one task. " +
       "If the defaults have never been set, the FIRST call (without explicit useWorktree/autoStart) returns { needsDefaultsSetup: true } instead of creating the task — ask the user their preference, call set_task_defaults once, then call create_task again. " +
@@ -114,12 +118,18 @@ export const taskTools = {
       }
 
       // Determine baseBranch: explicit param > auto-detect from project's current git branch
+      // Fetch project meta once — name/alias for the display card below,
+      // localPath for worktree base-branch autodetect.
+      const project = await db.project.findUnique({
+        where: { id: args.projectId },
+        select: { name: true, alias: true, localPath: true },
+      });
+
       let baseBranch: string | null = null;
       if (useWorktree) {
         if (args.baseBranch) {
           baseBranch = args.baseBranch;
         } else {
-          const project = await db.project.findUnique({ where: { id: args.projectId }, select: { localPath: true } });
           if (project?.localPath) {
             try {
               baseBranch = execFileSync("git", ["branch", "--show-current"], {
@@ -265,6 +275,24 @@ export const taskTools = {
       // reports the real result instead of guessing why an image didn't land.
       const attachmentInfo = attachmentFailures.length > 0 ? { attachmentFailures } : {};
 
+      // Deterministic confirmation card — rendered SERVER-SIDE via the shared
+      // display module (single source of truth for MCP result cards) so every
+      // caller (assistant, OpenClaw, Feishu bot, CLI) shows one consistent card
+      // instead of re-deriving it from the skill and (as reported) flattening it
+      // into a hard-to-scan paragraph.
+      const buildDisplay = (exec: { started: boolean; error?: string }): string =>
+        renderTaskCreated({
+          title: task.title,
+          projectName: project?.name ?? null,
+          projectAlias: project?.alias ?? null,
+          projectId: args.projectId,
+          priority: task.priority,
+          status: task.status,
+          useWorktree,
+          baseBranch,
+          execution: exec,
+        });
+
       // Auto-start execution if requested — pass title as prompt since
       // startPtyExecution already injects task description as context.
       //
@@ -285,7 +313,7 @@ export const taskTools = {
           });
           if (res.ok) {
             const execData = await res.json();
-            return { ...task, ...attachmentInfo, execution: execData };
+            return { ...task, ...attachmentInfo, execution: execData, display: buildDisplay({ started: true }) };
           }
           let errMsg = `HTTP ${res.status}`;
           try {
@@ -294,24 +322,27 @@ export const taskTools = {
           } catch {
             /* response body wasn't JSON; keep status code */
           }
-          return { ...task, ...attachmentInfo, execution: null, executionError: errMsg };
+          return { ...task, ...attachmentInfo, execution: null, executionError: errMsg, display: buildDisplay({ started: false, error: errMsg }) };
         } catch (err) {
+          const execErr = err instanceof Error ? err.message : String(err);
           return {
             ...task,
             ...attachmentInfo,
             execution: null,
-            executionError: err instanceof Error ? err.message : String(err),
+            executionError: execErr,
+            display: buildDisplay({ started: false, error: execErr }),
           };
         }
       }
 
-      return { ...task, ...attachmentInfo };
+      return { ...task, ...attachmentInfo, display: buildDisplay({ started: false }) };
     },
   },
 
   update_task: {
     description:
       "Update a task's title, description, priority, labels, subPath, and/or version. If labelIds is provided, replaces all existing labels. " +
+      "When you pass description, it MUST keep the tower skill's 'Task Description Format' — the `## 目标` / `## 需求` / `## 参考` / `## 备注` / `## 来源` template (来源 last and mandatory) — never overwrite it with a raw one-paragraph message. " +
       "Pass versionId to file the task under a project version (use list_versions to discover options); pass null or an empty string to move it back to the backlog (no version).",
     schema: z.object({
       taskId: z.string(),
