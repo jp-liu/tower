@@ -388,6 +388,26 @@ export const taskTools = {
           versionData = { versionId: resolved };
         }
 
+        // Source is a hard rule on update too: normalize any supplied description
+        // with the same server logic used on create (strip <task-source> blocks,
+        // guarantee a trailing `## 来源`), so an edit can't bypass the guarantee
+        // by dropping the source or pasting a raw bridge block.
+        if (typeof updateData.description === "string") {
+          const existing = await tx.task.findUnique({
+            where: { id: taskId },
+            select: { parentTaskId: true },
+          });
+          let parent: { id: string; title: string } | null = null;
+          if (existing?.parentTaskId) {
+            const p = await tx.task.findUnique({
+              where: { id: existing.parentTaskId },
+              select: { id: true, title: true },
+            });
+            if (p) parent = p;
+          }
+          updateData.description = resolveTaskSource(updateData.description, parent);
+        }
+
         const task = await tx.task.update({
           where: { id: taskId },
           data: {

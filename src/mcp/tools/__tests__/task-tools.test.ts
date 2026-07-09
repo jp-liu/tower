@@ -496,6 +496,32 @@ describe("task-tools", () => {
       expect(result).toEqual(updatedTask);
     });
 
+    it("normalizes description source on update — strips <task-source>, renders 来源", async () => {
+      mockTx.task.findUnique.mockResolvedValue(null); // no parent
+      mockTx.task.update.mockResolvedValue({ id: "task1" });
+
+      await taskTools.update_task.handler({
+        taskId: "task1",
+        description: "## 目标\nx\n\n<task-source>\nchannel: wechat\nchat_id: oc_5\n</task-source>",
+      });
+
+      const data = (mockTx.task.update.mock.calls[0][0] as { data: { description: string } }).data;
+      expect(data.description).not.toContain("<task-source>");
+      expect(data.description).toContain("- 渠道：微信群");
+      expect(data.description).toContain("chat=oc_5");
+    });
+
+    it("guarantees a trailing 来源 on update when description omits it", async () => {
+      mockTx.task.findUnique.mockResolvedValue(null);
+      mockTx.task.update.mockResolvedValue({ id: "task1" });
+
+      await taskTools.update_task.handler({ taskId: "task1", description: "## 目标\n只改目标" });
+
+      const data = (mockTx.task.update.mock.calls[0][0] as { data: { description: string } }).data;
+      expect(data.description).toContain("## 来源");
+      expect(data.description.trimEnd().endsWith("无")).toBe(true);
+    });
+
     it("deletes existing labels then creates new ones when labelIds provided", async () => {
       const callOrder: string[] = [];
       mockTx.task.update.mockResolvedValue({ id: "task1" });

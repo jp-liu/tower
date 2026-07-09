@@ -148,11 +148,19 @@ function appendSection(description: string | undefined, section: string): string
   return base ? `${base}\n\n${section}` : section;
 }
 
+/** Remove a `## 来源` section (documented as the LAST section) through the end of
+ *  the string, so an authoritative source can replace a model-written one. */
+function stripSourceSection(description: string): string {
+  return description.replace(/\n*##\s*来源[\s\S]*$/, "").trimEnd();
+}
+
 /**
  * Resolve the final description, guaranteeing a correct `## 来源` regardless of
  * what the model produced. Precedence:
- *   1. `<task-source>` block present → strip it, render bridge source (unless the
- *      model already wrote its own `## 来源`).
+ *   1. `<task-source>` block present + parseable → the bridge is authoritative:
+ *      strip the block, drop any model-written `## 来源` (may be a bare `无`
+ *      placeholder), and render the parsed block as the source. Block present but
+ *      unparseable (no channel) → keep the model's source, else `无`.
  *   2. parent-derived and no `## 来源` yet → append parent source.
  *   3. described but no `## 来源` → append `## 来源\n无`.
  *   4. no description and no parent → leave undefined (nothing to source).
@@ -164,9 +172,14 @@ export function resolveTaskSource(
   const match = description ? TASK_SOURCE_RE.exec(description) : null;
   if (match && description) {
     const stripped = description.replace(TASK_SOURCE_STRIP_RE, "").replace(/\n{3,}/g, "\n\n").trim();
-    if (hasSourceSection(stripped)) return stripped;
     const data = parseTaskSourceBlock(match[1]);
-    return data ? appendSection(stripped, renderBridgeSource(data)) : appendSection(stripped, "## 来源\n\n无");
+    if (data) {
+      // Bridge block wins over any model-written `## 来源` so its chat link / IDs /
+      // transcript are never discarded in favour of a `无` placeholder.
+      return appendSection(stripSourceSection(stripped), renderBridgeSource(data));
+    }
+    // Unparseable block (no channel) — keep the model's source if it wrote one.
+    return hasSourceSection(stripped) ? stripped : appendSection(stripped, "## 来源\n\n无");
   }
 
   if (parent) {

@@ -145,12 +145,27 @@ describe("resolveTaskSource", () => {
     expect(out).toContain("10:00 A：需求");
   });
 
-  it("strips the raw block but keeps the model's own rendered source if present", () => {
-    const desc = `## 来源\n无\n\n<task-source>\nchannel: feishu\nchat_id: oc_1\n</task-source>`;
+  it("keeps the model's own source only when the block is unparseable (no channel)", () => {
+    // Block lacks the required `channel` → not authoritative; the model's own
+    // `## 来源` is preserved (and the raw block still stripped).
+    const desc = `## 目标\nx\n\n<task-source>\nchat_id: oc_1\n</task-source>\n\n## 来源\n无`;
     const out = resolveTaskSource(desc, null)!;
     expect(out).not.toContain("<task-source>");
     expect(out).toContain("## 来源\n无");
     expect(out).not.toContain("飞书群");
+  });
+
+  it("lets a parseable bridge block win over a model-written 来源 placeholder", () => {
+    // Model wrote a bare `## 来源\n无` but a real bridge block is present — the
+    // block's data (id, transcript) must not be discarded in favour of `无`.
+    const desc = `## 目标\nx\n\n<task-source>\nchannel: feishu\nchat_id: oc_7\ntrigger_message_id: om_7\ntranscript: |\n  10:00 A：需求\n</task-source>\n\n## 来源\n无`;
+    const out = resolveTaskSource(desc, null)!;
+    expect(out).not.toContain("<task-source>");
+    expect(out).toContain("- 渠道：飞书群");
+    expect(out).toContain("chat=oc_7");
+    expect(out).toContain("10:00 A：需求");
+    // the bare `无` placeholder is gone, replaced by the real source
+    expect(out).not.toMatch(/##\s*来源\s*\n+无\s*$/);
   });
 
   it("strips EVERY <task-source> block, not just the first (never store raw)", () => {
