@@ -207,7 +207,7 @@ export async function captureExecutionSummary(
 
     // Phase 2: Background AI summary — fire and forget, updates DB when done
     // Dreaming (Phase 3) moved to captureTaskDreaming() — runs only on task DONE
-    if (terminalLog && worktreePath) {
+    if (terminalLog && worktreePath && existsSync(worktreePath)) {
       console.error("[captureExecutionSummary] Starting background AI summary...");
       generateSummaryFromLog(terminalLog, worktreePath)
         .then(async (aiSummary) => {
