@@ -10,10 +10,18 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 import { getConfigValue, setConfigValue } from "@/actions/config-actions";
-import { testHarnessTarget } from "@/actions/harness-actions";
+import { testHarnessTarget, getHarnessSetupInfo } from "@/actions/harness-actions";
+
+/** Gateways that run the agent themselves, so they need Tower's MCP + skill wired in. */
+const MCP_GATEWAYS = new Set(["openclaw", "hermes"]);
+interface HarnessSetupInfo {
+  mcp: { name: string; command: string; args: string[]; env: Record<string, string> };
+  skillDir: string;
+}
 
 /**
  * 无人值守发送渠道注册表。Tower 只**存**这张表、不发消息。每条是一条「网关 → 下游」路由：
@@ -85,6 +93,12 @@ export function HarnessTargetsSection() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; output: string } | null>(null);
 
+  // 本机真实 MCP 配置 + skill 路径 —— 用于 openclaw/hermes 的可复制接入提示词。
+  const [setupInfo, setSetupInfo] = useState<HarnessSetupInfo | null>(null);
+  useEffect(() => {
+    getHarnessSetupInfo().then(setSetupInfo).catch(() => {});
+  }, []);
+
   useEffect(() => {
     getConfigValue<NotifyTarget[]>("harness.targets", [])
       .then((v) => {
@@ -150,7 +164,42 @@ export function HarnessTargetsSection() {
       await navigator.clipboard.writeText(SETUP_PROMPT);
       toast.success(t("settings.harness.copied"));
     } catch {
-      toast.error("复制失败");
+      toast.error(t("settings.harness.copyFailed"));
+    }
+  };
+
+  // openclaw/hermes 作为「跑 agent 的网关」，得自己接 Tower 的 MCP + 技能。这段提示词带本机真实
+  // MCP 命令与技能路径，丢给对应网关的 AI 就能照做（同机、stdio）。
+  const buildGatewayPrompt = (gw: string): string => {
+    const gl = tk(`settings.harness.gateway.${gw}`);
+    const mcpBlock = setupInfo
+      ? [
+          `   name: ${setupInfo.mcp.name}`,
+          `   command: ${setupInfo.mcp.command}`,
+          `   args: ${JSON.stringify(setupInfo.mcp.args)}`,
+          `   env: ${JSON.stringify(setupInfo.mcp.env)}`,
+        ].join("\n")
+      : "   （Tower MCP 配置未就绪，稍等片刻重试）";
+    const skillDir = setupInfo?.skillDir ?? "<Tower 安装目录>/skills/tower";
+    return [
+      `帮我把 Tower 接入 ${gl}，让它能用 Tower 的 MCP 工具与技能（作为无人值守网关）。前提：${gl} 与 Tower 在同一台机器上，MCP 走 stdio。`,
+      "",
+      `1) 注册 Tower MCP server（stdio）—— 在 ${gl} 的 MCP 配置里加一条：`,
+      mcpBlock,
+      "",
+      `2) 加载 Tower 技能 —— 软链到 ${gl} 的技能目录（软链而非复制，随 Tower 更新自动生效）：`,
+      `   ln -s "${skillDir}" <你的技能目录>/tower`,
+      "",
+      `3) 验证 —— 连上后应能调用 create_task / list_tasks / ask_human / notify_human 等 Tower 工具，技能列表里出现「tower」。`,
+    ].join("\n");
+  };
+
+  const copyGatewayPrompt = async (gw: string) => {
+    try {
+      await navigator.clipboard.writeText(buildGatewayPrompt(gw));
+      toast.success(t("settings.harness.gatewaySetupCopied"));
+    } catch {
+      toast.error(t("settings.harness.copyFailed"));
     }
   };
 
@@ -212,14 +261,23 @@ export function HarnessTargetsSection() {
               </a>
             ) : null
           )}
-          <button
-            type="button"
-            onClick={copyPrompt}
-            className="inline-flex items-center gap-1 text-primary hover:underline"
-          >
-            <Copy className="h-3 w-3" />
-            {t("settings.harness.copyPrompt")}
-          </button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  onClick={copyPrompt}
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  <Copy className="h-3 w-3" />
+                  {t("settings.harness.copyPrompt")}
+                </button>
+              }
+            />
+            <TooltipContent className="max-w-xs whitespace-pre-line text-left">
+              {t("settings.harness.copyPromptTip")}
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
 
@@ -341,14 +399,35 @@ export function HarnessTargetsSection() {
                 </div>
               </Field>
 
+              {/* openclaw/hermes 网关：跑 agent 的一方，得自己接 Tower MCP + 技能 → 给一段可复制的接入提示词 */}
+              {MCP_GATEWAYS.has(tgt.gateway) && (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        className="text-muted-foreground"
+                        onClick={() => copyGatewayPrompt(tgt.gateway)}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        <span className="text-xs">{t("settings.harness.gatewaySetup")}</span>
+                      </Button>
+                    }
+                  />
+                  <TooltipContent className="max-w-xs whitespace-pre-line text-left">
+                    {t("settings.harness.gatewaySetupTip")}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+
               <div className="flex items-center gap-2 pt-1">
-                <Button onClick={() => { setEditingId(null); setTestResult(null); }}>
-                  <Check className="h-3.5 w-3.5" />
-                  <span>{t("settings.harness.done")}</span>
-                </Button>
                 <Button variant="ghost" className="text-muted-foreground" onClick={() => removeTarget(tgt.id)}>
                   <Trash2 className="h-3.5 w-3.5" />
                   <span>{t("settings.harness.remove")}</span>
+                </Button>
+                <Button onClick={() => { setEditingId(null); setTestResult(null); }}>
+                  <Check className="h-3.5 w-3.5" />
+                  <span>{t("settings.harness.done")}</span>
                 </Button>
               </div>
             </div>

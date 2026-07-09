@@ -105,6 +105,25 @@ export async function testHarnessTarget(input: {
   }
 }
 
+/**
+ * Real Tower MCP config + skill source dir, for the copyable OpenClaw/Hermes
+ * integration prompt. These paths are machine-specific (derived from the local
+ * install + data dir), so the prompt must carry the live values, not a template.
+ */
+export async function getHarnessSetupInfo(): Promise<{
+  mcp: { name: string; command: string; args: string[]; env: Record<string, string> };
+  skillDir: string;
+}> {
+  const { buildTowerMcpConfig, getTowerSkillSourceDir } = await import(
+    "@/lib/ai/install-orchestrator"
+  );
+  const mcp = buildTowerMcpConfig();
+  return {
+    mcp: { name: mcp.name, command: mcp.command, args: mcp.args, env: mcp.env ?? {} },
+    skillDir: getTowerSkillSourceDir(),
+  };
+}
+
 export async function ignoreHarnessAsk(messageId: string): Promise<{ ok: boolean }> {
   const ok = await ignoreAsk(messageId);
   revalidatePath("/harness");
