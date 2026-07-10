@@ -18,10 +18,14 @@ import { migrateLegacyTowerMcp, type MigrationReport } from "./migrate-legacy-mc
 import { getPackageRoot } from "../tower-paths";
 
 /**
- * Skill content is identical across dev/prod (same SKILL.md). Always use
- * the canonical name so a single ~/.claude/skills/tower symlink suffices.
+ * Skill content is identical across dev/prod (same SKILL.md). Always use the
+ * canonical names so a symlink per skill under ~/.claude/skills suffices.
+ *   - tower       : task-management operator (bridge / assistant)
+ *   - tower-goal  : run-time "unattended goal mode" for a working task terminal
+ *   - tower-ask   : send-a-message-to-a-human primitive (used by tower-goal)
  */
 const TOWER_SKILL_NAME = "tower";
+const TOWER_SKILL_NAMES = ["tower", "tower-goal", "tower-ask"];
 
 /**
  * MCP name MUST differ across data dirs so dev and prod can coexist in
@@ -104,9 +108,9 @@ export function buildTowerMcpConfig(): McpServerConfig {
   };
 }
 
-/** Absolute path to the Tower skill source dir inside this repo. */
-export function getTowerSkillSourceDir(): string {
-  return path.join(getPackageRoot(), "skills", TOWER_SKILL_NAME);
+/** Absolute path to a Tower skill's source dir inside this repo. */
+export function getTowerSkillSourceDir(skillName: string = TOWER_SKILL_NAME): string {
+  return path.join(getPackageRoot(), "skills", skillName);
 }
 
 /**
@@ -143,7 +147,12 @@ export async function installAllForProvider(
   const mcpConfig = buildTowerMcpConfig();
   const mcp = await adapter.installMcp(mcpConfig, { scope: "user" });
   const hooks = await adapter.installHooks(apiUrl);
-  const skill = await adapter.installSkill(TOWER_SKILL_NAME, getTowerSkillSourceDir());
+  // Install every Tower skill (tower + tower-goal + tower-ask). Report the first
+  // failure if any, else the canonical `tower` result — ok reflects all of them.
+  const skillResults = await Promise.all(
+    TOWER_SKILL_NAMES.map((name) => adapter.installSkill(name, getTowerSkillSourceDir(name))),
+  );
+  const skill = skillResults.find((r) => !r.ok) ?? skillResults[0];
 
   return {
     provider: providerName,

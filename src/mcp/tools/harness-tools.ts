@@ -10,6 +10,26 @@ function validateMcpTaskId(taskId: string): string | null {
 }
 
 export const harnessTools = {
+  list_notify_targets: {
+    description:
+      "List the ACTIVE unattended notify channel so a task terminal knows which gateway/downstream to " +
+      "send through when pushing a message to a human (used by the tower-ask / tower-goal skills). " +
+      "Tower only records — the agent does the actual send via its own platform MCP. Returns the single " +
+      "active target, or { noChannelConfigured: true } if none is configured/active.",
+    schema: z.object({}),
+    handler: async () => {
+      const { readConfigValue } = await import("@/lib/config-reader");
+      const targets = await readConfigValue<
+        Array<{ id?: string; label?: string; gateway?: string; downstream?: string; active?: boolean }>
+      >("harness.targets", []);
+      const active = (Array.isArray(targets) ? targets : []).find((x) => x?.active && x.gateway);
+      if (!active) return { noChannelConfigured: true };
+      return {
+        active: { gateway: active.gateway, downstream: active.downstream ?? null, label: active.label ?? null },
+      };
+    },
+  },
+
   ask_human: {
     description:
       "Ask the human operator a question and PARK the task until they reply. " +
