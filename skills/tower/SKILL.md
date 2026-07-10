@@ -27,7 +27,7 @@ Before using Tower tools, check if the `tower` MCP server is available. If tools
 
 ---
 
-## Core Contracts (必守)
+## Core Contracts (must follow)
 
 The must-follow rules. Everything else is operational detail below.
 

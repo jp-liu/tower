@@ -1,95 +1,92 @@
-# Tower 无人值守 · 收发消息规则
+# Tower unattended · send/receive contract
 
-Tower **不发送、不接收平台消息**，也不维护「任务 ↔ 会话/群」的绑定。Tower 只做三件事：
+Tower **does not send or receive platform messages**, and keeps no "task ↔ chat/group" binding. Tower does only three things:
 
-1. **记录** 每一条 ask/notify/done/failed（`/harness` 面板即操作日志）。
-2. **park / resume** 任务执行的生命周期（外部工具碰不到）。
-3. 定义**这份规则**，供任意 agent/bridge（bot、OpenClaw、Hermes…）遵循。
+1. **Record** every ask/notify/done/failed (the `/harness` panel is the operations log).
+2. **park / resume** the task-execution lifecycle (external tools can't touch this).
+3. Define **this contract** for any agent/bridge (bot, OpenClaw, Hermes…) to follow.
 
-真正把消息发到飞书/微信/…、以及把人的回复送回来，由 **agent 用它自己挂载的平台 MCP** 完成。飞书等平台协议、凭据、连接**全部隔离在 Tower 之外**。
-
----
-
-## 角色
-
-| 角色 | 是谁 | 干什么 |
-|------|------|--------|
-| **tower-goal（无人值守）** | 运行中激活了 `tower-goal` skill 的任务 | 主动激活（`/tower-goal <目标>`）即进入无人值守自主长跑：静默朝目标跑，卡住/达成时经 tower-ask 外推 + `ask_human` park。激活即赋权（可建任务、中枢管理子任务）。**由人工激活，不由后端 `unattended` 字段判断。** |
-| **tower-ask（出站）** | 任务 agent（`tower-ask` skill） | 调 `list_notify_targets` 拿到「填好真实渠道的发送指令」→ 用平台 MCP 发出去（带口令）→ 再调 `ask_human`/`notify_human` 让 Tower 记录 + park。 |
-| **bridge（入站）** | 常驻的 MCP agent（bot / OpenClaw / …） | 收平台上人的回复 → 认出 taskId → 用 `reply_to_ask(taskId, text)` 送回任务。非任务类（创建/查询）用普通 MCP 工具处理。 |
-
-> `tower-goal` / `tower-ask` 现在是**真正可调用的 skill**（`skills/tower-goal`、`skills/tower-ask`，随 Tower 分发到 `~/.claude/skills`）；`bridge` 仍只是本文档对**入站角色**的称呼，不是 skill。
+Actually delivering messages to Feishu/WeChat/… and bringing human replies back is done by the **agent using its own mounted platform MCP**. Platform protocols, credentials, and connections are **kept entirely outside Tower**.
 
 ---
 
-## 出站：怎么把消息发给人
+## Roles
 
-任务 agent 在无人值守下需要发问或汇报时：
+| Role | Who | Does what |
+|------|-----|-----------|
+| **tower-goal (unattended)** | A task that activated the `tower-goal` skill at run time | Activating it (`/tower-goal <goal>`) enters unattended autonomous run: work silently toward the goal, and on stuck/done push out via tower-ask + `ask_human` park. Activation = authorization (may create tasks, act as the hub for child tasks). **Entered by human activation, not decided by a backend flag.** |
+| **tower-ask (outbound)** | The task agent (`tower-ask` skill) | Call `list_notify_targets` to get "ready-to-follow send instructions with the real channel filled in" → send via the platform MCP (with the token) → then call `ask_human`/`notify_human` so Tower records + parks. |
+| **bridge (inbound)** | A long-running MCP agent (bot / OpenClaw / …) | Receive the human's reply on the platform → recover the taskId → deliver it via `reply_to_ask(taskId, text)`. Non-task messages (create/query) go through ordinary MCP tools. |
 
-1. **决定用哪个工具**
-   - `ask_human`：被卡住、需要决策、或做危险/不可逆操作前要签字。**阻塞 + 结束本回合**，任务被 park。
-   - `notify_human`：里程碑 / 进度 / FYI，**不阻塞**，继续干。
+> `tower-goal` / `tower-ask` are now **real callable skills** (`skills/tower-goal`, `skills/tower-ask`, distributed with Tower into `~/.claude/skills`); `bridge` is still just this doc's name for the **inbound role**, not a skill.
 
-2. **组织消息，必须带关联口令**（硬规则）
-   消息正文**必须逐字**包含关联口令，bridge 靠它把「平台上的这条线程」对回 taskId：
+---
+
+## Outbound: how to get a message to a human
+
+When a task agent needs to ask or report while unattended:
+
+1. **Pick the tool**
+   - `ask_human`: blocked, needs a decision, or sign-off before a risky/irreversible action. **Blocks + ends your turn**; the task is parked.
+   - `notify_human`: milestone / progress / FYI. **Non-blocking**, keep working.
+
+2. **Compose the message; it MUST carry the token** (hard rule)
+   The body **must contain the token verbatim** — the bridge uses it to map "this thread on the platform" back to a taskId:
 
    ```
    [[tower:task=<taskId>]]
    ```
 
-   漏了口令 = 人的回复无法归属 = 任务永久卡死。
+   Missing the token = the human's reply can't be attributed = the task is stuck forever.
 
-3. **用一条「网关 → 下游」渠道把它发出去**
-   渠道来自设置里的注册表（`harness.targets`），每条含 `gateway`（feishu/openclaw/hermes）+
-   `downstream`（wechat/feishu/qq/… 或自定义）。**发到哪个群/人在消息里说清楚**（注册表不预设目的地）。
-   按网关措辞：
+3. **Send it over one "gateway → downstream" channel**
+   Channels come from the registry in Settings (`harness.targets`); each has a `gateway` (feishu/openclaw/hermes) + `downstream` (wechat/feishu/qq/… or custom). **State which group/person in the message** (the registry does not preset a destination). Phrase per gateway:
 
-   **统一消息模板（填空）**：
+   **Unified message template (fill in the blanks):**
 
    ```
-   【发送目标】<群组 或 人员>｜【消息】<正文>｜[[tower:task=<taskId>]]
+   [to] <group or person> | [message] <body> | [[tower:task=<taskId>]]
    ```
 
-   - `gateway=feishu` → 用飞书 MCP 直发：`mcp__feishu__im_v1_message_create` 到 `<发送目标>`，正文带口令。
-   - `gateway=openclaw` / `hermes`（网关转下游）：
-     > 用 **openclaw** 通过 **微信** 发给「后端值班群」：登录页改造需要你拍板…… `[[tower:task=cxxx]]`
+   - `gateway=feishu` → send directly via the Feishu MCP: `mcp__feishu__im_v1_message_create` to `<to>`, body carrying the token.
+   - `gateway=openclaw` / `hermes` (gateway relays to a downstream):
+     > via **openclaw** over **WeChat** to the "backend on-call group": the login refactor needs your call… `[[tower:task=cxxx]]`
 
-   —— `downstream` 决定"通过什么"，目的地（群/人）由消息正文给出。**若只知道名称（群名/人名）而无平台 id，
-   先用平台 MCP 按名称查出 id 再发**（同「测试」按钮的逻辑）。
+   — `downstream` decides "over what"; the destination (group/person) is given in the message body. **If you only have a name (group/person) and no platform id, look the id up via the platform MCP first, then send** (same logic as the "Test" button).
 
-4. **发送成功后再调 Tower 记录**：
-   - `ask_human(taskId, question)` —— **记录 + park**（结束本回合，等人回复）。
-   - `notify_human(taskId, message)` —— **只记录、不 park、不结束回合**（发完继续干）。
-   - 这两个工具**只在 Tower 内留档，本身不外发**；顺序必须是「第 1–3 步先经平台 MCP 发出去 → 确认成功 → 再调它们」。
+4. **Only after the send succeeds, call Tower to record**:
+   - `ask_human(taskId, question)` — **record + park** (ends your turn, waits for a reply).
+   - `notify_human(taskId, message)` — **record only, no park, doesn't end your turn** (keep working).
+   - These tools **only log inside Tower and never send**; the order MUST be "steps 1–3 send via platform MCP → confirm success → then call them".
 
-### 失败与幂等
-- **平台发送失败**时**不要**调 `ask_human`（否则任务被 park 却没人收到问题、永久卡死）—— 重试，或把问题留在 `/harness` 面板后停下等人。
-- 同一任务同一时刻只有一条待回复 ask（`ask_human` 会自动取消旧的 OPEN ask），`[[tower:task=<id>]]` 口令即幂等键；`reply_to_ask` 对已应答的 ask 幂等、不会重复注入。
+### Failure & idempotency
+- **If the platform send fails, do NOT call `ask_human`** (else the task parks but nobody got the question — stuck forever). Retry, or leave the question in the `/harness` panel and stop.
+- One pending ask per task at a time (`ask_human` auto-cancels the previous OPEN ask); the `[[tower:task=<id>]]` token is the idempotency key; `reply_to_ask` is idempotent against an already-answered ask and won't double-inject.
 
-> 记录的 `content` 应与你发出去的正文一致（口令可省略在记录里），这样 `/harness` 日志里「问了什么」才准确。
+> The recorded `content` should match what you sent (the token may be omitted in the record) so the `/harness` log shows "what was asked" accurately.
 
-> **没有配置任何渠道时**（`harness.targets` 为空，`ask_human` 会返回 `noChannelConfigured: true`）：
-> **不要臆造发送**。直接告诉用户「请到 **设置 → 通知 → 无人值守发送渠道** 配置一个渠道，否则无法外发对应消息」。
-> 问题仍已记录、在 `/harness` 面板可见可回复，只是不会推到外部渠道。
+> **When no channel is configured** (`harness.targets` empty; `ask_human` returns `noChannelConfigured: true`):
+> **Don't pretend you sent it.** Tell the user directly: "configure a channel under **Settings → Notifications → unattended send channels**, otherwise this message can't go out."
+> The question is still recorded and visible/answerable in the `/harness` panel — it just won't be pushed to any external channel.
 
 ---
 
-## 入站：怎么把回复送回任务
+## Inbound: how to deliver a reply back to the task
 
-人在平台上回复后：
+After the human replies on the platform:
 
-1. 回复先到 **bridge**（它连着平台，这是它的事）。
-2. bridge 从线程/上下文里的 `[[tower:task=<taskId>]]` 口令**取出 taskId**（这张「线程↔taskId」映射由 bridge 自己维护，Tower 不管）。
-3. bridge 调 **`reply_to_ask(taskId, text)`** —— **不要**用裸的 `send_task_terminal_input`。
-   `reply_to_ask` 会：标记该 ask 为已回复 + **记录回复内容**（`/harness` 日志可见）+ resume 会话 + 把回复注入为任务下一条消息。
-4. 若返回 `{ no_pending: true }`：该任务没有待回复的问题 → 把这条消息当**普通请求**正常处理（`create_task` / `search` / …）。
+1. The reply reaches the **bridge** first (it's connected to the platform — that's its job).
+2. The bridge **recovers the taskId** from the `[[tower:task=<taskId>]]` token in the thread/context (the bridge maintains this "thread ↔ taskId" map itself; Tower doesn't).
+3. The bridge calls **`reply_to_ask(taskId, text)`** — **not** a bare `send_task_terminal_input`.
+   `reply_to_ask` will: mark the ask answered + **record the reply** (visible in the `/harness` log) + resume the session + inject the reply as the task's next message.
+4. If it returns `{ no_pending: true }`: the task has no pending question → handle the message as an **ordinary request** (`create_task` / `search` / …).
 
-## 非任务类消息（创建 / 查询）
+## Non-task messages (create / query)
 
-发给 bridge 的不一定是对某个 ask 的回答。没有关联口令、或 `reply_to_ask` 回 `no_pending` 的，就用普通 Tower MCP 工具照常处理，**不进 harness 日志**（harness 日志只收 ask 的一问一答闭环）。以后想给普通 MCP 操作也留痕，在 MCP 层加埋点即可，不改这套。
+What reaches the bridge isn't always an answer to some ask. Anything with no token, or where `reply_to_ask` returns `no_pending`, is handled with ordinary Tower MCP tools as usual, **outside the harness log** (the harness log only captures the ask question-and-answer loop). To also trace ordinary MCP operations later, add instrumentation at the MCP layer — no change to this contract.
 
 ---
 
-## 一句话契约
+## One-line contract
 
-> Tower 记录 + park/resume；agent 用平台 MCP 收发；口令 `[[tower:task=<id>]]` 是唯一的归属钥匙；回复一律走 `reply_to_ask`。
+> Tower records + park/resume; the agent sends/receives via a platform MCP; the `[[tower:task=<id>]]` token is the only attribution key; replies always go through `reply_to_ask`.
