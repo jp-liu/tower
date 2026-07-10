@@ -15,11 +15,20 @@ Tower 的 `ask_human` / `notify_human` 工具**只在 Tower 内记录 + park，�
 
 ## 三步发送
 
-### 1. 拿到「填好真实渠道的发送指令」
+### 1. 先判断类别（scope），再拿「填好真实渠道的发送指令」
 
-调 **`list_notify_targets`**（传当前 `taskId` = 环境变量 `TOWER_TASK_ID`）。它会**读 Tower 数据库里配置的生效渠道**，直接返回一段组装好的 `instructions`——里面已经填好了真实网关（飞书 / openclaw…）、下游、以及带你 taskId 的关联口令 `[[tower:task=<id>]]`。**照着 `instructions` 做即可**，不用自己去猜渠道。
+渠道分两类，先判断这次属于哪类：
 
-- 返回 `{ noChannelConfigured: true }` → **不要臆造已发**。按其 `instructions` 告诉用户去「设置 → 通知 → 无人值守发送渠道」配一条并设为生效，然后停。
+| scope | 什么时候 | 特点 |
+|-------|---------|------|
+| **`work`** | 你在场（日常上班），用户显式让你**发某群/某人讨论方案**（"发飞书 a 群…确认结果告诉我"） | 目的地由指令给出；发完**不 park、不关终端**，等用户回终端说结论 |
+| **`unattended`** | 你不在（`tower-goal` 下班长跑），要**找用户本人拍板** | 目的地=本人；需回复才能继续则 `ask_human` **park** 等 bridge 注入 |
+
+判据：**用户显式点名了发给哪个群/人 → `work`；没指定、要找本人拍板 → `unattended`。**
+
+调 **`list_notify_targets`**（传 `scope` + 当前 `taskId` = 环境变量 `TOWER_TASK_ID`）。它**读 Tower 数据库里该类别的生效渠道**，返回组装好的 `instructions`——已填好真实网关（飞书 / openclaw…）、下游、带你 taskId 的口令 `[[tower:task=<id>]]`，还写明了这类要不要 park。**照着 `instructions` 做即可**。
+
+- 返回 `{ noChannelConfigured: true }` → **不要臆造已发**。work 类没配可直接用你挂载的平台 MCP 发到用户指定的群；unattended 类没配则按 `instructions` 让用户去「设置 → 通知」配一条并设为生效，然后停。
 
 ### 2. 确定发给谁
 

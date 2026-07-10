@@ -27,12 +27,15 @@ interface HarnessSetupInfo {
  * 无人值守发送渠道注册表。Tower 只**存**这张表、不发消息。每条是一条「网关 → 下游」路由：
  * gateway（飞书 MCP / OpenClaw / Hermes）+ downstream（终端渠道）。目的地(群/人)在发送时说明。
  */
+export type NotifyScope = "work" | "unattended";
 export interface NotifyTarget {
   id: string;
   gateway: string;
   downstream: string;
-  active: boolean; // 单选：仅生效的这条被 agent 用于外推
+  active: boolean; // 单选（按 scope 各自单选）：该类别里生效的这条被 agent 用于外推
+  scope: NotifyScope; // work=在场发群讨论 / unattended=下班找本人
 }
+const SCOPES: NotifyScope[] = ["work", "unattended"];
 
 const GATEWAYS = ["feishu", "openclaw", "hermes"];
 // 各网关支持的下游渠道（据 openclaw / hermes 官网整理，非穷举，其余走「自定义」）。
@@ -107,9 +110,14 @@ export function HarnessTargetsSection() {
           gateway: GATEWAYS.includes(r.gateway) ? r.gateway : "feishu",
           downstream: r.downstream ?? "feishu",
           active: !!r.active,
+          // 老数据无 scope → 当无人值守（原来这张表就是给无人值守外推配的）。
+          scope: r.scope === "work" ? "work" : "unattended",
         }));
-        // 保证有渠道时恰好一个生效（无则默认第一条）。
-        if (rows.length > 0 && !rows.some((r) => r.active)) rows[0].active = true;
+        // 每个类别各保证恰好一个生效（无则该类别第一条）。
+        for (const sc of SCOPES) {
+          const group = rows.filter((r) => r.scope === sc);
+          if (group.length > 0 && !group.some((r) => r.active)) group[0].active = true;
+        }
         setTargets(rows);
         setCustomIds(
           new Set(rows.filter((r) => r.downstream && !KNOWN_DS.includes(r.downstream)).map((r) => r.id))
@@ -121,24 +129,36 @@ export function HarnessTargetsSection() {
   const patch = (id: string, p: Partial<NotifyTarget>) =>
     setTargets((ts) => ts.map((x) => (x.id === id ? { ...x, ...p } : x)));
 
-  const addTarget = () => {
+  const addTarget = (scope: NotifyScope) => {
     const id = crypto.randomUUID();
-    // 第一条自动生效。
-    setTargets((ts) => [...ts, { id, gateway: "feishu", downstream: "feishu", active: ts.length === 0 }]);
+    // 该类别第一条自动生效。
+    setTargets((ts) => [
+      ...ts,
+      { id, gateway: "feishu", downstream: "feishu", scope, active: !ts.some((t) => t.scope === scope) },
+    ]);
     setEditingId(id);
     setTestResult(null);
   };
 
-  // 单选生效：设一条为生效，其余取消。
+  // 单选生效（限本类别）：设一条为生效，同类别其余取消，别的类别不动。
   const setActive = (id: string) =>
-    setTargets((ts) => ts.map((x) => ({ ...x, active: x.id === id })));
+    setTargets((ts) => {
+      const scope = ts.find((x) => x.id === id)?.scope;
+      return ts.map((x) => (x.scope === scope ? { ...x, active: x.id === id } : x));
+    });
 
   const removeTarget = (id: string) => {
     setTargets((ts) => {
-      const wasActive = ts.find((x) => x.id === id)?.active;
+      const removed = ts.find((x) => x.id === id);
       const rest = ts.filter((x) => x.id !== id);
-      // 删掉生效的那条 → 让第一条剩余的生效。
-      if (wasActive && rest.length > 0 && !rest.some((x) => x.active)) rest[0].active = true;
+      // 删掉某类别里生效的那条 → 让同类别第一条剩余的生效。
+      if (removed?.active) {
+        const group = rest.filter((x) => x.scope === removed.scope);
+        if (group.length > 0 && !group.some((x) => x.active)) {
+          const first = group[0];
+          return rest.map((x) => (x.id === first.id ? { ...x, active: true } : x));
+        }
+      }
       return rest;
     });
     if (editingId === id) setEditingId(null);
@@ -283,8 +303,22 @@ export function HarnessTargetsSection() {
 
       {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
 
-      <div className="space-y-2">
-        {targets.map((tgt) => {
+      {SCOPES.map((sc) => (
+        <div key={sc} className="space-y-2">
+          <div className="space-y-0.5">
+            <h4 className="text-xs font-semibold text-foreground">
+              {sc === "work" ? t("settings.harness.scope.work") : t("settings.harness.scope.unattended")}
+            </h4>
+            <p className="text-[11px] text-muted-foreground">
+              {sc === "work" ? t("settings.harness.scope.workDesc") : t("settings.harness.scope.unattendedDesc")}
+            </p>
+          </div>
+          {targets.filter((r) => r.scope === sc).length === 0 && (
+            <p className="rounded-lg border border-dashed bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
+              {t("settings.harness.scope.empty")}
+            </p>
+          )}
+          {targets.filter((r) => r.scope === sc).map((tgt) => {
           const custom = customIds.has(tgt.id);
           return editingId === tgt.id ? (
             <div key={tgt.id} className="rounded-lg border bg-muted/30 p-3 space-y-3">
@@ -474,14 +508,19 @@ export function HarnessTargetsSection() {
               </div>
             </div>
           );
-        })}
-      </div>
+          })}
+          <Button
+            variant="outline"
+            onClick={() => addTarget(sc)}
+            className="text-muted-foreground"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>{sc === "work" ? t("settings.harness.addWork") : t("settings.harness.addUnattended")}</span>
+          </Button>
+        </div>
+      ))}
 
       <div className="flex items-center gap-2">
-        <Button variant="outline" onClick={addTarget} className="text-muted-foreground">
-          <Plus className="h-3.5 w-3.5" />
-          <span>{t("settings.harness.addTarget")}</span>
-        </Button>
         <Button onClick={save} disabled={saving} className="rounded-lg">
           {t("common.save")}
         </Button>

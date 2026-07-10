@@ -18,18 +18,24 @@ function validateMcpTaskId(taskId: string): string | null {
 function composeSendInstructions(
   active: { gateway?: string; downstream?: string; label?: string },
   token: string,
+  scope: "work" | "unattended",
 ): string {
   const gw = active.gateway ?? "";
   const via =
     gw === "feishu"
       ? `用飞书 MCP（如 mcp__feishu__im_v1_message_create）直发到 <目的地>`
       : `用 ${gw} 对应的平台 MCP 发送，正文里写明「通过 ${active.downstream ?? "下游渠道"} 发给 <目的地>」`;
+  const parkLine =
+    scope === "work"
+      ? `2. 你在场（工作渠道）：平台发送成功后，用 notify_human 记一条即可，**不要 park、不要关终端**——等你回终端说结论就继续。`
+      : `2. 你不在（无人值守渠道）：平台发送成功后，需回复才能继续则 ask_human（park 停下、等 bridge 注入回复），只是知会则 notify_human。`;
   return [
+    `渠道类别：${scope === "work" ? "工作（在场·发群讨论）" : "无人值守（下班·找你本人）"}`,
     `生效渠道：${active.label ?? gw}（网关 ${gw}${active.downstream ? ` → 下游 ${active.downstream}` : ""}）`,
     `发送两步（顺序不可颠倒）：`,
     `1. ${via}。正文**必须逐字**包含关联口令 ${token}（漏了对方回复无法归属、任务永久卡死）。`,
     `   只知道群名/人名而无平台 id → 先用平台 MCP 按名称查出 id 再发。`,
-    `2. 平台发送**成功后**，才调 notify_human（FYI/进度，不 park）或 ask_human（需回复，park 停下）留档。`,
+    parkLine,
     `失败别调 ask_human（否则 park 了却没人收到）——重试或把消息留在 /harness 面板后停下。`,
   ].join("\n");
 }
@@ -37,34 +43,45 @@ function composeSendInstructions(
 export const harnessTools = {
   list_notify_targets: {
     description:
-      "Read the ACTIVE notify channel from Tower's DB (harness.targets) and return READY-TO-FOLLOW send " +
-      "instructions for pushing a message to a human — used by the tower-ask / tower-goal skills. Tower only " +
-      "records; the agent does the actual send via its own platform MCP. Pass the current taskId so the " +
-      "[[tower:task=...]] token is filled in. Returns { active, instructions }, or { noChannelConfigured: true } " +
-      "with guidance if no channel is configured/active.",
+      "Read the ACTIVE notify channel of a given SCOPE from Tower's DB (harness.targets) and return " +
+      "READY-TO-FOLLOW send instructions for pushing a message to a human — used by the tower-ask / tower-goal " +
+      "skills. Two scopes: 'work' (you're at the keyboard — send to a group/colleague for discussion, don't " +
+      "park) and 'unattended' (off-hours — reach you personally, park while waiting). Tower only records; the " +
+      "agent does the actual send via its own platform MCP. Pass the current taskId so the [[tower:task=...]] " +
+      "token is filled in. Returns { scope, active, instructions }, or { noChannelConfigured: true } with " +
+      "guidance if that scope has no active channel.",
     schema: z.object({
+      scope: z
+        .enum(["work", "unattended"])
+        .optional()
+        .describe("Channel class: 'work' (in-office, send to a group) or 'unattended' (off-hours, reach you). Default 'unattended'."),
       taskId: z
         .string()
         .optional()
         .describe("Current task id (TOWER_TASK_ID) to embed in the [[tower:task=...]] token"),
     }),
-    handler: async (args: { taskId?: string }) => {
+    handler: async (args: { scope?: "work" | "unattended"; taskId?: string }) => {
+      const scope = args.scope ?? "unattended";
       const { readConfigValue } = await import("@/lib/config-reader");
       const targets = await readConfigValue<
-        Array<{ id?: string; label?: string; gateway?: string; downstream?: string; active?: boolean }>
+        Array<{ id?: string; label?: string; gateway?: string; downstream?: string; active?: boolean; scope?: string }>
       >("harness.targets", []);
-      const active = (Array.isArray(targets) ? targets : []).find((x) => x?.active && x.gateway);
+      // Rows without an explicit scope are legacy unattended channels.
+      const active = (Array.isArray(targets) ? targets : []).find(
+        (x) => x?.active && x.gateway && (x.scope ?? "unattended") === scope,
+      );
       if (!active) {
-        return {
-          noChannelConfigured: true,
-          instructions:
-            "当前未配置生效发送渠道，无法外推消息。不要臆造已发——告诉用户到「设置 → 通知 → 无人值守发送渠道」配一条并设为生效。",
-        };
+        const hint =
+          scope === "work"
+            ? "当前「工作」类别未配置生效渠道。要发群讨论请到「设置 → 通知」的工作渠道栏配一条并设为生效（或直接用你挂载的平台 MCP 发到用户指定的群）。"
+            : "当前「无人值守」类别未配置生效渠道，无法外推。不要臆造已发——告诉用户到「设置 → 通知」的无人值守渠道栏配一条并设为生效。";
+        return { scope, noChannelConfigured: true, instructions: hint };
       }
       const token = `[[tower:task=${args.taskId ?? "<taskId>"}]]`;
       return {
+        scope,
         active: { gateway: active.gateway, downstream: active.downstream ?? null, label: active.label ?? null },
-        instructions: composeSendInstructions(active, token),
+        instructions: composeSendInstructions(active, token, scope),
       };
     },
   },

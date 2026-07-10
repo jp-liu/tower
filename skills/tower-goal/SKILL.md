@@ -25,10 +25,10 @@ description: 运行中主动进入「无人值守目标模式」——像设一�
 
 ### 1. 先自检渠道
 
-调 `list_notify_targets` 确认有生效渠道：
+tower-goal 是「下班找你本人」的场景，走 **`unattended`** 类渠道。调 `list_notify_targets({ scope: "unattended" })` 确认有生效渠道：
 
 - 有 → 记下 `gateway`/`downstream`，继续。
-- `noChannelConfigured: true` → 告诉用户「无人值守跑之前，请到 设置 → 通知 → 无人值守发送渠道 配一条并设为生效，否则我撞墙时推不出去」，先别进模式。
+- `noChannelConfigured: true` → 告诉用户「无人值守跑之前，请到 设置 → 通知 → 无人值守渠道栏 配一条并设为生效，否则我撞墙时推不出去」，先别进模式。
 
 ### 2. 自主推进，全程静默
 
@@ -36,7 +36,7 @@ description: 运行中主动进入「无人值守目标模式」——像设一�
 
 ### 3. 只在「卡住」或「达成」时出声
 
-撞到这两类情况，用 **tower-ask** skill 把消息推给人，再调 `ask_human(taskId, ...)` **park**（停下、终端不关、任务状态不动）：
+撞到这两类情况，用 **tower-ask** skill（`scope: "unattended"`）把消息推给你本人，再调 `ask_human(taskId, ...)` **park**（停下、终端不关、任务状态不动）：
 
 - **彻底卡住**：需要人拍板的决策、缺关键信息、二义需求，或**危险/不可逆操作前签字**（删库、force-push、对外发布——即便终端已放开权限也必须先签字）。
 - **目标达成**：把结果 + 收尾情况推给人，然后同样 `ask_human` park 停下。
