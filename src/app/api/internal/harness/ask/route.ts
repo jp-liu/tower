@@ -35,7 +35,6 @@ export async function POST(request: NextRequest) {
   const task = await db.task.findUnique({
     where: { id: taskId },
     select: {
-      unattended: true,
       executions: { where: { status: "RUNNING" }, select: { id: true }, take: 1 },
     },
   });

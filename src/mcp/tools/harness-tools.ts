@@ -9,23 +9,62 @@ function validateMcpTaskId(taskId: string): string | null {
   return null;
 }
 
+/**
+ * Compose ready-to-follow send instructions from the ACTIVE notify channel.
+ * The tower-ask / tower-goal skills call list_notify_targets and just DO what
+ * `instructions` says — no need to re-derive the gateway→platform-MCP mapping
+ * from static skill docs. Tower only records; the agent does the real send.
+ */
+function composeSendInstructions(
+  active: { gateway?: string; downstream?: string; label?: string },
+  token: string,
+): string {
+  const gw = active.gateway ?? "";
+  const via =
+    gw === "feishu"
+      ? `用飞书 MCP（如 mcp__feishu__im_v1_message_create）直发到 <目的地>`
+      : `用 ${gw} 对应的平台 MCP 发送，正文里写明「通过 ${active.downstream ?? "下游渠道"} 发给 <目的地>」`;
+  return [
+    `生效渠道：${active.label ?? gw}（网关 ${gw}${active.downstream ? ` → 下游 ${active.downstream}` : ""}）`,
+    `发送两步（顺序不可颠倒）：`,
+    `1. ${via}。正文**必须逐字**包含关联口令 ${token}（漏了对方回复无法归属、任务永久卡死）。`,
+    `   只知道群名/人名而无平台 id → 先用平台 MCP 按名称查出 id 再发。`,
+    `2. 平台发送**成功后**，才调 notify_human（FYI/进度，不 park）或 ask_human（需回复，park 停下）留档。`,
+    `失败别调 ask_human（否则 park 了却没人收到）——重试或把消息留在 /harness 面板后停下。`,
+  ].join("\n");
+}
+
 export const harnessTools = {
   list_notify_targets: {
     description:
-      "List the ACTIVE unattended notify channel so a task terminal knows which gateway/downstream to " +
-      "send through when pushing a message to a human (used by the tower-ask / tower-goal skills). " +
-      "Tower only records — the agent does the actual send via its own platform MCP. Returns the single " +
-      "active target, or { noChannelConfigured: true } if none is configured/active.",
-    schema: z.object({}),
-    handler: async () => {
+      "Read the ACTIVE notify channel from Tower's DB (harness.targets) and return READY-TO-FOLLOW send " +
+      "instructions for pushing a message to a human — used by the tower-ask / tower-goal skills. Tower only " +
+      "records; the agent does the actual send via its own platform MCP. Pass the current taskId so the " +
+      "[[tower:task=...]] token is filled in. Returns { active, instructions }, or { noChannelConfigured: true } " +
+      "with guidance if no channel is configured/active.",
+    schema: z.object({
+      taskId: z
+        .string()
+        .optional()
+        .describe("Current task id (TOWER_TASK_ID) to embed in the [[tower:task=...]] token"),
+    }),
+    handler: async (args: { taskId?: string }) => {
       const { readConfigValue } = await import("@/lib/config-reader");
       const targets = await readConfigValue<
         Array<{ id?: string; label?: string; gateway?: string; downstream?: string; active?: boolean }>
       >("harness.targets", []);
       const active = (Array.isArray(targets) ? targets : []).find((x) => x?.active && x.gateway);
-      if (!active) return { noChannelConfigured: true };
+      if (!active) {
+        return {
+          noChannelConfigured: true,
+          instructions:
+            "当前未配置生效发送渠道，无法外推消息。不要臆造已发——告诉用户到「设置 → 通知 → 无人值守发送渠道」配一条并设为生效。",
+        };
+      }
+      const token = `[[tower:task=${args.taskId ?? "<taskId>"}]]`;
       return {
         active: { gateway: active.gateway, downstream: active.downstream ?? null, label: active.label ?? null },
+        instructions: composeSendInstructions(active, token),
       };
     },
   },
@@ -37,8 +76,9 @@ export const harnessTools = {
       "or before a dangerous/irreversible action that needs sign-off. " +
       "This ENDS your turn — do NOT keep working after calling it. The task is suspended " +
       "(its terminal is closed to save resources) and later resumed with the human's answer " +
-      "as your next message. In unattended mode the question is pushed to the operator's channel (e.g. Feishu); " +
-      "otherwise it waits visibly in the Tower UI.",
+      "as your next message. This tool only RECORDS + parks — to actually reach the human, first push the " +
+      "question via the tower-ask skill (call list_notify_targets for the active channel), then call this. " +
+      "Otherwise it just waits visibly in the Tower /harness panel.",
     schema: z.object({
       taskId: z.string().describe("The current task id (TOWER_TASK_ID)"),
       question: z.string().min(1).max(4000).describe("The question / options for the human"),
@@ -81,8 +121,8 @@ export const harnessTools = {
     description:
       "Send a NON-BLOCKING progress update / heads-up to the human operator, then KEEP WORKING. " +
       "Unlike ask_human this does not park the task or end your turn — use it for milestones, " +
-      "status reports, or FYI notes that need no reply. In unattended mode it is pushed to the " +
-      "operator's channel (no @mention); otherwise it is a no-op.",
+      "status reports, or FYI notes that need no reply. This tool only RECORDS — to actually reach the human, " +
+      "first push the note via the tower-ask skill (list_notify_targets for the active channel), then call this.",
     schema: z.object({
       taskId: z.string().describe("The current task id (TOWER_TASK_ID)"),
       message: z.string().min(1).max(4000).describe("The progress update for the human"),

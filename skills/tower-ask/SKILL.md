@@ -13,40 +13,21 @@ Tower 的 `ask_human` / `notify_human` 工具**只在 Tower 内记录 + park，�
 
 **边界**：往代码/文件里写东西、给 PR 留评论、终端内部操作——**不是** tower-ask，别触发。
 
-## 拿 taskId
-
-关联口令要用当前任务 id：读环境变量 `TOWER_TASK_ID`（等价 `AI_MANAGER_TASK_ID`）。拿不到就停下问用户，别瞎编——口令错了对方回复无法归属。
-
 ## 三步发送
 
-### 1. 确定走哪条渠道
+### 1. 拿到「填好真实渠道的发送指令」
 
-- 若系统提示里已注入「生效渠道」（无人值守启动的任务会有），直接用。
-- 否则调 `list_notify_targets`：
-  - 返回 `{ active: { gateway, downstream? } }` → 用它。
-  - 返回 `{ noChannelConfigured: true }` → **不要臆造已发**。告诉用户「请到 设置 → 通知 → 无人值守发送渠道 配一条并设为生效，否则无法外发」，然后停。
+调 **`list_notify_targets`**（传当前 `taskId` = 环境变量 `TOWER_TASK_ID`）。它会**读 Tower 数据库里配置的生效渠道**，直接返回一段组装好的 `instructions`——里面已经填好了真实网关（飞书 / openclaw…）、下游、以及带你 taskId 的关联口令 `[[tower:task=<id>]]`。**照着 `instructions` 做即可**，不用自己去猜渠道。
+
+- 返回 `{ noChannelConfigured: true }` → **不要臆造已发**。按其 `instructions` 告诉用户去「设置 → 通知 → 无人值守发送渠道」配一条并设为生效，然后停。
 
 ### 2. 确定发给谁
 
 目的地（群名/人名）由**触发语境**给出（"发给后端值班群"）。只知道名称、没有平台 id → 先用平台 MCP 按名称查出 id 再发（同设置里「测试」按钮的逻辑）。
 
-### 3. 发送（正文必带口令）
+### 3. 按 instructions 发送 + 留档
 
-正文**必须逐字**包含关联口令，漏了 = 对方回复无法归属 = 任务永久卡死：
-
-```
-[[tower:task=<taskId>]]
-```
-
-按生效渠道的 `gateway` 用对应平台 MCP：
-
-- `gateway=feishu` → 用飞书 MCP 直发，如 `mcp__feishu__im_v1_message_create` 到 `<目的地>`，正文带口令。
-- `gateway=openclaw` / `hermes`（网关转下游）→ 用对应 MCP，正文里写明「通过 `<downstream>`（如微信）发给 `<目的地>`」，例如：
-  > 用 openclaw 通过微信发给「后端值班群」：登录页改造需要你拍板…… `[[tower:task=cxxx]]`
-
-## 发送成功后再留档
-
-**发送成功**（第 3 步平台 MCP 返回 ok）之后，才调 Tower 工具记录：
+用 `instructions` 指定的平台 MCP 把消息发出去，正文**必须逐字**含其中的口令。**发送成功后**才调 Tower 工具记录：
 
 - 需要对方**回复**才能继续（决策 / 缺信息 / 危险操作签字）→ `ask_human(taskId, question)`：记录 + **park**，你的回合到此结束，停下等回复。
 - 只是**告知 / 进度 / FYI**，无需回复 → `notify_human(taskId, message)`：只记录，不 park，继续干。

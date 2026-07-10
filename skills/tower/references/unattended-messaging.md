@@ -14,11 +14,11 @@ Tower **不发送、不接收平台消息**，也不维护「任务 ↔ 会话/�
 
 | 角色 | 是谁 | 干什么 |
 |------|------|--------|
-| **tower-loop（无人值守）** | 带 goal 启动的任务执行 | 设一个目标像普通 goal 一样跑；遇到阻塞用 `ask_human` 发问、用 `notify_human` 汇报。`unattended=1` 时终端注入 `TOWER_UNATTENDED=1`。 |
-| **tower-ask（出站）** | 任务 agent | 按下面的格式把问题/进度**用平台 MCP 发出去**，再调 `ask_human`/`notify_human` 让 Tower 记录 + park。 |
+| **tower-goal（无人值守）** | 运行中激活了 `tower-goal` skill 的任务 | 主动激活（`/tower-goal <目标>`）即进入无人值守自主长跑：静默朝目标跑，卡住/达成时经 tower-ask 外推 + `ask_human` park。激活即赋权（可建任务、中枢管理子任务）。**由人工激活，不由后端 `unattended` 字段判断。** |
+| **tower-ask（出站）** | 任务 agent（`tower-ask` skill） | 调 `list_notify_targets` 拿到「填好真实渠道的发送指令」→ 用平台 MCP 发出去（带口令）→ 再调 `ask_human`/`notify_human` 让 Tower 记录 + park。 |
 | **bridge（入站）** | 常驻的 MCP agent（bot / OpenClaw / …） | 收平台上人的回复 → 认出 taskId → 用 `reply_to_ask(taskId, text)` 送回任务。非任务类（创建/查询）用普通 MCP 工具处理。 |
 
-> `tower-loop` / `tower-ask` / `bridge` 只是本文档里对**角色/流程**的称呼，**不是可 `/调用` 的 skill**，也不用去找同名工具。它们描述的是"谁在什么时候按什么规则做"。
+> `tower-goal` / `tower-ask` 现在是**真正可调用的 skill**（`skills/tower-goal`、`skills/tower-ask`，随 Tower 分发到 `~/.claude/skills`）；`bridge` 仍只是本文档对**入站角色**的称呼，不是 skill。
 
 ---
 

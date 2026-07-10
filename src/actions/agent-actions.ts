@@ -231,7 +231,6 @@ export async function resumePtyExecution(
     envOverrides: adapterEnv,
   });
 
-  if (task.unattended) spawnResult.env.TOWER_UNATTENDED = "1";
 
   const SESSION_ERROR_RE = /no conversation found with session id|unknown session|session .* not found/i;
 
@@ -383,7 +382,6 @@ export async function continueLatestPtyExecution(
     envOverrides: adapterEnv,
   });
 
-  if (task.unattended) spawnResult.env.TOWER_UNATTENDED = "1";
 
   createSession(
     taskId,
@@ -669,32 +667,6 @@ export async function startPtyExecution(
     appendSystemPrompt += (appendSystemPrompt ? "\n" : "") + `The user's name is ${usernameVal}.`;
   }
 
-  // 无人值守：注入「生效」发送渠道 + 出站两步协议 —— 否则 agent 不知道走哪条渠道，也可能误以为
-  // ask_human 会替它外发（实际 Tower 工具只记录+park，绝不发消息）。
-  if (task.unattended) {
-    const targets = await readConfigValue<Array<{ gateway?: string; downstream?: string; active?: boolean }>>(
-      "harness.targets",
-      []
-    );
-    // 只认「生效」渠道（单选）；没有生效渠道即视为未配置 —— 绝不群发、绝不退回被禁用的渠道。
-    const chosen = (Array.isArray(targets) ? targets : []).find((x) => x?.active && x.gateway);
-    const block = chosen
-      ? [
-          "## 无人值守外推（ask_human / notify_human）",
-          "`ask_human` / `notify_human` 工具**只在 Tower 内记录 + park**，绝不替你把消息发给人。要让人真正收到，必须你自己按两步做：",
-          "1. **先发**：用下列生效渠道对应的平台 MCP 工具把消息发出去。正文**必须逐字带**关联口令 `[[tower:task=<taskId>]]`（漏了人回复就无法归属、任务永久卡死）。",
-          `   - 生效渠道：网关 ${chosen.gateway}${chosen.downstream ? ` → 下游 ${chosen.downstream}` : ""}`,
-          "   - 发到哪个群/人由你在正文说明；若只知道名称（群名/人名）而无平台 id，先用平台 MCP 按名称查出 id 再发。",
-          "2. **再记录**：确认第 1 步**发送成功后**，才调 `ask_human`（阻塞、park）或 `notify_human`（不阻塞、不 park）让 Tower 留档。",
-          "- 平台发送**失败**时**不要**调 ask_human（否则任务被 park 却没人知道）——重试，或把问题写进 /harness 面板后停下等人。",
-        ].join("\n")
-      : [
-          "## 无人值守外推",
-          "当前未配置任何发送渠道，你**无法**把消息外推给人（ask_human 会返回 noChannelConfigured）。**不要臆造已通知**——把问题记进 Tower（/harness 面板可见），并明确告知需去「设置 → 通知 → 无人值守发送渠道」配置一条并设为生效。",
-        ].join("\n");
-    appendSystemPrompt += (appendSystemPrompt ? "\n\n" : "") + block;
-  }
-
   // 8. Adapter produces complete command + args + env
   const spawnResult = cliAdapter.buildSpawnArgs({
     taskId,
@@ -711,9 +683,6 @@ export async function startPtyExecution(
       callbackUrl: callbackUrl ?? undefined,
     }),
   });
-
-  // 无人值守：让运行中的 agent 知道自己处于无人值守模式（据此主动用 ask_human/notify_human）。
-  if (task.unattended) spawnResult.env.TOWER_UNATTENDED = "1";
 
   // 9. Create PTY session — onData is a no-op; ws-server.ts wires the real
   //    broadcaster via setDataListener when the WebSocket client connects
