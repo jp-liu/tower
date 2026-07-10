@@ -24,25 +24,25 @@ function composeSendInstructions(
   const gw = active.gateway ?? "";
   const via =
     gw === "feishu"
-      ? `用飞书 MCP（如 mcp__feishu__im_v1_message_create）直发到 <目的地>`
-      : `用 ${gw} 对应的平台 MCP 发送，正文里写明「通过 ${active.downstream ?? "下游渠道"} 发给 <目的地>」`;
-  // 无人值守：正文以【任务标题】开头，多个 goal 并行时人才能一眼认出这条是哪个任务、回复不串台。
+      ? `Send via the Feishu MCP (e.g. mcp__feishu__im_v1_message_create) directly to <destination>`
+      : `Send via the ${gw} platform MCP; in the body state "via ${active.downstream ?? "downstream"} to <destination>"`;
+  // Unattended: start the body with 【task title】 so the human can tell parallel goals apart and reply without crossing wires.
   const titlePrefix =
     scope === "unattended" && taskTitle
-      ? `1. 正文**以 【${taskTitle}】 开头**（多任务并行时人靠它区分是哪个任务）。\n`
+      ? `1. Start the body with 【${taskTitle}】 (lets the human tell which task this is when several run in parallel).\n`
       : "";
   const parkLine =
     scope === "work"
-      ? `你在场（工作渠道）：平台发送成功后，用 notify_human 记一条即可，**不要 park、不要关终端**——等你回终端说结论就继续。`
-      : `你不在（无人值守渠道）：平台发送成功后，需回复才能继续则 ask_human（park 停下、等 bridge 注入回复），只是知会则 notify_human。`;
+      ? `You're present (work channel): after the send succeeds, just record one notify_human; DO NOT park, DO NOT close the terminal — wait for the reply in the terminal to continue.`
+      : `You're away (unattended channel): after the send succeeds, if a reply is needed to continue use ask_human (parks, waits for a bridge-injected reply); if it's just a heads-up use notify_human.`;
   return [
-    `渠道类别：${scope === "work" ? "工作（在场·发群讨论）" : "无人值守（下班·找你本人）"}`,
-    `生效渠道：${active.label ?? gw}（网关 ${gw}${active.downstream ? ` → 下游 ${active.downstream}` : ""}）`,
-    `发送步骤（顺序不可颠倒）：`,
-    titlePrefix + `${titlePrefix ? "2" : "1"}. ${via}。正文**必须逐字**包含关联口令 ${token}（漏了对方回复无法归属、任务永久卡死）。`,
-    `   只知道群名/人名而无平台 id → 先用平台 MCP 按名称查出 id 再发。`,
+    `Channel class: ${scope === "work" ? "work (present · discuss in a group)" : "unattended (off-hours · reach the owner)"}`,
+    `Active channel: ${active.label ?? gw} (gateway ${gw}${active.downstream ? ` → downstream ${active.downstream}` : ""})`,
+    `Steps (order is fixed):`,
+    titlePrefix + `${titlePrefix ? "2" : "1"}. ${via}. The body MUST contain the token ${token} verbatim (missing it → replies can't be attributed → task stuck forever).`,
+    `   Only have a group/person name, no platform id → look the id up via the platform MCP first, then send.`,
     `${titlePrefix ? "3" : "2"}. ${parkLine}`,
-    `失败别调 ask_human（否则 park 了却没人收到）——重试或把消息留在 /harness 面板后停下。`,
+    `If the send fails, don't call ask_human (else it parks but nobody got it) — retry, or leave the message in the /harness panel and stop.`,
   ].join("\n");
 }
 
@@ -97,8 +97,8 @@ export const harnessTools = {
       if (!active) {
         const hint =
           scope === "work"
-            ? "当前「工作」类别未配置生效渠道。要发群讨论请到「设置 → 通知」的工作渠道栏配一条并设为生效（或直接用你挂载的平台 MCP 发到用户指定的群）。"
-            : "当前「无人值守」类别未配置生效渠道，无法外推。不要臆造已发——告诉用户到「设置 → 通知」的无人值守渠道栏配一条并设为生效。";
+            ? "No active channel in the 'work' category. To send to a group, configure one under Settings → Notifications (work column) and mark it active — or just use your mounted platform MCP to send to the group the user named."
+            : "No active channel in the 'unattended' category, so nothing can be pushed out. Don't pretend you sent it — tell the user to configure one under Settings → Notifications (unattended column) and mark it active.";
         return { scope, noChannelConfigured: true, instructions: hint };
       }
       const token = `[[tower:task=${args.taskId ?? "<taskId>"}]]`;

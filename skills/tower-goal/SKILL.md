@@ -1,65 +1,65 @@
 ---
 name: tower-goal
-description: 运行中主动进入「无人值守目标模式」——像设一个 goal 一样让当前任务自己跑到目标达成，途中卡住/需要拍板时把消息推给人（走 tower-ask），人不在也不丢、回来就能看到。当用户说「/tower-goal」「开启 loop」「进入无人值守」「我下班了让它自己跑完」「设个目标自主跑完」「挂机跑」时激活。Activate to run the current task autonomously toward a goal, pushing blockers to the human when stuck.
+description: Enter "unattended goal mode" mid-run — set a goal and let the current task run toward it on its own, pushing blockers/decisions to the human (via tower-ask) when stuck so nothing is lost while you're away. Activate when the user says things like "/tower-goal", "start the loop", "go unattended", "I'm leaving, let it finish on its own", "set a goal and run autonomously", or "run it while I'm away".
 ---
 
-# tower-goal — 无人值守目标模式（运行中激活）
+# tower-goal — unattended goal mode (activated at run time)
 
-普通 goal 的毛病：中途一卡就停在那，没人盯就死了没人知道。tower-goal 补上这个缺口——**自己朝目标跑，撞墙时经渠道推给人**，人不在就 park 着等，回来能接着干。
+A plain goal's flaw: it stalls the moment it gets stuck, and with nobody watching it just dies unnoticed. tower-goal fixes that gap — **run toward the goal on your own, and when you hit a wall push a message to the human via a channel**; if they're away, park and wait, and pick up when they reply.
 
-这个 skill 让你**运行到一半也能主动切进这个模式**（比如用户下班前一句「把这个做完，我走了」）。无人值守不是任务的某个属性、也不由后端判断——**用户激活这个 skill 这个动作本身，就是判断和授权。**
+This skill lets you **switch into the mode partway through a run** (e.g. the user says "finish this, I'm leaving"). Unattended isn't a property of the task or something the backend decides — **the user activating this skill IS the judgment and the authorization.**
 
-## 激活即赋权
+## Activation = authorization
 
-用户主动激活 tower-goal = 授权你在这条任务里**自主完成目标所需的一切**，无需再逐步请示：
+The user activating tower-goal = authorizing you to **do whatever the goal needs**, in this task, without asking step by step:
 
-- **可以创建任务**：目标大就用 Tower MCP（`create_task`）把它拆成子任务派下去。
-- **你就是中枢**：子任务做完会经 stop hook **自动回推到你这条父任务**（你会收到它们的结果作为新消息），你据此继续调度 / 下发下一步。子任务不用自己操心无人值守——**你无人值守，整条链路就无人值守**：它们只管执行你下发的内容，有问题回推给你，由你这个中枢决定要不要经 tower-ask 问人。
-- **可以做任意功能**：只要服务于目标（改代码、建任务、查知识库、中枢编排…）。
+- **You may create tasks**: if the goal is large, use Tower MCP (`create_task`) to split it into child tasks and dispatch them.
+- **You are the hub**: when a child task finishes, its stop hook **pushes back to this parent task automatically** (you receive its result as a new message); you schedule / dispatch the next step from that. Child tasks don't worry about unattended themselves — **you're unattended, so the whole chain is unattended**: they just execute what you dispatch, push problems back to you, and you (the hub) decide whether to ask the human via tower-ask.
+- **You may use any capability** in service of the goal (edit code, create tasks, query the knowledge base, orchestrate the hub…).
 
-唯一的硬边界见下面「铁律」——危险/不可逆操作仍要先签字。
+The only hard boundary is under "Iron rules" below — risky/irreversible actions still need sign-off first.
 
-## 激活即承诺
+## Activation = commitment
 
-用户激活时会给一个**目标**（"把登录重构做完"）。记下它，然后：
+On activation the user gives you a **goal** ("finish the login refactor"). Note it, then:
 
-### 1. 打上 goal 标记（抗遗忘）
+### 1. Set the goal-mode flag (survives forgetting)
 
-激活的第一件事：调 **`set_goal_mode(taskId, true)`**（`taskId` = 环境变量 `TOWER_TASK_ID`）。它把这个任务标成 goal 模式并**持久化**——这样即使后面上下文被压缩、或 park/resume/新会话让你「忘了自己在 goal 里」，`list_notify_targets` 仍会据这个标记把默认渠道判成 `unattended`（找本人），撞墙不会误发或不发。
+First thing on activation: call **`set_goal_mode(taskId, true)`** (`taskId` = env `TOWER_TASK_ID`). It marks this task as goal mode and **persists it** — so even if your context is later compacted, or park/resume/a new session makes you "forget you're looping", `list_notify_targets` still resolves the default channel to `unattended` (reach the owner), and you won't misroute or fail to send when you hit a wall.
 
-这个标记会在任务离开活跃 loop 时**自动清除**（你 Stop 终端、或任务进 DONE/CANCELLED/IN_REVIEW），你一般不用手动关。
+The flag is **auto-cleared** when the task leaves the active loop (you Stop the terminal, or the task moves to DONE/CANCELLED/IN_REVIEW), so you rarely close it by hand.
 
-### 2. 自检渠道
+### 2. Self-check the channel
 
-tower-goal 是「下班找你本人」的场景，走 **`unattended`** 类渠道。调 `list_notify_targets({ scope: "unattended" })` 确认有生效渠道：
+tower-goal is the "off-hours, reach the owner" case, so it uses the **`unattended`** channel class. Call `list_notify_targets({ scope: "unattended" })` to confirm an active channel exists:
 
-- 有 → 记下 `gateway`/`downstream`，继续。
-- `noChannelConfigured: true` → 告诉用户「无人值守跑之前，请到 设置 → 通知 → 无人值守渠道栏 配一条并设为生效，否则我撞墙时推不出去」，先别进模式。
+- Present → note the `gateway`/`downstream`, continue.
+- `noChannelConfigured: true` → tell the user "before running unattended, please configure a channel under Settings → Notifications → unattended column and mark it active, otherwise I can't push out when I hit a wall", and don't enter the mode yet.
 
-### 3. 自主推进，全程静默
+### 3. Advance autonomously, silently
 
-朝目标干活，自己决策能定的都定。**不主动报进度**——里程碑也别发，安静跑。只在下面两种时刻出声。
+Work toward the goal; decide anything you can decide yourself. **Don't report progress proactively** — not even milestones; run quietly. Only speak up in the two moments below.
 
-### 4. 只在「卡住」或「达成」时出声
+### 4. Speak up only when "stuck" or "done"
 
-撞到这两类情况，用 **tower-ask** skill（`scope: "unattended"`）把消息推给你本人，再调 `ask_human(taskId, ...)` **park**（停下、终端不关、任务状态不动）：
+On these two cases, use the **tower-ask** skill (`scope: "unattended"`) to push a message to the owner, then call `ask_human(taskId, ...)` to **park** (stop; terminal stays open; task status untouched):
 
-- **彻底卡住**：需要人拍板的决策、缺关键信息、二义需求，或**危险/不可逆操作前签字**（删库、force-push、对外发布——即便终端已放开权限也必须先签字）。
-- **目标达成**：把结果 + 收尾情况推给人，然后同样 `ask_human` park 停下。
+- **Truly stuck**: a decision that needs the human, missing key info, an ambiguous requirement, or **sign-off before a risky/irreversible action** (drop a DB, force-push, publish externally — required even if the terminal has permissions wide open).
+- **Goal reached**: push the result + wrap-up to the human, then likewise `ask_human` park and stop.
 
-### 5. 回复了就接着干，没回复就放着
+### 5. Reply → continue; no reply → leave it
 
-- 人回复 → 平台 bridge 会用 `reply_to_ask` 把回复注入为你的下一条消息 → **按回复继续干**。
-- 人没回复 → 就 park 在那，**无害**（记录在 `/harness` 面板，未被消费）。用户会自己去处理，你不用管、不用轮询、不用催。
+- Human replies → the platform bridge injects it via `reply_to_ask` as your next message → **continue per the reply**.
+- No reply → it just stays parked, **harmless** (recorded in the `/harness` panel, unconsumed). The user will handle it themselves; don't poll, don't nag.
 
-## 铁律
+## Iron rules
 
-- **出声一律走 tower-ask**：目标模式里所有「发消息给人」都遵守 tower-ask 的规则（先平台 MCP 发 + 带口令 `[[tower:task=<taskId>]]` → 再 `ask_human`/`notify_human`）。
-- **危险/不可逆操作前必 `ask_human` 签字**，无一例外。
-- **调 `ask_human` 后立即结束本回合**，不要继续操作——它会 park 任务、关终端省资源，人回复后自动恢复。
-- **别自作主张改任务状态、别关终端**——达成也只是 park 停下，等用户自己去 review/关掉。
-- taskId 来自环境变量 `TOWER_TASK_ID`。
+- **All outbound goes through tower-ask**: every "send a message to a human" in goal mode follows tower-ask's rules (platform MCP send + the `[[tower:task=<taskId>]]` token → then `ask_human`/`notify_human`).
+- **Sign-off via `ask_human` before any risky/irreversible action**, no exceptions.
+- **End your turn immediately after calling `ask_human`** — don't keep working; it parks the task and closes the terminal to save resources, and resumes automatically when the human replies.
+- **Don't change task status or close the terminal on your own** — even "done" just parks and stops; let the user review/close it.
+- taskId comes from env `TOWER_TASK_ID`.
 
-## 一句话
+## One line
 
-> 朝目标静默跑；卡住或达成就经 tower-ask 推给人 + `ask_human` park；回复了续跑，没回复就静置。
+> Run silently toward the goal; when stuck or done, push to the human via tower-ask + `ask_human` park; reply → continue, no reply → leave it.
