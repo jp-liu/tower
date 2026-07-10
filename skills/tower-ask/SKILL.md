@@ -26,7 +26,12 @@ Tower 的 `ask_human` / `notify_human` 工具**只在 Tower 内记录 + park，�
 
 判据：**用户显式点名了发给哪个群/人 → `work`；没指定、要找本人拍板 → `unattended`。**
 
-调 **`list_notify_targets`**（传 `scope` + 当前 `taskId` = 环境变量 `TOWER_TASK_ID`）。它**读 Tower 数据库里该类别的生效渠道**，返回组装好的 `instructions`——已填好真实网关（飞书 / openclaw…）、下游、带你 taskId 的口令 `[[tower:task=<id>]]`，还写明了这类要不要 park。**照着 `instructions` 做即可**。
+调 **`list_notify_targets`**（务必传当前 `taskId` = 环境变量 `TOWER_TASK_ID`）：
+
+- **用户显式点名了群/人** → 传 `scope: "work"`（覆盖默认）。
+- **没点名、就是要找本人拍板** → **不传 `scope`**，让工具据这个任务的 goal 标记自动判：goal 模式(`set_goal_mode` 置过) → `unattended`(发本人)；否则 → `work`。这样即使你忘了自己在不在 goal 里，也不会发错地方。
+
+它**读 Tower 数据库里该类别的生效渠道**，返回组装好的 `instructions`——已填好真实网关（飞书 / openclaw…）、下游、带你 taskId 的口令 `[[tower:task=<id>]]`，还写明了这类要不要 park。**照着 `instructions` 做即可**。
 
 - 返回 `{ noChannelConfigured: true }` → **不要臆造已发**。work 类没配可直接用你挂载的平台 MCP 发到用户指定的群；unattended 类没配则按 `instructions` 让用户去「设置 → 通知」配一条并设为生效，然后停。
 
@@ -45,6 +50,7 @@ Tower 的 `ask_human` / `notify_human` 工具**只在 Tower 内记录 + park，�
 
 ## 硬规则
 
+- **无人值守（unattended）消息正文以 `【任务标题】` 开头**——口令 `[[tower:task=id]]` 是给机器认的，但人在微信里看到多个 goal 并行的消息会分不清哪条是哪个任务；`【标题】` 前缀让人一眼认出、回复不串台。`list_notify_targets` 的 `instructions` 会带上具体标题，照做即可。**工作（work）场景发群不用带**。
 - **一律直接发，不二次确认**。识别到「发给 X」意图就发，别先问「要发吗」。
 - **平台发送失败**时**绝不**调 `ask_human`（否则任务被 park 却没人收到，永久卡死）——重试，或把消息留在 `/harness` 面板后停下等人。
 - 顺序**不可颠倒**：先经平台 MCP 发出去 + 确认成功 → 再调 `ask_human`/`notify_human`。这两个工具本身不外发。

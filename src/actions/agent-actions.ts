@@ -131,10 +131,10 @@ export async function stopPtyExecution(taskId: string): Promise<void> {
       data: { status: "COMPLETED", endedAt: new Date() },
     });
 
-    // Transition task to IN_REVIEW
+    // Transition task to IN_REVIEW; stopping also ends any tower-goal mode → clear the flag.
     await db.task.update({
       where: { id: taskId },
-      data: { status: "IN_REVIEW" },
+      data: { status: "IN_REVIEW", unattended: false },
     });
 
     // Capture summary — use worktreePath or project localPath for direct mode

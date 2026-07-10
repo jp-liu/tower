@@ -19,23 +19,29 @@ function composeSendInstructions(
   active: { gateway?: string; downstream?: string; label?: string },
   token: string,
   scope: "work" | "unattended",
+  taskTitle: string | null,
 ): string {
   const gw = active.gateway ?? "";
   const via =
     gw === "feishu"
       ? `用飞书 MCP（如 mcp__feishu__im_v1_message_create）直发到 <目的地>`
       : `用 ${gw} 对应的平台 MCP 发送，正文里写明「通过 ${active.downstream ?? "下游渠道"} 发给 <目的地>」`;
+  // 无人值守：正文以【任务标题】开头，多个 goal 并行时人才能一眼认出这条是哪个任务、回复不串台。
+  const titlePrefix =
+    scope === "unattended" && taskTitle
+      ? `1. 正文**以 【${taskTitle}】 开头**（多任务并行时人靠它区分是哪个任务）。\n`
+      : "";
   const parkLine =
     scope === "work"
-      ? `2. 你在场（工作渠道）：平台发送成功后，用 notify_human 记一条即可，**不要 park、不要关终端**——等你回终端说结论就继续。`
-      : `2. 你不在（无人值守渠道）：平台发送成功后，需回复才能继续则 ask_human（park 停下、等 bridge 注入回复），只是知会则 notify_human。`;
+      ? `你在场（工作渠道）：平台发送成功后，用 notify_human 记一条即可，**不要 park、不要关终端**——等你回终端说结论就继续。`
+      : `你不在（无人值守渠道）：平台发送成功后，需回复才能继续则 ask_human（park 停下、等 bridge 注入回复），只是知会则 notify_human。`;
   return [
     `渠道类别：${scope === "work" ? "工作（在场·发群讨论）" : "无人值守（下班·找你本人）"}`,
     `生效渠道：${active.label ?? gw}（网关 ${gw}${active.downstream ? ` → 下游 ${active.downstream}` : ""}）`,
-    `发送两步（顺序不可颠倒）：`,
-    `1. ${via}。正文**必须逐字**包含关联口令 ${token}（漏了对方回复无法归属、任务永久卡死）。`,
+    `发送步骤（顺序不可颠倒）：`,
+    titlePrefix + `${titlePrefix ? "2" : "1"}. ${via}。正文**必须逐字**包含关联口令 ${token}（漏了对方回复无法归属、任务永久卡死）。`,
     `   只知道群名/人名而无平台 id → 先用平台 MCP 按名称查出 id 再发。`,
-    parkLine,
+    `${titlePrefix ? "3" : "2"}. ${parkLine}`,
     `失败别调 ask_human（否则 park 了却没人收到）——重试或把消息留在 /harness 面板后停下。`,
   ].join("\n");
 }
@@ -54,15 +60,33 @@ export const harnessTools = {
       scope: z
         .enum(["work", "unattended"])
         .optional()
-        .describe("Channel class: 'work' (in-office, send to a group) or 'unattended' (off-hours, reach you). Default 'unattended'."),
+        .describe(
+          "Channel class: 'work' (in-office, send to a group) or 'unattended' (off-hours, reach you). " +
+            "Pass it when the user explicitly named a destination (group → 'work'). If omitted, it defaults " +
+            "from the task's goal-mode flag: goal mode on → 'unattended', off → 'work'.",
+        ),
       taskId: z
         .string()
         .optional()
-        .describe("Current task id (TOWER_TASK_ID) to embed in the [[tower:task=...]] token"),
+        .describe("Current task id (TOWER_TASK_ID) — embeds the [[tower:task=...]] token AND resolves the default scope from goal mode"),
     }),
     handler: async (args: { scope?: "work" | "unattended"; taskId?: string }) => {
-      const scope = args.scope ?? "unattended";
       const { readConfigValue } = await import("@/lib/config-reader");
+      // Look up the task once for both goal-mode (default scope) and title (unattended prefix).
+      let goalMode = false;
+      let taskTitle: string | null = null;
+      if (args.taskId) {
+        const { db } = await import("@/lib/db");
+        const task = await db.task.findUnique({
+          where: { id: args.taskId },
+          select: { unattended: true, title: true },
+        });
+        goalMode = !!task?.unattended;
+        taskTitle = task?.title ?? null;
+      }
+      // Explicit scope wins; else derive from goal mode; else fall back to 'unattended'.
+      // This keeps scope right even if the agent forgot it's in goal mode.
+      const scope: "work" | "unattended" = args.scope ?? (args.taskId ? (goalMode ? "unattended" : "work") : "unattended");
       const targets = await readConfigValue<
         Array<{ id?: string; label?: string; gateway?: string; downstream?: string; active?: boolean; scope?: string }>
       >("harness.targets", []);
@@ -81,7 +105,7 @@ export const harnessTools = {
       return {
         scope,
         active: { gateway: active.gateway, downstream: active.downstream ?? null, label: active.label ?? null },
-        instructions: composeSendInstructions(active, token, scope),
+        instructions: composeSendInstructions(active, token, scope, taskTitle),
       };
     },
   },

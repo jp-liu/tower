@@ -87,7 +87,14 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
   const task = await db.task.update({
     where: { id: taskId },
     // 进入 DONE 记录时间戳作为归档基准；离开 DONE 清空（编辑已完成任务不会重置倒计时）。
-    data: { status, doneAt: status === "DONE" ? new Date() : null },
+    // 离开活跃 loop（DONE/CANCELLED/IN_REVIEW）即结束 tower-goal 模式 → 清 unattended 标记。
+    data: {
+      status,
+      doneAt: status === "DONE" ? new Date() : null,
+      ...(status === "DONE" || status === "CANCELLED" || status === "IN_REVIEW"
+        ? { unattended: false }
+        : {}),
+    },
     include: { project: true },
   });
 
