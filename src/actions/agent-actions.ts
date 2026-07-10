@@ -26,6 +26,8 @@ export interface ActiveExecutionInfo {
   worktreePath: string | null;
   subPath: string | null;
   startedAt: string | null; // ISO string for serialization
+  /** Task carries the builtin "Tower" label → a system/workbench task, not completable via merge. */
+  isSystemTask: boolean;
 }
 
 const log = logger.create("agent-actions");
@@ -853,6 +855,7 @@ export async function getActiveExecutionsAcrossWorkspaces(): Promise<ActiveExecu
           project: {
             include: { workspace: true },
           },
+          labels: { include: { label: true } },
         },
       },
     },
@@ -870,5 +873,7 @@ export async function getActiveExecutionsAcrossWorkspaces(): Promise<ActiveExecu
     worktreePath: e.worktreePath,
     subPath: e.task.subPath ?? null,
     startedAt: e.startedAt?.toISOString() ?? null,
+    // Builtin "Tower" label marks system/workbench tasks (same check the MCP report tools use).
+    isSystemTask: e.task.labels.some((tl) => tl.label.name === "Tower" && tl.label.isBuiltin),
   }));
 }

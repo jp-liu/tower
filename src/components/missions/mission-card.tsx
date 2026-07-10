@@ -195,23 +195,26 @@ export function MissionCard({
           <TooltipContent>{t("missions.openFullView")}</TooltipContent>
         </Tooltip>
 
-        {/* Complete button — merge/return flow */}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon"
-                className="ml-1 shrink-0 text-emerald-500 hover:text-emerald-500"
-                onClick={() => onComplete(execution)}
-                disabled={isRemoving}
-              />
-            }
-          >
-            <Check className="h-3.5 w-3.5" />
-          </TooltipTrigger>
-          <TooltipContent>{t("missions.completeTask")}</TooltipContent>
-        </Tooltip>
+        {/* Complete button — merge/return flow. Hidden for system/workbench tasks
+            (builtin "Tower" label): those aren't completable via merge. */}
+        {!execution.isSystemTask && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="ml-1 shrink-0 text-emerald-500 hover:text-emerald-500"
+                  onClick={() => onComplete(execution)}
+                  disabled={isRemoving}
+                />
+              }
+            >
+              <Check className="h-3.5 w-3.5" />
+            </TooltipTrigger>
+            <TooltipContent>{t("missions.completeTask")}</TooltipContent>
+          </Tooltip>
+        )}
 
         {/* Stop button */}
         <Tooltip>
