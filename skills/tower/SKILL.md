@@ -47,7 +47,7 @@ The must-follow rules. Everything else is operational detail below.
 
 ## When to Use
 
-Use Tower tools when the user wants to view/create/manage tasks and projects, check execution status, interact with a running task's terminal, search, organize with labels/status, or get a daily summary / todo. For unattended relay (`TOWER_UNATTENDED=1`, pushing `ask_human`/`notify_human`, or `reply_to_ask`), read [references/unattended-messaging.md](references/unattended-messaging.md).
+Use Tower tools when the user wants to view/create/manage tasks and projects, check execution status, interact with a running task's terminal, search, organize with labels/status, or get a daily summary / todo. For unattended relay (the tower-goal / tower-ask skills, pushing `ask_human`/`notify_human`, or `reply_to_ask`), read [references/unattended-messaging.md](references/unattended-messaging.md).
 
 ## Session default scope
 

@@ -745,8 +745,11 @@ export async function startPtyExecution(
       });
 
       if (exitCode === 0) {
+        // Natural PTY exit is a THIRD task→IN_REVIEW path (besides updateTaskStatus
+        // and stopTaskExecution); it also ends any tower-goal mode → clear the flag.
+        // Park doesn't reach here (guarded above: execution is PAUSED, not RUNNING).
         await db.task
-          .update({ where: { id: taskId }, data: { status: "IN_REVIEW" } })
+          .update({ where: { id: taskId }, data: { status: "IN_REVIEW", unattended: false } })
           .catch((err: unknown) => {
             log.error("Failed to update task status", err);
           });
