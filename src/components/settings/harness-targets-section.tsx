@@ -24,18 +24,19 @@ interface HarnessSetupInfo {
 }
 
 /**
- * 无人值守发送渠道注册表。Tower 只**存**这张表、不发消息。每条是一条「网关 → 下游」路由：
- * gateway（飞书 MCP / OpenClaw / Hermes）+ downstream（终端渠道）。目的地(群/人)在发送时说明。
+ * Unattended send-channel registry. Tower only **stores** this table, it never sends.
+ * Each row is a "gateway → downstream" route: gateway (Feishu MCP / OpenClaw / Hermes) +
+ * downstream (terminal channel). The destination (group/person) is stated at send time.
  */
 export interface NotifyTarget {
   id: string;
   gateway: string;
   downstream: string;
-  active: boolean; // 单选：仅生效的这条被 agent 用于外推
+  active: boolean; // single-select: only the active row is used by the agent for outbound
 }
 
 const GATEWAYS = ["feishu", "openclaw", "hermes"];
-// 各网关支持的下游渠道（据 openclaw / hermes 官网整理，非穷举，其余走「自定义」）。
+// Downstream channels each gateway supports (from openclaw / hermes docs, non-exhaustive; rest go via "custom").
 const DS_BY_GATEWAY: Record<string, string[]> = {
   feishu: ["feishu"],
   openclaw: ["telegram", "signal", "whatsapp", "discord", "slack", "imessage"],
@@ -49,15 +50,16 @@ const CUSTOM = "__custom__";
 const allowsCustom = (gw: string) => gw !== "feishu";
 const dsOptions = (gw: string) => DS_BY_GATEWAY[gw] ?? [];
 
-// 各平台开放后台/文档。
+// Each platform's open-console / docs URL.
 const DOCS: Record<string, string> = {
   feishu: "https://open.feishu.cn/",
   openclaw: "https://docs.openclaw.ai/",
   hermes: "https://hermes-agent.nousresearch.com/docs/",
 };
 
-// 丢给 AI 的一键配置提示词（默认走飞书；OpenClaw / Hermes 见末尾）。
-// 与「飞书助理机器人」同事上手文档里的创建提示词保持一致 —— 同一个应用可同时用于无人值守通知与飞书助理。
+// One-shot setup prompt handed to an AI (defaults to Feishu; OpenClaw / Hermes noted at the end).
+// Kept in sync with the create-bot prompt in the "Feishu assistant bot" onboarding doc —
+// the same app serves both unattended notifications and the Feishu assistant.
 const SETUP_PROMPT = [
   "你有 Playwright（浏览器自动化）能力。帮我在飞书创建一个自建应用（机器人），用于 Tower 的无人值守通知与飞书助理。请一步步来；遇到需要我登录/扫码/人工确认的地方，停下来让我操作，我弄好再继续。",
   "",
@@ -88,12 +90,12 @@ export function HarnessTargetsSection() {
   const [loading, setLoading] = useState(true);
   const [saving, startSave] = useTransition();
 
-  // 测试态（一次一条）
+  // Test state (one row at a time)
   const [testDest, setTestDest] = useState("");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; output: string } | null>(null);
 
-  // 本机真实 MCP 配置 + skill 路径 —— 用于 openclaw/hermes 的可复制接入提示词。
+  // This machine's real MCP config + skill path — used for openclaw/hermes copyable integration prompt.
   const [setupInfo, setSetupInfo] = useState<HarnessSetupInfo | null>(null);
   useEffect(() => {
     getHarnessSetupInfo().then(setSetupInfo).catch(() => {});
@@ -108,7 +110,7 @@ export function HarnessTargetsSection() {
           downstream: r.downstream ?? "feishu",
           active: !!r.active,
         }));
-        // 保证有渠道时恰好一个生效（无则默认第一条）。
+        // Ensure exactly one row is active when any exist (default to the first).
         if (rows.length > 0 && !rows.some((r) => r.active)) rows[0].active = true;
         setTargets(rows);
         setCustomIds(
@@ -123,13 +125,13 @@ export function HarnessTargetsSection() {
 
   const addTarget = () => {
     const id = crypto.randomUUID();
-    // 第一条自动生效。
+    // First row is auto-activated.
     setTargets((ts) => [...ts, { id, gateway: "feishu", downstream: "feishu", active: ts.length === 0 }]);
     setEditingId(id);
     setTestResult(null);
   };
 
-  // 单选生效：设一条为生效，其余取消。
+  // Single-select active: mark one row active, clear the rest.
   const setActive = (id: string) =>
     setTargets((ts) => ts.map((x) => ({ ...x, active: x.id === id })));
 
@@ -137,7 +139,7 @@ export function HarnessTargetsSection() {
     setTargets((ts) => {
       const wasActive = ts.find((x) => x.id === id)?.active;
       const rest = ts.filter((x) => x.id !== id);
-      // 删掉生效的那条 → 让第一条剩余的生效。
+      // Removing the active row → activate the first remaining one.
       if (wasActive && rest.length > 0 && !rest.some((x) => x.active)) rest[0].active = true;
       return rest;
     });
@@ -168,8 +170,9 @@ export function HarnessTargetsSection() {
     }
   };
 
-  // openclaw/hermes 作为「跑 agent 的网关」，得自己接 Tower 的 MCP + 技能。这段提示词带本机真实
-  // MCP 命令与技能路径，丢给对应网关的 AI 就能照做（同机、stdio）。
+  // openclaw/hermes are "gateways that run the agent", so they must wire in Tower's MCP + skill.
+  // This prompt carries the machine's real MCP command and skill path; hand it to that gateway's AI
+  // to follow (same machine, stdio).
   const buildGatewayPrompt = (gw: string): string => {
     const gl = tk(`settings.harness.gateway.${gw}`);
     const mcpBlock = setupInfo
@@ -179,7 +182,7 @@ export function HarnessTargetsSection() {
           `   args: ${JSON.stringify(setupInfo.mcp.args)}`,
           `   env: ${JSON.stringify(setupInfo.mcp.env)}`,
         ].join("\n")
-      : "   （Tower MCP 配置未就绪，稍等片刻重试）";
+      : "   (Tower MCP config not ready yet — retry in a moment)";
     const skillDir = setupInfo?.skillDir ?? "<Tower 安装目录>/skills/tower";
     return [
       `帮我把 Tower 接入 ${gl}，让它能用 Tower 的 MCP 工具与技能（作为无人值守网关）。前提：${gl} 与 Tower 在同一台机器上，MCP 走 stdio。`,
@@ -239,7 +242,7 @@ export function HarnessTargetsSection() {
         <p className="mt-0.5 text-xs text-muted-foreground">{t("settings.harness.desc")}</p>
       </div>
 
-      {/* 提示 + 配置帮助（文档链接 + 一键复制提示词） */}
+      {/* Notice + setup help (doc links + one-click copy prompt) */}
       <div className="space-y-2 rounded-lg bg-muted/30 px-3 py-2">
         <div className="flex items-start gap-2 text-xs text-muted-foreground">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -359,14 +362,18 @@ export function HarnessTargetsSection() {
                 </Field>
               )}
 
-              {/* 测试：填目的地真发一条 */}
+              {/* Test: fill a destination and actually send one */}
               <Field label={t("settings.harness.test")}>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Input
                       value={testDest}
                       onChange={(e) => setTestDest(e.target.value)}
-                      placeholder={t("settings.harness.testDestPlaceholder")}
+                      placeholder={t(
+                        MCP_GATEWAYS.has(tgt.gateway)
+                          ? "settings.harness.testDestPlaceholderId"
+                          : "settings.harness.testDestPlaceholder",
+                      )}
                       className="flex-1"
                     />
                     <Button variant="outline" onClick={() => runTest(tgt)} disabled={testing || !testDest.trim()}>
@@ -399,7 +406,7 @@ export function HarnessTargetsSection() {
                 </div>
               </Field>
 
-              {/* openclaw/hermes 网关：跑 agent 的一方，得自己接 Tower MCP + 技能 → 给一段可复制的接入提示词 */}
+              {/* openclaw/hermes gateway: the side running the agent must wire in Tower MCP + skill → offer a copyable integration prompt */}
               {MCP_GATEWAYS.has(tgt.gateway) && (
                 <Tooltip>
                   <TooltipTrigger

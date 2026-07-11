@@ -104,7 +104,7 @@ export async function stopTaskExecution(executionId: string, status: "COMPLETED"
  * and updates the execution status to COMPLETED.
  */
 export async function stopPtyExecution(taskId: string): Promise<void> {
-  // Harness 清理：任务被停 → 该任务任何待回复 ask 作废（CANCELLED）。best-effort。
+  // Harness cleanup: task stopped → cancel any pending ask for it (CANCELLED). best-effort.
   await cancelOpenAsks(taskId).catch(() => {});
   const { destroySession, getSession } = await import("@/lib/pty/session-store");
 
@@ -166,7 +166,7 @@ export async function resumePtyExecution(
   taskId: string,
   previousSessionId: string
 ): Promise<{ executionId: string; worktreePath: string | null }> {
-  // Harness 清理：人工重启会话 → 作废旧的待回复 ask（/reply 已先应答，故此处对其为 no-op）。
+  // Harness cleanup: manual session restart → cancel the old pending ask (/reply already answered it, so this is a no-op there).
   await cancelOpenAsks(taskId).catch(() => {});
   const task = await db.task.findUnique({
     where: { id: taskId },
@@ -311,8 +311,8 @@ export async function resumePtyExecution(
 export async function continueLatestPtyExecution(
   taskId: string
 ): Promise<{ executionId: string; worktreePath: string | null }> {
-  // Harness 清理：人工重启（Continue 按钮）→ 作废旧的待回复 ask。
-  // 经 /reply 走这里时该任务已无 OPEN ask（先应答再 resume），故对答复流程为 no-op。
+  // Harness cleanup: manual restart (Continue button) → cancel the old pending ask.
+  // When reached via /reply the task has no OPEN ask (answered before resume), so this is a no-op for that flow.
   await cancelOpenAsks(taskId).catch(() => {});
   const task = await db.task.findUnique({
     where: { id: taskId },
@@ -500,8 +500,8 @@ export async function startPtyExecution(
   /** When true, skip injecting task context — start a clean CLI session */
   cleanStart?: boolean
 ): Promise<{ executionId: string; worktreePath: string | null }> {
-  // Harness 清理：全新/重启一段执行 → 作废旧的待回复 ask（fresh start 由 /reply 走时任务无历史，
-  // 此处也无 OPEN 可清）。best-effort。
+  // Harness cleanup: fresh/restarted execution → cancel the old pending ask (a fresh start via /reply has no
+  // history, so there's no OPEN ask to clear here either). best-effort.
   await cancelOpenAsks(taskId).catch(() => {});
   // 1. Load task with project
   const task = await db.task.findUnique({
@@ -648,8 +648,8 @@ export async function startPtyExecution(
   }
 
   // 7c. Build system prompt additions
-  // 内置系统声明（所有任务都带，默认见 config-defaults.ts，可被 SystemConfig 覆盖）在前，
-  // 再 merge 任务自选的 AgentPrompt（在后），最后附用户名。
+  // Built-in system directive first (attached to every task; default in config-defaults.ts, overridable via SystemConfig),
+  // then merge the task's chosen AgentPrompt (after), and finally append the username.
   let appendSystemPrompt = "";
   const { CONFIG_DEFAULTS } = await import("@/lib/config-defaults");
   const systemDirective = await readConfigValue<string>(
@@ -669,14 +669,14 @@ export async function startPtyExecution(
     appendSystemPrompt += (appendSystemPrompt ? "\n" : "") + `The user's name is ${usernameVal}.`;
   }
 
-  // 无人值守：注入「生效」发送渠道 + 出站两步协议 —— 否则 agent 不知道走哪条渠道，也可能误以为
-  // ask_human 会替它外发（实际 Tower 工具只记录+park，绝不发消息）。
+  // Unattended: inject the active send channel + the two-step outbound protocol — otherwise the agent won't know
+  // which channel to use, and may wrongly assume ask_human sends for it (Tower tools only record + park, never send).
   if (task.unattended) {
     const targets = await readConfigValue<Array<{ gateway?: string; downstream?: string; active?: boolean }>>(
       "harness.targets",
       []
     );
-    // 只认「生效」渠道（单选）；没有生效渠道即视为未配置 —— 绝不群发、绝不退回被禁用的渠道。
+    // Only honor the active channel (single-select); no active channel means unconfigured — never broadcast, never fall back to a disabled channel.
     const chosen = (Array.isArray(targets) ? targets : []).find((x) => x?.active && x.gateway);
     const block = chosen
       ? [
@@ -712,7 +712,7 @@ export async function startPtyExecution(
     }),
   });
 
-  // 无人值守：让运行中的 agent 知道自己处于无人值守模式（据此主动用 ask_human/notify_human）。
+  // Unattended: let the running agent know it's in unattended mode (so it proactively uses ask_human/notify_human).
   if (task.unattended) spawnResult.env.TOWER_UNATTENDED = "1";
 
   // 9. Create PTY session — onData is a no-op; ws-server.ts wires the real

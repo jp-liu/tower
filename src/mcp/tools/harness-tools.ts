@@ -42,7 +42,7 @@ export const harnessTools = {
           "Question recorded and task parked. Your turn is over — stop now and wait. " +
           "You will be resumed with the human's answer as your next message.",
       };
-      // 没有配置任何发送渠道 → 无法外推。告诉 agent 引导用户去设置页配置。
+      // No notify channel configured → cannot push outbound. Tell the agent to guide the user to the settings page.
       if (data.noChannelConfigured) {
         return {
           ...base,
@@ -102,12 +102,12 @@ export const harnessTools = {
       const res = await fetch(`${BRIDGE}/reply`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        // allowRetry:false —— 只应答仍 OPEN 的问题；答后的新消息返回 no_pending 交 bridge 按普通消息处理。
+        // allowRetry:false — only answer questions still OPEN; a later message returns no_pending for the bridge to handle as a normal message.
         body: JSON.stringify({ taskId: args.taskId, text: args.text, allowRetry: false }),
       });
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
 
-      // 409 = 该任务没有待回复的 ask —— 不是错误，告诉调用方按普通消息处理。
+      // 409 = the task has no pending ask — not an error; tell the caller to handle it as a normal message.
       if (res.status === 409) return { no_pending: true, taskId: args.taskId };
       if (!res.ok) return { error: data?.error ?? "reply failed", status: res.status };
 

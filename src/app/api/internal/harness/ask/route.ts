@@ -7,9 +7,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * ask_human 桥：记一条 ask(OPEN) + 把 RUNNING execution 置 PAUSED（park）。
- * Tower **只记录不发送** —— 真正把问题推给人由 agent 经 tower-ask 技能用平台 MCP 完成。
- * MCP 是独立 stdio 进程，拿不到 Next 内存里的 DB/PTY，所以走这个进程内桥（与 terminal-tools 一致）。
+ * ask_human bridge: record an ask(OPEN) + set the RUNNING execution to PAUSED (park).
+ * Tower **records only, never sends** — actually pushing the question to a human is done by the
+ * agent via the tower-ask skill using a platform MCP.
+ * MCP is a separate stdio process with no access to Next's in-memory DB/PTY, so it goes through this
+ * in-process bridge (same as terminal-tools).
  */
 export async function POST(request: NextRequest) {
   const blocked = requireLocalhost(request);
@@ -41,15 +43,15 @@ export async function POST(request: NextRequest) {
   });
   if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
 
-  // 记录 ask(OPEN) + park（one-pending：内部会先取消旧 OPEN ask）。Tower 不发送 ——
-  // 问题外推由 agent 经 tower-ask 技能用平台 MCP 完成；无论如何这条 OPEN ask 在 /harness 面板可见、可回复。
+  // Record ask(OPEN) + park (one-pending: internally cancels any prior OPEN ask first). Tower does not send —
+  // the agent pushes the question out via the tower-ask skill using a platform MCP; either way this OPEN ask is visible and answerable in the /harness panel.
   const { messageId } = await createAskMessage({
     taskId,
     executionId: task.executions[0]?.id ?? null,
     question,
   });
 
-  // 没配置任何发送渠道 → 提示 agent 引导用户去设置页配置（问题仍在 /harness 面板可见可回复）。
+  // No notify channel configured → prompt the agent to guide the user to the settings page (the question stays visible/answerable in the /harness panel).
   const { readConfigValue } = await import("@/lib/config-reader");
   const targets = await readConfigValue<unknown[]>("harness.targets", []);
   const noChannelConfigured = !Array.isArray(targets) || targets.length === 0;
