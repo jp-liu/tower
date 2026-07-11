@@ -96,15 +96,27 @@ export function HarnessTargetsSection() {
   const { t } = useI18n();
   const tk = (k: string) => t(k as Parameters<typeof t>[0]);
   const [targets, setTargets] = useState<NotifyTarget[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // 多卡片可同时展开编辑（work / unattended 互不干扰）。
+  const [editingIds, setEditingIds] = useState<Set<string>>(new Set());
+  const isEditing = (id: string) => editingIds.has(id);
+  const openEdit = (id: string) =>
+    setEditingIds((s) => new Set(s).add(id));
+  const closeEdit = (id: string) =>
+    setEditingIds((s) => {
+      const n = new Set(s);
+      n.delete(id);
+      return n;
+    });
   const [customIds, setCustomIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [saving, startSave] = useTransition();
 
-  // 测试态（一次一条）
-  const [testDest, setTestDest] = useState("");
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; output: string } | null>(null);
+  // 测试态按渠道 id 隔离，避免跨卡片串台。
+  type TestState = { dest: string; testing: boolean; result: { ok: boolean; output: string } | null };
+  const [tests, setTests] = useState<Record<string, TestState>>({});
+  const testOf = (id: string): TestState => tests[id] ?? { dest: "", testing: false, result: null };
+  const setTest = (id: string, p: Partial<TestState>) =>
+    setTests((t) => ({ ...t, [id]: { ...testOf(id), ...p } }));
 
   // 本机真实 MCP 配置 + skill 路径 —— 用于 openclaw/hermes 的可复制接入提示词。
   const [setupInfo, setSetupInfo] = useState<HarnessSetupInfo | null>(null);
@@ -146,8 +158,7 @@ export function HarnessTargetsSection() {
       ...ts,
       { id, gateway: "feishu", downstream: "feishu", scope, active: !ts.some((t) => t.scope === scope) },
     ]);
-    setEditingId(id);
-    setTestResult(null);
+    openEdit(id);
   };
 
   // 单选生效（限本类别）：设一条为生效，同类别其余取消，别的类别不动。
@@ -171,7 +182,7 @@ export function HarnessTargetsSection() {
       }
       return rest;
     });
-    if (editingId === id) setEditingId(null);
+    closeEdit(id);
   };
 
   const setCustom = (id: string, on: boolean) =>
@@ -185,7 +196,7 @@ export function HarnessTargetsSection() {
   const save = () =>
     startSave(async () => {
       await setConfigValue("harness.targets", targets);
-      setEditingId(null);
+      setEditingIds(new Set());
       toast.success(t("settings.harness.saved"));
     });
 
@@ -234,16 +245,14 @@ export function HarnessTargetsSection() {
   };
 
   const runTest = async (tgt: NotifyTarget) => {
-    if (!testDest.trim()) return;
-    setTesting(true);
-    setTestResult(null);
+    const dest = testOf(tgt.id).dest.trim();
+    if (!dest) return;
+    setTest(tgt.id, { testing: true, result: null });
     try {
-      const r = await testHarnessTarget({ gateway: tgt.gateway, downstream: tgt.downstream, dest: testDest.trim() });
-      setTestResult(r);
+      const r = await testHarnessTarget({ gateway: tgt.gateway, downstream: tgt.downstream, dest });
+      setTest(tgt.id, { testing: false, result: r });
     } catch (e) {
-      setTestResult({ ok: false, output: e instanceof Error ? e.message : String(e) });
-    } finally {
-      setTesting(false);
+      setTest(tgt.id, { testing: false, result: { ok: false, output: e instanceof Error ? e.message : String(e) } });
     }
   };
 
@@ -323,7 +332,8 @@ export function HarnessTargetsSection() {
           )}
           {targets.filter((r) => r.scope === sc).map((tgt) => {
           const custom = customIds.has(tgt.id);
-          return editingId === tgt.id ? (
+          const ts = testOf(tgt.id);
+          return isEditing(tgt.id) ? (
             <div key={tgt.id} className="rounded-lg border bg-muted/30 p-3 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <Field label={t("settings.harness.gatewayLabel")}>
@@ -401,35 +411,35 @@ export function HarnessTargetsSection() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Input
-                      value={testDest}
-                      onChange={(e) => setTestDest(e.target.value)}
+                      value={ts.dest}
+                      onChange={(e) => setTest(tgt.id, { dest: e.target.value })}
                       placeholder={t("settings.harness.testDestPlaceholder")}
                       className="flex-1"
                     />
-                    <Button variant="outline" onClick={() => runTest(tgt)} disabled={testing || !testDest.trim()}>
-                      {testing ? (
+                    <Button variant="outline" onClick={() => runTest(tgt)} disabled={ts.testing || !ts.dest.trim()}>
+                      {ts.testing ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
                         <Send className="h-3.5 w-3.5" />
                       )}
-                      <span>{testing ? t("settings.harness.testing") : t("settings.harness.testSend")}</span>
+                      <span>{ts.testing ? t("settings.harness.testing") : t("settings.harness.testSend")}</span>
                     </Button>
                   </div>
-                  {testResult && (
+                  {ts.result && (
                     <div
                       className={`flex items-start gap-1.5 rounded bg-muted/40 px-2 py-1 text-xs ${
-                        testResult.ok ? "text-emerald-500" : "text-rose-400"
+                        ts.result.ok ? "text-emerald-500" : "text-rose-400"
                       }`}
                     >
-                      {testResult.ok ? (
+                      {ts.result.ok ? (
                         <CircleCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                       ) : (
                         <CircleX className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                       )}
                       <span className="whitespace-pre-wrap break-words">
-                        {testResult.ok
+                        {ts.result.ok
                           ? t("settings.harness.testOk")
-                          : `${t("settings.harness.testFail")}：${testResult.output}`}
+                          : `${t("settings.harness.testFail")}：${ts.result.output}`}
                       </span>
                     </div>
                   )}
@@ -462,7 +472,7 @@ export function HarnessTargetsSection() {
                   <Trash2 className="h-3.5 w-3.5" />
                   <span>{t("settings.harness.remove")}</span>
                 </Button>
-                <Button onClick={() => { setEditingId(null); setTestResult(null); }}>
+                <Button onClick={() => closeEdit(tgt.id)}>
                   <Check className="h-3.5 w-3.5" />
                   <span>{t("settings.harness.done")}</span>
                 </Button>
@@ -494,7 +504,7 @@ export function HarnessTargetsSection() {
                   variant="ghost"
                   size="icon"
                   className="text-muted-foreground"
-                  onClick={() => { setEditingId(tgt.id); setTestResult(null); setTestDest(""); }}
+                  onClick={() => openEdit(tgt.id)}
                   title={t("settings.harness.edit")}
                 >
                   <Pencil className="h-4 w-4" />
