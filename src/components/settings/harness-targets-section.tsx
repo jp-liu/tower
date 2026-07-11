@@ -220,10 +220,11 @@ export function HarnessTargetsSection() {
           `   args: ${JSON.stringify(setupInfo.mcp.args)}`,
           `   env: ${JSON.stringify(setupInfo.mcp.env)}`,
         ].join("\n")
-      : "   （Tower MCP 配置未就绪，稍等片刻重试）";
+      : "   (Tower MCP config not ready yet — retry in a moment)";
     const skillDir = setupInfo?.skillDir ?? "<Tower 安装目录>/skills/tower";
-    // skillDir 是 <root>/skills/tower —— 去掉末尾 /tower 得 skills 根，软链全部 3 个技能
-    // （tower + tower-goal + tower-ask），否则按提示接入的网关会缺无人值守核心技能。
+    // skillDir is <root>/skills/tower — strip the trailing /tower to get the skills root, then
+    // symlink all three skills (tower + tower-goal + tower-ask); otherwise a gateway onboarded
+    // via this prompt would lack the unattended core.
     const skillsRoot = skillDir.replace(/[\\/]tower$/, "");
     return [
       `帮我把 Tower 接入 ${gl}，让它能用 Tower 的 MCP 工具与技能（作为无人值守网关）。前提：${gl} 与 Tower 在同一台机器上，MCP 走 stdio。`,
@@ -418,7 +419,11 @@ export function HarnessTargetsSection() {
                     <Input
                       value={ts.dest}
                       onChange={(e) => setTest(tgt.id, { dest: e.target.value })}
-                      placeholder={t("settings.harness.testDestPlaceholder")}
+                      placeholder={t(
+                        MCP_GATEWAYS.has(tgt.gateway)
+                          ? "settings.harness.testDestPlaceholderId"
+                          : "settings.harness.testDestPlaceholder"
+                      )}
                       className="flex-1"
                     />
                     <Button variant="outline" onClick={() => runTest(tgt)} disabled={ts.testing || !ts.dest.trim()}>

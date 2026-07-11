@@ -863,6 +863,7 @@ export const en: Translations = {
   "settings.harness.gatewaySetupCopied": "Integration prompt copied",
   "settings.harness.test": "Test",
   "settings.harness.testDestPlaceholder": "Test recipient (group/person name or id, e.g. group Tower, John Doe)",
+  "settings.harness.testDestPlaceholderId": "Test chat-id (exact id, e.g. feishu:oc_xxx or chat_id — this gateway sends by id, no name lookup)",
   "settings.harness.testSend": "Send test",
   "settings.harness.testing": "Sending…",
   "settings.harness.testOk": "Sent successfully",

@@ -116,9 +116,10 @@ export async function dispatchTaskCompletionEvent(
     const { broadcastNotification } = await import("@/lib/pty/ws-server");
     broadcastNotification({ ...payload, type: "completion" });
 
-    // Done/failed 外推不再由后端自动记账：无人值守是运行时由 tower-goal 技能激活的状态，
-    // 后端无从判断。达成/失败时经 tower-ask 推给人是激活了 tower-goal 的 agent 自己的职责
-    // （目标达成 → tower-ask 外推 + ask_human park）。onExit guard 也保证 park 态走不到这里。
+    // Done/failed is no longer auto-recorded by the backend: unattended is a run-time state the
+    // agent enters via the tower-goal skill, which the backend can't infer. Pushing the result on
+    // done/failure is the goal-activated agent's own job (tower-ask + ask_human park). The onExit
+    // guard also keeps a parked task from ever reaching here.
   } catch {
     // Best-effort: notifications are non-critical
   }

@@ -878,6 +878,7 @@ export const zh = {
   "settings.harness.gatewaySetupCopied": "已复制接入提示词",
   "settings.harness.test": "测试",
   "settings.harness.testDestPlaceholder": "测试发给谁（群名/人名/id，如：群组 Tower、张三）",
+  "settings.harness.testDestPlaceholderId": "测试发到哪个 chat-id（精确 id，如 feishu:oc_xxx 或 chat_id；此网关按 id 发，不能按名字查）",
   "settings.harness.testSend": "发送测试",
   "settings.harness.testing": "发送中…",
   "settings.harness.testOk": "发送成功",

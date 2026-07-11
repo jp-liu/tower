@@ -48,8 +48,9 @@ export async function POST(request: NextRequest) {
     question,
   });
 
-  // ask_human = 找本人拍板 = unattended 语义。防呆：没有「生效的 unattended 渠道」就报
-  // noChannelConfigured —— 只配了 work 渠道时也算未配，否则 park 了却推不到本人、没人收到。
+  // ask_human means "reach the owner to decide" = unattended semantics. Backstop: report
+  // noChannelConfigured unless an ACTIVE unattended channel exists — a work-only config also
+  // counts as unconfigured, else the task parks but nobody can be reached.
   const { readConfigValue } = await import("@/lib/config-reader");
   const targets = await readConfigValue<Array<{ active?: boolean; gateway?: string; scope?: string }>>(
     "harness.targets",
