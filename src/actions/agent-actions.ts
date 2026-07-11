@@ -291,7 +291,10 @@ export async function resumePtyExecution(
       });
 
       if (exitCode === 0) {
-        await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW" } }).catch(() => {});
+        // Natural exit → IN_REVIEW; also ends tower-goal mode → clear the flag.
+        // This is the resume/continue path (park → reply → exit), the MOST common
+        // way a goal task ends — must clear here too, not only on fresh-start exit.
+        await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW", unattended: false } }).catch(() => {});
       }
     },
     spawnResult.env,
@@ -422,7 +425,10 @@ export async function continueLatestPtyExecution(
       });
 
       if (exitCode === 0) {
-        await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW" } }).catch(() => {});
+        // Natural exit → IN_REVIEW; also ends tower-goal mode → clear the flag.
+        // This is the resume/continue path (park → reply → exit), the MOST common
+        // way a goal task ends — must clear here too, not only on fresh-start exit.
+        await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW", unattended: false } }).catch(() => {});
       }
     },
     spawnResult.env,

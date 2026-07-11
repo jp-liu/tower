@@ -222,16 +222,21 @@ export function HarnessTargetsSection() {
         ].join("\n")
       : "   （Tower MCP 配置未就绪，稍等片刻重试）";
     const skillDir = setupInfo?.skillDir ?? "<Tower 安装目录>/skills/tower";
+    // skillDir 是 <root>/skills/tower —— 去掉末尾 /tower 得 skills 根，软链全部 3 个技能
+    // （tower + tower-goal + tower-ask），否则按提示接入的网关会缺无人值守核心技能。
+    const skillsRoot = skillDir.replace(/[\\/]tower$/, "");
     return [
       `帮我把 Tower 接入 ${gl}，让它能用 Tower 的 MCP 工具与技能（作为无人值守网关）。前提：${gl} 与 Tower 在同一台机器上，MCP 走 stdio。`,
       "",
       `1) 注册 Tower MCP server（stdio）—— 在 ${gl} 的 MCP 配置里加一条：`,
       mcpBlock,
       "",
-      `2) 加载 Tower 技能 —— 软链到 ${gl} 的技能目录（软链而非复制，随 Tower 更新自动生效）：`,
-      `   ln -s "${skillDir}" <你的技能目录>/tower`,
+      `2) 加载 Tower 技能 —— 软链 3 个技能目录到 ${gl} 的技能目录（软链而非复制，随 Tower 更新自动生效）：`,
+      `   ln -s "${skillsRoot}/tower" <你的技能目录>/tower`,
+      `   ln -s "${skillsRoot}/tower-goal" <你的技能目录>/tower-goal`,
+      `   ln -s "${skillsRoot}/tower-ask" <你的技能目录>/tower-ask`,
       "",
-      `3) 验证 —— 连上后应能调用 create_task / list_tasks / ask_human / notify_human 等 Tower 工具，技能列表里出现「tower」。`,
+      `3) 验证 —— 连上后应能调用 create_task / list_tasks / ask_human / notify_human / list_notify_targets / set_goal_mode 等工具，技能列表里出现 tower / tower-goal / tower-ask。`,
     ].join("\n");
   };
 

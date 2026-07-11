@@ -23,18 +23,18 @@ The only hard boundary is under "Iron rules" below — risky/irreversible action
 
 On activation the user gives you a **goal** ("finish the login refactor"). Note it, then:
 
-### 1. Set the goal-mode flag (survives forgetting)
+### 1. Self-check the channel FIRST (before flipping any flag)
 
-First thing on activation: call **`set_goal_mode(taskId, true)`** (`taskId` = env `TOWER_TASK_ID`). It marks this task as goal mode and **persists it** — so even if your context is later compacted, or park/resume/a new session makes you "forget you're looping", `list_notify_targets` still resolves the default channel to `unattended` (reach the owner), and you won't misroute or fail to send when you hit a wall.
+tower-goal is the "off-hours, reach the owner" case, so it uses the **`unattended`** channel class. Call `list_notify_targets({ scope: "unattended", taskId })` (`taskId` = env `TOWER_TASK_ID`) to confirm an active channel exists:
+
+- Present → note the `gateway`/`downstream`, continue to step 2.
+- `noChannelConfigured: true` → tell the user "before running unattended, please configure a channel under Settings → Notifications → unattended column and mark it active, otherwise I can't push out when I hit a wall", and **do NOT enter the mode** (do not call `set_goal_mode`).
+
+### 2. Set the goal-mode flag (only once a channel exists)
+
+Now call **`set_goal_mode(taskId, true)`**. It marks this task as goal mode and **persists it** — so even if your context is later compacted, or park/resume/a new session makes you "forget you're looping", `list_notify_targets` still resolves the default channel to `unattended` (reach the owner), and you won't misroute or fail to send when you hit a wall.
 
 The flag is **auto-cleared** when the task leaves the active loop (you Stop the terminal, or the task moves to DONE/CANCELLED/IN_REVIEW), so you rarely close it by hand.
-
-### 2. Self-check the channel
-
-tower-goal is the "off-hours, reach the owner" case, so it uses the **`unattended`** channel class. Call `list_notify_targets({ scope: "unattended" })` to confirm an active channel exists:
-
-- Present → note the `gateway`/`downstream`, continue.
-- `noChannelConfigured: true` → tell the user "before running unattended, please configure a channel under Settings → Notifications → unattended column and mark it active, otherwise I can't push out when I hit a wall", and don't enter the mode yet.
 
 ### 3. Advance autonomously, silently
 

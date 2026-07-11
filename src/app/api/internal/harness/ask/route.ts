@@ -48,10 +48,17 @@ export async function POST(request: NextRequest) {
     question,
   });
 
-  // 没配置任何发送渠道 → 提示 agent 引导用户去设置页配置（问题仍在 /harness 面板可见可回复）。
+  // ask_human = 找本人拍板 = unattended 语义。防呆：没有「生效的 unattended 渠道」就报
+  // noChannelConfigured —— 只配了 work 渠道时也算未配，否则 park 了却推不到本人、没人收到。
   const { readConfigValue } = await import("@/lib/config-reader");
-  const targets = await readConfigValue<unknown[]>("harness.targets", []);
-  const noChannelConfigured = !Array.isArray(targets) || targets.length === 0;
+  const targets = await readConfigValue<Array<{ active?: boolean; gateway?: string; scope?: string }>>(
+    "harness.targets",
+    []
+  );
+  const noChannelConfigured = !(
+    Array.isArray(targets) &&
+    targets.some((t) => t?.active && t?.gateway && (t.scope ?? "unattended") === "unattended")
+  );
 
   return NextResponse.json({ ok: true, requestId: messageId, noChannelConfigured });
 }

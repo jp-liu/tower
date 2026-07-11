@@ -101,12 +101,27 @@ export const harnessTools = {
             : "No active channel in the 'unattended' category, so nothing can be pushed out. Don't pretend you sent it — tell the user to configure one under Settings → Notifications (unattended column) and mark it active.";
         return { scope, noChannelConfigured: true, instructions: hint };
       }
-      const token = `[[tower:task=${args.taskId ?? "<taskId>"}]]`;
-      return {
-        scope,
-        active: { gateway: active.gateway, downstream: active.downstream ?? null, label: active.label ?? null },
-        instructions: composeSendInstructions(active, token, scope, taskTitle),
-      };
+      // Only a valid CUID taskId yields a usable token. Without one, the placeholder
+      // [[tower:task=<taskId>]] can't be attributed (reply_to_ask rejects it), so mark
+      // the result as a self-check, not a ready-to-send instruction.
+      const validTaskId = args.taskId && CUID_RE.test(args.taskId) ? args.taskId : null;
+      const token = `[[tower:task=${validTaskId ?? "<taskId>"}]]`;
+      const instructions = composeSendInstructions(active, token, scope, taskTitle);
+      const active_ = { gateway: active.gateway, downstream: active.downstream ?? null, label: active.label ?? null };
+      if (!validTaskId) {
+        return {
+          scope,
+          active: active_,
+          needsTaskId: true,
+          instructions:
+            "⚠️ No valid taskId provided (pass TOWER_TASK_ID). This is a CHANNEL SELF-CHECK only — the " +
+            "token [[tower:task=<taskId>]] is a placeholder and MUST NOT be used to actually send (the " +
+            "human's reply couldn't be attributed → task stuck forever). To really send, call again with " +
+            "the real taskId.\n\n" +
+            instructions,
+        };
+      }
+      return { scope, active: active_, instructions };
     },
   },
 
