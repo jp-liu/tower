@@ -52,6 +52,16 @@ const CUSTOM = "__custom__";
 const allowsCustom = (gw: string) => gw !== "feishu";
 const dsOptions = (gw: string) => DS_BY_GATEWAY[gw] ?? [];
 
+// Module-level so its identity is stable across renders. Defined inside the
+// component, every keystroke minted a fresh component type and React remounted
+// the wrapped <Input>, dropping focus after one character.
+const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div className="space-y-1">
+    <label className="text-xs text-muted-foreground">{label}</label>
+    {children}
+  </div>
+);
+
 // 各平台开放后台/文档。
 const DOCS: Record<string, string> = {
   feishu: "https://open.feishu.cn/",
@@ -244,13 +254,6 @@ export function HarnessTargetsSection() {
     const g = tk(`settings.harness.gateway.${tgt.gateway}`);
     return tgt.downstream ? `${g} · ${dsLabel(tgt.downstream)}` : g;
   };
-
-  const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
-    <div className="space-y-1">
-      <label className="text-xs text-muted-foreground">{label}</label>
-      {children}
-    </div>
-  );
 
   return (
     <div className="rounded-xl border bg-card p-4 space-y-4">
