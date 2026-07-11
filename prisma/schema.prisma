@@ -133,8 +133,11 @@ model Task {
   updatedAt   DateTime   @updatedAt
   doneAt      DateTime?  // 进入 DONE 的时间戳，用于「归档期限」判定（离开 DONE 时清空）
 
-  // 无人值守：开启后 agent 遇阻塞主动 ask_human/notify_human（经 tower-ask 技能用平台 MCP 外推）；
-  // 关闭则只在 /harness 面板内显示等待。Tower 只记录+park/resume，不发消息、不存平台绑定。
+  // Goal-mode runtime marker (NOT a task-creation setting). Set to true only when the
+  // agent activates the tower-goal skill at run time (set_goal_mode), and auto-cleared
+  // when the task leaves the active loop (Stop / DONE / CANCELLED / IN_REVIEW). While true,
+  // list_notify_targets defaults the scope to 'unattended' (reach the owner). Tower only
+  // records + park/resume — it never sends and never stores platform bindings.
   unattended    Boolean   @default(false)
 
   project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)

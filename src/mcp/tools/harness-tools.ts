@@ -71,22 +71,33 @@ export const harnessTools = {
         .describe("Current task id (TOWER_TASK_ID) — embeds the [[tower:task=...]] token AND resolves the default scope from goal mode"),
     }),
     handler: async (args: { scope?: "work" | "unattended"; taskId?: string }) => {
-      const { readConfigValue } = await import("@/lib/config-reader");
-      // Look up the task once for both goal-mode (default scope) and title (unattended prefix).
-      let goalMode = false;
-      let taskTitle: string | null = null;
-      if (args.taskId) {
-        const { db } = await import("@/lib/db");
-        const task = await db.task.findUnique({
-          where: { id: args.taskId },
-          select: { unattended: true, title: true },
-        });
-        goalMode = !!task?.unattended;
-        taskTitle = task?.title ?? null;
+      // Invariant: no usable reply token without a real taskId. Refuse to emit a send
+      // instruction at all (the placeholder [[tower:task=<taskId>]] can't be attributed
+      // and reply_to_ask rejects it → task would be stuck forever).
+      if (!args.taskId || !CUID_RE.test(args.taskId)) {
+        return {
+          error: "taskId required",
+          instructions:
+            "Do NOT send. Call list_notify_targets again with the current TOWER_TASK_ID so the reply " +
+            "token can be attributed.",
+        };
       }
-      // Explicit scope wins; else derive from goal mode; else fall back to 'unattended'.
-      // This keeps scope right even if the agent forgot it's in goal mode.
-      const scope: "work" | "unattended" = args.scope ?? (args.taskId ? (goalMode ? "unattended" : "work") : "unattended");
+      const { db } = await import("@/lib/db");
+      const task = await db.task.findUnique({
+        where: { id: args.taskId },
+        select: { unattended: true, title: true },
+      });
+      if (!task) {
+        return {
+          error: "task not found",
+          instructions: "Do NOT send. The given taskId does not resolve to a task.",
+        };
+      }
+      const goalMode = !!task.unattended;
+      const taskTitle = task.title ?? null;
+      // Explicit scope wins; else derive from goal mode (on → unattended, off → work).
+      const scope: "work" | "unattended" = args.scope ?? (goalMode ? "unattended" : "work");
+      const { readConfigValue } = await import("@/lib/config-reader");
       const targets = await readConfigValue<
         Array<{ id?: string; label?: string; gateway?: string; downstream?: string; active?: boolean; scope?: string }>
       >("harness.targets", []);
@@ -101,27 +112,12 @@ export const harnessTools = {
             : "No active channel in the 'unattended' category, so nothing can be pushed out. Don't pretend you sent it — tell the user to configure one under Settings → Notifications (unattended column) and mark it active.";
         return { scope, noChannelConfigured: true, instructions: hint };
       }
-      // Only a valid CUID taskId yields a usable token. Without one, the placeholder
-      // [[tower:task=<taskId>]] can't be attributed (reply_to_ask rejects it), so mark
-      // the result as a self-check, not a ready-to-send instruction.
-      const validTaskId = args.taskId && CUID_RE.test(args.taskId) ? args.taskId : null;
-      const token = `[[tower:task=${validTaskId ?? "<taskId>"}]]`;
-      const instructions = composeSendInstructions(active, token, scope, taskTitle);
-      const active_ = { gateway: active.gateway, downstream: active.downstream ?? null, label: active.label ?? null };
-      if (!validTaskId) {
-        return {
-          scope,
-          active: active_,
-          needsTaskId: true,
-          instructions:
-            "⚠️ No valid taskId provided (pass TOWER_TASK_ID). This is a CHANNEL SELF-CHECK only — the " +
-            "token [[tower:task=<taskId>]] is a placeholder and MUST NOT be used to actually send (the " +
-            "human's reply couldn't be attributed → task stuck forever). To really send, call again with " +
-            "the real taskId.\n\n" +
-            instructions,
-        };
-      }
-      return { scope, active: active_, instructions };
+      const token = `[[tower:task=${args.taskId}]]`;
+      return {
+        scope,
+        active: { gateway: active.gateway, downstream: active.downstream ?? null, label: active.label ?? null },
+        instructions: composeSendInstructions(active, token, scope, taskTitle),
+      };
     },
   },
 
