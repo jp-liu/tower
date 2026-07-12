@@ -82,7 +82,7 @@ function flattenPnpmStore(nmDir) {
 if (fs.existsSync(standaloneNm)) {
   for (const entry of fs.readdirSync(standaloneNm, { withFileTypes: true })) {
     if (entry.isSymbolicLink()) {
-      fs.rmSync(path.join(standaloneNm, entry.name), { force: true });
+      fs.rmSync(path.join(standaloneNm, entry.name), { recursive: true, force: true });
     }
   }
 }

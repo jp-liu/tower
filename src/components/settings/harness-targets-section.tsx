@@ -41,7 +41,7 @@ const SCOPES: NotifyScope[] = ["work", "unattended"];
 const GATEWAYS = ["hermes", "openclaw"];
 // 各网关支持的下游渠道（据 openclaw / hermes 官网整理，非穷举，其余走「自定义」）。
 const DS_BY_GATEWAY: Record<string, string[]> = {
-  openclaw: ["telegram", "signal", "whatsapp", "discord", "slack", "imessage"],
+  openclaw: ["feishu", "telegram", "signal", "whatsapp", "discord", "slack", "imessage"],
   hermes: [
     "telegram", "discord", "slack", "whatsapp", "signal",
     "feishu", "wechat", "wecom", "dingtalk", "qq", "matrix", "email",
@@ -172,10 +172,13 @@ export function HarnessTargetsSection() {
 
   const addTarget = (scope: NotifyScope) => {
     const id = crypto.randomUUID();
+    const preferredGateway =
+      targets.some((t) => t.gateway === "openclaw") || scope === "work" ? "openclaw" : "hermes";
+    const downstream = dsOptions(preferredGateway)[0] ?? "feishu";
     // 该类别第一条自动生效。
     setTargets((ts) => [
       ...ts,
-      { id, gateway: "hermes", downstream: "feishu", dest: "", scope, active: !ts.some((t) => t.scope === scope) },
+      { id, gateway: preferredGateway, downstream, dest: "", scope, active: !ts.some((t) => t.scope === scope) },
     ]);
     openEdit(id);
   };
