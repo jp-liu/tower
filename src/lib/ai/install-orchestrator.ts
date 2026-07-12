@@ -16,6 +16,7 @@ import { providerRegistry } from "./providers";
 import { getTowerDbPath, getTowerDir } from "../tower-dir";
 import { migrateLegacyTowerMcp, type MigrationReport } from "./migrate-legacy-mcp";
 import { getPackageRoot } from "../tower-paths";
+import { HermesCliAdapter } from "./adapters/cli/hermes-cli-adapter";
 
 /**
  * Skill content is identical across dev/prod (same SKILL.md). Always use the
@@ -158,6 +159,30 @@ export async function installAllForProvider(
     provider: providerName,
     available: true,
     migration,
+    mcp,
+    hooks,
+    skill,
+    ok: mcp.ok && hooks.ok && skill.ok,
+  };
+}
+
+export async function installHermesGateway(profile?: string): Promise<ProviderInstallReport> {
+  const provider = "hermes";
+  const adapter = new HermesCliAdapter(profile);
+  const available = await adapter.isAvailable();
+  if (!available) return { provider, available: false, ok: false };
+
+  const mcpConfig = buildTowerMcpConfig();
+  const mcp = await adapter.installMcp(mcpConfig, { scope: "user" });
+  const hooks = await adapter.installHooks("");
+  const skillResults = await Promise.all(
+    TOWER_SKILL_NAMES.map((name) => adapter.installSkill(name, getTowerSkillSourceDir(name))),
+  );
+  const skill = skillResults.find((r) => !r.ok) ?? skillResults[0];
+
+  return {
+    provider,
+    available: true,
     mcp,
     hooks,
     skill,

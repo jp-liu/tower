@@ -1,12 +1,13 @@
 # Tower unattended · send/receive contract
 
-Tower **does not send or receive platform messages**, and keeps no "task ↔ chat/group" binding. Tower does only three things:
+Tower records and resumes task conversations, and for configured Hermes/OpenClaw channels it can also push outbound messages through the gateway CLI. Tower keeps no fixed "task ↔ chat/group" binding. Tower does these things:
 
 1. **Record** every ask/notify/done/failed (the `/harness` panel is the operations log).
 2. **park / resume** the task-execution lifecycle (external tools can't touch this).
-3. Define **this contract** for any agent/bridge (bot, OpenClaw, Hermes…) to follow.
+3. Push outbound messages for Hermes/OpenClaw-backed channels via `push_to_human`.
+4. Define **this contract** for any agent/bridge (bot, OpenClaw, Hermes…) to follow.
 
-Actually delivering messages to Feishu/WeChat/… and bringing human replies back is done by the **agent using its own mounted platform MCP**. Platform protocols, credentials, and connections are **kept entirely outside Tower**.
+Feishu/WhatsApp/Slack/etc. are downstream platforms, not Tower gateways. Tower supports Hermes and OpenClaw as sending gateways; each gateway decides how far it can resolve names for a given downstream platform.
 
 ---
 
@@ -14,9 +15,9 @@ Actually delivering messages to Feishu/WeChat/… and bringing human replies bac
 
 | Role | Who | Does what |
 |------|-----|-----------|
-| **tower-goal (unattended)** | A task that activated the `tower-goal` skill at run time | Activating it (`/tower-goal <goal>`) enters unattended autonomous run: work silently toward the goal, and on stuck/done push out via tower-ask + `ask_human` park. Activation = authorization (may create tasks, act as the hub for child tasks). **Entered by human activation, not decided by a backend flag.** |
-| **tower-ask (outbound)** | The task agent (`tower-ask` skill) | Call `list_notify_targets` to get "ready-to-follow send instructions with the real channel filled in" → send via the platform MCP (with the token) → then call `ask_human`/`notify_human` so Tower records + parks. |
-| **bridge (inbound)** | A long-running MCP agent (bot / OpenClaw / …) | Receive the human's reply on the platform → recover the taskId → deliver it via `reply_to_ask(taskId, text)`. Non-task messages (create/query) go through ordinary MCP tools. |
+| **tower-goal (unattended)** | A task that activated the `tower-goal` skill at run time | Activating it (`/tower-goal <goal>`) enters unattended autonomous run: work silently toward the goal, and on stuck/done push out via tower-ask and park. Activation = authorization (may create tasks, act as the hub for child tasks). **Entered by human activation, not decided by a backend flag.** |
+| **tower-ask (outbound)** | The task agent (`tower-ask` skill) | Call `list_notify_targets` to get ready-to-follow send instructions. Hermes/OpenClaw-backed channels use `push_to_human` (send first, then record/park atomically). |
+| **bridge (inbound)** | A long-running MCP agent (bot / OpenClaw / …) | Receive the human's reply on the platform → recover the taskId and replied-to message id if available → deliver it via `relay_channel_reply`. Non-task messages (create/query) go through ordinary MCP tools. |
 
 > `tower-goal` / `tower-ask` are now **real callable skills** (`skills/tower-goal`, `skills/tower-ask`, distributed with Tower into `~/.claude/skills`); `bridge` is still just this doc's name for the **inbound role**, not a skill.
 
@@ -26,9 +27,9 @@ Actually delivering messages to Feishu/WeChat/… and bringing human replies bac
 
 When a task agent needs to ask or report while unattended:
 
-1. **Pick the tool**
-   - `ask_human`: blocked, needs a decision, or sign-off before a risky/irreversible action. **Blocks + ends your turn**; the task is parked.
-   - `notify_human`: milestone / progress / FYI. **Non-blocking**, keep working.
+1. **Pick the path**
+   - Hermes/OpenClaw active channel: use `push_to_human({ taskId, message, scope, to, expectReply })`. It sends first, then records with `ask_human` (when `expectReply=true`) or `notify_human` (when false).
+   - Work messages pass the destination from the user instruction as `to` (group/person name, alias, or platform id). Unattended messages may omit `to` when the channel has a home/owner route.
 
 2. **Compose the message; it MUST carry the token** (hard rule)
    The body **must contain the token verbatim** — the bridge uses it to map "this thread on the platform" back to a taskId:
@@ -40,7 +41,7 @@ When a task agent needs to ask or report while unattended:
    Missing the token = the human's reply can't be attributed = the task is stuck forever.
 
 3. **Send it over one "gateway → downstream" channel**
-   Channels come from the registry in Settings (`harness.targets`); each has a `gateway` (feishu/openclaw/hermes) + `downstream` (wechat/feishu/qq/… or custom). **State which group/person in the message** (the registry does not preset a destination). Phrase per gateway:
+   Channels come from the registry in Settings (`harness.targets`); each has a `gateway` (openclaw/hermes) + `downstream` (wechat/feishu/whatsapp/slack/… or custom) + optional exact owner/home `dest`.
 
    **Unified message template (fill in the blanks):**
 
@@ -48,16 +49,15 @@ When a task agent needs to ask or report while unattended:
    [to] <group or person> | [message] <body> | [[tower:task=<taskId>]]
    ```
 
-   - `gateway=feishu` → send directly via the Feishu MCP: `mcp__feishu__im_v1_message_create` to `<to>`, body carrying the token.
-   - `gateway=openclaw` / `hermes` (gateway relays to a downstream):
-     > via **openclaw** over **WeChat** to the "backend on-call group": the login refactor needs your call… `[[tower:task=cxxx]]`
+   - `gateway=openclaw` → call `push_to_human` with `to`.
+   - `gateway=hermes` → call `push_to_human` with `to` for work messages, or omit `to` for unattended home routes.
 
-   — `downstream` decides "over what"; the destination (group/person) is given in the message body. **If you only have a name (group/person) and no platform id, look the id up via the platform MCP first, then send** (same logic as the "Test" button).
+   — `downstream` decides "over what". Tower resolves exact ids, aliases in `harness.destinations`, and gateway directory entries where available. Some platforms (for example WhatsApp) may need a configured alias/JID rather than a natural group name.
 
 4. **Only after the send succeeds, call Tower to record**:
    - `ask_human(taskId, question)` — **record + park** (ends your turn, waits for a reply).
    - `notify_human(taskId, message)` — **record only, no park, doesn't end your turn** (keep working).
-   - These tools **only log inside Tower and never send**; the order MUST be "steps 1–3 send via platform MCP → confirm success → then call them".
+   - These tools **only log inside Tower and never send**; skip this step when using `push_to_human`, because it already records after a successful gateway send.
 
 ### Failure & idempotency
 - **If the platform send fails, do NOT call `ask_human`** (else the task parks but nobody got the question — stuck forever). Retry, or leave the question in the `/harness` panel and stop.
@@ -76,10 +76,12 @@ When a task agent needs to ask or report while unattended:
 After the human replies on the platform:
 
 1. The reply reaches the **bridge** first (it's connected to the platform — that's its job).
-2. The bridge **recovers the taskId** from the `[[tower:task=<taskId>]]` token in the thread/context (the bridge maintains this "thread ↔ taskId" map itself; Tower doesn't).
-3. The bridge calls **`reply_to_ask(taskId, text)`** — **not** a bare `send_task_terminal_input`.
-   `reply_to_ask` will: mark the ask answered + **record the reply** (visible in the `/harness` log) + resume the session + inject the reply as the task's next message.
-4. If it returns `{ no_pending: true }`: the task has no pending question → handle the message as an **ordinary request** (`create_task` / `search` / …).
+2. The bridge **recovers the taskId** from the `[[tower:task=<taskId>]]` token in the message, quoted/replied-to text, thread context, or its own "thread ↔ taskId" map.
+3. The bridge calls **`relay_channel_reply({ text, taskId, platform, chatId, platformMessageId, quotedText })`** — **not** a bare `send_task_terminal_input`.
+   - Pass `platform` and `chatId` whenever available (Feishu `chatId` is usually `oc_xxx`). Tower uses this to recognize whether the reply came from the configured work group or unattended home channel.
+   - If the referenced outbound message was an ask, Tower marks it answered, resumes the task, and injects the reply.
+   - If the referenced outbound message was a work-channel notify, Tower injects the reply into the live task terminal without consuming any unrelated open ask on the same task.
+4. If it returns `{ no_task_token: true }` or `{ no_pending: true }`: handle the message as an **ordinary request** (`create_task` / `search` / …).
 
 ## Non-task messages (create / query)
 
@@ -89,4 +91,4 @@ What reaches the bridge isn't always an answer to some ask. Anything with no tok
 
 ## One-line contract
 
-> Tower records + park/resume; the agent sends/receives via a platform MCP; the `[[tower:task=<id>]]` token is the only attribution key; replies always go through `reply_to_ask`.
+> Tower records + park/resume; Hermes/OpenClaw can push via `push_to_human`; the `[[tower:task=<id>]]` token plus platform reply message id/chat id are the attribution keys; external replies go through `relay_channel_reply`.

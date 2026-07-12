@@ -42,7 +42,7 @@ Work toward the goal; decide anything you can decide yourself. **Don't report pr
 
 ### 4. Speak up only when "stuck" or "done"
 
-On these two cases, use the **tower-ask** skill (`scope: "unattended"`) to push a message to the owner, then call `ask_human(taskId, ...)` to **park** (stop; terminal stays open; task status untouched):
+On these two cases, use the **tower-ask** skill (`scope: "unattended"`) to push a message to the owner and park. For Hermes/OpenClaw-backed channels this means `push_to_human(..., expectReply: true)`. Stop after the park (terminal stays open; task status untouched):
 
 - **Truly stuck**: a decision that needs the human, missing key info, an ambiguous requirement, or **sign-off before a risky/irreversible action** (drop a DB, force-push, publish externally — required even if the terminal has permissions wide open).
 - **Goal reached**: push the result + wrap-up to the human, then likewise `ask_human` park and stop.
@@ -54,7 +54,7 @@ On these two cases, use the **tower-ask** skill (`scope: "unattended"`) to push 
 
 ## Iron rules
 
-- **All outbound goes through tower-ask**: every "send a message to a human" in goal mode follows tower-ask's rules (platform MCP send + the `[[tower:task=<taskId>]]` token → then `ask_human`/`notify_human`).
+- **All outbound goes through tower-ask**: every "send a message to a human" in goal mode follows tower-ask's rules. Hermes/OpenClaw use `push_to_human` (send + record/park atomically).
 - **Sign-off via `ask_human` before any risky/irreversible action**, no exceptions.
 - **End your turn immediately after calling `ask_human`** — don't keep working; it parks the task and closes the terminal to save resources, and resumes automatically when the human replies.
 - **Don't change task status or close the terminal on your own** — even "done" just parks and stops; let the user review/close it.
@@ -62,4 +62,4 @@ On these two cases, use the **tower-ask** skill (`scope: "unattended"`) to push 
 
 ## One line
 
-> Run silently toward the goal; when stuck or done, push to the human via tower-ask + `ask_human` park; reply → continue, no reply → leave it.
+> Run silently toward the goal; when stuck or done, push to the human via tower-ask and park; reply → continue, no reply → leave it.

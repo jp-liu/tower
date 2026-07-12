@@ -24,23 +24,23 @@ interface HarnessSetupInfo {
 }
 
 /**
- * 无人值守发送渠道注册表。Tower 只**存**这张表、不发消息。每条是一条「网关 → 下游」路由：
- * gateway（飞书 MCP / OpenClaw / Hermes）+ downstream（终端渠道）。目的地(群/人)在发送时说明。
+ * 无人值守发送渠道注册表。每条是一条「网关 → 下游」路由：
+ * gateway（OpenClaw / Hermes）+ downstream（终端渠道）。work 目的地(群/人)在发送时说明。
  */
 export type NotifyScope = "work" | "unattended";
 export interface NotifyTarget {
   id: string;
   gateway: string;
   downstream: string;
+  dest?: string; // exact chat/user id; unattended Hermes may leave blank to use its home channel
   active: boolean; // 单选（按 scope 各自单选）：该类别里生效的这条被 agent 用于外推
   scope: NotifyScope; // work=在场发群讨论 / unattended=下班找本人
 }
 const SCOPES: NotifyScope[] = ["work", "unattended"];
 
-const GATEWAYS = ["feishu", "openclaw", "hermes"];
+const GATEWAYS = ["hermes", "openclaw"];
 // 各网关支持的下游渠道（据 openclaw / hermes 官网整理，非穷举，其余走「自定义」）。
 const DS_BY_GATEWAY: Record<string, string[]> = {
-  feishu: ["feishu"],
   openclaw: ["telegram", "signal", "whatsapp", "discord", "slack", "imessage"],
   hermes: [
     "telegram", "discord", "slack", "whatsapp", "signal",
@@ -49,8 +49,14 @@ const DS_BY_GATEWAY: Record<string, string[]> = {
 };
 const KNOWN_DS = [...new Set(Object.values(DS_BY_GATEWAY).flat())];
 const CUSTOM = "__custom__";
-const allowsCustom = (gw: string) => gw !== "feishu";
+const allowsCustom = () => true;
 const dsOptions = (gw: string) => DS_BY_GATEWAY[gw] ?? [];
+const isWechatDownstream = (downstream?: string | null) => {
+  const ds = downstream?.trim().toLowerCase();
+  return ds === "wechat" || ds === "weixin";
+};
+const isHermesWechatUnattended = (target: NotifyTarget) =>
+  target.gateway === "hermes" && target.scope === "unattended" && isWechatDownstream(target.downstream);
 
 // Module-level so its identity is stable across renders. Defined inside the
 // component, every keystroke minted a fresh component type and React remounted
@@ -64,7 +70,6 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
 
 // 各平台开放后台/文档。
 const DOCS: Record<string, string> = {
-  feishu: "https://open.feishu.cn/",
   openclaw: "https://docs.openclaw.ai/",
   hermes: "https://hermes-agent.nousresearch.com/docs/",
 };
@@ -85,7 +90,7 @@ const SETUP_PROMPT = [
   "4. 发布版本：改完权限必须「创建版本 → 申请发布 / 上线」，否则权限不生效（最容易忘的一步）。等发布成功。",
   "5. 取凭据：到「凭证与基础信息」，复制 App ID（cli_ 开头）和 App Secret；并取机器人自己的 open_id（botOpenId，拿不到就标「待补」）。",
   "6. 建议新建一个唯一名称的专属群（如「Tower 通知」），把机器人加进去，记下群 id —— 避免同名群/人导致发错。",
-  "7. 把 appId / appSecret / domain 配到飞书 MCP，并在 Tower「设置 → 通知 → 无人值守发送渠道」加一条渠道，点「测试」验证能收到消息。",
+  "7. 把 appId / appSecret / domain 配到 Hermes 或 OpenClaw 的飞书下游，并在 Tower「设置 → 通知 → 消息发送渠道」加一条 Hermes/OpenClaw → 飞书渠道，点「测试」验证能收到消息。",
   "",
   "避坑：① 域名别搞反 —— 公司飞书和公网飞书是两套、凭据不通用；② 只「建了应用」不等于能用，必须开机器人能力 + 发布版本 + 拉进群三样齐；③ 别用 curl 直接抓控制台页面（有 WAF 会 403），用浏览器（Playwright）操作。",
   "",
@@ -98,15 +103,25 @@ export function HarnessTargetsSection() {
   const [targets, setTargets] = useState<NotifyTarget[]>([]);
   // 多卡片可同时展开编辑（work / unattended 互不干扰）。
   const [editingIds, setEditingIds] = useState<Set<string>>(new Set());
+  const [editSnapshots, setEditSnapshots] = useState<Record<string, NotifyTarget | null>>({});
   const isEditing = (id: string) => editingIds.has(id);
-  const openEdit = (id: string) =>
+  const openEdit = (id: string) => {
+    const snapshot = targets.find((x) => x.id === id) ?? null;
+    setEditSnapshots((s) => (id in s ? s : { ...s, [id]: snapshot }));
     setEditingIds((s) => new Set(s).add(id));
-  const closeEdit = (id: string) =>
+  };
+  const closeEdit = (id: string) => {
     setEditingIds((s) => {
       const n = new Set(s);
       n.delete(id);
       return n;
     });
+    setEditSnapshots((s) => {
+      const next = { ...s };
+      delete next[id];
+      return next;
+    });
+  };
   const [customIds, setCustomIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [saving, startSave] = useTransition();
@@ -120,6 +135,9 @@ export function HarnessTargetsSection() {
 
   // 本机真实 MCP 配置 + skill 路径 —— 用于 openclaw/hermes 的可复制接入提示词。
   const [setupInfo, setSetupInfo] = useState<HarnessSetupInfo | null>(null);
+  const [installingGateway, setInstallingGateway] = useState<string | null>(null);
+  const [installedGateways, setInstalledGateways] = useState<Set<string>>(() => new Set());
+  const [installFailedGateways, setInstallFailedGateways] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     getHarnessSetupInfo().then(setSetupInfo).catch(() => {});
   }, []);
@@ -129,8 +147,9 @@ export function HarnessTargetsSection() {
       .then((v) => {
         const rows: NotifyTarget[] = (Array.isArray(v) ? v : []).map((r) => ({
           id: r.id ?? crypto.randomUUID(),
-          gateway: GATEWAYS.includes(r.gateway) ? r.gateway : "feishu",
+          gateway: GATEWAYS.includes(r.gateway) ? r.gateway : "hermes",
           downstream: r.downstream ?? "feishu",
+          dest: r.dest ?? "",
           active: !!r.active,
           // 老数据无 scope → 当无人值守（原来这张表就是给无人值守外推配的）。
           scope: r.scope === "work" ? "work" : "unattended",
@@ -156,7 +175,7 @@ export function HarnessTargetsSection() {
     // 该类别第一条自动生效。
     setTargets((ts) => [
       ...ts,
-      { id, gateway: "feishu", downstream: "feishu", scope, active: !ts.some((t) => t.scope === scope) },
+      { id, gateway: "hermes", downstream: "feishu", dest: "", scope, active: !ts.some((t) => t.scope === scope) },
     ]);
     openEdit(id);
   };
@@ -192,6 +211,20 @@ export function HarnessTargetsSection() {
       else next.delete(id);
       return next;
     });
+
+  const cancelEdit = (id: string) => {
+    const snapshot = editSnapshots[id];
+    if (snapshot) {
+      setTargets((ts) => ts.map((x) => (x.id === id ? snapshot : x)));
+      setCustom(id, !!snapshot.downstream && !KNOWN_DS.includes(snapshot.downstream));
+      setTest(id, { dest: snapshot.dest ?? "", result: null, testing: false });
+    } else {
+      setTargets((ts) => ts.filter((x) => x.id !== id));
+      setCustom(id, false);
+      setTest(id, { dest: "", result: null, testing: false });
+    }
+    closeEdit(id);
+  };
 
   const save = () =>
     startSave(async () => {
@@ -250,12 +283,45 @@ export function HarnessTargetsSection() {
     }
   };
 
+  const installGateway = async (gw: string) => {
+    if (gw !== "hermes") return;
+    setInstallingGateway(gw);
+    try {
+      const res = await fetch("/api/internal/harness/gateway-install", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ gateway: gw }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; report?: { ok?: boolean; mcp?: { error?: string }; skill?: { error?: string } } };
+      if (!res.ok || !data.ok) {
+        const msg = data.error ?? data.report?.mcp?.error ?? data.report?.skill?.error ?? "install failed";
+        setInstallFailedGateways((prev) => new Set(prev).add(gw));
+        toast.error(`${t("settings.harness.gatewayInstallFailed")}：${msg}`);
+        return;
+      }
+      setInstalledGateways((prev) => new Set(prev).add(gw));
+      setInstallFailedGateways((prev) => {
+        const next = new Set(prev);
+        next.delete(gw);
+        return next;
+      });
+      toast.success(t("settings.harness.gatewayInstalled"));
+    } catch (err) {
+      setInstallFailedGateways((prev) => new Set(prev).add(gw));
+      toast.error(`${t("settings.harness.gatewayInstallFailed")}：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setInstallingGateway(null);
+    }
+  };
+
   const runTest = async (tgt: NotifyTarget) => {
-    const dest = testOf(tgt.id).dest.trim();
-    if (!dest) return;
+    const useHomeRoute = isHermesWechatUnattended(tgt);
+    const dest = useHomeRoute ? "" : (testOf(tgt.id).dest || tgt.dest || "").trim();
+    const canUseHermesHome = tgt.gateway === "hermes" && tgt.scope === "unattended" && !!tgt.downstream?.trim();
+    if (!dest && !canUseHermesHome) return;
     setTest(tgt.id, { testing: true, result: null });
     try {
-      const r = await testHarnessTarget({ gateway: tgt.gateway, downstream: tgt.downstream, dest });
+      const r = await testHarnessTarget({ gateway: tgt.gateway, downstream: tgt.downstream, dest, scope: tgt.scope });
       setTest(tgt.id, { testing: false, result: r });
     } catch (e) {
       setTest(tgt.id, { testing: false, result: { ok: false, output: e instanceof Error ? e.message : String(e) } });
@@ -346,7 +412,7 @@ export function HarnessTargetsSection() {
                   <Select
                     value={tgt.gateway}
                     onValueChange={(v) => {
-                      const g = v ?? "feishu";
+                      const g = v ?? "hermes";
                       const opts = dsOptions(g);
                       patch(tgt.id, {
                         gateway: g,
@@ -395,7 +461,7 @@ export function HarnessTargetsSection() {
                           {tk(`settings.harness.ds.${d}`)}
                         </SelectItem>
                       ))}
-                      {allowsCustom(tgt.gateway) && (
+                      {allowsCustom() && (
                         <SelectItem value={CUSTOM}>{t("settings.harness.ds.custom")}</SelectItem>
                       )}
                     </SelectContent>
@@ -412,21 +478,50 @@ export function HarnessTargetsSection() {
                 </Field>
               )}
 
+              {tgt.scope === "unattended" && !isHermesWechatUnattended(tgt) && (
+                <Field label={t("settings.harness.destLabel")}>
+                  <Input
+                    value={tgt.dest ?? ""}
+                    onChange={(e) => {
+                      patch(tgt.id, { dest: e.target.value });
+                      setTest(tgt.id, { dest: e.target.value });
+                    }}
+                    placeholder={
+                      tgt.gateway === "hermes"
+                        ? t("settings.harness.destPlaceholderHome")
+                        : t("settings.harness.destPlaceholder")
+                    }
+                  />
+                </Field>
+              )}
+
               {/* 测试：填目的地真发一条 */}
               <Field label={t("settings.harness.test")}>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Input
-                      value={ts.dest}
-                      onChange={(e) => setTest(tgt.id, { dest: e.target.value })}
-                      placeholder={t(
-                        MCP_GATEWAYS.has(tgt.gateway)
-                          ? "settings.harness.testDestPlaceholderId"
-                          : "settings.harness.testDestPlaceholder"
-                      )}
-                      className="flex-1"
-                    />
-                    <Button variant="outline" onClick={() => runTest(tgt)} disabled={ts.testing || !ts.dest.trim()}>
+                    {!isHermesWechatUnattended(tgt) && (
+                      <Input
+                        value={ts.dest}
+                        onChange={(e) => setTest(tgt.id, { dest: e.target.value })}
+                        placeholder={t(
+                          "settings.harness.testDestPlaceholder"
+                        )}
+                        className="flex-1"
+                      />
+                    )}
+                    <Button
+                      variant="outline"
+                      onClick={() => runTest(tgt)}
+                      className={isHermesWechatUnattended(tgt) ? "w-full justify-center" : undefined}
+                      disabled={
+                        ts.testing ||
+                        !(
+                          isHermesWechatUnattended(tgt) ||
+                          (ts.dest || tgt.dest || "").trim() ||
+                          (tgt.gateway === "hermes" && tgt.scope === "unattended" && tgt.downstream?.trim())
+                        )
+                      }
+                    >
                       {ts.testing ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
@@ -456,36 +551,73 @@ export function HarnessTargetsSection() {
                 </div>
               </Field>
 
-              {/* openclaw/hermes 网关：跑 agent 的一方，得自己接 Tower MCP + 技能 → 给一段可复制的接入提示词 */}
+              {/* openclaw/hermes 网关：跑 agent 的一方，得自己接 Tower MCP + 技能。Hermes 支持一键注入；其它网关保留提示词 fallback。 */}
               {MCP_GATEWAYS.has(tgt.gateway) && (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        variant="ghost"
-                        className="text-muted-foreground"
-                        onClick={() => copyGatewayPrompt(tgt.gateway)}
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                        <span className="text-xs">{t("settings.harness.gatewaySetup")}</span>
-                      </Button>
-                    }
-                  />
-                  <TooltipContent className="max-w-xs whitespace-pre-line text-left">
-                    {t("settings.harness.gatewaySetupTip")}
-                  </TooltipContent>
-                </Tooltip>
+                <div className="flex flex-wrap items-center gap-2">
+                  {tgt.gateway === "hermes" && installedGateways.has(tgt.gateway) ? (
+                    <div className="inline-flex items-center gap-1 rounded-md border bg-background px-3 py-2 text-xs text-emerald-500">
+                      <CircleCheck className="h-3.5 w-3.5" />
+                      <span>{t("settings.harness.gatewayInstalledHint")}</span>
+                    </div>
+                  ) : tgt.gateway === "hermes" ? (
+                    <Button
+                      variant="outline"
+                      className="text-muted-foreground"
+                      onClick={() => installGateway(tgt.gateway)}
+                      disabled={installingGateway === tgt.gateway}
+                    >
+                      {installingGateway === tgt.gateway ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Check className="h-3.5 w-3.5" />
+                      )}
+                      <span className="text-xs">
+                        {installingGateway === tgt.gateway
+                          ? t("settings.harness.gatewayInstalling")
+                          : t("settings.harness.gatewayInstall")}
+                      </span>
+                    </Button>
+                  ) : null}
+                  {(tgt.gateway !== "hermes" || installFailedGateways.has(tgt.gateway)) && (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            className="text-muted-foreground"
+                            onClick={() => copyGatewayPrompt(tgt.gateway)}
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                            <span className="text-xs">{t("settings.harness.gatewayManualSetup")}</span>
+                          </Button>
+                        }
+                      />
+                      <TooltipContent className="max-w-xs whitespace-pre-line text-left">
+                        {t("settings.harness.gatewaySetupTip")}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
               )}
 
-              <div className="flex items-center gap-2 pt-1">
-                <Button variant="ghost" className="text-muted-foreground" onClick={() => removeTarget(tgt.id)}>
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <Button
+                  variant="ghost"
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => removeTarget(tgt.id)}
+                >
                   <Trash2 className="h-3.5 w-3.5" />
                   <span>{t("settings.harness.remove")}</span>
                 </Button>
-                <Button onClick={() => closeEdit(tgt.id)}>
-                  <Check className="h-3.5 w-3.5" />
-                  <span>{t("settings.harness.done")}</span>
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" onClick={() => cancelEdit(tgt.id)}>
+                    <span>{t("common.cancel")}</span>
+                  </Button>
+                  <Button onClick={() => closeEdit(tgt.id)}>
+                    <Check className="h-3.5 w-3.5" />
+                    <span>{t("settings.harness.done")}</span>
+                  </Button>
+                </div>
               </div>
             </div>
           ) : (

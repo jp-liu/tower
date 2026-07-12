@@ -40,8 +40,8 @@ The must-follow rules. Everything else is operational detail below.
 7. **All files/images go in `references`** on `create_task` (local paths directly; base64-only → `manage_assets upload` first, then pass the returned path).
 8. **Labels & versions replace, not merge.** `set_task_labels` / `update_task labelIds` overwrite the full set. `versionId: null`/`""` moves a task to the backlog.
 9. **Follow the Display Templates** in [references/display-templates.md](references/display-templates.md) for every query result — never invent formats or output raw JSON. Empty results → "No {items} found."
-10. **Parked tasks reply via `reply_to_ask`**, not `send_task_terminal_input`. The server redirects a raw send on a parked task, but call the right tool.
-11. **Unattended send/receive** follows [references/unattended-messaging.md](references/unattended-messaging.md): Tower only records + parks/resumes; you send via the platform's own MCP; every outbound ask/notify carries `[[tower:task=<taskId>]]`.
+10. **Platform replies go through `relay_channel_reply`** when they contain or quote `[[tower:task=...]]`. Pass `platform`, `chatId`, `platformMessageId`, and `quotedText` when available; it disambiguates ask replies vs work-channel replies. For direct UI/operator replies to a parked ask, `reply_to_ask` is still valid.
+11. **Unattended send/receive** follows [references/unattended-messaging.md](references/unattended-messaging.md): Hermes/OpenClaw can send via `push_to_human`; every outbound ask/notify carries `[[tower:task=<taskId>]]`.
 
 ---
 
@@ -77,7 +77,7 @@ If a turn opens with `[当前会话默认范围：…]`, the user bound this cha
 
 ### "Send a message to the task" / "Tell it to ..."
 
-`send_task_terminal_input` with taskId and text. If the task is parked on an `ask_human`, use `reply_to_ask` instead (Contract 10). Then `get_task_terminal_output` to see the response.
+`send_task_terminal_input` with taskId and text. If the message came from an external platform and contains/quotes `[[tower:task=...]]`, use `relay_channel_reply` instead (Contract 10). Then `get_task_terminal_output` to see the response.
 
 ### "Move / cancel / edit a task"
 

@@ -50,7 +50,9 @@ describe("list_notify_targets — taskId invariant", () => {
 describe("list_notify_targets — scope derivation", () => {
   it("goal mode on + no explicit scope → unattended", async () => {
     findUnique.mockResolvedValue({ unattended: true, title: "T" });
-    readCfg.mockResolvedValue([{ active: true, gateway: "hermes", downstream: "feishu", scope: "unattended" }]);
+    readCfg.mockResolvedValue([
+      { active: true, gateway: "hermes", downstream: "feishu", dest: "feishu:oc_test", scope: "unattended" },
+    ]);
     const r = await call({ taskId: TASK_ID });
     expect(r.scope).toBe("unattended");
     expect(String(r.instructions)).toContain(`[[tower:task=${TASK_ID}]]`);
@@ -58,30 +60,48 @@ describe("list_notify_targets — scope derivation", () => {
 
   it("goal mode off + no explicit scope → work", async () => {
     findUnique.mockResolvedValue({ unattended: false, title: "T" });
-    readCfg.mockResolvedValue([{ active: true, gateway: "feishu", downstream: "feishu", scope: "work" }]);
+    readCfg.mockResolvedValue([{ active: true, gateway: "openclaw", downstream: "slack", scope: "work" }]);
     const r = await call({ taskId: TASK_ID });
     expect(r.scope).toBe("work");
   });
 
   it("explicit scope overrides goal mode", async () => {
     findUnique.mockResolvedValue({ unattended: true, title: "T" });
-    readCfg.mockResolvedValue([{ active: true, gateway: "feishu", downstream: "feishu", scope: "work" }]);
+    readCfg.mockResolvedValue([{ active: true, gateway: "openclaw", downstream: "slack", scope: "work" }]);
     const r = await call({ taskId: TASK_ID, scope: "work" });
     expect(r.scope).toBe("work");
   });
 
   it("legacy target without scope counts as unattended", async () => {
     findUnique.mockResolvedValue({ unattended: true, title: "T" });
-    readCfg.mockResolvedValue([{ active: true, gateway: "hermes" /* no scope */ }]);
+    readCfg.mockResolvedValue([{ active: true, gateway: "hermes", dest: "feishu:oc_test" /* no scope */ }]);
     const r = await call({ taskId: TASK_ID });
     expect(r.scope).toBe("unattended");
     expect(r.noChannelConfigured).toBeUndefined();
     expect((r.active as { gateway?: string })?.gateway).toBe("hermes");
   });
 
+  it("unattended Hermes channel without dest uses downstream home", async () => {
+    findUnique.mockResolvedValue({ unattended: true, title: "T" });
+    readCfg.mockResolvedValue([{ active: true, gateway: "hermes", downstream: "feishu", scope: "unattended" }]);
+    const r = await call({ taskId: TASK_ID });
+    expect(r.scope).toBe("unattended");
+    expect(r.noChannelConfigured).toBeUndefined();
+    expect(String(r.instructions)).toContain("feishu home channel");
+  });
+
+  it("work Hermes channel without fixed dest is sendable when push_to_human gets `to`", async () => {
+    findUnique.mockResolvedValue({ unattended: false, title: "T" });
+    readCfg.mockResolvedValue([{ active: true, gateway: "hermes", downstream: "feishu", scope: "work" }]);
+    const r = await call({ taskId: TASK_ID });
+    expect(r.scope).toBe("work");
+    expect(r.noChannelConfigured).toBeUndefined();
+    expect(String(r.instructions)).toContain("pass `to`");
+  });
+
   it("no active channel of the derived scope → noChannelConfigured", async () => {
     findUnique.mockResolvedValue({ unattended: true, title: "T" });
-    readCfg.mockResolvedValue([{ active: true, gateway: "feishu", scope: "work" }]); // only work active
+    readCfg.mockResolvedValue([{ active: true, gateway: "openclaw", scope: "work" }]); // only work active
     const r = await call({ taskId: TASK_ID }); // derives unattended
     expect(r.scope).toBe("unattended");
     expect(r.noChannelConfigured).toBe(true);

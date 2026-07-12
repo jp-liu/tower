@@ -52,13 +52,17 @@ export async function POST(request: NextRequest) {
   // noChannelConfigured unless an ACTIVE unattended channel exists — a work-only config also
   // counts as unconfigured, else the task parks but nobody can be reached.
   const { readConfigValue } = await import("@/lib/config-reader");
-  const targets = await readConfigValue<Array<{ active?: boolean; gateway?: string; scope?: string }>>(
+  const targets = await readConfigValue<Array<{ active?: boolean; gateway?: string; scope?: string; dest?: string }>>(
     "harness.targets",
     []
   );
   const noChannelConfigured = !(
     Array.isArray(targets) &&
-    targets.some((t) => t?.active && t?.gateway && (t.scope ?? "unattended") === "unattended")
+    targets.some((t) => {
+      if (!t?.active || !t?.gateway || (t.scope ?? "unattended") !== "unattended") return false;
+      if (t.gateway === "hermes") return true;
+      return true;
+    })
   );
 
   return NextResponse.json({ ok: true, requestId: messageId, noChannelConfigured });
