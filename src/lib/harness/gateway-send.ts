@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { readConfigValue } from "@/lib/config-reader";
 import { sendViaHermes } from "@/lib/harness/hermes-send";
 import { sendViaOpenClaw } from "@/lib/harness/openclaw-send";
+import { resolveCommandPathSync } from "@/lib/platform";
 
 export type HarnessGateway = "hermes" | "openclaw";
 
@@ -101,6 +103,13 @@ export async function resolveHarnessDestination(input: {
   });
   if (byDirectory) return { ok: true, dest: byDirectory };
 
+  const byOpenClawDirectory = await findDestinationInOpenClawDirectory({
+    gateway: input.gateway,
+    platform,
+    query: requested,
+  });
+  if (byOpenClawDirectory) return { ok: true, dest: byOpenClawDirectory };
+
   return { ok: true, dest: normalizePlatformDest(requested, platform) };
 }
 
@@ -150,7 +159,9 @@ async function findDestinationByAlias(input: {
     if (scope !== input.scope) return false;
     return [item.alias, item.label, item.dest].some((x) => normalizeName(x) === normalized);
   });
-  return matches.length === 1 ? matches[0] : null;
+  if (matches.length === 1) return matches[0];
+  const uniqueDests = new Set(matches.map((item) => item.dest));
+  return uniqueDests.size === 1 ? matches[0] : null;
 }
 
 async function findDestinationInHermesDirectory(input: {
@@ -175,6 +186,55 @@ async function findDestinationInHermesDirectory(input: {
     return normalizePlatformDest(matches[0].id, input.platform);
   } catch {
     return null;
+  }
+}
+
+async function findDestinationInOpenClawDirectory(input: {
+  gateway: HarnessGateway;
+  platform: string;
+  query: string;
+}): Promise<string | null> {
+  if (input.gateway !== "openclaw" || !input.platform) return null;
+  const raw = input.query.trim();
+  if (!raw || /^[a-z][a-z0-9_-]*:/i.test(raw) || isLikelyPlatformId(raw)) return null;
+
+  try {
+    const cmd = process.env.OPENCLAW_CLI_PATH || resolveOpenClawCommand();
+    const { stdout } = await execFilePromise(
+      cmd,
+      ["directory", "groups", "list", "--channel", input.platform, "--query", raw, "--json", "--limit", "10"],
+      { timeout: 20_000, maxBuffer: 1024 * 1024, env: process.env },
+    );
+    const parsed = JSON.parse(stdout) as Array<{ id?: string; name?: string }>;
+    const normalized = normalizeName(raw);
+    const matches = (Array.isArray(parsed) ? parsed : []).filter((entry) =>
+      [entry.name, entry.id].some((x) => normalizeName(x) === normalized),
+    );
+    if (matches.length !== 1 || !matches[0].id) return null;
+    return normalizePlatformDest(matches[0].id, input.platform);
+  } catch {
+    return null;
+  }
+}
+
+function execFilePromise(
+  cmd: string,
+  args: string[],
+  options: { timeout: number; maxBuffer: number; env: NodeJS.ProcessEnv },
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, options, (err, stdout, stderr) => {
+      if (err) reject(err);
+      else resolve({ stdout: String(stdout), stderr: String(stderr) });
+    });
+  });
+}
+
+function resolveOpenClawCommand(): string {
+  try {
+    return resolveCommandPathSync("openclaw");
+  } catch {
+    return `${process.env.HOME}/.local/bin/openclaw`;
   }
 }
 
