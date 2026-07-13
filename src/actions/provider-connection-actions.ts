@@ -115,6 +115,22 @@ export async function getConnectedProviders(): Promise<string[]> {
   return rows.map((r) => r.provider);
 }
 
+export async function getProviderConnection(provider: string): Promise<ProviderConnectionRow | null> {
+  return db.providerConnection.findUnique({
+    where: { provider },
+    select: {
+      provider: true,
+      lastTestedAt: true,
+      testOk: true,
+      version: true,
+      mcpInstalled: true,
+      hooksInstalled: true,
+      skillsInstalled: true,
+      installLog: true,
+    },
+  });
+}
+
 /** All rows, for Settings UI to render status badges per provider. */
 export async function getProviderConnections(): Promise<ProviderConnectionRow[]> {
   return db.providerConnection.findMany({

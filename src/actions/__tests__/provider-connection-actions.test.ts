@@ -16,6 +16,7 @@ import {
   markProviderDisconnected,
   isProviderConnected,
   getConnectedProviders,
+  getProviderConnection,
 } from "@/actions/provider-connection-actions";
 import type { ProviderInstallReport } from "@/lib/ai/install-orchestrator";
 
@@ -134,6 +135,27 @@ describe("provider-connection-actions", () => {
       expect(list).toEqual(["claude", "codex"]);
       const call = mockDb.providerConnection.findMany.mock.calls[0][0];
       expect(call.where).toEqual({ testOk: true });
+    });
+  });
+
+  describe("getProviderConnection", () => {
+    it("fetches a single provider row with install status and log", async () => {
+      mockDb.providerConnection.findUnique.mockResolvedValue({
+        provider: "claude",
+        lastTestedAt: null,
+        testOk: true,
+        version: "1.0.0",
+        mcpInstalled: true,
+        hooksInstalled: true,
+        skillsInstalled: true,
+        installLog: "{}",
+      });
+
+      const row = await getProviderConnection("claude");
+      expect(row?.provider).toBe("claude");
+      const call = mockDb.providerConnection.findUnique.mock.calls[0][0];
+      expect(call.where).toEqual({ provider: "claude" });
+      expect(call.select.installLog).toBe(true);
     });
   });
 });

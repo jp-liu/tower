@@ -1,3 +1,5 @@
+import type { ProviderConnectionRow } from "@/actions/provider-connection-actions";
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { pruneOrphanedWorktrees, cleanupStaleExecutions, ensureTowerLabel, ensureDefaultWorkspace } = await import(
@@ -39,22 +41,23 @@ export async function register() {
       setInterval(() => void runSweep(), 6 * 60 * 60 * 1000);
     }
 
-    // Auto-refresh Tower integrations in every available CLI's user-scope config.
-    // Idempotent — installAllForProvider replaces the MCP entry, upserts hooks,
-    // and verifies all bundled skills. Do NOT skip just because an MCP named
-    // "tower" exists: old installs may point to a stale package path and would
-    // otherwise leave hooks/skills (tower-goal, tower-ask) missing forever.
-    // Runs after ensureTowerDir so any legacy project-scope writes are cleaned up
-    // first. Fire-and-forget: a slow CLI probe must not block server startup.
+    // Auto-refresh Tower integrations only when the recorded install fingerprint
+    // is stale. The fingerprint includes Tower's package version plus runtime
+    // identity (package root, data dir, API URL), so upgrades and path/port
+    // changes self-heal without rewriting user CLI config on every boot.
+    // Fire-and-forget: a slow CLI probe must not block server startup.
     void (async () => {
       try {
         const { providerRegistry } = await import("@/lib/ai/providers");
-        const { installAllForProvider } = await import("@/lib/ai/install-orchestrator");
-        const { markProviderConnected, markProviderDisconnected } = await import(
+        const { buildTowerIntegrationFingerprint, installAllForProvider } = await import(
+          "@/lib/ai/install-orchestrator"
+        );
+        const { getProviderConnection, markProviderConnected, markProviderDisconnected } = await import(
           "@/actions/provider-connection-actions"
         );
         const httpPort = parseInt(process.env.PORT || "3000", 10);
         const apiUrl = `http://localhost:${httpPort}`;
+        const integrationFingerprint = buildTowerIntegrationFingerprint(apiUrl);
         for (const provider of providerRegistry.getAll()) {
           const adapter = provider.cli?.adapter;
           if (!adapter) continue;
@@ -65,6 +68,11 @@ export async function register() {
             // now (issue #8). Refresh only existing entries — never adds new.
             await adapter.repairHookPaths?.().catch(() => {});
             if (!(await adapter.isAvailable())) continue;
+            const connection = await getProviderConnection(provider.name);
+            if (isTowerIntegrationCurrent(connection, integrationFingerprint)) {
+              console.error(`[init-tower] Tower integration for ${provider.name} is up to date`);
+              continue;
+            }
             const report = await installAllForProvider(provider.name, apiUrl);
             if (report.ok) await markProviderConnected(provider.name, {
               version: await adapter.getVersion().catch(() => null),
@@ -95,5 +103,22 @@ export async function register() {
         console.error("[init-tower] Provider auto-install setup failed:", err);
       }
     })();
+  }
+}
+
+function isTowerIntegrationCurrent(
+  connection: ProviderConnectionRow | null,
+  integrationFingerprint: string,
+): boolean {
+  if (!connection) return false;
+  if (!connection.testOk) return false;
+  if (!connection.mcpInstalled || !connection.hooksInstalled || !connection.skillsInstalled) return false;
+  if (!connection.installLog) return false;
+
+  try {
+    const report = JSON.parse(connection.installLog) as { integrationFingerprint?: unknown };
+    return report.integrationFingerprint === integrationFingerprint;
+  } catch {
+    return false;
   }
 }

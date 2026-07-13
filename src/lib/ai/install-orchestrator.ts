@@ -17,6 +17,7 @@ import { getTowerDbPath, getTowerDir } from "../tower-dir";
 import { migrateLegacyTowerMcp, type MigrationReport } from "./migrate-legacy-mcp";
 import { getPackageRoot } from "../tower-paths";
 import { HermesCliAdapter } from "./adapters/cli/hermes-cli-adapter";
+import packageJson from "../../../package.json";
 
 /**
  * Skill content is identical across dev/prod (same SKILL.md). Always use the
@@ -27,6 +28,17 @@ import { HermesCliAdapter } from "./adapters/cli/hermes-cli-adapter";
  */
 const TOWER_SKILL_NAME = "tower";
 const TOWER_SKILL_NAMES = ["tower", "tower-goal", "tower-ask"];
+const TOWER_INTEGRATION_SCHEMA_VERSION = 1;
+
+export function buildTowerIntegrationFingerprint(apiUrl: string): string {
+  return [
+    `schema=${TOWER_INTEGRATION_SCHEMA_VERSION}`,
+    `version=${packageJson.version}`,
+    `root=${getPackageRoot()}`,
+    `data=${getTowerDir()}`,
+    `api=${apiUrl}`,
+  ].join("|");
+}
 
 /**
  * MCP name MUST differ across data dirs so dev and prod can coexist in
@@ -63,6 +75,8 @@ export interface ProviderInstallReport {
   provider: string;
   /** Was the provider's CLI actually available? If not, nothing else ran. */
   available: boolean;
+  /** Startup skips reinstall when this matches the current Tower runtime. */
+  integrationFingerprint?: string;
   migration?: MigrationReport;
   mcp?: InstallResult;
   hooks?: InstallResult;
@@ -125,19 +139,21 @@ export async function installAllForProvider(
   providerName: string,
   apiUrl: string,
 ): Promise<ProviderInstallReport> {
+  const integrationFingerprint = buildTowerIntegrationFingerprint(apiUrl);
   const provider = providerRegistry.get(providerName);
   const adapter: CliAdapter | undefined = provider?.cli?.adapter;
   if (!adapter) {
     return {
       provider: providerName,
       available: false,
+      integrationFingerprint,
       ok: false,
     };
   }
 
   const available = await adapter.isAvailable();
   if (!available) {
-    return { provider: providerName, available: false, ok: false };
+    return { provider: providerName, available: false, integrationFingerprint, ok: false };
   }
 
   // Migrate first — this is a one-time cleanup of where older Tower wrote the
@@ -158,6 +174,7 @@ export async function installAllForProvider(
   return {
     provider: providerName,
     available: true,
+    integrationFingerprint,
     migration,
     mcp,
     hooks,
@@ -168,9 +185,10 @@ export async function installAllForProvider(
 
 export async function installHermesGateway(profile?: string): Promise<ProviderInstallReport> {
   const provider = "hermes";
+  const integrationFingerprint = buildTowerIntegrationFingerprint("");
   const adapter = new HermesCliAdapter(profile);
   const available = await adapter.isAvailable();
-  if (!available) return { provider, available: false, ok: false };
+  if (!available) return { provider, available: false, integrationFingerprint, ok: false };
 
   const mcpConfig = buildTowerMcpConfig();
   const mcp = await adapter.installMcp(mcpConfig, { scope: "user" });
@@ -183,6 +201,7 @@ export async function installHermesGateway(profile?: string): Promise<ProviderIn
   return {
     provider,
     available: true,
+    integrationFingerprint,
     mcp,
     hooks,
     skill,
