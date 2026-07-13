@@ -765,6 +765,7 @@ export const en: Translations = {
   "missions.completeCommitExcluded": "{count} unchecked file(s) will be discarded, not committed.",
   "missions.completeCommitPlaceholder": "Commit message (e.g. feat: xxx)",
   "missions.completeCommitSubmit": "Commit & Complete",
+  "missions.completeSkipSubmit": "Complete",
   "missions.openFullView": "Open full view",
   "missions.runningTime": "Running",
   "missions.statusCompleted": "Completed",

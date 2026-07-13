@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
-import { commitWorktreeChanges } from "@/actions/task-actions";
+import { commitWorktreeChanges, discardWorktreeChanges } from "@/actions/task-actions";
 
 /**
  * Parse a `git status --porcelain` line (already trimmed) into its status code
@@ -75,11 +75,20 @@ export function MissionCompleteCommitDialog({
       return next;
     });
 
+  const hasSelection = selected.size > 0;
+
   const handleSubmit = async () => {
-    if (!message.trim() || selected.size === 0) return;
+    // Commit needs a message; the skip-commit path (nothing checked) doesn't.
+    if (hasSelection && !message.trim()) return;
     setSubmitting(true);
     try {
-      await commitWorktreeChanges(taskId, message.trim(), [...selected]);
+      if (hasSelection) {
+        await commitWorktreeChanges(taskId, message.trim(), [...selected]);
+      } else {
+        // Everything unchecked → discard the dirty files, skip the commit, then
+        // let the parent resume completion (worktree is now clean).
+        await discardWorktreeChanges(taskId);
+      }
       onOpenChange(false);
       onCommitted();
     } catch (e) {
@@ -136,15 +145,16 @@ export function MissionCompleteCommitDialog({
           placeholder={t("missions.completeCommitPlaceholder")}
           rows={3}
           autoFocus
+          disabled={!hasSelection}
         />
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>
             {t("common.cancel")}
           </Button>
-          <Button onClick={handleSubmit} disabled={submitting || !message.trim() || selected.size === 0}>
+          <Button onClick={handleSubmit} disabled={submitting || (hasSelection && !message.trim())}>
             {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {t("missions.completeCommitSubmit")}
+            {hasSelection ? t("missions.completeCommitSubmit") : t("missions.completeSkipSubmit")}
           </Button>
         </DialogFooter>
       </DialogContent>

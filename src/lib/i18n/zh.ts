@@ -780,6 +780,7 @@ export const zh = {
   "missions.completeCommitExcluded": "{count} 个未勾选的文件将被丢弃，不会提交。",
   "missions.completeCommitPlaceholder": "提交说明（如 feat: xxx）",
   "missions.completeCommitSubmit": "提交并完成",
+  "missions.completeSkipSubmit": "完成",
   "missions.openFullView": "查看详情",
   "missions.runningTime": "运行",
   "missions.statusCompleted": "已完成",

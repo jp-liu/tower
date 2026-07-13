@@ -437,6 +437,31 @@ export async function commitWorktreeChanges(
   return { hash };
 }
 
+/**
+ * Discard all uncommitted changes in a task's worktree without committing — the
+ * "unchecked everything" branch of the complete flow. Restores tracked edits and
+ * removes untracked files (gitignored symlinks kept — no `-x`), leaving the tree
+ * clean so completion's dirty-worktree guard passes. Nothing is merged/kept: the
+ * user deliberately chose not to commit these (e.g. `.claude` session leftovers).
+ */
+export async function discardWorktreeChanges(taskId: string): Promise<void> {
+  const { execFileSync } = await import("child_process");
+  const { existsSync } = await import("fs");
+
+  const execution = await db.taskExecution.findFirst({
+    where: { taskId },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!execution?.worktreePath || !existsSync(execution.worktreePath)) {
+    throw new Error("No active worktree for this task");
+  }
+
+  const cwd = execution.worktreePath;
+  execFileSync("git", ["checkout", "--", "."], { cwd, timeout: 10000 });
+  execFileSync("git", ["clean", "-fd"], { cwd, timeout: 10000 });
+}
+
 export async function getTaskOverview(taskId: string) {
   if (!/^c[a-z0-9]{20,30}$/.test(taskId)) return null;
   return db.task.findUnique({
