@@ -51,7 +51,7 @@ export const taskTools = {
       "If the defaults have never been set, the FIRST call (without explicit useWorktree/autoStart) returns { needsDefaultsSetup: true } instead of creating the task — ask the user their preference, call set_task_defaults once, then call create_task again. " +
       "Pass versionId to file the task under a project version (use list_versions to discover options). " +
       "Pass references as file paths to attach as project assets. For OpenClaw/Hermes bridge messages with images/files, pass the local media paths in references; do not only summarize them in description. " +
-      "If references is omitted but the description clearly mentions a screenshot/image, Tower may attach the only recent inbound bridge image as a best-effort fallback.",
+      "If the current turn exposes MediaPath/MediaPaths or a local path in message metadata/text, copy those paths into references.",
     schema: z.object({
       projectId: z.string(),
       title: z.string(),
