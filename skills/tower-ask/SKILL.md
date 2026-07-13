@@ -9,7 +9,9 @@ Tower's `ask_human` / `notify_human` tools **only record + park inside Tower; th
 
 ## When to use
 
-Any time the intent is to get some content to a real person/group: "send X to the backend on-call group", "tell the boss…", "report progress to…". tower-goal pushing a blocker off-hours also goes through here.
+Use only when the user explicitly asks to get content to a real person/group ("send X to the backend on-call group", "tell the boss…", "report progress to…"), or when the task has explicitly entered **tower-goal** and must push a blocker/result off-hours.
+
+**Plain Goal / long-running task mode is NOT tower-goal.** Do not infer unattended messaging from a generic UI goal, a running task title, or "goal mode" wording unless `/tower-goal` was activated (or `set_goal_mode` is already on for this task). For ordinary goal/task runs, report in the terminal/Tower only; don't push a human message unless the user asked for that outbound send.
 
 **Not this skill**: writing to code/files, leaving a PR comment, terminal-internal actions — don't trigger.
 

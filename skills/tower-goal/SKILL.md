@@ -9,6 +9,8 @@ A plain goal's flaw: it stalls the moment it gets stuck, and with nobody watchin
 
 This skill lets you **switch into the mode partway through a run** (e.g. the user says "finish this, I'm leaving"). Unattended isn't a property of the task or something the backend decides — **the user activating this skill IS the judgment and the authorization.**
 
+Do not confuse this with a plain Claude/Codex/Tower "goal" or long-running task. A generic Goal UI/session means "keep working toward an objective"; it does **not** authorize outbound human messaging or parking. Only explicit activation of this `tower-goal` skill (or a persisted `set_goal_mode(taskId, true)` flag) enters unattended mode.
+
 ## Activation = authorization
 
 The user activating tower-goal = authorizing you to **do whatever the goal needs**, in this task, without asking step by step:

@@ -39,15 +39,20 @@ export async function register() {
       setInterval(() => void runSweep(), 6 * 60 * 60 * 1000);
     }
 
-    // Auto-install Tower MCP into every available CLI's user-scope config.
-    // Idempotent — skips providers whose CLI isn't installed or whose user-
-    // scope MCP entry already matches. Runs after ensureTowerDir so any
-    // legacy project-scope writes are cleaned up first. Fire-and-forget:
-    // a slow CLI probe must not block server startup.
+    // Auto-refresh Tower integrations in every available CLI's user-scope config.
+    // Idempotent — installAllForProvider replaces the MCP entry, upserts hooks,
+    // and verifies all bundled skills. Do NOT skip just because an MCP named
+    // "tower" exists: old installs may point to a stale package path and would
+    // otherwise leave hooks/skills (tower-goal, tower-ask) missing forever.
+    // Runs after ensureTowerDir so any legacy project-scope writes are cleaned up
+    // first. Fire-and-forget: a slow CLI probe must not block server startup.
     void (async () => {
       try {
         const { providerRegistry } = await import("@/lib/ai/providers");
         const { installAllForProvider } = await import("@/lib/ai/install-orchestrator");
+        const { markProviderConnected, markProviderDisconnected } = await import(
+          "@/actions/provider-connection-actions"
+        );
         const httpPort = parseInt(process.env.PORT || "3000", 10);
         const apiUrl = `http://localhost:${httpPort}`;
         for (const provider of providerRegistry.getAll()) {
@@ -60,13 +65,23 @@ export async function register() {
             // now (issue #8). Refresh only existing entries — never adds new.
             await adapter.repairHookPaths?.().catch(() => {});
             if (!(await adapter.isAvailable())) continue;
-            const already = await adapter.isMcpInstalled("tower", { scope: "user" }).catch(() => false);
-            if (already) continue;
             const report = await installAllForProvider(provider.name, apiUrl);
+            if (report.ok) await markProviderConnected(provider.name, {
+              version: await adapter.getVersion().catch(() => null),
+              report,
+            });
+            else await markProviderDisconnected(provider.name, {
+              reason: JSON.stringify({
+                mcp: report.mcp?.ok,
+                hooks: report.hooks?.ok,
+                skill: report.skill?.ok,
+                error: report.skill?.error ?? report.hooks?.error ?? report.mcp?.error,
+              }),
+            });
             if (report.ok) {
-              console.error(`[init-tower] Auto-installed Tower MCP for ${provider.name} (user scope)`);
+              console.error(`[init-tower] Auto-refreshed Tower integration for ${provider.name} (user scope)`);
             } else {
-              console.error(`[init-tower] Auto-install for ${provider.name} reported issues:`, {
+              console.error(`[init-tower] Auto-refresh for ${provider.name} reported issues:`, {
                 mcp: report.mcp?.ok,
                 hooks: report.hooks?.ok,
                 skill: report.skill?.ok,
