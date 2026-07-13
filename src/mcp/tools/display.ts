@@ -29,10 +29,27 @@ const PRIORITY_EMOJI: Record<string, string> = {
   LOW: "⚪",
 };
 
+const PRIORITY_LABEL: Record<string, string> = {
+  CRITICAL: "紧急",
+  HIGH: "高",
+  MEDIUM: "中等",
+  LOW: "低",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  TODO: "待开始",
+  IN_PROGRESS: "进行中",
+  IN_REVIEW: "待验收",
+  DONE: "已完成",
+  CANCELLED: "已取消",
+};
+
 /** `create_task` confirmation card. Mirrors the skill's "Task Creation
  *  Confirmation" template. `execution`/`error` reflect the auto-start outcome. */
 export function renderTaskCreated(input: {
+  taskId: string;
   title: string;
+  description?: string | null;
   projectName: string | null;
   projectAlias: string | null;
   projectId: string;
@@ -40,19 +57,59 @@ export function renderTaskCreated(input: {
   status: string;
   useWorktree: boolean;
   baseBranch: string | null;
+  attachedFiles?: string[];
+  attachmentFailures?: { reference: string; error: string }[];
   execution: { started: boolean; error?: string };
 }): string {
+  const project = `${input.projectName ?? input.projectId}${input.projectAlias ? ` (${input.projectAlias})` : ""}`;
+  const priority = `${PRIORITY_EMOJI[input.priority] ?? ""} ${PRIORITY_LABEL[input.priority] ?? input.priority}`.trim();
+  const status = STATUS_LABEL[input.status] ?? input.status;
+  const goal = extractMarkdownSection(input.description, "目标");
   const lines = [
-    `✅ Task created: **${input.title}**`,
-    `- Project: ${input.projectName ?? input.projectId}${input.projectAlias ? ` (${input.projectAlias})` : ""}`,
-    `- Priority: ${PRIORITY_EMOJI[input.priority] ?? ""} ${input.priority}`,
-    `- Status: ${input.status}`,
-    `- Worktree: ${input.useWorktree ? "yes" : "no"}`,
+    `✅ 已为您创建任务：**${input.title}**`,
+    "",
+    "📋 **任务详情：**",
+    `- 项目：${project}`,
+    `- 优先级：${priority}`,
+    `- 状态：${status}`,
+    `- 工作区：${input.useWorktree ? "已创建工作树用于开发" : "直接在项目目录执行"}`,
   ];
-  if (input.useWorktree && input.baseBranch) lines.push(`- Base branch: ${input.baseBranch}`);
-  if (input.execution.started) lines.push("⚡ Execution started");
-  else if (input.execution.error) lines.push(`⚠️ Auto-start failed: ${input.execution.error}`);
+  if (input.useWorktree && input.baseBranch) lines.push(`- 基准分支：${input.baseBranch}`);
+  lines.push(`- 任务 ID：${input.taskId}`);
+
+  if (goal) {
+    lines.push("", "🎯 **任务目标：**", goal);
+  }
+
+  lines.push("", "✅ **已准备就绪：**", "- 任务已创建并分配到正确的项目");
+  lines.push(input.useWorktree ? "- 工作树已设置，可以直接开始开发" : "- 当前任务使用直接执行模式");
+  lines.push("- 任务包含结构化需求描述与来源记录");
+
+  if (input.attachedFiles?.length) {
+    lines.push(`- 已关联参考附件：${input.attachedFiles.join(", ")}`);
+  }
+  if (input.attachmentFailures?.length) {
+    lines.push(
+      `- ⚠️ 有 ${input.attachmentFailures.length} 个附件未能关联：${input.attachmentFailures
+        .map((f) => `${f.reference}（${f.error}）`)
+        .join("；")}`,
+    );
+  }
+  if (input.execution.started) lines.push("- ⚡ 已自动启动执行");
+  else if (input.execution.error) lines.push(`- ⚠️ 自动启动失败：${input.execution.error}`);
+
   return lines.join("\n");
+}
+
+function extractMarkdownSection(markdown: string | null | undefined, heading: string): string | null {
+  if (!markdown) return null;
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`^##\\s+${escaped}\\s*\\n([\\s\\S]*?)(?=^##\\s+|\\s*$)`, "m");
+  const match = markdown.match(re);
+  const value = match?.[1]
+    ?.trim()
+    .replace(/\n{3,}/g, "\n\n");
+  return value || null;
 }
 
 /** `start_task_execution` confirmation. Mirrors the skill's "Start Execution

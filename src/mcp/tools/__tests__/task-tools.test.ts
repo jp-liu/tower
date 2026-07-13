@@ -175,23 +175,35 @@ describe("task-tools", () => {
     });
 
     it("returns a ready-to-show display card rendered from the tower skill template", async () => {
-      const createdTask = { id: "task1", title: "My Task", priority: "HIGH", status: "TODO" };
+      const createdTask = {
+        id: "task1",
+        title: "My Task",
+        priority: "HIGH",
+        status: "TODO",
+        description: "## 目标\n修复角色切换后的权限提示。\n\n## 需求\n- 复现问题",
+      };
       mockDb.task.create.mockResolvedValue(createdTask);
       mockDb.project.findUnique.mockResolvedValue({ name: "南京招生报名", alias: "enrollment-static", localPath: null });
 
       const result = (await taskTools.create_task.handler({
         projectId: "proj1",
         title: "My Task",
+        description: "## 目标\n修复角色切换后的权限提示。\n\n## 需求\n- 复现问题",
         priority: "HIGH",
         useWorktree: false,
         autoStart: false,
       })) as { display?: string };
 
-      expect(result.display).toContain("✅ Task created: **My Task**");
-      expect(result.display).toContain("- Project: 南京招生报名 (enrollment-static)");
-      expect(result.display).toContain("- Priority: 🟠 HIGH");
-      expect(result.display).toContain("- Status: TODO");
-      expect(result.display).toContain("- Worktree: no");
+      expect(result.display).toContain("✅ 已为您创建任务：**My Task**");
+      expect(result.display).toContain("📋 **任务详情：**");
+      expect(result.display).toContain("- 项目：南京招生报名 (enrollment-static)");
+      expect(result.display).toContain("- 优先级：🟠 高");
+      expect(result.display).toContain("- 状态：待开始");
+      expect(result.display).toContain("- 工作区：直接在项目目录执行");
+      expect(result.display).toContain("- 任务 ID：task1");
+      expect(result.display).toContain("🎯 **任务目标：**");
+      expect(result.display).toContain("修复角色切换后的权限提示。");
+      expect(result.display).toContain("✅ **已准备就绪：**");
     });
 
     it("creates TaskLabel records when labelIds provided", async () => {

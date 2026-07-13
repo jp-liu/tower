@@ -5,8 +5,9 @@ All query results MUST follow these templates. Do NOT invent your own format. Wh
 **Server-rendered cards — show `response.display` verbatim.** `create_task`,
 `start_task_execution`, `get_task_execution_status`, and `get_task_terminal_output`
 return a ready-formatted `display` string in their response. Present that `display`
-to the user as-is instead of re-deriving the format — the templates for those four
-below just document what `display` already contains (fallback only if it's absent).
+to the user as-is instead of re-deriving, translating, shortening, or flattening
+the format — the templates for those four below just document what `display`
+already contains (fallback only if it's absent).
 Everything else here (list/search/daily tables) you render yourself from the data.
 
 ## Priority Markers
@@ -56,13 +57,26 @@ parameter — `autoStart: true` does NOT mean execution actually started; check
 `response.execution` and `response.executionError`):
 
 ```
-✅ Task created: **{title}**
-- Project: {projectName}
-- Priority: {priority}
-- Status: {status}
-- Worktree: {yes/no}
-{worktree yes ? "- Base branch: " + response.baseBranch : ""}
-{response.execution ? "⚡ Execution started" : response.executionError ? "⚠️ Auto-start failed: " + response.executionError : ""}
+✅ 已为您创建任务：**{title}**
+
+📋 **任务详情：**
+- 项目：{projectName}
+- 优先级：{priority marker + localized label}
+- 状态：{localized status}
+- 工作区：{已创建工作树用于开发 / 直接在项目目录执行}
+{worktree yes && response.baseBranch ? "- 基准分支：" + response.baseBranch : ""}
+- 任务 ID：{taskId}
+
+🎯 **任务目标：**
+{description.目标}
+
+✅ **已准备就绪：**
+- 任务已创建并分配到正确的项目
+- {工作树已设置，可以直接开始开发 / 当前任务使用直接执行模式}
+- 任务包含结构化需求描述与来源记录
+{attachments ? "- 已关联参考附件：" + filenames : ""}
+{attachment failures ? "- ⚠️ 有 N 个附件未能关联：" + details : ""}
+{response.execution ? "- ⚡ 已自动启动执行" : response.executionError ? "- ⚠️ 自动启动失败：" + response.executionError : ""}
 ```
 
 `response.baseBranch` is non-null only when worktree isolation applies — show the
