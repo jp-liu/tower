@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { readConfigValue } from "@/lib/config-reader";
+import { db } from "@/lib/db";
 import { sendViaHermes } from "@/lib/harness/hermes-send";
 import { sendViaOpenClaw } from "@/lib/harness/openclaw-send";
 import { resolveCommandPathSync } from "@/lib/platform";
@@ -107,6 +108,7 @@ export async function resolveHarnessDestination(input: {
     gateway: input.gateway,
     platform,
     query: requested,
+    scope: input.scope,
   });
   if (byOpenClawDirectory) return { ok: true, dest: byOpenClawDirectory };
 
@@ -193,6 +195,7 @@ async function findDestinationInOpenClawDirectory(input: {
   gateway: HarnessGateway;
   platform: string;
   query: string;
+  scope: "work" | "unattended";
 }): Promise<string | null> {
   if (input.gateway !== "openclaw" || !input.platform) return null;
   const raw = input.query.trim();
@@ -211,9 +214,63 @@ async function findDestinationInOpenClawDirectory(input: {
       [entry.name, entry.id].some((x) => normalizeName(x) === normalized),
     );
     if (matches.length !== 1 || !matches[0].id) return null;
-    return normalizePlatformDest(matches[0].id, input.platform);
+    const dest = normalizePlatformDest(matches[0].id, input.platform);
+    await cacheDestinationAlias({
+      gateway: input.gateway,
+      platform: input.platform,
+      scope: input.scope,
+      alias: raw,
+      label: matches[0].name || raw,
+      dest,
+    });
+    return dest;
   } catch {
     return null;
+  }
+}
+
+async function cacheDestinationAlias(input: {
+  gateway: HarnessGateway;
+  platform: string;
+  scope: "work" | "unattended";
+  alias: string;
+  label: string;
+  dest: string;
+}): Promise<void> {
+  try {
+    const current = await readConfigValue<HarnessDestination[]>("harness.destinations", []);
+    const destinations = Array.isArray(current) ? current.slice() : [];
+    const normalizedAlias = normalizeName(input.alias);
+    const existingIndex = destinations.findIndex((item) => {
+      const gateway = item.gateway?.trim().toLowerCase();
+      const platform = (item.platform || item.downstream || "").trim().toLowerCase();
+      const scope = item.scope ?? "work";
+      return (
+        gateway === input.gateway &&
+        platform === input.platform &&
+        scope === input.scope &&
+        normalizeName(item.alias) === normalizedAlias
+      );
+    });
+    const nextItem: HarnessDestination = {
+      ...(existingIndex >= 0 ? destinations[existingIndex] : {}),
+      alias: input.alias,
+      label: input.label,
+      gateway: input.gateway,
+      platform: input.platform,
+      dest: input.dest,
+      scope: input.scope,
+    };
+    if (existingIndex >= 0) destinations[existingIndex] = nextItem;
+    else destinations.push(nextItem);
+
+    await db.systemConfig.upsert({
+      where: { key: "harness.destinations" },
+      create: { key: "harness.destinations", value: JSON.stringify(destinations) },
+      update: { value: JSON.stringify(destinations) },
+    });
+  } catch {
+    // Sending should not fail just because the local alias cache could not be updated.
   }
 }
 

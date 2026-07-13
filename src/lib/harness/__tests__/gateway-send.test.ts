@@ -5,6 +5,14 @@ vi.mock("@/lib/config-reader", () => ({
   readConfigValue: vi.fn(),
 }));
 
+vi.mock("@/lib/db", () => ({
+  db: {
+    systemConfig: {
+      upsert: vi.fn(),
+    },
+  },
+}));
+
 vi.mock("node:fs/promises", () => ({
   readFile: vi.fn(),
 }));
@@ -20,15 +28,19 @@ vi.mock("@/lib/platform", () => ({
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { readConfigValue } from "@/lib/config-reader";
+import { db } from "@/lib/db";
 import { resolveHarnessDestination } from "../gateway-send";
 
 const readCfg = readConfigValue as unknown as ReturnType<typeof vi.fn>;
 const readFileMock = readFile as unknown as ReturnType<typeof vi.fn>;
 const execFileMock = execFile as unknown as ReturnType<typeof vi.fn>;
+const upsertMock = db.systemConfig.upsert as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   readCfg.mockReset();
   readCfg.mockResolvedValue([]);
+  upsertMock.mockReset();
+  upsertMock.mockResolvedValue({});
   readFileMock.mockReset();
   readFileMock.mockRejectedValue(new Error("no directory"));
   execFileMock.mockReset();
@@ -102,6 +114,34 @@ describe("resolveHarnessDestination", () => {
       scope: "work",
     });
     expect(r).toEqual({ ok: true, dest: "feishu:oc_nanzhao" });
+    expect(upsertMock).toHaveBeenCalledWith({
+      where: { key: "harness.destinations" },
+      create: {
+        key: "harness.destinations",
+        value: JSON.stringify([
+          {
+            alias: "南招分班系统群",
+            label: "南招分班系统",
+            gateway: "openclaw",
+            platform: "feishu",
+            dest: "feishu:oc_nanzhao",
+            scope: "work",
+          },
+        ]),
+      },
+      update: {
+        value: JSON.stringify([
+          {
+            alias: "南招分班系统群",
+            label: "南招分班系统",
+            gateway: "openclaw",
+            platform: "feishu",
+            dest: "feishu:oc_nanzhao",
+            scope: "work",
+          },
+        ]),
+      },
+    });
     expect(execFileMock).toHaveBeenCalledWith(
       "openclaw",
       [
