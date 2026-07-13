@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { execFileSync } from "child_process";
-import { copyFileSync, existsSync, readdirSync, statSync } from "fs";
-import { homedir } from "os";
+import { copyFileSync, existsSync, statSync } from "fs";
 import { basename, extname, join } from "path";
 import { db } from "../db";
 import { readConfigValue } from "@/lib/config-reader";
@@ -11,8 +10,7 @@ import { renderTaskCreated } from "./display";
 
 const TaskStatus = z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"]);
 const Priority = z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
-const AMBIENT_IMAGE_MAX_AGE_MS = 10 * 60 * 1000;
-const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".avif"]);
+const ABSOLUTE_MEDIA_PATH_RE = /(?:^|[\s("'：:])((?:\/Users|\/tmp|\/var\/folders)\/[^\s"'，,；;）)]+?\.(?:png|jpe?g|gif|webp|bmp|avif|pdf|md|txt|json|csv))/giu;
 
 export const taskTools = {
   list_tasks: {
@@ -517,34 +515,15 @@ export const taskTools = {
 function resolveCreateTaskReferences(explicit: string[] | undefined, description: string | undefined): string[] {
   const refs = Array.isArray(explicit) ? explicit.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()) : [];
   if (refs.length > 0) return refs;
-  const ambient = inferAmbientImageReferences(description);
-  return ambient.length === 1 ? ambient : [];
+  return extractReferencePathsFromDescription(description);
 }
 
-function inferAmbientImageReferences(description: string | undefined): string[] {
-  if (!description || !/(截图|图片|照片|image message|screenshot|attached image)/i.test(description)) return [];
-  const roots = [
-    join(homedir(), ".openclaw", "media", "inbound"),
-    join(homedir(), ".openclaw", "workspace", "media", "inbound"),
-    join(homedir(), ".hermes", "media", "inbound"),
-    join(homedir(), ".hermes", "profiles", process.env.HERMES_PROFILE || "h-tower", "media", "inbound"),
-  ];
-  const cutoff = Date.now() - AMBIENT_IMAGE_MAX_AGE_MS;
-  const candidates: Array<{ path: string; mtimeMs: number }> = [];
-  for (const root of roots) {
-    try {
-      if (!existsSync(root)) continue;
-      for (const name of readdirSync(root)) {
-        const filePath = join(root, name);
-        if (!IMAGE_EXTENSIONS.has(extname(name).toLowerCase())) continue;
-        const stat = statSync(filePath);
-        if (!stat.isFile() || stat.mtimeMs < cutoff) continue;
-        candidates.push({ path: filePath, mtimeMs: stat.mtimeMs });
-      }
-    } catch {
-      // Best effort only; explicit references remain the reliable path.
-    }
+function extractReferencePathsFromDescription(description: string | undefined): string[] {
+  if (!description) return [];
+  const refs: string[] = [];
+  for (const match of description.matchAll(ABSOLUTE_MEDIA_PATH_RE)) {
+    const filePath = match[1]?.trim();
+    if (filePath && !refs.includes(filePath)) refs.push(filePath);
   }
-  candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
-  return candidates.length === 1 ? [candidates[0].path] : [];
+  return refs;
 }
