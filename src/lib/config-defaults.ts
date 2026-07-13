@@ -215,8 +215,8 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
       "- 真被外部因素阻塞（待接口、待素材、待人决策）就**明确说明并停下**，别反复空转或自行臆测硬做。",
       "- 危险 / 不可逆操作（删数据库、删大目录、`rm -rf`、`drop table`、对外发布 / 部署）先说明并征得确认再执行。",
       "",
-      "## 无人值守（环境变量 TOWER_UNATTENDED=1 时尤其重要）",
-      "- 你可能在无人盯守下运行。两个与人沟通的 MCP 工具：`ask_human`（阻塞：**记录**问题并挂起任务——本回合到此为止，人回复后自动唤醒、带答案续跑）和 `notify_human`（非阻塞：**记录**一条进度/FYI 后立即继续，不必等回复、不挂起）。**注意：这两个工具只在 Tower 内记录（/harness 面板可见），本身不把消息发给人**；无人值守下要真正通知到人，须按系统提示里「无人值守外推」段先经平台渠道把消息发出去，再调这两个工具留档。",
+      "## 无人值守 / 与人沟通",
+      "- 用户主动激活 `tower-goal` 技能即进入无人值守自主长跑（激活即赋权）；此时用 `tower-ask` 技能与人沟通：先调 `list_notify_targets` 拿真实渠道。active gateway 只支持 Hermes / OpenClaw；调用 `push_to_human` 先外发成功再自动 `ask_human`/`notify_human` 留档。工作群消息必须把用户指定的群/人作为 `to` 传入；无人值守可走配置的 owner/home。不要在未确认发送成功时 park。",
       "- 需要人拍板才能推进（选型、二义需求、缺关键信息、对外发布/部署等）→ 用 `ask_human` 把问题和可选项讲清楚，然后停下等待，别自行臆测硬做。",
       "- 危险 / 不可逆操作（删库、删大目录、`rm -rf`、`drop table`、force-push、对外发布）→ 一律先 `ask_human` 征得同意再执行，即使终端已放开权限也不例外。",
       "- 只是想同步进展或抛个 FYI、无需回复 → 用 `notify_human`，发完继续干。",
@@ -230,15 +230,19 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
   },
 
   // ── 无人值守 harness ──────────────────────────────────────────────
-  // Tower 只记录 ask/notify/done/failed（/harness 面板可见），**不发送消息**：外推给人由 agent
-  // 按注入的「无人值守外推」协议用平台 MCP（飞书/微信/…）完成。故这里不再有平台凭据/渠道绑定配置。
   // 无人值守发送渠道注册表：agent 据「生效」的那条决定走哪条「网关→下游」把消息发出去。
-  // 每项形如 { id, label, gateway: "feishu"|"openclaw"|"hermes", downstream: "wechat"|"feishu"|... }
-  // （downstream 也可是自定义文本）。目的地(群/人)在发送时由消息说明，不在此预设。Tower 只存不发。
+  // Tower sends via Hermes/OpenClaw with push_to_human (send first, then record/park).
+  // 每项形如 { id, label, gateway, downstream, dest, scope, active }；无人值守 Hermes 可留空 dest 使用 home，工作消息应在发送时传 to。
   "harness.targets": {
     defaultValue: [],
     type: "object",
     label: "Harness Notify Targets (multi-platform registry)",
+  },
+  // 可选目的地别名表：用于把「起飞群」「前端群」这类人类名称解析成平台 id/JID。
+  "harness.destinations": {
+    defaultValue: [],
+    type: "object",
+    label: "Harness Destination Aliases",
   },
   // 待回复 ask 的 TTL 兜底：超过这么多天仍 OPEN 的 ask 被周期 sweep 转 EXPIRED。
   "harness.pendingTtlDays": {

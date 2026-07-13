@@ -63,7 +63,6 @@ export const taskTools = {
       baseBranch: z.string().optional().describe("Base branch for worktree checkout. Only used when useWorktree resolves to true. If omitted, auto-detects the project's current branch."),
       autoStart: z.boolean().optional().describe("Start execution immediately after creating. Omit to use the user's saved default; pass explicitly to override this task."),
       references: z.array(z.string()).max(20).optional(),
-      unattended: z.boolean().optional().describe("Run in unattended mode — the task's agent uses tower-ask to push ask_human / notify_human / done-failed to a configured channel (Settings → Notifications). Defaults false."),
     }),
     handler: async (args: {
       projectId: string;
@@ -78,7 +77,6 @@ export const taskTools = {
       baseBranch?: string;
       autoStart?: boolean;
       references?: string[];
-      unattended?: boolean;
     }) => {
       // Resolve worktree / auto-start: explicit arg wins, else fall back to the
       // user's saved global default. On the very first MCP create_task where
@@ -173,7 +171,6 @@ export const taskTools = {
           versionId,
           subPath: args.subPath ?? null,
           parentTaskId: resolvedParentId,
-          unattended: args.unattended ?? false,
         },
       });
 
@@ -451,6 +448,24 @@ export const taskTools = {
     handler: async (args: { taskId: string }) => {
       await db.task.delete({ where: { id: args.taskId } });
       return { deleted: true, taskId: args.taskId };
+    },
+  },
+
+  set_goal_mode: {
+    description:
+      "Mark (or unmark) a task as being in unattended 'goal mode' — the run-time state entered by activating " +
+      "the tower-goal skill. While on, list_notify_targets defaults to the 'unattended' scope (reach the owner) " +
+      "for this task, so blockers get pushed personally even if the agent later forgets it's in goal mode. The " +
+      "flag is a persistent marker (survives park/resume/compaction) and is auto-cleared when the task leaves " +
+      "the active loop (Stop, or moving to DONE/CANCELLED/IN_REVIEW). Call with on=true right when tower-goal " +
+      "is activated; you rarely need on=false (the lifecycle clears it).",
+    schema: z.object({
+      taskId: z.string().describe("The task entering/leaving goal mode (TOWER_TASK_ID)"),
+      on: z.boolean().describe("true = enter goal mode, false = leave"),
+    }),
+    handler: async (args: { taskId: string; on: boolean }) => {
+      await db.task.update({ where: { id: args.taskId }, data: { unattended: args.on } });
+      return { ok: true, taskId: args.taskId, goalMode: args.on };
     },
   },
 
