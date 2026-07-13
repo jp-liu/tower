@@ -37,7 +37,6 @@ export async function POST(request: NextRequest) {
   const task = await db.task.findUnique({
     where: { id: taskId },
     select: {
-      unattended: true,
       executions: { where: { status: "RUNNING" }, select: { id: true }, take: 1 },
     },
   });
@@ -51,10 +50,22 @@ export async function POST(request: NextRequest) {
     question,
   });
 
-  // No notify channel configured → prompt the agent to guide the user to the settings page (the question stays visible/answerable in the /harness panel).
+  // ask_human means "reach the owner to decide" = unattended semantics. Backstop: report
+  // noChannelConfigured unless an ACTIVE unattended channel exists — a work-only config also
+  // counts as unconfigured, else the task parks but nobody can be reached.
   const { readConfigValue } = await import("@/lib/config-reader");
-  const targets = await readConfigValue<unknown[]>("harness.targets", []);
-  const noChannelConfigured = !Array.isArray(targets) || targets.length === 0;
+  const targets = await readConfigValue<Array<{ active?: boolean; gateway?: string; scope?: string; dest?: string }>>(
+    "harness.targets",
+    []
+  );
+  const noChannelConfigured = !(
+    Array.isArray(targets) &&
+    targets.some((t) => {
+      if (!t?.active || !t?.gateway || (t.scope ?? "unattended") !== "unattended") return false;
+      if (t.gateway === "hermes") return true;
+      return true;
+    })
+  );
 
   return NextResponse.json({ ok: true, requestId: messageId, noChannelConfigured });
 }

@@ -131,10 +131,10 @@ export async function stopPtyExecution(taskId: string): Promise<void> {
       data: { status: "COMPLETED", endedAt: new Date() },
     });
 
-    // Transition task to IN_REVIEW
+    // Transition task to IN_REVIEW; stopping also ends any tower-goal mode → clear the flag.
     await db.task.update({
       where: { id: taskId },
-      data: { status: "IN_REVIEW" },
+      data: { status: "IN_REVIEW", unattended: false },
     });
 
     // Capture summary — use worktreePath or project localPath for direct mode
@@ -231,7 +231,6 @@ export async function resumePtyExecution(
     envOverrides: adapterEnv,
   });
 
-  if (task.unattended) spawnResult.env.TOWER_UNATTENDED = "1";
 
   const SESSION_ERROR_RE = /no conversation found with session id|unknown session|session .* not found/i;
 
@@ -292,7 +291,10 @@ export async function resumePtyExecution(
       });
 
       if (exitCode === 0) {
-        await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW" } }).catch(() => {});
+        // Natural exit → IN_REVIEW; also ends tower-goal mode → clear the flag.
+        // This is the resume/continue path (park → reply → exit), the MOST common
+        // way a goal task ends — must clear here too, not only on fresh-start exit.
+        await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW", unattended: false } }).catch(() => {});
       }
     },
     spawnResult.env,
@@ -383,7 +385,6 @@ export async function continueLatestPtyExecution(
     envOverrides: adapterEnv,
   });
 
-  if (task.unattended) spawnResult.env.TOWER_UNATTENDED = "1";
 
   createSession(
     taskId,
@@ -424,7 +425,10 @@ export async function continueLatestPtyExecution(
       });
 
       if (exitCode === 0) {
-        await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW" } }).catch(() => {});
+        // Natural exit → IN_REVIEW; also ends tower-goal mode → clear the flag.
+        // This is the resume/continue path (park → reply → exit), the MOST common
+        // way a goal task ends — must clear here too, not only on fresh-start exit.
+        await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW", unattended: false } }).catch(() => {});
       }
     },
     spawnResult.env,
@@ -669,32 +673,6 @@ export async function startPtyExecution(
     appendSystemPrompt += (appendSystemPrompt ? "\n" : "") + `The user's name is ${usernameVal}.`;
   }
 
-  // Unattended: inject the active send channel + the two-step outbound protocol — otherwise the agent won't know
-  // which channel to use, and may wrongly assume ask_human sends for it (Tower tools only record + park, never send).
-  if (task.unattended) {
-    const targets = await readConfigValue<Array<{ gateway?: string; downstream?: string; active?: boolean }>>(
-      "harness.targets",
-      []
-    );
-    // Only honor the active channel (single-select); no active channel means unconfigured — never broadcast, never fall back to a disabled channel.
-    const chosen = (Array.isArray(targets) ? targets : []).find((x) => x?.active && x.gateway);
-    const block = chosen
-      ? [
-          "## 无人值守外推（ask_human / notify_human）",
-          "`ask_human` / `notify_human` 工具**只在 Tower 内记录 + park**，绝不替你把消息发给人。要让人真正收到，必须你自己按两步做：",
-          "1. **先发**：用下列生效渠道对应的平台 MCP 工具把消息发出去。正文**必须逐字带**关联口令 `[[tower:task=<taskId>]]`（漏了人回复就无法归属、任务永久卡死）。",
-          `   - 生效渠道：网关 ${chosen.gateway}${chosen.downstream ? ` → 下游 ${chosen.downstream}` : ""}`,
-          "   - 发到哪个群/人由你在正文说明；若只知道名称（群名/人名）而无平台 id，先用平台 MCP 按名称查出 id 再发。",
-          "2. **再记录**：确认第 1 步**发送成功后**，才调 `ask_human`（阻塞、park）或 `notify_human`（不阻塞、不 park）让 Tower 留档。",
-          "- 平台发送**失败**时**不要**调 ask_human（否则任务被 park 却没人知道）——重试，或把问题写进 /harness 面板后停下等人。",
-        ].join("\n")
-      : [
-          "## 无人值守外推",
-          "当前未配置任何发送渠道，你**无法**把消息外推给人（ask_human 会返回 noChannelConfigured）。**不要臆造已通知**——把问题记进 Tower（/harness 面板可见），并明确告知需去「设置 → 通知 → 无人值守发送渠道」配置一条并设为生效。",
-        ].join("\n");
-    appendSystemPrompt += (appendSystemPrompt ? "\n\n" : "") + block;
-  }
-
   // 8. Adapter produces complete command + args + env
   const spawnResult = cliAdapter.buildSpawnArgs({
     taskId,
@@ -711,9 +689,6 @@ export async function startPtyExecution(
       callbackUrl: callbackUrl ?? undefined,
     }),
   });
-
-  // Unattended: let the running agent know it's in unattended mode (so it proactively uses ask_human/notify_human).
-  if (task.unattended) spawnResult.env.TOWER_UNATTENDED = "1";
 
   // 9. Create PTY session — onData is a no-op; ws-server.ts wires the real
   //    broadcaster via setDataListener when the WebSocket client connects
@@ -776,8 +751,11 @@ export async function startPtyExecution(
       });
 
       if (exitCode === 0) {
+        // Natural PTY exit is a THIRD task→IN_REVIEW path (besides updateTaskStatus
+        // and stopTaskExecution); it also ends any tower-goal mode → clear the flag.
+        // Park doesn't reach here (guarded above: execution is PAUSED, not RUNNING).
         await db.task
-          .update({ where: { id: taskId }, data: { status: "IN_REVIEW" } })
+          .update({ where: { id: taskId }, data: { status: "IN_REVIEW", unattended: false } })
           .catch((err: unknown) => {
             log.error("Failed to update task status", err);
           });

@@ -15,7 +15,7 @@ This file documents the block format and the rendering the server produces, so
 you understand what lands in the task. Read it only when a prompt carries a
 `<task-source>` block or you want to hand-render the parent case.
 
-## Parent task derivation (派生子任务)
+## Parent task derivation
 
 If `TOWER_TASK_ID` is set (run `echo $TOWER_TASK_ID`), you are inside a Tower task
 terminal, so any task you create is a child of the current task. The server
@@ -46,7 +46,7 @@ occurred_at: 2026-06-16 17:49 +08:00 # trigger time with timezone
 chat_link: https://applink.feishu.cn/client/chat/open?openChatId=oc_xxxxxxxx
 trigger_message_id: om_xxxxxxxx      # the triggering message ID (hard anchor, keep)
 thread_root_id: om_yyyyyyyy          # (optional) thread root message ID
-bridge: hermes                       # (optional) transport bot — see "记平台不记搬运工"
+bridge: hermes                       # (optional) transport bot — see "Channel vs bridge"
 participants:                        # display name + open_id + role
   - name: 张斯佳, open_id: ou_aaa, role: 讨论
   - name: 刘俊平, open_id: ou_ccc, role: 确认
@@ -57,7 +57,7 @@ summary: 线下核验点无可预约时间，确认合并提示语后处理   # 
 </task-source>
 ```
 
-### Channel map (渠道 → 渲染前缀)
+### Channel map (channel → rendered prefix)
 
 `channel` is a platform **enum**; the server maps it to a localized prefix.
 Unknown channels fall back to the raw value.
@@ -71,7 +71,7 @@ Unknown channels fall back to the raw value.
 | `openclaw`| OpenClaw        |
 | `manual`  | 手动创建        |
 
-### 记平台不记搬运工 (channel vs bridge)
+### Channel vs bridge (record the platform, not the courier)
 
 `channel` is the **real platform where the discussion happened** (WeChat/Feishu).
 The **transport bot** that carried the message into Tower (hermes / openclaw) is a
@@ -102,11 +102,11 @@ Only lines whose data is present are emitted. `chat_id` + `trigger_message_id`
 (hard anchors) and the `transcript` (what humans read) are the fields that matter.
 
 **Feishu reality** — `chat_link` opens the **group**, not a single message. The
-practical "go back and find it" combo is 群链接 + occurred_at + transcript. The
+practical "go back and find it" combo is the group link + occurred_at + transcript. The
 line is labelled **打开群** (never "原始消息"). `trigger_message_id` is the only
 hard anchor to the exact message (not clickable — for programmatic re-read/dedup).
 
-Role inference (谁提出/讨论/拍板) and summary derivation from the transcript are
+Role inference (who raised / discussed / decided) and summary derivation from the transcript are
 **soft** — the server does not compute them. If you want a richer `参与者`/`讨论要点`
 than the raw fields, render `## 来源` yourself and drop the block; the server keeps
 your section and only strips the raw block.

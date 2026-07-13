@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
 
   const task = await db.task.findUnique({
     where: { id: taskId },
-    select: { unattended: true },
+    select: { id: true },
   });
   if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
 

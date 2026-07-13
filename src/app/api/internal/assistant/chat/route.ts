@@ -222,10 +222,22 @@ export async function POST(request: NextRequest) {
         // exactly one dedicated, reliably-connected Tower instance.
         const towerMcp = buildTowerMcpConfig();
         const assistantMcpName = `${towerMcp.name}-assistant`;
+        // The inline MCP is spawned by THIS server process, not by an interactive
+        // CLI. The MCP stdio transport only inherits PATH from the spawner's env
+        // (getDefaultEnvironment), so a bare `command: "node"` resolves against
+        // Tower's server PATH — which, when Tower was launched outside a login
+        // shell (nvm/fnm node, GUI/launchd start), often lacks node's dir. Result:
+        // deterministic spawn ENOENT → server stuck "pending" → 0 tools every turn
+        // (while the terminal-registered MCP, spawned by the CLI with a full PATH,
+        // connects fine). Pin the absolute path of the node running this server —
+        // guaranteed present, PATH-independent. Only "node" needs this; the tsx
+        // fallback command is already an absolute path.
+        const assistantMcpCommand =
+          towerMcp.command === "node" ? process.execPath : towerMcp.command;
         const options: Record<string, unknown> = {
           mcpServers: {
             [assistantMcpName]: {
-              command: towerMcp.command,
+              command: assistantMcpCommand,
               args: towerMcp.args,
               env: towerMcp.env,
             },
