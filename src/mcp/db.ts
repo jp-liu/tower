@@ -10,7 +10,12 @@ export const db = new PrismaClient({ datasourceUrl: `file:${getTowerDbFilePath()
 export async function initDb(): Promise<PrismaClient> {
   getDatabaseDir(); // ensure ~/.tower/database exists before the first connect
   await db.$connect();
-  await db.$queryRaw(Prisma.sql`PRAGMA journal_mode=WAL`);
+  // busy_timeout FIRST: `journal_mode=WAL` needs a brief write lock, and with a
+  // default 0 timeout it fails instantly with SQLITE_BUSY under contention —
+  // which in the MCP entrypoint throws → process.exit(1) → the server never
+  // finishes its stdio handshake and sits at `pending` for that turn. Setting
+  // the 5s timeout first makes the WAL pragma wait for the lock instead.
   await db.$queryRaw(Prisma.sql`PRAGMA busy_timeout=5000`);
+  await db.$queryRaw(Prisma.sql`PRAGMA journal_mode=WAL`);
   return db;
 }

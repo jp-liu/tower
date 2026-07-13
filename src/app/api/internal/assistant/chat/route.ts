@@ -65,6 +65,22 @@ class ToolsUnavailableRetry extends Error {
 }
 
 /**
+ * Thrown at `init` when the dedicated Tower MCP server is STILL not connected
+ * after the one-shot re-spawn (see ToolsUnavailableRetry). At this point the
+ * turn genuinely has no Tower tools — rather than let the model narrate a no-op
+ * ("I'll create the task…") and leave the user to discover the tools are gone,
+ * we abort and surface a clear error naming the connection status.
+ */
+class McpUnavailableError extends Error {
+  readonly status: string;
+  constructor(status: string) {
+    super(`Tower MCP not connected (status=${status})`);
+    this.name = "McpUnavailableError";
+    this.status = status;
+  }
+}
+
+/**
  * Thrown from the consume loop when the model itself is rejected before any
  * output streams — "selected model … may not exist or you may not have access"
  * (a gated model id, or one this account/login can't use). Signals the outer
@@ -534,14 +550,14 @@ export async function POST(request: NextRequest) {
               } else if (!streamedContent) {
                 // Turn "succeeded" but the model emitted no text and called no
                 // tool (only a tiny thinking trace). Without a bubble the user
-                // sees total silence and assumes a hang. Surface a hint instead
-                // — and when the tools never loaded (MCP connect timed out),
-                // say so, since a retry usually connects on the next turn.
-                const hint =
-                  initToolCount === 0
-                    ? "助手工具未能及时加载（MCP 连接超时），本轮没有执行任何操作。请再发送一次试试。"
-                    : "助手本轮没有返回内容，请重试或换一种说法。";
-                send({ type: "text", content: hint, sessionId: resultMsg.session_id });
+                // sees total silence and assumes a hang. Surface a hint instead.
+                // (A pending Tower MCP is caught earlier at init and reported as
+                // an explicit error, so by here the tools were connected.)
+                send({
+                  type: "text",
+                  content: "助手本轮没有返回内容，请重试或换一种说法。",
+                  sessionId: resultMsg.session_id,
+                });
               }
               send({ type: "done", sessionId: resultMsg.session_id });
               break;
@@ -561,18 +577,40 @@ export async function POST(request: NextRequest) {
               // has no create_task tool and can only narrate — log it so that
               // failure mode is obvious instead of silent.
               if (sysMsg.subtype === "init") {
-                const servers = (sysMsg.mcp_servers ?? [])
+                const serverList = sysMsg.mcp_servers ?? [];
+                const servers = serverList
                   .map((s) => `${s.name}:${s.status}`)
                   .join(",");
                 initToolCount = sysMsg.tools?.length ?? 0;
-                clog(
-                  `session init — mcpServers=[${servers}] toolCount=${initToolCount}`
+                // Key readiness off the Tower server's OWN status, NOT the tool
+                // count: the always-on `Read` built-in makes toolCount ≥ 1 even
+                // when the MCP contributed 0 tools, so an `initToolCount === 0`
+                // check never catches a `tower-assistant:pending` server — the
+                // turn would silently proceed tool-less. "connected" is the only
+                // ready state; pending/needs-auth/failed all mean no Tower tools.
+                const towerServer = serverList.find(
+                  (s) => s.name === assistantMcpName
                 );
-                // No tools = the Tower MCP didn't connect in time. Abort now
-                // (before the model narrates a no-op turn) and re-spawn once.
-                if (initToolCount === 0 && !toolsRetried) {
-                  throw new ToolsUnavailableRetry(
-                    `MCP not connected at init (servers=[${servers}])`
+                const mcpConnected = towerServer?.status === "connected";
+                clog(
+                  `session init — mcpServers=[${servers}] toolCount=${initToolCount} ` +
+                    `towerMcp=${towerServer?.status ?? "absent"}`
+                );
+                if (!mcpConnected) {
+                  // First miss: abort before the model narrates a no-op turn and
+                  // re-spawn once — a cold MCP that lost the connect race under
+                  // DB contention usually wins the rematch.
+                  if (!toolsRetried) {
+                    throw new ToolsUnavailableRetry(
+                      `Tower MCP not connected at init ` +
+                        `(status=${towerServer?.status ?? "absent"}, servers=[${servers}])`
+                    );
+                  }
+                  // Retried and STILL not connected — stop pretending. Surface a
+                  // clear error instead of a silent tool-less turn the user only
+                  // notices when the model says it "has no create_task tool".
+                  throw new McpUnavailableError(
+                    towerServer?.status ?? "absent"
                   );
                 }
               }
@@ -729,7 +767,9 @@ export async function POST(request: NextRequest) {
         // rewritten to a node-runnable cli.js. Name the resolved path so the
         // user can act without digging through server logs.
         const isSpawnFailure = /\bspawn\b|ENOENT|EINVAL/i.test(detail);
-        const friendly = /output token maximum|max_output_tokens/i.test(detail)
+        const friendly = err instanceof McpUnavailableError
+          ? `助手的 Tower 工具服务未能连接（状态：${err.status}），本轮无法执行任何 Tower 操作（新建/查询任务等）。这通常是 MCP 服务进程启动或与数据库握手超时（多为并发争用下的偶发），已自动重试一次仍未连上。请稍后再发送一次；若持续如此，请检查 Tower 服务端日志中 MCP 启动是否报错。`
+          : /output token maximum|max_output_tokens/i.test(detail)
           ? "回复内容超出了模型单次输出上限。请把问题拆小一些，或在设置里把 assistant.maxOutputTokens 调整为所用模型支持的上限（Sonnet/Haiku 最高 64K，Opus 最高 128K）。"
           : isModelUnavailableError(detail)
           ? `助手所用模型不可用（${attemptedModel || "?"}）：该模型可能不存在，或当前账号 / Claude 登录无权访问它。助手用哪个模型由配置项 assistant.model 决定（默认 sonnet）；留空则继承 Claude CLI 的默认模型（受 ANTHROPIC_MODEL 环境变量或 ~/.claude 设置里的 model 影响）。请把 assistant.model 设为账号有权限的模型（如 sonnet / opus / haiku），或修正 Claude CLI 的默认模型。原始错误：${detail}`

@@ -25,8 +25,11 @@ export async function initDb(): Promise<PrismaClient> {
   if (initialized) return db;
   getDatabaseDir(); // ensure ~/.tower/database exists before the first connect
   await db.$connect();
-  await db.$queryRaw`PRAGMA journal_mode=WAL`;
+  // busy_timeout FIRST so `journal_mode=WAL` (which needs a brief write lock)
+  // waits up to 5s under contention instead of failing instantly with the
+  // default 0 timeout — see src/mcp/db.ts for the pending-MCP failure mode.
   await db.$queryRaw`PRAGMA busy_timeout=5000`;
+  await db.$queryRaw`PRAGMA journal_mode=WAL`;
   initialized = true;
   return db;
 }
