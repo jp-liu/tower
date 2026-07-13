@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { execFileSync } from "child_process";
-import { copyFileSync, existsSync, statSync } from "fs";
+import { copyFileSync, existsSync, readdirSync, statSync } from "fs";
+import { homedir } from "os";
 import { basename, extname, join } from "path";
 import { db } from "../db";
 import { readConfigValue } from "@/lib/config-reader";
@@ -10,6 +11,8 @@ import { renderTaskCreated } from "./display";
 
 const TaskStatus = z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"]);
 const Priority = z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
+const AMBIENT_IMAGE_MAX_AGE_MS = 10 * 60 * 1000;
+const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".avif"]);
 
 export const taskTools = {
   list_tasks: {
@@ -49,7 +52,8 @@ export const taskTools = {
       "pass either explicitly to override for this one task. " +
       "If the defaults have never been set, the FIRST call (without explicit useWorktree/autoStart) returns { needsDefaultsSetup: true } instead of creating the task — ask the user their preference, call set_task_defaults once, then call create_task again. " +
       "Pass versionId to file the task under a project version (use list_versions to discover options). " +
-      "Pass references as file paths to attach as project assets.",
+      "Pass references as file paths to attach as project assets. For OpenClaw/Hermes bridge messages with images/files, pass the local media paths in references; do not only summarize them in description. " +
+      "If references is omitted but the description clearly mentions a screenshot/image, Tower may attach the only recent inbound bridge image as a best-effort fallback.",
     schema: z.object({
       projectId: z.string(),
       title: z.string(),
@@ -159,6 +163,7 @@ export const taskTools = {
       // parent-derivation source for child tasks, and fall back to `## 来源\n无`
       // for a described task with no external source. See ./task-source.ts.
       const description = resolveTaskSource(args.description, resolvedParent);
+      const references = resolveCreateTaskReferences(args.references, description);
 
       const task = await db.task.create({
         data: {
@@ -189,7 +194,7 @@ export const taskTools = {
       const attachedFiles: string[] = [];
       const attachmentFailures: { reference: string; error: string }[] = [];
       let updatedDesc: string | null = null;
-      if (args.references && args.references.length > 0) {
+      if (references.length > 0) {
         let assetsDir: string | null = null;
         try {
           assetsDir = ensureAssetsDir(args.projectId);
@@ -197,14 +202,14 @@ export const taskTools = {
           // Storage root unwritable/unresolvable — surface it instead of
           // silently dropping every attachment.
           const error = e instanceof Error ? e.message : String(e);
-          for (const filePath of args.references) {
+          for (const filePath of references) {
             attachmentFailures.push({ reference: filePath, error });
           }
         }
 
         if (assetsDir) {
           const dir = assetsDir; // narrowed to string for the loop body
-          for (const filePath of args.references) {
+          for (const filePath of references) {
             try {
               if (!existsSync(filePath)) {
                 attachmentFailures.push({ reference: filePath, error: "源文件不存在" });
@@ -508,3 +513,38 @@ export const taskTools = {
     },
   },
 };
+
+function resolveCreateTaskReferences(explicit: string[] | undefined, description: string | undefined): string[] {
+  const refs = Array.isArray(explicit) ? explicit.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()) : [];
+  if (refs.length > 0) return refs;
+  const ambient = inferAmbientImageReferences(description);
+  return ambient.length === 1 ? ambient : [];
+}
+
+function inferAmbientImageReferences(description: string | undefined): string[] {
+  if (!description || !/(截图|图片|照片|image message|screenshot|attached image)/i.test(description)) return [];
+  const roots = [
+    join(homedir(), ".openclaw", "media", "inbound"),
+    join(homedir(), ".openclaw", "workspace", "media", "inbound"),
+    join(homedir(), ".hermes", "media", "inbound"),
+    join(homedir(), ".hermes", "profiles", process.env.HERMES_PROFILE || "h-tower", "media", "inbound"),
+  ];
+  const cutoff = Date.now() - AMBIENT_IMAGE_MAX_AGE_MS;
+  const candidates: Array<{ path: string; mtimeMs: number }> = [];
+  for (const root of roots) {
+    try {
+      if (!existsSync(root)) continue;
+      for (const name of readdirSync(root)) {
+        const filePath = join(root, name);
+        if (!IMAGE_EXTENSIONS.has(extname(name).toLowerCase())) continue;
+        const stat = statSync(filePath);
+        if (!stat.isFile() || stat.mtimeMs < cutoff) continue;
+        candidates.push({ path: filePath, mtimeMs: stat.mtimeMs });
+      }
+    } catch {
+      // Best effort only; explicit references remain the reliable path.
+    }
+  }
+  candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return candidates.length === 1 ? [candidates[0].path] : [];
+}

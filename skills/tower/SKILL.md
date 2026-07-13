@@ -37,7 +37,7 @@ The must-follow rules. Everything else is operational detail below.
 4. **Never hand-format `## 来源`.** The server guarantees it (fallback `无`, parent-derivation, `<task-source>` rendering). Just pass any `<task-source>` block through verbatim. See [references/task-source.md](references/task-source.md).
 5. **Worktree / auto-start defaults**: `create_task` follows the user's saved global preference. On `{ needsDefaultsSetup: true }`, ask the two questions, call `set_task_defaults` once, then retry. Explicit `useWorktree`/`autoStart` args override and skip the prompt.
 6. **Render task-creation from the *response*, not the input** — `autoStart: true` does not mean it started; check `response.execution` / `response.executionError`.
-7. **All files/images go in `references`** on `create_task` (local paths directly; base64-only → `manage_assets upload` first, then pass the returned path).
+7. **All files/images go in `references`** on `create_task` (local paths directly; base64-only → `manage_assets upload` first, then pass the returned path). For OpenClaw/Hermes bridge messages, if the prompt/tool context contains a local media path (for example under `.openclaw/.../media/inbound`, `.openclaw/.../attachments`, or `.hermes/...`), pass that path in `references`; do not only summarize the picture in `description`.
 8. **Labels & versions replace, not merge.** `set_task_labels` / `update_task labelIds` overwrite the full set. `versionId: null`/`""` moves a task to the backlog.
 9. **Follow the Display Templates** in [references/display-templates.md](references/display-templates.md) for every query result — never invent formats or output raw JSON. Empty results → "No {items} found."
 10. **Platform replies go through `relay_channel_reply`** when they contain or quote `[[tower:task=...]]`. Pass `platform`, `chatId`, `platformMessageId`, and `quotedText` when available; it disambiguates ask replies vs work-channel replies. For direct UI/operator replies to a parked ask, `reply_to_ask` is still valid.
@@ -63,7 +63,7 @@ If a turn opens with `[当前会话默认范围：…]`, the user bound this cha
 2. **Worktree / auto-start** (Contract 5): on `{ needsDefaultsSetup: true }`, ask (a) default to Git worktree isolation? (b) auto-start after create? → `set_task_defaults` once → retry. When worktree resolves true you may pass `baseBranch` (else the project's current branch is auto-detected).
 3. **Version (optional)**: `list_versions` → let the user pick → pass `versionId`. Omit for backlog.
 4. **SubPath**: for a monorepo, if the task clearly belongs to a subdir (per the project description), set `subPath` (e.g. `packages/web`); else omit.
-5. **References** (Contract 7): pass all file paths / pasted-image paths in `references`. Base64-only → `manage_assets upload` first, then pass the returned `path`.
+5. **References** (Contract 7): pass all file paths / pasted-image paths in `references`. Bridge screenshots/images from OpenClaw/Hermes count as files: include the local media path in `references` even if you also analyzed or summarized the image. Base64-only → `manage_assets upload` first, then pass the returned `path`.
 6. **Source** (Contract 4): don't hand-format `## 来源`; pass any `<task-source>` block through in `description`. The server renders it.
 7. Call `create_task`, then render from the response (Contract 6).
 
@@ -139,7 +139,7 @@ The `description` is Markdown. **Never copy the user's raw message as-is** — r
 Rules:
 - `title`: short (< 30 chars), summarizing the task.
 - Extract actionable requirements from natural language; omit empty sections.
-- File paths go in **both** `参考` and the `references` parameter.
+- File paths go in **both** `参考` and the `references` parameter. A screenshot summary is not a substitute for the original image; include the image/file path in `references` whenever one exists.
 - **`## 来源`**: don't write it yourself — the server guarantees it (Contract 4). Just pass any `<task-source>` bridge block through verbatim in `description`. Details: [references/task-source.md](references/task-source.md).
 
 ---

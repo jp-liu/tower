@@ -49,6 +49,7 @@ vi.mock("@/actions/task-actions", () => ({
 
 vi.mock("fs", () => ({
   existsSync: vi.fn(),
+  readdirSync: vi.fn(),
   statSync: vi.fn(),
   copyFileSync: vi.fn(),
 }));
@@ -62,7 +63,7 @@ vi.mock("@/lib/file-utils", () => ({
 
 import { db } from "../../db";
 import { execFileSync } from "child_process";
-import { existsSync, statSync, copyFileSync } from "fs";
+import { existsSync, readdirSync, statSync, copyFileSync } from "fs";
 import { stripCacheUuidSuffix, isAssistantCachePath, ensureAssetsDir } from "@/lib/file-utils";
 import { taskTools } from "../task-tools";
 
@@ -89,6 +90,7 @@ const mockDb = db as {
 
 const mockExecFileSync = execFileSync as ReturnType<typeof vi.fn>;
 const mockExistsSync = existsSync as ReturnType<typeof vi.fn>;
+const mockReaddirSync = readdirSync as ReturnType<typeof vi.fn>;
 const mockStatSync = statSync as ReturnType<typeof vi.fn>;
 const mockCopyFileSync = copyFileSync as ReturnType<typeof vi.fn>;
 const mockEnsureAssetsDir = ensureAssetsDir as ReturnType<typeof vi.fn>;
@@ -98,6 +100,7 @@ const mockStripCacheUuidSuffix = stripCacheUuidSuffix as ReturnType<typeof vi.fn
 describe("task-tools", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockReaddirSync.mockReturnValue([]);
     // Default $transaction: execute callback with mockTx
     mockDb.$transaction.mockImplementation(async (cb: (tx: typeof mockTx) => Promise<unknown>) => cb(mockTx));
     mockTx.task.update.mockResolvedValue({});
@@ -285,6 +288,48 @@ describe("task-tools", () => {
       const dest = mockCopyFileSync.mock.calls[0][1] as string;
       expect(dest).toContain("/mock/.tower/storage/assets/proj1");
       expect(dest).not.toContain("data/assets");
+    });
+
+    it("infers the latest inbound image as a reference when a bridge task mentions a screenshot", async () => {
+      const createdTask = { id: "task1", title: "With Image", description: "## 参考\n- 页面截图" };
+      mockDb.task.create.mockResolvedValue(createdTask);
+      mockDb.task.update.mockResolvedValue({ ...createdTask });
+      mockDb.projectAsset.create.mockResolvedValue({});
+
+      mockExistsSync.mockImplementation((p: string) => {
+        if (p.endsWith("/.openclaw/media/inbound")) return true;
+        if (p.endsWith("/inbound/shot.jpg")) return true;
+        return false;
+      });
+      mockReaddirSync.mockImplementation((p: string) =>
+        p.endsWith("/.openclaw/media/inbound") ? ["shot.jpg"] : [],
+      );
+      mockStatSync.mockImplementation((p: string) => ({
+        isFile: () => p.endsWith("shot.jpg"),
+        size: 2048,
+        mtimeMs: Date.now(),
+      }));
+      mockIsAssistantCachePath.mockReturnValue(false);
+
+      await taskTools.create_task.handler({
+        projectId: "proj1",
+        title: "With Image",
+        description: "## 目标\n修复截图中的问题\n\n## 参考\n- 页面截图",
+        autoStart: false,
+      });
+
+      expect(mockCopyFileSync).toHaveBeenCalledWith(
+        expect.stringContaining("/.openclaw/media/inbound/shot.jpg"),
+        expect.stringContaining("/mock/.tower/storage/assets/proj1/shot.jpg"),
+      );
+      expect(mockDb.projectAsset.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            filename: "shot.jpg",
+            taskId: "task1",
+          }),
+        }),
+      );
     });
 
     it("surfaces a failure (not a silent skip) when copying a reference throws", async () => {
