@@ -12,6 +12,7 @@ import { writeFile, rm, mkdtemp, mkdir } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { getSignalDir } from "@/lib/tower-dir";
+import { TOWER_LABEL_NAME } from "@/lib/constants";
 
 export interface ActiveExecutionInfo {
   executionId: string;
@@ -507,10 +508,10 @@ export async function startPtyExecution(
   // Harness cleanup: fresh/restarted execution → cancel the old pending ask (a fresh start via /reply has no
   // history, so there's no OPEN ask to clear here either). best-effort.
   await cancelOpenAsks(taskId).catch(() => {});
-  // 1. Load task with project
+  // 1. Load task with project; labels decide which system directive applies (see step 7c)
   const task = await db.task.findUnique({
     where: { id: taskId },
-    include: { project: true },
+    include: { project: true, labels: { include: { label: true } } },
   });
 
   if (!task) {
@@ -654,11 +655,17 @@ export async function startPtyExecution(
   // 7c. Build system prompt additions
   // Built-in system directive first (attached to every task; default in config-defaults.ts, overridable via SystemConfig),
   // then merge the task's chosen AgentPrompt (after), and finally append the username.
+  // Workbench tasks (builtin "Tower" label) get their own directive instead — they dispatch
+  // and review work rather than doing it. Either/or, never both.
   let appendSystemPrompt = "";
   const { CONFIG_DEFAULTS } = await import("@/lib/config-defaults");
+  const isWorkbench = task.labels.some(
+    (tl) => tl.label.name === TOWER_LABEL_NAME && tl.label.isBuiltin
+  );
+  const directiveKey = isWorkbench ? "task.workbenchDirective" : "task.systemDirective";
   const systemDirective = await readConfigValue<string>(
-    "task.systemDirective",
-    CONFIG_DEFAULTS["task.systemDirective"].defaultValue as string
+    directiveKey,
+    CONFIG_DEFAULTS[directiveKey].defaultValue as string
   );
   if (systemDirective) {
     appendSystemPrompt += systemDirective;

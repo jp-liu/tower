@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, type TranslationKey } from "@/lib/i18n";
 import { toast } from "sonner";
 import type { Locale } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
@@ -62,6 +62,8 @@ import {
   getBuiltinPrompts,
   saveSystemDirective,
   resetSystemDirective,
+  saveWorkbenchDirective,
+  resetWorkbenchDirective,
   type BuiltinPromptsData,
 } from "@/actions/builtin-prompt-actions";
 import { getAvailableProviders } from "@/actions/ai-config-actions";
@@ -317,6 +319,28 @@ type MissionsGridForm = {
 };
 type HookStatus = { installed: boolean; hookPath: string };
 
+/** The two editable built-in directives: normal tasks vs. the project workbench task. */
+type DirectiveKind = "system" | "workbench";
+
+function directiveRows(b: BuiltinPromptsData) {
+  return [
+    {
+      kind: "system" as DirectiveKind,
+      value: b.systemDirective,
+      isCustom: b.systemDirectiveIsCustom,
+      titleKey: "settings.prompts.builtin.systemTitle" as TranslationKey,
+      descKey: "settings.prompts.builtin.systemDesc" as TranslationKey,
+    },
+    {
+      kind: "workbench" as DirectiveKind,
+      value: b.workbenchDirective,
+      isCustom: b.workbenchDirectiveIsCustom,
+      titleKey: "settings.prompts.builtin.workbenchTitle" as TranslationKey,
+      descKey: "settings.prompts.builtin.workbenchDesc" as TranslationKey,
+    },
+  ];
+}
+
 // ===========================================================================
 // MAIN COMPONENT
 // ===========================================================================
@@ -357,12 +381,13 @@ export function SettingsPage() {
   const [promptName, setPromptName] = useState("");
   const [promptDescription, setPromptDescription] = useState("");
   const [promptContent, setPromptContent] = useState("");
-  // 内置提示语：系统声明（可编辑）+ 子任务回推引导语（只读）
+  // 内置提示语：系统声明 + 工作台声明（都可编辑）+ 子任务回推引导语（只读）
   const [builtinPrompts, setBuiltinPrompts] = useState<BuiltinPromptsData | null>(null);
   const [directiveDraft, setDirectiveDraft] = useState("");
   const [savingDirective, setSavingDirective] = useState(false);
-  // 内置提示语只在弹窗里看/编辑完整内容，列表处只展示 3 行预览
-  const [directiveDialogOpen, setDirectiveDialogOpen] = useState(false);
+  // 内置提示语只在弹窗里看/编辑完整内容，列表处只展示 3 行预览。
+  // 两条声明共用一个编辑弹窗，非 null 即打开，值表示正在编辑哪条。
+  const [directiveEditing, setDirectiveEditing] = useState<DirectiveKind | null>(null);
   const [childDialogOpen, setChildDialogOpen] = useState(false);
 
   // ── System Config state ────────────────────────────────────────
@@ -468,12 +493,9 @@ export function SettingsPage() {
     getPrompts().then(setPrompts);
   }, []);
 
-  // 内置提示语 load
+  // 内置提示语 load（草稿在打开编辑弹窗时才填）
   useEffect(() => {
-    getBuiltinPrompts().then((b) => {
-      setBuiltinPrompts(b);
-      setDirectiveDraft(b.systemDirective);
-    });
+    getBuiltinPrompts().then(setBuiltinPrompts);
   }, []);
 
   // System config load
@@ -686,31 +708,37 @@ export function SettingsPage() {
   }, [deletePromptId, router]);
 
   const handleSaveDirective = useCallback(async () => {
+    if (!directiveEditing) return;
     setSavingDirective(true);
     try {
-      await saveSystemDirective(directiveDraft);
-      const b = await getBuiltinPrompts();
-      setBuiltinPrompts(b);
-      setDirectiveDraft(b.systemDirective);
-      setDirectiveDialogOpen(false);
+      if (directiveEditing === "system") {
+        await saveSystemDirective(directiveDraft);
+      } else {
+        await saveWorkbenchDirective(directiveDraft);
+      }
+      setBuiltinPrompts(await getBuiltinPrompts());
+      setDirectiveEditing(null);
       toast.success(t("settings.prompts.builtin.saved"));
     } finally {
       setSavingDirective(false);
     }
-  }, [directiveDraft, t]);
+  }, [directiveDraft, directiveEditing, t]);
 
   const handleResetDirective = useCallback(async () => {
+    if (!directiveEditing) return;
     setSavingDirective(true);
     try {
-      const def = await resetSystemDirective();
-      const b = await getBuiltinPrompts();
-      setBuiltinPrompts(b);
+      const def =
+        directiveEditing === "system"
+          ? await resetSystemDirective()
+          : await resetWorkbenchDirective();
+      setBuiltinPrompts(await getBuiltinPrompts());
       setDirectiveDraft(def);
       toast.info(t("settings.prompts.builtin.resetDone"));
     } finally {
       setSavingDirective(false);
     }
-  }, [t]);
+  }, [directiveEditing, t]);
 
   // =========================================================================
   // HANDLERS — System Config
@@ -1260,9 +1288,14 @@ export function SettingsPage() {
       return <div className="h-32 rounded-lg bg-muted animate-pulse" />;
     }
 
+    // The row being edited in the shared directive dialog (null when closed).
+    const editingDirective = builtinPrompts
+      ? directiveRows(builtinPrompts).find((r) => r.kind === directiveEditing)
+      : undefined;
+
     return (
       <div className="space-y-4">
-        {/* 内置提示语：系统声明（可编辑不可删）+ 子任务回推引导语（只读） */}
+        {/* 内置提示语：系统声明 + 工作台声明（可编辑不可删）+ 子任务回推引导语（只读） */}
         {builtinPrompts && (
           <div className="space-y-4 rounded-xl border border-border/50 bg-card p-4">
             <div>
@@ -1272,37 +1305,37 @@ export function SettingsPage() {
               </p>
             </div>
 
-            {/* 系统声明 — 3 行预览，点「编辑」弹窗查看/编辑完整内容 */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Label className="text-sm">{t("settings.prompts.builtin.systemTitle")}</Label>
-                  {builtinPrompts.systemDirectiveIsCustom && (
-                    <Badge variant="secondary" className="rounded-full text-xs">
-                      {t("settings.prompts.builtin.modified")}
-                    </Badge>
-                  )}
+            {/* 系统声明 / 工作台声明 — 各 3 行预览，点「编辑」弹窗查看/编辑完整内容 */}
+            {directiveRows(builtinPrompts).map((row, i) => (
+              <div key={row.kind} className={i > 0 ? "space-y-2 border-t border-border/50 pt-4" : "space-y-2"}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm">{t(row.titleKey)}</Label>
+                    {row.isCustom && (
+                      <Badge variant="secondary" className="rounded-full text-xs">
+                        {t("settings.prompts.builtin.modified")}
+                      </Badge>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setDirectiveDraft(row.value);
+                      setDirectiveEditing(row.kind);
+                    }}
+                  >
+                    <Edit className="h-4 w-4" />
+                    {t("settings.prompts.builtin.edit")}
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setDirectiveDraft(builtinPrompts.systemDirective);
-                    setDirectiveDialogOpen(true);
-                  }}
-                >
-                  <Edit className="h-4 w-4" />
-                  {t("settings.prompts.builtin.edit")}
-                </Button>
+                <p className="text-xs text-muted-foreground">{t(row.descKey)}</p>
+                <div className="rounded-lg border border-border/50 bg-muted/30 p-3">
+                  <p className="line-clamp-3 whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">
+                    {row.value}
+                  </p>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {t("settings.prompts.builtin.systemDesc")}
-              </p>
-              <div className="rounded-lg border border-border/50 bg-muted/30 p-3">
-                <p className="line-clamp-3 whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">
-                  {builtinPrompts.systemDirective}
-                </p>
-              </div>
-            </div>
+            ))}
 
             {/* 子任务回推引导语 — 3 行预览，点「查看」弹窗看完整内容（只读） */}
             <div className="space-y-2 border-t border-border/50 pt-4">
@@ -1392,13 +1425,16 @@ export function SettingsPage() {
           )}
         </div>
 
-        {/* 系统声明 — 编辑弹窗（完整内容，可编辑 / 恢复默认） */}
-        <Dialog open={directiveDialogOpen} onOpenChange={setDirectiveDialogOpen}>
+        {/* 系统声明 / 工作台声明 — 共用编辑弹窗（完整内容，可编辑 / 恢复默认） */}
+        <Dialog
+          open={directiveEditing !== null}
+          onOpenChange={(open) => !open && setDirectiveEditing(null)}
+        >
           <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{t("settings.prompts.builtin.systemTitle")}</DialogTitle>
+              <DialogTitle>{editingDirective && t(editingDirective.titleKey)}</DialogTitle>
               <DialogDescription>
-                {t("settings.prompts.builtin.systemDesc")}
+                {editingDirective && t(editingDirective.descKey)}
               </DialogDescription>
             </DialogHeader>
             <Textarea
@@ -1410,14 +1446,14 @@ export function SettingsPage() {
               <Button
                 variant="outline"
                 onClick={handleResetDirective}
-                disabled={savingDirective || !builtinPrompts?.systemDirectiveIsCustom}
+                disabled={savingDirective || !editingDirective?.isCustom}
               >
                 {t("settings.prompts.builtin.resetDefault")}
               </Button>
               <Button
                 variant="default"
                 onClick={handleSaveDirective}
-                disabled={savingDirective || directiveDraft === builtinPrompts?.systemDirective}
+                disabled={savingDirective || directiveDraft === editingDirective?.value}
               >
                 {t("settings.prompts.save")}
               </Button>
