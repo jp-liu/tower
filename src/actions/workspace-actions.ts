@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { createWorkspaceSchema, updateWorkspaceSchema, reorderWorkspacesSchema, createProjectSchema, updateProjectSchema } from "@/lib/schemas";
 import { expandHome } from "@/lib/git-url";
+import { syncProjectDoc } from "@/lib/group-doc";
 import { detectPreset } from "@/lib/preview/detector";
 
 /** Lightweight list: workspace names + project names only (for selectors) */
@@ -196,6 +197,9 @@ export async function updateProject(id: string, data: { name?: string; alias?: s
         // 失败不阻塞 update
       }
     }
+    // The group block lists every member's absolute path — a moved repo
+    // invalidates its siblings' blocks too, so re-render the whole group.
+    await syncProjectDoc(db, id);
   }
 
   revalidatePath("/workspaces");

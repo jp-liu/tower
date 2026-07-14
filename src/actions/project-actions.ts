@@ -4,6 +4,7 @@ import { rename, mkdir, readdir } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 import { db } from "@/lib/db";
+import { syncProjectDoc } from "@/lib/group-doc";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -172,6 +173,10 @@ export async function migrateProjectPath(
     where: { id: projectId },
     data: { localPath: targetPath },
   });
+
+  // The group block lists every member's absolute path — a moved repo
+  // invalidates its siblings' blocks too, so re-render the whole group.
+  await syncProjectDoc(db, projectId);
 
   // Revalidate
   revalidatePath("/workspaces");

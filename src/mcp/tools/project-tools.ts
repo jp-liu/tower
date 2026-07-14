@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { db } from "../db";
+import { syncGroupDoc, syncProjectDoc } from "../../lib/group-doc";
 
 export const projectTools = {
   list_projects: {
@@ -94,7 +95,19 @@ export const projectTools = {
         }
         data.groupId = normalized;
       }
-      return db.project.update({ where: { id: projectId }, data });
+      // This path writes groupId directly instead of going through
+      // setProjectGroup, so it has to refresh the group docs itself. Read the
+      // old group first — after the update nothing points at it any more.
+      const previous = await db.project.findUnique({
+        where: { id: projectId },
+        select: { groupId: true },
+      });
+      const project = await db.project.update({ where: { id: projectId }, data });
+      if (previous?.groupId && previous.groupId !== project.groupId) {
+        await syncGroupDoc(db, previous.groupId);
+      }
+      await syncProjectDoc(db, projectId);
+      return project;
     },
   },
 

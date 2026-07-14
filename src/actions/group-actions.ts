@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
+import { syncGroupDoc, syncProjectDoc } from "@/lib/group-doc";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 
@@ -60,6 +61,7 @@ export async function updateProductGroup(
   if (data.description !== undefined) patch.description = data.description?.trim() || null;
   try {
     const group = await db.productGroup.update({ where: { id }, data: patch });
+    await syncGroupDoc(db, id); // the block carries the group name — re-render on rename
     revalidatePath("/workspaces");
     return group;
   } catch (e) {
@@ -76,10 +78,14 @@ export async function updateProductGroup(
  *  且 SQLite 默认不强制外键，靠 DB cascade 会留孤儿 groupId、继续被分到一组。 */
 export async function deleteProductGroup(id: string) {
   try {
+    // Members must be captured before they are unbound — afterwards nothing
+    // points at them, and their CLAUDE.local.md blocks would be left orphaned.
+    const members = await db.project.findMany({ where: { groupId: id }, select: { id: true } });
     await db.$transaction([
       db.project.updateMany({ where: { groupId: id }, data: { groupId: null } }),
       db.productGroup.delete({ where: { id } }),
     ]);
+    for (const m of members) await syncProjectDoc(db, m.id);
     revalidatePath("/workspaces");
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") {
@@ -102,8 +108,13 @@ export async function setProjectGroup(projectId: string, groupId: string | null)
       throw new Error("分组与项目不在同一工作区，不能跨区分组");
     }
   }
+  // Read the old group before the update: joining/leaving re-renders both the
+  // old group (remaining members) and the new one.
+  const previous = await db.project.findUnique({ where: { id: projectId }, select: { groupId: true } });
   try {
     const project = await db.project.update({ where: { id: projectId }, data: { groupId } });
+    if (previous?.groupId && previous.groupId !== groupId) await syncGroupDoc(db, previous.groupId);
+    await syncProjectDoc(db, projectId); // joined → re-render new group; detached → strip block
     revalidatePath("/workspaces");
     return project;
   } catch (e) {
