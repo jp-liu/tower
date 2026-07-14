@@ -1,5 +1,5 @@
 import * as pty from "node-pty";
-import { ensurePathInEnv, stripClaudeNestingEnv } from "@/lib/platform";
+import { ensurePathInEnv, stripClaudeNestingEnv, stripTowerRuntimeEnv } from "@/lib/platform";
 
 export class PtySession {
   readonly taskId: string;
@@ -36,8 +36,9 @@ export class PtySession {
     this._onIdle = onIdle ?? null;
     this._idleThresholdMs = Math.max(idleThresholdMs ?? 180_000, 180_000);
 
-    // Build env: inherit full parent env, strip Claude nesting vars, ensure PATH exists
-    const baseEnv = stripClaudeNestingEnv(ensurePathInEnv(process.env));
+    // Build env: inherit full parent env, strip Claude nesting vars and Tower's
+    // own data-root config, ensure PATH exists
+    const baseEnv = stripTowerRuntimeEnv(stripClaudeNestingEnv(ensurePathInEnv(process.env)));
     const spawnEnv = {
       ...baseEnv,
       TERM: "xterm-color",

@@ -143,6 +143,25 @@ export function stripClaudeNestingEnv(
 }
 
 /**
+ * Tower's own data-root config — must never be inherited by child processes.
+ * Otherwise a PTY (and the MCP servers its CLI spawns) picks up the server's
+ * TOWER_DATA_DIR and overrides whatever the MCP registry pinned, so a dev MCP
+ * writes the prod DB. Registered MCP servers pin both keys themselves.
+ * Returns a new object.
+ */
+const TOWER_RUNTIME_VARS = ["TOWER_DATA_DIR", "DATABASE_URL"];
+
+export function stripTowerRuntimeEnv(
+  env: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  const cleaned = { ...env };
+  for (const key of TOWER_RUNTIME_VARS) {
+    delete cleaned[key];
+  }
+  return cleaned;
+}
+
+/**
  * Redact sensitive values from an env object for safe logging.
  * Matches keys containing: key, token, secret, password, authorization, cookie.
  */

@@ -759,6 +759,33 @@ describe("platform utilities", () => {
   });
 
   // =========================================================================
+  // stripTowerRuntimeEnv
+  // =========================================================================
+  describe("stripTowerRuntimeEnv", () => {
+    it("removes Tower data-root variables", async () => {
+      const { stripTowerRuntimeEnv } = await import("@/lib/platform");
+      const input = {
+        PATH: "/usr/bin",
+        TOWER_DATA_DIR: "/Users/x/.tower",
+        DATABASE_URL: "file:/Users/x/.tower/database/tower.db",
+        HOME: "/home/user",
+      };
+      const result = stripTowerRuntimeEnv(input);
+      expect(result).not.toHaveProperty("TOWER_DATA_DIR");
+      expect(result).not.toHaveProperty("DATABASE_URL");
+      expect(result.PATH).toBe("/usr/bin");
+      expect(result.HOME).toBe("/home/user");
+    });
+
+    it("does not mutate input object", async () => {
+      const { stripTowerRuntimeEnv } = await import("@/lib/platform");
+      const input = { TOWER_DATA_DIR: "/Users/x/.tower", HOME: "/home" };
+      stripTowerRuntimeEnv(input);
+      expect(input).toHaveProperty("TOWER_DATA_DIR");
+    });
+  });
+
+  // =========================================================================
   // redactEnvForLogs
   // =========================================================================
   describe("redactEnvForLogs", () => {
