@@ -113,12 +113,13 @@ function renderBlock(groupName: string, self: MemberProject, members: MemberProj
   // leaving an empty list behind. It comes back when a second member joins.
   if (siblings.length === 0) return null;
   return [
-    `## Tower 产品组：${groupName}`,
-    `本仓库属于产品组「${groupName}」。以下兄弟仓库按需读取，不需要就别读：`,
+    `## Tower Product Group: ${groupName}`,
+    `This repo belongs to product group "${groupName}". Its sibling repos are listed below —`,
+    "read one only when the task actually needs it; skip them otherwise.",
     ...siblings.map(
-      (s) => `- ${s.name}${s.alias ? `（${s.alias}）` : ""} — ${resolve(expandHome(s.localPath!))}`
+      (s) => `- ${s.name}${s.alias ? ` (${s.alias})` : ""} — ${resolve(expandHome(s.localPath!))}`
     ),
-    "跨仓问题也可用 MCP `ask_project_knowledge`，它会一并检索同组仓库。",
+    "For cross-repo questions the MCP tool `ask_project_knowledge` searches the whole group at once.",
   ].join("\n");
 }
 
