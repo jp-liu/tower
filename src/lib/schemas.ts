@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidBranchPrefix } from "@/lib/worktree-branch";
 
 // Shared ID validator
 const cuid = z.string().min(1, "ID is required");
@@ -73,7 +74,13 @@ export const createLabelSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color"),
   // null = system-level: visible in every workspace (see getLabelsForWorkspace).
   workspaceId: cuid.nullable(),
-  branchPrefix: z.string().max(100).nullable().optional(),
+  // Same bar as updateLabelBranchPrefix — one field, one validity standard.
+  branchPrefix: z
+    .string()
+    .max(100)
+    .refine(isValidBranchPrefix, "Invalid branch prefix")
+    .nullable()
+    .optional(),
 });
 
 // ── Version schemas ──
