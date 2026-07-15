@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { createWorktree } from "@/lib/worktree";
+import { resolveWorktreeBranch, DEFAULT_BRANCH_PREFIX } from "@/lib/worktree-branch";
 import { createSession } from "@/lib/pty/session-store";
 import { logger } from "@/lib/logger";
 import { readConfigValue } from "@/lib/config-reader";
@@ -508,10 +509,16 @@ export async function startPtyExecution(
   // Harness cleanup: fresh/restarted execution → cancel the old pending ask (a fresh start via /reply has no
   // history, so there's no OPEN ask to clear here either). best-effort.
   await cancelOpenAsks(taskId).catch(() => {});
-  // 1. Load task with project; labels decide which system directive applies (see step 7c)
+  // 1. Load task with project; labels decide which system directive applies
+  // (see step 7c) and which branch prefix the worktree gets (step 6). Ordered
+  // by name so "first label with a prefix wins" is stable and predictable —
+  // relation rows come back in no guaranteed order otherwise.
   const task = await db.task.findUnique({
     where: { id: taskId },
-    include: { project: true, labels: { include: { label: true } } },
+    include: {
+      project: true,
+      labels: { include: { label: true }, orderBy: { label: { name: "asc" } } },
+    },
   });
 
   if (!task) {
@@ -594,10 +601,23 @@ export async function startPtyExecution(
   let resolvedWorktreeBranch: string | null = null;
 
   if (task.baseBranch && task.project.localPath) {
+    // The task's labels decide the branch prefix; no prefixed label falls back
+    // to the configured default, whose "task" value keeps the historical
+    // `task/<taskId>`. The resolved name is persisted on the execution below —
+    // teardown reads it back instead of re-deriving it.
+    const defaultPrefix = await readConfigValue<string>(
+      "git.defaultWorktreeBranchPrefix",
+      DEFAULT_BRANCH_PREFIX
+    );
     const { worktreePath, worktreeBranch } = await createWorktree(
       task.project.localPath,
       taskId,
-      task.baseBranch
+      task.baseBranch,
+      resolveWorktreeBranch(
+        task.labels.map((tl) => tl.label),
+        defaultPrefix,
+        taskId
+      )
     );
     resolvedWorktreePath = worktreePath;
     resolvedWorktreeBranch = worktreeBranch;

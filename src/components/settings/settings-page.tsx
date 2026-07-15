@@ -77,6 +77,7 @@ import { BackupSection } from "./backup-section";
 import { ExtensionsSection } from "./extensions-section";
 import { KeyboardShortcutsSection } from "./keyboard-shortcuts-section";
 import { HarnessTargetsSection } from "./harness-targets-section";
+import { LabelsSection } from "./labels-section";
 import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
@@ -1839,6 +1840,9 @@ export function SettingsPage() {
             )}
           </div>
         </div>
+
+        {/* ── Labels (level + worktree branch prefix) ──────────── */}
+        <LabelsSection />
 
         {/* ── System Parameters ────────────────────────────────── */}
         <div className="rounded-xl border border-border bg-muted/50 p-5 space-y-4">

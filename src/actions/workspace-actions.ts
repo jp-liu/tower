@@ -215,6 +215,7 @@ export async function deleteProject(id: string) {
 
   const { destroySession } = await import("@/lib/pty/session-store");
   const { removeWorktree } = await import("@/lib/worktree");
+  const { getRecordedWorktreeBranch } = await import("@/lib/task-completion");
 
   for (const task of tasks) {
     // Kill any running PTY session
@@ -228,7 +229,13 @@ export async function deleteProject(id: string) {
 
     // Clean up worktree
     if (task.project?.localPath) {
-      try { await removeWorktree(task.project.localPath, task.id); } catch { /* best-effort */ }
+      try {
+        await removeWorktree(
+          task.project.localPath,
+          task.id,
+          await getRecordedWorktreeBranch(task.id)
+        );
+      } catch { /* best-effort */ }
     }
 
     // Set non-terminal tasks to CANCELLED

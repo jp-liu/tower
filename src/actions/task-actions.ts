@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { setTaskLabels } from "@/actions/label-actions";
 import { removeWorktree, stripTowerLinkedStatus } from "@/lib/worktree";
+import { getRecordedWorktreeBranch } from "@/lib/task-completion";
 import { z } from "zod";
 import { createTaskSchema, updateTaskSchema, taskStatusSchema } from "@/lib/schemas";
 import { logger } from "@/lib/logger";
@@ -170,7 +171,11 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
   // LC-01: Auto-cleanup worktree on CANCELLED (per D-03, D-04: only for GIT projects)
   if (status === "CANCELLED" && task.project?.localPath) {
     try {
-      await removeWorktree(task.project.localPath, taskId);
+      await removeWorktree(
+        task.project.localPath,
+        taskId,
+        await getRecordedWorktreeBranch(taskId)
+      );
     } catch (error) {
       log.error("Worktree cleanup failed", error, { taskId });
     }
@@ -248,7 +253,11 @@ export async function deleteTask(taskId: string) {
 
   if (task?.project?.localPath) {
     try {
-      await removeWorktree(task.project.localPath, taskId);
+      await removeWorktree(
+        task.project.localPath,
+        taskId,
+        await getRecordedWorktreeBranch(taskId)
+      );
     } catch {
       // best-effort cleanup
     }

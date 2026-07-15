@@ -45,6 +45,7 @@ export const taskTools = {
       "Create a new task in a project. Priority defaults to MEDIUM, status defaults to TODO. " +
       "`description` MUST follow the tower skill's 'Task Description Format' — structured Markdown with the H2 sections " +
       "`## 目标` / `## 需求` / `## 参考` / `## 备注` / `## 来源` (mandatory for every task, no 'simple task' exception; never a raw one-paragraph copy of the user's message). Load the tower skill for the full rules. " +
+      "REQUIRED, same standing as the description format: call `list_labels` FIRST and pass the single best-fitting label in `labelIds` (e.g. 需求 / 缺陷 / 重构 — judge from what the task actually does). A label may carry a branch prefix that names the task's worktree branch, so a missing label silently falls back to the default prefix. Extra labels are allowed when they genuinely apply. " +
       "The response includes a `display` field — a ready-to-show Markdown confirmation card. Present that `display` to the user verbatim instead of composing, translating, shortening, or flattening your own summary. " +
       "useWorktree (branch isolation) and autoStart (run immediately after create) default to the user's saved preference; " +
       "pass either explicitly to override for this one task. " +

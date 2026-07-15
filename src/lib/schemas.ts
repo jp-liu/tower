@@ -71,7 +71,9 @@ export const taskStatusSchema = z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DON
 export const createLabelSchema = z.object({
   name: z.string().min(1, "Name is required").max(50),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color"),
-  workspaceId: cuid,
+  // null = system-level: visible in every workspace (see getLabelsForWorkspace).
+  workspaceId: cuid.nullable(),
+  branchPrefix: z.string().max(100).nullable().optional(),
 });
 
 // ── Version schemas ──
