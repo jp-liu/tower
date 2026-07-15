@@ -14,22 +14,23 @@ if (!process.env.DATABASE_URL) {
 const prisma = new PrismaClient();
 
 async function main() {
-  // Builtin labels — create only if missing
-  const builtinLabels = [
+  // System-level labels (workspaceId null = visible in every workspace) — create
+  // only if missing. Only Tower is `isBuiltin`: that flag is purely a "cannot
+  // edit/delete" guard for the marker Tower puts on its own workbench tasks. The
+  // others are ordinary labels users may delete or give a branchPrefix.
+  const systemLabels = [
     { name: "需求", color: "#3b82f6" },
     { name: "缺陷", color: "#ef4444" },
-    { name: "Tower", color: "#8b5cf6" },
+    { name: "Tower", color: "#8b5cf6", isBuiltin: true },
   ];
 
-  for (const label of builtinLabels) {
+  for (const label of systemLabels) {
     const existing = await prisma.label.findFirst({
-      where: { name: label.name, isBuiltin: true },
+      where: { name: label.name, workspaceId: null },
     });
     if (!existing) {
-      await prisma.label.create({
-        data: { ...label, isBuiltin: true },
-      });
-      console.log(`Created builtin label: ${label.name}`);
+      await prisma.label.create({ data: label });
+      console.log(`Created system label: ${label.name}`);
     }
   }
 

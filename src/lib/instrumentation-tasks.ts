@@ -55,7 +55,9 @@ export async function ensureDefaultWorkspace() {
 }
 
 /**
- * Ensure the builtin "Tower" label exists.
+ * Ensure the builtin "Tower" label exists, and that it is the *only* label
+ * carrying `isBuiltin`.
+ *
  * Used for system workbench tasks (hidden from kanban board).
  */
 export async function ensureTowerLabel() {
@@ -71,6 +73,15 @@ export async function ensureTowerLabel() {
       });
       log.info("Created builtin Tower label");
     }
+    // `isBuiltin` is purely a "cannot edit/delete" guard, and Tower is the only
+    // label that needs it. Older installs also flagged 需求 / 缺陷, which locks
+    // them out of branch-prefix editing and deletion. Clear the flag wherever it
+    // was never meant to be — idempotent, and user-created labels never set it.
+    const { count } = await db.label.updateMany({
+      where: { isBuiltin: true, name: { not: TOWER_LABEL_NAME } },
+      data: { isBuiltin: false },
+    });
+    if (count > 0) log.info(`Cleared stale isBuiltin flag on ${count} label(s)`);
   } catch (error) {
     log.error("Failed to ensure Tower label", error);
   }
