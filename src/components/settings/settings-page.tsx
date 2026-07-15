@@ -355,6 +355,20 @@ export function SettingsPage() {
   const tabsRef = useRef<HTMLDivElement>(null);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
 
+  // Deep link, e.g. /settings?section=config#labels. The active tab is local
+  // state, so an anchor alone reaches nothing — read the target on mount, then
+  // scroll to the block once the section it lives in has rendered.
+  useEffect(() => {
+    const section = new URLSearchParams(window.location.search).get("section");
+    if (SECTIONS.some((s) => s.id === section)) setActiveSection(section as SectionId);
+    const anchor = window.location.hash.slice(1);
+    if (anchor) {
+      requestAnimationFrame(() =>
+        document.getElementById(anchor)?.scrollIntoView({ block: "start" })
+      );
+    }
+  }, []);
+
   // ── General state ──────────────────────────────────────────────
   const [mounted, setMounted] = useState(false);
   const [terminalApp, setTerminalApp] = useState("Terminal");
@@ -1841,7 +1855,7 @@ export function SettingsPage() {
           </div>
         </div>
 
-        {/* ── Labels (level + worktree branch prefix) ──────────── */}
+        {/* ── Labels (grouped by reach + worktree branch prefix) ── */}
         <LabelsSection />
 
         {/* ── System Parameters ────────────────────────────────── */}

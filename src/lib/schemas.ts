@@ -69,18 +69,26 @@ export const updateTaskSchema = z.object({
 export const taskStatusSchema = z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"]);
 
 // ── Label schemas ──
+const labelName = z.string().min(1, "Name is required").max(50);
+// Same bar as the branch prefix on update — one field, one validity standard.
+const labelBranchPrefix = z
+  .string()
+  .max(100)
+  .refine(isValidBranchPrefix, "Invalid branch prefix")
+  .nullable()
+  .optional();
+
 export const createLabelSchema = z.object({
-  name: z.string().min(1, "Name is required").max(50),
+  name: labelName,
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color"),
   // null = system-level: visible in every workspace (see getLabelsForWorkspace).
   workspaceId: cuid.nullable(),
-  // Same bar as updateLabelBranchPrefix — one field, one validity standard.
-  branchPrefix: z
-    .string()
-    .max(100)
-    .refine(isValidBranchPrefix, "Invalid branch prefix")
-    .nullable()
-    .optional(),
+  branchPrefix: labelBranchPrefix,
+});
+
+export const updateLabelSchema = z.object({
+  name: labelName.optional(),
+  branchPrefix: labelBranchPrefix,
 });
 
 // ── Version schemas ──

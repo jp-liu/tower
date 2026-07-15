@@ -2,15 +2,20 @@
 
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
-import { createLabelSchema } from "@/lib/schemas";
-import { isValidBranchPrefix } from "@/lib/worktree-branch";
+import { createLabelSchema, updateLabelSchema } from "@/lib/schemas";
+
+// `isBuiltin` marks exactly one label: Tower's own marker on workbench tasks,
+// whose name TOWER_LABEL_NAME is matched on and whose row nothing may touch
+// (see ensureTowerLabel, which also clears the flag from every other label).
+// Every other label — system-level (workspaceId null) or workspace-scoped — is
+// the user's to rename, re-prefix and delete.
+const isTowerLabel = (label: { isBuiltin: boolean }) => label.isBuiltin;
 
 // Get all labels available for a workspace: system-level ones (workspaceId null
 // → visible everywhere) plus the ones scoped to this workspace.
 //
-// Visibility keys off `workspaceId`, NOT `isBuiltin` — the latter is only a
-// "cannot be edited or deleted" protection bit (currently just the Tower label).
-// A system-level label is freely creatable and deletable.
+// Visibility keys off `workspaceId`, NOT `isBuiltin` — the latter is only the
+// "this is Tower's own marker, hands off" bit.
 export async function getLabelsForWorkspace(workspaceId: string) {
   return db.label.findMany({
     where: {
@@ -43,29 +48,37 @@ export async function createLabel(data: {
   return label;
 }
 
-// Update a label's worktree branch prefix. Pass null / "" to clear it, which
-// drops the label back to the configured default prefix.
-export async function updateLabelBranchPrefix(id: string, branchPrefix: string | null) {
-  const prefix = branchPrefix?.trim() || null;
-  if (prefix !== null && !isValidBranchPrefix(prefix)) {
-    throw new Error("Invalid branch prefix");
-  }
+// Update a label. Omitted fields are left alone; a null / "" branchPrefix clears
+// it, dropping the label back to the configured default prefix.
+export async function updateLabel(
+  id: string,
+  data: { name?: string; branchPrefix?: string | null }
+) {
+  const v = updateLabelSchema.parse({
+    ...(data.name !== undefined && { name: data.name.trim() }),
+    ...(data.branchPrefix !== undefined && { branchPrefix: data.branchPrefix?.trim() || null }),
+  });
   const label = await db.label.findUnique({ where: { id } });
   if (!label) throw new Error("Label not found");
-  if (label.isBuiltin) throw new Error("Cannot edit builtin labels");
+  // Refused server-side, not merely hidden in the UI: the Tower label is looked
+  // up by name and carries no branch of its own.
+  if (isTowerLabel(label)) throw new Error("Cannot edit the Tower label");
   const updated = await db.label.update({
     where: { id },
-    data: { branchPrefix: prefix },
+    data: {
+      ...(v.name !== undefined && { name: v.name }),
+      ...(v.branchPrefix !== undefined && { branchPrefix: v.branchPrefix }),
+    },
   });
   revalidatePath("/workspaces");
   return updated;
 }
 
-// Delete a custom label (not builtin)
+// Delete a label. Only Tower's own marker is off limits.
 export async function deleteLabel(id: string) {
   const label = await db.label.findUnique({ where: { id } });
   if (!label) throw new Error("Label not found");
-  if (label.isBuiltin) throw new Error("Cannot delete builtin labels");
+  if (isTowerLabel(label)) throw new Error("Cannot delete the Tower label");
   await db.label.delete({ where: { id } });
   revalidatePath("/workspaces");
 }

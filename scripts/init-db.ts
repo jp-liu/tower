@@ -14,24 +14,34 @@ if (!process.env.DATABASE_URL) {
 const prisma = new PrismaClient();
 
 async function main() {
-  // System-level labels (workspaceId null = visible in every workspace) — create
-  // only if missing. Only Tower is `isBuiltin`: that flag is purely a "cannot
-  // edit/delete" guard for the marker Tower puts on its own workbench tasks. The
-  // others are ordinary labels users may delete or give a branchPrefix.
-  const systemLabels = [
-    { name: "需求", color: "#3b82f6" },
-    { name: "缺陷", color: "#ef4444" },
-    { name: "Tower", color: "#8b5cf6", isBuiltin: true },
-  ];
-
-  for (const label of systemLabels) {
-    const existing = await prisma.label.findFirst({
-      where: { name: label.name, workspaceId: null },
+  // Tower's own marker on workbench tasks — looked up by name, `isBuiltin` being
+  // the "cannot edit/delete" guard. It must exist, so create it if missing.
+  const tower = await prisma.label.findFirst({ where: { name: "Tower", workspaceId: null } });
+  if (!tower) {
+    await prisma.label.create({
+      data: { name: "Tower", color: "#8b5cf6", isBuiltin: true },
     });
-    if (!existing) {
-      await prisma.label.create({ data: label });
-      console.log(`Created system label: ${label.name}`);
-    }
+    console.log("Created system label: Tower");
+  }
+
+  // Starter labels, only on a database that has no labels of its own yet.
+  //
+  // Not per-name "create if missing": an existing install has its own set (it
+  // may have renamed or deleted these), and looking up names it never had would
+  // hand it a second, duplicate pair with the same meaning.
+  //
+  // English names because locale lives in the browser's localStorage and does
+  // not exist yet here, at install time on the server. Prefixes are seeded so a
+  // fresh install sees feature/<task id> without a detour through settings.
+  const ownLabelCount = await prisma.label.count({ where: { name: { not: "Tower" } } });
+  if (ownLabelCount === 0) {
+    await prisma.label.createMany({
+      data: [
+        { name: "prd", color: "#3b82f6", branchPrefix: "feature" },
+        { name: "bug", color: "#ef4444", branchPrefix: "fix" },
+      ],
+    });
+    console.log("Created starter labels: prd, bug");
   }
 
   // Default agent config

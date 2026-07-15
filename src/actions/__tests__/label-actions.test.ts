@@ -7,6 +7,7 @@ vi.mock("@/lib/db", () => ({
       findMany: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
       delete: vi.fn(),
     },
     taskLabel: {
@@ -25,6 +26,7 @@ import { revalidatePath } from "next/cache";
 import {
   getLabelsForWorkspace,
   createLabel,
+  updateLabel,
   deleteLabel,
   setTaskLabels,
   getTaskLabels,
@@ -35,6 +37,7 @@ const mockDb = db as unknown as {
     findMany: ReturnType<typeof vi.fn>;
     findUnique: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
   };
   taskLabel: {
@@ -101,8 +104,8 @@ describe("label-actions", () => {
   });
 
   describe("deleteLabel", () => {
-    it("deletes non-builtin label and calls revalidatePath", async () => {
-      const mockLabel = { id: "l1", name: "Custom", isBuiltin: false };
+    it("deletes workspace label and calls revalidatePath", async () => {
+      const mockLabel = { id: "l1", name: "Custom", isBuiltin: false, workspaceId: "ws1" };
       mockDb.label.findUnique.mockResolvedValue(mockLabel);
       mockDb.label.delete.mockResolvedValue(mockLabel);
 
@@ -112,11 +115,23 @@ describe("label-actions", () => {
       expect(revalidatePath).toHaveBeenCalledWith("/workspaces");
     });
 
-    it("throws 'Cannot delete builtin labels' when label is builtin", async () => {
-      const mockLabel = { id: "l1", name: "Bug", isBuiltin: true };
+    // Only Tower is protected: a system-level label (workspaceId null) is an
+    // ordinary starter label the user may throw away.
+    it("deletes a system-level label that is not Tower's marker", async () => {
+      const mockLabel = { id: "l1", name: "prd", isBuiltin: false, workspaceId: null };
+      mockDb.label.findUnique.mockResolvedValue(mockLabel);
+      mockDb.label.delete.mockResolvedValue(mockLabel);
+
+      await deleteLabel("l1");
+
+      expect(mockDb.label.delete).toHaveBeenCalledWith({ where: { id: "l1" } });
+    });
+
+    it("throws 'Cannot delete the Tower label' for the builtin marker", async () => {
+      const mockLabel = { id: "l1", name: "Tower", isBuiltin: true, workspaceId: null };
       mockDb.label.findUnique.mockResolvedValue(mockLabel);
 
-      await expect(deleteLabel("l1")).rejects.toThrow("Cannot delete builtin labels");
+      await expect(deleteLabel("l1")).rejects.toThrow("Cannot delete the Tower label");
       expect(mockDb.label.delete).not.toHaveBeenCalled();
     });
 
@@ -125,6 +140,83 @@ describe("label-actions", () => {
 
       await expect(deleteLabel("nonexistent")).rejects.toThrow("Label not found");
       expect(mockDb.label.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("updateLabel", () => {
+    it("renames a workspace label", async () => {
+      mockDb.label.findUnique.mockResolvedValue({ id: "l1", isBuiltin: false, workspaceId: "ws1" });
+      mockDb.label.update.mockResolvedValue({ id: "l1", name: "Hotfix" });
+
+      await updateLabel("l1", { name: "  Hotfix  " });
+
+      expect(mockDb.label.update).toHaveBeenCalledWith({
+        where: { id: "l1" },
+        data: { name: "Hotfix" },
+      });
+      expect(revalidatePath).toHaveBeenCalledWith("/workspaces");
+    });
+
+    it("renames a system-level label — only Tower's marker is protected", async () => {
+      mockDb.label.findUnique.mockResolvedValue({ id: "l1", name: "prd", isBuiltin: false, workspaceId: null });
+      mockDb.label.update.mockResolvedValue({ id: "l1", name: "需求" });
+
+      await updateLabel("l1", { name: "需求" });
+
+      expect(mockDb.label.update).toHaveBeenCalledWith({
+        where: { id: "l1" },
+        data: { name: "需求" },
+      });
+    });
+
+    it("refuses to touch the Tower label", async () => {
+      mockDb.label.findUnique.mockResolvedValue({ id: "l1", name: "Tower", isBuiltin: true, workspaceId: null });
+
+      await expect(updateLabel("l1", { name: "Something" })).rejects.toThrow(
+        "Cannot edit the Tower label"
+      );
+      expect(mockDb.label.update).not.toHaveBeenCalled();
+    });
+
+    it("lets a system-level label set its branch prefix", async () => {
+      mockDb.label.findUnique.mockResolvedValue({ id: "l1", name: "prd", isBuiltin: false, workspaceId: null });
+      mockDb.label.update.mockResolvedValue({ id: "l1", branchPrefix: "feature" });
+
+      await updateLabel("l1", { branchPrefix: "feature" });
+
+      expect(mockDb.label.update).toHaveBeenCalledWith({
+        where: { id: "l1" },
+        data: { branchPrefix: "feature" },
+      });
+    });
+
+    it("clears the branch prefix when given an empty string", async () => {
+      mockDb.label.findUnique.mockResolvedValue({ id: "l1", isBuiltin: false, workspaceId: "ws1" });
+      mockDb.label.update.mockResolvedValue({ id: "l1", branchPrefix: null });
+
+      await updateLabel("l1", { branchPrefix: "  " });
+
+      expect(mockDb.label.update).toHaveBeenCalledWith({
+        where: { id: "l1" },
+        data: { branchPrefix: null },
+      });
+    });
+
+    it("rejects an invalid branch prefix before touching the db", async () => {
+      await expect(updateLabel("l1", { branchPrefix: "../evil" })).rejects.toThrow();
+      expect(mockDb.label.update).not.toHaveBeenCalled();
+    });
+
+    it("rejects an empty name", async () => {
+      await expect(updateLabel("l1", { name: "   " })).rejects.toThrow();
+      expect(mockDb.label.update).not.toHaveBeenCalled();
+    });
+
+    it("throws 'Label not found' when label does not exist", async () => {
+      mockDb.label.findUnique.mockResolvedValue(null);
+
+      await expect(updateLabel("nonexistent", { name: "X" })).rejects.toThrow("Label not found");
+      expect(mockDb.label.update).not.toHaveBeenCalled();
     });
   });
 

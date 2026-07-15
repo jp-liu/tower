@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { GitBranch, Check, ChevronsUpDown } from "lucide-react";
+import Link from "next/link";
+import { GitBranch, Check, ChevronsUpDown, Tags } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -36,6 +37,9 @@ import { useI18n } from "@/lib/i18n";
 import { getProjectBranches, fetchRemoteBranches, getCurrentBranch } from "@/actions/git-actions";
 import { getConfigValues } from "@/actions/config-actions";
 import type { Task, Priority, TaskStatus } from "@prisma/client";
+
+/** Settings page, Config tab, scrolled to the labels block (see settings-page.tsx). */
+const SETTINGS_LABELS_HREF = "/settings?section=config#labels";
 
 interface LabelOption {
   id: string;
@@ -421,10 +425,39 @@ export function CreateTaskDialog({
               </div>
             </div>
           )}
-          {/* Labels */}
-          {labels.length > 0 && (
+          {/* Labels — the only place a task picks up a branch prefix, so when
+              there are none, sell the idea rather than hiding the section. */}
+          {labels.length === 0 ? (
             <div className="space-y-2">
               <Label>{t("task.labels")}</Label>
+              <div className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-3">
+                <p className="text-sm font-medium">{t("task.labelsEmptyTitle")}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("task.labelsEmptyDesc")}
+                </p>
+                <Button
+                  variant="outline"
+                  className="mt-2.5"
+                  render={<Link href={SETTINGS_LABELS_HREF} />}
+                >
+                  <Tags className="mr-2 h-3.5 w-3.5" />
+                  {t("task.labelsEmptyCta")}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label>{t("task.labels")}</Label>
+                <Button
+                  variant="ghost"
+                  className="h-7 px-2 text-muted-foreground"
+                  render={<Link href={SETTINGS_LABELS_HREF} />}
+                >
+                  <Tags className="mr-1.5 h-3.5 w-3.5" />
+                  <span className="text-xs">{t("task.manageLabels")}</span>
+                </Button>
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 {labels.map((label) => {
                   const isSelected = selectedLabelIds.includes(label.id);

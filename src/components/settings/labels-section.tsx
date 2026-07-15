@@ -4,13 +4,13 @@ import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
@@ -20,15 +20,17 @@ import {
   getLabelsForWorkspace,
   createLabel,
   deleteLabel,
-  updateLabelBranchPrefix,
+  updateLabel,
 } from "@/actions/label-actions";
 import { isValidBranchPrefix, DEFAULT_BRANCH_PREFIX } from "@/lib/worktree-branch";
 
 /** Same palette the sidebar label manager used before this moved here. */
 const LABEL_COLORS = ["#3b82f6", "#ef4444", "#f59e0b", "#10b981", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316"];
 
-/** A label is system-level when it belongs to no workspace. */
-type Level = "system" | "workspace";
+const randomColor = () => LABEL_COLORS[Math.floor(Math.random() * LABEL_COLORS.length)];
+
+/** Matches createLabelSchema — keep both in step. */
+const MAX_LABEL_NAME = 50;
 
 interface LabelItem {
   id: string;
@@ -44,17 +46,106 @@ interface WorkspaceOption {
   name: string;
 }
 
+/** Color swatch that opens the palette in a popover. */
+function ColorPicker({ value, onChange }: { value: string; onChange: (color: string) => void }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      {/* Sized like the static dots of the rows above so the name inputs stay in
+          one column; `after` widens the hit area without widening the layout. */}
+      <PopoverTrigger
+        aria-label={t("settings.config.labels.pickColor")}
+        title={t("settings.config.labels.pickColor")}
+        className="relative size-3 shrink-0 cursor-pointer rounded-full ring-offset-2 ring-offset-background after:absolute after:-inset-2 after:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30"
+        style={{ backgroundColor: value }}
+      />
+      <PopoverContent align="start" className="w-auto flex-row gap-1.5">
+        {LABEL_COLORS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => {
+              onChange(c);
+              setOpen(false);
+            }}
+            aria-label={c}
+            className={cn(
+              "size-5 cursor-pointer rounded-full transition-all",
+              value === c && "ring-2 ring-foreground/30 ring-offset-2 ring-offset-popover"
+            )}
+            style={{ backgroundColor: c }}
+          />
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Trailing row of a label group: pick a color, type a name, add. */
+function AddLabelRow({
+  addLabel,
+  onAdd,
+  disabled,
+}: {
+  addLabel: string;
+  onAdd: (name: string, color: string) => Promise<void>;
+  disabled?: boolean;
+}) {
+  const { t } = useI18n();
+  const [name, setName] = useState("");
+  // Randomized on mount, not in the initializer: this is server rendered too, and
+  // a color picked twice would be a hydration mismatch.
+  const [color, setColor] = useState(LABEL_COLORS[0]);
+
+  useEffect(() => setColor(randomColor()), []);
+
+  const submit = async () => {
+    if (!name.trim() || disabled) return;
+    await onAdd(name.trim(), color);
+    setName("");
+    setColor(randomColor());
+  };
+
+  return (
+    <li className="flex items-center gap-3 bg-muted/20 px-5 py-3">
+      <ColorPicker value={color} onChange={setColor} />
+      <Input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void submit();
+          }
+        }}
+        maxLength={MAX_LABEL_NAME}
+        placeholder={t("settings.config.labels.namePlaceholder")}
+        className="w-40 shrink-0 text-sm"
+      />
+      <div className="flex-1" />
+      <Button onClick={() => void submit()} disabled={!name.trim() || disabled}>
+        <Plus className="mr-2 h-4 w-4" />
+        {addLabel}
+      </Button>
+    </li>
+  );
+}
+
 /**
- * Label management: create/delete labels, choose their level (system-wide vs.
- * one workspace), and give each a worktree branch prefix.
+ * Label management, grouped by reach:
  *
- * Scoped by a workspace picker because "workspace-level" only means anything
- * relative to one workspace — the table shows system-level labels plus the
- * selected workspace's, exactly what `getLabelsForWorkspace` returns and what a
- * task in that workspace can actually pick.
+ * - System labels (`workspaceId: null`) are usable from every workspace.
+ * - Workspace labels belong to the workspace picked next to that group's title.
  *
- * Builtin labels (just Tower, Tower's own machine marker on workbench tasks)
- * are read-only here: no delete, no prefix, no level change.
+ * Both kinds are the user's own: name, worktree branch prefix and deletion are
+ * all editable. The only exception is Tower's machine marker (`isBuiltin`),
+ * which is filtered out entirely — users have no reason to know it exists, and
+ * the server actions refuse to touch it regardless.
+ *
+ * Which group a new label lands in is decided by which group's Add row was used,
+ * so no level dropdown is needed.
  */
 export function LabelsSection() {
   const { t } = useI18n();
@@ -62,12 +153,6 @@ export function LabelsSection() {
   const [workspaceId, setWorkspaceId] = useState<string>("");
   const [labels, setLabels] = useState<LabelItem[]>([]);
   const [defaultPrefix, setDefaultPrefix] = useState(DEFAULT_BRANCH_PREFIX);
-
-  const [newName, setNewName] = useState("");
-  const [newColor, setNewColor] = useState(LABEL_COLORS[0]);
-  // Stored as a level, not a workspace id: the id is read from `workspaceId` at
-  // create time, so switching workspaces can never file a label under a stale one.
-  const [newLevel, setNewLevel] = useState<Level>("system");
 
   useEffect(() => {
     getWorkspacesWithProjects().then((list) => {
@@ -89,24 +174,48 @@ export function LabelsSection() {
     getLabelsForWorkspace(workspaceId).then((list) => setLabels(list as LabelItem[]));
   }, [workspaceId]);
 
-  const handleAdd = async () => {
-    if (!newName.trim()) return;
-    await createLabel({
-      name: newName.trim(),
-      color: newColor,
-      workspaceId: newLevel === "system" ? null : workspaceId,
-    });
-    setNewName("");
+  // Tower's own marker is a machine detail, not a label anyone manages here.
+  const visible = labels.filter((l) => !l.isBuiltin);
+  const systemLabels = visible.filter((l) => l.workspaceId === null);
+  const workspaceLabels = visible.filter((l) => l.workspaceId !== null);
+
+  const handleAdd = async (name: string, color: string, scope: string | null) => {
+    try {
+      await createLabel({ name, color, workspaceId: scope });
+    } catch {
+      toast.error(t("settings.config.labels.saveFailed"));
+      return;
+    }
     await reload();
   };
 
   const handleDelete = async (id: string) => {
-    await deleteLabel(id);
+    try {
+      await deleteLabel(id);
+    } catch {
+      toast.error(t("settings.config.labels.saveFailed"));
+      await reload();
+      return;
+    }
     setLabels((prev) => prev.filter((l) => l.id !== id));
   };
 
-  const patchPrefix = (id: string, branchPrefix: string) =>
-    setLabels((prev) => prev.map((l) => (l.id === id ? { ...l, branchPrefix } : l)));
+  const patch = (id: string, fields: Partial<LabelItem>) =>
+    setLabels((prev) => prev.map((l) => (l.id === id ? { ...l, ...fields } : l)));
+
+  const handleNameBlur = async (label: LabelItem) => {
+    const name = label.name.trim();
+    if (!name || name.length > MAX_LABEL_NAME) {
+      toast.error(t("settings.config.labels.invalidName"));
+      return; // reject the save, keep the text so the user can fix it
+    }
+    try {
+      await updateLabel(label.id, { name });
+    } catch {
+      toast.error(t("settings.config.labels.saveFailed"));
+      await reload();
+    }
+  };
 
   const handlePrefixBlur = async (label: LabelItem) => {
     const prefix = label.branchPrefix?.trim() ?? "";
@@ -115,7 +224,7 @@ export function LabelsSection() {
       return; // reject the save, keep the text so the user can fix it
     }
     try {
-      await updateLabelBranchPrefix(label.id, prefix || null);
+      await updateLabel(label.id, { branchPrefix: prefix || null });
     } catch {
       toast.error(t("settings.config.labels.saveFailed"));
       await reload();
@@ -132,15 +241,73 @@ export function LabelsSection() {
     toast.success(t("settings.config.labels.defaultPrefixSaved"));
   };
 
+  // Both groups render the same row: the level is carried by the group heading,
+  // not by a per-row badge.
+  const labelRow = (label: LabelItem) => (
+    <li key={label.id} className="flex items-center gap-3 px-5 py-3">
+      <span
+        className="size-3 shrink-0 rounded-full"
+        style={{ backgroundColor: label.color }}
+      />
+      <Input
+        value={label.name}
+        onChange={(e) => patch(label.id, { name: e.target.value })}
+        onBlur={() => void handleNameBlur(label)}
+        maxLength={MAX_LABEL_NAME}
+        aria-label={t("settings.config.labels.namePlaceholder")}
+        className="w-40 shrink-0 text-sm"
+      />
+      <Input
+        value={label.branchPrefix ?? ""}
+        onChange={(e) => patch(label.id, { branchPrefix: e.target.value })}
+        onBlur={() => void handlePrefixBlur(label)}
+        placeholder={t("settings.config.labels.prefixPlaceholder")}
+        aria-invalid={Boolean(label.branchPrefix) && !isValidBranchPrefix(label.branchPrefix!)}
+        className="w-40 shrink-0 font-mono text-sm"
+      />
+      <p className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+        {`${label.branchPrefix?.trim() || defaultPrefix}/`}
+        {t("settings.config.labels.taskIdPlaceholder")}
+      </p>
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => void handleDelete(label.id)}
+        className="shrink-0 text-destructive"
+        title={t("settings.config.labels.delete")}
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </li>
+  );
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4 gap-4">
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold">{t("settings.config.labels.title")}</h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {t("settings.config.labels.desc")}
-          </p>
-        </div>
+    <div id="labels" className="scroll-mt-4">
+      <div className="mb-4 min-w-0">
+        <h3 className="text-sm font-semibold">{t("settings.config.labels.title")}</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {t("settings.config.labels.desc")}
+        </p>
+      </div>
+
+      {/* System labels — every workspace can use these */}
+      <div className="mb-1.5 flex min-h-8 items-center gap-2">
+        <h4 className="text-xs font-semibold">{t("settings.config.labels.groupSystem")}</h4>
+        <p className="min-w-0 truncate text-xs text-muted-foreground">
+          {t("settings.config.labels.groupSystemHint")}
+        </p>
+      </div>
+      <ul className="divide-y rounded-xl border border-border bg-card">
+        {systemLabels.map(labelRow)}
+        <AddLabelRow
+          addLabel={t("settings.config.labels.addSystem")}
+          onAdd={(name, color) => handleAdd(name, color, null)}
+        />
+      </ul>
+
+      {/* Workspace labels — scoped to the workspace picked on this very row */}
+      <div className="mt-4 mb-1.5 flex min-h-8 items-center justify-between gap-4">
+        <h4 className="text-xs font-semibold">{t("settings.config.labels.groupWorkspace")}</h4>
         <Select value={workspaceId} onValueChange={(v) => setWorkspaceId(v as string)}>
           <SelectTrigger className="w-52 shrink-0">
             <span className="truncate">
@@ -157,107 +324,13 @@ export function LabelsSection() {
           </SelectContent>
         </Select>
       </div>
-
       <ul className="divide-y rounded-xl border border-border bg-card">
-        {labels.map((label) => (
-          <li key={label.id} className="flex items-center gap-3 px-5 py-3">
-            <span
-              className="size-3 shrink-0 rounded-full"
-              style={{ backgroundColor: label.color }}
-            />
-            <span className="w-40 shrink-0 truncate text-sm">{label.name}</span>
-
-            <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0">
-              {t(
-                label.workspaceId === null
-                  ? "settings.config.labels.levelSystem"
-                  : "settings.config.labels.levelWorkspace"
-              )}
-              {label.isBuiltin ? ` · ${t("settings.config.labels.builtin")}` : ""}
-            </Badge>
-
-            {label.isBuiltin ? (
-              <p className="min-w-0 flex-1 text-xs text-muted-foreground">
-                {t("settings.config.labels.builtinReadonly")}
-              </p>
-            ) : (
-              <>
-                <Input
-                  value={label.branchPrefix ?? ""}
-                  onChange={(e) => patchPrefix(label.id, e.target.value)}
-                  onBlur={() => void handlePrefixBlur(label)}
-                  placeholder={t("settings.config.labels.prefixPlaceholder")}
-                  aria-invalid={Boolean(label.branchPrefix) && !isValidBranchPrefix(label.branchPrefix!)}
-                  className="w-40 shrink-0 font-mono text-sm"
-                />
-                <p className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
-                  {`${label.branchPrefix?.trim() || defaultPrefix}/`}
-                  {t("settings.config.labels.taskIdPlaceholder")}
-                </p>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => void handleDelete(label.id)}
-                  className="shrink-0 text-destructive"
-                  title={t("settings.config.labels.delete")}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </>
-            )}
-          </li>
-        ))}
-
-        {/* Add a label */}
-        <li className="flex items-center gap-3 px-5 py-3 bg-muted/20">
-          <div className="flex shrink-0 gap-1.5">
-            {LABEL_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setNewColor(c)}
-                aria-label={c}
-                className={cn(
-                  "size-4 rounded-full transition-all cursor-pointer",
-                  newColor === c && "ring-2 ring-offset-2 ring-offset-background ring-foreground/30 scale-110"
-                )}
-                style={{ backgroundColor: c }}
-              />
-            ))}
-          </div>
-          <Input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void handleAdd();
-              }
-            }}
-            placeholder={t("settings.config.labels.namePlaceholder")}
-            className="w-40 shrink-0 text-sm"
-          />
-          <Select value={newLevel} onValueChange={(v) => setNewLevel(v as Level)}>
-            <SelectTrigger className="w-40 shrink-0">
-              <span className="truncate">
-                {t(
-                  newLevel === "system"
-                    ? "settings.config.labels.levelSystem"
-                    : "settings.config.labels.levelWorkspace"
-                )}
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="system">{t("settings.config.labels.levelSystem")}</SelectItem>
-              <SelectItem value="workspace">{t("settings.config.labels.levelWorkspace")}</SelectItem>
-            </SelectContent>
-          </Select>
-          <div className="flex-1" />
-          <Button onClick={() => void handleAdd()} disabled={!newName.trim() || !workspaceId}>
-            <Plus className="mr-2 h-4 w-4" />
-            {t("settings.config.labels.add")}
-          </Button>
-        </li>
+        {workspaceLabels.map(labelRow)}
+        <AddLabelRow
+          addLabel={t("settings.config.labels.addWorkspace")}
+          onAdd={(name, color) => handleAdd(name, color, workspaceId)}
+          disabled={!workspaceId}
+        />
       </ul>
 
       {/* Fallback prefix for tasks whose labels carry none */}
