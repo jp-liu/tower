@@ -16,7 +16,7 @@ vi.mock("../../db", () => ({
 import { db } from "../../db";
 import { projectTools } from "../project-tools";
 
-const mockDb = db as {
+const mockDb = db as unknown as {
   project: {
     findMany: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;

@@ -56,7 +56,7 @@ describe("readConfigValue", () => {
 
   it("returns parsed object when findUnique returns valid JSON object string", async () => {
     mockFindUnique.mockResolvedValue({ value: '{"a":1}' });
-    const result = await readConfigValue<{ a: number }>("object-key", {});
+    const result = await readConfigValue<{ a: number }>("object-key", {} as { a: number });
     expect(result).toEqual({ a: 1 });
   });
 

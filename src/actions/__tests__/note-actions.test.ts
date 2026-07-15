@@ -32,7 +32,7 @@ import {
   getTaskNotes,
 } from "@/actions/note-actions";
 
-const mockDb = db as {
+const mockDb = db as unknown as {
   projectNote: {
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;

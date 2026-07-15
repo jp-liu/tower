@@ -35,7 +35,7 @@ import {
   setDefaultPrompt,
 } from "@/actions/prompt-actions";
 
-const mockDb = db as {
+const mockDb = db as unknown as {
   agentPrompt: {
     findMany: ReturnType<typeof vi.fn>;
     findUnique: ReturnType<typeof vi.fn>;

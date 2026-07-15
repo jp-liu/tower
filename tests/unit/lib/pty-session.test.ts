@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
 
 // Mock node-pty to avoid native addon in test environment
 const mockPty = {
@@ -17,8 +17,8 @@ vi.mock("node-pty", () => ({
 import { PtySession } from "@/lib/pty/pty-session";
 
 describe("PtySession", () => {
-  let onData: ReturnType<typeof vi.fn>;
-  let onExit: ReturnType<typeof vi.fn>;
+  let onData: Mock<(data: string) => void>;
+  let onExit: Mock<(exitCode: number, signal?: number) => void>;
   let session: PtySession;
 
   beforeEach(() => {

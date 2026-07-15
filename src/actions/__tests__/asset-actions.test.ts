@@ -43,7 +43,7 @@ import {
   uploadAsset,
 } from "@/actions/asset-actions";
 
-const mockDb = db as {
+const mockDb = db as unknown as {
   projectAsset: {
     create: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;

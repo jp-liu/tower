@@ -66,7 +66,7 @@ import { existsSync, statSync, copyFileSync } from "fs";
 import { stripCacheUuidSuffix, isAssistantCachePath, ensureAssetsDir } from "@/lib/file-utils";
 import { taskTools } from "../task-tools";
 
-const mockDb = db as {
+const mockDb = db as unknown as {
   task: {
     findMany: ReturnType<typeof vi.fn>;
     findUnique: ReturnType<typeof vi.fn>;

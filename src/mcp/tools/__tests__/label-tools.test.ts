@@ -19,7 +19,7 @@ vi.mock("../../db", () => ({
 import { db } from "../../db";
 import { labelTools } from "../label-tools";
 
-const mockDb = db as {
+const mockDb = db as unknown as {
   label: {
     findMany: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;

@@ -30,7 +30,7 @@ import {
   getTaskLabels,
 } from "@/actions/label-actions";
 
-const mockDb = db as {
+const mockDb = db as unknown as {
   label: {
     findMany: ReturnType<typeof vi.fn>;
     findUnique: ReturnType<typeof vi.fn>;

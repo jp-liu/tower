@@ -217,7 +217,7 @@ test.describe.serial("Settings Persistence Flow", () => {
     );
 
     // Extra wait to ensure all React reconciliation has completed
-    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
 
     // Verify DOM value is still newVal after rAF (ensure no re-render reset it)
     const domValAfterRAF = await idleInput.inputValue();

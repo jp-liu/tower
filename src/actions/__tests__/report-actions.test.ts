@@ -9,7 +9,7 @@ vi.mock("@/lib/db", () => ({
 import { db } from "@/lib/db";
 import { getDailySummary, getDailyTodo } from "@/actions/report-actions";
 
-const mockDb = db as {
+const mockDb = db as unknown as {
   task: { findMany: ReturnType<typeof vi.fn> };
 };
 
