@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { PrismaClient } from "@prisma/client";
+import { getTowerDbFilePath } from "@/lib/tower-dir";
 
 // Mock next/cache before importing server actions
 vi.mock("next/cache", () => ({
@@ -17,9 +18,7 @@ import {
 } from "@/actions/note-actions";
 
 const testDb = new PrismaClient({
-  datasources: {
-    db: { url: process.env.DATABASE_URL ?? "file:./prisma/dev.db" },
-  },
+  datasourceUrl: `file:${getTowerDbFilePath()}`,
 });
 
 let testWorkspaceId: string;

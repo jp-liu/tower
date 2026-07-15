@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
 import { PrismaClient } from "@prisma/client";
+import { getTowerDbFilePath } from "@/lib/tower-dir";
 import { removeWorktree } from "@/lib/worktree";
 
 // Mock next/cache to avoid "static generation store missing" error in test environment
@@ -16,9 +17,7 @@ vi.mock("@/lib/worktree", () => ({
 }));
 
 const testDb = new PrismaClient({
-  datasources: {
-    db: { url: process.env.DATABASE_URL ?? "file:./prisma/dev.db" },
-  },
+  datasourceUrl: `file:${getTowerDbFilePath()}`,
 });
 
 let createTaskFn: (data: {
@@ -134,7 +133,13 @@ describe("updateTaskStatus CANCELLED cleanup", () => {
 
     await updateTaskStatusFn(task.id, "CANCELLED");
 
-    expect(mockedRemoveWorktree).toHaveBeenCalledWith("/tmp/test-repo", task.id);
+    // Third arg is the recorded worktree branch; with no execution row it falls
+    // back to the default `task/<taskId>` prefix (getRecordedWorktreeBranch).
+    expect(mockedRemoveWorktree).toHaveBeenCalledWith(
+      "/tmp/test-repo",
+      task.id,
+      `task/${task.id}`
+    );
 
     // Cleanup
     await testDb.task.deleteMany({ where: { projectId: gitProject.id } });
