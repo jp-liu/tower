@@ -14,9 +14,12 @@ async function main() {
   await prisma.workspace.deleteMany();
   await prisma.agentConfig.deleteMany();
 
-  // Built-in labels (no workspace = global)
-  await prisma.label.create({ data: { name: "需求", color: "#3b82f6", isBuiltin: true } });
-  await prisma.label.create({ data: { name: "缺陷", color: "#ef4444", isBuiltin: true } });
+  // System-level labels (workspaceId null = visible in every workspace). Only
+  // Tower is `isBuiltin` — that flag is purely a "cannot edit/delete" guard, as
+  // Tower is a machine marker Tower itself puts on workbench tasks. The others
+  // are ordinary labels users may rename, delete, or give a branchPrefix.
+  await prisma.label.create({ data: { name: "需求", color: "#3b82f6" } });
+  await prisma.label.create({ data: { name: "缺陷", color: "#ef4444" } });
   await prisma.label.create({ data: { name: "Tower", color: "#8b5cf6", isBuiltin: true } });
 
   // Default agent config

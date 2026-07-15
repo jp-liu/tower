@@ -38,9 +38,9 @@ describe("label-tools", () => {
   });
 
   describe("list_labels", () => {
-    it("calls db.label.findMany with OR condition for builtin and workspace-specific labels", async () => {
+    it("calls db.label.findMany with OR condition for system-level and workspace-specific labels", async () => {
       const mockLabels = [
-        { id: "l1", name: "Bug", color: "#ff0000", isBuiltin: true },
+        { id: "l1", name: "Bug", color: "#ff0000", isBuiltin: false, workspaceId: null },
         { id: "l2", name: "Custom", color: "#00ff00", isBuiltin: false, workspaceId: "ws1" },
       ];
       mockDb.label.findMany.mockResolvedValue(mockLabels);
@@ -49,8 +49,10 @@ describe("label-tools", () => {
 
       expect(mockDb.label.findMany).toHaveBeenCalledOnce();
       const callArgs = mockDb.label.findMany.mock.calls[0][0];
+      // System-level visibility keys off `workspaceId: null`, NOT `isBuiltin` —
+      // that flag only protects a label from edits/deletion.
       expect(callArgs.where.OR).toEqual(
-        expect.arrayContaining([{ isBuiltin: true }, { workspaceId: "ws1" }])
+        expect.arrayContaining([{ workspaceId: null }, { workspaceId: "ws1" }])
       );
       expect(result).toEqual(mockLabels);
     });

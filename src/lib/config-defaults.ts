@@ -10,6 +10,13 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "object",
     label: "Git Path Mapping Rules",
   },
+  // Worktree branch prefix for tasks whose labels carry no `branchPrefix` (see
+  // src/lib/worktree-branch.ts). The "task" default keeps `task/<taskId>`.
+  "git.defaultWorktreeBranchPrefix": {
+    defaultValue: "task",
+    type: "string",
+    label: "Default Worktree Branch Prefix",
+  },
   "system.maxUploadBytes": {
     defaultValue: 52428800,
     type: "number",
@@ -193,10 +200,10 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
       "",
       "## Git 工作规则",
       "- 完成一段有意义的改动后，主动用清晰的 message 创建 commit（约定式：feat / fix / refactor / docs / chore…），不要留一堆未提交的改动。",
-      "- 若当前任务运行在 Git worktree 隔离分支里（worktree 任务）：**只 commit，绝不 push `task/…` 分支到远程** —— worktree 分支由 Tower 在本地统一合并回 base 并清理（完成任务时本地 merge，不经远程 PR）。把 `task/…` 推到远程只会留下 Tower 返程流程清不掉的残留分支，需要人工 `git push origin --delete` 才能收拾。",
+      "- 若当前任务运行在 Git worktree 隔离分支里（worktree 任务）：**只 commit，绝不把当前任务分支 push 到远程** —— 任务分支由 Tower 在本地统一合并回 base 并清理（完成任务时本地 merge，不经远程 PR）。把它推到远程只会留下 Tower 返程流程清不掉的残留分支，需要人工 `git push origin --delete` 才能收拾。分支名由 Tower 按规则生成（可能是 `task/…`，也可能是自定义前缀），以 `git branch --show-current` 的实际值为准。",
       "- 若当前任务直接在项目主工作区里（非 worktree 任务）：可以 push。",
       "- 不确定自己是不是 worktree 任务时，默认只 commit、不 push。",
-      "- **完成任务遇到合并冲突时可自助**：Tower 完成任务会把 `task/…` 分支合并回 base，若报「合并到 base 存在冲突」，根因通常是 base 有了新提交。此时**在当前 worktree 里**执行 `git merge <base 分支>`（如 `git merge main`）把 base 合进来、解决冲突并提交，然后重新完成任务即可——**不要去主仓库解冲突**（那违反 worktree 纪律，合并动作由 Tower 在主仓库完成）。",
+      "- **完成任务遇到合并冲突时可自助**：Tower 完成任务会把当前任务分支合并回 base，若报「合并到 base 存在冲突」，根因通常是 base 有了新提交。此时**在当前 worktree 里**执行 `git merge <base 分支>`（如 `git merge main`）把 base 合进来、解决冲突并提交，然后重新完成任务即可——**不要去主仓库解冲突**（那违反 worktree 纪律，合并动作由 Tower 在主仓库完成）。",
       "",
       "## 并发与协作（多任务可能同改一个仓库）",
       "- Tower 常同时跑多个任务、甚至同一仓库多个 worktree。**只 stage / commit 你这轮亲手改的文件**，一律 `git add <明确路径>`；禁止 `git add .` / `-A` / `-u` / `git commit -a`，别把别的窗口或用户手动的改动一并提交。",
@@ -205,8 +212,9 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
       "",
       "## Worktree 纪律（务必防止改到主仓库）",
       "- 开工第一件事先跑 `pwd`：它就是你的工作根。之后所有 Read/Edit/Write/Bash 路径都以它为基准，优先用相对路径；用绝对路径时必须以这个根开头，**绝不**凭上下文/记忆里的主仓库路径去拼绝对路径——这正是历次「worktree 里看什么都没变」的根因。",
-      "- 判断自己是不是 worktree 任务：`pwd` 落在 `.worktrees/task-$TOWER_TASK_ID` 下、或 `git branch --show-current` 为 `task/$TOWER_TASK_ID`，即是。是则严格走本节纪律。",
-      "- 动任何文件 / 提交前，先核对三件事都成立：① `git rev-parse --show-toplevel` 等于当前 worktree 根（不是主仓库路径）；② `git branch --show-current` 为 `task/$TOWER_TASK_ID`（不是 main / feature / 其它分支）；③ 要改的文件绝对路径含 `.worktrees/task-$TOWER_TASK_ID/` 段。任一不满足，说明你操作到主仓库了，**立即停止、不要提交**，先纠正目录。",
+      "- 判断自己是不是 worktree 任务：`pwd` 落在 `.worktrees/task-$TOWER_TASK_ID` 下即是（目录名固定带 `task-` 前缀；分支名不固定，别拿分支名判断）。是则严格走本节纪律。",
+      "- 开工时先记下 `git branch --show-current` 的值——那就是 Tower 为本任务建好的分支，全程待在它上面，不要切换、不要新建分支。",
+      "- 动任何文件 / 提交前，先核对三件事都成立：① `git rev-parse --show-toplevel` 等于当前 worktree 根（不是主仓库路径）；② `git branch --show-current` 仍是开工时记下的那个任务分支（不是 main / feature / 其它共享分支）；③ 要改的文件绝对路径含 `.worktrees/task-$TOWER_TASK_ID/` 段。任一不满足，说明你操作到主仓库了，**立即停止、不要提交**，先纠正目录。",
       "- 绝不 `cd` 到主仓库或 worktree 之外去改文件 / 跑 git；所有 git 命令都在当前 worktree 根内执行（跨目录时用 `git -C <worktree 根>` 显式指定，别靠默认 cwd 猜）。",
       "- 万一已经改错到主仓库：把改动搬回 worktree（`git -C <worktree 根> cherry-pick <误提交>` 或重打一遍），主仓库工作区用 `git restore` 复原、误提交按情况处理——已被别的提交叠在上面就用 `git revert`（保历史、不动别人的提交），确认独占且未 push 才用 `git reset`；最后如实报告两边最终状态，不要隐瞒。",
       "",

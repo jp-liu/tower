@@ -39,9 +39,9 @@ function initRepo(): string {
 }
 
 /** Adds the task worktree + branch, optionally with a commit on it. */
-function addWorktree(repo: string, withCommit: boolean): string {
+function addWorktree(repo: string, withCommit: boolean, branch = `task/${TASK_ID}`): string {
   const wt = path.join(repo, ".worktrees", "task-" + TASK_ID);
-  execFileSync("git", ["worktree", "add", "-q", "-b", `task/${TASK_ID}`, wt, "main"], { cwd: repo });
+  execFileSync("git", ["worktree", "add", "-q", "-b", branch, wt, "main"], { cwd: repo });
   if (withCommit) {
     writeFileSync(path.join(wt, "b.txt"), "work\n");
     const git = (...a: string[]) => execFileSync("git", a, { cwd: wt });
@@ -94,6 +94,23 @@ describe("completeWorktreeReturn", () => {
     expect(execUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ worktreePath: null }) })
     );
+  });
+
+  it("merges and tears down a branch whose name came from a naming rule", async () => {
+    // A label-based rule gave this worktree a custom prefix; the name is only
+    // knowable from the execution record, never re-derivable from the taskId.
+    const branch = `feat/${TASK_ID}`;
+    latestExecution = { id: "exec1", worktreeBranch: branch };
+    const wt = addWorktree(repo, true, branch);
+
+    const res = await completeWorktreeReturn(TASK_ID, repo, "main");
+
+    expect(res.completed).toBe(true);
+    const files = execFileSync("git", ["ls-tree", "--name-only", "main"], { cwd: repo, encoding: "utf-8" });
+    expect(files).toContain("b.txt");
+    expect(existsSync(wt)).toBe(false);
+    const branches = execFileSync("git", ["branch", "--list", branch], { cwd: repo, encoding: "utf-8" }).trim();
+    expect(branches).toBe("");
   });
 
   it("refuses (and preserves the worktree) when there are uncommitted changes", async () => {

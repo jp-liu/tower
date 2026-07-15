@@ -4,9 +4,34 @@ import { db } from "@/lib/db";
 import { checkConflicts } from "@/lib/diff-parser";
 import { mergeBranchIntoBase } from "@/lib/git-merge";
 import { removeWorktree, stripTowerLinkedStatus, worktreePathFor } from "@/lib/worktree";
+import { DEFAULT_BRANCH_PREFIX } from "@/lib/worktree-branch";
 import { logger } from "@/lib/logger";
 
 const log = logger.create("task-completion");
+
+/**
+ * The branch name actually used when the task's worktree was created, as
+ * recorded on its latest execution — the only reliable source once labels carry
+ * branch prefixes (see `resolveWorktreeBranch`): a label's prefix may since have
+ * been edited or the label deleted, so re-deriving the name would target a
+ * branch that never existed.
+ *
+ * The fallback is the literal `task/<taskId>` constant, NOT the configured
+ * default prefix: reaching it means no execution ever recorded a branch, i.e. a
+ * task from before this field existed — and those branches are literally
+ * `task/…` regardless of what the default is set to today.
+ *
+ * Shared by every teardown path — completion here, plus cancel / delete-task /
+ * delete-project in the actions layer.
+ */
+export async function getRecordedWorktreeBranch(taskId: string): Promise<string> {
+  const execution = await db.taskExecution.findFirst({
+    where: { taskId, worktreeBranch: { not: null } },
+    orderBy: { createdAt: "desc" },
+    select: { worktreeBranch: true },
+  });
+  return execution?.worktreeBranch ?? `${DEFAULT_BRANCH_PREFIX}/${taskId}`;
+}
 
 /** Thrown when a worktree has uncommitted changes — merging would lose them. */
 export class WorktreeDirtyError extends Error {
@@ -68,7 +93,12 @@ export async function completeWorktreeReturn(
     where: { taskId, status: "COMPLETED" },
     orderBy: { createdAt: "desc" },
   });
-  const worktreeBranch = latestExecution?.worktreeBranch ?? `task/${taskId}`;
+  // The name recorded at creation time is the only truth: a label-based naming
+  // rule may have given this worktree a custom prefix, and the rule may since
+  // have changed. Only a task with no recorded branch at all falls back to the
+  // `task/<taskId>` convention.
+  const worktreeBranch =
+    latestExecution?.worktreeBranch ?? (await getRecordedWorktreeBranch(taskId));
 
   // Refuse on uncommitted changes: they live in the worktree, not the branch,
   // so a merge wouldn't carry them and `removeWorktree --force` would delete
@@ -143,7 +173,7 @@ export async function completeWorktreeReturn(
 
   // Tear down the worktree dir + local task branch.
   try {
-    await removeWorktree(localPath, taskId);
+    await removeWorktree(localPath, taskId, worktreeBranch);
   } catch (error) {
     log.error("Worktree cleanup failed", error, { taskId });
   }

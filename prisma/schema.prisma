@@ -93,8 +93,14 @@ model Label {
   id          String  @id @default(cuid())
   name        String
   color       String  @default("#94a3b8")
+  /// null = system-level (visible in every workspace); set = scoped to that workspace
   workspaceId String?
+  /// Protection bit only: builtin labels cannot be edited or deleted. Does NOT
+  /// imply system-level visibility — that is `workspaceId: null`.
   isBuiltin   Boolean @default(false)
+  /// Worktree branch prefix: a task carrying this label branches as
+  /// `<branchPrefix>/<taskId>`. null = no opinion, fall back to the default.
+  branchPrefix String?
   createdAt   DateTime @default(now())
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

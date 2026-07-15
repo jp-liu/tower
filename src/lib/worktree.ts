@@ -26,19 +26,23 @@ export interface WorktreeResult {
  * Creates a git worktree for the given task, or reuses one if it already exists.
  *
  * @param localPath  - Absolute path to the project root (git repo)
- * @param taskId     - The task ID (used to derive worktree path and branch name)
+ * @param taskId     - The task ID (used to derive the worktree path)
  * @param baseBranch - The branch to base the new task branch on
+ * @param branch     - Branch name to create/attach; defaults to `task/<taskId>`.
+ *   Callers resolve label-based naming rules (see `resolveWorktreeBranch`) and
+ *   pass the result, keeping this module free of db/config dependencies.
  * @returns WorktreeResult with the worktree path and branch name
  * @throws If git worktree add fails with a non-recoverable error
  */
 export async function createWorktree(
   localPathRaw: string,
   taskId: string,
-  baseBranch: string
+  baseBranch: string,
+  branch?: string
 ): Promise<WorktreeResult> {
   const localPath = expandHome(localPathRaw);
   const worktreePath = path.join(localPath, ".worktrees", "task-" + taskId);
-  const worktreeBranch = "task/" + taskId;
+  const worktreeBranch = branch ?? "task/" + taskId;
 
   // Validate that the local path exists and is a git repository before
   // running any git command — otherwise execFileSync throws a raw shell
@@ -244,15 +248,19 @@ function symlinkNodeModules(projectRoot: string, worktreePath: string): void {
  * Callers should wrap in try/catch — this function may throw on git errors.
  *
  * @param localPath - Absolute path to the project root (git repo)
- * @param taskId    - The task ID (used to derive worktree path and branch name)
+ * @param taskId    - The task ID (used to derive the worktree path)
+ * @param branch    - Branch to delete; defaults to `task/<taskId>`. Pass the
+ *   name recorded at creation time (`getRecordedWorktreeBranch`) — a task whose
+ *   naming rule matched a label has a custom prefix that cannot be re-derived.
  */
 export async function removeWorktree(
   localPathRaw: string,
-  taskId: string
+  taskId: string,
+  branch?: string
 ): Promise<void> {
   const localPath = expandHome(localPathRaw);
   const worktreePath = path.join(localPath, ".worktrees", "task-" + taskId);
-  const worktreeBranch = "task/" + taskId;
+  const worktreeBranch = branch ?? "task/" + taskId;
 
   // D-11: Only remove worktree dir if it exists
   if (existsSync(worktreePath)) {

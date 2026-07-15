@@ -3,15 +3,17 @@ import { db } from "../db";
 
 export const labelTools = {
   list_labels: {
-    description: "List all labels available for a workspace, including builtin labels and workspace-specific labels.",
+    description: "List all labels available for a workspace: system-level labels (usable in every workspace) plus this workspace's own. Each label may carry a branchPrefix that decides the git branch name of a task's worktree.",
     schema: z.object({
       workspaceId: z.string(),
     }),
     handler: async (args: { workspaceId: string }) => {
+      // Visibility is `workspaceId: null` (system-level), NOT `isBuiltin` —
+      // that flag only marks a label as protected from edits/deletion.
       return db.label.findMany({
         where: {
           OR: [
-            { isBuiltin: true },
+            { workspaceId: null },
             { workspaceId: args.workspaceId },
           ],
         },

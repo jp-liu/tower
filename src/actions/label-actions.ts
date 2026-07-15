@@ -3,13 +3,19 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { createLabelSchema } from "@/lib/schemas";
+import { isValidBranchPrefix } from "@/lib/worktree-branch";
 
-// Get all labels available for a workspace (builtin + workspace-specific)
+// Get all labels available for a workspace: system-level ones (workspaceId null
+// → visible everywhere) plus the ones scoped to this workspace.
+//
+// Visibility keys off `workspaceId`, NOT `isBuiltin` — the latter is only a
+// "cannot be edited or deleted" protection bit (currently just the Tower label).
+// A system-level label is freely creatable and deletable.
 export async function getLabelsForWorkspace(workspaceId: string) {
   return db.label.findMany({
     where: {
       OR: [
-        { isBuiltin: true },
+        { workspaceId: null },
         { workspaceId },
       ],
     },
@@ -17,11 +23,12 @@ export async function getLabelsForWorkspace(workspaceId: string) {
   });
 }
 
-// Create a custom label for a workspace
+// Create a label. `workspaceId: null` makes it system-level (every workspace).
 export async function createLabel(data: {
   name: string;
   color: string;
-  workspaceId: string;
+  workspaceId: string | null;
+  branchPrefix?: string | null;
 }) {
   const v = createLabelSchema.parse(data);
   const label = await db.label.create({
@@ -29,10 +36,29 @@ export async function createLabel(data: {
       name: v.name,
       color: v.color,
       workspaceId: v.workspaceId,
+      branchPrefix: v.branchPrefix ?? null,
     },
   });
   revalidatePath("/workspaces");
   return label;
+}
+
+// Update a label's worktree branch prefix. Pass null / "" to clear it, which
+// drops the label back to the configured default prefix.
+export async function updateLabelBranchPrefix(id: string, branchPrefix: string | null) {
+  const prefix = branchPrefix?.trim() || null;
+  if (prefix !== null && !isValidBranchPrefix(prefix)) {
+    throw new Error("Invalid branch prefix");
+  }
+  const label = await db.label.findUnique({ where: { id } });
+  if (!label) throw new Error("Label not found");
+  if (label.isBuiltin) throw new Error("Cannot edit builtin labels");
+  const updated = await db.label.update({
+    where: { id },
+    data: { branchPrefix: prefix },
+  });
+  revalidatePath("/workspaces");
+  return updated;
 }
 
 // Delete a custom label (not builtin)

@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   Archive, Plus, Pencil, Trash2, Boxes,
-  MoreHorizontal, ChevronsLeft, Tag, FileText, FolderOpen, Gauge, BellRing,
+  MoreHorizontal, ChevronsLeft, FileText, FolderOpen, Gauge, BellRing,
   Menu, Settings,
 } from "lucide-react";
 import {
@@ -35,7 +35,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createWorkspace, updateWorkspace, deleteWorkspace, reorderWorkspaces } from "@/actions/workspace-actions";
-import { getLabelsForWorkspace, createLabel, deleteLabel } from "@/actions/label-actions";
 import { getLastProjectId } from "@/lib/workspace-last-project";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
@@ -81,8 +80,6 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
   }, []);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
-  const [showLabelManager, setShowLabelManager] = useState(false);
-  const [labelManagerWsId, setLabelManagerWsId] = useState<string | null>(null);
   const [dialogName, setDialogName] = useState("");
   const [dialogIcon, setDialogIcon] = useState(WORKSPACE_ICONS[0]);
   const [editingWsId, setEditingWsId] = useState<string | null>(null);
@@ -180,11 +177,6 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
       toast.error(t("sidebar.lastWorkspaceError"));
     }
   }, [activeWorkspaceId, router, t, workspaces.length]);
-
-  const openLabelManager = useCallback((wsId: string) => {
-    setLabelManagerWsId(wsId);
-    setShowLabelManager(true);
-  }, []);
 
   const getIcon = (ws: WorkspaceItem) => {
     if (ws.description && WORKSPACE_ICONS.includes(ws.description)) return ws.description;
@@ -372,7 +364,6 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
                 t={t}
                 onSelect={() => navigateToWorkspace(ws.id)}
                 onEdit={() => openEditDialog(ws)}
-                onManageLabels={() => openLabelManager(ws.id)}
                 onDelete={() => handleDelete(ws.id, ws.name)}
               />
             ))}
@@ -444,15 +435,6 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
         namePlaceholder={t("workspace.namePlaceholder")}
         cancelLabel={t("common.cancel")}
       />
-
-      {/* Label Manager Dialog */}
-      {labelManagerWsId && (
-        <LabelManagerDialog
-          open={showLabelManager}
-          onOpenChange={(open) => { setShowLabelManager(open); if (!open) setLabelManagerWsId(null); }}
-          workspaceId={labelManagerWsId}
-        />
-      )}
     </aside>
   );
 }
@@ -545,7 +527,6 @@ function SortableWorkspaceItem({
   t,
   onSelect,
   onEdit,
-  onManageLabels,
   onDelete,
 }: {
   ws: WorkspaceItem;
@@ -555,7 +536,6 @@ function SortableWorkspaceItem({
   t: ReturnType<typeof useI18n>["t"];
   onSelect: () => void;
   onEdit: () => void;
-  onManageLabels: () => void;
   onDelete: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -606,10 +586,6 @@ function SortableWorkspaceItem({
           <DropdownMenuItem onClick={onEdit}>
             <Pencil className="mr-2 h-3.5 w-3.5" />
             {t("sidebar.rename")}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={onManageLabels}>
-            <Tag className="mr-2 h-3.5 w-3.5" />
-            {t("sidebar.manageLabels")}
           </DropdownMenuItem>
           <DropdownMenuItem
             className={disableDelete ? "text-muted-foreground opacity-50" : "text-rose-400"}
@@ -690,115 +666,6 @@ function WorkspaceDialog({
             {submitLabel}
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// Label color presets
-const LABEL_COLORS = ["#3b82f6", "#ef4444", "#f59e0b", "#10b981", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316"];
-
-interface LabelItem {
-  id: string;
-  name: string;
-  color: string;
-  isBuiltin: boolean;
-}
-
-function LabelManagerDialog({
-  open,
-  onOpenChange,
-  workspaceId,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  workspaceId: string;
-}) {
-  const { t } = useI18n();
-  const [labels, setLabels] = useState<LabelItem[]>([]);
-  const [newName, setNewName] = useState("");
-  const [newColor, setNewColor] = useState(LABEL_COLORS[0]);
-
-  useEffect(() => {
-    if (open) {
-      getLabelsForWorkspace(workspaceId).then(setLabels);
-    }
-  }, [open, workspaceId]);
-
-  const handleAdd = async () => {
-    if (!newName.trim()) return;
-    await createLabel({ name: newName.trim(), color: newColor, workspaceId });
-    const updated = await getLabelsForWorkspace(workspaceId);
-    setLabels(updated);
-    setNewName("");
-  };
-
-  const handleDelete = async (id: string) => {
-    await deleteLabel(id);
-    setLabels((prev) => prev.filter((l) => l.id !== id));
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{t("label.manage")}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3 py-2">
-          {/* Existing labels */}
-          {labels.map((label) => (
-            <div key={label.id} className="flex items-center gap-2">
-              <span
-                className="h-3 w-3 rounded-full"
-                style={{ backgroundColor: label.color }}
-              />
-              <span className="flex-1 text-sm text-foreground">{label.name}</span>
-              {label.isBuiltin ? (
-                <span className="text-[10px] text-muted-foreground">
-                  {t("label.builtin")}
-                </span>
-              ) : (
-                <button
-                  onClick={() => handleDelete(label.id)}
-                  className="text-xs text-rose-400 hover:text-rose-300"
-                >
-                  {t("common.delete")}
-                </button>
-              )}
-            </div>
-          ))}
-          {/* Add new */}
-          <div className="border-t border-border pt-3">
-            <div className="flex items-center gap-2">
-              <Input
-                placeholder={t("label.name")}
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
-                className="flex-1 h-8"
-              />
-              <Button
-                size="sm"
-                onClick={handleAdd}
-                disabled={!newName.trim()}
-                className="bg-primary/10 text-primary ring-1 ring-primary/20 hover:bg-primary/15"
-              >
-                {t("label.add")}
-              </Button>
-            </div>
-            {/* Color presets */}
-            <div className="mt-2 flex gap-1.5">
-              {LABEL_COLORS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setNewColor(c)}
-                  className={`h-5 w-5 rounded-full transition-all ${newColor === c ? "ring-2 ring-offset-2 ring-offset-background ring-foreground/30 scale-110" : ""}`}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
       </DialogContent>
     </Dialog>
   );
