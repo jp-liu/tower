@@ -67,6 +67,7 @@ export async function testHarnessTarget(input: {
   gateway: string;
   downstream: string;
   dest: string;
+  profile?: string;
   scope?: "work" | "unattended";
 }): Promise<{ ok: boolean; output: string }> {
   const dest = input.dest?.trim();
@@ -78,6 +79,7 @@ export async function testHarnessTarget(input: {
     gateway: input.gateway,
     downstream: input.downstream,
     dest,
+    profile: input.profile,
     message: "✅ Tower 通知渠道测试，收到请忽略",
     scope: input.scope ?? "work",
   });

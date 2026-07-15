@@ -69,16 +69,14 @@ export function matchGitPathRule(url: string, rules: GitPathRule[]): string {
 }
 
 /**
- * Git URL → Local Path mapping (hardcoded rules for now, will extract to config later)
+ * Git URL → Local Path mapping fallback.
  *
- * Rules:
- *   code.iflytek.com  → ~/company/{org/path/repo}
- *   github.com/jp-liu → ~/project/i/{repo}
- *   github.com/other  → ~/project/f/{repo}
+ * Organization/company-specific path rules belong in `git.pathMappingRules`.
+ * Built-in fallback only keeps generic GitHub conventions and otherwise uses
+ * `~/project/f/{repo}`.
  */
 
 const GITHUB_USERNAME = "jp-liu";
-const COMPANY_HOST = "code.iflytek.com";
 
 /**
  * Parse a git URL and return the suggested local path.
@@ -94,10 +92,6 @@ export function gitUrlToLocalPath(url: string): string {
     if (!parsed) return "";
 
     const { host, pathSegments } = parsed;
-
-    if (host === COMPANY_HOST) {
-      return expandHome(companyPath(pathSegments));
-    }
 
     if (host === "github.com") {
       return expandHome(githubPath(pathSegments));
@@ -115,14 +109,12 @@ export function gitUrlToLocalPath(url: string): string {
  * Normalize any git-related URL into a valid clone URL.
  *
  * Browser URLs (not clonable) are converted to HTTPS clone URLs:
- *   https://code.iflytek.com/osc/_source/EBG_jcjf/.../repo/-/code/
- *     → https://code.iflytek.com/EBG_jcjf/.../repo.git
  *   https://github.com/user/repo (no .git)
  *     → https://github.com/user/repo.git
  *
  * Already valid clone URLs are returned as-is:
  *   git@github.com:user/repo.git
- *   ssh://git@code.iflytek.com:30004/path.git
+ *   ssh://git@example.com:30004/path.git
  *   https://github.com/user/repo.git
  */
 export function toCloneUrl(url: string): string {
@@ -140,27 +132,22 @@ export function toCloneUrl(url: string): string {
 
   try {
     const urlObj = new URL(trimmed);
-    const host = urlObj.hostname;
     const rawPath = decodeURIComponent(urlObj.pathname);
-    const segments = rawPath.split("/").filter(Boolean);
+    let segments = rawPath.split("/").filter(Boolean);
 
-    if (host === COMPANY_HOST) {
-      // Strip GitLab prefixes: osc/_source
-      let parts = [...segments];
-      if (parts[0] === "osc" && parts[1] === "_source") {
-        parts = parts.slice(2);
-      }
-      // Strip GitLab suffixes: /-/code, /-/tree/branch, /-/blob/...
-      const dashIdx = parts.indexOf("-");
-      if (dashIdx > 0) {
-        parts = parts.slice(0, dashIdx);
-      }
-      if (parts.length === 0) return trimmed;
-      return `https://${host}/${parts.join("/")}.git`;
+    // Some GitLab-like deployments expose browser URLs under wrappers such as
+    // /osc/_source/<path>/-/code. Treat these as URL-shape conventions, not as
+    // company/domain-specific rules.
+    if (segments[0] === "osc" && segments[1] === "_source") {
+      segments = segments.slice(2);
     }
+    const dashIdx = segments.indexOf("-");
+    if (dashIdx > 0) {
+      segments = segments.slice(0, dashIdx);
+    }
+    if (segments.length === 0) return trimmed;
 
-    // GitHub / other — just append .git
-    return `${urlObj.origin}${urlObj.pathname.replace(/\/$/, "")}.git`;
+    return `${urlObj.origin}/${segments.join("/")}.git`;
   } catch {
     return trimmed;
   }
@@ -185,7 +172,7 @@ export function parseGitUrl(raw: string): ParsedUrl | null {
   // ssh://git@host:port/path or https://host/path
   let urlObj: URL;
   try {
-    // ssh://git@code.iflytek.com:30004/path → need to handle port in URL
+    // ssh://git@example.com:30004/path → need to handle port in URL
     urlObj = new URL(raw);
   } catch {
     return null;
@@ -200,32 +187,6 @@ export function parseGitUrl(raw: string): ParsedUrl | null {
 
 function stripGitSuffix(p: string): string {
   return p.replace(/\.git\/?$/, "");
-}
-
-/**
- * code.iflytek.com paths:
- *   /osc/_source/EBG_jcjf/jiangsu/NJZSBM/enrollment-static/-/code/
- *   /EBG_jcjf/jiangsu/NJZSBM/enrollment-static
- *
- * Strip known prefixes (osc/_source) and suffixes (/-/code, /-/tree, etc.)
- * Result: ~/company/EBG_jcjf/jiangsu/NJZSBM/enrollment-static
- */
-function companyPath(segments: string[]): string {
-  let parts = [...segments];
-
-  // Strip leading "osc/_source" or similar prefixes
-  if (parts[0] === "osc" && parts[1] === "_source") {
-    parts = parts.slice(2);
-  }
-
-  // Strip trailing gitlab-like suffixes: /-/code, /-/tree/branch, etc.
-  const dashIdx = parts.indexOf("-");
-  if (dashIdx > 0) {
-    parts = parts.slice(0, dashIdx);
-  }
-
-  if (parts.length === 0) return "";
-  return `~/company/${parts.join("/")}`;
 }
 
 /**

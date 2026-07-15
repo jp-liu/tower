@@ -900,6 +900,8 @@ export const zh = {
   "settings.harness.destLabel": "默认目的地（可选，群 / 人 / 平台 id）",
   "settings.harness.destPlaceholder": "可留空；也可填 feishu:oc_xxx、WhatsApp JID、群名或人名",
   "settings.harness.destPlaceholderHome": "留空使用 Hermes home；也可填 feishu:oc_xxx",
+  "settings.harness.profileLabel": "网关 profile（可选）",
+  "settings.harness.profilePlaceholder": "留空使用网关默认；如需指定可填个人/公司自己的 profile",
   "settings.harness.customLabel": "自定义渠道",
   "settings.harness.customPlaceholder": "自己输（如：Telegram / Slack）",
   "settings.harness.gateway.openclaw": "OpenClaw",

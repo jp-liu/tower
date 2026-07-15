@@ -32,6 +32,7 @@ export interface NotifyTarget {
   id: string;
   gateway: string;
   downstream: string;
+  profile?: string; // optional gateway profile / workspace name; blank means gateway default
   dest?: string; // exact chat/user id; unattended Hermes may leave blank to use its home channel
   active: boolean; // 单选（按 scope 各自单选）：该类别里生效的这条被 agent 用于外推
   scope: NotifyScope; // work=在场发群讨论 / unattended=下班找本人
@@ -149,6 +150,7 @@ export function HarnessTargetsSection() {
           id: r.id ?? crypto.randomUUID(),
           gateway: GATEWAYS.includes(r.gateway) ? r.gateway : "hermes",
           downstream: r.downstream ?? "feishu",
+          profile: r.profile ?? "",
           dest: r.dest ?? "",
           active: !!r.active,
           // 老数据无 scope → 当无人值守（原来这张表就是给无人值守外推配的）。
@@ -286,14 +288,15 @@ export function HarnessTargetsSection() {
     }
   };
 
-  const installGateway = async (gw: string) => {
+  const installGateway = async (target: NotifyTarget) => {
+    const gw = target.gateway;
     if (gw !== "hermes") return;
     setInstallingGateway(gw);
     try {
       const res = await fetch("/api/internal/harness/gateway-install", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ gateway: gw }),
+        body: JSON.stringify({ gateway: gw, profile: target.profile?.trim() || undefined }),
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; report?: { ok?: boolean; mcp?: { error?: string }; skill?: { error?: string } } };
       if (!res.ok || !data.ok) {
@@ -324,7 +327,7 @@ export function HarnessTargetsSection() {
     if (!dest && !canUseHermesHome) return;
     setTest(tgt.id, { testing: true, result: null });
     try {
-      const r = await testHarnessTarget({ gateway: tgt.gateway, downstream: tgt.downstream, dest, scope: tgt.scope });
+      const r = await testHarnessTarget({ gateway: tgt.gateway, downstream: tgt.downstream, dest, profile: tgt.profile, scope: tgt.scope });
       setTest(tgt.id, { testing: false, result: r });
     } catch (e) {
       setTest(tgt.id, { testing: false, result: { ok: false, output: e instanceof Error ? e.message : String(e) } });
@@ -481,6 +484,16 @@ export function HarnessTargetsSection() {
                 </Field>
               )}
 
+              {tgt.gateway === "hermes" && (
+                <Field label={t("settings.harness.profileLabel")}>
+                  <Input
+                    value={tgt.profile ?? ""}
+                    onChange={(e) => patch(tgt.id, { profile: e.target.value })}
+                    placeholder={t("settings.harness.profilePlaceholder")}
+                  />
+                </Field>
+              )}
+
               {tgt.scope === "unattended" && !isHermesWechatUnattended(tgt) && (
                 <Field label={t("settings.harness.destLabel")}>
                   <Input
@@ -566,7 +579,7 @@ export function HarnessTargetsSection() {
                     <Button
                       variant="outline"
                       className="text-muted-foreground"
-                      onClick={() => installGateway(tgt.gateway)}
+                      onClick={() => installGateway(tgt)}
                       disabled={installingGateway === tgt.gateway}
                     >
                       {installingGateway === tgt.gateway ? (

@@ -22,6 +22,7 @@ export interface HarnessGatewaySendInput {
   downstream?: string | null;
   dest?: string | null;
   to?: string | null;
+  profile?: string | null;
   message: string;
   scope: "work" | "unattended";
 }
@@ -41,6 +42,7 @@ export async function sendViaHarnessGateway(input: HarnessGatewaySendInput): Pro
     downstream: input.downstream,
     dest: input.dest,
     to: input.to,
+    profile: input.profile,
     scope: input.scope,
   });
   if (!resolvedDest.ok) return { ok: false, output: resolvedDest.error };
@@ -50,6 +52,7 @@ export async function sendViaHarnessGateway(input: HarnessGatewaySendInput): Pro
       message: input.message,
       dest: resolvedDest.dest,
       downstream: input.downstream,
+      profile: input.profile,
     });
     return { ...sent, resolvedDest: resolvedDest.dest };
   }
@@ -67,6 +70,7 @@ export async function resolveHarnessDestination(input: {
   downstream?: string | null;
   dest?: string | null;
   to?: string | null;
+  profile?: string | null;
   scope: "work" | "unattended";
 }): Promise<{ ok: true; dest: string | null } | { ok: false; error: string }> {
   const platform = input.downstream?.trim().toLowerCase() || "";
@@ -101,6 +105,7 @@ export async function resolveHarnessDestination(input: {
     gateway: input.gateway,
     platform,
     query: requested,
+    profile: input.profile,
   });
   if (byDirectory) return { ok: true, dest: byDirectory };
 
@@ -170,10 +175,13 @@ async function findDestinationInHermesDirectory(input: {
   gateway: HarnessGateway;
   platform: string;
   query: string;
+  profile?: string | null;
 }): Promise<string | null> {
   if (input.gateway !== "hermes") return null;
+  const profile = input.profile?.trim() || process.env.HERMES_PROFILE?.trim();
+  if (!profile) return null;
   const fs = await import("node:fs/promises");
-  const path = `${process.env.HOME}/.hermes/profiles/${process.env.HERMES_PROFILE || "h-tower"}/channel_directory.json`;
+  const path = `${process.env.HOME}/.hermes/profiles/${profile}/channel_directory.json`;
   try {
     const raw = await fs.readFile(path, "utf8");
     const parsed = JSON.parse(raw) as {

@@ -12,14 +12,14 @@
 # 流程: 检查干净 -> pull -> bump 版本 -> 修 esbuild shim -> build -> npm publish -> 校验 -> commit -> tag -> (可选)push
 #
 # 内置约定 (可用环境变量覆盖):
-#   RELEASE_PROXY     发布代理        默认 http://127.0.0.1:7897  (本地 Clash; 切勿用 31165, 会重置大 PUT)
+#   RELEASE_PROXY     发布代理        可选; 留空则沿用当前 shell/npm 环境
 #   RELEASE_REGISTRY  发布 registry   默认 https://registry.npmjs.org/  (项目默认 registry 是内网源, 必须覆盖)
 #
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-PROXY="${RELEASE_PROXY:-http://127.0.0.1:7897}"
+PROXY="${RELEASE_PROXY:-}"
 REGISTRY="${RELEASE_REGISTRY:-https://registry.npmjs.org/}"
 
 BUMP="patch"
@@ -35,6 +35,13 @@ done
 
 step() { printf '\n\033[1;36m▶ %s\033[0m\n' "$1"; }
 die()  { printf '\033[1;31m✗ %s\033[0m\n' "$1" >&2; exit 1; }
+with_optional_proxy() {
+  if [ -n "$PROXY" ]; then
+    HTTP_PROXY="$PROXY" HTTPS_PROXY="$PROXY" http_proxy="$PROXY" https_proxy="$PROXY" "$@"
+  else
+    "$@"
+  fi
+}
 
 # --- 1. 前置检查: 工作区必须干净, 否则 release commit 会混入杂物 ---
 step "检查工作区状态"
@@ -73,12 +80,11 @@ pnpm build
 
 # --- 6. 发布 (覆盖大小写代理变量 + 公共 registry) ---
 step "npm publish ($NEW_VER -> $REGISTRY)"
-HTTP_PROXY="$PROXY" HTTPS_PROXY="$PROXY" http_proxy="$PROXY" https_proxy="$PROXY" \
-  npm publish --registry "$REGISTRY"
+with_optional_proxy npm publish --registry "$REGISTRY"
 
 # --- 7. 校验线上版本 ---
 step "校验线上版本"
-LATEST="$(HTTPS_PROXY="$PROXY" https_proxy="$PROXY" npm view tower-studio version --registry "$REGISTRY" 2>&1)"
+LATEST="$(with_optional_proxy npm view tower-studio version --registry "$REGISTRY" 2>&1)"
 [ "$LATEST" = "$NEW_VER" ] || die "线上版本 ($LATEST) 与预期 ($NEW_VER) 不符"
 echo "  npm latest = $LATEST ✓"
 

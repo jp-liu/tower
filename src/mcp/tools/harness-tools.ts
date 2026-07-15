@@ -23,6 +23,7 @@ type NotifyTargetConfig = {
   gateway?: string;
   downstream?: string;
   dest?: string;
+  profile?: string;
   active?: boolean;
   scope?: string;
 };
@@ -160,6 +161,7 @@ export const harnessTools = {
           gateway: active.gateway,
           downstream: active.downstream ?? null,
           dest: active.dest ?? null,
+          profile: active.profile ?? null,
           label: active.label ?? null,
         },
         instructions: composeSendInstructions(active, token, scope, task.title ?? null),
@@ -209,6 +211,7 @@ export const harnessTools = {
         dest: active.dest,
         to: args.to,
         downstream: active.downstream,
+        profile: active.profile,
         scope,
       });
       if (!sent.ok) return { error: `${active.gateway} send failed`, output: sent.output };

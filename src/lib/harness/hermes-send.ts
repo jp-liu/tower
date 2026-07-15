@@ -13,7 +13,10 @@ export interface HermesSendInput {
 
 export async function sendViaHermes(input: HermesSendInput): Promise<{ ok: true; output: string } | { ok: false; output: string }> {
   const cmd = process.env.HERMES_CLI_PATH || resolveHermesCommand();
-  const args = ["--profile", input.profile || process.env.HERMES_PROFILE || "h-tower", "send"];
+  const args = [];
+  const profile = input.profile?.trim() || process.env.HERMES_PROFILE?.trim();
+  if (profile) args.push("--profile", profile);
+  args.push("send");
   const to = normalizeHermesDest(input.dest, input.downstream);
   if (!to) return { ok: false, output: "Hermes destination is required (e.g. feishu:oc_xxx)" };
   args.push("--to", to);
@@ -23,11 +26,7 @@ export async function sendViaHermes(input: HermesSendInput): Promise<{ ok: true;
     const { stdout, stderr } = await execFileAsync(cmd, args, {
       timeout: 60_000,
       maxBuffer: 1024 * 1024,
-      env: {
-        ...process.env,
-        NO_PROXY: appendNoProxy(process.env.NO_PROXY),
-        no_proxy: appendNoProxy(process.env.no_proxy),
-      },
+      env: process.env,
     });
     return { ok: true, output: `${stdout}${stderr}`.trim() };
   } catch (err) {
@@ -53,10 +52,4 @@ function normalizeHermesDest(dest?: string | null, downstream?: string | null): 
   if (ds === "feishu" && raw.startsWith("oc_")) return `feishu:${raw}`;
   if (platform === "weixin") return `weixin:${raw}`;
   return raw;
-}
-
-function appendNoProxy(value?: string): string {
-  const parts = new Set((value || "").split(",").map((x) => x.trim()).filter(Boolean));
-  for (const item of [".iflytek.com", "localhost", "127.0.0.1"]) parts.add(item);
-  return Array.from(parts).join(",");
 }

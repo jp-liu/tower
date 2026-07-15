@@ -60,7 +60,7 @@ without reliable directory lookup, aliases are the primary mechanism.
 Hermes can send through its CLI:
 
 ```bash
-hermes --profile h-tower send --to feishu:oc_xxx --json "message"
+hermes --profile default send --to feishu:oc_xxx --json "message"
 ```
 
 Tower normalizes common destinations:
@@ -84,6 +84,27 @@ Tower passes:
 OpenClaw may return no platform message id. In that case Tower still records the
 harness message, but inbound attribution depends on the `[[tower:task=...]]`
 token or later gateway support for returned message ids.
+
+## Proxy Handling
+
+Tower invokes Hermes/OpenClaw as child CLI processes, so they inherit the
+operator's proxy environment (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, etc.).
+Tower must not hard-code enterprise domains into `NO_PROXY`: some deployments
+need a proxy to reach their gateway, while private-network deployments may need
+to bypass a proxy.
+
+Tower does not rewrite proxy variables. Deployments should configure the
+standard environment for their own network:
+
+```bash
+HTTPS_PROXY=http://proxy.example.com:8080
+HTTP_PROXY=http://proxy.example.com:8080
+NO_PROXY=localhost,127.0.0.1,::1,.example.internal
+no_proxy=localhost,127.0.0.1,::1,.example.internal
+```
+
+Leave private gateway domains out of `NO_PROXY` when that gateway must be
+reached through the configured proxy.
 
 ## WhatsApp
 

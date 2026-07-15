@@ -885,6 +885,8 @@ export const en: Translations = {
   "settings.harness.destLabel": "Default destination (optional group / person / platform id)",
   "settings.harness.destPlaceholder": "Optional; e.g. feishu:oc_xxx, WhatsApp JID, group name, or person",
   "settings.harness.destPlaceholderHome": "Blank uses Hermes home; or enter feishu:oc_xxx",
+  "settings.harness.profileLabel": "Gateway profile (optional)",
+  "settings.harness.profilePlaceholder": "Blank uses the gateway default; set your own personal/company profile if needed",
   "settings.harness.customLabel": "Custom channel",
   "settings.harness.customPlaceholder": "Type your own (e.g. Telegram / Slack)",
   "settings.harness.gateway.openclaw": "OpenClaw",

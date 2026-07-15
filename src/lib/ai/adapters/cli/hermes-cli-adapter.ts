@@ -11,7 +11,7 @@ import type {
   McpServerConfig,
 } from "../../types";
 
-const DEFAULT_PROFILE = process.env.HERMES_PROFILE || "h-tower";
+const DEFAULT_PROFILE = process.env.HERMES_PROFILE || "default";
 
 export class HermesCliAdapter implements CliAdapter {
   constructor(private readonly profile = DEFAULT_PROFILE) {}
