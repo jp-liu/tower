@@ -52,9 +52,16 @@ export async function POST(
     // tasks, then flips status — the same path MCP move_task takes. It throws on
     // conflict / dirty worktree, which we map to the codes the merge dialog UI
     // expects.
-    await updateTaskStatus(taskId, "DONE");
+    // `warning` = merge landed, but something non-fatal needs the user's hands
+    // (e.g. the main repo's autostash could not be restored). Pass it on: the
+    // dialog shows it instead of closing on a silent success.
+    const { warning } = await updateTaskStatus(taskId, "DONE");
 
-    return NextResponse.json({ success: true, message: "Merge completed" });
+    return NextResponse.json({
+      success: true,
+      message: "Merge completed",
+      ...(warning ? { warning } : {}),
+    });
   } catch (error) {
     if (error instanceof MergeConflictError) {
       return NextResponse.json(

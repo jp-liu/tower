@@ -128,8 +128,12 @@ describe("assertMainRepoReady", () => {
  * Real-git integration tests for mergeBranchIntoBase. The regression we guard
  * against: a clean working tree (nothing to stash) must NOT abort the merge
  * with "No stash entries found" / get reported as "Merge failed".
+ *
+ * Timeout raised off vitest's 5s default: each case drives a real repo through
+ * ~10 git subprocesses, which intermittently overruns 5s on a loaded machine and
+ * fails the whole block on timing rather than behavior.
  */
-describe("mergeBranchIntoBase", () => {
+describe("mergeBranchIntoBase", { timeout: 30_000 }, () => {
   let repo: string;
 
   const git = (...args: string[]) =>
@@ -218,11 +222,12 @@ describe("mergeBranchIntoBase", () => {
     expect(git("stash", "list")).toBe("");
   });
 
-  it("does not report merge failure when the autostash pop conflicts", () => {
-    // Local uncommitted edit to README on the same lines the task branch also
-    // changed. The merge will rewrite README, so the post-merge `git stash pop`
-    // conflicts. That cleanup failure must NOT be surfaced as a merge failure —
-    // the merge itself already succeeded.
+  /**
+   * Sets up a guaranteed `git stash pop` conflict: a local uncommitted edit to
+   * the same README lines the task branch also rewrote. The merge replaces
+   * README, so popping the autostash back on top conflicts.
+   */
+  const setupPopConflict = () => {
     git("checkout", "task/abc");
     writeFileSync(join(repo, "README.md"), "base\ntask edit\n");
     git("add", "README.md");
@@ -232,6 +237,12 @@ describe("mergeBranchIntoBase", () => {
     // Uncommitted local change to the same file in the main checkout.
     writeFileSync(join(repo, "README.md"), "base\nlocal edit\n");
     expect(git("status", "--porcelain")).not.toBe("");
+  };
+
+  it("does not report merge failure when the autostash pop conflicts", () => {
+    // That cleanup failure must NOT be surfaced as a merge failure — the merge
+    // itself already succeeded.
+    setupPopConflict();
 
     let result: { commitHash: string } | undefined;
     expect(() => {
@@ -247,6 +258,45 @@ describe("mergeBranchIntoBase", () => {
     expect(readFileSync(join(repo, "feature.txt"), "utf-8")).toBe(
       "feature work\n"
     );
+  });
+
+  it("warns the user when the autostash pop conflicts, instead of swallowing it", () => {
+    // The regression this guards: the pop failure used to go to console.error
+    // only, leaving the user with conflict markers and a stash they were never
+    // told about. It must come back as an actionable warning.
+    setupPopConflict();
+
+    const { stashPopWarning } = mergeBranchIntoBase({
+      localPath: repo,
+      baseBranch: "main",
+      worktreeBranch: "task/abc",
+    });
+
+    expect(stashPopWarning).toBeDefined();
+    // Everything the user needs to self-recover: the stash survived, its
+    // marker, where to look, and which file conflicted.
+    expect(stashPopWarning).toContain("tower-merge-temp");
+    expect(stashPopWarning).toContain("git stash list");
+    expect(stashPopWarning).toContain("git stash pop");
+    expect(stashPopWarning).toContain("README.md");
+
+    // The warning tells the truth: git really did keep the stash entry, and the
+    // working tree really is conflicted.
+    expect(git("stash", "list")).toContain("tower-merge-temp");
+    expect(git("status", "--porcelain")).toMatch(/^UU /m);
+  });
+
+  it("reports no warning when the autostash pops cleanly", () => {
+    writeFileSync(join(repo, "README.md"), "base\nlocal edit\n");
+
+    const { stashPopWarning } = mergeBranchIntoBase({
+      localPath: repo,
+      baseBranch: "main",
+      worktreeBranch: "task/abc",
+    });
+
+    expect(stashPopWarning).toBeUndefined();
+    expect(git("stash", "list")).toBe("");
   });
 
   it("is idempotent when the branch is already merged (no stale stash pop)", () => {

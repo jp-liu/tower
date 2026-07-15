@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -50,6 +51,13 @@ export function TaskMergeConfirmDialog({
       });
 
       if (res.ok) {
+        const ok = await res.json().catch(() => ({}));
+        // Merge succeeded but left the user something to fix by hand (e.g. an
+        // autostash that could not be restored). It must not auto-dismiss —
+        // the message carries the recovery steps.
+        if (ok.warning) {
+          toast.warning(ok.warning, { duration: Infinity, closeButton: true });
+        }
         onOpenChange(false);
         onMergeComplete();
         router.refresh();
