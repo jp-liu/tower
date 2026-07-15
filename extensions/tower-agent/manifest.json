@@ -1,0 +1,16 @@
+{
+  "id": "tower-agent",
+  "version": 1,
+  "name": "Tower Agent",
+  "description": "Tower assistant profile package for OpenClaw and Hermes.",
+  "gateways": {
+    "openclaw": {
+      "defaultProfile": "o-tower",
+      "defaultDisplayName": "小塔"
+    },
+    "hermes": {
+      "defaultProfile": "h-tower",
+      "defaultDisplayName": "小塔"
+    }
+  }
+}

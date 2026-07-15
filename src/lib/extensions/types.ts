@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 
-export type ExtensionId = "rg" | "monaco";
+export type ExtensionId = "rg" | "monaco" | "tower-agent-openclaw" | "tower-agent-hermes";
 
 export interface ExtensionStatus {
   installed: boolean;

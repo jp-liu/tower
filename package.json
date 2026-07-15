@@ -25,6 +25,7 @@
     "scripts/tower-stop-hook.js",
     "dist/mcp-server.cjs",
     "skills/",
+    "extensions/",
     "tsconfig.json"
   ],
   "scripts": {

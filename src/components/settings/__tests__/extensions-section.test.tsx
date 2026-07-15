@@ -9,6 +9,8 @@ vi.mock("@/actions/extension-actions", () => ({
   listAllExtensionStatus: vi.fn().mockResolvedValue({
     rg: { installed: true, version: "14.1.1", path: "/usr/bin/rg" },
     monaco: { installed: false },
+    "tower-agent-openclaw": { installed: false },
+    "tower-agent-hermes": { installed: false },
   }),
   checkExtension: vi.fn().mockResolvedValue({ installed: true }),
   installExtension: vi.fn().mockResolvedValue({ success: true }),
@@ -24,6 +26,8 @@ vi.mock("sonner", () => ({
 const INITIAL_STATUS = {
   rg: { installed: true, version: "14.1.1", path: "/usr/bin/rg" },
   monaco: { installed: false },
+  "tower-agent-openclaw": { installed: false },
+  "tower-agent-hermes": { installed: false },
 };
 
 function Wrapper({ children }: { children: React.ReactNode }) {

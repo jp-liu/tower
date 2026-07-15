@@ -7,7 +7,7 @@
  * `definitions/{ripgrep,monaco}.ts` and are server-only. The registry
  * (server-side) re-exports those; this file is the client-side counterpart.
  */
-import { Search, FileCode } from "lucide-react";
+import { Search, FileCode, RadioTower, Bot } from "lucide-react";
 import type { ExtensionMetadata, ExtensionId } from "./types";
 
 const EXTENSION_METADATA: Record<ExtensionId, ExtensionMetadata> = {
@@ -28,11 +28,29 @@ const EXTENSION_METADATA: Record<ExtensionId, ExtensionMetadata> = {
     sizeMB: 15,
     homepageUrl: "https://microsoft.github.io/monaco-editor/",
   },
+  "tower-agent-openclaw": {
+    id: "tower-agent-openclaw",
+    name: "Tower Agent (OpenClaw)",
+    description: "安装 Tower 助手 profile、MCP 与 skills 到 OpenClaw",
+    icon: RadioTower,
+    sizeMB: 1,
+    homepageUrl: "https://docs.openclaw.ai/",
+  },
+  "tower-agent-hermes": {
+    id: "tower-agent-hermes",
+    name: "Tower Agent (Hermes)",
+    description: "安装 Tower 助手 profile、MCP 与 skills 到 Hermes",
+    icon: Bot,
+    sizeMB: 1,
+    homepageUrl: "https://hermes-agent.nousresearch.com/docs/",
+  },
 };
 
 const METADATA_LIST: ReadonlyArray<ExtensionMetadata> = [
   EXTENSION_METADATA.rg,
   EXTENSION_METADATA.monaco,
+  EXTENSION_METADATA["tower-agent-openclaw"],
+  EXTENSION_METADATA["tower-agent-hermes"],
 ];
 
 export function listExtensionMetadata(): ReadonlyArray<ExtensionMetadata> {

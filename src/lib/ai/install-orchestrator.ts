@@ -28,6 +28,7 @@ import packageJson from "../../../package.json";
  */
 const TOWER_SKILL_NAME = "tower";
 const TOWER_SKILL_NAMES = ["tower", "tower-goal", "tower-ask"];
+const TOWER_GATEWAY_SKILL_NAMES = ["tower"];
 const TOWER_INTEGRATION_SCHEMA_VERSION = 1;
 
 export function buildTowerIntegrationFingerprint(apiUrl: string): string {
@@ -194,7 +195,7 @@ export async function installHermesGateway(profile?: string): Promise<ProviderIn
   const mcp = await adapter.installMcp(mcpConfig, { scope: "user" });
   const hooks = await adapter.installHooks("");
   const skillResults = await Promise.all(
-    TOWER_SKILL_NAMES.map((name) => adapter.installSkill(name, getTowerSkillSourceDir(name))),
+    TOWER_GATEWAY_SKILL_NAMES.map((name) => adapter.installSkill(name, getTowerSkillSourceDir(name))),
   );
   const skill = skillResults.find((r) => !r.ok) ?? skillResults[0];
 

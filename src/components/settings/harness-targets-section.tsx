@@ -484,7 +484,7 @@ export function HarnessTargetsSection() {
                 </Field>
               )}
 
-              {tgt.gateway === "hermes" && (
+              {MCP_GATEWAYS.has(tgt.gateway) && (
                 <Field label={t("settings.harness.profileLabel")}>
                   <Input
                     value={tgt.profile ?? ""}

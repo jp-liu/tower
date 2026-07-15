@@ -18,6 +18,8 @@ vi.mock("@/actions/extension-actions", () => ({
 const INITIAL_STATUS = {
   rg: { installed: true, version: "14.1.1" },
   monaco: { installed: false },
+  "tower-agent-openclaw": { installed: false },
+  "tower-agent-hermes": { installed: false },
 };
 
 function Probe() {

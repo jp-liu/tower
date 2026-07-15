@@ -21,7 +21,7 @@ describe("registry", () => {
 
   it("listExtensions returns both definitions in deterministic order", () => {
     const list = listExtensions();
-    expect(list.length).toBe(2);
-    expect(list.map((e) => e.id)).toEqual(["rg", "monaco"]);
+    expect(list.length).toBe(4);
+    expect(list.map((e) => e.id)).toEqual(["rg", "monaco", "tower-agent-openclaw", "tower-agent-hermes"]);
   });
 });
