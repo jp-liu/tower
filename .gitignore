@@ -48,11 +48,14 @@ yarn-error.log*
 next-env.d.ts
 
 # database
-prisma/dev.db
-prisma/dev.db-journal
-prisma/dev.db-shm
-prisma/dev.db-wal
-prisma/dev.db.bak-*
+# Unanchored on purpose: a `prisma/dev.db`-style rule only matches at the repo
+# root, so a relative `file:` URL resolved against the schema dir (prisma/) once
+# wrote prisma/prisma/dev.db straight past it and into a commit.
+dev.db
+dev.db-journal
+dev.db-shm
+dev.db-wal
+dev.db.bak-*
 
 # Monaco editor (copied from node_modules by postinstall)
 public/vs/

@@ -1,13 +1,12 @@
 // @vitest-environment node
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { PrismaClient } from "@prisma/client";
+import { getTowerDbFilePath } from "@/lib/tower-dir";
 import { syncNoteToFts } from "@/lib/fts";
 import type { SearchCategory, SearchResult } from "@/lib/search";
 
 const testDb = new PrismaClient({
-  datasources: {
-    db: { url: process.env.DATABASE_URL ?? "file:./prisma/dev.db" },
-  },
+  datasourceUrl: `file:${getTowerDbFilePath()}`,
 });
 
 let testWorkspaceId: string;
