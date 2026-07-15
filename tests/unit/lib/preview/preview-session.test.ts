@@ -1,9 +1,14 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { PreviewSession } from "@/lib/preview/preview-session";
 import { resolve } from "node:path";
 import { PRESETS } from "@/lib/preview/presets";
 
 const MOCK = resolve("tests/fixtures/mock-dev-server/index.js");
+
+// These tests spawn real node processes, so they wait on a condition rather than
+// on a fixed sleep: a hardcoded delay is a bet that the subprocess finishes in
+// time, and the whole suite running 16-wide is where that bet loses.
+const untilStatus = (check: () => void) => vi.waitFor(check, { timeout: 8000, interval: 50 });
 
 describe("PreviewSession", () => {
   let session: PreviewSession;
@@ -37,10 +42,9 @@ describe("PreviewSession", () => {
     session.onStateChange((s) => states.push(s.status));
 
     await session.run();
-    await new Promise((r) => setTimeout(r, 3000));
+    await untilStatus(() => expect(session.status).toBe("running"));
 
     expect(states).toContain("starting");
-    expect(session.status).toBe("running");
   }, 10_000);
 
   it("ring buffer keeps last 5000 lines (test helper pushBuffer)", () => {
@@ -90,10 +94,8 @@ describe("PreviewSession", () => {
       installArgs: ["-e", "process.exit(0)"],  // simulate install that exits successfully
       autoStartAfter: true,
     });
-    // give install + autoStart a chance to complete
-    await new Promise((r) => setTimeout(r, 1500));
     // status must not be stuck on "installing" — could be starting / running / stopped / error
-    expect(session.status).not.toBe("installing");
+    await untilStatus(() => expect(session.status).not.toBe("installing"));
   }, 10_000);
 
   it("cancelRequested during install transitions to stopped, not error", async () => {
@@ -111,7 +113,6 @@ describe("PreviewSession", () => {
     });
     expect(session.status).toBe("installing");
     session.stop();
-    await new Promise((r) => setTimeout(r, 1000));
-    expect(session.status).toBe("stopped");
+    await untilStatus(() => expect(session.status).toBe("stopped"));
   }, 10_000);
 });

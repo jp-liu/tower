@@ -6,6 +6,7 @@ vi.mock("../../db", () => ({
   db: {
     project: {
       findMany: vi.fn(),
+      findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
@@ -19,6 +20,7 @@ import { projectTools } from "../project-tools";
 const mockDb = db as unknown as {
   project: {
     findMany: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;

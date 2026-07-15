@@ -4,6 +4,12 @@ import { mkdtempSync, rmSync, writeFileSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 
+// These tests drive real git: init, commit, worktree add, merge, worktree
+// remove. That costs ~2s on an idle machine but 8s+ once the full suite runs
+// them alongside 15 other workers — past vitest's 5s default, which surfaced as
+// "flaky" failures that always passed when the file was run on its own.
+vi.setConfig({ testTimeout: 30_000 });
+
 // Record what gets written back to the execution, and stub the side-effect
 // imports so the real merge + worktree teardown run against a real repo without
 // touching a DB, PTY, or the AI overview pipeline.

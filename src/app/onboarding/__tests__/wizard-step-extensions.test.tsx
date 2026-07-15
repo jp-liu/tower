@@ -2,7 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { I18nProvider } from "@/lib/i18n";
+import { listExtensions } from "@/lib/extensions/registry";
 import { WizardStepExtensions } from "../wizard-step-extensions";
+
+// Counted from the registry rather than hardcoded: "all" is what these tests
+// actually mean, and a literal here silently goes stale the next time an
+// extension is added — which is exactly how it broke last time.
+const EXTENSION_COUNT = listExtensions().length;
 
 vi.mock("@/actions/extension-actions", () => ({
   installExtension: vi.fn().mockResolvedValue({ success: true }),
@@ -44,7 +50,7 @@ describe("WizardStepExtensions", () => {
   it("starts with all checkboxes checked by default", () => {
     renderStep();
     const checkboxes = screen.getAllByRole("checkbox");
-    expect(checkboxes.length).toBe(2);
+    expect(checkboxes.length).toBe(EXTENSION_COUNT);
     for (const cb of checkboxes) {
       expect(cb).toBeChecked();
     }
@@ -69,7 +75,7 @@ describe("WizardStepExtensions", () => {
     await user.click(finishBtn);
 
     await waitFor(() => {
-      expect(actions.installExtension).toHaveBeenCalledTimes(2);
+      expect(actions.installExtension).toHaveBeenCalledTimes(EXTENSION_COUNT);
       expect(onboarding.setOnboardingExtensions).toHaveBeenCalledWith(
         expect.arrayContaining(["rg", "monaco"]),
         expect.arrayContaining(["rg", "monaco"])
