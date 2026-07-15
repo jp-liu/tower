@@ -73,6 +73,11 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
   // — so completion leaves zero residue no matter who calls it. Returns
   // completed:false for direct tasks (no worktree on disk) → fall through.
   let worktreeCompleted = false;
+  // Non-fatal problem the user must still act on (e.g. the main repo's autostash
+  // could not be restored). Returned alongside the task rather than thrown — the
+  // completion did succeed — but it must reach a human, so every caller that can
+  // show it (merge dialog, MCP move_task) gets it in the result.
+  let warning: string | undefined;
   if (status === "DONE") {
     const pre = await db.task.findUnique({
       where: { id: taskId },
@@ -82,6 +87,7 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
       const { completeWorktreeReturn } = await import("@/lib/task-completion");
       const outcome = await completeWorktreeReturn(taskId, pre.project.localPath, pre.baseBranch);
       worktreeCompleted = outcome.completed;
+      warning = outcome.warning;
     }
   }
 
@@ -191,7 +197,9 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
   } catch (error) {
     log.error("revalidatePath failed (non-fatal)", error, { taskId });
   }
-  return task;
+  // `warning` is additive: existing callers reading task fields are unaffected,
+  // and MCP move_task surfaces it to the agent for free via its JSON result.
+  return { ...task, ...(warning ? { warning } : {}) };
 }
 
 export async function updateTask(

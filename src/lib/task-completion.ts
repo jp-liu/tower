@@ -76,6 +76,10 @@ export class MergeConflictError extends Error {
  * @returns `{ completed: false }` when there is no worktree on disk (a direct
  *   task, or one already cleaned up) — the caller should fall back to its
  *   direct-mode DONE handling. `{ completed: true, commitHash }` otherwise.
+ *   `warning` carries a non-fatal problem the user must still act on (the
+ *   main repo's autostash could not be restored): completion succeeded, but
+ *   the caller MUST surface this or the user is left with conflict markers and
+ *   an orphaned stash they never hear about.
  * @throws {WorktreeDirtyError} uncommitted changes present (would be lost).
  * @throws {MergeConflictError} task branch conflicts with base.
  */
@@ -83,7 +87,7 @@ export async function completeWorktreeReturn(
   taskId: string,
   localPath: string,
   baseBranch: string
-): Promise<{ completed: boolean; commitHash?: string }> {
+): Promise<{ completed: boolean; commitHash?: string; warning?: string }> {
   const worktreePath = worktreePathFor(localPath, taskId);
   if (!existsSync(worktreePath)) {
     return { completed: false };
@@ -134,7 +138,11 @@ export async function completeWorktreeReturn(
     // Best effort — diff falls back gracefully.
   }
 
-  const { commitHash } = mergeBranchIntoBase({ localPath, baseBranch, worktreeBranch });
+  const { commitHash, stashPopWarning } = mergeBranchIntoBase({
+    localPath,
+    baseBranch,
+    worktreeBranch,
+  });
 
   // Persist mergeCommit/branchTipCommit for the diff archive, and null out
   // worktreePath so it isn't a dangling reference once the dir is removed.
@@ -178,5 +186,5 @@ export async function completeWorktreeReturn(
     log.error("Worktree cleanup failed", error, { taskId });
   }
 
-  return { completed: true, commitHash };
+  return { completed: true, commitHash, ...(stashPopWarning ? { warning: stashPopWarning } : {}) };
 }

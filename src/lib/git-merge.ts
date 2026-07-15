@@ -1,6 +1,9 @@
 import { execFileSync } from "child_process";
 import { existsSync } from "fs";
 import path from "path";
+import { logger } from "@/lib/logger";
+
+const log = logger.create("git-merge");
 
 /** Unique marker so a tower-created autostash can be told apart from any
  *  pre-existing user stash (and verified to actually exist before popping). */
@@ -96,6 +99,68 @@ export function assertMainRepoReady(localPath: string): void {
   }
 }
 
+/**
+ * Files left unmerged (conflict markers written) after a failed `git stash pop`.
+ * Best-effort: an empty list just means the message omits the file names.
+ */
+function unmergedFiles(localPath: string, timeoutMs: number): string[] {
+  try {
+    const out = execFileSync(
+      "git",
+      ["diff", "--name-only", "--diff-filter=U"],
+      { cwd: localPath, encoding: "utf-8", timeout: timeoutMs, stdio: ["pipe", "pipe", "pipe"] }
+    ).trim();
+    return out ? out.split("\n") : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Condenses git's failure output to the line(s) that actually diagnose it.
+ *
+ * A conflicting `git stash pop` reports ~9 lines (to stdout — hence
+ * `describeGitError` picking it up): "Auto-merging", the CONFLICT lines, then a
+ * full `git status` hint block. Splicing that whole dump into a one-line warning
+ * buries the recovery steps, so keep the CONFLICT lines when present and fall
+ * back to the first line for any other failure, where it is the only diagnostic.
+ */
+function condenseGitOutput(raw: string): string {
+  const lines = raw
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const conflicts = lines.filter((l) => l.startsWith("CONFLICT"));
+  return (conflicts.length ? conflicts : lines.slice(0, 1)).join("; ");
+}
+
+/**
+ * Builds the user-facing warning for a failed post-merge `git stash pop`.
+ *
+ * The merge already landed, so this is NOT an error — but the user is left with
+ * a working tree carrying conflict markers and a stash entry git silently kept.
+ * Everything needed to self-recover goes in the message, since the MCP layer and
+ * the merge dialog both only surface a plain string: that the stash survives,
+ * its marker, where to look, and which files conflicted.
+ *
+ * Chinese to match the user-facing convention of `MergeConflictError` /
+ * `WorktreeDirtyError`, which reach the same UI surface.
+ */
+function describeStashPopFailure(
+  localPath: string,
+  timeoutMs: number,
+  error: unknown
+): string {
+  const files = unmergedFiles(localPath, timeoutMs);
+  const conflicts = files.length ? `冲突文件：${files.join(", ")}。` : "";
+  return (
+    `合并已成功，但主仓库暂存改动恢复失败（git stash pop）：${condenseGitOutput(describeGitError(error))}。` +
+    `你的未提交改动没有丢失 —— 仍保留在 stash 中（标记 ${STASH_MARKER}）。${conflicts}` +
+    `请在 ${localPath} 执行 \`git stash list\` 查看，解决工作区冲突标记后执行 ` +
+    `\`git stash pop\` 恢复改动。`
+  );
+}
+
 export interface MergeBranchParams {
   /** Main checkout where the merge is performed. */
   localPath: string;
@@ -127,15 +192,20 @@ export interface MergeBranchParams {
  *     best-effort: their failure is logged but never thrown. By the time they
  *     run the merge has already succeeded, so a cleanup hiccup must not be
  *     reported back to the caller as "Merge failed".
+ *  5. A failed stash pop is nonetheless *reported*: it comes back as
+ *     `stashPopWarning` rather than an exception, so the caller can tell the
+ *     user their changes are still stashed without failing the completion.
+ *     "Must not mask a successful merge" means don't throw — not stay silent.
  *
- * @returns the short hash of the resulting merge commit.
+ * @returns the short hash of the merge commit, plus `stashPopWarning` when the
+ *   autostash could not be restored (merge still succeeded — see above).
  */
 export function mergeBranchIntoBase({
   localPath,
   baseBranch,
   worktreeBranch,
   timeoutMs = 30000,
-}: MergeBranchParams): { commitHash: string } {
+}: MergeBranchParams): { commitHash: string; stashPopWarning?: string } {
   const gitOpts = {
     encoding: "utf-8" as const,
     timeout: timeoutMs,
@@ -180,6 +250,7 @@ export function mergeBranchIntoBase({
   }
 
   let commitHash: string;
+  let stashPopWarning: string | undefined;
   try {
     if (needsCheckout) {
       execFileSync("git", ["checkout", baseBranch], gitOpts);
@@ -199,25 +270,30 @@ export function mergeBranchIntoBase({
       try {
         execFileSync("git", ["checkout", originalBranch], gitOpts);
       } catch (error) {
-        console.error(
-          "[merge] Restore original branch failed (non-fatal):",
-          error instanceof Error ? error.message : String(error)
-        );
+        log.error("Restore original branch failed (non-fatal)", error, {
+          localPath,
+          originalBranch,
+        });
       }
     }
 
-    // Pop is cleanup: a failure here must not mask a successful merge.
+    // Pop is cleanup: a failure here must not mask a successful merge, so it is
+    // never thrown. It is still handed back as a warning — silently swallowing
+    // it leaves the user with conflict markers and an orphaned stash they were
+    // never told about.
     if (didStash) {
       try {
         execFileSync("git", ["stash", "pop"], gitOpts);
       } catch (error) {
-        console.error(
-          "[merge] Stash pop after merge failed (non-fatal):",
-          error instanceof Error ? error.message : String(error)
-        );
+        stashPopWarning = describeStashPopFailure(localPath, timeoutMs, error);
+        log.warn("Stash pop after merge failed (non-fatal)", {
+          localPath,
+          stashMarker: STASH_MARKER,
+          error: describeGitError(error),
+        });
       }
     }
   }
 
-  return { commitHash };
+  return { commitHash, ...(stashPopWarning ? { stashPopWarning } : {}) };
 }
