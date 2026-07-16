@@ -8,6 +8,8 @@ export interface OpenClawSendInput {
   message: string;
   dest: string;
   downstream?: string | null;
+  presentation?: unknown;
+  env?: Record<string, string>;
 }
 
 export async function sendViaOpenClaw(
@@ -19,10 +21,22 @@ export async function sendViaOpenClaw(
   if (!channel) return { ok: false, output: "OpenClaw downstream channel is required (e.g. slack, whatsapp, telegram)" };
   if (!target) return { ok: false, output: "OpenClaw destination is required" };
 
-  const argSets = [
-    ["message", "send", "--channel", channel, "--target", target, "--message", input.message],
-    ["message", "send", channel, target, input.message],
-  ];
+  const presentationJson = input.presentation ? JSON.stringify(input.presentation) : null;
+  const primaryArgs = ["message", "send", "--channel", channel, "--target", target];
+  if (presentationJson) primaryArgs.push("--presentation", presentationJson);
+  else if (input.message.trim()) primaryArgs.push("--message", input.message);
+  primaryArgs.push("--json");
+
+  const argSets = presentationJson
+    ? [
+        primaryArgs,
+        ["message", "send", "--channel", channel, "--target", target, "--message", input.message, "--json"],
+        ["message", "send", channel, target, input.message],
+      ]
+    : [
+        ["message", "send", "--channel", channel, "--target", target, "--message", input.message, "--json"],
+        ["message", "send", channel, target, input.message],
+      ];
 
   let lastOutput = "";
   for (const args of argSets) {
@@ -30,7 +44,7 @@ export async function sendViaOpenClaw(
       const { stdout, stderr } = await execFileAsync(cmd, args, {
         timeout: 60_000,
         maxBuffer: 1024 * 1024,
-        env: process.env,
+        env: { ...process.env, ...(input.env ?? {}) },
       });
       return { ok: true, output: `${stdout}${stderr}`.trim() };
     } catch (err) {

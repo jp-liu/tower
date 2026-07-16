@@ -699,11 +699,12 @@ describe("platform utilities", () => {
   // ensurePathInEnv
   // =========================================================================
   describe("ensurePathInEnv", () => {
-    it("returns env unchanged when PATH is set", async () => {
+    it("preserves existing PATH entries and appends common CLI locations", async () => {
       const { ensurePathInEnv } = await import("@/lib/platform");
       const input = { PATH: "/usr/bin", HOME: "/home/user" };
       const result = ensurePathInEnv(input, "darwin");
-      expect(result.PATH).toBe("/usr/bin");
+      expect(result.PATH?.split(":")[0]).toBe("/usr/bin");
+      expect(result.PATH).toContain("/.local/bin");
     });
 
     it("adds default PATH on Unix when missing", async () => {

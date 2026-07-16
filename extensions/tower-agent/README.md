@@ -11,4 +11,7 @@ or copies Tower's bundled gateway-facing skill:
 
 - `tower`
 
-It must not set model, fallback model, provider, or global proxy rules.
+It must not set model, fallback model, provider, or hard-coded global proxy
+rules. If the user explicitly configures gateway runtime env (for example proxy
+or no-proxy values), Tower may write those user-owned values into the gateway
+runtime config.

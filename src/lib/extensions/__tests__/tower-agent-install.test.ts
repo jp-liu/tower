@@ -49,6 +49,10 @@ describe("tower agent extension installer", () => {
       gateway: "openclaw",
       profile: "o-tower",
       displayName: "小塔",
+      env: {
+        NO_PROXY: "localhost,127.0.0.1,::1,.example.test",
+        HTTPS_PROXY: "http://127.0.0.1:7890",
+      },
       paths,
     });
 
@@ -59,6 +63,9 @@ describe("tower agent extension installer", () => {
     expect(fs.existsSync(path.join(workspace, "skills", "tower-ask", "SKILL.md"))).toBe(false);
     expect(fs.existsSync(path.join(workspace, "skills", "tower-goal", "SKILL.md"))).toBe(false);
     expect(fs.existsSync(path.join(workspace, "mcp.json"))).toBe(true);
+    expect(fs.readFileSync(path.join(workspace, "gateway.env"), "utf-8")).toContain(
+      'NO_PROXY="localhost,127.0.0.1,::1,.example.test"',
+    );
 
     const cfg = JSON.parse(fs.readFileSync(paths.openclawConfigPath, "utf-8")) as {
       agents: { list: Array<Record<string, unknown>> };
@@ -70,6 +77,46 @@ describe("tower agent extension installer", () => {
       identity: { name: "小塔", emoji: "🗼" },
     });
     expect(agent?.model).toEqual({ primary: "keep/me" });
+    expect(cfg).toMatchObject({
+      env: {
+        vars: {
+          NO_PROXY: "localhost,127.0.0.1,::1,.example.test",
+          HTTPS_PROXY: "http://127.0.0.1:7890",
+        },
+      },
+    });
+
+    const serviceEnv = fs.readFileSync(paths.openclawGatewayServiceEnvPath, "utf-8");
+    expect(serviceEnv).toContain("export NO_PROXY='localhost,127.0.0.1,::1,.example.test'");
+    expect(serviceEnv).toContain("export HTTPS_PROXY='http://127.0.0.1:7890'");
+
+    const updated = await installTowerAgentExtension({
+      gateway: "openclaw",
+      profile: "o-tower",
+      displayName: "塔塔",
+      env: { NO_PROXY: "localhost" },
+      paths,
+    });
+    expect(updated.success).toBe(true);
+    const updatedCfg = JSON.parse(fs.readFileSync(paths.openclawConfigPath, "utf-8")) as {
+      env?: { vars?: Record<string, string> };
+      agents: { list: Array<Record<string, unknown>> };
+    };
+    const updatedAgent = updatedCfg.agents.list.find((item) => item.id === "o-tower");
+    expect(updatedAgent).toMatchObject({
+      id: "o-tower",
+      identity: { name: "塔塔", emoji: "🗼" },
+    });
+    expect(updatedAgent?.model).toEqual({ primary: "keep/me" });
+    expect(updatedCfg.env?.vars).toMatchObject({ NO_PROXY: "localhost" });
+    expect(updatedCfg.env?.vars?.HTTPS_PROXY).toBeUndefined();
+
+    const updatedServiceEnv = fs.readFileSync(paths.openclawGatewayServiceEnvPath, "utf-8");
+    expect(updatedServiceEnv).toContain("export NO_PROXY='localhost'");
+    expect(updatedServiceEnv).not.toContain("HTTPS_PROXY");
+
+    const marker = JSON.parse(fs.readFileSync(path.join(workspace, ".tower-agent.json"), "utf-8")) as { envKeys?: string[] };
+    expect(marker.envKeys).toEqual(["NO_PROXY"]);
   });
 
   it("checks and uninstalls an OpenClaw profile using the Tower marker", async () => {
@@ -95,6 +142,7 @@ function testPaths(): TowerAgentInstallPaths {
     openclawConfigPath: path.join(root, ".openclaw", "openclaw.json"),
     openclawWorkspacesDir: path.join(root, ".openclaw", "workspaces"),
     openclawAgentsDir: path.join(root, ".openclaw", "agents"),
+    openclawGatewayServiceEnvPath: path.join(root, ".openclaw", "service-env", "ai.openclaw.gateway.env"),
     hermesProfilesDir: path.join(root, ".hermes", "profiles"),
   };
 }

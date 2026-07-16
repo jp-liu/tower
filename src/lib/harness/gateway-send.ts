@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { sendViaHermes } from "@/lib/harness/hermes-send";
 import { sendViaOpenClaw } from "@/lib/harness/openclaw-send";
 import { resolveCommandPathSync } from "@/lib/platform";
+import { readHarnessGatewayRuntimeConfig } from "./gateway-config";
 
 export type HarnessGateway = "hermes" | "openclaw";
 
@@ -24,6 +25,7 @@ export interface HarnessGatewaySendInput {
   to?: string | null;
   profile?: string | null;
   message: string;
+  presentation?: unknown;
   scope: "work" | "unattended";
 }
 
@@ -36,13 +38,17 @@ export interface HarnessGatewaySendResult {
 export async function sendViaHarnessGateway(input: HarnessGatewaySendInput): Promise<HarnessGatewaySendResult> {
   const gateway = normalizeGateway(input.gateway);
   if (!gateway) return { ok: false, output: `Unsupported gateway: ${input.gateway}` };
+  const gatewayConfig = await readHarnessGatewayRuntimeConfig(gateway);
+  const profile = input.profile?.trim() || gatewayConfig.profile;
+  const env = gatewayConfig.env;
 
   const resolvedDest = await resolveHarnessDestination({
     gateway,
     downstream: input.downstream,
     dest: input.dest,
     to: input.to,
-    profile: input.profile,
+    profile,
+    env,
     scope: input.scope,
   });
   if (!resolvedDest.ok) return { ok: false, output: resolvedDest.error };
@@ -52,7 +58,8 @@ export async function sendViaHarnessGateway(input: HarnessGatewaySendInput): Pro
       message: input.message,
       dest: resolvedDest.dest,
       downstream: input.downstream,
-      profile: input.profile,
+      profile,
+      env,
     });
     return { ...sent, resolvedDest: resolvedDest.dest };
   }
@@ -61,6 +68,8 @@ export async function sendViaHarnessGateway(input: HarnessGatewaySendInput): Pro
     message: input.message,
     dest: resolvedDest.dest || "",
     downstream: input.downstream,
+    presentation: input.presentation,
+    env,
   });
   return { ...sent, resolvedDest: resolvedDest.dest };
 }
@@ -71,6 +80,7 @@ export async function resolveHarnessDestination(input: {
   dest?: string | null;
   to?: string | null;
   profile?: string | null;
+  env?: Record<string, string>;
   scope: "work" | "unattended";
 }): Promise<{ ok: true; dest: string | null } | { ok: false; error: string }> {
   const platform = input.downstream?.trim().toLowerCase() || "";
@@ -106,6 +116,7 @@ export async function resolveHarnessDestination(input: {
     platform,
     query: requested,
     profile: input.profile,
+    env: input.env,
   });
   if (byDirectory) return { ok: true, dest: byDirectory };
 
@@ -114,6 +125,7 @@ export async function resolveHarnessDestination(input: {
     platform,
     query: requested,
     scope: input.scope,
+    env: input.env,
   });
   if (byOpenClawDirectory) return { ok: true, dest: byOpenClawDirectory };
 
@@ -176,6 +188,7 @@ async function findDestinationInHermesDirectory(input: {
   platform: string;
   query: string;
   profile?: string | null;
+  env?: Record<string, string>;
 }): Promise<string | null> {
   if (input.gateway !== "hermes") return null;
   const profile = input.profile?.trim() || process.env.HERMES_PROFILE?.trim();
@@ -204,6 +217,7 @@ async function findDestinationInOpenClawDirectory(input: {
   platform: string;
   query: string;
   scope: "work" | "unattended";
+  env?: Record<string, string>;
 }): Promise<string | null> {
   if (input.gateway !== "openclaw" || !input.platform) return null;
   const raw = input.query.trim();
@@ -214,7 +228,7 @@ async function findDestinationInOpenClawDirectory(input: {
     const { stdout } = await execFilePromise(
       cmd,
       ["directory", "groups", "list", "--channel", input.platform, "--query", raw, "--json", "--limit", "10"],
-      { timeout: 20_000, maxBuffer: 1024 * 1024, env: process.env },
+      { timeout: 20_000, maxBuffer: 1024 * 1024, env: { ...process.env, ...(input.env ?? {}) } },
     );
     const parsed = JSON.parse(stdout) as Array<{ id?: string; name?: string }>;
     const normalized = normalizeName(raw);

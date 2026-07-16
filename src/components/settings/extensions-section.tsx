@@ -3,10 +3,11 @@
 import { useI18n } from "@/lib/i18n";
 import { listExtensionMetadata } from "@/lib/extensions/metadata";
 import { ExtensionCard } from "./extension-card";
+import { GatewayExtensionSettings } from "./gateway-extension-settings";
 
 export function ExtensionsSection() {
   const { t } = useI18n();
-  const extensions = listExtensionMetadata();
+  const extensions = listExtensionMetadata().filter((ext) => !ext.id.startsWith("tower-agent-"));
 
   return (
     <div className="space-y-5">
@@ -20,6 +21,8 @@ export function ExtensionsSection() {
           <ExtensionCard key={ext.id} extension={ext} />
         ))}
       </div>
+
+      <GatewayExtensionSettings />
     </div>
   );
 }

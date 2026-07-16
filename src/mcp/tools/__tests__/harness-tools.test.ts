@@ -8,7 +8,7 @@ vi.mock("@/lib/config-reader", () => ({
   readConfigValue: vi.fn(),
 }));
 
-import { harnessTools } from "../harness-tools";
+import { harnessTools, parseGatewaySendOutput } from "../harness-tools";
 import { db } from "@/lib/db";
 import { readConfigValue } from "@/lib/config-reader";
 
@@ -105,5 +105,48 @@ describe("list_notify_targets — scope derivation", () => {
     const r = await call({ taskId: TASK_ID }); // derives unattended
     expect(r.scope).toBe("unattended");
     expect(r.noChannelConfigured).toBe(true);
+  });
+});
+
+describe("parseGatewaySendOutput", () => {
+  it("parses Hermes-style send JSON", () => {
+    expect(
+      parseGatewaySendOutput(
+        JSON.stringify({
+          platform: "feishu",
+          chat_id: "oc_abc",
+          message_id: "om_x100b6ab22dfd28a0386013615b78d2f",
+        }),
+      ),
+    ).toEqual({
+      platform: "feishu",
+      chat_id: "oc_abc",
+      message_id: "om_x100b6ab22dfd28a0386013615b78d2f",
+    });
+  });
+
+  it("parses nested OpenClaw-style send JSON", () => {
+    expect(
+      parseGatewaySendOutput(
+        JSON.stringify({
+          action: "send",
+          channel: "feishu",
+          result: {
+            target: "feishu:oc_abc",
+            platformMessageId: "om_x100b6ab22dfd28a0386013615b78d2f",
+          },
+        }),
+      ),
+    ).toEqual({
+      platform: "feishu",
+      chat_id: "feishu:oc_abc",
+      message_id: "om_x100b6ab22dfd28a0386013615b78d2f",
+    });
+  });
+
+  it("parses human-readable fallback output", () => {
+    expect(parseGatewaySendOutput("飞书消息 ID: om_x100b6ab22dfd28a0386013615b78d2f")).toEqual({
+      message_id: "om_x100b6ab22dfd28a0386013615b78d2f",
+    });
   });
 });

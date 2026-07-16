@@ -14,14 +14,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 import { getConfigValue, setConfigValue } from "@/actions/config-actions";
-import { testHarnessTarget, getHarnessSetupInfo } from "@/actions/harness-actions";
-
-/** Gateways that run the agent themselves, so they need Tower's MCP + skill wired in. */
-const MCP_GATEWAYS = new Set(["openclaw", "hermes"]);
-interface HarnessSetupInfo {
-  mcp: { name: string; command: string; args: string[]; env: Record<string, string> };
-  skillDir: string;
-}
+import { testHarnessTarget } from "@/actions/harness-actions";
 
 /**
  * 无人值守发送渠道注册表。每条是一条「网关 → 下游」路由：
@@ -32,7 +25,6 @@ export interface NotifyTarget {
   id: string;
   gateway: string;
   downstream: string;
-  profile?: string; // optional gateway profile / workspace name; blank means gateway default
   dest?: string; // exact chat/user id; unattended Hermes may leave blank to use its home channel
   active: boolean; // 单选（按 scope 各自单选）：该类别里生效的这条被 agent 用于外推
   scope: NotifyScope; // work=在场发群讨论 / unattended=下班找本人
@@ -134,15 +126,6 @@ export function HarnessTargetsSection() {
   const setTest = (id: string, p: Partial<TestState>) =>
     setTests((t) => ({ ...t, [id]: { ...testOf(id), ...p } }));
 
-  // 本机真实 MCP 配置 + skill 路径 —— 用于 openclaw/hermes 的可复制接入提示词。
-  const [setupInfo, setSetupInfo] = useState<HarnessSetupInfo | null>(null);
-  const [installingGateway, setInstallingGateway] = useState<string | null>(null);
-  const [installedGateways, setInstalledGateways] = useState<Set<string>>(() => new Set());
-  const [installFailedGateways, setInstallFailedGateways] = useState<Set<string>>(() => new Set());
-  useEffect(() => {
-    getHarnessSetupInfo().then(setSetupInfo).catch(() => {});
-  }, []);
-
   useEffect(() => {
     getConfigValue<NotifyTarget[]>("harness.targets", [])
       .then((v) => {
@@ -150,7 +133,6 @@ export function HarnessTargetsSection() {
           id: r.id ?? crypto.randomUUID(),
           gateway: GATEWAYS.includes(r.gateway) ? r.gateway : "hermes",
           downstream: r.downstream ?? "feishu",
-          profile: r.profile ?? "",
           dest: r.dest ?? "",
           active: !!r.active,
           // 老数据无 scope → 当无人值守（原来这张表就是给无人值守外推配的）。
@@ -247,79 +229,6 @@ export function HarnessTargetsSection() {
     }
   };
 
-  // openclaw/hermes 作为「跑 agent 的网关」，得自己接 Tower 的 MCP + 技能。这段提示词带本机真实
-  // MCP 命令与技能路径，丢给对应网关的 AI 就能照做（同机、stdio）。
-  const buildGatewayPrompt = (gw: string): string => {
-    const gl = tk(`settings.harness.gateway.${gw}`);
-    const mcpBlock = setupInfo
-      ? [
-          `   name: ${setupInfo.mcp.name}`,
-          `   command: ${setupInfo.mcp.command}`,
-          `   args: ${JSON.stringify(setupInfo.mcp.args)}`,
-          `   env: ${JSON.stringify(setupInfo.mcp.env)}`,
-        ].join("\n")
-      : "   (Tower MCP config not ready yet — retry in a moment)";
-    const skillDir = setupInfo?.skillDir ?? "<Tower 安装目录>/skills/tower";
-    // skillDir is <root>/skills/tower — strip the trailing /tower to get the skills root, then
-    // symlink all three skills (tower + tower-goal + tower-ask); otherwise a gateway onboarded
-    // via this prompt would lack the unattended core.
-    const skillsRoot = skillDir.replace(/[\\/]tower$/, "");
-    return [
-      `帮我把 Tower 接入 ${gl}，让它能用 Tower 的 MCP 工具与技能（作为无人值守网关）。前提：${gl} 与 Tower 在同一台机器上，MCP 走 stdio。`,
-      "",
-      `1) 注册 Tower MCP server（stdio）—— 在 ${gl} 的 MCP 配置里加一条：`,
-      mcpBlock,
-      "",
-      `2) 加载 Tower 技能 —— 软链 3 个技能目录到 ${gl} 的技能目录（软链而非复制，随 Tower 更新自动生效）：`,
-      `   ln -s "${skillsRoot}/tower" <你的技能目录>/tower`,
-      `   ln -s "${skillsRoot}/tower-goal" <你的技能目录>/tower-goal`,
-      `   ln -s "${skillsRoot}/tower-ask" <你的技能目录>/tower-ask`,
-      "",
-      `3) 验证 —— 连上后应能调用 create_task / list_tasks / ask_human / notify_human / list_notify_targets / set_goal_mode 等工具，技能列表里出现 tower / tower-goal / tower-ask。`,
-    ].join("\n");
-  };
-
-  const copyGatewayPrompt = async (gw: string) => {
-    try {
-      await navigator.clipboard.writeText(buildGatewayPrompt(gw));
-      toast.success(t("settings.harness.gatewaySetupCopied"));
-    } catch {
-      toast.error(t("settings.harness.copyFailed"));
-    }
-  };
-
-  const installGateway = async (target: NotifyTarget) => {
-    const gw = target.gateway;
-    if (gw !== "hermes") return;
-    setInstallingGateway(gw);
-    try {
-      const res = await fetch("/api/internal/harness/gateway-install", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ gateway: gw, profile: target.profile?.trim() || undefined }),
-      });
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; report?: { ok?: boolean; mcp?: { error?: string }; skill?: { error?: string } } };
-      if (!res.ok || !data.ok) {
-        const msg = data.error ?? data.report?.mcp?.error ?? data.report?.skill?.error ?? "install failed";
-        setInstallFailedGateways((prev) => new Set(prev).add(gw));
-        toast.error(`${t("settings.harness.gatewayInstallFailed")}：${msg}`);
-        return;
-      }
-      setInstalledGateways((prev) => new Set(prev).add(gw));
-      setInstallFailedGateways((prev) => {
-        const next = new Set(prev);
-        next.delete(gw);
-        return next;
-      });
-      toast.success(t("settings.harness.gatewayInstalled"));
-    } catch (err) {
-      setInstallFailedGateways((prev) => new Set(prev).add(gw));
-      toast.error(`${t("settings.harness.gatewayInstallFailed")}：${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setInstallingGateway(null);
-    }
-  };
-
   const runTest = async (tgt: NotifyTarget) => {
     const useHomeRoute = isHermesWechatUnattended(tgt);
     const dest = useHomeRoute ? "" : (testOf(tgt.id).dest || tgt.dest || "").trim();
@@ -327,7 +236,7 @@ export function HarnessTargetsSection() {
     if (!dest && !canUseHermesHome) return;
     setTest(tgt.id, { testing: true, result: null });
     try {
-      const r = await testHarnessTarget({ gateway: tgt.gateway, downstream: tgt.downstream, dest, profile: tgt.profile, scope: tgt.scope });
+      const r = await testHarnessTarget({ gateway: tgt.gateway, downstream: tgt.downstream, dest, scope: tgt.scope });
       setTest(tgt.id, { testing: false, result: r });
     } catch (e) {
       setTest(tgt.id, { testing: false, result: { ok: false, output: e instanceof Error ? e.message : String(e) } });
@@ -484,16 +393,6 @@ export function HarnessTargetsSection() {
                 </Field>
               )}
 
-              {MCP_GATEWAYS.has(tgt.gateway) && (
-                <Field label={t("settings.harness.profileLabel")}>
-                  <Input
-                    value={tgt.profile ?? ""}
-                    onChange={(e) => patch(tgt.id, { profile: e.target.value })}
-                    placeholder={t("settings.harness.profilePlaceholder")}
-                  />
-                </Field>
-              )}
-
               {tgt.scope === "unattended" && !isHermesWechatUnattended(tgt) && (
                 <Field label={t("settings.harness.destLabel")}>
                   <Input
@@ -566,55 +465,6 @@ export function HarnessTargetsSection() {
                   )}
                 </div>
               </Field>
-
-              {/* openclaw/hermes 网关：跑 agent 的一方，得自己接 Tower MCP + 技能。Hermes 支持一键注入；其它网关保留提示词 fallback。 */}
-              {MCP_GATEWAYS.has(tgt.gateway) && (
-                <div className="flex flex-wrap items-center gap-2">
-                  {tgt.gateway === "hermes" && installedGateways.has(tgt.gateway) ? (
-                    <div className="inline-flex items-center gap-1 rounded-md border bg-background px-3 py-2 text-xs text-emerald-500">
-                      <CircleCheck className="h-3.5 w-3.5" />
-                      <span>{t("settings.harness.gatewayInstalledHint")}</span>
-                    </div>
-                  ) : tgt.gateway === "hermes" ? (
-                    <Button
-                      variant="outline"
-                      className="text-muted-foreground"
-                      onClick={() => installGateway(tgt)}
-                      disabled={installingGateway === tgt.gateway}
-                    >
-                      {installingGateway === tgt.gateway ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Check className="h-3.5 w-3.5" />
-                      )}
-                      <span className="text-xs">
-                        {installingGateway === tgt.gateway
-                          ? t("settings.harness.gatewayInstalling")
-                          : t("settings.harness.gatewayInstall")}
-                      </span>
-                    </Button>
-                  ) : null}
-                  {(tgt.gateway !== "hermes" || installFailedGateways.has(tgt.gateway)) && (
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <Button
-                            variant="ghost"
-                            className="text-muted-foreground"
-                            onClick={() => copyGatewayPrompt(tgt.gateway)}
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                            <span className="text-xs">{t("settings.harness.gatewayManualSetup")}</span>
-                          </Button>
-                        }
-                      />
-                      <TooltipContent className="max-w-xs whitespace-pre-line text-left">
-                        {t("settings.harness.gatewaySetupTip")}
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                </div>
-              )}
 
               <div className="flex items-center justify-between gap-2 pt-1">
                 <Button

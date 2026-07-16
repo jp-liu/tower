@@ -9,6 +9,7 @@ export interface HermesSendInput {
   dest?: string | null;
   downstream?: string | null;
   profile?: string | null;
+  env?: Record<string, string>;
 }
 
 export async function sendViaHermes(input: HermesSendInput): Promise<{ ok: true; output: string } | { ok: false; output: string }> {
@@ -26,7 +27,7 @@ export async function sendViaHermes(input: HermesSendInput): Promise<{ ok: true;
     const { stdout, stderr } = await execFileAsync(cmd, args, {
       timeout: 60_000,
       maxBuffer: 1024 * 1024,
-      env: process.env,
+      env: { ...process.env, ...(input.env ?? {}) },
     });
     return { ok: true, output: `${stdout}${stderr}`.trim() };
   } catch (err) {

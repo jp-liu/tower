@@ -11,4 +11,4 @@ terminal skills, not OpenClaw/Hermes bridge-agent skills.
 
 Message gateway env such as `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` belongs
 to the user's gateway runtime. Tower does not hard-code enterprise domains or
-proxy decisions into this profile.
+proxy decisions into this profile; it only carries values the user configured.

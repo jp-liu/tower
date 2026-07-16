@@ -29,7 +29,7 @@ import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { readConfigValue } from "@/lib/config-reader";
 import { db } from "@/lib/db";
-import { resolveHarnessDestination } from "../gateway-send";
+import { resolveHarnessDestination, sendViaHarnessGateway } from "../gateway-send";
 
 const readCfg = readConfigValue as unknown as ReturnType<typeof vi.fn>;
 const readFileMock = readFile as unknown as ReturnType<typeof vi.fn>;
@@ -200,5 +200,58 @@ describe("resolveHarnessDestination", () => {
       scope: "unattended",
     });
     expect(r).toEqual({ ok: true, dest: null });
+  });
+});
+
+describe("sendViaHarnessGateway", () => {
+  it("sends OpenClaw presentation cards without duplicating the text fallback", async () => {
+    execFileMock.mockImplementation((_cmd, _args, _options, cb) => cb(null, "sent", ""));
+
+    const presentation = {
+      title: "Tower",
+      tone: "info",
+      blocks: [
+        { type: "text", text: "消息正文" },
+        { type: "divider" },
+        { type: "context", text: "[[tower:task=claaaaaaaaaaaaaaaaaaaaaa]]" },
+      ],
+    };
+    const r = await sendViaHarnessGateway({
+      gateway: "openclaw",
+      downstream: "feishu",
+      to: "oc_exact",
+      message: "消息正文\n\n[[tower:task=claaaaaaaaaaaaaaaaaaaaaa]]",
+      presentation,
+      scope: "work",
+    });
+
+    expect(r.ok).toBe(true);
+    const args = execFileMock.mock.calls[0][1] as string[];
+    expect(args).toContain("--presentation");
+    expect(args).toContain("--json");
+    expect(args).not.toContain("--message");
+    expect(JSON.parse(args[args.indexOf("--presentation") + 1])).toEqual(presentation);
+  });
+
+  it("falls back to plain text when OpenClaw does not support presentation", async () => {
+    execFileMock
+      .mockImplementationOnce((_cmd, _args, _options, cb) => cb({ stderr: "unknown option --presentation" }))
+      .mockImplementationOnce((_cmd, _args, _options, cb) => cb(null, "sent", ""));
+
+    const r = await sendViaHarnessGateway({
+      gateway: "openclaw",
+      downstream: "feishu",
+      to: "oc_exact",
+      message: "fallback body",
+      presentation: { title: "Tower", blocks: [{ type: "text", text: "fallback body" }] },
+      scope: "work",
+    });
+
+    expect(r.ok).toBe(true);
+    expect(execFileMock).toHaveBeenCalledTimes(2);
+    const fallbackArgs = execFileMock.mock.calls[1][1] as string[];
+    expect(fallbackArgs).toContain("--message");
+    expect(fallbackArgs).toContain("fallback body");
+    expect(fallbackArgs).toContain("--json");
   });
 });

@@ -28,6 +28,42 @@ type NotifyTargetConfig = {
   scope?: string;
 };
 
+type MessagePresentation = {
+  title: string;
+  tone: "info" | "success" | "warning" | "danger" | "neutral";
+  blocks: Array<
+    | { type: "text"; text: string }
+    | { type: "divider" }
+    | { type: "context"; text: string }
+  >;
+};
+
+function buildTowerOutboundPresentation(args: {
+  message: string;
+  token: string;
+  scope: "work" | "unattended";
+  taskTitle: string | null;
+  targetLabel?: string | null;
+}): MessagePresentation {
+  const title = args.scope === "unattended" && args.taskTitle
+    ? `Tower · ${args.taskTitle}`
+    : "Tower";
+  const footerParts = [
+    "Agent: Tower",
+    args.targetLabel ? `Channel: ${args.targetLabel}` : null,
+    args.token,
+  ].filter(Boolean);
+  return {
+    title,
+    tone: args.scope === "unattended" ? "warning" : "info",
+    blocks: [
+      { type: "text", text: args.message },
+      { type: "divider" },
+      { type: "context", text: footerParts.join(" | ") },
+    ],
+  };
+}
+
 function composeSendInstructions(
   active: NotifyTargetConfig,
   token: string,
@@ -204,10 +240,18 @@ export const harnessTools = {
       const token = `[[tower:task=${args.taskId}]]`;
       const prefix = scope === "unattended" && task.title ? `【${task.title}】` : "";
       const body = `${prefix}${args.message}\n\n${token}`;
+      const presentation = buildTowerOutboundPresentation({
+        message: `${prefix}${args.message}`,
+        token,
+        scope,
+        taskTitle: task.title ?? null,
+        targetLabel: active.label ?? active.gateway ?? null,
+      });
       const { sendViaHarnessGateway } = await import("@/lib/harness/gateway-send");
       const sent = await sendViaHarnessGateway({
         gateway: active.gateway,
         message: body,
+        presentation,
         dest: active.dest,
         to: args.to,
         downstream: active.downstream,
@@ -228,7 +272,7 @@ export const harnessTools = {
       });
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) return { error: data?.error ?? `${endpoint} failed`, status: res.status, sent: true };
-      const sentMeta = parseHermesSendOutput(sent.output);
+      const sentMeta = parseGatewaySendOutput(sent.output);
       const harnessMessageId = String((expectReply ? data.requestId : data.messageId) || "");
       if (sentMeta?.message_id && harnessMessageId) {
         await recordHarnessDelivery({
@@ -410,17 +454,65 @@ export const harnessTools = {
   },
 };
 
-function parseHermesSendOutput(output: string): { platform?: string; chat_id?: string; message_id?: string } | null {
+export function parseGatewaySendOutput(output: string): { platform?: string; chat_id?: string; message_id?: string } | null {
   try {
-    const parsed = JSON.parse(output) as { platform?: unknown; chat_id?: unknown; message_id?: unknown };
+    const parsed = JSON.parse(output) as unknown;
+    const messageId =
+      findStringByKeys(parsed, ["message_id", "messageId", "platformMessageId", "openMessageId"]) ??
+      findStringByPattern(parsed, /^om_[A-Za-z0-9_-]+$/);
+    if (!messageId) return null;
     return {
-      platform: typeof parsed.platform === "string" ? parsed.platform : undefined,
-      chat_id: typeof parsed.chat_id === "string" ? parsed.chat_id : undefined,
-      message_id: typeof parsed.message_id === "string" ? parsed.message_id : undefined,
+      platform: findStringByKeys(parsed, ["platform", "channel", "downstream"]),
+      chat_id: findStringByKeys(parsed, ["chat_id", "chatId", "target", "to", "destination"]),
+      message_id: messageId,
     };
   } catch {
-    return null;
+    const messageId =
+      output.match(/\b(message_id|messageId|platformMessageId|飞书消息\s*ID|message\s*id)\b[^A-Za-z0-9_-]*(om_[A-Za-z0-9_-]+)/i)?.[2] ??
+      output.match(/\bom_[A-Za-z0-9_-]+\b/)?.[0];
+    if (!messageId) return null;
+    const platform = output.match(/\b(platform|channel)\b[^A-Za-z0-9_-]*([A-Za-z0-9_-]+)/i)?.[2];
+    const chatId =
+      output.match(/\b(chat_id|chatId|target|to)\b[^A-Za-z0-9:_-]*([A-Za-z]+:[A-Za-z0-9:_-]+)/i)?.[2] ??
+      output.match(/\b(chat_id|chatId|target|to)\b[^A-Za-z0-9:_-]*(oc_[A-Za-z0-9_-]+)/i)?.[2];
+    return {
+      ...(platform ? { platform } : {}),
+      ...(chatId ? { chat_id: chatId } : {}),
+      message_id: messageId,
+    };
   }
+}
+
+function findStringByKeys(value: unknown, keys: string[]): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findStringByKeys(item, keys);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  const obj = value as Record<string, unknown>;
+  for (const key of keys) {
+    const raw = obj[key];
+    if (typeof raw === "string" && raw.trim()) return raw.trim();
+  }
+  for (const raw of Object.values(obj)) {
+    const found = findStringByKeys(raw, keys);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function findStringByPattern(value: unknown, pattern: RegExp): string | undefined {
+  if (typeof value === "string" && pattern.test(value)) return value;
+  if (!value || typeof value !== "object") return undefined;
+  const children = Array.isArray(value) ? value : Object.values(value as Record<string, unknown>);
+  for (const child of children) {
+    const found = findStringByPattern(child, pattern);
+    if (found) return found;
+  }
+  return undefined;
 }
 
 async function getOpenAskForRelay(taskId: string): Promise<boolean> {

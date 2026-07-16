@@ -332,6 +332,25 @@ export async function continueLatestPtyExecution(
     orderBy: { createdAt: "desc" },
   });
 
+  if (latestExec?.sessionId) {
+    const sameSessionOnOtherTask = await db.taskExecution.findFirst({
+      where: { sessionId: latestExec.sessionId, NOT: { taskId } },
+      select: { id: true },
+    });
+    if (!sameSessionOnOtherTask) {
+      return resumePtyExecution(taskId, latestExec.sessionId);
+    }
+  }
+
+  // Direct-mode tasks share the same project cwd. Without an explicit sessionId,
+  // `claude --continue` resumes the latest conversation in that cwd, which may
+  // belong to another Tower task. Only use --continue when the previous run had
+  // an isolated worktree cwd; otherwise start fresh with task context.
+  if (!latestExec?.worktreePath) {
+    const r = await startPtyExecution(taskId, task.title);
+    return { executionId: r.executionId, worktreePath: r.worktreePath };
+  }
+
   // Destroy any live PTY session for this task before spawning a new one
   const { destroySession: destroyExisting } = await import("@/lib/pty/session-store");
   destroyExisting(taskId);

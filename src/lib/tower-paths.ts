@@ -10,5 +10,10 @@
  * blindly using `process.cwd()`.
  */
 export function getPackageRoot(): string {
-  return process.env.TOWER_PACKAGE_ROOT || process.cwd();
+  if (process.env.TOWER_PACKAGE_ROOT) return process.env.TOWER_PACKAGE_ROOT;
+  const cwd = process.cwd();
+  if (cwd.endsWith("/.next/standalone") || cwd.endsWith("\\.next\\standalone")) {
+    return cwd.slice(0, -"/.next/standalone".length);
+  }
+  return cwd;
 }

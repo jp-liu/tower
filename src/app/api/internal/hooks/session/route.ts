@@ -51,6 +51,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, skipped: true });
   }
 
+  const existingOwner = await db.taskExecution.findFirst({
+    where: { sessionId, NOT: { taskId } },
+    select: { id: true, taskId: true },
+  });
+  if (existingOwner) {
+    return NextResponse.json(
+      {
+        error: "Session id already belongs to another task",
+        ownerTaskId: existingOwner.taskId,
+      },
+      { status: 409 },
+    );
+  }
+
   await db.taskExecution.update({
     where: { id: execution.id },
     data: { sessionId },

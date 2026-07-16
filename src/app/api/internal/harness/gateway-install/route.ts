@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { installHermesGateway } from "@/lib/ai/install-orchestrator";
+import { installTowerAgentExtension } from "@/lib/extensions/tower-agent-install";
 
 const bodySchema = z.object({
-  gateway: z.enum(["hermes"]),
+  gateway: z.enum(["hermes", "openclaw"]),
   profile: z.string().min(1).max(80).optional(),
+  displayName: z.string().min(1).max(80).optional(),
+  env: z.record(z.string(), z.string()).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -13,6 +15,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Invalid request body" }, { status: 400 });
   }
 
-  const report = await installHermesGateway(parsed.data.profile);
-  return NextResponse.json({ ok: report.ok, report });
+  const report = await installTowerAgentExtension(parsed.data);
+  return NextResponse.json({ ok: report.success, report });
 }

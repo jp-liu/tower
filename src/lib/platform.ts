@@ -13,6 +13,7 @@
 
 import { constants as fsConstants, promises as fs, readFileSync, existsSync } from "node:fs";
 import { execSync, execFileSync } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
 
 // ---------------------------------------------------------------------------
@@ -98,16 +99,30 @@ export function quoteForCmd(arg: string): string {
 // Environment utilities
 // ---------------------------------------------------------------------------
 
-/** Default PATH values when the env has none (prevents "command not found"). */
+/** Default PATH values for service-launched processes (prevents "command not found"). */
 function defaultPathForPlatform(platform: NodeJS.Platform = process.platform): string {
   if (isWindows(platform)) {
     return "C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\Wbem";
   }
-  return "/usr/local/bin:/opt/homebrew/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin";
+  const home = os.homedir();
+  return [
+    path.join(home, ".local", "bin"),
+    path.join(home, "bin"),
+    "/usr/local/bin",
+    "/opt/homebrew/bin",
+    "/usr/local/sbin",
+    "/usr/bin",
+    "/bin",
+    "/usr/sbin",
+    "/sbin",
+  ].join(":");
 }
 
 /**
- * Ensure env has a non-empty PATH. If missing/empty, merges sensible defaults.
+ * Ensure env has a usable PATH. macOS launchd services often inherit only
+ * /usr/bin:/bin:/usr/sbin:/sbin, which hides user-installed CLIs such as
+ * ~/.local/bin/claude. Preserve the caller's PATH, then append missing common
+ * locations without imposing proxy or company-specific routing behavior.
  * Returns a new object — never mutates the input.
  */
 export function ensurePathInEnv(
@@ -116,8 +131,15 @@ export function ensurePathInEnv(
 ): Record<string, string | undefined> {
   const key = isWindows(platform) ? "Path" : "PATH";
   const current = env.PATH ?? env.Path ?? "";
-  if (current.length > 0) return env;
-  return { ...env, [key]: defaultPathForPlatform(platform) };
+  const separator = isWindows(platform) ? ";" : ":";
+  const seen = new Set(current.split(separator).filter(Boolean));
+  const merged = current.split(separator).filter(Boolean);
+  for (const entry of defaultPathForPlatform(platform).split(separator)) {
+    if (!entry || seen.has(entry)) continue;
+    seen.add(entry);
+    merged.push(entry);
+  }
+  return { ...env, [key]: merged.join(separator) };
 }
 
 /**

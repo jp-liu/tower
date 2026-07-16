@@ -4,14 +4,17 @@ import {
   installTowerAgentExtension,
   uninstallTowerAgentExtension,
 } from "../tower-agent-install";
+import { readHarnessGatewayRuntimeConfig } from "@/lib/harness/gateway-config";
 import type { Extension, ExtensionResult, ExtensionStatus } from "../types";
 
 async function check(): Promise<ExtensionStatus> {
-  return checkTowerAgentExtension("openclaw");
+  const config = await readHarnessGatewayRuntimeConfig("openclaw");
+  return checkTowerAgentExtension("openclaw", { profile: config.profile });
 }
 
 async function install(): Promise<ExtensionResult> {
-  return installTowerAgentExtension({ gateway: "openclaw" });
+  const config = await readHarnessGatewayRuntimeConfig("openclaw");
+  return installTowerAgentExtension({ gateway: "openclaw", ...config });
 }
 
 async function uninstall(): Promise<ExtensionResult> {
