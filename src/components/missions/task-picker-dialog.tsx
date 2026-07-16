@@ -116,7 +116,10 @@ function TaskRow({
   return (
     <div className="group/task grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-1.5 hover:bg-accent/50 cursor-default">
       <div className="min-w-0">
-        <p className={`text-sm truncate ${isRunning ? "italic text-muted-foreground" : ""}`}>
+        <p
+          title={task.title}
+          className={`text-sm truncate ${isRunning ? "italic text-muted-foreground" : ""}`}
+        >
           {task.title}
         </p>
         <div className="flex items-center gap-1.5 mt-0.5">
@@ -468,7 +471,10 @@ export function TaskPickerDialog({
                           ) : (
                             <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                           )}
-                          <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          <span
+                            title={ws.name}
+                            className="truncate text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+                          >
                             {ws.name}
                           </span>
                         </Button>
@@ -482,7 +488,10 @@ export function TaskPickerDialog({
                                 onClick={() => selectProject(project.id)}
                                 className={`flex h-auto w-full justify-start gap-2 rounded-none py-1.5 pl-7 pr-2 hover:bg-accent ${isSelected ? "bg-accent" : ""}`}
                               >
-                                <span className="min-w-0 flex-1 truncate text-left text-xs font-medium">
+                                <span
+                                  title={project.alias ?? project.name}
+                                  className="min-w-0 flex-1 truncate text-left text-xs font-medium"
+                                >
                                   {project.alias ?? project.name}
                                 </span>
                                 <span className="shrink-0 text-[10px] text-muted-foreground">
