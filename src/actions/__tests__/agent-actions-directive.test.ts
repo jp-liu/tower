@@ -83,11 +83,11 @@ describe("startPtyExecution directive selection", () => {
     await startPtyExecution("t1", "");
 
     const directive = injectedDirective();
-    expect(directive).toContain("## Tower 工作台");
-    expect(directive).not.toContain("## Tower 系统说明");
+    expect(directive).toContain("## Tower Workbench");
+    expect(directive).not.toContain("## About Tower");
     // The workbench lives in the main worktree and has no Complete button.
-    expect(directive).not.toContain("Worktree 纪律");
-    expect(directive).not.toContain("本轮 commit 回显");
+    expect(directive).not.toContain("Worktree discipline");
+    expect(directive).not.toContain("Commit echo for this turn");
   });
 
   it("injects the normal task directive for a task without the Tower label", async () => {
@@ -98,9 +98,9 @@ describe("startPtyExecution directive selection", () => {
     await startPtyExecution("t1", "");
 
     const directive = injectedDirective();
-    expect(directive).toContain("## Tower 系统说明");
-    expect(directive).toContain("Worktree 纪律");
-    expect(directive).not.toContain("## Tower 工作台");
+    expect(directive).toContain("## About Tower");
+    expect(directive).toContain("Worktree discipline");
+    expect(directive).not.toContain("## Tower Workbench");
   });
 
   it("ignores a non-builtin label that merely happens to be named Tower", async () => {
@@ -110,6 +110,6 @@ describe("startPtyExecution directive selection", () => {
 
     await startPtyExecution("t1", "");
 
-    expect(injectedDirective()).toContain("## Tower 系统说明");
+    expect(injectedDirective()).toContain("## About Tower");
   });
 });
