@@ -2,6 +2,7 @@ import { execFileSync } from "child_process";
 import { existsSync } from "fs";
 import path from "path";
 import { logger } from "@/lib/logger";
+import { renderEn, type I18nMessage } from "@/lib/i18n/render";
 
 const log = logger.create("git-merge");
 
@@ -63,40 +64,48 @@ export function resolveGitDir(localPath: string): string {
 }
 
 /**
+ * The main repo is in a state that makes mutating its working tree unsafe.
+ *
+ * Dual-audience: the message reaches an agent through MCP / the logs, and the
+ * merge dialog through the route's 500 fallback. `message` is rendered English
+ * up front so `error.message` needs no translation-aware handling anywhere,
+ * while `i18nKey`/`i18nVars` let the UI re-render it in the user's locale.
+ */
+export class MainRepoNotReadyError extends Error implements I18nMessage {
+  constructor(
+    public key: I18nMessage["key"],
+    public vars: Record<string, string>
+  ) {
+    super(renderEn(key, vars));
+    this.name = "MainRepoNotReadyError";
+  }
+}
+
+/**
  * Preflight guard before mutating the main repo's working tree (stash/checkout/
  * merge). Detects the states that make `git stash push` fail with an opaque
  * "Command failed" and throws an actionable, user-facing error instead.
  *
- * @throws Error with an actionable message when the repo is not in a clean
- *         state to operate on.
+ * @throws {MainRepoNotReadyError} when the repo is not in a clean state to
+ *         operate on.
  */
 export function assertMainRepoReady(localPath: string): void {
   const gitDir = resolveGitDir(localPath);
 
   const lockPath = path.join(gitDir, "index.lock");
   if (existsSync(lockPath)) {
-    throw new Error(
-      `The main repo has a Git lock file (${lockPath}) - another git process may be running, ` +
-        `or a previous git command crashed and left it behind. ` +
-        `Make sure no git operation is in progress, delete the lock file, then retry.`
-    );
+    throw new MainRepoNotReadyError("merge.mainRepoLocked", { lockPath });
   }
 
   if (existsSync(path.join(gitDir, "MERGE_HEAD"))) {
-    throw new Error(
-      `The main repo is in an unfinished merge state (MERGE_HEAD exists). ` +
-        `Run git merge --abort in ${localPath}, or finish the current merge, then retry.`
-    );
+    throw new MainRepoNotReadyError("merge.mainRepoMerging", { localPath });
   }
 
   if (
     existsSync(path.join(gitDir, "rebase-merge")) ||
     existsSync(path.join(gitDir, "rebase-apply"))
   ) {
-    throw new Error(
-      `The main repo is in an unfinished rebase state. ` +
-        `Run git rebase --abort in ${localPath}, or finish the current rebase, then retry.`
-    );
+    throw new MainRepoNotReadyError("merge.mainRepoRebasing", { localPath });
   }
 }
 
@@ -140,24 +149,31 @@ function condenseGitOutput(raw: string): string {
  *
  * The merge already landed, so this is NOT an error — but the user is left with
  * a working tree carrying conflict markers and a stash entry git silently kept.
- * Everything needed to self-recover goes in the message, since the MCP layer and
- * the merge dialog both only surface a plain string: that the stash survives,
- * its marker, where to look, and which files conflicted.
+ * Everything needed to self-recover goes in the message: that the stash
+ * survives, its marker, where to look, and which files conflicted.
+ *
+ * Returned as a key + vars rather than a finished string because the audience is
+ * split: the merge dialog renders it in the user's locale, MCP `move_task`
+ * renders it in English for the agent. Git's own output and the paths are
+ * interpolated verbatim — only the prose skeleton is translated.
  */
 function describeStashPopFailure(
   localPath: string,
   timeoutMs: number,
   error: unknown
-): string {
+): I18nMessage {
   const files = unmergedFiles(localPath, timeoutMs);
-  const conflicts = files.length ? `Conflicting files: ${files.join(", ")}. ` : "";
-  return (
-    `Merge succeeded, but restoring the main repo's stashed changes failed (git stash pop): ` +
-    `${condenseGitOutput(describeGitError(error))}. ` +
-    `Your uncommitted changes are NOT lost - they are still in the stash (marked ${STASH_MARKER}). ${conflicts}` +
-    `Run \`git stash list\` in ${localPath} to see it, resolve the conflict markers in your working tree, ` +
-    `then run \`git stash pop\` to restore the changes.`
-  );
+  const vars = {
+    detail: condenseGitOutput(describeGitError(error)),
+    marker: STASH_MARKER,
+    localPath,
+  };
+  return files.length
+    ? {
+        key: "merge.stashPopFailedWithFiles",
+        vars: { ...vars, files: files.join(", ") },
+      }
+    : { key: "merge.stashPopFailed", vars };
 }
 
 export interface MergeBranchParams {
@@ -204,7 +220,7 @@ export function mergeBranchIntoBase({
   baseBranch,
   worktreeBranch,
   timeoutMs = 30000,
-}: MergeBranchParams): { commitHash: string; stashPopWarning?: string } {
+}: MergeBranchParams): { commitHash: string; stashPopWarning?: I18nMessage } {
   const gitOpts = {
     encoding: "utf-8" as const,
     timeout: timeoutMs,
@@ -249,7 +265,7 @@ export function mergeBranchIntoBase({
   }
 
   let commitHash: string;
-  let stashPopWarning: string | undefined;
+  let stashPopWarning: I18nMessage | undefined;
   try {
     if (needsCheckout) {
       execFileSync("git", ["checkout", baseBranch], gitOpts);

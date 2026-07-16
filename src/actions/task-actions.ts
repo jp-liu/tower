@@ -10,6 +10,7 @@ import { createTaskSchema, updateTaskSchema, taskStatusSchema } from "@/lib/sche
 import { logger } from "@/lib/logger";
 import { visibleTaskWhere, archivedTaskWhere } from "@/lib/task-archive";
 import { getArchiveDelayDays } from "@/actions/config-actions";
+import type { I18nMessage } from "@/lib/i18n/render";
 import type { TaskStatus, Priority } from "@prisma/client";
 
 const log = logger.create("task-actions");
@@ -76,8 +77,9 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
   // Non-fatal problem the user must still act on (e.g. the main repo's autostash
   // could not be restored). Returned alongside the task rather than thrown — the
   // completion did succeed — but it must reach a human, so every caller that can
-  // show it (merge dialog, MCP move_task) gets it in the result.
-  let warning: string | undefined;
+  // show it (merge dialog, MCP move_task) gets it in the result. Stays a key +
+  // vars: the dialog renders it in the user's locale, MCP in English.
+  let warning: I18nMessage | undefined;
   if (status === "DONE") {
     const pre = await db.task.findUnique({
       where: { id: taskId },

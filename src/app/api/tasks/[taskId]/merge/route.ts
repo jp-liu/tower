@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { updateTaskStatus } from "@/actions/task-actions";
 import { MergeConflictError, WorktreeDirtyError } from "@/lib/task-completion";
+import { MainRepoNotReadyError } from "@/lib/git-merge";
 
 export async function POST(
   _request: NextRequest,
@@ -77,8 +78,14 @@ export async function POST(
     }
     const message = error instanceof Error ? error.message : String(error);
     console.error("[merge] Merge failed:", message);
+    // `error` is already rendered English for the logs and any non-UI caller;
+    // the key + vars ride along so the dialog can show it in the user's locale.
+    const i18n =
+      error instanceof MainRepoNotReadyError
+        ? { i18nKey: error.key, i18nVars: error.vars }
+        : {};
     return NextResponse.json(
-      { error: `Merge failed: ${message}` },
+      { error: `Merge failed: ${message}`, ...i18n },
       { status: 500 }
     );
   }

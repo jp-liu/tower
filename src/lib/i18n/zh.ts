@@ -647,6 +647,7 @@ export const zh = {
   "merge.targetBranch": "目标分支",
   "merge.changedFiles": "变更文件数",
   "merge.commitsToSquash": "待压缩提交数",
+  "merge.commitList": "提交记录",
   "merge.commitMessage": "提交信息",
   "merge.confirm": "确认合并",
   "merge.cancel": "取消",
@@ -654,6 +655,29 @@ export const zh = {
   "merge.success": "合并成功",
   "merge.conflictError": "无法合并：检测到冲突",
   "merge.failed": "合并失败",
+  "merge.conflictFilesError": "检测到合并冲突：{files}",
+  "merge.unknownFiles": "未知文件",
+  "merge.dirtyError": "worktree 有未提交的改动：{files}",
+  "merge.networkError": "网络错误 — 合并失败",
+  "merge.stashPopFailed":
+    "合并已成功，但恢复主仓库暂存的改动失败（git stash pop）：{detail}。" +
+    "你未提交的改动没有丢失 —— 它们仍在 stash 里（标记为 {marker}）。" +
+    "在 {localPath} 执行 `git stash list` 查看，解决工作区里的冲突标记，" +
+    "然后执行 `git stash pop` 恢复改动。",
+  "merge.stashPopFailedWithFiles":
+    "合并已成功，但恢复主仓库暂存的改动失败（git stash pop）：{detail}。" +
+    "你未提交的改动没有丢失 —— 它们仍在 stash 里（标记为 {marker}）。冲突文件：{files}。" +
+    "在 {localPath} 执行 `git stash list` 查看，解决工作区里的冲突标记，" +
+    "然后执行 `git stash pop` 恢复改动。",
+  "merge.mainRepoLocked":
+    "主仓库存在 Git 锁文件（{lockPath}）—— 可能有另一个 git 进程正在运行，" +
+    "或上一次 git 命令崩溃后残留。请确认没有 git 操作正在进行，删除该锁文件后重试。",
+  "merge.mainRepoMerging":
+    "主仓库处于未完成的 merge 状态（存在 MERGE_HEAD）。" +
+    "请在 {localPath} 执行 git merge --abort，或完成当前 merge 后重试。",
+  "merge.mainRepoRebasing":
+    "主仓库处于未完成的 rebase 状态。" +
+    "请在 {localPath} 执行 git rebase --abort，或完成当前 rebase 后重试。",
   // Project type & preview (Phase 23)
   "project.type.label": "项目类型",
   "project.type.frontend": "前端",

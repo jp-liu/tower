@@ -16,6 +16,7 @@ import {
   resolveGitDir,
   assertMainRepoReady,
 } from "@/lib/git-merge";
+import { renderEn } from "@/lib/i18n/render";
 
 describe("describeGitError", () => {
   it("prefers stderr over the opaque message", () => {
@@ -272,13 +273,24 @@ describe("mergeBranchIntoBase", { timeout: 30_000 }, () => {
       worktreeBranch: "task/abc",
     });
 
-    expect(stashPopWarning).toBeDefined();
-    // Everything the user needs to self-recover: the stash survived, its
-    // marker, where to look, and which file conflicted.
-    expect(stashPopWarning).toContain("tower-merge-temp");
-    expect(stashPopWarning).toContain("git stash list");
-    expect(stashPopWarning).toContain("git stash pop");
-    expect(stashPopWarning).toContain("README.md");
+    // Structured, not a finished string: the dialog renders it in the user's
+    // locale, MCP renders it in English for the agent.
+    expect(stashPopWarning?.key).toBe("merge.stashPopFailedWithFiles");
+    expect(stashPopWarning?.vars).toMatchObject({
+      marker: "tower-merge-temp",
+      localPath: repo,
+      files: "README.md",
+    });
+    expect(stashPopWarning?.vars?.detail).toBeTruthy();
+
+    // The agent-facing English rendering still carries everything needed to
+    // self-recover: the stash survived, its marker, where to look, and which
+    // file conflicted. Structuring the warning must not drop any of it.
+    const english = renderEn(stashPopWarning!.key, stashPopWarning!.vars);
+    expect(english).toContain("tower-merge-temp");
+    expect(english).toContain("git stash list");
+    expect(english).toContain("git stash pop");
+    expect(english).toContain("README.md");
 
     // The warning tells the truth: git really did keep the stash entry, and the
     // working tree really is conflicted.

@@ -3,6 +3,7 @@ import { existsSync } from "fs";
 import { db } from "@/lib/db";
 import { checkConflicts } from "@/lib/diff-parser";
 import { mergeBranchIntoBase } from "@/lib/git-merge";
+import type { I18nMessage } from "@/lib/i18n/render";
 import { removeWorktree, stripTowerLinkedStatus, worktreePathFor } from "@/lib/worktree";
 import { DEFAULT_BRANCH_PREFIX } from "@/lib/worktree-branch";
 import { logger } from "@/lib/logger";
@@ -79,7 +80,9 @@ export class MergeConflictError extends Error {
  *   `warning` carries a non-fatal problem the user must still act on (the
  *   main repo's autostash could not be restored): completion succeeded, but
  *   the caller MUST surface this or the user is left with conflict markers and
- *   an orphaned stash they never hear about.
+ *   an orphaned stash they never hear about. It stays a key + vars so each
+ *   caller renders it for its own audience — locale-aware in the UI, English
+ *   for the agent on the MCP side.
  * @throws {WorktreeDirtyError} uncommitted changes present (would be lost).
  * @throws {MergeConflictError} task branch conflicts with base.
  */
@@ -87,7 +90,7 @@ export async function completeWorktreeReturn(
   taskId: string,
   localPath: string,
   baseBranch: string
-): Promise<{ completed: boolean; commitHash?: string; warning?: string }> {
+): Promise<{ completed: boolean; commitHash?: string; warning?: I18nMessage }> {
   const worktreePath = worktreePathFor(localPath, taskId);
   if (!existsSync(worktreePath)) {
     return { completed: false };

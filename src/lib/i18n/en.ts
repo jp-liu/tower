@@ -632,6 +632,7 @@ export const en: Translations = {
   "merge.targetBranch": "Target branch",
   "merge.changedFiles": "Changed files",
   "merge.commitsToSquash": "Commits to squash",
+  "merge.commitList": "Commits",
   "merge.commitMessage": "Commit message",
   "merge.confirm": "Confirm Merge",
   "merge.cancel": "Cancel",
@@ -639,6 +640,31 @@ export const en: Translations = {
   "merge.success": "Merge completed successfully",
   "merge.conflictError": "Cannot merge: conflicts detected",
   "merge.failed": "Merge failed",
+  "merge.conflictFilesError": "Merge conflicts detected: {files}",
+  "merge.unknownFiles": "unknown files",
+  "merge.dirtyError": "Worktree has uncommitted changes: {files}",
+  "merge.networkError": "Network error — merge failed",
+  "merge.stashPopFailed":
+    "Merge succeeded, but restoring the main repo's stashed changes failed (git stash pop): {detail}. " +
+    "Your uncommitted changes are NOT lost - they are still in the stash (marked {marker}). " +
+    "Run `git stash list` in {localPath} to see it, resolve the conflict markers in your working tree, " +
+    "then run `git stash pop` to restore the changes.",
+  "merge.stashPopFailedWithFiles":
+    "Merge succeeded, but restoring the main repo's stashed changes failed (git stash pop): {detail}. " +
+    "Your uncommitted changes are NOT lost - they are still in the stash (marked {marker}). " +
+    "Conflicting files: {files}. " +
+    "Run `git stash list` in {localPath} to see it, resolve the conflict markers in your working tree, " +
+    "then run `git stash pop` to restore the changes.",
+  "merge.mainRepoLocked":
+    "The main repo has a Git lock file ({lockPath}) - another git process may be running, " +
+    "or a previous git command crashed and left it behind. " +
+    "Make sure no git operation is in progress, delete the lock file, then retry.",
+  "merge.mainRepoMerging":
+    "The main repo is in an unfinished merge state (MERGE_HEAD exists). " +
+    "Run git merge --abort in {localPath}, or finish the current merge, then retry.",
+  "merge.mainRepoRebasing":
+    "The main repo is in an unfinished rebase state. " +
+    "Run git rebase --abort in {localPath}, or finish the current rebase, then retry.",
   // Project type & preview (Phase 23)
   "project.type.label": "Project Type",
   "project.type.frontend": "Frontend",

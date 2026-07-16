@@ -444,7 +444,12 @@ export const taskTools = {
     handler: async (args: { taskId: string; status: string }) => {
       // Delegate to updateTaskStatus to trigger side effects (dreaming on DONE, worktree cleanup on CANCELLED, etc.)
       const { updateTaskStatus } = await import("@/actions/task-actions");
-      return updateTaskStatus(args.taskId, args.status as "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED");
+      const result = await updateTaskStatus(args.taskId, args.status as "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED");
+      // `warning` is a key + vars so the UI can localize it; an agent gets the
+      // English rendering, keeping this tool's contract a readable string.
+      if (!("warning" in result) || !result.warning) return result;
+      const { renderEn } = await import("@/lib/i18n/render");
+      return { ...result, warning: renderEn(result.warning.key, result.warning.vars) };
     },
   },
 
