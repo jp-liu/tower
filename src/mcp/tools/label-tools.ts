@@ -8,16 +8,19 @@ export const labelTools = {
       workspaceId: z.string(),
     }),
     handler: async (args: { workspaceId: string }) => {
-      // Visibility is `workspaceId: null` (system-level), NOT `isBuiltin` —
-      // that flag only marks a label as protected from edits/deletion.
+      // Tower's builtin labels (isBuiltin: true, e.g. "Tower") are hidden from
+      // agents: they mark workbench tasks and must not be offered when an agent
+      // picks a label for a normal task (mislabeling triggers directive injection).
+      // The UI keeps showing them (via getLabelsForWorkspace) for manual tagging.
       return db.label.findMany({
         where: {
+          isBuiltin: false,
           OR: [
             { workspaceId: null },
             { workspaceId: args.workspaceId },
           ],
         },
-        orderBy: [{ isBuiltin: "desc" }, { name: "asc" }],
+        orderBy: [{ name: "asc" }],
       });
     },
   },
