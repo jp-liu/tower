@@ -1,24 +1,27 @@
 /**
- * 派生中枢：子任务回合结束时，写进【父任务】终端的「引导 prompt」。
+ * Derivation hub: the "guidance prompt" written into the [parent task]'s
+ * terminal when a sub-task finishes a round.
  *
- * 这是内置、**只读**的提示语 —— 故意做成代码常量而不走 SystemConfig：
- * 没有覆盖通道 = 真·只读，UI 只展示、不可编辑。仅用于完成回推：
- * 子任务 stop hook 触发 → notify-parent 用它插值后写父任务 PTY 唤醒父任务 review。
+ * This is a built-in, **read-only** prompt — deliberately a code constant
+ * rather than a SystemConfig value: no override channel = truly read-only, the
+ * UI only displays it and can't edit it. Used solely for the completion
+ * callback: the sub-task's stop hook fires → notify-parent interpolates this
+ * and writes it into the parent's PTY to wake the parent up for review.
  *
- * 占位符：{{childTitle}} / {{childTaskId}} / {{childReply}}
+ * Placeholders: {{childTitle}} / {{childTaskId}} / {{childReply}}
  */
 
 export const CHILD_REVIEW_PROMPT_TEMPLATE = [
-  "[Tower] 你派生的子任务「{{childTitle}}」（taskId: {{childTaskId}}）刚结束一轮、正在等指令 —— 可能完成、也可能没完成。",
+  "[Tower] The sub-task \"{{childTitle}}\" (taskId: {{childTaskId}}) you derived just finished a round and is awaiting instructions — it may or may not be done.",
   "",
-  "子任务最后的回复：",
+  "The sub-task's last reply:",
   "{{childReply}}",
   "",
-  "请你作为中枢 review：",
-  "1. 若要核实它具体改了什么，用 get_task_terminal_output 读它的终端产出。",
-  "2. 若已正确完成 → stop_task_execution 关闭它 + move_task 置 DONE。",
-  "3. 若没完成 / 有问题 → send_task_terminal_input 给它具体反馈，让它继续改。",
-  "4. 把你的判断与决定用 manage_notes 记录下来，供用户事后查看。",
+  "Please review as the hub:",
+  "1. To verify what it actually changed, **prefer** using git to inspect the commits this sub-task made this round (e.g. `git -C <sub-task worktree> log` / `show` / `diff`) — a commit diff is precise and compact. **Only when the sub-task made no commits this round** should you fall back to `get_task_terminal_output` to read its terminal. Terminal output is large and noisy, eats a lot of context, and clouds your review judgment — so when you can look at commits, don't read the terminal.",
+  "2. If correctly completed → stop_task_execution to close it + move_task to DONE.",
+  "3. If not done / has problems → send_task_terminal_input to give it specific feedback and let it keep working.",
+  "4. Record your judgment and decision with manage_notes, so the user can review it later.",
 ].join("\n");
 
 export interface ChildReviewVars {
@@ -27,9 +30,9 @@ export interface ChildReviewVars {
   childReply: string;
 }
 
-/** 用子任务信息插值出最终写入父任务 PTY 的文本。 */
+/** Interpolate sub-task info into the final text written to the parent's PTY. */
 export function buildChildReviewPrompt(vars: ChildReviewVars): string {
   return CHILD_REVIEW_PROMPT_TEMPLATE.replaceAll("{{childTitle}}", vars.childTitle)
     .replaceAll("{{childTaskId}}", vars.childTaskId)
-    .replaceAll("{{childReply}}", vars.childReply.trim() || "（无文本回复）");
+    .replaceAll("{{childReply}}", vars.childReply.trim() || "(no text reply)");
 }
