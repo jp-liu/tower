@@ -67,8 +67,8 @@ export function resolveGitDir(localPath: string): string {
  * merge). Detects the states that make `git stash push` fail with an opaque
  * "Command failed" and throws an actionable, user-facing error instead.
  *
- * @throws Error with a friendly Chinese message when the repo is not in a
- *         clean state to operate on.
+ * @throws Error with an actionable message when the repo is not in a clean
+ *         state to operate on.
  */
 export function assertMainRepoReady(localPath: string): void {
   const gitDir = resolveGitDir(localPath);
@@ -76,15 +76,16 @@ export function assertMainRepoReady(localPath: string): void {
   const lockPath = path.join(gitDir, "index.lock");
   if (existsSync(lockPath)) {
     throw new Error(
-      `主仓库存在 Git 锁文件（${lockPath}），可能有其他 git 进程正在运行，或上次 git 操作异常退出残留。` +
-        `请确认没有正在进行的 git 操作后，删除该 lock 文件再重试。`
+      `The main repo has a Git lock file (${lockPath}) - another git process may be running, ` +
+        `or a previous git command crashed and left it behind. ` +
+        `Make sure no git operation is in progress, delete the lock file, then retry.`
     );
   }
 
   if (existsSync(path.join(gitDir, "MERGE_HEAD"))) {
     throw new Error(
-      `主仓库正处于未完成的合并状态（存在 MERGE_HEAD）。` +
-        `请先在 ${localPath} 执行 git merge --abort 或完成当前合并后再重试。`
+      `The main repo is in an unfinished merge state (MERGE_HEAD exists). ` +
+        `Run git merge --abort in ${localPath}, or finish the current merge, then retry.`
     );
   }
 
@@ -93,8 +94,8 @@ export function assertMainRepoReady(localPath: string): void {
     existsSync(path.join(gitDir, "rebase-apply"))
   ) {
     throw new Error(
-      `主仓库正处于未完成的 rebase 状态。` +
-        `请先在 ${localPath} 执行 git rebase --abort 或完成当前 rebase 后再重试。`
+      `The main repo is in an unfinished rebase state. ` +
+        `Run git rebase --abort in ${localPath}, or finish the current rebase, then retry.`
     );
   }
 }
@@ -142,9 +143,6 @@ function condenseGitOutput(raw: string): string {
  * Everything needed to self-recover goes in the message, since the MCP layer and
  * the merge dialog both only surface a plain string: that the stash survives,
  * its marker, where to look, and which files conflicted.
- *
- * Chinese to match the user-facing convention of `MergeConflictError` /
- * `WorktreeDirtyError`, which reach the same UI surface.
  */
 function describeStashPopFailure(
   localPath: string,
@@ -152,12 +150,13 @@ function describeStashPopFailure(
   error: unknown
 ): string {
   const files = unmergedFiles(localPath, timeoutMs);
-  const conflicts = files.length ? `冲突文件：${files.join(", ")}。` : "";
+  const conflicts = files.length ? `Conflicting files: ${files.join(", ")}. ` : "";
   return (
-    `合并已成功，但主仓库暂存改动恢复失败（git stash pop）：${condenseGitOutput(describeGitError(error))}。` +
-    `你的未提交改动没有丢失 —— 仍保留在 stash 中（标记 ${STASH_MARKER}）。${conflicts}` +
-    `请在 ${localPath} 执行 \`git stash list\` 查看，解决工作区冲突标记后执行 ` +
-    `\`git stash pop\` 恢复改动。`
+    `Merge succeeded, but restoring the main repo's stashed changes failed (git stash pop): ` +
+    `${condenseGitOutput(describeGitError(error))}. ` +
+    `Your uncommitted changes are NOT lost - they are still in the stash (marked ${STASH_MARKER}). ${conflicts}` +
+    `Run \`git stash list\` in ${localPath} to see it, resolve the conflict markers in your working tree, ` +
+    `then run \`git stash pop\` to restore the changes.`
   );
 }
 
@@ -238,8 +237,8 @@ export function mergeBranchIntoBase({
       runGit(["stash", "push", "-m", STASH_MARKER], localPath, timeoutMs);
     } catch (err) {
       throw new Error(
-        `暂存主仓库工作区改动失败（git stash push）：${describeGitError(err)}。` +
-          `请在 ${localPath} 执行 git status / git stash list 检查工作区状态后重试。`
+        `Failed to stash the main repo's working tree changes (git stash push): ${describeGitError(err)}. ` +
+          `Run git status / git stash list in ${localPath} to inspect the working tree, then retry.`
       );
     }
     // Verify an entry was actually created before relying on it — `git stash
