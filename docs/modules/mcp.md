@@ -18,10 +18,12 @@ Tower 暴露 MCP Server 供外部 AI Agent 调用，通过 stdio 传输协议运
 - **终端交互**：启动任务执行、查询终端输出、发送终端输入、获取执行状态
 - **搜索**：全局搜索任务、项目、仓库
 - **知识识别**：按名称/别名/描述模糊匹配定位项目
+- **知识库问答**：聚合仓库知识 markdown、事实卡、版本 commit、笔记回答项目问题
 - **笔记和资产**：管理项目笔记和资产文件（截图、上传）
 - **报告**：每日摘要、每日待办
+- **Harness 消息**：无人值守下向人推送消息、登记问题并挂起任务、回灌回复（详见 [Harness 模块](./harness)）
 
-共 35 个工具，分 10 大类。
+共 42 个工具，分 11 大类。
 
 ## 详细说明
 
@@ -63,11 +65,13 @@ MCP stdio 进程无法访问内存中的 PTY 会话，通过内部 HTTP 路由�
 | 文件 | 工具数 | 说明 |
 |------|--------|------|
 | `workspace-tools.ts` | 4 | Workspace CRUD |
-| `project-tools.ts` | 4 | Project CRUD |
-| `task-tools.ts` | 7 | Task CRUD + move + 默认项 + 版本 |
+| `project-tools.ts` | 6 | Project CRUD + 产品组（product group） |
+| `task-tools.ts` | 8 | Task CRUD + move + 默认项 + 版本 + set_goal_mode |
 | `label-tools.ts` | 4 | Label CRUD + set_task_labels |
 | `search-tools.ts` | 1 | 全局搜索 |
 | `knowledge-tools.ts` | 1 | identify_project（项目识别） |
+| `knowledge-base-tools.ts` | 2 | ask_project_knowledge / manage_project_facts |
 | `note-asset-tools.ts` | 2 | manage_notes / manage_assets |
 | `terminal-tools.ts` | 6 | 启动执行 + 终端输出/输入/状态 + 关闭终端 + 启动/继续终端 |
 | `report-tools.ts` | 2 | daily_summary / daily_todo |
+| `harness-tools.ts` | 6 | 无人值守消息：list_notify_targets / push_to_human / ask_human / notify_human / reply_to_ask / relay_channel_reply（详见 [Harness 模块](./harness)） |

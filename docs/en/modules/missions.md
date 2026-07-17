@@ -17,7 +17,7 @@ Each mission card embeds a real-time xterm.js terminal so you can observe agent 
 
 - **Grid layout presets**: Six layout options from single-card (1x1) to nine-card (3x3). The selected layout persists in localStorage across sessions.
 - **Workspace filtering**: A dropdown filter lets you narrow the view to tasks from a specific workspace.
-- **Launch search dialog**: Clicking **Launch task** opens a search dialog directly — fuzzy-search tasks with Fuse, browse by workspace → project, or pick from the recent-tasks list (up to 100 recent tasks loaded, search capped at 30 results). Tasks with a saved `sessionId` can resume their Claude CLI session; otherwise a fresh execution starts.
+- **Launch search dialog**: Clicking **Launch task** opens a search dialog directly — fuzzy-search tasks with Fuse, browse by workspace → project, or pick from the recent-tasks list (up to 100 recent tasks loaded, search capped at 30 results). Tasks with a saved `sessionId` can resume their Claude CLI session; otherwise a fresh execution starts. The dialog **does not auto-focus the search box** (Base UI `initialFocus`) — press `Tab` once to focus it, which avoids the browser's history dropdown overlapping the dialog.
 - **Dual navigation modes**: *input* mode (default — panes auto-focus their terminals so you can type immediately) and *nav* mode (a centered pane-selector dialog tiles all panes with quick-select characters `1–9 / A–Z` and breadcrumb titles). Toggle with the mode button or `Ctrl+;`.
 - **Auto-removal**: When a task execution completes or exits naturally, its card is automatically removed from the dashboard. Manually stopping an execution also removes the card.
 - **Drag-and-drop**: Reorder mission cards using dnd-kit to arrange your monitoring layout.

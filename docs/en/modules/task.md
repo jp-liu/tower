@@ -75,6 +75,7 @@ Task (id, title, description?, status, priority, order)
 - Server Actions: `src/actions/label-actions.ts`
 - MCP Tools: `src/mcp/tools/label-tools.ts`
 - `set_task_labels` / `setTaskLabels` perform a full replacement (not a merge)
+- **`description` field**: Labels have an optional `description` describing "what kind of task this label fits". It is read by `create_task` (MCP) to pick a label by meaning rather than guessing from the name; `null` = no guidance. `create_label` accepts it (≤200 chars), `list_labels` returns it, and the label management UI (Settings → Labels) can set it in both the add and edit forms
 
 ## Constraints
 

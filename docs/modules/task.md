@@ -41,6 +41,7 @@ Task (id, title, description?, status, priority, order)
 - Server Actions: `src/actions/label-actions.ts`
 - MCP Tools: `src/mcp/tools/label-tools.ts`
 - `set_task_labels` / `setTaskLabels` 执行全量替换（非合并）
+- **`description` 字段**：Label 新增可选 `description`（说明「该标签适用什么任务」）。它是给 `create_task`（MCP）读的——按语义而非猜名字来选标签；`null` 表示无指引。`create_label` 支持传入（≤200 字），`list_labels` 返回，标签管理 UI（Settings → Labels）的新增 / 编辑表单可填描述
 
 ## 文件清单
 

@@ -87,6 +87,21 @@ Different capabilities can use different models. Lightweight tasks like mini sum
 | `settings/prompts-config.tsx` | Prompt template management UI |
 | `settings/ai-tools-config.tsx` | Agent configuration UI |
 
+## Task Overview Note
+
+When a task enters **DONE** (or is cancelled), Tower auto-generates a "task overview" note (a `ProjectNote` under the "task notes" category) recording what the task changed, for later review / regression backlinking. It is skipped (no empty note) when there are no commits and no changed files.
+
+Template structure (`src/lib/task-overview.ts` / `task-overview-format.ts`):
+
+1. Intro blockquote (DONE / cancelled variants)
+2. `## Change Summary` — the AI-generated change summary (falls back to the first commit message when absent)
+3. `## File List` — each changed file as `` `path` (+N / -M) `` (max 100) plus an "N files, M commits" count line
+4. `## Commits` — **new**: each commit listed as `` `<sha>` <message> `` (from `git log --oneline`, max 50, then "…N more commits"); only rendered when commits exist
+5. `## Related Attachments & References` — linked assets as `filename — description`
+6. Footer: task title + id, project, generated-at timestamp
+
+**zh/en i18n follows the UI language**: the whole template copy and the AI summary prompt switch by language. At generation time it reads the systemConfig `locale` value (`getConfigValue("locale", "zh")`, default `zh`) — the UI language lives only in the browser, so switching language persists the latest value into systemConfig for the backend note generator to read. (commits `5c69d8d` / `96e08b1`)
+
 ## CLI Adapter Interface (TODO)
 
 Currently hardcoded for Claude Code. Will be abstracted when integrating a second CLI:

@@ -5,6 +5,10 @@ export default defineConfig({
   title: "Tower Docs",
   description: "AI Task Orchestration Platform",
   ignoreDeadLinks: true,
+  // Only guide/ modules/ en/ index.md are the live site. Other top-level dirs are
+  // scratch doc copies not wired into the nav — exclude them so stray markdown
+  // (e.g. spec files with pseudo-HTML tags) doesn't break the Vue/MD compiler.
+  srcExclude: ["superpowers/**", "specs/**", "design/**", "diagrams/**", "ai/**"],
   appearance: "dark",
   head: [
     ["link", { rel: "icon", href: "/tower/favicon.ico" }],
@@ -42,6 +46,7 @@ export default defineConfig({
               { text: "Search 搜索", link: "/modules/search" },
               { text: "Settings 设置", link: "/modules/settings" },
               { text: "MCP 工具链", link: "/modules/mcp" },
+              { text: "Harness 无人值守", link: "/modules/harness" },
               { text: "Git 集成", link: "/modules/git" },
               { text: "Assets & Notes", link: "/modules/assets-notes" },
               { text: "AI 能力", link: "/modules/ai" },
@@ -89,6 +94,7 @@ export default defineConfig({
               { text: "Search", link: "/en/modules/search" },
               { text: "Settings", link: "/en/modules/settings" },
               { text: "MCP", link: "/en/modules/mcp" },
+              { text: "Harness (Unattended)", link: "/en/modules/harness" },
               { text: "Git Integration", link: "/en/modules/git" },
               { text: "Assets & Notes", link: "/en/modules/assets-notes" },
               { text: "AI Capabilities", link: "/en/modules/ai" },

@@ -31,6 +31,21 @@ AI 能力层统一管理 Tower 中所有的 AI 调用，提供 5 种核心 AI �
 | 项目分析 | `actions/project-actions.ts` → `analyzeProjectDirectory` | Agent SDK `aiQuery()` |
 | 任务执行 | `actions/agent-actions.ts` → `startPtyExecution` | PTY spawn CLI |
 
+### 任务概览笔记
+
+任务进入 **DONE**（或被取消）时，Tower 自动生成一篇「任务概览」笔记（`ProjectNote`，分类「任务笔记」），记录这次任务改了什么，供日后回顾 / 回归回溯。无 commit 且无改动文件时跳过，不产生空笔记。
+
+模板结构（`src/lib/task-overview.ts` / `task-overview-format.ts`）：
+
+1. 引言（DONE / 取消两种措辞）
+2. `## 改动摘要` — AI 生成的改动摘要（无摘要时回退为首条 commit message）
+3. `## 文件清单` — 每个改动文件 `` `路径` (+N / -M) ``（至多 100 条）+ 「N 个文件，M 次提交」统计行
+4. `## 提交记录` — **新增**：逐条列出 commit，每行 `` `<sha>` <message> ``（取自 `git log --oneline`，至多 50 条，超出显示「…还有 N 次提交」），仅有 commit 时才渲染
+5. `## 相关附件与参考资料` — 关联资产 `文件名 — 描述`
+6. 页脚：任务标题 + id、项目、生成时间
+
+**zh/en 国际化跟随界面语言**：整篇模板文案 + AI 摘要 prompt 都按语言切换。生成时读 systemConfig 的 `locale` 配置（`getConfigValue("locale", "zh")`，默认 `zh`）——界面语言只存在浏览器，所以切换语言时会把最新值写入 systemConfig，供后端生成笔记时读取。（commit `5c69d8d` / `96e08b1`）
+
 ### CLI Adapter 接口（TODO）
 
 当前硬编码 Claude Code，后续接入第二个 CLI 时抽象：
