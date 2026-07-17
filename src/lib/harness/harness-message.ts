@@ -139,6 +139,14 @@ export async function listHarnessMessages(filter: ListHarnessFilter = {}) {
     where,
     orderBy: { createdAt: "desc" },
     take: filter.limit ?? 200,
-    include: { task: { select: { id: true, title: true } } },
+    include: {
+      task: {
+        select: {
+          id: true,
+          title: true,
+          project: { select: { name: true, workspace: { select: { name: true } } } },
+        },
+      },
+    },
   });
 }

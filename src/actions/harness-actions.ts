@@ -14,6 +14,8 @@ export interface HarnessMessageView {
   id: string;
   taskId: string;
   taskTitle: string;
+  workspaceName: string;
+  projectName: string;
   kind: string;
   content: string;
   state: string;
@@ -29,6 +31,8 @@ export async function getHarnessMessages(view: HarnessView = "pending"): Promise
     id: r.id,
     taskId: r.taskId,
     taskTitle: r.task?.title ?? "",
+    workspaceName: r.task?.project?.workspace?.name ?? "",
+    projectName: r.task?.project?.name ?? "",
     kind: r.kind,
     content: r.content,
     state: r.state,

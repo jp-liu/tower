@@ -19,6 +19,8 @@ const openAsk: HarnessMessageView = {
   id: "h1",
   taskId: "ctask123456789012345",
   taskTitle: "登录页重构",
+  workspaceName: "个人空间",
+  projectName: "Tower",
   kind: "ask",
   content: "用方案 A 还是方案 B?",
   state: "OPEN",
@@ -58,20 +60,24 @@ describe("HarnessClient", () => {
     expect(screen.getByText("暂无消息")).toBeInTheDocument();
   });
 
-  it("OPEN ask 卡片：任务名、正文、待回复徽标、回复框与发送/忽略按钮", () => {
+  it("OPEN ask 行：工作区/项目/任务名、内容、待回复徽标、查看详情/处理按钮", () => {
     renderClient([openAsk]);
+    expect(screen.getByText("个人空间")).toBeInTheDocument();
+    expect(screen.getByText("Tower")).toBeInTheDocument();
     expect(screen.getByText("登录页重构")).toBeInTheDocument();
     expect(screen.getByText("用方案 A 还是方案 B?")).toBeInTheDocument();
     // 待回复徽标（badge）—— chip 也叫「待回复」，故至少 2 处
     expect(screen.getAllByText("待回复").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByPlaceholderText(/输入回复/)).toBeInTheDocument();
-    expect(screen.getByText("发送")).toBeInTheDocument();
-    expect(screen.getByText("忽略")).toBeInTheDocument();
+    expect(screen.getByText("查看详情")).toBeInTheDocument();
+    expect(screen.getByText("处理")).toBeInTheDocument();
+    // 回复框在详情弹窗内，表格行不含
+    expect(screen.queryByPlaceholderText(/输入回复/)).not.toBeInTheDocument();
   });
 
-  it("已回复卡片：展示「你」回复块，不显示回复框", () => {
+  it("已回复行：展示回复内容，处理按钮隐藏、无回复框", () => {
     renderClient([answered]);
     expect(screen.getByText("先别删")).toBeInTheDocument();
+    expect(screen.queryByText("处理")).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/输入回复/)).not.toBeInTheDocument();
   });
 });
