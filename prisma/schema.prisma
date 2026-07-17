@@ -101,6 +101,9 @@ model Label {
   /// Worktree branch prefix: a task carrying this label branches as
   /// `<branchPrefix>/<taskId>`. null = no opinion, fall back to the default.
   branchPrefix String?
+  /// What kind of task this label fits — read by create_task (MCP) to pick a
+  /// label by meaning rather than guessing from the name. null = no guidance.
+  description String?
   createdAt   DateTime @default(now())
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

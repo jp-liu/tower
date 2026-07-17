@@ -77,6 +77,8 @@ const labelBranchPrefix = z
   .refine(isValidBranchPrefix, "Invalid branch prefix")
   .nullable()
   .optional();
+// Free-text hint on what tasks the label fits; read by create_task to pick by meaning.
+const labelDescription = z.string().max(200).nullable().optional();
 
 export const createLabelSchema = z.object({
   name: labelName,
@@ -84,11 +86,13 @@ export const createLabelSchema = z.object({
   // null = system-level: visible in every workspace (see getLabelsForWorkspace).
   workspaceId: cuid.nullable(),
   branchPrefix: labelBranchPrefix,
+  description: labelDescription,
 });
 
 export const updateLabelSchema = z.object({
   name: labelName.optional(),
   branchPrefix: labelBranchPrefix,
+  description: labelDescription,
 });
 
 // ── Version schemas ──

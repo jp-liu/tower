@@ -70,7 +70,7 @@ describe("label-tools", () => {
       });
 
       expect(mockDb.label.create).toHaveBeenCalledWith({
-        data: { name: "Feature", color: "#0000ff", workspaceId: "ws1" },
+        data: { name: "Feature", color: "#0000ff", workspaceId: "ws1", description: null },
       });
       expect(result).toEqual(mockLabel);
     });

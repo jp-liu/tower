@@ -23,8 +23,8 @@ async function main() {
   // localStorage and does not exist yet at install time; their branch prefixes
   // are seeded so a fresh install sees feature/<task id> without a detour
   // through settings.
-  await prisma.label.create({ data: { name: "prd", color: "#3b82f6", branchPrefix: "feature" } });
-  await prisma.label.create({ data: { name: "bug", color: "#ef4444", branchPrefix: "fix" } });
+  await prisma.label.create({ data: { name: "prd", color: "#3b82f6", branchPrefix: "feature", description: "新功能、需求增强类任务" } });
+  await prisma.label.create({ data: { name: "bug", color: "#ef4444", branchPrefix: "fix", description: "Bug 修复、缺陷修正类任务" } });
   await prisma.label.create({ data: { name: "Tower", color: "#8b5cf6", isBuiltin: true } });
 
   // Default agent config

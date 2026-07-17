@@ -31,6 +31,7 @@ const randomColor = () => LABEL_COLORS[Math.floor(Math.random() * LABEL_COLORS.l
 
 /** Matches createLabelSchema — keep both in step. */
 const MAX_LABEL_NAME = 50;
+const MAX_LABEL_DESCRIPTION = 200;
 
 interface LabelItem {
   id: string;
@@ -39,6 +40,7 @@ interface LabelItem {
   workspaceId: string | null;
   isBuiltin: boolean;
   branchPrefix: string | null;
+  description: string | null;
 }
 
 interface WorkspaceOption {
@@ -90,11 +92,12 @@ function AddLabelRow({
   disabled,
 }: {
   addLabel: string;
-  onAdd: (name: string, color: string) => Promise<void>;
+  onAdd: (name: string, color: string, description: string) => Promise<void>;
   disabled?: boolean;
 }) {
   const { t } = useI18n();
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   // Randomized on mount, not in the initializer: this is server rendered too, and
   // a color picked twice would be a hydration mismatch.
   const [color, setColor] = useState(LABEL_COLORS[0]);
@@ -103,8 +106,9 @@ function AddLabelRow({
 
   const submit = async () => {
     if (!name.trim() || disabled) return;
-    await onAdd(name.trim(), color);
+    await onAdd(name.trim(), color, description.trim());
     setName("");
+    setDescription("");
     setColor(randomColor());
   };
 
@@ -124,7 +128,19 @@ function AddLabelRow({
         placeholder={t("settings.config.labels.namePlaceholder")}
         className="w-40 shrink-0 text-sm"
       />
-      <div className="flex-1" />
+      <Input
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void submit();
+          }
+        }}
+        maxLength={MAX_LABEL_DESCRIPTION}
+        placeholder={t("settings.config.labels.descriptionPlaceholder")}
+        className="min-w-0 flex-1 text-sm"
+      />
       <Button onClick={() => void submit()} disabled={!name.trim() || disabled}>
         <Plus className="mr-2 h-4 w-4" />
         {addLabel}
@@ -179,9 +195,14 @@ export function LabelsSection() {
   const systemLabels = visible.filter((l) => l.workspaceId === null);
   const workspaceLabels = visible.filter((l) => l.workspaceId !== null);
 
-  const handleAdd = async (name: string, color: string, scope: string | null) => {
+  const handleAdd = async (
+    name: string,
+    color: string,
+    description: string,
+    scope: string | null
+  ) => {
     try {
-      await createLabel({ name, color, workspaceId: scope });
+      await createLabel({ name, color, workspaceId: scope, description: description || null });
     } catch {
       toast.error(t("settings.config.labels.saveFailed"));
       return;
@@ -211,6 +232,15 @@ export function LabelsSection() {
     }
     try {
       await updateLabel(label.id, { name });
+    } catch {
+      toast.error(t("settings.config.labels.saveFailed"));
+      await reload();
+    }
+  };
+
+  const handleDescriptionBlur = async (label: LabelItem) => {
+    try {
+      await updateLabel(label.id, { description: label.description?.trim() || null });
     } catch {
       toast.error(t("settings.config.labels.saveFailed"));
       await reload();
@@ -263,12 +293,20 @@ export function LabelsSection() {
         onBlur={() => void handlePrefixBlur(label)}
         placeholder={t("settings.config.labels.prefixPlaceholder")}
         aria-invalid={Boolean(label.branchPrefix) && !isValidBranchPrefix(label.branchPrefix!)}
-        className="w-40 shrink-0 font-mono text-sm"
+        className="w-32 shrink-0 font-mono text-sm"
       />
-      <p className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+      <p className="w-40 shrink-0 truncate font-mono text-xs text-muted-foreground">
         {`${label.branchPrefix?.trim() || defaultPrefix}/`}
         {t("settings.config.labels.taskIdPlaceholder")}
       </p>
+      <Input
+        value={label.description ?? ""}
+        onChange={(e) => patch(label.id, { description: e.target.value })}
+        onBlur={() => void handleDescriptionBlur(label)}
+        maxLength={MAX_LABEL_DESCRIPTION}
+        placeholder={t("settings.config.labels.descriptionPlaceholder")}
+        className="min-w-0 flex-1 text-sm"
+      />
       <Button
         variant="ghost"
         size="icon"
@@ -301,7 +339,7 @@ export function LabelsSection() {
         {systemLabels.map(labelRow)}
         <AddLabelRow
           addLabel={t("settings.config.labels.addSystem")}
-          onAdd={(name, color) => handleAdd(name, color, null)}
+          onAdd={(name, color, description) => handleAdd(name, color, description, null)}
         />
       </ul>
 
@@ -328,7 +366,7 @@ export function LabelsSection() {
         {workspaceLabels.map(labelRow)}
         <AddLabelRow
           addLabel={t("settings.config.labels.addWorkspace")}
-          onAdd={(name, color) => handleAdd(name, color, workspaceId)}
+          onAdd={(name, color, description) => handleAdd(name, color, description, workspaceId)}
           disabled={!workspaceId}
         />
       </ul>
