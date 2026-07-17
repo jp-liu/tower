@@ -60,6 +60,26 @@ describe("formatNoteContent", () => {
     expect(md).toContain("共 2 个文件、2 个提交。");
   });
 
+  it("lists commits with sha and message", () => {
+    const md = formatNoteContent(makeData(), "s", "t");
+    expect(md).toContain("## 提交记录");
+    expect(md).toContain("- `abc123` fix: login timeout");
+    expect(md).toContain("- `def456` chore: bump dep");
+  });
+
+  it("omits the commit section when there is no commit log", () => {
+    expect(formatNoteContent(makeData({ commitLog: null }), "s", "t")).not.toContain("## 提交记录");
+    expect(formatNoteContent(makeData({ commitLog: "" }), "s", "t")).not.toContain("## 提交记录");
+  });
+
+  it("truncates the commit list past 50 entries", () => {
+    const commitLog = Array.from({ length: 62 }, (_, i) => `sha${i} commit ${i}`).join("\n");
+    const md = formatNoteContent(makeData({ commitLog }), "s", "t");
+    expect(md).toContain("- `sha49` commit 49");
+    expect(md).not.toContain("- `sha50` commit 50");
+    expect(md).toContain("- …其余 12 个提交");
+  });
+
   it("renders assets with and without descriptions", () => {
     const md = formatNoteContent(makeData(), "s", "t");
     expect(md).toContain("- api-spec.md — 接口文档");

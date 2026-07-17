@@ -8,6 +8,7 @@
 import type { DiffFile } from "@/lib/diff-parser";
 
 const FILE_LIST_NOTE_MAX = 100; // files listed in the note body
+const COMMIT_LIST_NOTE_MAX = 50; // commits listed in the note body
 
 export interface TaskAsset {
   filename: string;
@@ -84,6 +85,22 @@ export function formatNoteContent(
     lines.push(`（未能获取精确文件清单，本次约 ${data.commitCount} 个提交。）`);
   }
   lines.push("");
+
+  const commits = (data.commitLog ?? "").split("\n").filter(Boolean);
+  if (commits.length > 0) {
+    lines.push("## 提交记录");
+    const shown = commits.slice(0, COMMIT_LIST_NOTE_MAX);
+    for (const line of shown) {
+      const sp = line.indexOf(" ");
+      const sha = sp === -1 ? line : line.slice(0, sp);
+      const message = sp === -1 ? "" : line.slice(sp + 1);
+      lines.push(`- \`${sha}\` ${message}`);
+    }
+    if (commits.length > shown.length) {
+      lines.push(`- …其余 ${commits.length - shown.length} 个提交`);
+    }
+    lines.push("");
+  }
 
   lines.push("## 相关附件与参考资料");
   if (data.assets.length > 0) {
