@@ -67,6 +67,32 @@ export function destroySession(taskId: string): void {
   }
 }
 
+/**
+ * Park a task's PTY while it waits for a human reply (ask_human). Suspends the
+ * WS-disconnect keepalive auto-destroy (ws-server) and cancels any timer already
+ * ticking, so a multi-hour human wait can't reap the live terminal — the reply
+ * then injects into the SAME running session (continueOrStartTaskExecution's
+ * already_running branch) instead of a fragile resume/--continue restart.
+ * Mirrors preview PTYs' long-lived `onIdle: undefined` policy. No-op if the
+ * session is gone or already dead. Only touches the shared PtySession object,
+ * so it works across bundle instances (session map lives on globalThis).
+ */
+export function parkSession(taskId: string): void {
+  const s = sessions.get(taskId);
+  if (!s || s.killed) return;
+  s.parked = true;
+  if (s.disconnectTimer) {
+    clearTimeout(s.disconnectTimer);
+    s.disconnectTimer = null;
+  }
+}
+
+/** Reply arrived → clear parked; normal keepalive resumes on the next WS disconnect. */
+export function unparkSession(taskId: string): void {
+  const s = sessions.get(taskId);
+  if (s) s.parked = false;
+}
+
 /** D-08: Called on SIGTERM — kills all sessions */
 export function destroyAllSessions(): void {
   for (const taskId of sessions.keys()) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireLocalhost, validateTaskId } from "@/lib/internal-api-guard";
 import { db } from "@/lib/db";
 import { createAskMessage } from "@/lib/harness/harness-message";
+import { parkSession } from "@/lib/pty/session-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +50,11 @@ export async function POST(request: NextRequest) {
     executionId: task.executions[0]?.id ?? null,
     question,
   });
+
+  // Keep the live PTY alive across the human wait: suspend the WS-disconnect
+  // keepalive so the reply lands in this same session (already_running injection)
+  // instead of a fragile resume/--continue restart. No-op if no live session.
+  parkSession(taskId);
 
   // ask_human means "reach the owner to decide" = unattended semantics. Backstop: report
   // noChannelConfigured unless an ACTIVE unattended channel exists — a work-only config also

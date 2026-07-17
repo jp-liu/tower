@@ -6,6 +6,10 @@ export class PtySession {
   private readonly _pty: pty.IPty;
   killed = false;
   disconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Parked waiting for a human reply (ask_human) → WS-disconnect keepalive is
+   *  suspended so a long human wait can't reap the live terminal. See session-store
+   *  parkSession/unparkSession and ws-server's disconnect handler. */
+  parked = false;
   /** Ring buffer: last 50 KB of PTY output for reconnect replay */
   private _buffer = "";
   private static readonly BUFFER_MAX = 50 * 1024; // 50 KB

@@ -3,6 +3,7 @@ import { requireLocalhost, validateTaskId } from "@/lib/internal-api-guard";
 import { db } from "@/lib/db";
 import { getOpenAsk, getLatestAsk, answerOpenAsk } from "@/lib/harness/harness-message";
 import { continueOrStartTaskExecution } from "@/actions/agent-actions";
+import { unparkSession } from "@/lib/pty/session-store";
 import { logger } from "@/lib/logger";
 
 const log = logger.create("harness-reply");
@@ -83,11 +84,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "resume failed" }, { status: 500 });
   }
 
+  // Reply consumed → clear parked so normal keepalive resumes on the next disconnect.
+  unparkSession(taskId);
+
   // fresh start（无历史会话可续）时，新 agent 不知道在答什么 → 注入答案带上原问题上下文。
   const injectText =
     mode === "started" && question ? `[针对你之前的提问：${question}]\n${text}` : text;
 
-  const injected = await injectWhenReady(taskId, injectText);
+  // already_running = live parked terminal, TUI already ready → inject immediately;
+  // the 2500ms startup window is only needed after a resume/fresh-start restart.
+  const injected = await injectWhenReady(taskId, injectText, mode === "already_running");
   return NextResponse.json({ ok: true, taskId, mode, injected });
 }
 
@@ -98,9 +104,9 @@ const INJECT_INITIAL_DELAY_MS = 2500;
 const INJECT_RETRY_INTERVAL_MS = 800;
 const INJECT_MAX_ATTEMPTS = 20;
 
-async function injectWhenReady(taskId: string, text: string): Promise<boolean> {
+async function injectWhenReady(taskId: string, text: string, skipInitialDelay = false): Promise<boolean> {
   const tid = encodeURIComponent(taskId);
-  await new Promise((r) => setTimeout(r, INJECT_INITIAL_DELAY_MS));
+  if (!skipInitialDelay) await new Promise((r) => setTimeout(r, INJECT_INITIAL_DELAY_MS));
   for (let i = 0; i < INJECT_MAX_ATTEMPTS; i++) {
     try {
       const res = await fetch(`http://localhost:${PORT}/api/internal/terminal/${tid}/input`, {

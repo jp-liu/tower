@@ -332,6 +332,14 @@ export async function startWsServer(): Promise<void> {
         return;
       }
 
+      // Parked waiting for a human reply (ask_human) → keep the PTY alive
+      // indefinitely so the reply injects into this same live session. Normal
+      // keepalive resumes once unparkSession clears the flag (on reply).
+      if (s.parked && !s.killed) {
+        console.error(`[ws-server] Task ${taskId} parked (ask_human) — keepalive suspended, PTY kept alive`);
+        return;
+      }
+
       const timeout = s.killed ? KEEPALIVE_EXITED_MS : KEEPALIVE_RUNNING_MS;
       s.disconnectTimer = setTimeout(() => {
         console.error(`[ws-server] Keepalive expired for task ${taskId}`);
