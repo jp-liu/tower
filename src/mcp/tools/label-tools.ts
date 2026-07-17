@@ -3,7 +3,7 @@ import { db } from "../db";
 
 export const labelTools = {
   list_labels: {
-    description: "List all labels available for a workspace: system-level labels (usable in every workspace) plus this workspace's own. Each label may carry a branchPrefix that decides the git branch name of a task's worktree.",
+    description: "List all labels available for a workspace: system-level labels (usable in every workspace) plus this workspace's own. Each label may carry a branchPrefix that decides the git branch name of a task's worktree, and a description explaining what kind of task it fits — use it to pick a label by meaning.",
     schema: z.object({
       workspaceId: z.string(),
     }),
@@ -26,18 +26,20 @@ export const labelTools = {
   },
 
   create_label: {
-    description: "Create a custom label for a workspace with a name and color.",
+    description: "Create a custom label for a workspace with a name and color. Optional description explains what kind of task the label fits (read by create_task when picking a label).",
     schema: z.object({
       workspaceId: z.string(),
       name: z.string(),
       color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Color must be a hex color code like #ff0000"),
+      description: z.string().max(200).optional(),
     }),
-    handler: async (args: { workspaceId: string; name: string; color: string }) => {
+    handler: async (args: { workspaceId: string; name: string; color: string; description?: string }) => {
       return db.label.create({
         data: {
           name: args.name,
           color: args.color,
           workspaceId: args.workspaceId,
+          description: args.description ?? null,
         },
       });
     },

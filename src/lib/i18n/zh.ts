@@ -310,6 +310,7 @@ export const zh = {
   "settings.config.labels.invalidName": "标签名不能为空，且不超过 50 个字符",
   "settings.config.labels.namePlaceholder": "标签名",
   "settings.config.labels.prefixPlaceholder": "分支前缀",
+  "settings.config.labels.descriptionPlaceholder": "描述：适用什么类型的任务（供选标签参考）",
   "settings.config.labels.taskIdPlaceholder": "<任务 id>",
   "settings.config.labels.delete": "删除",
   "settings.config.labels.defaultPrefix": "默认分支前缀",

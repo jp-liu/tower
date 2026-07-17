@@ -34,6 +34,7 @@ export async function createLabel(data: {
   color: string;
   workspaceId: string | null;
   branchPrefix?: string | null;
+  description?: string | null;
 }) {
   const v = createLabelSchema.parse(data);
   const label = await db.label.create({
@@ -42,6 +43,7 @@ export async function createLabel(data: {
       color: v.color,
       workspaceId: v.workspaceId,
       branchPrefix: v.branchPrefix ?? null,
+      description: v.description ?? null,
     },
   });
   revalidatePath("/workspaces");
@@ -52,11 +54,12 @@ export async function createLabel(data: {
 // it, dropping the label back to the configured default prefix.
 export async function updateLabel(
   id: string,
-  data: { name?: string; branchPrefix?: string | null }
+  data: { name?: string; branchPrefix?: string | null; description?: string | null }
 ) {
   const v = updateLabelSchema.parse({
     ...(data.name !== undefined && { name: data.name.trim() }),
     ...(data.branchPrefix !== undefined && { branchPrefix: data.branchPrefix?.trim() || null }),
+    ...(data.description !== undefined && { description: data.description?.trim() || null }),
   });
   const label = await db.label.findUnique({ where: { id } });
   if (!label) throw new Error("Label not found");
@@ -68,6 +71,7 @@ export async function updateLabel(
     data: {
       ...(v.name !== undefined && { name: v.name }),
       ...(v.branchPrefix !== undefined && { branchPrefix: v.branchPrefix }),
+      ...(v.description !== undefined && { description: v.description }),
     },
   });
   revalidatePath("/workspaces");

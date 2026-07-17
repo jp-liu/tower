@@ -299,6 +299,7 @@ export const en: Translations = {
   "settings.config.labels.invalidName": "A label name is required and must be at most 50 characters",
   "settings.config.labels.namePlaceholder": "Label name",
   "settings.config.labels.prefixPlaceholder": "Branch prefix",
+  "settings.config.labels.descriptionPlaceholder": "Description: what kind of task it fits (used when picking a label)",
   "settings.config.labels.taskIdPlaceholder": "<task id>",
   "settings.config.labels.delete": "Delete",
   "settings.config.labels.defaultPrefix": "Default branch prefix",
