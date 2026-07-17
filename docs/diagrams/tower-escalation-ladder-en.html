@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tower Escalation Ladder</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #020617; color: #e2e8f0;
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    padding: 40px 20px;
+  }
+  h1 {
+    font-size: 26px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 8px;
+    background: linear-gradient(135deg, #22d3ee, #34d399, #a78bfa);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .subtitle { font-size: 13px; color: #64748b; margin-bottom: 32px; letter-spacing: 1px; }
+  .diagram-container { width: 100%; max-width: 1000px; overflow-x: auto; }
+  svg text { font-family: 'JetBrains Mono', monospace; }
+  .cards { display: flex; gap: 20px; max-width: 1000px; width: 100%; margin-top: 32px; flex-wrap: wrap; }
+  .card {
+    flex: 1; min-width: 280px; background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 12px; padding: 20px;
+    backdrop-filter: blur(8px);
+  }
+  .card-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+  .card-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .card-body { font-size: 12px; color: #94a3b8; line-height: 1.7; }
+  .footer { margin-top: 40px; font-size: 12px; color: #475569; letter-spacing: 2px; }
+</style>
+</head>
+<body>
+
+<h1>Tower Escalation Ladder</h1>
+<p class="subtitle">parent × attended matrix — native question allowed only in ①, hard-banned elsewhere</p>
+
+<div class="diagram-container">
+<svg viewBox="0 0 1000 800" xmlns="http://www.w3.org/2000/svg" width="100%">
+  <defs>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(148,163,184,0.05)" stroke-width="0.5"/>
+    </pattern>
+    <marker id="a-emerald" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7" fill="#34d399"/></marker>
+    <marker id="a-orange" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7" fill="#fb923c"/></marker>
+    <marker id="a-violet" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7" fill="#a78bfa"/></marker>
+    <marker id="a-rose" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7" fill="#fb7185"/></marker>
+    <marker id="a-slate" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7" fill="#94a3b8"/></marker>
+    <filter id="glow-e" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3" result="b"/><feFlood flood-color="#34d399" flood-opacity="0.18" result="c"/><feComposite in="c" in2="b" operator="in" result="g"/><feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+
+  <rect width="1000" height="800" fill="url(#grid)"/>
+
+  <!-- ===== Matrix header ===== -->
+  <text x="60" y="60" fill="#64748b" font-size="11" font-weight="600">Case matrix · who is watching this terminal?</text>
+  <text x="345" y="90" text-anchor="middle" fill="#34d399" font-size="12" font-weight="600">attended</text>
+  <text x="725" y="90" text-anchor="middle" fill="#fb923c" font-size="12" font-weight="600">unattended</text>
+  <text x="40" y="172" fill="#22d3ee" font-size="11" font-weight="600" transform="rotate(-90 40 172)" text-anchor="middle">no parent</text>
+  <text x="40" y="330" fill="#a78bfa" font-size="11" font-weight="600" transform="rotate(-90 40 330)" text-anchor="middle">has parent</text>
+
+  <!-- ① no parent + attended (ALLOW) -->
+  <rect x="70" y="104" width="550" height="130" rx="8" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.8" filter="url(#glow-e)"/>
+  <circle cx="96" cy="130" r="11" fill="rgba(52,211,153,0.2)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="96" y="134" text-anchor="middle" fill="#34d399" font-size="12" font-weight="700">①</text>
+  <text x="118" y="128" fill="#34d399" font-size="13" font-weight="600">no parent + attended → ask right here</text>
+  <text x="118" y="147" fill="#34d399" font-size="10" font-weight="600">✔ native AskUserQuestion / option menu allowed (encouraged)</text>
+  <line x1="88" y1="160" x2="600" y2="160" stroke="rgba(52,211,153,0.2)" stroke-width="1"/>
+  <text x="88" y="180" fill="#cbd5e1" font-size="10">a human is watching THIS terminal; picks on the spot.</text>
+  <text x="88" y="198" fill="#cbd5e1" font-size="10">don't flatten options into prose — pop the menu.</text>
+  <text x="88" y="220" fill="#64748b" font-size="9">the only "native menu is safe" cell</text>
+
+  <!-- ② no parent + unattended -->
+  <rect x="650" y="104" width="290" height="130" rx="8" fill="rgba(76,29,149,0.28)" stroke="#a78bfa" stroke-width="1.5"/>
+  <circle cx="676" cy="130" r="11" fill="rgba(167,139,250,0.2)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="676" y="134" text-anchor="middle" fill="#a78bfa" font-size="12" font-weight="700">②</text>
+  <text x="698" y="128" fill="#a78bfa" font-size="12" font-weight="600">no parent + unattended</text>
+  <text x="698" y="146" fill="#fb7185" font-size="10" font-weight="600">✘ native menu hard-banned</text>
+  <line x1="668" y1="158" x2="920" y2="158" stroke="rgba(167,139,250,0.2)" stroke-width="1"/>
+  <text x="668" y="178" fill="#cbd5e1" font-size="10">put question + options into</text>
+  <text x="668" y="196" fill="#c4b5fd" font-size="10" font-weight="600">ask_human / push_to_human</text>
+  <text x="668" y="214" fill="#64748b" font-size="9">sent straight to the human (via relay)</text>
+
+  <!-- ③ has parent + attended -->
+  <rect x="70" y="264" width="425" height="130" rx="8" fill="rgba(120,53,15,0.28)" stroke="#fb923c" stroke-width="1.5"/>
+  <circle cx="96" cy="290" r="11" fill="rgba(251,146,60,0.2)" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="96" y="294" text-anchor="middle" fill="#fb923c" font-size="12" font-weight="700">③</text>
+  <text x="118" y="288" fill="#fb923c" font-size="12" font-weight="600">has parent + attended</text>
+  <text x="118" y="306" fill="#fb7185" font-size="10" font-weight="600">✘ hard-banned (human watches the parent, not you)</text>
+  <line x1="88" y1="318" x2="475" y2="318" stroke="rgba(251,146,60,0.2)" stroke-width="1"/>
+  <text x="88" y="338" fill="#cbd5e1" font-size="10">write blocker + options as plain-text final message, end turn</text>
+  <text x="88" y="356" fill="#cbd5e1" font-size="10">stop hook → notify-parent wakes the parent to decide</text>
+  <text x="88" y="378" fill="#64748b" font-size="9">## 来源 = "父任务派生" marks this case</text>
+
+  <!-- ④ has parent + unattended -->
+  <rect x="525" y="264" width="415" height="130" rx="8" fill="rgba(120,53,15,0.28)" stroke="#fb923c" stroke-width="1.5"/>
+  <circle cx="551" cy="290" r="11" fill="rgba(251,146,60,0.2)" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="551" y="294" text-anchor="middle" fill="#fb923c" font-size="12" font-weight="700">④</text>
+  <text x="573" y="288" fill="#fb923c" font-size="12" font-weight="600">has parent + unattended</text>
+  <text x="573" y="306" fill="#fb7185" font-size="10" font-weight="600">✘ native menu hard-banned</text>
+  <line x1="543" y1="318" x2="920" y2="318" stroke="rgba(251,146,60,0.2)" stroke-width="1"/>
+  <text x="543" y="338" fill="#cbd5e1" font-size="10">same as ③: plain-text end → notify-parent reports up</text>
+  <text x="543" y="356" fill="#cbd5e1" font-size="10">parent can't decide → parent escalates further (human)</text>
+  <text x="543" y="378" fill="#64748b" font-size="9">upward only: child→parent→human, never bounced back</text>
+
+  <!-- ===== PreToolUse hook gate ===== -->
+  <rect x="70" y="426" width="870" height="90" rx="8" fill="rgba(15,23,42,0.7)" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="7,4"/>
+  <text x="88" y="450" fill="#fbbf24" font-size="12" font-weight="700">PreToolUse hook · scripts/tower-pre-tool-hook.js (enforcement layer)</text>
+  <text x="88" y="470" fill="#94a3b8" font-size="10">blocks the native question tool: Claude=AskUserQuestion · Codex=request_user_input (different names, one script lists both)</text>
+  <rect x="88" y="480" width="245" height="26" rx="13" fill="rgba(52,211,153,0.14)" stroke="#34d399" stroke-width="1.2"/>
+  <text x="210" y="497" text-anchor="middle" fill="#34d399" font-size="10" font-weight="600">allow ⇔ no parent AND attended (①)</text>
+  <rect x="345" y="480" width="300" height="26" rx="13" fill="rgba(159,18,57,0.2)" stroke="#fb7185" stroke-width="1.2"/>
+  <text x="495" y="497" text-anchor="middle" fill="#fb7185" font-size="10" font-weight="600">deny ⇔ has parent OR unattended (②③④)</text>
+  <text x="660" y="490" fill="#64748b" font-size="9">state from spawn-time env:</text>
+  <text x="660" y="503" fill="#64748b" font-size="9">TOWER_HAS_PARENT + TOWER_SIGNAL_DIR/unattended-&lt;id&gt;</text>
+
+  <!-- ===== Escalation ladder ===== -->
+  <text x="60" y="558" fill="#64748b" font-size="11" font-weight="600">Escalation ladder · upward only</text>
+
+  <!-- Child -->
+  <rect x="70" y="576" width="230" height="70" rx="8" fill="rgba(76,29,149,0.25)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="185" y="602" text-anchor="middle" fill="#a78bfa" font-size="12" font-weight="600">child task</text>
+  <text x="185" y="622" text-anchor="middle" fill="#94a3b8" font-size="9">ends turn with plain-text final msg</text>
+  <text x="185" y="636" text-anchor="middle" fill="#64748b" font-size="9">reuses stop hook, no new channel</text>
+
+  <line x1="300" y1="611" x2="368" y2="611" stroke="#fb923c" stroke-width="1.6" marker-end="url(#a-orange)"/>
+  <rect x="304" y="590" width="62" height="14" fill="#020617"/>
+  <text x="335" y="601" text-anchor="middle" fill="#fb923c" font-size="9">notify-parent</text>
+
+  <!-- Parent -->
+  <rect x="370" y="576" width="230" height="70" rx="8" fill="rgba(120,53,15,0.28)" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="485" y="602" text-anchor="middle" fill="#fb923c" font-size="12" font-weight="600">parent task</text>
+  <text x="485" y="622" text-anchor="middle" fill="#94a3b8" font-size="9">woken to decide → inject decision</text>
+  <text x="485" y="636" text-anchor="middle" fill="#64748b" font-size="9">send_task_terminal_input</text>
+
+  <line x1="600" y1="611" x2="668" y2="611" stroke="#a78bfa" stroke-width="1.6" marker-end="url(#a-violet)"/>
+  <rect x="604" y="590" width="62" height="14" fill="#020617"/>
+  <text x="635" y="601" text-anchor="middle" fill="#a78bfa" font-size="9">only if stuck</text>
+
+  <!-- Human -->
+  <rect x="670" y="576" width="270" height="70" rx="8" fill="#0f172a"/>
+  <rect x="670" y="576" width="270" height="70" rx="8" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="805" y="602" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">human</text>
+  <text x="805" y="622" text-anchor="middle" fill="#94a3b8" font-size="9">parent's ask_human / push_to_human</text>
+  <text x="805" y="636" text-anchor="middle" fill="#64748b" font-size="9">relayed to Feishu/WeChat</text>
+
+  <!-- decision-back (parent → child) -->
+  <path d="M 485 646 C 485 690, 185 690, 185 648" fill="none" stroke="#34d399" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#a-emerald)"/>
+  <rect x="285" y="682" width="100" height="14" fill="#020617"/>
+  <text x="335" y="693" text-anchor="middle" fill="#34d399" font-size="9">decision → child</text>
+
+  <!-- anti-loop note -->
+  <rect x="70" y="712" width="870" height="40" rx="8" fill="rgba(159,18,57,0.12)" stroke="#fb7185" stroke-width="1.2" stroke-dasharray="6,3"/>
+  <text x="88" y="730" fill="#fb7185" font-size="11" font-weight="600">anti-loop</text>
+  <text x="88" y="745" fill="#94a3b8" font-size="10">when reviewing a stuck child the parent must not bounce the same question straight back (rule in child-review-prompt.ts); "beyond me" is the agent's own judgment, no deterministic detector.</text>
+</svg>
+</div>
+
+<div class="cards">
+  <div class="card">
+    <div class="card-title"><span class="card-dot" style="background:#34d399"></span>Guidance layer</div>
+    <div class="card-body">The four-case principle lives in the built-in system directives task.systemDirective / task.workbenchDirective (src/lib/config-defaults.ts), telling the agent which path to take.</div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="card-dot" style="background:#fbbf24"></span>Enforcement layer</div>
+    <div class="card-body">The PreToolUse hook's deny is verified under --dangerously-skip-permissions; only ① is allowed, the rest hard-banned. Codex also needs --dangerously-bypass-hook-trust and the [features] flag renamed codex_hooks → hooks.</div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="card-dot" style="background:#a78bfa"></span>Parent-child callback</div>
+    <div class="card-body">parentTaskId binding + child stop hook → notify-parent writes into the parent's PTY to wake it; the parent decides in IN_REVIEW, injecting the decision or escalating up to a human.</div>
+  </div>
+</div>
+
+<p class="footer">Tower Harness · Escalation Ladder</p>
+
+</body>
+</html>

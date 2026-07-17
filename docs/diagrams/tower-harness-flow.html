@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tower Harness Relay Flow</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #020617;
+    color: #e2e8f0;
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, #22d3ee, #34d399, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #64748b;
+    margin-bottom: 32px;
+    letter-spacing: 1px;
+  }
+  .diagram-container { width: 100%; max-width: 1040px; overflow-x: auto; }
+  svg text { font-family: 'JetBrains Mono', monospace; }
+  .cards {
+    display: flex;
+    gap: 20px;
+    max-width: 1040px;
+    width: 100%;
+    margin-top: 32px;
+    flex-wrap: wrap;
+  }
+  .card {
+    flex: 1;
+    min-width: 280px;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 12px;
+    padding: 20px;
+    backdrop-filter: blur(8px);
+  }
+  .card-title {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 14px; font-weight: 600; margin-bottom: 10px;
+  }
+  .card-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .card-body { font-size: 12px; color: #94a3b8; line-height: 1.7; }
+  .footer { margin-top: 40px; font-size: 12px; color: #475569; letter-spacing: 2px; }
+</style>
+</head>
+<body>
+
+<h1>Tower 无人值守消息中继</h1>
+<p class="subtitle">RECORD · PARK · RESUME —— 收发外包给外部网关</p>
+
+<div class="diagram-container">
+<svg viewBox="0 0 1000 760" xmlns="http://www.w3.org/2000/svg" width="100%">
+  <defs>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(148,163,184,0.05)" stroke-width="0.5"/>
+    </pattern>
+    <marker id="a-cyan" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7" fill="#22d3ee"/></marker>
+    <marker id="a-emerald" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7" fill="#34d399"/></marker>
+    <marker id="a-orange" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7" fill="#fb923c"/></marker>
+    <marker id="a-violet" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7" fill="#a78bfa"/></marker>
+    <marker id="a-slate" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7" fill="#94a3b8"/></marker>
+    <filter id="glow-e" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3" result="b"/><feFlood flood-color="#34d399" flood-opacity="0.15" result="c"/><feComposite in="c" in2="b" operator="in" result="g"/><feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="glow-o" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3" result="b"/><feFlood flood-color="#fb923c" flood-opacity="0.15" result="c"/><feComposite in="c" in2="b" operator="in" result="g"/><feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+
+  <rect width="1000" height="760" fill="url(#grid)"/>
+
+  <!-- Column headers -->
+  <text x="250" y="30" text-anchor="middle" fill="#34d399" font-size="10" font-weight="600" opacity="0.7" letter-spacing="1">出站 · OUTBOUND ▼</text>
+  <text x="750" y="30" text-anchor="middle" fill="#a78bfa" font-size="10" font-weight="600" opacity="0.7" letter-spacing="1">▲ 回灌 · INBOUND</text>
+  <line x1="500" y1="46" x2="500" y2="600" stroke="rgba(148,163,184,0.12)" stroke-width="1" stroke-dasharray="3,5"/>
+
+  <!-- ============ OUTBOUND (left column) ============ -->
+
+  <!-- Task Agent -->
+  <rect x="60" y="56" width="380" height="70" rx="8" fill="#0f172a"/>
+  <rect x="60" y="56" width="380" height="70" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="250" y="82" text-anchor="middle" fill="#22d3ee" font-size="13" font-weight="600">Task Agent</text>
+  <text x="250" y="102" text-anchor="middle" fill="#94a3b8" font-size="10">MCP 工具：push_to_human / ask_human / notify_human</text>
+  <text x="250" y="117" text-anchor="middle" fill="#64748b" font-size="9">卡住 / 需决策 / 报进展时联系人</text>
+
+  <line x1="250" y1="126" x2="250" y2="168" stroke="#34d399" stroke-width="1.5" marker-end="url(#a-emerald)"/>
+
+  <!-- Tower -->
+  <rect x="60" y="170" width="380" height="120" rx="8" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5" filter="url(#glow-e)"/>
+  <text x="250" y="194" text-anchor="middle" fill="#34d399" font-size="13" font-weight="700">Tower · 只做胶水</text>
+  <line x1="80" y1="204" x2="420" y2="204" stroke="rgba(52,211,153,0.2)" stroke-width="1"/>
+  <circle cx="88" cy="221" r="2.5" fill="#34d399"/><text x="98" y="224" fill="#cbd5e1" font-size="10">登记 OPEN 问题 / 进展日志 → /harness</text>
+  <circle cx="88" cy="240" r="2.5" fill="#34d399"/><text x="98" y="243" fill="#cbd5e1" font-size="10">ask → park 任务 (PAUSED)；notify → 不 park</text>
+  <circle cx="88" cy="259" r="2.5" fill="#34d399"/><text x="98" y="262" fill="#cbd5e1" font-size="10">push_to_human：先经网关发，成功后转 ask/notify</text>
+  <circle cx="88" cy="278" r="2.5" fill="#fb7185"/><text x="98" y="281" fill="#cbd5e1" font-size="10">自己不接飞书/微信，也不直连平台</text>
+
+  <!-- Tower → Gateway (only push) -->
+  <line x1="250" y1="290" x2="250" y2="330" stroke="#fb923c" stroke-width="1.5" marker-end="url(#a-orange)"/>
+  <rect x="256" y="298" width="180" height="14" fill="#020617"/>
+  <text x="262" y="309" fill="#fb923c" font-size="9" font-weight="500">仅 push_to_human 出站</text>
+
+  <!-- Gateway -->
+  <rect x="60" y="332" width="380" height="72" rx="8" fill="rgba(120,53,15,0.3)" stroke="#fb923c" stroke-width="1.5" filter="url(#glow-o)"/>
+  <text x="250" y="358" text-anchor="middle" fill="#fb923c" font-size="13" font-weight="600">外部网关 Hermes / OpenClaw</text>
+  <text x="250" y="378" text-anchor="middle" fill="#94a3b8" font-size="10">gateway-send.ts · CLI 出站 · 独立仓库/服务</text>
+  <text x="250" y="394" text-anchor="middle" fill="#fbbf24" font-size="10">出站体携带口令 [[tower:task=&lt;id&gt;]]</text>
+
+  <!-- Gateway → Human -->
+  <line x1="250" y1="404" x2="250" y2="446" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#a-slate)"/>
+
+  <!-- Human -->
+  <rect x="60" y="448" width="380" height="66" rx="8" fill="#0f172a"/>
+  <rect x="60" y="448" width="380" height="66" rx="8" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="250" y="474" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="600">人 · 飞书 / 微信 / …</text>
+  <text x="250" y="494" text-anchor="middle" fill="#64748b" font-size="10">线程 ↔ 任务映射维护在网关侧</text>
+  <text x="250" y="507" text-anchor="middle" fill="#64748b" font-size="9">飞书等平台被隔离在 Tower 系统之外</text>
+
+  <!-- ============ INBOUND (right column) ============ -->
+
+  <!-- Human reply -->
+  <rect x="560" y="448" width="380" height="66" rx="8" fill="#0f172a"/>
+  <rect x="560" y="448" width="380" height="66" rx="8" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="750" y="474" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="600">人的回复</text>
+  <text x="750" y="494" text-anchor="middle" fill="#a78bfa" font-size="10">带回口令 [[tower:task=&lt;id&gt;]]</text>
+  <text x="750" y="507" text-anchor="middle" fill="#64748b" font-size="9">无口令 → 无法归属 → 任务永远卡住</text>
+
+  <!-- reply crosses from human (left) to human-reply (right) -->
+  <line x1="440" y1="481" x2="556" y2="481" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#a-violet)"/>
+
+  <line x1="750" y1="448" x2="750" y2="408" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#a-violet)"/>
+
+  <!-- Reply handler -->
+  <rect x="560" y="332" width="380" height="72" rx="8" fill="rgba(76,29,149,0.35)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="750" y="356" text-anchor="middle" fill="#a78bfa" font-size="13" font-weight="600">relay_channel_reply / reply_to_ask</text>
+  <text x="750" y="376" text-anchor="middle" fill="#94a3b8" font-size="10">delivery-map 解析口令 → 定位任务</text>
+  <text x="750" y="392" text-anchor="middle" fill="#94a3b8" font-size="10">标记 OPEN 问题为已答</text>
+
+  <line x1="750" y1="332" x2="750" y2="292" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#a-violet)"/>
+
+  <!-- Resume / inject -->
+  <rect x="560" y="170" width="380" height="120" rx="8" fill="rgba(76,29,149,0.25)" stroke="#c4b5fd" stroke-width="1.5"/>
+  <text x="750" y="194" text-anchor="middle" fill="#c4b5fd" font-size="13" font-weight="700">resume · 注入活终端</text>
+  <line x1="580" y1="204" x2="920" y2="204" stroke="rgba(196,181,253,0.2)" stroke-width="1"/>
+  <circle cx="588" cy="221" r="2.5" fill="#c4b5fd"/><text x="598" y="224" fill="#cbd5e1" font-size="10">execution PAUSED → RUNNING</text>
+  <circle cx="588" cy="240" r="2.5" fill="#c4b5fd"/><text x="598" y="243" fill="#cbd5e1" font-size="10">回复作为下一条消息注入 PTY (already_running)</text>
+  <circle cx="588" cy="259" r="2.5" fill="#c4b5fd"/><text x="598" y="262" fill="#cbd5e1" font-size="10">接上一次上下文继续，不 --resume 从头重跑</text>
+  <circle cx="588" cy="278" r="2.5" fill="#c4b5fd"/><text x="598" y="281" fill="#cbd5e1" font-size="10">commit ecab514</text>
+
+  <line x1="750" y1="170" x2="750" y2="126" stroke="#c4b5fd" stroke-width="1.5" marker-end="url(#a-violet)"/>
+
+  <!-- Agent resumes -->
+  <rect x="560" y="56" width="380" height="70" rx="8" fill="#0f172a"/>
+  <rect x="560" y="56" width="380" height="70" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="750" y="82" text-anchor="middle" fill="#22d3ee" font-size="13" font-weight="600">Task Agent 被唤醒</text>
+  <text x="750" y="102" text-anchor="middle" fill="#94a3b8" font-size="10">读到人的回复，继续干活</text>
+  <text x="750" y="117" text-anchor="middle" fill="#64748b" font-size="9">同一 PTY 会话 · 上下文不丢</text>
+
+  <!-- Keepalive note spanning bottom -->
+  <rect x="60" y="548" width="880" height="52" rx="8" fill="rgba(120,53,15,0.12)" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="6,3"/>
+  <text x="78" y="570" fill="#fbbf24" font-size="11" font-weight="600">park 期间 PTY 保活</text>
+  <text x="78" y="588" fill="#94a3b8" font-size="10">ask_human 只置 PAUSED、不杀 PTY；挂起 WS 断连的 2h keepalive 销毁，等回复期间终端不被回收 · session-store / ws-server / pty-session</text>
+
+  <!-- Legend -->
+  <rect x="60" y="620" width="880" height="26" rx="6" fill="rgba(15,23,42,0.6)" stroke="rgba(148,163,184,0.1)" stroke-width="1"/>
+  <circle cx="80" cy="633" r="4" fill="#22d3ee"/><text x="90" y="637" fill="#94a3b8" font-size="9">Agent</text>
+  <circle cx="160" cy="633" r="4" fill="#34d399"/><text x="170" y="637" fill="#94a3b8" font-size="9">Tower (登记/park)</text>
+  <circle cx="320" cy="633" r="4" fill="#fb923c"/><text x="330" y="637" fill="#94a3b8" font-size="9">网关 (真发)</text>
+  <circle cx="440" cy="633" r="4" fill="#94a3b8"/><text x="450" y="637" fill="#94a3b8" font-size="9">人/平台</text>
+  <circle cx="540" cy="633" r="4" fill="#a78bfa"/><text x="550" y="637" fill="#94a3b8" font-size="9">回灌/resume</text>
+  <text x="930" y="637" text-anchor="end" fill="#475569" font-size="9">实线=真发送 · 虚线=跨系统回传</text>
+</svg>
+</div>
+
+<div class="cards">
+  <div class="card">
+    <div class="card-title"><span class="card-dot" style="background:#34d399"></span>三件胶水事</div>
+    <div class="card-body">登记问题（写 /harness）· 挂起任务（park=PAUSED）· 回复回灌唤醒（resume 注入活终端）。收发都不碰。</div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="card-dot" style="background:#fbbf24"></span>口令 [[tower:task=id]]</div>
+    <div class="card-body">出站体必须携带；人的回复带它回来，网关据此归属到任务。缺口令 = 回复无法归属 = 任务永久卡住。</div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="card-dot" style="background:#a78bfa"></span>四工具速记</div>
+    <div class="card-body">ask=登记+park（不发）· notify=登记（不发/不 park）· push=真发+登记（一站式）· reply_to_ask/relay=回灌 resume。</div>
+  </div>
+</div>
+
+<p class="footer">Tower Harness · Unattended Message Relay</p>
+
+</body>
+</html>

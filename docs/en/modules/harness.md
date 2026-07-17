@@ -1,6 +1,6 @@
 ---
 title: Harness
-description: Unattended messaging system — Tower is the "record + park + resume" glue, sending and receiving are outsourced to external gateways
+description: Unattended messaging + parent-child communication + stuck-escalation ladder — Tower is the "record + park + resume" glue
 ---
 
 # Harness Module
@@ -9,7 +9,13 @@ description: Unattended messaging system — Tower is the "record + park + resum
 
 ## Overview
 
-Harness is Tower's **unattended messaging system**. When a task runs autonomously for a long time (L2 unattended mode), the agent needs to reach a human when it is blocked, needs a decision, or wants to report progress — and once the human replies, the task must wake up and continue. This "reach a human → park → resume on reply" capability is what Harness provides.
+Harness is Tower's **unattended collaboration system**. When a task runs autonomously for a long time (L2 unattended mode), or was derived by a parent task to chase a sub-goal, the agent needs to reach whoever can make the call when it is **blocked, needs a decision, or wants to report progress** — and once that person decides, the task must wake up and continue. This "reach the one above → park → resume on reply" capability is Harness.
+
+It is three pieces wired into one chain:
+
+1. **Relay messaging**: the agent sends to a human / receives a reply, with send/receive outsourced to external gateways ([Relay architecture](#relay-architecture)).
+2. **Parent-child communication**: when a derived child gets stuck it does not bother a human first — it reports back to the **parent** to decide ([Parent-child derivation](#parent-child-derivation)).
+3. **Stuck-escalation ladder**: a "who is watching this terminal → who to reach" decision that **hard-bans** the native blocking question (`AskUserQuestion` menu) on terminals nobody is watching, forcing the child → parent → human path instead ([Escalation ladder](#escalation-ladder-guidance--hard-ban)).
 
 The core design is a **relay model**:
 
@@ -17,6 +23,10 @@ The core design is a **relay model**:
 - The actual sending and receiving are outsourced to the external gateways **Hermes / OpenClaw** (separate repos / external services).
 - Tower does only three glue jobs: **record the question, park the task, and resume it when the reply is injected**.
 - The platform-thread ↔ task mapping is maintained on the gateway side, keyed by the token `[[tower:task=<id>]]` carried in every outbound message — the human's reply brings the token back, so the gateway knows which task to route it to.
+
+> **Companion diagrams** (self-contained HTML under `docs/diagrams/`, openable standalone):
+> - Unattended message relay: `docs/diagrams/tower-harness-flow-en.html` (ZH: drop the `-en`)
+> - Parent-child + escalation ladder: `docs/diagrams/tower-escalation-ladder-en.html` (ZH: drop the `-en`)
 
 ## Details
 
@@ -35,6 +45,8 @@ External gateway Hermes / OpenClaw ──► Feishu / WeChat / … (thread↔tas
    ▼
 relay_channel_reply / reply_to_ask ──► resume the parked task, inject into the live terminal
 ```
+
+See `docs/diagrams/tower-harness-flow-en.html` (EN) / `tower-harness-flow.html` (ZH).
 
 - Tower is agnostic to the concrete IM platform; Feishu et al. are isolated outside the system.
 - The outbound body **must** contain the `[[tower:task=<id>]]` token, otherwise the human's reply cannot be attributed to a task and the task stays stuck forever.
@@ -82,26 +94,57 @@ The `/harness` route is the human-facing surface for this system — a table lay
 - The "view detail / handle" dialog lays out **sent + reply stacked**, and the human can **reply inline** — the reply goes through `reply_to_ask` and resumes the corresponding task directly.
 - With no channel configured, `ask_human` still records the question into the `/harness` panel and parks the task, but nothing can be sent out; configure and activate a channel under Settings → Notifications.
 
-### PTY keepalive during an ask wait
+### PTY keepalive during an ask wait · reply injected into the live terminal
 
-When `ask_human` parks a task, it **only sets the execution to PAUSED — it does not kill the PTY**:
+When `ask_human` parks a task it takes the "**park, don't kill**" path rather than "kill then `--resume`", so context survives the wait:
 
-- While parked, the **WS-disconnect keepalive teardown is suspended** — so the terminal is not destroyed during the wait for a reply just because the client disconnected (default keepalive is 2h while running).
-- The human's reply is **injected directly into the live terminal** (`already_running`), continuing from the previous context, rather than a full `--resume` rerun from scratch.
-- This path was fixed in commit `ecab514`.
+1. **Set PAUSED only, never kill the PTY**: the execution is marked PAUSED and the PTY session is left intact.
+2. **Suspend the disconnect keepalive teardown**: while parked the **WS-disconnect keepalive timer is suspended** — so the terminal is not reclaimed during the wait just because the client disconnected (default keepalive is 2h while running).
+3. **Inject the reply into the live terminal**: on reply, `reply_to_ask` flips the execution back to RUNNING and injects the reply as the next message **into the same live PTY** (`already_running`), continuing from the prior context rather than a full `--resume` rerun from scratch.
+
+This path was fixed in commit `ecab514`. Implemented across `src/lib/pty/{session-store,ws-server,pty-session}.ts`.
+
+### Parent-child derivation
+
+A task can be **derived by another task**: the child's `parentTaskId` points back to the parent, and the child's description carries a `## 来源` section noting "父任务派生" (derived by parent). Parent and child need no new mid-run channel — they **reuse the existing stop-hook fan-out**:
+
+- When the child **ends a turn** (stop hook) → `POST /api/internal/hooks/stop` fans out to `notify-parent` (`src/lib/derive/notify-parent.ts`).
+- `notifyParentOnChildStop` finds the parent: **only if the parent's PTY is still alive** does it write a review-guidance prompt (`child-review-prompt.ts`) into the parent's PTY to wake it; if the parent is not running it skips (user's rule).
+- Waking is best-effort: on failure it only warns, never throws into the child's stop path. The body and the carriage return are written twice with a beat between (`SUBMIT_DELAY_MS`), otherwise the Claude TUI folds the trailing CR into the text and never submits.
+
+So "a child asking the parent mid-run" needs no dedicated mid-run channel — **ending the turn with the blocker as the final reply** is enough; the stop hook surfaces it to the parent. The parent decides during its review and injects the decision back into the child's terminal via `send_task_terminal_input`.
+
+### Escalation ladder (guidance + hard-ban)
+
+Native blocking interactions (`AskUserQuestion` / plan option menu) are ones **Tower can neither see nor click on the human's behalf** — the moment nobody is watching that terminal they deadlock the task forever. So Harness puts a **two-layer block** on them (**both shipped**): a **guidance layer** tells the agent which path to take, and an **enforcement layer** uses a PreToolUse hook to `deny` the menu that shouldn't pop.
+
+See `docs/diagrams/tower-escalation-ladder-en.html` (EN) / `tower-escalation-ladder.html` (ZH).
+
+The decision looks at just two axes — **has a parent or not** × **is a human watching this terminal or not** — giving four cases. Principle: **a native menu is usable only when a real human is actively watching *this* terminal**; everywhere else, route the **question plus its concrete options** up the ladder, **upward only** (child → parent → human):
+
+| Case | Native menu | What to do |
+|------|:---:|------|
+| **① no parent + attended** | ✅ allowed (encouraged) | A human is watching this terminal; picks on the spot. Don't flatten options into prose — pop `AskUserQuestion`. |
+| **② no parent + unattended** | ✘ hard-banned | Put question + options into `ask_human` (needs a reply → stop and wait) or `push_to_human`, sent straight to the human. |
+| **③ has parent + attended** | ✘ hard-banned | The human watches the **parent**, not you. Write blocker + options as a plain-text final message and end the turn → stop hook → `notify-parent` wakes the parent to decide. |
+| **④ has parent + unattended** | ✘ hard-banned | Same as ③: end plain-text and report up to the parent; if the parent can't decide, the **parent** escalates further to a human. |
+
+- **When the parent can't decide either**: attended → present the options in the parent's own terminal for the human (native menu OK); unattended → `ask_human` / `push_to_human`.
+- **Anti-loop**: when reviewing a stuck child the parent **must not bounce the same question straight back down** (this rule is also written into the parent-wake guidance in `child-review-prompt.ts`). Whether a decision is "beyond me" is the agent's own judgment (guided by the directive), **not any deterministic detector**.
+
+**Guidance layer** — the four-case principle lives in the built-in system directives `task.systemDirective` / `task.workbenchDirective` (the escalation-ladder section of `src/lib/config-defaults.ts`).
+
+**Enforcement layer** — a PreToolUse hook `scripts/tower-pre-tool-hook.js` (one script shared by Claude + Codex) whose **`deny` is verified to take effect** under `--dangerously-skip-permissions` / `--dangerously-bypass-approvals-and-sandbox`:
+
+- **Blocked target** is each provider's interactive-question tool name — **Claude = `AskUserQuestion`, Codex = `request_user_input` (different names!)**, both verified live. One script lists both; a session only ever exposes its own provider's name, so listing both is harmless. Every other tool passes through.
+- **Decision**: `allow ⇔ no parent AND attended (case ①)`; `deny ⇔ has parent OR unattended (②③④)`, returning `permissionDecision:"deny"` plus a note pointing the agent at the ladder.
+- **State comes from spawn-time env** (the PTY strips `TOWER_DATA_DIR`, so the resolved path is injected directly):
+  - `TOWER_HAS_PARENT` — injected when `parentTaskId` is set (static).
+  - `TOWER_SIGNAL_DIR` — the signal dir; the file `unattended-<taskId>` present ⇔ unattended. It is written/removed via `src/lib/harness/unattended-signal.ts` from `set_goal_mode` / status transitions, mirroring the DB `task.unattended` column (the standalone hook has no DB access, so it reads the file). Fail-open: a missing signal file is treated as attended.
+- **Codex side**: spawn adds `--dangerously-bypass-hook-trust` and the `[features]` flag is renamed `codex_hooks` → `hooks`; Hermes is a gateway adapter with no PTY, so it's unaffected.
 
 ## Known limitations / future work
 
-- **Native interactive questions have a two-layer block — guidance + hard-ban** (**both shipped**): the native blocking interactions (`AskUserQuestion` / plan option menu) are invisible to Tower and deadlock the moment no human is watching that terminal.
-  - **Guidance layer**: the principle lives in the built-in system directives (`task.systemDirective` / `task.workbenchDirective`, see `src/lib/config-defaults.ts`).
-  - **Enforcement layer**: a PreToolUse hook `scripts/tower-pre-tool-hook.js` (one script shared by Claude + Codex) whose **`deny` is verified to take effect** under `--dangerously-skip-permissions` / `--dangerously-bypass-approvals-and-sandbox`. Its matcher is scoped to each provider's interactive-question tool name (Claude = `AskUserQuestion`, Codex = `request_user_input`, both verified live); it allows only **no parent + attended** and returns `permissionDecision:"deny"` everywhere else (has parent / unattended), pointing the agent at the escalation ladder. State comes from spawn-time env: `TOWER_HAS_PARENT` (injected when `parentTaskId` is set) + `TOWER_SIGNAL_DIR` (the signal dir; the file `unattended-<taskId>` present ⇔ unattended, written/removed via `src/lib/harness/unattended-signal.ts` from `set_goal_mode` / status transitions). Codex additionally needs `--dangerously-bypass-hook-trust` at spawn and the `[features]` flag renamed `codex_hooks` → `hooks`; Hermes is a gateway adapter with no PTY, so it's unaffected.
-
-  **A native menu is only usable when a real human is actively watching *this* terminal** — i.e. **no parent + attended** (case ①: the person picks on the spot, offering options is encouraged). Everywhere else, route the **question plus its options** up the ladder (upward only: child → parent → human):
-  - **A derived child task (attended or not)**: the human watches the parent, not the child terminal → never idle on a native menu; write the blocker + options as a plain-text final message and end the turn. The stop hook → `notify-parent` (`src/lib/derive/notify-parent.ts`) wakes the parent, which injects its decision back via `send_task_terminal_input`; if the parent can't decide either it escalates further up to a human.
-  - **No parent + unattended**: put the question + options into `ask_human` / `push_to_human`.
-  - **When the parent can't decide either**: attended → present the options in its own terminal for the human (native menu OK); unattended → `ask_human` / `push_to_human`.
-  - Anti-loop: when reviewing a stuck child the parent **must not bounce the same question straight back down** (this rule is also written into the parent-wake guidance in `child-review-prompt.ts`).
-  "A child asking the parent mid-run" reuses the existing stop hook → notify-parent completion path — no new mid-run channel is needed; ending the turn with the blocker as the final reply is enough to surface it to the parent. Whether a decision is "beyond me" is judged by the agent itself (guided by the directive), **not by any deterministic detector**.
 - **SessionStart hook fails to load inside a worktree**: a `node:internal/modules/cjs/loader:1424` error prevents `execution.sessionId` from being saved, making the `--resume` fallback unreliable. After the keepalive fix this path is rarely hit, but it remains a separate open issue.
 
 ## File Reference
@@ -118,6 +161,22 @@ When `ask_human` parks a task, it **only sets the execution to PAUSED — it doe
 | `gateway-config.ts` | Gateway runtime config (display name, profile, env) |
 | `delivery-map.ts` | Platform message id ↔ task delivery mapping; `[[tower:task=...]]` token extraction |
 | `harness-message.ts` | Message lifecycle (OPEN/ANSWERED/…); Tower records only, never sends |
+| `unattended-signal.ts` | Write/remove the `unattended-<taskId>` signal file read by the PreToolUse hook |
+
+### Parent-child derivation (`src/lib/derive/`)
+
+| File | Description |
+|------|-------------|
+| `notify-parent.ts` | Child stop → write the parent's PTY to wake it; only pushes if the parent PTY is alive |
+| `child-review-prompt.ts` | The parent-wake guidance prompt (incl. the "don't bounce it back" anti-loop rule) |
+
+### Hook scripts (`scripts/`)
+
+- `tower-pre-tool-hook.js` — PreToolUse hard-ban of the native question tool (enforcement layer); install/uninstall in `src/lib/ai/adapters/cli/claude-cli-adapter.ts`
+
+### System directives (`src/lib/config-defaults.ts`)
+
+- `task.systemDirective` / `task.workbenchDirective` — the four-case escalation-ladder guidance (guidance layer)
 
 ### API Routes (internal bridge, `src/app/api/internal/harness/`)
 
@@ -139,3 +198,4 @@ When `ask_human` parks a task, it **only sets the execution to PAUSED — it doe
 
 - Full MCP tool overview: [MCP module](./mcp)
 - Terminal and disconnect keepalive: [Terminal module](./terminal)
+- Process lifecycle and hook fan-out convention: `.claude/rules/process-lifecycle.md`
