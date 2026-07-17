@@ -90,7 +90,12 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 
 ## 已知限制 / 后续
 
-- **Claude CLI 原生选项菜单靠引导规避**（**已落地**，非检测器）：子任务若卡在 Claude CLI 的原生阻塞交互（`AskUserQuestion` / plan 选项菜单）上，Tower **无法检测**，无人值守下会僵死。落地方案是把一条「卡住升级阶梯」写进内置系统声明（`task.systemDirective`，见 `src/lib/config-defaults.ts`）：**禁止**停在原生阻塞菜单干等，改按阶梯上报——① **有父任务**（任务描述带 `## 来源 / 父任务派生`）→ 把 blocker 作为一段纯文本收尾、正常结束本回合，stop hook → `notify-parent`（`src/lib/derive/notify-parent.ts`）自动唤醒父任务，父任务用 `send_task_terminal_input` 注入决策回灌；② **无父 + 无人值守** → 自己 `ask_human` / `push_to_human` 发人；③ **无父 + 有人值守** → 终端里直接问、等人当场答。防环：只向上（子→父→人），父任务 review 时**不得把同一问题原样打回子任务**（规则同时写进 `child-review-prompt.ts` 的父任务唤醒引导）。「子任务中途求助父任务」复用既有 stop hook → notify-parent 完成回推链路，无需新造中途通道——把 blocker 作为收尾回复结束回合即可 surface 到父任务。判「定不了」由 agent 自身判断（指令引导），**不做确定性检测**。
+- **Claude CLI 原生选项菜单靠引导规避**（**已落地**，非检测器）：原生阻塞交互（`AskUserQuestion` / plan 选项菜单）Tower **无法检测**，一旦没人盯着当前终端就会僵死。落地原则写进内置系统声明（`task.systemDirective` / `task.workbenchDirective`，见 `src/lib/config-defaults.ts`）：**原生菜单只在「有真人正盯着当前终端」时可用**——即**无父任务 + 有人值守**（情况①，人当场点选，鼓励给选项，别逼纯文本）；其余一律把「问题 + 选项」改道送出去，按阶梯上报（只向上：子→父→人）：
+  - **被派生的子任务（无论有没有人值守）**：人只盯父任务、不看子任务终端 → 永远别弹原生菜单干等，把「问题+选项」作为纯文本 final message 结束回合，stop hook → `notify-parent`（`src/lib/derive/notify-parent.ts`）唤醒父任务，父任务用 `send_task_terminal_input` 注入决策回灌；父任务也定不了再往上发人。
+  - **无父 + 无人值守**：把「问题+选项」塞进 `ask_human` / `push_to_human` 发人。
+  - **父任务自己也定不了**：有人值守就在本终端呈现选项让人选（原生 OK），无人值守就 `ask_human` / `push_to_human`。
+  - 防环：父任务 review 时**不得把同一问题原样打回子任务**（规则同时写进 `child-review-prompt.ts` 的父任务唤醒引导）。
+  「子任务中途求助父任务」复用既有 stop hook → notify-parent 回推链路，无需新造中途通道——把 blocker 作为收尾回复结束回合即可 surface 到父任务。判「定不了」由 agent 自身判断（指令引导），**不做确定性检测**。
 - **worktree 里 SessionStart hook 加载失败**：`node:internal/modules/cjs/loader:1424` 报错会导致 `execution.sessionId` 存不上，`--resume` 兜底不可靠。保活修复后此路径极少触发，但仍是独立待修问题。
 
 ## 文件清单
