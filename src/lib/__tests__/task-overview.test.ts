@@ -42,6 +42,10 @@ describe("buildFallbackSummary", () => {
   it("summarizes multiple commits with a count prefix", () => {
     expect(buildFallbackSummary("abc123 fix: a\ndef456 feat: b")).toBe("2 个提交：fix: a");
   });
+
+  it("uses English copy when locale is en", () => {
+    expect(buildFallbackSummary("abc123 fix: a\ndef456 feat: b", "en")).toBe("2 commits: fix: a");
+  });
 });
 
 describe("formatNoteContent", () => {
@@ -118,6 +122,44 @@ describe("formatNoteContent", () => {
     const md = formatNoteContent(makeData(), "s", "t", "cancelled");
     expect(md).toContain("本笔记由任务取消时自动生成");
     expect(md).toContain("作为下次重启该任务的参考经验");
+  });
+
+  it("renders English copy when locale is en", () => {
+    const md = formatNoteContent(makeData(), "Did login fix.", "2026-06-12T10:00:00.000Z", "done", "en");
+    expect(md).toContain("This note was auto-generated when the task completed");
+    expect(md).toContain("## Change Summary");
+    expect(md).toContain("## File List");
+    expect(md).toContain("`src/auth/login.ts` (+12 / -3)");
+    expect(md).toContain("`docs/logo.png` (binary)");
+    expect(md).toContain("2 file(s), 2 commit(s).");
+    expect(md).toContain("## Commits");
+    expect(md).toContain("- `abc123` fix: login timeout");
+    expect(md).toContain("## Related Attachments & References");
+    expect(md).toContain("Task: 修复登录超时 (`ckabc123def456ghi789jkl`)");
+    expect(md).toContain("Project: Tower");
+    expect(md).toContain("Generated at: 2026-06-12T10:00:00.000Z");
+    // No Chinese headings leak through.
+    expect(md).not.toContain("## 改动摘要");
+  });
+
+  it("shows English fallbacks for empty assets and missing file list", () => {
+    const noAssets = formatNoteContent(makeData({ assets: [] }), "s", "t", "done", "en");
+    expect(noAssets).toContain("(none)");
+    const noFiles = formatNoteContent(
+      makeData({ files: [], commitCount: 3 }),
+      null,
+      "t",
+      "done",
+      "en"
+    );
+    expect(noFiles).toContain("(Failed to generate change summary)");
+    expect(noFiles).toContain("No precise file list available; about 3 commit(s)");
+  });
+
+  it("uses English commit-truncation copy when locale is en", () => {
+    const commitLog = Array.from({ length: 62 }, (_, i) => `sha${i} commit ${i}`).join("\n");
+    const md = formatNoteContent(makeData({ commitLog }), "s", "t", "done", "en");
+    expect(md).toContain("- …and 12 more commits");
   });
 });
 

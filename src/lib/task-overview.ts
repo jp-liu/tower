@@ -21,9 +21,11 @@ import { existsSync } from "fs";
 import { db } from "@/lib/db";
 import { syncNoteToFts } from "@/lib/fts";
 import { aiQuery } from "@/lib/claude-session";
+import { getConfigValue } from "@/actions/config-actions";
 import { resolveTaskDiffSource } from "@/lib/task-diff-resolver";
 import { parseDiffOutput, type DiffFile } from "@/lib/diff-parser";
 import { TASK_OVERVIEW_CATEGORY } from "@/lib/constants";
+import type { Locale } from "@/lib/i18n";
 import {
   buildFallbackSummary,
   buildNoteTitle,
@@ -147,7 +149,10 @@ async function gatherTaskChangeData(taskId: string): Promise<TaskChangeData | nu
 }
 
 /** Ask the AI for a concise change summary; fall back to the commit log. */
-async function generateChangeSummary(data: TaskChangeData): Promise<string | null> {
+async function generateChangeSummary(
+  data: TaskChangeData,
+  locale: Locale
+): Promise<string | null> {
   const fileListText =
     data.files
       .slice(0, FILE_LIST_PROMPT_MAX)
@@ -156,9 +161,25 @@ async function generateChangeSummary(data: TaskChangeData): Promise<string | nul
           ? `${f.filename} (binary)`
           : `${f.filename} (+${f.added}/-${f.removed})`
       )
-      .join("\n") || "（无文件清单）";
+      .join("\n") || (locale === "en" ? "(no file list)" : "（无文件清单）");
 
-  const prompt = `你是资深工程师。下面是一个刚完成的开发任务的代码改动信息，请用简洁中文写一段「改动摘要」：说明这次改动做了什么、解决了什么问题、主要涉及哪些模块或逻辑。要求 3-6 句、纯文本，不要 markdown 标题，不要逐条罗列文件（文件清单会另外展示）。
+  const prompt =
+    locale === "en"
+      ? `You are a senior engineer. Below is the code-change information for a development task that was just completed. Write a concise "Change Summary" in English: explain what this change did, what problem it solved, and which modules or logic it mainly touched. Requirements: 3-6 sentences, plain text, no markdown headings, do not enumerate files one by one (the file list is shown separately).
+
+Task title: ${data.taskTitle}
+
+Commit log:
+${data.commitLog ?? "(no commit log)"}
+
+Changed files (${data.files.length} total):
+${fileListText}
+
+diff (may be truncated):
+\`\`\`diff
+${data.diffText ?? "(no diff)"}
+\`\`\``
+      : `你是资深工程师。下面是一个刚完成的开发任务的代码改动信息，请用简洁中文写一段「改动摘要」：说明这次改动做了什么、解决了什么问题、主要涉及哪些模块或逻辑。要求 3-6 句、纯文本，不要 markdown 标题，不要逐条罗列文件（文件清单会另外展示）。
 
 任务标题：${data.taskTitle}
 
@@ -179,7 +200,7 @@ ${data.diffText ?? "（无 diff）"}
     const cleaned = result.replace(/^[#*\->"'\s]+/, "").trim();
     if (cleaned) return cleaned;
   }
-  return buildFallbackSummary(data.commitLog);
+  return buildFallbackSummary(data.commitLog, locale);
 }
 
 /**
@@ -209,14 +230,18 @@ export async function captureTaskOverview(
   }
   const captured = data;
 
+  // Follow the current UI language. locale lives in the browser only, so the UI
+  // persists the last-switched value to systemConfig for backend readers here.
+  const locale = await getConfigValue<Locale>("locale", "zh");
+
   // Detached: AI summary + note write. Worktree is already free to be removed
   // — the git data was captured above and the AI query is text-only.
   void (async () => {
     try {
-      const summary = await generateChangeSummary(captured);
+      const summary = await generateChangeSummary(captured, locale);
       const generatedAt = new Date().toISOString();
-      const content = formatNoteContent(captured, summary, generatedAt, kind);
-      const title = buildNoteTitle(captured.taskTitle, kind);
+      const content = formatNoteContent(captured, summary, generatedAt, kind, locale);
+      const title = buildNoteTitle(captured.taskTitle, kind, locale);
 
       const note = await db.projectNote.create({
         data: {

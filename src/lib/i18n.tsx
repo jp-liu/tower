@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 import { zh } from "./i18n/zh";
 import { en } from "./i18n/en";
+import { setConfigValue } from "@/actions/config-actions";
 export type { TranslationKey } from "./i18n/types";
 
 export type Locale = "zh" | "en";
@@ -35,6 +36,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const setLocale = useCallback((l: Locale) => {
     setLocaleState(l);
     localStorage.setItem("locale", l);
+    // Persist for backend readers (task overview note generation runs server-side
+    // and can't see localStorage). Best-effort — never block the UI switch.
+    setConfigValue("locale", l).catch(() => {});
   }, []);
 
   const t = useCallback(
