@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { extractTowerTaskId, findHarnessDeliveryByPlatformMessageId, recordHarnessDelivery } from "@/lib/harness/delivery-map";
+import { readHarnessGatewayRuntimeConfig } from "@/lib/harness/gateway-config";
 
 const PORT = process.env.PORT ?? "3000";
 const BRIDGE = `http://localhost:${PORT}/api/internal/harness`;
@@ -39,29 +40,38 @@ type MessagePresentation = {
 };
 
 function buildTowerOutboundPresentation(args: {
+  agentName: string;
   message: string;
   token: string;
   scope: "work" | "unattended";
   taskTitle: string | null;
-  targetLabel?: string | null;
 }): MessagePresentation {
-  const title = args.scope === "unattended" && args.taskTitle
-    ? `Tower · ${args.taskTitle}`
-    : "Tower";
-  const footerParts = [
-    "Agent: Tower",
-    args.targetLabel ? `Channel: ${args.targetLabel}` : null,
-    args.token,
-  ].filter(Boolean);
+  const body = buildTowerOutboundText({
+    message: args.message,
+    token: null,
+    taskTitle: args.taskTitle,
+  });
   return {
-    title,
+    title: args.agentName.trim() || "Tower",
     tone: args.scope === "unattended" ? "warning" : "info",
     blocks: [
-      { type: "text", text: args.message },
+      { type: "text", text: body },
       { type: "divider" },
-      { type: "context", text: footerParts.join(" | ") },
+      { type: "context", text: `Task ID: ${args.token}` },
     ],
   };
+}
+
+function buildTowerOutboundText(args: {
+  message: string;
+  token: string | null;
+  taskTitle: string | null;
+}): string {
+  return [
+    args.taskTitle?.trim() || null,
+    args.message.trim(),
+    args.token ? `Task ID: ${args.token}` : null,
+  ].filter(Boolean).join("\n\n");
 }
 
 function composeSendInstructions(
@@ -238,14 +248,18 @@ export const harnessTools = {
       }
 
       const token = `[[tower:task=${args.taskId}]]`;
-      const prefix = scope === "unattended" && task.title ? `【${task.title}】` : "";
-      const body = `${prefix}${args.message}\n\n${token}`;
+      const body = buildTowerOutboundText({
+        message: args.message,
+        token,
+        taskTitle: task.title ?? null,
+      });
+      const gatewayRuntime = await readHarnessGatewayRuntimeConfig(active.gateway);
       const presentation = buildTowerOutboundPresentation({
-        message: `${prefix}${args.message}`,
+        agentName: gatewayRuntime.displayName || "Tower",
+        message: args.message,
         token,
         scope,
         taskTitle: task.title ?? null,
-        targetLabel: active.label ?? active.gateway ?? null,
       });
       const { sendViaHarnessGateway } = await import("@/lib/harness/gateway-send");
       const sent = await sendViaHarnessGateway({
@@ -326,11 +340,12 @@ export const harnessTools = {
       const shouldAnswerAsk =
         delivery?.expectReply ??
         (chatScope === "work" ? false : !!(await getOpenAskForRelay(taskId)));
+      const replyText = await buildExternalReplyText(taskId, args);
       if (shouldAnswerAsk) {
         const res = await fetch(`${BRIDGE}/reply`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ taskId, text: args.text, allowRetry: false }),
+          body: JSON.stringify({ taskId, text: replyText, allowRetry: false }),
         });
         const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
         if (res.status !== 409) {
@@ -340,8 +355,7 @@ export const harnessTools = {
         if (delivery?.expectReply) return { no_pending: true, taskId, delivery };
       }
 
-      const terminalText = `【外部渠道回复】${args.text}`;
-      const injected = await injectChannelReply(taskId, terminalText);
+      const injected = await injectChannelReply(taskId, replyText);
       if (injected.ok) return { ok: true, mode: "terminal_reply", taskId, delivery, chatScope, resumed: injected.resumed };
       return { error: injected.error, status: injected.status, taskId, delivery, chatScope };
     },
@@ -388,7 +402,7 @@ export const harnessTools = {
           message:
             "Question recorded (visible in Tower's /harness panel) and task parked, but NO notify " +
             "channel is configured, so it cannot be pushed to any external channel. Before stopping, " +
-            "tell the user: 请到「设置 → 通知 → 无人值守发送渠道」配置一个渠道，否则无法外发。",
+            "tell the user to configure a channel under Settings -> Notifications -> unattended channels; otherwise Tower cannot send externally.",
         };
       }
       return base;
@@ -468,7 +482,7 @@ export function parseGatewaySendOutput(output: string): { platform?: string; cha
     };
   } catch {
     const messageId =
-      output.match(/\b(message_id|messageId|platformMessageId|飞书消息\s*ID|message\s*id)\b[^A-Za-z0-9_-]*(om_[A-Za-z0-9_-]+)/i)?.[2] ??
+      output.match(/\b(message_id|messageId|platformMessageId|\u98de\u4e66\u6d88\u606f\s*ID|message\s*id)\b[^A-Za-z0-9_-]*(om_[A-Za-z0-9_-]+)/i)?.[2] ??
       output.match(/\bom_[A-Za-z0-9_-]+\b/)?.[0];
     if (!messageId) return null;
     const platform = output.match(/\b(platform|channel)\b[^A-Za-z0-9_-]*([A-Za-z0-9_-]+)/i)?.[2];
@@ -585,6 +599,46 @@ async function injectChannelReply(taskId: string, text: string): Promise<{ ok: t
     await new Promise((r) => setTimeout(r, 800));
   }
   return { ok: false, status: 404, error: "terminal not ready after resume" };
+}
+
+async function buildExternalReplyText(
+  taskId: string,
+  args: {
+    text: string;
+    platform?: string;
+    chatId?: string;
+    platformMessageId?: string;
+  },
+): Promise<string> {
+  const { db } = await import("@/lib/db");
+  const task = await db.task.findUnique({
+    where: { id: taskId },
+    select: { id: true, title: true, parentTaskId: true },
+  });
+  let parent: { id: string; title: string } | null = null;
+  if (task?.parentTaskId) {
+    parent = await db.task.findUnique({
+      where: { id: task.parentTaskId },
+      select: { id: true, title: true },
+    });
+  }
+
+  const source = [
+    args.platform?.trim() ? `Platform: ${args.platform.trim()}` : null,
+    args.chatId?.trim() ? `Chat: ${args.chatId.trim()}` : null,
+    args.platformMessageId?.trim() ? `Platform message ID: ${args.platformMessageId.trim()}` : null,
+  ].filter(Boolean).join("\n");
+
+  return [
+    "[External Channel Reply]",
+    `Task: ${task?.title?.trim() || "(unknown)"}`,
+    `Task ID: [[tower:task=${taskId}]]`,
+    parent ? `Parent task: ${parent.title}\nParent task ID: [[tower:task=${parent.id}]]` : null,
+    source ? `Source:\n${source}` : null,
+    `Reply:\n${args.text.trim()}`,
+    "Continue the current task based on this external reply. If this is a child task, act only on what this child task needs; if the parent needs to know, use Tower's parent/child handoff flow.",
+    "Language rule: when replying to the human or summarizing this reply externally, use the human's language. If the language is unclear, use the language of the reply above.",
+  ].filter(Boolean).join("\n\n");
 }
 
 async function postTerminalInput(taskId: string, text: string): Promise<{ ok: true } | { ok: false; error: unknown; status: number }> {

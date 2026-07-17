@@ -233,37 +233,41 @@ export function GatewayExtensionSettings() {
               </div>
 
               <div className="mt-4 space-y-3">
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">{t("settings.extensions.gateway.profileLabel")}</label>
-                  <Input
-                    value={runtime.profile ?? ""}
-                    onChange={(e) => patch(gateway, { profile: e.target.value })}
-                    placeholder={t("settings.extensions.gateway.profilePlaceholder")}
-                  />
-                </div>
+                {isInstalled ? (
+                  <>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">{t("settings.extensions.gateway.profileLabel")}</label>
+                      <Input
+                        value={runtime.profile ?? ""}
+                        onChange={(e) => patch(gateway, { profile: e.target.value })}
+                        placeholder={t("settings.extensions.gateway.profilePlaceholder")}
+                      />
+                    </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">{t("settings.extensions.gateway.displayNameLabel")}</label>
-                  <Input
-                    value={runtime.displayName ?? ""}
-                    onChange={(e) => patch(gateway, { displayName: e.target.value })}
-                    placeholder={t("settings.extensions.gateway.displayNamePlaceholder")}
-                  />
-                </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">{t("settings.extensions.gateway.displayNameLabel")}</label>
+                      <Input
+                        value={runtime.displayName ?? ""}
+                        onChange={(e) => patch(gateway, { displayName: e.target.value })}
+                        placeholder={t("settings.extensions.gateway.displayNamePlaceholder")}
+                      />
+                    </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">{t("settings.extensions.gateway.envLabel")}</label>
-                  <Textarea
-                    value={envToText(runtime.env)}
-                    onChange={(e) => {
-                      const parsed = textToEnv(e.target.value);
-                      patch(gateway, { env: parsed.env });
-                    }}
-                    placeholder={t("settings.extensions.gateway.envPlaceholder")}
-                    className="min-h-24 font-mono text-xs"
-                  />
-                  <p className="text-[11px] text-muted-foreground">{t("settings.extensions.gateway.envHint")}</p>
-                </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">{t("settings.extensions.gateway.envLabel")}</label>
+                      <Textarea
+                        value={envToText(runtime.env)}
+                        onChange={(e) => {
+                          const parsed = textToEnv(e.target.value);
+                          patch(gateway, { env: parsed.env });
+                        }}
+                        placeholder={t("settings.extensions.gateway.envPlaceholder")}
+                        className="min-h-24 font-mono text-xs"
+                      />
+                      <p className="text-[11px] text-muted-foreground">{t("settings.extensions.gateway.envHint")}</p>
+                    </div>
+                  </>
+                ) : null}
 
                 <div className="flex flex-wrap gap-2 pt-1">
                   <Button variant="default" onClick={() => install(gateway)} disabled={installing === gateway}>
@@ -274,10 +278,12 @@ export function GatewayExtensionSettings() {
                         ? t("settings.extensions.gateway.update")
                         : t("settings.extensions.gateway.install")}
                   </Button>
-                  <Button variant="ghost" onClick={saveWithToast} disabled={saving || installing !== null}>
-                    <Check className="h-3.5 w-3.5" />
-                    {t("common.save")}
-                  </Button>
+                  {isInstalled ? (
+                    <Button variant="ghost" onClick={saveWithToast} disabled={saving || installing !== null}>
+                      <Check className="h-3.5 w-3.5" />
+                      {t("common.save")}
+                    </Button>
+                  ) : null}
                   <Button variant="ghost" onClick={() => recheck(gateway)} disabled={refreshing === gateway}>
                     <RefreshCw className={`h-3.5 w-3.5 ${refreshing === gateway ? "animate-spin" : ""}`} />
                     {t("settings.extensions.recheck")}
