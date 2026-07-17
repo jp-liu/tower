@@ -34,7 +34,14 @@ export class CodexCliAdapter implements CliAdapter {
     // "-a","never","-s","workspace-write" — keeps the sandbox, but note codex's
     // workspace-write defaults to NO network, which breaks pnpm install / dev
     // servers. One-line switch; decision deferred to the user (see design doc §7).
-    const args: string[] = ["--dangerously-bypass-approvals-and-sandbox"];
+    // --dangerously-bypass-hook-trust: PreToolUse/SessionStart/etc. only fire for
+    // *trusted* hooks; without this flag codex silently skips Tower's hooks (so the
+    // AskUserQuestion hard-block would never run). Global pre-subcommand flag,
+    // parses for fresh and `codex resume` alike (verified on 0.142.x).
+    const args: string[] = [
+      "--dangerously-bypass-approvals-and-sandbox",
+      "--dangerously-bypass-hook-trust",
+    ];
 
     if (opts.extraArgs?.length) {
       args.push(...opts.extraArgs);
@@ -67,6 +74,8 @@ export class CodexCliAdapter implements CliAdapter {
     taskTitle: string;
     apiUrl: string;
     callbackUrl?: string;
+    hasParent?: boolean;
+    signalDir?: string;
   }): Record<string, string> {
     const env: Record<string, string> = {
       TOWER_TASK_ID: opts.taskId,
@@ -77,6 +86,13 @@ export class CodexCliAdapter implements CliAdapter {
     if (opts.callbackUrl) {
       env.CALLBACK_URL = opts.callbackUrl;
     }
+    // PreToolUse hook state (see scripts/tower-pre-tool-hook.js).
+    if (opts.hasParent) {
+      env.TOWER_HAS_PARENT = "1";
+    }
+    if (opts.signalDir) {
+      env.TOWER_SIGNAL_DIR = opts.signalDir;
+    }
     return env;
   }
 
@@ -85,11 +101,13 @@ export class CodexCliAdapter implements CliAdapter {
   //
   // Codex CLI 0.142.x exposes no `codex hook add` subcommand (verified via
   // `codex --help`; there is only `--dangerously-bypass-hook-trust`). We write
-  // hooks.json and toggle `[features] codex_hooks=true` in config.toml — verified
+  // hooks.json and toggle `[features] hooks=true` in config.toml — verified
   // live: codex accepts our PascalCase hooks.json and records [hooks.state].
-  // Hook entries we create are always invocations of OUR scripts
-  // (session-start-hook.js, post-tool-hook.js, stop-hook.js) — that filename
-  // string is the marker for clean uninstall. Re-check on every Codex release.
+  // (The feature key was renamed `codex_hooks` → `hooks`; ensureHooksFeatureEnabled
+  // migrates old configs.) Hook entries we create are always invocations of OUR
+  // scripts (pre-tool-hook.js, session-start-hook.js, post-tool-hook.js,
+  // stop-hook.js) — that filename string is the marker for clean uninstall.
+  // Re-check on every Codex release.
   // ===========================================================================
 
   async installHooks(_apiUrl: string): Promise<InstallResult> {
@@ -97,12 +115,21 @@ export class CodexCliAdapter implements CliAdapter {
       const hooks = this.readHooks();
       const root = getPackageRoot().replace(/\\/g, "/");
       const sessionStart = path.join(root, "scripts", "tower-session-start-hook.js").replace(/\\/g, "/");
+      const preTool = path.join(root, "scripts", "tower-pre-tool-hook.js").replace(/\\/g, "/");
       const postTool = path.join(root, "scripts", "tower-post-tool-hook.js").replace(/\\/g, "/");
       const stop = path.join(root, "scripts", "tower-stop-hook.js").replace(/\\/g, "/");
       let changed = false;
 
       changed = this.upsertHook(hooks, "SessionStart", "session-start-hook.js", {
         hooks: [{ command: `node "${sessionStart}"`, timeout: 5, type: "command" }],
+      }) || changed;
+
+      // PreToolUse — hard-block the native interactive-question menu on unwatched
+      // terminals. Codex names this tool `request_user_input` (verified live),
+      // unlike Claude's `AskUserQuestion`.
+      changed = this.upsertHook(hooks, "PreToolUse", "pre-tool-hook.js", {
+        hooks: [{ command: `node "${preTool}"`, timeout: 5, type: "command" }],
+        matcher: "request_user_input",
       }) || changed;
 
       changed = this.upsertHook(hooks, "PostToolUse", "post-tool-hook.js", {
@@ -143,6 +170,7 @@ export class CodexCliAdapter implements CliAdapter {
       // —— 短名 includes 让老用户 settings.json 里的旧 entry 自动迁移到新名（幂等）。
       const map: Array<[string, string, string]> = [
         ["SessionStart", "session-start-hook.js", "tower-session-start-hook.js"],
+        ["PreToolUse", "pre-tool-hook.js", "tower-pre-tool-hook.js"],
         ["PostToolUse", "post-tool-hook.js", "tower-post-tool-hook.js"],
         ["Stop", "stop-hook.js", "tower-stop-hook.js"],
       ];
@@ -204,9 +232,9 @@ export class CodexCliAdapter implements CliAdapter {
   async uninstallHooks(): Promise<InstallResult> {
     try {
       const hooks = this.readHooks();
-      const hookFiles = ["session-start-hook.js", "post-tool-hook.js", "stop-hook.js"];
+      const hookFiles = ["session-start-hook.js", "pre-tool-hook.js", "post-tool-hook.js", "stop-hook.js"];
 
-      for (const event of ["SessionStart", "PostToolUse", "Stop"]) {
+      for (const event of ["SessionStart", "PreToolUse", "PostToolUse", "Stop"]) {
         const entries = this.getHookArray(hooks, event);
         hooks[event] = entries.filter(
           (e) => !e.hooks?.some((h: { command?: string }) =>
@@ -488,21 +516,30 @@ export class CodexCliAdapter implements CliAdapter {
     fs.writeFileSync(this.getHooksPath(), JSON.stringify({ hooks }, null, 2), "utf-8");
   }
 
-  /** Ensure `[features] codex_hooks = true` in config.toml so hooks actually fire. */
+  /**
+   * Ensure `[features] hooks = true` in config.toml so hooks actually fire.
+   * 0.142.5 renamed the feature (`codex_hooks` → `hooks`); migrate old configs in
+   * place. `\bhooks` never matches the `hooks` inside `codex_hooks` (preceded by
+   * `_`, a word char, so no boundary) — the migration replace handles that line.
+   */
   private ensureHooksFeatureEnabled(): void {
     const tomlPath = this.getSettingsPath();
     let content = "";
     try { content = fs.readFileSync(tomlPath, "utf-8"); } catch { /* file may not exist */ }
+    const original = content;
 
-    if (/codex_hooks\s*=\s*true/.test(content)) return;
+    // Migrate deprecated flag name.
+    content = content.replace(/codex_hooks(\s*=\s*true)/g, "hooks$1");
 
-    // Append or update the feature flag
-    if (/\[features\]/.test(content)) {
-      // Section exists — append under it
-      content = content.replace(/\[features\]/, "[features]\ncodex_hooks = true");
-    } else {
-      content += "\n[features]\ncodex_hooks = true\n";
+    if (!/\bhooks\s*=\s*true/.test(content)) {
+      if (/\[features\]/.test(content)) {
+        content = content.replace(/\[features\]/, "[features]\nhooks = true");
+      } else {
+        content += "\n[features]\nhooks = true\n";
+      }
     }
+
+    if (content === original) return;
 
     const dir = this.getConfigDir();
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });

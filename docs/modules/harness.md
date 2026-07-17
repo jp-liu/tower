@@ -90,7 +90,11 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 
 ## 已知限制 / 后续
 
-- **Claude CLI 原生选项菜单靠引导规避**（**已落地**，非检测器）：原生阻塞交互（`AskUserQuestion` / plan 选项菜单）Tower **无法检测**，一旦没人盯着当前终端就会僵死。落地原则写进内置系统声明（`task.systemDirective` / `task.workbenchDirective`，见 `src/lib/config-defaults.ts`）：**原生菜单只在「有真人正盯着当前终端」时可用**——即**无父任务 + 有人值守**（情况①，人当场点选，鼓励给选项，别逼纯文本）；其余一律把「问题 + 选项」改道送出去，按阶梯上报（只向上：子→父→人）：
+- **原生交互问答有「引导 + 硬禁」双层拦截**（**均已落地**）：原生阻塞交互（`AskUserQuestion` / plan 选项菜单）Tower 无法检测，一旦没人盯着当前终端就会僵死。
+  - **引导层**：原则写进内置系统声明（`task.systemDirective` / `task.workbenchDirective`，见 `src/lib/config-defaults.ts`）。
+  - **enforcement 层**：PreToolUse hook `scripts/tower-pre-tool-hook.js`（Claude + Codex 共用一套）在 `--dangerously-skip-permissions` / `--dangerously-bypass-approvals-and-sandbox` 下**实测 deny 生效**。matcher 精确到各 provider 的交互问答工具名（Claude=`AskUserQuestion`，Codex=`request_user_input`，均实测确认），仅在**无父任务 + 有人值守**放行，其余（有父任务 / 无人值守）返回 `permissionDecision:"deny"` 硬禁并提示改走升级阶梯。判定状态从 spawn 时注入的 env 读：`TOWER_HAS_PARENT`（有 `parentTaskId` 时注入）+ `TOWER_SIGNAL_DIR`（信号目录，`unattended-<taskId>` 文件存在 ⇔ 无人值守，由 `set_goal_mode` / 状态流转经 `src/lib/harness/unattended-signal.ts` 写删）。Codex 侧 spawn 补 `--dangerously-bypass-hook-trust`、`[features]` 特性名从 `codex_hooks` 迁到 `hooks`；Hermes 是网关适配器无 PTY，不涉及。
+  
+  **原生菜单只在「有真人正盯着当前终端」时可用**——即**无父任务 + 有人值守**（情况①，人当场点选，鼓励给选项，别逼纯文本）；其余一律把「问题 + 选项」改道送出去，按阶梯上报（只向上：子→父→人）：
   - **被派生的子任务（无论有没有人值守）**：人只盯父任务、不看子任务终端 → 永远别弹原生菜单干等，把「问题+选项」作为纯文本 final message 结束回合，stop hook → `notify-parent`（`src/lib/derive/notify-parent.ts`）唤醒父任务，父任务用 `send_task_terminal_input` 注入决策回灌；父任务也定不了再往上发人。
   - **无父 + 无人值守**：把「问题+选项」塞进 `ask_human` / `push_to_human` 发人。
   - **父任务自己也定不了**：有人值守就在本终端呈现选项让人选（原生 OK），无人值守就 `ask_human` / `push_to_human`。

@@ -51,6 +51,8 @@ export class ClaudeCliAdapter implements CliAdapter {
     taskTitle: string;
     apiUrl: string;
     callbackUrl?: string;
+    hasParent?: boolean;
+    signalDir?: string;
   }): Record<string, string> {
     const env: Record<string, string> = {
       TOWER_TASK_ID: opts.taskId,
@@ -60,6 +62,13 @@ export class ClaudeCliAdapter implements CliAdapter {
     };
     if (opts.callbackUrl) {
       env.CALLBACK_URL = opts.callbackUrl;
+    }
+    // PreToolUse hook state (see scripts/tower-pre-tool-hook.js).
+    if (opts.hasParent) {
+      env.TOWER_HAS_PARENT = "1";
+    }
+    if (opts.signalDir) {
+      env.TOWER_SIGNAL_DIR = opts.signalDir;
     }
     return env;
   }
@@ -80,12 +89,19 @@ export class ClaudeCliAdapter implements CliAdapter {
       const hooks = (settings["hooks"] as Record<string, unknown>) ?? {};
       const root = getPackageRoot().replace(/\\/g, "/");
       const sessionStart = path.join(root, "scripts", "tower-session-start-hook.js").replace(/\\/g, "/");
+      const preTool = path.join(root, "scripts", "tower-pre-tool-hook.js").replace(/\\/g, "/");
       const postTool = path.join(root, "scripts", "tower-post-tool-hook.js").replace(/\\/g, "/");
       const stop = path.join(root, "scripts", "tower-stop-hook.js").replace(/\\/g, "/");
       let changed = false;
 
       changed = this.upsertHook(hooks, "SessionStart", "session-start-hook.js", {
         hooks: [{ command: `node "${sessionStart}"`, timeout: 5, type: "command" }],
+      }) || changed;
+
+      // PreToolUse — hard-block the native AskUserQuestion menu on unwatched terminals.
+      changed = this.upsertHook(hooks, "PreToolUse", "pre-tool-hook.js", {
+        hooks: [{ command: `node "${preTool}"`, timeout: 5, type: "command" }],
+        matcher: "AskUserQuestion",
       }) || changed;
 
       changed = this.upsertHook(hooks, "PostToolUse", "post-tool-hook.js", {
@@ -130,6 +146,7 @@ export class ClaudeCliAdapter implements CliAdapter {
       //  settings.json 里的旧 entry 在下次 repair 时自动迁移到 tower- 前缀（幂等）。
       const map: Array<[string, string, string]> = [
         ["SessionStart", "session-start-hook.js", "tower-session-start-hook.js"],
+        ["PreToolUse", "pre-tool-hook.js", "tower-pre-tool-hook.js"],
         ["PostToolUse", "post-tool-hook.js", "tower-post-tool-hook.js"],
         ["Stop", "stop-hook.js", "tower-stop-hook.js"],
       ];
@@ -192,9 +209,9 @@ export class ClaudeCliAdapter implements CliAdapter {
     try {
       const settings = this.readSettings();
       const hooks = (settings["hooks"] as Record<string, unknown>) ?? {};
-      const hookFiles = ["session-start-hook.js", "post-tool-hook.js", "stop-hook.js"];
+      const hookFiles = ["session-start-hook.js", "pre-tool-hook.js", "post-tool-hook.js", "stop-hook.js"];
 
-      for (const event of ["SessionStart", "PostToolUse", "Stop"]) {
+      for (const event of ["SessionStart", "PreToolUse", "PostToolUse", "Stop"]) {
         const entries = this.getHookArray(hooks, event);
         hooks[event] = entries.filter(
           (e) => !e.hooks?.some((h: { command?: string }) =>

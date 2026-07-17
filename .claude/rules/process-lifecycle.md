@@ -42,6 +42,7 @@
 
 ## Hook Scripts
 
-- Tower 的 Claude Code hook 脚本（`scripts/`）命名统一加 `tower-` 前缀：`tower-stop-hook.js` / `tower-session-start-hook.js` / `tower-post-tool-hook.js`。新增 hook 一律 `tower-<event>-hook`。
+- Tower 的 Claude Code hook 脚本（`scripts/`）命名统一加 `tower-` 前缀：`tower-stop-hook.js` / `tower-session-start-hook.js` / `tower-pre-tool-hook.js` / `tower-post-tool-hook.js`。新增 hook 一律 `tower-<event>-hook`。
+- `tower-pre-tool-hook.js` 是 **PreToolUse 硬禁**：matcher 精确到 `AskUserQuestion`（Claude/Codex 同名），仅在「无父任务 + 有人值守」放行，否则返回 `permissionDecision:"deny"` 逼走升级阶梯。状态从 spawn 时注入的 env 读：`TOWER_HAS_PARENT`（静态）+ `TOWER_SIGNAL_DIR`（信号目录，因 PTY 剥了 `TOWER_DATA_DIR` 只能注入解析好的路径）；无人值守信号文件 `unattended-<taskId>` 由 `set_goal_mode` / 状态流转经 `src/lib/harness/unattended-signal.ts` 写删。Codex 侧 spawn 需 `--dangerously-bypass-hook-trust`，且 `[features]` 特性名已从 `codex_hooks` 迁到 `hooks`。
 - 注册/卸载在 `src/lib/ai/adapters/cli/claude-cli-adapter.ts`（`installHooks` / `repairHookPaths`）—— 改名脚本要**同步**这里的路径与 filename marker（marker 用 `includes` 匹配做 clean uninstall；注意老用户 `~/.claude/settings.json` 里的旧路径）。
 - 一个 hook 事件 = 一个脚本 = 一次 POST；后端 **fan-out** 给多个消费者，不为新增消费者拆 hook/route。例：Stop hook → `POST /api/internal/hooks/stop` → `broadcastNotification`（浏览器通知）+ `notify-parent`（父任务回推），二者各自容错、互不拖累。

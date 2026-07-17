@@ -70,6 +70,10 @@ export interface CliAdapter {
     taskTitle: string;
     apiUrl: string;
     callbackUrl?: string;
+    /** True when the task was derived by a parent — injects TOWER_HAS_PARENT for the PreToolUse hook. */
+    hasParent?: boolean;
+    /** Tower's resolved signal dir — injects TOWER_SIGNAL_DIR so the PreToolUse hook can read the unattended flag (TOWER_DATA_DIR is stripped from the PTY env). */
+    signalDir?: string;
   }): Record<string, string>;
 
   // ---- Hooks ---------------------------------------------------------------

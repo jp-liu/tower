@@ -206,6 +206,8 @@ export async function resumePtyExecution(
     taskTitle: task.title,
     apiUrl: `http://localhost:${process.env.PORT || "3000"}`,
     callbackUrl: prevExec.callbackUrl ?? undefined,
+    hasParent: !!task.parentTaskId,
+    signalDir: SIGNAL_DIR,
   });
 
   // Reuse execution: set back to RUNNING
@@ -373,6 +375,8 @@ export async function continueLatestPtyExecution(
     taskId,
     taskTitle: task.title,
     apiUrl: `http://localhost:${process.env.PORT || "3000"}`,
+    hasParent: !!task.parentTaskId,
+    signalDir: SIGNAL_DIR,
   });
 
   // Create a new execution record
@@ -733,6 +737,8 @@ export async function startPtyExecution(
       taskTitle: task.title,
       apiUrl: `http://localhost:${process.env.PORT || "3000"}`,
       callbackUrl: callbackUrl ?? undefined,
+      hasParent: !!task.parentTaskId,
+      signalDir: SIGNAL_DIR,
     }),
   });
 

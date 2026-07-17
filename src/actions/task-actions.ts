@@ -107,6 +107,12 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
     include: { project: true },
   });
 
+  // Leaving the active loop clears goal mode → remove the PreToolUse hook's signal file too.
+  if (status === "DONE" || status === "CANCELLED" || status === "IN_REVIEW") {
+    const { setUnattendedSignal } = await import("@/lib/harness/unattended-signal");
+    setUnattendedSignal(taskId, false);
+  }
+
   // Direct mode DONE: record current HEAD as mergeCommit for diff archive.
   // Worktree tasks record their merge commit inside completeWorktreeReturn, so
   // skip here when that already ran.

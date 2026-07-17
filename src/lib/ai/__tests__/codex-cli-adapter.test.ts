@@ -197,12 +197,14 @@ describe("CodexCliAdapter", () => {
       const raw = JSON.parse(fs.readFileSync(hooksJsonPath, "utf-8"));
       expect(raw.hooks.PostToolUse).toBeDefined();
       expect(raw.hooks.SessionStart).toBeDefined();
+      expect(raw.hooks.PreToolUse).toBeDefined();
       expect(raw.hooks.Stop).toBeDefined();
       expect(raw.hooks.PostToolUse[0].matcher).toBe("Write|Edit|MultiEdit");
+      expect(raw.hooks.PreToolUse[0].matcher).toBe("request_user_input");
 
-      // Verify config.toml has codex_hooks = true
+      // Verify config.toml enables the (renamed) hooks feature
       const toml = fs.readFileSync(configTomlPath, "utf-8");
-      expect(toml).toContain("codex_hooks = true");
+      expect(toml).toContain("hooks = true");
     });
 
     it("does not duplicate hooks on repeated install", async () => {
@@ -234,19 +236,29 @@ describe("CodexCliAdapter", () => {
       await adapter.installHooks("http://localhost:3000");
 
       const toml = fs.readFileSync(configTomlPath, "utf-8");
-      expect(toml).toContain("codex_hooks = true");
+      expect(toml).toContain("hooks = true");
       expect(toml).toContain("some_flag = true");
     });
 
     it("skips feature flag write if already enabled", async () => {
-      fs.writeFileSync(configTomlPath, "[features]\ncodex_hooks = true\n", "utf-8");
+      fs.writeFileSync(configTomlPath, "[features]\nhooks = true\n", "utf-8");
 
       await adapter.installHooks("http://localhost:3000");
 
       const toml = fs.readFileSync(configTomlPath, "utf-8");
       // Should not have duplicated the flag
-      const matches = toml.match(/codex_hooks/g);
+      const matches = toml.match(/\bhooks\s*=\s*true/g);
       expect(matches).toHaveLength(1);
+    });
+
+    it("migrates the deprecated codex_hooks feature flag to hooks", async () => {
+      fs.writeFileSync(configTomlPath, "[features]\ncodex_hooks = true\n", "utf-8");
+
+      await adapter.installHooks("http://localhost:3000");
+
+      const toml = fs.readFileSync(configTomlPath, "utf-8");
+      expect(toml).toContain("hooks = true");
+      expect(toml).not.toContain("codex_hooks");
     });
   });
 

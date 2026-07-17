@@ -478,6 +478,9 @@ export const taskTools = {
     }),
     handler: async (args: { taskId: string; on: boolean }) => {
       await db.task.update({ where: { id: args.taskId }, data: { unattended: args.on } });
+      // Mirror to the signal file the PreToolUse hook reads (DB is unreachable from the hook).
+      const { setUnattendedSignal } = await import("@/lib/harness/unattended-signal");
+      setUnattendedSignal(args.taskId, args.on);
       return { ok: true, taskId: args.taskId, goalMode: args.on };
     },
   },
