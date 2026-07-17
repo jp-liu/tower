@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Fuse from "fuse.js";
 import { useI18n } from "@/lib/i18n";
 import { getWorkspacesWithActiveTasks } from "@/actions/workspace-actions";
@@ -242,6 +242,9 @@ export function TaskPickerDialog({
   const [loading, setLoading] = useState(false);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  // Focus the dialog popup itself on open (not the search Input) so the browser's
+  // native input-history dropdown doesn't pop up; Tab still lands on the search box.
+  const contentRef = useRef<HTMLDivElement>(null);
   const [expandedWs, setExpandedWs] = useState<Set<string>>(new Set());
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [page, setPage] = useState(0);
@@ -382,7 +385,11 @@ export function TaskPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl flex h-[80vh] max-h-[640px] flex-col gap-0 overflow-hidden p-0">
+      <DialogContent
+        ref={contentRef}
+        initialFocus={contentRef}
+        className="sm:max-w-3xl flex h-[80vh] max-h-[640px] flex-col gap-0 overflow-hidden p-0"
+      >
         <DialogHeader className="shrink-0 border-b px-4 py-3">
           <DialogTitle>{t("missions.launchTask")}</DialogTitle>
         </DialogHeader>
@@ -395,6 +402,7 @@ export function TaskPickerDialog({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t("missions.fullPicker.searchPlaceholder")}
+              autoComplete="off"
               className="pl-8 pr-8 h-8"
             />
             {searchQuery && (
