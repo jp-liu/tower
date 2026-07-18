@@ -17,11 +17,11 @@ the gateway's own delegation mechanism instead of inventing a new one:
 - **OpenClaw**: route to another agent registered in `agents.list`.
 - **Hermes**: call `delegate_task` with the `toolsets` the child needs.
 
-The delegation target is user-local and never shipped by default. Example: to
-handle Feishu, a user configures their own operator on their machine — an
-OpenClaw `feishu-operator` agent, or a Hermes subagent with the Feishu toolsets
-enabled (which also needs the user's own Feishu credentials). Tower installs no
-Feishu skill, secret, or toolset by default; it only knows how to delegate.
+The delegation target is user-local and never shipped by default. A user may
+configure their own operator for document spaces, spreadsheets, mail,
+knowledge bases, cloud drives, or other office systems. Tower installs no
+third-party skill, secret, or toolset by default; it only knows how to
+delegate.
 
 Message gateway env such as `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` belongs
 to the user's gateway runtime. Tower does not hard-code enterprise domains or

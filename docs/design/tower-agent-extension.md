@@ -175,7 +175,8 @@ Example agent skill allowlists:
       },
       {
         "id": "xiao-fei",
-        "skills": ["feishu-doc", "feishu-drive", "feishu-wiki", "feishu-perm"]
+        "skills": ["feishu"],
+        "allowedTools": ["feishu__*"]
       }
     ]
   }
@@ -191,6 +192,7 @@ channels:
       doc: true
       drive: true
       wiki: true
+      sheets: true
       bitable: true
       perm: false
 ```

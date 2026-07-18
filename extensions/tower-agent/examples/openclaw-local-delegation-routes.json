@@ -8,19 +8,21 @@
   },
   "routes": [
     {
-      "id": "feishu-bitable",
-      "description": "Feishu Bitable/Base work is delegated to a local Feishu operator agent.",
+      "id": "external-spreadsheet",
+      "description": "Spreadsheet and database-table work is delegated to a user-local office operator agent.",
       "match": [
-        "飞书表格",
-        "飞书多维表格",
-        "飞书 Bitable",
+        "表格",
+        "多维表格",
+        "电子表格",
+        "spreadsheet",
+        "sheet",
         "Bitable",
         "Base",
         "bitable",
         "base"
       ],
-      "agent": "xiao-fei",
-      "delegateCommand": "openclaw agent --agent xiao-fei --json --message-file <task-file>",
+      "agent": "<operator-agent-id>",
+      "delegateCommand": "openclaw agent --agent <operator-agent-id> --json --message-file <task-file>",
       "requiresConfirmationForWrite": true,
       "expectedOutput": {
         "ok": "boolean",
@@ -33,19 +35,21 @@
       }
     },
     {
-      "id": "feishu-knowledge-base",
-      "description": "Feishu wiki/docs work is delegated to a local Feishu operator agent.",
+      "id": "external-document-space",
+      "description": "Document pages, knowledge-base pages, Drive files, folders, and attachments are delegated to a user-local office operator agent.",
       "match": [
-        "飞书知识库",
-        "飞书 wiki",
-        "飞书 Wiki",
-        "飞书文档",
-        "飞书云文档",
+        "知识库",
+        "文档页面",
+        "云文档",
+        "文件",
+        "附件",
+        "云盘",
+        "文件夹",
         "wiki",
-        "docx"
+        "document"
       ],
-      "agent": "xiao-fei",
-      "delegateCommand": "openclaw agent --agent xiao-fei --json --message-file <task-file>",
+      "agent": "<operator-agent-id>",
+      "delegateCommand": "openclaw agent --agent <operator-agent-id> --json --message-file <task-file>",
       "requiresConfirmationForWrite": true,
       "expectedOutput": {
         "ok": "boolean",

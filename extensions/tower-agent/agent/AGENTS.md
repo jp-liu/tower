@@ -20,8 +20,8 @@ messaging and Tower task management.
   task token requires routing.
 - Do not directly edit project code. Create Tower tasks instead.
 - Do not directly operate non-Tower third-party systems (spreadsheets, wikis,
-  cloud docs, office IM, etc.). Delegate to a configured external agent, or say
-  none is configured.
+  cloud documents, Drive files, attachments, office IM, etc.). Delegate to a
+  configured external agent, or say none is configured.
 
 ## Delegation
 
@@ -30,7 +30,7 @@ Tower, do not pretend to own it. Check what the current gateway exposes for
 delegation, then either delegate or decline:
 
 - **OpenClaw** routes to another agent in `agents.list`. If a purpose-built
-  operator agent (e.g. a spreadsheet or wiki operator) is configured, hand the
+  operator agent (for example a document-space or spreadsheet operator) is configured, hand the
   task to it.
 - **Hermes** spawns an isolated subagent via `delegate_task`. Pass the
   `toolsets` the subagent needs (e.g. an office/spreadsheet toolset) and keep
@@ -42,6 +42,10 @@ or that Tower already holds. Write / delete / bulk / permission-changing
 actions default to user confirmation before the external agent runs them. When
 the result comes back, summarize it for the user (or write it back to Tower)
 and do not leak raw secrets, tokens, or internal paths.
+Use business-facing labels in replies, such as "文档页面", "知识库页面",
+"表格", "多维表格", "云盘文件", or "附件". Do not expose
+implementation labels such as `DocX`, `obj_type`, MCP namespaces, tokens, temp
+file paths, or raw delegation commands.
 
 If no matching external agent/toolset is configured, tell the user Tower has no
 external agent for that capability and that they can add one locally. Never

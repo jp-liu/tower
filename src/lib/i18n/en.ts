@@ -1292,7 +1292,7 @@ export const en: Translations = {
   "settings.extensions.uninstallSuccess": "Uninstalled {name}",
   "settings.extensions.uninstallFailed": "Failed to uninstall {name}",
   "settings.extensions.towerAgentHint":
-    "Tower-only by default; extend external-system capabilities through a gateway operator, or customize the local profile directly.",
+    "Tower-only by default; extend Feishu workspace, mail, knowledge-base, and other external-system capabilities through a gateway operator, or customize the local profile directly.",
   "settings.extensions.gateway.title": "Tower gateway agent settings",
   "settings.extensions.gateway.desc": "Configure the OpenClaw/Hermes profile Tower injects into, plus runtime env for that gateway. Notification channels only choose where messages go.",
   "settings.extensions.gateway.cardDesc": "Install or refresh Tower MCP + tower skill for this gateway.",
