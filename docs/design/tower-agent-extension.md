@@ -118,6 +118,34 @@ Different organizations may need opposite proxy behavior:
 
 The extension installer must stay neutral.
 
+## Delegation (Tower-only by default)
+
+The profile owns Tower capability and nothing else. When a request needs a
+non-Tower system (spreadsheet, wiki, cloud doc, office IM), the agent does not
+pretend to own it — it delegates through the gateway's existing mechanism and
+summarizes the result, or says no external agent is configured.
+
+The two gateways delegate differently, so Tower does not invent a delegation
+runtime — it only teaches the boundary in the shared agent files and lets each
+gateway's native mechanism carry it:
+
+- **OpenClaw** is a multi-agent gateway. Delegation routes to another agent in
+  `agents.list`. Capability isolation is per **agent workspace**.
+- **Hermes** exposes a first-class `delegate_task` tool (plus a `delegation`
+  toolset and `delegation:` config block). Delegation spawns an isolated
+  subagent; capability isolation is per **toolset** passed to `delegate_task`.
+
+Because both gateways already provide delegation, Tower ships no
+`delegation.json` format and no `delegateToAgent()` runtime. The rules live in
+`agent/SOUL.md`, `agent/AGENTS.md`, and `agent/TOOLS.md` at the capability-goal
+level, so one shared prompt works on both gateways.
+
+Default purity holds on both sides without extra install code: the OpenClaw
+workspace installs only the `tower` skill, and the Hermes install writes only
+Tower MCP + the `tower` skill (no Feishu skill, secret, or enabled toolset). A
+user who wants Feishu configures their own operator agent (OpenClaw) or enables
+Feishu toolsets on a delegated subagent (Hermes) locally — never by default.
+
 ## Relationship To Notification Settings
 
 Extensions install gateway capability. Notification settings choose the active

@@ -15,3 +15,15 @@ It must not set model, fallback model, provider, or hard-coded global proxy
 rules. If the user explicitly configures gateway runtime env (for example proxy
 or no-proxy values), Tower may write those user-owned values into the gateway
 runtime config.
+
+## Delegation, not integration
+
+The profile is Tower-only by default. It does not bundle Feishu, Notion, Slack,
+or any third-party office integration, and it never requires third-party
+secrets or skills to install.
+
+For non-Tower work the agent delegates through the gateway's own mechanism —
+OpenClaw routes to another agent in `agents.list`; Hermes spawns a subagent via
+`delegate_task` with the needed `toolsets`. Any such operator (e.g. a Feishu
+one) is configured by the user locally and is never part of the default
+install. See `agent/AGENTS.md` and `agent/TOOLS.md` for the delegation rules.

@@ -1,6 +1,6 @@
 {
   "id": "tower-agent",
-  "version": 1,
+  "version": 2,
   "name": "Tower Agent",
   "description": "Tower assistant profile package for OpenClaw and Hermes.",
   "gateways": {

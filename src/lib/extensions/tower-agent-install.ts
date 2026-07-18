@@ -7,7 +7,7 @@ import type { ExtensionResult, ExtensionStatus } from "./types";
 
 export type TowerAgentGateway = "openclaw" | "hermes";
 
-const TOWER_AGENT_PACKAGE_VERSION = "1";
+const TOWER_AGENT_PACKAGE_VERSION = "2";
 const TOWER_GATEWAY_SKILL_NAMES = ["tower"] as const;
 
 export interface TowerAgentInstallOptions {

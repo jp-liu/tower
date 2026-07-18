@@ -62,6 +62,8 @@ describe("tower agent extension installer", () => {
     expect(fs.existsSync(path.join(workspace, "skills", "tower", "SKILL.md"))).toBe(true);
     expect(fs.existsSync(path.join(workspace, "skills", "tower-ask", "SKILL.md"))).toBe(false);
     expect(fs.existsSync(path.join(workspace, "skills", "tower-goal", "SKILL.md"))).toBe(false);
+    // Default install stays Tower-only: no office/third-party (e.g. Feishu) skill is bundled.
+    expect(fs.readdirSync(path.join(workspace, "skills")).sort()).toEqual(["tower"]);
     expect(fs.existsSync(path.join(workspace, "mcp.json"))).toBe(true);
     expect(fs.readFileSync(path.join(workspace, "gateway.env"), "utf-8")).toContain(
       'NO_PROXY="localhost,127.0.0.1,::1,.example.test"',
@@ -125,7 +127,7 @@ describe("tower agent extension installer", () => {
 
     const installed = await checkTowerAgentExtension("openclaw", { paths });
     expect(installed.installed).toBe(true);
-    expect(installed.version).toBe("1");
+    expect(installed.version).toBe("2");
 
     const removed = await uninstallTowerAgentExtension("openclaw", { paths });
     expect(removed.success).toBe(true);
