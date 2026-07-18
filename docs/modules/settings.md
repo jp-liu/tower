@@ -19,6 +19,73 @@ description: 系统配置管理，包括通用配置、AI 工具配置、CLI Pro
 - **Agent 配置**：管理 AI 代理的附加 prompt 和设置，每个 Agent 配置有唯一的 `(agent, configName)` 约束
 - **Git 路径映射**：配置 host/owner 到本地路径的映射规则，自动解析 Git URL 对应的本地目录
 
+### Tower Agent 扩展能力
+
+`Tower Agent (OpenClaw)` 和 `Tower Agent (Hermes)` 默认只直接操作 Tower。
+如果用户希望让它处理飞书、表格、知识库、Slack、Notion 等外部系统，推荐使用网关自己的委托机制扩展能力，而不是把第三方能力装进官方默认 profile。
+
+推荐边界：
+
+- Tower Agent 直接能力：Tower MCP + `tower` skill。
+- 外部能力：由用户本地配置的 operator agent/toolset 执行。
+- Tower Agent 的职责：识别外部能力需求、委托、接收结果、整理后回复用户或写回 Tower。
+
+OpenClaw 示例：
+
+```bash
+openclaw agents add xiao-fei \
+  --workspace ~/.openclaw/workspaces/xiao-fei \
+  --agent-dir ~/.openclaw/agents/xiao-fei/agent \
+  --non-interactive
+openclaw agents set-identity --agent xiao-fei --name 小飞
+```
+
+在 OpenClaw 配置里收窄各 agent 的 skill allowlist：
+
+```json
+{
+  "agents": {
+    "list": [
+      {
+        "id": "o-tower",
+        "skills": ["tower"]
+      },
+      {
+        "id": "xiao-fei",
+        "skills": ["feishu-doc", "feishu-drive", "feishu-wiki", "feishu-perm"]
+      }
+    ]
+  }
+}
+```
+
+在 `~/.openclaw/workspaces/o-tower/delegation-routes.json` 中记录能力到 agent 的映射：
+
+```json
+{
+  "schemaVersion": 1,
+  "sourceAgent": "o-tower",
+  "routes": [
+    {
+      "id": "feishu-bitable",
+      "match": ["飞书表格", "飞书多维表格", "Bitable", "Base"],
+      "agent": "xiao-fei",
+      "delegateCommand": "openclaw agent --agent xiao-fei --json --message-file <task-file>",
+      "requiresConfirmationForWrite": true
+    },
+    {
+      "id": "feishu-knowledge-base",
+      "match": ["飞书知识库", "飞书 wiki", "飞书文档", "飞书云文档"],
+      "agent": "xiao-fei",
+      "delegateCommand": "openclaw agent --agent xiao-fei --json --message-file <task-file>",
+      "requiresConfirmationForWrite": true
+    }
+  ]
+}
+```
+
+这份配置属于用户本地 OpenClaw 环境，不随 Tower 默认安装分发。修改 OpenClaw agent 配置后，需要重启或重新加载 OpenClaw gateway。高级用户也可以自行给 `o-tower` 直接安装第三方 skill，但这不属于官方推荐默认路径。
+
 ## 详细说明
 
 ### CLI Profile

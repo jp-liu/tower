@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "sourceAgent": "o-tower",
+  "defaultPolicy": {
+    "directCapabilities": ["tower"],
+    "delegateExternalCapabilities": true,
+    "noDefaultThirdPartyIntegration": true
+  },
+  "routes": [
+    {
+      "id": "feishu-bitable",
+      "description": "Feishu Bitable/Base work is delegated to a local Feishu operator agent.",
+      "match": [
+        "飞书表格",
+        "飞书多维表格",
+        "飞书 Bitable",
+        "Bitable",
+        "Base",
+        "bitable",
+        "base"
+      ],
+      "agent": "xiao-fei",
+      "delegateCommand": "openclaw agent --agent xiao-fei --json --message-file <task-file>",
+      "requiresConfirmationForWrite": true,
+      "expectedOutput": {
+        "ok": "boolean",
+        "summary": "string",
+        "actionsTaken": "array",
+        "requiresUserConfirmation": "boolean",
+        "risks": "array",
+        "data": "object",
+        "suggestedUserReply": "string"
+      }
+    },
+    {
+      "id": "feishu-knowledge-base",
+      "description": "Feishu wiki/docs work is delegated to a local Feishu operator agent.",
+      "match": [
+        "飞书知识库",
+        "飞书 wiki",
+        "飞书 Wiki",
+        "飞书文档",
+        "飞书云文档",
+        "wiki",
+        "docx"
+      ],
+      "agent": "xiao-fei",
+      "delegateCommand": "openclaw agent --agent xiao-fei --json --message-file <task-file>",
+      "requiresConfirmationForWrite": true,
+      "expectedOutput": {
+        "ok": "boolean",
+        "summary": "string",
+        "actionsTaken": "array",
+        "requiresUserConfirmation": "boolean",
+        "risks": "array",
+        "data": "object",
+        "suggestedUserReply": "string"
+      }
+    }
+  ]
+}

@@ -146,6 +146,98 @@ Tower MCP + the `tower` skill (no Feishu skill, secret, or enabled toolset). A
 user who wants Feishu configures their own operator agent (OpenClaw) or enables
 Feishu toolsets on a delegated subagent (Hermes) locally — never by default.
 
+### OpenClaw Local Operator Routing
+
+For OpenClaw, the recommended extension path is an optional local operator
+agent. Tower does not install this operator; the user creates it in their own
+OpenClaw runtime and records a simple route map in the Tower profile workspace.
+
+Example Feishu operator:
+
+```bash
+openclaw plugin add @openclaw/feishu
+openclaw agents add xiao-fei \
+  --workspace ~/.openclaw/workspaces/xiao-fei \
+  --agent-dir ~/.openclaw/agents/xiao-fei/agent \
+  --non-interactive
+openclaw agents set-identity --agent xiao-fei --name 小飞
+```
+
+Example agent skill allowlists:
+
+```json
+{
+  "agents": {
+    "list": [
+      {
+        "id": "o-tower",
+        "skills": ["tower"]
+      },
+      {
+        "id": "xiao-fei",
+        "skills": ["feishu-doc", "feishu-drive", "feishu-wiki", "feishu-perm"]
+      }
+    ]
+  }
+}
+```
+
+Example Feishu tool policy, owned by OpenClaw:
+
+```yaml
+channels:
+  feishu:
+    tools:
+      doc: true
+      drive: true
+      wiki: true
+      bitable: true
+      perm: false
+```
+
+Example Tower-profile route map:
+
+```json
+{
+  "schemaVersion": 1,
+  "sourceAgent": "o-tower",
+  "defaultPolicy": {
+    "directCapabilities": ["tower"],
+    "delegateExternalCapabilities": true,
+    "noDefaultThirdPartyIntegration": true
+  },
+  "routes": [
+    {
+      "id": "feishu-bitable",
+      "match": ["飞书表格", "飞书多维表格", "Bitable", "Base"],
+      "agent": "xiao-fei",
+      "delegateCommand": "openclaw agent --agent xiao-fei --json --message-file <task-file>",
+      "requiresConfirmationForWrite": true
+    },
+    {
+      "id": "feishu-knowledge-base",
+      "match": ["飞书知识库", "飞书 wiki", "飞书文档", "飞书云文档"],
+      "agent": "xiao-fei",
+      "delegateCommand": "openclaw agent --agent xiao-fei --json --message-file <task-file>",
+      "requiresConfirmationForWrite": true
+    }
+  ]
+}
+```
+
+This file is intentionally user-local, for example:
+
+```text
+~/.openclaw/workspaces/o-tower/delegation-routes.json
+```
+
+The Tower profile can reference it from `USER.md`. `o-tower` remains the
+conversation owner and Tower reporter; `xiao-fei` owns Feishu execution and
+returns structured results.
+
+After changing OpenClaw agent config, restart or reload the OpenClaw gateway so
+the allowlists and new operator are applied to live sessions.
+
 ## Relationship To Notification Settings
 
 Extensions install gateway capability. Notification settings choose the active
