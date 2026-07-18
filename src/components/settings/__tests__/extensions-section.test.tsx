@@ -63,6 +63,19 @@ describe("ExtensionsSection", () => {
     });
   });
 
+  it("shows the delegation helper text on tower-agent cards", async () => {
+    render(
+      <Wrapper>
+        <ExtensionsSection />
+      </Wrapper>
+    );
+    await waitFor(() => {
+      // Both OpenClaw and Hermes cards share the same hint (settings.extensions.towerAgentHint).
+      const hints = screen.getAllByText(/默认只直接操作 Tower|Tower-only by default/);
+      expect(hints.length).toBe(2);
+    });
+  });
+
   it("shows not-installed marker for monaco", async () => {
     render(
       <Wrapper>

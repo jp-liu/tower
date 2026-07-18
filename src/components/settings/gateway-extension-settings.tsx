@@ -208,6 +208,9 @@ export function GatewayExtensionSettings() {
                   <div className="min-w-0">
                     <h4 className="text-sm font-semibold">{extension?.name ?? tk(`settings.harness.gateway.${gateway}`)}</h4>
                     <p className="mt-0.5 text-xs text-muted-foreground">{extension?.description}</p>
+                    {extension?.hintKey ? (
+                      <p className="mt-1 text-xs text-muted-foreground/80">{t(extension.hintKey)}</p>
+                    ) : null}
                   </div>
                 </div>
                 <span className="shrink-0 rounded-md bg-background px-2 py-0.5 text-xs text-muted-foreground ring-1 ring-border">

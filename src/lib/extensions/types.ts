@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import type { TranslationKey } from "@/lib/i18n/types";
 
 export type ExtensionId = "rg" | "monaco" | "tower-agent-openclaw" | "tower-agent-hermes";
 
@@ -33,6 +34,12 @@ export interface ExtensionMetadata {
    * is unreliable in restricted networks.
    */
   manualInstall?: boolean;
+  /**
+   * Optional i18n key for a one-line helper text shown under the description
+   * on the extension card. Use for capability/boundary hints (e.g. Tower Agent
+   * delegation). Rendered via `t(hintKey)` — no hardcoded copy in the UI.
+   */
+  hintKey?: TranslationKey;
 }
 
 /**

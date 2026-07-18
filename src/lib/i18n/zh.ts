@@ -1305,6 +1305,8 @@ export const zh = {
   "settings.extensions.installFailed": "安装 {name} 失败",
   "settings.extensions.uninstallSuccess": "已卸载 {name}",
   "settings.extensions.uninstallFailed": "卸载 {name} 失败",
+  "settings.extensions.towerAgentHint":
+    "默认只直接操作 Tower；外部系统能力建议通过网关里的独立 operator 委托扩展，也可由高级用户自行扩展本地 profile。",
   "settings.extensions.gateway.title": "Tower 网关 Agent 设置",
   "settings.extensions.gateway.desc": "配置 Tower 要注入的 OpenClaw/Hermes profile，以及该网关运行时 env。通知渠道页只负责选择消息发到哪里。",
   "settings.extensions.gateway.cardDesc": "为该网关安装或更新 Tower MCP + tower 技能。",

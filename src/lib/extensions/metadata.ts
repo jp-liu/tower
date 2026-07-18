@@ -35,6 +35,7 @@ const EXTENSION_METADATA: Record<ExtensionId, ExtensionMetadata> = {
     icon: RadioTower,
     sizeMB: 1,
     homepageUrl: "https://docs.openclaw.ai/",
+    hintKey: "settings.extensions.towerAgentHint",
   },
   "tower-agent-hermes": {
     id: "tower-agent-hermes",
@@ -43,6 +44,7 @@ const EXTENSION_METADATA: Record<ExtensionId, ExtensionMetadata> = {
     icon: Bot,
     sizeMB: 1,
     homepageUrl: "https://hermes-agent.nousresearch.com/docs/",
+    hintKey: "settings.extensions.towerAgentHint",
   },
 };
 

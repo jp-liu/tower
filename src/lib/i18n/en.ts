@@ -1291,6 +1291,8 @@ export const en: Translations = {
   "settings.extensions.installFailed": "Failed to install {name}",
   "settings.extensions.uninstallSuccess": "Uninstalled {name}",
   "settings.extensions.uninstallFailed": "Failed to uninstall {name}",
+  "settings.extensions.towerAgentHint":
+    "Tower-only by default; extend external-system capabilities through a gateway operator, or customize the local profile directly.",
   "settings.extensions.gateway.title": "Tower gateway agent settings",
   "settings.extensions.gateway.desc": "Configure the OpenClaw/Hermes profile Tower injects into, plus runtime env for that gateway. Notification channels only choose where messages go.",
   "settings.extensions.gateway.cardDesc": "Install or refresh Tower MCP + tower skill for this gateway.",
