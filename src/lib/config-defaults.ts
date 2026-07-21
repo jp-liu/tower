@@ -155,6 +155,26 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "string",
     label: "Assistant System Prompt",
   },
+  "assistant.model": {
+    defaultValue: "sonnet",
+    type: "string",
+    label: "Assistant Model",
+  },
+  "assistant.effort": {
+    defaultValue: "low",
+    type: "string",
+    label: "Assistant Effort Level",
+  },
+  "assistant.maxTurns": {
+    defaultValue: 30,
+    type: "number",
+    label: "Assistant Max Turns",
+  },
+  "assistant.maxOutputTokens": {
+    defaultValue: 128000,
+    type: "number",
+    label: "Assistant Max Output Tokens",
+  },
   "assistant.displayMode": {
     defaultValue: "sidebar",
     type: "string",

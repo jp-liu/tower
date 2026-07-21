@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
-import { Terminal, Lock } from "lucide-react";
+import { Terminal, BookOpen, Brain, BarChart3 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -16,24 +16,16 @@ import {
   getAvailableProviders,
 } from "@/actions/ai-config-actions";
 import { getConnectedProviders } from "@/actions/provider-connection-actions";
+import { AiCapabilityBlock } from "./ai-capability-block";
+import { AssistantCapabilityBlock } from "./assistant-capability-block";
 
 type ProviderAvail = Awaited<ReturnType<typeof getAvailableProviders>>[number];
 type SlotConfig = Awaited<ReturnType<typeof getAiCapabilityConfigs>>[number];
 
-// The 4 query slots still run on a hardcoded Claude path (see design doc §3.1).
-// Shown greyed so the user knows they exist but aren't wired to the slot system
-// yet — Phase B migrates them to resolveQueryAdapter.
-const DEFERRED_SLOTS = [
-  { slot: "summary", key: "settings.capabilitySlots.summary" },
-  { slot: "dreaming", key: "settings.capabilitySlots.dreaming" },
-  { slot: "analysis", key: "settings.capabilitySlots.analysis" },
-  { slot: "assistant", key: "settings.capabilitySlots.assistant" },
-] as const;
-
 /**
- * Capability slots panel. MVP wires only the `terminal` slot (which already
- * routes through resolveCliAdapter in agent-actions.ts) — pick which connected
- * provider runs task terminals. The other 4 slots are display-only for now.
+ * Capability slots panel. Each AI capability gets its own independent block.
+ * The `terminal` slot is fully wired; `assistant` has model/effort config.
+ * The remaining 3 slots (summary / dreaming / analysis) are display-only for now.
  */
 export function CapabilitySlotsSection() {
   const { t } = useI18n();
@@ -68,9 +60,6 @@ export function CapabilitySlotsSection() {
   }, []);
 
   const terminalCfg = configs.find((c) => c.slot === "terminal");
-  // Mirror capability-resolver's fallback: no config → prefer claude if
-  // connected, else first connected. Purely for display of the current effective
-  // choice; the resolver is the source of truth at runtime.
   const effectiveProvider =
     terminalCfg?.provider ??
     (connected.includes("claude") ? "claude" : connected[0] ?? "claude");
@@ -78,7 +67,7 @@ export function CapabilitySlotsSection() {
   const displayName = (name: string) =>
     providers.find((p) => p.name === name)?.displayName ?? name;
 
-  function handleChange(provider: string | null) {
+  function handleTerminalChange(provider: string | null) {
     if (!provider) return;
     startTransition(async () => {
       try {
@@ -113,65 +102,75 @@ export function CapabilitySlotsSection() {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 space-y-4">
-      <div>
-        <h3 className="text-sm font-medium flex items-center gap-2">
-          <Terminal className="h-4 w-4" />
-          {t("settings.capabilitySlots.title")}
-        </h3>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {t("settings.capabilitySlots.desc")}
-        </p>
-      </div>
-
-      {/* terminal slot — the only wired slot in MVP */}
-      <div
-        className={`flex items-center justify-between gap-4 ${
-          isPending ? "opacity-40 pointer-events-none" : ""
-        }`}
+    <div className="space-y-3">
+      {/* Terminal slot — fully wired */}
+      <AiCapabilityBlock
+        icon={Terminal}
+        title={t("settings.capabilitySlots.terminal")}
+        description={t("settings.capabilitySlots.terminalDesc")}
+        badge="active"
       >
-        <div className="min-w-0">
-          <div className="text-sm font-medium">
-            {t("settings.capabilitySlots.terminal")}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {t("settings.capabilitySlots.terminalDesc")}
-          </div>
-        </div>
-        {connected.length === 0 ? (
-          <span className="text-xs text-muted-foreground shrink-0">
-            {t("settings.capabilitySlots.noConnected")}
-          </span>
-        ) : (
-          <Select value={effectiveProvider} onValueChange={handleChange}>
-            <SelectTrigger className="w-44 shrink-0">
-              <span className="truncate">{displayName(effectiveProvider)}</span>
-            </SelectTrigger>
-            <SelectContent>
-              {connected.map((name) => (
-                <SelectItem key={name} value={name}>
-                  {displayName(name)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
-
-      {/* deferred slots — display-only until Phase B */}
-      <div className="space-y-2.5 border-t border-border/50 pt-3">
-        {DEFERRED_SLOTS.map((d) => (
-          <div key={d.slot} className="flex items-center justify-between gap-4 opacity-60">
-            <div className="text-sm font-medium flex items-center gap-1.5">
-              <Lock className="h-3 w-3" />
-              {t(d.key)}
-            </div>
+        <div
+          className={`flex items-center justify-between gap-4 ${
+            isPending ? "opacity-40 pointer-events-none" : ""
+          }`}
+        >
+          {connected.length === 0 ? (
             <span className="text-xs text-muted-foreground shrink-0">
-              {t("settings.capabilitySlots.claudeFixed")}
+              {t("settings.capabilitySlots.noConnected")}
             </span>
-          </div>
-        ))}
-      </div>
+          ) : (
+            <Select value={effectiveProvider} onValueChange={handleTerminalChange}>
+              <SelectTrigger className="w-44 shrink-0">
+                <span className="truncate">{displayName(effectiveProvider)}</span>
+              </SelectTrigger>
+              <SelectContent>
+                {connected.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {displayName(name)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      </AiCapabilityBlock>
+
+      {/* Assistant slot — model + effort config */}
+      <AssistantCapabilityBlock />
+
+      {/* Summary slot — coming soon */}
+      <AiCapabilityBlock
+        icon={BookOpen}
+        title={t("settings.capabilitySlots.summary")}
+        badge="coming-soon"
+      >
+        <span className="text-xs text-muted-foreground">
+          {t("settings.capabilitySlots.claudeFixed")}
+        </span>
+      </AiCapabilityBlock>
+
+      {/* Dreaming slot — coming soon */}
+      <AiCapabilityBlock
+        icon={Brain}
+        title={t("settings.capabilitySlots.dreaming")}
+        badge="coming-soon"
+      >
+        <span className="text-xs text-muted-foreground">
+          {t("settings.capabilitySlots.claudeFixed")}
+        </span>
+      </AiCapabilityBlock>
+
+      {/* Analysis slot — coming soon */}
+      <AiCapabilityBlock
+        icon={BarChart3}
+        title={t("settings.capabilitySlots.analysis")}
+        badge="coming-soon"
+      >
+        <span className="text-xs text-muted-foreground">
+          {t("settings.capabilitySlots.claudeFixed")}
+        </span>
+      </AiCapabilityBlock>
     </div>
   );
 }
