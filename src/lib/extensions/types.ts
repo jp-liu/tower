@@ -23,7 +23,9 @@ export interface ExtensionResult {
 export interface ExtensionMetadata {
   id: ExtensionId;
   name: string;
+  nameKey?: TranslationKey;
   description: string;
+  descriptionKey?: TranslationKey;
   icon: LucideIcon;
   sizeMB: number;
   homepageUrl: string;

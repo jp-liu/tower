@@ -194,6 +194,8 @@ export function GatewayExtensionSettings() {
           const runtime = config[gateway] ?? {};
           const extension = getExtensionMetadata(EXTENSION_BY_GATEWAY[gateway]);
           const Icon = extension?.icon;
+          const extensionName = extension?.nameKey ? t(extension.nameKey) : extension?.name;
+          const extensionDescription = extension?.descriptionKey ? t(extension.descriptionKey) : extension?.description;
           const gatewayStatus = status[gateway];
           const isInstalled = Boolean(gatewayStatus?.installed);
           return (
@@ -206,8 +208,8 @@ export function GatewayExtensionSettings() {
                     </div>
                   ) : null}
                   <div className="min-w-0">
-                    <h4 className="text-sm font-semibold">{extension?.name ?? tk(`settings.harness.gateway.${gateway}`)}</h4>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{extension?.description}</p>
+                    <h4 className="text-sm font-semibold">{extensionName ?? tk(`settings.harness.gateway.${gateway}`)}</h4>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{extensionDescription}</p>
                     {extension?.hintKey ? (
                       <p className="mt-1 text-xs text-muted-foreground/80">{t(extension.hintKey)}</p>
                     ) : null}

@@ -31,7 +31,10 @@ export function HarnessClient({ initial }: { initial: HarnessMessageView[] }) {
   const [detail, setDetail] = useState<{ m: HarnessMessageView; focus: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
   const viewRef = useRef(view);
-  viewRef.current = view;
+
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
 
   const refresh = useCallback(async (v: HarnessView) => {
     try {
@@ -42,11 +45,14 @@ export function HarnessClient({ initial }: { initial: HarnessMessageView[] }) {
     }
   }, []);
 
-  // 切换视图立即拉取
-  useEffect(() => {
+  const selectView = (v: HarnessView) => {
+    viewRef.current = v;
+    setView(v);
     setLoading(true);
-    refresh(view).finally(() => setLoading(false));
-  }, [view, refresh]);
+    refresh(v).finally(() => {
+      if (viewRef.current === v) setLoading(false);
+    });
+  };
 
   // 4s 轮询（退化方案，spec ④ 允许）
   useEffect(() => {
@@ -88,40 +94,42 @@ export function HarnessClient({ initial }: { initial: HarnessMessageView[] }) {
         </div>
 
         {/* 过滤 chips */}
-        <div className="flex items-center gap-2 px-6 py-3">
-          {VIEWS.map((v) => (
-            <Button
-              key={v}
-              variant={view === v ? "default" : "outline"}
-              onClick={() => setView(v)}
-              className={view === v ? "" : "text-muted-foreground"}
-            >
-              {t(`harness.chip.${v}`)}
-            </Button>
-          ))}
+        <div className="shrink-0 border-b border-border/70 px-6 py-3">
+          <div className="flex items-center gap-2">
+            {VIEWS.map((v) => (
+              <Button
+                key={v}
+                variant={view === v ? "default" : "outline"}
+                onClick={() => selectView(v)}
+                className={view === v ? "" : "text-muted-foreground"}
+              >
+                {t(`harness.chip.${v}`)}
+              </Button>
+            ))}
+          </div>
         </div>
 
         {/* 表格 */}
-        <div className="flex-1 overflow-auto px-6 pb-6">
+        <div className="min-h-0 flex-1 px-6 py-4">
           {messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
               <Inbox className="mb-3 h-10 w-10 opacity-40" />
               <p className="text-sm">{t("harness.empty")}</p>
             </div>
           ) : (
-            <div className={`overflow-x-auto rounded-xl border bg-card ${pending ? "opacity-50" : ""}`}>
+            <div className={`h-full overflow-auto rounded-xl border bg-card ${pending ? "opacity-50" : ""}`}>
               <table className="w-full min-w-[960px] text-sm">
-                <thead>
-                  <tr className="border-b text-left text-[11px] uppercase text-muted-foreground">
-                    <th className="px-3 py-2 font-medium">{t("harness.col.workspace")}</th>
-                    <th className="px-3 py-2 font-medium">{t("harness.col.project")}</th>
-                    <th className="px-3 py-2 font-medium">{t("harness.col.task")}</th>
-                    <th className="px-3 py-2 font-medium">{t("harness.col.content")}</th>
-                    <th className="px-3 py-2 font-medium whitespace-nowrap">{t("harness.col.sentAt")}</th>
-                    <th className="px-3 py-2 font-medium">{t("harness.col.reply")}</th>
-                    <th className="px-3 py-2 font-medium whitespace-nowrap">{t("harness.col.repliedAt")}</th>
-                    <th className="px-3 py-2 font-medium">{t("harness.col.status")}</th>
-                    <th className="px-3 py-2 font-medium">{t("harness.col.actions")}</th>
+                <thead className="sticky top-0 z-10 bg-card shadow-[0_1px_0_hsl(var(--border))]">
+                  <tr className="text-left text-[11px] uppercase text-muted-foreground">
+                    <th className="px-3 py-2.5 font-medium">{t("harness.col.workspace")}</th>
+                    <th className="px-3 py-2.5 font-medium">{t("harness.col.project")}</th>
+                    <th className="px-3 py-2.5 font-medium">{t("harness.col.task")}</th>
+                    <th className="px-3 py-2.5 font-medium">{t("harness.col.content")}</th>
+                    <th className="px-3 py-2.5 font-medium whitespace-nowrap">{t("harness.col.sentAt")}</th>
+                    <th className="px-3 py-2.5 font-medium">{t("harness.col.reply")}</th>
+                    <th className="px-3 py-2.5 font-medium whitespace-nowrap">{t("harness.col.repliedAt")}</th>
+                    <th className="px-3 py-2.5 font-medium">{t("harness.col.status")}</th>
+                    <th className="px-3 py-2.5 font-medium">{t("harness.col.actions")}</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -24,7 +24,9 @@ async function uninstall(): Promise<ExtensionResult> {
 export const towerAgentHermesExtension: Extension = {
   id: "tower-agent-hermes",
   name: "Tower Agent (Hermes)",
+  nameKey: "settings.extensions.towerAgentHermes.name",
   description: "安装 Tower 助手 profile、MCP 与 skills 到 Hermes",
+  descriptionKey: "settings.extensions.towerAgentHermes.description",
   icon: Bot,
   sizeMB: 1,
   homepageUrl: "https://hermes-agent.nousresearch.com/docs/",

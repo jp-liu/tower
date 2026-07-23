@@ -140,7 +140,9 @@ async function install(): Promise<ExtensionResult> {
 export const ripgrepExtension: Extension = {
   id: "rg",
   name: "代码搜索 (ripgrep)",
+  nameKey: "settings.extensions.rg.name",
   description: "基于 rg 的全文代码搜索",
+  descriptionKey: "settings.extensions.rg.description",
   icon: Search,
   sizeMB: 5,
   homepageUrl: "https://github.com/BurntSushi/ripgrep#installation",

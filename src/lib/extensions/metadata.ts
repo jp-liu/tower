@@ -14,7 +14,9 @@ const EXTENSION_METADATA: Record<ExtensionId, ExtensionMetadata> = {
   rg: {
     id: "rg",
     name: "代码搜索 (ripgrep)",
+    nameKey: "settings.extensions.rg.name",
     description: "基于 rg 的全文代码搜索",
+    descriptionKey: "settings.extensions.rg.description",
     icon: Search,
     sizeMB: 5,
     homepageUrl: "https://github.com/BurntSushi/ripgrep#installation",
@@ -23,7 +25,9 @@ const EXTENSION_METADATA: Record<ExtensionId, ExtensionMetadata> = {
   monaco: {
     id: "monaco",
     name: "代码编辑器 (Monaco)",
+    nameKey: "settings.extensions.monaco.name",
     description: "VS Code 同款 Web 编辑器",
+    descriptionKey: "settings.extensions.monaco.description",
     icon: FileCode,
     sizeMB: 15,
     homepageUrl: "https://microsoft.github.io/monaco-editor/",
@@ -31,7 +35,9 @@ const EXTENSION_METADATA: Record<ExtensionId, ExtensionMetadata> = {
   "tower-agent-openclaw": {
     id: "tower-agent-openclaw",
     name: "Tower Agent (OpenClaw)",
+    nameKey: "settings.extensions.towerAgentOpenClaw.name",
     description: "安装 Tower 助手 profile、MCP 与 skills 到 OpenClaw",
+    descriptionKey: "settings.extensions.towerAgentOpenClaw.description",
     icon: RadioTower,
     sizeMB: 1,
     homepageUrl: "https://docs.openclaw.ai/",
@@ -40,7 +46,9 @@ const EXTENSION_METADATA: Record<ExtensionId, ExtensionMetadata> = {
   "tower-agent-hermes": {
     id: "tower-agent-hermes",
     name: "Tower Agent (Hermes)",
+    nameKey: "settings.extensions.towerAgentHermes.name",
     description: "安装 Tower 助手 profile、MCP 与 skills 到 Hermes",
+    descriptionKey: "settings.extensions.towerAgentHermes.description",
     icon: Bot,
     sizeMB: 1,
     homepageUrl: "https://hermes-agent.nousresearch.com/docs/",

@@ -69,14 +69,16 @@ export function ExtensionCard({ extension }: ExtensionCardProps) {
 
   const Icon = extension.icon;
   const isInstalled = status.installed;
+  const extensionName = extension.nameKey ? t(extension.nameKey) : extension.name;
+  const extensionDescription = extension.descriptionKey ? t(extension.descriptionKey) : extension.description;
 
   const handleInstall = async () => {
     const result = await install();
     if (result.success) {
-      toast.success(t("settings.extensions.installSuccess").replace("{name}", extension.name));
+      toast.success(t("settings.extensions.installSuccess").replace("{name}", extensionName));
     } else {
       toast.error(
-        t("settings.extensions.installFailed").replace("{name}", extension.name) +
+        t("settings.extensions.installFailed").replace("{name}", extensionName) +
           (result.error ? `: ${result.error.slice(0, 200)}` : "")
       );
     }
@@ -85,10 +87,10 @@ export function ExtensionCard({ extension }: ExtensionCardProps) {
   const handleUninstall = async () => {
     const result = await uninstall();
     if (result.success) {
-      toast.success(t("settings.extensions.uninstallSuccess").replace("{name}", extension.name));
+      toast.success(t("settings.extensions.uninstallSuccess").replace("{name}", extensionName));
     } else {
       toast.error(
-        t("settings.extensions.uninstallFailed").replace("{name}", extension.name) +
+        t("settings.extensions.uninstallFailed").replace("{name}", extensionName) +
           (result.error ? `: ${result.error.slice(0, 200)}` : "")
       );
     }
@@ -116,8 +118,8 @@ export function ExtensionCard({ extension }: ExtensionCardProps) {
             <Icon className="h-5 w-5 text-muted-foreground" />
           </div>
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold">{extension.name}</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">{extension.description}</p>
+            <h3 className="text-sm font-semibold">{extensionName}</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">{extensionDescription}</p>
           </div>
         </div>
         <span className="shrink-0 rounded-md bg-background px-2 py-0.5 text-xs text-muted-foreground ring-1 ring-border">

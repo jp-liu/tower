@@ -106,10 +106,12 @@ export function WizardStepExtensions({ username, onComplete }: WizardStepExtensi
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium">{ext.name}</span>
+                    <span className="text-sm font-medium">{ext.nameKey ? t(ext.nameKey) : ext.name}</span>
                     <span className="shrink-0 text-xs text-muted-foreground">~{ext.sizeMB} MB</span>
                   </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{ext.description}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {ext.descriptionKey ? t(ext.descriptionKey) : ext.description}
+                  </p>
                   <a
                     href={ext.homepageUrl}
                     target="_blank"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Send } from "lucide-react";
+import { Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -75,14 +75,13 @@ export function HarnessDetailDialog({
   onChanged: () => void;
 }) {
   const { t } = useI18n();
-  const [reply, setReply] = useState("");
+  const [replyDraft, setReplyDraft] = useState<{ messageId: string; value: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const replyRef = useRef<HTMLTextAreaElement>(null);
 
   // 每次打开新消息清空草稿；OPEN ask 且要求聚焦时聚焦输入框
   useEffect(() => {
     if (!message) return;
-    setReply("");
     if (autoFocusReply && message.kind === "ask" && message.state === "OPEN") {
       // 等 Dialog 挂载后聚焦
       const id = setTimeout(() => replyRef.current?.focus(), 50);
@@ -95,6 +94,7 @@ export function HarnessDetailDialog({
   const isOpenAsk = m.kind === "ask" && m.state === "OPEN";
   const isInfo = m.kind !== "ask";
   const badge = badgeOf(m);
+  const reply = replyDraft?.messageId === m.id ? replyDraft.value : "";
 
   const doReply = () => {
     if (!reply.trim()) return;
@@ -102,7 +102,7 @@ export function HarnessDetailDialog({
       const r = await replyHarnessAsk(m.taskId, reply.trim());
       if (r.ok) {
         toast.success(t("harness.toast.replySent"));
-        setReply("");
+        setReplyDraft(null);
         onChanged();
         onOpenChange(false);
       } else {
@@ -127,10 +127,18 @@ export function HarnessDetailDialog({
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
+      <DialogContent showCloseButton={false} className="max-h-[86vh] overflow-hidden pr-12 sm:max-w-2xl">
+        <button
+          type="button"
+          onClick={() => onOpenChange(false)}
+          className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label={t("common.close")}
+        >
+          <X className="h-4 w-4" />
+        </button>
+        <DialogHeader className="pr-20">
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
               <DialogTitle className="truncate text-left">
                 {m.taskTitle || t("harness.unknownTask")}
               </DialogTitle>
@@ -142,21 +150,23 @@ export function HarnessDetailDialog({
                 {absTime(m.createdAt)}
               </p>
             </div>
-            <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${STATUS_COLORS[badge]}`}
-            >
-              {badgeLabel(badge)}
-            </span>
+            <div className="shrink-0 pt-0.5">
+              <span
+                className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${STATUS_COLORS[badge]}`}
+              >
+                {badgeLabel(badge)}
+              </span>
+            </div>
           </div>
         </DialogHeader>
 
-        <div className={`space-y-4 ${pending ? "opacity-50" : ""}`}>
+        <div className={`max-h-[calc(86vh-7rem)] space-y-4 overflow-y-auto pr-1 ${pending ? "opacity-50" : ""}`}>
           {/* 发送内容 */}
           <div>
             <div className="mb-1 text-xs font-medium text-muted-foreground">
               {t("harness.detail.sent")}
             </div>
-            <p className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted/30 px-3 py-2 text-sm text-secondary-foreground">
+            <p className="max-h-[34vh] overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted/30 px-3 py-2 text-sm text-secondary-foreground">
               {m.content}
             </p>
           </div>
@@ -167,7 +177,7 @@ export function HarnessDetailDialog({
               {t("harness.detail.reply")}
             </div>
             {m.replyText ? (
-              <p className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted/30 px-3 py-2 text-sm text-foreground">
+              <p className="max-h-[28vh] overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted/30 px-3 py-2 text-sm text-foreground">
                 {m.replyText}
                 {m.repliedAt && (
                   <span className="ml-1 text-muted-foreground">（{absTime(m.repliedAt)}）</span>
@@ -184,7 +194,7 @@ export function HarnessDetailDialog({
               <textarea
                 ref={replyRef}
                 value={reply}
-                onChange={(e) => setReply(e.target.value)}
+                onChange={(e) => setReplyDraft({ messageId: m.id, value: e.target.value })}
                 placeholder={t("harness.replyPlaceholder")}
                 rows={3}
                 className="w-full resize-none rounded-lg border bg-muted/30 px-3 py-2 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary/30"

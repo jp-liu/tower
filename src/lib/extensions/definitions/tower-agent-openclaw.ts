@@ -24,7 +24,9 @@ async function uninstall(): Promise<ExtensionResult> {
 export const towerAgentOpenClawExtension: Extension = {
   id: "tower-agent-openclaw",
   name: "Tower Agent (OpenClaw)",
+  nameKey: "settings.extensions.towerAgentOpenClaw.name",
   description: "安装 Tower 助手 profile、MCP 与 skills 到 OpenClaw",
+  descriptionKey: "settings.extensions.towerAgentOpenClaw.description",
   icon: RadioTower,
   sizeMB: 1,
   homepageUrl: "https://docs.openclaw.ai/",
