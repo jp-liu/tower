@@ -25,9 +25,10 @@ import packageJson from "../../../package.json";
  *   - tower       : task-management operator (bridge / assistant)
  *   - tower-goal  : run-time "unattended goal mode" for a working task terminal
  *   - tower-ask   : send-a-message-to-a-human primitive (used by tower-goal)
+ *   - tower-bridge: route content to a gateway, sibling task, or operator agent
  */
 const TOWER_SKILL_NAME = "tower";
-const TOWER_SKILL_NAMES = ["tower", "tower-goal", "tower-ask"];
+const TOWER_SKILL_NAMES = ["tower", "tower-goal", "tower-ask", "tower-bridge"];
 const TOWER_GATEWAY_SKILL_NAMES = ["tower"];
 const TOWER_INTEGRATION_SCHEMA_VERSION = 1;
 
@@ -165,8 +166,8 @@ export async function installAllForProvider(
   const mcpConfig = buildTowerMcpConfig();
   const mcp = await adapter.installMcp(mcpConfig, { scope: "user" });
   const hooks = await adapter.installHooks(apiUrl);
-  // Install every Tower skill (tower + tower-goal + tower-ask). Report the first
-  // failure if any, else the canonical `tower` result — ok reflects all of them.
+  // Install every task-terminal Tower skill. Report the first failure if any,
+  // else the canonical `tower` result — ok reflects all of them.
   const skillResults = await Promise.all(
     TOWER_SKILL_NAMES.map((name) => adapter.installSkill(name, getTowerSkillSourceDir(name))),
   );

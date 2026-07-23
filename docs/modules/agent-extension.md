@@ -44,6 +44,22 @@ capabilityRoutes:
 
 `o-tower` 看到 Tower 范围内的需求时自己处理；看到飞书文档页面、知识库页面、普通表格、多维表格、云盘文件、附件、权限等请求时，把目标、输入、期望输出和风险约束交给 `xiao-fei`。`xiao-fei` 返回结构化结果后，`o-tower` 再回复用户或写回 Tower。
 
+## tower-bridge 与 tower-ask
+
+`tower-ask` 只负责把消息发给真人、群组或外部沟通渠道。它不负责把任务交给 `o-tower`、`xiao-fei` 或其他 agent。
+
+当一个 Tower 任务需要“把整理结果交给小塔，让小塔按扩展能力分流”时，使用 `tower-bridge`：
+
+```text
+当前任务
+-> tower-bridge
+-> o-tower 网关 / Tower 任务终端
+-> 按本地路由委托给 xiao-fei 等 operator
+-> 汇总结果回当前任务或用户
+```
+
+`tower-bridge` 是路由技能，不安装第三方 MCP，也不默认持有飞书、邮件、知识库等权限。它只负责把内容交给正确的执行 owner。
+
 ## OpenClaw 示例：小飞负责飞书
 
 先创建专用 agent workspace：
@@ -81,6 +97,12 @@ openclaw agents set-identity --agent xiao-fei --name 小飞
 
 如果使用本地统一 Feishu MCP facade，可以把官方 Lark MCP 与普通 Sheets values 工具合并到一个 `feishu` MCP server，对外暴露同一 `feishu__...` namespace。例如普通飞书表格补充工具可命名为：
 
+- `feishu__auth_login_start`
+- `feishu__auth_login_command`
+- `feishu__sheets_workbook_create`
+- `feishu__sheets_spreadsheet_create`
+- `feishu__sheets_sheet_add`
+- `feishu__sheets_sheet_delete`
 - `feishu__sheets_values_resolve`
 - `feishu__sheets_values_read`
 - `feishu__sheets_values_update`

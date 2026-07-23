@@ -88,10 +88,10 @@ It also upserts an entry into `~/.openclaw/openclaw.json` under `agents.list`.
 The entry contains `id`, `name`, `workspace`, `agentDir`, and display identity.
 It intentionally does not write `model`, `fallbacks`, or provider data.
 
-Only the `tower` skill is installed into gateway profiles. `tower-ask` and
-`tower-goal` are task-terminal skills and remain available through Tower's
-normal task-agent installation path, not through the OpenClaw/Hermes bridge
-profile.
+Only the `tower` skill is installed into gateway profiles. `tower-ask`,
+`tower-goal`, and `tower-bridge` are task-terminal skills and remain available
+through Tower's normal task-agent installation path, not through the
+OpenClaw/Hermes bridge profile.
 
 ## Hermes Integration
 

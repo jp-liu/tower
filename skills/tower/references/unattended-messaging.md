@@ -18,8 +18,9 @@ Feishu/WhatsApp/Slack/etc. are downstream platforms, not Tower gateways. Tower s
 | **tower-goal (unattended)** | A task that activated the `tower-goal` skill at run time | Activating it (`/tower-goal <goal>`) enters unattended autonomous run: work silently toward the goal, and on stuck/done push out via tower-ask and park. Activation = authorization (may create tasks, act as the hub for child tasks). **Entered by human activation, not decided by a backend flag.** |
 | **tower-ask (outbound)** | The task agent (`tower-ask` skill) | Call `list_notify_targets` to get ready-to-follow send instructions. Hermes/OpenClaw-backed channels use `push_to_human` (send first, then record/park atomically). |
 | **bridge (inbound)** | A long-running MCP agent (bot / OpenClaw / …) | Receive the human's reply on the platform → recover the taskId and replied-to message id if available → deliver it via `relay_channel_reply`. Non-task messages (create/query) go through ordinary MCP tools. |
+| **tower-bridge (routing)** | The task agent (`tower-bridge` skill) | Route prepared content from a task to a human channel, `o-tower`, a sibling task, or a specialist operator such as `xiao-fei`. Human sends still use `tower-ask`; agent/task handoff uses Tower terminal or gateway-native delegation. |
 
-> `tower-goal` / `tower-ask` are now **real callable skills** (`skills/tower-goal`, `skills/tower-ask`, distributed with Tower into `~/.claude/skills`); `bridge` is still just this doc's name for the **inbound role**, not a skill.
+> `tower-goal` / `tower-ask` / `tower-bridge` are **real callable skills** distributed with Tower into task-agent skill homes. Lowercase `bridge` is still this doc's name for the inbound gateway role.
 
 ---
 

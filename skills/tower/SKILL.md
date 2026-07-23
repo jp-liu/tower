@@ -47,7 +47,7 @@ The must-follow rules. Everything else is operational detail below.
 
 ## When to Use
 
-Use Tower tools when the user wants to view/create/manage tasks and projects, check execution status, interact with a running task's terminal, search, organize with labels/status, or get a daily summary / todo. For unattended relay (the tower-goal / tower-ask skills, pushing `ask_human`/`notify_human`, or `reply_to_ask`), read [references/unattended-messaging.md](references/unattended-messaging.md).
+Use Tower tools when the user wants to view/create/manage tasks and projects, check execution status, interact with a running task's terminal, search, organize with labels/status, or get a daily summary / todo. For unattended relay (the tower-goal / tower-ask skills, pushing `ask_human`/`notify_human`, or `reply_to_ask`), read [references/unattended-messaging.md](references/unattended-messaging.md). For routing content to `o-tower`, a sibling task, or an external operator agent such as `xiao-fei`, use the `tower-bridge` skill.
 
 ## Session default scope
 
@@ -78,6 +78,10 @@ If a turn opens with `[当前会话默认范围：…]`, the user bound this cha
 ### "Send a message to the task" / "Tell it to ..."
 
 `send_task_terminal_input` with taskId and text. If the message came from an external platform and contains/quotes `[[tower:task=...]]`, use `relay_channel_reply` instead (Contract 10). Then `get_task_terminal_output` to see the response.
+
+### "Send this to o-tower" / "Let xiao-fei handle it"
+
+Use `tower-bridge`. Do not use `tower-ask` unless the target is a real human/group/channel.
 
 ### "Move / cancel / edit a task"
 

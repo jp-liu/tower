@@ -38,6 +38,26 @@ spreadsheet operator. It can own the user's accessible company documents:
 knowledge-base pages, cloud documents, ordinary Sheets, Bitable/Base apps,
 Drive files, folders, attachments, and permission checks.
 
+## tower-bridge And tower-ask
+
+`tower-ask` only sends or asks real humans, groups, and external communication
+channels. It does not hand work to `o-tower`, `xiao-fei`, or another agent.
+
+When a Tower task needs to send prepared content to `o-tower` so the gateway can
+route it through local extensions, use `tower-bridge`:
+
+```text
+current task
+-> tower-bridge
+-> o-tower gateway / Tower task terminal
+-> local route to xiao-fei or another operator
+-> summarized result back to the current task or user
+```
+
+`tower-bridge` is a routing skill. It does not install third-party MCPs and does
+not hold Feishu, mail, or knowledge-base credentials by default. It only hands
+content to the right execution owner.
+
 ## OpenClaw Sketch
 
 Create a dedicated operator workspace:
