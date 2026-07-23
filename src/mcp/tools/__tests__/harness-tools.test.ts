@@ -16,11 +16,20 @@ const findUnique = db.task.findUnique as unknown as ReturnType<typeof vi.fn>;
 const readCfg = readConfigValue as unknown as ReturnType<typeof vi.fn>;
 const call = (args: { scope?: "work" | "unattended"; taskId?: string }) =>
   harnessTools.list_notify_targets.handler(args) as Promise<Record<string, unknown>>;
+const pushToHuman = (args: {
+  taskId?: string;
+  message: string;
+  scope?: "work" | "unattended";
+  to?: string;
+  expectReply?: boolean;
+}) => harnessTools.push_to_human.handler(args) as Promise<Record<string, unknown>>;
 
 // A syntactically valid CUID (matches /^c[a-z0-9]{20,30}$/).
 const TASK_ID = "claaaaaaaaaaaaaaaaaaaaaa";
+const OTHER_TASK_ID = "clbbbbbbbbbbbbbbbbbbbbbb";
 
 beforeEach(() => {
+  vi.unstubAllEnvs();
   findUnique.mockReset();
   readCfg.mockReset();
   readCfg.mockResolvedValue([]);
@@ -36,7 +45,7 @@ describe("list_notify_targets — taskId invariant", () => {
 
   it("non-CUID taskId → error", async () => {
     const r = await call({ taskId: "not-a-cuid" });
-    expect(r.error).toBe("taskId required");
+    expect(r.error).toBe("Invalid taskId format — expected CUID");
   });
 
   it("task not found → error, does not default to work", async () => {
@@ -44,6 +53,83 @@ describe("list_notify_targets — taskId invariant", () => {
     const r = await call({ taskId: TASK_ID });
     expect(r.error).toBe("task not found");
     expect(r.scope).toBeUndefined();
+  });
+
+  it("taskId different from current terminal env → error before DB lookup", async () => {
+    vi.stubEnv("TOWER_TASK_ID", TASK_ID);
+    const r = await call({ taskId: OTHER_TASK_ID });
+    expect(r.error).toBe(`Task boundary mismatch — this terminal is bound to ${TASK_ID}, refusing to operate on ${OTHER_TASK_ID}`);
+    expect(findUnique).not.toHaveBeenCalled();
+  });
+
+  it("no taskId + current terminal env → uses the env task id", async () => {
+    vi.stubEnv("TOWER_TASK_ID", TASK_ID);
+    findUnique.mockResolvedValue({ unattended: false, title: "T" });
+    readCfg.mockResolvedValue([{ active: true, gateway: "openclaw", downstream: "feishu", scope: "work" }]);
+
+    const r = await call({});
+
+    expect(r.scope).toBe("work");
+    expect(String(r.instructions)).toContain(`[[tower:task=${TASK_ID}]]`);
+    expect(findUnique).toHaveBeenCalledWith({
+      where: { id: TASK_ID },
+      select: { unattended: true, title: true },
+    });
+  });
+});
+
+describe("push_to_human — task boundary invariant", () => {
+  it("rejects a different taskId before resolving channels or sending", async () => {
+    vi.stubEnv("TOWER_TASK_ID", TASK_ID);
+    const r = await pushToHuman({
+      taskId: OTHER_TASK_ID,
+      message: "状态同步",
+      scope: "work",
+      to: "起飞",
+      expectReply: false,
+    });
+
+    expect(r).toEqual({
+      error: `Task boundary mismatch — this terminal is bound to ${TASK_ID}, refusing to operate on ${OTHER_TASK_ID}`,
+      taskId: OTHER_TASK_ID,
+    });
+    expect(findUnique).not.toHaveBeenCalled();
+    expect(readCfg).not.toHaveBeenCalled();
+  });
+
+  it("allows explicit taskId when no task terminal env exists", async () => {
+    findUnique.mockResolvedValue({ unattended: false, title: "T" });
+    readCfg.mockResolvedValue([{ active: true, gateway: "not-supported", scope: "work" }]);
+
+    const r = await pushToHuman({
+      taskId: TASK_ID,
+      message: "状态同步",
+      scope: "work",
+      to: "起飞",
+      expectReply: false,
+    });
+
+    expect(r.error).toBe("push_to_human supports Hermes/OpenClaw channels only; active gateway is not-supported");
+    expect(findUnique).toHaveBeenCalled();
+  });
+
+  it("uses TOWER_TASK_ID when taskId is omitted in a task terminal", async () => {
+    vi.stubEnv("TOWER_TASK_ID", TASK_ID);
+    findUnique.mockResolvedValue({ unattended: false, title: "T" });
+    readCfg.mockResolvedValue([{ active: true, gateway: "not-supported", scope: "work" }]);
+
+    const r = await pushToHuman({
+      message: "状态同步",
+      scope: "work",
+      to: "起飞",
+      expectReply: false,
+    });
+
+    expect(r.error).toBe("push_to_human supports Hermes/OpenClaw channels only; active gateway is not-supported");
+    expect(findUnique).toHaveBeenCalledWith({
+      where: { id: TASK_ID },
+      select: { unattended: true, title: true },
+    });
   });
 });
 

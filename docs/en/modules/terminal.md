@@ -18,7 +18,7 @@ When a client disconnects, the session stays alive with auto-keepalive (2 hours 
 - **Architecture**: The browser-side xterm.js terminal connects via WebSocket to a Node.js server (`ws-server.ts`), which bridges to a real PTY session managed by node-pty. The `session-store.ts` module keeps an in-memory registry of all active sessions indexed by task ID.
 - **One session per task**: Each task can only have one active PTY session at a time. Starting a new session for a task that already has one will fail.
 - **Concurrency limit**: The maximum number of simultaneous PTY sessions is controlled by the `system.maxConcurrentExecutions` config setting (default 20).
-- **Environment injection**: Every PTY session automatically receives `AI_MANAGER_TASK_ID` and `CALLBACK_URL` environment variables. Additional env vars come from the active CLI Profile.
+- **Environment injection**: Every task PTY session automatically receives `TOWER_TASK_ID`, `TOWER_TASK_TITLE`, `TOWER_API_URL`, and optionally `CALLBACK_URL` environment variables. Additional env vars come from the active CLI Profile.
 - **Internal HTTP bridge**: Since MCP runs as a separate stdio process, it cannot access in-memory PTY sessions directly. Instead, it uses localhost-only HTTP endpoints to read terminal output and send input.
 
 ## Architecture
@@ -69,5 +69,5 @@ Client (xterm.js) <-> WebSocket <-> ws-server.ts <-> PTY Session (node-pty)
 - Concurrency limit configured via `system.maxConcurrentExecutions` (default 20)
 - Disconnect keepalive: 2h while running / 5min after exit
 - All sessions automatically cleaned up on SIGTERM
-- `AI_MANAGER_TASK_ID` and `CALLBACK_URL` are injected into PTY environment variables
+- `TOWER_TASK_ID`, `TOWER_TASK_TITLE`, `TOWER_API_URL`, and optionally `CALLBACK_URL` are injected into PTY environment variables
 - Do not modify `process.env`; use `envOverrides` instead

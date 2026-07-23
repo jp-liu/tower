@@ -346,7 +346,7 @@ Product-group CRUD and project↔group assignment. A group's members must all li
 - **Label replacement**: `set_task_labels` / `setTaskLabels` / `update_task` with `labelIds` all perform a full replace, not a merge. Pass the complete desired set.
 - **PTY sessions**: Keyed by `taskId` — one active session per task. Use `startPtyExecution` to create, `resumePtyExecution` to resume with a `sessionId`, `stopPtyExecution` to kill.
 - **CliProfile**: Only one default profile (`isDefault: true`). `baseArgs` and `envVars` are JSON strings — parse before use.
-- **Environment injection**: `AI_MANAGER_TASK_ID` and `CALLBACK_URL` are injected into every PTY session environment. Never mutate `process.env` — use `envOverrides`.
+- **Environment injection**: `TOWER_TASK_ID`, `TOWER_TASK_TITLE`, `TOWER_API_URL`, and optionally `CALLBACK_URL` are injected into every task PTY session environment. Never mutate `process.env` — use `envOverrides`.
 - **Internal HTTP bridge**: `/api/internal/terminal/[taskId]/buffer` (GET), `/input`, `/start`, `/stop`, `/resume`, and `/paste-image` (POST) — localhost-only routes for cross-process PTY access. MCP tools use these since MCP stdio processes cannot share in-memory PTY sessions. `/paste-image` stores a clipboard image pasted into the browser xterm.js terminal to a host file and returns its absolute path; the frontend injects that path as terminal input so the Claude CLI can read it (xterm cannot forward image blobs, so native image paste does not reach the CLI).
 
 ---

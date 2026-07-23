@@ -32,7 +32,7 @@ Client (xterm.js) ←→ WebSocket ←→ ws-server.ts ←→ PTY Session (node-
 - 每个 taskId 只能有一个活跃 PTY 会话
 - 并发上限由 `system.maxConcurrentExecutions` 配置（默认 20）
 - SIGTERM 时自动清理所有会话
-- `AI_MANAGER_TASK_ID` 和 `CALLBACK_URL` 注入到 PTY 环境变量
+- `TOWER_TASK_ID`、`TOWER_TASK_TITLE`、`TOWER_API_URL` 和可选的 `CALLBACK_URL` 注入到 PTY 环境变量
 - 禁止修改 `process.env`，使用 `envOverrides`
 
 ## 文件清单

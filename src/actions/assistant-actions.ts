@@ -14,7 +14,7 @@ import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
  * Spawn a fresh Claude CLI PTY session for the global assistant (BE-01).
  * Destroys any existing assistant session first (UX-01).
  * Uses --allowedTools mcp__tower__* (BE-03) and --append-system-prompt (BE-02).
- * Does NOT inject AI_MANAGER_TASK_ID — assistant has no associated task.
+ * Does NOT inject TOWER_TASK_ID — assistant has no associated task.
  *
  * @param sessionId - When provided, resumes an existing Claude CLI session via --resume.
  *                    When omitted, starts a new session with a generated --session-id.

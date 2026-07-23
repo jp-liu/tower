@@ -12,6 +12,20 @@ function validateMcpTaskId(taskId: string): string | null {
   return null;
 }
 
+function resolveTaskForCurrentTerminal(taskId?: string): { taskId: string } | { error: string } {
+  const currentTaskId = process.env.TOWER_TASK_ID?.trim();
+  const selectedTaskId = taskId?.trim() || currentTaskId;
+  if (!selectedTaskId) return { error: "taskId required" };
+  const formatErr = validateMcpTaskId(selectedTaskId);
+  if (formatErr) return { error: formatErr };
+  if (currentTaskId && currentTaskId !== selectedTaskId) {
+    return {
+      error: `Task boundary mismatch — this terminal is bound to ${currentTaskId}, refusing to operate on ${selectedTaskId}`,
+    };
+  }
+  return { taskId: selectedTaskId };
+}
+
 /**
  * Compose ready-to-follow send instructions from the ACTIVE notify channel.
  * The tower-ask / tower-goal skills call list_notify_targets and just DO what
@@ -177,15 +191,17 @@ export const harnessTools = {
       // Invariant: no usable reply token without a real taskId. Refuse to emit a send
       // instruction at all (the placeholder [[tower:task=<taskId>]] can't be attributed
       // and reply_to_ask rejects it → task would be stuck forever).
-      if (!args.taskId || !CUID_RE.test(args.taskId)) {
+      const bound = resolveTaskForCurrentTerminal(args.taskId);
+      if ("error" in bound) {
         return {
-          error: "taskId required",
+          error: bound.error,
           instructions:
             "Do NOT send. Call list_notify_targets again with the current TOWER_TASK_ID so the reply " +
             "token can be attributed.",
         };
       }
-      const resolved = await resolveActiveTarget(args.taskId, args.scope);
+      const { taskId } = bound;
+      const resolved = await resolveActiveTarget(taskId, args.scope);
       if ("error" in resolved) {
         return {
           error: resolved.error,
@@ -200,7 +216,7 @@ export const harnessTools = {
             : "No active channel in the 'unattended' category, so nothing can be pushed out. Don't pretend you sent it — tell the user to configure one under Settings → Notifications (unattended column) and mark it active.";
         return { scope, noChannelConfigured: true, instructions: hint };
       }
-      const token = `[[tower:task=${args.taskId}]]`;
+      const token = `[[tower:task=${taskId}]]`;
       return {
         scope,
         active: {
@@ -222,18 +238,19 @@ export const harnessTools = {
       "call ask_human (park, when expectReply=true) or notify_human (record only). Use this instead of manually " +
       "sending + ask_human for gateway-backed work/unattended channels.",
     schema: z.object({
-      taskId: z.string().describe("The current task id (TOWER_TASK_ID)"),
+      taskId: z.string().optional().describe("The current task id (TOWER_TASK_ID); defaults to the terminal's TOWER_TASK_ID when present"),
       message: z.string().min(1).max(4000).describe("Message body to send to the human/group"),
       scope: z.enum(["work", "unattended"]).optional().describe("Channel scope. Omit to derive from goal mode."),
       to: z.string().optional().describe("Destination for work messages: group/person name, Tower alias, or platform id. Optional for unattended home routes."),
       expectReply: z.boolean().optional().describe("If true, record with ask_human and park. Defaults true for unattended, false for work."),
     }),
-    handler: async (args: { taskId: string; message: string; scope?: "work" | "unattended"; to?: string; expectReply?: boolean }) => {
-      const err = validateMcpTaskId(args.taskId);
-      if (err) return { error: err, taskId: args.taskId };
+    handler: async (args: { taskId?: string; message: string; scope?: "work" | "unattended"; to?: string; expectReply?: boolean }) => {
+      const bound = resolveTaskForCurrentTerminal(args.taskId);
+      if ("error" in bound) return { error: bound.error, taskId: args.taskId };
+      const { taskId } = bound;
 
-      const resolved = await resolveActiveTarget(args.taskId, args.scope);
-      if ("error" in resolved) return { error: resolved.error, taskId: args.taskId };
+      const resolved = await resolveActiveTarget(taskId, args.scope);
+      if ("error" in resolved) return { error: resolved.error, taskId };
       const { task, scope, active } = resolved;
       if (!active) return { error: `No active ${scope} channel configured`, noChannelConfigured: true };
       if (active.gateway !== "hermes" && active.gateway !== "openclaw") {
@@ -247,7 +264,7 @@ export const harnessTools = {
         };
       }
 
-      const token = `[[tower:task=${args.taskId}]]`;
+      const token = `[[tower:task=${taskId}]]`;
       const body = buildTowerOutboundText({
         message: args.message,
         token,
@@ -277,8 +294,8 @@ export const harnessTools = {
       const expectReply = args.expectReply ?? scope === "unattended";
       const endpoint = expectReply ? "ask" : "notify";
       const payload = expectReply
-        ? { taskId: args.taskId, question: args.message }
-        : { taskId: args.taskId, message: args.message };
+        ? { taskId, question: args.message }
+        : { taskId, message: args.message };
       const res = await fetch(`${BRIDGE}/${endpoint}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -291,7 +308,7 @@ export const harnessTools = {
       if (sentMeta?.message_id && harnessMessageId) {
         await recordHarnessDelivery({
           harnessMessageId,
-          taskId: args.taskId,
+          taskId,
           platform: sentMeta.platform || active.downstream || "hermes",
           chatId: sentMeta.chat_id || sent.resolvedDest || active.dest || args.to || "",
           platformMessageId: sentMeta.message_id,
@@ -372,17 +389,18 @@ export const harnessTools = {
       "question via the tower-ask skill (call list_notify_targets for the active channel), then call this. " +
       "Otherwise it just waits visibly in the Tower /harness panel.",
     schema: z.object({
-      taskId: z.string().describe("The current task id (TOWER_TASK_ID)"),
+      taskId: z.string().optional().describe("The current task id (TOWER_TASK_ID); defaults to the terminal's TOWER_TASK_ID when present"),
       question: z.string().min(1).max(4000).describe("The question / options for the human"),
     }),
-    handler: async (args: { taskId: string; question: string }) => {
-      const err = validateMcpTaskId(args.taskId);
-      if (err) return { error: err, taskId: args.taskId };
+    handler: async (args: { taskId?: string; question: string }) => {
+      const bound = resolveTaskForCurrentTerminal(args.taskId);
+      if ("error" in bound) return { error: bound.error, taskId: args.taskId };
+      const { taskId } = bound;
 
       const res = await fetch(`${BRIDGE}/ask`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ taskId: args.taskId, question: args.question }),
+        body: JSON.stringify({ taskId, question: args.question }),
       });
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) return { error: data?.error ?? "ask failed", status: res.status };
@@ -416,17 +434,18 @@ export const harnessTools = {
       "status reports, or FYI notes that need no reply. This tool only RECORDS — to actually reach the human, " +
       "first push the note via the tower-ask skill (list_notify_targets for the active channel), then call this.",
     schema: z.object({
-      taskId: z.string().describe("The current task id (TOWER_TASK_ID)"),
+      taskId: z.string().optional().describe("The current task id (TOWER_TASK_ID); defaults to the terminal's TOWER_TASK_ID when present"),
       message: z.string().min(1).max(4000).describe("The progress update for the human"),
     }),
-    handler: async (args: { taskId: string; message: string }) => {
-      const err = validateMcpTaskId(args.taskId);
-      if (err) return { error: err, taskId: args.taskId };
+    handler: async (args: { taskId?: string; message: string }) => {
+      const bound = resolveTaskForCurrentTerminal(args.taskId);
+      if ("error" in bound) return { error: bound.error, taskId: args.taskId };
+      const { taskId } = bound;
 
       const res = await fetch(`${BRIDGE}/notify`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ taskId: args.taskId, message: args.message }),
+        body: JSON.stringify({ taskId, message: args.message }),
       });
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) return { error: data?.error ?? "notify failed", status: res.status };
@@ -444,26 +463,27 @@ export const harnessTools = {
       "task's next message. If the task has NO pending question, it does nothing and returns { no_pending: true } — " +
       "in that case treat the message as an ordinary request and handle it normally (create_task / search / etc.).",
     schema: z.object({
-      taskId: z.string().describe("The task that is parked waiting for a reply (its TOWER_TASK_ID)"),
+      taskId: z.string().optional().describe("The task that is parked waiting for a reply (its TOWER_TASK_ID); defaults to the terminal's TOWER_TASK_ID when present"),
       text: z.string().min(1).max(8000).describe("The human's reply to inject into the task"),
     }),
-    handler: async (args: { taskId: string; text: string }) => {
-      const err = validateMcpTaskId(args.taskId);
-      if (err) return { error: err, taskId: args.taskId };
+    handler: async (args: { taskId?: string; text: string }) => {
+      const bound = resolveTaskForCurrentTerminal(args.taskId);
+      if ("error" in bound) return { error: bound.error, taskId: args.taskId };
+      const { taskId } = bound;
 
       const res = await fetch(`${BRIDGE}/reply`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         // allowRetry:false — only answer questions still OPEN; a later message returns no_pending for the bridge to handle as a normal message.
-        body: JSON.stringify({ taskId: args.taskId, text: args.text, allowRetry: false }),
+        body: JSON.stringify({ taskId, text: args.text, allowRetry: false }),
       });
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
 
       // 409 = the task has no pending ask — not an error; tell the caller to handle it as a normal message.
-      if (res.status === 409) return { no_pending: true, taskId: args.taskId };
+      if (res.status === 409) return { no_pending: true, taskId };
       if (!res.ok) return { error: data?.error ?? "reply failed", status: res.status };
 
-      return { ok: true, taskId: args.taskId, mode: data.mode, injected: data.injected, deduped: data.deduped };
+      return { ok: true, taskId, mode: data.mode, injected: data.injected, deduped: data.deduped };
     },
   },
 };
