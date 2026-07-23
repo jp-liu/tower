@@ -1,4 +1,5 @@
 import { ClaudeCliAdapter } from "@/lib/ai/adapters/cli/claude-cli-adapter";
+import { resolveSdkExecutable } from "@/lib/platform";
 
 const claudeAdapter = new ClaudeCliAdapter();
 
@@ -29,7 +30,10 @@ export async function aiQuery(
   let result = "";
   try {
     const { query } = await import("@anthropic-ai/claude-agent-sdk");
-    const claudePath = claudeAdapter.resolveCommand();
+    const rawCmd = claudeAdapter.resolveCommand();
+    // On Windows the SDK spawns this path directly (no shell) — a .cmd shim
+    // causes EINVAL. resolveSdkExecutable rewrites it to the underlying cli.js.
+    const claudePath = resolveSdkExecutable(rawCmd);
     const q = query({
       prompt,
       options: {

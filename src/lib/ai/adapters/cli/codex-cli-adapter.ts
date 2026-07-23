@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { isWindows, resolveCommandPathSync } from "@/lib/platform";
+import { isWindows, quoteForCmd, resolveCommandPathSync } from "@/lib/platform";
 import { getPackageRoot } from "@/lib/tower-paths";
 import type {
   CliAdapter,
@@ -62,8 +62,26 @@ export class CodexCliAdapter implements CliAdapter {
       ...(opts.envOverrides ?? {}),
     };
 
+    const raw = this.resolveCommand();
+
+    // On Windows, pty.spawn() uses CreateProcess which cannot execute .cmd/.bat
+    // files directly — they must be wrapped with cmd.exe. Without this the
+    // spawned process exits immediately (exit code 1, near-empty buffer).
+    if (isWindows()) {
+      const ext = path.extname(raw).toLowerCase();
+      if (ext === ".cmd" || ext === ".bat" || ext === ".com") {
+        const shell = process.env.ComSpec || "cmd.exe";
+        const commandLine = [quoteForCmd(raw), ...args.map(quoteForCmd)].join(" ");
+        return {
+          command: shell,
+          args: ["/d", "/s", "/c", commandLine],
+          env,
+        };
+      }
+    }
+
     return {
-      command: this.resolveCommand(),
+      command: raw,
       args,
       env,
     };
