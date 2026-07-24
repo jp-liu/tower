@@ -41,6 +41,7 @@ import {
   buildTowerMcpConfig,
   inspectProviderIntegration,
   installAllForProvider,
+  shouldRefreshProviderIntegration,
 } from "@/lib/ai/install-orchestrator";
 import { TOWER_MCP_ENV_VARS } from "@/lib/ai/tower-mcp-env";
 
@@ -91,6 +92,31 @@ describe("inspectProviderIntegration", () => {
       skillsInstalled: true,
       ok: false,
     });
+  });
+
+  it("refreshes a current database record when the real Codex hooks disappeared", async () => {
+    adapter.isHooksInstalled.mockResolvedValue(false);
+    const fingerprint = "schema=2|version=test";
+
+    await expect(shouldRefreshProviderIntegration("codex", {
+      testOk: true,
+      mcpInstalled: true,
+      hooksInstalled: true,
+      skillsInstalled: true,
+      installLog: JSON.stringify({ integrationFingerprint: fingerprint }),
+    }, fingerprint)).resolves.toBe(true);
+  });
+
+  it("skips startup repair only when the record and real integration are current", async () => {
+    const fingerprint = "schema=2|version=test";
+
+    await expect(shouldRefreshProviderIntegration("codex", {
+      testOk: true,
+      mcpInstalled: true,
+      hooksInstalled: true,
+      skillsInstalled: true,
+      installLog: JSON.stringify({ integrationFingerprint: fingerprint }),
+    }, fingerprint)).resolves.toBe(false);
   });
 
   it("treats inspection errors as a missing integration", async () => {

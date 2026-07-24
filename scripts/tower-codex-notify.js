@@ -4,8 +4,9 @@
  * Codex turn-complete notifier fallback.
  *
  * Codex appends one JSON payload argument to the configured `notify` argv.
- * This adapter forwards that event to Tower's existing Stop endpoint. It is
- * used when an administrator policy allows managed hooks only.
+ * This adapter records the Codex thread ID and then forwards the event to
+ * Tower's existing Stop endpoint. It is used only when managed-only policy
+ * filters Tower's user hooks and no managed Tower hooks are installed.
  */
 
 "use strict";
@@ -40,6 +41,38 @@ function runChain(chain, payload) {
   }
 }
 
+function post(url, body, onDone) {
+  const transport = url.protocol === "https:" ? https : http;
+  const request = transport.request({
+    hostname: url.hostname,
+    port: url.port,
+    path: url.pathname,
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(body),
+    },
+    timeout: 3000,
+  });
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    onDone();
+  };
+  request.on("response", (response) => {
+    response.resume();
+    response.on("end", finish);
+  });
+  request.on("error", finish);
+  request.on("timeout", () => {
+    request.destroy();
+    finish();
+  });
+  request.write(body);
+  request.end();
+}
+
 function main() {
   const args = process.argv.slice(2);
   const payload = args.at(-1) || "";
@@ -54,41 +87,37 @@ function main() {
   if (event?.type !== "agent-turn-complete") return;
 
   const taskId = process.env.TOWER_TASK_ID;
-  const apiUrl = process.env.TOWER_API_URL;
-  if (!taskId || !apiUrl) return;
+  const apiBaseUrl = process.env.TOWER_API_URL;
+  if (!taskId || !apiBaseUrl) return;
 
-  let url;
+  let parsedApiUrl;
   try {
-    url = new URL("/api/internal/hooks/stop", apiUrl);
-    if (!["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return;
+    parsedApiUrl = new URL(apiBaseUrl);
+    if (!["localhost", "127.0.0.1", "[::1]"].includes(parsedApiUrl.hostname)) return;
   } catch {
     return;
   }
 
-  const body = JSON.stringify({
+  const sessionId = typeof event["thread-id"] === "string" ? event["thread-id"] : "";
+  const stopBody = JSON.stringify({
     taskId,
-    sessionId: typeof event["thread-id"] === "string" ? event["thread-id"] : "",
+    sessionId,
     lastReply:
       typeof event["last-assistant-message"] === "string"
         ? event["last-assistant-message"].slice(0, 2000)
         : "",
   });
-  const transport = url.protocol === "https:" ? https : http;
-  const request = transport.request({
-    hostname: url.hostname,
-    port: url.port,
-    path: url.pathname,
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Content-Length": Buffer.byteLength(body),
-    },
-    timeout: 3000,
-  });
-  request.on("error", () => {});
-  request.on("timeout", () => request.destroy());
-  request.write(body);
-  request.end();
+  const sendStop = () =>
+    post(new URL("/api/internal/hooks/stop", parsedApiUrl), stopBody, () => {});
+  if (!sessionId) {
+    sendStop();
+    return;
+  }
+  post(
+    new URL("/api/internal/hooks/session", parsedApiUrl),
+    JSON.stringify({ taskId, sessionId }),
+    sendStop,
+  );
 }
 
 main();

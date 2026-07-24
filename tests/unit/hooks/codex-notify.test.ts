@@ -18,19 +18,20 @@ afterEach(async () => {
 });
 
 describe("tower-codex-notify", () => {
-  it("forwards Codex turn completion to Tower's Stop endpoint", async () => {
-    let resolveBody: (body: unknown) => void = () => {};
-    const received = new Promise<unknown>((resolve) => {
-      resolveBody = resolve;
+  it("records the thread before forwarding Codex turn completion", async () => {
+    let resolveRequests: (requests: Array<{ url: string; body: unknown }>) => void = () => {};
+    const received = new Promise<Array<{ url: string; body: unknown }>>((resolve) => {
+      resolveRequests = resolve;
     });
+    const requests: Array<{ url: string; body: unknown }> = [];
     const server = createServer((request, response) => {
       let raw = "";
       request.setEncoding("utf-8");
       request.on("data", (chunk) => { raw += chunk; });
       request.on("end", () => {
-        expect(request.url).toBe("/api/internal/hooks/stop");
-        resolveBody(JSON.parse(raw));
+        requests.push({ url: request.url ?? "", body: JSON.parse(raw) });
         response.writeHead(200).end("ok");
+        if (requests.length === 2) resolveRequests(requests);
       });
     });
     servers.push(server);
@@ -53,11 +54,19 @@ describe("tower-codex-notify", () => {
       },
     });
 
-    await expect(received).resolves.toEqual({
-      taskId: "task-123",
-      sessionId: "thread-123",
-      lastReply: "Implemented and verified.",
-    });
+    await expect(received).resolves.toEqual([
+      {
+        url: "/api/internal/hooks/session",
+        body: { taskId: "task-123", sessionId: "thread-123" },
+      },
+      {
+        url: "/api/internal/hooks/stop",
+        body: {
+          taskId: "task-123",
+          sessionId: "thread-123",
+          lastReply: "Implemented and verified.",
+        },
+      },
+    ]);
   });
 });
-

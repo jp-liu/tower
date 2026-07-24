@@ -133,21 +133,6 @@ export class CodexCliAdapter implements CliAdapter {
   async installHooks(): Promise<InstallResult> {
     try {
       const managedOnlyPolicyPath = this.getManagedOnlyHooksPolicyPath();
-      if (managedOnlyPolicyPath) {
-        this.ensureCodexNotifyFallback();
-        return {
-          ok: true,
-          method: "file",
-          detail:
-            `${this.getSettingsPath()} (turn-complete notify fallback; ` +
-            `managed hooks policy: ${managedOnlyPolicyPath})`,
-        };
-      }
-
-      // A previous managed-only install may have used the notify fallback.
-      // Restore any user notifier before enabling real hooks to avoid duplicate
-      // Stop events when the administrator policy is later relaxed.
-      this.removeCodexNotifyFallback();
 
       const hooks = this.readHooks();
       const root = getPackageRoot().replace(/\\/g, "/");
@@ -182,6 +167,34 @@ export class CodexCliAdapter implements CliAdapter {
       // Config may have been reset independently of hooks.json (for example by
       // reinstalling Codex). Always reassert the feature flag.
       this.ensureHooksFeatureEnabled();
+
+      if (managedOnlyPolicyPath) {
+        if (this.hasManagedTowerHooks(managedOnlyPolicyPath)) {
+          this.removeCodexNotifyFallback();
+          return {
+            ok: true,
+            method: "file",
+            detail: `${managedOnlyPolicyPath} (managed Tower hooks active)`,
+          };
+        }
+
+        // `--dangerously-bypass-hook-trust` cannot override managed-only source
+        // filtering. Keep notify only as the completion fallback for this
+        // enterprise-policy case.
+        this.ensureCodexNotifyFallback();
+        return {
+          ok: true,
+          method: "file",
+          detail:
+            `${this.getHooksPath()} (turn-complete notify fallback active; ` +
+            `managed hooks policy: ${managedOnlyPolicyPath})`,
+        };
+      }
+
+      // Tower-launched Codex sessions pass --dangerously-bypass-hook-trust, so
+      // these hooks run immediately on first install. Remove a prior managed
+      // fallback to prevent duplicate Stop callbacks.
+      this.removeCodexNotifyFallback();
       return { ok: true, method: "file", detail: this.getHooksPath() };
     } catch (err) {
       return {
@@ -294,9 +307,8 @@ export class CodexCliAdapter implements CliAdapter {
   }
 
   async isHooksInstalled(): Promise<boolean> {
-    if (this.getManagedOnlyHooksPolicyPath()) {
-      return this.isCodexNotifyFallbackInstalled();
-    }
+    const managedOnlyPolicyPath = this.getManagedOnlyHooksPolicyPath();
+    if (managedOnlyPolicyPath && this.hasManagedTowerHooks(managedOnlyPolicyPath)) return true;
 
     const hooks = this.readHooks();
     const required: Array<[string, string]> = [
@@ -305,9 +317,11 @@ export class CodexCliAdapter implements CliAdapter {
       ["PostToolUse", "post-tool-hook.js"],
       ["Stop", "stop-hook.js"],
     ];
-    return required.every(([event, filename]) =>
+    const hooksInstalled = required.every(([event, filename]) =>
       this.hasHook(this.getHookArray(hooks, event), filename)
     ) && this.isHooksFeatureEnabled();
+    if (!hooksInstalled) return false;
+    return !managedOnlyPolicyPath || this.isCodexNotifyFallbackInstalled();
   }
 
   // ===========================================================================
@@ -659,6 +673,24 @@ export class CodexCliAdapter implements CliAdapter {
       }
     }
     return null;
+  }
+
+  private hasManagedTowerHooks(requirementsPath: string): boolean {
+    try {
+      const content = fs.readFileSync(requirementsPath, "utf-8");
+      const markerStart = content.indexOf("# --- Tower managed hooks (BEGIN) ---");
+      const markerEnd = content.indexOf("# --- Tower managed hooks (END) ---");
+      if (markerStart < 0 || markerEnd <= markerStart) return false;
+      const block = content.slice(markerStart, markerEnd);
+      return [
+        "tower-session-start-hook.js",
+        "tower-pre-tool-hook.js",
+        "tower-post-tool-hook.js",
+        "tower-stop-hook.js",
+      ].every((filename) => block.includes(filename));
+    } catch {
+      return false;
+    }
   }
 
   private getCodexNotifyScriptPath(): string {

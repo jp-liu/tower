@@ -28,7 +28,7 @@ import packageJson from "../../../package.json";
 const TOWER_SKILL_NAME = "tower";
 const TOWER_SKILL_NAMES = ["tower", "tower-goal", "tower-ask", "tower-bridge"];
 const TOWER_GATEWAY_SKILL_NAMES = ["tower"];
-const TOWER_INTEGRATION_SCHEMA_VERSION = 2;
+const TOWER_INTEGRATION_SCHEMA_VERSION = 3;
 
 export function buildTowerIntegrationFingerprint(apiUrl: string): string {
   return [
@@ -90,6 +90,14 @@ export interface ProviderIntegrationStatus {
   hooksInstalled: boolean;
   skillsInstalled: boolean;
   ok: boolean;
+}
+
+interface RecordedProviderIntegration {
+  testOk: boolean;
+  mcpInstalled: boolean;
+  hooksInstalled: boolean;
+  skillsInstalled: boolean;
+  installLog: string | null;
 }
 
 /**
@@ -175,6 +183,38 @@ export async function inspectProviderIntegration(
     skillsInstalled,
     ok: mcpInstalled && hooksInstalled && skillsInstalled,
   };
+}
+
+/**
+ * Decide whether startup must repair a provider integration. A matching
+ * database fingerprint is only a cache hit: Codex/Claude may have been
+ * reinstalled since Tower last ran, deleting their user-scope integration.
+ */
+export async function shouldRefreshProviderIntegration(
+  providerName: string,
+  connection: RecordedProviderIntegration | null,
+  integrationFingerprint: string,
+): Promise<boolean> {
+  if (!isRecordedIntegrationCurrent(connection, integrationFingerprint)) return true;
+  return !(await inspectProviderIntegration(providerName)).ok;
+}
+
+function isRecordedIntegrationCurrent(
+  connection: RecordedProviderIntegration | null,
+  integrationFingerprint: string,
+): boolean {
+  if (!connection?.testOk) return false;
+  if (!connection.mcpInstalled || !connection.hooksInstalled || !connection.skillsInstalled) {
+    return false;
+  }
+  if (!connection.installLog) return false;
+
+  try {
+    const report = JSON.parse(connection.installLog) as { integrationFingerprint?: unknown };
+    return report.integrationFingerprint === integrationFingerprint;
+  } catch {
+    return false;
+  }
 }
 
 /**

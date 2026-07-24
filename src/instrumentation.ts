@@ -1,5 +1,3 @@
-import type { ProviderConnectionRow } from "@/actions/provider-connection-actions";
-
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { pruneOrphanedWorktrees, cleanupStaleExecutions, ensureTowerLabel, ensureDefaultWorkspace } = await import(
@@ -41,18 +39,19 @@ export async function register() {
       setInterval(() => void runSweep(), 6 * 60 * 60 * 1000);
     }
 
-    // Auto-refresh Tower integrations only when the recorded install fingerprint
-    // is stale or the database explicitly marks an integration incomplete.
-    // A successful install is verified against the real user-scope config by
-    // installAllForProvider before its state is persisted. Ordinary starts with
-    // a current fingerprint do not invoke provider CLI checks.
+    // Auto-refresh Tower integrations when the recorded fingerprint is stale
+    // or the real user-scope config is incomplete. The database is only a
+    // cache: reinstalling a provider CLI may delete hooks/MCP/skills while the
+    // previous successful install record remains current.
     // Fire-and-forget: a slow CLI probe must not block server startup.
     void (async () => {
       try {
         const { providerRegistry } = await import("@/lib/ai/providers");
-        const { buildTowerIntegrationFingerprint, installAllForProvider } = await import(
-          "@/lib/ai/install-orchestrator"
-        );
+        const {
+          buildTowerIntegrationFingerprint,
+          installAllForProvider,
+          shouldRefreshProviderIntegration,
+        } = await import("@/lib/ai/install-orchestrator");
         const { getProviderConnection, markProviderConnected } = await import(
           "@/actions/provider-connection-actions"
         );
@@ -70,7 +69,11 @@ export async function register() {
             await adapter.repairHookPaths?.().catch(() => {});
             if (!(await adapter.isAvailable())) continue;
             const connection = await getProviderConnection(provider.name);
-            if (isTowerIntegrationCurrent(connection, integrationFingerprint)) {
+            if (!(await shouldRefreshProviderIntegration(
+              provider.name,
+              connection,
+              integrationFingerprint,
+            ))) {
               console.error(`[init-tower] Tower integration for ${provider.name} is up to date`);
               continue;
             }
@@ -96,22 +99,5 @@ export async function register() {
         console.error("[init-tower] Provider auto-install setup failed:", err);
       }
     })();
-  }
-}
-
-function isTowerIntegrationCurrent(
-  connection: ProviderConnectionRow | null,
-  integrationFingerprint: string,
-): boolean {
-  if (!connection) return false;
-  if (!connection.testOk) return false;
-  if (!connection.mcpInstalled || !connection.hooksInstalled || !connection.skillsInstalled) return false;
-  if (!connection.installLog) return false;
-
-  try {
-    const report = JSON.parse(connection.installLog) as { integrationFingerprint?: unknown };
-    return report.integrationFingerprint === integrationFingerprint;
-  } catch {
-    return false;
   }
 }

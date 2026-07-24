@@ -50,11 +50,13 @@ describe("CodexCliAdapter", () => {
     };
 
     const YOLO = "--yolo";
+    const HOOK_TRUST = "--dangerously-bypass-hook-trust";
 
     it("builds fresh start args with yolo mode first and prompt last", () => {
       const result = adapter.buildSpawnArgs(baseOpts);
       expect(result.command).toMatch(/codex$/);
       expect(result.args[0]).toBe(YOLO);
+      expect(result.args[1]).toBe(HOOK_TRUST);
       expect(result.args[result.args.length - 1]).toBe("Fix the bug");
       expect(result.args).not.toContain("resume");
       expect(result.initialInput).toBeUndefined();
@@ -88,6 +90,7 @@ describe("CodexCliAdapter", () => {
     it("includes yolo mode by default on fresh start", () => {
       const result = adapter.buildSpawnArgs(baseOpts);
       expect(result.args).toContain(YOLO);
+      expect(result.args).toContain(HOOK_TRUST);
     });
 
     it("merges extraArgs after yolo mode, before prompt, on fresh start", () => {
@@ -231,16 +234,17 @@ describe("CodexCliAdapter", () => {
       expect(raw.hooks.PostToolUse).toBeDefined();
       expect(raw.hooks.SessionStart).toBeDefined();
       expect(raw.hooks.PreToolUse).toBeDefined();
-      expect(raw.hooks.Stop).toBeDefined();
+      expect(raw.hooks.Stop).toHaveLength(1);
       expect(raw.hooks.PostToolUse[0].matcher).toBe("Write|Edit|MultiEdit");
       expect(raw.hooks.PreToolUse[0].matcher).toBe("request_user_input");
 
       // Verify config.toml enables the (renamed) hooks feature
       const toml = fs.readFileSync(configTomlPath, "utf-8");
       expect(toml).toContain("hooks = true");
+      expect(toml).not.toContain("tower-codex-notify.js");
     });
 
-    it("installs a turn-complete notify fallback when admin policy allows managed hooks only", async () => {
+    it("keeps core completion working under managed-only policy with notify", async () => {
       vi.mocked(adapter.getManagedRequirementsPaths).mockReturnValue([requirementsTomlPath]);
       fs.writeFileSync(
         requirementsTomlPath,
@@ -252,9 +256,53 @@ describe("CodexCliAdapter", () => {
 
       expect(result.ok).toBe(true);
       expect(result.detail).toContain("turn-complete notify fallback");
-      expect(fs.existsSync(hooksJsonPath)).toBe(false);
+      expect(fs.existsSync(hooksJsonPath)).toBe(true);
+      const hooks = JSON.parse(fs.readFileSync(hooksJsonPath, "utf-8"));
+      expect(hooks.hooks.SessionStart).toBeDefined();
+      expect(hooks.hooks.PreToolUse).toBeDefined();
+      expect(hooks.hooks.PostToolUse).toBeDefined();
+      expect(hooks.hooks.Stop).toHaveLength(1);
       expect(fs.readFileSync(configTomlPath, "utf-8")).toContain("tower-codex-notify.js");
       expect(await adapter.isHooksInstalled()).toBe(true);
+    });
+
+    it("recognizes active Tower hooks in the managed requirements config", async () => {
+      vi.mocked(adapter.getManagedRequirementsPaths).mockReturnValue([requirementsTomlPath]);
+      fs.writeFileSync(
+        requirementsTomlPath,
+        [
+          "allow_managed_hooks_only = true",
+          "# --- Tower managed hooks (BEGIN) ---",
+          "[[hooks.SessionStart]]",
+          'command = "tower-session-start-hook.js"',
+          "[[hooks.PreToolUse]]",
+          'command = "tower-pre-tool-hook.js"',
+          "[[hooks.PostToolUse]]",
+          'command = "tower-post-tool-hook.js"',
+          "[[hooks.Stop]]",
+          'command = "tower-stop-hook.js"',
+          "# --- Tower managed hooks (END) ---",
+          "",
+        ].join("\n"),
+        "utf-8",
+      );
+
+      const result = await adapter.installHooks();
+
+      expect(result.ok).toBe(true);
+      expect(result.detail).toContain("managed Tower hooks active");
+      expect(await adapter.isHooksInstalled()).toBe(true);
+      expect(fs.readFileSync(configTomlPath, "utf-8")).not.toContain("tower-codex-notify.js");
+    });
+
+    it("does not let the managed notify fallback hide missing Tower hooks", async () => {
+      vi.mocked(adapter.getManagedRequirementsPaths).mockReturnValue([requirementsTomlPath]);
+      fs.writeFileSync(requirementsTomlPath, "allow_managed_hooks_only = true\n", "utf-8");
+
+      await adapter.installHooks();
+      fs.rmSync(hooksJsonPath);
+
+      expect(await adapter.isHooksInstalled()).toBe(false);
     });
 
     it("preserves and restores an existing Codex notifier around the managed fallback", async () => {
