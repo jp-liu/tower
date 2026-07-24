@@ -36,7 +36,8 @@ AI Tools 设置页分为上下两层：
 - 使用 Vercel AI SDK 作为 API 调用底座，统一文本生成、流式输出、结构化输出和工具调用。
 - Tower 在 Vercel AI SDK 之上保留一层薄 `ApiAdapter` 接口；业务插槽和第三方扩展不直接依赖具体 SDK。
 - 不默认使用 Vercel AI Gateway。请求直接发送到用户配置的上游地址，API Key 只保存在本机。
-- 首版同时实现以下三类协议：
+- 首版同时实现以下四类协议：
+  - `openai`：OpenAI 原生 Provider，保留 Responses API 和官方特有能力。
   - `openai-compatible`：任意兼容 OpenAI API 的服务和自定义 Base URL。
   - `anthropic`：Anthropic 原生协议与能力。
   - `google`：Google Generative AI 原生协议与能力。
@@ -101,7 +102,6 @@ API Key 与登录密码不同：Tower 调用上游模型时必须取回原值，
 
 ## 待讨论
 
-- OpenAI 官方连接是否从 `openai-compatible` 中分离，使用原生 OpenAI Provider 以保留 Responses API 等能力。
 - 模型列表的拉取、手动维护、能力标注和默认模型选择。
 - 多 API Key、轮换、限流与连接健康检查是否进入首版。
 - CLI 扩展包的 manifest、加载机制、权限边界和兼容性策略。
