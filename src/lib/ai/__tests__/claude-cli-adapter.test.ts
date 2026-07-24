@@ -97,6 +97,17 @@ describe("ClaudeCliAdapter", () => {
       });
       expect(result.env.CUSTOM_VAR).toBe("value");
     });
+
+    it("leaves Windows cmd shims and long prompts for the central spawn resolver", () => {
+      const longPrompt = "x".repeat(10_000);
+      vi.spyOn(adapter, "resolveCommand").mockReturnValue("C:\\npm\\claude.cmd");
+
+      const result = adapter.buildSpawnArgs({ ...baseOpts, prompt: longPrompt });
+
+      expect(result.command).toBe("C:\\npm\\claude.cmd");
+      expect(result.args.at(-1)).toBe(longPrompt);
+      expect(result.args).not.toContain("/c");
+    });
   });
 
   describe("buildEnvOverrides", () => {

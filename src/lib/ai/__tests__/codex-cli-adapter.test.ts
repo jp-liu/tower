@@ -158,6 +158,17 @@ describe("CodexCliAdapter", () => {
       expect(result.env.CUSTOM_VAR).toBe("value");
     });
 
+    it("leaves Windows cmd shims and long prompts for the central spawn resolver", () => {
+      const longPrompt = "x".repeat(10_000);
+      vi.spyOn(adapter, "resolveCommand").mockReturnValue("C:\\npm\\codex.cmd");
+
+      const result = adapter.buildSpawnArgs({ ...baseOpts, prompt: longPrompt });
+
+      expect(result.command).toBe("C:\\npm\\codex.cmd");
+      expect(result.args.at(-1)).toBe(longPrompt);
+      expect(result.args).not.toContain("/c");
+    });
+
     it("handles empty prompt on fresh start", () => {
       const result = adapter.buildSpawnArgs({
         ...baseOpts,

@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { isWindows, quoteForCmd, resolveCommandPathSync } from "@/lib/platform";
+import { isWindows, resolveCommandPathSync } from "@/lib/platform";
 import { getPackageRoot } from "@/lib/tower-paths";
 import { TOWER_MCP_ENV_VARS } from "@/lib/ai/tower-mcp-env";
 import type {
@@ -64,26 +64,11 @@ export class CodexCliAdapter implements CliAdapter {
       ...(opts.envOverrides ?? {}),
     };
 
-    const raw = this.resolveCommand();
-
-    // On Windows, pty.spawn() uses CreateProcess which cannot execute .cmd/.bat
-    // files directly — they must be wrapped with cmd.exe. Without this the
-    // spawned process exits immediately (exit code 1, near-empty buffer).
-    if (isWindows()) {
-      const ext = path.extname(raw).toLowerCase();
-      if (ext === ".cmd" || ext === ".bat" || ext === ".com") {
-        const shell = process.env.ComSpec || "cmd.exe";
-        const commandLine = [quoteForCmd(raw), ...args.map(quoteForCmd)].join(" ");
-        return {
-          command: shell,
-          args: ["/d", "/s", "/c", commandLine],
-          env,
-        };
-      }
-    }
-
     return {
-      command: raw,
+      // createSession resolves Windows npm shims to node + cli.js (or a native
+      // executable) before spawning. Keep args separate here so long task
+      // prompts do not hit cmd.exe's 8191-character command-line limit.
+      command: this.resolveCommand(),
       args,
       env,
     };
