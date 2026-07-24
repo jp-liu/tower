@@ -71,11 +71,15 @@ export function CapabilitySlotsSection() {
     if (!provider) return;
     startTransition(async () => {
       try {
-        await updateAiCapabilityConfig("terminal", {
+        const result = await updateAiCapabilityConfig("terminal", {
           provider,
           mode: "cli",
           model: null,
         });
+        if (!result.ok) {
+          toast.error(result.error);
+          return;
+        }
         setConfigs((prev) => {
           const others = prev.filter((c) => c.slot !== "terminal");
           const base =

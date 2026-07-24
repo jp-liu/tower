@@ -44,7 +44,7 @@ export class CodexCliAdapter implements CliAdapter {
     ];
 
     if (opts.extraArgs?.length) {
-      args.push(...opts.extraArgs);
+      args.push(...this.normalizeExtraArgs(opts.extraArgs));
     }
 
     if (opts.resumeSessionId) {
@@ -128,7 +128,7 @@ export class CodexCliAdapter implements CliAdapter {
   // Re-check on every Codex release.
   // ===========================================================================
 
-  async installHooks(_apiUrl: string): Promise<InstallResult> {
+  async installHooks(): Promise<InstallResult> {
     try {
       const hooks = this.readHooks();
       const root = getPackageRoot().replace(/\\/g, "/");
@@ -507,6 +507,36 @@ export class CodexCliAdapter implements CliAdapter {
       command: this.resolveCommand(),
       args: ["exec", prompt],
     };
+  }
+
+  /**
+   * Tower's PTY layer was born on Claude Code, where extra system guidance is
+   * passed with `--append-system-prompt`. Codex CLI has no such flag; its
+   * supported one-off override is `-c developer_instructions=<toml string>`.
+   */
+  private normalizeExtraArgs(extraArgs: string[]): string[] {
+    const passthrough: string[] = [];
+    const developerInstructions: string[] = [];
+
+    for (let i = 0; i < extraArgs.length; i += 1) {
+      const arg = extraArgs[i];
+      if (arg === "--append-system-prompt") {
+        const value = extraArgs[i + 1];
+        if (value) developerInstructions.push(value);
+        i += 1;
+        continue;
+      }
+      passthrough.push(arg);
+    }
+
+    if (developerInstructions.length > 0) {
+      passthrough.unshift(
+        "-c",
+        `developer_instructions=${JSON.stringify(developerInstructions.join("\n\n"))}`,
+      );
+    }
+
+    return passthrough;
   }
 
   /** Resolve codex binary — env var > platform-aware resolution. */

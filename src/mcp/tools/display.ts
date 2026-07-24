@@ -59,6 +59,7 @@ export function renderTaskCreated(input: {
   baseBranch: string | null;
   attachedFiles?: string[];
   attachmentFailures?: { reference: string; error: string }[];
+  projectFileReferences?: string[];
   execution: { started: boolean; error?: string };
 }): string {
   const project = `${input.projectName ?? input.projectId}${input.projectAlias ? ` (${input.projectAlias})` : ""}`;
@@ -87,6 +88,9 @@ export function renderTaskCreated(input: {
 
   if (input.attachedFiles?.length) {
     lines.push(`- 已关联参考附件：${input.attachedFiles.join(", ")}`);
+  }
+  if (input.projectFileReferences?.length) {
+    lines.push(`- 已记录项目文件：${input.projectFileReferences.join(", ")}`);
   }
   if (input.attachmentFailures?.length) {
     lines.push(

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { execFileSync } from "child_process";
 import { copyFileSync, existsSync, statSync } from "fs";
-import { basename, extname, join } from "path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "path";
 import { db } from "../db";
 import { readConfigValue } from "@/lib/config-reader";
 import { stripCacheUuidSuffix, isAssistantCachePath, guessMimeType, ensureAssetsDir } from "@/lib/file-utils";
@@ -11,6 +11,15 @@ import { renderTaskCreated } from "./display";
 const TaskStatus = z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"]);
 const Priority = z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
 const ABSOLUTE_MEDIA_PATH_RE = /(?:^|[\s("'：:])((?:\/Users|\/tmp|\/var\/folders)\/[^\s"'，,；;）)]+?\.(?:png|jpe?g|gif|webp|bmp|avif|pdf|md|txt|json|csv))/giu;
+const SOURCE_CODE_EXTENSIONS = new Set([
+  ".c", ".cc", ".cpp", ".cs", ".css", ".go", ".graphql", ".gql", ".h", ".hpp",
+  ".htm", ".html", ".java", ".js", ".jsx", ".kt", ".kts", ".less", ".mjs", ".mts",
+  ".php", ".proto", ".py", ".rb", ".rs", ".sass", ".scss", ".sh", ".sql", ".svelte",
+  ".swift", ".ts", ".tsx", ".vue",
+]);
+const SOURCE_CODE_FILENAMES = new Set([
+  "dockerfile", "gemfile", "makefile", "rakefile",
+]);
 
 export const taskTools = {
   list_tasks: {
@@ -51,8 +60,10 @@ export const taskTools = {
       "pass either explicitly to override for this one task. " +
       "If the defaults have never been set, the FIRST call (without explicit useWorktree/autoStart) returns { needsDefaultsSetup: true } instead of creating the task — ask the user their preference, call set_task_defaults once, then call create_task again. " +
       "Pass versionId to file the task under a project version (use list_versions to discover options). " +
-      "Pass references as file paths to attach as project assets. For OpenClaw/Hermes bridge messages with images/files, pass the local media paths in references; do not only summarize them in description. " +
-      "If the current turn exposes MediaPath/MediaPaths or a local path in message metadata/text, copy those paths into references.",
+      "Use references ONLY for files supplied by the user in the current request (such as pasted images, screenshots, PDFs, or bridge MediaPath files). " +
+      "Never pass source files discovered while searching the repository in references; mention those as project-relative paths under `## 参考` instead. " +
+      "For OpenClaw/Hermes bridge messages with images/files, pass the local media paths in references; do not only summarize them in description. " +
+      "If the current turn exposes MediaPath/MediaPaths or a local attachment path in message metadata/text, copy those paths into references.",
     schema: z.object({
       projectId: z.string(),
       title: z.string(),
@@ -65,7 +76,9 @@ export const taskTools = {
       useWorktree: z.boolean().optional().describe("Use a Git worktree for branch isolation. Omit to use the user's saved default; pass explicitly to override this task."),
       baseBranch: z.string().optional().describe("Base branch for worktree checkout. Only used when useWorktree resolves to true. If omitted, auto-detects the project's current branch."),
       autoStart: z.boolean().optional().describe("Start execution immediately after creating. Omit to use the user's saved default; pass explicitly to override this task."),
-      references: z.array(z.string()).max(20).optional(),
+      references: z.array(z.string()).max(20).optional().describe(
+        "User-supplied attachment paths only. Do not include repository source files; put their project-relative paths in description under ## 参考.",
+      ),
     }),
     handler: async (args: {
       projectId: string;
@@ -161,8 +174,13 @@ export const taskTools = {
       // <task-source> bridge block, render a channel-generic `## 来源`, add the
       // parent-derivation source for child tasks, and fall back to `## 来源\n无`
       // for a described task with no external source. See ./task-source.ts.
-      const description = resolveTaskSource(args.description, resolvedParent);
-      const references = resolveCreateTaskReferences(args.references, description);
+      const sourceResolvedDescription = resolveTaskSource(args.description, resolvedParent);
+      const references = resolveCreateTaskReferences(args.references, sourceResolvedDescription);
+      const referenceResolution = resolveReferenceKinds(references, project?.localPath ?? null);
+      const description = addProjectFileReferences(
+        sourceResolvedDescription,
+        referenceResolution.projectFileReferences,
+      );
 
       const task = await db.task.create({
         data: {
@@ -193,7 +211,7 @@ export const taskTools = {
       const attachedFiles: string[] = [];
       const attachmentFailures: { reference: string; error: string }[] = [];
       let updatedDesc: string | null = null;
-      if (references.length > 0) {
+      if (referenceResolution.assetReferences.length > 0) {
         let assetsDir: string | null = null;
         try {
           assetsDir = ensureAssetsDir(args.projectId);
@@ -201,14 +219,14 @@ export const taskTools = {
           // Storage root unwritable/unresolvable — surface it instead of
           // silently dropping every attachment.
           const error = e instanceof Error ? e.message : String(e);
-          for (const filePath of references) {
+          for (const filePath of referenceResolution.assetReferences) {
             attachmentFailures.push({ reference: filePath, error });
           }
         }
 
         if (assetsDir) {
           const dir = assetsDir; // narrowed to string for the loop body
-          for (const filePath of references) {
+          for (const filePath of referenceResolution.assetReferences) {
             try {
               if (!existsSync(filePath)) {
                 attachmentFailures.push({ reference: filePath, error: "源文件不存在" });
@@ -274,7 +292,15 @@ export const taskTools = {
 
       // Attachment outcomes ride along on every return path so the assistant
       // reports the real result instead of guessing why an image didn't land.
-      const attachmentInfo = attachmentFailures.length > 0 ? { attachmentFailures } : {};
+      const attachmentInfo = {
+        ...(attachmentFailures.length > 0 ? { attachmentFailures } : {}),
+        ...(referenceResolution.projectFileReferences.length > 0
+          ? { projectFileReferences: referenceResolution.projectFileReferences }
+          : {}),
+        ...(referenceResolution.skippedSourceReferences.length > 0
+          ? { skippedReferences: referenceResolution.skippedSourceReferences }
+          : {}),
+      };
 
       // Deterministic confirmation card — rendered SERVER-SIDE via the shared
       // display module (single source of truth for MCP result cards) so every
@@ -295,6 +321,7 @@ export const taskTools = {
           baseBranch,
           attachedFiles,
           attachmentFailures,
+          projectFileReferences: referenceResolution.projectFileReferences,
           execution: exec,
         });
 
@@ -522,9 +549,114 @@ export const taskTools = {
 };
 
 function resolveCreateTaskReferences(explicit: string[] | undefined, description: string | undefined): string[] {
-  const refs = Array.isArray(explicit) ? explicit.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()) : [];
+  const refs = Array.isArray(explicit)
+    ? [...new Set(explicit.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()))]
+    : [];
   if (refs.length > 0) return refs;
   return extractReferencePathsFromDescription(description);
+}
+
+function resolveReferenceKinds(
+  references: string[],
+  projectLocalPath: string | null,
+): {
+  assetReferences: string[];
+  projectFileReferences: string[];
+  skippedSourceReferences: { reference: string; reason: string }[];
+} {
+  const assetReferences: string[] = [];
+  const projectFileReferences: string[] = [];
+  const skippedSourceReferences: { reference: string; reason: string }[] = [];
+
+  for (const reference of references) {
+    if (isSourceCodeReference(reference)) {
+      const relativeSourcePath = resolveProjectRelativePath(reference, projectLocalPath)
+        ?? resolveGitRelativePath(reference);
+      if (relativeSourcePath) {
+        if (!projectFileReferences.includes(relativeSourcePath)) {
+          projectFileReferences.push(relativeSourcePath);
+        }
+      } else {
+        skippedSourceReferences.push({
+          reference,
+          reason: "源码文件不会上传为项目附件；请在任务描述中使用仓库相对路径",
+        });
+      }
+      continue;
+    }
+
+    assetReferences.push(reference);
+  }
+
+  return { assetReferences, projectFileReferences, skippedSourceReferences };
+}
+
+function resolveProjectRelativePath(reference: string, projectLocalPath: string | null): string | null {
+  if (!projectLocalPath) return null;
+  const projectRoot = resolve(projectLocalPath);
+  const candidate = isAbsolute(reference) ? resolve(reference) : resolve(projectRoot, reference);
+  const relativePath = relative(projectRoot, candidate);
+  if (!relativePath || relativePath === ".." || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) {
+    return null;
+  }
+  return normalizeRelativePath(relativePath);
+}
+
+function resolveGitRelativePath(reference: string): string | null {
+  if (!isAbsolute(reference)) return normalizeRelativePath(reference);
+  try {
+    const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd: dirname(reference),
+      encoding: "utf-8",
+      timeout: 5000,
+    }).trim();
+    if (!repoRoot) return null;
+    const relativePath = relative(resolve(repoRoot), resolve(reference));
+    if (!relativePath || relativePath === ".." || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) {
+      return null;
+    }
+    return normalizeRelativePath(relativePath);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeRelativePath(filePath: string): string {
+  return filePath.split(sep).join("/").replace(/^\.\//, "");
+}
+
+function isSourceCodeReference(reference: string): boolean {
+  const filename = basename(reference).toLowerCase();
+  return SOURCE_CODE_FILENAMES.has(filename) || SOURCE_CODE_EXTENSIONS.has(extname(filename));
+}
+
+function addProjectFileReferences(description: string | undefined, projectFiles: string[]): string | undefined {
+  const uniqueFiles = [...new Set(projectFiles)].filter((filePath) => !description?.includes(filePath));
+  if (uniqueFiles.length === 0) return description;
+
+  const bullets = uniqueFiles.map((filePath) => `- 项目文件：\`${filePath}\``).join("\n");
+  const base = (description ?? "").trim();
+  const headings = [...base.matchAll(/^##\s+(.+?)\s*$/gm)];
+  const referenceHeadingIndex = headings.findIndex((match) => match[1]?.trim() === "参考");
+
+  if (referenceHeadingIndex >= 0) {
+    const nextHeading = headings[referenceHeadingIndex + 1];
+    const insertAt = nextHeading?.index ?? base.length;
+    const before = base.slice(0, insertAt).trimEnd();
+    const after = base.slice(insertAt).trimStart();
+    return after ? `${before}\n${bullets}\n\n${after}` : `${before}\n${bullets}`;
+  }
+
+  const referenceSection = `## 参考\n\n${bullets}`;
+  const sourceHeading = headings.find((match) => match[1]?.trim() === "来源");
+  if (sourceHeading?.index !== undefined) {
+    const before = base.slice(0, sourceHeading.index).trimEnd();
+    const after = base.slice(sourceHeading.index).trimStart();
+    return before ? `${before}\n\n${referenceSection}\n\n${after}` : `${referenceSection}\n\n${after}`;
+  }
+
+  if (!base) return `${referenceSection}\n\n## 来源\n\n无`;
+  return `${base}\n\n${referenceSection}\n\n## 来源\n\n无`;
 }
 
 function extractReferencePathsFromDescription(description: string | undefined): string[] {

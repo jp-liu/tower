@@ -116,6 +116,37 @@ describe("CodexCliAdapter", () => {
       expect(resumeIdx).toBeGreaterThan(modelIdx);
     });
 
+    it("converts Claude append-system-prompt args to Codex developer_instructions config", () => {
+      const result = adapter.buildSpawnArgs({
+        ...baseOpts,
+        extraArgs: ["--append-system-prompt", "Follow Tower task rules."],
+      });
+
+      expect(result.args).not.toContain("--append-system-prompt");
+      expect(result.args).toContain("-c");
+      expect(result.args).toContain('developer_instructions="Follow Tower task rules."');
+      const configIdx = result.args.indexOf("-c");
+      const promptIdx = result.args.indexOf("Fix the bug");
+      expect(configIdx).toBeGreaterThan(result.args.indexOf(BYPASS));
+      expect(promptIdx).toBeGreaterThan(configIdx);
+    });
+
+    it("converts append-system-prompt before the resume subcommand", () => {
+      const result = adapter.buildSpawnArgs({
+        ...baseOpts,
+        resumeSessionId: "sess-1",
+        extraArgs: ["--append-system-prompt", "The user's name is Alice."],
+      });
+
+      const configIdx = result.args.indexOf("-c");
+      const resumeIdx = result.args.indexOf("resume");
+      expect(configIdx).toBeGreaterThan(-1);
+      expect(result.args[configIdx + 1]).toBe(
+        'developer_instructions="The user\'s name is Alice."',
+      );
+      expect(resumeIdx).toBeGreaterThan(configIdx);
+    });
+
     it("merges envOverrides into env", () => {
       const result = adapter.buildSpawnArgs({
         ...baseOpts,
@@ -189,7 +220,7 @@ describe("CodexCliAdapter", () => {
     });
 
     it("installs hooks to hooks.json and enables feature flag in config.toml", async () => {
-      await adapter.installHooks("http://localhost:3000");
+      await adapter.installHooks();
 
       expect(await adapter.isHooksInstalled()).toBe(true);
 
@@ -208,8 +239,8 @@ describe("CodexCliAdapter", () => {
     });
 
     it("does not duplicate hooks on repeated install", async () => {
-      await adapter.installHooks("http://localhost:3000");
-      await adapter.installHooks("http://localhost:3000");
+      await adapter.installHooks();
+      await adapter.installHooks();
 
       const raw = JSON.parse(fs.readFileSync(hooksJsonPath, "utf-8"));
       expect(raw.hooks.PostToolUse).toHaveLength(1);
@@ -218,7 +249,7 @@ describe("CodexCliAdapter", () => {
     });
 
     it("uninstalls hooks from hooks.json", async () => {
-      await adapter.installHooks("http://localhost:3000");
+      await adapter.installHooks();
       expect(await adapter.isHooksInstalled()).toBe(true);
 
       await adapter.uninstallHooks();
@@ -233,7 +264,7 @@ describe("CodexCliAdapter", () => {
     it("preserves existing [features] section when enabling hooks", async () => {
       fs.writeFileSync(configTomlPath, "[features]\nsome_flag = true\n", "utf-8");
 
-      await adapter.installHooks("http://localhost:3000");
+      await adapter.installHooks();
 
       const toml = fs.readFileSync(configTomlPath, "utf-8");
       expect(toml).toContain("hooks = true");
@@ -243,7 +274,7 @@ describe("CodexCliAdapter", () => {
     it("skips feature flag write if already enabled", async () => {
       fs.writeFileSync(configTomlPath, "[features]\nhooks = true\n", "utf-8");
 
-      await adapter.installHooks("http://localhost:3000");
+      await adapter.installHooks();
 
       const toml = fs.readFileSync(configTomlPath, "utf-8");
       // Should not have duplicated the flag
@@ -254,7 +285,7 @@ describe("CodexCliAdapter", () => {
     it("migrates the deprecated codex_hooks feature flag to hooks", async () => {
       fs.writeFileSync(configTomlPath, "[features]\ncodex_hooks = true\n", "utf-8");
 
-      await adapter.installHooks("http://localhost:3000");
+      await adapter.installHooks();
 
       const toml = fs.readFileSync(configTomlPath, "utf-8");
       expect(toml).toContain("hooks = true");

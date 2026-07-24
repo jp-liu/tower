@@ -205,12 +205,12 @@ function parseJson(value: string): Record<string, unknown> | null {
 }
 
 /**
- * Extract a useful summary from probe stdout when the expected "hello" word
- * isn't found. Tries stream-json parsing first (every line is a JSON event:
- * `assistant`, `result`, `hook_started/completed/failed`, ...), falling back
- * to a raw 800-char preview for non-JSON output. Without this, users see only
- * the first 120 bytes — typically just `{"type":"system","subtype":"hook_started"...`,
- * which hides whatever actually went wrong.
+ * Extract a useful summary from probe stdout when a zero-exit probe did not
+ * produce usable response text. Tries stream-json parsing first (every line is a JSON event:
+ * `assistant`, `result`, `hook_started/completed/failed`, ...). Without this,
+ * users see only the first 120 bytes — typically just
+ * `{"type":"system","subtype":"hook_started"...`, which hides whatever actually
+ * went wrong.
  */
 function buildProbeMismatchMessage(command: string, output: string): string {
   const events: Record<string, unknown>[] = [];
@@ -242,10 +242,10 @@ function buildProbeMismatchMessage(command: string, output: string): string {
       const last = events[events.length - 1];
       parts.push(`last event: ${JSON.stringify(last).slice(0, 400)}`);
     }
-    return `${command} probe ran but missing "hello" — ${parts.join("; ")}`;
+    return `${command} probe ran but produced no usable response text — ${parts.join("; ")}`;
   }
 
-  return `${command} probe ran but returned unexpected output: ${output.slice(0, 800)}`;
+  return `${command} probe ran but produced no usable response text`;
 }
 
 /** Walk stream-json events and return the concatenated assistant/result text. */
@@ -516,16 +516,18 @@ async function testWithAdapter(
     } else if ((probe.exitCode ?? 1) === 0) {
       const output = probe.stdout.trim();
       const assistantText = extractAssistantText(output);
+      const replyText = (assistantText || output).trim();
       // Pass as long as the model actually responded with text. Earlier
       // versions required a literal "hello", but real models freely say
       // "Hey!" / "Sure!" / "Hi there" — locking those out was just noise
-      // around a CLI that genuinely works.
-      const passed = assistantText.length > 0;
+      // around a CLI that genuinely works. Codex `exec` may also return plain
+      // stdout instead of stream-json, so fall back to the raw successful output.
+      const passed = replyText.length > 0;
       checks.push({
         name: `${providerName}_hello_probe`,
         passed,
         message: passed
-          ? `${command} hello probe succeeded (model replied: ${assistantText.slice(0, 80)})`
+          ? `${command} hello probe succeeded (model replied: ${replyText.slice(0, 80)})`
           : buildProbeMismatchMessage(command, output),
       });
     } else {

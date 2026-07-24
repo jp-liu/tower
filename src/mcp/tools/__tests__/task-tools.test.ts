@@ -261,6 +261,139 @@ describe("task-tools", () => {
       );
     });
 
+    it("records repository files as relative paths instead of uploading them as assets", async () => {
+      mockDb.project.findUnique.mockResolvedValue({
+        name: "Project",
+        alias: null,
+        localPath: "/home/user/project",
+      });
+      mockDb.task.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: "task1",
+        ...data,
+      }));
+
+      const result = await taskTools.create_task.handler({
+        projectId: "proj1",
+        title: "Code references",
+        description: "## 目标\n修复问题\n\n## 参考\n\n## 来源\n\n无",
+        references: [
+          "/home/user/project/src/backend.ts",
+          "/home/user/project/src/components/TwinDialogs.vue",
+        ],
+        useWorktree: false,
+        autoStart: false,
+      }) as { projectFileReferences?: string[]; display?: string };
+
+      expect(mockEnsureAssetsDir).not.toHaveBeenCalled();
+      expect(mockCopyFileSync).not.toHaveBeenCalled();
+      expect(mockDb.projectAsset.create).not.toHaveBeenCalled();
+      expect(mockDb.task.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          description: expect.stringContaining("- 项目文件：`src/backend.ts`"),
+        }),
+      });
+      const storedDescription = mockDb.task.create.mock.calls[0][0].data.description as string;
+      expect(storedDescription).toContain("- 项目文件：`src/components/TwinDialogs.vue`");
+      expect(storedDescription.indexOf("## 参考")).toBeLessThan(storedDescription.indexOf("## 来源"));
+      expect(result.projectFileReferences).toEqual([
+        "src/backend.ts",
+        "src/components/TwinDialogs.vue",
+      ]);
+      expect(result.display).toContain("已记录项目文件：src/backend.ts, src/components/TwinDialogs.vue");
+    });
+
+    it("resolves relative repository references without uploading them", async () => {
+      mockDb.project.findUnique.mockResolvedValue({
+        name: "Project",
+        alias: null,
+        localPath: "/home/user/project",
+      });
+      mockDb.task.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: "task1",
+        ...data,
+      }));
+
+      await taskTools.create_task.handler({
+        projectId: "proj1",
+        title: "Relative code reference",
+        description: "## 目标\n修复问题\n\n## 来源\n\n无",
+        references: ["src/index.ts"],
+        useWorktree: false,
+        autoStart: false,
+      });
+
+      expect(mockEnsureAssetsDir).not.toHaveBeenCalled();
+      expect(mockDb.projectAsset.create).not.toHaveBeenCalled();
+      expect(mockDb.task.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          description: expect.stringContaining("## 参考\n\n- 项目文件：`src/index.ts`"),
+        }),
+      });
+    });
+
+    it("blocks source files outside the project from becoming assets", async () => {
+      mockDb.project.findUnique.mockResolvedValue({
+        name: "Project",
+        alias: null,
+        localPath: "/home/user/project",
+      });
+      mockDb.task.create.mockResolvedValue({ id: "task1", title: "External code", priority: "MEDIUM", status: "TODO" });
+      mockExecFileSync.mockImplementation(() => {
+        throw new Error("not a git repository");
+      });
+
+      const result = await taskTools.create_task.handler({
+        projectId: "proj1",
+        title: "External code",
+        references: ["/tmp/generated/backend.ts"],
+        useWorktree: false,
+        autoStart: false,
+      }) as { skippedReferences?: { reference: string; reason: string }[] };
+
+      expect(mockEnsureAssetsDir).not.toHaveBeenCalled();
+      expect(mockCopyFileSync).not.toHaveBeenCalled();
+      expect(mockDb.projectAsset.create).not.toHaveBeenCalled();
+      expect(result.skippedReferences).toEqual([
+        expect.objectContaining({ reference: "/tmp/generated/backend.ts" }),
+      ]);
+    });
+
+    it("converts source paths from a git worktree to repository-relative references", async () => {
+      mockDb.project.findUnique.mockResolvedValue({
+        name: "Project",
+        alias: null,
+        localPath: "/home/user/project",
+      });
+      mockDb.task.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: "task1",
+        ...data,
+      }));
+      mockExecFileSync.mockReturnValue("/tmp/tower-worktree\n");
+
+      const result = await taskTools.create_task.handler({
+        projectId: "proj1",
+        title: "Worktree code reference",
+        description: "## 目标\n修复问题\n\n## 来源\n\n无",
+        references: ["/tmp/tower-worktree/src/backend.ts"],
+        useWorktree: false,
+        autoStart: false,
+      }) as { projectFileReferences?: string[] };
+
+      expect(mockExecFileSync).toHaveBeenCalledWith(
+        "git",
+        ["rev-parse", "--show-toplevel"],
+        expect.objectContaining({ cwd: "/tmp/tower-worktree/src" }),
+      );
+      expect(mockEnsureAssetsDir).not.toHaveBeenCalled();
+      expect(mockDb.projectAsset.create).not.toHaveBeenCalled();
+      expect(result.projectFileReferences).toEqual(["src/backend.ts"]);
+      expect(mockDb.task.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          description: expect.stringContaining("- 项目文件：`src/backend.ts`"),
+        }),
+      });
+    });
+
     it("resolves the assets dir via ensureAssetsDir (Tower storage root), not a cwd/install-relative path", async () => {
       const createdTask = { id: "task1", title: "With Ref", description: "desc" };
       mockDb.task.create.mockResolvedValue(createdTask);
@@ -285,6 +418,35 @@ describe("task-tools", () => {
       const dest = mockCopyFileSync.mock.calls[0][1] as string;
       expect(dest).toContain("/mock/.tower/storage/assets/proj1");
       expect(dest).not.toContain("data/assets");
+    });
+
+    it("still uploads user attachment types even when their path is inside the project", async () => {
+      const createdTask = { id: "task1", title: "Project Screenshot", description: "desc" };
+      mockDb.task.create.mockResolvedValue(createdTask);
+      mockDb.task.update.mockResolvedValue({ ...createdTask });
+      mockDb.projectAsset.create.mockResolvedValue({});
+      mockDb.project.findUnique.mockResolvedValue({
+        name: "Project",
+        alias: null,
+        localPath: "/home/user/project",
+      });
+      mockExistsSync.mockImplementation((p: string) => p === "/home/user/project/screenshots/issue.png");
+      mockStatSync.mockReturnValue({ isFile: () => true, size: 1024 });
+      mockIsAssistantCachePath.mockReturnValue(false);
+
+      await taskTools.create_task.handler({
+        projectId: "proj1",
+        title: "Project Screenshot",
+        references: ["/home/user/project/screenshots/issue.png"],
+        useWorktree: false,
+        autoStart: false,
+      });
+
+      expect(mockCopyFileSync).toHaveBeenCalledWith(
+        "/home/user/project/screenshots/issue.png",
+        expect.stringContaining("/mock/.tower/storage/assets/proj1/issue.png"),
+      );
+      expect(mockDb.projectAsset.create).toHaveBeenCalled();
     });
 
     it("attaches an explicit local media path found in the description", async () => {
