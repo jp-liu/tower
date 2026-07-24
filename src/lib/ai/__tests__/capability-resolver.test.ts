@@ -64,7 +64,20 @@ describe("capability-resolver (gated by ProviderConnection)", () => {
       const result = await resolveCliAdapter("terminal", "gemini");
 
       expect(result.provider.name).toBe("gemini");
+      expect(result.model).toBeUndefined();
       expect(mockIsConnected).not.toHaveBeenCalled();
+    });
+
+    it("keeps the configured model when the fixed execution provider matches the slot", async () => {
+      vi.mocked(db.aiCapabilityConfig.findUnique).mockResolvedValue({
+        id: "1", slot: "terminal", provider: "codex", mode: "cli", model: "gpt-5.1-codex",
+        createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      const result = await resolveCliAdapter("terminal", "codex");
+
+      expect(result.provider.name).toBe("codex");
+      expect(result.model).toBe("gpt-5.1-codex");
     });
 
     it("returns adapter + model when configured provider is connected", async () => {

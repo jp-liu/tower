@@ -169,7 +169,7 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 
 ### Hook 脚本 (`scripts/`)
 
-- `tower-pre-tool-hook.js` —— PreToolUse 硬禁原生问答工具（enforcement 层）；注册/卸载在 `src/lib/ai/adapters/cli/claude-cli-adapter.ts`
+- `tower-pre-tool-hook.js` —— PreToolUse 硬禁原生问答工具（enforcement 层）；注册/卸载在 `packages/ai-provider-claude/src/adapter.ts`
 
 ### 系统声明 (`src/lib/config-defaults.ts`)
 

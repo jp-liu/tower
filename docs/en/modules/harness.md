@@ -172,7 +172,7 @@ The decision looks at just two axes — **has a parent or not** × **is a human 
 
 ### Hook scripts (`scripts/`)
 
-- `tower-pre-tool-hook.js` — PreToolUse hard-ban of the native question tool (enforcement layer); install/uninstall in `src/lib/ai/adapters/cli/claude-cli-adapter.ts`
+- `tower-pre-tool-hook.js` — PreToolUse hard-ban of the native question tool (enforcement layer); install/uninstall in `packages/ai-provider-claude/src/adapter.ts`
 
 ### System directives (`src/lib/config-defaults.ts`)
 

@@ -18,7 +18,8 @@ import type { CliSessionOptions } from "@tower/ai-sdk";
 import { providerRegistry } from "@/lib/ai/providers";
 import {
   mergeProviderProcess,
-  providerBaseEnvironment,
+  profileForProvider,
+  terminalBaseEnvironment,
   type LegacyCliProfileOverrides,
 } from "@/lib/ai/provider-host";
 import type { ProviderDefinition } from "@/lib/ai/types";
@@ -79,8 +80,7 @@ async function loadLegacyCliProfile(): Promise<LegacyCliProfileOverrides> {
   };
 }
 
-function executionProviderName(execution: { config?: string | null; agent: string }): string | undefined {
-  if (execution.config && providerRegistry.get(execution.config)) return execution.config;
+function executionProviderName(execution: { agent: string }): string | undefined {
   return providerRegistry.getByAgentFieldValue(execution.agent)?.name;
 }
 
@@ -106,7 +106,7 @@ async function buildProviderLaunch(
   provider: ProviderDefinition,
   options: CliSessionOptions,
 ) {
-  const profile = await loadLegacyCliProfile();
+  const profile = profileForProvider(await loadLegacyCliProfile(), provider.cli!.plugin);
   const resolved = await providerRegistry.createResolvedCliAdapter(
     provider.name,
     options.cwd,
@@ -124,7 +124,7 @@ async function buildProviderLaunch(
   return {
     processSpec,
     envOverrides,
-    baseEnv: providerBaseEnvironment(provider.name),
+    baseEnv: terminalBaseEnvironment(),
     adapter: resolved.adapter,
   };
 }
@@ -321,7 +321,7 @@ export async function resumePtyExecution(
   // Reuse execution: set back to RUNNING
   const execution = await db.taskExecution.update({
     where: { id: prevExec.id },
-    data: { status: "RUNNING", endedAt: null, config: providerDef.name },
+    data: { status: "RUNNING", endedAt: null },
   });
 
   await db.task.update({
@@ -496,7 +496,6 @@ export async function continueLatestPtyExecution(
     data: {
       taskId,
       agent: providerDef.agentFieldValue,
-      config: providerDef.name,
       status: "RUNNING",
       startedAt: new Date(),
       worktreePath: latestExec?.worktreePath ?? null,
@@ -796,7 +795,6 @@ export async function startPtyExecution(
     data: {
       taskId,
       agent: providerDef.agentFieldValue,
-      config: providerDef.name,
       status: "RUNNING",
       startedAt: new Date(),
       worktreePath: resolvedWorktreePath ?? null,
@@ -881,6 +879,7 @@ export async function startPtyExecution(
     }),
   }).catch(async (error) => {
     await markExecutionLaunchFailed(execution.id);
+    if (tempDir) await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     throw error;
   });
 

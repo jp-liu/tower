@@ -102,8 +102,11 @@ export async function POST(request: NextRequest) {
             skill: undefined,
           } as ProviderInstallReport;
           console.error("[adapters/test] install error:", err);
-          await markProviderDisconnected(provider, {
-            reason: err instanceof Error ? err.message : String(err),
+          // The Hello Probe already succeeded. Integration failures are a
+          // degraded connection, not a disconnected CLI.
+          await markProviderConnected(provider, {
+            version: extractVersion(testResult.checks),
+            report: install,
           });
         }
       } else {

@@ -69,9 +69,10 @@ export async function resolveCliAdapter(
   fixedProviderName?: string,
 ): Promise<ResolvedCliAdapter> {
   const config = await loadSlotConfig(slot);
-  const model = config?.model ?? undefined;
-
   const providerName = fixedProviderName ?? await resolveProviderName(config?.provider ?? null);
+  const model = !fixedProviderName || config?.provider === fixedProviderName
+    ? config?.model ?? undefined
+    : undefined;
 
   const providerDef = providerRegistry.get(providerName);
   if (!providerDef) {

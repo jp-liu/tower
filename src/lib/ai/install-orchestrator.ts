@@ -109,6 +109,23 @@ function unsupportedIntegration(name: string): InstallResult {
   };
 }
 
+async function installIntegration(
+  name: string,
+  method: InstallResult["method"],
+  install: () => Promise<CliIntegrationResult>,
+): Promise<InstallResult> {
+  try {
+    return asInstallResult(method, await install());
+  } catch (error) {
+    return {
+      ok: false,
+      method,
+      detail: `${name} install failed`,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 interface RecordedProviderIntegration {
   testOk: boolean;
   mcpInstalled: boolean;
@@ -285,16 +302,16 @@ export async function installAllForProvider(
   const mcpConfig = buildTowerMcpConfig();
   const capabilities = provider.cli.plugin.manifest.capabilities.integrations;
   const mcp = adapter.mcp
-    ? asInstallResult("cli", await adapter.mcp.install({ ...mcpConfig, scope: "user" }))
+    ? await installIntegration("MCP", "cli", () => adapter.mcp!.install({ ...mcpConfig, scope: "user" }))
     : unsupportedIntegration("MCP");
   const hooks = adapter.hooks
-    ? asInstallResult("file", await adapter.hooks.install({ apiUrl }))
+    ? await installIntegration("Hooks", "file", () => adapter.hooks!.install({ apiUrl }))
     : unsupportedIntegration("Hooks");
   // Install every task-terminal Tower skill. Report the first failure if any,
   // else the canonical `tower` result — ok reflects all of them.
   const skillResults = await Promise.all(
     TOWER_SKILL_NAMES.map(async (name) => adapter.skills
-      ? asInstallResult("symlink", await adapter.skills.install({
+      ? installIntegration(`Skill ${name}`, "symlink", () => adapter.skills!.install({
           name,
           sourceDir: getTowerSkillSourceDir(name),
           scope: "user",

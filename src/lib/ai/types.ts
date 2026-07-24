@@ -2,29 +2,8 @@
 
 import type { CliAdapter as SdkCliAdapter, CliPlugin } from "@tower/ai-sdk";
 
-// ---------------------------------------------------------------------------
-// CLI Adapter — PTY execution layer
-// ---------------------------------------------------------------------------
-
-export interface CliSpawnOptions {
-  taskId: string;
-  prompt: string;
-  cwd: string;
-  envOverrides?: Record<string, string>;
-  resumeSessionId?: string;
-  continueLatest?: boolean;
-  worktreePath?: string;
-  /** Extra CLI args (e.g. --append-system-prompt, --model) appended after built-in defaults */
-  extraArgs?: string[];
-}
-
-export interface CliSpawnResult {
-  command: string;
-  args: string[];
-  env: Record<string, string>;
-  /** Gemini: spawn 后通过 PTY write 发送初始 prompt */
-  initialInput?: string;
-}
+// Legacy Hermes gateway integration types. Task-terminal providers use the
+// public @tower/ai-sdk contract exclusively.
 
 export interface McpServerConfig {
   /** Unique name for the MCP server (e.g. "tower") */
@@ -39,7 +18,7 @@ export interface McpServerConfig {
   envVars?: string[];
 }
 
-/** Where the registration lives. CLI commands accept this as `-s <scope>`. */
+/** Where the legacy gateway registration lives. */
 export type McpScope = "user" | "project" | "local";
 
 export interface McpInstallOptions {
@@ -64,71 +43,6 @@ export interface InstallResult {
   /** Command string, file path, or symlink target — whatever was actually applied. */
   detail: string;
   error?: string;
-}
-
-export interface CliAdapter {
-  buildSpawnArgs(opts: CliSpawnOptions): CliSpawnResult;
-
-  buildEnvOverrides(opts: {
-    taskId: string;
-    taskTitle: string;
-    apiUrl: string;
-    callbackUrl?: string;
-    /** True when the task was derived by a parent — injects TOWER_HAS_PARENT for the PreToolUse hook. */
-    hasParent?: boolean;
-    /** Tower's resolved signal dir — injects TOWER_SIGNAL_DIR so the PreToolUse hook can read the unattended flag (TOWER_DATA_DIR is stripped from the PTY env). */
-    signalDir?: string;
-  }): Record<string, string>;
-
-  // ---- Hooks ---------------------------------------------------------------
-  // Method: file write (no CLI subcommand exists in Claude 4.x or Codex 1.x).
-  // See .notes/ai-provider-integration.md for the rationale.
-  installHooks(apiUrl: string): Promise<InstallResult>;
-  uninstallHooks(): Promise<InstallResult>;
-  isHooksInstalled(): Promise<boolean>;
-
-  // ---- MCP -----------------------------------------------------------------
-  // Method: CLI (`claude mcp add-json` / `codex mcp add`). Direct file edits
-  // are forbidden — the CLI's own command keeps us forward-compatible with
-  // schema changes.
-  installMcp(server: McpServerConfig, opts?: McpInstallOptions): Promise<InstallResult>;
-  uninstallMcp(name: string, opts?: McpInstallOptions): Promise<InstallResult>;
-  isMcpInstalled(name: string, opts?: McpInstallOptions): Promise<boolean>;
-
-  // ---- Skills --------------------------------------------------------------
-  // Method: symlink (`~/.claude/skills/<name>` → repo skill dir).
-  // No CLI add/remove command — skills are discovered by directory scan.
-  // Symlink lets edits in the repo reflect immediately and lets us safely
-  // identify our own installs vs user-managed skills (lstat → isSymbolicLink +
-  // readlink target check).
-  installSkill(skillName: string, sourceDir: string): Promise<InstallResult>;
-  uninstallSkill(skillName: string): Promise<InstallResult>;
-  /** When `expectedSourceDir` is given, also verifies the symlink points to that path. */
-  isSkillInstalled(skillName: string, expectedSourceDir?: string): Promise<boolean>;
-
-  isAvailable(): Promise<boolean>;
-  getVersion(): Promise<string | null>;
-  getModels(): Promise<string[]>;
-
-  getConfigDir(): string;
-  getSettingsPath(): string;
-  getSessionsDir(): string;
-
-  /** API key environment variable name and whether it's strictly required.
-   *  If not required, missing key is a warning (user may use subscription auth). */
-  getApiKeyInfo(): { envVar: string; required: boolean };
-
-  /** Build the command + args for a non-interactive hello probe.
-   *  Embed the prompt inline (no stdin pipe) — Windows libuv crashes when
-   *  cmd.exe-wrapped children with piped stdin exit too quickly. */
-  buildHelloProbeArgs(prompt: string): { command: string; args: string[] };
-
-  /** Rewrite stale Tower hook command paths in the provider's settings file
-   *  to the current `TOWER_PACKAGE_ROOT`. Does NOT install new hook entries —
-   *  only refreshes ones that already exist. Used to self-heal users whose
-   *  hooks were written by pre-0.2.7 versions with broken `process.cwd()` paths.
-   *  Optional; adapters that don't manage hooks via file paths can omit it. */
-  repairHookPaths?(): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------

@@ -6,7 +6,9 @@ import type {
   CliPlugin,
   CliProcessSpec,
   PlatformName,
+  RedactedLogger,
 } from "@tower/ai-sdk";
+import { redactSensitiveRecord } from "@tower/ai-sdk";
 import {
   CommandResolver,
   type CommandResolution,
@@ -63,6 +65,77 @@ export function providerBaseEnvironment(
   return stripTowerRuntimeEnv(stripClaudeNestingEnv(ensurePathInEnv(selected as NodeJS.ProcessEnv))) as Record<string, string>;
 }
 
+/** PTY children inherit the user's toolchain/session environment after Tower-specific cleanup. */
+export function terminalBaseEnvironment(
+  source: NodeJS.ProcessEnv = process.env,
+): Record<string, string> {
+  const cleaned = stripTowerRuntimeEnv(stripClaudeNestingEnv(ensurePathInEnv({ ...source })));
+  return Object.fromEntries(
+    Object.entries(cleaned).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  );
+}
+
+function commandBasename(command: string): string {
+  return command
+    .split(/[\\/]/)
+    .at(-1)!
+    .toLowerCase()
+    .replace(/\.(?:cmd|exe|bat)$/i, "");
+}
+
+/** Legacy profiles have no provider column, so only an explicit command match establishes ownership. */
+export function profileForProvider(
+  profile: LegacyCliProfileOverrides,
+  plugin: CliPlugin,
+): LegacyCliProfileOverrides {
+  if (!profile.command) return {};
+  const candidates = [plugin.manifest.command.default, ...(plugin.manifest.command.aliases ?? [])]
+    .map(commandBasename);
+  return candidates.includes(commandBasename(profile.command)) ? profile : {};
+}
+
+type LoggerSink = Pick<typeof console, "debug" | "info" | "warn" | "error">;
+
+function redactDetail(value: unknown, knownSecrets: string[]): unknown {
+  if (typeof value === "string") {
+    return knownSecrets.reduce(
+      (redacted, secret) => redacted.split(secret).join("***REDACTED***"),
+      value,
+    );
+  }
+  if (Array.isArray(value)) return value.map((entry) => redactDetail(entry, knownSecrets));
+  if (!value || typeof value !== "object") return value;
+
+  const byKey = redactSensitiveRecord(value as Record<string, unknown>);
+  return Object.fromEntries(
+    Object.entries(byKey).map(([key, entry]) => [
+      key,
+      entry === "***REDACTED***" ? entry : redactDetail(entry, knownSecrets),
+    ]),
+  );
+}
+
+export function createProviderLogger(
+  providerId: string,
+  env: Record<string, string>,
+  sink: LoggerSink = console,
+): RedactedLogger {
+  const knownSecrets = Object.entries(env)
+    .filter(([key, value]) => value.length > 0
+      && redactSensitiveRecord({ [key]: value })[key] === "***REDACTED***")
+    .map(([, value]) => value)
+    .sort((left, right) => right.length - left.length);
+  const write = (level: keyof LoggerSink, message: string, details?: Record<string, unknown>) => {
+    sink[level](`[ai:${providerId}] ${message}`, details ? redactDetail(details, knownSecrets) : "");
+  };
+  return {
+    debug: (message, details) => write("debug", message, details),
+    info: (message, details) => write("info", message, details),
+    warn: (message, details) => write("warn", message, details),
+    error: (message, details) => write("error", message, details),
+  };
+}
+
 function managedConfigPaths(providerId: string, platform: PlatformName, env: Record<string, string>): string[] {
   if (providerId !== "codex") return [];
   if (platform === "win32") {
@@ -92,32 +165,12 @@ export function createProviderHostContext(
       towerPackageRoot: getPackageRoot(),
       managedConfigPaths: managedConfigPaths(providerId, platform, env),
     },
-    logger: {
-      debug: (message, details) => console.debug(`[ai:${providerId}] ${message}`, details ?? ""),
-      info: (message, details) => console.info(`[ai:${providerId}] ${message}`, details ?? ""),
-      warn: (message, details) => console.warn(`[ai:${providerId}] ${message}`, details ?? ""),
-      error: (message, details) => console.error(`[ai:${providerId}] ${message}`, details ?? ""),
-    },
+    logger: createProviderLogger(providerId, env),
   };
 }
 
 export function createBuiltInAdapter(spec: BuiltInProviderSpec, commandPath?: string): CliAdapter {
   return spec.plugin.createAdapter(createProviderHostContext(spec.id, commandPath), {});
-}
-
-export async function resolveBuiltInCommand(
-  spec: BuiltInProviderSpec,
-  cwd: string,
-  commandOverride?: string,
-): Promise<string> {
-  const resolution = await resolveBuiltInCommandResolution(spec, cwd, commandOverride);
-  if (!resolution.selected || resolution.selected.state === "not-found") {
-    throw new Error(`${spec.plugin.manifest.display.name} CLI was not found`);
-  }
-  if (resolution.selected.state === "found") {
-    throw new Error(`${spec.plugin.manifest.display.name} CLI is not runnable`);
-  }
-  return resolution.selected.path;
 }
 
 export async function resolveBuiltInCommandResolution(

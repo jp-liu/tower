@@ -47,6 +47,9 @@ export async function register() {
     void (async () => {
       try {
         const { providerRegistry } = await import("@/lib/ai/providers");
+        const { providerRefreshVersion, repairHooksBeforeResolve } = await import(
+          "@/lib/ai/provider-startup-refresh"
+        );
         const {
           buildTowerIntegrationFingerprint,
           installAllForProvider,
@@ -65,12 +68,11 @@ export async function register() {
             // status: settings.json may still list hooks from a previous
             // Tower install even if the CLI binary is gone from PATH right
             // now (issue #8). Refresh only existing entries — never adds new.
-            const resolved = await providerRegistry.createResolvedCliAdapter(
-              provider.name,
-              process.cwd(),
+            const resolved = await repairHooksBeforeResolve(
+              provider.cli.adapter,
+              () => providerRegistry.createResolvedCliAdapter(provider.name, process.cwd()),
             ).catch(() => null);
             if (!resolved) continue;
-            await resolved.adapter.hooks?.install({ repairOnly: true }).catch(() => {});
             const connection = await getProviderConnection(provider.name);
             if (!(await shouldRefreshProviderIntegration(
               provider.name,
@@ -82,7 +84,7 @@ export async function register() {
             }
             const report = await installAllForProvider(provider.name, apiUrl);
             await markProviderConnected(provider.name, {
-              version: null,
+              version: providerRefreshVersion(resolved.version, connection?.version),
               report,
             });
             if (report.ok) {

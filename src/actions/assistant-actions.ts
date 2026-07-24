@@ -10,7 +10,7 @@ import { readConfigValue } from "@/lib/config-reader";
 import { resolveCliAdapter } from "@/lib/ai/capability-resolver";
 import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
 import { providerRegistry } from "@/lib/ai/providers";
-import { mergeProviderProcess, providerBaseEnvironment } from "@/lib/ai/provider-host";
+import { mergeProviderProcess, terminalBaseEnvironment } from "@/lib/ai/provider-host";
 
 /**
  * Spawn a fresh Claude CLI PTY session for the global assistant (BE-01).
@@ -73,7 +73,7 @@ export async function startAssistantSession(sessionId?: string): Promise<void> {
     undefined,
     undefined,
     processSpec.initialInput,
-    providerBaseEnvironment(provider.name),
+    terminalBaseEnvironment(),
   );
 }
 

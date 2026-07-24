@@ -3,9 +3,6 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { resolveCommandPathSync } from "@/lib/platform";
 import type {
-  CliAdapter,
-  CliSpawnOptions,
-  CliSpawnResult,
   InstallResult,
   McpInstallOptions,
   McpServerConfig,
@@ -13,17 +10,9 @@ import type {
 
 const DEFAULT_PROFILE = process.env.HERMES_PROFILE || "default";
 
-export class HermesCliAdapter implements CliAdapter {
+/** Legacy message-gateway integration. Hermes is not a task-terminal Provider. */
+export class HermesCliAdapter {
   constructor(private readonly profile = DEFAULT_PROFILE) {}
-
-  buildSpawnArgs(opts: CliSpawnOptions): CliSpawnResult {
-    void opts;
-    throw new Error("Hermes is a message gateway adapter, not a Tower task terminal provider.");
-  }
-
-  buildEnvOverrides(): Record<string, string> {
-    return {};
-  }
 
   async installHooks(apiUrl: string): Promise<InstallResult> {
     void apiUrl;

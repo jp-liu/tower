@@ -125,7 +125,7 @@ export class CodexCliAdapter implements CliAdapter {
   };
 
   buildSessionProcess(opts: CliSessionOptions): CliProcessSpec {
-    // Mirror ClaudeCliAdapter (claude-cli-adapter.ts): the autonomy flag and any
+    // Match the Claude Provider contract: the autonomy flag and any
     // extraArgs (e.g. --model) must apply to fresh AND resumed sessions, so they
     // go first -- before the fresh/resume/continue branch. Verified on codex-cli
     // 0.145.x accepts the explicit full-access flag both globally and before

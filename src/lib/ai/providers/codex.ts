@@ -14,8 +14,7 @@ export function createCodexProvider(): ProviderDefinition {
       adapter: createBuiltInAdapter(builtIn),
     },
     // api adapter uses OpenAI SDK — will be added in Phase 2
-    // cli models empty on purpose — let ~/.codex account default win; see
-    // CODEX_MODELS note in codex-cli-adapter.ts.
+    // CLI models stay empty on purpose so the user's Codex account default wins.
     models: {
       cli: [],
       api: [],

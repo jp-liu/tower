@@ -144,4 +144,22 @@ describe("inspectProviderIntegration", () => {
     });
     expect(report.ok).toBe(false);
   });
+
+  it.each([
+    ["MCP", "mcp"],
+    ["Hooks", "hooks"],
+    ["Skills", "skills"],
+  ] as const)("normalizes a thrown %s install without rejecting the provider report", async (_label, integration) => {
+    adapter[integration].install.mockRejectedValue(new Error(`${integration} unavailable`));
+
+    const report = await installAllForProvider("codex", "http://localhost:3000");
+
+    const result = integration === "skills" ? report.skill : report[integration];
+    expect(result).toMatchObject({
+      ok: false,
+      error: `${integration} unavailable`,
+    });
+    expect(report.available).toBe(true);
+    expect(report.ok).toBe(false);
+  });
 });

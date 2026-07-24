@@ -81,8 +81,8 @@ export async function syncProjectDoc(db: PrismaClient, projectId: string): Promi
 /**
  * Idempotent upsert of our marked block, leaving everything outside the markers
  * byte-for-byte intact (the user may keep their own notes in the same file).
- * Same "only touch what we marked" convention as `upsertHook` in
- * claude-cli-adapter.ts and `cleanupLegacyAssistantMcp` in init-tower.ts.
+ * Same "only touch what we marked" convention as the Claude Provider hook
+ * integration and `cleanupLegacyAssistantMcp` in init-tower.ts.
  *
  * `block === null` removes the block; an empty result means the file should go.
  */

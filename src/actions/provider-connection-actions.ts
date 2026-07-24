@@ -27,8 +27,7 @@ export interface ProviderConnectionRow {
  * Persist the result of a successful test+install. Called from /api/adapters/test.
  *
  * `report.ok` reflects the install pipeline; `testOk` reflects only the hello
- * probe — they're stored separately so the slot resolver can distinguish
- * "probe passed but install failed (still unusable)" from "probe failed".
+ * probe. A degraded integration never prevents terminal use.
  */
 export async function markProviderConnected(
   provider: string,
