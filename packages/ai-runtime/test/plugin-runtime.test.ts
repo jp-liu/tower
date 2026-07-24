@@ -142,31 +142,10 @@ function testGate(): TestGate {
   };
 }
 
-class PausingInstallFileSystem extends NodePluginFileSystem {
-  private gate: TestGate | null = null;
-
-  pauseNextInstallCommit(): TestGate {
-    this.gate = testGate();
-    return this.gate;
-  }
-
-  override async rename(from: string, to: string): Promise<void> {
-    await super.rename(from, to);
-    const gate = this.gate;
-    if (gate
-      && path.basename(from) === "package"
-      && path.basename(path.dirname(from)).startsWith(".install-")) {
-      this.gate = null;
-      gate.markReached();
-      await gate.waitForRelease;
-    }
-  }
-}
-
 class PausingLockFileSystem extends NodePluginFileSystem {
   private gate: TestGate | null = null;
 
-  pauseNextRegistryLock(): TestGate {
+  pauseNextLock(): TestGate {
     this.gate = testGate();
     return this.gate;
   }
@@ -251,9 +230,10 @@ describe("CLI plugin installation runtime", () => {
     const adapter = await plugins.load(installed.id, host());
     expect(await adapter.generate({ prompt: "hello" })).toEqual({ text: "fixture-ok" });
     expect(globalThis.__towerFixtureLoads).toBe(1);
+    const installContainer = path.dirname(installed.installPath);
     await plugins.uninstall(installed.id);
     expect(await plugins.get(installed.id)).toBeNull();
-    await expect(fs.access(installed.installPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(fs.access(installContainer)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it.each(["latest", "^1.0.0", "1.x", "v1.0.0", "1.0"])(
@@ -416,6 +396,70 @@ describe("CLI plugin installation runtime", () => {
       .toEqual([]);
   });
 
+  it("removes every retained npm version when uninstalling after an upgrade", async () => {
+    const dataRoot = await temporaryDirectory();
+    const provider = new FixtureNpmProvider();
+    provider.add("1.0.0", await createFixture({ version: "1.0.0" }));
+    provider.add("2.0.0", await createFixture({ version: "2.0.0" }));
+    const plugins = runtime(dataRoot, provider);
+    const firstPlan = await plugins.planNpmInstall("@fixture/tower-cli", "1.0.0");
+    const first = await plugins.installNpm(firstPlan);
+    const upgradePlan = await plugins.planNpmInstall(first.id, "2.0.0");
+    const upgraded = await plugins.installNpm(upgradePlan);
+    const container = path.dirname(first.installPath);
+    expect(path.dirname(upgraded.installPath)).toBe(container);
+    expect(await fs.readdir(container)).toHaveLength(2);
+
+    await plugins.uninstall(first.id);
+
+    expect(await plugins.get(first.id)).toBeNull();
+    await expect(fs.access(container)).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await fs.readdir(plugins.registry.stagingDir)).filter((entry) => entry.startsWith(".uninstall-")))
+      .toEqual([]);
+  });
+
+  it("removes retained npm files but preserves the source after switching to local", async () => {
+    const dataRoot = await temporaryDirectory();
+    const provider = new FixtureNpmProvider();
+    provider.add("1.0.0", await createFixture({ version: "1.0.0" }));
+    const localSource = await createFixture({ version: "2.0.0" });
+    const plugins = runtime(dataRoot, provider);
+    const npmPlan = await plugins.planNpmInstall("@fixture/tower-cli", "1.0.0");
+    const installed = await plugins.installNpm(npmPlan);
+    const container = path.dirname(installed.installPath);
+    const localPlan = await plugins.planLocalRegistration(localSource);
+    const local = await plugins.registerLocal(localPlan);
+    expect(local.installPath).toBe(await fs.realpath(localSource));
+
+    await plugins.uninstall(local.id);
+
+    expect(await plugins.get(local.id)).toBeNull();
+    await expect(fs.access(container)).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await fs.stat(localSource)).isDirectory()).toBe(true);
+  });
+
+  it("restores the full npm container when the uninstall registry write fails", async () => {
+    const dataRoot = await temporaryDirectory();
+    const provider = new FixtureNpmProvider();
+    provider.add("1.0.0", await createFixture({ version: "1.0.0" }));
+    const fileSystem = new FailingAtomicFileSystem();
+    const plugins = new CliPluginRuntime({
+      dataRoot,
+      towerVersion: "0.3.0",
+      npmProvider: provider,
+      fileSystem,
+    });
+    const plan = await plugins.planNpmInstall("@fixture/tower-cli", "1.0.0");
+    const installed = await plugins.installNpm(plan);
+    const container = path.dirname(installed.installPath);
+
+    fileSystem.failNextAtomicWrite = true;
+    await expect(plugins.uninstall(installed.id)).rejects.toMatchObject({ code: "UNINSTALL_FAILED" });
+    expect(await plugins.get(installed.id)).toMatchObject({ installPath: installed.installPath });
+    await expect(fs.access(container)).resolves.toBeUndefined();
+    await expect(fs.access(installed.installPath)).resolves.toBeUndefined();
+  });
+
   it("registers local directories without copying and only removes the registration", async () => {
     const packageRoot = await createFixture();
     const plugins = runtime(await temporaryDirectory());
@@ -507,7 +551,7 @@ describe("plugin registry durability", () => {
     provider.add("1.0.0", await createFixture({ version: "1.0.0" }));
     provider.add("2.0.0", await createFixture({ version: "2.0.0" }));
     const replacementPackage = await createFixture({ version: "1.0.0" });
-    const pausingFileSystem = new PausingInstallFileSystem();
+    const pausingFileSystem = new PausingLockFileSystem();
     const staleRuntime = new CliPluginRuntime({
       dataRoot,
       towerVersion: "0.3.0",
@@ -520,7 +564,7 @@ describe("plugin registry durability", () => {
     const stalePlan = await staleRuntime.planNpmInstall(initial.id, "2.0.0");
     const winnerPlan = await winnerRuntime.planLocalRegistration(replacementPackage);
 
-    const gate = pausingFileSystem.pauseNextInstallCommit();
+    const gate = pausingFileSystem.pauseNextLock();
     const staleInstall = staleRuntime.installNpm(stalePlan);
     await gate.reached;
     const winner = await winnerRuntime.registerLocal(winnerPlan);
@@ -534,6 +578,35 @@ describe("plugin registry durability", () => {
     });
     expect((await fs.readdir(path.dirname(initial.installPath))).some((entry) => entry.startsWith("2.0.0-")))
       .toBe(false);
+  });
+
+  it("does not recreate an empty container when a staged install loses to uninstall", async () => {
+    const dataRoot = await temporaryDirectory();
+    const provider = new FixtureNpmProvider();
+    provider.add("1.0.0", await createFixture({ version: "1.0.0" }));
+    provider.add("2.0.0", await createFixture({ version: "2.0.0" }));
+    const pausingFileSystem = new PausingLockFileSystem();
+    const installingRuntime = new CliPluginRuntime({
+      dataRoot,
+      towerVersion: "0.3.0",
+      npmProvider: provider,
+      fileSystem: pausingFileSystem,
+    });
+    const uninstallingRuntime = runtime(dataRoot, provider);
+    const firstPlan = await uninstallingRuntime.planNpmInstall("@fixture/tower-cli", "1.0.0");
+    const first = await uninstallingRuntime.installNpm(firstPlan);
+    const stalePlan = await installingRuntime.planNpmInstall(first.id, "2.0.0");
+    const container = path.dirname(first.installPath);
+
+    const gate = pausingFileSystem.pauseNextLock();
+    const staleInstall = installingRuntime.installNpm(stalePlan);
+    await gate.reached;
+    await uninstallingRuntime.uninstall(first.id);
+    gate.release();
+
+    await expect(staleInstall).rejects.toMatchObject({ code: "INSTALL_PLAN_MISMATCH" });
+    expect(await uninstallingRuntime.get(first.id)).toBeNull();
+    await expect(fs.access(container)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("rejects a stale local registration after another runtime commits the winner", async () => {
@@ -550,7 +623,7 @@ describe("plugin registry durability", () => {
     const stalePlan = await staleRuntime.planLocalRegistration(stalePackage);
     const winnerPlan = await winnerRuntime.planLocalRegistration(winnerPackage);
 
-    const gate = pausingFileSystem.pauseNextRegistryLock();
+    const gate = pausingFileSystem.pauseNextLock();
     const staleRegistration = staleRuntime.registerLocal(stalePlan);
     await gate.reached;
     const winner = await winnerRuntime.registerLocal(winnerPlan);
@@ -583,7 +656,7 @@ describe("plugin registry durability", () => {
     await upgradingRuntime.installNpm(firstPlan);
     const upgradePlan = await upgradingRuntime.planNpmInstall(firstPlan.pluginId, "2.0.0");
 
-    const gate = pausingFileSystem.pauseNextRegistryLock();
+    const gate = pausingFileSystem.pauseNextLock();
     const oldConfirmation = confirmingRuntime.confirmAndEnable(firstPlan.pluginId, firstPlan);
     await gate.reached;
     await upgradingRuntime.installNpm(upgradePlan);
@@ -615,7 +688,7 @@ describe("plugin registry durability", () => {
     await upgradingRuntime.installNpm(firstPlan);
     const upgradePlan = await upgradingRuntime.planNpmInstall(firstPlan.pluginId, "2.0.0");
 
-    const gate = pausingFileSystem.pauseNextRegistryLock();
+    const gate = pausingFileSystem.pauseNextLock();
     const staleUninstall = uninstallingRuntime.uninstall(firstPlan.pluginId);
     await gate.reached;
     const winner = await upgradingRuntime.installNpm(upgradePlan);
@@ -627,6 +700,38 @@ describe("plugin registry durability", () => {
       installPath: winner.installPath,
     });
     await expect(fs.access(winner.installPath)).resolves.toBeUndefined();
+  });
+
+  it("does not remove a local source registered while another runtime waits to uninstall", async () => {
+    const dataRoot = await temporaryDirectory();
+    const provider = new FixtureNpmProvider();
+    provider.add("1.0.0", await createFixture({ version: "1.0.0" }));
+    const localSource = await createFixture({ version: "2.0.0" });
+    const pausingFileSystem = new PausingLockFileSystem();
+    const uninstallingRuntime = new CliPluginRuntime({
+      dataRoot,
+      towerVersion: "0.3.0",
+      npmProvider: provider,
+      fileSystem: pausingFileSystem,
+    });
+    const registeringRuntime = runtime(dataRoot, provider);
+    const firstPlan = await registeringRuntime.planNpmInstall("@fixture/tower-cli", "1.0.0");
+    await registeringRuntime.installNpm(firstPlan);
+    const localPlan = await registeringRuntime.planLocalRegistration(localSource);
+
+    const gate = pausingFileSystem.pauseNextLock();
+    const staleUninstall = uninstallingRuntime.uninstall(firstPlan.pluginId);
+    await gate.reached;
+    const winner = await registeringRuntime.registerLocal(localPlan);
+    gate.release();
+
+    await expect(staleUninstall).rejects.toMatchObject({ code: "UNINSTALL_FAILED" });
+    expect(await registeringRuntime.get(firstPlan.pluginId)).toMatchObject({
+      source: "local",
+      version: "2.0.0",
+      installPath: winner.installPath,
+    });
+    await expect(fs.access(localSource)).resolves.toBeUndefined();
   });
 
   it("reports a corrupt registry and explicitly recovers it to a versioned empty registry", async () => {

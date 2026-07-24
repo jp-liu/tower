@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -154,18 +154,20 @@ export class CliPluginRuntime {
         throw pluginError("INVALID_PACKAGE", plan.pluginId, error);
       });
       const plugin = await this.validate(packageRoot, plan.pluginId, plan.toVersion);
-      return this.registry.transact(plan.pluginId, (current) => {
-        const expected = createInstallPlan({
-          source: "local",
-          sourcePath: packageRoot,
-          plugin,
-          integrity: this.localIntegrity(plugin),
-          previous: current ?? undefined,
-        });
-        if (!isMatchingPlan(expected, plan)) throw pluginError("INSTALL_PLAN_MISMATCH", plan.pluginId);
-        const registration = this.createRegistration(expected, packageRoot, current ?? undefined);
-        return { next: registration, result: registration };
-      });
+      return this.withLifecycleLock(plan.pluginId, () =>
+        this.registry.transact(plan.pluginId, (current) => {
+          const expected = createInstallPlan({
+            source: "local",
+            sourcePath: packageRoot,
+            plugin,
+            integrity: this.localIntegrity(plugin),
+            previous: current ?? undefined,
+          });
+          if (!isMatchingPlan(expected, plan)) throw pluginError("INSTALL_PLAN_MISMATCH", plan.pluginId);
+          const registration = this.createRegistration(expected, packageRoot, current ?? undefined);
+          return { next: registration, result: registration };
+        })
+      );
     });
   }
 
@@ -208,28 +210,47 @@ export class CliPluginRuntime {
     await this.serialized(async () => {
       const snapshot = await this.registry.get(pluginId);
       if (!snapshot) throw pluginError("PLUGIN_NOT_FOUND", pluginId);
-      const installPath = path.resolve(snapshot.installPath);
       const container = this.packageContainer(pluginId);
-      if (snapshot.source === "npm" && (installPath === container || !isPathInside(container, installPath))) {
-        throw pluginError("UNINSTALL_FAILED", pluginId);
+      if (snapshot.source === "npm") {
+        const installPath = path.resolve(snapshot.installPath);
+        if (installPath === container || !isPathInside(container, installPath)) {
+          throw pluginError("UNINSTALL_FAILED", pluginId);
+        }
       }
-      let removed = false;
       try {
-        await this.registry.transact(pluginId, (current) => {
+        const trash = await this.withLifecycleLock(pluginId, async () => {
+          const current = await this.registry.get(pluginId);
           if (!current) throw pluginError("PLUGIN_NOT_FOUND", pluginId);
           if (!this.sameRegistration(current, snapshot)) throw pluginError("UNINSTALL_FAILED", pluginId);
-          return { next: null, result: undefined };
+          const trash = path.join(
+            this.registry.stagingDir,
+            `.uninstall-${packageDirectoryName(pluginId)}-${randomUUID()}`,
+          );
+          const containerExists = await this.exists(container);
+          let movedToTrash = false;
+          try {
+            if (containerExists) {
+              await this.fileSystem.rename(container, trash);
+              movedToTrash = true;
+            }
+            await this.registry.transact(pluginId, (current) => {
+              if (!current) throw pluginError("PLUGIN_NOT_FOUND", pluginId);
+              if (!this.sameRegistration(current, snapshot)) throw pluginError("UNINSTALL_FAILED", pluginId);
+              return { next: null, result: undefined };
+            });
+          } catch (error) {
+            if (movedToTrash && await this.exists(trash)) {
+              await this.fileSystem.rename(trash, container).catch(() => undefined);
+            }
+            throw error;
+          }
+          return movedToTrash ? trash : null;
         });
-        removed = true;
-        if (snapshot.source === "npm") await this.fileSystem.rm(installPath);
+        if (trash) await this.fileSystem.rm(trash).catch(() => undefined);
       } catch (error) {
-        if (removed && snapshot.source === "npm" && await this.exists(installPath)) {
-          await this.registry.transact(pluginId, (current) => current
-            ? { next: current, result: undefined }
-            : { next: snapshot, result: undefined }).catch(() => undefined);
-        }
         if (error instanceof PluginRuntimeError && error.code === "PLUGIN_NOT_FOUND") throw error;
-        throw pluginError("UNINSTALL_FAILED", pluginId, error);
+        if (error instanceof PluginRuntimeError && error.code === "UNINSTALL_FAILED") throw error;
+        throw pluginError("UNINSTALL_FAILED", pluginId);
       }
     });
   }
@@ -325,20 +346,28 @@ export class CliPluginRuntime {
     const container = this.packageContainer(receivedPlan.pluginId);
     const target = path.join(container, installationDirectoryName(receivedPlan));
     try {
-      await this.fileSystem.mkdir(container);
-      await this.fileSystem.rename(staged.packageRoot, target);
-      return await this.registry.transact(receivedPlan.pluginId, (current) => {
-        const expected = createInstallPlan({
-          source: "npm",
-          plugin: staged.plugin,
-          integrity: staged.resolution.integrity,
-          previous: current ?? undefined,
-        });
-        if (!isMatchingPlan(expected, receivedPlan)) {
-          throw pluginError("INSTALL_PLAN_MISMATCH", receivedPlan.pluginId);
+      return await this.withLifecycleLock(receivedPlan.pluginId, async () => {
+        await this.fileSystem.mkdir(container);
+        await this.fileSystem.rename(staged.packageRoot, target);
+        try {
+          return await this.registry.transact(receivedPlan.pluginId, (current) => {
+            const expected = createInstallPlan({
+              source: "npm",
+              plugin: staged.plugin,
+              integrity: staged.resolution.integrity,
+              previous: current ?? undefined,
+            });
+            if (!isMatchingPlan(expected, receivedPlan)) {
+              throw pluginError("INSTALL_PLAN_MISMATCH", receivedPlan.pluginId);
+            }
+            const registration = this.createRegistration(expected, target, current ?? undefined);
+            return { next: registration, result: registration };
+          });
+        } catch (error) {
+          await this.fileSystem.rm(target).catch(() => undefined);
+          await this.removeContainerIfEmpty(container);
+          throw error;
         }
-        const registration = this.createRegistration(expected, target, current ?? undefined);
-        return { next: registration, result: registration };
       });
     } catch (error) {
       await this.fileSystem.rm(target).catch(() => undefined);
@@ -428,6 +457,24 @@ export class CliPluginRuntime {
 
   private packageContainer(pluginId: string): string {
     return path.join(this.registry.packagesDir, packageDirectoryName(pluginId));
+  }
+
+  private async withLifecycleLock<T>(pluginId: string, operation: () => Promise<T>): Promise<T> {
+    const lockPath = path.join(this.registry.baseDir, ".locks", `${packageDirectoryName(pluginId)}.lock`);
+    const release = await this.fileSystem.acquireLock(lockPath);
+    try {
+      return await operation();
+    } finally {
+      await release();
+    }
+  }
+
+  private async removeContainerIfEmpty(container: string): Promise<void> {
+    try {
+      if ((await this.fileSystem.readdir(container)).length === 0) await this.fileSystem.rm(container);
+    } catch {
+      // Another failure path reports the original installation error.
+    }
   }
 
   private async exists(target: string): Promise<boolean> {
