@@ -1,112 +1,96 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("next/cache", () => ({
-  revalidatePath: vi.fn(),
-}));
-
-vi.mock("@/lib/db", () => ({
-  db: {
-    aiCapabilityConfig: {
-      findMany: vi.fn(),
-      upsert: vi.fn(),
-    },
-    providerConnection: {
-      findUnique: vi.fn(),
-    },
-  },
-}));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/actions/provider-connection-actions", () => ({ getProviderConnection: vi.fn() }));
+vi.mock("@/lib/ai/capability-config-service", async () => {
+  class CapabilityServiceError extends Error {
+    constructor(public code: string) {
+      super("safe capability error");
+    }
+  }
+  return {
+    CapabilityServiceError,
+    listCapabilityConfigsService: vi.fn(),
+    getCapabilityConfigService: vi.fn(),
+    replaceCapabilityTargetsService: vi.fn(),
+    addCapabilityTargetService: vi.fn(),
+    updateCapabilityTargetService: vi.fn(),
+    deleteCapabilityTargetService: vi.fn(),
+    reorderCapabilityTargetsService: vi.fn(),
+    listCapabilityChoicesService: vi.fn(),
+    getCapabilityDiagnosticsService: vi.fn(),
+  };
+});
 
 import { revalidatePath } from "next/cache";
-import { db } from "@/lib/db";
-import { updateAiCapabilityConfig } from "@/actions/ai-config-actions";
+import { getProviderConnection } from "@/actions/provider-connection-actions";
+import {
+  CapabilityServiceError,
+  replaceCapabilityTargetsService,
+} from "@/lib/ai/capability-config-service";
+import {
+  replaceAiCapabilityTargets,
+  updateAiCapabilityConfig,
+} from "@/actions/ai-config-actions";
 
-const mockDb = db as unknown as {
-  aiCapabilityConfig: {
-    upsert: ReturnType<typeof vi.fn>;
-  };
-  providerConnection: {
-    findUnique: ReturnType<typeof vi.fn>;
-  };
+const connected = {
+  id: "connection-codex",
+  connectionKey: "cli:codex",
+  name: "codex",
+  kind: "cli",
+  provider: "codex",
+  enabled: true,
+  testStatus: "connected",
+  lastTestedAt: new Date(),
+  testOk: true,
+  version: "1",
+  mcpInstalled: false,
+  hooksInstalled: false,
+  skillsInstalled: false,
+  installLog: null,
 };
 
 describe("ai-config-actions", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  beforeEach(() => vi.clearAllMocks());
+
+  it("keeps the legacy readiness error", async () => {
+    vi.mocked(getProviderConnection).mockResolvedValue(null);
+    const result = await updateAiCapabilityConfig("terminal", { provider: "codex", mode: "cli" });
+    expect(result.ok).toBe(false);
+    expect(result).toMatchObject({ error: expect.stringContaining("还没有完成连接测试") });
+    expect(replaceCapabilityTargetsService).not.toHaveBeenCalled();
   });
 
-  it("returns a user-facing error when selecting an untested provider", async () => {
-    mockDb.providerConnection.findUnique.mockResolvedValue(null);
-
+  it("translates a legacy single target write to one explicit primary", async () => {
+    vi.mocked(getProviderConnection).mockResolvedValue(connected);
+    vi.mocked(replaceCapabilityTargetsService).mockResolvedValue({} as never);
     const result = await updateAiCapabilityConfig("terminal", {
       provider: "codex",
       mode: "cli",
+      model: "future-model",
     });
-
-    expect(result).toEqual({
-      ok: false,
-      error:
-        "Codex CLI 还没有完成连接测试。请先在 Settings → AI Tools 点击 Test Connection，测试通过后再选择。",
-    });
-    expect(mockDb.aiCapabilityConfig.upsert).not.toHaveBeenCalled();
-  });
-
-  it("returns the last failed test reason instead of throwing a server action error", async () => {
-    mockDb.providerConnection.findUnique.mockResolvedValue({
-      provider: "codex",
-      lastTestedAt: new Date(),
-      testOk: false,
-      version: "codex-cli 0.145.0",
-      mcpInstalled: false,
-      hooksInstalled: false,
-      skillsInstalled: false,
-      installLog: "codex probe ran but produced no usable response text",
-    });
-
-    const result = await updateAiCapabilityConfig("terminal", {
-      provider: "codex",
-      mode: "cli",
-    });
-
-    expect(result).toEqual({
-      ok: false,
-      error:
-        "Codex CLI 最近一次 Test Connection 未通过：codex probe ran but produced no usable response text。请修复后重新测试，再选择为终端 Provider。",
-    });
-    expect(mockDb.aiCapabilityConfig.upsert).not.toHaveBeenCalled();
-  });
-
-  it("updates the terminal slot when the provider probe passed", async () => {
-    mockDb.providerConnection.findUnique.mockResolvedValue({
-      provider: "codex",
-      lastTestedAt: new Date(),
-      testOk: true,
-      version: "codex-cli 0.145.0",
-      mcpInstalled: false,
-      hooksInstalled: false,
-      skillsInstalled: false,
-      installLog: null,
-    });
-
-    const result = await updateAiCapabilityConfig("terminal", {
-      provider: "codex",
-      mode: "cli",
-    });
-
     expect(result).toEqual({ ok: true });
-    expect(mockDb.aiCapabilityConfig.upsert).toHaveBeenCalledWith({
-      where: { slot: "terminal" },
-      create: {
-        slot: "terminal",
-        provider: "codex",
-        mode: "cli",
-        model: null,
-      },
-      update: {
-        provider: "codex",
-        mode: "cli",
-        model: null,
-      },
-    });
+    expect(replaceCapabilityTargetsService).toHaveBeenCalledWith("terminal", [{
+      connectionId: "connection-codex",
+      modelId: "future-model",
+    }]);
     expect(revalidatePath).toHaveBeenCalledWith("/settings");
+  });
+
+  it("does not guess an API instance through the legacy action", async () => {
+    vi.mocked(getProviderConnection).mockResolvedValue(connected);
+    const result = await updateAiCapabilityConfig("summary", { provider: "codex", mode: "api" });
+    expect(result).toMatchObject({ ok: false, error: expect.stringContaining("具体 API 连接") });
+    expect(replaceCapabilityTargetsService).not.toHaveBeenCalled();
+  });
+
+  it("returns stable structured service errors without raw exceptions", async () => {
+    vi.mocked(replaceCapabilityTargetsService)
+      .mockRejectedValue(new CapabilityServiceError("duplicate_target" as never));
+    const result = await replaceAiCapabilityTargets("summary", []);
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "duplicate_target", message: "safe capability error" },
+    });
   });
 });

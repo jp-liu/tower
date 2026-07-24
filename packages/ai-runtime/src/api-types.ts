@@ -1,6 +1,7 @@
 export type ApiProtocol = "openai" | "openai-compatible" | "anthropic" | "google";
 
 export type ApiErrorCode =
+  | "connection_unavailable"
   | "authentication"
   | "permission"
   | "rate_limit"
@@ -11,6 +12,9 @@ export type ApiErrorCode =
   | "content_safety"
   | "cancelled"
   | "tool_error"
+  | "no_output"
+  | "provider_failure"
+  | "structured_output_invalid"
   | "unknown";
 
 export interface ApiRuntimeErrorShape {
@@ -132,4 +136,8 @@ export interface ApiAdapter {
 
 export interface ApiRuntimeCursor {
   reserve(candidateCount: number): Promise<number>;
+}
+
+export interface ApiRuntimeExecutionContext {
+  onActivity?: () => void;
 }

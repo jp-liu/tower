@@ -441,6 +441,20 @@ describe("multi-key runtime", () => {
     expect(adapter.calls).toEqual(["key-a"]);
   });
 
+  it("forwards non-stream activity to the outer fallback boundary", async () => {
+    const outerActivity = vi.fn();
+    const adapter = new FakeAdapter(async (context) => {
+      context.onActivity();
+      throw retryable(429);
+    });
+    await expect(new ApiConnectionRuntime(adapter, keys, new MemoryApiRuntimeCursor()).generate(
+      { modelId: "model" },
+      { onActivity: outerActivity },
+    )).rejects.toMatchObject({ code: "rate_limit" });
+    expect(outerActivity).toHaveBeenCalledTimes(1);
+    expect(adapter.calls).toEqual(["key-a"]);
+  });
+
   it("does not rotate cancellation, invalid configuration, safety, or tool errors", async () => {
     for (const code of ["cancelled", "invalid_request", "content_safety", "tool_error"] as const) {
       const adapter = new FakeAdapter(async () => {
@@ -462,6 +476,18 @@ describe("multi-key runtime", () => {
 });
 
 describe("safe errors", () => {
+  it("classifies upstream 5xx failures without exposing the response", () => {
+    const error = new APICallError({
+      message: "RESPONSE_CANARY",
+      url: "https://example.test/v1",
+      requestBodyValues: {},
+      responseBody: "BODY_CANARY",
+      statusCode: 503,
+    });
+    expect(safeErrorShape(error)).toMatchObject({ code: "provider_failure" });
+    expect(JSON.stringify(safeErrorShape(error))).not.toMatch(/RESPONSE_CANARY|BODY_CANARY/);
+  });
+
   it("never returns Key, Header, Query, or Prompt canaries", () => {
     const secrets = [
       "CANARY_API_KEY_92A",

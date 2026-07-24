@@ -364,13 +364,59 @@ model CliProfile {
 }
 
 model AiCapabilityConfig {
-  id        String   @id @default(cuid())
-  slot      String   @unique
-  provider  String   @default("claude")
-  mode      String   @default("cli")
-  model     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(cuid())
+  slot            String   @unique
+  provider        String   @default("claude")
+  mode            String   @default("cli")
+  model           String?
+  migrationStatus String   @default("pending")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  targets AiCapabilityTarget[]
+}
+
+model AiCapabilityTarget {
+  id                 String   @id @default(cuid())
+  capabilityConfigId String
+  connectionId       String
+  modelId             String?
+  targetKey           String
+  order               Int
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  capabilityConfig AiCapabilityConfig @relation(fields: [capabilityConfigId], references: [id], onDelete: Cascade)
+  connection       ProviderConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+
+  @@unique([capabilityConfigId, targetKey])
+  @@unique([capabilityConfigId, order])
+  @@index([connectionId])
+}
+
+model AiCapabilityAttempt {
+  id              String   @id @default(cuid())
+  requestId       String
+  correlationId   String?
+  slot            String
+  targetId        String
+  connectionId    String
+  connectionRefId String?
+  modelId         String?
+  startedAt       DateTime
+  durationMs      Int
+  result          String
+  errorCode       String?
+  repaired        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  connectionRef ProviderConnection? @relation(fields: [connectionRefId], references: [id], onDelete: SetNull)
+
+  @@index([requestId, startedAt])
+  @@index([correlationId])
+  @@index([slot, startedAt])
+  @@index([targetId])
+  @@index([connectionRefId])
 }
 
 model AgentPrompt {
@@ -426,6 +472,8 @@ model ProviderConnection {
   diagnosticsJson  String?
   apiKeys          ApiConnectionKey[]
   models           ApiConnectionModel[]
+  capabilityTargets  AiCapabilityTarget[]
+  capabilityAttempts AiCapabilityAttempt[]
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
 

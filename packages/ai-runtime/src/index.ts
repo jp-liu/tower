@@ -4,6 +4,8 @@ export * from "./api-config.js";
 export * from "./api-errors.js";
 export * from "./api-runtime.js";
 export * from "./api-types.js";
+export * from "./capability-runtime.js";
+export * from "./capability-types.js";
 export * from "./api-presets.generated.js";
 export * from "./host-filesystem.js";
 export * from "./npm-package-provider.js";

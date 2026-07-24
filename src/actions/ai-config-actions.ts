@@ -1,9 +1,21 @@
 "use server";
 
-import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { providerRegistry } from "@/lib/ai/providers";
 import type { AiSlot } from "@/lib/ai/types";
+import {
+  CapabilityServiceError,
+  addCapabilityTargetService,
+  deleteCapabilityTargetService,
+  getCapabilityConfigService,
+  getCapabilityDiagnosticsService,
+  listCapabilityChoicesService,
+  listCapabilityConfigsService,
+  reorderCapabilityTargetsService,
+  replaceCapabilityTargetsService,
+  updateCapabilityTargetService,
+  type CapabilityTargetInput,
+} from "@/lib/ai/capability-config-service";
 import {
   getProviderConnection,
   type ProviderConnectionRow,
@@ -16,7 +28,7 @@ export type UpdateAiCapabilityConfigResult =
   | { ok: false; error: string };
 
 export async function getAiCapabilityConfigs() {
-  return db.aiCapabilityConfig.findMany({ orderBy: { slot: "asc" } });
+  return listCapabilityConfigsService();
 }
 
 export async function updateAiCapabilityConfig(
@@ -38,7 +50,12 @@ export async function updateAiCapabilityConfig(
 
   // Gate: terminal execution only needs a passing CLI probe. MCP/hooks/skills
   // are surfaced separately as degraded integration status in Settings.
-  const connection = await getProviderConnection(data.provider);
+  let connection: ProviderConnectionRow | null;
+  try {
+    connection = await getProviderConnection(data.provider);
+  } catch {
+    return { ok: false, error: "AI 能力配置暂时无法读取，请稍后重试。" };
+  }
   if (!connection?.testOk) {
     return {
       ok: false,
@@ -46,20 +63,26 @@ export async function updateAiCapabilityConfig(
     };
   }
 
-  await db.aiCapabilityConfig.upsert({
-    where: { slot },
-    create: {
-      slot,
-      provider: data.provider,
-      mode: data.mode,
-      model: data.model ?? null,
-    },
-    update: {
-      provider: data.provider,
-      mode: data.mode,
-      model: data.model ?? null,
-    },
-  });
+  if (data.mode !== "cli") {
+    return {
+      ok: false,
+      error: "旧版设置入口无法确定具体 API 连接，请在显式目标配置中选择连接实例。",
+    };
+  }
+
+  try {
+    await replaceCapabilityTargetsService(slot, [{
+      connectionId: connection.id,
+      modelId: data.model ?? null,
+    }]);
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof CapabilityServiceError
+        ? error.message
+        : "AI 能力配置无法保存，请稍后重试。",
+    };
+  }
 
   revalidatePath("/settings");
   return { ok: true };
@@ -67,6 +90,78 @@ export async function updateAiCapabilityConfig(
 
 export async function getAvailableProviders() {
   return providerRegistry.getAvailableProviders();
+}
+
+type CapabilityActionResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: { code: string; message: string } };
+
+async function capabilityAction<T>(operation: () => Promise<T>): Promise<CapabilityActionResult<T>> {
+  try {
+    return { ok: true, data: await operation() };
+  } catch (error) {
+    if (error instanceof CapabilityServiceError) {
+      return { ok: false, error: { code: error.code, message: error.message } };
+    }
+    return {
+      ok: false,
+      error: {
+        code: "capability_operation_failed",
+        message: "The AI capability operation could not be completed",
+      },
+    };
+  }
+}
+
+async function mutateCapability<T>(operation: () => Promise<T>): Promise<CapabilityActionResult<T>> {
+  const result = await capabilityAction(operation);
+  if (result.ok) revalidatePath("/settings");
+  return result;
+}
+
+export async function listAiCapabilities() {
+  return capabilityAction(listCapabilityConfigsService);
+}
+
+export async function getAiCapability(slot: string) {
+  return capabilityAction(() => getCapabilityConfigService(slot));
+}
+
+export async function replaceAiCapabilityTargets(slot: string, targets: CapabilityTargetInput[]) {
+  return mutateCapability(() => replaceCapabilityTargetsService(slot, targets));
+}
+
+export async function addAiCapabilityTarget(slot: string, target: CapabilityTargetInput) {
+  return mutateCapability(() => addCapabilityTargetService(slot, target));
+}
+
+export async function updateAiCapabilityTarget(
+  slot: string,
+  targetId: string,
+  target: Omit<CapabilityTargetInput, "targetId">,
+) {
+  return mutateCapability(() => updateCapabilityTargetService(slot, targetId, target));
+}
+
+export async function deleteAiCapabilityTarget(slot: string, targetId: string) {
+  return mutateCapability(() => deleteCapabilityTargetService(slot, targetId));
+}
+
+export async function reorderAiCapabilityTargets(slot: string, orderedTargetIds: string[]) {
+  return mutateCapability(() => reorderCapabilityTargetsService(slot, orderedTargetIds));
+}
+
+export async function getAiCapabilityChoices(slot: string) {
+  return capabilityAction(() => listCapabilityChoicesService(slot));
+}
+
+export async function getAiCapabilityDiagnostics(input?: {
+  slot?: string;
+  requestId?: string;
+  correlationId?: string;
+  limit?: number;
+}) {
+  return capabilityAction(() => getCapabilityDiagnosticsService(input));
 }
 
 function buildProviderNotReadyMessage(

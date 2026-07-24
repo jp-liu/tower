@@ -5,6 +5,7 @@ import type {
   ApiGenerateRequest,
   ApiGenerateResult,
   ApiRuntimeCursor,
+  ApiRuntimeExecutionContext,
   ApiStreamEvent,
   ApiStructuredRequest,
 } from "./api-types.js";
@@ -31,7 +32,10 @@ export class ApiConnectionRuntime {
     return !activity && error.retryableWithNextKey && index < this.candidates.length - 1;
   }
 
-  async generate(request: ApiGenerateRequest): Promise<ApiGenerateResult> {
+  async generate(
+    request: ApiGenerateRequest,
+    executionContext: ApiRuntimeExecutionContext = {},
+  ): Promise<ApiGenerateResult> {
     const candidates = await this.orderedCandidates();
     let lastError: ApiRuntimeError | undefined;
     for (let index = 0; index < candidates.length; index += 1) {
@@ -39,7 +43,10 @@ export class ApiConnectionRuntime {
       try {
         return await this.adapter.generate(request, {
           credential: candidates[index]!,
-          onActivity: () => { activity = true; },
+          onActivity: () => {
+            activity = true;
+            executionContext.onActivity?.();
+          },
         });
       } catch (error) {
         lastError = normalizeApiError(error);
@@ -54,7 +61,10 @@ export class ApiConnectionRuntime {
     });
   }
 
-  async generateStructured(request: ApiStructuredRequest): Promise<unknown> {
+  async generateStructured(
+    request: ApiStructuredRequest,
+    executionContext: ApiRuntimeExecutionContext = {},
+  ): Promise<unknown> {
     const candidates = await this.orderedCandidates();
     let lastError: ApiRuntimeError | undefined;
     for (let index = 0; index < candidates.length; index += 1) {
@@ -62,7 +72,10 @@ export class ApiConnectionRuntime {
       try {
         return await this.adapter.generateStructured(request, {
           credential: candidates[index]!,
-          onActivity: () => { activity = true; },
+          onActivity: () => {
+            activity = true;
+            executionContext.onActivity?.();
+          },
         });
       } catch (error) {
         lastError = normalizeApiError(error);
@@ -72,7 +85,10 @@ export class ApiConnectionRuntime {
     throw lastError!;
   }
 
-  async *stream(request: ApiGenerateRequest): AsyncIterable<ApiStreamEvent> {
+  async *stream(
+    request: ApiGenerateRequest,
+    executionContext: ApiRuntimeExecutionContext = {},
+  ): AsyncIterable<ApiStreamEvent> {
     const candidates = await this.orderedCandidates();
     let lastError: ApiRuntimeError | undefined;
     for (let index = 0; index < candidates.length; index += 1) {
@@ -80,7 +96,10 @@ export class ApiConnectionRuntime {
       try {
         for await (const event of this.adapter.stream(request, {
           credential: candidates[index]!,
-          onActivity: () => { activity = true; },
+          onActivity: () => {
+            activity = true;
+            executionContext.onActivity?.();
+          },
         })) {
           yield event;
         }

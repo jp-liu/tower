@@ -63,6 +63,16 @@ export type ApiConnectionPatch = z.input<typeof connectionPatchSchema>;
 export type ApiKeyInput = z.input<typeof keyInputSchema>;
 export type ApiKeyPatch = z.input<typeof keyPatchSchema>;
 
+export class ApiConnectionServiceError extends Error {
+  constructor(
+    public readonly code: "connection_in_use" | "model_in_use",
+    message: string,
+  ) {
+    super(message);
+    this.name = "ApiConnectionServiceError";
+  }
+}
+
 const connectionInclude = {
   apiKeys: { orderBy: [{ order: "asc" as const }, { createdAt: "asc" as const }] },
   models: { orderBy: { modelId: "asc" as const } },
@@ -196,6 +206,16 @@ export async function updateApiConnectionService(connectionId: string, input: Ap
 
 export async function deleteApiConnectionService(connectionId: string): Promise<void> {
   await requireApiConnection(connectionId);
+  const reference = await db.aiCapabilityTarget.findFirst({
+    where: { connectionId },
+    select: { id: true },
+  });
+  if (reference) {
+    throw new ApiConnectionServiceError(
+      "connection_in_use",
+      "API connection is in use by an AI capability target",
+    );
+  }
   await db.providerConnection.delete({ where: { id: connectionId } });
 }
 
@@ -299,6 +319,16 @@ export async function removeManualApiModelService(connectionId: string, modelId:
     where: { connectionId_modelId: { connectionId, modelId } },
   });
   if (!model || model.source !== "manual") throw new Error("Manual model not found");
+  const reference = await db.aiCapabilityTarget.findFirst({
+    where: { connectionId, modelId },
+    select: { id: true },
+  });
+  if (reference) {
+    throw new ApiConnectionServiceError(
+      "model_in_use",
+      "API model is in use by an AI capability target",
+    );
+  }
   await db.apiConnectionModel.delete({ where: { id: model.id } });
 }
 
@@ -427,7 +457,7 @@ export async function getApiRuntimeService(connectionId: string): Promise<ApiCon
   const connection = await requireApiConnection(connectionId);
   if (!connection.enabled || !connection.testOk) {
     throw new ApiRuntimeError({
-      code: "invalid_request",
+      code: "connection_unavailable",
       message: "The API connection is not enabled and available",
       cause: "ConnectionUnavailable",
       retryableWithNextKey: false,

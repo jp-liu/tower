@@ -1,7 +1,15 @@
-import { APICallError, InvalidArgumentError, InvalidPromptError, NoSuchModelError } from "@ai-sdk/provider";
+import {
+  APICallError,
+  InvalidArgumentError,
+  InvalidPromptError,
+  NoContentGeneratedError,
+  NoSuchModelError,
+} from "@ai-sdk/provider";
+import { NoObjectGeneratedError, NoOutputGeneratedError } from "ai";
 import type { ApiErrorCode, ApiRuntimeErrorShape } from "./api-types.js";
 
 const SAFE_MESSAGES: Record<ApiErrorCode, string> = {
+  connection_unavailable: "The API connection is unavailable",
   authentication: "Authentication failed",
   permission: "The credential does not have permission for this request",
   rate_limit: "The upstream service rate limit was reached",
@@ -12,6 +20,9 @@ const SAFE_MESSAGES: Record<ApiErrorCode, string> = {
   content_safety: "The upstream service rejected the request for content safety",
   cancelled: "The request was cancelled",
   tool_error: "A tool execution failed",
+  no_output: "The upstream service returned no usable output",
+  provider_failure: "The upstream service could not complete the request",
+  structured_output_invalid: "The structured response could not be parsed",
   unknown: "The upstream request failed",
 };
 
@@ -54,6 +65,8 @@ function classify(error: unknown, status?: number): ApiErrorCode {
   if (status === 401) return "authentication";
   if (status === 403) return "permission";
   if (status === 429) return "rate_limit";
+  if (NoObjectGeneratedError.isInstance(error)) return "structured_output_invalid";
+  if (NoOutputGeneratedError.isInstance(error) || NoContentGeneratedError.isInstance(error)) return "no_output";
   if (status === 404 && text.includes("model")) return "model_unavailable";
   if (text.includes("content safety") || text.includes("safety policy") || text.includes("blocked_reason")) {
     return "content_safety";
@@ -61,6 +74,7 @@ function classify(error: unknown, status?: number): ApiErrorCode {
   if (NoSuchModelError.isInstance(error)) return "model_unavailable";
   if (InvalidArgumentError.isInstance(error) || InvalidPromptError.isInstance(error)) return "invalid_request";
   if (status !== undefined && status >= 400 && status < 500) return "invalid_request";
+  if (status !== undefined && status >= 500) return "provider_failure";
   if (error instanceof TypeError || text.includes("fetch failed") || text.includes("econn")) return "network";
   return "unknown";
 }
@@ -88,6 +102,8 @@ export function apiErrorFromStatus(status: number): ApiRuntimeError {
         ? "rate_limit"
         : status === 404
           ? "model_unavailable"
+          : status >= 500
+            ? "provider_failure"
           : status >= 400 && status < 500
             ? "invalid_request"
             : "unknown";

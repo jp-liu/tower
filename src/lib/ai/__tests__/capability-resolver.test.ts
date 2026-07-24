@@ -1,140 +1,153 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({
   db: {
-    aiCapabilityConfig: {
-      findUnique: vi.fn(),
-    },
+    aiCapabilityConfig: { findUnique: vi.fn() },
+    providerConnection: { findUnique: vi.fn(), findFirst: vi.fn() },
   },
 }));
 
-vi.mock("@/actions/provider-connection-actions", () => ({
-  isProviderConnected: vi.fn(),
-  getConnectedProviders: vi.fn(),
-}));
-
-import { resolveCliAdapter, resolveQueryAdapter } from "../capability-resolver";
 import { db } from "@/lib/db";
-import { AiProviderError } from "../types";
+import { providerRegistry } from "../providers";
 import {
-  isProviderConnected,
-  getConnectedProviders,
-} from "@/actions/provider-connection-actions";
+  resolveCapabilityPlan,
+  resolveCliAdapter,
+  resolveFixedCliConnection,
+} from "../capability-resolver";
 
-const mockIsConnected = vi.mocked(isProviderConnected);
-const mockGetConnected = vi.mocked(getConnectedProviders);
+type TestConnection = {
+  id: string;
+  name: string;
+  kind: string;
+  provider: string;
+  enabled: boolean;
+  testStatus: string;
+  testOk: boolean;
+  models: Array<{ modelId: string; available: boolean }>;
+  apiKeys: Array<{ enabled: boolean; testStatus: string }>;
+};
 
-describe("capability-resolver (gated by ProviderConnection)", () => {
+const mockDb = db as unknown as {
+  aiCapabilityConfig: { findUnique: ReturnType<typeof vi.fn> };
+  providerConnection: { findUnique: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn> };
+};
+
+const connection: TestConnection = {
+  id: "connection-cli",
+  name: "Claude CLI",
+  kind: "cli",
+  provider: "claude",
+  enabled: true,
+  testStatus: "connected",
+  testOk: true,
+  models: [],
+  apiKeys: [],
+};
+
+const resolvedCli = {
+  adapter: providerRegistry.get("claude")!.cli!.adapter,
+  commandPath: "/fake/claude",
+  version: "1",
+};
+
+function configWith(targetConnection: TestConnection = connection, modelId: string | null = null) {
+  return {
+    id: "config",
+    slot: "terminal",
+    provider: "claude",
+    mode: "cli",
+    model: modelId,
+    migrationStatus: "complete",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    targets: [{
+      id: "target",
+      capabilityConfigId: "config",
+      connectionId: targetConnection.id,
+      modelId,
+      targetKey: `${targetConnection.id}\u0000${modelId ?? ""}`,
+      order: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      connection: targetConnection,
+    }],
+  };
+}
+
+describe("explicit capability resolver", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(providerRegistry, "createResolvedCliAdapter").mockResolvedValue(resolvedCli);
   });
 
-  describe("resolveCliAdapter — no slot config", () => {
-    it("uses default provider (claude) when it's connected", async () => {
-      vi.mocked(db.aiCapabilityConfig.findUnique).mockResolvedValue(null);
-      mockGetConnected.mockResolvedValue(["claude", "codex"]);
+  it("returns slot_unconfigured instead of an implicit provider", async () => {
+    mockDb.aiCapabilityConfig.findUnique.mockResolvedValue(null);
+    await expect(resolveCapabilityPlan("terminal")).rejects.toMatchObject({ code: "slot_unconfigured" });
+  });
 
-      const result = await resolveCliAdapter("terminal");
-      expect(result.provider.name).toBe("claude");
-    });
-
-    it("falls back to first connected provider when default isn't connected", async () => {
-      vi.mocked(db.aiCapabilityConfig.findUnique).mockResolvedValue(null);
-      mockGetConnected.mockResolvedValue(["codex"]);
-
-      const result = await resolveCliAdapter("terminal");
-      expect(result.provider.name).toBe("codex");
-    });
-
-    it("throws when no provider is connected at all", async () => {
-      vi.mocked(db.aiCapabilityConfig.findUnique).mockResolvedValue(null);
-      mockGetConnected.mockResolvedValue([]);
-
-      await expect(resolveCliAdapter("terminal")).rejects.toThrow(/没有任何 AI Provider 已连接/);
+  it("preserves stable target, connection, model, and implementation", async () => {
+    mockDb.aiCapabilityConfig.findUnique.mockResolvedValue(configWith(connection, "unknown-future-model"));
+    const plan = await resolveCapabilityPlan("terminal");
+    expect(plan.targets[0]).toMatchObject({
+      targetId: "target",
+      connectionId: "connection-cli",
+      modelId: "unknown-future-model",
+      kind: "cli",
+      provider: "claude",
+      cli: { commandPath: "/fake/claude" },
     });
   });
 
-  describe("resolveCliAdapter — slot config present", () => {
-    it("keeps an execution pinned to its recorded provider when the slot changes", async () => {
-      vi.mocked(db.aiCapabilityConfig.findUnique).mockResolvedValue({
-        id: "1", slot: "terminal", provider: "claude", mode: "cli", model: null,
-        createdAt: new Date(), updatedAt: new Date(),
-      });
+  it("marks disabled CLI and unavailable API models for diagnosable fallback", async () => {
+    const disabled = { ...connection, enabled: false };
+    mockDb.aiCapabilityConfig.findUnique.mockResolvedValue(configWith(disabled));
+    expect((await resolveCapabilityPlan("terminal")).targets[0]?.preflightError?.code)
+      .toBe("connection_disabled");
 
-      const result = await resolveCliAdapter("terminal", "gemini");
-
-      expect(result.provider.name).toBe("gemini");
-      expect(result.model).toBeUndefined();
-      expect(mockIsConnected).not.toHaveBeenCalled();
-    });
-
-    it("keeps the configured model when the fixed execution provider matches the slot", async () => {
-      vi.mocked(db.aiCapabilityConfig.findUnique).mockResolvedValue({
-        id: "1", slot: "terminal", provider: "codex", mode: "cli", model: "gpt-5.1-codex",
-        createdAt: new Date(), updatedAt: new Date(),
-      });
-
-      const result = await resolveCliAdapter("terminal", "codex");
-
-      expect(result.provider.name).toBe("codex");
-      expect(result.model).toBe("gpt-5.1-codex");
-    });
-
-    it("returns adapter + model when configured provider is connected", async () => {
-      vi.mocked(db.aiCapabilityConfig.findUnique).mockResolvedValue({
-        id: "1", slot: "terminal", provider: "claude", mode: "cli", model: "opus",
-        createdAt: new Date(), updatedAt: new Date(),
-      });
-      mockIsConnected.mockResolvedValue(true);
-
-      const result = await resolveCliAdapter("terminal");
-      expect(result.provider.name).toBe("claude");
-      expect(result.model).toBe("opus");
-    });
-
-    it("throws AiProviderError when configured provider is not connected", async () => {
-      vi.mocked(db.aiCapabilityConfig.findUnique).mockResolvedValue({
-        id: "1", slot: "terminal", provider: "claude", mode: "cli", model: null,
-        createdAt: new Date(), updatedAt: new Date(),
-      });
-      mockIsConnected.mockResolvedValue(false);
-
-      await expect(resolveCliAdapter("terminal")).rejects.toThrow(AiProviderError);
-      await expect(resolveCliAdapter("terminal")).rejects.toThrow(/未连接/);
-    });
-
-    it("throws for unknown provider name in config", async () => {
-      vi.mocked(db.aiCapabilityConfig.findUnique).mockResolvedValue({
-        id: "1", slot: "terminal", provider: "nonexistent", mode: "cli", model: null,
-        createdAt: new Date(), updatedAt: new Date(),
-      });
-      mockIsConnected.mockResolvedValue(true); // pretend it's "connected"
-
-      // Even if marked connected, registry doesn't know the provider → throws.
-      await expect(resolveCliAdapter("terminal")).rejects.toThrow(AiProviderError);
-    });
+    const apiConnection = {
+      ...connection,
+      id: "connection-api",
+      name: "API",
+      kind: "api",
+      provider: "openai-compatible",
+      models: [{ modelId: "gone", available: false }],
+    };
+    const apiConfig = configWith(apiConnection, "gone");
+    apiConfig.slot = "summary";
+    apiConfig.mode = "api";
+    mockDb.aiCapabilityConfig.findUnique.mockResolvedValue(apiConfig);
+    expect((await resolveCapabilityPlan("summary")).targets[0]?.preflightError?.code)
+      .toBe("model_unavailable");
   });
 
-  describe("resolveQueryAdapter", () => {
-    it("requires connection on the configured provider", async () => {
-      vi.mocked(db.aiCapabilityConfig.findUnique).mockResolvedValue({
-        id: "1", slot: "summary", provider: "claude", mode: "api", model: null,
-        createdAt: new Date(), updatedAt: new Date(),
-      });
-      mockIsConnected.mockResolvedValue(false);
+  it("accepts CLI and API targets for non-terminal slots", async () => {
+    const apiConnection = {
+      ...connection,
+      id: "connection-api",
+      name: "API",
+      kind: "api",
+      provider: "anthropic",
+    };
+    const apiConfig = configWith(apiConnection, "claude-future");
+    apiConfig.slot = "assistant";
+    apiConfig.mode = "api";
+    mockDb.aiCapabilityConfig.findUnique.mockResolvedValue(apiConfig);
+    const plan = await resolveCapabilityPlan("assistant");
+    expect(plan.targets[0]).toMatchObject({ kind: "api", api: { protocol: "anthropic" } });
+    expect(plan.targets[0]?.preflightError).toBeUndefined();
+  });
 
-      await expect(resolveQueryAdapter("summary")).rejects.toThrow(/未连接/);
-    });
+  it("keeps legacy wrapper on the explicit primary target", async () => {
+    mockDb.aiCapabilityConfig.findUnique.mockResolvedValue(configWith());
+    const resolved = await resolveCliAdapter("terminal");
+    expect(resolved).toMatchObject({ connectionId: "connection-cli", targetId: "target" });
+  });
 
-    it("throws UNSUPPORTED_MODE when provider lacks adapter for the mode", async () => {
-      vi.mocked(db.aiCapabilityConfig.findUnique).mockResolvedValue({
-        id: "1", slot: "summary", provider: "claude", mode: "api", model: null,
-        createdAt: new Date(), updatedAt: new Date(),
-      });
-      mockIsConnected.mockResolvedValue(true);
-
-      // Claude has no api query adapter registered → UNSUPPORTED_MODE.
-      await expect(resolveQueryAdapter("summary")).rejects.toThrow(AiProviderError);
-    });
+  it("resolves a fixed session by connection id without reading the slot", async () => {
+    mockDb.providerConnection.findUnique.mockResolvedValue(connection);
+    const resolved = await resolveFixedCliConnection("connection-cli");
+    expect(resolved.connectionId).toBe("connection-cli");
+    expect(db.aiCapabilityConfig.findUnique).not.toHaveBeenCalled();
   });
 });

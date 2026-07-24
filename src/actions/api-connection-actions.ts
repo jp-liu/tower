@@ -30,8 +30,11 @@ async function action<T>(operation: () => Promise<T>): Promise<ActionResult<T>> 
   try {
     return { ok: true, data: await operation() };
   } catch (error) {
-    const code = error && typeof error === "object" && "code" in error
+    const candidateCode = error && typeof error === "object" && "code" in error
       ? String(error.code)
+      : "invalid_input";
+    const code = candidateCode === "connection_in_use" || candidateCode === "model_in_use"
+      ? candidateCode
       : "invalid_input";
     return {
       ok: false,
