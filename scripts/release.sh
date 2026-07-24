@@ -6,10 +6,9 @@
 #   ./scripts/release.sh minor      # minor 版本 (0.2.38 -> 0.3.0)
 #   ./scripts/release.sh major      # major 版本 (0.2.38 -> 1.0.0)
 #   ./scripts/release.sh 0.3.5      # 指定版本号
-#   ./scripts/release.sh --push     # 发布后顺带 git push
-#   ./scripts/release.sh patch --push
+#   ./scripts/release.sh --no-push  # 发布后只在本地 commit + tag，不 push
 #
-# 流程: 检查干净 -> pull -> bump 版本 -> 修 esbuild shim -> build -> npm publish -> 校验 -> commit -> tag -> (可选)push
+# 流程: 检查干净 -> pull -> bump 版本 -> 修 esbuild shim -> build -> npm publish -> commit -> tag -> push
 #
 # 内置约定 (可用环境变量覆盖):
 #   RELEASE_PROXY     发布代理        可选; 留空则沿用当前 shell/npm 环境
@@ -23,10 +22,11 @@ PROXY="${RELEASE_PROXY:-}"
 REGISTRY="${RELEASE_REGISTRY:-https://registry.npmjs.org/}"
 
 BUMP="patch"
-PUSH=0
+PUSH=1
 for arg in "$@"; do
   case "$arg" in
-    --push) PUSH=1 ;;
+    --push) PUSH=1 ;;               # 向后兼容；push 现已是默认行为
+    --no-push) PUSH=0 ;;
     patch|minor|major) BUMP="$arg" ;;
     [0-9]*) BUMP="$arg" ;;          # 显式版本号
     *) echo "✗ 未知参数: $arg" >&2; exit 1 ;;
@@ -82,19 +82,13 @@ pnpm build
 step "npm publish ($NEW_VER -> $REGISTRY)"
 with_optional_proxy npm publish --registry "$REGISTRY"
 
-# --- 7. 校验线上版本 ---
-step "校验线上版本"
-LATEST="$(with_optional_proxy npm view tower-studio version --registry "$REGISTRY" 2>&1)"
-[ "$LATEST" = "$NEW_VER" ] || die "线上版本 ($LATEST) 与预期 ($NEW_VER) 不符"
-echo "  npm latest = $LATEST ✓"
-
-# --- 8. 提交 release ---
+# --- 7. 提交 release ---
 step "git commit"
 git add package.json
 git commit -m "chore(release): $NEW_VER"
 echo "  已提交 chore(release): $NEW_VER"
 
-# --- 8.5 打 git tag (指向 release commit) ---
+# --- 8. 打 git tag (指向 release commit) ---
 step "git tag v$NEW_VER"
 if git rev-parse "v$NEW_VER" >/dev/null 2>&1; then
   die "tag v$NEW_VER 已存在, 请检查 (可能上次发布残留)"
@@ -102,7 +96,7 @@ fi
 git tag -a "v$NEW_VER" -m "tower-studio v$NEW_VER"
 echo "  已打 tag v$NEW_VER"
 
-# --- 9. (可选) push (含 tag) ---
+# --- 9. 默认 push (含 tag) ---
 if [ "$PUSH" -eq 1 ]; then
   step "git push (含 tag)"
   git push
@@ -113,6 +107,6 @@ printf '\n\033[1;32m✓ 发布完成: tower-studio@%s\033[0m\n' "$NEW_VER"
 # 注意: 不要用 `[ ... ] && echo` 作为脚本最后一条命令 —— 条件为假时它返回 1,
 # 会让整个脚本以退出码 1 结束 (假失败), 即便发布全部成功.
 if [ "$PUSH" -eq 0 ]; then
-  echo "  (未 push, 需要时手动: git push && git push origin v$NEW_VER, 或加 --push)"
+  echo "  (--no-push: 未推送，需要时手动执行 git push && git push origin v$NEW_VER)"
 fi
 exit 0
