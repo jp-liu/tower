@@ -76,6 +76,21 @@ describe("Codex provider", () => {
     expect(plan.args.at(-1)).toBe(prompt);
   });
 
+  it("reports safe rate-limit query failures without exposing stderr", async () => {
+    const ctx = host();
+    vi.mocked(ctx.process.execute).mockResolvedValueOnce({
+      exitCode: 1,
+      signal: null,
+      stdout: "",
+      stderr: "429 quota exceeded SECRET",
+      durationMs: 1,
+    });
+    await expect(new CodexCliAdapter(ctx).generate({ prompt: "secret prompt" })).rejects.toMatchObject({
+      code: "RATE_LIMITED",
+      message: "Codex query failed",
+    });
+  });
+
   it("runs Hooks, MCP, and Skills through injected Host services", async () => {
     const ctx = host();
     const writes: Array<{ path: string; contents: string }> = [];

@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const mockAiQuery = vi.hoisted(() => vi.fn());
+const mockGenerateCapabilityText = vi.hoisted(() => vi.fn());
+const mockBuildProjectAnalysisContext = vi.hoisted(() => vi.fn(async () => "File: package.json"));
 
 vi.mock("@/lib/db", () => ({
   db: {
@@ -23,8 +24,11 @@ vi.mock("fs/promises", async (importOriginal) => {
 vi.mock("@/lib/pty/session-store", () => ({
   getSession: vi.fn(() => undefined),
 }));
-vi.mock("@/lib/claude-session", () => ({
-  aiQuery: mockAiQuery,
+vi.mock("@/lib/ai/capability-executor", () => ({
+  generateCapabilityText: mockGenerateCapabilityText,
+}));
+vi.mock("@/lib/ai/project-analysis-context", () => ({
+  buildProjectAnalysisContext: mockBuildProjectAnalysisContext,
 }));
 
 import { db } from "@/lib/db";
@@ -119,7 +123,7 @@ describe("migrateProjectPath", () => {
     mockDb.taskExecution.findMany.mockResolvedValue([]);
     mockDb.task.findMany.mockResolvedValue([]);
     mockExistsSync.mockImplementation((p: unknown) => String(p).includes("new-proj"));
-    mockReaddir.mockResolvedValue(["file.txt"] as any);
+    mockReaddir.mockResolvedValue(["file.txt"] as never);
     const result = await migrateProjectPath("p1", "/new-proj");
     expect(result.success).toBe(false);
   });
@@ -136,6 +140,7 @@ describe("migrateProjectPath", () => {
 describe("analyzeProjectDirectory", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockBuildProjectAnalysisContext.mockResolvedValue("File: package.json");
   });
 
   it("Test 1: throws for empty string localPath", async () => {
@@ -153,28 +158,39 @@ describe("analyzeProjectDirectory", () => {
     );
   });
 
-  it("Test 4: valid absolute path calls aiQuery with correct prompt and localPath", async () => {
-    mockAiQuery.mockResolvedValue("# My Project");
+  it("Test 4: valid absolute path calls the analysis capability with bounded context", async () => {
+    mockGenerateCapabilityText.mockResolvedValue("# My Project");
 
     await analyzeProjectDirectory("/valid/path");
 
-    expect(mockAiQuery).toHaveBeenCalledWith(
-      expect.stringContaining("package.json"),
-      "/valid/path",
-      expect.any(Object)
-    );
+    expect(mockBuildProjectAnalysisContext).toHaveBeenCalledWith("/valid/path");
+    expect(mockGenerateCapabilityText).toHaveBeenCalledWith(expect.objectContaining({
+      slot: "analysis",
+      cwd: "/valid/path",
+      prompt: expect.stringContaining("package.json"),
+    }));
   });
 
   it("Test 5: valid path resolves with result from aiQuery", async () => {
-    mockAiQuery.mockResolvedValue("# My Project\n...");
+    mockGenerateCapabilityText.mockResolvedValue("# My Project\n...");
 
     const result = await analyzeProjectDirectory("/valid/path");
     expect(result).toBe("# My Project\n...");
   });
 
-  it("Test 6: aiQuery error propagates as rejection", async () => {
-    mockAiQuery.mockRejectedValue(new Error("timeout exceeded"));
+  it("Test 6: capability errors become a safe user-facing failure", async () => {
+    mockGenerateCapabilityText.mockRejectedValue(new Error("timeout exceeded SECRET_CANARY"));
 
-    await expect(analyzeProjectDirectory("/valid/path")).rejects.toThrow("timeout exceeded");
+    await expect(analyzeProjectDirectory("/valid/path")).rejects.toThrow("项目分析暂时不可用");
+  });
+
+  it("caps analysis output and keeps the English contract", async () => {
+    mockGenerateCapabilityText.mockResolvedValue("x".repeat(2500));
+    const result = await analyzeProjectDirectory("/valid/path", "en");
+    expect(result).toHaveLength(2000);
+    expect(mockGenerateCapabilityText).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining("Output in English"),
+      maxOutputChars: 2000,
+    }));
   });
 });

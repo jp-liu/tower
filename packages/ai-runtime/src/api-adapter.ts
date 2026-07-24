@@ -137,9 +137,11 @@ function buildTools(request: ApiGenerateRequest, context: ApiAttemptContext): To
       ...(definition.execute
         ? {
             execute: async (input: unknown) => {
-              context.onActivity();
+              context.onActivity("tool_call");
               try {
-                return await definition.execute?.(input);
+                const output = await definition.execute?.(input);
+                context.onActivity("tool_result");
+                return output;
               } catch {
                 throw new ApiRuntimeError({
                   code: "tool_error",
@@ -195,7 +197,7 @@ function generationOptions(request: ApiGenerateRequest, context: ApiAttemptConte
     timeout: request.timeoutMs,
     maxRetries: 0,
     tools: buildTools(request, context),
-    onToolExecutionStart: () => context.onActivity(),
+    onToolExecutionStart: () => context.onActivity("tool_call"),
   };
 }
 
@@ -249,9 +251,10 @@ class VercelApiAdapter implements ApiAdapter {
         model: createModel(this.config, context.credential, request.modelId, this.rawFetch),
         ...generationOptions(request, context),
       });
-      if (result.text || result.reasoningText || result.toolCalls.length || result.toolResults.length) {
-        context.onActivity();
-      }
+      if (result.text) context.onActivity("text");
+      if (result.reasoningText) context.onActivity("reasoning");
+      if (result.toolCalls.length) context.onActivity("tool_call");
+      if (result.toolResults.length) context.onActivity("tool_result");
       return {
         text: result.text,
         reasoning: result.reasoningText,
@@ -275,16 +278,16 @@ class VercelApiAdapter implements ApiAdapter {
         if (part.type === "error") throw part.error;
         if (part.type === "abort") throw new DOMException("Aborted", "AbortError");
         if (part.type === "text-delta") {
-          context.onActivity();
+          context.onActivity("text");
           yield { type: "text", delta: part.text };
         } else if (part.type === "reasoning-delta") {
-          context.onActivity();
+          context.onActivity("reasoning");
           yield { type: "reasoning", delta: part.text };
         } else if (part.type === "tool-call") {
-          context.onActivity();
+          context.onActivity("tool_call");
           yield { type: "tool-call", call: toolCallShape(part as unknown as Record<string, unknown>) };
         } else if (part.type === "tool-result") {
-          context.onActivity();
+          context.onActivity("tool_result");
           yield { type: "tool-result", result: toolResultShape(part as unknown as Record<string, unknown>) };
         } else if (part.type === "finish") {
           yield { type: "finish", finishReason: part.finishReason, usage: usageShape(part.totalUsage) };
@@ -306,7 +309,7 @@ class VercelApiAdapter implements ApiAdapter {
           description: request.schemaDescription,
         }),
       });
-      context.onActivity();
+      context.onActivity("text");
       return result.output;
     } catch (error) {
       throw normalizeApiError(error);

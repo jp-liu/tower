@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import {
   CliPluginError,
+  classifyCliQueryFailure,
   type CliAdapter,
   type CliHostContext,
   type CliHookOptions,
@@ -170,9 +171,14 @@ export class ClaudeCliAdapter implements CliAdapter {
     if (options.model) args.push("--model", options.model);
     const result = await this.host.process.execute({ command: this.command(), args, cwd: options.cwd }, {
       signal: options.signal ?? this.host.signal,
+      maxOutputBytes: options.maxOutputBytes,
     });
-    if (result.exitCode !== 0) throw new CliPluginError("QUERY_FAILED", "Claude query failed");
-    return { text: result.stdout.trim() || null };
+    if (result.exitCode !== 0) {
+      throw new CliPluginError(classifyCliQueryFailure(`${result.stderr}\n${result.stdout}`), "Claude query failed");
+    }
+    const text = result.stdout.trim();
+    if (!text) throw new CliPluginError("NO_OUTPUT", "Claude query returned no output");
+    return { text };
   }
 
   // ===========================================================================

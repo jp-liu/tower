@@ -35,6 +35,24 @@ describe("explicit capability fallback", () => {
       .toMatchObject({ code: "rate_limit", message: "The upstream service rate limit was reached" });
   });
 
+  it.each([
+    ["COMMAND_NOT_EXECUTABLE", "cli_not_executable"],
+    ["PROCESS_TIMEOUT", "timeout"],
+    ["PROCESS_CANCELLED", "cancelled"],
+    ["QUERY_FAILED", "provider_failure"],
+    ["AUTHENTICATION_FAILED", "authentication"],
+    ["PERMISSION_DENIED", "permission"],
+    ["CONTENT_SAFETY", "content_safety"],
+    ["INVALID_REQUEST", "invalid_request"],
+    ["TOOL_ERROR", "tool_error"],
+  ] as const)("maps CLI query code %s to %s", (rawCode, expected) => {
+    expect(normalizeCapabilityError({ code: rawCode, message: "SECRET_OUTPUT" })).toMatchObject({
+      code: expected,
+    });
+    expect(JSON.stringify(normalizeCapabilityError({ code: rawCode, message: "SECRET_OUTPUT" })))
+      .not.toContain("SECRET_OUTPUT");
+  });
+
   it("does not invent a target for an empty slot", async () => {
     await expect(executeWithCapabilityFallback({
       requestId: "request",

@@ -1,10 +1,15 @@
 import { execFileSync } from "child_process";
 import { existsSync } from "fs";
+import { CapabilityRuntimeError } from "@tower/ai-runtime";
 import { db } from "@/lib/db";
 import { generateSummaryFromLog, generateDreamingInsight, type DreamingResult } from "@/lib/claude-session";
 import { SESSION_INSIGHT_CATEGORY } from "@/lib/constants";
 
 const TERMINAL_LOG_MAX = 10 * 1024; // 10 KB
+
+function safeFailureCode(error: unknown): string {
+  return error instanceof CapabilityRuntimeError ? error.code : "internal_error";
+}
 
 /** Format dreaming insights into readable Markdown content */
 function formatDreamingContent(dream: DreamingResult): string {
@@ -161,7 +166,7 @@ export async function captureExecutionSummary(
   forkCommit: string | null = null
 ): Promise<void> {
   try {
-    console.error(`[captureExecutionSummary] Starting: exec=${executionId.slice(0, 8)} exit=${exitCode} buffer=${terminalBuffer.length}chars worktree=${worktreePath} fork=${forkCommit?.slice(0, 8) ?? "none"}`);
+    console.error(`[captureExecutionSummary] Starting: exec=${executionId.slice(0, 8)} exit=${exitCode} buffer=${terminalBuffer.length}chars fork=${forkCommit?.slice(0, 8) ?? "none"}`);
 
     let gitLog: string | null = null;
     let gitStats: GitStats | null = null;
@@ -209,10 +214,10 @@ export async function captureExecutionSummary(
     // Dreaming (Phase 3) moved to captureTaskDreaming() — runs only on task DONE
     if (terminalLog && worktreePath && existsSync(worktreePath)) {
       console.error("[captureExecutionSummary] Starting background AI summary...");
-      generateSummaryFromLog(terminalLog, worktreePath)
+      generateSummaryFromLog(terminalLog, worktreePath, executionId)
         .then(async (aiSummary) => {
           if (aiSummary) {
-            console.error(`[captureExecutionSummary] AI summary ready: ${aiSummary.slice(0, 80)}`);
+            console.error("[captureExecutionSummary] AI summary ready");
             await db.taskExecution.update({
               where: { id: executionId },
               data: { summary: aiSummary },
@@ -220,11 +225,11 @@ export async function captureExecutionSummary(
           }
         })
         .catch((err: unknown) => {
-          console.error("[captureExecutionSummary] Background AI summary failed:", err);
+          console.error(`[captureExecutionSummary] Background AI summary failed: code=${safeFailureCode(err)}`);
         });
     }
-  } catch (err: unknown) {
-    console.error("[captureExecutionSummary] Failed to capture summary:", err);
+  } catch {
+    console.error("[captureExecutionSummary] Failed to capture summary: code=internal_error");
   }
 }
 
@@ -271,8 +276,8 @@ export async function captureTaskDreaming(taskId: string): Promise<void> {
 
     console.error(`[captureTaskDreaming] Starting for task=${taskId.slice(0, 8)}, ${task.executions.length} executions`);
 
-    const dream = await generateDreamingInsight(combinedLog, effectivePath, combinedSummary);
-    if (!dream || !dream.shouldCreateNote) {
+    const dream = await generateDreamingInsight(combinedLog, effectivePath, combinedSummary, taskId);
+    if (!dream.shouldCreateNote) {
       console.error("[captureTaskDreaming] No note needed");
       return;
     }
@@ -297,6 +302,6 @@ export async function captureTaskDreaming(taskId: string): Promise<void> {
 
     console.error(`[captureTaskDreaming] Note created: ${note.id}`);
   } catch (err: unknown) {
-    console.error("[captureTaskDreaming] Failed:", err);
+    console.error(`[captureTaskDreaming] Skipped: code=${safeFailureCode(err)}`);
   }
 }

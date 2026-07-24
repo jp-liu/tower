@@ -73,6 +73,19 @@ describe("Claude provider", () => {
       .toBe(false);
   });
 
+  it("reports safe authentication and no-output query codes", async () => {
+    const ctx = host();
+    vi.mocked(ctx.process.execute)
+      .mockResolvedValueOnce({ exitCode: 1, signal: null, stdout: "", stderr: "401 unauthorized SECRET", durationMs: 1 })
+      .mockResolvedValueOnce({ exitCode: 0, signal: null, stdout: "", stderr: "", durationMs: 1 });
+    const adapter = new ClaudeCliAdapter(ctx);
+    await expect(adapter.generate({ prompt: "secret prompt" })).rejects.toMatchObject({
+      code: "AUTHENTICATION_FAILED",
+      message: "Claude query failed",
+    });
+    await expect(adapter.generate({ prompt: "secret prompt" })).rejects.toMatchObject({ code: "NO_OUTPUT" });
+  });
+
   it("runs Hooks, MCP, and Skills through injected Host services", async () => {
     const ctx = host();
     const writes: Array<{ path: string; contents: string }> = [];

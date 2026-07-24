@@ -197,6 +197,33 @@ describe("captureExecutionSummary", () => {
     expect(logArg).toContain("terminal output");
   });
 
+  it("keeps the deterministic Git summary when all AI targets fail", async () => {
+    mockExistsSync.mockReturnValue(true);
+    mockGenerateSummaryFromLog.mockRejectedValue(new Error("provider failed SECRET"));
+    setupGitMocks({ gitLog: "abc1234 feat: deterministic summary" });
+
+    await captureExecutionSummary(EXEC_ID, TASK_ID, 0, "terminal output", WORKTREE);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockUpdate.mock.calls[0]?.[0].data.summary).toBe("feat: deterministic summary");
+  });
+
+  it("overwrites the deterministic summary after a successful AI result", async () => {
+    mockExistsSync.mockReturnValue(true);
+    mockGenerateSummaryFromLog.mockResolvedValue("AI summary");
+    setupGitMocks({ gitLog: "abc1234 feat: deterministic summary" });
+
+    await captureExecutionSummary(EXEC_ID, TASK_ID, 0, "terminal output", WORKTREE);
+    await vi.waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(2));
+
+    expect(mockUpdate.mock.calls[0]?.[0].data.summary).toBe("feat: deterministic summary");
+    expect(mockUpdate.mock.calls[1]?.[0]).toEqual({
+      where: { id: EXEC_ID },
+      data: { summary: "AI summary" },
+    });
+  });
+
   it("does not call generateSummaryFromLog when worktreePath is null", async () => {
     await captureExecutionSummary(EXEC_ID, TASK_ID, 0, "terminal output", null);
 

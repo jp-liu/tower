@@ -122,8 +122,10 @@ export type ModelDiscoveryResult =
 
 export interface ApiAttemptContext {
   credential: ApiCredential;
-  onActivity: () => void;
+  onActivity: (activity?: ApiActivity) => void;
 }
+
+export type ApiActivity = "text" | "reasoning" | "tool_call" | "tool_result" | "other";
 
 export interface ApiAdapter {
   readonly protocol: ApiProtocol;
@@ -139,5 +141,5 @@ export interface ApiRuntimeCursor {
 }
 
 export interface ApiRuntimeExecutionContext {
-  onActivity?: () => void;
+  onActivity?: (activity?: ApiActivity) => void;
 }

@@ -47,6 +47,9 @@ export interface CliQueryOptions {
   systemPrompt?: string;
   model?: string;
   maxTurns?: number;
+  maxOutputTokens?: number;
+  maxOutputBytes?: number;
+  temperature?: number;
   tools?: string[];
   allowedTools?: string[];
   settings?: Readonly<Record<string, unknown>>;

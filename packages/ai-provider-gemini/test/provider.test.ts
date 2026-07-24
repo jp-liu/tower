@@ -68,6 +68,21 @@ describe("Gemini provider", () => {
     expect(plan.initialInput).toBeUndefined();
   });
 
+  it("reports safe network query failures without exposing output", async () => {
+    const ctx = host();
+    vi.mocked(ctx.process.execute).mockResolvedValueOnce({
+      exitCode: 1,
+      signal: null,
+      stdout: "",
+      stderr: "fetch failed ECONNRESET SECRET",
+      durationMs: 1,
+    });
+    await expect(new GeminiCliAdapter(ctx).generate({ prompt: "secret prompt" })).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+      message: "Gemini query failed",
+    });
+  });
+
   it("uses stable Gemini MCP and Skills commands through the Host executor", async () => {
     const ctx = host();
     const adapter = new GeminiCliAdapter(ctx);

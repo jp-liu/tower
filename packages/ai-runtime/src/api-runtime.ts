@@ -43,9 +43,9 @@ export class ApiConnectionRuntime {
       try {
         return await this.adapter.generate(request, {
           credential: candidates[index]!,
-          onActivity: () => {
+          onActivity: (kind) => {
             activity = true;
-            executionContext.onActivity?.();
+            executionContext.onActivity?.(kind);
           },
         });
       } catch (error) {
@@ -72,9 +72,9 @@ export class ApiConnectionRuntime {
       try {
         return await this.adapter.generateStructured(request, {
           credential: candidates[index]!,
-          onActivity: () => {
+          onActivity: (kind) => {
             activity = true;
-            executionContext.onActivity?.();
+            executionContext.onActivity?.(kind);
           },
         });
       } catch (error) {
@@ -96,9 +96,9 @@ export class ApiConnectionRuntime {
       try {
         for await (const event of this.adapter.stream(request, {
           credential: candidates[index]!,
-          onActivity: () => {
+          onActivity: (kind) => {
             activity = true;
-            executionContext.onActivity?.();
+            executionContext.onActivity?.(kind);
           },
         })) {
           yield event;

@@ -54,15 +54,26 @@ const FALLBACK_CODES = new Set<CapabilityErrorCode>([
 const ERROR_CODE_ALIASES: Readonly<Record<string, CapabilityErrorCode>> = {
   CLI_NOT_FOUND: "cli_not_found",
   CLI_NOT_EXECUTABLE: "cli_not_executable",
+  COMMAND_NOT_EXECUTABLE: "cli_not_executable",
   SPAWN_FAILED: "spawn_failed",
+  PROCESS_TIMEOUT: "timeout",
+  PROCESS_CANCELLED: "cancelled",
+  QUERY_FAILED: "provider_failure",
   AUTH_REQUIRED: "authentication",
+  AUTHENTICATION_FAILED: "authentication",
   API_KEY_MISSING: "authentication",
+  PERMISSION_DENIED: "permission",
   MODEL_NOT_AVAILABLE: "model_unavailable",
   RATE_LIMITED: "rate_limit",
   NETWORK_ERROR: "network",
   TIMEOUT: "timeout",
+  CONTENT_SAFETY: "content_safety",
+  INVALID_REQUEST: "invalid_request",
+  TOOL_ERROR: "tool_error",
   NO_OUTPUT: "no_output",
   PROVIDER_FAILURE: "provider_failure",
+  UNSUPPORTED_CAPABILITY: "invalid_request",
+  INTEGRATION_FAILED: "provider_failure",
 };
 
 export const TERMINAL_PRESTART_FALLBACK_CODES = new Set<CapabilityErrorCode>([

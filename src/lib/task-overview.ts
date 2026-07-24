@@ -20,7 +20,8 @@ import { execFileSync } from "child_process";
 import { existsSync } from "fs";
 import { db } from "@/lib/db";
 import { syncNoteToFts } from "@/lib/fts";
-import { aiQuery } from "@/lib/claude-session";
+import { CapabilityRuntimeError } from "@tower/ai-runtime";
+import { generateCapabilityText } from "@/lib/ai/capability-executor";
 import { getConfigValue } from "@/actions/config-actions";
 import { resolveTaskDiffSource } from "@/lib/task-diff-resolver";
 import { parseDiffOutput, type DiffFile } from "@/lib/diff-parser";
@@ -195,10 +196,22 @@ ${data.diffText ?? "（无 diff）"}
 \`\`\``;
 
   const cwd = existsSync(data.cwd) ? data.cwd : process.cwd();
-  const result = await aiQuery(prompt, cwd, { maxTurns: 1 });
-  if (result) {
+  try {
+    const result = await generateCapabilityText({
+      slot: "summary",
+      prompt,
+      cwd,
+      correlationId: data.taskId,
+      maxTurns: 1,
+      maxOutputTokens: 800,
+      maxOutputChars: 3000,
+      temperature: 0.2,
+    });
     const cleaned = result.replace(/^[#*\->"'\s]+/, "").trim();
     if (cleaned) return cleaned;
+  } catch (error) {
+    const code = error instanceof CapabilityRuntimeError ? error.code : "internal_error";
+    console.error(`[captureTaskOverview] AI summary failed: code=${code}`);
   }
   return buildFallbackSummary(data.commitLog, locale);
 }
@@ -219,8 +232,8 @@ export async function captureTaskOverview(
   let data: TaskChangeData | null = null;
   try {
     data = await gatherTaskChangeData(taskId);
-  } catch (err) {
-    console.error("[captureTaskOverview] Failed to gather change data:", err);
+  } catch {
+    console.error("[captureTaskOverview] Failed to gather change data: code=internal_error");
     return;
   }
 
@@ -260,8 +273,8 @@ export async function captureTaskOverview(
       console.error(
         `[captureTaskOverview] Note created: ${note.id} for task=${taskId.slice(0, 8)}`
       );
-    } catch (err) {
-      console.error("[captureTaskOverview] Failed to create overview note:", err);
+    } catch {
+      console.error("[captureTaskOverview] Failed to create overview note: code=internal_error");
     }
   })();
 }
