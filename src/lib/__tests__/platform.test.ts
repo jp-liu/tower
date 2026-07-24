@@ -195,7 +195,7 @@ describe("platform utilities", () => {
         env: env({ PATH: "C:\\nodejs", PATHEXT: ".EXE;.CMD" }),
         platform: "win32",
       });
-      expect(result).toBe(path.join("C:\\nodejs", "claude.CMD"));
+      expect(result).toBe(path.win32.join("C:\\nodejs", "claude.CMD"));
     });
 
     it("returns null when command not found in any PATH dir", async () => {
@@ -505,7 +505,7 @@ describe("platform utilities", () => {
         env: env({ PATH: "C:\\nodejs", PATHEXT: ".EXE" }),
         platform: "win32",
       });
-      expect(result.command).toBe(path.join("C:\\nodejs", "node.EXE"));
+      expect(result.command).toBe(path.win32.join("C:\\nodejs", "node.EXE"));
       expect(result.args).toEqual(["index.js"]);
     });
 

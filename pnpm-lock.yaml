@@ -14,6 +14,12 @@ importers:
       '@prisma/client':
         specifier: ^6.19.2
         version: 6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)
+      '@tower/ai-runtime':
+        specifier: workspace:*
+        version: link:packages/ai-runtime
+      '@tower/ai-sdk':
+        specifier: workspace:*
+        version: link:packages/ai-sdk
       '@vscode/ripgrep':
         specifier: 1.18.0
         version: 1.18.0
@@ -204,6 +210,25 @@ importers:
       zustand:
         specifier: ^5.0.12
         version: 5.0.12(@types/react@19.2.14)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
+
+  packages/ai-runtime:
+    dependencies:
+      '@tower/ai-sdk':
+        specifier: workspace:*
+        version: link:../ai-sdk
+    devDependencies:
+      '@types/node':
+        specifier: ^20
+        version: 20.19.37
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
+  packages/ai-sdk:
+    devDependencies:
+      typescript:
+        specifier: ^5
+        version: 5.9.3
 
 packages:
 

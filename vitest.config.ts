@@ -32,6 +32,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@tower/ai-runtime": path.resolve(__dirname, "./packages/ai-runtime/src/index.ts"),
+      "@tower/ai-sdk": path.resolve(__dirname, "./packages/ai-sdk/src/index.ts"),
     },
   },
 });
