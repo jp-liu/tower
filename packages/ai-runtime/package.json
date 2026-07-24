@@ -19,7 +19,13 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "4.0.20",
+    "@ai-sdk/google": "4.0.24",
+    "@ai-sdk/openai": "4.0.20",
+    "@ai-sdk/openai-compatible": "3.0.14",
+    "@ai-sdk/provider": "4.0.3",
     "@tower/ai-sdk": "workspace:*",
+    "ai": "7.0.18",
     "ajv": "8.18.0",
     "semver": "7.7.4",
     "tar": "7.5.13"

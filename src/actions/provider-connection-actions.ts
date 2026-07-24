@@ -13,7 +13,13 @@ import { db } from "@/lib/db";
 import type { ProviderInstallReport } from "@/lib/ai/install-orchestrator";
 
 export interface ProviderConnectionRow {
+  id: string;
+  connectionKey: string | null;
+  name: string;
+  kind: string;
   provider: string;
+  enabled: boolean;
+  testStatus: string;
   lastTestedAt: Date | null;
   testOk: boolean;
   version: string | null;
@@ -21,6 +27,10 @@ export interface ProviderConnectionRow {
   hooksInstalled: boolean;
   skillsInstalled: boolean;
   installLog: string | null;
+}
+
+function cliConnectionKey(provider: string): string {
+  return `cli:${provider}`;
 }
 
 /**
@@ -40,9 +50,14 @@ export async function markProviderConnected(
   const installLog = report ? JSON.stringify(report) : null;
 
   await db.providerConnection.upsert({
-    where: { provider },
+    where: { connectionKey: cliConnectionKey(provider) },
     create: {
+      connectionKey: cliConnectionKey(provider),
+      name: provider,
+      kind: "cli",
       provider,
+      enabled: true,
+      testStatus: "connected",
       lastTestedAt: new Date(),
       testOk: true,
       version: args.version ?? null,
@@ -52,6 +67,7 @@ export async function markProviderConnected(
       installLog,
     },
     update: {
+      testStatus: "connected",
       lastTestedAt: new Date(),
       testOk: true,
       version: args.version ?? null,
@@ -72,14 +88,20 @@ export async function markProviderDisconnected(
   args: { reason?: string } = {},
 ): Promise<void> {
   await db.providerConnection.upsert({
-    where: { provider },
+    where: { connectionKey: cliConnectionKey(provider) },
     create: {
+      connectionKey: cliConnectionKey(provider),
+      name: provider,
+      kind: "cli",
       provider,
+      enabled: true,
+      testStatus: "unavailable",
       lastTestedAt: new Date(),
       testOk: false,
       installLog: args.reason ?? null,
     },
     update: {
+      testStatus: "unavailable",
       lastTestedAt: new Date(),
       testOk: false,
       mcpInstalled: false,
@@ -100,14 +122,16 @@ export async function markProviderDisconnected(
  * install status so users see what's degraded.
  */
 export async function isProviderConnected(provider: string): Promise<boolean> {
-  const row = await db.providerConnection.findUnique({ where: { provider } });
+  const row = await db.providerConnection.findUnique({
+    where: { connectionKey: cliConnectionKey(provider) },
+  });
   if (!row) return false;
-  return row.testOk;
+  return row.enabled && row.testOk;
 }
 
 export async function getConnectedProviders(): Promise<string[]> {
   const rows = await db.providerConnection.findMany({
-    where: { testOk: true },
+    where: { kind: "cli", enabled: true, testOk: true },
     select: { provider: true },
     orderBy: { provider: "asc" },
   });
@@ -116,9 +140,15 @@ export async function getConnectedProviders(): Promise<string[]> {
 
 export async function getProviderConnection(provider: string): Promise<ProviderConnectionRow | null> {
   return db.providerConnection.findUnique({
-    where: { provider },
+    where: { connectionKey: cliConnectionKey(provider) },
     select: {
+      id: true,
+      connectionKey: true,
+      name: true,
+      kind: true,
       provider: true,
+      enabled: true,
+      testStatus: true,
       lastTestedAt: true,
       testOk: true,
       version: true,
@@ -133,8 +163,15 @@ export async function getProviderConnection(provider: string): Promise<ProviderC
 /** All rows, for Settings UI to render status badges per provider. */
 export async function getProviderConnections(): Promise<ProviderConnectionRow[]> {
   return db.providerConnection.findMany({
+    where: { kind: "cli" },
     select: {
+      id: true,
+      connectionKey: true,
+      name: true,
+      kind: true,
       provider: true,
+      enabled: true,
+      testStatus: true,
       lastTestedAt: true,
       testOk: true,
       version: true,

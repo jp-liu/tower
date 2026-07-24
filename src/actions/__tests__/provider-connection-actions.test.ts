@@ -47,7 +47,9 @@ describe("provider-connection-actions", () => {
       await markProviderConnected("claude", { version: "1.0.0", report });
 
       const call = mockDb.providerConnection.upsert.mock.calls[0][0];
-      expect(call.where).toEqual({ provider: "claude" });
+      expect(call.where).toEqual({ connectionKey: "cli:claude" });
+      expect(call.create.connectionKey).toBe("cli:claude");
+      expect(call.create.kind).toBe("cli");
       expect(call.create.testOk).toBe(true);
       expect(call.create.mcpInstalled).toBe(true);
       expect(call.create.hooksInstalled).toBe(true);
@@ -96,6 +98,7 @@ describe("provider-connection-actions", () => {
 
     it("returns true only when test passed AND every integration installed", async () => {
       mockDb.providerConnection.findUnique.mockResolvedValue({
+        enabled: true,
         testOk: true,
         mcpInstalled: true,
         hooksInstalled: true,
@@ -106,6 +109,7 @@ describe("provider-connection-actions", () => {
 
     it("returns true even when an integration install partially failed (CLI itself works)", async () => {
       mockDb.providerConnection.findUnique.mockResolvedValue({
+        enabled: true,
         testOk: true,
         mcpInstalled: false,
         hooksInstalled: true,
@@ -116,6 +120,7 @@ describe("provider-connection-actions", () => {
 
     it("returns false when probe failed regardless of installs", async () => {
       mockDb.providerConnection.findUnique.mockResolvedValue({
+        enabled: true,
         testOk: false,
         mcpInstalled: true,
         hooksInstalled: true,
@@ -134,7 +139,7 @@ describe("provider-connection-actions", () => {
       const list = await getConnectedProviders();
       expect(list).toEqual(["claude", "codex"]);
       const call = mockDb.providerConnection.findMany.mock.calls[0][0];
-      expect(call.where).toEqual({ testOk: true });
+      expect(call.where).toEqual({ kind: "cli", enabled: true, testOk: true });
     });
   });
 
@@ -154,7 +159,7 @@ describe("provider-connection-actions", () => {
       const row = await getProviderConnection("claude");
       expect(row?.provider).toBe("claude");
       const call = mockDb.providerConnection.findUnique.mock.calls[0][0];
-      expect(call.where).toEqual({ provider: "claude" });
+      expect(call.where).toEqual({ connectionKey: "cli:claude" });
       expect(call.select.installLog).toBe(true);
     });
   });
