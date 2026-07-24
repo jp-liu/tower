@@ -480,6 +480,17 @@ function wrapForPlatform(
   }
 
   const ext = path.extname(executable).toLowerCase();
+  if (ext === ".cmd" || ext === ".bat") {
+    const directExecutable = resolveSdkExecutable(executable, platform);
+    if (directExecutable !== executable) {
+      const directExt = path.extname(directExecutable).toLowerCase();
+      if (directExt === ".js" || directExt === ".cjs" || directExt === ".mjs") {
+        return { command: process.execPath, args: [directExecutable, ...args] };
+      }
+      return { command: directExecutable, args };
+    }
+  }
+
   if (ext === ".cmd" || ext === ".bat" || ext === ".com") {
     const shell = env.ComSpec || "cmd.exe";
     const commandLine = [quoteForCmd(executable), ...args.map(quoteForCmd)].join(" ");

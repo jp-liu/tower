@@ -454,8 +454,10 @@ export class CodexCliAdapter implements CliAdapter {
   private async runCli(cmd: string, args: string[], cwd?: string, timeoutMs = 10000): Promise<string> {
     const { execFile } = await import("node:child_process");
     const { promisify } = await import("node:util");
+    const { resolveSpawnTarget } = await import("@/lib/platform");
     const execFileAsync = promisify(execFile);
-    const { stdout } = await execFileAsync(cmd, args, { cwd, timeout: timeoutMs });
+    const target = await resolveSpawnTarget(cmd, args, { cwd });
+    const { stdout } = await execFileAsync(target.command, target.args, { cwd, timeout: timeoutMs });
     return stdout;
   }
 
