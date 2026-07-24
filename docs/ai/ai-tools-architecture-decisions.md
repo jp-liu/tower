@@ -30,7 +30,24 @@ AI Tools 设置页分为上下两层：
 - 用户可以配置 `Base URL`、`API Key` 和模型。
 - API 连接服务于 `summary`、`dreaming`、`analysis`、`assistant` 等非终端能力。
 - API 连接不向 CLI 注入 API Key，也不代替 CLI 自身的登录和配置。
-- 具体采用的社区 SDK、兼容协议层及模型发现方案尚未确定。
+
+### API 调用底座与首版协议
+
+- 使用 Vercel AI SDK 作为 API 调用底座，统一文本生成、流式输出、结构化输出和工具调用。
+- Tower 在 Vercel AI SDK 之上保留一层薄 `ApiAdapter` 接口；业务插槽和第三方扩展不直接依赖具体 SDK。
+- 不默认使用 Vercel AI Gateway。请求直接发送到用户配置的上游地址，API Key 只保存在本机。
+- 首版同时实现以下三类协议：
+  - `openai-compatible`：任意兼容 OpenAI API 的服务和自定义 Base URL。
+  - `anthropic`：Anthropic 原生协议与能力。
+  - `google`：Google Generative AI 原生协议与能力。
+- 模型发现和模型列表管理方式仍待讨论。
+
+### 连接实例
+
+- “Provider/协议”是连接的实现类型，“连接”是用户实际配置的实例，两者不能混为一个标识。
+- 同一种协议允许创建多个连接，例如“我的 OpenRouter”“公司 NewAPI”“本机 Ollama”。
+- 能力插槽引用稳定的 `connectionId` 和模型，而不是只保存 Provider 名称与 mode。
+- CLI 内置连接同样作为连接实例参与插槽选择，内置实现不走私有路由。
 
 ## 能力插槽
 
@@ -84,8 +101,7 @@ API Key 与登录密码不同：Tower 调用上游模型时必须取回原值，
 
 ## 待讨论
 
-- API Provider 的公共接口，以及采用 OpenAI-compatible、Anthropic-compatible 等协议的方式。
-- 复用哪个社区 SDK/Provider Registry，是否需要 Tower 自己维护薄适配层。
+- OpenAI 官方连接是否从 `openai-compatible` 中分离，使用原生 OpenAI Provider 以保留 Responses API 等能力。
 - 模型列表的拉取、手动维护、能力标注和默认模型选择。
 - 多 API Key、轮换、限流与连接健康检查是否进入首版。
 - CLI 扩展包的 manifest、加载机制、权限边界和兼容性策略。
