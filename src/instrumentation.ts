@@ -42,9 +42,10 @@ export async function register() {
     }
 
     // Auto-refresh Tower integrations only when the recorded install fingerprint
-    // is stale. The fingerprint includes Tower's package version plus runtime
-    // identity (package root, data dir, API URL), so upgrades and path/port
-    // changes self-heal without rewriting user CLI config on every boot.
+    // is stale or the database explicitly marks an integration incomplete.
+    // A successful install is verified against the real user-scope config by
+    // installAllForProvider before its state is persisted. Ordinary starts with
+    // a current fingerprint do not invoke provider CLI checks.
     // Fire-and-forget: a slow CLI probe must not block server startup.
     void (async () => {
       try {
@@ -52,7 +53,7 @@ export async function register() {
         const { buildTowerIntegrationFingerprint, installAllForProvider } = await import(
           "@/lib/ai/install-orchestrator"
         );
-        const { getProviderConnection, markProviderConnected, markProviderDisconnected } = await import(
+        const { getProviderConnection, markProviderConnected } = await import(
           "@/actions/provider-connection-actions"
         );
         const httpPort = parseInt(process.env.PORT || "3000", 10);
@@ -74,17 +75,9 @@ export async function register() {
               continue;
             }
             const report = await installAllForProvider(provider.name, apiUrl);
-            if (report.ok) await markProviderConnected(provider.name, {
+            await markProviderConnected(provider.name, {
               version: await adapter.getVersion().catch(() => null),
               report,
-            });
-            else await markProviderDisconnected(provider.name, {
-              reason: JSON.stringify({
-                mcp: report.mcp?.ok,
-                hooks: report.hooks?.ok,
-                skill: report.skill?.ok,
-                error: report.skill?.error ?? report.hooks?.error ?? report.mcp?.error,
-              }),
             });
             if (report.ok) {
               console.error(`[init-tower] Auto-refreshed Tower integration for ${provider.name} (user scope)`);

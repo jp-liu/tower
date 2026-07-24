@@ -2,14 +2,10 @@
  * Local Tower bootstrap — runs once on server startup via instrumentation.ts.
  *
  * IMPORTANT scope: this file ONLY touches Tower's own data dir (~/.tower) and
- * the embedded assistant's project-level config. It does NOT install MCP /
- * hooks / skills into the user's global ~/.claude or ~/.codex.
- *
- * Why: earlier versions auto-injected those integrations on every boot, which
- * (a) bypassed the CLI's own command surface and (b) ran before we knew the
- * user actually had a working CLI. Provider integration is now triggered by
- * /api/adapters/test on a successful connection probe — see
- * src/lib/ai/install-orchestrator.ts and .notes/ai-provider-integration.md.
+ * the embedded assistant's project-level config. User-scope provider MCP /
+ * hooks / skills are managed separately by instrumentation.ts: after a Tower
+ * update or an explicitly stale database state, it reinstalls and verifies the
+ * provider integration once. Current installs are skipped on ordinary starts.
  */
 
 import { existsSync, mkdirSync, cpSync, writeFileSync, readFileSync } from "fs";

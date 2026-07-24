@@ -102,6 +102,7 @@ export class ClaudeCliAdapter implements CliAdapter {
   // ===========================================================================
 
   async installHooks(_apiUrl: string): Promise<InstallResult> {
+    void _apiUrl;
     try {
       const settings = this.readSettings();
       const hooks = (settings["hooks"] as Record<string, unknown>) ?? {};
@@ -254,9 +255,15 @@ export class ClaudeCliAdapter implements CliAdapter {
   async isHooksInstalled(): Promise<boolean> {
     const settings = this.readSettings();
     const hooks = (settings["hooks"] as Record<string, unknown>) ?? {};
-    // Consider installed if the PostToolUse hook exists (primary hook)
-    const entries = this.getHookArray(hooks, "PostToolUse");
-    return this.hasHook(entries, "post-tool-hook.js");
+    const required: Array<[string, string]> = [
+      ["SessionStart", "session-start-hook.js"],
+      ["PreToolUse", "pre-tool-hook.js"],
+      ["PostToolUse", "post-tool-hook.js"],
+      ["Stop", "stop-hook.js"],
+    ];
+    return required.every(([event, filename]) =>
+      this.hasHook(this.getHookArray(hooks, event), filename)
+    );
   }
 
   // ===========================================================================

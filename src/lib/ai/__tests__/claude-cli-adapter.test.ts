@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { ClaudeCliAdapter } from "../adapters/cli/claude-cli-adapter";
 import type { CliSpawnOptions } from "../types";
 
@@ -138,6 +140,34 @@ describe("ClaudeCliAdapter", () => {
     });
   });
 
+  describe("hooks", () => {
+    let configDir: string;
+    let settingsPath: string;
+
+    beforeEach(() => {
+      configDir = fs.mkdtempSync(path.join(os.tmpdir(), "tower-claude-hooks-"));
+      settingsPath = path.join(configDir, "settings.json");
+      vi.spyOn(adapter, "getConfigDir").mockReturnValue(configDir);
+      vi.spyOn(adapter, "getSettingsPath").mockReturnValue(settingsPath);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      fs.rmSync(configDir, { recursive: true, force: true });
+    });
+
+    it("requires every Tower hook after installation", async () => {
+      await adapter.installHooks("http://localhost:3000");
+      expect(await adapter.isHooksInstalled()).toBe(true);
+
+      const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+      delete settings.hooks.PreToolUse;
+      fs.writeFileSync(settingsPath, JSON.stringify(settings), "utf-8");
+
+      expect(await adapter.isHooksInstalled()).toBe(false);
+    });
+  });
+
   describe("MCP (CLI-driven)", () => {
     // installMcp / uninstallMcp / isMcpInstalled shell out to
     // `claude mcp add-json|remove|get`. We mock execFile via vi.mock at module
@@ -194,8 +224,6 @@ describe("ClaudeCliAdapter", () => {
 
   describe("Skills (symlink)", () => {
     // Use a temp dir as the source skill, then verify symlink target via lstat.
-    const os = require("node:os");
-    const path = require("node:path");
     let sourceDir: string;
     let skillsHome: string;
     let originalConfigDir: string;

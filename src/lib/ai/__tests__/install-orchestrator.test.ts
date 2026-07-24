@@ -1,55 +1,106 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import * as os from "node:os";
-import * as path from "node:path";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// We need to control what tower-dir returns so getTowerMcpName branches.
-vi.mock("@/lib/tower-dir", () => ({
-  getTowerDir: vi.fn(),
-  getTowerDbPath: vi.fn(() => "/dev/null"),
+const { adapter } = vi.hoisted(() => ({
+  adapter: {
+    isAvailable: vi.fn(),
+    installMcp: vi.fn(),
+    installHooks: vi.fn(),
+    installSkill: vi.fn(),
+    isMcpInstalled: vi.fn(),
+    isHooksInstalled: vi.fn(),
+    isSkillInstalled: vi.fn(),
+  },
 }));
 
-import { getTowerMcpName } from "../install-orchestrator";
-import { getTowerDir } from "@/lib/tower-dir";
+vi.mock("@/lib/ai/providers", () => ({
+  providerRegistry: {
+    get: vi.fn((name: string) => name === "codex" ? { cli: { adapter } } : undefined),
+  },
+}));
 
-const mockGetTowerDir = vi.mocked(getTowerDir);
+vi.mock("@/lib/tower-dir", () => ({
+  getTowerDbPath: vi.fn(() => "/Users/test/.tower/database/tower.db"),
+  getTowerDir: vi.fn(() => "/Users/test/.tower"),
+}));
 
-describe("getTowerMcpName", () => {
+vi.mock("@/lib/tower-paths", () => ({
+  getPackageRoot: vi.fn(() => "/opt/tower"),
+}));
+
+vi.mock("node:os", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:os")>()),
+  homedir: vi.fn(() => "/Users/test"),
+}));
+
+vi.mock("@/lib/ai/migrate-legacy-mcp", () => ({
+  migrateLegacyTowerMcp: vi.fn(),
+}));
+
+import { inspectProviderIntegration, installAllForProvider } from "@/lib/ai/install-orchestrator";
+
+describe("inspectProviderIntegration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    adapter.isAvailable.mockResolvedValue(true);
+    adapter.installMcp.mockResolvedValue({ ok: true, method: "cli", detail: "tower" });
+    adapter.installHooks.mockResolvedValue({ ok: true, method: "file", detail: "hooks.json" });
+    adapter.installSkill.mockResolvedValue({ ok: true, method: "symlink", detail: "skill" });
+    adapter.isMcpInstalled.mockResolvedValue(true);
+    adapter.isHooksInstalled.mockResolvedValue(true);
+    adapter.isSkillInstalled.mockResolvedValue(true);
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  it("checks the real MCP, hooks, and every Tower skill installation", async () => {
+    const result = await inspectProviderIntegration("codex");
+
+    expect(adapter.isMcpInstalled).toHaveBeenCalledWith("tower", { scope: "user" });
+    expect(adapter.isHooksInstalled).toHaveBeenCalledOnce();
+    expect(adapter.isSkillInstalled).toHaveBeenCalledTimes(4);
+    expect(adapter.isSkillInstalled).toHaveBeenCalledWith("tower", "/opt/tower/skills/tower");
+    expect(adapter.isSkillInstalled).toHaveBeenCalledWith("tower-goal", "/opt/tower/skills/tower-goal");
+    expect(adapter.isSkillInstalled).toHaveBeenCalledWith("tower-ask", "/opt/tower/skills/tower-ask");
+    expect(adapter.isSkillInstalled).toHaveBeenCalledWith("tower-bridge", "/opt/tower/skills/tower-bridge");
+    expect(result).toEqual({
+      mcpInstalled: true,
+      hooksInstalled: true,
+      skillsInstalled: true,
+      ok: true,
+    });
   });
 
-  it("returns 'tower' for the canonical ~/.tower path", () => {
-    mockGetTowerDir.mockReturnValue(path.join(os.homedir(), ".tower"));
-    expect(getTowerMcpName()).toBe("tower");
+  it("reports incomplete state when the CLI was reinstalled without hooks", async () => {
+    adapter.isHooksInstalled.mockResolvedValue(false);
+
+    await expect(inspectProviderIntegration("codex")).resolves.toEqual({
+      mcpInstalled: true,
+      hooksInstalled: false,
+      skillsInstalled: true,
+      ok: false,
+    });
   });
 
-  it("returns 'tower-dev' for ~/.tower-dev", () => {
-    mockGetTowerDir.mockReturnValue(path.join(os.homedir(), ".tower-dev"));
-    expect(getTowerMcpName()).toBe("tower-dev");
+  it("treats inspection errors as a missing integration", async () => {
+    adapter.isMcpInstalled.mockRejectedValue(new Error("codex config unavailable"));
+
+    await expect(inspectProviderIntegration("codex")).resolves.toMatchObject({
+      mcpInstalled: false,
+      ok: false,
+    });
   });
 
-  it("returns 'tower-staging' for ~/.tower-staging", () => {
-    mockGetTowerDir.mockReturnValue(path.join(os.homedir(), ".tower-staging"));
-    expect(getTowerMcpName()).toBe("tower-staging");
-  });
+  it("verifies a refreshed integration before reporting install success", async () => {
+    adapter.isHooksInstalled.mockResolvedValue(false);
 
-  it("strips leading dot when path basename is .tower-foo (not under home)", () => {
-    mockGetTowerDir.mockReturnValue("/opt/.tower-prod");
-    expect(getTowerMcpName()).toBe("tower-prod");
-  });
+    const report = await installAllForProvider("codex", "http://localhost:3000");
 
-  it("falls back to sanitized basename for non-conforming dir names", () => {
-    mockGetTowerDir.mockReturnValue("/srv/Custom Path/my data!");
-    expect(getTowerMcpName()).toBe("tower-my-data-");
-  });
-
-  it("lowercases the suffix", () => {
-    mockGetTowerDir.mockReturnValue(path.join(os.homedir(), ".tower-DEV"));
-    expect(getTowerMcpName()).toBe("tower-dev");
+    expect(adapter.installMcp).toHaveBeenCalledOnce();
+    expect(adapter.installHooks).toHaveBeenCalledOnce();
+    expect(adapter.installSkill).toHaveBeenCalledTimes(4);
+    expect(report.hooks).toMatchObject({
+      ok: false,
+      error: "Hooks verification failed after install",
+    });
+    expect(report.ok).toBe(false);
   });
 });

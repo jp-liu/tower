@@ -159,10 +159,10 @@ export class CodexCliAdapter implements CliAdapter {
         hooks: [{ command: `node "${stop}"`, timeout: 5, type: "command" }],
       }) || changed;
 
-      if (changed) {
-        this.writeHooks(hooks);
-        this.ensureHooksFeatureEnabled();
-      }
+      if (changed) this.writeHooks(hooks);
+      // Config may have been reset independently of hooks.json (for example by
+      // reinstalling Codex). Always reassert the feature flag.
+      this.ensureHooksFeatureEnabled();
       return { ok: true, method: "file", detail: this.getHooksPath() };
     } catch (err) {
       return {
@@ -275,8 +275,15 @@ export class CodexCliAdapter implements CliAdapter {
 
   async isHooksInstalled(): Promise<boolean> {
     const hooks = this.readHooks();
-    const entries = this.getHookArray(hooks, "PostToolUse");
-    return this.hasHook(entries, "post-tool-hook.js");
+    const required: Array<[string, string]> = [
+      ["SessionStart", "session-start-hook.js"],
+      ["PreToolUse", "pre-tool-hook.js"],
+      ["PostToolUse", "post-tool-hook.js"],
+      ["Stop", "stop-hook.js"],
+    ];
+    return required.every(([event, filename]) =>
+      this.hasHook(this.getHookArray(hooks, event), filename)
+    ) && this.isHooksFeatureEnabled();
   }
 
   // ===========================================================================
@@ -594,6 +601,14 @@ export class CodexCliAdapter implements CliAdapter {
     const dir = this.getConfigDir();
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(tomlPath, content, "utf-8");
+  }
+
+  private isHooksFeatureEnabled(): boolean {
+    try {
+      return /\bhooks\s*=\s*true/.test(fs.readFileSync(this.getSettingsPath(), "utf-8"));
+    } catch {
+      return false;
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

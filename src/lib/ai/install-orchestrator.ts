@@ -1,11 +1,8 @@
 /**
  * Install orchestrator — runs MCP, hooks, and skill registration for a single
- * provider in one go. Called from /api/adapters/test on the success branch
- * (i.e. only after a hello probe passed).
- *
- * This used to live in init-tower.ts and ran on every server boot. The boot
- * path now does NOT touch user system files. See .notes/ai-provider-integration.md
- * for the rationale.
+ * provider in one go. Called after a successful /api/adapters/test probe and
+ * from the startup self-heal path when the recorded fingerprint or integration
+ * state is stale.
  */
 
 import { existsSync } from "node:fs";
@@ -87,6 +84,13 @@ export interface ProviderInstallReport {
   ok: boolean;
 }
 
+export interface ProviderIntegrationStatus {
+  mcpInstalled: boolean;
+  hooksInstalled: boolean;
+  skillsInstalled: boolean;
+  ok: boolean;
+}
+
 /**
  * Build the spawn command for the Tower MCP server. The `name` field is
  * derived from the data dir (see getTowerMcpName) so dev and prod installs
@@ -131,6 +135,46 @@ export function getTowerSkillSourceDir(skillName: string = TOWER_SKILL_NAME): st
 }
 
 /**
+ * Inspect the provider's real user-scope integration state. The database is a
+ * cache, not a source of truth: reinstalling a CLI can remove its config while
+ * leaving ProviderConnection and the Tower package fingerprint unchanged.
+ */
+export async function inspectProviderIntegration(
+  providerName: string,
+): Promise<ProviderIntegrationStatus> {
+  const adapter = providerRegistry.get(providerName)?.cli?.adapter;
+  if (!adapter) {
+    return { mcpInstalled: false, hooksInstalled: false, skillsInstalled: false, ok: false };
+  }
+
+  const check = async (fn: () => Promise<boolean>): Promise<boolean> => {
+    try {
+      return await fn();
+    } catch {
+      return false;
+    }
+  };
+
+  const [mcpInstalled, hooksInstalled, skillChecks] = await Promise.all([
+    check(() => adapter.isMcpInstalled(getTowerMcpName(), { scope: "user" })),
+    check(() => adapter.isHooksInstalled()),
+    Promise.all(
+      TOWER_SKILL_NAMES.map((name) =>
+        check(() => adapter.isSkillInstalled(name, getTowerSkillSourceDir(name))),
+      ),
+    ),
+  ]);
+  const skillsInstalled = skillChecks.every(Boolean);
+
+  return {
+    mcpInstalled,
+    hooksInstalled,
+    skillsInstalled,
+    ok: mcpInstalled && hooksInstalled && skillsInstalled,
+  };
+}
+
+/**
  * Install MCP, hooks, and skill for a single provider. Order matters:
  *   1. legacy migration (idempotent)
  *   2. MCP install via CLI (`claude mcp add-json` / `codex mcp add`)
@@ -172,8 +216,7 @@ export async function installAllForProvider(
     TOWER_SKILL_NAMES.map((name) => adapter.installSkill(name, getTowerSkillSourceDir(name))),
   );
   const skill = skillResults.find((r) => !r.ok) ?? skillResults[0];
-
-  return {
+  const report: ProviderInstallReport = {
     provider: providerName,
     available: true,
     integrationFingerprint,
@@ -182,6 +225,33 @@ export async function installAllForProvider(
     hooks,
     skill,
     ok: mcp.ok && hooks.ok && skill.ok,
+  };
+  const actual = await inspectProviderIntegration(providerName);
+  return applyIntegrationVerification(report, actual);
+}
+
+function applyIntegrationVerification(
+  report: ProviderInstallReport,
+  actual: ProviderIntegrationStatus,
+): ProviderInstallReport {
+  const verify = (
+    result: InstallResult | undefined,
+    installed: boolean,
+    label: string,
+  ): InstallResult | undefined => {
+    if (!result || !result.ok || installed) return result;
+    return { ...result, ok: false, error: `${label} verification failed after install` };
+  };
+  const mcp = verify(report.mcp, actual.mcpInstalled, "MCP");
+  const hooks = verify(report.hooks, actual.hooksInstalled, "Hooks");
+  const skill = verify(report.skill, actual.skillsInstalled, "Skills");
+
+  return {
+    ...report,
+    mcp,
+    hooks,
+    skill,
+    ok: Boolean(mcp?.ok && hooks?.ok && skill?.ok && actual.ok),
   };
 }
 

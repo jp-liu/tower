@@ -238,6 +238,22 @@ describe("CodexCliAdapter", () => {
       expect(toml).toContain("hooks = true");
     });
 
+    it("reports hooks as incomplete when any required Tower hook is missing", async () => {
+      await adapter.installHooks();
+      const raw = JSON.parse(fs.readFileSync(hooksJsonPath, "utf-8"));
+      delete raw.hooks.PreToolUse;
+      fs.writeFileSync(hooksJsonPath, JSON.stringify(raw), "utf-8");
+
+      expect(await adapter.isHooksInstalled()).toBe(false);
+    });
+
+    it("reports hooks as inactive when the Codex hooks feature is disabled", async () => {
+      await adapter.installHooks();
+      fs.writeFileSync(configTomlPath, "[features]\nhooks = false\n", "utf-8");
+
+      expect(await adapter.isHooksInstalled()).toBe(false);
+    });
+
     it("does not duplicate hooks on repeated install", async () => {
       await adapter.installHooks();
       await adapter.installHooks();
