@@ -14,7 +14,14 @@ describe("CLI plugin runtime guards", () => {
 
   it("rejects incomplete plugin and adapter shapes", () => {
     expect(isCliPlugin({ manifest: {}, createAdapter() {} })).toBe(false);
+    expect(isCliAdapter({
+      buildSessionProcess() {},
+      buildHelloProbe() {},
+      generate() {},
+      models() {},
+    })).toBe(true);
+    // Probe support was added as a backwards-compatible v1 extension.
     expect(isCliAdapter({ buildSessionProcess() {}, generate() {}, models() {} })).toBe(true);
-    expect(isCliAdapter({ buildSessionProcess() {}, generate() {} })).toBe(false);
+    expect(isCliAdapter({ buildSessionProcess() {}, buildHelloProbe: true, generate() {}, models() {} })).toBe(false);
   });
 });

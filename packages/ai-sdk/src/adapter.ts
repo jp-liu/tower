@@ -16,9 +16,29 @@ export interface CliSessionOptions {
   prompt: string;
   cwd: string;
   mode: CliSessionMode;
+  systemPrompt?: string;
   model?: string;
   extraArgs?: string[];
+  envPatch?: Record<string, string | null>;
   settings?: Readonly<Record<string, unknown>>;
+}
+
+export interface CliProbeOptions {
+  command: string;
+  cwd: string;
+  prompt: string;
+}
+
+export interface CliSessionFailure {
+  code: "SESSION_NOT_FOUND" | "AUTH_REQUIRED" | "UNKNOWN";
+  retryableWithFresh: boolean;
+  diagnostic?: string;
+}
+
+export interface CliSessionFailureInput {
+  mode: Exclude<CliSessionMode, { type: "fresh" }>;
+  exitCode: number;
+  output: string;
 }
 
 export interface CliQueryOptions {
@@ -79,6 +99,27 @@ export interface CliIntegrationResult extends CliIntegrationState {
   changed: boolean;
 }
 
+export interface CliMcpServerOptions {
+  name: string;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  envVars?: string[];
+  scope?: "user" | "project" | "local";
+  cwd?: string;
+}
+
+export interface CliHookOptions {
+  apiUrl?: string;
+  repairOnly?: boolean;
+}
+
+export interface CliSkillOptions {
+  name: string;
+  sourceDir?: string;
+  scope?: "user" | "workspace";
+}
+
 export interface CliIntegration<TOptions = void> {
   inspect(options: TOptions): Promise<CliIntegrationState>;
   install(options: TOptions): Promise<CliIntegrationResult>;
@@ -87,12 +128,15 @@ export interface CliIntegration<TOptions = void> {
 
 export interface CliAdapter {
   buildSessionProcess(options: CliSessionOptions): CliProcessSpec;
+  /** Optional v1 extension used by hosts that offer an active connection test. */
+  buildHelloProbe?(options: CliProbeOptions): CliProcessSpec;
+  classifySessionFailure?(input: CliSessionFailureInput): CliSessionFailure;
   generate(options: CliQueryOptions): Promise<CliQueryResult>;
   stream?(options: CliQueryOptions): AsyncIterable<CliQueryEvent>;
   models(): Promise<CliModel[]>;
-  mcp?: CliIntegration<unknown>;
-  hooks?: CliIntegration<unknown>;
-  skills?: CliIntegration<unknown>;
+  mcp?: CliIntegration<CliMcpServerOptions>;
+  hooks?: CliIntegration<CliHookOptions>;
+  skills?: CliIntegration<CliSkillOptions>;
 }
 
 export abstract class BaseCliAdapter implements CliAdapter {
@@ -145,6 +189,7 @@ function isCliIntegration(value: unknown): value is CliIntegration<unknown> {
 export function isCliAdapter(value: unknown): value is CliAdapter {
   return isRecord(value)
     && typeof value.buildSessionProcess === "function"
+    && (value.buildHelloProbe === undefined || typeof value.buildHelloProbe === "function")
     && typeof value.generate === "function"
     && typeof value.models === "function"
     && (value.stream === undefined || typeof value.stream === "function")

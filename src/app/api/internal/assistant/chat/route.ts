@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { requireLocalhost } from "@/lib/internal-api-guard";
 import { buildAttachmentPrompt } from "@/lib/build-multimodal-prompt";
 import { getAssistantCacheRoot } from "@/lib/file-utils";
-import { ClaudeCliAdapter } from "@/lib/ai/adapters/cli/claude-cli-adapter";
+import { providerRegistry } from "@/lib/ai/providers";
 import { resolveSdkExecutable } from "@/lib/platform";
 import { db } from "@/lib/db";
 import { buildTowerMcpConfig } from "@/lib/ai/install-orchestrator";
@@ -13,8 +13,6 @@ import {
   shouldRetryFreshOnResume,
   isStaleResumeError,
 } from "@/lib/ai/assistant-turn";
-
-const claudeAdapter = new ClaudeCliAdapter();
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -212,7 +210,9 @@ export async function POST(request: NextRequest) {
         // `claude` command is a `.cmd` shim, which spawn() rejects with EINVAL —
         // resolveSdkExecutable rewrites it to the underlying cli.js so the SDK
         // runs `node cli.js`. No-op on macOS/Linux and for native `.exe` installs.
-        rawClaudeCmd = claudeAdapter.resolveCommand();
+        const resolvedClaude = await providerRegistry.createResolvedCliAdapter("claude", process.cwd());
+        if (!resolvedClaude) throw new Error("Claude CLI provider is unavailable");
+        rawClaudeCmd = resolvedClaude.commandPath;
         claudePath = resolveSdkExecutable(rawClaudeCmd);
         // Log the resolved CLI path — a Windows `spawn EINVAL` means a `.cmd`
         // reached the SDK (it can't be rewritten to a node-runnable cli.js).

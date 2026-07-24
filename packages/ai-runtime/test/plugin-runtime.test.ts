@@ -55,6 +55,7 @@ export const towerCliPlugin = {
   createAdapter() {
     return {
       buildSessionProcess(options) { return { command: "fixture-cli", args: [options.prompt] }; },
+      buildHelloProbe(options) { return { command: options.command, args: [options.prompt] }; },
       async generate() { return { text: "fixture-ok" }; },
       async models() { return [{ id: "fixture" }]; }
     };
@@ -176,6 +177,17 @@ function host(): CliHostContext {
         durationMs: 0,
       }),
     },
+    fileSystem: {
+      exists: () => false,
+      mkdir() {},
+      readText: () => "",
+      writeText() {},
+      lstat: async () => null,
+      readLink: async () => "",
+      symlink: async () => {},
+      unlink: async () => {},
+    },
+    resources: { homeDir: os.tmpdir(), providerConfigDir: path.join(os.tmpdir(), "provider") },
     logger: { debug() {}, info() {}, warn() {}, error() {} },
   };
 }

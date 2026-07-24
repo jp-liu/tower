@@ -1,0 +1,45 @@
+import { defineCliPlugin, type CliPluginManifestV1 } from "@tower/ai-sdk";
+import { CodexCliAdapter } from "./adapter.js";
+
+export const codexManifest = {
+  manifestVersion: 1,
+  apiVersion: "1.0",
+  kind: "cli-provider",
+  display: {
+    name: "Codex CLI",
+    description: "Official Tower provider for the OpenAI Codex CLI",
+  },
+  command: {
+    default: "codex",
+    aliases: ["codex-cli"],
+    knownPaths: {
+      darwin: ["/usr/local/bin/codex", "~/.npm-global/bin/codex"],
+      linux: ["/usr/local/bin/codex", "~/.npm-global/bin/codex"],
+      win32: ["%APPDATA%\\npm\\codex.cmd"],
+    },
+    versionArgs: ["--version"],
+  },
+  compatibility: { tower: ">=0.2.60 <0.4.0", node: ">=18" },
+  capabilities: {
+    sessions: { fresh: true, resume: true, continue: true },
+    query: { generate: true },
+    models: true,
+    integrations: { mcp: true, hooks: true, skills: true },
+  },
+  permissions: [
+    "process:spawn",
+    "filesystem:provider-config",
+    "network:provider",
+    "integration:mcp",
+    "integration:hooks",
+    "integration:skills",
+  ],
+  configSchema: "./config.schema.json",
+} satisfies CliPluginManifestV1;
+
+export const towerCliPlugin = defineCliPlugin({
+  manifest: codexManifest,
+  createAdapter: (host) => new CodexCliAdapter(host),
+});
+
+export { CodexCliAdapter } from "./adapter.js";

@@ -14,6 +14,7 @@ vi.mock("@/lib/db", () => ({
       create: vi.fn(async () => ({ id: "exec1" })),
       update: vi.fn(),
     },
+    cliProfile: { findFirst: vi.fn(async () => null) },
   },
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -27,17 +28,30 @@ vi.mock("@/lib/config-reader", () => ({
 }));
 vi.mock("@/lib/ai/capability-resolver", () => ({
   resolveCliAdapter: vi.fn(async () => ({
-    adapter: {
-      buildSpawnArgs: ({ extraArgs }: { extraArgs: string[] }) => ({
-        command: "claude",
-        args: extraArgs,
-        env: {},
-      }),
-      buildEnvOverrides: () => ({}),
-    },
-    provider: { agentFieldValue: "CLAUDE_CODE" },
+    provider: { name: "claude", agentFieldValue: "CLAUDE_CODE" },
     model: null,
   })),
+}));
+vi.mock("@/lib/ai/providers", () => ({
+  providerRegistry: {
+    get: vi.fn(),
+    getByAgentFieldValue: vi.fn(),
+    createResolvedCliAdapter: vi.fn(async () => ({
+      commandPath: "claude",
+      adapter: {
+        buildSessionProcess: ({ cwd, envPatch, systemPrompt }: {
+          cwd: string;
+          envPatch?: Record<string, string>;
+          systemPrompt?: string;
+        }) => ({
+          command: "claude",
+          args: systemPrompt ? ["--append-system-prompt", systemPrompt] : [],
+          cwd,
+          envPatch,
+        }),
+      },
+    })),
+  },
 }));
 
 import { db } from "@/lib/db";
@@ -46,6 +60,7 @@ import { startPtyExecution } from "@/actions/agent-actions";
 
 const mockDb = db as unknown as {
   task: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+  taskExecution: { updateMany: ReturnType<typeof vi.fn> };
 };
 
 type TaskLabel = { label: { name: string; isBuiltin: boolean } };
@@ -73,6 +88,7 @@ function injectedDirective(): string {
 describe("startPtyExecution directive selection", () => {
   beforeEach(() => {
     vi.mocked(createSession).mockClear();
+    mockDb.taskExecution.updateMany.mockClear();
   });
 
   it("injects the workbench directive for a task with the builtin Tower label", async () => {
@@ -111,5 +127,18 @@ describe("startPtyExecution directive selection", () => {
     await startPtyExecution("t1", "");
 
     expect(injectedDirective()).toContain("## About Tower");
+  });
+
+  it("marks the execution failed when the PTY cannot be started", async () => {
+    mockDb.task.findUnique.mockResolvedValue(taskWithLabels([]));
+    vi.mocked(createSession).mockImplementationOnce(() => {
+      throw new Error("spawn failed");
+    });
+
+    await expect(startPtyExecution("t1", "")).rejects.toThrow("spawn failed");
+    expect(mockDb.taskExecution.updateMany).toHaveBeenCalledWith({
+      where: { id: "exec1", status: "RUNNING" },
+      data: { status: "FAILED", endedAt: expect.any(Date) },
+    });
   });
 });

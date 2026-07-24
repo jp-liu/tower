@@ -66,6 +66,9 @@
   "dependencies": {
     "@tower/ai-runtime": "workspace:*",
     "@tower/ai-sdk": "workspace:*",
+    "@tower/ai-provider-claude": "workspace:*",
+    "@tower/ai-provider-codex": "workspace:*",
+    "@tower/ai-provider-gemini": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "@prisma/client": "^6.19.2",
     "@vscode/ripgrep": "1.18.0",

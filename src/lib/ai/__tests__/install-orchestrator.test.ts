@@ -3,19 +3,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { adapter } = vi.hoisted(() => ({
   adapter: {
-    isAvailable: vi.fn(),
-    installMcp: vi.fn(),
-    installHooks: vi.fn(),
-    installSkill: vi.fn(),
-    isMcpInstalled: vi.fn(),
-    isHooksInstalled: vi.fn(),
-    isSkillInstalled: vi.fn(),
+    mcp: { install: vi.fn(), inspect: vi.fn() },
+    hooks: { install: vi.fn(), inspect: vi.fn() },
+    skills: { install: vi.fn(), inspect: vi.fn() },
   },
 }));
 
 vi.mock("@/lib/ai/providers", () => ({
   providerRegistry: {
-    get: vi.fn((name: string) => name === "codex" ? { cli: { adapter } } : undefined),
+    get: vi.fn((name: string) => name === "codex" ? {
+      cli: {
+        adapter,
+        plugin: { manifest: { capabilities: { integrations: { mcp: true, hooks: true, skills: true } } } },
+      },
+    } : undefined),
+    createResolvedCliAdapter: vi.fn(async (name: string) =>
+      name === "codex" ? { adapter, commandPath: "/usr/local/bin/codex" } : null),
   },
 }));
 
@@ -48,13 +51,12 @@ import { TOWER_MCP_ENV_VARS } from "@/lib/ai/tower-mcp-env";
 describe("inspectProviderIntegration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter.isAvailable.mockResolvedValue(true);
-    adapter.installMcp.mockResolvedValue({ ok: true, method: "cli", detail: "tower" });
-    adapter.installHooks.mockResolvedValue({ ok: true, method: "file", detail: "hooks.json" });
-    adapter.installSkill.mockResolvedValue({ ok: true, method: "symlink", detail: "skill" });
-    adapter.isMcpInstalled.mockResolvedValue(true);
-    adapter.isHooksInstalled.mockResolvedValue(true);
-    adapter.isSkillInstalled.mockResolvedValue(true);
+    adapter.mcp.install.mockResolvedValue({ installed: true, changed: true, detail: "tower" });
+    adapter.hooks.install.mockResolvedValue({ installed: true, changed: true, detail: "hooks.json" });
+    adapter.skills.install.mockResolvedValue({ installed: true, changed: true, detail: "skill" });
+    adapter.mcp.inspect.mockResolvedValue({ installed: true });
+    adapter.hooks.inspect.mockResolvedValue({ installed: true });
+    adapter.skills.inspect.mockResolvedValue({ installed: true });
   });
 
   it("declares every task-scoped Tower environment variable for MCP forwarding", () => {
@@ -68,13 +70,13 @@ describe("inspectProviderIntegration", () => {
   it("checks the real MCP, hooks, and every Tower skill installation", async () => {
     const result = await inspectProviderIntegration("codex");
 
-    expect(adapter.isMcpInstalled).toHaveBeenCalledWith("tower", { scope: "user" });
-    expect(adapter.isHooksInstalled).toHaveBeenCalledOnce();
-    expect(adapter.isSkillInstalled).toHaveBeenCalledTimes(4);
-    expect(adapter.isSkillInstalled).toHaveBeenCalledWith("tower", "/opt/tower/skills/tower");
-    expect(adapter.isSkillInstalled).toHaveBeenCalledWith("tower-goal", "/opt/tower/skills/tower-goal");
-    expect(adapter.isSkillInstalled).toHaveBeenCalledWith("tower-ask", "/opt/tower/skills/tower-ask");
-    expect(adapter.isSkillInstalled).toHaveBeenCalledWith("tower-bridge", "/opt/tower/skills/tower-bridge");
+    expect(adapter.mcp.inspect).toHaveBeenCalledWith(expect.objectContaining({ name: "tower", scope: "user" }));
+    expect(adapter.hooks.inspect).toHaveBeenCalledOnce();
+    expect(adapter.skills.inspect).toHaveBeenCalledTimes(4);
+    expect(adapter.skills.inspect).toHaveBeenCalledWith(expect.objectContaining({ name: "tower", sourceDir: "/opt/tower/skills/tower" }));
+    expect(adapter.skills.inspect).toHaveBeenCalledWith(expect.objectContaining({ name: "tower-goal", sourceDir: "/opt/tower/skills/tower-goal" }));
+    expect(adapter.skills.inspect).toHaveBeenCalledWith(expect.objectContaining({ name: "tower-ask", sourceDir: "/opt/tower/skills/tower-ask" }));
+    expect(adapter.skills.inspect).toHaveBeenCalledWith(expect.objectContaining({ name: "tower-bridge", sourceDir: "/opt/tower/skills/tower-bridge" }));
     expect(result).toEqual({
       mcpInstalled: true,
       hooksInstalled: true,
@@ -84,7 +86,7 @@ describe("inspectProviderIntegration", () => {
   });
 
   it("reports incomplete state when the CLI was reinstalled without hooks", async () => {
-    adapter.isHooksInstalled.mockResolvedValue(false);
+    adapter.hooks.inspect.mockResolvedValue({ installed: false });
 
     await expect(inspectProviderIntegration("codex")).resolves.toEqual({
       mcpInstalled: true,
@@ -95,7 +97,7 @@ describe("inspectProviderIntegration", () => {
   });
 
   it("refreshes a current database record when the real Codex hooks disappeared", async () => {
-    adapter.isHooksInstalled.mockResolvedValue(false);
+    adapter.hooks.inspect.mockResolvedValue({ installed: false });
     const fingerprint = "schema=2|version=test";
 
     await expect(shouldRefreshProviderIntegration("codex", {
@@ -120,7 +122,7 @@ describe("inspectProviderIntegration", () => {
   });
 
   it("treats inspection errors as a missing integration", async () => {
-    adapter.isMcpInstalled.mockRejectedValue(new Error("codex config unavailable"));
+    adapter.mcp.inspect.mockRejectedValue(new Error("codex config unavailable"));
 
     await expect(inspectProviderIntegration("codex")).resolves.toMatchObject({
       mcpInstalled: false,
@@ -129,13 +131,13 @@ describe("inspectProviderIntegration", () => {
   });
 
   it("verifies a refreshed integration before reporting install success", async () => {
-    adapter.isHooksInstalled.mockResolvedValue(false);
+    adapter.hooks.inspect.mockResolvedValue({ installed: false });
 
     const report = await installAllForProvider("codex", "http://localhost:3000");
 
-    expect(adapter.installMcp).toHaveBeenCalledOnce();
-    expect(adapter.installHooks).toHaveBeenCalledOnce();
-    expect(adapter.installSkill).toHaveBeenCalledTimes(4);
+    expect(adapter.mcp.install).toHaveBeenCalledOnce();
+    expect(adapter.hooks.install).toHaveBeenCalledOnce();
+    expect(adapter.skills.install).toHaveBeenCalledTimes(4);
     expect(report.hooks).toMatchObject({
       ok: false,
       error: "Hooks verification failed after install",

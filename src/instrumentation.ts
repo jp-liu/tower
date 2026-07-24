@@ -59,15 +59,18 @@ export async function register() {
         const apiUrl = `http://localhost:${httpPort}`;
         const integrationFingerprint = buildTowerIntegrationFingerprint(apiUrl);
         for (const provider of providerRegistry.getAll()) {
-          const adapter = provider.cli?.adapter;
-          if (!adapter) continue;
+          if (!provider.cli) continue;
           try {
             // Stale-path repair is independent of CLI availability and MCP
             // status: settings.json may still list hooks from a previous
             // Tower install even if the CLI binary is gone from PATH right
             // now (issue #8). Refresh only existing entries — never adds new.
-            await adapter.repairHookPaths?.().catch(() => {});
-            if (!(await adapter.isAvailable())) continue;
+            const resolved = await providerRegistry.createResolvedCliAdapter(
+              provider.name,
+              process.cwd(),
+            ).catch(() => null);
+            if (!resolved) continue;
+            await resolved.adapter.hooks?.install({ repairOnly: true }).catch(() => {});
             const connection = await getProviderConnection(provider.name);
             if (!(await shouldRefreshProviderIntegration(
               provider.name,
@@ -79,7 +82,7 @@ export async function register() {
             }
             const report = await installAllForProvider(provider.name, apiUrl);
             await markProviderConnected(provider.name, {
-              version: await adapter.getVersion().catch(() => null),
+              version: null,
               report,
             });
             if (report.ok) {

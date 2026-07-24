@@ -9,6 +9,8 @@ import {
 import { readConfigValue } from "@/lib/config-reader";
 import { resolveCliAdapter } from "@/lib/ai/capability-resolver";
 import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
+import { providerRegistry } from "@/lib/ai/providers";
+import { mergeProviderProcess, providerBaseEnvironment } from "@/lib/ai/provider-host";
 
 /**
  * Spawn a fresh Claude CLI PTY session for the global assistant (BE-01).
@@ -24,7 +26,7 @@ export async function startAssistantSession(sessionId?: string): Promise<void> {
   destroySession(ASSISTANT_SESSION_KEY);
 
   // Resolve CLI adapter from AI abstraction layer
-  const { adapter: cliAdapter } = await resolveCliAdapter("terminal");
+  const { provider } = await resolveCliAdapter("terminal");
 
   // BE-02: Read the configured system prompt (default defined in config-defaults.ts)
   const systemPrompt = await readConfigValue<string>(
@@ -38,39 +40,40 @@ export async function startAssistantSession(sessionId?: string): Promise<void> {
   const cwd = getPackageRoot();
 
   // Build extra args for assistant-specific behavior
-  const extraArgs: string[] = [
-    // BE-03: Restrict to Tower MCP tools only
-    "--allowedTools",
-    "mcp__tower__*",
-    // BE-02: Inject operator identity prompt
-    "--append-system-prompt",
-    systemPrompt,
-  ];
+  const extraArgs: string[] = provider.name === "claude"
+    ? ["--allowedTools", "mcp__tower__*"]
+    : [];
 
   // Session management: resume existing or start new with a generated ID
-  if (sessionId) {
-    extraArgs.push("--resume", sessionId);
-  } else {
+  if (!sessionId && provider.name === "claude") {
     extraArgs.push("--session-id", randomUUID());
   }
 
-  // Adapter builds the full spawn command (includes --dangerously-skip-permissions etc.)
-  const spawnResult = cliAdapter.buildSpawnArgs({
-    taskId: ASSISTANT_SESSION_KEY,
+  const resolved = await providerRegistry.createResolvedCliAdapter(provider.name, cwd);
+  if (!resolved) throw new Error(`Provider "${provider.name}" does not support CLI sessions`);
+  const processSpec = mergeProviderProcess(resolved.adapter.buildSessionProcess({
     prompt: "",
     cwd,
+    mode: sessionId ? { type: "resume", sessionId } : { type: "fresh" },
+    systemPrompt,
     extraArgs,
-  });
+  }), resolved.commandPath);
 
   // BE-01: Spawn the PTY session keyed by __assistant__
   createSession(
     ASSISTANT_SESSION_KEY,
-    spawnResult.command,
-    spawnResult.args,
+    processSpec.command,
+    processSpec.args,
     cwd,
     () => {},
     () => {},
-    spawnResult.env
+    Object.fromEntries(
+      Object.entries(processSpec.envPatch ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+    ),
+    undefined,
+    undefined,
+    processSpec.initialInput,
+    providerBaseEnvironment(provider.name),
   );
 }
 

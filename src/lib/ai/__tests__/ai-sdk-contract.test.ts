@@ -45,6 +45,10 @@ class TestAdapter extends BaseCliAdapter {
     return { command: "test-cli", args: [options.mode.type, options.prompt], cwd: options.cwd };
   }
 
+  buildHelloProbe(options: { command: string; cwd: string; prompt: string }) {
+    return { command: options.command, args: [options.prompt], cwd: options.cwd };
+  }
+
   async generate(): Promise<CliQueryResult> {
     return { text: "ok" };
   }
@@ -60,6 +64,17 @@ const host = (): CliHostContext => ({
   storageDir: "/tmp/plugin",
   signal: new AbortController().signal,
   process: { execute: async () => ({ exitCode: 0, signal: null, stdout: "", stderr: "", durationMs: 1 }) },
+  fileSystem: {
+    exists: () => false,
+    mkdir() {},
+    readText: () => "",
+    writeText() {},
+    lstat: async () => null,
+    readLink: async () => "",
+    symlink: async () => {},
+    unlink: async () => {},
+  },
+  resources: { homeDir: "/tmp", providerConfigDir: "/tmp/provider" },
   logger: { debug() {}, info() {}, warn() {}, error() {} },
 });
 

@@ -14,6 +14,14 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { getSignalDir } from "@/lib/tower-dir";
 import { TOWER_LABEL_NAME } from "@/lib/constants";
+import type { CliSessionOptions } from "@tower/ai-sdk";
+import { providerRegistry } from "@/lib/ai/providers";
+import {
+  mergeProviderProcess,
+  providerBaseEnvironment,
+  type LegacyCliProfileOverrides,
+} from "@/lib/ai/provider-host";
+import type { ProviderDefinition } from "@/lib/ai/types";
 
 export interface ActiveExecutionInfo {
   executionId: string;
@@ -35,6 +43,114 @@ export interface ActiveExecutionInfo {
 const log = logger.create("agent-actions");
 
 const SIGNAL_DIR = getSignalDir();
+
+function parseStringArray(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === "string") ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseStringRecord(value: string): Record<string, string> {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+    );
+  } catch {
+    return {};
+  }
+}
+
+async function loadLegacyCliProfile(): Promise<LegacyCliProfileOverrides> {
+  // Some pre-migration deployments and focused test doubles do not expose the
+  // legacy table. The profile is compatibility input, never a launch requirement.
+  const cliProfile = (db as typeof db & { cliProfile?: typeof db.cliProfile }).cliProfile;
+  if (!cliProfile) return {};
+  const profile = await cliProfile.findFirst({ where: { isDefault: true } });
+  if (!profile) return {};
+  return {
+    command: profile.command.trim() || undefined,
+    baseArgs: parseStringArray(profile.baseArgs),
+    envPatch: parseStringRecord(profile.envVars),
+  };
+}
+
+function executionProviderName(execution: { config?: string | null; agent: string }): string | undefined {
+  if (execution.config && providerRegistry.get(execution.config)) return execution.config;
+  return providerRegistry.getByAgentFieldValue(execution.agent)?.name;
+}
+
+function taskEnvironment(input: {
+  taskId: string;
+  taskTitle: string;
+  callbackUrl?: string;
+  hasParent?: boolean;
+}): Record<string, string> {
+  const env: Record<string, string> = {
+    TOWER_TASK_ID: input.taskId,
+    TOWER_TASK_TITLE: input.taskTitle,
+    TOWER_STARTED_AT: new Date().toISOString(),
+    TOWER_API_URL: `http://localhost:${process.env.PORT || "3000"}`,
+    TOWER_SIGNAL_DIR: SIGNAL_DIR,
+  };
+  if (input.callbackUrl) env.CALLBACK_URL = input.callbackUrl;
+  if (input.hasParent) env.TOWER_HAS_PARENT = "1";
+  return env;
+}
+
+async function buildProviderLaunch(
+  provider: ProviderDefinition,
+  options: CliSessionOptions,
+) {
+  const profile = await loadLegacyCliProfile();
+  const resolved = await providerRegistry.createResolvedCliAdapter(
+    provider.name,
+    options.cwd,
+    profile.command,
+  );
+  if (!resolved) throw new Error(`Provider "${provider.name}" does not support CLI sessions`);
+  const processSpec = mergeProviderProcess(
+    resolved.adapter.buildSessionProcess(options),
+    resolved.commandPath,
+    profile,
+  );
+  const envOverrides = Object.fromEntries(
+    Object.entries(processSpec.envPatch ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+  );
+  return {
+    processSpec,
+    envOverrides,
+    baseEnv: providerBaseEnvironment(provider.name),
+    adapter: resolved.adapter,
+  };
+}
+
+async function markExecutionLaunchFailed(executionId: string): Promise<void> {
+  try {
+    await db.taskExecution.updateMany({
+      where: { id: executionId, status: "RUNNING" },
+      data: { status: "FAILED", endedAt: new Date() },
+    });
+  } catch {
+    // Preserve the original command-resolution or PTY-spawn error.
+  }
+}
+
+async function createTrackedSession(
+  executionId: string,
+  ...args: Parameters<typeof createSession>
+): Promise<void> {
+  try {
+    createSession(...args);
+  } catch (error) {
+    await markExecutionLaunchFailed(executionId);
+    throw error;
+  }
+}
 
 async function writeExitSignal(taskId: string, exitCode: number): Promise<void> {
   try {
@@ -198,22 +314,14 @@ export async function resumePtyExecution(
   // Read idle timeout from config
   const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
 
-  // Resolve adapter
-  const { adapter: cliAdapter } = await resolveCliAdapter("terminal");
-
-  const adapterEnv = cliAdapter.buildEnvOverrides({
-    taskId,
-    taskTitle: task.title,
-    apiUrl: `http://localhost:${process.env.PORT || "3000"}`,
-    callbackUrl: prevExec.callbackUrl ?? undefined,
-    hasParent: !!task.parentTaskId,
-    signalDir: SIGNAL_DIR,
-  });
+  // Resume is pinned to the provider recorded on the original execution.
+  const fixedProvider = executionProviderName(prevExec);
+  const { provider: providerDef } = await resolveCliAdapter("terminal", fixedProvider);
 
   // Reuse execution: set back to RUNNING
   const execution = await db.taskExecution.update({
     where: { id: prevExec.id },
-    data: { status: "RUNNING", endedAt: null },
+    data: { status: "RUNNING", endedAt: null, config: providerDef.name },
   });
 
   await db.task.update({
@@ -224,24 +332,27 @@ export async function resumePtyExecution(
 
   const usernameVal = await readConfigValue<string>("onboarding.username", "");
 
-  const spawnResult = cliAdapter.buildSpawnArgs({
-    taskId,
+  const launch = await buildProviderLaunch(providerDef, {
     prompt: "",
     cwd,
-    resumeSessionId: previousSessionId,
-    extraArgs: [
-      ...(usernameVal ? ["--append-system-prompt", `The user's name is ${usernameVal}.`] : []),
-    ],
-    envOverrides: adapterEnv,
+    mode: { type: "resume", sessionId: previousSessionId },
+    systemPrompt: usernameVal ? `The user's name is ${usernameVal}.` : undefined,
+    envPatch: taskEnvironment({
+      taskId,
+      taskTitle: task.title,
+      callbackUrl: prevExec.callbackUrl ?? undefined,
+      hasParent: !!task.parentTaskId,
+    }),
+  }).catch(async (error) => {
+    await markExecutionLaunchFailed(execution.id);
+    throw error;
   });
 
-
-  const SESSION_ERROR_RE = /no conversation found with session id|unknown session|session .* not found/i;
-
-  createSession(
+  await createTrackedSession(
+    execution.id,
     taskId,
-    spawnResult.command,
-    spawnResult.args,
+    launch.processSpec.command,
+    launch.processSpec.args,
     cwd,
     () => {},
     async (exitCode) => {
@@ -256,15 +367,21 @@ export async function resumePtyExecution(
       const session = getSession(taskId);
       const terminalBuffer = session?.getBuffer() ?? "";
 
-      // Session resume fallback: if Claude exited with session error, auto-retry fresh
-      if (exitCode !== 0 && SESSION_ERROR_RE.test(terminalBuffer)) {
+      const failure = exitCode !== 0
+        ? launch.adapter.classifySessionFailure?.({
+            mode: { type: "resume", sessionId: previousSessionId },
+            exitCode,
+            output: terminalBuffer,
+          })
+        : undefined;
+      if (failure?.retryableWithFresh) {
         log.info("Session resume failed — retrying with fresh execution", { taskId, previousSessionId });
         await db.taskExecution.update({
           where: { id: execution.id },
           data: { status: "FAILED", endedAt: new Date() },
         }).catch(() => {});
         try {
-          await startPtyExecution(taskId, task.title);
+          await startPtyExecution(taskId, task.title, undefined, undefined, false, providerDef.name);
         } catch (err) {
           log.error("Fresh execution retry also failed", err, { taskId });
         }
@@ -301,9 +418,11 @@ export async function resumePtyExecution(
         await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW", unattended: false } }).catch(() => {});
       }
     },
-    spawnResult.env,
+    launch.envOverrides,
     undefined,
-    idleTimeoutSec * 1000
+    idleTimeoutSec * 1000,
+    launch.processSpec.initialInput,
+    launch.baseEnv,
   );
 
   return { executionId: execution.id, worktreePath: prevExec.worktreePath ?? baseCwd ?? null };
@@ -333,6 +452,7 @@ export async function continueLatestPtyExecution(
     where: { taskId },
     orderBy: { createdAt: "desc" },
   });
+  const fixedProvider = latestExec ? executionProviderName(latestExec) : undefined;
 
   if (latestExec?.sessionId) {
     const sameSessionOnOtherTask = await db.taskExecution.findFirst({
@@ -349,7 +469,7 @@ export async function continueLatestPtyExecution(
   // belong to another Tower task. Only use --continue when the previous run had
   // an isolated worktree cwd; otherwise start fresh with task context.
   if (!latestExec?.worktreePath) {
-    const r = await startPtyExecution(taskId, task.title);
+    const r = await startPtyExecution(taskId, task.title, undefined, undefined, false, fixedProvider);
     return { executionId: r.executionId, worktreePath: r.worktreePath };
   }
 
@@ -369,21 +489,14 @@ export async function continueLatestPtyExecution(
   const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
 
   // Resolve adapter
-  const { adapter: cliAdapter, provider: providerDef } = await resolveCliAdapter("terminal");
-
-  const adapterEnv = cliAdapter.buildEnvOverrides({
-    taskId,
-    taskTitle: task.title,
-    apiUrl: `http://localhost:${process.env.PORT || "3000"}`,
-    hasParent: !!task.parentTaskId,
-    signalDir: SIGNAL_DIR,
-  });
+  const { provider: providerDef } = await resolveCliAdapter("terminal", fixedProvider);
 
   // Create a new execution record
   const execution = await db.taskExecution.create({
     data: {
       taskId,
       agent: providerDef.agentFieldValue,
+      config: providerDef.name,
       status: "RUNNING",
       startedAt: new Date(),
       worktreePath: latestExec?.worktreePath ?? null,
@@ -399,22 +512,27 @@ export async function continueLatestPtyExecution(
 
   const usernameVal = await readConfigValue<string>("onboarding.username", "");
 
-  const spawnResult = cliAdapter.buildSpawnArgs({
-    taskId,
+  const launch = await buildProviderLaunch(providerDef, {
     prompt: "",
     cwd,
-    continueLatest: true,
-    extraArgs: [
-      ...(usernameVal ? ["--append-system-prompt", `The user's name is ${usernameVal}.`] : []),
-    ],
-    envOverrides: adapterEnv,
+    mode: { type: "continue" },
+    systemPrompt: usernameVal ? `The user's name is ${usernameVal}.` : undefined,
+    envPatch: taskEnvironment({
+      taskId,
+      taskTitle: task.title,
+      hasParent: !!task.parentTaskId,
+    }),
+  }).catch(async (error) => {
+    await markExecutionLaunchFailed(execution.id);
+    throw error;
   });
 
 
-  createSession(
+  await createTrackedSession(
+    execution.id,
     taskId,
-    spawnResult.command,
-    spawnResult.args,
+    launch.processSpec.command,
+    launch.processSpec.args,
     cwd,
     () => {},
     async (exitCode) => {
@@ -426,6 +544,26 @@ export async function continueLatestPtyExecution(
       const { getSession } = await import("@/lib/pty/session-store");
       const session = getSession(taskId);
       const terminalBuffer = session?.getBuffer() ?? "";
+
+      const failure = exitCode !== 0
+        ? launch.adapter.classifySessionFailure?.({
+            mode: { type: "continue" },
+            exitCode,
+            output: terminalBuffer,
+          })
+        : undefined;
+      if (failure?.retryableWithFresh) {
+        await db.taskExecution.update({
+          where: { id: execution.id },
+          data: { status: "FAILED", endedAt: new Date() },
+        }).catch(() => {});
+        try {
+          await startPtyExecution(taskId, task.title, undefined, undefined, false, providerDef.name);
+        } catch (err) {
+          log.error("Fresh execution retry also failed", err, { taskId });
+        }
+        return;
+      }
 
       await db.taskExecution.update({
         where: { id: execution.id },
@@ -456,9 +594,11 @@ export async function continueLatestPtyExecution(
         await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW", unattended: false } }).catch(() => {});
       }
     },
-    spawnResult.env,
+    launch.envOverrides,
     undefined,
-    idleTimeoutSec * 1000
+    idleTimeoutSec * 1000,
+    launch.processSpec.initialInput,
+    launch.baseEnv,
   );
 
   return { executionId: execution.id, worktreePath: latestExec?.worktreePath ?? baseCwd ?? null };
@@ -527,7 +667,9 @@ export async function startPtyExecution(
   selectedPromptId?: string | null,
   callbackUrl?: string | null,
   /** When true, skip injecting task context — start a clean CLI session */
-  cleanStart?: boolean
+  cleanStart?: boolean,
+  /** Internal resume fallback: keep the original provider even if the terminal slot changed. */
+  fixedProviderName?: string,
 ): Promise<{ executionId: string; worktreePath: string | null }> {
   // Harness cleanup: fresh/restarted execution → cancel the old pending ask (a fresh start via /reply has no
   // history, so there's no OPEN ask to clear here either). best-effort.
@@ -563,7 +705,7 @@ export async function startPtyExecution(
   const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
 
   // 1c. Resolve adapter
-  const { adapter: cliAdapter, provider: providerDef, model: configuredModel } = await resolveCliAdapter("terminal");
+  const { provider: providerDef, model: configuredModel } = await resolveCliAdapter("terminal", fixedProviderName);
 
   // 2. Clean up stale RUNNING executions (from crashed/killed processes)
   await db.taskExecution.updateMany({
@@ -654,6 +796,7 @@ export async function startPtyExecution(
     data: {
       taskId,
       agent: providerDef.agentFieldValue,
+      config: providerDef.name,
       status: "RUNNING",
       startedAt: new Date(),
       worktreePath: resolvedWorktreePath ?? null,
@@ -723,31 +866,31 @@ export async function startPtyExecution(
     appendSystemPrompt += (appendSystemPrompt ? "\n" : "") + `The user's name is ${usernameVal}.`;
   }
 
-  // 8. Adapter produces complete command + args + env
-  const spawnResult = cliAdapter.buildSpawnArgs({
-    taskId,
+  // 8. Provider produces a structured process plan; Host resolves and merges legacy profile overrides.
+  const launch = await buildProviderLaunch(providerDef, {
     prompt: fullPrompt,
     cwd,
-    extraArgs: [
-      ...(appendSystemPrompt ? ["--append-system-prompt", appendSystemPrompt] : []),
-      ...(configuredModel ? ["--model", configuredModel] : []),
-    ],
-    envOverrides: cliAdapter.buildEnvOverrides({
+    mode: { type: "fresh" },
+    systemPrompt: appendSystemPrompt || undefined,
+    model: configuredModel,
+    envPatch: taskEnvironment({
       taskId,
       taskTitle: task.title,
-      apiUrl: `http://localhost:${process.env.PORT || "3000"}`,
       callbackUrl: callbackUrl ?? undefined,
       hasParent: !!task.parentTaskId,
-      signalDir: SIGNAL_DIR,
     }),
+  }).catch(async (error) => {
+    await markExecutionLaunchFailed(execution.id);
+    throw error;
   });
 
   // 9. Create PTY session — onData is a no-op; ws-server.ts wires the real
   //    broadcaster via setDataListener when the WebSocket client connects
-  createSession(
+  await createTrackedSession(
+    execution.id,
     taskId,
-    spawnResult.command,
-    spawnResult.args,
+    launch.processSpec.command,
+    launch.processSpec.args,
     cwd,
     () => {},
     async (exitCode) => {
@@ -833,10 +976,15 @@ export async function startPtyExecution(
         session.disconnectTimer = timer;
       }
     },
-    spawnResult.env,
+    launch.envOverrides,
     undefined,
-    idleTimeoutSec * 1000
-  );
+    idleTimeoutSec * 1000,
+    launch.processSpec.initialInput,
+    launch.baseEnv,
+  ).catch(async (error) => {
+    if (tempDir) await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  });
 
   return { executionId: execution.id, worktreePath: resolvedWorktreePath ?? baseCwd ?? null };
 }

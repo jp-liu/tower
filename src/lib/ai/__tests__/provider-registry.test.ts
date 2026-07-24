@@ -1,22 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { ProviderRegistry } from "../provider-registry";
 import type { ProviderDefinition } from "../types";
-import { ClaudeCliAdapter } from "../adapters/cli/claude-cli-adapter";
+import { createClaudeProvider } from "../providers/claude";
 
 function makeClaudeProvider(): ProviderDefinition {
-  return {
-    name: "claude",
-    displayName: "Claude Code",
-    agentFieldValue: "CLAUDE_CODE",
-    cli: {
-      command: "claude",
-      adapter: new ClaudeCliAdapter(),
-    },
-    models: {
-      cli: ["sonnet", "opus", "haiku"],
-      api: [],
-    },
-  };
+  return createClaudeProvider();
 }
 
 describe("ProviderRegistry", () => {

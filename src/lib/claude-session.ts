@@ -1,7 +1,5 @@
-import { ClaudeCliAdapter } from "@/lib/ai/adapters/cli/claude-cli-adapter";
+import { providerRegistry } from "@/lib/ai/providers";
 import { resolveSdkExecutable } from "@/lib/platform";
-
-const claudeAdapter = new ClaudeCliAdapter();
 
 export interface DreamingResult {
   summary: string;
@@ -30,7 +28,9 @@ export async function aiQuery(
   let result = "";
   try {
     const { query } = await import("@anthropic-ai/claude-agent-sdk");
-    const rawCmd = claudeAdapter.resolveCommand();
+    const resolved = await providerRegistry.createResolvedCliAdapter("claude", cwd);
+    if (!resolved) throw new Error("Claude CLI provider is unavailable");
+    const rawCmd = resolved.commandPath;
     // On Windows the SDK spawns this path directly (no shell) — a .cmd shim
     // causes EINVAL. resolveSdkExecutable rewrites it to the underlying cli.js.
     const claudePath = resolveSdkExecutable(rawCmd);

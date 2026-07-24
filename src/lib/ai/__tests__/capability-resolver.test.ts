@@ -55,6 +55,18 @@ describe("capability-resolver (gated by ProviderConnection)", () => {
   });
 
   describe("resolveCliAdapter — slot config present", () => {
+    it("keeps an execution pinned to its recorded provider when the slot changes", async () => {
+      vi.mocked(db.aiCapabilityConfig.findUnique).mockResolvedValue({
+        id: "1", slot: "terminal", provider: "claude", mode: "cli", model: null,
+        createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      const result = await resolveCliAdapter("terminal", "gemini");
+
+      expect(result.provider.name).toBe("gemini");
+      expect(mockIsConnected).not.toHaveBeenCalled();
+    });
+
     it("returns adapter + model when configured provider is connected", async () => {
       vi.mocked(db.aiCapabilityConfig.findUnique).mockResolvedValue({
         id: "1", slot: "terminal", provider: "claude", mode: "cli", model: "opus",

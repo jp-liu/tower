@@ -1,4 +1,5 @@
 export * from "./command-resolver.js";
+export * from "./host-filesystem.js";
 export * from "./npm-package-provider.js";
 export * from "./paths.js";
 export * from "./plugin-errors.js";

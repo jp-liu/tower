@@ -19,6 +19,7 @@ interface CliAdapterDef {
 const CLI_ADAPTERS: CliAdapterDef[] = [
   { adapterType: "claude_code", provider: "claude", label: "Claude CLI" },
   { adapterType: "codex_cli", provider: "codex", label: "Codex CLI" },
+  { adapterType: "gemini_cli", provider: "gemini", label: "Gemini CLI" },
 ];
 
 interface WizardStepCliTestProps {

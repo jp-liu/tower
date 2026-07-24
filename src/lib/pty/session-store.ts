@@ -21,7 +21,9 @@ export function createSession(
   onExit: (exitCode: number, signal?: number) => void,
   envOverrides?: Record<string, string>,
   onIdle?: () => void,
-  idleThresholdMs?: number
+  idleThresholdMs?: number,
+  initialInput?: string,
+  baseEnvOverride?: Record<string, string>
 ): PtySession {
   // Kill any existing session for this taskId before creating a new one. We do
   // NOT clear its pid file here — recordSessionPid below overwrites it, which
@@ -31,10 +33,22 @@ export function createSession(
   // Resolve command for cross-platform PTY spawning (handles .cmd/.bat on Windows)
   const { command: resolvedCommand, args: resolvedArgs } = resolveSpawnTargetSync(command, args);
 
-  const session = new PtySession(taskId, resolvedCommand, resolvedArgs, cwd, onData, onExit, envOverrides, onIdle, idleThresholdMs);
+  const session = new PtySession(
+    taskId,
+    resolvedCommand,
+    resolvedArgs,
+    cwd,
+    onData,
+    onExit,
+    envOverrides,
+    onIdle,
+    idleThresholdMs,
+    baseEnvOverride,
+  );
   sessions.set(taskId, session);
   // Persist pid so a hard Tower crash can reap this group on next boot.
   void recordSessionPid(taskId, session.pid);
+  if (initialInput !== undefined) session.writeInitialInput(initialInput);
   return session;
 }
 

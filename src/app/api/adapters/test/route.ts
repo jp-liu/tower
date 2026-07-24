@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     if (provider) {
       try {
         const adapter = providerRegistry.get(provider)?.cli?.adapter;
-        await adapter?.repairHookPaths?.();
+        await adapter?.hooks?.install({ repairOnly: true });
       } catch {
         // Best-effort — proceed with the probe even if repair fails.
       }

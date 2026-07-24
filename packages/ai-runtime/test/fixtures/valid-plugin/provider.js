@@ -23,6 +23,9 @@ export const towerCliPlugin = {
       buildSessionProcess(options) {
         return { command: "fixture-cli", args: [options.prompt] };
       },
+      buildHelloProbe(options) {
+        return { command: options.command, args: [options.prompt], cwd: options.cwd };
+      },
       async generate() {
         return { text: "fixture-ok" };
       },

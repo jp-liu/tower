@@ -14,6 +14,15 @@ importers:
       '@prisma/client':
         specifier: ^6.19.2
         version: 6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)
+      '@tower/ai-provider-claude':
+        specifier: workspace:*
+        version: link:packages/ai-provider-claude
+      '@tower/ai-provider-codex':
+        specifier: workspace:*
+        version: link:packages/ai-provider-codex
+      '@tower/ai-provider-gemini':
+        specifier: workspace:*
+        version: link:packages/ai-provider-gemini
       '@tower/ai-runtime':
         specifier: workspace:*
         version: link:packages/ai-runtime
@@ -210,6 +219,24 @@ importers:
       zustand:
         specifier: ^5.0.12
         version: 5.0.12(@types/react@19.2.14)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
+
+  packages/ai-provider-claude:
+    dependencies:
+      '@tower/ai-sdk':
+        specifier: workspace:*
+        version: link:../ai-sdk
+
+  packages/ai-provider-codex:
+    dependencies:
+      '@tower/ai-sdk':
+        specifier: workspace:*
+        version: link:../ai-sdk
+
+  packages/ai-provider-gemini:
+    dependencies:
+      '@tower/ai-sdk':
+        specifier: workspace:*
+        version: link:../ai-sdk
 
   packages/ai-runtime:
     dependencies:

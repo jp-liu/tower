@@ -1,5 +1,7 @@
 // src/lib/ai/types.ts
 
+import type { CliAdapter as SdkCliAdapter, CliPlugin } from "@tower/ai-sdk";
+
 // ---------------------------------------------------------------------------
 // CLI Adapter — PTY execution layer
 // ---------------------------------------------------------------------------
@@ -172,7 +174,8 @@ export interface ProviderDefinition {
 
   cli?: {
     command: string;
-    adapter: CliAdapter;
+    adapter: SdkCliAdapter;
+    plugin: CliPlugin;
   };
   api?: {
     keyEnvVar: string;

@@ -1,8 +1,14 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { homedir } from "node:os";
 import path from "node:path";
 import { resolveCommandPath, resolveSpawnTarget, ensurePathInEnv, stripClaudeNestingEnv } from "./platform";
-import type { CliAdapter } from "./ai/types";
 import { providerRegistry } from "./ai/providers";
+import { ControlledProcessExecutor } from "@tower/ai-runtime";
+import {
+  createBuiltInAdapter,
+  providerBaseEnvironment,
+  resolveBuiltInCommandResolution,
+} from "./ai/provider-host";
 
 // ---------------------------------------------------------------------------
 // Types (from adapters/types.ts)
@@ -52,6 +58,19 @@ type ChildProcessWithEvents = ChildProcess & {
 
 const runningProcesses = new Map<string, RunningProcess>();
 const MAX_CAPTURE_BYTES = 4 * 1024 * 1024;
+
+function sanitizeDiagnostic(value: string): string {
+  let sanitized = value;
+  const homePaths = [homedir(), process.env.USERPROFILE].filter(
+    (item): item is string => typeof item === "string" && item.length > 1,
+  );
+  for (const homePath of homePaths) sanitized = sanitized.split(homePath).join("~");
+  for (const [key, secret] of Object.entries(process.env)) {
+    if (!/(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)/i.test(key)) continue;
+    if (secret && secret.length >= 4) sanitized = sanitized.split(secret).join("[redacted]");
+  }
+  return sanitized;
+}
 
 function parseObject(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -421,12 +440,9 @@ function detectClaudeLoginRequired(input: {
 export async function testEnvironment(cwd: string, provider?: string): Promise<TestResult> {
   const providerName = provider ?? "claude";
   const providerDef = providerRegistry.get(providerName);
-  const adapter = providerDef?.cli?.adapter;
-  const command = providerDef?.cli?.command ?? providerName;
 
-  // If we have an adapter, use the generic path
-  if (adapter) {
-    return testWithAdapter(cwd, providerName, command, adapter);
+  if (providerDef?.cli) {
+    return testWithAdapter(cwd, providerName);
   }
 
   // Fallback: Claude-specific path (legacy, keeps stream-json parsing)
@@ -434,89 +450,78 @@ export async function testEnvironment(cwd: string, provider?: string): Promise<T
 }
 
 /**
- * Generic CLI test using adapter interface.
- * New providers only need to implement getApiKeyInfo() and buildHelloProbeArgs().
+ * Unified built-in CLI test through Runtime discovery and the SDK probe plan.
  */
 async function testWithAdapter(
   cwd: string,
   providerName: string,
-  command: string,
-  adapter: CliAdapter,
 ): Promise<TestResult> {
   const checks: TestCheck[] = [];
+  const provider = providerRegistry.get(providerName);
+  if (!provider?.cli) return { ok: false, checks };
+  const builtIn = {
+    id: provider.name,
+    agentFieldValue: provider.agentFieldValue,
+    plugin: provider.cli.plugin,
+  };
+  const command = provider.cli.plugin.manifest.command.default;
+  const env = providerBaseEnvironment(providerName);
+  const resolution = await resolveBuiltInCommandResolution(builtIn, cwd).catch(() => null);
+  const selected = resolution?.selected;
 
   // Check 1: command resolvable
-  try {
-    await ensureCommandResolvable(command, cwd, { ...process.env });
+  if (selected && (selected.state === "runnable" || selected.state === "connected")) {
     checks.push({
       name: `${providerName}_command_resolvable`,
       passed: true,
-      message: `${command} command found in PATH`,
+      message: `${command} command found and runnable`,
     });
-  } catch (err) {
+  } else {
     checks.push({
       name: `${providerName}_command_resolvable`,
       passed: false,
-      message: err instanceof Error ? err.message : `${command} command not found in PATH`,
+      message: sanitizeDiagnostic(selected?.diagnostic ?? `${command} command not found or not executable`),
     });
     return { ok: false, checks };
   }
 
-  // Check 2: version
-  try {
-    const version = await adapter.getVersion();
-    checks.push({
-      name: `${providerName}_version`,
-      passed: true,
-      message: version ? `Version: ${version}` : "Version: unknown",
-    });
-  } catch {
-    checks.push({
-      name: `${providerName}_version`,
-      passed: true,
-      message: "Version: unknown",
-    });
-  }
-
-  // Check 3: API key (from adapter — not required blocks pass)
-  const keyInfo = adapter.getApiKeyInfo();
-  const apiKey = process.env[keyInfo.envVar];
-  const hasApiKey = typeof apiKey === "string" && apiKey.trim().length > 0;
   checks.push({
-    name: `${providerName}_api_key`,
-    passed: hasApiKey,
-    message: hasApiKey
-      ? `${keyInfo.envVar} is set`
-      : `${keyInfo.envVar} is not set${keyInfo.required ? "" : ` (${command} may use subscription auth)`}`,
+    name: `${providerName}_version`,
+    passed: true,
+    message: selected.version ? `Version: ${selected.version}` : "Version: unknown",
   });
 
-  // Check 4: hello probe (from adapter)
-  const probeSpec = adapter.buildHelloProbeArgs("Respond with just the word hello");
-  const probeId = `${providerName}-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  try {
-    const probe = await runChildProcess(
-      probeId,
-      probeSpec.command,
-      probeSpec.args,
-      {
-        cwd,
-        env: {},
-        timeoutSec: 45,
-        graceSec: 5,
-        onLog: async () => {},
-      },
-    );
+  // Authentication remains owned by the CLI; Tower never reads or reports credential values.
+  checks.push({
+    name: `${providerName}_cli_auth`,
+    passed: true,
+    message: `Authentication is managed by ${command}`,
+  });
 
-    if (probe.timedOut) {
-      checks.push({
-        name: `${providerName}_hello_probe`,
-        passed: false,
-        message: `${command} hello probe timed out`,
-      });
-    } else if ((probe.exitCode ?? 1) === 0) {
+  const adapter = createBuiltInAdapter(builtIn, selected.path);
+  if (!adapter.buildHelloProbe) {
+    checks.push({
+      name: `${providerName}_hello_probe`,
+      passed: false,
+      message: `${command} provider does not support an active hello probe`,
+    });
+    return { ok: false, checks };
+  }
+  const probeSpec = adapter.buildHelloProbe({
+    command: selected.path,
+    cwd,
+    prompt: "Respond with just the word hello",
+  });
+  try {
+    const probe = await new ControlledProcessExecutor({ env }).execute(probeSpec, {
+      timeoutMs: 45_000,
+      maxOutputBytes: MAX_CAPTURE_BYTES,
+    });
+
+    if ((probe.exitCode ?? 1) === 0) {
       const output = probe.stdout.trim();
       const assistantText = extractAssistantText(output);
-      const replyText = (assistantText || output).trim();
+      const replyText = sanitizeDiagnostic((assistantText || output).trim());
       // Pass as long as the model actually responded with text. Earlier
       // versions required a literal "hello", but real models freely say
       // "Hey!" / "Sure!" / "Hi there" — locking those out was just noise
@@ -528,7 +533,7 @@ async function testWithAdapter(
         passed,
         message: passed
           ? `${command} hello probe succeeded (model replied: ${replyText.slice(0, 80)})`
-          : buildProbeMismatchMessage(command, output),
+          : sanitizeDiagnostic(buildProbeMismatchMessage(command, output)),
       });
     } else {
       const stderrLine =
@@ -540,7 +545,7 @@ async function testWithAdapter(
         name: `${providerName}_hello_probe`,
         passed: false,
         message: stderrLine
-          ? `${command} hello probe failed: ${stderrLine}`
+          ? `${command} hello probe failed: ${sanitizeDiagnostic(stderrLine)}`
           : `${command} hello probe failed with exit code ${probe.exitCode ?? -1}`,
       });
     }
@@ -548,11 +553,13 @@ async function testWithAdapter(
     checks.push({
       name: `${providerName}_hello_probe`,
       passed: false,
-      message: err instanceof Error ? err.message : `${command} hello probe threw an error`,
+      message: err instanceof Error
+        ? sanitizeDiagnostic(err.message)
+        : `${command} hello probe threw an error`,
     });
   }
 
-  const ok = checks.every((c) => c.passed || c.name === `${providerName}_api_key`);
+  const ok = checks.every((c) => c.passed);
   return { ok, checks };
 }
 

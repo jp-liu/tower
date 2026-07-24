@@ -1,5 +1,6 @@
 import * as pty from "node-pty";
-import { ensurePathInEnv, stripClaudeNestingEnv, stripTowerRuntimeEnv } from "@/lib/platform";
+import { ensurePathInEnv, isWindows, stripClaudeNestingEnv, stripTowerRuntimeEnv } from "@/lib/platform";
+import { planTerminalWrite } from "./terminal-submit";
 
 export class PtySession {
   readonly taskId: string;
@@ -23,6 +24,7 @@ export class PtySession {
   private _idleThresholdMs: number;
   private _onIdle: (() => void) | null;
   private _idleFired = false;
+  private _initialInputSent = false;
 
   constructor(
     taskId: string,
@@ -33,7 +35,8 @@ export class PtySession {
     onExit: (exitCode: number, signal?: number) => void,
     envOverrides?: Record<string, string>,
     onIdle?: () => void,
-    idleThresholdMs?: number
+    idleThresholdMs?: number,
+    baseEnvOverride?: Record<string, string>
   ) {
     this.taskId = taskId;
     this._onData = onData;
@@ -42,7 +45,9 @@ export class PtySession {
 
     // Build env: inherit full parent env, strip Claude nesting vars and Tower's
     // own data-root config, ensure PATH exists
-    const baseEnv = stripTowerRuntimeEnv(stripClaudeNestingEnv(ensurePathInEnv(process.env)));
+    const baseEnv = baseEnvOverride
+      ? ensurePathInEnv({ ...baseEnvOverride })
+      : stripTowerRuntimeEnv(stripClaudeNestingEnv(ensurePathInEnv(process.env)));
     const spawnEnv = {
       ...baseEnv,
       TERM: "xterm-color",
@@ -135,6 +140,22 @@ export class PtySession {
     }
   }
 
+  /** Deliver a fresh-session prompt once, after the PTY is ready for input. */
+  writeInitialInput(text: string): void {
+    if (this._initialInputSent || this.killed) return;
+    this._initialInputSent = true;
+    const plan = planTerminalWrite(text, true);
+    const bodyTimer = setTimeout(() => {
+      if (this.killed) return;
+      this.write(plan.body);
+      if (plan.submitKey) {
+        const submitTimer = setTimeout(() => this.write(plan.submitKey!), 25);
+        submitTimer.unref?.();
+      }
+    }, 100);
+    bodyTimer.unref?.();
+  }
+
   resize(cols: number, rows: number): void {
     if (!this.killed) {
       this._pty.resize(cols, rows);
@@ -215,7 +236,7 @@ export class PtySession {
 
     const pid = this._pty.pid;
 
-    if (process.platform === "win32") {
+    if (isWindows()) {
       // conpty/winpty terminates the whole process tree on kill
       try {
         this._pty.kill();

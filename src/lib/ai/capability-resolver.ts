@@ -1,7 +1,8 @@
 import { db } from "@/lib/db";
 import { providerRegistry } from "./providers";
 import { AiProviderError } from "./types";
-import type { CliAdapter, AiQueryAdapter, ProviderDefinition, AiSlot } from "./types";
+import type { CliAdapter } from "@tower/ai-sdk";
+import type { AiQueryAdapter, ProviderDefinition, AiSlot } from "./types";
 import {
   isProviderConnected,
   getConnectedProviders,
@@ -63,11 +64,14 @@ async function resolveProviderName(configuredProvider: string | null): Promise<s
   return connected.includes(DEFAULT_PROVIDER) ? DEFAULT_PROVIDER : connected[0];
 }
 
-export async function resolveCliAdapter(slot: "terminal"): Promise<ResolvedCliAdapter> {
+export async function resolveCliAdapter(
+  slot: "terminal",
+  fixedProviderName?: string,
+): Promise<ResolvedCliAdapter> {
   const config = await loadSlotConfig(slot);
   const model = config?.model ?? undefined;
 
-  const providerName = await resolveProviderName(config?.provider ?? null);
+  const providerName = fixedProviderName ?? await resolveProviderName(config?.provider ?? null);
 
   const providerDef = providerRegistry.get(providerName);
   if (!providerDef) {

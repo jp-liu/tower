@@ -8,7 +8,8 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import * as path from "node:path";
-import type { CliAdapter, InstallResult, McpServerConfig } from "./types";
+import type { CliAdapter as SdkCliAdapter, CliIntegrationResult } from "@tower/ai-sdk";
+import type { InstallResult, McpServerConfig } from "./types";
 import { providerRegistry } from "./providers";
 import { getTowerDbPath, getTowerDir } from "../tower-dir";
 import { migrateLegacyTowerMcp, type MigrationReport } from "./migrate-legacy-mcp";
@@ -92,6 +93,22 @@ export interface ProviderIntegrationStatus {
   ok: boolean;
 }
 
+function asInstallResult(
+  method: InstallResult["method"],
+  result: CliIntegrationResult,
+): InstallResult {
+  return { ok: true, method, detail: result.detail ?? (result.changed ? "updated" : "already current") };
+}
+
+function unsupportedIntegration(name: string): InstallResult {
+  return {
+    ok: false,
+    method: "cli",
+    detail: `${name} unsupported`,
+    error: `Provider manifest declares ${name} unsupported`,
+  };
+}
+
 interface RecordedProviderIntegration {
   testOk: boolean;
   mcpInstalled: boolean;
@@ -153,7 +170,10 @@ export function getTowerSkillSourceDir(skillName: string = TOWER_SKILL_NAME): st
 export async function inspectProviderIntegration(
   providerName: string,
 ): Promise<ProviderIntegrationStatus> {
-  const adapter = providerRegistry.get(providerName)?.cli?.adapter;
+  const resolved = await providerRegistry
+    .createResolvedCliAdapter(providerName, getPackageRoot())
+    .catch(() => null);
+  const adapter = resolved?.adapter;
   if (!adapter) {
     return { mcpInstalled: false, hooksInstalled: false, skillsInstalled: false, ok: false };
   }
@@ -166,22 +186,30 @@ export async function inspectProviderIntegration(
     }
   };
 
+  const mcpConfig = buildTowerMcpConfig();
   const [mcpInstalled, hooksInstalled, skillChecks] = await Promise.all([
-    check(() => adapter.isMcpInstalled(getTowerMcpName(), { scope: "user" })),
-    check(() => adapter.isHooksInstalled()),
+    check(async () => (await adapter.mcp?.inspect({ ...mcpConfig, scope: "user" }))?.installed ?? false),
+    check(async () => (await adapter.hooks?.inspect({}))?.installed ?? false),
     Promise.all(
       TOWER_SKILL_NAMES.map((name) =>
-        check(() => adapter.isSkillInstalled(name, getTowerSkillSourceDir(name))),
+        check(async () => (await adapter.skills?.inspect({
+          name,
+          sourceDir: getTowerSkillSourceDir(name),
+          scope: "user",
+        }))?.installed ?? false),
       ),
     ),
   ]);
   const skillsInstalled = skillChecks.every(Boolean);
+  const integrations = providerRegistry.get(providerName)?.cli?.plugin.manifest.capabilities.integrations;
 
   return {
     mcpInstalled,
     hooksInstalled,
     skillsInstalled,
-    ok: mcpInstalled && hooksInstalled && skillsInstalled,
+    ok: (!integrations?.mcp || mcpInstalled)
+      && (!integrations?.hooks || hooksInstalled)
+      && (!integrations?.skills || skillsInstalled),
   };
 }
 
@@ -195,16 +223,20 @@ export async function shouldRefreshProviderIntegration(
   connection: RecordedProviderIntegration | null,
   integrationFingerprint: string,
 ): Promise<boolean> {
-  if (!isRecordedIntegrationCurrent(connection, integrationFingerprint)) return true;
+  if (!isRecordedIntegrationCurrent(providerName, connection, integrationFingerprint)) return true;
   return !(await inspectProviderIntegration(providerName)).ok;
 }
 
 function isRecordedIntegrationCurrent(
+  providerName: string,
   connection: RecordedProviderIntegration | null,
   integrationFingerprint: string,
 ): boolean {
   if (!connection?.testOk) return false;
-  if (!connection.mcpInstalled || !connection.hooksInstalled || !connection.skillsInstalled) {
+  const integrations = providerRegistry.get(providerName)?.cli?.plugin.manifest.capabilities.integrations;
+  if ((integrations?.mcp && !connection.mcpInstalled)
+    || (integrations?.hooks && !connection.hooksInstalled)
+    || (integrations?.skills && !connection.skillsInstalled)) {
     return false;
   }
   if (!connection.installLog) return false;
@@ -230,8 +262,7 @@ export async function installAllForProvider(
 ): Promise<ProviderInstallReport> {
   const integrationFingerprint = buildTowerIntegrationFingerprint(apiUrl);
   const provider = providerRegistry.get(providerName);
-  const adapter: CliAdapter | undefined = provider?.cli?.adapter;
-  if (!adapter) {
+  if (!provider?.cli) {
     return {
       provider: providerName,
       available: false,
@@ -240,10 +271,11 @@ export async function installAllForProvider(
     };
   }
 
-  const available = await adapter.isAvailable();
-  if (!available) {
+  const resolved = await providerRegistry.createResolvedCliAdapter(providerName, getPackageRoot()).catch(() => null);
+  if (!resolved) {
     return { provider: providerName, available: false, integrationFingerprint, ok: false };
   }
+  const adapter: SdkCliAdapter = resolved.adapter;
 
   // Migrate first — this is a one-time cleanup of where older Tower wrote the
   // entry. Only Claude has a legacy entry; for other providers it's a no-op.
@@ -251,12 +283,23 @@ export async function installAllForProvider(
     providerName === "claude" ? migrateLegacyTowerMcp() : undefined;
 
   const mcpConfig = buildTowerMcpConfig();
-  const mcp = await adapter.installMcp(mcpConfig, { scope: "user" });
-  const hooks = await adapter.installHooks(apiUrl);
+  const capabilities = provider.cli.plugin.manifest.capabilities.integrations;
+  const mcp = adapter.mcp
+    ? asInstallResult("cli", await adapter.mcp.install({ ...mcpConfig, scope: "user" }))
+    : unsupportedIntegration("MCP");
+  const hooks = adapter.hooks
+    ? asInstallResult("file", await adapter.hooks.install({ apiUrl }))
+    : unsupportedIntegration("Hooks");
   // Install every task-terminal Tower skill. Report the first failure if any,
   // else the canonical `tower` result — ok reflects all of them.
   const skillResults = await Promise.all(
-    TOWER_SKILL_NAMES.map((name) => adapter.installSkill(name, getTowerSkillSourceDir(name))),
+    TOWER_SKILL_NAMES.map(async (name) => adapter.skills
+      ? asInstallResult("symlink", await adapter.skills.install({
+          name,
+          sourceDir: getTowerSkillSourceDir(name),
+          scope: "user",
+        }))
+      : unsupportedIntegration("Skills")),
   );
   const skill = skillResults.find((r) => !r.ok) ?? skillResults[0];
   const report: ProviderInstallReport = {
@@ -267,7 +310,9 @@ export async function installAllForProvider(
     mcp,
     hooks,
     skill,
-    ok: mcp.ok && hooks.ok && skill.ok,
+    ok: (!capabilities?.mcp || mcp.ok)
+      && (!capabilities?.hooks || hooks.ok)
+      && (!capabilities?.skills || skill.ok),
   };
   const actual = await inspectProviderIntegration(providerName);
   return applyIntegrationVerification(report, actual);
@@ -288,13 +333,17 @@ function applyIntegrationVerification(
   const mcp = verify(report.mcp, actual.mcpInstalled, "MCP");
   const hooks = verify(report.hooks, actual.hooksInstalled, "Hooks");
   const skill = verify(report.skill, actual.skillsInstalled, "Skills");
+  const capabilities = providerRegistry.get(report.provider)?.cli?.plugin.manifest.capabilities.integrations;
 
   return {
     ...report,
     mcp,
     hooks,
     skill,
-    ok: Boolean(mcp?.ok && hooks?.ok && skill?.ok && actual.ok),
+    ok: Boolean(actual.ok
+      && (!capabilities?.mcp || mcp?.ok)
+      && (!capabilities?.hooks || hooks?.ok)
+      && (!capabilities?.skills || skill?.ok)),
   };
 }
 
