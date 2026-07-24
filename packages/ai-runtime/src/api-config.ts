@@ -15,7 +15,7 @@ const SENSITIVE_NAME = /(authorization|token|key|secret|cookie)/i;
 const TOKEN_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
 export function normalizeBaseUrl(value: string): string {
-  const normalized = value.trim().replace(/\/+$/, "");
+  const normalized = value.trim();
   let url: URL;
   try {
     url = new URL(normalized);
@@ -27,7 +27,11 @@ export function normalizeBaseUrl(value: string): string {
   }
   if (url.username || url.password) throw new Error("Base URL must not contain credentials");
   if (url.hash) throw new Error("Base URL must not contain a fragment");
-  return normalized;
+  url.pathname = url.pathname.replace(/\/+$/, "");
+  const serialized = url.toString();
+  return url.pathname === "/"
+    ? `${url.origin}${serialized.slice(url.origin.length + 1)}`
+    : serialized;
 }
 
 export function defaultSensitive(name: string): boolean {

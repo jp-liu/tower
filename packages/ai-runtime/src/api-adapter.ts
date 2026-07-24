@@ -56,6 +56,26 @@ function providerBaseUrl(baseUrl: string): string {
   return url.toString().replace(/\/$/, "");
 }
 
+function replaceRequestUrl(request: Request, url: URL, headers: Headers): Request {
+  const body = request.method === "GET" || request.method === "HEAD" ? undefined : request.body;
+  const requestInit: RequestInit & { duplex?: "half" } = {
+    method: request.method,
+    headers,
+    body,
+    signal: request.signal,
+    cache: request.cache,
+    credentials: request.credentials,
+    integrity: request.integrity,
+    keepalive: request.keepalive,
+    mode: request.mode,
+    redirect: request.redirect,
+    referrer: request.referrer,
+    referrerPolicy: request.referrerPolicy,
+    ...(body ? { duplex: "half" as const } : {}),
+  };
+  return new Request(url, requestInit);
+}
+
 export function createControlledFetch(
   config: ApiConnectionRuntimeConfig,
   credential: ApiCredential,
@@ -66,16 +86,16 @@ export function createControlledFetch(
   const baseQuery = new URL(config.baseUrl).searchParams;
   const query = config.queryParams.filter((entry) => entry.enabled);
   return async (input, init) => {
+    const request = new Request(input, init);
     const url = requestUrl(input);
     baseQuery.forEach((value, name) => url.searchParams.set(name, value));
     for (const entry of query) url.searchParams.set(entry.name, entry.value);
 
-    const headers = new Headers(input instanceof Request ? input.headers : undefined);
-    new Headers(init?.headers).forEach((value, name) => headers.set(name, value));
+    const headers = new Headers(request.headers);
     if (!credential.value || explicitAuth) headers.delete(protocolAuthHeader(config.protocol));
     for (const [name, value] of Object.entries(customHeaders)) headers.set(name, value);
 
-    return rawFetch(url, { ...init, headers });
+    return rawFetch(replaceRequestUrl(request, url, headers));
   };
 }
 

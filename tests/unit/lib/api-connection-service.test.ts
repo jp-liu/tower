@@ -31,6 +31,8 @@ import {
   reorderApiKeysService,
   testApiConnectionService,
   testApiKeyService,
+  updateApiConnectionService,
+  updateApiKeyService,
 } from "@/lib/ai/api-connection-service";
 
 async function cleanup() {
@@ -93,6 +95,111 @@ describe("API connection service", () => {
       [second.id, "FULL_KEY_B", 0],
       [first.id, "FULL_KEY_A", 1],
     ]);
+  });
+
+  it("updates only the connection name without resetting runtime configuration or test state", async () => {
+    const connection = await createConnection();
+    const key = await addApiKeyService(connection.id, {
+      label: "primary",
+      value: "FULL_KEY_A",
+      enabled: false,
+    });
+    const connectionTestedAt = new Date("2026-04-11T10:00:00.000Z");
+    const keyTestedAt = new Date("2026-04-11T09:00:00.000Z");
+    await db.providerConnection.update({
+      where: { id: connection.id },
+      data: {
+        enabled: false,
+        defaultModelId: "preserved-model",
+        testStatus: "partial",
+        testOk: true,
+        lastTestedAt: connectionTestedAt,
+        headersJson: JSON.stringify([{
+          id: "preserved-header",
+          name: "X-Preserved-Token",
+          value: "PRESERVED_HEADER_VALUE",
+          enabled: false,
+          sensitive: true,
+        }]),
+        queryParamsJson: JSON.stringify([{
+          id: "preserved-query",
+          name: "tenant",
+          value: "PRESERVED_QUERY_VALUE",
+          enabled: true,
+          sensitive: false,
+        }]),
+      },
+    });
+    await db.apiConnectionKey.update({
+      where: { id: key.id },
+      data: {
+        testStatus: "failed",
+        lastTestedAt: keyTestedAt,
+        lastError: "Preserved safe error",
+      },
+    });
+
+    await updateApiConnectionService(connection.id, { name: "Renamed API" });
+
+    const stored = await getApiConnectionService(connection.id);
+    expect(stored).toMatchObject({
+      name: "Renamed API",
+      enabled: false,
+      defaultModelId: "preserved-model",
+      testStatus: "partial",
+      testOk: true,
+      lastTestedAt: connectionTestedAt,
+    });
+    expect(stored.headers).toEqual([{
+      id: "preserved-header",
+      name: "X-Preserved-Token",
+      value: "PRESERVED_HEADER_VALUE",
+      enabled: false,
+      sensitive: true,
+    }]);
+    expect(stored.queryParams).toEqual([{
+      id: "preserved-query",
+      name: "tenant",
+      value: "PRESERVED_QUERY_VALUE",
+      enabled: true,
+      sensitive: false,
+    }]);
+    expect(stored.apiKeys[0]).toMatchObject({
+      id: key.id,
+      enabled: false,
+      testStatus: "failed",
+      lastTestedAt: keyTestedAt,
+      lastError: "Preserved safe error",
+    });
+  });
+
+  it("updates only a key label without changing enabled or test state", async () => {
+    const connection = await createConnection();
+    const key = await addApiKeyService(connection.id, {
+      label: "old label",
+      value: "FULL_KEY_A",
+      enabled: false,
+    });
+    const testedAt = new Date("2026-04-12T09:00:00.000Z");
+    await db.apiConnectionKey.update({
+      where: { id: key.id },
+      data: {
+        testStatus: "failed",
+        lastTestedAt: testedAt,
+        lastError: "Preserved safe error",
+      },
+    });
+
+    const updated = await updateApiKeyService(connection.id, key.id, { label: "new label" });
+
+    expect(updated).toMatchObject({
+      label: "new label",
+      value: "FULL_KEY_A",
+      enabled: false,
+      testStatus: "failed",
+      lastTestedAt: testedAt,
+      lastError: "Preserved safe error",
+    });
   });
 
   it("atomically reserves different starting keys for concurrent calls", async () => {

@@ -7,13 +7,14 @@ import type { PrismaClient } from "@prisma/client";
 
 type Column = { name: string };
 type IndexRow = { name: string; unique: number; origin: string };
+type MigrationClient = Pick<PrismaClient, "$executeRawUnsafe" | "$queryRawUnsafe">;
 
-async function columns(prisma: PrismaClient, table: string): Promise<Set<string>> {
+async function columns(prisma: MigrationClient, table: string): Promise<Set<string>> {
   const rows = await prisma.$queryRawUnsafe<Column[]>(`PRAGMA table_info("${table}")`);
   return new Set(rows.map((row) => row.name));
 }
 
-async function hasLegacyProviderUniqueIndex(prisma: PrismaClient): Promise<boolean> {
+async function hasLegacyProviderUniqueIndex(prisma: MigrationClient): Promise<boolean> {
   const indexes = await prisma.$queryRawUnsafe<IndexRow[]>(`PRAGMA index_list("ProviderConnection")`);
   for (const index of indexes) {
     if (!index.unique) continue;
@@ -23,7 +24,7 @@ async function hasLegacyProviderUniqueIndex(prisma: PrismaClient): Promise<boole
   return false;
 }
 
-async function createProviderConnectionTable(prisma: PrismaClient, table: string): Promise<void> {
+async function createProviderConnectionTable(prisma: MigrationClient, table: string): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE "${table}" (
       "id" TEXT NOT NULL PRIMARY KEY,
@@ -53,7 +54,7 @@ async function createProviderConnectionTable(prisma: PrismaClient, table: string
   `);
 }
 
-async function rebuildLegacyTable(prisma: PrismaClient): Promise<void> {
+async function rebuildLegacyTable(prisma: MigrationClient): Promise<void> {
   await createProviderConnectionTable(prisma, "ProviderConnection_v03");
   await prisma.$executeRawUnsafe(`
     INSERT INTO "ProviderConnection_v03" (
@@ -75,7 +76,7 @@ async function rebuildLegacyTable(prisma: PrismaClient): Promise<void> {
 }
 
 async function addColumn(
-  prisma: PrismaClient,
+  prisma: MigrationClient,
   existing: Set<string>,
   name: string,
   definition: string,
@@ -93,7 +94,9 @@ export async function up(prisma: PrismaClient): Promise<void> {
   }
 
   if (await hasLegacyProviderUniqueIndex(prisma)) {
-    await rebuildLegacyTable(prisma);
+    await prisma.$transaction(async (transaction) => {
+      await rebuildLegacyTable(transaction);
+    });
   } else {
     const current = await columns(prisma, "ProviderConnection");
     await addColumn(prisma, current, "connectionKey", "TEXT");
@@ -116,7 +119,7 @@ export async function up(prisma: PrismaClient): Promise<void> {
           "testStatus" = CASE WHEN "testOk" THEN 'connected'
                               WHEN "lastTestedAt" IS NOT NULL THEN 'unavailable'
                               ELSE 'untested' END
-      WHERE "connectionKey" IS NULL OR "kind" = 'cli'
+      WHERE "kind" = 'cli'
     `);
   }
 

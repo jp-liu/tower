@@ -14,7 +14,6 @@ import {
   type ApiConfigEntry,
   type ApiConnectionRuntimeConfig,
   type ApiCredential,
-  type ApiProtocol,
   type ApiRuntimeCursor,
 } from "@tower/ai-runtime";
 import { db } from "@/lib/db";
@@ -38,13 +37,26 @@ const connectionInputSchema = z.object({
   queryParams: z.array(configEntrySchema).default([]),
 });
 
-const connectionPatchSchema = connectionInputSchema.partial();
+const connectionPatchSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  protocol: z.enum(["openai", "openai-compatible", "anthropic", "google"]).optional(),
+  presetId: z.string().trim().max(120).nullable().optional(),
+  baseUrl: z.string().optional(),
+  defaultModelId: z.string().trim().max(300).optional(),
+  enabled: z.boolean().optional(),
+  headers: z.array(configEntrySchema).optional(),
+  queryParams: z.array(configEntrySchema).optional(),
+});
 const keyInputSchema = z.object({
   label: z.string().trim().max(120).nullable().optional(),
   value: z.string(),
   enabled: z.boolean().default(true),
 });
-const keyPatchSchema = keyInputSchema.partial();
+const keyPatchSchema = z.object({
+  label: z.string().trim().max(120).nullable().optional(),
+  value: z.string().optional(),
+  enabled: z.boolean().optional(),
+});
 
 export type ApiConnectionInput = z.input<typeof connectionInputSchema>;
 export type ApiConnectionPatch = z.input<typeof connectionPatchSchema>;

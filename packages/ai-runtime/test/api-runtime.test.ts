@@ -5,6 +5,7 @@ import {
   ApiRuntimeError,
   MemoryApiRuntimeCursor,
   createApiAdapter,
+  createControlledFetch,
   normalizeBaseUrl,
   safeErrorShape,
   serializeConfigEntries,
@@ -75,10 +76,26 @@ function responseFor(protocol: ApiConnectionRuntimeConfig["protocol"]): unknown 
   };
 }
 
+async function inspectRequest(input: string | URL | Request, init?: RequestInit) {
+  const request = new Request(input, init);
+  return {
+    url: new URL(request.url),
+    headers: new Headers(request.headers),
+    body: await request.text(),
+    method: request.method,
+  };
+}
+
 describe("API configuration", () => {
   it("preserves the complete user path and only trims whitespace/trailing slashes", () => {
     expect(normalizeBaseUrl("  http://localhost:11434/custom/v2///  ")).toBe(
       "http://localhost:11434/custom/v2",
+    );
+    expect(normalizeBaseUrl("https://example.test/custom/v1///?tenant=one")).toBe(
+      "https://example.test/custom/v1?tenant=one",
+    );
+    expect(normalizeBaseUrl("https://example.test///?tenant=one")).toBe(
+      "https://example.test?tenant=one",
     );
     expect(() => normalizeBaseUrl("ftp://localhost/models")).toThrow("http or https");
     expect(() => normalizeBaseUrl("https://user:secret@example.com/v1")).toThrow("credentials");
@@ -96,16 +113,57 @@ describe("API configuration", () => {
   });
 });
 
+describe("controlled fetch", () => {
+  it("preserves Request and init semantics while applying custom query and headers", async () => {
+    const controller = new AbortController();
+    let captured: Request | undefined;
+    const rawFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      captured = new Request(input, init);
+      return new Response("OK");
+    }) as unknown as typeof fetch;
+    const adapterConfig = config("openai-compatible");
+    adapterConfig.baseUrl = "http://127.0.0.1:11434/custom/v2?base=one";
+    adapterConfig.headers = [{
+      id: "h1", name: "X-Custom", value: "custom-value", enabled: true, sensitive: false,
+    }];
+    adapterConfig.queryParams = [{
+      id: "q1", name: "tenant", value: "tenant-value", enabled: true, sensitive: false,
+    }];
+    const source = new Request("http://127.0.0.1:11434/custom/v2/generate?request=one", {
+      method: "POST",
+      body: "request-body",
+      headers: { "X-Original": "original-value" },
+      signal: controller.signal,
+      credentials: "include",
+    });
+
+    await createControlledFetch(
+      adapterConfig,
+      { id: "anonymous", value: "" },
+      rawFetch,
+    )(source);
+
+    expect(captured).toBeDefined();
+    expect(captured!.method).toBe("POST");
+    expect(captured!.credentials).toBe("include");
+    expect(captured!.headers.get("x-original")).toBe("original-value");
+    expect(captured!.headers.get("x-custom")).toBe("custom-value");
+    expect(new URL(captured!.url).searchParams.get("request")).toBe("one");
+    expect(new URL(captured!.url).searchParams.get("base")).toBe("one");
+    expect(new URL(captured!.url).searchParams.get("tenant")).toBe("tenant-value");
+    expect(await captured!.text()).toBe("request-body");
+    expect(captured!.signal.aborted).toBe(false);
+    controller.abort();
+    expect(captured!.signal.aborted).toBe(true);
+  });
+});
+
 describe("Vercel provider adapters", () => {
   for (const protocol of ["openai", "openai-compatible", "anthropic", "google"] as const) {
     it(`constructs ${protocol} with the exact Base URL and controlled request settings`, async () => {
       const requests: Array<{ url: URL; headers: Headers; body: string }> = [];
       const rawFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-        requests.push({
-          url: new URL(input instanceof Request ? input.url : input.toString()),
-          headers: new Headers(init?.headers),
-          body: String(init?.body ?? ""),
-        });
+        requests.push(await inspectRequest(input, init));
         return new Response(JSON.stringify(responseFor(protocol)), {
           status: 200,
           headers: { "content-type": "application/json" },
@@ -136,11 +194,124 @@ describe("Vercel provider adapters", () => {
     });
   }
 
+  const authCases = [
+    { protocol: "openai", header: "authorization", format: (key: string) => `Bearer ${key}` },
+    { protocol: "openai-compatible", header: "authorization", format: (key: string) => `Bearer ${key}` },
+    { protocol: "anthropic", header: "x-api-key", format: (key: string) => key },
+    { protocol: "google", header: "x-goog-api-key", format: (key: string) => key },
+  ] as const;
+
+  it.each(authCases)("sends $protocol default authentication and redacts failures", async ({
+    protocol,
+    header,
+    format,
+  }) => {
+    const key = `CANARY_${protocol.toUpperCase().replace("-", "_")}_KEY`;
+    const requests: Awaited<ReturnType<typeof inspectRequest>>[] = [];
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const rawFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      requests.push(await inspectRequest(input, init));
+      return new Response(JSON.stringify({ error: { message: `upstream rejected ${key}` } }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      let error: unknown;
+      try {
+        await createApiAdapter(config(protocol), rawFetch).testConnection(
+          "test-model",
+          { id: "key-1", value: key },
+        );
+      } catch (caught) {
+        error = caught;
+      }
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0]!.headers.get(header)).toBe(format(key));
+      expect(error).toMatchObject({ code: "authentication", status: 401 });
+      const report = JSON.stringify(safeErrorShape(error));
+      expect(report).not.toContain(key);
+      expect(String(error)).not.toContain(key);
+      expect(consoleError).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it.each(authCases)("does not send $protocol credentials for an anonymous connection", async ({
+    protocol,
+  }) => {
+    const requests: Awaited<ReturnType<typeof inspectRequest>>[] = [];
+    const rawFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      requests.push(await inspectRequest(input, init));
+      return new Response(JSON.stringify(responseFor(protocol)), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    await createApiAdapter(config(protocol), rawFetch).testConnection(
+      "test-model",
+      { id: "anonymous", value: "" },
+    );
+
+    const serializedRequest = JSON.stringify({
+      url: requests[0]!.url.toString(),
+      headers: Object.fromEntries(requests[0]!.headers),
+      body: requests[0]!.body,
+    });
+    expect(requests[0]!.headers.has("authorization")).toBe(false);
+    expect(requests[0]!.headers.has("x-api-key")).toBe(false);
+    expect(requests[0]!.headers.has("x-goog-api-key")).toBe(false);
+    expect(serializedRequest).not.toContain("tower-anonymous-placeholder");
+  });
+
+  it.each(authCases)("lets explicit $header override $protocol default authentication", async ({
+    protocol,
+    header,
+  }) => {
+    const generatedKey = `CANARY_${protocol.toUpperCase().replace("-", "_")}_GENERATED_KEY`;
+    const explicitValue = `Explicit ${protocol} credential`;
+    const requests: Awaited<ReturnType<typeof inspectRequest>>[] = [];
+    const rawFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      requests.push(await inspectRequest(input, init));
+      return new Response(JSON.stringify(responseFor(protocol)), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    const adapterConfig = config(protocol);
+    adapterConfig.headers = [{
+      id: "explicit-auth",
+      name: header,
+      value: explicitValue,
+      enabled: true,
+      sensitive: true,
+    }];
+
+    await createApiAdapter(adapterConfig, rawFetch).testConnection(
+      "test-model",
+      { id: "key-1", value: generatedKey },
+    );
+
+    expect(requests[0]!.headers.get(header)).toBe(explicitValue);
+    const serializedRequest = JSON.stringify({
+      url: requests[0]!.url.toString(),
+      headers: Object.fromEntries(requests[0]!.headers),
+      body: requests[0]!.body,
+    });
+    expect(serializedRequest).not.toContain(generatedKey);
+    expect(serializedRequest).not.toContain("tower-anonymous-placeholder");
+  });
+
   it("treats zero keys as anonymous and discovers models separately from generation", async () => {
     const rawFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const url = new URL(input instanceof Request ? input.url : input.toString());
+      const request = await inspectRequest(input, init);
+      const { url } = request;
       expect(url.pathname).toBe("/custom/v2/models");
-      expect(new Headers(init?.headers).has("authorization")).toBe(false);
+      expect(request.headers.has("authorization")).toBe(false);
       return new Response(JSON.stringify({ data: [{ id: "local-model", owned_by: "local" }] }), {
         status: 200,
         headers: { "content-type": "application/json" },
