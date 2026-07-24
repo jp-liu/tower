@@ -1,0 +1,41 @@
+{
+  "name": "@fixture/tower-cli",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    "./tower-cli-provider": {
+      "import": "./provider.js"
+    }
+  },
+  "scripts": {
+    "postinstall": "node postinstall.js"
+  },
+  "tower": {
+    "manifestVersion": 1,
+    "apiVersion": "1.0",
+    "kind": "cli-provider",
+    "display": {
+      "name": "Fixture CLI"
+    },
+    "command": {
+      "default": "fixture-cli"
+    },
+    "compatibility": {
+      "tower": ">=0.3.0 <1.0.0",
+      "node": ">=20"
+    },
+    "capabilities": {
+      "sessions": {
+        "fresh": true
+      },
+      "query": {
+        "generate": true
+      },
+      "models": true
+    },
+    "permissions": [
+      "process:spawn"
+    ],
+    "configSchema": "./config.schema.json"
+  }
+}

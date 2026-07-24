@@ -118,6 +118,41 @@ export interface CliPlugin<TSettings extends Record<string, unknown> = Record<st
   createAdapter(host: CliHostContext, settings: Readonly<TSettings>): CliAdapter;
 }
 
+/** Standard package export used by Tower to locate a CLI provider module. */
+export const CLI_PLUGIN_EXPORT_PATH = "./tower-cli-provider" as const;
+/** Standard named ESM export exposed by the provider entry module. */
+export const CLI_PLUGIN_EXPORT_NAME = "towerCliPlugin" as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Validate the module export shape without invoking plugin code. */
+export function isCliPlugin(value: unknown): value is CliPlugin {
+  return isRecord(value)
+    && isCliPluginManifestV1(value.manifest)
+    && typeof value.createAdapter === "function";
+}
+
+function isCliIntegration(value: unknown): value is CliIntegration<unknown> {
+  return isRecord(value)
+    && typeof value.inspect === "function"
+    && typeof value.install === "function"
+    && typeof value.uninstall === "function";
+}
+
+/** Validate the adapter returned by a plugin before exposing it to the host. */
+export function isCliAdapter(value: unknown): value is CliAdapter {
+  return isRecord(value)
+    && typeof value.buildSessionProcess === "function"
+    && typeof value.generate === "function"
+    && typeof value.models === "function"
+    && (value.stream === undefined || typeof value.stream === "function")
+    && (value.mcp === undefined || isCliIntegration(value.mcp))
+    && (value.hooks === undefined || isCliIntegration(value.hooks))
+    && (value.skills === undefined || isCliIntegration(value.skills));
+}
+
 export function defineCliPlugin<TSettings extends Record<string, unknown>>(
   plugin: CliPlugin<TSettings>,
 ): CliPlugin<TSettings> {
