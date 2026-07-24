@@ -1,6 +1,8 @@
 # CLI 抽象层设计
 
 > AI 能力插槽化 — Provider × Mode × Model，用户自选。
+>
+> **更新说明（2026-07-24）：** 本文是早期抽象设计，其中 API Key 仅从环境变量读取等 API 连接设计已经废弃。当前有效决策以 [`ai-tools-architecture-decisions.md`](./ai-tools-architecture-decisions.md) 为准；CLI 接口细节仍可作为后续讨论参考。
 
 ## 目标
 
