@@ -114,7 +114,53 @@ AI Tools 设置页分为上下两层：
 - Claude、Codex、Gemini 内置支持也使用这套公共接口实现，以验证扩展接口具备完整能力。
 - QCoder、Cursor、Kimi 等其他 CLI 可以由 Tower 官方或社区作为独立 npm 扩展包发布。
 - 社区开发者可以自行实现 CLI Adapter；Tower 提供固定、稳定的接入点，定位类似 Raycast 的扩展契约。
-- 扩展包的清单格式、发现/安装方式、版本兼容策略和运行隔离仍待讨论。
+
+### 公共 SDK v1 边界
+
+- 首版公共 SDK 只开放 CLI Provider 扩展；API 连接先使用 Tower 内置的四类协议和自定义 OpenAI Compatible，不开放任意 API Adapter 插件。
+- 公共契约以接口和 `defineCliPlugin()` 为准，同时提供 `BaseCliAdapter` 复用默认行为；社区实现不强制继承基类。
+- Adapter 只描述 CLI 的探测、参数构造、输出解析和集成安装方式；PTY、进程生命周期、任务状态、超时、取消和回收始终由 Tower 宿主管理。
+- Terminal 启动由 Adapter 返回结构化 `command + args + envPatch + initialInput`，禁止返回 shell 命令字符串，默认禁止 `shell: true`。
+- 查询协议提供 `generate()` 和可选 `stream()`，统一输出文本、推理、工具调用、用量、会话、结束和错误事件。
+- MCP、Hooks、Skills 是三个独立的可选子接口，分别提供 `inspect`、`install`、`uninstall`。
+- Adapter 通过 Host Context 使用受控命令执行器、脱敏日志、插件存储路径、平台信息和取消信号；Tower 不向插件传递数据库对象、其他连接配置或 API Key。
+
+### Plugin Manifest 与配置 Schema
+
+- npm 包名是插件全局 ID，首版一个包只贡献一个 CLI Provider。
+- Manifest 使用 npm `package.json` 的 `tower` 字段，模块入口使用标准 `exports`；静态清单必须在加载扩展代码之前完成校验。
+- Manifest 至少包含 `manifestVersion`、`apiVersion`、`kind`、显示信息、默认命令、Tower/Node 兼容版本、能力声明、权限声明和配置 Schema 路径。
+- `manifestVersion` 管清单格式，`apiVersion` 管运行时接口；npm 包版本继续遵循 SemVer，三者不能混用。
+- 配置采用 JSON Schema 2020-12；Tower 只增加 `x-tower` UI 标注，不允许插件注入 React 组件或设置页脚本。
+- 首版配置控件支持文本、数字、开关、单选、多选、路径、字符串列表和键值表，并支持顺序、分组、高级项和敏感值标记。
+- Connection 的名称、启用状态、命令覆盖、基础参数和高级环境变量由 Tower 统一管理；插件 Schema 只描述自己的 `settings`。
+- CLI 不增加专用 Token/Base URL 字段；高级环境变量继续作为兼容入口，敏感名称默认掩码。
+
+### 命令发现与执行
+
+- 命令发现统一由 Tower Runtime 实现，插件不得各自调用 `which`、`where` 或无边界扫描磁盘。
+- 解析顺序为：Connection 的 `commandOverride`、Manifest 默认命令、插件声明的候选别名、当前及补充 PATH、插件声明的少量已知安装路径、用户手动选择。
+- macOS/Linux 支持常见用户和包管理器 bin 路径；Windows 支持 `PATHEXT`、`.exe/.cmd/.bat` 和 npm shim 解析。
+- 不自动执行用户的 shell 启动脚本；自动探测失败后由用户选择绝对路径。
+- 自动解析路径只作为诊断缓存，不替代原始命令配置；每次启动前重新验证，失效时自动重新解析。
+- 连接状态区分未找到、已找到、可运行和已连接；`--version` 成功后仍需执行最小 Hello Probe 才算连接成功。
+- 多个候选同时存在时默认遵循 PATH 顺序，并在设置页展示路径和版本供用户切换。
+
+### 插件安装与信任边界
+
+- 首版插件是本地可信 Node.js 扩展，不承诺操作系统级沙箱；权限清单用于安装前提示、最小化上下文和审计。
+- npm 安装固定精确版本并校验包完整性，不执行安装脚本；插件必须发布已打包的 ESM 入口，不在用户机器编译原生模块。
+- 插件安装后默认禁用，用户确认权限并启用后才按需加载；Tower 启动时不得激活全部第三方插件。
+- 更新先验证新版本再原子切换，失败时保留旧版本；同时支持本地目录开发模式。
+
+## 包与组织规划
+
+- 当前仓库先建立 workspace packages，区分公共 `ai-sdk`、私有 `ai-runtime`、官方 CLI Providers、公共 `agent-sdk` 和 `o-tower` 等 Agent 包。
+- 公共 SDK 只包含契约、基类和无副作用纯工具；`where/which`、文件探测、进程启动、PTY 与环境清理属于私有 Host Runtime，通过 Context 提供能力。
+- `o-tower` 等 Agent 是 `agent-sdk` 的消费者，不属于 `ai-sdk`。
+- 第一版所有新包保持私有或仅作 workspace 引用，做到可独立发布但不实际发布。
+- 契约验证稳定后再创建 GitHub Organization 和 npm Scope；建议按主应用、SDK、Providers、Agents、Registry 划分仓库，每个仓库内部可继续维护多个包。
+- 组织名称、npm Scope、外部仓库创建和正式发布需要后续单独确认，不属于第一版实施授权。
 
 ## API Key 存储与交互
 
@@ -157,5 +203,4 @@ API Key 与登录密码不同：Tower 调用上游模型时必须取回原值，
 
 ## 待讨论
 
-- CLI 扩展包的 manifest、加载机制、权限边界和兼容性策略。
 - 现有 Claude/Codex 代码迁移顺序及实现任务拆分。
