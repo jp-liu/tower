@@ -14,6 +14,7 @@ import { getTowerDbPath, getTowerDir } from "../tower-dir";
 import { migrateLegacyTowerMcp, type MigrationReport } from "./migrate-legacy-mcp";
 import { getPackageRoot } from "../tower-paths";
 import { HermesCliAdapter } from "./adapters/cli/hermes-cli-adapter";
+import { TOWER_MCP_ENV_VARS } from "./tower-mcp-env";
 import packageJson from "../../../package.json";
 
 /**
@@ -27,7 +28,7 @@ import packageJson from "../../../package.json";
 const TOWER_SKILL_NAME = "tower";
 const TOWER_SKILL_NAMES = ["tower", "tower-goal", "tower-ask", "tower-bridge"];
 const TOWER_GATEWAY_SKILL_NAMES = ["tower"];
-const TOWER_INTEGRATION_SCHEMA_VERSION = 1;
+const TOWER_INTEGRATION_SCHEMA_VERSION = 2;
 
 export function buildTowerIntegrationFingerprint(apiUrl: string): string {
   return [
@@ -118,6 +119,7 @@ export function buildTowerMcpConfig(): McpServerConfig {
       command: "node",
       args: [builtPath],
       env,
+      envVars: [...TOWER_MCP_ENV_VARS],
     };
   }
 
@@ -126,6 +128,7 @@ export function buildTowerMcpConfig(): McpServerConfig {
     command: `${root}/node_modules/.bin/tsx`,
     args: [`${root}/src/mcp/index.ts`],
     env,
+    envVars: [...TOWER_MCP_ENV_VARS],
   };
 }
 

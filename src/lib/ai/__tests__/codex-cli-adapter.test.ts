@@ -240,7 +240,7 @@ describe("CodexCliAdapter", () => {
       expect(toml).toContain("hooks = true");
     });
 
-    it("rejects user hook installation when admin policy allows managed hooks only", async () => {
+    it("installs a turn-complete notify fallback when admin policy allows managed hooks only", async () => {
       vi.mocked(adapter.getManagedRequirementsPaths).mockReturnValue([requirementsTomlPath]);
       fs.writeFileSync(
         requirementsTomlPath,
@@ -250,11 +250,27 @@ describe("CodexCliAdapter", () => {
 
       const result = await adapter.installHooks();
 
-      expect(result.ok).toBe(false);
-      expect(result.detail).toBe(requirementsTomlPath);
-      expect(result.error).toContain("allow_managed_hooks_only=true");
+      expect(result.ok).toBe(true);
+      expect(result.detail).toContain("turn-complete notify fallback");
       expect(fs.existsSync(hooksJsonPath)).toBe(false);
-      expect(await adapter.isHooksInstalled()).toBe(false);
+      expect(fs.readFileSync(configTomlPath, "utf-8")).toContain("tower-codex-notify.js");
+      expect(await adapter.isHooksInstalled()).toBe(true);
+    });
+
+    it("preserves and restores an existing Codex notifier around the managed fallback", async () => {
+      vi.mocked(adapter.getManagedRequirementsPaths).mockReturnValue([requirementsTomlPath]);
+      fs.writeFileSync(requirementsTomlPath, "allow_managed_hooks_only = true\n", "utf-8");
+      fs.writeFileSync(configTomlPath, 'notify = ["notify-send", "Codex"]\n', "utf-8");
+
+      await adapter.installHooks();
+      const installed = fs.readFileSync(configTomlPath, "utf-8");
+      expect(installed).toContain("tower-codex-notify.js");
+      expect(installed).toContain("--chain-base64");
+
+      await adapter.uninstallHooks();
+      expect(fs.readFileSync(configTomlPath, "utf-8")).toContain(
+        'notify = ["notify-send","Codex"]',
+      );
     });
 
     it("does not treat a managed-only key inside another TOML table as admin policy", async () => {
@@ -367,9 +383,21 @@ describe("CodexCliAdapter", () => {
   });
 
   describe("MCP (CLI-driven)", () => {
+    let mcpConfigDir: string;
+    let mcpConfigPath: string;
+
     beforeEach(() => {
       execCalls.length = 0;
       mockBehavior.fn = () => ({ stdout: "" });
+      mcpConfigDir = fs.mkdtempSync(path.join(__dirname, "tower-codex-mcp-"));
+      mcpConfigPath = path.join(mcpConfigDir, "config.toml");
+      vi.spyOn(adapter, "getConfigDir").mockReturnValue(mcpConfigDir);
+      vi.spyOn(adapter, "getSettingsPath").mockReturnValue(mcpConfigPath);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      fs.rmSync(mcpConfigDir, { recursive: true, force: true });
     });
 
     it("installMcp invokes `codex mcp add` with --env and -- separator", async () => {
@@ -399,6 +427,32 @@ describe("CodexCliAdapter", () => {
       const result = await adapter.uninstallMcp("test-tower");
       expect(result.ok).toBe(true);
       expect(execCalls[0].args).toEqual(["mcp", "remove", "test-tower"]);
+    });
+
+    it("persists dynamic Tower env_vars in the Codex MCP table", async () => {
+      fs.writeFileSync(
+        mcpConfigPath,
+        '[mcp_servers.tower]\ncommand = "node"\nargs = ["/srv/mcp.cjs"]\n\n' +
+          '[mcp_servers.tower.env]\nDATABASE_URL = "file:/tmp/db"\n',
+        "utf-8",
+      );
+
+      const result = await adapter.installMcp({
+        name: "tower",
+        command: "node",
+        args: ["/srv/mcp.cjs"],
+        env: { DATABASE_URL: "file:/tmp/db" },
+        envVars: ["TOWER_TASK_ID", "TOWER_TASK_TITLE", "TOWER_API_URL"],
+      });
+
+      expect(result.ok).toBe(true);
+      const config = fs.readFileSync(mcpConfigPath, "utf-8");
+      expect(config).toContain(
+        'env_vars = ["TOWER_API_URL","TOWER_TASK_ID","TOWER_TASK_TITLE"]',
+      );
+      expect(config.indexOf("env_vars =")).toBeLessThan(
+        config.indexOf("[mcp_servers.tower.env]"),
+      );
     });
 
     it("isMcpInstalled honors `codex mcp get` exit code", async () => {

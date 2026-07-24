@@ -99,7 +99,10 @@ export function renderTaskCreated(input: {
         .join("；")}`,
     );
   }
-  if (input.execution.started) lines.push("- ⚡ 已自动启动执行");
+  if (input.execution.started) {
+    lines.push("- ⚡ 已自动启动执行");
+    lines.push("- 等待 Tower 完成回推；无需主动轮询子任务");
+  }
   else if (input.execution.error) lines.push(`- ⚠️ 自动启动失败：${input.execution.error}`);
 
   return lines.join("\n");

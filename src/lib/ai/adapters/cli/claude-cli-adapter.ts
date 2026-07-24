@@ -279,6 +279,9 @@ export class ClaudeCliAdapter implements CliAdapter {
     const scope = opts.scope ?? "user";
     const json: Record<string, unknown> = { command: server.command, args: server.args };
     if (server.env && Object.keys(server.env).length > 0) json.env = server.env;
+    // Claude MCP subprocesses inherit the task terminal's parent environment,
+    // so McpServerConfig.envVars needs no serialized equivalent here. Codex
+    // requires an explicit env_vars allow-list and handles it in its adapter.
     const cmd = this.resolveCommand();
     const args = ["mcp", "add-json", "-s", scope, server.name, JSON.stringify(json)];
     try {

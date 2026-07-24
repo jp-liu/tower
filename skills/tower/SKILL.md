@@ -42,6 +42,7 @@ The must-follow rules. Everything else is operational detail below.
 9. **Follow the Display Templates** in [references/display-templates.md](references/display-templates.md) for every query result — never invent formats or output raw JSON. Empty results → "No {items} found."
 10. **Platform replies go through `relay_channel_reply`** when they contain or quote `[[tower:task=...]]`. Pass `platform`, `chatId`, `platformMessageId`, and `quotedText` when available; it disambiguates ask replies vs work-channel replies. For direct UI/operator replies to a parked ask, `reply_to_ask` is still valid.
 11. **Unattended send/receive** follows [references/unattended-messaging.md](references/unattended-messaging.md): Hermes/OpenClaw can send via `push_to_human`; every outbound ask/notify carries `[[tower:task=<taskId>]]`.
+12. **Auto-start handoff is callback-driven.** After `create_task` reports that execution started, end the current turn and wait for Tower to inject the child-completion review message. Do not sleep, poll status/output, inspect the child worktree, or otherwise babysit it. Poll only when the user explicitly asks for progress or when recovering from a suspected missed callback.
 
 ---
 
@@ -66,6 +67,7 @@ If a turn opens with `[当前会话默认范围：…]`, the user bound this cha
 5. **References** (Contract 7): put repository source paths only in `description` under `## 参考`, using paths relative to the repository root. Put user-provided files / pasted-image paths in `references`. Bridge screenshots/images from OpenClaw/Hermes count as user attachments: include the local media path in `references` even if you also analyzed or summarized the image. Base64-only → `manage_assets upload` first, then pass the returned `path`.
 6. **Source** (Contract 4): don't hand-format `## 来源`; pass any `<task-source>` block through in `description`. The server renders it.
 7. Call `create_task`, then render from the response (Contract 6).
+8. If the response says execution started, follow Contract 12: stop this turn and wait for the callback.
 
 ### "Start a task" / "Run this task"
 

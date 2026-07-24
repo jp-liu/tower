@@ -56,6 +56,7 @@ export const taskTools = {
       "`## 目标` / `## 需求` / `## 参考` / `## 备注` / `## 来源` (mandatory for every task, no 'simple task' exception; never a raw one-paragraph copy of the user's message). Load the tower skill for the full rules. " +
       "Labels: call `list_labels` FIRST. If the workspace has any, picking the single best-fitting one for `labelIds` is REQUIRED, same standing as the description format — judge from what the task actually does, and consult each label's `description` field for which scenarios it fits rather than guessing from the name. A label may carry a branch prefix that names the task's worktree branch, so a fitting label left out silently falls back to the default prefix. Extra labels are allowed when they genuinely apply. If the workspace has no labels at all, omit `labelIds` — do not invent labels. " +
       "The response includes a `display` field — a ready-to-show Markdown confirmation card. Present that `display` to the user verbatim instead of composing, translating, shortening, or flattening your own summary. " +
+      "When the response includes `handoff.mode=callback`, end the current turn immediately and wait for Tower to inject the child's completion message. Do not sleep, poll execution status/output, or inspect the child worktree unless the user explicitly asks for progress or you are recovering from a suspected missed callback. " +
       "useWorktree (branch isolation) and autoStart (run immediately after create) default to the user's saved preference; " +
       "pass either explicitly to override for this one task. " +
       "If the defaults have never been set, the FIRST call (without explicit useWorktree/autoStart) returns { needsDefaultsSetup: true } instead of creating the task — ask the user their preference, call set_task_defaults once, then call create_task again. " +
@@ -345,7 +346,17 @@ export const taskTools = {
           });
           if (res.ok) {
             const execData = await res.json();
-            return { ...task, ...attachmentInfo, execution: execData, display: buildDisplay({ started: true }) };
+            return {
+              ...task,
+              ...attachmentInfo,
+              execution: execData,
+              handoff: {
+                mode: "callback",
+                shouldPoll: false,
+                instruction: "End this turn and wait for Tower's child-completion callback.",
+              },
+              display: buildDisplay({ started: true }),
+            };
           }
           let errMsg = `HTTP ${res.status}`;
           try {

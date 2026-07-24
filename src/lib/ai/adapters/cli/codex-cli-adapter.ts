@@ -3,6 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { isWindows, quoteForCmd, resolveCommandPathSync } from "@/lib/platform";
 import { getPackageRoot } from "@/lib/tower-paths";
+import { TOWER_MCP_ENV_VARS } from "@/lib/ai/tower-mcp-env";
 import type {
   CliAdapter,
   CliSpawnOptions,
@@ -133,17 +134,20 @@ export class CodexCliAdapter implements CliAdapter {
     try {
       const managedOnlyPolicyPath = this.getManagedOnlyHooksPolicyPath();
       if (managedOnlyPolicyPath) {
+        this.ensureCodexNotifyFallback();
         return {
-          ok: false,
+          ok: true,
           method: "file",
-          detail: managedOnlyPolicyPath,
-          error:
-            `Codex admin policy at ${managedOnlyPolicyPath} sets ` +
-            "allow_managed_hooks_only=true, so Codex ignores Tower hooks in " +
-            `${this.getHooksPath()}. Add the Tower hooks to the managed policy ` +
-            "or disable managed-only hooks.",
+          detail:
+            `${this.getSettingsPath()} (turn-complete notify fallback; ` +
+            `managed hooks policy: ${managedOnlyPolicyPath})`,
         };
       }
+
+      // A previous managed-only install may have used the notify fallback.
+      // Restore any user notifier before enabling real hooks to avoid duplicate
+      // Stop events when the administrator policy is later relaxed.
+      this.removeCodexNotifyFallback();
 
       const hooks = this.readHooks();
       const root = getPackageRoot().replace(/\\/g, "/");
@@ -277,6 +281,7 @@ export class CodexCliAdapter implements CliAdapter {
       }
 
       this.writeHooks(hooks);
+      this.removeCodexNotifyFallback();
       return { ok: true, method: "file", detail: this.getHooksPath() };
     } catch (err) {
       return {
@@ -289,7 +294,9 @@ export class CodexCliAdapter implements CliAdapter {
   }
 
   async isHooksInstalled(): Promise<boolean> {
-    if (this.getManagedOnlyHooksPolicyPath()) return false;
+    if (this.getManagedOnlyHooksPolicyPath()) {
+      return this.isCodexNotifyFallbackInstalled();
+    }
 
     const hooks = this.readHooks();
     const required: Array<[string, string]> = [
@@ -325,6 +332,7 @@ export class CodexCliAdapter implements CliAdapter {
       // Replace any existing entry so updates land cleanly.
       await this.runCli(cmd, ["mcp", "remove", server.name], opts.cwd).catch(() => {});
       await this.runCli(cmd, args, opts.cwd);
+      this.ensureMcpEnvVars(server.name, server.envVars ?? []);
       return { ok: true, method: "cli", detail: `${cmd} ${args.join(" ")}` };
     } catch (err) {
       return {
@@ -356,6 +364,9 @@ export class CodexCliAdapter implements CliAdapter {
     const cmd = this.resolveCommand();
     try {
       await this.runCli(cmd, ["mcp", "get", name], opts.cwd, 5000);
+      if (name === "tower" || name.startsWith("tower-")) {
+        return this.hasMcpEnvVars(name, [...TOWER_MCP_ENV_VARS]);
+      }
       return true;
     } catch {
       return false;
@@ -588,6 +599,55 @@ export class CodexCliAdapter implements CliAdapter {
     return path.join(this.getConfigDir(), "hooks.json");
   }
 
+  private ensureMcpEnvVars(serverName: string, envVars: string[]): void {
+    if (envVars.length === 0) return;
+    const configPath = this.getSettingsPath();
+    const content = fs.readFileSync(configPath, "utf-8");
+    const lines = content.split(/\r?\n/);
+    const heading = `[mcp_servers.${serverName}]`;
+    const start = lines.findIndex((line) => line.trim() === heading);
+    if (start < 0) {
+      throw new Error(`Codex MCP config section not found after install: ${heading}`);
+    }
+
+    let end = lines.length;
+    for (let i = start + 1; i < lines.length; i += 1) {
+      if (lines[i].trim().startsWith("[")) {
+        end = i;
+        break;
+      }
+    }
+
+    const value = `env_vars = ${JSON.stringify([...new Set(envVars)].sort())}`;
+    const existing = lines.findIndex(
+      (line, index) => index > start && index < end && /^\s*env_vars\s*=/.test(line),
+    );
+    if (existing >= 0) lines[existing] = value;
+    else lines.splice(end, 0, value);
+
+    fs.writeFileSync(configPath, lines.join("\n"), "utf-8");
+  }
+
+  private hasMcpEnvVars(serverName: string, required: string[]): boolean {
+    try {
+      const lines = fs.readFileSync(this.getSettingsPath(), "utf-8").split(/\r?\n/);
+      const heading = `[mcp_servers.${serverName}]`;
+      const start = lines.findIndex((line) => line.trim() === heading);
+      if (start < 0) return false;
+      for (let i = start + 1; i < lines.length; i += 1) {
+        const trimmed = lines[i].trim();
+        if (trimmed.startsWith("[")) break;
+        const match = trimmed.match(/^env_vars\s*=\s*(\[.*\])\s*$/);
+        if (!match) continue;
+        const configured = JSON.parse(match[1]) as unknown;
+        return Array.isArray(configured) && required.every((name) => configured.includes(name));
+      }
+    } catch {
+      return false;
+    }
+    return false;
+  }
+
   private getManagedOnlyHooksPolicyPath(): string | null {
     for (const requirementsPath of this.getManagedRequirementsPaths()) {
       try {
@@ -599,6 +659,110 @@ export class CodexCliAdapter implements CliAdapter {
       }
     }
     return null;
+  }
+
+  private getCodexNotifyScriptPath(): string {
+    return path
+      .join(getPackageRoot(), "scripts", "tower-codex-notify.js")
+      .replace(/\\/g, "/");
+  }
+
+  private ensureCodexNotifyFallback(): void {
+    const existing = this.readTopLevelNotify();
+    const scriptPath = this.getCodexNotifyScriptPath();
+    let chain: string[] = [];
+
+    if (existing?.some((part) => part.includes("tower-codex-notify.js"))) {
+      chain = this.decodeNotifyChain(existing);
+    } else if (existing) {
+      chain = existing;
+    }
+
+    const notify = ["node", scriptPath];
+    if (chain.length > 0) {
+      notify.push(
+        "--chain-base64",
+        Buffer.from(JSON.stringify(chain), "utf-8").toString("base64"),
+      );
+    }
+    this.writeTopLevelNotify(notify);
+  }
+
+  private removeCodexNotifyFallback(): void {
+    const existing = this.readTopLevelNotify();
+    if (!existing?.some((part) => part.includes("tower-codex-notify.js"))) return;
+    const chain = this.decodeNotifyChain(existing);
+    this.writeTopLevelNotify(chain.length > 0 ? chain : null);
+  }
+
+  private isCodexNotifyFallbackInstalled(): boolean {
+    const existing = this.readTopLevelNotify();
+    return existing?.includes(this.getCodexNotifyScriptPath()) ?? false;
+  }
+
+  private decodeNotifyChain(notify: string[]): string[] {
+    const index = notify.indexOf("--chain-base64");
+    if (index < 0 || !notify[index + 1]) return [];
+    try {
+      const parsed = JSON.parse(Buffer.from(notify[index + 1], "base64").toString("utf-8"));
+      return Array.isArray(parsed) && parsed.every((part) => typeof part === "string")
+        ? parsed
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private readTopLevelNotify(): string[] | null {
+    let content = "";
+    try {
+      content = fs.readFileSync(this.getSettingsPath(), "utf-8");
+    } catch {
+      return null;
+    }
+    for (const line of content.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("[")) break;
+      if (!/^notify\s*=/.test(trimmed)) continue;
+      const match = trimmed.match(/^notify\s*=\s*(\[.*\])\s*(?:#.*)?$/);
+      if (!match) throw new Error("Unsupported multiline Codex notify configuration");
+      const parsed = JSON.parse(match[1]) as unknown;
+      if (!Array.isArray(parsed) || !parsed.every((part) => typeof part === "string")) {
+        throw new Error("Codex notify configuration must be an argv string array");
+      }
+      return parsed;
+    }
+    return null;
+  }
+
+  private writeTopLevelNotify(notify: string[] | null): void {
+    const configPath = this.getSettingsPath();
+    let content = "";
+    try {
+      content = fs.readFileSync(configPath, "utf-8");
+    } catch {
+      // Config may not exist yet.
+    }
+    const lines = content.split(/\r?\n/);
+    const firstTable = lines.findIndex((line) => line.trim().startsWith("["));
+    const searchEnd = firstTable >= 0 ? firstTable : lines.length;
+    const existing = lines.findIndex(
+      (line, index) => index < searchEnd && /^\s*notify\s*=/.test(line),
+    );
+
+    if (notify) {
+      const value = `notify = ${JSON.stringify(notify)}`;
+      if (existing >= 0) lines[existing] = value;
+      else lines.splice(searchEnd, 0, value, "");
+    } else if (existing >= 0) {
+      lines.splice(existing, 1);
+    } else {
+      return;
+    }
+
+    const dir = this.getConfigDir();
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(configPath, lines.join("\n"), "utf-8");
   }
 
   private hasTopLevelManagedOnlyHooksPolicy(content: string): boolean {

@@ -16,7 +16,7 @@ Do not confuse this with a plain Claude/Codex/Tower "goal" or long-running task.
 The user activating tower-goal = authorizing you to **do whatever the goal needs**, in this task, without asking step by step:
 
 - **You may create tasks**: if the goal is large, use Tower MCP (`create_task`) to split it into child tasks and dispatch them.
-- **You are the hub**: when a child task finishes, its stop hook **pushes back to this parent task automatically** (you receive its result as a new message); you schedule / dispatch the next step from that. Child tasks don't worry about unattended themselves — **you're unattended, so the whole chain is unattended**: they just execute what you dispatch, push problems back to you, and you (the hub) decide whether to ask the human via tower-ask.
+- **You are the hub**: when a child task finishes, its completion integration **pushes back to this parent task automatically** (you receive its result as a new message); after dispatch, end the current turn and wait for that callback — do not sleep or poll the child. You schedule / dispatch the next step from the callback. Child tasks don't worry about unattended themselves — **you're unattended, so the whole chain is unattended**: they just execute what you dispatch, push problems back to you, and you (the hub) decide whether to ask the human via tower-ask.
 - **You may use any capability** in service of the goal (edit code, create tasks, query the knowledge base, orchestrate the hub…).
 
 The only hard boundary is under "Iron rules" below — risky/irreversible actions still need sign-off first.

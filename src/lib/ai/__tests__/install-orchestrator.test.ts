@@ -37,7 +37,12 @@ vi.mock("@/lib/ai/migrate-legacy-mcp", () => ({
   migrateLegacyTowerMcp: vi.fn(),
 }));
 
-import { inspectProviderIntegration, installAllForProvider } from "@/lib/ai/install-orchestrator";
+import {
+  buildTowerMcpConfig,
+  inspectProviderIntegration,
+  installAllForProvider,
+} from "@/lib/ai/install-orchestrator";
+import { TOWER_MCP_ENV_VARS } from "@/lib/ai/tower-mcp-env";
 
 describe("inspectProviderIntegration", () => {
   beforeEach(() => {
@@ -49,6 +54,14 @@ describe("inspectProviderIntegration", () => {
     adapter.isMcpInstalled.mockResolvedValue(true);
     adapter.isHooksInstalled.mockResolvedValue(true);
     adapter.isSkillInstalled.mockResolvedValue(true);
+  });
+
+  it("declares every task-scoped Tower environment variable for MCP forwarding", () => {
+    expect(buildTowerMcpConfig().envVars).toEqual([...TOWER_MCP_ENV_VARS]);
+    expect(buildTowerMcpConfig().env).toEqual({
+      DATABASE_URL: "file:/Users/test/.tower/database/tower.db",
+      TOWER_DATA_DIR: "/Users/test/.tower",
+    });
   });
 
   it("checks the real MCP, hooks, and every Tower skill installation", async () => {

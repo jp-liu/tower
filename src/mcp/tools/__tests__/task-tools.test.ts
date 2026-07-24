@@ -599,12 +599,15 @@ describe("task-tools", () => {
       const mockFetchResponse = { ok: true, json: vi.fn().mockResolvedValue({ executionId: "exec1" }) };
       global.fetch = vi.fn().mockResolvedValue(mockFetchResponse);
 
-      await taskTools.create_task.handler({
+      const result = await taskTools.create_task.handler({
         projectId: "proj1",
         title: "AutoStart Task",
         description: "start me",
         autoStart: true,
-      });
+      }) as {
+        handoff?: { mode: string; shouldPoll: boolean; instruction: string };
+        display?: string;
+      };
 
       // Prompt is the task title — startPtyExecution injects the description as context separately.
       expect(global.fetch).toHaveBeenCalledWith(
@@ -614,6 +617,12 @@ describe("task-tools", () => {
           body: expect.stringContaining("AutoStart Task"),
         })
       );
+      expect(result.handoff).toEqual({
+        mode: "callback",
+        shouldPoll: false,
+        instruction: "End this turn and wait for Tower's child-completion callback.",
+      });
+      expect(result.display).toContain("无需主动轮询子任务");
     });
 
     it("does NOT call fetch when autoStart=false", async () => {

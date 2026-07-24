@@ -33,6 +33,8 @@ export interface McpServerConfig {
   args: string[];
   /** Environment variables to pass to the server process */
   env?: Record<string, string>;
+  /** Parent-process environment variable names to forward dynamically. */
+  envVars?: string[];
 }
 
 /** Where the registration lives. CLI commands accept this as `-s <scope>`. */
