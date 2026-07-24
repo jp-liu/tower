@@ -61,6 +61,25 @@ AI Tools 设置页分为上下两层：
 - 能力插槽引用稳定的 `connectionId` 和模型，而不是只保存 Provider 名称与 mode。
 - CLI 内置连接同样作为连接实例参与插槽选择，内置实现不走私有路由。
 
+### 连接预设
+
+- Adapter 决定协议调用方式，Preset 只负责预填元数据，Connection 保存用户最终配置；三者不能共用一个 Provider 枚举。
+- 使用 MIT 许可的 `models.dev` 社区目录生成 Tower 的本地预设快照，提取名称、默认 Base URL、协议映射、文档地址和 Logo。
+- 预设快照在构建/发版时更新，Tower 启动和设置页不能依赖 `models.dev` 在线服务。
+- 实际可用模型仍以用户连接的上游模型接口和手动配置为准，预设目录不是模型限制名单。
+- 始终提供“自定义 OpenAI Compatible”入口；选择任何预设后，用户仍可编辑所有连接字段。
+
+### Base URL 与高级请求配置
+
+- 预设填入协议所需的完整 Base URL；用户输入只去除首尾空格和末尾 `/`，Tower 不自动添加 `/v1` 或改写路径。
+- Base URL 只允许 `http://` 和 `https://`；允许 localhost、局域网地址和 HTTP 本地模型服务。
+- 禁止在 URL 中嵌入用户名、密码或 Fragment；设置页显示不含凭据的最终请求地址预览。
+- API Key 允许为空，以支持 Ollama、LM Studio 等无需认证的本地服务。
+- API 连接支持自定义 Headers 和 Query Parameters，每项可以独立启停。
+- 禁止覆盖 `Host`、`Content-Length`、`Connection` 等传输层 Header；其他 Header 允许配置，包括显式覆盖 `Authorization`。
+- 名称包含 `authorization`、`token`、`key`、`secret`、`cookie` 的 Header/Query 值默认掩码，但用户可以查看和编辑。
+- 自定义 Header 与 Query 参数不得进入普通日志，并随连接和完整备份一起保存。
+
 ## 能力插槽
 
 当前确认的插槽边界：
