@@ -18,7 +18,11 @@ const manifest: CliPluginManifestV1 = {
   manifestVersion: 1,
   apiVersion: CLI_PLUGIN_API_VERSION,
   kind: "cli-provider",
-  display: { name: "Test CLI" },
+  display: {
+    name: "Test CLI",
+    description: "Test provider",
+    homepage: "https://example.com/test-cli",
+  },
   command: {
     default: "test-cli",
     aliases: ["test"],
@@ -78,8 +82,73 @@ describe("AI SDK CLI plugin contract", () => {
 
   it("validates a static package manifest without loading plugin code", () => {
     expect(isCliPluginManifestV1(manifest)).toBe(true);
+    expect(isCliPluginManifestV1({
+      ...manifest,
+      vendorExtension: { enabled: true },
+      display: { ...manifest.display, vendorBadge: 42 },
+    })).toBe(true);
     expect(isCliPluginManifestV1({ ...manifest, kind: "api-provider" })).toBe(false);
     expect(isCliPluginManifestV1({ ...manifest, permissions: ["database:read"] })).toBe(false);
+  });
+
+  it.each([
+    ["display.description", { ...manifest, display: { ...manifest.display, description: 1 } }],
+    ["display.homepage", { ...manifest, display: { ...manifest.display, homepage: 1 } }],
+    ["command.aliases", { ...manifest, command: { ...manifest.command, aliases: "test" } }],
+    ["command.knownPaths", { ...manifest, command: { ...manifest.command, knownPaths: { darwin: "/bin/test" } } }],
+    ["command.knownPaths entry", { ...manifest, command: { ...manifest.command, knownPaths: { linux: [1] } } }],
+    ["command.versionArgs", { ...manifest, command: { ...manifest.command, versionArgs: "--version" } }],
+    ["compatibility.tower", { ...manifest, compatibility: { ...manifest.compatibility, tower: 1 } }],
+    ["compatibility.node", { ...manifest, compatibility: { ...manifest.compatibility, node: 20 } }],
+    ["sessions.resume", {
+      ...manifest,
+      capabilities: {
+        ...manifest.capabilities,
+        sessions: { ...manifest.capabilities.sessions, resume: "yes" },
+      },
+    }],
+    ["sessions.continue", {
+      ...manifest,
+      capabilities: {
+        ...manifest.capabilities,
+        sessions: { ...manifest.capabilities.sessions, continue: 1 },
+      },
+    }],
+    ["query.stream", {
+      ...manifest,
+      capabilities: {
+        ...manifest.capabilities,
+        query: { ...manifest.capabilities.query, stream: "yes" },
+      },
+    }],
+    ["models", { ...manifest, capabilities: { ...manifest.capabilities, models: "yes" } }],
+    ["integrations", { ...manifest, capabilities: { ...manifest.capabilities, integrations: [] } }],
+    ["integrations.mcp", {
+      ...manifest,
+      capabilities: {
+        ...manifest.capabilities,
+        integrations: { ...manifest.capabilities.integrations, mcp: "yes" },
+      },
+    }],
+    ["integrations.hooks", {
+      ...manifest,
+      capabilities: {
+        ...manifest.capabilities,
+        integrations: { ...manifest.capabilities.integrations, hooks: 1 },
+      },
+    }],
+    ["integrations.skills", {
+      ...manifest,
+      capabilities: {
+        ...manifest.capabilities,
+        integrations: { ...manifest.capabilities.integrations, skills: null },
+      },
+    }],
+    ["permissions container", { ...manifest, permissions: "process:spawn" }],
+    ["permissions entry", { ...manifest, permissions: [1] }],
+    ["configSchema", { ...manifest, configSchema: 1 }],
+  ])("rejects a malformed %s field", (field, malformedManifest) => {
+    expect(isCliPluginManifestV1(malformedManifest), field).toBe(false);
   });
 
   it("checks API major and host minor compatibility independently of manifest version", () => {
@@ -98,6 +167,10 @@ describe("AI SDK CLI plugin contract", () => {
 
   it("keeps cross-platform path helpers deterministic and side-effect free", () => {
     expect(normalizePath("C:/work/../bin/tool", "win32")).toBe("C:\\bin\\tool");
+    expect(normalizePath("\\\\server\\share\\..\\x", "win32")).toBe("\\\\server\\share\\x");
+    expect(normalizePath("C:\\root\\..\\x", "win32")).toBe("C:\\x");
+    expect(normalizePath("\\foo", "win32")).toBe("\\foo");
+    expect(normalizePath("..\\foo\\..\\bar", "win32")).toBe("..\\bar");
     expect(normalizePath("/opt/work/../bin/tool", "linux")).toBe("/opt/bin/tool");
   });
 });

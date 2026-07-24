@@ -1,3 +1,5 @@
+import path from "node:path";
+
 export type PlatformName = "darwin" | "linux" | "win32";
 
 export function isWindows(platform: string): platform is "win32" {
@@ -9,19 +11,8 @@ export function toForwardSlash(value: string): string {
 }
 
 export function normalizePath(value: string, platform: PlatformName): string {
-  const separator = isWindows(platform) ? "\\" : "/";
-  const unified = isWindows(platform) ? value.replace(/\//g, "\\") : value.replace(/\\/g, "/");
-  const prefix = isWindows(platform)
-    ? (/^[A-Za-z]:\\/.exec(unified)?.[0] ?? (unified.startsWith("\\\\") ? "\\\\" : ""))
-    : (unified.startsWith("/") ? "/" : "");
-  const body = prefix ? unified.slice(prefix.length) : unified;
-  const parts: string[] = [];
-  for (const part of body.split(/[\\/]+/)) {
-    if (!part || part === ".") continue;
-    if (part === ".." && parts.length && parts.at(-1) !== "..") parts.pop();
-    else if (part !== ".." || !prefix) parts.push(part);
-  }
-  return `${prefix}${parts.join(separator)}` || (prefix || ".");
+  if (isWindows(platform)) return path.win32.normalize(value.replace(/\//g, "\\"));
+  return path.posix.normalize(value.replace(/\\/g, "/"));
 }
 
 export function quoteForCmd(argument: string): string {

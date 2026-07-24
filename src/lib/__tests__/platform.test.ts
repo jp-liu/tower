@@ -70,6 +70,14 @@ describe("platform utilities", () => {
       const result = normalizePath("/home/./user/./project", "darwin");
       expect(result).toBe("/home/user/project");
     });
+
+    it("preserves Windows roots while resolving parent segments", async () => {
+      const { normalizePath } = await import("@/lib/platform");
+      expect(normalizePath("\\\\server\\share\\..\\x", "win32")).toBe("\\\\server\\share\\x");
+      expect(normalizePath("C:\\root\\..\\x", "win32")).toBe("C:\\x");
+      expect(normalizePath("\\foo", "win32")).toBe("\\foo");
+      expect(normalizePath("..\\foo\\..\\bar", "win32")).toBe("..\\bar");
+    });
   });
 
   // =========================================================================

@@ -76,33 +76,73 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(isString);
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function hasValidOptionalField(
+  value: Record<string, unknown>,
+  key: string,
+  validate: (field: unknown) => boolean,
+): boolean {
+  return !hasOwn(value, key) || validate(value[key]);
+}
+
 /** Validate the static package.json `tower` field before plugin code is loaded. */
 export function isCliPluginManifestV1(value: unknown): value is CliPluginManifestV1 {
   if (!isRecord(value)) return false;
   if (value.manifestVersion !== CLI_PLUGIN_MANIFEST_VERSION || value.kind !== "cli-provider") return false;
   if (!isNonEmptyString(value.apiVersion) || !parseApiVersion(value.apiVersion)) return false;
-  if (!isRecord(value.display) || !isNonEmptyString(value.display.name)) return false;
+  if (!isRecord(value.display)
+    || !isNonEmptyString(value.display.name)
+    || !hasValidOptionalField(value.display, "description", isString)
+    || !hasValidOptionalField(value.display, "homepage", isString)) return false;
+
   if (!isRecord(value.command) || !isNonEmptyString(value.command.default)) return false;
-  if (value.command.aliases !== undefined
-    && (!Array.isArray(value.command.aliases) || !value.command.aliases.every(isNonEmptyString))) return false;
-  if (value.command.knownPaths !== undefined) {
+  if (!hasValidOptionalField(value.command, "aliases", isStringArray)
+    || !hasValidOptionalField(value.command, "versionArgs", isStringArray)) return false;
+  if (hasOwn(value.command, "knownPaths")) {
     if (!isRecord(value.command.knownPaths)) return false;
     for (const [platform, paths] of Object.entries(value.command.knownPaths)) {
       if (!(["darwin", "linux", "win32"] as string[]).includes(platform)) return false;
-      if (!Array.isArray(paths) || !paths.every(isNonEmptyString)) return false;
+      if (!isStringArray(paths)) return false;
     }
   }
+
   if (!isRecord(value.compatibility)
     || !isNonEmptyString(value.compatibility.tower)
     || !isNonEmptyString(value.compatibility.node)) return false;
-  if (!isRecord(value.capabilities)
-    || !isRecord(value.capabilities.sessions)
-    || value.capabilities.sessions.fresh !== true
-    || !isRecord(value.capabilities.query)
-    || value.capabilities.query.generate !== true
-    || typeof value.capabilities.models !== "boolean") return false;
+
+  if (!isRecord(value.capabilities)) return false;
+  const sessions = value.capabilities.sessions;
+  const query = value.capabilities.query;
+  if (!isRecord(sessions)
+    || sessions.fresh !== true
+    || !hasValidOptionalField(sessions, "resume", (field) => typeof field === "boolean")
+    || !hasValidOptionalField(sessions, "continue", (field) => typeof field === "boolean")) return false;
+  if (!isRecord(query)
+    || query.generate !== true
+    || !hasValidOptionalField(query, "stream", (field) => typeof field === "boolean")) return false;
+  if (typeof value.capabilities.models !== "boolean") return false;
+  if (hasOwn(value.capabilities, "integrations")) {
+    const integrations = value.capabilities.integrations;
+    if (!isRecord(integrations)
+      || !hasValidOptionalField(integrations, "mcp", (field) => typeof field === "boolean")
+      || !hasValidOptionalField(integrations, "hooks", (field) => typeof field === "boolean")
+      || !hasValidOptionalField(integrations, "skills", (field) => typeof field === "boolean")) return false;
+  }
+
   if (!Array.isArray(value.permissions)
-    || !value.permissions.every((permission) => CLI_PLUGIN_PERMISSIONS.has(permission as CliPluginPermission))) return false;
+    || !value.permissions.every((permission) => typeof permission === "string"
+      && CLI_PLUGIN_PERMISSIONS.has(permission as CliPluginPermission))) return false;
   return isNonEmptyString(value.configSchema);
 }
 
