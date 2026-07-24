@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { createRequire } from "node:module";
 import path from "node:path";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import semver from "semver";
@@ -192,6 +191,91 @@ async function scanPackageTree(
   await visit(root);
 }
 
+function esmExportTarget(exportsField: unknown): string | null {
+  if (typeof exportsField === "string") return exportsField;
+  if (Array.isArray(exportsField)) {
+    for (const candidate of exportsField) {
+      const target = esmExportTarget(candidate);
+      if (target) return target;
+    }
+    return null;
+  }
+  if (!isRecord(exportsField)) return null;
+  if (Object.keys(exportsField).some((key) => key.startsWith("."))) {
+    return esmExportTarget(exportsField["."]);
+  }
+  for (const [condition, candidate] of Object.entries(exportsField)) {
+    if (condition === "import" || condition === "node" || condition === "default") {
+      const target = esmExportTarget(candidate);
+      if (target) return target;
+    }
+  }
+  return null;
+}
+
+async function findDependencyRoot(
+  fileSystem: PluginFileSystem,
+  packageRoot: string,
+  dependency: string,
+  requireInsidePackage: boolean,
+): Promise<string> {
+  assertValidPackageName(dependency);
+  let directory = packageRoot;
+  while (true) {
+    const candidate = path.join(directory, "node_modules", ...dependency.split("/"));
+    try {
+      await fileSystem.access(path.join(candidate, "package.json"));
+      const realRoot = await fileSystem.realpath(candidate);
+      const realPackageRoot = await fileSystem.realpath(packageRoot);
+      if (requireInsidePackage && !isPathInside(realPackageRoot, realRoot)) {
+        throw new Error("Dependency escaped package root");
+      }
+      return realRoot;
+    } catch (error) {
+      if (requireInsidePackage) throw error;
+    }
+    const parent = path.dirname(directory);
+    if (parent === directory) throw new Error("Dependency package was not found");
+    directory = parent;
+  }
+}
+
+async function resolveEsmDependency(
+  fileSystem: PluginFileSystem,
+  packageRoot: string,
+  dependency: string,
+  requireInsidePackage: boolean,
+): Promise<string> {
+  const dependencyRoot = await findDependencyRoot(
+    fileSystem,
+    packageRoot,
+    dependency,
+    requireInsidePackage,
+  );
+  const dependencyPackage = await readJson(
+    fileSystem,
+    path.join(dependencyRoot, "package.json"),
+    "INVALID_PACKAGE",
+  );
+  if (!isRecord(dependencyPackage)) throw new Error("Dependency package metadata is invalid");
+  const target = dependencyPackage.exports === undefined
+    ? typeof dependencyPackage.main === "string" ? dependencyPackage.main : "./index.js"
+    : esmExportTarget(dependencyPackage.exports);
+  if (!target) throw new Error("Dependency has no ESM root export");
+  const relativeTarget = target.startsWith("./") ? target : `./${target}`;
+  if (!isSafePackageRelativePath(relativeTarget)) throw new Error("Dependency export escaped package root");
+  const resolved = await fileSystem.realpath(path.resolve(dependencyRoot, relativeTarget));
+  const stats = await fileSystem.stat(resolved);
+  if (!stats.isFile() || !isPathInside(dependencyRoot, resolved)) {
+    throw new Error("Dependency export escaped package root");
+  }
+  if (requireInsidePackage) {
+    const realPackageRoot = await fileSystem.realpath(packageRoot);
+    if (!isPathInside(realPackageRoot, resolved)) throw new Error("Dependency escaped package root");
+  }
+  return resolved;
+}
+
 export interface ValidatePluginPackageOptions {
   fileSystem: PluginFileSystem;
   packageRoot: string;
@@ -241,11 +325,16 @@ export async function validatePluginPackage(options: ValidatePluginPackageOption
   await scanPackageTree(options.fileSystem, packageRoot);
 
   const dependencies = isRecord(packageJson.dependencies) ? Object.keys(packageJson.dependencies) : [];
-  const resolveDependency = options.resolveDependency ?? (async (dependency: string, fromEntry: string) =>
-    createRequire(fromEntry).resolve(dependency));
   for (const dependency of dependencies) {
     try {
-      const resolved = await resolveDependency(dependency, entryPath);
+      const resolved = options.resolveDependency
+        ? await options.resolveDependency(dependency, entryPath)
+        : await resolveEsmDependency(
+            options.fileSystem,
+            packageRoot,
+            dependency,
+            options.requireDependenciesInsidePackage ?? false,
+          );
       if (options.requireDependenciesInsidePackage && typeof resolved === "string") {
         const realDependency = await options.fileSystem.realpath(resolved);
         if (!isPathInside(packageRoot, realDependency)) throw new Error("Dependency escaped package root");
@@ -302,6 +391,7 @@ export function createInstallPlan(input: {
     source: input.source,
     ...(input.sourcePath ? { sourcePath: input.sourcePath } : {}),
     fromVersion: input.previous?.version ?? null,
+    fromActivationPlanDigest: input.previous?.activationPlanDigest ?? null,
     toVersion: input.plugin.packageVersion,
     integrity: input.integrity,
     manifest: input.plugin.manifestSummary,
@@ -318,6 +408,7 @@ export function isMatchingPlan(expected: PluginInstallPlan, received: PluginInst
     source: received.source,
     ...(received.sourcePath ? { sourcePath: received.sourcePath } : {}),
     fromVersion: received.fromVersion,
+    fromActivationPlanDigest: received.fromActivationPlanDigest,
     toVersion: received.toVersion,
     integrity: received.integrity,
     manifest: received.manifest,

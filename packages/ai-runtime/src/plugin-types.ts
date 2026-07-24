@@ -54,6 +54,7 @@ export interface PluginInstallPlan {
   source: PluginSource;
   sourcePath?: string;
   fromVersion: string | null;
+  fromActivationPlanDigest: string | null;
   toVersion: string;
   integrity: string;
   manifest: PluginManifestSummary;

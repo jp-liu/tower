@@ -124,15 +124,7 @@ export class CliPluginRuntime {
     return this.serialized(async () => {
       const staged = await this.stageNpmPackage(plan.pluginId, plan.toVersion);
       try {
-        const previous = await this.registry.get(plan.pluginId) ?? undefined;
-        const expected = createInstallPlan({
-          source: "npm",
-          plugin: staged.plugin,
-          integrity: staged.resolution.integrity,
-          previous,
-        });
-        if (!isMatchingPlan(expected, plan)) throw pluginError("INSTALL_PLAN_MISMATCH", plan.pluginId);
-        return await this.commitNpmPackage(staged, expected, previous);
+        return await this.commitNpmPackage(staged, plan);
       } finally {
         await this.fileSystem.rm(staged.temporaryRoot).catch(() => undefined);
       }
@@ -162,37 +154,35 @@ export class CliPluginRuntime {
         throw pluginError("INVALID_PACKAGE", plan.pluginId, error);
       });
       const plugin = await this.validate(packageRoot, plan.pluginId, plan.toVersion);
-      const previous = await this.registry.get(plan.pluginId) ?? undefined;
-      const expected = createInstallPlan({
-        source: "local",
-        sourcePath: packageRoot,
-        plugin,
-        integrity: this.localIntegrity(plugin),
-        previous,
+      return this.registry.transact(plan.pluginId, (current) => {
+        const expected = createInstallPlan({
+          source: "local",
+          sourcePath: packageRoot,
+          plugin,
+          integrity: this.localIntegrity(plugin),
+          previous: current ?? undefined,
+        });
+        if (!isMatchingPlan(expected, plan)) throw pluginError("INSTALL_PLAN_MISMATCH", plan.pluginId);
+        const registration = this.createRegistration(expected, packageRoot, current ?? undefined);
+        return { next: registration, result: registration };
       });
-      if (!isMatchingPlan(expected, plan)) throw pluginError("INSTALL_PLAN_MISMATCH", plan.pluginId);
-      const registration = this.createRegistration(expected, packageRoot, previous);
-      await this.registry.set(registration);
-      await this.removePreviousNpmInstall(previous, packageRoot);
-      return registration;
     });
   }
 
   async confirmAndEnable(pluginId: string, plan: PluginInstallPlan): Promise<PluginRegistration> {
-    return this.serialized(async () => {
-      const registration = await this.registry.get(pluginId);
-      if (!registration) throw pluginError("PLUGIN_NOT_FOUND", pluginId);
+    return this.serialized(async () => this.registry.transact(pluginId, (current) => {
+      if (!current) throw pluginError("PLUGIN_NOT_FOUND", pluginId);
       if (plan.pluginId !== pluginId
-        || plan.planDigest !== registration.activationPlanDigest
+        || plan.planDigest !== current.activationPlanDigest
         || !isMatchingPlan(plan, plan)
-        || plan.toVersion !== registration.version
-        || plan.integrity !== registration.integrity
-        || plan.manifest.digest !== registration.manifest.digest
-        || !sameStringSet(plan.permissions.requested, registration.permissions)) {
+        || plan.toVersion !== current.version
+        || plan.integrity !== current.integrity
+        || plan.manifest.digest !== current.manifest.digest
+        || !sameStringSet(plan.permissions.requested, current.permissions)) {
         throw pluginError("INSTALL_PLAN_MISMATCH", pluginId);
       }
       const confirmedAt = this.now().toISOString();
-      return this.registry.update(pluginId, (current) => ({
+      const enabled = {
         ...current,
         enabled: true,
         permissionConfirmation: {
@@ -201,8 +191,9 @@ export class CliPluginRuntime {
           confirmedAt,
         },
         updatedAt: confirmedAt,
-      }));
-    });
+      };
+      return { next: enabled, result: enabled };
+    }));
   }
 
   async disable(pluginId: string): Promise<PluginRegistration> {
@@ -215,26 +206,29 @@ export class CliPluginRuntime {
 
   async uninstall(pluginId: string): Promise<void> {
     await this.serialized(async () => {
-      const registration = await this.registry.get(pluginId);
-      if (!registration) throw pluginError("PLUGIN_NOT_FOUND", pluginId);
-      if (registration.source === "local") {
-        await this.registry.remove(pluginId);
-        await this.fileSystem.rm(this.packageContainer(pluginId)).catch(() => undefined);
-        return;
-      }
-      const installPath = path.resolve(registration.installPath);
+      const snapshot = await this.registry.get(pluginId);
+      if (!snapshot) throw pluginError("PLUGIN_NOT_FOUND", pluginId);
+      const installPath = path.resolve(snapshot.installPath);
       const container = this.packageContainer(pluginId);
-      if (!isPathInside(container, installPath)) {
+      if (snapshot.source === "npm" && (installPath === container || !isPathInside(container, installPath))) {
         throw pluginError("UNINSTALL_FAILED", pluginId);
       }
-      const trash = path.join(this.registry.stagingDir, `.uninstall-${packageDirectoryName(pluginId)}-${Date.now()}`);
-      const exists = await this.exists(container);
+      let removed = false;
       try {
-        if (exists) await this.fileSystem.rename(container, trash);
-        await this.registry.remove(pluginId);
-        if (exists) await this.fileSystem.rm(trash).catch(() => undefined);
+        await this.registry.transact(pluginId, (current) => {
+          if (!current) throw pluginError("PLUGIN_NOT_FOUND", pluginId);
+          if (!this.sameRegistration(current, snapshot)) throw pluginError("UNINSTALL_FAILED", pluginId);
+          return { next: null, result: undefined };
+        });
+        removed = true;
+        if (snapshot.source === "npm") await this.fileSystem.rm(installPath);
       } catch (error) {
-        if (exists && await this.exists(trash)) await this.fileSystem.rename(trash, container).catch(() => undefined);
+        if (removed && snapshot.source === "npm" && await this.exists(installPath)) {
+          await this.registry.transact(pluginId, (current) => current
+            ? { next: current, result: undefined }
+            : { next: snapshot, result: undefined }).catch(() => undefined);
+        }
+        if (error instanceof PluginRuntimeError && error.code === "PLUGIN_NOT_FOUND") throw error;
         throw pluginError("UNINSTALL_FAILED", pluginId, error);
       }
     });
@@ -326,20 +320,30 @@ export class CliPluginRuntime {
 
   private async commitNpmPackage(
     staged: StagedNpmPackage,
-    plan: PluginInstallPlan,
-    previous?: PluginRegistration,
+    receivedPlan: PluginInstallPlan,
   ): Promise<PluginRegistration> {
-    const container = this.packageContainer(plan.pluginId);
-    const target = path.join(container, installationDirectoryName(plan));
+    const container = this.packageContainer(receivedPlan.pluginId);
+    const target = path.join(container, installationDirectoryName(receivedPlan));
     try {
       await this.fileSystem.mkdir(container);
       await this.fileSystem.rename(staged.packageRoot, target);
-      const registration = this.createRegistration(plan, target, previous);
-      await this.registry.set(registration);
-      return registration;
+      return await this.registry.transact(receivedPlan.pluginId, (current) => {
+        const expected = createInstallPlan({
+          source: "npm",
+          plugin: staged.plugin,
+          integrity: staged.resolution.integrity,
+          previous: current ?? undefined,
+        });
+        if (!isMatchingPlan(expected, receivedPlan)) {
+          throw pluginError("INSTALL_PLAN_MISMATCH", receivedPlan.pluginId);
+        }
+        const registration = this.createRegistration(expected, target, current ?? undefined);
+        return { next: registration, result: registration };
+      });
     } catch (error) {
       await this.fileSystem.rm(target).catch(() => undefined);
-      throw pluginError("INSTALL_FAILED", plan.pluginId, error);
+      if (error instanceof PluginRuntimeError) throw error;
+      throw pluginError("INSTALL_FAILED", receivedPlan.pluginId, error);
     }
   }
 
@@ -413,11 +417,13 @@ export class CliPluginRuntime {
     }
   }
 
-  private async removePreviousNpmInstall(previous: PluginRegistration | undefined, currentPath: string): Promise<void> {
-    // Immutable npm installs are intentionally retained until uninstall so a
-    // concurrent loader that already read the old registration never loses its files.
-    void previous;
-    void currentPath;
+  private sameRegistration(left: PluginRegistration, right: PluginRegistration): boolean {
+    return left.id === right.id
+      && left.source === right.source
+      && left.version === right.version
+      && left.integrity === right.integrity
+      && left.installPath === right.installPath
+      && left.activationPlanDigest === right.activationPlanDigest;
   }
 
   private packageContainer(pluginId: string): string {

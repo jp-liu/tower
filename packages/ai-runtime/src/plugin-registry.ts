@@ -92,6 +92,11 @@ export interface PluginRegistryOptions {
   fileSystem?: PluginFileSystem;
 }
 
+export interface PluginRegistryTransaction<T> {
+  next: PluginRegistration | null;
+  result: T;
+}
+
 export class PluginRegistry {
   readonly baseDir: string;
   readonly packagesDir: string;
@@ -124,32 +129,50 @@ export class PluginRegistry {
   }
 
   async set(registration: PluginRegistration): Promise<void> {
-    await this.mutate((registry) => {
-      registry.plugins[registration.id] = registration;
-    });
+    await this.transact(registration.id, () => ({ next: registration, result: undefined }));
   }
 
   async remove(pluginId: string): Promise<PluginRegistration | null> {
-    let removed: PluginRegistration | null = null;
-    await this.mutate((registry) => {
-      removed = registry.plugins[pluginId] ?? null;
-      delete registry.plugins[pluginId];
-    });
-    return removed;
+    return this.transact(pluginId, (current) => ({ next: null, result: current }));
   }
 
   async update(
     pluginId: string,
     updater: (registration: PluginRegistration) => PluginRegistration,
   ): Promise<PluginRegistration> {
-    let updated: PluginRegistration | null = null;
-    await this.mutate((registry) => {
-      const current = registry.plugins[pluginId];
+    return this.transact(pluginId, (current) => {
       if (!current) throw pluginError("PLUGIN_NOT_FOUND", pluginId);
-      updated = updater(current);
-      registry.plugins[pluginId] = updated;
+      const updated = updater(current);
+      return { next: updated, result: updated };
     });
-    return updated as unknown as PluginRegistration;
+  }
+
+  /** Read, validate, and replace one registration under the cross-process lock. */
+  async transact<T>(
+    pluginId: string,
+    transaction: (current: PluginRegistration | null) => PluginRegistryTransaction<T>,
+  ): Promise<T> {
+    return this.serialized(async () => {
+      await this.initialize();
+      const release = await this.fileSystem.acquireLock(`${this.registryPath}.lock`);
+      try {
+        const registry = await this.readUnlocked();
+        const current = registry.plugins[pluginId] ?? null;
+        const { next, result } = transaction(current);
+        if (next) {
+          if (next.id !== pluginId || !isRegistration(next, pluginId)) {
+            throw pluginError("REGISTRY_CORRUPT");
+          }
+          registry.plugins[pluginId] = next;
+        } else {
+          delete registry.plugins[pluginId];
+        }
+        await this.fileSystem.atomicWrite(this.registryPath, `${JSON.stringify(registry, null, 2)}\n`);
+        return result;
+      } finally {
+        await release();
+      }
+    });
   }
 
   async recover(): Promise<RegistryRecoveryResult> {
@@ -187,20 +210,6 @@ export class PluginRegistry {
       if (error instanceof Error && "code" in error && error.code === "REGISTRY_CORRUPT") throw error;
       throw pluginError("REGISTRY_CORRUPT", undefined, error);
     }
-  }
-
-  private async mutate(mutator: (registry: PluginRegistryData) => void): Promise<void> {
-    await this.serialized(async () => {
-      await this.initialize();
-      const release = await this.fileSystem.acquireLock(`${this.registryPath}.lock`);
-      try {
-        const registry = await this.readUnlocked();
-        mutator(registry);
-        await this.fileSystem.atomicWrite(this.registryPath, `${JSON.stringify(registry, null, 2)}\n`);
-      } finally {
-        await release();
-      }
-    });
   }
 
   private serialized<T>(operation: () => Promise<T>): Promise<T> {
