@@ -25,11 +25,12 @@ export class CodexCliAdapter implements CliAdapter {
     // Mirror ClaudeCliAdapter (claude-cli-adapter.ts): the autonomy flag and any
     // extraArgs (e.g. --model) must apply to fresh AND resumed sessions, so they
     // go first — before the fresh/resume/continue branch. Verified on codex-cli
-    // 0.142.x: the bypass flag parses both as a global pre-subcommand option and
+    // 0.145.x: --yolo parses both as a global pre-subcommand option and
     // directly on `codex resume`.
     //
-    // ponytail: full bypass == Claude's --dangerously-skip-permissions (Tower
-    // terminal is the "agent runs autonomously" surface). Safer alternative if
+    // --yolo is Codex's documented full-access mode and matches Claude's
+    // --dangerously-skip-permissions. Tower terminal is the "agent runs
+    // autonomously" surface. Safer alternative if
     // unrestricted host access is a concern: replace the one flag below with
     // "-a","never","-s","workspace-write" — keeps the sandbox, but note codex's
     // workspace-write defaults to NO network, which breaks pnpm install / dev
@@ -39,7 +40,7 @@ export class CodexCliAdapter implements CliAdapter {
     // AskUserQuestion hard-block would never run). Global pre-subcommand flag,
     // parses for fresh and `codex resume` alike (verified on 0.142.x).
     const args: string[] = [
-      "--dangerously-bypass-approvals-and-sandbox",
+      "--yolo",
       "--dangerously-bypass-hook-trust",
     ];
 
@@ -130,6 +131,20 @@ export class CodexCliAdapter implements CliAdapter {
 
   async installHooks(): Promise<InstallResult> {
     try {
+      const managedOnlyPolicyPath = this.getManagedOnlyHooksPolicyPath();
+      if (managedOnlyPolicyPath) {
+        return {
+          ok: false,
+          method: "file",
+          detail: managedOnlyPolicyPath,
+          error:
+            `Codex admin policy at ${managedOnlyPolicyPath} sets ` +
+            "allow_managed_hooks_only=true, so Codex ignores Tower hooks in " +
+            `${this.getHooksPath()}. Add the Tower hooks to the managed policy ` +
+            "or disable managed-only hooks.",
+        };
+      }
+
       const hooks = this.readHooks();
       const root = getPackageRoot().replace(/\\/g, "/");
       const sessionStart = path.join(root, "scripts", "tower-session-start-hook.js").replace(/\\/g, "/");
@@ -274,6 +289,8 @@ export class CodexCliAdapter implements CliAdapter {
   }
 
   async isHooksInstalled(): Promise<boolean> {
+    if (this.getManagedOnlyHooksPolicyPath()) return false;
+
     const hooks = this.readHooks();
     const required: Array<[string, string]> = [
       ["SessionStart", "session-start-hook.js"],
@@ -505,6 +522,19 @@ export class CodexCliAdapter implements CliAdapter {
     return path.join(this.getConfigDir(), "sessions");
   }
 
+  /**
+   * Codex's machine-wide requirements file can prohibit user hooks entirely.
+   * Kept overridable so installation checks can be tested without reading the
+   * developer machine's real administrator policy.
+   */
+  getManagedRequirementsPaths(): string[] {
+    if (isWindows()) {
+      const programData = process.env.ProgramData || "C:\\ProgramData";
+      return [path.join(programData, "OpenAI", "Codex", "requirements.toml")];
+    }
+    return ["/etc/codex/requirements.toml"];
+  }
+
   getApiKeyInfo(): { envVar: string; required: boolean } {
     return { envVar: "OPENAI_API_KEY", required: false };
   }
@@ -556,6 +586,33 @@ export class CodexCliAdapter implements CliAdapter {
 
   private getHooksPath(): string {
     return path.join(this.getConfigDir(), "hooks.json");
+  }
+
+  private getManagedOnlyHooksPolicyPath(): string | null {
+    for (const requirementsPath of this.getManagedRequirementsPaths()) {
+      try {
+        const content = fs.readFileSync(requirementsPath, "utf-8");
+        if (this.hasTopLevelManagedOnlyHooksPolicy(content)) return requirementsPath;
+      } catch {
+        // A missing or unreadable requirements file does not impose a policy
+        // that Tower can verify here.
+      }
+    }
+    return null;
+  }
+
+  private hasTopLevelManagedOnlyHooksPolicy(content: string): boolean {
+    for (const line of content.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      // Once a TOML table starts, later keys belong to that table rather than
+      // the document root where allow_managed_hooks_only is defined.
+      if (trimmed.startsWith("[")) return false;
+      if (/^allow_managed_hooks_only\s*=\s*true(?:\s*#.*)?$/i.test(trimmed)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private readHooks(): Record<string, unknown> {

@@ -49,58 +49,58 @@ describe("CodexCliAdapter", () => {
       cwd: "/project",
     };
 
-    const BYPASS = "--dangerously-bypass-approvals-and-sandbox";
+    const YOLO = "--yolo";
 
-    it("builds fresh start args with bypass flag first and prompt last", () => {
+    it("builds fresh start args with yolo mode first and prompt last", () => {
       const result = adapter.buildSpawnArgs(baseOpts);
       expect(result.command).toMatch(/codex$/);
-      expect(result.args[0]).toBe(BYPASS);
+      expect(result.args[0]).toBe(YOLO);
       expect(result.args[result.args.length - 1]).toBe("Fix the bug");
       expect(result.args).not.toContain("resume");
       expect(result.initialInput).toBeUndefined();
     });
 
-    it("builds resume args with bypass flag then `resume <id>` (no prompt)", () => {
+    it("builds resume args with yolo mode then `resume <id>` (no prompt)", () => {
       const result = adapter.buildSpawnArgs({
         ...baseOpts,
         resumeSessionId: "session-abc-123",
       });
       // Autonomy flag applies to resumed sessions too (mirrors Claude adapter).
-      expect(result.args[0]).toBe(BYPASS);
+      expect(result.args[0]).toBe(YOLO);
       expect(result.args).toContain("resume");
       const resumeIdx = result.args.indexOf("resume");
       expect(result.args[resumeIdx + 1]).toBe("session-abc-123");
       expect(result.args).not.toContain("Fix the bug");
     });
 
-    it("builds continue args with bypass flag then `resume --last` (no prompt)", () => {
+    it("builds continue args with yolo mode then `resume --last` (no prompt)", () => {
       const result = adapter.buildSpawnArgs({
         ...baseOpts,
         continueLatest: true,
       });
-      expect(result.args[0]).toBe(BYPASS);
+      expect(result.args[0]).toBe(YOLO);
       const resumeIdx = result.args.indexOf("resume");
       expect(resumeIdx).toBeGreaterThanOrEqual(0);
       expect(result.args[resumeIdx + 1]).toBe("--last");
       expect(result.args).not.toContain("Fix the bug");
     });
 
-    it("includes the bypass flag by default on fresh start", () => {
+    it("includes yolo mode by default on fresh start", () => {
       const result = adapter.buildSpawnArgs(baseOpts);
-      expect(result.args).toContain(BYPASS);
+      expect(result.args).toContain(YOLO);
     });
 
-    it("merges extraArgs after bypass flag, before prompt, on fresh start", () => {
+    it("merges extraArgs after yolo mode, before prompt, on fresh start", () => {
       const result = adapter.buildSpawnArgs({
         ...baseOpts,
         extraArgs: ["--model", "gpt-5.5"],
       });
       expect(result.args).toContain("--model");
       expect(result.args).toContain("gpt-5.5");
-      const bypassIdx = result.args.indexOf(BYPASS);
+      const yoloIdx = result.args.indexOf(YOLO);
       const modelIdx = result.args.indexOf("--model");
       const promptIdx = result.args.indexOf("Fix the bug");
-      expect(modelIdx).toBeGreaterThan(bypassIdx);
+      expect(modelIdx).toBeGreaterThan(yoloIdx);
       expect(promptIdx).toBeGreaterThan(modelIdx);
     });
 
@@ -127,7 +127,7 @@ describe("CodexCliAdapter", () => {
       expect(result.args).toContain('developer_instructions="Follow Tower task rules."');
       const configIdx = result.args.indexOf("-c");
       const promptIdx = result.args.indexOf("Fix the bug");
-      expect(configIdx).toBeGreaterThan(result.args.indexOf(BYPASS));
+      expect(configIdx).toBeGreaterThan(result.args.indexOf(YOLO));
       expect(promptIdx).toBeGreaterThan(configIdx);
     });
 
@@ -160,7 +160,7 @@ describe("CodexCliAdapter", () => {
         ...baseOpts,
         prompt: "",
       });
-      expect(result.args).toContain(BYPASS);
+      expect(result.args).toContain(YOLO);
       expect(result.args).not.toContain("");
     });
   });
@@ -202,12 +202,14 @@ describe("CodexCliAdapter", () => {
     const tmpDir = path.join(__dirname, ".tmp-codex-hooks-test");
     const hooksJsonPath = path.join(tmpDir, "hooks.json");
     const configTomlPath = path.join(tmpDir, "config.toml");
+    const requirementsTomlPath = path.join(tmpDir, "requirements.toml");
 
     beforeEach(() => {
       fs.mkdirSync(tmpDir, { recursive: true });
       // Point adapter to temp dir
       vi.spyOn(adapter, "getConfigDir").mockReturnValue(tmpDir);
       vi.spyOn(adapter, "getSettingsPath").mockReturnValue(configTomlPath);
+      vi.spyOn(adapter, "getManagedRequirementsPaths").mockReturnValue([]);
     });
 
     afterEach(() => {
@@ -236,6 +238,37 @@ describe("CodexCliAdapter", () => {
       // Verify config.toml enables the (renamed) hooks feature
       const toml = fs.readFileSync(configTomlPath, "utf-8");
       expect(toml).toContain("hooks = true");
+    });
+
+    it("rejects user hook installation when admin policy allows managed hooks only", async () => {
+      vi.mocked(adapter.getManagedRequirementsPaths).mockReturnValue([requirementsTomlPath]);
+      fs.writeFileSync(
+        requirementsTomlPath,
+        "allow_managed_hooks_only = true\n\n[features]\nhooks = true\n",
+        "utf-8",
+      );
+
+      const result = await adapter.installHooks();
+
+      expect(result.ok).toBe(false);
+      expect(result.detail).toBe(requirementsTomlPath);
+      expect(result.error).toContain("allow_managed_hooks_only=true");
+      expect(fs.existsSync(hooksJsonPath)).toBe(false);
+      expect(await adapter.isHooksInstalled()).toBe(false);
+    });
+
+    it("does not treat a managed-only key inside another TOML table as admin policy", async () => {
+      vi.mocked(adapter.getManagedRequirementsPaths).mockReturnValue([requirementsTomlPath]);
+      fs.writeFileSync(
+        requirementsTomlPath,
+        "[unrelated]\nallow_managed_hooks_only = true\n",
+        "utf-8",
+      );
+
+      const result = await adapter.installHooks();
+
+      expect(result.ok).toBe(true);
+      expect(await adapter.isHooksInstalled()).toBe(true);
     });
 
     it("reports hooks as incomplete when any required Tower hook is missing", async () => {
