@@ -84,6 +84,10 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(isString);
 }
 
+function isNonEmptyStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(isNonEmptyString);
+}
+
 function hasOwn(value: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
 }
@@ -107,13 +111,13 @@ export function isCliPluginManifestV1(value: unknown): value is CliPluginManifes
     || !hasValidOptionalField(value.display, "homepage", isString)) return false;
 
   if (!isRecord(value.command) || !isNonEmptyString(value.command.default)) return false;
-  if (!hasValidOptionalField(value.command, "aliases", isStringArray)
+  if (!hasValidOptionalField(value.command, "aliases", isNonEmptyStringArray)
     || !hasValidOptionalField(value.command, "versionArgs", isStringArray)) return false;
   if (hasOwn(value.command, "knownPaths")) {
     if (!isRecord(value.command.knownPaths)) return false;
     for (const [platform, paths] of Object.entries(value.command.knownPaths)) {
       if (!(["darwin", "linux", "win32"] as string[]).includes(platform)) return false;
-      if (!isStringArray(paths)) return false;
+      if (!isNonEmptyStringArray(paths)) return false;
     }
   }
 

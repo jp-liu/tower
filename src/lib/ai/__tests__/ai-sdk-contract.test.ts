@@ -87,6 +87,10 @@ describe("AI SDK CLI plugin contract", () => {
       vendorExtension: { enabled: true },
       display: { ...manifest.display, vendorBadge: 42 },
     })).toBe(true);
+    expect(isCliPluginManifestV1({
+      ...manifest,
+      command: { ...manifest.command, versionArgs: [""] },
+    })).toBe(true);
     expect(isCliPluginManifestV1({ ...manifest, kind: "api-provider" })).toBe(false);
     expect(isCliPluginManifestV1({ ...manifest, permissions: ["database:read"] })).toBe(false);
   });
@@ -95,8 +99,13 @@ describe("AI SDK CLI plugin contract", () => {
     ["display.description", { ...manifest, display: { ...manifest.display, description: 1 } }],
     ["display.homepage", { ...manifest, display: { ...manifest.display, homepage: 1 } }],
     ["command.aliases", { ...manifest, command: { ...manifest.command, aliases: "test" } }],
+    ["command.aliases empty entry", { ...manifest, command: { ...manifest.command, aliases: [""] } }],
     ["command.knownPaths", { ...manifest, command: { ...manifest.command, knownPaths: { darwin: "/bin/test" } } }],
     ["command.knownPaths entry", { ...manifest, command: { ...manifest.command, knownPaths: { linux: [1] } } }],
+    ["command.knownPaths empty entry", {
+      ...manifest,
+      command: { ...manifest.command, knownPaths: { darwin: [""] } },
+    }],
     ["command.versionArgs", { ...manifest, command: { ...manifest.command, versionArgs: "--version" } }],
     ["compatibility.tower", { ...manifest, compatibility: { ...manifest.compatibility, tower: 1 } }],
     ["compatibility.node", { ...manifest, compatibility: { ...manifest.compatibility, node: 20 } }],
