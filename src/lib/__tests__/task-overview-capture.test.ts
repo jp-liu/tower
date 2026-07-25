@@ -52,4 +52,15 @@ describe("captureTaskOverview fallback", () => {
     }) });
     expect(mocks.syncFts).toHaveBeenCalledTimes(1);
   });
+
+  it("redacts credential canaries from generated overview notes", async () => {
+    const canary = "sk-OVERVIEW_CANARY_123456789";
+    mocks.generateText.mockResolvedValue(`Summary token=${canary}`);
+    await captureTaskOverview("task");
+    await vi.waitFor(() => expect(mocks.noteCreate).toHaveBeenCalledTimes(1));
+
+    const payload = JSON.stringify(mocks.noteCreate.mock.calls);
+    expect(payload).not.toContain(canary);
+    expect(payload).toContain("[REDACTED]");
+  });
 });

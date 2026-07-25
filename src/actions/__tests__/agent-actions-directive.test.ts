@@ -20,7 +20,10 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({
   db: {
     task: { findUnique: vi.fn(), update: vi.fn(async () => ({})) },
-    taskMessage: { findMany: vi.fn(async () => []) },
+    taskMessage: {
+      create: vi.fn(async ({ data }) => ({ id: "message", ...data })),
+      findMany: vi.fn(async () => []),
+    },
     agentPrompt: { findUnique: vi.fn() },
     taskExecution: {
       count: vi.fn(async () => 0),
@@ -87,11 +90,13 @@ import { createWorktree } from "@/lib/worktree";
 import {
   continueLatestPtyExecution,
   resumePtyExecution,
+  sendTaskMessage,
   startPtyExecution,
 } from "@/actions/agent-actions";
 
 const mockDb = db as unknown as {
   task: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+  taskMessage: { create: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
   agentPrompt: { findUnique: ReturnType<typeof vi.fn> };
   taskExecution: {
     updateMany: ReturnType<typeof vi.fn>;
@@ -203,6 +208,15 @@ describe("startPtyExecution directive selection", () => {
         }),
       },
     } as never));
+  });
+
+  it("redacts credential canaries before persisting a TaskMessage", async () => {
+    const canary = "TASK_MESSAGE_CANARY_123456789";
+    await sendTaskMessage("t1", `Authorization: Bearer ${canary}`);
+
+    const payload = JSON.stringify(mockDb.taskMessage.create.mock.calls);
+    expect(payload).not.toContain(canary);
+    expect(payload).toContain("[REDACTED]");
   });
 
   it("injects the workbench directive for a task with the builtin Tower label", async () => {

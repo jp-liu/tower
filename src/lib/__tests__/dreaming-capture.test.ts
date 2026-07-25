@@ -61,4 +61,22 @@ describe("captureTaskDreaming", () => {
       data: { insightNoteId: "note" },
     });
   });
+
+  it("redacts credential canaries from generated dreaming notes", async () => {
+    const canary = "sk-DREAMING_CANARY_123456789";
+    mocks.generateDreamingInsight.mockResolvedValue({
+      summary: `token=${canary}`,
+      insights: [{ type: "decision", content: `Bearer ${canary}` }],
+      shouldCreateNote: true,
+      noteTitle: `Dream ${canary}`,
+    });
+    mocks.noteCreate.mockResolvedValue({ id: "note" });
+    mocks.executionUpdate.mockResolvedValue({});
+
+    await captureTaskDreaming("task");
+
+    const payload = JSON.stringify(mocks.noteCreate.mock.calls);
+    expect(payload).not.toContain(canary);
+    expect(payload).toContain("[REDACTED]");
+  });
 });

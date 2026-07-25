@@ -4,6 +4,7 @@ import { CapabilityRuntimeError } from "@tower/ai-runtime";
 import { db } from "@/lib/db";
 import { generateSummaryFromLog, generateDreamingInsight, type DreamingResult } from "@/lib/claude-session";
 import { SESSION_INSIGHT_CATEGORY } from "@/lib/constants";
+import { redactSecretString } from "@/lib/secret-redaction";
 
 const TERMINAL_LOG_MAX = 10 * 1024; // 10 KB
 
@@ -285,8 +286,8 @@ export async function captureTaskDreaming(taskId: string): Promise<void> {
     // Create ProjectNote
     const note = await db.projectNote.create({
       data: {
-        title: dream.noteTitle || dream.summary.slice(0, 50),
-        content: formatDreamingContent(dream),
+        title: redactSecretString(dream.noteTitle || dream.summary.slice(0, 50)),
+        content: redactSecretString(formatDreamingContent(dream)),
         category: SESSION_INSIGHT_CATEGORY,
         projectId: task.projectId,
         taskId,

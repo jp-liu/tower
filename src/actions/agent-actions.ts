@@ -27,6 +27,7 @@ import { join } from "path";
 import { randomUUID } from "crypto";
 import { getSignalDir } from "@/lib/tower-dir";
 import { TOWER_LABEL_NAME } from "@/lib/constants";
+import { redactSecretString } from "@/lib/secret-redaction";
 import {
   capabilityError,
   executeTerminalPrestartFallback,
@@ -125,7 +126,7 @@ export async function sendTaskMessage(taskId: string, content: string) {
   const userMessage = await db.taskMessage.create({
     data: {
       role: "USER",
-      content,
+      content: redactSecretString(content),
       taskId,
     },
   });

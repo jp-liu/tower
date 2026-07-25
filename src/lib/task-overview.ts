@@ -27,6 +27,7 @@ import { resolveTaskDiffSource } from "@/lib/task-diff-resolver";
 import { parseDiffOutput, type DiffFile } from "@/lib/diff-parser";
 import { TASK_OVERVIEW_CATEGORY } from "@/lib/constants";
 import type { Locale } from "@/lib/i18n";
+import { redactSecretString } from "@/lib/secret-redaction";
 import {
   buildFallbackSummary,
   buildNoteTitle,
@@ -253,8 +254,8 @@ export async function captureTaskOverview(
     try {
       const summary = await generateChangeSummary(captured, locale);
       const generatedAt = new Date().toISOString();
-      const content = formatNoteContent(captured, summary, generatedAt, kind, locale);
-      const title = buildNoteTitle(captured.taskTitle, kind, locale);
+      const content = redactSecretString(formatNoteContent(captured, summary, generatedAt, kind, locale));
+      const title = redactSecretString(buildNoteTitle(captured.taskTitle, kind, locale));
 
       const note = await db.projectNote.create({
         data: {
