@@ -15,6 +15,7 @@ export interface SDKSessionMessage {
 
 interface ContentBlock {
   type: string;
+  id?: string;
   text?: string;
   name?: string;
   input?: unknown;
@@ -29,9 +30,9 @@ interface UserContentBlock {
 
 /**
  * Extract attachmentFilenames from a user message's content field.
- * Currently returns undefined — attachments are tracked client-side via the
- * sessionStorage cache in assistant-provider.tsx. A future iteration will
- * populate this from SDK image/file blocks when multimodal storage is wired.
+ * Legacy SDK image blocks contain inline data but no Tower cache identifier.
+ * The importer deliberately does not persist that base64 payload as message
+ * metadata, so these historical blocks remain text-history-only.
  */
 function extractAttachmentFilenames(content: unknown): string[] | undefined {
   if (Array.isArray(content)) {
@@ -49,6 +50,7 @@ interface SystemPayload {
   subtype?: string;
   tool_name?: string;
   content?: string;
+  tool_use_id?: string;
 }
 
 function nextId(): string {
@@ -108,6 +110,7 @@ export function convertSessionMessages(sdkMessages: SDKSessionMessage[]): ChatMe
               role: "tool",
               content: JSON.stringify(block.input ?? {}, null, 2),
               toolName: block.name,
+              toolId: block.id,
             });
           }
         }
@@ -122,6 +125,7 @@ export function convertSessionMessages(sdkMessages: SDKSessionMessage[]): ChatMe
             role: "tool",
             content: payload.content,
             toolName: `${payload.tool_name ?? "tool"} (result)`,
+            toolId: payload.tool_use_id,
           });
         }
         // Skip other system messages

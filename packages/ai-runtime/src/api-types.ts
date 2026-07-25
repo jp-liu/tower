@@ -82,6 +82,7 @@ export interface ApiGenerateRequest {
   system?: string;
   maxOutputTokens?: number;
   temperature?: number;
+  effort?: "low" | "medium" | "high";
   timeoutMs?: number;
   /** Maximum model/tool-loop steps. Clamped to 1..20 by the runtime. */
   maxTurns?: number;

@@ -195,8 +195,23 @@ export class ClaudeCliAdapter implements CliAdapter {
     const allowed = options.allowedTools?.length
       ? (options.tools ?? options.allowedTools).filter((tool) => options.allowedTools!.includes(tool))
       : options.tools ?? [];
+    const imageAttachments = options.attachments ?? [];
+    const initialInput = imageAttachments.length ? `${JSON.stringify({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          { type: "text", text: options.prompt },
+          ...imageAttachments.map((attachment) => ({
+            type: "image",
+            source: { type: "base64", media_type: attachment.mediaType, data: attachment.dataBase64 },
+          })),
+        ],
+      },
+    })}\n` : undefined;
     const args = [
-      "--print", options.prompt,
+      "--print",
+      ...(initialInput ? ["--input-format", "stream-json"] : [options.prompt]),
       "--output-format", "stream-json",
       "--verbose",
       "--include-partial-messages",
@@ -206,6 +221,7 @@ export class ClaudeCliAdapter implements CliAdapter {
     if (options.systemPrompt) args.push("--append-system-prompt", options.systemPrompt);
     if (options.model) args.push("--model", options.model);
     if (options.maxTurns !== undefined) args.push("--max-turns", String(options.maxTurns));
+    if (options.effort) args.push("--effort", options.effort);
     if (allowed.length) args.push("--allowedTools", allowed.join(","));
     let sawError = false;
     let sawFinish = false;
@@ -214,7 +230,7 @@ export class ClaudeCliAdapter implements CliAdapter {
     const toolNames = new Map<string, string>();
     for await (const line of streamProcessJsonLines(
       this.host.process,
-      { command: this.command(), args, cwd: options.cwd },
+      { command: this.command(), args, cwd: options.cwd, initialInput },
       {
         signal: options.signal ?? this.host.signal,
         timeoutMs: options.timeoutMs,

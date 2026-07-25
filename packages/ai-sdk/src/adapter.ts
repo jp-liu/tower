@@ -52,6 +52,13 @@ export interface CliQueryOptions {
   /** Host-enforced request deadline for the complete CLI process tree. */
   timeoutMs?: number;
   temperature?: number;
+  effort?: "low" | "medium" | "high";
+  attachments?: Array<{
+    filename: string;
+    path: string;
+    mediaType: string;
+    dataBase64?: string;
+  }>;
   /** Provider-known tool names or patterns to expose. The adapter translates these into CLI arguments. */
   tools?: string[];
   /** Subset of provider-known tools that may execute without interactive approval. */

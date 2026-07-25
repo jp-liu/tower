@@ -7,7 +7,10 @@ const mocks = vi.hoisted(() => ({
   resolvePlan: vi.fn(),
   getApiRuntime: vi.fn(),
   createTools: vi.fn(() => ({ tower_tool: { inputSchema: {} } })),
-  preparePrompt: vi.fn(async ({ prompt }: { prompt: string }) => prompt),
+  prepareRequest: vi.fn(async ({ prompt }: { prompt: string }) => ({
+    prompt,
+    attachments: [],
+  })),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -17,7 +20,7 @@ vi.mock("../capability-resolver", () => ({
 }));
 vi.mock("../assistant-tool-bundle", () => ({
   createAssistantToolBundle: mocks.createTools,
-  prepareAssistantCliPrompt: mocks.preparePrompt,
+  prepareAssistantCliRequest: mocks.prepareRequest,
 }));
 vi.mock("@/mcp/tool-catalog", () => ({
   assistantTowerToolCatalog: { list_tasks: {}, create_task: {} },
@@ -180,7 +183,7 @@ describe("Assistant stream executor", () => {
       const target = cliTarget(provider, 0, stream);
       target.provider = provider;
       mocks.resolvePlan.mockResolvedValue({ slot: "assistant", targets: [target], migrationStatus: "complete" });
-      mocks.preparePrompt.mockRejectedValueOnce(new Error("PRIVATE_ATTACHMENT_PATH"));
+      mocks.prepareRequest.mockRejectedValueOnce(new Error("PRIVATE_ATTACHMENT_PATH"));
       const events = [];
       for await (const event of streamAssistantTurn({
         prompt: "PROMPT_CANARY",

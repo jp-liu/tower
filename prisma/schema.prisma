@@ -20,6 +20,7 @@ model Workspace {
   prompts       AgentPrompt[]
   versionTypes  VersionType[]
   productGroups ProductGroup[]
+  assistantSessions AssistantSession[]
 }
 
 model Project {
@@ -52,6 +53,7 @@ model Project {
   assets       ProjectAsset[]
   versions     Version[]
   facts        ProjectFact[]
+  assistantSessions AssistantSession[]
 
   @@index([workspaceId])
   @@index([groupId])
@@ -281,10 +283,79 @@ model Version {
   project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   type    VersionType? @relation(fields: [typeId], references: [id], onDelete: SetNull)
   tasks   Task[]
+  assistantSessions AssistantSession[]
 
   @@index([projectId])
   @@index([isCurrent])
   @@index([typeId])
+}
+
+/// Tower-owned Assistant conversation. Provider-native session identifiers are
+/// legacy/import hints only; messages below are the sole recovery source.
+model AssistantSession {
+  id                    String   @id
+  title                 String   @default("New Session")
+  workspaceId           String?
+  workspaceNameSnapshot String?
+  projectId             String?
+  projectNameSnapshot   String?
+  versionId             String?
+  versionNameSnapshot   String?
+  legacySource          String?
+  legacyId              String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  lastMessageAt         DateTime @default(now())
+
+  workspace Workspace?         @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  project   Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  version   Version?           @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  messages  AssistantMessage[]
+  turns     AssistantTurn[]
+
+  @@unique([legacySource, legacyId])
+  @@index([lastMessageAt])
+  @@index([workspaceId])
+  @@index([projectId])
+  @@index([versionId])
+}
+
+model AssistantTurn {
+  id                 String              @id
+  sessionId          String
+  clientTurnId       String
+  status             AssistantTurnStatus @default(STREAMING)
+  userMessageId      String?
+  assistantMessageId String?
+  startedAt          DateTime            @default(now())
+  completedAt        DateTime?
+
+  session  AssistantSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  messages AssistantMessage[]
+
+  @@unique([sessionId, clientTurnId])
+  @@index([sessionId, startedAt])
+  @@index([status])
+}
+
+model AssistantMessage {
+  id        String                 @id
+  sessionId String
+  turnId    String?
+  sequence  Int
+  role      AssistantMessageRole
+  partsJson String
+  status    AssistantMessageStatus @default(COMPLETE)
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+
+  session AssistantSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  turn    AssistantTurn?   @relation(fields: [turnId], references: [id], onDelete: SetNull)
+
+  @@unique([sessionId, sequence])
+  @@index([sessionId, createdAt])
+  @@index([turnId])
+  @@index([status])
 }
 
 model VersionType {
@@ -568,6 +639,26 @@ enum MessageRole {
   USER
   ASSISTANT
   SYSTEM
+}
+
+enum AssistantMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum AssistantMessageStatus {
+  STREAMING
+  COMPLETE
+  INTERRUPTED
+  FAILED
+}
+
+enum AssistantTurnStatus {
+  STREAMING
+  COMPLETE
+  INTERRUPTED
+  FAILED
 }
 
 enum ProjectCategory {

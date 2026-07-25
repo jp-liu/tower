@@ -1,102 +1,85 @@
-export interface AssistantSession {
-  id: string;       // UUID / SDK session ID
-  title: string;    // First user message truncated to 30 chars, or "New Session"
-  createdAt: string; // ISO string
-  updatedAt: string; // ISO string
-}
-
-const STORAGE_KEY = "tower-assistant-sessions";
-const ACTIVE_KEY = "tower-assistant-active-session";
-const BINDING_KEY = "tower-assistant-bindings";
-const MAX_SESSIONS = 10;
-
-/** A chat session's default scope: the workspace/project its actions default to.
- *  Soft default, not a hard filter — global requests ignore it. Names are cached
- *  alongside ids so the dropdowns and the backend prefix can render without a
- *  round-trip. */
 export interface SessionBinding {
   workspaceId?: string;
   workspaceName?: string;
   projectId?: string;
   projectName?: string;
-  // Version is only meaningful with a project. Cleared whenever the project
-  // changes/clears. Fed into create_task as the default versionId.
   versionId?: string;
   versionName?: string;
 }
 
-/** Read the binding for a session (empty object if none / storage unavailable). */
-export function getBinding(sessionId: string): SessionBinding {
-  if (typeof window === "undefined") return {};
+export interface AssistantSession extends SessionBinding {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  lastMessageAt?: string;
+  legacy?: boolean;
+}
+
+const STORAGE_KEY = "tower-assistant-sessions";
+const ACTIVE_KEY = "tower-assistant-active-session";
+const BINDING_KEY = "tower-assistant-bindings";
+const SESSION_ID_RE = /^(?:as_[0-9a-f-]{36}|[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
+
+export interface LegacyAssistantOverlay {
+  sessions: AssistantSession[];
+  bindings: Record<string, SessionBinding>;
+}
+
+function safeString(value: unknown, max: number): string | undefined {
+  return typeof value === "string" && value.length <= max ? value : undefined;
+}
+
+function safeBinding(value: unknown): SessionBinding | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const input = value as Record<string, unknown>;
+  const binding: SessionBinding = {};
+  for (const key of ["workspaceId", "projectId", "versionId"] as const) {
+    const entry = safeString(input[key], 128);
+    if (entry) binding[key] = entry;
+  }
+  for (const key of ["workspaceName", "projectName", "versionName"] as const) {
+    const entry = safeString(input[key], 256);
+    if (entry !== undefined) binding[key] = entry;
+  }
+  return binding;
+}
+
+/** Upgrade-only reader. DB responses are authoritative after this overlay is applied. */
+export function readLegacyAssistantOverlay(): LegacyAssistantOverlay {
+  if (typeof window === "undefined") return { sessions: [], bindings: {} };
   try {
-    const raw = localStorage.getItem(BINDING_KEY);
-    if (!raw) return {};
-    const map = JSON.parse(raw) as Record<string, SessionBinding>;
-    return map[sessionId] ?? {};
+    const rawSessions: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
+    const rawBindings: unknown = JSON.parse(localStorage.getItem(BINDING_KEY) ?? "{}");
+    const sessions = Array.isArray(rawSessions) ? rawSessions.flatMap((value): AssistantSession[] => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+      const input = value as Record<string, unknown>;
+      const id = safeString(input.id, 64);
+      const title = safeString(input.title, 120);
+      const createdAt = safeString(input.createdAt, 64);
+      const updatedAt = safeString(input.updatedAt, 64);
+      if (!id || !SESSION_ID_RE.test(id) || !title || !createdAt || !updatedAt) return [];
+      return [{ id, title, createdAt, updatedAt }];
+    }) : [];
+    const bindings = rawBindings && typeof rawBindings === "object" && !Array.isArray(rawBindings)
+      ? Object.fromEntries(Object.entries(rawBindings).flatMap(([id, value]) => {
+          const binding = SESSION_ID_RE.test(id) ? safeBinding(value) : undefined;
+          return binding ? [[id, binding]] : [];
+        }))
+      : {};
+    return {
+      sessions,
+      bindings,
+    };
   } catch {
-    return {};
+    return { sessions: [], bindings: {} };
   }
 }
 
-/** Persist (or clear, when empty) a session's binding. */
-export function setBinding(sessionId: string, binding: SessionBinding): void {
+export function clearLegacyAssistantOverlay(): void {
   if (typeof window === "undefined") return;
-  try {
-    const raw = localStorage.getItem(BINDING_KEY);
-    const map: Record<string, SessionBinding> = raw ? JSON.parse(raw) : {};
-    if (!binding.workspaceId && !binding.projectId) {
-      delete map[sessionId];
-    } else {
-      map[sessionId] = binding;
-    }
-    localStorage.setItem(BINDING_KEY, JSON.stringify(map));
-  } catch {
-    /* localStorage unavailable */
-  }
-}
-
-export function getSessions(): AssistantSession[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed as AssistantSession[];
-  } catch {
-    return [];
-  }
-}
-
-export function addSession(session: AssistantSession): void {
-  if (typeof window === "undefined") return;
-  const existing = getSessions();
-  // Prepend and cap at MAX_SESSIONS
-  const updated = [session, ...existing.filter((s) => s.id !== session.id)].slice(0, MAX_SESSIONS);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-}
-
-export function updateSession(id: string, updates: Partial<AssistantSession>): void {
-  if (typeof window === "undefined") return;
-  const existing = getSessions();
-  const updated = existing.map((s) =>
-    s.id === id ? { ...s, ...updates, updatedAt: new Date().toISOString() } : s
-  );
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-}
-
-export function deleteSession(id: string): void {
-  if (typeof window === "undefined") return;
-  const existing = getSessions();
-  const updated = existing.filter((s) => s.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  // Drop the session's binding too — otherwise a recycled sessionId could
-  // inherit a stale scope.
-  setBinding(id, {});
-  // If we deleted the active session, clear active
-  if (getActiveSessionId() === id) {
-    setActiveSessionId(null);
-  }
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(BINDING_KEY);
 }
 
 export function getActiveSessionId(): string | null {
@@ -106,19 +89,6 @@ export function getActiveSessionId(): string | null {
 
 export function setActiveSessionId(id: string | null): void {
   if (typeof window === "undefined") return;
-  if (id === null) {
-    localStorage.removeItem(ACTIVE_KEY);
-  } else {
-    localStorage.setItem(ACTIVE_KEY, id);
-  }
-}
-
-/**
- * Build a session title from the first user message.
- * Truncates to 30 characters.
- */
-export function buildSessionTitle(firstMessage: string): string {
-  const trimmed = firstMessage.trim();
-  if (!trimmed) return "New Session";
-  return trimmed.length > 30 ? trimmed.slice(0, 30) : trimmed;
+  if (id === null) localStorage.removeItem(ACTIVE_KEY);
+  else localStorage.setItem(ACTIVE_KEY, id);
 }

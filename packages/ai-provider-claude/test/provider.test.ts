@@ -122,6 +122,8 @@ describe("Claude provider", () => {
     for await (const event of new ClaudeCliAdapter(ctx).stream({
       prompt: "PROMPT_CANARY",
       maxTurns: 4,
+      effort: "low",
+      attachments: [{ filename: "image.png", path: "/safe/image.png", mediaType: "image/png", dataBase64: "IMAGE_CANARY" }],
       timeoutMs: 12_345,
       tools: ["mcp__tower-dev__list_tasks", "mcp__other__blocked"],
       allowedTools: ["mcp__tower-dev__list_tasks"],
@@ -139,9 +141,12 @@ describe("Claude provider", () => {
     expect(ctx.process.stream).toHaveBeenCalledWith(expect.objectContaining({
       args: expect.arrayContaining([
         "--output-format", "stream-json", "--tools", "mcp__tower-dev__list_tasks",
-        "--max-turns", "4", "--allowedTools", "mcp__tower-dev__list_tasks",
+        "--max-turns", "4", "--effort", "low", "--input-format", "stream-json",
+        "--allowedTools", "mcp__tower-dev__list_tasks",
       ]),
     }), expect.objectContaining({ timeoutMs: 12_345 }));
+    expect(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].initialInput).toContain("IMAGE_CANARY");
+    expect(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].initialInput).not.toContain("/safe/image.png");
     expect(JSON.stringify(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args)).not.toContain("blocked");
   });
 

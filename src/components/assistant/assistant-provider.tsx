@@ -12,20 +12,14 @@ import {
 import { toast } from "sonner";
 import { useActionShortcut } from "@/lib/shortcuts";
 import { getConfigValue } from "@/actions/config-actions";
-import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
 import type { ChatMessage, MessageRole } from "@/hooks/use-assistant-chat";
 import {
   type AssistantSession,
   type SessionBinding,
-  getSessions,
-  addSession,
-  deleteSession,
-  updateSession,
   getActiveSessionId,
   setActiveSessionId,
-  getBinding,
-  setBinding as persistBinding,
-  buildSessionTitle,
+  readLegacyAssistantOverlay,
+  clearLegacyAssistantOverlay,
 } from "@/lib/assistant-sessions";
 import { getWorkspacesWithProjects } from "@/actions/workspace-actions";
 
@@ -83,41 +77,17 @@ function nextId(): string {
 }
 
 // ---------------------------------------------------------------------------
-// sessionStorage attachment cache — preserves attachmentFilenames across page reload
-// ---------------------------------------------------------------------------
-
-const ATTACHMENT_CACHE_KEY = "assistant-attachment-cache";
-
-function cacheMessageAttachments(sessionId: string, userMsgIndex: number, filenames: string[]): void {
-  try {
-    const raw = sessionStorage.getItem(ATTACHMENT_CACHE_KEY);
-    const cache: Record<string, Record<number, string[]>> = raw ? JSON.parse(raw) : {};
-    if (!cache[sessionId]) cache[sessionId] = {};
-    cache[sessionId][userMsgIndex] = filenames;
-    sessionStorage.setItem(ATTACHMENT_CACHE_KEY, JSON.stringify(cache));
-  } catch { /* sessionStorage unavailable */ }
-}
-
-function getCachedAttachments(sessionId: string): Record<number, string[]> {
-  try {
-    const raw = sessionStorage.getItem(ATTACHMENT_CACHE_KEY);
-    if (!raw) return {};
-    const cache = JSON.parse(raw) as Record<string, Record<number, string[]>>;
-    return cache[sessionId] ?? {};
-  } catch { return {}; }
-}
-
-// ---------------------------------------------------------------------------
 // SSE event type
 // ---------------------------------------------------------------------------
 
 interface SSEEvent {
-  type: "text" | "text_delta" | "tool_use" | "tool_start" | "tool_result" | "error" | "done";
+  type: "session" | "text" | "text_delta" | "reasoning_delta" | "tool_use" | "tool_start" | "tool_result" | "usage" | "finish" | "error" | "done";
   content?: string;
   sessionId?: string;
   toolId?: string;
   toolInput?: unknown;
   toolOutput?: string;
+  code?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +99,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [isStarting, setIsStarting] = useState(false);
   const [inputFocusSignal, setInputFocusSignal] = useState(0);
   const [displayMode, setDisplayMode] = useState<"sidebar" | "dialog">("sidebar");
-  const [worktreePath, setWorktreePath] = useState<string | null>(null);
+  const worktreePath: string | null = null;
 
   // Chat state — lives here so it persists across route changes
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -142,8 +112,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   // Session management state
   const [sessions, setSessions] = useState<AssistantSession[]>([]);
   const [activeSessionId, setActiveSessionIdState] = useState<string | null>(null);
-  // Track whether the current session record has been created
-  const sessionCreatedRef = useRef(false);
+  const legacyOverlayAppliedRef = useRef(false);
 
   // Session default scope binding. `binding` drives the dropdowns; `bindingRef`
   // mirrors it so the sendChatMessage closure reads the latest selection without
@@ -159,13 +128,31 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       .catch(() => { /* dropdowns just stay empty */ });
   }, []);
 
-  // User picked a workspace/project in the dropdowns. Persist under the current
-  // sessionId when one exists; for a brand-new session (id not yet minted) it's
-  // held in state and persisted when the first sessionId arrives (see sender).
   const setSessionBinding = useCallback((next: SessionBinding) => {
     setBindingState(next);
     const sid = sessionIdRef.current;
-    if (sid) persistBinding(sid, next);
+    if (sid) {
+      void fetch(`/api/internal/assistant/sessions?sessionId=${encodeURIComponent(sid)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: next.workspaceId ?? null,
+          workspaceName: next.workspaceName ?? null,
+          projectId: next.projectId ?? null,
+          projectName: next.projectName ?? null,
+          versionId: next.versionId ?? null,
+          versionName: next.versionName ?? null,
+        }),
+      }).then(async (response) => {
+        if (!response.ok) throw new Error("binding_update_failed");
+        const data = await response.json();
+        if (data.sessionId && data.sessionId !== sid) {
+          sessionIdRef.current = data.sessionId;
+          setActiveSessionIdState(data.sessionId);
+          setActiveSessionId(data.sessionId);
+        }
+      }).catch(() => toast.error("Failed to save Assistant scope"));
+    }
   }, []);
 
   const flushChat = useCallback(() => {
@@ -180,38 +167,53 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { refreshConfig(); }, [refreshConfig]);
 
-  // Session list — enumerated from the durable on-disk SDK store (source of
-  // truth), with the localStorage registry overlaid for user-renamed titles.
-  // Listing from disk is what recovers conversations whose localStorage pointer
-  // was lost (interrupted first turn, cleared storage, different origin, >cap).
-  // Returns the resolved list so callers (mount hydration) can act on it.
   const refreshSessions = useCallback(async (): Promise<AssistantSession[]> => {
-    const local = getSessions();
     try {
       const res = await fetch("/api/internal/assistant/sessions");
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.sessions)) {
-          const localTitle = new Map(local.map((s) => [s.id, s.title] as const));
-          const merged: AssistantSession[] = (data.sessions as AssistantSession[]).map(
-            (d) => {
-              const overlay = localTitle.get(d.id);
-              return overlay ? { ...d, title: overlay } : d;
+          let authoritative = data.sessions as AssistantSession[];
+          if (!legacyOverlayAppliedRef.current) {
+            legacyOverlayAppliedRef.current = true;
+            const overlay = readLegacyAssistantOverlay();
+            const localById = new Map(overlay.sessions.map((session) => [session.id, session]));
+            const migrations = authoritative.flatMap((session) => {
+              const local = localById.get(session.id);
+              const savedBinding = overlay.bindings[session.id];
+              if (!local && !savedBinding) return [];
+              return [fetch(`/api/internal/assistant/sessions?sessionId=${encodeURIComponent(session.id)}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  ...(local?.title ? { title: local.title } : {}),
+                  ...(savedBinding ?? {}),
+                }),
+              })];
+            });
+            if (migrations.length) {
+              const results = await Promise.allSettled(migrations);
+              if (results.every((result) => result.status === "fulfilled" && result.value.ok)) {
+                clearLegacyAssistantOverlay();
+                const refreshed = await fetch("/api/internal/assistant/sessions");
+                if (refreshed.ok) authoritative = (await refreshed.json()).sessions as AssistantSession[];
+              } else {
+                legacyOverlayAppliedRef.current = false;
+              }
+            } else {
+              clearLegacyAssistantOverlay();
             }
-          );
-          setSessions(merged);
-          return merged;
+          }
+          setSessions(authoritative);
+          return authoritative;
         }
       }
     } catch {
-      // Disk listing failed — fall back to the localStorage registry so the
-      // dropdown still works offline / if the SDK import fails.
+      // Keep the last DB-backed list on transient failures.
     }
-    setSessions(local);
-    return local;
+    return [];
   }, []);
 
-  // Fetch history messages for a session from SDK via API
   const loadSessionHistory = useCallback(async (sessionId: string) => {
     setIsLoadingHistory(true);
     try {
@@ -220,36 +222,34 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       );
       if (!res.ok) return;
       const data = await res.json();
+      const resolvedSessionId = typeof data.sessionId === "string" ? data.sessionId : sessionId;
+      if (resolvedSessionId !== sessionId) {
+        sessionIdRef.current = resolvedSessionId;
+        setActiveSessionIdState(resolvedSessionId);
+        setActiveSessionId(resolvedSessionId);
+      }
+      if (data.session) {
+        setBindingState({
+          ...(data.session.workspaceId ? { workspaceId: data.session.workspaceId } : {}),
+          ...(data.session.workspaceName ? { workspaceName: data.session.workspaceName } : {}),
+          ...(data.session.projectId ? { projectId: data.session.projectId } : {}),
+          ...(data.session.projectName ? { projectName: data.session.projectName } : {}),
+          ...(data.session.versionId ? { versionId: data.session.versionId } : {}),
+          ...(data.session.versionName ? { versionName: data.session.versionName } : {}),
+        });
+      }
       if (Array.isArray(data.messages)) {
         msgsRef.current = data.messages;
-        // Restore attachmentFilenames from sessionStorage cache
-        const attachmentCache = getCachedAttachments(sessionId);
-        if (Object.keys(attachmentCache).length > 0) {
-          let userIdx = 0;
-          msgsRef.current = msgsRef.current.map((m) => {
-            if (m.role === "user") {
-              const filenames = attachmentCache[userIdx];
-              userIdx++;
-              if (filenames?.length) return { ...m, attachmentFilenames: filenames };
-            }
-            return m;
-          });
-        }
         setChatMessages([...msgsRef.current]);
       }
+      if (resolvedSessionId !== sessionId) void refreshSessions();
     } catch {
       // Silently fail — user can still send new messages
     } finally {
       setIsLoadingHistory(false);
     }
-  }, []);
+  }, [refreshSessions]);
 
-  // Hydrate on mount from the durable on-disk store. The stored localStorage
-  // pointer is only a hint: honor it when it still resolves to a real session,
-  // otherwise fall back to the most-recent conversation on disk. This is what
-  // restores history after a reload when the pointer was never written or was
-  // lost (interrupted first turn, cleared storage, different origin, >cap) —
-  // the conversations were always on disk; only the client index had drifted.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -263,11 +263,16 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       if (!chosen) return;
       setActiveSessionIdState(chosen);
       sessionIdRef.current = chosen;
-      // Mark as an existing session so the next message isn't mis-treated as a
-      // first message (which would try to mint a new session record).
-      sessionCreatedRef.current = true;
       setActiveSessionId(chosen);
-      setBindingState(getBinding(chosen));
+      const selected = merged.find((session) => session.id === chosen);
+      setBindingState(selected ? {
+        ...(selected.workspaceId ? { workspaceId: selected.workspaceId } : {}),
+        ...(selected.workspaceName ? { workspaceName: selected.workspaceName } : {}),
+        ...(selected.projectId ? { projectId: selected.projectId } : {}),
+        ...(selected.projectName ? { projectName: selected.projectName } : {}),
+        ...(selected.versionId ? { versionId: selected.versionId } : {}),
+        ...(selected.versionName ? { versionName: selected.versionName } : {}),
+      } : {});
       loadSessionHistory(chosen);
     })();
     return () => {
@@ -278,7 +283,6 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const createNewSession = useCallback(() => {
     abortRef.current?.abort();
     sessionIdRef.current = null;
-    sessionCreatedRef.current = false;
     setActiveSessionIdState(null);
     setActiveSessionId(null);
     // A fresh session starts with no scope — the user picks one if they want.
@@ -291,32 +295,36 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const switchSession = useCallback((sessionId: string) => {
     abortRef.current?.abort();
     sessionIdRef.current = sessionId;
-    sessionCreatedRef.current = true;
     setActiveSessionIdState(sessionId);
     setActiveSessionId(sessionId);
-    // Restore this session's saved scope into the dropdowns.
-    setBindingState(getBinding(sessionId));
-    // Clear then load history from SDK
+    const selected = sessions.find((session) => session.id === sessionId);
+    setBindingState(selected ? {
+      ...(selected.workspaceId ? { workspaceId: selected.workspaceId } : {}),
+      ...(selected.workspaceName ? { workspaceName: selected.workspaceName } : {}),
+      ...(selected.projectId ? { projectId: selected.projectId } : {}),
+      ...(selected.projectName ? { projectName: selected.projectName } : {}),
+      ...(selected.versionId ? { versionId: selected.versionId } : {}),
+      ...(selected.versionName ? { versionName: selected.versionName } : {}),
+    } : {});
     msgsRef.current = [];
     setChatMessages([]);
     setChatStatus("idle");
     loadSessionHistory(sessionId);
-  }, [loadSessionHistory]);
+  }, [loadSessionHistory, sessions]);
 
   const removeSession = useCallback((sessionId: string) => {
-    // Optimistic: drop the localStorage overlay + list entry for a snappy UI.
-    deleteSession(sessionId);
     setSessions((prev) => prev.filter((s) => s.id !== sessionId));
     if (activeSessionId === sessionId) {
       createNewSession();
     }
-    // Durable delete from the on-disk store — otherwise disk-as-truth would
-    // resurrect the session on the next list/hydrate. Reconcile after it lands.
     void fetch(
       `/api/internal/assistant/sessions?sessionId=${encodeURIComponent(sessionId)}`,
       { method: "DELETE" }
     )
-      .catch(() => {})
+      .then((response) => {
+        if (!response.ok) throw new Error("session_delete_failed");
+      })
+      .catch(() => toast.error("Failed to delete Assistant session"))
       .finally(() => {
         void refreshSessions();
       });
@@ -325,13 +333,9 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const renameSession = useCallback((sessionId: string, title: string) => {
     const trimmed = title.trim();
     if (!trimmed) return;
-    // Optimistic overlay update.
-    updateSession(sessionId, { title: trimmed });
     setSessions((prev) =>
       prev.map((s) => (s.id === sessionId ? { ...s, title: trimmed } : s))
     );
-    // Persist to the on-disk store (customTitle) so the rename survives
-    // localStorage loss / a different origin.
     void fetch(
       `/api/internal/assistant/sessions?sessionId=${encodeURIComponent(sessionId)}`,
       {
@@ -339,8 +343,21 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: trimmed }),
       }
-    ).catch(() => {});
-  }, []);
+    ).then((response) => {
+      if (!response.ok) throw new Error("session_rename_failed");
+      return response.json();
+    }).then((data) => {
+      if (data.sessionId && data.sessionId !== sessionId) {
+        sessionIdRef.current = data.sessionId;
+        setActiveSessionIdState(data.sessionId);
+        setActiveSessionId(data.sessionId);
+      }
+      if (data.legacySyncWarning) toast.warning("Title saved, but the legacy session could not be renamed");
+    }).catch(() => {
+      toast.error("Failed to rename Assistant session");
+      void refreshSessions();
+    });
+  }, [refreshSessions]);
 
   const openAssistant = useCallback(async () => {
     setIsStarting(true);
@@ -395,10 +412,6 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    // Capture the first message text for session title
-    const isFirstMessage = msgsRef.current.length === 0 && !sessionCreatedRef.current;
-    const firstMessageText = isFirstMessage ? text : null;
-
     const thinkingId = nextId();
     msgsRef.current = [
       ...msgsRef.current,
@@ -411,11 +424,6 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       { id: thinkingId, role: "thinking" as MessageRole, content: "", isStreaming: true },
     ];
     flushChat();
-    // Cache attachmentFilenames so they survive session reload
-    if (options?.attachmentFilenames?.length && sessionIdRef.current) {
-      const userMsgCount = msgsRef.current.filter((m) => m.role === "user").length - 1;
-      cacheMessageAttachments(sessionIdRef.current, userMsgCount, options.attachmentFilenames);
-    }
     setChatStatus("connecting");
 
     let assistantMsgId: string | null = null;
@@ -427,6 +435,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({
           message: text,
           sessionId: sessionIdRef.current,
+          clientTurnId: nextId().replace(/[^A-Za-z0-9_-]/g, "_"),
           attachmentFilenames: options?.attachmentFilenames ?? [],
           // Session default scope — sent every turn so a mid-session switch takes
           // effect immediately. Empty binding → fields undefined → backend no-op.
@@ -440,7 +449,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         signal: controller.signal,
       });
 
-      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok || !res.body) {
+        const payload = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(payload.error ?? `HTTP ${res.status}`);
+      }
       setChatStatus("streaming");
 
       const reader = res.body.getReader();
@@ -459,35 +471,21 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           let event: SSEEvent;
           try { event = JSON.parse(line.slice(6).trim()); } catch { continue; }
           if (event.sessionId) {
-            const prevSessionId = sessionIdRef.current;
+            const changed = event.sessionId !== sessionIdRef.current;
             sessionIdRef.current = event.sessionId;
-            // Create session record on first sessionId received
-            if (firstMessageText && !sessionCreatedRef.current && event.sessionId !== prevSessionId) {
-              sessionCreatedRef.current = true;
-              const now = new Date().toISOString();
-              const newSession: AssistantSession = {
-                id: event.sessionId,
-                title: buildSessionTitle(firstMessageText),
-                createdAt: now,
-                updatedAt: now,
-              };
-              addSession(newSession);
-              setSessions(getSessions());
+            if (changed) {
               setActiveSessionIdState(event.sessionId);
               setActiveSessionId(event.sessionId);
-              // Migrate the scope chosen before the session had an id onto the
-              // real sessionId, so it's restored when the user revisits it.
-              if (bindingRef.current.workspaceId || bindingRef.current.projectId) {
-                persistBinding(event.sessionId, bindingRef.current);
-              }
-              // Migrate cached images from the pre-session (null) key to the real sessionId
-              if (options?.attachmentFilenames?.length) {
-                cacheMessageAttachments(event.sessionId, 0, options.attachmentFilenames);
-              }
+              void refreshSessions();
             }
           }
 
           switch (event.type) {
+            case "session":
+            case "reasoning_delta":
+            case "usage":
+            case "finish":
+              break;
             case "text_delta": {
               // Incremental streaming chunk — append to current assistant message
               const filtered = msgsRef.current.filter((m) => m.id !== thinkingId);
@@ -604,11 +602,24 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
               break;
             }
             case "tool_result": {
-              msgsRef.current = [...msgsRef.current, {
-                id: nextId(), role: "tool" as MessageRole,
-                content: String(event.toolOutput ?? ""),
-                toolName: `${event.content ?? "tool"} (result)`,
-              }];
+              const resultText = String(event.toolOutput ?? "");
+              const matchIdx = event.toolId
+                ? msgsRef.current.findIndex((message) => message.role === "tool" && message.toolId === event.toolId)
+                : -1;
+              if (matchIdx >= 0) {
+                msgsRef.current = msgsRef.current.map((message, index) => index === matchIdx ? {
+                  ...message,
+                  content: `${message.content}\n\nResult:\n${resultText}`,
+                  isStreaming: false,
+                } : message);
+              } else {
+                msgsRef.current = [...msgsRef.current, {
+                  id: nextId(), role: "tool" as MessageRole,
+                  content: resultText,
+                  toolName: event.content ?? "tool",
+                  toolId: event.toolId,
+                }];
+              }
               flushChat();
               break;
             }
@@ -641,8 +652,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       msgsRef.current = msgsRef.current.filter((m) => m.id !== thinkingId);
       flushChat();
       setChatStatus((s) => (s === "streaming" ? "idle" : s));
-      // Refresh session list from SDK (picks up newly created sessions)
-      refreshSessions();
+      void refreshSessions();
     } catch (err: unknown) {
       if ((err as Error).name === "AbortError") return;
       msgsRef.current = [...msgsRef.current.filter((m) => m.id !== thinkingId), {

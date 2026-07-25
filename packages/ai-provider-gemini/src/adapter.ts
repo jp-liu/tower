@@ -188,7 +188,11 @@ export class GeminiCliAdapter implements CliAdapter {
   }
 
   async *stream(options: CliQueryOptions): AsyncIterable<CliQueryEvent> {
-    const prompt = combinedInitialInput(options.systemPrompt, options.prompt);
+    const attachmentPrefix = (options.attachments ?? []).map((attachment) => `@${attachment.path}`).join(" ");
+    const prompt = combinedInitialInput(
+      options.systemPrompt,
+      [attachmentPrefix, options.prompt].filter(Boolean).join("\n\n"),
+    );
     const selectedTools = options.allowedTools?.length
       ? (options.tools ?? options.allowedTools).filter((tool) => options.allowedTools!.includes(tool))
       : options.tools ?? [];

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 vi.mock("server-only", () => ({}));
-import { createAssistantToolBundle, prepareAssistantCliPrompt } from "../assistant-tool-bundle";
+import { createAssistantToolBundle, prepareAssistantCliPrompt, prepareAssistantCliRequest } from "../assistant-tool-bundle";
 
 const roots: string[] = [];
 
@@ -76,8 +76,9 @@ describe("Assistant tool bundle", () => {
     const attachmentRoot = await root();
     await fs.writeFile(path.join(attachmentRoot, "2026-07/files/first.txt"), "FIRST_CANARY");
     await fs.writeFile(path.join(attachmentRoot, "2026-07/files/second.txt"), "SECOND_CANARY");
+    await fs.writeFile(path.join(attachmentRoot, "2026-07/files/data.json"), '{"value":"JSON_CANARY"}');
 
-    const [first, second] = await Promise.all([
+    const [first, second, json] = await Promise.all([
       prepareAssistantCliPrompt({
         prompt: "first",
         attachmentRoot,
@@ -88,12 +89,18 @@ describe("Assistant tool bundle", () => {
         attachmentRoot,
         attachments: ["2026-07/files/second.txt"],
       }),
+      prepareAssistantCliPrompt({
+        prompt: "json",
+        attachmentRoot,
+        attachments: ["2026-07/files/data.json"],
+      }),
     ]);
 
     expect(first).toContain("FIRST_CANARY");
     expect(first).not.toContain("SECOND_CANARY");
     expect(second).toContain("SECOND_CANARY");
     expect(second).not.toContain("FIRST_CANARY");
+    expect(json).toContain("JSON_CANARY");
   });
 
   it("rejects CLI attachment traversal, realpath escapes, oversized data, and unsupported MIME", async () => {
@@ -106,7 +113,7 @@ describe("Assistant tool bundle", () => {
     await fs.writeFile(path.join(attachmentRoot, "2026-07/files/binary.txt"), Buffer.from([0, 1, 2]));
     await fs.writeFile(
       path.join(attachmentRoot, "2026-07/files/image.png"),
-      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]),
     );
 
     const cases = [
@@ -114,11 +121,23 @@ describe("Assistant tool bundle", () => {
       { attachments: ["2026-07/files/link.txt"] },
       { attachments: ["2026-07/files/large.txt"], maxAttachmentBytes: 4 },
       { attachments: ["2026-07/files/binary.txt"] },
-      { attachments: ["2026-07/files/image.png"] },
     ];
     for (const options of cases) {
       await expect(prepareAssistantCliPrompt({ prompt: "test", attachmentRoot, ...options }))
         .rejects.toMatchObject({ code: "tool_error", message: "A tool execution failed" });
     }
+
+    const image = await prepareAssistantCliRequest({
+      prompt: "inspect",
+      attachmentRoot,
+      attachments: ["2026-07/files/image.png"],
+    });
+    expect(image.attachments).toEqual([expect.objectContaining({
+      filename: "2026-07/files/image.png",
+      mediaType: "image/png",
+      dataBase64: expect.any(String),
+    })]);
+    const realAttachmentRoot = await fs.realpath(attachmentRoot);
+    expect(image.attachments[0]!.path.startsWith(realAttachmentRoot)).toBe(true);
   });
 });

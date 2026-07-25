@@ -205,6 +205,11 @@ function generationOptions(request: ApiGenerateRequest, context: ApiAttemptConte
     instructions: request.system,
     maxOutputTokens: request.maxOutputTokens,
     temperature: request.temperature,
+    providerOptions: request.effort ? {
+      openai: { reasoningEffort: request.effort },
+      anthropic: { effort: request.effort },
+      google: { thinkingConfig: { thinkingLevel: request.effort } },
+    } : undefined,
     abortSignal: request.abortSignal,
     timeout: request.timeoutMs,
     maxRetries: 0,

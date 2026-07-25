@@ -8,11 +8,12 @@ import type { ChatMessage, MessageRole } from "./use-assistant-chat";
 // ---------------------------------------------------------------------------
 
 export interface SSEEvent {
-  type: "text" | "tool_use" | "tool_result" | "error" | "done";
+  type: "session" | "text" | "text_delta" | "reasoning_delta" | "tool_start" | "tool_use" | "tool_result" | "usage" | "finish" | "error" | "done";
   content?: string;
   sessionId?: string;
   toolInput?: unknown;
   toolOutput?: string;
+  toolId?: string;
 }
 
 export interface ReducerState {
@@ -41,7 +42,8 @@ export function applySSEEvent(
   idGenerator: () => string
 ): ReducerState {
   switch (event.type) {
-    case "text": {
+    case "text":
+    case "text_delta": {
       // Remove thinking, add/append assistant message
       const filtered = state.messages.filter((m) => m.id !== thinkingId);
       if (state.assistantMsgId) {
@@ -88,12 +90,26 @@ export function applySSEEvent(
             role: "tool" as MessageRole,
             content: JSON.stringify(event.toolInput ?? {}, null, 2),
             toolName: event.content,
+            toolId: event.toolId,
           },
         ],
       };
     }
 
     case "tool_result": {
+      const toolIndex = event.toolId
+        ? state.messages.findIndex((message) => message.role === "tool" && message.toolId === event.toolId)
+        : -1;
+      if (toolIndex >= 0) {
+        return {
+          ...state,
+          messages: state.messages.map((message, index) => index === toolIndex ? {
+            ...message,
+            content: `${message.content}\n\nResult:\n${String(event.toolOutput ?? "")}`,
+            isStreaming: false,
+          } : message),
+        };
+      }
       return {
         ...state,
         messages: [
@@ -103,6 +119,21 @@ export function applySSEEvent(
             role: "tool" as MessageRole,
             content: String(event.toolOutput ?? ""),
             toolName: `${event.content ?? "tool"} (result)`,
+          },
+        ],
+      };
+    }
+
+    case "tool_start": {
+      if (event.toolId && state.messages.some((message) => message.role === "tool" && message.toolId === event.toolId)) return state;
+      return {
+        ...state,
+        assistantMsgId: null,
+        messages: [
+          ...state.messages.filter((message) => message.id !== thinkingId),
+          {
+            id: idGenerator(), role: "tool", content: `Calling ${event.content ?? "tool"}...`,
+            toolName: event.content, toolId: event.toolId, isStreaming: true,
           },
         ],
       };
@@ -137,6 +168,12 @@ export function applySSEEvent(
         messages: msgs,
       };
     }
+
+    case "session":
+    case "reasoning_delta":
+    case "usage":
+    case "finish":
+      return state;
 
     default:
       return state;

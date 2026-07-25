@@ -132,6 +132,8 @@ describe("Codex provider", () => {
     for await (const event of new CodexCliAdapter(ctx).stream({
       prompt: "PROMPT_CANARY",
       timeoutMs: 12_345,
+      effort: "medium",
+      attachments: [{ filename: "image.png", path: "/safe/image.png", mediaType: "image/png" }],
       tools: ["mcp__tower-dev__list_tasks", "mcp__other_server__blocked"],
       allowedTools: ["mcp__tower-dev__list_tasks"],
     })) events.push(event);
@@ -149,6 +151,7 @@ describe("Codex provider", () => {
     expect(ctx.process.stream).toHaveBeenCalledWith(expect.objectContaining({
       args: expect.arrayContaining([
         "--json", "--sandbox", "read-only", "--disable", "shell_tool",
+        "-c", 'model_reasoning_effort="medium"', "--image", "/safe/image.png",
         "-c", "mcp_servers.unrelated.enabled=false",
         "-c", "mcp_servers.tower-dev.enabled=true",
         "-c", 'mcp_servers.tower-dev.enabled_tools=["list_tasks"]',

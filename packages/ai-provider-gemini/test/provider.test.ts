@@ -117,6 +117,7 @@ describe("Gemini provider", () => {
     for await (const event of new GeminiCliAdapter(ctx).stream({
       prompt: "PROMPT_CANARY",
       timeoutMs: 12_345,
+      attachments: [{ filename: "image.png", path: "/safe/image.png", mediaType: "image/png" }],
       tools: ["mcp__tower-dev__list_tasks", "mcp__other__blocked"],
       allowedTools: ["mcp__tower-dev__list_tasks"],
     })) events.push(event);
@@ -140,6 +141,7 @@ describe("Gemini provider", () => {
         "--allowed-mcp-server-names", "tower-dev", "--allowed-tools", "mcp_tower-dev_list_tasks",
       ]),
     }), expect.objectContaining({ timeoutMs: 12_345 }));
+    expect(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args).toContain("@/safe/image.png\n\nPROMPT_CANARY");
     expect(writes[0]?.contents).not.toContain("blocked");
     expect(unlink).toHaveBeenCalledWith(writes[0]!.path);
   });

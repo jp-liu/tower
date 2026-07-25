@@ -228,6 +228,8 @@ export class CodexCliAdapter implements CliAdapter {
     ];
     if (options.systemPrompt) args.push("-c", `developer_instructions=${JSON.stringify(options.systemPrompt)}`);
     if (options.model) args.push("--model", options.model);
+    if (options.effort) args.push("-c", `model_reasoning_effort=${JSON.stringify(options.effort)}`);
+    for (const attachment of options.attachments ?? []) args.push("--image", attachment.path);
     const allowed = options.allowedTools?.length
       ? (options.tools ?? options.allowedTools).filter((tool) => options.allowedTools!.includes(tool))
       : options.tools ?? [];

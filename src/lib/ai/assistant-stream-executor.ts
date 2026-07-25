@@ -12,7 +12,7 @@ import {
 import type { ApiMessage, ApiStreamEvent } from "@tower/ai-runtime";
 import type { CliQueryEvent, CliQueryOptions } from "@tower/ai-sdk";
 import { assistantTowerToolCatalog } from "@/mcp/tool-catalog";
-import { createAssistantToolBundle, prepareAssistantCliPrompt } from "./assistant-tool-bundle";
+import { createAssistantToolBundle, prepareAssistantCliRequest } from "./assistant-tool-bundle";
 import {
   getApiRuntimeForResolvedTarget,
   resolveCapabilityPlan,
@@ -30,6 +30,7 @@ export interface AssistantStreamRequest {
   maxOutputBytes?: number;
   timeoutMs?: number;
   temperature?: number;
+  effort?: "low" | "medium" | "high";
   signal?: AbortSignal;
   towerMcpServerName?: string;
   attachments?: string[];
@@ -116,14 +117,14 @@ async function* executeTarget(
   if (target.kind === "cli") {
     if (!target.cli?.adapter.stream) throw capabilityError("invalid_request");
     const tools = await ensureCliTooling(target, request);
-    let prompt: string;
+    let prepared: Awaited<ReturnType<typeof prepareAssistantCliRequest>>;
     try {
-      prompt = await prepareAssistantCliPrompt({ prompt: request.prompt ?? "", attachments: request.attachments });
+      prepared = await prepareAssistantCliRequest({ prompt: request.prompt ?? "", attachments: request.attachments });
     } catch {
       throw { code: "ATTACHMENT_UNAVAILABLE" };
     }
     const options: CliQueryOptions = {
-      prompt,
+      prompt: prepared.prompt,
       cwd: request.cwd,
       systemPrompt: request.systemPrompt,
       model: target.modelId,
@@ -132,6 +133,8 @@ async function* executeTarget(
       maxOutputBytes: request.maxOutputBytes,
       timeoutMs,
       temperature: request.temperature,
+      effort: request.effort,
+      attachments: prepared.attachments,
       tools,
       allowedTools: tools,
       signal: request.signal,
@@ -148,6 +151,7 @@ async function* executeTarget(
       maxTurns: request.maxTurns,
       maxOutputTokens: request.maxOutputTokens,
       temperature: request.temperature,
+      effort: request.effort,
       timeoutMs,
       abortSignal: request.signal,
       tools: createAssistantToolBundle({ attachments: request.attachments }),

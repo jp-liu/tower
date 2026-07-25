@@ -15,7 +15,7 @@ export interface ChatMessage {
   role: MessageRole;
   content: string;
   toolName?: string;
-  /** Claude tool-block id — pairs the 调起 (tool_start) placeholder with its
+  /** Provider-neutral tool call id — pairs start/use/result into one card.
    *  真正调用 (tool_use) so they render as a single card, not two. */
   toolId?: string;
   isStreaming?: boolean;
@@ -90,6 +90,7 @@ export function useAssistantChat(opts: {
           body: JSON.stringify({
             message: text,
             sessionId: sessionIdRef.current,
+            clientTurnId: nextId().replace(/[^A-Za-z0-9_-]/g, "_"),
           }),
           signal: controller.signal,
         });
