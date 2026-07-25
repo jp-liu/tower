@@ -316,7 +316,10 @@ test.describe.serial("AI Tools 0.3 final browser acceptance", () => {
     const analysisCard = page.getByRole("heading", { name: "Project Analysis" }).locator("xpath=ancestor::article");
     await expect(analysisCard.getByText("model_unavailable", { exact: true })).toBeVisible();
     const assistantCard = page.getByRole("heading", { name: "AI Assistant" }).locator("xpath=ancestor::article");
-    await assistantCard.getByRole("button", { name: "Move target down" }).first().click();
+    const moveDown = assistantCard.getByRole("button", { name: "Move target down" }).first();
+    await moveDown.hover();
+    await expect(page.getByText("Move target down", { exact: true })).toBeVisible();
+    await moveDown.click();
     await page.reload();
     await page.getByRole("button", { name: "AI Tools", exact: true }).click();
     await expect(page.getByText("secondary-browser-key", { exact: true })).toHaveCount(0);
