@@ -1,69 +1,24 @@
 ---
 title: Assistant
-description: AI assistant chat system with streaming and multimodal support
+description: Tower-owned sessions, SSE, attachments, and tool execution
 ---
 
 # Assistant Module
 
 **Slug:** `assistant`
 
-## Overview
+In 0.3.0, Tower-owned SQLite sessions and messages are the recovery source. Assistant is no longer tied to Claude Agent SDK transcripts. Its slot may use CLI or API connections and follows the same explicit fallback rules as other AI Tools slots.
 
-The built-in AI assistant is powered by the Claude Agent SDK with streaming chat support. It acts as a "task management operator" — rather than writing code directly, it manages workspaces, projects, and tasks through Tower's MCP tools. You can ask the assistant to create tasks, move them between statuses, search across projects, generate summaries, and more.
+## Sessions and streaming
 
-The assistant supports image uploads for multimodal conversations. Chat history is sourced from on-disk transcripts (localStorage is only an index), so reopening the assistant reliably restores past conversations without losing records.
+- `AssistantSession`, `AssistantTurn`, and `AssistantMessage` store history, titles, and workspace/project/version bindings.
+- SSE emits text, reasoning, tool-call, tool-result, usage, finish, and redacted error events. Users can cancel the active turn.
+- Fallback is allowed only before the turn's first text, reasoning, tool call, or side effect. Activity locks the connection/model to avoid duplicate output, tools, and charges.
+- Image and text attachments pass path, count, type, and size checks. Messages store controlled metadata, never arbitrary host paths.
+- The host supplies and executes Tower tools; the model sees only the allowed definitions and results return to the same turn.
 
-## Details
+## Legacy import
 
-- **Streaming responses**: Chat responses arrive via Server-Sent Events (SSE), so you see the assistant's reply as it is generated in real time.
-- **MCP tool integration**: The assistant has access to all Tower MCP tools, allowing it to perform actions like creating workspaces, listing tasks, or checking terminal output on your behalf.
-- **Multimodal input**: Upload images and other attachments alongside text messages, processed and included in the conversation context for the AI to reference.
-- **Binding scope**: The binding bar at the top of the panel pins a default workspace / project for the current session, so MCP operations default to that scope.
-- **Session management**: Each conversation is a session with a unique ID. Sessions persist across page navigations and can be resumed or renamed (rename requires an explicit save) from the session list.
-- **Resilience & fallback**: If a session can no longer be resumed, the assistant transparently falls back to a fresh session and retries, suppressing the leftover error bubble. When a turn succeeds but the model returns no text, a hint bubble is shown so the turn is never silently empty. A disconnected MCP server is automatically re-spawned once, SSE stream drops no longer crash the chat, and MCP tool cards no longer double-render.
-- **Message format conversion**: Internal SDK message formats are converted to a UI-friendly format for display, handling tool calls, thinking blocks, and rich content.
+Tower lists up to 50 legacy Claude Agent SDK sessions. Opening or sending to one imports a copy on demand and records `legacySource + legacyId` to prevent duplicates. Failed conversion leaves the original transcript untouched. After import, Tower's database messages provide multi-provider continuation context.
 
-## File Reference
-
-### Server Actions (`src/actions/assistant-actions.ts`)
-
-Session management and message handling.
-
-### API Routes
-
-| Route | Description |
-|-------|-------------|
-| `/api/internal/assistant/route.ts` | Assistant management |
-| `/api/internal/assistant/chat/route.ts` | Chat messages (SSE streaming) |
-| `/api/internal/assistant/attachments/` | Attachment upload |
-| `/api/internal/assistant/sessions/` | Session management |
-
-### Components (`src/components/assistant/`)
-
-| Component | Description |
-|-----------|-------------|
-| `assistant-panel.tsx` | Assistant panel container |
-| `assistant-provider.tsx` | Assistant context provider (session / binding-scope state) |
-| `assistant-chat.tsx` | Main chat interface |
-| `assistant-chat-bubble.tsx` | Message bubble |
-| `assistant-markdown.tsx` | Reply Markdown rendering |
-| `assistant-binding-bar.tsx` | Binding bar (default workspace / project) |
-| `attachment-strip.tsx` | Attachment preview strip |
-
-### Hooks (`src/hooks/`)
-
-| Hook | Description |
-|------|-------------|
-| `use-assistant-chat.ts` | SSE event handling |
-| `sse-event-reducer.ts` | SSE stream parsing |
-
-### Core Library
-
-| File | Description |
-|------|-------------|
-| `lib/assistant-sessions.ts` | Session management |
-| `lib/assistant-constants.ts` | Assistant constants |
-| `lib/assistant-session-title.ts` | Session title generation |
-| `lib/assistant-message-converter.ts` | Message format conversion |
-| `lib/claude-session.ts` | Claude API session |
-| `lib/build-multimodal-prompt.ts` | Multimodal prompt construction |
+See [Upgrading to 0.3.0](/en/guide/upgrade-0.3) for data and backup boundaries.

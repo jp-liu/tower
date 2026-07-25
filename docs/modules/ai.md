@@ -1,119 +1,50 @@
 ---
 title: AI 模块
-description: Tower 的 AI 能力层，涵盖 Claude Agent SDK 集成、CLI Adapter、助手聊天、任务执行等
+description: AI Tools 0.3 的连接、能力插槽、CLI 插件与 API Runtime
 ---
 
 **Slug:** `ai`
 
-## 功能介绍
+## 0.3.0 状态
 
-AI 能力层统一管理 Tower 中所有的 AI 调用，提供 5 种核心 AI 能力：
+AI Tools 已从 Claude 专用调用重构为“连接 + 能力插槽”。设置页上半区管理 CLI/API 连接，下半区为 Terminal、Summary、Dreaming、Analysis、Assistant 五个使用场景选择有序目标。完整用户说明见 [AI Tools 0.3](/guide/ai-tools)；插件契约见 [CLI Provider 开发](/guide/cli-provider-sdk)。
 
-| 能力 | 说明 | 触发时机 | 建议模型 |
-|------|------|----------|----------|
-| **助手聊天** | 多轮流式对话，支持图片输入 | 用户在助手面板发起对话 | 当前默认 |
-| **小总结** | 50 字执行摘要 | 任务停止时自动生成 | Haiku 4.5 |
-| **大总结 Dreaming** | 结构化洞察 JSON | 任务完成（DONE）时自动生成 | Sonnet 4.6 |
-| **项目分析** | 分析目录结构生成描述 | 点击项目「生成描述」按钮 | Sonnet 4.6 |
-| **任务执行** | PTY 终端交互式执行 | 启动任务执行 | 当前默认 |
+| 插槽 | 用途 | 连接类型 |
+|---|---|---|
+| Terminal | 交互式任务终端 | 仅 CLI |
+| Summary | 执行小总结 | CLI / API |
+| Dreaming | 洞察与知识沉淀 | CLI / API |
+| Analysis | 项目分析 | CLI / API |
+| Assistant | Tower 自有多轮助手 | CLI / API |
 
-不同能力建议使用不同模型（Haiku 适合轻量级摘要，Sonnet 适合深度分析），后续支持为每种能力独立配置模型。
+内置 CLI Provider 为 Claude Code、Codex CLI、Gemini CLI；API Runtime 支持 OpenAI、OpenAI Compatible、Anthropic 和 Google。业务层通过 `connectionId + modelId` 引用目标，不再把 Provider 名称当连接实例。
 
-## 详细说明
+## 执行语义
 
-### AI 能力调用点
+- 每个插槽只有用户显式配置的主目标与有序备用目标，不会临时挑选未声明 Provider。
+- 只在首个内容、工具调用或副作用前切换健康 Key/备用目标；活动开始后锁定当前目标。
+- Terminal 只在创建新会话前回退，成功创建后把 connection/model 快照写入 `TaskExecution`，恢复时固定使用原目标。
+- API 多 Key 只从“启用且健康”的 Key 中 round-robin；`401`、`403`、`429` 只允许在活动前换 Key。
+- 所有尝试记录目标、模型、耗时与脱敏错误码，不记录 prompt、Key 或敏感 header/query 值。
 
-| 能力 | 文件 | 调用方式 |
-|------|------|----------|
-| 助手聊天 | `api/internal/assistant/chat/route.ts` | Agent SDK `query()` |
-| 小总结 | `lib/claude-session.ts` → `generateSummaryFromLog` | Agent SDK `aiQuery()` |
-| 大总结(Dreaming) | `lib/claude-session.ts` → `generateDreamingInsight` | Agent SDK `aiQuery()` |
-| 项目分析 | `actions/project-actions.ts` → `analyzeProjectDirectory` | Agent SDK `aiQuery()` |
-| 任务执行 | `actions/agent-actions.ts` → `startPtyExecution` | PTY spawn CLI |
+## 主要边界
 
-### 任务概览笔记
+| 层 | 位置 | 职责 |
+|---|---|---|
+| 公共 CLI 契约 | `packages/ai-sdk` | Manifest v1、Adapter、process spec、事件与配置 Schema 类型 |
+| 私有 Host Runtime | `packages/ai-runtime` | 受控进程、API Adapter、回退、插件安装/校验、models.dev 快照 |
+| 内置 Provider | `packages/ai-provider-*` | Claude/Codex/Gemini 参数、解析与 MCP/Hooks/Skills 集成 |
+| 应用服务 | `src/lib/ai` | 连接 CRUD、能力解析、Assistant 会话、工具执行与审计 |
 
-任务进入 **DONE**（或被取消）时，Tower 自动生成一篇「任务概览」笔记（`ProjectNote`，分类「任务笔记」），记录这次任务改了什么，供日后回顾 / 回归回溯。无 commit 且无改动文件时跳过，不产生空笔记。
+这些 workspace 包当前都保持 `private@0.1.0`。`0.1.0` 是内部包契约版本，不跟随 Tower 主应用 `0.3.0`；本期没有创建外部组织、发布 SDK/Provider 包或承诺独立安装。
 
-模板结构（`src/lib/task-overview.ts` / `task-overview-format.ts`）：
+## 安全模型
 
-1. 引言（DONE / 取消两种措辞）
-2. `## 改动摘要` — AI 生成的改动摘要（无摘要时回退为首条 commit message）
-3. `## 文件清单` — 每个改动文件 `` `路径` (+N / -M) ``（至多 100 条）+ 「N 个文件，M 次提交」统计行
-4. `## 提交记录` — **新增**：逐条列出 commit，每行 `` `<sha>` <message> ``（取自 `git log --oneline`，至多 50 条，超出显示「…还有 N 次提交」），仅有 commit 时才渲染
-5. `## 相关附件与参考资料` — 关联资产 `文件名 — 描述`
-6. 页脚：任务标题 + id、项目、生成时间
+- CLI 自己负责登录、token 和 base URL；Tower 只负责发现、Hello 测试、启动和集成状态。
+- API Key 明文存入本机 SQLite，界面默认掩码但可显示、复制和编辑；普通日志、错误与测试报告脱敏。
+- 第三方 CLI 插件是本地可信 Node.js 代码，不是操作系统沙箱。安装前校验精确版本、完整性、静态 Manifest/Schema 和权限；禁用状态不加载。
+- Adapter 返回结构化 `command/args/envPatch/initialInput`，宿主默认不启用 shell，并控制超时、取消和进程树回收。
 
-**zh/en 国际化跟随界面语言**：整篇模板文案 + AI 摘要 prompt 都按语言切换。生成时读 systemConfig 的 `locale` 配置（`getConfigValue("locale", "zh")`，默认 `zh`）——界面语言只存在浏览器，所以切换语言时会把最新值写入 systemConfig，供后端生成笔记时读取。（commit `5c69d8d` / `96e08b1`）
+## 后续
 
-### CLI Adapter 接口（TODO）
-
-当前硬编码 Claude Code，后续接入第二个 CLI 时抽象：
-
-```
-spawn(cwd, args, env)        — 启动 CLI 进程（PTY）
-resume(sessionId)            — 恢复会话
-continue()                   — 继续最近会话
-getSessionId()               — 获取会话 ID
-getHooks() / installHooks()  — Hook 配置注册
-buildEnvOverrides(taskId)    — 环境变量注入
-```
-
-## 文件清单
-
-### 核心库
-
-| 文件 | 说明 |
-|------|------|
-| `lib/claude-session.ts` | AI 统一入口：`aiQuery()`、`generateSummaryFromLog()`、`generateDreamingInsight()` |
-| `lib/assistant-sessions.ts` | 助手会话管理（localStorage 注册表） |
-| `lib/assistant-constants.ts` | `ASSISTANT_SESSION_KEY` 等常量 |
-| `lib/assistant-message-converter.ts` | SDK 消息 → UI 消息格式转换 |
-| `lib/build-multimodal-prompt.ts` | 多模态 prompt 构建（文本+图片） |
-| `lib/execution-summary.ts` | 执行后摘要和 Dreaming 洞察生成 |
-| `lib/cli-test.ts` | CLI Adapter 环境检测 |
-
-### Server Actions
-
-| 文件 | 函数 | 说明 |
-|------|------|------|
-| `actions/agent-actions.ts` | `startPtyExecution` | 启动 Claude CLI PTY |
-| `actions/agent-actions.ts` | `resumePtyExecution` | 恢复会话 |
-| `actions/agent-actions.ts` | `continueLatestPtyExecution` | 继续最近会话 |
-| `actions/cli-profile-actions.ts` | `getDefaultCliProfile` | 获取活跃 CLI 配置 |
-| `actions/prompt-actions.ts` | `getPrompts` / `createPrompt` | Prompt 模板管理 |
-| `actions/project-actions.ts` | `analyzeProjectDirectory` | AI 项目分析 |
-
-### API Routes
-
-| 路由 | 说明 |
-|------|------|
-| `/api/internal/assistant/chat` | 助手聊天 SSE 流式 |
-| `/api/internal/assistant/sessions` | 会话消息检索 |
-| `/api/internal/assistant/images` | 图片服务 |
-| `/api/adapters/test` | CLI Adapter 连接测试 |
-
-### 数据模型
-
-| 模型 | 说明 |
-|------|------|
-| `CliProfile` | CLI 命令、参数、环境变量配置。`command` 仅允许 `claude`/`claude-code` |
-| `AgentConfig` | Agent 特定配置，唯一约束 `(agent, configName)` |
-| `AgentPrompt` | Prompt 模板，支持全局/workspace 级别 |
-| `TaskExecution` | 执行记录，含 `sessionId`、`summary`、`gitLog`、`insightNoteId` |
-
-### 组件
-
-| 组件 | 说明 |
-|------|------|
-| `settings/cli-profile-config.tsx` | CLI Profile 配置 UI |
-| `settings/cli-adapter-tester.tsx` | CLI 连接测试 UI |
-| `settings/prompts-config.tsx` | Prompt 模板管理 UI |
-| `settings/ai-tools-config.tsx` | Agent 配置 UI |
-
-## 约束
-
-- `CliProfile.command` 仅白名单 `claude`、`claude-code`
-- `baseArgs` 禁止 shell 元字符 `;&|$()`
-- `envVars` 禁止危险 key: `PATH`, `LD_PRELOAD`, `NODE_OPTIONS` 等
-- 环境变量通过 `envOverrides` 注入，禁止修改 `process.env`
+公共 npm 发布、外部组织/scope、任意 API Adapter 插件、插件操作系统级沙箱均为后续工作，0.3.0 未实现或未发布。架构依据保留在 `docs/ai/ai-tools-architecture-decisions.md`。

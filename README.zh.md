@@ -49,6 +49,8 @@ pnpm build
 pnpm start
 ```
 
+生产模式默认只监听 `127.0.0.1`。只有确实需要远程访问时才使用 `pnpm start -- --host 0.0.0.0` 或明确的局域网地址。
+
 ## 核心概念
 
 ```
@@ -83,8 +85,9 @@ Workspace（工作空间）
 
 - 基于 xterm.js + node-pty 的浏览器终端
 - 完整 ANSI 渲染（颜色、进度条、光标移动）
-- 点击"执行"启动 Claude CLI，实时输出
-- 支持键盘输入，与 Claude 交互式对话
+- 通过 Terminal 插槽启动 Claude Code、Codex CLI、Gemini CLI 或已启用的第三方 CLI
+- 仅在会话创建前按显式顺序回退，会话开始后固定 connection/model
+- 支持键盘输入，直接与所选 CLI 交互
 - 窗口大小自动同步
 - 断开重连不丢失会话
 
@@ -121,7 +124,7 @@ Workspace（工作空间）
 
 ```
 创建任务 → 点击执行 → TODO 自动变为 IN_PROGRESS
-    → Claude CLI 在终端运行 → 执行完成（exit 0）→ IN_REVIEW
+    → 所选 CLI 在终端运行 → 执行完成（exit 0）→ IN_REVIEW
     → 人工检查 → 合格则 DONE / 不合格可重新执行
 ```
 
@@ -142,11 +145,13 @@ Workspace（工作空间）
 - 点击「启动任务」打开搜索弹窗 — 模糊搜索任务、按「工作区 → 项目」浏览或从最近任务挑选；可启动新执行或恢复历史会话
 - 双导航模式：input（直接在窗格打字）与 nav（居中窗格选择器，`1–9 / A–Z` 快捷定位），`Ctrl+;` 切换
 
-### AI 助手
+### AI Tools 与助手
 
-- 内置聊天，基于 Claude Agent SDK，SSE 流式 + 多模态（图片）输入
-- 定位为「任务管理操作员」—— 通过 Tower MCP 工具创建/移动任务、搜索、生成报告
-- 会话历史以磁盘 transcript 为准；resume 失效自动降级重试，MCP 断开自动重连
+- 连接在上、五能力插槽在下：Terminal、Summary、Dreaming、Analysis、Assistant
+- 内置 Claude/Codex/Gemini CLI，以及 OpenAI、OpenAI Compatible、Anthropic、Google API 连接
+- Tower 自有多轮 Assistant 会话，支持 SSE、附件、Tower 工具、取消和旧 Claude 会话按需导入
+- 显式主备目标只在首活动前切换；API 多健康 Key round-robin
+- 详见 [AI Tools 0.3](./docs/guide/ai-tools.md)、[升级说明](./docs/guide/upgrade-0.3.md) 和 [CLI Provider 开发](./docs/guide/cli-provider-sdk.md)
 
 ### 版本时间线
 
@@ -163,7 +168,8 @@ Workspace（工作空间）
 | 通用 | 主题（深色/浅色/系统）、语言（中/英）、默认终端 App |
 | 终端 | WebSocket 端口、空闲超时时间 |
 | 系统 | 上传限制、并发数、Git 超时、搜索参数 |
-| CLI Profile | CLI 命令、参数、环境变量 |
+| AI Tools | CLI/API 连接、模型、五能力插槽、CLI 插件 |
+| CLI Profile | 旧配置兼容的 CLI 命令、参数、环境变量 |
 | Prompts | 自定义 Agent 提示词模板 |
 | Agent | Agent 配置管理 |
 | Git 规则 | 路径映射规则（host/owner → 本地路径） |
@@ -187,7 +193,7 @@ Tower 提供 MCP Server，可被外部 AI Agent 调用：
 }
 ```
 
-### 可用工具（31 个）
+### 可用工具（35 个）
 
 | 分类 | 工具 |
 |------|------|
@@ -196,7 +202,7 @@ Tower 提供 MCP Server，可被外部 AI Agent 调用：
 | Task | list_tasks, create_task, update_task, move_task, delete_task, set_task_defaults, list_versions |
 | Label | list_labels, create_label, delete_label, set_task_labels |
 | Search | search（全局搜索任务/项目/仓库） |
-| Knowledge | identify_project |
+| Knowledge | identify_project, ask_project_knowledge, manage_project_facts |
 | Notes/Assets | manage_notes, manage_assets |
 | Terminal | start_task_execution, get_task_terminal_output, send_task_terminal_input, get_task_execution_status, stop_task_execution, resume_task_execution |
 | Report | daily_summary, daily_todo |
@@ -232,3 +238,4 @@ pnpm mcp            # 启动 MCP Server（独立进程）
 |------|------|--------|
 | DATABASE_URL | 数据库连接串 | `file:./prisma/dev.db` (SQLite) |
 | PORT | 服务端口 | 3000 |
+| TOWER_DATA_DIR | 生产数据目录 | `~/.tower` |

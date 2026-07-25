@@ -1,125 +1,50 @@
 ---
 title: AI
-description: AI capability layer covering Claude Agent SDK, CLI adapter, assistant chat, task execution, and summaries
+description: AI Tools 0.3 connections, capability slots, CLI plugins, and API runtime
 ---
 
 # AI Module
 
 **Slug:** `ai`
 
-## Overview
+## 0.3.0 status
 
-The AI capability layer manages all AI-powered features in Tower. There are 5 distinct capabilities, each serving a different purpose:
+AI Tools now uses a connection-and-slot model instead of a Claude-only call path. The top half of Settings manages CLI/API connections; the bottom half assigns ordered targets to Terminal, Summary, Dreaming, Analysis, and Assistant. See [AI Tools 0.3](/en/guide/ai-tools) for user workflows and [CLI Provider development](/en/guide/cli-provider-sdk) for the contract.
 
-1. **Assistant chat** — Multi-turn streaming conversation via the Claude Agent SDK. The assistant acts as a task management operator with access to Tower's MCP tools.
-2. **Mini summary** — Generates a short (~50 character) summary when a task execution stops, used for quick reference in the UI.
-3. **Dreaming** — Produces structured insight JSON when a task execution completes, capturing what was accomplished, patterns discovered, and learnings. These are auto-saved as notes.
-4. **Project analysis** — Analyzes a project's local directory structure on import, generating a structured description covering tech stack, architecture, and key directories.
-5. **Task execution** — Spawns a PTY terminal running Claude CLI in an isolated environment for interactive AI-driven development.
+| Slot | Purpose | Connection types |
+|---|---|---|
+| Terminal | Interactive task terminal | CLI only |
+| Summary | Short execution summary | CLI / API |
+| Dreaming | Insights and knowledge capture | CLI / API |
+| Analysis | Project analysis | CLI / API |
+| Assistant | Tower-owned multi-turn chat | CLI / API |
 
-Different capabilities can use different models. Lightweight tasks like mini summaries use Haiku for cost efficiency, while deeper analysis like Dreaming uses Sonnet for higher quality output.
+Built-in CLI providers are Claude Code, Codex CLI, and Gemini CLI. The API runtime supports OpenAI, OpenAI Compatible, Anthropic, and Google. Targets use a stable `connectionId + modelId`, not a provider name as an instance identifier.
 
-## Details
+## Execution semantics
 
-- **Model routing**: Each capability specifies a suggested model. `generateSummaryFromLog` uses Haiku 4.5 for fast, cheap summaries. `generateDreamingInsight` and `analyzeProjectDirectory` use Sonnet 4.6 for deeper reasoning. Task execution and assistant chat use the system's configured default model.
-- **CLI adapter**: Currently hardcoded for Claude Code. The interface (`spawn`, `resume`, `continue`, `getSessionId`, `buildEnvOverrides`) is designed for future abstraction to support multiple CLI providers.
-- **Execution summaries**: When a task execution ends, Tower automatically extracts the terminal output log and generates both a mini summary and a Dreaming insight, attaching them to the execution record and saving the insight as a project note.
+- A slot uses only its explicit primary and ordered fallback targets.
+- Key or target fallback is allowed only before the first content, tool call, or side effect. Once activity starts, the target is locked.
+- Terminal may fall back before creating a new session. The successful connection/model snapshot is stored on `TaskExecution` and reused for resume.
+- API keys round-robin only among enabled, healthy keys. `401`, `403`, and `429` may rotate a key only before activity.
+- Attempt telemetry stores target, model, duration, and redacted error code, never prompts, keys, or sensitive header/query values.
 
-## AI Capability Entry Points
+## Boundaries
 
-| Capability | File | Invocation Method | Suggested Model |
-|------------|------|-------------------|-----------------|
-| Assistant chat | `api/internal/assistant/chat/route.ts` | Agent SDK `query()` | Current default |
-| Short summary | `lib/claude-session.ts` -> `generateSummaryFromLog` | Agent SDK `aiQuery()` | Haiku 4.5 |
-| Long summary (Dreaming) | `lib/claude-session.ts` -> `generateDreamingInsight` | Agent SDK `aiQuery()` | Sonnet 4.6 |
-| Project analysis | `actions/project-actions.ts` -> `analyzeProjectDirectory` | Agent SDK `aiQuery()` | Sonnet 4.6 |
-| Task execution | `actions/agent-actions.ts` -> `startPtyExecution` | PTY spawn CLI | Current default |
+| Layer | Location | Responsibility |
+|---|---|---|
+| Public CLI contract | `packages/ai-sdk` | Manifest v1, adapters, process specs, events, and config schema types |
+| Private host runtime | `packages/ai-runtime` | Controlled processes, API adapters, fallback, plugin validation, models.dev snapshot |
+| Built-in providers | `packages/ai-provider-*` | Claude/Codex/Gemini arguments, parsing, and MCP/Hooks/Skills integration |
+| Application services | `src/lib/ai` | Connections, slot resolution, Assistant sessions/tools, and auditing |
 
-## File Reference
+All workspace packages remain `private@0.1.0`. That is an internal contract version independent of the Tower app's `0.3.0`; this release creates no external organization and publishes no SDK or provider package.
 
-### Core Library
+## Security
 
-| File | Description |
-|------|-------------|
-| `lib/claude-session.ts` | Unified AI entry: `aiQuery()`, `generateSummaryFromLog()`, `generateDreamingInsight()` |
-| `lib/assistant-sessions.ts` | Assistant session management (localStorage registry) |
-| `lib/assistant-constants.ts` | `ASSISTANT_SESSION_KEY` and other constants |
-| `lib/assistant-message-converter.ts` | SDK message to UI message format conversion |
-| `lib/build-multimodal-prompt.ts` | Multimodal prompt construction (text + images) |
-| `lib/execution-summary.ts` | Post-execution summary and Dreaming insight generation |
-| `lib/cli-test.ts` | CLI adapter environment detection |
+- Each CLI owns its login, token, and base URL. Tower handles discovery, Hello probes, process launch, and integration status.
+- API keys are plaintext in local SQLite. The UI masks them by default but permits reveal, copy, and edit; logs and errors are redacted.
+- Third-party CLI plugins are trusted local Node.js code, not an OS sandbox. Tower validates exact versions, integrity, static manifests/schemas, and declared permissions before enablement.
+- Adapters return structured process specs. The host disables shell execution by default and owns deadlines, cancellation, and process-tree cleanup.
 
-### Server Actions
-
-| File | Function | Description |
-|------|----------|-------------|
-| `actions/agent-actions.ts` | `startPtyExecution` | Start Claude CLI PTY |
-| `actions/agent-actions.ts` | `resumePtyExecution` | Resume session |
-| `actions/agent-actions.ts` | `continueLatestPtyExecution` | Continue latest session |
-| `actions/cli-profile-actions.ts` | `getDefaultCliProfile` | Get active CLI profile |
-| `actions/prompt-actions.ts` | `getPrompts` / `createPrompt` | Prompt template management |
-| `actions/project-actions.ts` | `analyzeProjectDirectory` | AI project analysis |
-
-### API Routes
-
-| Route | Description |
-|-------|-------------|
-| `/api/internal/assistant/chat` | Assistant chat SSE streaming |
-| `/api/internal/assistant/sessions` | Session message retrieval |
-| `/api/internal/assistant/images` | Image serving |
-| `/api/adapters/test` | CLI adapter connection test |
-
-### Data Models
-
-| Model | Description |
-|-------|-------------|
-| `CliProfile` | CLI command, arguments, and environment variable config. `command` only allows `claude`/`claude-code` |
-| `AgentConfig` | Agent-specific config with unique constraint `(agent, configName)` |
-| `AgentPrompt` | Prompt templates, supporting global and workspace-level scopes |
-| `TaskExecution` | Execution records, including `sessionId`, `summary`, `gitLog`, `insightNoteId` |
-
-### Components
-
-| Component | Description |
-|-----------|-------------|
-| `settings/cli-profile-config.tsx` | CLI Profile configuration UI |
-| `settings/cli-adapter-tester.tsx` | CLI connection test UI |
-| `settings/prompts-config.tsx` | Prompt template management UI |
-| `settings/ai-tools-config.tsx` | Agent configuration UI |
-
-## Task Overview Note
-
-When a task enters **DONE** (or is cancelled), Tower auto-generates a "task overview" note (a `ProjectNote` under the "task notes" category) recording what the task changed, for later review / regression backlinking. It is skipped (no empty note) when there are no commits and no changed files.
-
-Template structure (`src/lib/task-overview.ts` / `task-overview-format.ts`):
-
-1. Intro blockquote (DONE / cancelled variants)
-2. `## Change Summary` — the AI-generated change summary (falls back to the first commit message when absent)
-3. `## File List` — each changed file as `` `path` (+N / -M) `` (max 100) plus an "N files, M commits" count line
-4. `## Commits` — **new**: each commit listed as `` `<sha>` <message> `` (from `git log --oneline`, max 50, then "…N more commits"); only rendered when commits exist
-5. `## Related Attachments & References` — linked assets as `filename — description`
-6. Footer: task title + id, project, generated-at timestamp
-
-**zh/en i18n follows the UI language**: the whole template copy and the AI summary prompt switch by language. At generation time it reads the systemConfig `locale` value (`getConfigValue("locale", "zh")`, default `zh`) — the UI language lives only in the browser, so switching language persists the latest value into systemConfig for the backend note generator to read. (commits `5c69d8d` / `96e08b1`)
-
-## CLI Adapter Interface (TODO)
-
-Currently hardcoded for Claude Code. Will be abstracted when integrating a second CLI:
-
-```
-spawn(cwd, args, env)        -- Start CLI process (PTY)
-resume(sessionId)            -- Resume session
-continue()                   -- Continue latest session
-getSessionId()               -- Get session ID
-getHooks() / installHooks()  -- Hook configuration and registration
-buildEnvOverrides(taskId)    -- Environment variable injection
-```
-
-See [README.md TODO](../../README.md#todo) for the detailed interface list.
-
-## Security Constraints
-
-- `CliProfile.command` is restricted to the whitelist: `claude`, `claude-code`
-- `baseArgs` prohibits shell metacharacters `;&|$()`
-- `envVars` prohibits dangerous keys: `PATH`, `LD_PRELOAD`, `NODE_OPTIONS`, etc.
-- Environment variables are injected via `envOverrides`; modifying `process.env` is forbidden
+Public npm publication, an external organization/scope, arbitrary API adapter plugins, and OS-level plugin sandboxing remain future work.

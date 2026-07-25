@@ -49,6 +49,8 @@ pnpm build
 pnpm start
 ```
 
+Production binds to `127.0.0.1` by default. Use `pnpm start -- --host 0.0.0.0` or an explicit LAN address only when remote access is intentional.
+
 ## Core Concepts
 
 ```
@@ -83,8 +85,9 @@ The task detail page has a terminal panel on the left and a three-tab workspace 
 
 - Browser terminal powered by xterm.js + node-pty
 - Full ANSI rendering (colors, progress bars, cursor movement)
-- Click "Execute" to launch Claude CLI with live output
-- Interactive keyboard input — chat with Claude directly
+- Launch Claude Code, Codex CLI, Gemini CLI, or an enabled third-party CLI through the Terminal slot
+- Explicit ordered fallback before session creation; connection/model stays pinned after the session starts
+- Interactive keyboard input directly to the selected CLI
 - Auto-synced terminal dimensions
 - Reconnect without losing the session
 
@@ -121,7 +124,7 @@ The task detail page has a terminal panel on the left and a three-tab workspace 
 
 ```
 Create task → Click Execute → TODO auto-transitions to IN_PROGRESS
-    → Claude CLI runs in terminal → Completes (exit 0) → IN_REVIEW
+    → selected CLI runs in terminal → Completes (exit 0) → IN_REVIEW
     → Manual review → Pass → DONE / Fail → re-execute
 ```
 
@@ -142,11 +145,13 @@ Create task → Click Execute → TODO auto-transitions to IN_PROGRESS
 - **Launch task** opens a search dialog — fuzzy-search tasks, browse by workspace → project, or pick from recent; launch new or resume a previous session
 - Dual navigation: *input* mode (type into a pane) and *nav* mode (centered pane selector with `1–9 / A–Z` quick-select), toggle with `Ctrl+;`
 
-### AI Assistant
+### AI Tools and Assistant
 
-- Built-in chat powered by the Claude Agent SDK with SSE streaming and multimodal (image) input
-- Acts as a task-management operator — creates and moves tasks, searches, and reports through Tower's MCP tools
-- Chat history sourced from on-disk transcripts; resilient resume with automatic fallback and MCP re-spawn on disconnect
+- Connections above, five capability slots below: Terminal, Summary, Dreaming, Analysis, and Assistant
+- Built-in Claude/Codex/Gemini CLI connections plus OpenAI, OpenAI Compatible, Anthropic, and Google API connections
+- Tower-owned multi-turn Assistant sessions with SSE, attachments, Tower tools, cancellation, and on-demand legacy Claude import
+- Explicit primary/fallback targets switch only before first activity; API connections support healthy multi-key round-robin
+- See [AI Tools 0.3](./docs/en/guide/ai-tools.md), [upgrade guide](./docs/en/guide/upgrade-0.3.md), and [CLI Provider SDK](./docs/en/guide/cli-provider-sdk.md)
 
 ### Version Timeline
 
@@ -163,7 +168,8 @@ Create task → Click Execute → TODO auto-transitions to IN_PROGRESS
 | General | Theme (dark/light/system), Language (zh/en), Default terminal app |
 | Terminal | WebSocket port, Idle timeout |
 | System | Upload limits, Concurrency, Git timeout, Search parameters |
-| CLI Profile | CLI command, Args, Environment variables |
+| AI Tools | CLI/API connections, models, five capability slots, CLI plugins |
+| CLI Profile | Legacy-compatible CLI command, Args, Environment variables |
 | Prompts | Custom agent prompt templates |
 | Agent | Agent configuration management |
 | Git Rules | Path mapping rules (host/owner → local path) |
@@ -187,7 +193,7 @@ Tower exposes an MCP Server for external AI agents:
 }
 ```
 
-### Available Tools (31)
+### Available Tools (35)
 
 | Category | Tools |
 |----------|-------|
@@ -196,7 +202,7 @@ Tower exposes an MCP Server for external AI agents:
 | Task | list_tasks, create_task, update_task, move_task, delete_task, set_task_defaults, list_versions |
 | Label | list_labels, create_label, delete_label, set_task_labels |
 | Search | search (global search across tasks/projects/repos) |
-| Knowledge | identify_project |
+| Knowledge | identify_project, ask_project_knowledge, manage_project_facts |
 | Notes/Assets | manage_notes, manage_assets |
 | Terminal | start_task_execution, get_task_terminal_output, send_task_terminal_input, get_task_execution_status, stop_task_execution, resume_task_execution |
 | Report | daily_summary, daily_todo |
@@ -232,5 +238,6 @@ pnpm mcp            # Start MCP Server (standalone process)
 |----------|-------------|---------|
 | DATABASE_URL | Database connection string | `file:./prisma/dev.db` (SQLite) |
 | PORT | Server port | 3000 |
+| TOWER_DATA_DIR | Production data directory | `~/.tower` |
 
 <!-- Internal notes (TODO, pitfalls) moved to .notes/ (gitignored) -->

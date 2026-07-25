@@ -30,6 +30,10 @@ export default defineConfig({
             items: [
               { text: "介绍", link: "/guide/introduction" },
               { text: "快速开始", link: "/guide/getting-started" },
+              { text: "AI Tools 0.3", link: "/guide/ai-tools" },
+              { text: "升级到 0.3.0", link: "/guide/upgrade-0.3" },
+              { text: "CLI Provider 开发", link: "/guide/cli-provider-sdk" },
+              { text: "0.3.0 发布说明", link: "/guide/release-0.3.0" },
               { text: "系统架构", link: "/guide/architecture" },
             ],
           },
@@ -79,6 +83,10 @@ export default defineConfig({
             items: [
               { text: "Introduction", link: "/en/guide/introduction" },
               { text: "Getting Started", link: "/en/guide/getting-started" },
+              { text: "AI Tools 0.3", link: "/en/guide/ai-tools" },
+              { text: "Upgrade to 0.3.0", link: "/en/guide/upgrade-0.3" },
+              { text: "CLI Provider Development", link: "/en/guide/cli-provider-sdk" },
+              { text: "0.3.0 Release Notes", link: "/en/guide/release-0.3.0" },
               { text: "Architecture", link: "/en/guide/architecture" },
             ],
           },
