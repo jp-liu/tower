@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Archive, Plus, Pencil, Trash2, Boxes,
   MoreHorizontal, ChevronsLeft, FileText, FolderOpen, Gauge, BellRing,
@@ -196,7 +197,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
               />
             }
           >
-            <img src="/logo.png" alt="Tower" className="h-6 w-6 rounded" />
+            <Image src="/logo.png" alt="Tower" width={24} height={24} className="h-6 w-6 rounded" />
           </TooltipTrigger>
           <TooltipContent side="right" sideOffset={8}>{t("sidebar.expand")}</TooltipContent>
         </Tooltip>
@@ -310,7 +311,7 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
     <aside className="noise relative flex h-screen w-56 flex-col border-r border-border bg-sidebar">
       {/* Logo */}
       <div className="relative z-10 flex items-center gap-3 px-4 py-4">
-        <img src="/logo.png" alt="Tower" className="h-9 w-9 rounded-lg" />
+        <Image src="/logo.png" alt="Tower" width={36} height={36} className="h-9 w-9 rounded-lg" />
         <div className="flex-1">
           <div className="text-sm font-semibold tracking-tight text-foreground">Tower</div>
           <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Studio</div>

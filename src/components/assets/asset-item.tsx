@@ -1,6 +1,7 @@
 "use client";
 
 import { FileText, Eye, FolderOpen, Trash2 } from "lucide-react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { localPathToApiUrl, isImageAsset } from "@/lib/file-serve-client";
 import { useI18n } from "@/lib/i18n";
@@ -51,9 +52,12 @@ export function AssetItem({ asset, onPreview, onReveal, onDelete, onTaskClick }:
       {/* Preview / Icon — clickable */}
       <Button variant="ghost" onClick={() => onPreview(asset)} className="flex-shrink-0 cursor-pointer p-0 h-auto">
         {isImage ? (
-          <img
+          <Image
             src={url}
             alt={asset.filename}
+            width={48}
+            height={48}
+            unoptimized
             className="h-12 w-12 rounded object-cover border border-border"
           />
         ) : (

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -263,7 +264,7 @@ export default function OnboardingPage() {
         <div className="space-y-4">
           {/* Brand */}
           <div className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="Tower" className="h-8 w-8 rounded-lg" />
+            <Image src="/logo.png" alt="Tower" width={32} height={32} className="h-8 w-8 rounded-lg" />
             <span className="text-lg font-semibold tracking-tight">Tower</span>
           </div>
 

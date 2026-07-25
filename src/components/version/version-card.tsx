@@ -10,7 +10,7 @@ import {
   GitCompare,
   FolderOpen,
   FileText,
-  Image,
+  Image as ImageIcon,
   Pencil,
   PackageCheck,
   PanelRight,
@@ -176,7 +176,7 @@ export function TaskRow({ task, onOpenDetail }: TaskRowProps) {
                       className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-[12px] text-foreground shadow-sm transition-colors hover:border-primary/50"
                     >
                       {isImage ? (
-                        <Image className="h-3.5 w-3.5 text-muted-foreground" />
+                        <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" />
                       ) : (
                         <FileText className="h-3.5 w-3.5 text-muted-foreground" />
                       )}

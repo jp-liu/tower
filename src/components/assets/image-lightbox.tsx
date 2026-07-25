@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
+import Image from "next/image";
 import { X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RotateCcw } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useHydrated } from "@/hooks/use-hydrated";
@@ -243,16 +244,19 @@ export function ImageLightbox({
         onWheel={handleWheel}
       >
         {imageUrl && (
-          <img
+          <Image
             src={imageUrl}
             alt={filename}
+            width={1}
+            height={1}
+            unoptimized
             onClick={handleImageClick}
             onPointerDown={handleImagePointerDown}
             onPointerMove={handleImagePointerMove}
             onPointerUp={endDrag}
             onPointerLeave={endDrag}
             onPointerCancel={endDrag}
-            className="max-h-[88vh] max-w-[92vw] object-contain pointer-events-auto"
+            className="h-auto w-auto max-h-[88vh] max-w-[92vw] object-contain pointer-events-auto"
             style={{
               transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${scale})`,
               transformOrigin: "center center",
@@ -308,9 +312,12 @@ export function ImageLightbox({
                         : "opacity-60 hover:opacity-100 ring-1 ring-white/20"
                     }`}
                   >
-                    <img
+                    <Image
                       src={a.url}
                       alt={a.filename}
+                      width={48}
+                      height={48}
+                      unoptimized
                       className="h-full w-full object-cover"
                       loading="lazy"
                       draggable={false}

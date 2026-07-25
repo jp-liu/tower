@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { Bot, Check, ChevronRight, Copy, FileText, ImageOff, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
@@ -91,9 +92,12 @@ function MessageImage({
       className="relative size-16 rounded-md overflow-hidden bg-muted shrink-0"
       onClick={() => onPreview?.(url)}
     >
-      <img
+      <Image
         src={url}
         alt=""
+        width={64}
+        height={64}
+        unoptimized
         loading="lazy"
         className="size-16 rounded-md object-cover cursor-pointer hover:opacity-80 transition-opacity"
         onError={() => setBroken(true)}
