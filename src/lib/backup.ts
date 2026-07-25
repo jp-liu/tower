@@ -102,6 +102,7 @@ export async function createArchive(
     if (existsSync(join(towerDir, "database", "tower.db"))) entries.push(join("database", "tower.db"));
     if (existsSync(join(towerDir, "storage", "assets"))) entries.push(join("storage", "assets"));
     if (existsSync(join(towerDir, "assistant"))) entries.push("assistant");
+    if (existsSync(join(towerDir, "ai"))) entries.push("ai");
     if (existsSync(join(towerDir, "logs"))) entries.push("logs");
 
     await tar.create(
@@ -201,7 +202,30 @@ export async function extractArchive(archivePath: string, destDir: string): Prom
 // ---------------------------------------------------------------------------
 // Atomic swap: current → _old_tmp, extracted → current
 // ---------------------------------------------------------------------------
-const DIRS_TO_SWAP = ["database", join("storage", "assets"), "assistant", "logs"] as const;
+const DIRS_TO_SWAP = ["database", join("storage", "assets"), "assistant", "ai", "logs"] as const;
+
+function rebasePluginRegistry(towerDir: string): void {
+  const registryPath = join(towerDir, "ai", "plugins", "registry.v1.json");
+  if (!existsSync(registryPath)) return;
+  const parsed = JSON.parse(readFileSync(registryPath, "utf8")) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+  const plugins = (parsed as { plugins?: unknown }).plugins;
+  if (!plugins || typeof plugins !== "object" || Array.isArray(plugins)) return;
+
+  let changed = false;
+  for (const registration of Object.values(plugins as Record<string, unknown>)) {
+    if (!registration || typeof registration !== "object" || Array.isArray(registration)) continue;
+    const record = registration as { installPath?: unknown };
+    if (typeof record.installPath !== "string") continue;
+    const packageDir = record.installPath.split(/[\\/]/).at(-1);
+    if (!packageDir || packageDir === "." || packageDir === "..") continue;
+    const restoredPath = join(towerDir, "ai", "plugins", "packages", packageDir);
+    if (!existsSync(restoredPath) || record.installPath === restoredPath) continue;
+    record.installPath = restoredPath;
+    changed = true;
+  }
+  if (changed) writeFileSync(registryPath, `${JSON.stringify(parsed, null, 2)}\n`);
+}
 
 export function swapDirs(towerDir: string, extractedDir: string): void {
   const oldTmp = join(towerDir, "_old_tmp");
@@ -225,6 +249,8 @@ export function swapDirs(towerDir: string, extractedDir: string): void {
         renameSync(src, dst);
       }
     }
+
+    rebasePluginRegistry(towerDir);
 
     rmSync(oldTmp, { recursive: true, force: true });
   } catch (err) {
@@ -255,7 +281,7 @@ export function deleteWalFiles(towerDir: string): void {
 // Wipe data dirs (for reset)
 // ---------------------------------------------------------------------------
 export function wipeTowerData(towerDir: string): void {
-  for (const rel of ["database", join("storage", "assets"), "assistant", "logs"]) {
+  for (const rel of ["database", join("storage", "assets"), "assistant", "ai", "logs"]) {
     const dir = join(towerDir, rel);
     if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
   }
