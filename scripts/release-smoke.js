@@ -16,21 +16,180 @@ const cacheDir = path.join(baseDir, "npm-cache");
 const homeDir = path.join(baseDir, "home");
 const dataDir = path.join(baseDir, "tower-data");
 const logPath = path.join(baseDir, "tower.log");
+const registryDir = path.join(baseDir, "registry");
 
 fs.mkdirSync(prefixDir, { recursive: true });
 fs.mkdirSync(cacheDir, { recursive: true });
 fs.mkdirSync(homeDir, { recursive: true });
 fs.mkdirSync(dataDir, { recursive: true });
+fs.mkdirSync(registryDir, { recursive: true });
 
 let child = null;
+let registry = null;
+
+function cleanEnvironment(overrides = {}) {
+  const env = { ...process.env, ...overrides };
+  for (const key of [
+    "__NEXT_PRIVATE_ORIGIN",
+    "__NEXT_PRIVATE_STANDALONE_CONFIG",
+    "CALLBACK_URL",
+    "TOWER_TASK_ID",
+    "TOWER_TASK_TITLE",
+    "TURBOPACK",
+  ]) {
+    delete env[key];
+  }
+  return env;
+}
 
 function run(command, args, options = {}) {
   execFileSync(command, args, {
     cwd: projectRoot,
     stdio: "inherit",
-    env: process.env,
+    env: cleanEnvironment(),
     ...options,
   });
+}
+
+function runAsync(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const processHandle = spawn(command, args, {
+      cwd: projectRoot,
+      stdio: "inherit",
+      env: cleanEnvironment(),
+      ...options,
+    });
+    processHandle.once("error", reject);
+    processHandle.once("exit", (code, signal) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${command} exited with ${code ?? signal}`));
+    });
+  });
+}
+
+function collectInstalledPackages() {
+  const packages = new Map();
+
+  function registerPackage(packageDir) {
+    const packageJsonPath = path.join(packageDir, "package.json");
+    if (!fs.existsSync(packageJsonPath)) return;
+    try {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+      if (!packageJson.name || !packageJson.version) return;
+      const versions = packages.get(packageJson.name) || new Map();
+      versions.set(packageJson.version, { packageDir: fs.realpathSync(packageDir), packageJson });
+      packages.set(packageJson.name, versions);
+    } catch {}
+  }
+
+  function scanNodeModules(nodeModulesDir) {
+    if (!fs.existsSync(nodeModulesDir)) return;
+    for (const entry of fs.readdirSync(nodeModulesDir, { withFileTypes: true })) {
+      if (entry.name.startsWith(".")) continue;
+      const entryPath = path.join(nodeModulesDir, entry.name);
+      if (entry.name.startsWith("@")) {
+        if (!entry.isDirectory()) continue;
+        for (const scopedEntry of fs.readdirSync(entryPath, { withFileTypes: true })) {
+          if (scopedEntry.isDirectory() || scopedEntry.isSymbolicLink()) {
+            registerPackage(path.join(entryPath, scopedEntry.name));
+          }
+        }
+      } else if (entry.isDirectory() || entry.isSymbolicLink()) {
+        registerPackage(entryPath);
+      }
+    }
+  }
+
+  const nodeModulesDir = path.join(projectRoot, "node_modules");
+  scanNodeModules(nodeModulesDir);
+  const virtualStoreDir = path.join(nodeModulesDir, ".pnpm");
+  if (fs.existsSync(virtualStoreDir)) {
+    for (const entry of fs.readdirSync(virtualStoreDir, { withFileTypes: true })) {
+      if (entry.isDirectory()) scanNodeModules(path.join(virtualStoreDir, entry.name, "node_modules"));
+    }
+  }
+
+  return packages;
+}
+
+async function startLocalRegistry() {
+  const packages = collectInstalledPackages();
+  const tarballs = new Map();
+
+  registry = http.createServer((req, res) => {
+    const requestUrl = new URL(req.url || "/", `http://${host}`);
+    if (req.method === "POST" && requestUrl.pathname.includes("/-/npm/v1/security/")) {
+      req.resume();
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end("{}");
+      return;
+    }
+
+    if (requestUrl.pathname.startsWith("/tarballs/")) {
+      const [, , encodedName, encodedVersion] = requestUrl.pathname.split("/");
+      const name = decodeURIComponent(encodedName || "");
+      const version = decodeURIComponent((encodedVersion || "").replace(/\.tgz$/, ""));
+      const packageInfo = packages.get(name)?.get(version);
+      if (!packageInfo) {
+        res.writeHead(404);
+        res.end("not found");
+        return;
+      }
+
+      try {
+        const cacheKey = `${name}@${version}`;
+        let tarballPath = tarballs.get(cacheKey);
+        if (!tarballPath) {
+          const tarballName = execFileSync(
+            "npm",
+            ["pack", packageInfo.packageDir, "--ignore-scripts", "--silent", "--pack-destination", registryDir],
+            { cwd: projectRoot, encoding: "utf8", env: cleanEnvironment({ NPM_CONFIG_CACHE: cacheDir }) }
+          ).trim().split("\n").pop();
+          tarballPath = path.join(registryDir, tarballName);
+          tarballs.set(cacheKey, tarballPath);
+        }
+        const stat = fs.statSync(tarballPath);
+        res.writeHead(200, { "content-length": stat.size, "content-type": "application/octet-stream" });
+        fs.createReadStream(tarballPath).pipe(res);
+      } catch (error) {
+        res.writeHead(500);
+        res.end(error.message);
+      }
+      return;
+    }
+
+    const name = decodeURIComponent(requestUrl.pathname.slice(1));
+    const versions = packages.get(name);
+    if (!versions) {
+      res.writeHead(404, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "package not available in local fixture registry" }));
+      return;
+    }
+
+    const registryAddress = registry.address();
+    const registryPort = typeof registryAddress === "object" && registryAddress ? registryAddress.port : 0;
+    const versionEntries = {};
+    for (const [version, packageInfo] of versions) {
+      versionEntries[version] = {
+        ...packageInfo.packageJson,
+        dist: {
+          tarball: `http://${host}:${registryPort}/tarballs/${encodeURIComponent(name)}/${encodeURIComponent(version)}.tgz`,
+        },
+      };
+    }
+    const latest = Array.from(versions.keys()).at(-1);
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ name, "dist-tags": { latest }, versions: versionEntries }));
+  });
+
+  await new Promise((resolve, reject) => {
+    registry.once("error", reject);
+    registry.listen(0, host, resolve);
+  });
+  const address = registry.address();
+  const registryPort = typeof address === "object" && address ? address.port : null;
+  if (!registryPort) throw new Error("Local fixture registry did not bind a temporary port");
+  return `http://${host}:${registryPort}`;
 }
 
 function wait(ms) {
@@ -92,6 +251,12 @@ async function stopChild() {
   } catch {}
 }
 
+async function stopRegistry() {
+  if (!registry) return;
+  await new Promise((resolve) => registry.close(resolve));
+  registry = null;
+}
+
 async function waitForServer(pid) {
   const start = Date.now();
   while (Date.now() - start < 60000) {
@@ -133,8 +298,10 @@ async function main() {
 
   const tarballPath = path.join(baseDir, tarball);
 
+  console.log("[release:smoke] Starting local dependency registry fixture");
+  const registryUrl = await startLocalRegistry();
   console.log("[release:smoke] Installing tarball into temporary prefix");
-  run("npm", [
+  await runAsync("npm", [
     "install",
     "-g",
     tarballPath,
@@ -142,12 +309,16 @@ async function main() {
     prefixDir,
     "--cache",
     cacheDir,
+    "--registry",
+    registryUrl,
+    "--no-audit",
+    "--no-fund",
   ]);
 
   const towerBin = path.join(prefixDir, "bin", "tower");
   const installedRoot = path.join(prefixDir, "lib", "node_modules", pkg.name);
   const smokeEnv = {
-    ...process.env,
+    ...cleanEnvironment(),
     HOME: homeDir,
     TOWER_DATA_DIR: dataDir,
     NPM_CONFIG_CACHE: cacheDir,
@@ -205,5 +376,6 @@ main()
   })
   .finally(async () => {
     await stopChild();
+    await stopRegistry();
     fs.rmSync(baseDir, { recursive: true, force: true });
   });
