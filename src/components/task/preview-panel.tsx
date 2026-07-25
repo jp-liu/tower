@@ -164,32 +164,34 @@ export function PreviewPanel({
   }, [state?.previewKey, taskId]);
 
   // Auto expand/collapse logic
+  const previewStatus = state?.status;
   useEffect(() => {
-    if (!state) return;
+    if (!previewStatus) return;
     const lockMs = 30_000;
     if (userToggledAt && Date.now() - userToggledAt < lockMs) return;
 
     let timer: ReturnType<typeof setTimeout> | null = null;
-    if (state.status === "starting" || state.status === "installing") {
-      setDrawerExpanded(true);
-    } else if (state.status === "running") {
+    if (previewStatus === "starting" || previewStatus === "installing") {
+      timer = setTimeout(() => setDrawerExpanded(true), 0);
+    } else if (previewStatus === "running") {
       timer = setTimeout(() => {
         if (!userToggledAt || Date.now() - userToggledAt > lockMs) {
           setDrawerExpanded(false);
         }
       }, 3000);
-    } else if (state.status === "error") {
-      setDrawerExpanded(true);
+    } else if (previewStatus === "error") {
+      timer = setTimeout(() => setDrawerExpanded(true), 0);
     }
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [state?.status, userToggledAt]);
+  }, [previewStatus, userToggledAt]);
 
   // Sync iframe URL when state.url changes (preview start auto-injects URL)
   useEffect(() => {
     if (state?.url && state.url !== iframeUrl) {
-      navigateTo(state.url);
+      const frame = requestAnimationFrame(() => navigateTo(state.url!));
+      return () => cancelAnimationFrame(frame);
     }
   }, [state?.url, iframeUrl, navigateTo]);
 
@@ -649,7 +651,11 @@ function CommandInput({
   onBlur: (v: string) => void;
 }) {
   const [local, setLocal] = useState(value);
-  useEffect(() => setLocal(value), [value]);
+  const [sourceValue, setSourceValue] = useState(value);
+  if (sourceValue !== value) {
+    setSourceValue(value);
+    setLocal(value);
+  }
   return (
     <Input
       type="text"
@@ -671,7 +677,11 @@ function PortInput({
   onBlur: (v: number) => void;
 }) {
   const [local, setLocal] = useState(String(value));
-  useEffect(() => setLocal(String(value)), [value]);
+  const [sourceValue, setSourceValue] = useState(value);
+  if (sourceValue !== value) {
+    setSourceValue(value);
+    setLocal(String(value));
+  }
   return (
     <Input
       type="number"
