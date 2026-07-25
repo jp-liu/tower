@@ -3,6 +3,8 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest
 import { PrismaClient } from "@prisma/client";
 import { getTowerDbFilePath } from "@/lib/tower-dir";
 
+vi.mock("server-only", () => ({}));
+
 // Mock next/cache to avoid "static generation store missing" error in test environment
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),

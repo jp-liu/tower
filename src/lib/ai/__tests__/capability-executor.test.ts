@@ -61,6 +61,26 @@ function plan(targets: ResolvedCapabilityTarget[]) {
   mocks.resolveCapabilityPlan.mockResolvedValue({ slot: "summary", targets, migrationStatus: "complete" });
 }
 
+const structuredSchema = {
+  type: "object",
+  required: ["summary", "insights", "shouldCreateNote"],
+  properties: {
+    summary: { type: "string" },
+    insights: {
+      type: "array",
+      items: {
+        type: "object",
+        required: ["type", "content"],
+        properties: {
+          type: { enum: ["pattern", "pitfall", "decision", "tool", "reference"] },
+          content: { type: "string" },
+        },
+      },
+    },
+    shouldCreateNote: { type: "boolean" },
+  },
+};
+
 describe("one-shot capability executor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -148,38 +168,71 @@ describe("one-shot capability executor", () => {
   it("repairs invalid CLI structured output once on the same target", async () => {
     const generate = vi.fn()
       .mockResolvedValueOnce({ text: "not json" })
-      .mockResolvedValueOnce({ text: "```json\n{\"value\":2}\n```" });
+      .mockResolvedValueOnce({ text: "```json\n{\"summary\":\"ok\",\"insights\":[],\"shouldCreateNote\":false}\n```" });
     plan([cliTarget("cli", 0, generate)]);
     await expect(generateCapabilityStructured({
       slot: "dreaming",
       prompt: "return json",
       cwd: "/work",
-      schema: { type: "object" },
+      schema: structuredSchema,
+      schemaName: "dreaming_result",
+      schemaDescription: "Strict dreaming output",
       parse: (value) => {
-        if (!value || typeof value !== "object" || (value as { value?: unknown }).value !== 2) throw new Error();
-        return value as { value: number };
+        if (!value || typeof value !== "object" || (value as { summary?: unknown }).summary !== "ok") throw new Error();
+        return value as { summary: string; insights: unknown[]; shouldCreateNote: boolean };
       },
-    })).resolves.toEqual({ value: 2 });
+    })).resolves.toEqual({ summary: "ok", insights: [], shouldCreateNote: false });
     expect(generate).toHaveBeenCalledTimes(2);
+    const initialPrompt = generate.mock.calls[0]?.[0].prompt ?? "";
+    const repairPrompt = generate.mock.calls[1]?.[0].prompt ?? "";
+    for (const prompt of [initialPrompt, repairPrompt]) {
+      expect(prompt).toContain("[Tower host structured output contract]");
+      expect(prompt).toContain('Schema name: "dreaming_result"');
+      expect(prompt).toContain('Schema description: "Strict dreaming output"');
+      expect(prompt).toContain('"required": [');
+      expect(prompt).toContain('"properties": {');
+      expect(prompt).toContain('"enum": [');
+      expect(prompt).toContain('"shouldCreateNote"');
+      expect(prompt).toContain('"reference"');
+    }
+    expect(initialPrompt).not.toContain("single repair attempt");
+    expect(repairPrompt).toContain("This is the single repair attempt");
     expect(mocks.recordAttempt).toHaveBeenCalledWith(expect.objectContaining({ result: "selected", repaired: true }));
   });
 
   it("uses the next target only after one failed repair", async () => {
-    const broken = vi.fn(async () => ({ text: "{}" }));
-    const backup = vi.fn(async () => ({ text: '{"valid":true}' }));
+    const order: string[] = [];
+    const broken = vi.fn(async (options: CliQueryOptions) => {
+      order.push(options.prompt.includes("single repair attempt") ? "broken:repair" : "broken:initial");
+      return { text: "{}" };
+    });
+    const backup = vi.fn(async (options: CliQueryOptions) => {
+      order.push(options.prompt.includes("single repair attempt") ? "backup:repair" : "backup:initial");
+      return { text: '{"summary":"ok","insights":[{"type":"decision","content":"x"}],"shouldCreateNote":true}' };
+    });
     plan([cliTarget("broken", 0, broken), cliTarget("backup", 1, backup)]);
     await expect(generateCapabilityStructured({
       slot: "dreaming",
       prompt: "json",
       cwd: "/work",
-      schema: { type: "object" },
+      schema: structuredSchema,
       parse: (value) => {
-        if ((value as { valid?: boolean }).valid !== true) throw new Error();
+        if ((value as { summary?: string }).summary !== "ok") throw new Error();
         return value;
       },
-    })).resolves.toEqual({ valid: true });
+    })).resolves.toEqual({
+      summary: "ok",
+      insights: [{ type: "decision", content: "x" }],
+      shouldCreateNote: true,
+    });
     expect(broken).toHaveBeenCalledTimes(2);
     expect(backup).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(["broken:initial", "broken:repair", "backup:initial"]);
+    for (const call of [...broken.mock.calls, ...backup.mock.calls]) {
+      expect(call[0].prompt).toContain('"required": [');
+      expect(call[0].prompt).toContain('"properties": {');
+      expect(call[0].prompt).toContain('"enum": [');
+    }
   });
 
   it("blocks fallback when a structured CLI target produced a tool result", async () => {
@@ -208,9 +261,13 @@ describe("one-shot capability executor", () => {
       slot: "dreaming",
       prompt: "json",
       cwd: "/work",
-      schema: { type: "object", required: ["summary"] },
+      schema: structuredSchema,
       parse: (value) => value as { summary: string },
     })).resolves.toEqual({ summary: "ok" });
-    expect(generateStructured).toHaveBeenCalledWith(expect.objectContaining({ modelId: "model" }), expect.any(Object));
+    expect(generateStructured).toHaveBeenCalledWith(expect.objectContaining({
+      modelId: "model",
+      prompt: "json",
+      schema: structuredSchema,
+    }), expect.any(Object));
   });
 });

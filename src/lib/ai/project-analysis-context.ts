@@ -1,7 +1,7 @@
 import "server-only";
 
-import { lstat, readFile, readdir, realpath } from "node:fs/promises";
-import type { Dirent } from "node:fs";
+import { lstat, open, readdir, realpath } from "node:fs/promises";
+import { constants as fsConstants, type Dirent } from "node:fs";
 import path from "node:path";
 
 export const PROJECT_ANALYSIS_MAX_FILES = 30;
@@ -57,6 +57,38 @@ function truncateUtf8(value: string, maxBytes: number): string {
   return bytes.subarray(0, maxBytes).toString("utf8").replace(/\uFFFD$/, "");
 }
 
+interface BoundedReadHandle {
+  stat(): Promise<{ isFile(): boolean; size: number }>;
+  read(buffer: Buffer, offset: number, length: number, position: number): Promise<{ bytesRead: number }>;
+  close(): Promise<void>;
+}
+
+export type BoundedOpenFile = (filePath: string, flags: number) => Promise<BoundedReadHandle>;
+
+export async function readBoundedUtf8File(
+  filePath: string,
+  maxBytes: number,
+  openFile: BoundedOpenFile = open as unknown as BoundedOpenFile,
+): Promise<string> {
+  if (maxBytes <= 0) return "";
+  const handle = await openFile(filePath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile() || stat.size <= 0) return "";
+    const byteLimit = Math.min(Math.floor(maxBytes), stat.size);
+    const buffer = Buffer.alloc(byteLimit);
+    let totalRead = 0;
+    while (totalRead < byteLimit) {
+      const { bytesRead } = await handle.read(buffer, totalRead, byteLimit - totalRead, totalRead);
+      if (bytesRead <= 0) break;
+      totalRead += bytesRead;
+    }
+    return buffer.subarray(0, totalRead).toString("utf8").replace(/\uFFFD$/, "");
+  } finally {
+    await handle.close();
+  }
+}
+
 async function shallowOverview(root: string): Promise<string[]> {
   const result: string[] = [];
   async function visit(directory: string, depth: number): Promise<void> {
@@ -93,7 +125,12 @@ export async function buildProjectAnalysisContext(localPath: string): Promise<st
     .sort((a, b) => compareNames(a.name, b.name))
     .slice(0, PROJECT_ANALYSIS_MAX_FILES);
   const overview = await shallowOverview(root);
-  const sections: string[] = ["Directory overview:\n" + overview.join("\n")];
+  const overviewSection = truncateUtf8(
+    "Directory overview:\n" + overview.join("\n"),
+    PROJECT_ANALYSIS_MAX_TOTAL_BYTES,
+  );
+  const sections: string[] = [overviewSection];
+  let usedBytes = Buffer.byteLength(overviewSection, "utf8");
 
   for (const entry of rootEntries) {
     try {
@@ -102,13 +139,24 @@ export async function buildProjectAnalysisContext(localPath: string): Promise<st
       if (!isWithinRoot(root, resolved)) continue;
       const stat = await lstat(absolute);
       if (!stat.isFile() || stat.isSymbolicLink()) continue;
-      const bytes = await readFile(absolute);
-      const text = truncateUtf8(bytes.toString("utf8"), PROJECT_ANALYSIS_MAX_FILE_BYTES);
-      sections.push(`File: ${entry.name}\n\`\`\`\n${text}\n\`\`\``);
+      const separator = "\n\n";
+      const prefix = `File: ${entry.name}\n\`\`\`\n`;
+      const suffix = "\n```";
+      const framingBytes = Buffer.byteLength(separator + prefix + suffix, "utf8");
+      const remainingBytes = PROJECT_ANALYSIS_MAX_TOTAL_BYTES - usedBytes - framingBytes;
+      if (remainingBytes <= 0) break;
+      const text = await readBoundedUtf8File(
+        absolute,
+        Math.min(PROJECT_ANALYSIS_MAX_FILE_BYTES, remainingBytes),
+      );
+      if (!text) continue;
+      const section = `${prefix}${text}${suffix}`;
+      sections.push(section);
+      usedBytes += framingBytes + Buffer.byteLength(text, "utf8");
     } catch {
       // Files may disappear or become unreadable while the snapshot is built.
     }
   }
 
-  return truncateUtf8(sections.join("\n\n"), PROJECT_ANALYSIS_MAX_TOTAL_BYTES);
+  return sections.join("\n\n");
 }

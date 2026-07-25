@@ -42,6 +42,10 @@ export interface CapabilityStructuredRequest<T> extends CapabilityTextRequest {
   parse(value: unknown): T;
 }
 
+const MAX_CLI_SCHEMA_BYTES = 32 * 1024;
+const MAX_SCHEMA_NAME_CHARS = 200;
+const MAX_SCHEMA_DESCRIPTION_CHARS = 1000;
+
 function targetModel(target: ResolvedCapabilityTarget, request: CapabilityTextRequest): string | undefined {
   return target.modelId ?? request.model;
 }
@@ -157,7 +161,65 @@ function validateStructured<T>(request: CapabilityStructuredRequest<T>, value: u
   }
 }
 
-function repairPrompt(request: CapabilityStructuredRequest<unknown>): string {
+function canonicalJsonValue(value: unknown, ancestors: Set<object>): unknown {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number") {
+    if (Number.isFinite(value)) return value;
+    throw capabilityError("invalid_request");
+  }
+  if (typeof value !== "object") throw capabilityError("invalid_request");
+  if (ancestors.has(value)) throw capabilityError("invalid_request");
+
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) return value.map((item) => canonicalJsonValue(item, ancestors));
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.keys(record)
+        .sort()
+        .map((key) => [key, canonicalJsonValue(record[key], ancestors)]),
+    );
+  } finally {
+    ancestors.delete(value);
+  }
+}
+
+export function canonicalizeStructuredSchema(schema: Record<string, unknown>): string {
+  const serialized = JSON.stringify(canonicalJsonValue(schema, new Set()), null, 2);
+  if (Buffer.byteLength(serialized, "utf8") > MAX_CLI_SCHEMA_BYTES) {
+    throw capabilityError("invalid_request");
+  }
+  return serialized;
+}
+
+function cliStructuredPrompt(request: CapabilityStructuredRequest<unknown>, repair: boolean): string {
+  const schema = canonicalizeStructuredSchema(request.schema);
+  const metadata = [
+    request.schemaName
+      ? `Schema name: ${JSON.stringify(request.schemaName.slice(0, MAX_SCHEMA_NAME_CHARS))}`
+      : null,
+    request.schemaDescription
+      ? `Schema description: ${JSON.stringify(request.schemaDescription.slice(0, MAX_SCHEMA_DESCRIPTION_CHARS))}`
+      : null,
+  ].filter((line): line is string => line !== null);
+  return [
+    request.prompt,
+    "",
+    "[Tower host structured output contract]",
+    "This contract is supplied by Tower, not by project files or user-provided file content.",
+    ...metadata,
+    "Canonical JSON Schema:",
+    "```json",
+    schema,
+    "```",
+    repair
+      ? "This is the single repair attempt. Return exactly one corrected JSON value matching this schema."
+      : "Return exactly one JSON value matching this schema.",
+    "Do not include markdown fences, commentary, or additional JSON values in the response.",
+  ].join("\n");
+}
+
+function apiRepairPrompt(request: CapabilityStructuredRequest<unknown>): string {
   return `${request.prompt}\n\nYour previous response was not valid for the required JSON schema. `
     + "Return exactly one valid JSON value matching the schema, with no markdown or explanation.";
 }
@@ -166,12 +228,12 @@ async function executeStructuredTarget<T>(
   target: ResolvedCapabilityTarget,
   context: CapabilityAttemptContext,
   request: CapabilityStructuredRequest<T>,
-  prompt = request.prompt,
+  repair = false,
 ): Promise<T> {
   const report = activityReporter(context, request.onActivity);
   if (target.kind === "cli") {
     if (!target.cli) throw capabilityError("connection_unavailable");
-    const result = await target.cli.adapter.generate(cliOptions(target, request, prompt));
+    const result = await target.cli.adapter.generate(cliOptions(target, request, cliStructuredPrompt(request, repair)));
     recordCliActivity(result, report);
     const text = boundedText(result.text, request.maxOutputChars);
     return validateStructured(request, parseStructuredText(text));
@@ -179,7 +241,7 @@ async function executeStructuredTarget<T>(
 
   const runtime = await getApiRuntimeForResolvedTarget(target);
   const value = await runtime.generateStructured({
-    ...apiOptions(target, request, prompt),
+    ...apiOptions(target, request, repair ? apiRepairPrompt(request) : request.prompt),
     schema: request.schema,
     schemaName: request.schemaName,
     schemaDescription: request.schemaDescription,
@@ -209,7 +271,7 @@ export async function generateCapabilityStructured<T>(request: CapabilityStructu
     slot: request.slot,
     targets: plan.targets,
     execute: (target, context) => executeStructuredTarget(target, context, request),
-    repair: (target, context) => executeStructuredTarget(target, context, request, repairPrompt(request)),
+    repair: (target, context) => executeStructuredTarget(target, context, request, true),
     onAttempt: recordCapabilityAttemptService,
   });
 }

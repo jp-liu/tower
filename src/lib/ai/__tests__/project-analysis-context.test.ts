@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, open, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -10,6 +10,8 @@ import {
   buildProjectAnalysisContext,
   PROJECT_ANALYSIS_MAX_FILE_BYTES,
   PROJECT_ANALYSIS_MAX_TOTAL_BYTES,
+  readBoundedUtf8File,
+  type BoundedOpenFile,
 } from "../project-analysis-context";
 
 const directories: string[] = [];
@@ -64,5 +66,41 @@ describe("project analysis context", () => {
     const context = await buildProjectAnalysisContext(root);
     expect(Buffer.byteLength(context)).toBeLessThanOrEqual(PROJECT_ANALYSIS_MAX_TOTAL_BYTES);
     expect(context).not.toContain("TAIL_CANARY");
+  });
+
+  it("allocates and reads no more than the explicit byte budget for a huge file", async () => {
+    const read = vi.fn(async (buffer: Buffer, offset: number, length: number) => {
+      buffer.fill(0x61, offset, offset + length);
+      return { bytesRead: length };
+    });
+    const close = vi.fn(async () => {});
+    const openFile = vi.fn(async () => ({
+      stat: async () => ({ isFile: () => true, size: Number.MAX_SAFE_INTEGER }),
+      read,
+      close,
+    })) as BoundedOpenFile;
+
+    const result = await readBoundedUtf8File("/virtual/README.md", 4096, openFile);
+
+    expect(result).toHaveLength(4096);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(read.mock.calls[0]?.[0]).toHaveLength(4096);
+    expect(read.mock.calls[0]?.slice(1)).toEqual([0, 4096, 0]);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads a sparse allowlisted file through the bounded path", async () => {
+    const root = await tempDir();
+    const filePath = path.join(root, "README.md");
+    const handle = await open(filePath, "w");
+    await handle.write("SPARSE_PREFIX");
+    await handle.truncate(1024 * 1024 * 1024);
+    await handle.close();
+
+    const context = await buildProjectAnalysisContext(root);
+
+    expect(context).toContain("SPARSE_PREFIX");
+    expect(Buffer.byteLength(context, "utf8")).toBeLessThanOrEqual(PROJECT_ANALYSIS_MAX_TOTAL_BYTES);
+    expect(context.length).toBeLessThan(PROJECT_ANALYSIS_MAX_FILE_BYTES + 1024);
   });
 });
