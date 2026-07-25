@@ -463,7 +463,8 @@ test.describe.serial("AI Tools 0.3 final browser acceptance", () => {
     await context.close();
   });
 
-  test("final three viewport screenshots and layout assertions", async ({ browser }) => {
+  test("final three viewport layout assertions with optional evidence screenshots", async ({ browser }) => {
+    const skipScreenshots = process.env.TOWER_SKIP_EVIDENCE_SCREENSHOTS === "1";
     const viewports = [
       { name: "desktop", width: 1440, height: 900, assistant: false },
       { name: "laptop", width: 1280, height: 720, assistant: false },
@@ -483,9 +484,13 @@ test.describe.serial("AI Tools 0.3 final browser acceptance", () => {
         await expect(page.getByRole("heading", { name: "Connections", exact: true })).toBeVisible();
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-      await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}.png`), fullPage: false });
+      if (!skipScreenshots) {
+        await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}.png`), fullPage: false });
+      }
       await context.close();
     }
-    expect((await fs.readdir(screenshotDir)).sort()).toEqual(["desktop.png", "laptop.png", "mobile.png"]);
+    expect((await fs.readdir(screenshotDir)).sort()).toEqual(
+      skipScreenshots ? [] : ["desktop.png", "laptop.png", "mobile.png"],
+    );
   });
 });
