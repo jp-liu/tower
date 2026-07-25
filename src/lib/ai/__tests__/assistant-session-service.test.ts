@@ -40,6 +40,11 @@ afterEach(async () => {
 });
 
 describe("AssistantSessionService", () => {
+  it("accepts an attachment-free first turn before the cache root exists", async () => {
+    const missingRoot = join(tmpdir(), `tower-missing-assistant-${Date.now()}-${Math.random()}`);
+    await expect(attachmentParts([], missingRoot)).resolves.toEqual([]);
+  });
+
   it("persists list/read/rename/binding and restores complete tool cards", async () => {
     const { prisma, sessions } = await service();
     try {

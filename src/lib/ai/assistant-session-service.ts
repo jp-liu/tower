@@ -589,6 +589,7 @@ export async function attachmentParts(filenames: string[], root = getAssistantCa
   if (unique.length > MAX_ATTACHMENTS || unique.some((filename) => !ATTACHMENT_SUBPATH_RE.test(filename))) {
     throw new AssistantSessionError("invalid_attachment", "One or more attachments are invalid");
   }
+  if (unique.length === 0) return [];
   const realRoot = await fs.realpath(root);
   return Promise.all(unique.map(async (attachment) => {
     const unresolved = path.resolve(realRoot, attachment);
