@@ -1,10 +1,12 @@
+import { redactSecretString, redactSecretValue } from "@/lib/secret-redaction";
+
 type LogLevel = "info" | "warn" | "error";
 
 function formatMessage(level: LogLevel, context: string, message: string, meta?: Record<string, unknown>): string {
   const timestamp = new Date().toISOString();
-  const base = `[${timestamp}] ${level.toUpperCase()} [${context}] ${message}`;
+  const base = `[${timestamp}] ${level.toUpperCase()} [${context}] ${redactSecretString(message)}`;
   if (meta && Object.keys(meta).length > 0) {
-    return `${base} ${JSON.stringify(meta)}`;
+    return `${base} ${JSON.stringify(redactSecretValue(meta))}`;
   }
   return base;
 }

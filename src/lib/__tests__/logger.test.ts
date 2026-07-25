@@ -139,24 +139,21 @@ describe("logger", () => {
     });
   });
 
-  describe("sensitive field behavior (COV-23 documentation)", () => {
-    it("logger does NOT scrub sensitive fields — password value IS present in output (current behavior)", () => {
-      // COV-23: Documenting current logger behavior — no field scrubbing.
-      // The logger outputs sensitive fields as-is. This test documents
-      // the current behavior. Future work could add scrubbing.
-      logger.info("user action", { password: "secret123", userId: "u1" });
+  describe("sensitive field behavior", () => {
+    it("redacts sensitive fields recursively while preserving safe metadata", () => {
+      logger.info("user action", { password: "CANARY_PASSWORD_7f19", nested: { userId: "u1" } });
       const output = logSpy.mock.calls[0][0] as string;
-      // Current behavior: sensitive fields are NOT scrubbed
-      expect(output).toContain("secret123");
+      expect(output).not.toContain("CANARY_PASSWORD_7f19");
       expect(output).toContain("password");
+      expect(output).toContain("u1");
     });
 
-    it("logger does NOT scrub token field — token value is present in output (current behavior)", () => {
-      // COV-23: Documenting current logger behavior for API tokens
-      logger.info("api call", { token: "sk-abc123", action: "list" });
-      const output = logSpy.mock.calls[0][0] as string;
-      // Current behavior: token is not scrubbed
-      expect(output).toContain("sk-abc123");
+    it("redacts credential-shaped values from messages and Error stacks", () => {
+      const canary = "CANARY_CONSOLE_SECRET_814ad9";
+      logger.error(`api call ?apiKey=${canary}`, new Error(`upstream token=${canary}`));
+      const output = errorSpy.mock.calls[0][0] as string;
+      expect(output).not.toContain(canary);
+      expect(output).toContain("[REDACTED]");
     });
   });
 

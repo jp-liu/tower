@@ -21,12 +21,12 @@ import {
   assistantSessionService,
   attachmentParts,
   normalizeAssistantParts,
-  redactAssistantValue,
   towerSessionIdSchema,
   trimAssistantHistory,
   type AssistantBinding,
   type AssistantPart,
 } from "@/lib/ai/assistant-session-service";
+import { redactSecretValue } from "@/lib/secret-redaction";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -68,7 +68,7 @@ function currentAttachmentContext(parts: AssistantPart[]): string | undefined {
 }
 
 function safeToolOutput(value: unknown): string {
-  const safe = redactAssistantValue(value);
+  const safe = redactSecretValue(value);
   return typeof safe === "string" ? safe : JSON.stringify(safe, null, 2);
 }
 
@@ -293,16 +293,18 @@ export async function POST(request: NextRequest) {
         })) {
           if (turn.controller.signal.aborted) break;
           if (event.type === "text") {
-            parts = appendStreamDelta(parts, "text", event.text);
-            send({ type: "text_delta", content: event.text });
+            const safeText = String(redactSecretValue(event.text));
+            parts = appendStreamDelta(parts, "text", safeText);
+            send({ type: "text_delta", content: safeText });
             await persist();
           } else if (event.type === "reasoning") {
-            parts = appendStreamDelta(parts, "reasoning", event.text);
-            send({ type: "reasoning_delta", content: event.text });
+            const safeText = String(redactSecretValue(event.text));
+            parts = appendStreamDelta(parts, "reasoning", safeText);
+            send({ type: "reasoning_delta", content: safeText });
             await persist();
           } else if (event.type === "tool-call") {
             const toolCallId = event.toolCall.id;
-            const safeInput = redactAssistantValue(event.toolCall.input);
+            const safeInput = redactSecretValue(event.toolCall.input);
             parts = normalizeStreamingParts([
               ...parts,
               { type: "tool-call", toolCallId, toolName: event.toolCall.name, input: safeInput },
@@ -316,7 +318,7 @@ export async function POST(request: NextRequest) {
               part.type === "tool-call" && part.toolCallId === toolCallId
             );
             const toolName = event.toolResult.name ?? matchingCall?.toolName ?? "tool";
-            const output = redactAssistantValue(event.toolResult.output ?? event.toolResult.error?.message ?? "");
+            const output = redactSecretValue(event.toolResult.output ?? event.toolResult.error?.message ?? "");
             parts = normalizeStreamingParts([
               ...parts,
               { type: "tool-result", toolCallId, toolName, output, ...(event.toolResult.error ? { isError: true } : {}) },
@@ -329,7 +331,9 @@ export async function POST(request: NextRequest) {
             send({ type: "finish", finishReason: event.reason });
           } else if (event.type === "error") {
             const code = String(event.error.code || "provider_failure").slice(0, 128);
-            const message = String(event.error.message || "Assistant execution failed").slice(0, MAX_PERSISTED_ERROR_CHARS);
+            const message = String(redactSecretValue(
+              String(event.error.message || "Assistant execution failed"),
+            )).slice(0, MAX_PERSISTED_ERROR_CHARS);
             parts = appendDiagnostic(parts, code, message);
             await assistantSessionService.finishTurn({
               sessionId, turnId: turn.turnId, assistantMessageId: turn.assistantMessageId,

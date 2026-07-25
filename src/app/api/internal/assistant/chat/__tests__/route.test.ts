@@ -66,7 +66,6 @@ vi.mock("@/lib/ai/assistant-session-service", () => {
       return mocks.attachmentParts;
     },
     normalizeAssistantParts: (parts: unknown[]) => parts,
-    redactAssistantValue: (value: unknown) => value,
     assistantSessionService: {
       createSession: mocks.createSession,
       deleteSession: mocks.deleteSession,
@@ -160,6 +159,31 @@ describe("Assistant chat SSE route", () => {
         expect.objectContaining({ type: "error", code: "provider_failure" }),
       ]),
     }));
+  });
+
+  it("redacts distinct provider canaries from SSE events and persisted parts", async () => {
+    const textCanary = "CANARY_SSE_TEXT_9a21";
+    const inputCanary = "CANARY_TOOL_INPUT_b613";
+    const outputCanary = "CANARY_TOOL_OUTPUT_c824";
+    const errorCanary = "CANARY_UPSTREAM_ERROR_d035";
+    mocks.events = [
+      { type: "text", text: `apiKey=${textCanary}` },
+      { type: "reasoning", text: `token=${textCanary}` },
+      { type: "tool-call", toolCall: { id: "tool-sec", name: "query", input: { apiKey: inputCanary } } },
+      { type: "tool-result", toolResult: { id: "tool-sec", name: "query", output: { secret: outputCanary } } },
+      { type: "error", error: { code: "provider_failure", message: `token=${errorCanary}` } },
+    ];
+
+    const responseBody = await (await POST(request())).text();
+    const persisted = JSON.stringify([
+      ...mocks.updateAssistantMessage.mock.calls,
+      ...mocks.finishTurn.mock.calls,
+    ]);
+    for (const canary of [textCanary, inputCanary, outputCanary, errorCanary]) {
+      expect(responseBody).not.toContain(canary);
+      expect(persisted).not.toContain(canary);
+    }
+    expect(responseBody).toContain("[REDACTED]");
   });
 
   it("passes complete history, current attachment metadata, and capability options to the executor", async () => {

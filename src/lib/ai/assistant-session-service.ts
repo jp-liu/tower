@@ -11,6 +11,7 @@ import { DEFAULT_ASSISTANT_HISTORY_TURNS, normalizeAssistantHistoryTurns } from 
 import { ATTACHMENT_SUBPATH_RE, MAX_ATTACHMENTS, classifyAttachmentSubPath } from "@/lib/attachment-utils";
 import { getAssistantCacheRoot } from "@/lib/file-utils";
 import { detectImageMime, isLikelyTextFile, TEXT_EXT_TO_MIME } from "@/lib/mime-magic";
+import { isSensitiveKey, redactSecretString } from "@/lib/secret-redaction";
 
 export const MAX_ASSISTANT_SESSIONS = 50;
 export const MAX_ASSISTANT_MESSAGES = 1000;
@@ -97,26 +98,10 @@ type StoredMessage = {
   updatedAt: Date;
 };
 
-const SENSITIVE_KEY = /(authorization|api[-_]?key|token|secret|password|passwd|credential|cookie|headers?|query|env)/i;
-
-function redactString(value: string): string {
-  let result = value
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, "Bearer [REDACTED]")
-    .replace(/\b(?:sk|rk|pk)-[A-Za-z0-9_-]{12,}\b/g, "[REDACTED]")
-    .replace(/([?&](?:authorization|api[-_]?key|token|secret|password|credential|cookie)=)[^&#\s]+/gi, "$1[REDACTED]")
-    .replace(/(["'](?:authorization|api[-_]?key|token|secret|password|credential|cookie)["']\s*:\s*["'])[^"']+(["'])/gi, "$1[REDACTED]$2")
-    .replace(/\b(authorization|api[-_]?key|token|secret|password|credential|cookie)\s*[:=]\s*([^\s,;&]+)/gi, "$1=[REDACTED]");
-  for (const [key, secret] of Object.entries(process.env)) {
-    if (!SENSITIVE_KEY.test(key) || !secret || secret.length < 8) continue;
-    result = result.split(secret).join("[REDACTED]");
-  }
-  return result;
-}
-
 /** Central persistence boundary for tool inputs/results and safe diagnostics. */
 export function redactAssistantValue(value: unknown, depth = 0): unknown {
   if (depth > 8) return "[TRUNCATED]";
-  if (typeof value === "string") return redactString(value).slice(0, MAX_TOOL_SUMMARY_BYTES);
+  if (typeof value === "string") return redactSecretString(value).slice(0, MAX_TOOL_SUMMARY_BYTES);
   if (typeof value === "number" || typeof value === "boolean" || value === null) return value;
   if (Array.isArray(value)) return value.slice(0, 100).map((entry) => redactAssistantValue(entry, depth + 1));
   if (value && typeof value === "object") {
@@ -134,7 +119,7 @@ export function redactAssistantValue(value: unknown, depth = 0): unknown {
     }
     return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, 100).map(([key, entry]) => [
       key,
-      SENSITIVE_KEY.test(key) ? "[REDACTED]" : redactAssistantValue(entry, depth + 1),
+      isSensitiveKey(key) ? "[REDACTED]" : redactAssistantValue(entry, depth + 1),
     ]));
   }
   return String(value ?? "").slice(0, MAX_TOOL_SUMMARY_BYTES);
@@ -144,8 +129,8 @@ export function normalizeAssistantParts(parts: AssistantPart[]): AssistantPart[]
   const parsed = assistantPartsSchema.parse(parts).map((part) => {
     if (part.type === "tool-call") return { ...part, input: redactAssistantValue(part.input) };
     if (part.type === "tool-result") return { ...part, output: redactAssistantValue(part.output) };
-    if (part.type === "text" || part.type === "reasoning") return { ...part, text: redactString(part.text) };
-    if (part.type === "error" || part.type === "notice") return { ...part, message: redactString(part.message) };
+    if (part.type === "text" || part.type === "reasoning") return { ...part, text: redactSecretString(part.text) };
+    if (part.type === "error" || part.type === "notice") return { ...part, message: redactSecretString(part.message) };
     return part;
   });
   const serialized = JSON.stringify(parsed);
