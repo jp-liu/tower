@@ -12,6 +12,7 @@ import {
   attachmentParts,
   assistantMessagesToApi,
   assistantMessagesToClient,
+  normalizeAssistantParts,
   parseAssistantParts,
   trimAssistantHistory,
 } from "../assistant-session-service";
@@ -314,6 +315,24 @@ describe("AssistantSessionService", () => {
     } finally {
       await prisma.$disconnect();
     }
+  });
+
+  it("redacts credential-shaped canaries from prompt, header, query, and JSON text", () => {
+    const canaries = [
+      "CANARY_PROMPT_SECRET_123",
+      "CANARY_HEADER_SECRET_456",
+      "CANARY_QUERY_SECRET_789",
+      "CANARY_JSON_SECRET_abc",
+    ];
+    const [part] = normalizeAssistantParts([{ type: "text", text: [
+      `secret=${canaries[0]}`,
+      `Authorization: Bearer ${canaries[1]}`,
+      `https://example.invalid/path?api_key=${canaries[2]}`,
+      `{"token":"${canaries[3]}"}`,
+    ].join("\n") }]);
+    const serialized = JSON.stringify(part);
+    for (const canary of canaries) expect(serialized).not.toContain(canary);
+    expect(serialized.match(/REDACTED/g)?.length).toBeGreaterThanOrEqual(4);
   });
 
   it("imports a legacy conversation idempotently and trims by complete turn", async () => {

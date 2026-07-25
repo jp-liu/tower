@@ -102,7 +102,10 @@ const SENSITIVE_KEY = /(authorization|api[-_]?key|token|secret|password|passwd|c
 function redactString(value: string): string {
   let result = value
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, "Bearer [REDACTED]")
-    .replace(/\b(?:sk|rk|pk)-[A-Za-z0-9_-]{12,}\b/g, "[REDACTED]");
+    .replace(/\b(?:sk|rk|pk)-[A-Za-z0-9_-]{12,}\b/g, "[REDACTED]")
+    .replace(/([?&](?:authorization|api[-_]?key|token|secret|password|credential|cookie)=)[^&#\s]+/gi, "$1[REDACTED]")
+    .replace(/(["'](?:authorization|api[-_]?key|token|secret|password|credential|cookie)["']\s*:\s*["'])[^"']+(["'])/gi, "$1[REDACTED]$2")
+    .replace(/\b(authorization|api[-_]?key|token|secret|password|credential|cookie)\s*[:=]\s*([^\s,;&]+)/gi, "$1=[REDACTED]");
   for (const [key, secret] of Object.entries(process.env)) {
     if (!SENSITIVE_KEY.test(key) || !secret || secret.length < 8) continue;
     result = result.split(secret).join("[REDACTED]");

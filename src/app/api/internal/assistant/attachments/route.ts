@@ -88,7 +88,9 @@ export async function POST(request: NextRequest) {
     dir = getAssistantCacheDir("files");
   }
 
-  const filename = buildCacheFilename(file.name, ext);
+  // Cache paths are persisted in Assistant history and diagnostics. Never carry
+  // the user-supplied filename into that durable identifier.
+  const filename = buildCacheFilename("", ext);
   const dest = path.join(dir, filename);
 
   // Containment check
