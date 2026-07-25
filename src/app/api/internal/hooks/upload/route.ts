@@ -20,8 +20,6 @@ function isUniqueConstraintError(err: unknown): boolean {
   );
 }
 
-const CUID_RE = /^c[a-z0-9]{20,30}$/;
-
 const DEFAULT_UPLOAD_TYPES = [
   "png", "jpg", "jpeg", "gif", "webp", "svg", "pdf", "md", "txt", "json",
 ];

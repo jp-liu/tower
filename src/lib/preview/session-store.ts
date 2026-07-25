@@ -1,11 +1,8 @@
 import { PreviewSession, type PreviewSessionOpts } from "./preview-session";
 
 declare global {
-  // eslint-disable-next-line no-var
   var __previewSignalHandlersRegistered: boolean | undefined;
-  // eslint-disable-next-line no-var
   var __previewSessions: Map<string, PreviewSession> | undefined;
-  // eslint-disable-next-line no-var
   var __previewSweepStarted: boolean | undefined;
 }
 

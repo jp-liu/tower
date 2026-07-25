@@ -5,7 +5,8 @@ export const workspaceTools = {
   list_workspaces: {
     description: "List all workspaces ordered by last updated, including project count for each.",
     schema: z.object({}),
-    handler: async (_args: Record<string, never>) => {
+    handler: async (args: Record<string, never>) => {
+      void args;
       const workspaces = await db.workspace.findMany({
         include: {
           projects: {

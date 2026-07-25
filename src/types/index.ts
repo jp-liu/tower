@@ -7,7 +7,6 @@ import type {
   TaskLabel,
   Label,
   Repository,
-  AgentConfig,
 } from "@prisma/client";
 
 export type TaskWithRelations = Task & {
