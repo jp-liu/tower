@@ -151,6 +151,7 @@ export function ConnectionsSection() {
               const result = results[provider.name];
               const isTesting = testing === provider.name;
               const enabled = stored?.enabled ?? true;
+              const canToggle = Boolean(stored && stored.testStatus !== "untested");
               const probeOk = result?.ok ?? stored?.testOk ?? false;
               const status = !provider.cli.available
                 ? provider.cli.commandState === "found" ? "notExecutable" : "notInstalled"
@@ -182,7 +183,7 @@ export function ConnectionsSection() {
                       <label className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Switch
                           checked={enabled}
-                          disabled={toggling === provider.name || !stored}
+                          disabled={toggling === provider.name || !canToggle}
                           onCheckedChange={(checked) => void toggleProvider(provider.name, checked)}
                           aria-label={`${provider.displayName} ${t("settings.aiTools.enabledLabel")}`}
                         />

@@ -189,7 +189,11 @@ export async function setCliProviderEnabled(provider: string, enabled: boolean):
     throw new Error("Invalid CLI provider");
   }
   const result = await db.providerConnection.updateMany({
-    where: { connectionKey: cliConnectionKey(provider), kind: "cli" },
+    where: {
+      connectionKey: cliConnectionKey(provider),
+      kind: "cli",
+      testStatus: { not: "untested" },
+    },
     data: { enabled },
   });
   if (result.count === 0) throw new Error("CLI connection has not been tested yet");

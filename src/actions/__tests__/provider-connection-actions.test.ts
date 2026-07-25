@@ -6,6 +6,7 @@ vi.mock("@/lib/db", () => ({
       upsert: vi.fn(),
       findUnique: vi.fn(),
       findMany: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
 }));
@@ -17,6 +18,7 @@ import {
   isProviderConnected,
   getConnectedProviders,
   getProviderConnection,
+  setCliProviderEnabled,
 } from "@/actions/provider-connection-actions";
 import type { ProviderInstallReport } from "@/lib/ai/install-orchestrator";
 
@@ -25,6 +27,7 @@ const mockDb = db as unknown as {
     upsert: ReturnType<typeof vi.fn>;
     findUnique: ReturnType<typeof vi.fn>;
     findMany: ReturnType<typeof vi.fn>;
+    updateMany: ReturnType<typeof vi.fn>;
   };
 };
 
@@ -161,6 +164,31 @@ describe("provider-connection-actions", () => {
       const call = mockDb.providerConnection.findUnique.mock.calls[0][0];
       expect(call.where).toEqual({ connectionKey: "cli:claude" });
       expect(call.select.installLog).toBe(true);
+    });
+  });
+
+  describe("setCliProviderEnabled", () => {
+    it("only updates CLI connections that have a persisted test result", async () => {
+      mockDb.providerConnection.updateMany.mockResolvedValue({ count: 1 });
+
+      await setCliProviderEnabled("codex", false);
+
+      expect(mockDb.providerConnection.updateMany).toHaveBeenCalledWith({
+        where: {
+          connectionKey: "cli:codex",
+          kind: "cli",
+          testStatus: { not: "untested" },
+        },
+        data: { enabled: false },
+      });
+    });
+
+    it("rejects untested or missing CLI connections", async () => {
+      mockDb.providerConnection.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(setCliProviderEnabled("codex", true)).rejects.toThrow(
+        "CLI connection has not been tested yet",
+      );
     });
   });
 });
