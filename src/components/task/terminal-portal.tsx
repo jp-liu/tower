@@ -5,6 +5,7 @@ import {
   useContext,
   useCallback,
   useEffect,
+  useEffectEvent,
   useRef,
   useState,
   type ReactNode,
@@ -80,7 +81,7 @@ export function TerminalPortalProvider({ children }: { children: ReactNode }) {
   const instancesRef = useRef(new Map<string, TerminalInstance>());
   // Track access order for LRU eviction (most recent at end)
   const accessOrderRef = useRef<string[]>([]);
-  const [, setTick] = useState(0);
+  const [portalInstances, setPortalInstances] = useState<TerminalInstance[]>([]);
 
   const getPortal = useCallback((taskId: string, worktreePath: string) => {
     const existing = instancesRef.current.get(taskId);
@@ -123,14 +124,14 @@ export function TerminalPortalProvider({ children }: { children: ReactNode }) {
     };
     instancesRef.current.set(taskId, instance);
     accessOrderRef.current.push(taskId);
-    setTick((t) => t + 1);
+    setPortalInstances(Array.from(instancesRef.current.values()));
     return instance;
   }, []);
 
   const removePortal = useCallback((taskId: string) => {
     instancesRef.current.delete(taskId);
     accessOrderRef.current = accessOrderRef.current.filter((id) => id !== taskId);
-    setTick((t) => t + 1);
+    setPortalInstances(Array.from(instancesRef.current.values()));
   }, []);
 
   const setOnSessionEnd = useCallback((taskId: string, fn: ((exitCode: number) => void) | null) => {
@@ -149,7 +150,7 @@ export function TerminalPortalProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Render all terminal instances via InPortal (they stay alive even when OutPortal unmounts)
-  const portals = Array.from(instancesRef.current.values()).map((inst) => (
+  const portals = portalInstances.map((inst) => (
     <InPortal key={inst.taskId} node={inst.portalNode}>
       <TaskTerminal
         taskId={inst.taskId}
@@ -177,7 +178,16 @@ export function TerminalPortalProvider({ children }: { children: ReactNode }) {
  * Renders a terminal by "projecting" its persistent portal node here.
  * When this unmounts, the terminal stays alive — just detached from the DOM.
  */
-export function TerminalOutlet({
+export function TerminalOutlet(props: {
+  taskId: string;
+  worktreePath: string;
+  onSessionEnd?: (exitCode: number) => void;
+  onReady?: (controls: TerminalControls | null) => void;
+}) {
+  return <TerminalOutletState key={`${props.taskId}:${props.worktreePath}`} {...props} />;
+}
+
+function TerminalOutletState({
   taskId,
   worktreePath,
   onSessionEnd,
@@ -196,9 +206,8 @@ export function TerminalOutlet({
   // render, so register a STABLE forwarding wrapper once (per taskId) instead of
   // re-registering (and momentarily dropping controls) on every render. Synced in
   // an effect (not during render) since the wrapper only reads it after commit.
-  const onReadyRef = useRef(onReady);
-  useEffect(() => {
-    onReadyRef.current = onReady;
+  const handleReady = useEffectEvent((controls: TerminalControls | null) => {
+    onReady?.(controls);
   });
 
   // Create/get portal instance — clear stale instance immediately when taskId changes.
@@ -206,10 +215,10 @@ export function TerminalOutlet({
   useEffect(() => {
     const inst = getPortal(taskId, worktreePath);
     inst.mountCount++;
-    setInstance(inst);
+    const frame = requestAnimationFrame(() => setInstance(inst));
     return () => {
+      cancelAnimationFrame(frame);
       inst.mountCount--;
-      setInstance(null);
     };
   }, [taskId, worktreePath, getPortal]);
 
@@ -223,9 +232,9 @@ export function TerminalOutlet({
   // On unmount, hand a null through so a consumer that keyed controls by taskId
   // (Mission Control) drops the stale entry.
   useEffect(() => {
-    setOnReady(taskId, (controls) => onReadyRef.current?.(controls));
+    setOnReady(taskId, handleReady);
     return () => {
-      onReadyRef.current?.(null);
+      handleReady(null);
       setOnReady(taskId, null);
     };
   }, [taskId, setOnReady]);

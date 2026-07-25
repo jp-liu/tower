@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useHydrated } from "@/hooks/use-hydrated";
 
 export interface ResizableWidthOptions {
   /** localStorage key used to persist the chosen width across sessions. */
@@ -55,9 +56,12 @@ export function useResizableWidth(options: ResizableWidthOptions) {
   const [width, setWidth] = useState(defaultWidth);
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef<{ x: number; width: number } | null>(null);
+  const hydrated = useHydrated();
+  const storageIdentity = `${storageKey}:${minWidth}:${maxWidth}`;
+  const [loadedStorageIdentity, setLoadedStorageIdentity] = useState<string | null>(null);
 
-  // Re-hydrate persisted width after mount (avoids SSR/client mismatch).
-  useEffect(() => {
+  if (hydrated && loadedStorageIdentity !== storageIdentity) {
+    setLoadedStorageIdentity(storageIdentity);
     try {
       const saved = window.localStorage.getItem(storageKey);
       const parsed = saved == null ? NaN : Number(saved);
@@ -67,7 +71,7 @@ export function useResizableWidth(options: ResizableWidthOptions) {
     } catch {
       // localStorage unavailable — keep the default.
     }
-  }, [storageKey, minWidth, maxWidth]);
+  }
 
   const onPointerMove = useCallback(
     (e: PointerEvent) => {
@@ -82,8 +86,6 @@ export function useResizableWidth(options: ResizableWidthOptions) {
     if (!dragStart.current) return;
     dragStart.current = null;
     setIsDragging(false);
-    window.removeEventListener("pointermove", onPointerMove);
-    window.removeEventListener("pointerup", onPointerUp);
     setWidth((w) => {
       try {
         window.localStorage.setItem(storageKey, String(w));
@@ -92,26 +94,27 @@ export function useResizableWidth(options: ResizableWidthOptions) {
       }
       return w;
     });
-  }, [onPointerMove, storageKey]);
+  }, [storageKey]);
 
   const startResize = useCallback(
     (e: React.PointerEvent) => {
       e.preventDefault();
       dragStart.current = { x: e.clientX, width };
       setIsDragging(true);
-      window.addEventListener("pointermove", onPointerMove);
-      window.addEventListener("pointerup", onPointerUp);
     },
-    [width, onPointerMove, onPointerUp],
+    [width],
   );
 
-  // Drop any stray listeners on unmount (e.g. unmounted mid-drag).
+  // Install native listeners only for the lifetime of an active drag.
   useEffect(() => {
+    if (!isDragging) return;
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
     return () => {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
     };
-  }, [onPointerMove, onPointerUp]);
+  }, [isDragging, onPointerMove, onPointerUp]);
 
   return { width, isDragging, startResize };
 }
