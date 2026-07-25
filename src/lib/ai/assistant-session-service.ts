@@ -12,6 +12,7 @@ import { getAssistantCacheRoot } from "@/lib/file-utils";
 import { detectImageMime, isLikelyTextFile, TEXT_EXT_TO_MIME } from "@/lib/mime-magic";
 
 export const MAX_ASSISTANT_SESSIONS = 50;
+export const MAX_ASSISTANT_MESSAGES = 1000;
 export const MAX_ASSISTANT_PARTS = 128;
 export const MAX_ASSISTANT_MESSAGE_BYTES = 1024 * 1024;
 export const MAX_ASSISTANT_HISTORY_BYTES = 8 * 1024 * 1024;
@@ -197,16 +198,9 @@ const bindingSchema = z.object({
   versionName: z.string().max(256).optional(),
 }).strict();
 
-function bindingData(binding: AssistantBinding) {
+function bindingIds(binding: AssistantBinding) {
   const safe = bindingSchema.parse(binding);
-  return {
-    workspaceId: safe.workspaceId ?? null,
-    workspaceNameSnapshot: safe.workspaceName ?? null,
-    projectId: safe.projectId ?? null,
-    projectNameSnapshot: safe.projectName ?? null,
-    versionId: safe.versionId ?? null,
-    versionNameSnapshot: safe.versionName ?? null,
-  };
+  return { workspaceId: safe.workspaceId, projectId: safe.projectId, versionId: safe.versionId };
 }
 
 function sessionView(session: {
@@ -234,6 +228,49 @@ function sessionView(session: {
 export class AssistantSessionService {
   constructor(private readonly client: DbClient = db) {}
 
+  private async bindingData(binding: AssistantBinding) {
+    const requested = bindingIds(binding);
+    const version = requested.versionId ? await this.client.version.findUnique({
+      where: { id: requested.versionId },
+      select: { id: true, name: true, number: true, projectId: true },
+    }) : null;
+    if (requested.versionId && !version) {
+      throw new AssistantSessionError("invalid_binding", "Assistant version scope is invalid");
+    }
+
+    const projectId = requested.projectId ?? version?.projectId;
+    if (requested.projectId && version && version.projectId !== requested.projectId) {
+      throw new AssistantSessionError("invalid_binding", "Assistant version does not belong to the selected project");
+    }
+    const project = projectId ? await this.client.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, name: true, workspaceId: true },
+    }) : null;
+    if (projectId && !project) {
+      throw new AssistantSessionError("invalid_binding", "Assistant project scope is invalid");
+    }
+
+    const workspaceId = requested.workspaceId ?? project?.workspaceId;
+    if (requested.workspaceId && project && project.workspaceId !== requested.workspaceId) {
+      throw new AssistantSessionError("invalid_binding", "Assistant project does not belong to the selected workspace");
+    }
+    const workspace = workspaceId ? await this.client.workspace.findUnique({
+      where: { id: workspaceId }, select: { id: true, name: true },
+    }) : null;
+    if (workspaceId && !workspace) {
+      throw new AssistantSessionError("invalid_binding", "Assistant workspace scope is invalid");
+    }
+
+    return {
+      workspaceId: workspace?.id ?? null,
+      workspaceNameSnapshot: workspace?.name ?? null,
+      projectId: project?.id ?? null,
+      projectNameSnapshot: project?.name ?? null,
+      versionId: version?.id ?? null,
+      versionNameSnapshot: version ? version.name || version.number : null,
+    };
+  }
+
   async reconcileInterrupted(): Promise<void> {
     const streaming = await this.client.assistantTurn.findMany({
       where: { status: "STREAMING" }, select: { id: true, sessionId: true }, take: 100,
@@ -254,7 +291,11 @@ export class AssistantSessionService {
 
   async createSession(binding: AssistantBinding = {}, title = "New Session") {
     const session = await this.client.assistantSession.create({
-      data: { id: id("as"), title: title.trim().slice(0, 120) || "New Session", ...bindingData(binding) },
+      data: {
+        id: id("as"),
+        title: title.trim().slice(0, 120) || "New Session",
+        ...await this.bindingData(binding),
+      },
     });
     return sessionView(session);
   }
@@ -302,7 +343,7 @@ export class AssistantSessionService {
       const title = z.string().trim().min(1).max(120).parse(update.title);
       data.title = title;
     }
-    if (update.binding !== undefined) Object.assign(data, bindingData(update.binding));
+    if (update.binding !== undefined) Object.assign(data, await this.bindingData(update.binding));
     const session = await this.client.assistantSession.update({ where: { id: sessionId }, data });
     return sessionView(session);
   }
@@ -316,8 +357,11 @@ export class AssistantSessionService {
   async getMessages(sessionId: string): Promise<StoredMessage[]> {
     await this.getSession(sessionId);
     const messages = await this.client.assistantMessage.findMany({
-      where: { sessionId }, orderBy: { sequence: "asc" }, take: 1000,
+      where: { sessionId }, orderBy: { sequence: "asc" }, take: MAX_ASSISTANT_MESSAGES + 1,
     });
+    if (messages.length > MAX_ASSISTANT_MESSAGES) {
+      throw new AssistantSessionError("history_too_large", "Assistant session has too many messages");
+    }
     let bytes = 0;
     for (const message of messages) {
       bytes += Buffer.byteLength(message.partsJson);
@@ -349,10 +393,11 @@ export class AssistantSessionService {
     try {
       await this.getSession(options.sessionId);
       const bytes = await this.client.$queryRawUnsafe<Array<{ bytes: bigint | number | null }>>(
-        `SELECT SUM(LENGTH("partsJson")) AS "bytes" FROM "AssistantMessage" WHERE "sessionId" = ?`,
+        `SELECT SUM(LENGTH(CAST("partsJson" AS BLOB))) AS "bytes" FROM "AssistantMessage" WHERE "sessionId" = ?`,
         options.sessionId,
       );
-      if (Number(bytes[0]?.bytes ?? 0) + Buffer.byteLength(JSON.stringify(userParts)) > MAX_ASSISTANT_HISTORY_BYTES) {
+      const incomingBytes = Buffer.byteLength(JSON.stringify(userParts)) + Buffer.byteLength("[]");
+      if (Number(bytes[0]?.bytes ?? 0) + incomingBytes > MAX_ASSISTANT_HISTORY_BYTES) {
         throw new AssistantSessionError("history_too_large", "Assistant session history is too large");
       }
       await this.client.$transaction(async (transaction) => {
@@ -363,6 +408,10 @@ export class AssistantSessionService {
         const lastMessage = await transaction.assistantMessage.findFirst({
           where: { sessionId: options.sessionId }, orderBy: { sequence: "desc" }, select: { sequence: true },
         });
+        const messageCount = await transaction.assistantMessage.count({ where: { sessionId: options.sessionId } });
+        if (messageCount + 2 > MAX_ASSISTANT_MESSAGES) {
+          throw new AssistantSessionError("history_too_large", "Assistant session has too many messages");
+        }
         const firstSequence = (lastMessage?.sequence ?? 0) + 1;
         await transaction.assistantTurn.create({
           data: { id: turnId, sessionId: options.sessionId, clientTurnId: options.clientTurnId, userMessageId, assistantMessageId },

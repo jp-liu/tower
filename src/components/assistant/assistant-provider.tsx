@@ -22,6 +22,7 @@ import {
   clearLegacyAssistantOverlay,
 } from "@/lib/assistant-sessions";
 import { getWorkspacesWithProjects } from "@/actions/workspace-actions";
+import { AssistantRequestState, settleAssistantMessages } from "@/lib/assistant-request-state";
 
 /** Cascading workspace → project options for the binding dropdowns. */
 export interface WorkspaceTreeItem {
@@ -108,6 +109,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const msgsRef = useRef<ChatMessage[]>([]);
   const sessionIdRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const historyAbortRef = useRef<AbortController | null>(null);
+  const historyLoadingRef = useRef(false);
+  const requestStateRef = useRef<AssistantRequestState | null>(null);
+  if (!requestStateRef.current) requestStateRef.current = new AssistantRequestState();
 
   // Session management state
   const [sessions, setSessions] = useState<AssistantSession[]>([]);
@@ -146,7 +151,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       }).then(async (response) => {
         if (!response.ok) throw new Error("binding_update_failed");
         const data = await response.json();
-        if (data.sessionId && data.sessionId !== sid) {
+        if (sessionIdRef.current === sid && data.sessionId && data.sessionId !== sid) {
           sessionIdRef.current = data.sessionId;
           setActiveSessionIdState(data.sessionId);
           setActiveSessionId(data.sessionId);
@@ -157,6 +162,23 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const flushChat = useCallback(() => {
     setChatMessages([...msgsRef.current]);
+  }, []);
+
+  const cancelHistoryLoad = useCallback(() => {
+    requestStateRef.current!.cancelHistory();
+    historyAbortRef.current?.abort();
+    historyAbortRef.current = null;
+    historyLoadingRef.current = false;
+    setIsLoadingHistory(false);
+  }, []);
+
+  const settleCurrentChat = useCallback(() => {
+    requestStateRef.current!.cancelStream();
+    abortRef.current?.abort();
+    abortRef.current = null;
+    msgsRef.current = settleAssistantMessages(msgsRef.current);
+    setChatMessages([...msgsRef.current]);
+    setChatStatus("idle");
   }, []);
 
   // Read config
@@ -215,15 +237,23 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadSessionHistory = useCallback(async (sessionId: string) => {
+    historyAbortRef.current?.abort();
+    const controller = new AbortController();
+    historyAbortRef.current = controller;
+    const token = requestStateRef.current!.beginHistory(sessionId);
+    historyLoadingRef.current = true;
     setIsLoadingHistory(true);
     try {
       const res = await fetch(
-        `/api/internal/assistant/sessions?sessionId=${encodeURIComponent(sessionId)}`
+        `/api/internal/assistant/sessions?sessionId=${encodeURIComponent(sessionId)}`,
+        { signal: controller.signal },
       );
       if (!res.ok) return;
       const data = await res.json();
+      if (!requestStateRef.current!.isCurrentHistory(token, sessionIdRef.current)) return;
       const resolvedSessionId = typeof data.sessionId === "string" ? data.sessionId : sessionId;
       if (resolvedSessionId !== sessionId) {
+        token.sessionId = resolvedSessionId;
         sessionIdRef.current = resolvedSessionId;
         setActiveSessionIdState(resolvedSessionId);
         setActiveSessionId(resolvedSessionId);
@@ -243,10 +273,16 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         setChatMessages([...msgsRef.current]);
       }
       if (resolvedSessionId !== sessionId) void refreshSessions();
-    } catch {
-      // Silently fail — user can still send new messages
+    } catch (error) {
+      if ((error as Error).name !== "AbortError") {
+        // Keep the selected session empty on a transient history failure.
+      }
     } finally {
-      setIsLoadingHistory(false);
+      if (requestStateRef.current!.isCurrentHistory(token, sessionIdRef.current)) {
+        historyAbortRef.current = null;
+        historyLoadingRef.current = false;
+        setIsLoadingHistory(false);
+      }
     }
   }, [refreshSessions]);
 
@@ -273,7 +309,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         ...(selected.versionId ? { versionId: selected.versionId } : {}),
         ...(selected.versionName ? { versionName: selected.versionName } : {}),
       } : {});
-      loadSessionHistory(chosen);
+      void loadSessionHistory(chosen);
     })();
     return () => {
       cancelled = true;
@@ -281,7 +317,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, [refreshSessions, loadSessionHistory]);
 
   const createNewSession = useCallback(() => {
-    abortRef.current?.abort();
+    cancelHistoryLoad();
+    settleCurrentChat();
     sessionIdRef.current = null;
     setActiveSessionIdState(null);
     setActiveSessionId(null);
@@ -289,11 +326,11 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     setBindingState({});
     msgsRef.current = [];
     setChatMessages([]);
-    setChatStatus("idle");
-  }, []);
+  }, [cancelHistoryLoad, settleCurrentChat]);
 
   const switchSession = useCallback((sessionId: string) => {
-    abortRef.current?.abort();
+    cancelHistoryLoad();
+    settleCurrentChat();
     sessionIdRef.current = sessionId;
     setActiveSessionIdState(sessionId);
     setActiveSessionId(sessionId);
@@ -308,9 +345,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     } : {});
     msgsRef.current = [];
     setChatMessages([]);
-    setChatStatus("idle");
-    loadSessionHistory(sessionId);
-  }, [loadSessionHistory, sessions]);
+    void loadSessionHistory(sessionId);
+  }, [cancelHistoryLoad, loadSessionHistory, sessions, settleCurrentChat]);
 
   const removeSession = useCallback((sessionId: string) => {
     setSessions((prev) => prev.filter((s) => s.id !== sessionId));
@@ -347,7 +383,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       if (!response.ok) throw new Error("session_rename_failed");
       return response.json();
     }).then((data) => {
-      if (data.sessionId && data.sessionId !== sessionId) {
+      if (sessionIdRef.current === sessionId && data.sessionId && data.sessionId !== sessionId) {
         sessionIdRef.current = data.sessionId;
         setActiveSessionIdState(data.sessionId);
         setActiveSessionId(data.sessionId);
@@ -371,12 +407,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const closeAssistant = useCallback(() => {
     setIsOpen(false);
-    // Abort any in-flight chat request — and settle status to idle so reopening
-    // the panel doesn't show a stuck "thinking" state for a turn that's gone.
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setChatStatus("idle");
-  }, []);
+    settleCurrentChat();
+  }, [settleCurrentChat]);
 
   // Smart toggle (default ⌘L / Ctrl+L):
   //  - closed        → open (the freshly-mounted chat auto-focuses its input)
@@ -407,8 +439,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   // -------------------------------------------------------------------------
   const sendChatMessage = useCallback(async (text: string, options?: { attachmentFilenames?: string[] }) => {
     if (!text.trim() && !(options?.attachmentFilenames?.length)) return;
+    if (historyLoadingRef.current) return;
 
-    abortRef.current?.abort();
+    settleCurrentChat();
+    const requestToken = requestStateRef.current!.beginStream(sessionIdRef.current);
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -434,7 +468,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: text,
-          sessionId: sessionIdRef.current,
+          sessionId: requestToken.sessionId,
           clientTurnId: nextId().replace(/[^A-Za-z0-9_-]/g, "_"),
           attachmentFilenames: options?.attachmentFilenames ?? [],
           // Session default scope — sent every turn so a mid-session switch takes
@@ -453,6 +487,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         const payload = await res.json().catch(() => ({})) as { error?: string };
         throw new Error(payload.error ?? `HTTP ${res.status}`);
       }
+      if (!requestStateRef.current!.acceptsStreamEvent(requestToken, sessionIdRef.current)) return;
       setChatStatus("streaming");
 
       const reader = res.body.getReader();
@@ -470,6 +505,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           if (!line.startsWith("data: ")) continue;
           let event: SSEEvent;
           try { event = JSON.parse(line.slice(6).trim()); } catch { continue; }
+          if (!requestStateRef.current!.acceptsStreamEvent(requestToken, sessionIdRef.current, event.sessionId)) {
+            await reader.cancel();
+            return;
+          }
           if (event.sessionId) {
             const changed = event.sessionId !== sessionIdRef.current;
             sessionIdRef.current = event.sessionId;
@@ -649,20 +688,24 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       }
 
       // Final cleanup
+      if (!requestStateRef.current!.acceptsStreamEvent(requestToken, sessionIdRef.current)) return;
       msgsRef.current = msgsRef.current.filter((m) => m.id !== thinkingId);
       flushChat();
       setChatStatus((s) => (s === "streaming" ? "idle" : s));
       void refreshSessions();
     } catch (err: unknown) {
       if ((err as Error).name === "AbortError") return;
+      if (!requestStateRef.current!.acceptsStreamEvent(requestToken, sessionIdRef.current)) return;
       msgsRef.current = [...msgsRef.current.filter((m) => m.id !== thinkingId), {
         id: nextId(), role: "assistant" as MessageRole,
         content: `Connection error: ${(err as Error).message ?? "Unknown error"}`,
       }];
       flushChat();
       setChatStatus("error");
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
     }
-  }, [flushChat, refreshSessions]);
+  }, [flushChat, refreshSessions, settleCurrentChat]);
 
   // Cancel the in-flight request but PRESERVE completed records. Stopping must
   // not discard work already done — e.g. a task the assistant already created,
@@ -671,17 +714,9 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   // so it settles as a finished bubble. Returns null: nothing is restored to the
   // input box because the conversation (incl. the user message) stays in place.
   const cancelChat = useCallback((): string | null => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-
-    msgsRef.current = msgsRef.current
-      .filter((m) => m.role !== "thinking")
-      .map((m) => (m.isStreaming ? { ...m, isStreaming: false } : m));
-    setChatMessages([...msgsRef.current]);
-
-    setChatStatus("idle");
+    settleCurrentChat();
     return null;
-  }, []);
+  }, [settleCurrentChat]);
 
   const lastMsg = chatMessages[chatMessages.length - 1];
   const isChatThinking =

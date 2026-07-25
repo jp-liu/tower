@@ -219,7 +219,7 @@ export function AssistantChat() {
       .map((i) => i.filename!);
 
     if (!text && doneFilenames.length === 0) return;
-    if (isThinking || hasUploading) return;
+    if (isThinking || isLoadingHistory || hasUploading) return;
 
     sendMessage(text, { attachmentFilenames: doneFilenames });
     setInputValue("");
@@ -247,7 +247,7 @@ export function AssistantChat() {
 
   const hasDoneAttachments = pendingAttachments.some((i) => i.status === "done");
   const isSendDisabled =
-    (!inputValue.trim() && !hasDoneAttachments) || isThinking || hasUploading;
+    (!inputValue.trim() && !hasDoneAttachments) || isThinking || isLoadingHistory || hasUploading;
 
   return (
     <div className="flex flex-col h-full">

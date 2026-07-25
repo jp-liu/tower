@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   createTools: vi.fn(() => ({ tower_tool: { inputSchema: {} } })),
   prepareRequest: vi.fn(async ({ prompt }: { prompt: string }) => ({
     prompt,
-    attachments: [],
+    attachments: [] as NonNullable<CliQueryOptions["attachments"]>,
   })),
 }));
 
@@ -200,6 +200,50 @@ describe("Assistant stream executor", () => {
     },
   );
 
+  it("passes prepared current attachments and capability options to a CLI target", async () => {
+    const stream = vi.fn(async function* () {
+      yield { type: "text" as const, text: "done" };
+      yield { type: "finish" as const, reason: "stop" };
+    });
+    const target = cliTarget("cli", 0, stream);
+    mocks.resolvePlan.mockResolvedValue({ slot: "assistant", targets: [target], migrationStatus: "complete" });
+    const preparedAttachment = {
+      filename: "2026-07/images/design.png",
+      path: "/safe/design.png",
+      mediaType: "image/png",
+      dataBase64: "IMAGE_DATA",
+    };
+    mocks.prepareRequest.mockResolvedValueOnce({ prompt: "prepared prompt", attachments: [preparedAttachment] });
+    const events = [];
+    for await (const event of streamAssistantTurn({
+      prompt: "raw prompt",
+      messages: [{ role: "user", content: "history for API only" }],
+      cwd: "/work",
+      systemPrompt: "system",
+      maxTurns: 7,
+      maxOutputTokens: 123,
+      maxOutputBytes: 456,
+      effort: "high",
+      attachments: ["2026-07/images/design.png"],
+      towerMcpServerName: "tower-dev",
+    })) events.push(event);
+
+    expect(events.map((event) => event.type)).toEqual(["text", "finish"]);
+    expect(mocks.prepareRequest).toHaveBeenCalledWith({
+      prompt: "raw prompt",
+      attachments: ["2026-07/images/design.png"],
+    });
+    expect(stream).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "prepared prompt",
+      systemPrompt: "system",
+      maxTurns: 7,
+      maxOutputTokens: 123,
+      maxOutputBytes: 456,
+      effort: "high",
+      attachments: [preparedAttachment],
+    }));
+  });
+
   it("loads an API runtime only when its explicit target executes", async () => {
     const target: ResolvedCapabilityTarget = {
       targetId: "api", connectionId: "api-connection", modelId: "model", order: 0,
@@ -213,12 +257,37 @@ describe("Assistant stream executor", () => {
         yield { type: "finish", finishReason: "stop" };
     });
     mocks.getApiRuntime.mockResolvedValue({ stream: apiStream });
-    const events = await collect([target]);
+    mocks.resolvePlan.mockResolvedValue({ slot: "assistant", targets: [target], migrationStatus: "complete" });
+    const messages = [
+      { role: "user" as const, content: "older" },
+      { role: "assistant" as const, content: [{ type: "text" as const, text: "answer" }] },
+      { role: "user" as const, content: "current with attachment metadata" },
+    ];
+    const events = [];
+    for await (const event of streamAssistantTurn({
+      prompt: "CLI prompt",
+      messages,
+      cwd: "/work",
+      systemPrompt: "system",
+      maxTurns: 6,
+      maxOutputTokens: 321,
+      effort: "medium",
+      attachments: ["2026-07/files/note.txt"],
+      towerMcpServerName: "tower-dev",
+    })) events.push(event);
     expect(events.map((event) => event.type)).toEqual([
       "tool-call", "tool-result", "text", "usage", "finish",
     ]);
     expect(mocks.getApiRuntime).toHaveBeenCalledWith(target);
-    expect(mocks.createTools).toHaveBeenCalledTimes(1);
-    expect(apiStream).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 300_000 }), expect.any(Object));
+    expect(mocks.createTools).toHaveBeenCalledWith({ attachments: ["2026-07/files/note.txt"] });
+    expect(apiStream).toHaveBeenCalledWith(expect.objectContaining({
+      messages,
+      system: "system",
+      maxTurns: 6,
+      maxOutputTokens: 321,
+      effort: "medium",
+      timeoutMs: 300_000,
+      tools: expect.any(Object),
+    }), expect.any(Object));
   });
 });

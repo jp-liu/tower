@@ -47,12 +47,20 @@ function jsonError(error: string, status: number): Response {
 function binding(body: z.infer<typeof bodySchema>): AssistantBinding {
   return {
     ...(body.workspaceId ? { workspaceId: body.workspaceId } : {}),
-    ...(body.workspaceName ? { workspaceName: body.workspaceName } : {}),
     ...(body.projectId ? { projectId: body.projectId } : {}),
-    ...(body.projectName ? { projectName: body.projectName } : {}),
     ...(body.versionId ? { versionId: body.versionId } : {}),
-    ...(body.versionName ? { versionName: body.versionName } : {}),
   };
+}
+
+function currentAttachmentContext(parts: AssistantPart[]): string | undefined {
+  const attachments = parts.filter((part): part is Extract<AssistantPart, { type: "attachment" }> =>
+    part.type === "attachment"
+  );
+  if (!attachments.length) return undefined;
+  return [
+    "Current-message attachments available to read_attachment (use the exact attachment identifier):",
+    ...attachments.map((part) => `- ${JSON.stringify(part.attachment)} (${part.mimeType}, ${part.size} bytes)`),
+  ].join("\n");
 }
 
 function safeToolOutput(value: unknown): string {
@@ -72,11 +80,27 @@ export async function POST(request: NextRequest) {
   }
   if (!body.message.trim() && body.attachmentFilenames.length === 0) return jsonError("message_required", 400);
 
+  let currentAttachmentParts: AssistantPart[];
+  try {
+    currentAttachmentParts = await attachmentParts(body.attachmentFilenames);
+  } catch (error) {
+    const code = error instanceof AssistantSessionError ? error.code : "invalid_attachment";
+    return jsonError(code, 400);
+  }
+
   const requestedBinding = binding(body);
   let sessionId: string;
+  let unstartedNewSessionId: string | null = null;
+  const cleanupUnstartedSession = async () => {
+    if (!unstartedNewSessionId) return;
+    const pending = unstartedNewSessionId;
+    unstartedNewSessionId = null;
+    try { await assistantSessionService.deleteSession(pending); } catch { /* safe orphan cleanup is best-effort */ }
+  };
   try {
     if (!body.sessionId) {
       sessionId = (await assistantSessionService.createSession(requestedBinding)).id;
+      unstartedNewSessionId = sessionId;
     } else if (towerSessionIdSchema.safeParse(body.sessionId).success) {
       sessionId = body.sessionId;
       await assistantSessionService.getSession(sessionId);
@@ -89,18 +113,18 @@ export async function POST(request: NextRequest) {
         await assistantSessionService.updateSession(sessionId, { binding: requestedBinding });
       }
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof AssistantSessionError) return jsonError(error.code, 400);
     return jsonError(body.sessionId ? "session_unavailable" : "session_create_failed", 400);
   }
 
   let history;
-  let currentAttachmentParts: AssistantPart[];
   try {
     history = trimAssistantHistory(await assistantSessionService.getMessages(sessionId));
-    currentAttachmentParts = await attachmentParts(body.attachmentFilenames);
   } catch (error) {
-    const code = error instanceof AssistantSessionError ? error.code : "invalid_attachment";
-    return jsonError(code, 400);
+    await cleanupUnstartedSession();
+    if (error instanceof AssistantSessionError) return jsonError(error.code, 400);
+    return jsonError("history_unavailable", 500);
   }
 
   const userParts: AssistantPart[] = [
@@ -113,6 +137,7 @@ export async function POST(request: NextRequest) {
   let maxOutputTokens: number;
   let maxOutputBytes: number;
   let effort: "low" | "medium" | "high";
+  let towerMcpServerName: string;
   try {
     session = await assistantSessionService.getSessionView(sessionId);
     const resolvedBinding: AssistantBinding = {
@@ -130,14 +155,16 @@ export async function POST(request: NextRequest) {
       readConfigValue<number>("assistant.maxOutputBytes", 2 * 1024 * 1024),
       readConfigValue<"low" | "medium" | "high">("assistant.effort", "low"),
     ]);
+    towerMcpServerName = buildTowerMcpConfig().name;
   } catch {
+    await cleanupUnstartedSession();
     return jsonError("assistant_configuration_unavailable", 500);
   }
   const apiHistory = assistantMessagesToApi(history);
   const currentMessage = body.message.trim() || "Please inspect the attachments included with this message.";
-  const apiMessages = [...apiHistory, { role: "user" as const, content: currentMessage }];
+  const apiCurrentMessage = [currentMessage, currentAttachmentContext(currentAttachmentParts)].filter(Boolean).join("\n\n");
+  const apiMessages = [...apiHistory, { role: "user" as const, content: apiCurrentMessage }];
   const cliPrompt = buildAssistantCliPrompt(apiHistory, currentMessage);
-  const towerMcpServerName = buildTowerMcpConfig().name;
 
   let turn: Awaited<ReturnType<typeof assistantSessionService.beginTurn>>;
   try {
@@ -147,12 +174,14 @@ export async function POST(request: NextRequest) {
       userParts,
     });
   } catch (error) {
+    await cleanupUnstartedSession();
     if (error instanceof AssistantSessionError) {
       const status = error.code === "turn_in_progress" || error.code === "turn_already_exists" ? 409 : 400;
       return jsonError(error.code, status);
     }
     return jsonError("turn_start_failed", 500);
   }
+  unstartedNewSessionId = null;
 
   let closed = false;
   const abort = () => turn.controller.abort();

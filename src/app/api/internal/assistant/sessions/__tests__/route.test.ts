@@ -25,6 +25,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/internal-api-guard", () => ({ requireLocalhost: () => null }));
 vi.mock("@/lib/ai/assistant-session-service", () => ({
+  AssistantSessionError: class AssistantSessionError extends Error {
+    constructor(readonly code: string, message: string) { super(message); }
+  },
   assistantSessionIdSchema: z.union([z.string().regex(/^as_/), z.string().uuid()]),
   towerSessionIdSchema: z.string().regex(/^as_/),
   legacySessionIdSchema: z.string().uuid(),
@@ -105,6 +108,24 @@ describe("Assistant sessions route", () => {
       legacySyncWarning: "legacy_rename_failed",
     });
     expect(mocks.updateSession).toHaveBeenCalledWith(TOWER_ID, { title: "Renamed", binding: undefined });
+  });
+
+  it("ignores client display names and preserves explicit ID clearing", async () => {
+    const nameOnly = await PATCH(request(`?sessionId=${TOWER_ID}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceName: "PROMPT_INJECTION" }),
+    }));
+    expect(nameOnly.status).toBe(400);
+    expect(mocks.updateSession).not.toHaveBeenCalled();
+
+    const cleared = await PATCH(request(`?sessionId=${TOWER_ID}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId: null, projectId: null, versionId: null }),
+    }));
+    expect(cleared.status).toBe(200);
+    expect(mocks.updateSession).toHaveBeenCalledWith(TOWER_ID, { title: undefined, binding: {} });
   });
 
   it("deletes an imported legacy source before its DB session", async () => {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireLocalhost } from "@/lib/internal-api-guard";
 import {
+  AssistantSessionError,
   assistantMessagesToClient,
   assistantSessionIdSchema,
   assistantSessionService,
@@ -26,6 +27,10 @@ const patchSchema = z.object({
 
 function safeError(code: string, status = 500) {
   return NextResponse.json({ error: code }, { status });
+}
+
+function hasBindingUpdate(body: z.infer<typeof patchSchema>): boolean {
+  return ["workspaceId", "projectId", "versionId"].some((key) => Object.hasOwn(body, key));
 }
 
 async function resolveTowerSessionId(sessionId: string): Promise<string> {
@@ -118,12 +123,12 @@ export async function PATCH(request: NextRequest) {
   } catch {
     return safeError("invalid_request", 400);
   }
-  if (!body.title && !Object.keys(body).some((key) => key !== "title")) return safeError("empty_update", 400);
+  if (!body.title && !hasBindingUpdate(body)) return safeError("empty_update", 400);
 
   try {
     if (legacySessionIdSchema.safeParse(requestedId).success) {
       const imported = await assistantSessionService.findImportedLegacy(requestedId);
-      const hasBinding = Object.keys(body).some((key) => key !== "title");
+      const hasBinding = hasBindingUpdate(body);
       if (!imported && !hasBinding) {
         await assistantLegacyAdapter.rename(requestedId, body.title!);
         return NextResponse.json({ ok: true, sessionId: requestedId });
@@ -132,13 +137,10 @@ export async function PATCH(request: NextRequest) {
 
     const sessionId = await resolveTowerSessionId(requestedId);
     const raw = await assistantSessionService.getSession(sessionId);
-    const binding: AssistantBinding | undefined = Object.keys(body).some((key) => key !== "title") ? {
+    const binding: AssistantBinding | undefined = hasBindingUpdate(body) ? {
       ...(body.workspaceId ? { workspaceId: body.workspaceId } : {}),
-      ...(body.workspaceName ? { workspaceName: body.workspaceName } : {}),
       ...(body.projectId ? { projectId: body.projectId } : {}),
-      ...(body.projectName ? { projectName: body.projectName } : {}),
       ...(body.versionId ? { versionId: body.versionId } : {}),
-      ...(body.versionName ? { versionName: body.versionName } : {}),
     } : undefined;
     const session = await assistantSessionService.updateSession(sessionId, { title: body.title, binding });
     let legacySyncWarning: string | undefined;
@@ -147,7 +149,8 @@ export async function PATCH(request: NextRequest) {
       catch { legacySyncWarning = "legacy_rename_failed"; }
     }
     return NextResponse.json({ ok: true, sessionId, session, ...(legacySyncWarning ? { legacySyncWarning } : {}) });
-  } catch {
+  } catch (error) {
+    if (error instanceof AssistantSessionError) return safeError(error.code, 400);
     return safeError("session_update_failed");
   }
 }
