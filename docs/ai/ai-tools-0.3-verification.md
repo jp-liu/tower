@@ -44,12 +44,12 @@ ports, and no real credentials or provider network.
 |---|---|---|---|
 | HOT-01 | Business hot paths have no direct Claude Agent SDK dependency bypassing Runtime. | `rg` audit found the SDK only in `assistant-legacy-adapter.ts` and legacy metadata/import code. The obsolete server action was removed in `e6c6a9b`; the old route now returns localhost-only 410. | proved |
 | HOT-02 | Business hot paths do not directly spawn `claude` or use legacy `assistant.model`, legacy `CliProfile` defaults, static first-provider selection, or implicit fallback. | Reviewed `src/lib/ai/{capability-resolver,capability-executor,terminal-target}.ts`; empty plans return `slot_unconfigured`. Removed stale config defaults and Claude-only connection fallback in `e6c6a9b`/`d164dae`; root tests pass. | proved |
-| HOT-03 | Summary proves both CLI and API explicit-target execution. | Failure/degradation tests exist, but no direct cross-module test names both CLI and API Summary targets. | missing |
-| HOT-04 | Dreaming/task overview proves both CLI and API explicit-target execution and non-destructive degradation. | `dreaming-capture.test.ts` proves non-destructive failure, but no direct CLI+API entry matrix was produced. | missing |
-| HOT-05 | Project analysis proves both CLI and API explicit-target execution and preserves original content on failure. | Context/security tests exist, but no direct CLI+API project-analysis entry matrix was produced. | missing |
+| HOT-03 | Summary proves both CLI and API explicit-target execution. | `capability-entry-matrix.test.ts` directly drives Execution Summary and task overview through named CLI and API targets (2 tests); failure degradation remains covered by `execution-summary.test.ts` and `task-overview-capture.test.ts`. | proved |
+| HOT-04 | Dreaming/task overview proves both CLI and API explicit-target execution and non-destructive degradation. | `capability-entry-matrix.test.ts` directly drives structured Dreaming through CLI and API targets; `dreaming-capture.test.ts` proves failure cannot block Done or create a damaged note. | proved |
+| HOT-05 | Project analysis proves both CLI and API explicit-target execution and preserves original content on failure. | `capability-entry-matrix.test.ts` directly drives real `analyzeProjectDirectory` through CLI and API targets; project-action tests prove original description preservation on failure. | proved |
 | HOT-06 | Assistant proves both CLI and API explicit-target execution. | `assistant-stream-executor.test.ts` uses explicit fake CLI targets and a separate explicit API target; full root run includes both. | proved |
 | HOT-07 | Terminal proves built-in and third-party CLI plan execution while rejecting API targets. | `agent-actions-directive.test.ts`, `target-binding-routes.test.ts`, capability Runtime Terminal tests, and capability service API-target rejection all pass in the root run. | proved |
-| HOT-08 | A fixture third-party CLI enters connection testing, slot resolution, Terminal, and query execution without source registration. | Plugin registration and Terminal/query pieces are tested separately; no one dynamic fixture crosses all four entry points. | missing |
+| HOT-08 | A fixture third-party CLI enters connection testing, slot resolution, Terminal, and query execution without source registration. | `cli-plugin-service.test.ts` copies an unregistered fixture, installs/confirms it, runs Hello/models, persists a connection, resolves the Summary and Terminal slots, then executes both capability and legacy query paths plus a Terminal plan in one test. | proved |
 
 ### Migration matrix
 
@@ -66,8 +66,8 @@ ports, and no real credentials or provider network.
 
 | ID | Requirement | Direct evidence required | Status |
 |---|---|---|---|
-| CLI-01 | Claude/Codex/Gemini cover not-found, found, runnable, connected, and MCP unavailable. | Provider tests and fake browser discovery cover subsets, but not the complete state matrix for each built-in. | missing |
-| CLI-02 | All built-ins cover model selection, fresh/resume/continue, generate/stream, tool call/result, and cancellation. | 35 provider tests cover plans/streams/tools/MCP; cancellation and every facet are not directly asserted for every provider. | missing |
+| CLI-01 | Claude/Codex/Gemini cover not-found, found, runnable, connected, and MCP unavailable. | `builtin-cli-contract-matrix.test.ts` applies the four command states and each provider's own Hello probe to all three built-ins (6/6 matrix tests); the direct provider suites assert their MCP-unavailable behavior (Claude 10, Codex 11, Gemini 14). | proved |
+| CLI-02 | All built-ins cover model selection, fresh/resume/continue, generate/stream, tool call/result, and cancellation. | The same direct matrix asserts explicit model plans, model arrays, and cancellation for every provider; the three direct provider suites assert fresh/resume/continue, generate/stream, and tool-call/result framing. All 35 provider tests pass. | proved |
 | API-01 | OpenAI request URL/header/query/body, stream, structured output, and tools are correct. | `packages/ai-runtime/test/api-runtime.test.ts` exact four-protocol construction, controlled fetch, streaming, structured/tool loop tests; 131 Runtime tests pass. | proved |
 | API-02 | OpenAI Compatible request URL/header/query/body, stream, structured output, and tools are correct. | Same four-protocol Runtime matrix. | proved |
 | API-03 | Anthropic request URL/header/query/body, stream, structured output, and tools are correct. | Same four-protocol Runtime matrix. | proved |
@@ -89,21 +89,21 @@ ports, and no real credentials or provider network.
 
 | ID | Requirement | Direct evidence required | Status |
 |---|---|---|---|
-| SEC-01 | Key/header/query/CLI env/plugin-setting canaries never appear outside credential storage or explicit reveal. | Runtime/API and Assistant DB canary tests pass, but no single sweep inspected every required sink (console, install log, snapshots, notes). | missing |
-| SEC-02 | Prompt/tool/stderr/upstream-body/attachment-filename canaries are redacted from the same sinks. | `f814ec5` redacts persisted tool/error/query data and opaque attachment names; exhaustive all-sink adversarial sweep is still absent. | missing |
-| SEC-03 | Plugin install logs and generated diagnostics contain no secret and plugins receive no unrelated Keys/database. | Permission tests pass, but install-log canary inspection and unrelated-Key negative proof are incomplete. | missing |
+| SEC-01 | Key/header/query/CLI env/plugin-setting canaries never appear outside credential storage or explicit reveal. | Unified `secret-redaction.ts` is exercised at every required boundary: `secret-redaction`, `logger`, `capability-config-service`, `install-orchestrator`, Assistant route/session, adapter route, Terminal snapshot, TaskMessage, task-overview, and Dreaming canary tests. Credential storage/reveal is separately proved by SEC-05. | proved |
+| SEC-02 | Prompt/tool/stderr/upstream-body/attachment-filename canaries are redacted from the same sinks. | Direct tests inject distinct canaries into prompts, tool input/result/error, provider stderr/upstream body, and attachment filenames, then inspect console, diagnostics, TaskMessage, AssistantMessage, install report, SSE/action response, Terminal snapshot, and both generated-note paths. The final 3-file addition is 35/35. | proved |
+| SEC-03 | Plugin install logs and generated diagnostics contain no secret and plugins receive no unrelated Keys/database. | `install-orchestrator.test.ts` inspects a canary-failing install report; `provider-host.test.ts` proves unrelated sensitive env is excluded; `ai-sdk-contract.test.ts` rejects `database:read`; permission-bypass tests prove integrations are never invoked without declared permission. | proved |
 | SEC-04 | Non-loopback internal requests, traversal, symlink escape, malicious schema, shell metacharacters, dangerous env keys, and permission bypass are rejected. | Localhost route tests, attachment/project symlink tests, config-schema/process-executor/plugin permission suites all pass. | proved |
-| SEC-05 | Key mask/reveal/copy/edit returns the saved original only to explicit UI actions. | Action/component tests exist; real browser did not execute the complete Key workflow. | missing |
-| SEC-06 | Full backup/restore preserves credentials and connection usability, with static risk text. | Backup unit coverage and static warning exist; no second-directory production restore smoke was run. | missing |
+| SEC-05 | Key mask/reveal/copy/edit returns the saved original only to explicit UI actions. | Final real-browser Settings flow asserts masked initial value, absence of plaintext in the dialog, explicit reveal, clipboard copy of the original, edit/save, reload persistence, and controlled connection test. | proved |
+| SEC-06 | Full backup/restore preserves credentials and connection usability, with static risk text. | `backup-ai-tools.test.ts` uses real Prisma databases and archive/restore code across two temporary data roots, then verifies the original Key, models, all five targets, plugin registry/path rebasing, Assistant history, and a successful restored fake-upstream connection. Static warning remains in Settings/docs. | proved |
 
 ### Real browser acceptance
 
 | ID | Requirement | Direct evidence required | Status |
 |---|---|---|---|
-| UI-01 | AI Tools layout and CRUD workflows work at 1440x900, 1280x720, and 390x844. | Final Playwright run proves layout at all three viewports, but does not complete every CRUD workflow. | missing |
-| UI-02 | API multi-Key, model/manual/headers/query; plugin lifecycle/config; and target ordering/model/effort/diagnostics work and persist after reload. | Component tests pass; the required end-to-end browser action matrix was not run. | missing |
-| UI-03 | Long names/errors/models/Keys do not overflow; keyboard, focus, labels, and tooltips are usable; zh/en have no missing keys. | Final run proves zero page overflow, zero unnamed visible buttons, correct order, and zh/en reload at three viewports; long/error/Key stress and tooltip keyboard traversal remain unproved. | missing |
-| UI-04 | Assistant UI covers session create/switch/reload/rename/delete/binding, text/tool/attachment, cancel/error, and legacy import. | Component/route tests pass; no real-browser fake stream workflow was run. | missing |
+| UI-01 | AI Tools layout and CRUD workflows work at 1440x900, 1280x720, and 390x844. | Final Playwright run (3/3) asserts Settings/Assistant layout and no horizontal overflow at desktop, laptop, and mobile. The same serial fake-provider run completes API CRUD and plugin install/config/disable/enable/uninstall; its three final screenshots were asserted and deleted in teardown. | proved |
+| UI-02 | API multi-Key, model/manual/headers/query; plugin lifecycle/config; and target ordering/model/effort/diagnostics work and persist after reload. | Real browser executes Key mask/reveal/copy/edit/add/test, model refresh/manual add, headers/query, slot diagnostics/reorder, reload persistence, and the complete local fixture-plugin lifecycle including plan, permission, schema config, disable, enable, and uninstall. | proved |
+| UI-03 | Long names/errors/models/Keys do not overflow; keyboard, focus, labels, and tooltips are usable; zh/en have no missing keys. | Browser seed includes long connection/model/error/Key values; DOM asserts no overflow, keyboard focus leaves body, every visible button has a label, capability icon hover exposes its tooltip, and both en/zh reload without untranslated keys. Focused final Settings rerun is 1/1. | proved |
+| UI-04 | Assistant UI covers session create/switch/reload/rename/delete/binding, text/tool/attachment, cancel/error, and legacy import. | Real browser selects the imported legacy session, verifies history/tool card and workspace/project/version bindings, creates a fresh session, streams text, uploads an attachment, cancels a turn, observes a controlled error, then renames and deletes the session. Focused run is 1/1. | proved |
 
 ### Production package smoke and complete quality gate
 
@@ -111,12 +111,12 @@ ports, and no real credentials or provider network.
 |---|---|---|---|
 | REL-01 | Packaged `tower` binds only 127.0.0.1 by default. | `release:smoke` installed the tarball and served only `127.0.0.1:55072`; final browser smoke used `127.0.0.1:59638`. | proved |
 | REL-02 | `--host 0.0.0.0` override resolves correctly without exposing a real machine port. | `bin/network.test.mjs` is included in the passing root suite; no wildcard listener was started by acceptance. | proved |
-| REL-03 | Tarball install, first boot, migration, settings load, built-in registry, fixture plugin, fake connection/slot, and fake Summary/Assistant/Terminal plan work. | Tarball install/boot/13 migrations/built-in registry/settings load pass; fixture plugin and three fake plans were not exercised in the packaged process. | missing |
-| REL-04 | Full restore to a second temporary data directory preserves Keys, targets, plugin registry, and Assistant sessions. | No second-directory production restore was run. | missing |
-| REL-05 | No real provider CLI/network/credentials, publish, tag, push, or organization action occurs. | No Provider network/credential/publish/tag/push/org action occurred, but an early discarded UI smoke inherited PATH and startup discovery invoked real CLI version/integration probes before it was stopped. | failed |
+| REL-03 | Tarball install, first boot, migration, settings load, built-in registry, fixture plugin, fake connection/slot, and fake Summary/Assistant/Terminal plan work. | Final `release:smoke` installs the tarball from a local fixture registry, boots on a temporary loopback port, applies 13 migrations, loads Settings/built-ins, dynamically imports an unregistered local plugin, persists a fake API connection and all five slots, and executes packaged Summary, Assistant, and Terminal plans. | proved |
+| REL-04 | Full restore to a second temporary data directory preserves Keys, targets, plugin registry, and Assistant sessions. | `backup-ai-tools.test.ts` directly restores the full archive into a second temporary root and verifies the Key/models, five targets, rebased plugin registry, Assistant session/messages, and post-restore fake API request. | proved |
+| REL-05 | No real provider CLI/network/credentials, publish, tag, push, or organization action occurs. | No Provider network/credential/publish/tag/push/org action occurred. However, an early discarded UI smoke inherited real `PATH` and invoked CLI version/integration probes, so strict fake-only acceptance failed. Read-only audit found no timestamp evidence of writes: `~/.claude.json` 2026-07-25 21:27:03, `~/.claude/settings.json` 2026-07-24 17:08:28, `~/.codex/config.toml` 2026-07-25 21:27:55, and `~/.gemini/settings.json` 2026-07-21 09:58:04. No user file was modified during audit. | failed |
 | QG-01 | Full repository `pnpm test:run` passes with Harness injection variables cleared. | Final exact command exit 0: 204 passed + 6 skipped files; 1947 passed + 27 todo tests. `4b0e8b2` serializes fork-heavy fixtures. | proved |
 | QG-02 | `pnpm exec tsc --noEmit` passes. | Exit 0 after package and path fixes. | proved |
-| QG-03 | Full ESLint passes. | `pnpm lint` exit 1: 161 errors and 72 warnings (233 findings), including stable pre-existing React/TypeScript lint failures. | failed |
+| QG-03 | Full ESLint passes. | `pnpm lint` exit 1: 161 errors and 72 warnings (233 findings). Safe decomposition without rule/ignore changes: 44 CommonJS script `no-require-imports`, about 64 historical test `no-explicit-any`, about 41 React Compiler/effect/ref lifecycle findings across roughly 30 UI/version/Preview modules, and about 12 miscellaneous findings. This is too broad for a safe release-gate fix and remains failed. | failed |
 | QG-04 | Prisma generate and validate pass against a temporary SQLite URL. | Combined generate/validate command exit 0. | proved |
 | QG-05 | Every AI workspace package test and build passes. | Package tests exit 0: SDK 15, Claude 10, Codex 11, Gemini 14, Runtime 131 = 181; recursive builds exit 0. | proved |
 | QG-06 | MCP build passes with root esbuild available. | Exit 0, 3.8 MB bundle; root `esbuild` declared by `5a08f6a`. | proved |
@@ -145,28 +145,44 @@ ports, and no real credentials or provider network.
 | 2026-07-25 | First final root run | 1 | 1916 passed, 2 failed, 27 todo; 4 worker errors | Resource-starved Preview waits/workers; isolated 5-file rerun was 35/35. |
 | 2026-07-25 | Second root run (`maxWorkers=4`) | 1 | 1938 passed, 2 failed, 27 todo; 1 worker error | Still nondeterministic under concurrent Tower workload. |
 | 2026-07-25 | Final exact `pnpm test:run` (`maxWorkers=1`) | 0 | 1947 passed, 27 todo | 204 passed/6 skipped of 210 files; 197.31 s. |
+| 2026-07-25 | Capability entry + degradation focused suite | 0 | 44 passed, 3 todo | Includes 6 direct Summary/Dreaming/Analysis CLI+API entry tests and existing non-destructive paths. |
+| 2026-07-25 | Dynamic plugin service | 0 | 4/4 | One unregistered local plugin crosses install, test, slot, query, and Terminal. |
+| 2026-07-25 | Built-in CLI direct matrix | 0 | 6/6 | Two parameterized tests for each of Claude, Codex, and Gemini; direct provider packages remain 35/35. |
+| 2026-07-25 | Secret boundary focused suite | 0 | 66/66 | Six files cover unified redaction, console, diagnostics, Assistant persistence/SSE, install report, and action response. |
+| 2026-07-25 | TaskMessage/generated-note canaries | 0 | 35/35 | Three files directly inspect TaskMessage, task overview, and Dreaming note persistence. |
+| 2026-07-25 | Full archive second-root restore | 0 | 1/1 | Real Prisma source/restored roots plus controlled local HTTP upstream. |
+| 2026-07-25 | Final packaged `release:smoke` | 0 | 13 migrations + 3 plans | `127.0.0.1:49987`; fixture plugin, fake API, Summary, Assistant, Terminal verified; 1993-file/44.1 MB tarball, 140 local-registry packages. |
+| 2026-07-25 | Final Settings + Assistant browser workflows | 0 | 3/3 | 27.4 s serial run; final three screenshots created once and removed. Additional expanded Settings 1/1 (20.3 s) and Assistant 1/1 (8.1 s) passed without screenshots. |
+| 2026-07-25 | Tooltip browser assertion (role-name selector) | 1 | 0/1 | Product tooltip rendered without an accessible name; assertion selector corrected to direct visible content. Temporary process/data still removed by teardown. |
+| 2026-07-25 | Corrected Settings tooltip/browser workflow | 0 | 1/1 | 21.2 s; accessible trigger label plus visible hover content, no screenshots. |
+| 2026-07-25 | Read-only real-HOME impact audit | 0 | 4 mtimes | No timestamp evidence of CLI config writes; no user file was changed or restored. REL-05 remains failed because real probes occurred. |
 
 ## Defects and fixes
 
 Release-relevant fixes are committed separately: workspace test resolution
 (`fcc62ec`, `d414030`), atomic migrations (`d148397`), legacy Assistant bypass
-removal (`e6c6a9b`), explicit CLI connection safety (`d164dae`), Assistant
-redaction (`f814ec5`), stable acceptance coverage (`9177e79`, `4b0e8b2`), root
-esbuild (`5a08f6a`), inherited Next production build isolation (`710654b`),
-offline local-registry tarball smoke (`0e52c9e`), and icon-button labels
-(`931ec30`).
+removal (`e6c6a9b`), explicit CLI connection safety (`d164dae`), redaction
+boundaries (`f814ec5`, `09b3154`, `57276c6`), backup completeness (`c164158`),
+root esbuild (`5a08f6a`), inherited Next build isolation (`710654b`), offline
+tarball smoke (`0e52c9e`), packaged dynamic imports (`872a4ac`), first-turn
+Assistant attachments/session payloads (`9ae9253`, `7513aa5`), and global
+icon/button binding labels (`931ec30`, `7513aa5`). Contract/browser evidence is
+split across `1132e7c`, `69dfd3a`, `4a24e3e`, `02972f3`, and `f9e6d55`.
 
 ## Final process and artifact audit
 
-Final audit confirms production PID 58740 remains on port 3000. All temporary
-Tower acceptance ports (55072, 55662, 57239, 59638 and failed-attempt ports),
-Chromium processes, fixture registries, and `tower-{smoke,ui}-*` directories were
-closed/removed. Temporary screenshots and runtime databases were not committed.
+Final audit confirms production PID 58740 remains on port 3000 with cwd
+`/Users/liujunping/project/f/tower/.next/standalone`. All temporary Tower
+acceptance ports (49987, 55072, 55662, 57239, 59638 and failed-attempt ports),
+Playwright Chromium processes, fixture registries, and `tower-{smoke,ui}-*`
+directories are gone. Two failed-browser-attempt roots that retained only empty
+temporary `home/.gemini` directories were removed with exact-path `rmdir` during
+the final audit. Temporary screenshots and runtime databases were not committed.
 
 ## Final status
 
-**48 proved / 2 failed / 17 missing (67 total).** This gate is not complete:
-QG-03 (full ESLint) and REL-05 (strict fake-only execution) failed, while the
-remaining missing items require dedicated end-to-end CLI state, all-sink secret,
-full browser CRUD/Assistant, packaged fixture-plugin/plan, and backup/restore
-evidence. The task must remain in review until those requirements are proved.
+**65 proved / 2 failed / 0 missing (67 total).** This gate remains incomplete:
+QG-03 (full ESLint) and REL-05 (strict fake-only execution) failed. All formerly
+missing P0/P1/P2 evidence now has a direct test, smoke, browser action, or read-only
+audit, but neither failed item is represented as passed and no release approval is
+claimed.
