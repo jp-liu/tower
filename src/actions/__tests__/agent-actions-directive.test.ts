@@ -75,7 +75,8 @@ vi.mock("@/lib/ai/providers", () => ({
 }));
 
 import { db } from "@/lib/db";
-import { createSession } from "@/lib/pty/session-store";
+import { createSession, destroySession } from "@/lib/pty/session-store";
+import { readConfigValue } from "@/lib/config-reader";
 import {
   resolveFixedCliConnection,
   resolveLegacyExecutionCliConnection,
@@ -174,6 +175,11 @@ function injectedDirective(): string {
 describe("startPtyExecution directive selection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    fsMocks.mkdtemp.mockResolvedValue("/tmp/tower-pty-unit-test");
+    fsMocks.writeFile.mockResolvedValue(undefined);
+    fsMocks.readFile.mockResolvedValue("selected instructions");
+    fsMocks.rm.mockResolvedValue(undefined);
+    vi.mocked(readConfigValue).mockImplementation(async (_key, fallback) => fallback);
     mockDb.taskExecution.create.mockResolvedValue({ id: "exec1" });
     mockDb.cliProfile.findFirst.mockResolvedValue(null);
     vi.mocked(resolveTerminalTargetPlan).mockResolvedValue({
@@ -308,6 +314,77 @@ describe("startPtyExecution directive selection", () => {
 
     await expect(startPtyExecution("t1", "")).rejects.toThrow("resolution failed");
 
+    expect(fsMocks.rm).toHaveBeenCalledWith(
+      "/tmp/tower-pty-unit-test",
+      { recursive: true, force: true },
+    );
+  });
+
+  it.each(["task.systemDirective", "onboarding.username"] as const)(
+    "fails and cleans a fresh execution when %s cannot be read",
+    async (failedKey) => {
+      mockDb.task.findUnique.mockResolvedValue({ ...taskWithLabels([]), promptId: "prompt1" });
+      mockDb.agentPrompt.findUnique.mockResolvedValue({ content: "selected instructions" });
+      vi.mocked(readConfigValue).mockImplementation(async (key, fallback) => {
+        if (key === failedKey) throw new Error(`${failedKey} failed`);
+        return fallback;
+      });
+
+      await expect(startPtyExecution("t1", "")).rejects.toThrow(`${failedKey} failed`);
+
+      expect(createSession).not.toHaveBeenCalled();
+      expect(mockDb.taskExecution.updateMany).toHaveBeenCalledWith({
+        where: { id: "exec1", status: { in: ["PENDING", "RUNNING"] } },
+        data: {
+          status: "FAILED",
+          endedAt: expect.any(Date),
+          connectionId: null,
+          modelId: null,
+          targetId: null,
+        },
+      });
+      expect(mockDb.task.update).toHaveBeenLastCalledWith({
+        where: { id: "t1" },
+        data: { status: "TODO" },
+      });
+      expect(fsMocks.rm).toHaveBeenCalledWith(
+        "/tmp/tower-pty-unit-test",
+        { recursive: true, force: true },
+      );
+      expect(destroySession).toHaveBeenCalledWith("t1");
+    },
+  );
+
+  it("removes the temp directory when writing instructions fails before execution creation", async () => {
+    mockDb.task.findUnique.mockResolvedValue({ ...taskWithLabels([]), promptId: "prompt1" });
+    mockDb.agentPrompt.findUnique.mockResolvedValue({ content: "selected instructions" });
+    fsMocks.writeFile.mockRejectedValueOnce(new Error("write failed"));
+
+    await expect(startPtyExecution("t1", "")).rejects.toThrow("write failed");
+
+    expect(mockDb.taskExecution.create).not.toHaveBeenCalled();
+    expect(mockDb.task.update).not.toHaveBeenCalled();
+    expect(createSession).not.toHaveBeenCalled();
+    expect(fsMocks.rm).toHaveBeenCalledWith(
+      "/tmp/tower-pty-unit-test",
+      { recursive: true, force: true },
+    );
+  });
+
+  it("removes the temp directory when worktree preparation fails before execution creation", async () => {
+    mockDb.task.findUnique.mockResolvedValue({
+      ...taskWithLabels([]),
+      promptId: "prompt1",
+      baseBranch: "main",
+    });
+    mockDb.agentPrompt.findUnique.mockResolvedValue({ content: "selected instructions" });
+    vi.mocked(createWorktree).mockRejectedValueOnce(new Error("worktree failed"));
+
+    await expect(startPtyExecution("t1", "")).rejects.toThrow("worktree failed");
+
+    expect(mockDb.taskExecution.create).not.toHaveBeenCalled();
+    expect(mockDb.task.update).not.toHaveBeenCalled();
+    expect(createSession).not.toHaveBeenCalled();
     expect(fsMocks.rm).toHaveBeenCalledWith(
       "/tmp/tower-pty-unit-test",
       { recursive: true, force: true },
@@ -547,6 +624,50 @@ describe("startPtyExecution directive selection", () => {
     });
   });
 
+  it("fails resume before session creation while preserving the fixed snapshot", async () => {
+    const task = { ...taskWithLabels([]), status: "IN_REVIEW" };
+    const previous = {
+      id: "exec-codex",
+      taskId: "t1",
+      agent: "CODEX_CLI",
+      sessionId: "session-1",
+      worktreePath: null,
+      callbackUrl: null,
+      connectionId: "connection-codex",
+      modelId: "codex-model",
+      targetId: "target-codex",
+    };
+    mockDb.task.findUnique.mockResolvedValue(task);
+    mockDb.taskExecution.findFirst.mockResolvedValue(previous);
+    mockDb.taskExecution.update.mockResolvedValue({ ...previous, status: "RUNNING" });
+    vi.mocked(resolveFixedCliConnection).mockResolvedValue(terminalTarget("codex") as never);
+    vi.mocked(readConfigValue).mockImplementation(async (key, fallback) => {
+      if (key === "onboarding.username") throw new Error("username failed");
+      return fallback;
+    });
+
+    await expect(resumePtyExecution("t1", "session-1")).rejects.toThrow("username failed");
+
+    expect(createSession).not.toHaveBeenCalled();
+    expect(mockDb.taskExecution.updateMany).toHaveBeenCalledWith({
+      where: { id: "exec-codex", status: { in: ["PENDING", "RUNNING"] } },
+      data: { status: "FAILED", endedAt: expect.any(Date) },
+    });
+    expect(mockDb.task.update).toHaveBeenLastCalledWith({
+      where: { id: "t1" },
+      data: { status: "IN_REVIEW" },
+    });
+    expect(mockDb.taskExecution.update).toHaveBeenCalledWith({
+      where: { id: "exec-codex" },
+      data: expect.objectContaining({
+        connectionId: "connection-codex",
+        modelId: "codex-model",
+        targetId: "target-codex",
+      }),
+    });
+    expect(destroySession).toHaveBeenCalledWith("t1");
+  });
+
   it("uses the latest snapshot for direct-mode fresh continue without reading the slot", async () => {
     const latest = {
       id: "exec-direct",
@@ -612,6 +733,50 @@ describe("startPtyExecution directive selection", () => {
       cwd: "/tmp/task-worktree",
     }));
     expect(resolveTerminalTargetPlan).not.toHaveBeenCalled();
+  });
+
+  it("fails isolated continue before session creation while preserving the fixed snapshot", async () => {
+    const latest = {
+      id: "exec-isolated",
+      taskId: "t1",
+      agent: "GEMINI_CLI",
+      sessionId: null,
+      worktreePath: "/tmp/task-worktree",
+      worktreeBranch: "task/t1",
+      callbackUrl: null,
+      forkCommit: "fork",
+      connectionId: "connection-gemini",
+      modelId: "gemini-model",
+      targetId: "target-gemini",
+    };
+    mockDb.task.findUnique.mockResolvedValue({ ...taskWithLabels([]), status: "IN_REVIEW" });
+    mockDb.taskExecution.findFirst.mockResolvedValue(latest);
+    vi.mocked(resolveFixedCliConnection).mockResolvedValue(terminalTarget("gemini") as never);
+    vi.mocked(readConfigValue).mockImplementation(async (key, fallback) => {
+      if (key === "onboarding.username") throw new Error("username failed");
+      return fallback;
+    });
+
+    await expect(continueLatestPtyExecution("t1")).rejects.toThrow("username failed");
+
+    expect(createSession).not.toHaveBeenCalled();
+    expect(mockDb.taskExecution.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        status: "RUNNING",
+        connectionId: "connection-gemini",
+        modelId: "gemini-model",
+        targetId: "target-gemini",
+      }),
+    });
+    expect(mockDb.taskExecution.updateMany).toHaveBeenCalledWith({
+      where: { id: "exec1", status: { in: ["PENDING", "RUNNING"] } },
+      data: { status: "FAILED", endedAt: expect.any(Date) },
+    });
+    expect(mockDb.task.update).toHaveBeenLastCalledWith({
+      where: { id: "t1" },
+      data: { status: "IN_REVIEW" },
+    });
+    expect(destroySession).toHaveBeenCalledWith("t1");
   });
 
   it("retries a missing resume session fresh on the same fixed target", async () => {

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { createWorktree } from "@/lib/worktree";
 import { resolveWorktreeBranch, DEFAULT_BRANCH_PREFIX } from "@/lib/worktree-branch";
-import { createSession } from "@/lib/pty/session-store";
+import { createSession, destroySession } from "@/lib/pty/session-store";
 import { logger } from "@/lib/logger";
 import { readConfigValue } from "@/lib/config-reader";
 import {
@@ -77,34 +77,27 @@ function taskEnvironment(input: {
   return env;
 }
 
-async function markExecutionLaunchFailed(executionId: string): Promise<void> {
-  try {
-    await db.taskExecution.updateMany({
-      where: { id: executionId, status: { in: ["PENDING", "RUNNING"] } },
-      data: { status: "FAILED", endedAt: new Date() },
-    });
-  } catch {
-    // Preserve the original command-resolution or PTY-spawn error.
-  }
-}
-
 async function failTerminalPrestart(input: {
   executionId: string;
   taskId: string;
   previousTaskStatus: "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED";
   tempDir?: string;
+  clearTargetSnapshot?: boolean;
 }): Promise<void> {
-  const { destroySession } = await import("@/lib/pty/session-store");
-  destroySession(input.taskId);
+  try {
+    destroySession(input.taskId);
+  } catch {
+    // Continue restoring persistent state even if the session store is already torn down.
+  }
   await Promise.all([
     db.taskExecution.updateMany({
       where: { id: input.executionId, status: { in: ["PENDING", "RUNNING"] } },
       data: {
         status: "FAILED",
         endedAt: new Date(),
-        connectionId: null,
-        modelId: null,
-        targetId: null,
+        ...(input.clearTargetSnapshot
+          ? { connectionId: null, modelId: null, targetId: null }
+          : {}),
       },
     }).catch(() => {}),
     db.task.update({
@@ -116,18 +109,6 @@ async function failTerminalPrestart(input: {
       : Promise.resolve(),
   ]);
   revalidatePath("/workspaces");
-}
-
-async function createTrackedSession(
-  executionId: string,
-  ...args: Parameters<typeof createSession>
-): Promise<void> {
-  try {
-    createSession(...args);
-  } catch (error) {
-    await markExecutionLaunchFailed(executionId);
-    throw error;
-  }
 }
 
 async function writeExitSignal(taskId: string, exitCode: number): Promise<void> {
@@ -311,15 +292,16 @@ export async function resumePtyExecution(
     },
   });
 
-  await db.task.update({
-    where: { id: taskId },
-    data: { status: "IN_PROGRESS" },
-  });
-  revalidatePath("/workspaces");
+  try {
+    await db.task.update({
+      where: { id: taskId },
+      data: { status: "IN_PROGRESS" },
+    });
+    revalidatePath("/workspaces");
 
-  const usernameVal = await readConfigValue<string>("onboarding.username", "");
+    const usernameVal = await readConfigValue<string>("onboarding.username", "");
 
-  const launch = await buildTerminalLaunch(fixedTarget, {
+    const launch = await buildTerminalLaunch(fixedTarget, {
     prompt: "",
     cwd,
     mode: { type: "resume", sessionId: previousSessionId },
@@ -331,22 +313,15 @@ export async function resumePtyExecution(
       callbackUrl: prevExec.callbackUrl ?? undefined,
       hasParent: !!task.parentTaskId,
     }),
-  }).catch(async (error) => {
-    await Promise.all([
-      markExecutionLaunchFailed(execution.id),
-      db.task.update({ where: { id: taskId }, data: { status: previousTaskStatus } }).catch(() => {}),
-    ]);
-    throw error;
-  });
+    });
 
-  await createTrackedSession(
-    execution.id,
-    taskId,
-    launch.processSpec.command,
-    launch.processSpec.args,
-    cwd,
-    () => {},
-    async (exitCode) => {
+    createSession(
+      taskId,
+      launch.processSpec.command,
+      launch.processSpec.args,
+      cwd,
+      () => {},
+      async (exitCode) => {
       // Write exit code signal file for notify-agi.sh (runs before DB update)
       await writeExitSignal(taskId, exitCode);
 
@@ -412,19 +387,21 @@ export async function resumePtyExecution(
         // way a goal task ends — must clear here too, not only on fresh-start exit.
         await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW", unattended: false } }).catch(() => {});
       }
-    },
-    launch.envOverrides,
-    undefined,
-    idleTimeoutSec * 1000,
-    launch.processSpec.initialInput,
-    launch.baseEnv,
-  ).catch(async (error) => {
-    await db.task.update({
-      where: { id: taskId },
-      data: { status: previousTaskStatus },
-    }).catch(() => {});
+      },
+      launch.envOverrides,
+      undefined,
+      idleTimeoutSec * 1000,
+      launch.processSpec.initialInput,
+      launch.baseEnv,
+    );
+  } catch (error) {
+    await failTerminalPrestart({
+      executionId: execution.id,
+      taskId,
+      previousTaskStatus,
+    });
     throw error;
-  });
+  }
 
   return {
     executionId: execution.id,
@@ -520,15 +497,16 @@ export async function continueLatestPtyExecution(
     },
   });
 
-  await db.task.update({
-    where: { id: taskId },
-    data: { status: "IN_PROGRESS" },
-  });
-  revalidatePath("/workspaces");
+  try {
+    await db.task.update({
+      where: { id: taskId },
+      data: { status: "IN_PROGRESS" },
+    });
+    revalidatePath("/workspaces");
 
-  const usernameVal = await readConfigValue<string>("onboarding.username", "");
+    const usernameVal = await readConfigValue<string>("onboarding.username", "");
 
-  const launch = await buildTerminalLaunch(fixedTarget, {
+    const launch = await buildTerminalLaunch(fixedTarget, {
     prompt: "",
     cwd,
     mode: { type: "continue" },
@@ -539,23 +517,15 @@ export async function continueLatestPtyExecution(
       taskTitle: task.title,
       hasParent: !!task.parentTaskId,
     }),
-  }).catch(async (error) => {
-    await Promise.all([
-      markExecutionLaunchFailed(execution.id),
-      db.task.update({ where: { id: taskId }, data: { status: previousTaskStatus } }).catch(() => {}),
-    ]);
-    throw error;
-  });
+    });
 
-
-  await createTrackedSession(
-    execution.id,
-    taskId,
-    launch.processSpec.command,
-    launch.processSpec.args,
-    cwd,
-    () => {},
-    async (exitCode) => {
+    createSession(
+      taskId,
+      launch.processSpec.command,
+      launch.processSpec.args,
+      cwd,
+      () => {},
+      async (exitCode) => {
       await writeExitSignal(taskId, exitCode);
 
       const currentExec = await db.taskExecution.findUnique({ where: { id: execution.id } });
@@ -617,19 +587,21 @@ export async function continueLatestPtyExecution(
         // way a goal task ends — must clear here too, not only on fresh-start exit.
         await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW", unattended: false } }).catch(() => {});
       }
-    },
-    launch.envOverrides,
-    undefined,
-    idleTimeoutSec * 1000,
-    launch.processSpec.initialInput,
-    launch.baseEnv,
-  ).catch(async (error) => {
-    await db.task.update({
-      where: { id: taskId },
-      data: { status: previousTaskStatus },
-    }).catch(() => {});
+      },
+      launch.envOverrides,
+      undefined,
+      idleTimeoutSec * 1000,
+      launch.processSpec.initialInput,
+      launch.baseEnv,
+    );
+  } catch (error) {
+    await failTerminalPrestart({
+      executionId: execution.id,
+      taskId,
+      previousTaskStatus,
+    });
     throw error;
-  });
+  }
 
   return {
     executionId: execution.id,
@@ -776,155 +748,151 @@ export async function startPtyExecution(
   // 4. Prepare instructions file if task has a promptId (or selectedPromptId)
   let instructionsFile: string | undefined;
   let tempDir: string | undefined;
-
-  const promptId = selectedPromptId ?? task.promptId;
-  if (promptId) {
-    const promptRecord = await db.agentPrompt.findUnique({
-      where: { id: promptId },
-    });
-    if (promptRecord?.content) {
-      tempDir = await mkdtemp(join(tmpdir(), "tower-pty-"));
-      instructionsFile = join(tempDir, "instructions.md");
-      await writeFile(instructionsFile, promptRecord.content, "utf-8");
-    }
-  }
-
-  // 5. Create worktree if task has a baseBranch
   let resolvedWorktreePath: string | null = null;
   let resolvedWorktreeBranch: string | null = null;
+  let execution: { id: string };
 
-  if (task.baseBranch && task.project.localPath) {
-    // The task's labels decide the branch prefix; no prefixed label falls back
-    // to the configured default, whose "task" value keeps the historical
-    // `task/<taskId>`. The resolved name is persisted on the execution below —
-    // teardown reads it back instead of re-deriving it.
-    const defaultPrefix = await readConfigValue<string>(
-      "git.defaultWorktreeBranchPrefix",
-      DEFAULT_BRANCH_PREFIX
-    );
-    const { worktreePath, worktreeBranch } = await createWorktree(
-      task.project.localPath,
-      taskId,
-      task.baseBranch,
-      resolveWorktreeBranch(
-        task.labels.map((tl) => tl.label),
-        defaultPrefix,
-        taskId
-      )
-    );
-    resolvedWorktreePath = worktreePath;
-    resolvedWorktreeBranch = worktreeBranch;
+  try {
+    const promptId = selectedPromptId ?? task.promptId;
+    if (promptId) {
+      const promptRecord = await db.agentPrompt.findUnique({
+        where: { id: promptId },
+      });
+      if (promptRecord?.content) {
+        tempDir = await mkdtemp(join(tmpdir(), "tower-pty-"));
+        instructionsFile = join(tempDir, "instructions.md");
+        await writeFile(instructionsFile, promptRecord.content, "utf-8");
+      }
+    }
+
+    // 5. Create worktree if task has a baseBranch
+    if (task.baseBranch && task.project.localPath) {
+      // The task's labels decide the branch prefix; no prefixed label falls back
+      // to the configured default, whose "task" value keeps the historical
+      // `task/<taskId>`. The resolved name is persisted on the execution below —
+      // teardown reads it back instead of re-deriving it.
+      const defaultPrefix = await readConfigValue<string>(
+        "git.defaultWorktreeBranchPrefix",
+        DEFAULT_BRANCH_PREFIX
+      );
+      const { worktreePath, worktreeBranch } = await createWorktree(
+        task.project.localPath,
+        taskId,
+        task.baseBranch,
+        resolveWorktreeBranch(
+          task.labels.map((tl) => tl.label),
+          defaultPrefix,
+          taskId
+        )
+      );
+      resolvedWorktreePath = worktreePath;
+      resolvedWorktreeBranch = worktreeBranch;
+    }
+
+    // 6. Create one pending execution before resolving or trying any target.
+    execution = await db.taskExecution.create({
+      data: {
+        taskId,
+        status: "PENDING",
+        startedAt: new Date(),
+        worktreePath: resolvedWorktreePath ?? null,
+        worktreeBranch: resolvedWorktreeBranch ?? null,
+        callbackUrl: callbackUrl ?? null,
+      },
+    });
+  } catch (error) {
+    if (tempDir) {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+    throw error;
   }
 
   const baseCwd = resolvedWorktreePath ?? task.project.localPath;
   const cwd = task.subPath ? join(baseCwd, task.subPath) : baseCwd;
 
-  // 6. Create one pending execution before resolving or trying any target.
-  const execution = await db.taskExecution.create({
-    data: {
-      taskId,
-      status: "PENDING",
-      startedAt: new Date(),
-      worktreePath: resolvedWorktreePath ?? null,
-      worktreeBranch: resolvedWorktreeBranch ?? null,
-      callbackUrl: callbackUrl ?? null,
-    },
-  });
-
   const previousTaskStatus = task.status;
-  if (task.status !== "IN_PROGRESS") {
-    await db.task.update({
-      where: { id: taskId },
-      data: { status: "IN_PROGRESS" },
-    });
-    revalidatePath("/workspaces");
-  }
-
-  // Resolve only after the final cwd is known. A fixed retry never reads the slot.
-  let terminalTargets: ResolvedCapabilityTarget[];
+  let selected: { launch: TerminalLaunch; target: ResolvedCapabilityTarget; snapshot: TerminalTargetSnapshot };
   try {
-    terminalTargets = fixedTargetSnapshot
+    if (task.status !== "IN_PROGRESS") {
+      await db.task.update({
+        where: { id: taskId },
+        data: { status: "IN_PROGRESS" },
+      });
+      revalidatePath("/workspaces");
+    }
+
+    // Resolve only after the final cwd is known. A fixed retry never reads the slot.
+    const terminalTargets = fixedTargetSnapshot
       ? [await resolveFixedCliConnection(
           fixedTargetSnapshot.connectionId,
           fixedTargetSnapshot.modelId,
           { cwd, targetId: fixedTargetSnapshot.targetId },
         )]
       : (await resolveTerminalTargetPlan({ cwd })).targets;
-  } catch (error) {
-    await failTerminalPrestart({
-      executionId: execution.id,
-      taskId,
-      previousTaskStatus,
-      tempDir,
-    });
-    throw error;
-  }
 
-  // 6b. Record forkCommit
-  // Worktree mode: merge-base between baseBranch and HEAD
-  // Direct mode: current HEAD commit (baseline for diff)
-  // Captured into an outer variable so the onExit summary can scope the git
-  // range to THIS task's own commits (prevents summary cross-talk in direct mode).
-  let resolvedForkCommit: string | null = null;
-  if (task.project.localPath) {
-    try {
-      const { execFileSync } = await import("child_process");
-      let forkCommit: string;
-      if (resolvedWorktreePath && task.baseBranch) {
-        forkCommit = execFileSync(
-          "git", ["merge-base", task.baseBranch, "HEAD"],
-          { cwd: resolvedWorktreePath, encoding: "utf-8", timeout: 5000 }
-        ).trim();
-      } else {
-        forkCommit = execFileSync(
-          "git", ["rev-parse", "HEAD"],
-          { cwd: task.project.localPath, encoding: "utf-8", timeout: 5000 }
-        ).trim();
+    // 6b. Record forkCommit
+    // Worktree mode: merge-base between baseBranch and HEAD
+    // Direct mode: current HEAD commit (baseline for diff)
+    // Captured into an outer variable so the onExit summary can scope the git
+    // range to THIS task's own commits (prevents summary cross-talk in direct mode).
+    let resolvedForkCommit: string | null = null;
+    if (task.project.localPath) {
+      try {
+        const { execFileSync } = await import("child_process");
+        let forkCommit: string;
+        if (resolvedWorktreePath && task.baseBranch) {
+          forkCommit = execFileSync(
+            "git", ["merge-base", task.baseBranch, "HEAD"],
+            { cwd: resolvedWorktreePath, encoding: "utf-8", timeout: 5000 }
+          ).trim();
+        } else {
+          forkCommit = execFileSync(
+            "git", ["rev-parse", "HEAD"],
+            { cwd: task.project.localPath, encoding: "utf-8", timeout: 5000 }
+          ).trim();
+        }
+        if (forkCommit) {
+          resolvedForkCommit = forkCommit;
+          await db.taskExecution.update({
+            where: { id: execution.id },
+            data: { forkCommit },
+          });
+        }
+      } catch {
+        // Best effort — diff will fallback to branch comparison
       }
-      if (forkCommit) {
-        resolvedForkCommit = forkCommit;
-        await db.taskExecution.update({
-          where: { id: execution.id },
-          data: { forkCommit },
-        });
-      }
-    } catch {
-      // Best effort — diff will fallback to branch comparison
     }
-  }
 
-  // 6c. Build system prompt additions
-  // Built-in system directive first (attached to every task; default in config-defaults.ts, overridable via SystemConfig),
-  // then merge the task's chosen AgentPrompt (after), and finally append the username.
-  // Workbench tasks (builtin "Tower" label) get their own directive instead — they dispatch
-  // and review work rather than doing it. Either/or, never both.
-  let appendSystemPrompt = "";
-  const { CONFIG_DEFAULTS } = await import("@/lib/config-defaults");
-  const isWorkbench = task.labels.some(
-    (tl) => tl.label.name === TOWER_LABEL_NAME && tl.label.isBuiltin
-  );
-  const directiveKey = isWorkbench ? "task.workbenchDirective" : "task.systemDirective";
-  const systemDirective = await readConfigValue<string>(
-    directiveKey,
-    CONFIG_DEFAULTS[directiveKey].defaultValue as string
-  );
-  if (systemDirective) {
-    appendSystemPrompt += systemDirective;
-  }
-  if (instructionsFile) {
-    const { readFile } = await import("fs/promises");
-    const selected = await readFile(instructionsFile, "utf-8");
-    appendSystemPrompt += (appendSystemPrompt ? "\n\n" : "") + selected;
-  }
-  const usernameVal = await readConfigValue<string>("onboarding.username", "");
-  if (usernameVal) {
-    appendSystemPrompt += (appendSystemPrompt ? "\n" : "") + `The user's name is ${usernameVal}.`;
-  }
+    // 6c. Build system prompt additions
+    // Built-in system directive first (attached to every task; default in config-defaults.ts, overridable via SystemConfig),
+    // then merge the task's chosen AgentPrompt (after), and finally append the username.
+    // Workbench tasks (builtin "Tower" label) get their own directive instead — they dispatch
+    // and review work rather than doing it. Either/or, never both.
+    let appendSystemPrompt = "";
+    const { CONFIG_DEFAULTS } = await import("@/lib/config-defaults");
+    const isWorkbench = task.labels.some(
+      (tl) => tl.label.name === TOWER_LABEL_NAME && tl.label.isBuiltin
+    );
+    const directiveKey = isWorkbench ? "task.workbenchDirective" : "task.systemDirective";
+    const systemDirective = await readConfigValue<string>(
+      directiveKey,
+      CONFIG_DEFAULTS[directiveKey].defaultValue as string
+    );
+    if (systemDirective) {
+      appendSystemPrompt += systemDirective;
+    }
+    if (instructionsFile) {
+      const { readFile } = await import("fs/promises");
+      const selectedInstructions = await readFile(instructionsFile, "utf-8");
+      appendSystemPrompt += (appendSystemPrompt ? "\n\n" : "") + selectedInstructions;
+    }
+    const usernameVal = await readConfigValue<string>("onboarding.username", "");
+    if (usernameVal) {
+      appendSystemPrompt += (appendSystemPrompt ? "\n" : "") + `The user's name is ${usernameVal}.`;
+    }
 
-  // Build and synchronously spawn each explicit target in order. Returning from
-  // createSession is the activity boundary: later process exits never fall back.
-  let selected: { launch: TerminalLaunch; target: ResolvedCapabilityTarget; snapshot: TerminalTargetSnapshot };
-  try {
+    // Build and synchronously spawn each explicit target in order. Returning from
+    // createSession is the activity boundary: later process exits never fall back.
     selected = await executeTerminalPrestartFallback({
       requestId: randomUUID(),
       correlationId: execution.id,
@@ -1057,6 +1025,7 @@ export async function startPtyExecution(
       taskId,
       previousTaskStatus,
       tempDir,
+      clearTargetSnapshot: true,
     });
     throw error;
   }
