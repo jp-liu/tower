@@ -80,7 +80,7 @@ describe("inspectProviderIntegration", () => {
   it("declares every task-scoped Tower environment variable for MCP forwarding", () => {
     expect(buildTowerMcpConfig().envVars).toEqual([...TOWER_MCP_ENV_VARS]);
     expect(buildTowerMcpConfig().env).toEqual({
-      DATABASE_URL: "file:/Users/test/.tower/database/tower.db",
+      DATABASE_URL: process.env.DATABASE_URL || "file:/Users/test/.tower/database/tower.db",
       TOWER_DATA_DIR: "/Users/test/.tower",
     });
   });

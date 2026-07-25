@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { PrismaClient } from "@prisma/client";
+import path from "node:path";
 import { getTowerDbFilePath } from "@/lib/tower-dir";
 
 const testDb = new PrismaClient({
@@ -151,7 +152,7 @@ describe("resolveGitLocalPath", () => {
 
     const result = await resolveGitLocalPathFn("https://github.com/jp-liu/test-repo");
     const home = (await import("os")).default.homedir();
-    expect(result).toBe(`${home}/custom/path/test-repo`);
+    expect(result).toBe(path.join(home, "custom", "path", "test-repo"));
   });
 
   it("falls back to hardcoded logic when no rule matches the URL", async () => {
@@ -197,7 +198,7 @@ describe("resolveGitLocalPathWithSource", () => {
 
     const result = await resolveGitLocalPathWithSourceFn("https://github.com/jp-liu/test-repo");
     const home = (await import("os")).default.homedir();
-    expect(result).toEqual({ path: `${home}/custom/path/test-repo`, source: "rule" });
+    expect(result).toEqual({ path: path.join(home, "custom", "path", "test-repo"), source: "rule" });
   });
 
   it("reports source 'fallback' when rules exist but none match the URL", async () => {

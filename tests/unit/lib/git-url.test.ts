@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import os from "os";
+import path from "node:path";
 
 // Import the functions we're about to add
 // These imports will fail until we implement them (RED phase)
@@ -28,7 +29,7 @@ describe("matchGitPathRule", () => {
         }),
       ];
       const result = matchGitPathRule("https://github.com/jp-liu/my-repo", rules);
-      expect(result).toBe(`${home}/project/i/my-repo`);
+      expect(result).toBe(path.join(home, "project", "i", "my-repo"));
     });
 
     it("returns interpolated path for wildcard * owner match", () => {
@@ -41,7 +42,7 @@ describe("matchGitPathRule", () => {
         }),
       ];
       const result = matchGitPathRule("https://github.com/jp-liu/my-repo", rules);
-      expect(result).toBe(`${home}/project/f/my-repo`);
+      expect(result).toBe(path.join(home, "project", "f", "my-repo"));
     });
 
     it("respects priority: specific owner (priority=0) wins over wildcard (priority=10)", () => {
@@ -61,7 +62,7 @@ describe("matchGitPathRule", () => {
         }),
       ];
       const result = matchGitPathRule("https://github.com/jp-liu/my-repo", rules);
-      expect(result).toBe(`${home}/project/i/my-repo`);
+      expect(result).toBe(path.join(home, "project", "i", "my-repo"));
     });
 
     it("exact owner match wins over wildcard regardless of priority number", () => {
@@ -82,7 +83,7 @@ describe("matchGitPathRule", () => {
       ];
       const result = matchGitPathRule("https://github.com/jp-liu/my-repo", rules);
       // Exact owner (jp-liu) takes priority over wildcard (*) even with lower priority number
-      expect(result).toBe(`${home}/project/i/my-repo`);
+      expect(result).toBe(path.join(home, "project", "i", "my-repo"));
     });
   });
 
@@ -151,7 +152,7 @@ describe("matchGitPathRule", () => {
         }),
       ];
       const result = matchGitPathRule("https://github.com/jp-liu/my-repo", rules);
-      expect(result).toBe(`${home}/code/jp-liu/my-repo`);
+      expect(result).toBe(path.join(home, "code", "jp-liu", "my-repo"));
     });
 
     it("expands ~ to home directory", () => {
@@ -163,7 +164,7 @@ describe("matchGitPathRule", () => {
         }),
       ];
       const result = matchGitPathRule("https://github.com/anyone/test-repo", rules);
-      expect(result).toBe(`${home}/project/f/test-repo`);
+      expect(result).toBe(path.join(home, "project", "f", "test-repo"));
     });
 
     it("auto-appends repo name when template has no {repo}", () => {
@@ -175,7 +176,7 @@ describe("matchGitPathRule", () => {
         }),
       ];
       const result = matchGitPathRule("https://github.com/jp-liu/tower", rules);
-      expect(result).toBe(`${home}/project/tower`);
+      expect(result).toBe(path.join(home, "project", "tower"));
     });
 
     it("auto-appends repo name with {owner} but no {repo}", () => {
@@ -187,7 +188,7 @@ describe("matchGitPathRule", () => {
         }),
       ];
       const result = matchGitPathRule("https://github.com/jp-liu/tower", rules);
-      expect(result).toBe(`${home}/project/jp-liu/tower`);
+      expect(result).toBe(path.join(home, "project", "jp-liu", "tower"));
     });
 
     it("handles absolute path without ~ or {repo}", () => {
@@ -212,7 +213,7 @@ describe("matchGitPathRule", () => {
       ];
       const result = matchGitPathRule("https://github.com/owner/my-app", rules);
       // {repo} stripped, trailing slash trimmed, then /my-app appended
-      expect(result).toBe(`${home}/project/my-app`);
+      expect(result).toBe(path.join(home, "project", "my-app"));
       expect(result).not.toContain("//");
     });
 
@@ -225,7 +226,7 @@ describe("matchGitPathRule", () => {
         }),
       ];
       const result = matchGitPathRule("https://github.com/owner/repo-name", rules);
-      expect(result).toBe(`${home}/project/repo-name`);
+      expect(result).toBe(path.join(home, "project", "repo-name"));
       expect(result).not.toContain("//");
     });
   });
@@ -240,7 +241,7 @@ describe("matchGitPathRule", () => {
         }),
       ];
       const result = matchGitPathRule("git@github.com:jp-liu/my-repo.git", rules);
-      expect(result).toBe(`${home}/project/i/my-repo`);
+      expect(result).toBe(path.join(home, "project", "i", "my-repo"));
     });
 
     it("handles SSH wildcard match", () => {
@@ -252,7 +253,7 @@ describe("matchGitPathRule", () => {
         }),
       ];
       const result = matchGitPathRule("git@github.com:someowner/some-repo.git", rules);
-      expect(result).toBe(`${home}/project/f/some-repo`);
+      expect(result).toBe(path.join(home, "project", "f", "some-repo"));
     });
   });
 });

@@ -1,91 +1,50 @@
-import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
-import { join } from "path";
-import { homedir } from "os";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
-/**
- * Tests for Claude hook auto-registration.
- * Reads the actual ~/.claude/settings.json to verify registration.
- *
- * Note: These tests check the real settings file. ensureTowerDir() is
- * called on every dev/start, so running it in test is safe (idempotent).
- */
+let root: string;
+let dataDir: string;
+let homeDir: string;
 
-const SETTINGS_PATH = join(homedir(), ".claude", "settings.json");
-
-function readSettings(): Record<string, unknown> {
-  try {
-    return JSON.parse(readFileSync(SETTINGS_PATH, "utf-8"));
-  } catch {
-    return {};
-  }
+function readJson(file: string): Record<string, unknown> {
+  return JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
 }
 
-// Reads/writes the real ~/.claude/settings.json; CI has no such file and a
-// read-only-ish HOME, so these run locally only.
-describe.skipIf(process.env.CI)("ensureClaudeHooks — Stop hook registration", () => {
-  it("should have Stop hook registered after ensureTowerDir", async () => {
-    // Import and run — this writes to real settings
-    const { ensureTowerDir } = await import("@/lib/init-tower");
-    ensureTowerDir();
-
-    const settings = readSettings();
-    const hooks = settings["hooks"] as Record<string, unknown>;
-    expect(hooks).toBeDefined();
-
-    const stopEntries = hooks["Stop"] as Array<{ hooks: Array<{ command: string }> }>;
-    expect(stopEntries).toBeDefined();
-    expect(
-      stopEntries.some((e) =>
-        e.hooks.some((h) => h.command.includes("stop-hook.js"))
-      )
-    ).toBe(true);
+describe("Tower-owned assistant bootstrap", () => {
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "tower-bootstrap-test-"));
+    dataDir = join(root, "data");
+    homeDir = join(root, "home");
+    mkdirSync(homeDir, { recursive: true });
+    vi.stubEnv("HOME", homeDir);
+    vi.stubEnv("TOWER_DATA_DIR", dataDir);
   });
 
-  it("should have all 3 Tower hooks registered", async () => {
-    const settings = readSettings();
-    const hooks = settings["hooks"] as Record<string, unknown>;
-
-    // SessionStart
-    const sessionStart = hooks["SessionStart"] as Array<{ hooks: Array<{ command: string }> }>;
-    expect(
-      sessionStart?.some((e) =>
-        e.hooks.some((h) => h.command.includes("session-start-hook.js"))
-      )
-    ).toBe(true);
-
-    // PostToolUse
-    const postToolUse = hooks["PostToolUse"] as Array<{ hooks: Array<{ command: string }> }>;
-    expect(
-      postToolUse?.some((e) =>
-        e.hooks.some((h) => h.command.includes("post-tool-hook.js"))
-      )
-    ).toBe(true);
-
-    // Stop
-    const stop = hooks["Stop"] as Array<{ hooks: Array<{ command: string }> }>;
-    expect(
-      stop?.some((e) =>
-        e.hooks.some((h) => h.command.includes("stop-hook.js"))
-      )
-    ).toBe(true);
+  afterAll(() => {
+    vi.unstubAllEnvs();
+    rmSync(root, { recursive: true, force: true });
   });
 
-  it("should not duplicate Stop hook on repeated calls", async () => {
+  it("initializes only the Tower-owned assistant directory", async () => {
     const { ensureTowerDir } = await import("@/lib/init-tower");
 
-    // Call twice
+    expect(ensureTowerDir()).toBe(join(dataDir, "assistant"));
+    expect(existsSync(join(dataDir, "assistant", "CLAUDE.md"))).toBe(true);
+    expect(existsSync(join(dataDir, "assistant", ".claude", "skills", "tower", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(homeDir, ".claude", "settings.json"))).toBe(false);
+  });
+
+  it("removes only the obsolete assistant MCP field and is idempotent", async () => {
+    const { ensureTowerDir } = await import("@/lib/init-tower");
+    const settingsFile = join(dataDir, "assistant", ".claude", "settings.json");
+    mkdirSync(join(dataDir, "assistant", ".claude"), { recursive: true });
+    writeFileSync(settingsFile, JSON.stringify({ theme: "dark", mcpServers: { tower: {} } }));
+
     ensureTowerDir();
     ensureTowerDir();
 
-    const settings = readSettings();
-    const hooks = settings["hooks"] as Record<string, unknown>;
-    const stopEntries = hooks["Stop"] as Array<{ hooks: Array<{ command: string }> }>;
-
-    const stopHookCount = stopEntries.filter((e) =>
-      e.hooks.some((h) => h.command.includes("stop-hook.js"))
-    ).length;
-
-    expect(stopHookCount).toBe(1);
+    expect(readJson(settingsFile)).toEqual({ theme: "dark" });
+    expect(existsSync(join(homeDir, ".claude", "settings.json"))).toBe(false);
   });
 });
