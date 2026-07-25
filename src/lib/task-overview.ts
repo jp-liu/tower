@@ -150,7 +150,7 @@ async function gatherTaskChangeData(taskId: string): Promise<TaskChangeData | nu
 }
 
 /** Ask the AI for a concise change summary; fall back to the commit log. */
-async function generateChangeSummary(
+export async function generateChangeSummary(
   data: TaskChangeData,
   locale: Locale
 ): Promise<string | null> {
