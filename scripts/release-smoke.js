@@ -26,6 +26,8 @@ fs.mkdirSync(registryDir, { recursive: true });
 
 let child = null;
 let registry = null;
+let upstream = null;
+const upstreamRequests = [];
 
 function cleanEnvironment(overrides = {}) {
   const env = { ...process.env, ...overrides };
@@ -240,21 +242,180 @@ function waitForExit(processHandle, timeoutMs) {
 }
 
 async function stopChild() {
-  if (!child || child.exitCode !== null) return;
+  if (!child) return;
+  if (child.exitCode !== null) {
+    child = null;
+    return;
+  }
   try {
     if (process.platform === "win32") {
       execFileSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore" });
-      return;
+    } else {
+      process.kill(-child.pid, "SIGTERM");
+      if (!await waitForExit(child, 5000)) {
+        process.kill(-child.pid, "SIGKILL");
+        await waitForExit(child, 5000);
+      }
     }
-    process.kill(-child.pid, "SIGTERM");
-    if (!await waitForExit(child, 5000)) process.kill(-child.pid, "SIGKILL");
   } catch {}
+  child = null;
 }
 
 async function stopRegistry() {
   if (!registry) return;
   await new Promise((resolve) => registry.close(resolve));
   registry = null;
+}
+
+async function stopUpstream() {
+  if (!upstream) return;
+  await new Promise((resolve) => upstream.close(resolve));
+  upstream = null;
+}
+
+async function startFakeAiUpstream() {
+  upstream = http.createServer((req, res) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+      const body = Buffer.concat(chunks).toString("utf8");
+      upstreamRequests.push({ url: req.url, authorization: req.headers.authorization, body });
+      const content = body.includes("packaged assistant smoke") ? "assistant-ok" : "summary-ok";
+      res.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+      });
+      res.write(`data: ${JSON.stringify({
+        id: "chatcmpl-release-smoke",
+        object: "chat.completion.chunk",
+        created: 1,
+        model: "fixture-model",
+        choices: [{ index: 0, delta: { role: "assistant", content }, finish_reason: null }],
+      })}\n\n`);
+      res.write(`data: ${JSON.stringify({
+        id: "chatcmpl-release-smoke",
+        object: "chat.completion.chunk",
+        created: 1,
+        model: "fixture-model",
+        choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+      })}\n\n`);
+      res.end("data: [DONE]\n\n");
+    });
+  });
+  await new Promise((resolve, reject) => {
+    upstream.once("error", reject);
+    upstream.listen(0, host, resolve);
+  });
+  const address = upstream.address();
+  if (!address || typeof address === "string") throw new Error("Fake AI upstream did not bind a temporary port");
+  return `http://${host}:${address.port}/v1`;
+}
+
+function requestApp(pathname, body) {
+  return new Promise((resolve, reject) => {
+    const payload = body === undefined ? null : JSON.stringify(body);
+    const request = http.request({
+      host,
+      port: Number(port),
+      path: pathname,
+      method: payload ? "POST" : "GET",
+      headers: payload ? { "content-type": "application/json", "content-length": Buffer.byteLength(payload) } : {},
+      timeout: 10_000,
+    }, (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => resolve({ status: response.statusCode || 0, body: Buffer.concat(chunks).toString("utf8") }));
+    });
+    request.on("error", reject);
+    request.on("timeout", () => request.destroy(new Error("request timeout")));
+    if (payload) request.write(payload);
+    request.end();
+  });
+}
+
+async function preparePackagedAiFixtures(installedRoot, smokeEnv, baseUrl) {
+  const fixtureDir = path.join(baseDir, "fixture-provider");
+  const projectDir = path.join(baseDir, "fixture-project");
+  const fakeBinDir = path.join(baseDir, "fake-bin");
+  fs.cpSync(path.join(projectRoot, "packages", "ai-runtime", "test", "fixtures", "valid-plugin"), fixtureDir, {
+    recursive: true,
+  });
+  fs.mkdirSync(projectDir, { recursive: true });
+  fs.mkdirSync(fakeBinDir, { recursive: true });
+  const fakeCli = path.join(fakeBinDir, "fixture-cli");
+  fs.writeFileSync(fakeCli, "#!/bin/sh\nprintf 'packaged terminal output\\n'\n");
+  fs.chmodSync(fakeCli, 0o700);
+  const runtimeUrl = require("url").pathToFileURL(path.join(projectRoot, "packages", "ai-runtime", "dist", "index.js")).href;
+  const registerScript = `
+    import(process.argv[1]).then(async ({ CliPluginRuntime }) => {
+      const runtime = new CliPluginRuntime({ dataRoot: process.argv[2], towerVersion: '0.3.0' });
+      const plan = await runtime.planLocalRegistration(process.argv[3]);
+      await runtime.registerLocal(plan);
+      await runtime.confirmAndEnable(plan.pluginId, plan);
+    });
+  `;
+  execFileSync(process.execPath, ["-e", registerScript, runtimeUrl, dataDir, fixtureDir], {
+    cwd: projectRoot,
+    stdio: "inherit",
+    env: smokeEnv,
+  });
+
+  const seedScript = `
+    const { PrismaClient } = require('@prisma/client');
+    const db = new PrismaClient();
+    async function main() {
+      await db.workspace.upsert({ where: { id: 'release-workspace' }, create: { id: 'release-workspace', name: 'Release Smoke' }, update: {} });
+      await db.project.upsert({
+        where: { id: 'release-project' },
+        create: { id: 'release-project', name: 'Release Fixture', workspaceId: 'release-workspace', localPath: process.argv[1] },
+        update: { localPath: process.argv[1] },
+      });
+      await db.task.upsert({
+        where: { id: 'creleasesmoketask00000001' },
+        create: { id: 'creleasesmoketask00000001', title: 'Packaged Terminal', projectId: 'release-project' },
+        update: { status: 'TODO' },
+      });
+      await db.providerConnection.upsert({
+        where: { connectionKey: 'cli:@fixture/tower-cli' },
+        create: {
+          id: 'release-cli', connectionKey: 'cli:@fixture/tower-cli', name: 'Packaged Fixture CLI', kind: 'cli',
+          provider: '@fixture/tower-cli', enabled: true, testStatus: 'connected', testOk: true,
+          commandOverride: process.argv[2], resolvedCommand: process.argv[2], resolvedVersion: '1.0.0',
+        },
+        update: { enabled: true, testStatus: 'connected', testOk: true, commandOverride: process.argv[2] },
+      });
+      await db.providerConnection.upsert({
+        where: { id: 'release-api' },
+        create: {
+          id: 'release-api', name: 'Packaged Fake API', kind: 'api', provider: 'openai-compatible', enabled: true,
+          testStatus: 'connected', testOk: true, baseUrl: process.argv[3], defaultModelId: 'fixture-model',
+          apiKeys: { create: { id: 'release-key', value: 'release-smoke-key', enabled: true, order: 0, testStatus: 'ok' } },
+          models: { create: { id: 'release-model', modelId: 'fixture-model', source: 'manual', available: true } },
+        },
+        update: { enabled: true, testStatus: 'connected', testOk: true, baseUrl: process.argv[3] },
+      });
+      for (const slot of ['summary', 'dreaming', 'analysis', 'assistant', 'terminal']) {
+        const config = await db.aiCapabilityConfig.upsert({
+          where: { slot }, create: { slot, migrationStatus: 'complete' }, update: { migrationStatus: 'complete' },
+        });
+        await db.aiCapabilityTarget.deleteMany({ where: { capabilityConfigId: config.id } });
+        const terminal = slot === 'terminal';
+        await db.aiCapabilityTarget.create({ data: {
+          capabilityConfigId: config.id,
+          connectionId: terminal ? 'release-cli' : 'release-api',
+          modelId: terminal ? 'fixture' : 'fixture-model',
+          targetKey: terminal ? 'release-cli:fixture' : 'release-api:fixture-model',
+          order: 0,
+        } });
+      }
+    }
+    main().finally(() => db.$disconnect());
+  `;
+  execFileSync(process.execPath, ["-e", seedScript, projectDir, fakeCli, baseUrl], {
+    cwd: installedRoot,
+    stdio: "inherit",
+    env: { ...smokeEnv, DATABASE_URL: `file:${path.join(dataDir, "database", "tower.db")}` },
+  });
 }
 
 async function waitForServer(pid) {
@@ -275,6 +436,19 @@ async function waitForServer(pid) {
 
   const logs = fs.existsSync(logPath) ? fs.readFileSync(logPath, "utf-8") : "(no logs)";
   throw new Error(`Smoke server did not become reachable.\n\nLog tail:\n${logs.slice(-4000)}`);
+}
+
+async function startPackagedApp(towerBin, smokeEnv) {
+  const logFd = fs.openSync(logPath, "a");
+  child = spawn(towerBin, ["--port", port, "--no-open"], {
+    cwd: projectRoot,
+    detached: true,
+    stdio: ["ignore", logFd, logFd],
+    env: smokeEnv,
+  });
+  child.unref();
+  fs.closeSync(logFd);
+  await waitForServer(child.pid);
 }
 
 async function main() {
@@ -326,19 +500,8 @@ async function main() {
   };
   const version = execFileSync(towerBin, ["--version"], { encoding: "utf8", env: smokeEnv }).trim();
   if (version !== `tower v${pkg.version}`) throw new Error(`Version mismatch: ${version}`);
-  const logFd = fs.openSync(logPath, "a");
-
   console.log("[release:smoke] Starting packaged app");
-  child = spawn(towerBin, ["--port", port, "--no-open"], {
-    cwd: projectRoot,
-    detached: true,
-    stdio: ["ignore", logFd, logFd],
-    env: smokeEnv,
-  });
-  child.unref();
-  fs.closeSync(logFd);
-
-  await waitForServer(child.pid);
+  await startPackagedApp(towerBin, smokeEnv);
 
   const migrationIds = fs.readdirSync(path.join(installedRoot, "scripts", "migrations"))
     .filter((name) => /^\d.*\.(?:ts|mjs|js)$/.test(name))
@@ -364,18 +527,72 @@ async function main() {
     env: { ...smokeEnv, DATABASE_URL: databaseUrl },
   });
 
+  console.log("[release:smoke] Preparing packaged fixture plugin and explicit capability plans");
+  const fakeAiBaseUrl = await startFakeAiUpstream();
+  await preparePackagedAiFixtures(installedRoot, smokeEnv, fakeAiBaseUrl);
+  smokeEnv.PATH = `${path.join(baseDir, "fake-bin")}${path.delimiter}${smokeEnv.PATH ?? ""}`;
+  await stopChild();
+  await startPackagedApp(towerBin, smokeEnv);
+
+  const assistant = await requestApp("/api/internal/assistant/chat", {
+    message: "packaged assistant smoke",
+    clientTurnId: "release_smoke_12345678",
+  });
+  if (assistant.status !== 200 || !assistant.body.includes("assistant-ok") || !assistant.body.includes('"type":"done"')) {
+    throw new Error(`Packaged Assistant smoke failed (${assistant.status}): ${assistant.body.slice(-1000)}`);
+  }
+
+  const terminal = await requestApp("/api/internal/terminal/creleasesmoketask00000001/start", { prompt: "packaged terminal smoke" });
+  if (terminal.status !== 200) {
+    const diagnosticScript = `
+      const { PrismaClient } = require('@prisma/client');
+      const db = new PrismaClient();
+      Promise.all([
+        db.taskExecution.findMany({ where: { taskId: 'creleasesmoketask00000001' }, orderBy: { createdAt: 'desc' }, take: 2 }),
+        db.aiCapabilityAttempt.findMany({ where: { slot: 'terminal' }, orderBy: { createdAt: 'desc' }, take: 5 }),
+      ]).then((rows) => process.stdout.write(JSON.stringify(rows))).finally(() => db.$disconnect());
+    `;
+    const diagnostics = execFileSync(process.execPath, ["-e", diagnosticScript], {
+      cwd: installedRoot,
+      encoding: "utf8",
+      env: { ...smokeEnv, DATABASE_URL: databaseUrl },
+    });
+    throw new Error(`Packaged Terminal smoke failed (${terminal.status}): ${terminal.body}; diagnostics=${diagnostics}`);
+  }
+  const terminalBinding = JSON.parse(terminal.body);
+  if (terminalBinding.connectionId !== "release-cli" || terminalBinding.modelId !== "fixture" || !terminalBinding.targetId) {
+    throw new Error(`Packaged Terminal binding mismatch: ${terminal.body}`);
+  }
+
+  const summaryDeadline = Date.now() + 20_000;
+  while (Date.now() < summaryDeadline && !upstreamRequests.some((request) => request.body.includes("packaged terminal output"))) {
+    await wait(250);
+  }
+  const assistantRequest = upstreamRequests.find((request) => request.body.includes("packaged assistant smoke"));
+  const summaryRequest = upstreamRequests.find((request) => request.body.includes("packaged terminal output"));
+  if (!assistantRequest || !summaryRequest) {
+    throw new Error(`Packaged capability requests missing: assistant=${Boolean(assistantRequest)} summary=${Boolean(summaryRequest)}`);
+  }
+  if (assistantRequest.authorization !== "Bearer release-smoke-key" || summaryRequest.authorization !== "Bearer release-smoke-key") {
+    throw new Error("Packaged API connection did not use the restored explicit Key");
+  }
+
   console.log("");
   console.log(`[release:smoke] Ready: http://${host}:${port}`);
-  console.log(`[release:smoke] Verified ${migrationIds.length} migrations and built-in provider initialization`);
+  console.log(`[release:smoke] Verified ${migrationIds.length} migrations, fixture plugin, API, Summary, Assistant, and Terminal plans`);
 }
 
 main()
   .catch((error) => {
     console.error(`[release:smoke] Failed: ${error.message}`);
+    if (fs.existsSync(logPath)) {
+      console.error(`[release:smoke] Log tail:\n${fs.readFileSync(logPath, "utf8").slice(-4000)}`);
+    }
     process.exitCode = 1;
   })
   .finally(async () => {
     await stopChild();
+    await stopUpstream();
     await stopRegistry();
-    fs.rmSync(baseDir, { recursive: true, force: true });
+    fs.rmSync(baseDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   });

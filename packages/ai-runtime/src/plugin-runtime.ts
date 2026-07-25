@@ -90,7 +90,9 @@ export class CliPluginRuntime {
     this.npmProvider = options.npmProvider ?? new DefaultNpmPackageProvider({ fileSystem: this.fileSystem });
     this.towerVersion = options.towerVersion;
     this.nodeVersion = options.nodeVersion ?? process.versions.node;
-    this.importModule = options.importModule ?? (async (specifier) => import(specifier) as Promise<Record<string, unknown>>);
+    this.importModule = options.importModule ?? (async (specifier) => import(
+      /* webpackIgnore: true */ specifier
+    ) as Promise<Record<string, unknown>>);
     this.now = options.now ?? (() => new Date());
   }
 
