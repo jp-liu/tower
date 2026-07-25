@@ -1,5 +1,6 @@
 "use server";
 
+import { API_PRESET_SNAPSHOT } from "@tower/ai-runtime";
 import {
   addApiKeyService,
   addManualApiModelService,
@@ -33,19 +34,32 @@ async function action<T>(operation: () => Promise<T>): Promise<ActionResult<T>> 
     const candidateCode = error && typeof error === "object" && "code" in error
       ? String(error.code)
       : "invalid_input";
+    const message = error instanceof Error ? error.message : "";
     const code = candidateCode === "connection_in_use" || candidateCode === "model_in_use"
       ? candidateCode
-      : "invalid_input";
+      : message.includes("controlled by the transport")
+        ? "forbidden_header"
+        : "invalid_input";
     return {
       ok: false,
       error: {
         code,
-        message: error instanceof Error && error.message.startsWith("API ")
-          ? error.message
-          : "The API connection operation could not be completed",
+        message: code === "forbidden_header"
+          ? "A configured header is controlled by the transport"
+          : error instanceof Error && error.message.startsWith("API ")
+            ? error.message
+            : "The API connection operation could not be completed",
       },
     };
   }
+}
+
+export async function listApiConnectionPresets() {
+  return {
+    source: API_PRESET_SNAPSHOT.source,
+    generatedAt: API_PRESET_SNAPSHOT.generatedAt,
+    presets: API_PRESET_SNAPSHOT.presets.map((preset) => ({ ...preset })),
+  };
 }
 
 export async function listApiConnections() { return action(listApiConnectionsService); }

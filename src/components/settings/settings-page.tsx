@@ -33,14 +33,10 @@ import {
   Keyboard,
   X,
   Plus,
-  Star,
   Trash2,
   Edit,
   Eye,
   Save,
-  Loader2,
-  CheckCircle2,
-  XCircle,
   FolderOpen,
   ChevronLeft,
   ChevronRight,
@@ -66,10 +62,8 @@ import {
   resetWorkbenchDirective,
   type BuiltinPromptsData,
 } from "@/actions/builtin-prompt-actions";
-import { getAvailableProviders } from "@/actions/ai-config-actions";
 import { CapabilitySlotsSection } from "@/components/settings/capability-slots-section";
-import type { TestResult } from "@/lib/cli-test";
-import type { ProviderAvailability } from "@/lib/ai/types";
+import { ConnectionsSection } from "@/components/settings/connections-section";
 import type { AgentPrompt } from "@prisma/client";
 import type { DetectedTerminalApp, DetectedEditor } from "@/lib/platform";
 import type { GitPathRule } from "@/lib/git-url";
@@ -261,15 +255,6 @@ const ACCENT_STYLES: Record<
 };
 
 // ---------------------------------------------------------------------------
-// CLI Adapters (AI Tools)
-// ---------------------------------------------------------------------------
-// The AI Tools list is rendered dynamically from the provider registry
-// (getAvailableProviders) — adding a provider there surfaces it here with no
-// UI change. The provider `name` ("claude", "codex", …) is the identifier
-// used for the default-adapter preference and the test endpoint.
-const DEFAULT_CLI_ADAPTER_KEY = "ai-manager:default-cli-adapter";
-
-// ---------------------------------------------------------------------------
 // System Config types
 // ---------------------------------------------------------------------------
 type RuleEditState = {
@@ -380,14 +365,6 @@ export function SettingsPage() {
     "Menlo, Monaco, 'Courier New', monospace"
   );
 
-  // ── AI Tools state ─────────────────────────────────────────────
-  const [providers, setProviders] = useState<ProviderAvailability[]>([]);
-  const [defaultAdapter, setDefaultAdapter] = useState("claude");
-  const [testingAdapter, setTestingAdapter] = useState<string | null>(null);
-  const [testResults, setTestResults] = useState<Record<string, TestResult>>(
-    {}
-  );
-
   // ── Prompts state ──────────────────────────────────────────────
   const [prompts, setPrompts] = useState<AgentPrompt[]>([]);
   const [promptDialogOpen, setPromptDialogOpen] = useState(false);
@@ -495,13 +472,6 @@ export function SettingsPage() {
       void setConfigValue("editor.command", byName.command);
     }
   }, [detectedEditors, editorCommand]);
-
-  // AI Tools — providers from the registry + default adapter from localStorage
-  useEffect(() => {
-    getAvailableProviders().then(setProviders);
-    const stored = localStorage.getItem(DEFAULT_CLI_ADAPTER_KEY);
-    if (stored) setDefaultAdapter(stored);
-  }, []);
 
   // Prompts load
   useEffect(() => {
@@ -629,49 +599,6 @@ export function SettingsPage() {
   // =========================================================================
   // HANDLERS — General
   // =========================================================================
-
-  // =========================================================================
-  // HANDLERS — AI Tools
-  // =========================================================================
-  function handleSetAdapterDefault(provider: string) {
-    setDefaultAdapter(provider);
-    localStorage.setItem(DEFAULT_CLI_ADAPTER_KEY, provider);
-  }
-
-  async function handleTestAdapter(provider: string) {
-    if (testingAdapter) return;
-    setTestingAdapter(provider);
-    setTestResults((prev) => {
-      const next = { ...prev };
-      delete next[provider];
-      return next;
-    });
-    try {
-      const res = await fetch("/api/adapters/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider }),
-      });
-      const data: TestResult = await res.json();
-      setTestResults((prev) => ({ ...prev, [provider]: data }));
-    } catch {
-      setTestResults((prev) => ({
-        ...prev,
-        [provider]: {
-          ok: false,
-          checks: [
-            {
-              name: "network_error",
-              passed: false,
-              message: "Network request failed",
-            },
-          ],
-        },
-      }));
-    } finally {
-      setTestingAdapter(null);
-    }
-  }
 
   // =========================================================================
   // HANDLERS — Prompts
@@ -1189,110 +1116,7 @@ export function SettingsPage() {
   function renderAiTools() {
     return (
       <div className="space-y-4">
-      <ul className="divide-y rounded-xl border border-border bg-card">
-        {providers.map((provider) => {
-          const isDefault = defaultAdapter === provider.name;
-          const isTesting = testingAdapter === provider.name;
-          const result = testResults[provider.name];
-
-          return (
-            <li key={provider.name}>
-              <div className="px-5 py-4">
-                {/* Row: info left, actions right */}
-                <div className="flex items-center gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">{provider.displayName}</span>
-                      <Badge variant="outline">{t("label.builtin")}</Badge>
-                      {isDefault && (
-                        <Badge variant="secondary" className="shrink-0">
-                          <Star className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
-                          {t("settings.prompts.default")}
-                        </Badge>
-                      )}
-                      {result && (
-                        <Badge
-                          variant={result.ok ? "secondary" : "destructive"}
-                          className={cn(
-                            "shrink-0",
-                            result.ok && "bg-green-600 text-white hover:bg-green-700"
-                          )}
-                        >
-                          {result.ok ? (
-                            <><CheckCircle2 className="h-3 w-3 mr-1" />{t("settings.aiTools.testPassed")}</>
-                          ) : (
-                            <><XCircle className="h-3 w-3 mr-1" />{t("settings.aiTools.testFailed")}</>
-                          )}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {provider.cli.available && provider.cli.version
-                        ? `${provider.name} · ${provider.cli.version}`
-                        : provider.name}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {!isDefault && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleSetAdapterDefault(provider.name)}
-                      >
-                        <Star className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-                        {t("settings.prompts.setDefault")}
-                      </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleTestAdapter(provider.name)}
-                      disabled={isTesting}
-                    >
-                      {isTesting ? (
-                        <>
-                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                          {t("settings.aiTools.testing")}
-                        </>
-                      ) : (
-                        t("settings.aiTools.testConnection")
-                      )}
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Test results */}
-                {result && (
-                  <div className="mt-3 rounded-md border border-border bg-muted/30 px-4 py-3">
-                    <div className="space-y-1.5">
-                      {result.checks.map((check) => (
-                        <div
-                          key={`${provider.name}-${check.name}`}
-                          className="flex items-center gap-2 text-sm"
-                        >
-                          <span
-                            className={cn(
-                              "w-1.5 h-1.5 rounded-full shrink-0",
-                              check.passed ? "bg-green-500" : "bg-red-500"
-                            )}
-                          />
-                          <span className={cn(
-                            check.passed
-                              ? "text-foreground"
-                              : "text-red-700 dark:text-red-300"
-                          )}>
-                            {check.message}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+        <ConnectionsSection />
         <CapabilitySlotsSection />
       </div>
     );

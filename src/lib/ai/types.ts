@@ -108,7 +108,12 @@ export interface ProviderDefinition {
 export interface ProviderAvailability {
   name: string;
   displayName: string;
-  cli: { available: boolean; version: string | null };
+  cli: {
+    available: boolean;
+    version: string | null;
+    commandPath: string | null;
+    commandState: "not-found" | "found" | "runnable" | "connected" | null;
+  };
   api: { available: boolean; keyConfigured: boolean };
 }
 

@@ -67,6 +67,8 @@ export class ProviderRegistry {
     for (const p of this.providers.values()) {
       let cliAvailable = false;
       let cliVersion: string | null = null;
+      let commandPath: string | null = null;
+      let commandState: ProviderAvailability["cli"]["commandState"] = null;
       if (p.cli) {
         try {
           const spec = { id: p.name, agentFieldValue: p.agentFieldValue, plugin: p.cli.plugin };
@@ -74,8 +76,11 @@ export class ProviderRegistry {
           cliAvailable = resolution.selected?.state === "runnable"
             || resolution.selected?.state === "connected";
           cliVersion = resolution.selected?.version ?? null;
+          commandPath = resolution.selected?.path ?? null;
+          commandState = resolution.selected?.state ?? resolution.state;
         } catch {
           cliAvailable = false;
+          commandState = "not-found";
         }
       }
       const apiKeyConfigured = p.api ? !!process.env[p.api.keyEnvVar] : false;
@@ -84,7 +89,7 @@ export class ProviderRegistry {
       results.push({
         name: p.name,
         displayName: p.displayName,
-        cli: { available: cliAvailable, version: cliVersion },
+        cli: { available: cliAvailable, version: cliVersion, commandPath, commandState },
         api: { available: apiAvailable, keyConfigured: apiKeyConfigured },
       });
     }

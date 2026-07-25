@@ -183,3 +183,14 @@ export async function getProviderConnections(): Promise<ProviderConnectionRow[]>
     orderBy: { provider: "asc" },
   });
 }
+
+export async function setCliProviderEnabled(provider: string, enabled: boolean): Promise<void> {
+  if (!/^[a-z0-9][a-z0-9._-]{0,79}$/i.test(provider)) {
+    throw new Error("Invalid CLI provider");
+  }
+  const result = await db.providerConnection.updateMany({
+    where: { connectionKey: cliConnectionKey(provider), kind: "cli" },
+    data: { enabled },
+  });
+  if (result.count === 0) throw new Error("CLI connection has not been tested yet");
+}

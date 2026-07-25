@@ -1,180 +1,420 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
-import { Terminal, BookOpen, Brain, BarChart3 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
-import { useI18n } from "@/lib/i18n";
+  ArrowDown,
+  ArrowUp,
+  BarChart3,
+  BookOpen,
+  Bot,
+  Brain,
+  CircleAlert,
+  CircleDashed,
+  Clock3,
+  Loader2,
+  Pencil,
+  Plus,
+  Route,
+  Terminal,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
-  getAiCapabilityConfigs,
-  updateAiCapabilityConfig,
-  getAvailableProviders,
+  addAiCapabilityTarget,
+  deleteAiCapabilityTarget,
+  getAiCapabilityChoices,
+  getAiCapabilityDiagnostics,
+  listAiCapabilities,
+  reorderAiCapabilityTargets,
+  updateAiCapabilityTarget,
 } from "@/actions/ai-config-actions";
-import { getConnectedProviders } from "@/actions/provider-connection-actions";
-import { AiCapabilityBlock } from "./ai-capability-block";
-import { AssistantCapabilityBlock } from "./assistant-capability-block";
+import { getConfigValue, setConfigValue } from "@/actions/config-actions";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useI18n } from "@/lib/i18n";
 
-type ProviderAvail = Awaited<ReturnType<typeof getAvailableProviders>>[number];
-type SlotConfig = Awaited<ReturnType<typeof getAiCapabilityConfigs>>[number];
+type Slot = "terminal" | "summary" | "dreaming" | "analysis" | "assistant";
+type ConfigResult = Awaited<ReturnType<typeof listAiCapabilities>>;
+type SlotConfig = Extract<ConfigResult, { ok: true }>["data"][number];
+type Target = SlotConfig["targets"][number];
+type ChoiceResult = Awaited<ReturnType<typeof getAiCapabilityChoices>>;
+type Choice = Extract<ChoiceResult, { ok: true }>["data"][number];
+type DiagnosticsResult = Awaited<ReturnType<typeof getAiCapabilityDiagnostics>>;
+type Diagnostic = Extract<DiagnosticsResult, { ok: true }>["data"][number];
 
-/**
- * Capability slots panel. Each AI capability gets its own independent block.
- * The `terminal` slot is fully wired; `assistant` has model/effort config.
- * The remaining 3 slots (summary / dreaming / analysis) are display-only for now.
- */
+const SLOT_META = [
+  { slot: "terminal", icon: Terminal, desc: "terminalDesc" },
+  { slot: "summary", icon: BookOpen, desc: "summaryDesc" },
+  { slot: "dreaming", icon: Brain, desc: "dreamingDesc" },
+  { slot: "analysis", icon: BarChart3, desc: "analysisDesc" },
+  { slot: "assistant", icon: Bot, desc: "assistantDesc" },
+] as const;
+
+const EFFORT_OPTIONS = ["low", "medium", "high"] as const;
+
+function IconButton({ label, children, ...props }: React.ComponentProps<typeof Button> & { label: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<Button type="button" variant="ghost" size="icon" aria-label={label} {...props} />}>
+        {children}
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function unavailableReason(choice: Choice, modelId: string | null) {
+  if (!choice.enabled) return "connectionDisabled";
+  if (!choice.testOk) return "connectionFailed";
+  if (choice.kind === "api" && modelId) {
+    const model = choice.models.find((item) => item.modelId === modelId);
+    if (!model || !model.available) return "modelUnavailable";
+  }
+  return null;
+}
+
 export function CapabilitySlotsSection() {
   const { t } = useI18n();
-  const [providers, setProviders] = useState<ProviderAvail[]>([]);
-  const [connected, setConnected] = useState<string[]>([]);
   const [configs, setConfigs] = useState<SlotConfig[]>([]);
+  const [choices, setChoices] = useState<Record<Slot, Choice[]>>({
+    terminal: [], summary: [], dreaming: [], analysis: [], assistant: [],
+  });
+  const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isPending, startTransition] = useTransition();
+  const [loadError, setLoadError] = useState(false);
+  const [pending, setPending] = useState<Record<string, boolean>>({});
+  const [editor, setEditor] = useState<null | { slot: Slot; target: Target | null }>(null);
+  const [connectionId, setConnectionId] = useState("");
+  const [modelId, setModelId] = useState("");
+  const [editorError, setEditorError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<null | { slot: Slot; target: Target }>(null);
+  const [effort, setEffort] = useState("low");
 
-  useEffect(() => {
-    let alive = true;
-    Promise.all([
-      getAvailableProviders(),
-      getConnectedProviders(),
-      getAiCapabilityConfigs(),
-    ])
-      .then(([p, c, cfg]) => {
-        if (!alive) return;
-        setProviders(p);
-        setConnected(c);
-        setConfigs(cfg);
-      })
-      .catch((e) => {
-        if (alive) toast.error(e instanceof Error ? e.message : String(e));
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
+  const load = useCallback(async () => {
+    setLoadError(false);
+    const [configResult, terminal, summary, dreaming, analysis, assistant, diagnosticResult, effortValue] = await Promise.all([
+      listAiCapabilities(),
+      getAiCapabilityChoices("terminal"),
+      getAiCapabilityChoices("summary"),
+      getAiCapabilityChoices("dreaming"),
+      getAiCapabilityChoices("analysis"),
+      getAiCapabilityChoices("assistant"),
+      getAiCapabilityDiagnostics({ limit: 25 }),
+      getConfigValue("assistant.effort", "low"),
+    ]);
+    if (!configResult.ok || !terminal.ok || !summary.ok || !dreaming.ok || !analysis.ok || !assistant.ok) {
+      setLoadError(true);
+    } else {
+      setConfigs(configResult.data);
+      setChoices({
+        terminal: terminal.data,
+        summary: summary.data,
+        dreaming: dreaming.data,
+        analysis: analysis.data,
+        assistant: assistant.data,
       });
-    return () => {
-      alive = false;
-    };
+    }
+    if (diagnosticResult.ok) setDiagnostics(diagnosticResult.data);
+    setEffort(String(effortValue));
+    setLoading(false);
   }, []);
 
-  const terminalCfg = configs.find((c) => c.slot === "terminal");
-  const effectiveProvider =
-    terminalCfg?.provider ??
-    (connected.includes("claude") ? "claude" : connected[0] ?? "claude");
+  useEffect(() => { void load(); }, [load]);
 
-  const displayName = (name: string) =>
-    providers.find((p) => p.name === name)?.displayName ?? name;
+  function markPending(key: string, value: boolean) {
+    setPending((current) => ({ ...current, [key]: value }));
+  }
 
-  function handleTerminalChange(provider: string | null) {
-    if (!provider) return;
-    startTransition(async () => {
-      try {
-        const result = await updateAiCapabilityConfig("terminal", {
-          provider,
-          mode: "cli",
-          model: null,
-        });
-        if (!result.ok) {
-          toast.error(result.error);
-          return;
-        }
-        setConfigs((prev) => {
-          const others = prev.filter((c) => c.slot !== "terminal");
-          const base =
-            terminalCfg ??
-            ({
-              id: "",
-              slot: "terminal",
-              mode: "cli",
-              model: null,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            } as SlotConfig);
-          return [...others, { ...base, slot: "terminal", provider, mode: "cli", model: null }];
-        });
-        toast.success(t("settings.capabilitySlots.updated"));
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : String(e));
-      }
-    });
+  function actionError(code?: string) {
+    return t(`settings.capabilitySlots.error.${code ?? "capability_operation_failed"}` as never);
+  }
+
+  function openTargetEditor(slot: Slot, target: Target | null) {
+    setEditor({ slot, target });
+    setConnectionId(target?.connectionId ?? "");
+    setModelId(target?.modelId ?? "");
+    setEditorError(null);
+  }
+
+  const selectedChoice = useMemo(
+    () => editor ? choices[editor.slot].find((choice) => choice.id === connectionId) ?? null : null,
+    [choices, connectionId, editor],
+  );
+
+  async function saveTarget() {
+    if (!editor || !connectionId) return;
+    if (selectedChoice?.kind === "api" && !modelId.trim()) {
+      setEditorError(t("settings.capabilitySlots.apiModelRequired"));
+      return;
+    }
+    const key = `save:${editor.slot}:${editor.target?.id ?? "new"}`;
+    markPending(key, true);
+    const input = { connectionId, modelId: modelId.trim() || null };
+    const result = editor.target
+      ? await updateAiCapabilityTarget(editor.slot, editor.target.id, input)
+      : await addAiCapabilityTarget(editor.slot, input);
+    if (!result.ok) {
+      setEditorError(actionError(result.error.code));
+      markPending(key, false);
+      return;
+    }
+    setEditor(null);
+    await load();
+    markPending(key, false);
+    toast.success(t("settings.capabilitySlots.saved"));
+  }
+
+  async function removeTarget() {
+    if (!deleteTarget) return;
+    const { slot, target } = deleteTarget;
+    setDeleteTarget(null);
+    const key = `delete:${target.id}`;
+    markPending(key, true);
+    const result = await deleteAiCapabilityTarget(slot, target.id);
+    if (!result.ok) toast.error(actionError(result.error.code));
+    else await load();
+    markPending(key, false);
+  }
+
+  async function moveTarget(slot: Slot, index: number, direction: -1 | 1) {
+    const config = configs.find((item) => item.slot === slot);
+    if (!config) return;
+    const destination = index + direction;
+    if (destination < 0 || destination >= config.targets.length) return;
+    const ids = config.targets.map((target) => target.id);
+    [ids[index], ids[destination]] = [ids[destination], ids[index]];
+    const key = `reorder:${slot}`;
+    markPending(key, true);
+    const result = await reorderAiCapabilityTargets(slot, ids);
+    if (!result.ok) toast.error(actionError(result.error.code));
+    else await load();
+    markPending(key, false);
+  }
+
+  async function saveEffort(value: string | null) {
+    if (!value) return;
+    setPending((current) => ({ ...current, effort: true }));
+    try {
+      await setConfigValue("assistant.effort", value);
+      setEffort(value);
+      toast.success(t("settings.assistantCapability.updated"));
+    } catch {
+      toast.error(t("settings.capabilitySlots.error.capability_operation_failed"));
+    } finally {
+      setPending((current) => ({ ...current, effort: false }));
+    }
   }
 
   if (loading) {
-    return <div className="h-32 rounded-xl bg-muted animate-pulse" />;
+    return (
+      <section className="relative h-44 rounded-lg border bg-card" aria-label={t("common.loading")}>
+        <Loader2 className="absolute inset-0 m-auto size-5 animate-spin text-muted-foreground" />
+      </section>
+    );
   }
 
   return (
-    <div className="space-y-3">
-      {/* Terminal slot — fully wired */}
-      <AiCapabilityBlock
-        icon={Terminal}
-        title={t("settings.capabilitySlots.terminal")}
-        description={t("settings.capabilitySlots.terminalDesc")}
-        badge="active"
-      >
-        <div
-          className={`flex items-center justify-between gap-4 ${
-            isPending ? "opacity-40 pointer-events-none" : ""
-          }`}
-        >
-          {connected.length === 0 ? (
-            <span className="text-xs text-muted-foreground shrink-0">
-              {t("settings.capabilitySlots.noConnected")}
-            </span>
-          ) : (
-            <Select value={effectiveProvider} onValueChange={handleTerminalChange}>
-              <SelectTrigger className="w-44 shrink-0">
-                <span className="truncate">{displayName(effectiveProvider)}</span>
-              </SelectTrigger>
-              <SelectContent>
-                {connected.map((name) => (
-                  <SelectItem key={name} value={name}>
-                    {displayName(name)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+    <section className="space-y-3" aria-labelledby="capability-slots-title">
+      <div className="flex items-start gap-3 border-t pt-4">
+        <div className="mt-0.5 rounded-md border bg-muted/40 p-1.5"><Route className="size-4" aria-hidden /></div>
+        <div className="min-w-0">
+          <h2 id="capability-slots-title" className="text-sm font-semibold">{t("settings.capabilitySlots.title")}</h2>
+          <p className="text-xs text-muted-foreground">{t("settings.capabilitySlots.desc")}</p>
         </div>
-      </AiCapabilityBlock>
+      </div>
 
-      {/* Assistant slot — model + effort config */}
-      <AssistantCapabilityBlock />
+      {loadError ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-4 py-6 text-sm text-destructive">
+          <span>{t("settings.capabilitySlots.loadFailed")}</span>
+          <Button variant="outline" onClick={() => void load()}>{t("settings.aiTools.retry")}</Button>
+        </div>
+      ) : SLOT_META.map(({ slot, icon: Icon, desc }) => {
+        const config = configs.find((item) => item.slot === slot);
+        const targets = config?.targets ?? [];
+        const recent = diagnostics.find((attempt) => attempt.slot === slot);
+        const migrationWarning = config && config.migrationStatus !== "complete" && config.migrationStatus !== "defaulted" && config.migrationStatus !== "missing";
+        return (
+          <article key={slot} className="overflow-hidden rounded-lg border bg-card">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3 sm:flex-nowrap">
+              <div className="flex min-w-0 gap-2.5">
+                <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <div className="min-w-0">
+                  <h3 className="text-sm font-medium">{t(`settings.capabilitySlots.${slot}` as never)}</h3>
+                  <p className="text-xs text-muted-foreground">{t(`settings.capabilitySlots.${desc}` as never)}</p>
+                </div>
+              </div>
+              <Button onClick={() => openTargetEditor(slot, null)}><Plus />{t("settings.capabilitySlots.addTarget")}</Button>
+            </div>
 
-      {/* Summary slot — coming soon */}
-      <AiCapabilityBlock
-        icon={BookOpen}
-        title={t("settings.capabilitySlots.summary")}
-        badge="coming-soon"
-      >
-        <span className="text-xs text-muted-foreground">
-          {t("settings.capabilitySlots.claudeFixed")}
-        </span>
-      </AiCapabilityBlock>
+            {migrationWarning && (
+              <div className="flex gap-2 border-b bg-amber-500/10 px-4 py-2 text-xs text-amber-800 dark:text-amber-200">
+                <CircleAlert className="size-4 shrink-0" aria-hidden />
+                <span>{t("settings.capabilitySlots.migrationUnmapped")}</span>
+              </div>
+            )}
 
-      {/* Dreaming slot — coming soon */}
-      <AiCapabilityBlock
-        icon={Brain}
-        title={t("settings.capabilitySlots.dreaming")}
-        badge="coming-soon"
-      >
-        <span className="text-xs text-muted-foreground">
-          {t("settings.capabilitySlots.claudeFixed")}
-        </span>
-      </AiCapabilityBlock>
+            {targets.length === 0 ? (
+              <div className="flex items-center gap-2 px-4 py-5 text-sm text-muted-foreground">
+                <CircleDashed className="size-4" aria-hidden />
+                {t("settings.capabilitySlots.unconfigured")}
+              </div>
+            ) : (
+              <ol className="divide-y">
+                {targets.map((target, index) => {
+                  const choice = choices[slot].find((item) => item.id === target.connectionId);
+                  const reason = choice ? unavailableReason(choice, target.modelId) : "connectionMissing";
+                  const model = choice?.models.find((item) => item.modelId === target.modelId);
+                  return (
+                    <li key={target.id} className="flex min-w-0 flex-wrap items-center gap-2 px-4 py-3 sm:flex-nowrap">
+                      <Badge variant={index === 0 ? "default" : "outline"}>
+                        {index === 0 ? t("settings.capabilitySlots.primary") : `${t("settings.capabilitySlots.fallback")} ${index}`}
+                      </Badge>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="break-words text-sm font-medium">{target.connection.name}</span>
+                          <Badge variant="outline">{target.connection.kind.toUpperCase()}</Badge>
+                          <Badge variant={target.connection.testOk ? "secondary" : "destructive"}>
+                            {t(`settings.aiTools.status.${target.connection.testStatus}` as never)}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
+                          {target.modelId || t("settings.capabilitySlots.cliDefaultModel")}
+                          {model ? ` · ${model.source}` : ""}
+                        </p>
+                        {reason && (
+                          <p className="mt-1 flex items-center gap-1 text-xs text-destructive">
+                            <CircleAlert className="size-3.5 shrink-0" aria-hidden />
+                            {t(`settings.capabilitySlots.diagnostic.${reason}` as never)}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        <IconButton label={t("settings.capabilitySlots.moveUp")} disabled={index === 0 || pending[`reorder:${slot}`]} onClick={() => void moveTarget(slot, index, -1)}><ArrowUp /></IconButton>
+                        <IconButton label={t("settings.capabilitySlots.moveDown")} disabled={index === targets.length - 1 || pending[`reorder:${slot}`]} onClick={() => void moveTarget(slot, index, 1)}><ArrowDown /></IconButton>
+                        <IconButton label={t("common.edit")} onClick={() => openTargetEditor(slot, target)}><Pencil /></IconButton>
+                        <IconButton label={t("common.delete")} disabled={pending[`delete:${target.id}`]} onClick={() => setDeleteTarget({ slot, target })}><Trash2 /></IconButton>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
 
-      {/* Analysis slot — coming soon */}
-      <AiCapabilityBlock
-        icon={BarChart3}
-        title={t("settings.capabilitySlots.analysis")}
-        badge="coming-soon"
-      >
-        <span className="text-xs text-muted-foreground">
-          {t("settings.capabilitySlots.claudeFixed")}
-        </span>
-      </AiCapabilityBlock>
-    </div>
+            {slot === "assistant" && (
+              <div className="flex min-w-0 flex-wrap items-center gap-3 border-t bg-muted/20 px-4 py-3 sm:flex-nowrap">
+                <div className="min-w-0 flex-1">
+                  <Label htmlFor="assistant-effort">{t("settings.assistantCapability.effort")}</Label>
+                  <p className="text-[11px] text-muted-foreground">{t("settings.assistantCapability.effortDesc")}</p>
+                </div>
+                <Select value={effort} onValueChange={(value) => void saveEffort(value)} disabled={pending.effort}>
+                  <SelectTrigger id="assistant-effort" className="w-full sm:w-44">
+                    <span className="truncate">{t(`settings.assistantCapability.effort${effort[0]?.toUpperCase()}${effort.slice(1)}` as never)}</span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EFFORT_OPTIONS.map((option) => <SelectItem key={option} value={option}>{t(`settings.assistantCapability.effort${option[0].toUpperCase()}${option.slice(1)}` as never)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {recent && (
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-t px-4 py-2 text-[11px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1"><Clock3 className="size-3.5" aria-hidden />{t("settings.capabilitySlots.recentAttempt")}</span>
+                <span>{recent.result}</span>
+                <span>{recent.durationMs} ms</span>
+                {recent.errorCode && <span className="break-all text-destructive">{recent.errorCode}</span>}
+              </div>
+            )}
+          </article>
+        );
+      })}
+
+      <Dialog open={editor !== null} onOpenChange={(open) => { if (!open) setEditor(null); }}>
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-lg sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editor?.target ? t("settings.capabilitySlots.editTarget") : t("settings.capabilitySlots.addTarget")}</DialogTitle>
+            <DialogDescription>{t("settings.capabilitySlots.targetDialogDesc")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="slot-connection">{t("settings.capabilitySlots.connection")}</Label>
+              <Select value={connectionId || null} onValueChange={(value) => { setConnectionId(value ?? ""); setModelId(""); setEditorError(null); }}>
+                <SelectTrigger id="slot-connection" className="w-full">
+                  <span className="truncate">{selectedChoice ? `${selectedChoice.name} · ${selectedChoice.kind.toUpperCase()} · ${t(`settings.aiTools.status.${selectedChoice.testStatus}` as never)}` : t("settings.capabilitySlots.selectConnection")}</span>
+                </SelectTrigger>
+                <SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
+                  {editor && choices[editor.slot].map((choice) => (
+                    <SelectItem key={choice.id} value={choice.id}>
+                      {choice.name} · {choice.kind.toUpperCase()} · {t(`settings.aiTools.status.${choice.testStatus}` as never)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {editor?.slot === "terminal" && <p className="text-[11px] text-muted-foreground">{t("settings.capabilitySlots.terminalCliOnly")}</p>}
+            </div>
+
+            {selectedChoice?.kind === "api" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="slot-model">{t("settings.capabilitySlots.model")}</Label>
+                <Select value={modelId || null} onValueChange={(value) => setModelId(value ?? "")}>
+                  <SelectTrigger id="slot-model" className="w-full">
+                    <span className="truncate">{modelId || t("settings.capabilitySlots.selectModel")}</span>
+                  </SelectTrigger>
+                  <SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
+                    {selectedChoice.models.map((model) => (
+                      <SelectItem key={model.modelId} value={model.modelId}>
+                        {model.modelId} · {model.source} · {model.available ? t("settings.aiTools.available") : t("settings.aiTools.unavailable")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : selectedChoice ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="slot-cli-model">{t("settings.capabilitySlots.modelOptional")}</Label>
+                <Input id="slot-cli-model" value={modelId} onChange={(event) => setModelId(event.target.value)} placeholder={t("settings.capabilitySlots.cliDefaultModel")} className="font-mono" />
+              </div>
+            ) : null}
+
+            {selectedChoice && unavailableReason(selectedChoice, modelId || null) && (
+              <p className="flex gap-2 text-xs text-destructive">
+                <CircleAlert className="size-4 shrink-0" aria-hidden />
+                {t(`settings.capabilitySlots.diagnostic.${unavailableReason(selectedChoice, modelId || null)}` as never)}
+              </p>
+            )}
+            {editorError && <p className="text-xs text-destructive" role="alert">{editorError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditor(null)}>{t("common.cancel")}</Button>
+            <Button onClick={() => void saveTarget()} disabled={!connectionId || pending[`save:${editor?.slot}:${editor?.target?.id ?? "new"}`]}>{t("common.save")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent className="rounded-lg sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("settings.capabilitySlots.deleteTarget")}</DialogTitle>
+            <DialogDescription>{t("settings.capabilitySlots.deleteTargetConfirm")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>{t("common.cancel")}</Button>
+            <Button variant="destructive" onClick={() => void removeTarget()}>{t("common.delete")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
   );
 }
