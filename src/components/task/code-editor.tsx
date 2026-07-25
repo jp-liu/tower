@@ -123,12 +123,13 @@ export function CodeEditor({
 
   // Dispose all Monaco models on unmount to prevent memory leaks
   useEffect(() => {
+    const models = modelsRef.current;
     return () => {
-      modelsRef.current.forEach((model) => {
+      models.forEach((model) => {
         const m = model as { dispose?: () => void };
         m?.dispose?.();
       });
-      modelsRef.current.clear();
+      models.clear();
     };
   }, []);
 
@@ -409,7 +410,6 @@ export function CodeEditor({
       }
     }, 300);
     return () => clearTimeout(handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabPath, monacoReady, gutterTick, worktreePath]);
 
   // Inline blame: fetch per-file blame data on tab activation, cache it,

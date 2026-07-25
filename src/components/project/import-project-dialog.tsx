@@ -173,7 +173,7 @@ export function ImportProjectDialog({
         // Safety check failed — full check runs again at migration time
       }
     }
-  }, [gitUrl, localPath]);
+  }, [gitUrl, localPath, t]);
 
   const handleAnalyze = async () => {
     if (!localPath || isAnalyzing) return;
@@ -248,7 +248,6 @@ export function ImportProjectDialog({
     onOpenChange(false);
   };
 
-  const canMigrate = migrateEnabled && targetPath && !isSamePath && !migrating;
   const isConfirmDisabled = !projectName.trim() || !localPath.trim() || migrating || isAnalyzing || (migrateEnabled && !!safetyWarning);
 
   return (

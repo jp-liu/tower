@@ -121,7 +121,6 @@ function CreateTaskDialogState({
   editTaskLabelIds,
   prefillFromTask,
   labels,
-  projectType: _projectType,
   projectLocalPath,
   versions,
   defaultVersionId,

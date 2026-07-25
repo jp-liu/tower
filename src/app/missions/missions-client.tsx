@@ -331,9 +331,9 @@ export function MissionsClient({
 
   // handleSessionEnd — terminal exit = natural completion
   const handleSessionEnd = useCallback(
-    (_taskId: string, _exitCode: number) => {
+    (taskId: string) => {
       setCards((prev) => {
-        const card = prev.find((c) => c.taskId === _taskId);
+        const card = prev.find((c) => c.taskId === taskId);
         if (card) startFadeOut(card.executionId, "completed");
         return prev;
       });
@@ -342,7 +342,7 @@ export function MissionsClient({
   );
 
   // handleLaunched — optimistic: poll will pick up the new card; also trigger immediate poll
-  const handleLaunched = useCallback((_taskId: string) => {
+  const handleLaunched = useCallback(() => {
     getActiveExecutionsAcrossWorkspaces()
       .then((fresh) => {
         setCards((prev) => {

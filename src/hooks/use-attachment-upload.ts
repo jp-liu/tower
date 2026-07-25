@@ -35,12 +35,13 @@ export function useAttachmentUpload() {
 
   // Cleanup on unmount: revoke blob URLs and abort in-flight XHRs
   useEffect(() => {
+    const requests = xhrMap.current;
     return () => {
       itemsRef.current.forEach((it) => {
         if (it.blobUrl) URL.revokeObjectURL(it.blobUrl);
       });
-      xhrMap.current.forEach((xhr) => xhr.abort());
-      xhrMap.current.clear();
+      requests.forEach((xhr) => xhr.abort());
+      requests.clear();
     };
   }, []);
 

@@ -169,6 +169,7 @@ export function FileTreeNode({
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         role="treeitem"
+        aria-selected={isSelected}
         aria-expanded={entry.isDirectory ? isExpanded : undefined}
       >
         {/* Expand chevron for directories */}

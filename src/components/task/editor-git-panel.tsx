@@ -322,8 +322,14 @@ export function EditorGitPanel({ localPath, onFileSelect, mode = "project" }: Ed
     }
   };
 
-  const stagedFiles = gitInfo?.changedFiles.filter((f) => f.staged) ?? [];
-  const unstagedFiles = gitInfo?.changedFiles.filter((f) => !f.staged) ?? [];
+  const stagedFiles = useMemo(
+    () => gitInfo?.changedFiles.filter((file) => file.staged) ?? [],
+    [gitInfo?.changedFiles],
+  );
+  const unstagedFiles = useMemo(
+    () => gitInfo?.changedFiles.filter((file) => !file.staged) ?? [],
+    [gitInfo?.changedFiles],
+  );
 
   const stagedTree = useMemo(() => buildFileTree(stagedFiles), [stagedFiles]);
   const unstagedTree = useMemo(() => buildFileTree(unstagedFiles), [unstagedFiles]);

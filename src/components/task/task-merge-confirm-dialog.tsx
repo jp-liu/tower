@@ -30,7 +30,6 @@ export function TaskMergeConfirmDialog({
   open,
   onOpenChange,
   taskId,
-  taskTitle,
   baseBranch,
   fileCount,
   commitCount,
