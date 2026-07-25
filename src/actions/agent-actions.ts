@@ -7,22 +7,31 @@ import { resolveWorktreeBranch, DEFAULT_BRANCH_PREFIX } from "@/lib/worktree-bra
 import { createSession } from "@/lib/pty/session-store";
 import { logger } from "@/lib/logger";
 import { readConfigValue } from "@/lib/config-reader";
-import { resolveCliAdapter } from "@/lib/ai/capability-resolver";
+import {
+  resolveFixedCliConnection,
+  resolveTerminalTargetPlan,
+  type ResolvedCapabilityTarget,
+} from "@/lib/ai/capability-resolver";
+import { recordCapabilityAttemptService } from "@/lib/ai/capability-config-service";
+import {
+  buildTerminalLaunch,
+  resolveExecutionTerminalTarget,
+  terminalTargetSnapshot,
+  type TerminalLaunch,
+  type TerminalTargetSnapshot,
+} from "@/lib/ai/terminal-target";
 import { cancelOpenAsks } from "@/lib/harness/harness-message";
 import { writeFile, rm, mkdtemp, mkdir } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import { randomUUID } from "crypto";
 import { getSignalDir } from "@/lib/tower-dir";
 import { TOWER_LABEL_NAME } from "@/lib/constants";
-import type { CliSessionOptions } from "@tower/ai-sdk";
-import { providerRegistry } from "@/lib/ai/providers";
 import {
-  mergeProviderProcess,
-  profileForProvider,
-  terminalBaseEnvironment,
-  type LegacyCliProfileOverrides,
-} from "@/lib/ai/provider-host";
-import type { ProviderDefinition } from "@/lib/ai/types";
+  capabilityError,
+  executeTerminalPrestartFallback,
+  normalizeCapabilityError,
+} from "@tower/ai-runtime";
 
 export interface ActiveExecutionInfo {
   executionId: string;
@@ -41,48 +50,14 @@ export interface ActiveExecutionInfo {
   isSystemTask: boolean;
 }
 
+export interface TerminalExecutionResult extends TerminalTargetSnapshot {
+  executionId: string;
+  worktreePath: string | null;
+}
+
 const log = logger.create("agent-actions");
 
 const SIGNAL_DIR = getSignalDir();
-
-function parseStringArray(value: string): string[] {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) && parsed.every((item) => typeof item === "string") ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function parseStringRecord(value: string): Record<string, string> {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-    return Object.fromEntries(
-      Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
-    );
-  } catch {
-    return {};
-  }
-}
-
-async function loadLegacyCliProfile(): Promise<LegacyCliProfileOverrides> {
-  // Some pre-migration deployments and focused test doubles do not expose the
-  // legacy table. The profile is compatibility input, never a launch requirement.
-  const cliProfile = (db as typeof db & { cliProfile?: typeof db.cliProfile }).cliProfile;
-  if (!cliProfile) return {};
-  const profile = await cliProfile.findFirst({ where: { isDefault: true } });
-  if (!profile) return {};
-  return {
-    command: profile.command.trim() || undefined,
-    baseArgs: parseStringArray(profile.baseArgs),
-    envPatch: parseStringRecord(profile.envVars),
-  };
-}
-
-function executionProviderName(execution: { agent: string }): string | undefined {
-  return providerRegistry.getByAgentFieldValue(execution.agent)?.name;
-}
 
 function taskEnvironment(input: {
   taskId: string;
@@ -102,42 +77,45 @@ function taskEnvironment(input: {
   return env;
 }
 
-async function buildProviderLaunch(
-  provider: ProviderDefinition,
-  options: CliSessionOptions,
-) {
-  const profile = profileForProvider(await loadLegacyCliProfile(), provider.cli!.plugin);
-  const resolved = await providerRegistry.createResolvedCliAdapter(
-    provider.name,
-    options.cwd,
-    profile.command,
-  );
-  if (!resolved) throw new Error(`Provider "${provider.name}" does not support CLI sessions`);
-  const processSpec = mergeProviderProcess(
-    resolved.adapter.buildSessionProcess(options),
-    resolved.commandPath,
-    profile,
-  );
-  const envOverrides = Object.fromEntries(
-    Object.entries(processSpec.envPatch ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
-  );
-  return {
-    processSpec,
-    envOverrides,
-    baseEnv: terminalBaseEnvironment(),
-    adapter: resolved.adapter,
-  };
-}
-
 async function markExecutionLaunchFailed(executionId: string): Promise<void> {
   try {
     await db.taskExecution.updateMany({
-      where: { id: executionId, status: "RUNNING" },
+      where: { id: executionId, status: { in: ["PENDING", "RUNNING"] } },
       data: { status: "FAILED", endedAt: new Date() },
     });
   } catch {
     // Preserve the original command-resolution or PTY-spawn error.
   }
+}
+
+async function failTerminalPrestart(input: {
+  executionId: string;
+  taskId: string;
+  previousTaskStatus: "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED";
+  tempDir?: string;
+}): Promise<void> {
+  const { destroySession } = await import("@/lib/pty/session-store");
+  destroySession(input.taskId);
+  await Promise.all([
+    db.taskExecution.updateMany({
+      where: { id: input.executionId, status: { in: ["PENDING", "RUNNING"] } },
+      data: {
+        status: "FAILED",
+        endedAt: new Date(),
+        connectionId: null,
+        modelId: null,
+        targetId: null,
+      },
+    }).catch(() => {}),
+    db.task.update({
+      where: { id: input.taskId },
+      data: { status: input.previousTaskStatus },
+    }).catch(() => {}),
+    input.tempDir
+      ? rm(input.tempDir, { recursive: true, force: true }).catch(() => {})
+      : Promise.resolve(),
+  ]);
+  revalidatePath("/workspaces");
 }
 
 async function createTrackedSession(
@@ -188,6 +166,8 @@ export async function startTaskExecution(
   worktreePath?: string,
   worktreeBranch?: string
 ) {
+  // This non-PTY compatibility entrypoint has no resolved Terminal target. It
+  // intentionally leaves connectionId/modelId/targetId null (legacy-only row).
   const execution = await db.taskExecution.create({
     data: {
       taskId,
@@ -277,13 +257,13 @@ export async function getTaskExecutions(taskId: string) {
 }
 
 /**
- * Resume a previous Claude CLI session for a task.
+ * Resume a previous CLI session for a task.
  * Reuses the existing TaskExecution record (same session = same execution).
  */
 export async function resumePtyExecution(
   taskId: string,
   previousSessionId: string
-): Promise<{ executionId: string; worktreePath: string | null }> {
+): Promise<TerminalExecutionResult> {
   // Harness cleanup: manual session restart → cancel the old pending ask (/reply already answered it, so this is a no-op there).
   await cancelOpenAsks(taskId).catch(() => {});
   const task = await db.task.findUnique({
@@ -293,6 +273,7 @@ export async function resumePtyExecution(
 
   if (!task) throw new Error("Task not found");
   if (!task.project?.localPath) throw new Error("Project has no local path configured");
+  const previousTaskStatus = task.status;
 
   // Clean up stale RUNNING executions (not the one we're resuming)
   await db.taskExecution.updateMany({
@@ -314,14 +295,20 @@ export async function resumePtyExecution(
   // Read idle timeout from config
   const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
 
-  // Resume is pinned to the provider recorded on the original execution.
-  const fixedProvider = executionProviderName(prevExec);
-  const { provider: providerDef } = await resolveCliAdapter("terminal", fixedProvider);
+  // Resume is pinned to the exact connection/model snapshot on the original execution.
+  // Legacy rows are mapped once through their unique cli:<provider> connection.
+  const fixedTarget = await resolveExecutionTerminalTarget(prevExec, cwd);
+  const fixedSnapshot = terminalTargetSnapshot(fixedTarget);
 
   // Reuse execution: set back to RUNNING
   const execution = await db.taskExecution.update({
     where: { id: prevExec.id },
-    data: { status: "RUNNING", endedAt: null },
+    data: {
+      status: "RUNNING",
+      endedAt: null,
+      agent: fixedTarget.cli!.provider.agentFieldValue,
+      ...fixedSnapshot,
+    },
   });
 
   await db.task.update({
@@ -332,10 +319,11 @@ export async function resumePtyExecution(
 
   const usernameVal = await readConfigValue<string>("onboarding.username", "");
 
-  const launch = await buildProviderLaunch(providerDef, {
+  const launch = await buildTerminalLaunch(fixedTarget, {
     prompt: "",
     cwd,
     mode: { type: "resume", sessionId: previousSessionId },
+    model: fixedTarget.modelId,
     systemPrompt: usernameVal ? `The user's name is ${usernameVal}.` : undefined,
     envPatch: taskEnvironment({
       taskId,
@@ -344,7 +332,10 @@ export async function resumePtyExecution(
       hasParent: !!task.parentTaskId,
     }),
   }).catch(async (error) => {
-    await markExecutionLaunchFailed(execution.id);
+    await Promise.all([
+      markExecutionLaunchFailed(execution.id),
+      db.task.update({ where: { id: taskId }, data: { status: previousTaskStatus } }).catch(() => {}),
+    ]);
     throw error;
   });
 
@@ -381,9 +372,13 @@ export async function resumePtyExecution(
           data: { status: "FAILED", endedAt: new Date() },
         }).catch(() => {});
         try {
-          await startPtyExecution(taskId, task.title, undefined, undefined, false, providerDef.name);
+          await startPtyExecution(taskId, task.title, undefined, undefined, false, fixedSnapshot);
         } catch (err) {
           log.error("Fresh execution retry also failed", err, { taskId });
+          await db.task.update({
+            where: { id: taskId },
+            data: { status: previousTaskStatus },
+          }).catch(() => {});
         }
         return;
       }
@@ -423,19 +418,29 @@ export async function resumePtyExecution(
     idleTimeoutSec * 1000,
     launch.processSpec.initialInput,
     launch.baseEnv,
-  );
+  ).catch(async (error) => {
+    await db.task.update({
+      where: { id: taskId },
+      data: { status: previousTaskStatus },
+    }).catch(() => {});
+    throw error;
+  });
 
-  return { executionId: execution.id, worktreePath: prevExec.worktreePath ?? baseCwd ?? null };
+  return {
+    executionId: execution.id,
+    worktreePath: prevExec.worktreePath ?? baseCwd ?? null,
+    ...fixedSnapshot,
+  };
 }
 
 /**
- * Continue the most recent Claude CLI session for a task (no sessionId needed).
- * Uses `claude --continue` to resume the latest conversation in the cwd.
+ * Continue the most recent CLI session for a task (no sessionId needed).
+ * Uses the fixed adapter's continue mode in the original isolated cwd.
  * Useful when a session was interrupted (crash, power loss) and sessionId was not captured.
  */
 export async function continueLatestPtyExecution(
   taskId: string
-): Promise<{ executionId: string; worktreePath: string | null }> {
+): Promise<TerminalExecutionResult> {
   // Harness cleanup: manual restart (Continue button) → cancel the old pending ask.
   // When reached via /reply the task has no OPEN ask (answered before resume), so this is a no-op for that flow.
   await cancelOpenAsks(taskId).catch(() => {});
@@ -446,13 +451,13 @@ export async function continueLatestPtyExecution(
 
   if (!task) throw new Error("Task not found");
   if (!task.project?.localPath) throw new Error("Project has no local path configured");
+  const previousTaskStatus = task.status;
 
   // Find the latest execution to reuse its worktree path
   const latestExec = await db.taskExecution.findFirst({
     where: { taskId },
     orderBy: { createdAt: "desc" },
   });
-  const fixedProvider = latestExec ? executionProviderName(latestExec) : undefined;
 
   if (latestExec?.sessionId) {
     const sameSessionOnOtherTask = await db.taskExecution.findFirst({
@@ -465,12 +470,22 @@ export async function continueLatestPtyExecution(
   }
 
   // Direct-mode tasks share the same project cwd. Without an explicit sessionId,
-  // `claude --continue` resumes the latest conversation in that cwd, which may
+  // CLI continue mode resumes the latest conversation in that cwd, which may
   // belong to another Tower task. Only use --continue when the previous run had
   // an isolated worktree cwd; otherwise start fresh with task context.
   if (!latestExec?.worktreePath) {
-    const r = await startPtyExecution(taskId, task.title, undefined, undefined, false, fixedProvider);
-    return { executionId: r.executionId, worktreePath: r.worktreePath };
+    if (!latestExec) return startPtyExecution(taskId, task.title);
+    const baseCwd = task.project.localPath;
+    const cwd = task.subPath ? join(baseCwd, task.subPath) : baseCwd;
+    const target = await resolveExecutionTerminalTarget(latestExec, cwd);
+    return startPtyExecution(
+      taskId,
+      task.title,
+      undefined,
+      undefined,
+      false,
+      terminalTargetSnapshot(target),
+    );
   }
 
   // Destroy any live PTY session for this task before spawning a new one
@@ -488,14 +503,16 @@ export async function continueLatestPtyExecution(
 
   const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
 
-  // Resolve adapter
-  const { provider: providerDef } = await resolveCliAdapter("terminal", fixedProvider);
+  // Continue is fixed to the latest execution's exact connection and model.
+  const fixedTarget = await resolveExecutionTerminalTarget(latestExec, cwd);
+  const fixedSnapshot = terminalTargetSnapshot(fixedTarget);
 
   // Create a new execution record
   const execution = await db.taskExecution.create({
     data: {
       taskId,
-      agent: providerDef.agentFieldValue,
+      agent: fixedTarget.cli!.provider.agentFieldValue,
+      ...fixedSnapshot,
       status: "RUNNING",
       startedAt: new Date(),
       worktreePath: latestExec?.worktreePath ?? null,
@@ -511,10 +528,11 @@ export async function continueLatestPtyExecution(
 
   const usernameVal = await readConfigValue<string>("onboarding.username", "");
 
-  const launch = await buildProviderLaunch(providerDef, {
+  const launch = await buildTerminalLaunch(fixedTarget, {
     prompt: "",
     cwd,
     mode: { type: "continue" },
+    model: fixedTarget.modelId,
     systemPrompt: usernameVal ? `The user's name is ${usernameVal}.` : undefined,
     envPatch: taskEnvironment({
       taskId,
@@ -522,7 +540,10 @@ export async function continueLatestPtyExecution(
       hasParent: !!task.parentTaskId,
     }),
   }).catch(async (error) => {
-    await markExecutionLaunchFailed(execution.id);
+    await Promise.all([
+      markExecutionLaunchFailed(execution.id),
+      db.task.update({ where: { id: taskId }, data: { status: previousTaskStatus } }).catch(() => {}),
+    ]);
     throw error;
   });
 
@@ -557,9 +578,13 @@ export async function continueLatestPtyExecution(
           data: { status: "FAILED", endedAt: new Date() },
         }).catch(() => {});
         try {
-          await startPtyExecution(taskId, task.title, undefined, undefined, false, providerDef.name);
+          await startPtyExecution(taskId, task.title, undefined, undefined, false, fixedSnapshot);
         } catch (err) {
           log.error("Fresh execution retry also failed", err, { taskId });
+          await db.task.update({
+            where: { id: taskId },
+            data: { status: previousTaskStatus },
+          }).catch(() => {});
         }
         return;
       }
@@ -598,9 +623,19 @@ export async function continueLatestPtyExecution(
     idleTimeoutSec * 1000,
     launch.processSpec.initialInput,
     launch.baseEnv,
-  );
+  ).catch(async (error) => {
+    await db.task.update({
+      where: { id: taskId },
+      data: { status: previousTaskStatus },
+    }).catch(() => {});
+    throw error;
+  });
 
-  return { executionId: execution.id, worktreePath: latestExec?.worktreePath ?? baseCwd ?? null };
+  return {
+    executionId: execution.id,
+    worktreePath: latestExec.worktreePath ?? baseCwd ?? null,
+    ...fixedSnapshot,
+  };
 }
 
 /**
@@ -620,6 +655,9 @@ export async function continueOrStartTaskExecution(
   mode: "already_running" | "continued" | "started";
   executionId: string | null;
   worktreePath: string | null;
+  connectionId: string | null;
+  modelId: string | null;
+  targetId: string | null;
 }> {
   // Already running? Respect the one-active-PTY-per-task constraint — don't restart.
   const { getSession } = await import("@/lib/pty/session-store");
@@ -633,6 +671,9 @@ export async function continueOrStartTaskExecution(
       mode: "already_running",
       executionId: exec?.id ?? null,
       worktreePath: exec?.worktreePath ?? null,
+      connectionId: exec?.connectionId ?? null,
+      modelId: exec?.modelId ?? null,
+      targetId: exec?.targetId ?? null,
     };
   }
 
@@ -640,16 +681,16 @@ export async function continueOrStartTaskExecution(
   const historyCount = await db.taskExecution.count({ where: { taskId } });
   if (historyCount > 0) {
     const r = await continueLatestPtyExecution(taskId);
-    return { mode: "continued", executionId: r.executionId, worktreePath: r.worktreePath };
+    return { mode: "continued", ...r };
   }
 
   // Fresh start mirrors the Launch button: empty prompt, task context injected.
   const r = await startPtyExecution(taskId, "");
-  return { mode: "started", executionId: r.executionId, worktreePath: r.worktreePath };
+  return { mode: "started", ...r };
 }
 
 /**
- * INT-01: Create a TaskExecution row and spawn Claude CLI in PTY mode.
+ * INT-01: Create a TaskExecution row and spawn the selected CLI in PTY mode.
  *
  * This replaces the SSE stream route for terminal-based execution (Phase 26).
  * The session is pre-created with a no-op onData; ws-server.ts wires the real
@@ -667,9 +708,9 @@ export async function startPtyExecution(
   callbackUrl?: string | null,
   /** When true, skip injecting task context — start a clean CLI session */
   cleanStart?: boolean,
-  /** Internal resume fallback: keep the original provider even if the terminal slot changed. */
-  fixedProviderName?: string,
-): Promise<{ executionId: string; worktreePath: string | null }> {
+  /** Internal resume/continue retry: keep the exact historical target snapshot. */
+  fixedTargetSnapshot?: TerminalTargetSnapshot,
+): Promise<TerminalExecutionResult> {
   // Harness cleanup: fresh/restarted execution → cancel the old pending ask (a fresh start via /reply has no
   // history, so there's no OPEN ask to clear here either). best-effort.
   await cancelOpenAsks(taskId).catch(() => {});
@@ -703,25 +744,13 @@ export async function startPtyExecution(
   // 1b. Read idle timeout from config
   const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
 
-  // 1c. Resolve adapter
-  const { provider: providerDef, model: configuredModel } = await resolveCliAdapter("terminal", fixedProviderName);
-
   // 2. Clean up stale RUNNING executions (from crashed/killed processes)
   await db.taskExecution.updateMany({
     where: { taskId, status: "RUNNING" },
     data: { status: "FAILED", endedAt: new Date() },
   });
 
-  // 3. Transition task to IN_PROGRESS (from TODO, IN_REVIEW, or any non-terminal state)
-  if (task.status !== "IN_PROGRESS") {
-    await db.task.update({
-      where: { id: taskId },
-      data: { status: "IN_PROGRESS" },
-    });
-    revalidatePath("/workspaces");
-  }
-
-  // 4. Build full prompt string (mirrors stream/route.ts buildExecutionPrompt)
+  // 3. Build full prompt string (mirrors stream/route.ts buildExecutionPrompt)
   // When cleanStart is true, skip all context — user wants a pure CLI terminal.
   let fullPrompt = "";
   if (!cleanStart) {
@@ -744,7 +773,7 @@ export async function startPtyExecution(
     fullPrompt = contextParts.join("\n\n");
   }
 
-  // 5. Prepare instructions file if task has a promptId (or selectedPromptId)
+  // 4. Prepare instructions file if task has a promptId (or selectedPromptId)
   let instructionsFile: string | undefined;
   let tempDir: string | undefined;
 
@@ -760,7 +789,7 @@ export async function startPtyExecution(
     }
   }
 
-  // 6. Create worktree if task has a baseBranch
+  // 5. Create worktree if task has a baseBranch
   let resolvedWorktreePath: string | null = null;
   let resolvedWorktreeBranch: string | null = null;
 
@@ -790,12 +819,11 @@ export async function startPtyExecution(
   const baseCwd = resolvedWorktreePath ?? task.project.localPath;
   const cwd = task.subPath ? join(baseCwd, task.subPath) : baseCwd;
 
-  // 7. Create TaskExecution row with RUNNING status
+  // 6. Create one pending execution before resolving or trying any target.
   const execution = await db.taskExecution.create({
     data: {
       taskId,
-      agent: providerDef.agentFieldValue,
-      status: "RUNNING",
+      status: "PENDING",
       startedAt: new Date(),
       worktreePath: resolvedWorktreePath ?? null,
       worktreeBranch: resolvedWorktreeBranch ?? null,
@@ -803,7 +831,36 @@ export async function startPtyExecution(
     },
   });
 
-  // 7b. Record forkCommit
+  const previousTaskStatus = task.status;
+  if (task.status !== "IN_PROGRESS") {
+    await db.task.update({
+      where: { id: taskId },
+      data: { status: "IN_PROGRESS" },
+    });
+    revalidatePath("/workspaces");
+  }
+
+  // Resolve only after the final cwd is known. A fixed retry never reads the slot.
+  let terminalTargets: ResolvedCapabilityTarget[];
+  try {
+    terminalTargets = fixedTargetSnapshot
+      ? [await resolveFixedCliConnection(
+          fixedTargetSnapshot.connectionId,
+          fixedTargetSnapshot.modelId,
+          { cwd, targetId: fixedTargetSnapshot.targetId },
+        )]
+      : (await resolveTerminalTargetPlan({ cwd })).targets;
+  } catch (error) {
+    await failTerminalPrestart({
+      executionId: execution.id,
+      taskId,
+      previousTaskStatus,
+      tempDir,
+    });
+    throw error;
+  }
+
+  // 6b. Record forkCommit
   // Worktree mode: merge-base between baseBranch and HEAD
   // Direct mode: current HEAD commit (baseline for diff)
   // Captured into an outer variable so the onExit summary can scope the git
@@ -836,7 +893,7 @@ export async function startPtyExecution(
     }
   }
 
-  // 7c. Build system prompt additions
+  // 6c. Build system prompt additions
   // Built-in system directive first (attached to every task; default in config-defaults.ts, overridable via SystemConfig),
   // then merge the task's chosen AgentPrompt (after), and finally append the username.
   // Workbench tasks (builtin "Tower" label) get their own directive instead — they dispatch
@@ -864,134 +921,160 @@ export async function startPtyExecution(
     appendSystemPrompt += (appendSystemPrompt ? "\n" : "") + `The user's name is ${usernameVal}.`;
   }
 
-  // 8. Provider produces a structured process plan; Host resolves and merges legacy profile overrides.
-  const launch = await buildProviderLaunch(providerDef, {
-    prompt: fullPrompt,
-    cwd,
-    mode: { type: "fresh" },
-    systemPrompt: appendSystemPrompt || undefined,
-    model: configuredModel,
-    envPatch: taskEnvironment({
-      taskId,
-      taskTitle: task.title,
-      callbackUrl: callbackUrl ?? undefined,
-      hasParent: !!task.parentTaskId,
-    }),
-  }).catch(async (error) => {
-    await markExecutionLaunchFailed(execution.id);
-    if (tempDir) await rm(tempDir, { recursive: true, force: true }).catch(() => {});
-    throw error;
-  });
+  // Build and synchronously spawn each explicit target in order. Returning from
+  // createSession is the activity boundary: later process exits never fall back.
+  let selected: { launch: TerminalLaunch; target: ResolvedCapabilityTarget; snapshot: TerminalTargetSnapshot };
+  try {
+    selected = await executeTerminalPrestartFallback({
+      requestId: randomUUID(),
+      correlationId: execution.id,
+      targets: terminalTargets,
+      onAttempt: recordCapabilityAttemptService,
+      execute: async (target, context) => {
+        let launch: TerminalLaunch;
+        try {
+          launch = await buildTerminalLaunch(target, {
+            prompt: fullPrompt,
+            cwd,
+            mode: { type: "fresh" },
+            systemPrompt: appendSystemPrompt || undefined,
+            model: target.modelId,
+            envPatch: taskEnvironment({
+              taskId,
+              taskTitle: task.title,
+              callbackUrl: callbackUrl ?? undefined,
+              hasParent: !!task.parentTaskId,
+            }),
+          });
+        } catch (error) {
+          throw normalizeCapabilityError(error);
+        }
 
-  // 9. Create PTY session — onData is a no-op; ws-server.ts wires the real
-  //    broadcaster via setDataListener when the WebSocket client connects
-  await createTrackedSession(
-    execution.id,
-    taskId,
-    launch.processSpec.command,
-    launch.processSpec.args,
-    cwd,
-    () => {},
-    async (exitCode) => {
-      // Write exit code signal file for notify-agi.sh (runs before DB update)
-      await writeExitSignal(taskId, exitCode);
-
-      // Guard: if stopPtyExecution already handled this execution, skip
-      const currentExec = await db.taskExecution.findUnique({ where: { id: execution.id } });
-      if (currentExec?.status !== "RUNNING") {
-        // Already finalized by stopPtyExecution — don't overwrite
-        return;
-      }
-
-      // Capture terminal buffer FIRST (before session might be destroyed)
-      const { getSession } = await import("@/lib/pty/session-store");
-      const session = getSession(taskId);
-      const terminalBuffer = session?.getBuffer() ?? "";
-
-      // INT-03: Update execution status and task status on PTY exit
-      await db.taskExecution
-        .update({
+        const snapshot = terminalTargetSnapshot(target);
+        await db.taskExecution.update({
           where: { id: execution.id },
           data: {
-            status: exitCode === 0 ? "COMPLETED" : "FAILED",
-            endedAt: new Date(),
+            status: "RUNNING",
+            endedAt: null,
+            agent: target.cli!.provider.agentFieldValue,
+            ...snapshot,
           },
-        })
-        .catch((err: unknown) => {
-          log.error("Failed to update execution status", err);
         });
 
-      // Capture execution summary (git log, stats, terminal log)
-      // Use worktreePath if available, otherwise fall back to project localPath (direct mode)
-      const summaryPath = resolvedWorktreePath || task.project!.localPath;
-      const { captureExecutionSummary } = await import("@/lib/execution-summary");
-      await captureExecutionSummary(
-        execution.id,
-        taskId,
-        exitCode,
-        terminalBuffer,
-        summaryPath,
-        resolvedForkCommit
-      );
+        try {
+          createSession(
+            taskId,
+            launch.processSpec.command,
+            launch.processSpec.args,
+            cwd,
+            () => {},
+            async (exitCode) => {
+              await writeExitSignal(taskId, exitCode);
 
-      // Dispatch task completion event for notification system (Phase 65)
-      const { dispatchTaskCompletionEvent } = await import("@/actions/onboarding-actions");
-      await dispatchTaskCompletionEvent({
-        taskId,
-        taskTitle: task.title,
-        status: exitCode === 0 ? "COMPLETED" : "FAILED",
-        executionId: execution.id,
-        workspaceId: task.project.workspaceId,
-      });
+              const currentExec = await db.taskExecution.findUnique({ where: { id: execution.id } });
+              if (currentExec?.status !== "RUNNING") return;
 
-      if (exitCode === 0) {
-        // Natural PTY exit is a THIRD task→IN_REVIEW path (besides updateTaskStatus
-        // and stopTaskExecution); it also ends any tower-goal mode → clear the flag.
-        // Park doesn't reach here (guarded above: execution is PAUSED, not RUNNING).
-        await db.task
-          .update({ where: { id: taskId }, data: { status: "IN_REVIEW", unattended: false } })
-          .catch((err: unknown) => {
-            log.error("Failed to update task status", err);
-          });
-      }
+              const { getSession } = await import("@/lib/pty/session-store");
+              const session = getSession(taskId);
+              const terminalBuffer = session?.getBuffer() ?? "";
 
-      // Clean up temp instructions dir
-      if (tempDir) {
-        await rm(tempDir, { recursive: true, force: true }).catch(() => {});
-      }
+              await db.taskExecution.update({
+                where: { id: execution.id },
+                data: {
+                  status: exitCode === 0 ? "COMPLETED" : "FAILED",
+                  endedAt: new Date(),
+                },
+              }).catch((err: unknown) => {
+                log.error("Failed to update execution status", err);
+              });
 
-      // Headless-started tasks (MCP / orchestrator, no browser WS ever attached)
-      // never receive the ws-close keepalive that destroys an exited session — so
-      // the killed session (+ its 50KB ring buffer + pid file) would leak in the
-      // sessions Map forever. Schedule the same exited-keepalive here. Guarded by
-      // !disconnectTimer so we don't double-schedule when a browser IS attached
-      // (its ws-close path already set one); destroySession is idempotent and
-      // wireSession clears the timer if a browser attaches within the window.
-      if (session && !session.disconnectTimer) {
-        const { destroySession } = await import("@/lib/pty/session-store");
-        const KEEPALIVE_EXITED_MS = 5 * 60 * 1000; // mirror ws-server.ts
-        const timer = setTimeout(() => destroySession(taskId), KEEPALIVE_EXITED_MS);
-        timer.unref?.();
-        session.disconnectTimer = timer;
-      }
-    },
-    launch.envOverrides,
-    undefined,
-    idleTimeoutSec * 1000,
-    launch.processSpec.initialInput,
-    launch.baseEnv,
-  ).catch(async (error) => {
-    if (tempDir) await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+              const summaryPath = resolvedWorktreePath || task.project!.localPath;
+              const { captureExecutionSummary } = await import("@/lib/execution-summary");
+              await captureExecutionSummary(
+                execution.id,
+                taskId,
+                exitCode,
+                terminalBuffer,
+                summaryPath,
+                resolvedForkCommit,
+              );
+
+              const { dispatchTaskCompletionEvent } = await import("@/actions/onboarding-actions");
+              await dispatchTaskCompletionEvent({
+                taskId,
+                taskTitle: task.title,
+                status: exitCode === 0 ? "COMPLETED" : "FAILED",
+                executionId: execution.id,
+                workspaceId: task.project.workspaceId,
+              });
+
+              if (exitCode === 0) {
+                await db.task.update({
+                  where: { id: taskId },
+                  data: { status: "IN_REVIEW", unattended: false },
+                }).catch((err: unknown) => {
+                  log.error("Failed to update task status", err);
+                });
+              }
+
+              if (tempDir) await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+
+              if (session && !session.disconnectTimer) {
+                const { destroySession } = await import("@/lib/pty/session-store");
+                const KEEPALIVE_EXITED_MS = 5 * 60 * 1000;
+                const timer = setTimeout(() => destroySession(taskId), KEEPALIVE_EXITED_MS);
+                timer.unref?.();
+                session.disconnectTimer = timer;
+              }
+            },
+            launch.envOverrides,
+            undefined,
+            idleTimeoutSec * 1000,
+            launch.processSpec.initialInput,
+            launch.baseEnv,
+          );
+        } catch {
+          await db.taskExecution.updateMany({
+            where: { id: execution.id, status: "RUNNING" },
+            data: {
+              status: "PENDING",
+              endedAt: null,
+              connectionId: null,
+              modelId: null,
+              targetId: null,
+            },
+          }).catch(() => {});
+          throw capabilityError("spawn_failed");
+        }
+
+        context.onActivity("side_effect");
+        return { launch, target, snapshot };
+      },
+    });
+  } catch (error) {
+    await failTerminalPrestart({
+      executionId: execution.id,
+      taskId,
+      previousTaskStatus,
+      tempDir,
+    });
     throw error;
-  });
+  }
 
-  return { executionId: execution.id, worktreePath: resolvedWorktreePath ?? baseCwd ?? null };
+  return {
+    executionId: execution.id,
+    worktreePath: resolvedWorktreePath ?? baseCwd ?? null,
+    ...selected.snapshot,
+  };
 }
 
 export interface StartPtyResult {
   ok: boolean;
   executionId?: string;
   worktreePath?: string | null;
+  connectionId?: string;
+  modelId?: string | null;
+  targetId?: string;
   error?: string;
 }
 

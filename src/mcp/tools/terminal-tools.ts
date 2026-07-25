@@ -97,7 +97,7 @@ async function resolveTaskTarget(args: {
 export const terminalTools = {
   start_task_execution: {
     description:
-      "Start a Claude CLI terminal session for a task. The prompt is sent as the initial instruction. The task status will change to IN_PROGRESS. Returns executionId and worktreePath (if worktree mode), plus a ready-to-show `display` card — present `display` to the user verbatim.",
+      "Start the configured CLI terminal session for a task. The prompt is sent as the initial instruction. The task status will change to IN_PROGRESS. Returns executionId, worktreePath (if worktree mode), and the selected target identifiers, plus a ready-to-show `display` card — present `display` to the user verbatim.",
     schema: z.object({
       taskId: z.string(),
       prompt: z.string().optional(),
@@ -164,7 +164,7 @@ export const terminalTools = {
 
   send_task_terminal_input: {
     description:
-      "Send text input to a running task's PTY terminal (e.g. the Claude CLI). By default the message is submitted: trailing newlines are trimmed and a real carriage return is appended so the TUI input box actually sends it. Pass submit:false to only fill the input box without submitting (the text is forwarded verbatim).",
+      "Send text input to a running task's CLI terminal. By default the message is submitted: trailing newlines are trimmed and a real carriage return is appended so the TUI input box actually sends it. Pass submit:false to only fill the input box without submitting (the text is forwarded verbatim).",
     schema: z.object({
       taskId: z.string(),
       text: z.string().min(1).max(10000),
@@ -296,6 +296,9 @@ export const terminalTools = {
         mode?: "already_running" | "continued" | "started";
         executionId?: string | null;
         worktreePath?: string | null;
+        connectionId?: string | null;
+        modelId?: string | null;
+        targetId?: string | null;
       };
       const mode = data.mode ?? "started";
       const messages: Record<string, string> = {
@@ -310,6 +313,9 @@ export const terminalTools = {
         mode,
         executionId: data.executionId ?? null,
         worktreePath: data.worktreePath ?? null,
+        connectionId: data.connectionId ?? null,
+        modelId: data.modelId ?? null,
+        targetId: data.targetId ?? null,
         message: messages[mode] ?? "Terminal started",
       };
     },
@@ -361,6 +367,9 @@ export const terminalTools = {
         terminalStatus,
         startedAt: execution.startedAt,
         endedAt: execution.endedAt,
+        connectionId: execution.connectionId,
+        modelId: execution.modelId,
+        targetId: execution.targetId,
         outputSnippet,
         display: renderExecutionStatus({
           taskId: args.taskId,

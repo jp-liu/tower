@@ -37,6 +37,7 @@ export interface ResolvedCapabilityPlan {
 
 interface ResolveOptions {
   cwd?: string;
+  targetId?: string | null;
 }
 
 const connectionSelect = {
@@ -134,10 +135,9 @@ async function resolveStoredTarget(
   }
 
   try {
-    const resolved = await providerRegistry.createResolvedCliAdapter(
-      connection.provider,
+    const resolved = await providerRegistry.createResolvedCliConnectionAdapter(
+      connection,
       options.cwd ?? process.cwd(),
-      connection.commandOverride ?? undefined,
     );
     if (!resolved) return { ...base, kind: "cli", preflightError: preflight("cli_not_found") };
     const resolvedProvider = resolved.provider ?? providerRegistry.get(connection.provider);
@@ -186,6 +186,7 @@ export async function getApiRuntimeForResolvedTarget(target: ResolvedCapabilityT
 
 export async function resolveFixedCliConnection(
   connectionId: string,
+  modelId: string | null = null,
   options: ResolveOptions = {},
 ): Promise<ResolvedCapabilityTarget> {
   const connection = await db.providerConnection.findUnique({
@@ -194,7 +195,30 @@ export async function resolveFixedCliConnection(
   });
   if (!connection || connection.kind !== "cli") throw capabilityError("connection_unavailable");
   return resolveStoredTarget({
-    id: `fixed:${connection.id}`,
+    id: options.targetId ?? `fixed:${connection.id}`,
+    connectionId: connection.id,
+    modelId,
+    order: 0,
+    connection,
+  }, options);
+}
+
+export async function resolveLegacyExecutionCliConnection(
+  agent: string,
+  options: ResolveOptions = {},
+): Promise<ResolvedCapabilityTarget> {
+  const providers = providerRegistry.getAll().filter((provider) =>
+    provider.cli && provider.agentFieldValue === agent
+  );
+  if (providers.length !== 1) throw capabilityError("connection_unavailable");
+  const provider = providers[0]!;
+  const connection = await db.providerConnection.findUnique({
+    where: { connectionKey: `cli:${provider.name}` },
+    select: connectionSelect,
+  });
+  if (!connection || connection.kind !== "cli") throw capabilityError("connection_unavailable");
+  return resolveStoredTarget({
+    id: options.targetId ?? `legacy:${connection.id}`,
     connectionId: connection.id,
     modelId: null,
     order: 0,

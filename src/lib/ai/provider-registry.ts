@@ -88,6 +88,24 @@ export class ProviderRegistry {
     );
   }
 
+  async createResolvedCliConnectionAdapter(
+    connection: CliPluginConnectionRecord,
+    cwd: string,
+  ): Promise<{
+    adapter: SdkCliAdapter;
+    provider?: ProviderDefinition;
+    commandPath: string;
+    version: string | null;
+  } | null> {
+    const provider = this.providers.get(connection.provider);
+    if (!provider?.cli) return resolvePluginCliConnection(connection, cwd);
+    return this.createResolvedCliAdapter(
+      connection.provider,
+      cwd,
+      connection.commandOverride ?? undefined,
+    );
+  }
+
   getQueryAdapter(name: string, mode: "api" | "cli"): AiQueryAdapter | null {
     const provider = this.providers.get(name);
     if (!provider) return null;

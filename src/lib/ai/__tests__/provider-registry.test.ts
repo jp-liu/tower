@@ -185,6 +185,28 @@ describe("ProviderRegistry", () => {
     expect(dynamicMocks.resolvePlugin).not.toHaveBeenCalled();
   });
 
+  it("resolves the exact selected community connection record", async () => {
+    const connection = {
+      id: "selected-connection",
+      provider: "@acme/community",
+      enabled: true,
+      commandOverride: "/opt/selected-community",
+      baseArgsJson: "[]",
+      envVarsJson: "[]",
+      settingsJson: "{}",
+    };
+    dynamicMocks.resolvePlugin.mockResolvedValue({
+      adapter: {},
+      commandPath: connection.commandOverride,
+      version: "1",
+    });
+
+    await registry.createResolvedCliConnectionAdapter(connection, "/worktree");
+
+    expect(dynamicMocks.resolvePlugin).toHaveBeenCalledWith(connection, "/worktree");
+    expect(dynamicMocks.findUnique).not.toHaveBeenCalled();
+  });
+
   it("reports only integrations declared by a partial provider manifest", async () => {
     hostMocks.resolveBuiltInCommandResolution.mockResolvedValue({
       state: "runnable",

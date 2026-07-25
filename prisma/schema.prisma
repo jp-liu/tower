@@ -169,6 +169,9 @@ model TaskExecution {
   taskId         String
   agent          String          @default("CLAUDE_CODE")
   config         String?         @default("DEFAULT")
+  connectionId   String?
+  modelId        String?
+  targetId       String?
   status         ExecutionStatus @default(PENDING)
   branch         String?
   sessionId      String?

@@ -93,7 +93,13 @@ describe("terminal-tools", () => {
 
   describe("start_task_execution", () => {
     it("POSTs to /{taskId}/start and returns ok: true with merged data on success", async () => {
-      const mockData = { executionId: "exec1", worktreePath: "/tmp/wt" };
+      const mockData = {
+        executionId: "exec1",
+        worktreePath: "/tmp/wt",
+        connectionId: "connection-1",
+        modelId: "model-1",
+        targetId: "target-1",
+      };
       mockFetch.mockResolvedValue(mockFetchResponse(200, mockData));
 
       const result = await terminalTools.start_task_execution.handler({
@@ -107,7 +113,14 @@ describe("terminal-tools", () => {
       expect(init.method).toBe("POST");
       expect(JSON.parse(init.body)).toEqual({ prompt: "do something" });
 
-      expect(result).toMatchObject({ ok: true, executionId: "exec1", worktreePath: "/tmp/wt" });
+      expect(result).toMatchObject({
+        ok: true,
+        executionId: "exec1",
+        worktreePath: "/tmp/wt",
+        connectionId: "connection-1",
+        modelId: "model-1",
+        targetId: "target-1",
+      });
     });
 
     it("returns error with status on non-ok response", async () => {
@@ -406,7 +419,15 @@ describe("terminal-tools", () => {
     it("launches by taskId, POSTs to /resume and reports the mode", async () => {
       mockDb.task.findUnique.mockResolvedValue({ id: VALID_TASK_ID, title: "Notify B" });
       mockFetch.mockResolvedValue(
-        mockFetchResponse(200, { ok: true, mode: "continued", executionId: "exec9", worktreePath: "/tmp/wt" })
+        mockFetchResponse(200, {
+          ok: true,
+          mode: "continued",
+          executionId: "exec9",
+          worktreePath: "/tmp/wt",
+          connectionId: "connection-9",
+          modelId: "model-9",
+          targetId: "target-9",
+        })
       );
 
       const result = await terminalTools.resume_task_execution.handler({ taskId: VALID_TASK_ID });
@@ -421,6 +442,9 @@ describe("terminal-tools", () => {
         mode: "continued",
         executionId: "exec9",
         worktreePath: "/tmp/wt",
+        connectionId: "connection-9",
+        modelId: "model-9",
+        targetId: "target-9",
         message: "Terminal resumed from latest history",
       });
     });
@@ -507,6 +531,9 @@ describe("terminal-tools", () => {
         status: "COMPLETED",
         startedAt: null,
         endedAt: null,
+        connectionId: "connection-1",
+        modelId: "model-1",
+        targetId: "target-1",
       });
       mockFetch.mockResolvedValue(mockFetchResponse(404, {}));
 
@@ -519,6 +546,9 @@ describe("terminal-tools", () => {
         executionId: "exec1",
         executionStatus: "COMPLETED",
         terminalStatus: "exited",
+        connectionId: "connection-1",
+        modelId: "model-1",
+        targetId: "target-1",
         outputSnippet: null,
       });
     });

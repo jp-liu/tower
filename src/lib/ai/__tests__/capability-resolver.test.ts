@@ -15,6 +15,7 @@ import {
   resolveCapabilityPlan,
   resolveCliAdapter,
   resolveFixedCliConnection,
+  resolveLegacyExecutionCliConnection,
 } from "../capability-resolver";
 
 type TestConnection = {
@@ -87,7 +88,7 @@ function configWith(targetConnection: TestConnection = connection, modelId: stri
 describe("explicit capability resolver", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(providerRegistry, "createResolvedCliAdapter").mockResolvedValue(resolvedCli);
+    vi.spyOn(providerRegistry, "createResolvedCliConnectionAdapter").mockResolvedValue(resolvedCli);
   });
 
   it("returns slot_unconfigured instead of an implicit provider", async () => {
@@ -161,7 +162,7 @@ describe("explicit capability resolver", () => {
       displayName: "Community CLI",
       builtin: false,
     };
-    vi.mocked(providerRegistry.createResolvedCliAdapter).mockResolvedValueOnce({
+    vi.mocked(providerRegistry.createResolvedCliConnectionAdapter).mockResolvedValueOnce({
       ...resolvedCli,
       provider: dynamicProvider,
       commandPath: "/fake/community-cli",
@@ -184,7 +185,7 @@ describe("explicit capability resolver", () => {
     [new Error("cli_not_executable"), "cli_not_executable"],
   ] as const)("maps dynamic CLI resolution failures to stable preflight codes", async (error, code) => {
     const community = { ...connection, provider: "@acme/community-cli" };
-    vi.mocked(providerRegistry.createResolvedCliAdapter).mockRejectedValueOnce(error);
+    vi.mocked(providerRegistry.createResolvedCliConnectionAdapter).mockRejectedValueOnce(error);
     mockDb.aiCapabilityConfig.findUnique.mockResolvedValue(configWith(community));
 
     expect((await resolveCapabilityPlan("terminal")).targets[0]?.preflightError?.code).toBe(code);
@@ -192,8 +193,30 @@ describe("explicit capability resolver", () => {
 
   it("resolves a fixed session by connection id without reading the slot", async () => {
     mockDb.providerConnection.findUnique.mockResolvedValue(connection);
-    const resolved = await resolveFixedCliConnection("connection-cli");
+    const resolved = await resolveFixedCliConnection(
+      "connection-cli",
+      "fixed-model",
+      { cwd: "/fixed/cwd", targetId: "historical-target" },
+    );
+    expect(resolved).toMatchObject({
+      connectionId: "connection-cli",
+      modelId: "fixed-model",
+      targetId: "historical-target",
+    });
+    expect(db.aiCapabilityConfig.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("maps a legacy execution through its unique built-in cli connection without reading the slot", async () => {
+    mockDb.providerConnection.findUnique.mockResolvedValue(connection);
+    const resolved = await resolveLegacyExecutionCliConnection("CLAUDE_CODE", { cwd: "/legacy/cwd" });
     expect(resolved.connectionId).toBe("connection-cli");
     expect(db.aiCapabilityConfig.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unmapped legacy execution instead of selecting a current target", async () => {
+    await expect(resolveLegacyExecutionCliConnection("CLI_PLUGIN"))
+      .rejects.toMatchObject({ code: "connection_unavailable" });
+    expect(db.aiCapabilityConfig.findUnique).not.toHaveBeenCalled();
+    expect(db.providerConnection.findUnique).not.toHaveBeenCalled();
   });
 });
