@@ -115,6 +115,11 @@ export interface ProviderAvailability {
     version: string | null;
     commandPath: string | null;
     commandState: "not-found" | "found" | "runnable" | "connected" | null;
+    integrations: {
+      mcp: boolean;
+      hooks: boolean;
+      skills: boolean;
+    };
     connectionStatus?:
       | "untested"
       | "connected"

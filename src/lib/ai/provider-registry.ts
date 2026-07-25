@@ -8,6 +8,16 @@ import {
   resolveBuiltInCommandResolution,
 } from "./provider-host";
 
+function declaredIntegrations(capabilities: {
+  integrations?: { mcp?: boolean; hooks?: boolean; skills?: boolean };
+} | null | undefined): ProviderAvailability["cli"]["integrations"] {
+  return {
+    mcp: capabilities?.integrations?.mcp === true,
+    hooks: capabilities?.integrations?.hooks === true,
+    skills: capabilities?.integrations?.skills === true,
+  };
+}
+
 export class ProviderRegistry {
   private providers = new Map<string, ProviderDefinition>();
 
@@ -121,7 +131,13 @@ export class ProviderRegistry {
         name: p.name,
         displayName: p.displayName,
         builtin: p.builtin === true,
-        cli: { available: cliAvailable, version: cliVersion, commandPath, commandState },
+        cli: {
+          available: cliAvailable,
+          version: cliVersion,
+          commandPath,
+          commandState,
+          integrations: declaredIntegrations(p.cli?.plugin.manifest.capabilities),
+        },
         api: { available: apiAvailable, keyConfigured: apiKeyConfigured },
       });
     }
@@ -162,6 +178,7 @@ export class ProviderRegistry {
           commandState: connection?.testStatus === "connected"
             ? "connected"
             : connection?.resolvedCommand ? "found" : null,
+          integrations: declaredIntegrations(plugin.capabilities),
           connectionStatus,
         },
         api: { available: false, keyConfigured: false },
@@ -179,6 +196,7 @@ export class ProviderRegistry {
           version: connection.resolvedVersion,
           commandPath: connection.resolvedCommand,
           commandState: connection.resolvedCommand ? "found" : null,
+          integrations: declaredIntegrations(null),
           connectionStatus: "pluginUninstalled",
         },
         api: { available: false, keyConfigured: false },

@@ -165,6 +165,13 @@ export function ConnectionsSection() {
                 ?? (!provider.cli.available
                   ? provider.cli.commandState === "found" ? "notExecutable" : "notInstalled"
                   : stored?.testStatus ?? "untested");
+              const declaredIntegrations = (["mcp", "hooks", "skills"] as const)
+                .filter((integration) => provider.cli.integrations[integration]);
+              const integrationInstalled = (integration: typeof declaredIntegrations[number]) =>
+                integration === "mcp" ? stored?.mcpInstalled
+                  : integration === "hooks" ? stored?.hooksInstalled : stored?.skillsInstalled;
+              const degraded = Boolean(stored?.testOk
+                && declaredIntegrations.some((integration) => !integrationInstalled(integration)));
               return (
                 <li key={provider.name} className="px-4 py-3">
                   <div className="flex flex-wrap items-start gap-3 sm:flex-nowrap sm:items-center">
@@ -209,24 +216,25 @@ export function ConnectionsSection() {
                     </div>
                   </div>
 
-                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                    {["mcp", "hooks", "skills"].map((integration) => {
-                      const ok = integration === "mcp" ? stored?.mcpInstalled
-                        : integration === "hooks" ? stored?.hooksInstalled : stored?.skillsInstalled;
-                      return (
-                        <span key={integration} className="inline-flex items-center gap-1">
-                          {stored ? <StatusIcon ok={Boolean(ok)} /> : <CircleDashed className="size-3.5" aria-hidden />}
-                          {integration === "skills" ? "Skills" : integration.toUpperCase()}
+                  {declaredIntegrations.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                      {declaredIntegrations.map((integration) => {
+                        const ok = integrationInstalled(integration);
+                        return (
+                          <span key={integration} className="inline-flex items-center gap-1">
+                            {stored ? <StatusIcon ok={Boolean(ok)} /> : <CircleDashed className="size-3.5" aria-hidden />}
+                            {integration === "skills" ? "Skills" : integration.toUpperCase()}
+                          </span>
+                        );
+                      })}
+                      {degraded && (
+                        <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
+                          <CircleAlert className="size-3.5" aria-hidden />
+                          {t("settings.aiTools.degraded")}
                         </span>
-                      );
-                    })}
-                    {stored?.testOk && (!stored.mcpInstalled || !stored.hooksInstalled || !stored.skillsInstalled) && (
-                      <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
-                        <CircleAlert className="size-3.5" aria-hidden />
-                        {t("settings.aiTools.degraded")}
-                      </span>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  )}
 
                   {result && (
                     <div className="mt-3 space-y-1 rounded-md border bg-muted/30 px-3 py-2 text-xs" aria-live="polite">

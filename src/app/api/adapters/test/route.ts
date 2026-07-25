@@ -9,10 +9,13 @@ import {
 } from "@/lib/ai/install-orchestrator";
 import { providerRegistry } from "@/lib/ai/providers";
 import { testPluginCliConnection } from "@/lib/ai/cli-plugin-provider";
+import { requireLocalhost } from "@/lib/internal-api-guard";
 import {
   markProviderConnected,
   markProviderDisconnected,
 } from "@/actions/provider-connection-actions";
+
+export const runtime = "nodejs";
 
 /** Pull the CLI version string out of the probe checks for telemetry. */
 function extractVersion(checks: TestCheck[]): string | null {
@@ -34,6 +37,9 @@ export interface TestAndInstallResult extends TestResult {
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = requireLocalhost(request);
+  if (blocked) return blocked;
+
   try {
     const parsed = bodySchema.safeParse(await request.json());
     if (!parsed.success) {
@@ -70,9 +76,13 @@ export async function POST(request: NextRequest) {
     // hook entries are added.
     if (provider) {
       try {
-        const adapter = providerRegistry.get(provider)?.cli?.adapter
-          ?? (await providerRegistry.createResolvedCliAdapter(provider, resolvedCwd))?.adapter;
-        await adapter?.hooks?.install({ repairOnly: true });
+        const definition = providerRegistry.get(provider);
+        const manifest = definition?.cli?.plugin.manifest;
+        if (definition?.builtin
+          && manifest?.capabilities.integrations?.hooks === true
+          && manifest.permissions.includes("integration:hooks")) {
+          await definition.cli?.adapter.hooks?.install({ repairOnly: true });
+        }
       } catch {
         // Best-effort — proceed with the probe even if repair fails.
       }

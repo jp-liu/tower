@@ -30,35 +30,35 @@ const providers = [
     name: "claude",
     displayName: "Claude Code",
     builtin: true,
-    cli: { available: true, version: "2.4.1", commandPath: "/opt/tower/bin/claude", commandState: "runnable" },
+    cli: { available: true, version: "2.4.1", commandPath: "/opt/tower/bin/claude", commandState: "runnable", integrations: { mcp: true, hooks: true, skills: true } },
     api: { available: false, keyConfigured: false },
   },
   {
     name: "codex",
     displayName: "Codex CLI",
     builtin: true,
-    cli: { available: false, version: null, commandPath: null, commandState: "not-found" },
+    cli: { available: false, version: null, commandPath: null, commandState: "not-found", integrations: { mcp: true, hooks: true, skills: true } },
     api: { available: false, keyConfigured: false },
   },
   {
     name: "gemini",
     displayName: "Gemini CLI",
     builtin: true,
-    cli: { available: false, version: null, commandPath: "/usr/local/bin/gemini", commandState: "found" },
+    cli: { available: true, version: "1.0.0", commandPath: "/usr/local/bin/gemini", commandState: "runnable", integrations: { mcp: true, hooks: false, skills: true } },
     api: { available: false, keyConfigured: false },
   },
   {
     name: "acme",
     displayName: "Acme Extension",
     builtin: false,
-    cli: { available: true, version: "1.0.0", commandPath: "/opt/acme/bin/acme", commandState: "runnable" },
+    cli: { available: true, version: "1.0.0", commandPath: "/opt/acme/bin/acme", commandState: "runnable", integrations: { mcp: false, hooks: false, skills: false } },
     api: { available: false, keyConfigured: false },
   },
   {
     name: "lab",
     displayName: "Lab Extension",
     builtin: false,
-    cli: { available: true, version: null, commandPath: "/opt/lab/bin/lab", commandState: "runnable" },
+    cli: { available: true, version: null, commandPath: "/opt/lab/bin/lab", commandState: "runnable", integrations: { mcp: false, hooks: false, skills: false } },
     api: { available: false, keyConfigured: false },
   },
   {
@@ -70,6 +70,7 @@ const providers = [
       version: "1.0.0",
       commandPath: null,
       commandState: null,
+      integrations: { mcp: false, hooks: false, skills: false },
       connectionStatus: "permissionRequired",
     },
     api: { available: false, keyConfigured: false },
@@ -111,8 +112,12 @@ describe("ConnectionsSection CLI connections", () => {
     vi.clearAllMocks();
     persisted = [
       connection("claude", { hooksInstalled: false }),
-      connection("acme", { testStatus: "unavailable", testOk: false }),
-      connection("gemini", { testStatus: "untested", lastTestedAt: null, testOk: false }),
+      connection("acme", {
+        mcpInstalled: false,
+        hooksInstalled: false,
+        skillsInstalled: false,
+      }),
+      connection("gemini", { hooksInstalled: false }),
     ];
     actionMocks.getAvailableProviders.mockResolvedValue(providers);
     actionMocks.getProviderConnections.mockImplementation(async () => persisted);
@@ -131,9 +136,9 @@ describe("ConnectionsSection CLI connections", () => {
       expect(within(providerRow(name)).getByText(/^(扩展|Extension)$/)).toBeInTheDocument();
     }
     expect(within(providerRow("Codex CLI")).getByText(/未安装|Not installed/)).toBeInTheDocument();
-    expect(within(providerRow("Gemini CLI")).getByText(/不可执行|Not executable/)).toBeInTheDocument();
+    expect(within(providerRow("Gemini CLI")).getByText(/已连接|Connected/)).toBeInTheDocument();
     expect(within(providerRow("Claude Code")).getByText(/已连接|Connected/)).toBeInTheDocument();
-    expect(within(providerRow("Acme Extension")).getByText(/不可用|Unavailable/)).toBeInTheDocument();
+    expect(within(providerRow("Acme Extension")).getByText(/已连接|Connected/)).toBeInTheDocument();
     expect(within(providerRow("Lab Extension")).getByText(/未测试|Untested/)).toBeInTheDocument();
     expect(within(providerRow("Pending Extension")).getByText(/权限待审查|Permission review required/)).toBeInTheDocument();
     expect(within(providerRow("Pending Extension")).queryByText(/未安装|Not installed/)).not.toBeInTheDocument();
@@ -149,6 +154,18 @@ describe("ConnectionsSection CLI connections", () => {
     expect(within(row).getByText("HOOKS")).toBeInTheDocument();
     expect(within(row).getByText("Skills")).toBeInTheDocument();
     expect(within(row).getByText(/部分.*集成未完成|integrations are incomplete/)).toBeInTheDocument();
+
+    const noIntegrations = providerRow("Acme Extension");
+    expect(within(noIntegrations).queryByText("MCP")).not.toBeInTheDocument();
+    expect(within(noIntegrations).queryByText("HOOKS")).not.toBeInTheDocument();
+    expect(within(noIntegrations).queryByText("Skills")).not.toBeInTheDocument();
+    expect(within(noIntegrations).queryByText(/部分.*集成未完成|integrations are incomplete/)).not.toBeInTheDocument();
+
+    const partial = providerRow("Gemini CLI");
+    expect(within(partial).getByText("MCP")).toBeInTheDocument();
+    expect(within(partial).queryByText("HOOKS")).not.toBeInTheDocument();
+    expect(within(partial).getByText("Skills")).toBeInTheDocument();
+    expect(within(partial).queryByText(/部分.*集成未完成|integrations are incomplete/)).not.toBeInTheDocument();
   });
 
   it("posts a connection test and refreshes the persisted status", async () => {
@@ -201,7 +218,7 @@ describe("ConnectionsSection CLI connections", () => {
     await screen.findByText("Claude Code");
 
     expect(within(providerRow("Lab Extension")).getByRole("switch")).toHaveAttribute("aria-disabled", "true");
-    expect(within(providerRow("Gemini CLI")).getByRole("switch")).toHaveAttribute("aria-disabled", "true");
+    expect(within(providerRow("Codex CLI")).getByRole("switch")).toHaveAttribute("aria-disabled", "true");
     const testedSwitch = within(providerRow("Claude Code")).getByRole("switch");
     expect(testedSwitch).toBeEnabled();
     await user.click(testedSwitch);

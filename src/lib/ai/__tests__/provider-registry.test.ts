@@ -38,6 +38,8 @@ function makeClaudeProvider(): ProviderDefinition {
         manifest: {
           display: { name: "Claude Code" },
           command: { default: "claude" },
+          capabilities: { integrations: { mcp: true, hooks: true, skills: true } },
+          permissions: ["integration:mcp", "integration:hooks", "integration:skills"],
         },
       } as CliPlugin,
     },
@@ -131,6 +133,7 @@ describe("ProviderRegistry", () => {
           version: "2.4.1",
           commandPath: "/opt/tower/bin/claude",
           commandState: "runnable",
+          integrations: { mcp: true, hooks: true, skills: true },
         },
       }),
       expect.objectContaining({
@@ -141,6 +144,7 @@ describe("ProviderRegistry", () => {
           version: null,
           commandPath: "/opt/extensions/acme",
           commandState: "found",
+          integrations: { mcp: true, hooks: true, skills: true },
         },
       }),
     ]);
@@ -153,6 +157,7 @@ describe("ProviderRegistry", () => {
       enabled: true,
       permissionConfirmed: true,
       health: "ready",
+      capabilities: { integrations: {} },
     }]);
     dynamicMocks.findMany.mockResolvedValue([{
       name: "Community",
@@ -174,9 +179,39 @@ describe("ProviderRegistry", () => {
         available: true,
         commandPath: "/opt/community",
         connectionStatus: "connected",
+        integrations: { mcp: false, hooks: false, skills: false },
       }),
     })]);
     expect(dynamicMocks.resolvePlugin).not.toHaveBeenCalled();
+  });
+
+  it("reports only integrations declared by a partial provider manifest", async () => {
+    hostMocks.resolveBuiltInCommandResolution.mockResolvedValue({
+      state: "runnable",
+      selected: { state: "runnable", path: "/opt/gemini", version: "1.0.0" },
+    });
+    const provider = makeClaudeProvider();
+    registry.register({
+      ...provider,
+      name: "gemini",
+      displayName: "Gemini CLI",
+      cli: {
+        ...provider.cli!,
+        plugin: {
+          manifest: {
+            ...provider.cli!.plugin.manifest,
+            capabilities: { integrations: { mcp: true, hooks: false, skills: true } },
+            permissions: ["integration:mcp", "integration:skills"],
+          },
+        } as CliPlugin,
+      },
+    });
+
+    expect((await registry.getAvailableProviders())[0]?.cli.integrations).toEqual({
+      mcp: true,
+      hooks: false,
+      skills: true,
+    });
   });
 
   it("reports installed plugin lifecycle states without treating them as missing commands", async () => {
