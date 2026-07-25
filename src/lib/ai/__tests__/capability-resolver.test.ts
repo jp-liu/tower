@@ -24,6 +24,10 @@ type TestConnection = {
   enabled: boolean;
   testStatus: string;
   testOk: boolean;
+  commandOverride: string | null;
+  baseArgsJson: string;
+  envVarsJson: string;
+  settingsJson: string;
   models: Array<{ modelId: string; available: boolean }>;
   apiKeys: Array<{ enabled: boolean; testStatus: string }>;
 };
@@ -41,6 +45,10 @@ const connection: TestConnection = {
   enabled: true,
   testStatus: "connected",
   testOk: true,
+  commandOverride: null,
+  baseArgsJson: "[]",
+  envVarsJson: "[]",
+  settingsJson: "{}",
   models: [],
   apiKeys: [],
 };
@@ -142,6 +150,30 @@ describe("explicit capability resolver", () => {
     mockDb.aiCapabilityConfig.findUnique.mockResolvedValue(configWith());
     const resolved = await resolveCliAdapter("terminal");
     expect(resolved).toMatchObject({ connectionId: "connection-cli", targetId: "target" });
+  });
+
+  it("resolves an enabled third-party CLI without a static source definition", async () => {
+    const community = { ...connection, id: "community-connection", name: "Community", provider: "@acme/community-cli" };
+    const dynamicProvider = {
+      ...providerRegistry.get("claude")!,
+      name: community.provider,
+      displayName: "Community CLI",
+      builtin: false,
+    };
+    vi.mocked(providerRegistry.createResolvedCliAdapter).mockResolvedValueOnce({
+      ...resolvedCli,
+      provider: dynamicProvider,
+      commandPath: "/fake/community-cli",
+    });
+    mockDb.aiCapabilityConfig.findUnique.mockResolvedValue(configWith(community));
+
+    const target = (await resolveCapabilityPlan("terminal")).targets[0];
+    expect(providerRegistry.get(community.provider)).toBeUndefined();
+    expect(target).toMatchObject({
+      provider: community.provider,
+      cli: { commandPath: "/fake/community-cli", provider: { builtin: false } },
+    });
+    expect(target?.preflightError).toBeUndefined();
   });
 
   it("resolves a fixed session by connection id without reading the slot", async () => {

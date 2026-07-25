@@ -8,6 +8,7 @@ import {
   type ProviderInstallReport,
 } from "@/lib/ai/install-orchestrator";
 import { providerRegistry } from "@/lib/ai/providers";
+import { testPluginCliConnection } from "@/lib/ai/cli-plugin-provider";
 import {
   markProviderConnected,
   markProviderDisconnected,
@@ -69,14 +70,39 @@ export async function POST(request: NextRequest) {
     // hook entries are added.
     if (provider) {
       try {
-        const adapter = providerRegistry.get(provider)?.cli?.adapter;
+        const adapter = providerRegistry.get(provider)?.cli?.adapter
+          ?? (await providerRegistry.createResolvedCliAdapter(provider, resolvedCwd))?.adapter;
         await adapter?.hooks?.install({ repairOnly: true });
       } catch {
         // Best-effort — proceed with the probe even if repair fails.
       }
     }
 
-    const testResult: TestResult = await testEnvironment(resolvedCwd, provider);
+    let testResult: TestResult;
+    if (provider && !providerRegistry.get(provider)) {
+      try {
+        const probe = await testPluginCliConnection(provider);
+        testResult = {
+          ok: true,
+          checks: [
+            { name: `${provider}_command_resolvable`, passed: true, message: "CLI command found and runnable" },
+            { name: `${provider}_version`, passed: true, message: `Version: ${probe.version ?? "unknown"}` },
+            { name: `${provider}_hello`, passed: true, message: "Hello probe passed" },
+          ],
+        };
+      } catch (error) {
+        testResult = {
+          ok: false,
+          checks: [{
+            name: `${provider}_hello`,
+            passed: false,
+            message: error instanceof Error ? error.message : "probe_failed",
+          }],
+        };
+      }
+    } else {
+      testResult = await testEnvironment(resolvedCwd, provider);
+    }
 
     // On a successful probe, run the integration installer (MCP via CLI, hooks
     // via file, skill via symlink) AND record the outcome to ProviderConnection
@@ -101,7 +127,10 @@ export async function POST(request: NextRequest) {
             hooks: undefined,
             skill: undefined,
           } as ProviderInstallReport;
-          console.error("[adapters/test] install error:", err);
+          console.error(
+            "[adapters/test] install error:",
+            providerRegistry.get(provider) ? err : "third-party integration failed",
+          );
           // The Hello Probe already succeeded. Integration failures are a
           // degraded connection, not a disconnected CLI.
           await markProviderConnected(provider, {

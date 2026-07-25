@@ -6,7 +6,7 @@
 
 # dependencies
 /node_modules
-/packages/*/node_modules/
+/packages/*/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -78,7 +78,7 @@ skills-lock.json
 .planning/
 
 # Docs site
-docs/node_modules/
+docs/node_modules
 docs/.vitepress/dist/
 docs/.vitepress/cache/
 

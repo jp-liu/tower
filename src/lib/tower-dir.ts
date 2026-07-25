@@ -24,16 +24,13 @@ import { homedir, tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { mkdirSync, existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 
-let _dir: string | undefined;
-
 /** TOWER_DATA_DIR env or ~/.tower */
 export function getTowerDir(): string {
-  if (_dir) return _dir;
-  _dir = process.env.TOWER_DATA_DIR || join(homedir(), ".tower");
-  if (!existsSync(_dir)) {
-    mkdirSync(_dir, { recursive: true });
+  const dir = process.env.TOWER_DATA_DIR || join(homedir(), ".tower");
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
   }
-  return _dir;
+  return dir;
 }
 
 /** ~/.tower/database */

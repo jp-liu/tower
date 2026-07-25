@@ -96,8 +96,15 @@ export interface ProviderIntegrationStatus {
 function asInstallResult(
   method: InstallResult["method"],
   result: CliIntegrationResult,
+  includeProviderDetail: boolean,
 ): InstallResult {
-  return { ok: true, method, detail: result.detail ?? (result.changed ? "updated" : "already current") };
+  return {
+    ok: true,
+    method,
+    detail: includeProviderDetail && result.detail
+      ? result.detail
+      : result.changed ? "updated" : "already current",
+  };
 }
 
 function unsupportedIntegration(name: string): InstallResult {
@@ -113,15 +120,18 @@ async function installIntegration(
   name: string,
   method: InstallResult["method"],
   install: () => Promise<CliIntegrationResult>,
+  includeProviderDetail = true,
 ): Promise<InstallResult> {
   try {
-    return asInstallResult(method, await install());
+    return asInstallResult(method, await install(), includeProviderDetail);
   } catch (error) {
     return {
       ok: false,
       method,
       detail: `${name} install failed`,
-      error: error instanceof Error ? error.message : String(error),
+      error: includeProviderDetail && error instanceof Error
+        ? error.message
+        : `${name} install failed`,
     };
   }
 }
@@ -191,6 +201,7 @@ export async function inspectProviderIntegration(
     .createResolvedCliAdapter(providerName, getPackageRoot())
     .catch(() => null);
   const adapter = resolved?.adapter;
+  const provider = resolved?.provider ?? providerRegistry.get(providerName);
   if (!adapter) {
     return { mcpInstalled: false, hooksInstalled: false, skillsInstalled: false, ok: false };
   }
@@ -218,7 +229,7 @@ export async function inspectProviderIntegration(
     ),
   ]);
   const skillsInstalled = skillChecks.every(Boolean);
-  const integrations = providerRegistry.get(providerName)?.cli?.plugin.manifest.capabilities.integrations;
+  const integrations = provider?.cli?.plugin.manifest.capabilities.integrations;
 
   return {
     mcpInstalled,
@@ -278,18 +289,9 @@ export async function installAllForProvider(
   apiUrl: string,
 ): Promise<ProviderInstallReport> {
   const integrationFingerprint = buildTowerIntegrationFingerprint(apiUrl);
-  const provider = providerRegistry.get(providerName);
-  if (!provider?.cli) {
-    return {
-      provider: providerName,
-      available: false,
-      integrationFingerprint,
-      ok: false,
-    };
-  }
-
   const resolved = await providerRegistry.createResolvedCliAdapter(providerName, getPackageRoot()).catch(() => null);
-  if (!resolved) {
+  const provider = resolved?.provider ?? providerRegistry.get(providerName);
+  if (!resolved || !provider?.cli) {
     return { provider: providerName, available: false, integrationFingerprint, ok: false };
   }
   const adapter: SdkCliAdapter = resolved.adapter;
@@ -301,11 +303,12 @@ export async function installAllForProvider(
 
   const mcpConfig = buildTowerMcpConfig();
   const capabilities = provider.cli.plugin.manifest.capabilities.integrations;
+  const includeProviderDetail = provider.builtin === true;
   const mcp = adapter.mcp
-    ? await installIntegration("MCP", "cli", () => adapter.mcp!.install({ ...mcpConfig, scope: "user" }))
+    ? await installIntegration("MCP", "cli", () => adapter.mcp!.install({ ...mcpConfig, scope: "user" }), includeProviderDetail)
     : unsupportedIntegration("MCP");
   const hooks = adapter.hooks
-    ? await installIntegration("Hooks", "file", () => adapter.hooks!.install({ apiUrl }))
+    ? await installIntegration("Hooks", "file", () => adapter.hooks!.install({ apiUrl }), includeProviderDetail)
     : unsupportedIntegration("Hooks");
   // Install every task-terminal Tower skill. Report the first failure if any,
   // else the canonical `tower` result — ok reflects all of them.
@@ -315,7 +318,7 @@ export async function installAllForProvider(
           name,
           sourceDir: getTowerSkillSourceDir(name),
           scope: "user",
-        }))
+        }), includeProviderDetail)
       : unsupportedIntegration("Skills")),
   );
   const skill = skillResults.find((r) => !r.ok) ?? skillResults[0];
@@ -332,12 +335,13 @@ export async function installAllForProvider(
       && (!capabilities?.skills || skill.ok),
   };
   const actual = await inspectProviderIntegration(providerName);
-  return applyIntegrationVerification(report, actual);
+  return applyIntegrationVerification(report, actual, capabilities);
 }
 
 function applyIntegrationVerification(
   report: ProviderInstallReport,
   actual: ProviderIntegrationStatus,
+  capabilities: { mcp?: boolean; hooks?: boolean; skills?: boolean } | undefined,
 ): ProviderInstallReport {
   const verify = (
     result: InstallResult | undefined,
@@ -350,8 +354,6 @@ function applyIntegrationVerification(
   const mcp = verify(report.mcp, actual.mcpInstalled, "MCP");
   const hooks = verify(report.hooks, actual.hooksInstalled, "Hooks");
   const skill = verify(report.skill, actual.skillsInstalled, "Skills");
-  const capabilities = providerRegistry.get(report.provider)?.cli?.plugin.manifest.capabilities.integrations;
-
   return {
     ...report,
     mcp,

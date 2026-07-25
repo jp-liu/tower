@@ -4,6 +4,9 @@ import type {
   CliAdapter,
   CliHostContext,
   CliPlugin,
+  CliProcessExecutor,
+  CliProcessRunOptions,
+  CliProcessResult,
   CliProcessSpec,
   PlatformName,
   RedactedLogger,
@@ -49,6 +52,29 @@ export interface LegacyCliProfileOverrides {
   command?: string;
   baseArgs?: string[];
   envPatch?: Record<string, string>;
+}
+
+export interface ProviderHostOptions {
+  baseArgs?: string[];
+  envOverrides?: Record<string, string>;
+  storageDir?: string;
+  providerConfigDir?: string | null;
+}
+
+class ManagedCliProcessExecutor implements CliProcessExecutor {
+  constructor(
+    private readonly executor: CliProcessExecutor,
+    private readonly commandPath: string | undefined,
+    private readonly profile: LegacyCliProfileOverrides,
+    private readonly signal: AbortSignal,
+  ) {}
+
+  execute(spec: CliProcessSpec, options: CliProcessRunOptions = {}): Promise<CliProcessResult> {
+    const merged = this.commandPath
+      ? mergeProviderProcess(spec, this.commandPath, this.profile)
+      : mergeProviderProcess(spec, spec.command, this.profile);
+    return this.executor.execute(merged, { ...options, signal: options.signal ?? this.signal });
+  }
 }
 
 /** Keep the CLI's own auth/config variables while excluding unrelated application secrets. */
@@ -148,19 +174,29 @@ export function createProviderHostContext(
   providerId: string,
   commandPath?: string,
   signal: AbortSignal = new AbortController().signal,
+  options: ProviderHostOptions = {},
 ): CliHostContext {
   const platform = process.platform as PlatformName;
-  const env = providerBaseEnvironment(providerId);
+  const env = { ...providerBaseEnvironment(providerId), ...(options.envOverrides ?? {}) };
+  const executor = new ControlledProcessExecutor({ platform, env });
+  const providerConfigDir = options.providerConfigDir === undefined
+    ? path.join(os.homedir(), PROVIDER_CONFIG_DIR[providerId] ?? `.${providerId}`)
+    : options.providerConfigDir;
   return {
     platform,
     arch: process.arch,
-    storageDir: path.join(os.homedir(), ".tower", "ai-plugins", providerId),
+    storageDir: options.storageDir ?? path.join(os.homedir(), ".tower", "ai-plugins", providerId),
     signal,
-    process: new ControlledProcessExecutor({ platform, env }),
+    process: new ManagedCliProcessExecutor(
+      executor,
+      commandPath,
+      { baseArgs: options.baseArgs, envPatch: options.envOverrides },
+      signal,
+    ),
     fileSystem: new NodeCliHostFileSystem(),
     resources: {
       homeDir: os.homedir(),
-      providerConfigDir: path.join(os.homedir(), PROVIDER_CONFIG_DIR[providerId] ?? `.${providerId}`),
+      ...(providerConfigDir ? { providerConfigDir } : {}),
       commandPath,
       towerPackageRoot: getPackageRoot(),
       managedConfigPaths: managedConfigPaths(providerId, platform, env),

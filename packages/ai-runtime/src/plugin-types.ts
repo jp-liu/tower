@@ -1,4 +1,4 @@
-import type { CliPluginManifestV1, CliPluginPermission } from "@tower/ai-sdk";
+import type { CliConfigSchema, CliPluginManifestV1, CliPluginPermission } from "@tower/ai-sdk";
 
 export const PLUGIN_REGISTRY_VERSION = 1 as const;
 export const PLUGIN_INSTALL_PLAN_VERSION = 1 as const;
@@ -58,6 +58,7 @@ export interface PluginInstallPlan {
   toVersion: string;
   integrity: string;
   manifest: PluginManifestSummary;
+  manifestData: CliPluginManifestV1;
   permissions: PluginPermissionDiff;
   planDigest: string;
 }
@@ -75,4 +76,9 @@ export interface ValidatedPluginPackage {
 export interface RegistryRecoveryResult {
   recovered: boolean;
   backupFileName?: string;
+}
+
+export interface InspectedPluginPackage {
+  manifest: CliPluginManifestV1;
+  configSchema: CliConfigSchema;
 }

@@ -63,6 +63,7 @@ const SLOT_META = [
 ] as const;
 
 const EFFORT_OPTIONS = ["low", "medium", "high"] as const;
+const CONNECTIONS_CHANGED_EVENT = "tower:provider-connections-changed";
 
 function IconButton({ label, children, ...props }: React.ComponentProps<typeof Button> & { label: string }) {
   return (
@@ -131,7 +132,12 @@ export function CapabilitySlotsSection() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    const reload = () => { void load(); };
+    window.addEventListener(CONNECTIONS_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(CONNECTIONS_CHANGED_EVENT, reload);
+  }, [load]);
 
   function markPending(key: string, value: boolean) {
     setPending((current) => ({ ...current, [key]: value }));

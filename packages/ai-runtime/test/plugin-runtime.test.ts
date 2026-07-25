@@ -233,12 +233,17 @@ describe("CLI plugin installation runtime", () => {
       code: "PERMISSION_CONFIRMATION_REQUIRED",
     });
     await plugins.disable(installed.id);
+    await expect(plugins.enable(installed.id)).rejects.toMatchObject({
+      code: "PERMISSION_CONFIRMATION_REQUIRED",
+    });
 
     const tampered = { ...plan, integrity: "sha512-tampered" };
     await expect(plugins.confirmAndEnable(installed.id, tampered)).rejects.toMatchObject({
       code: "INSTALL_PLAN_MISMATCH",
     });
     await plugins.confirmAndEnable(installed.id, JSON.parse(JSON.stringify(plan)));
+    await plugins.disable(installed.id);
+    await expect(plugins.enable(installed.id)).resolves.toMatchObject({ enabled: true });
     const adapter = await plugins.load(installed.id, host());
     expect(await adapter.generate({ prompt: "hello" })).toEqual({ text: "fixture-ok" });
     expect(globalThis.__towerFixtureLoads).toBe(1);

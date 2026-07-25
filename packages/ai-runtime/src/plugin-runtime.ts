@@ -20,6 +20,7 @@ import {
 } from "./npm-package-provider.js";
 import { PluginRegistry } from "./plugin-registry.js";
 import type {
+  InspectedPluginPackage,
   PluginInstallPlan,
   PluginRegistration,
   RegistryRecoveryResult,
@@ -206,6 +207,20 @@ export class CliPluginRuntime {
     })));
   }
 
+  async enable(pluginId: string): Promise<PluginRegistration> {
+    return this.serialized(async () => this.registry.update(pluginId, (current) => {
+      if (!current.permissionConfirmation
+        || !sameStringSet(current.permissions, current.permissionConfirmation.permissions)) {
+        throw pluginError("PERMISSION_CONFIRMATION_REQUIRED", pluginId);
+      }
+      return {
+        ...current,
+        enabled: true,
+        updatedAt: this.now().toISOString(),
+      };
+    }));
+  }
+
   async uninstall(pluginId: string): Promise<void> {
     await this.serialized(async () => {
       const snapshot = await this.registry.get(pluginId);
@@ -304,6 +319,30 @@ export class CliPluginRuntime {
     }
     if (!isCliAdapter(adapter)) throw pluginError("INVALID_ADAPTER", pluginId);
     return adapter;
+  }
+
+  async inspect(pluginId: string): Promise<InspectedPluginPackage> {
+    const registration = await this.registry.get(pluginId);
+    if (!registration) throw pluginError("PLUGIN_NOT_FOUND", pluginId);
+    const packageRoot = await this.resolveRegisteredRoot(registration);
+    const pluginPackage = await this.validate(
+      packageRoot,
+      registration.id,
+      registration.version,
+      registration.source === "npm",
+    ).catch((error) => {
+      throw pluginError("PLUGIN_CORRUPT", pluginId, error);
+    });
+    if (stableJson(pluginPackage.manifestSummary) !== stableJson(registration.manifest)) {
+      throw pluginError("PLUGIN_CORRUPT", pluginId);
+    }
+    const configSchema = JSON.parse(
+      (await this.fileSystem.readFile(pluginPackage.configSchemaPath)).toString("utf8"),
+    ) as InspectedPluginPackage["configSchema"];
+    return {
+      manifest: structuredClone(pluginPackage.manifest),
+      configSchema,
+    };
   }
 
   private async stageNpmPackage(packageName: string, version: string): Promise<StagedNpmPackage> {

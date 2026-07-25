@@ -52,7 +52,7 @@ export interface CliHostResources {
   /** User home resolved by the host. */
   homeDir: string;
   /** Provider-owned configuration root, such as ~/.claude or ~/.codex. */
-  providerConfigDir: string;
+  providerConfigDir?: string;
   /** Host-resolved executable used for provider-managed probes and integrations. */
   commandPath?: string;
   /** Tower package root containing scripts and bundled skills. */

@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
 import { providerRegistry } from "../providers";
 import {
   createProviderLogger,

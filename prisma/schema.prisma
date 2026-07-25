@@ -470,6 +470,12 @@ model ProviderConnection {
   queryParamsJson  String               @default("[]")
   roundRobinCursor Int                  @default(0)
   diagnosticsJson  String?
+  commandOverride  String?
+  baseArgsJson     String               @default("[]")
+  envVarsJson      String               @default("[]")
+  settingsJson     String               @default("{}")
+  resolvedCommand  String?
+  resolvedVersion  String?
   apiKeys          ApiConnectionKey[]
   models           ApiConnectionModel[]
   capabilityTargets  AiCapabilityTarget[]

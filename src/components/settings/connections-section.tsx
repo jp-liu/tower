@@ -23,6 +23,9 @@ import { Switch } from "@/components/ui/switch";
 import { useI18n } from "@/lib/i18n";
 import type { ProviderAvailability } from "@/lib/ai/types";
 import { ApiConnectionsSection } from "./api-connections-section";
+import { CliPluginsSection } from "./cli-plugins-section";
+
+const CONNECTIONS_CHANGED_EVENT = "tower:provider-connections-changed";
 
 type ProbeResult = {
   ok: boolean;
@@ -68,7 +71,12 @@ export function ConnectionsSection() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    const reload = () => { void load(); };
+    window.addEventListener(CONNECTIONS_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(CONNECTIONS_CHANGED_EVENT, reload);
+  }, [load]);
 
   async function testProvider(provider: string) {
     if (testing) return;
@@ -183,7 +191,7 @@ export function ConnectionsSection() {
                       <label className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Switch
                           checked={enabled}
-                          disabled={toggling === provider.name || !canToggle}
+                          disabled={!provider.builtin || toggling === provider.name || !canToggle}
                           onCheckedChange={(checked) => void toggleProvider(provider.name, checked)}
                           aria-label={`${provider.displayName} ${t("settings.aiTools.enabledLabel")}`}
                         />
@@ -239,6 +247,8 @@ export function ConnectionsSection() {
           </ul>
         )}
       </div>
+
+      <CliPluginsSection />
 
       <ApiConnectionsSection />
     </section>

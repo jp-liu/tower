@@ -593,7 +593,7 @@ export class CodexCliAdapter implements CliAdapter {
   }
 
   getConfigDir(): string {
-    return this.host.resources.providerConfigDir;
+    return this.host.resources.providerConfigDir ?? path.join(this.host.resources.homeDir, ".codex");
   }
 
   getSettingsPath(): string {

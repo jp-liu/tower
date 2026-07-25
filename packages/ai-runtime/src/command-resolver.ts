@@ -48,6 +48,7 @@ export interface ResolveCommandRequest {
   versionTimeoutMs?: number;
   helloProbe?: (candidate: CommandCandidate) => CliProcessSpec;
   helloTimeoutMs?: number;
+  signal?: AbortSignal;
   cacheKey?: string;
 }
 
@@ -185,7 +186,7 @@ export class CommandResolver {
         try {
           const version = await this.executor.execute(
             { command: attempt.path, args: request.versionArgs ?? ["--version"], cwd },
-            { timeoutMs: request.versionTimeoutMs ?? 5_000 },
+            { timeoutMs: request.versionTimeoutMs ?? 5_000, signal: request.signal },
           );
           if (version.exitCode === 0) {
             candidate.state = "runnable";
@@ -207,6 +208,7 @@ export class CommandResolver {
       try {
         const hello = await this.executor.execute(request.helloProbe(selected), {
           timeoutMs: request.helloTimeoutMs ?? 15_000,
+          signal: request.signal,
         });
         if (hello.exitCode === 0) selected.state = "connected";
         else selected.diagnostic = `Hello probe exited with code ${hello.exitCode ?? "signal"}`;

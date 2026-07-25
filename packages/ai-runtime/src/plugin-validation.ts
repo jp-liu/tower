@@ -8,6 +8,7 @@ import {
   isCliPluginManifestV1,
   type CliPluginManifestV1,
   type CliPluginPermission,
+  type CliConfigSchema,
 } from "@tower/ai-sdk";
 import { pluginError } from "./plugin-errors.js";
 import type { PluginFileSystem } from "./plugin-filesystem.js";
@@ -126,10 +127,72 @@ function validateTowerAnnotations(value: unknown): void {
   }
 }
 
-function validateConfigSchema(schema: unknown): void {
+const ROOT_SCHEMA_KEYS = new Set([
+  "$schema", "$id", "title", "description", "type", "properties", "required",
+  "additionalProperties", "default", "x-tower",
+]);
+const VALUE_SCHEMA_KEYS = new Set([
+  "title", "description", "type", "items", "enum", "default", "minimum", "maximum",
+  "minLength", "maxLength", "pattern", "additionalProperties", "x-tower",
+]);
+
+function validateSchemaNode(schema: unknown, root = false): void {
+  if (!isRecord(schema)) throw pluginError("INVALID_CONFIG_SCHEMA");
+  const allowed = root ? ROOT_SCHEMA_KEYS : VALUE_SCHEMA_KEYS;
+  if (Object.keys(schema).some((key) => !allowed.has(key))) throw pluginError("INVALID_CONFIG_SCHEMA");
+  if (root) {
+    if (schema.$schema !== CONFIG_SCHEMA_URI || schema.type !== "object" || !isRecord(schema.properties)) {
+      throw pluginError("INVALID_CONFIG_SCHEMA");
+    }
+    const properties = schema.properties;
+    if (schema.additionalProperties !== false) throw pluginError("INVALID_CONFIG_SCHEMA");
+    if (schema.required !== undefined
+      && (!Array.isArray(schema.required)
+        || schema.required.some((entry) => typeof entry !== "string" || !(entry in properties)))) {
+      throw pluginError("INVALID_CONFIG_SCHEMA");
+    }
+    for (const property of Object.values(properties)) validateSchemaNode(property);
+    return;
+  }
+
+  const annotation = isRecord(schema["x-tower"])
+    ? schema["x-tower"] as Record<string, unknown>
+    : {};
+  const control = annotation.control;
+  if (schema.type === "string") {
+    if (control !== undefined && !["text", "path", "select"].includes(String(control))) {
+      throw pluginError("INVALID_CONFIG_SCHEMA");
+    }
+  } else if (schema.type === "number" || schema.type === "integer") {
+    if (control !== undefined && !["number", "select"].includes(String(control))) {
+      throw pluginError("INVALID_CONFIG_SCHEMA");
+    }
+  } else if (schema.type === "boolean") {
+    if (control !== undefined && control !== "switch") throw pluginError("INVALID_CONFIG_SCHEMA");
+  } else if (schema.type === "array") {
+    if (!isRecord(schema.items) || schema.items.type !== "string") throw pluginError("INVALID_CONFIG_SCHEMA");
+    if (control !== "multiselect" && control !== "string-list") throw pluginError("INVALID_CONFIG_SCHEMA");
+    validateSchemaNode(schema.items);
+  } else if (schema.type === "object") {
+    if (control !== "key-value"
+      || !isRecord(schema.additionalProperties)
+      || schema.additionalProperties.type !== "string") {
+      throw pluginError("INVALID_CONFIG_SCHEMA");
+    }
+    validateSchemaNode(schema.additionalProperties);
+  } else {
+    throw pluginError("INVALID_CONFIG_SCHEMA");
+  }
+  if (schema.enum !== undefined && (!Array.isArray(schema.enum) || schema.enum.length === 0)) {
+    throw pluginError("INVALID_CONFIG_SCHEMA");
+  }
+}
+
+export function validatePluginConfigSchema(schema: unknown): asserts schema is CliConfigSchema {
   if (!isRecord(schema) || schema.$schema !== CONFIG_SCHEMA_URI || schema.type !== "object") {
     throw pluginError("INVALID_CONFIG_SCHEMA");
   }
+  validateSchemaNode(schema, true);
   validateTowerAnnotations(schema);
   try {
     const ajv = new Ajv2020({ strict: false, validateSchema: true });
@@ -138,6 +201,30 @@ function validateConfigSchema(schema: unknown): void {
   } catch (error) {
     throw pluginError("INVALID_CONFIG_SCHEMA", undefined, error);
   }
+}
+
+function configValidator(schema: CliConfigSchema, useDefaults: boolean) {
+  validatePluginConfigSchema(schema);
+  const ajv = new Ajv2020({
+    strict: false,
+    allErrors: true,
+    useDefaults,
+    removeAdditional: false,
+  });
+  ajv.addKeyword({ keyword: "x-tower", schemaType: "object", valid: true });
+  return ajv.compile(schema);
+}
+
+export function validatePluginSettings(
+  schema: CliConfigSchema,
+  settings: unknown,
+  options: { applyDefaults?: boolean } = {},
+): Record<string, unknown> {
+  if (!isRecord(settings)) throw pluginError("INVALID_CONFIG_SCHEMA");
+  const value = structuredClone(settings);
+  const validate = configValidator(schema, options.applyDefaults === true);
+  if (!validate(value)) throw pluginError("INVALID_CONFIG_SCHEMA");
+  return value;
 }
 
 async function readJson(fileSystem: PluginFileSystem, filePath: string, errorCode: "INVALID_PACKAGE" | "INVALID_CONFIG_SCHEMA") {
@@ -321,7 +408,7 @@ export async function validatePluginPackage(options: ValidatePluginPackageOption
   const entryPath = await resolveContainedFile(options.fileSystem, packageRoot, exportPath);
   const configSchemaPath = await resolveContainedFile(options.fileSystem, packageRoot, manifest.configSchema);
   const configSchemaContents = await options.fileSystem.readFile(configSchemaPath);
-  validateConfigSchema(await readJson(options.fileSystem, configSchemaPath, "INVALID_CONFIG_SCHEMA"));
+  validatePluginConfigSchema(await readJson(options.fileSystem, configSchemaPath, "INVALID_CONFIG_SCHEMA"));
   await scanPackageTree(options.fileSystem, packageRoot);
 
   const dependencies = isRecord(packageJson.dependencies) ? Object.keys(packageJson.dependencies) : [];
@@ -395,6 +482,7 @@ export function createInstallPlan(input: {
     toVersion: input.plugin.packageVersion,
     integrity: input.integrity,
     manifest: input.plugin.manifestSummary,
+    manifestData: structuredClone(input.plugin.manifest),
     permissions: permissionDiff(input.plugin.manifest.permissions, input.previous?.permissions),
   };
   return { ...planBase, planDigest: sha256(stableJson(planBase)) };
@@ -412,6 +500,7 @@ export function isMatchingPlan(expected: PluginInstallPlan, received: PluginInst
     toVersion: received.toVersion,
     integrity: received.integrity,
     manifest: received.manifest,
+    manifestData: received.manifestData,
     permissions: received.permissions,
   };
   return expected.planDigest === received.planDigest

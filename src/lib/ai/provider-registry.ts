@@ -1,5 +1,8 @@
 import type { CliAdapter as SdkCliAdapter } from "@tower/ai-sdk";
 import type { AiQueryAdapter, ProviderDefinition, ProviderAvailability } from "./types";
+import { db } from "@/lib/db";
+import { getCliPluginApplication } from "./cli-plugin-service";
+import { resolvePluginCliConnection, type CliPluginConnectionRecord } from "./cli-plugin-provider";
 import {
   createBuiltInAdapter,
   resolveBuiltInCommandResolution,
@@ -28,23 +31,51 @@ export class ProviderRegistry {
     return this.getAll().find((provider) => provider.agentFieldValue === agent);
   }
 
-  async createResolvedCliAdapter(name: string, cwd: string, commandOverride?: string) {
+  async createResolvedCliAdapter(
+    name: string,
+    cwd: string,
+    commandOverride?: string,
+  ): Promise<{
+    adapter: SdkCliAdapter;
+    provider?: ProviderDefinition;
+    commandPath: string;
+    version: string | null;
+  } | null> {
     const provider = this.providers.get(name);
-    if (!provider?.cli) return null;
-    const spec = { id: provider.name, agentFieldValue: provider.agentFieldValue, plugin: provider.cli.plugin };
-    const resolution = await resolveBuiltInCommandResolution(spec, cwd, commandOverride);
-    if (!resolution.selected || resolution.selected.state === "not-found") {
-      throw new Error(`${spec.plugin.manifest.display.name} CLI was not found`);
+    if (provider?.cli) {
+      const spec = { id: provider.name, agentFieldValue: provider.agentFieldValue, plugin: provider.cli.plugin };
+      const resolution = await resolveBuiltInCommandResolution(spec, cwd, commandOverride);
+      if (!resolution.selected || resolution.selected.state === "not-found") {
+        throw new Error(`${spec.plugin.manifest.display.name} CLI was not found`);
+      }
+      if (resolution.selected.state === "found") {
+        throw new Error(`${spec.plugin.manifest.display.name} CLI is not runnable`);
+      }
+      const commandPath = resolution.selected.path;
+      return {
+        adapter: createBuiltInAdapter(spec, commandPath),
+        provider,
+        commandPath,
+        version: resolution.selected.version ?? null,
+      };
     }
-    if (resolution.selected.state === "found") {
-      throw new Error(`${spec.plugin.manifest.display.name} CLI is not runnable`);
-    }
-    const commandPath = resolution.selected.path;
-    return {
-      adapter: createBuiltInAdapter(spec, commandPath),
-      commandPath,
-      version: resolution.selected.version ?? null,
-    };
+    const connection = await db.providerConnection.findUnique({
+      where: { connectionKey: `cli:${name}` },
+      select: {
+        id: true,
+        provider: true,
+        enabled: true,
+        commandOverride: true,
+        baseArgsJson: true,
+        envVarsJson: true,
+        settingsJson: true,
+      },
+    });
+    if (!connection) return null;
+    return resolvePluginCliConnection(
+      { ...connection, commandOverride: commandOverride ?? connection.commandOverride } as CliPluginConnectionRecord,
+      cwd,
+    );
   }
 
   getQueryAdapter(name: string, mode: "api" | "cli"): AiQueryAdapter | null {
@@ -92,6 +123,54 @@ export class ProviderRegistry {
         builtin: p.builtin === true,
         cli: { available: cliAvailable, version: cliVersion, commandPath, commandState },
         api: { available: apiAvailable, keyConfigured: apiKeyConfigured },
+      });
+    }
+    const [plugins, connections] = await Promise.all([
+      getCliPluginApplication().list(),
+      db.providerConnection.findMany({
+        where: { kind: "cli" },
+        select: {
+          name: true,
+          provider: true,
+          enabled: true,
+          testOk: true,
+          resolvedCommand: true,
+          resolvedVersion: true,
+          testStatus: true,
+        },
+      }),
+    ]);
+    const connectionsByProvider = new Map(connections.map((connection) => [connection.provider, connection]));
+    for (const plugin of plugins) {
+      if (this.providers.has(plugin.id)) continue;
+      const connection = connectionsByProvider.get(plugin.id);
+      results.push({
+        name: plugin.id,
+        displayName: plugin.displayName,
+        builtin: false,
+        cli: {
+          available: Boolean(plugin.enabled && plugin.health === "ready" && connection?.enabled && connection.testOk),
+          version: connection?.resolvedVersion ?? null,
+          commandPath: connection?.resolvedCommand ?? null,
+          commandState: connection?.testStatus === "connected" ? "connected" : null,
+        },
+        api: { available: false, keyConfigured: false },
+      });
+    }
+    for (const connection of connections) {
+      if (this.providers.has(connection.provider)
+        || plugins.some((plugin) => plugin.id === connection.provider)) continue;
+      results.push({
+        name: connection.provider,
+        displayName: connection.name,
+        builtin: false,
+        cli: {
+          available: false,
+          version: connection.resolvedVersion,
+          commandPath: connection.resolvedCommand,
+          commandState: null,
+        },
+        api: { available: false, keyConfigured: false },
       });
     }
     return results;

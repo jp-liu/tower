@@ -20,6 +20,9 @@ vi.mock("@/actions/provider-connection-actions", () => ({
 vi.mock("../api-connections-section", () => ({
   ApiConnectionsSection: () => <div data-testid="api-connections" />,
 }));
+vi.mock("../cli-plugins-section", () => ({
+  CliPluginsSection: () => <div data-testid="cli-plugins" />,
+}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const providers = [

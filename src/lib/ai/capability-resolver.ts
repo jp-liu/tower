@@ -46,6 +46,10 @@ const connectionSelect = {
   enabled: true,
   testStatus: true,
   testOk: true,
+  commandOverride: true,
+  baseArgsJson: true,
+  envVarsJson: true,
+  settingsJson: true,
   models: { select: { modelId: true, available: true } },
   apiKeys: { select: { enabled: true, testStatus: true } },
 } as const;
@@ -69,6 +73,10 @@ async function resolveStoredTarget(
       enabled: boolean;
       testStatus: string;
       testOk: boolean;
+      commandOverride: string | null;
+      baseArgsJson: string;
+      envVarsJson: string;
+      settingsJson: string;
       models: Array<{ modelId: string; available: boolean }>;
       apiKeys: Array<{ enabled: boolean; testStatus: string }>;
     };
@@ -110,20 +118,19 @@ async function resolveStoredTarget(
     return { ...base, kind: "api", api: { protocol: connection.provider } };
   }
 
-  const provider = providerRegistry.get(connection.provider);
-  if (!provider?.cli) {
-    return { ...base, kind: "cli", preflightError: preflight("cli_not_found") };
-  }
   try {
     const resolved = await providerRegistry.createResolvedCliAdapter(
       connection.provider,
       options.cwd ?? process.cwd(),
+      connection.commandOverride ?? undefined,
     );
     if (!resolved) return { ...base, kind: "cli", preflightError: preflight("cli_not_found") };
+    const resolvedProvider = resolved.provider ?? providerRegistry.get(connection.provider);
+    if (!resolvedProvider) return { ...base, kind: "cli", preflightError: preflight("cli_not_found") };
     return {
       ...base,
       kind: "cli",
-      cli: { adapter: resolved.adapter, provider, commandPath: resolved.commandPath },
+      cli: { adapter: resolved.adapter, provider: resolvedProvider, commandPath: resolved.commandPath },
     };
   } catch (error) {
     const code = error instanceof Error && error.message.includes("not runnable")
@@ -241,7 +248,8 @@ export async function resolveQueryAdapter(
       "This legacy query entry point cannot execute an API connection; use the resolved capability target runtime",
     );
   }
-  const adapter = providerRegistry.getQueryAdapter(target.provider, "cli");
+  const adapter = target.cli.provider.cliQuery?.adapter
+    ?? providerRegistry.getQueryAdapter(target.provider, "cli");
   if (!adapter) {
     throw new AiProviderError("UNSUPPORTED_MODE", target.provider, "The configured CLI has no query adapter");
   }

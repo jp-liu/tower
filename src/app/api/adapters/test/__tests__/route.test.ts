@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   connected: vi.fn(),
   disconnected: vi.fn(),
   repair: vi.fn(async () => ({ installed: true, changed: false })),
+  pluginProbe: vi.fn(),
 }));
 
 vi.mock("@/lib/cli-test", () => ({
@@ -23,8 +24,17 @@ vi.mock("@/actions/provider-connection-actions", () => ({
 }));
 vi.mock("@/lib/ai/providers", () => ({
   providerRegistry: {
-    get: vi.fn(() => ({ cli: { adapter: { hooks: { install: mocks.repair } } } })),
+    get: vi.fn((provider: string) => provider === "codex"
+      ? { cli: { adapter: { hooks: { install: mocks.repair } } } }
+      : undefined),
+    createResolvedCliAdapter: vi.fn(async () => ({
+      adapter: { hooks: { install: mocks.repair } },
+      commandPath: "/usr/local/bin/community-cli",
+    })),
   },
+}));
+vi.mock("@/lib/ai/cli-plugin-provider", () => ({
+  testPluginCliConnection: mocks.pluginProbe,
 }));
 
 import { POST } from "../route";
@@ -53,5 +63,28 @@ describe("adapter test route", () => {
       report: expect.objectContaining({ provider: "codex", available: true, ok: false }),
     });
     expect(mocks.disconnected).not.toHaveBeenCalled();
+  });
+
+  it("uses the dynamic plugin Hello probe for providers without static definitions", async () => {
+    mocks.pluginProbe.mockResolvedValue({ version: "1.2.3" });
+    mocks.install.mockResolvedValue({
+      provider: "@acme/community-cli",
+      available: true,
+      ok: true,
+    });
+    const request = new NextRequest("http://localhost:3000/api/adapters/test", {
+      method: "POST",
+      body: JSON.stringify({ provider: "@acme/community-cli" }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(body.ok).toBe(true);
+    expect(body.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "@acme/community-cli_hello", passed: true }),
+    ]));
+    expect(mocks.pluginProbe).toHaveBeenCalledWith("@acme/community-cli");
   });
 });

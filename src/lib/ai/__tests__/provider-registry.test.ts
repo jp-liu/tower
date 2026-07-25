@@ -5,8 +5,22 @@ const hostMocks = vi.hoisted(() => ({
   createBuiltInAdapter: vi.fn(() => ({})),
   resolveBuiltInCommandResolution: vi.fn(),
 }));
+const dynamicMocks = vi.hoisted(() => ({
+  listPlugins: vi.fn(async (): Promise<Array<Record<string, unknown>>> => []),
+  findMany: vi.fn(async (): Promise<Array<Record<string, unknown>>> => []),
+  findUnique: vi.fn(),
+  resolvePlugin: vi.fn(),
+}));
 
+vi.mock("server-only", () => ({}));
 vi.mock("../provider-host", () => hostMocks);
+vi.mock("@/lib/db", () => ({
+  db: { providerConnection: { findMany: dynamicMocks.findMany, findUnique: dynamicMocks.findUnique } },
+}));
+vi.mock("../cli-plugin-service", () => ({
+  getCliPluginApplication: () => ({ list: dynamicMocks.listPlugins }),
+}));
+vi.mock("../cli-plugin-provider", () => ({ resolvePluginCliConnection: dynamicMocks.resolvePlugin }));
 
 import { ProviderRegistry } from "../provider-registry";
 import type { ProviderDefinition } from "../types";
@@ -35,6 +49,9 @@ describe("ProviderRegistry", () => {
   let registry: ProviderRegistry;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    dynamicMocks.listPlugins.mockResolvedValue([]);
+    dynamicMocks.findMany.mockResolvedValue([]);
     registry = new ProviderRegistry();
   });
 
@@ -127,5 +144,28 @@ describe("ProviderRegistry", () => {
         },
       }),
     ]);
+  });
+
+  it("lists enabled plugin manifests without loading third-party adapter code", async () => {
+    dynamicMocks.listPlugins.mockResolvedValue([{ id: "@acme/community", displayName: "Community", enabled: true, health: "ready" }]);
+    dynamicMocks.findMany.mockResolvedValue([{
+      name: "Community",
+      provider: "@acme/community",
+      enabled: true,
+      testOk: true,
+      resolvedCommand: "/opt/community",
+      resolvedVersion: "1.2.3",
+      testStatus: "connected",
+    }]);
+
+    const providers = await registry.getAvailableProviders();
+
+    expect(providers).toEqual([expect.objectContaining({
+      name: "@acme/community",
+      displayName: "Community",
+      builtin: false,
+      cli: expect.objectContaining({ available: true, commandPath: "/opt/community" }),
+    })]);
+    expect(dynamicMocks.resolvePlugin).not.toHaveBeenCalled();
   });
 });

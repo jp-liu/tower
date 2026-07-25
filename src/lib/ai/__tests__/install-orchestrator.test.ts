@@ -9,16 +9,28 @@ const { adapter } = vi.hoisted(() => ({
   },
 }));
 
+const providerDefinition = {
+  name: "codex",
+  displayName: "Codex",
+  agentFieldValue: "CODEX",
+  builtin: true,
+  cli: {
+    adapter,
+    plugin: { manifest: { capabilities: { integrations: { mcp: true, hooks: true, skills: true } } } },
+  },
+};
+
 vi.mock("@/lib/ai/providers", () => ({
   providerRegistry: {
-    get: vi.fn((name: string) => name === "codex" ? {
-      cli: {
-        adapter,
-        plugin: { manifest: { capabilities: { integrations: { mcp: true, hooks: true, skills: true } } } },
-      },
-    } : undefined),
+    get: vi.fn((name: string) => name === "codex" ? providerDefinition : undefined),
     createResolvedCliAdapter: vi.fn(async (name: string) =>
-      name === "codex" ? { adapter, commandPath: "/usr/local/bin/codex" } : null),
+      name === "codex" ? { adapter, provider: providerDefinition, commandPath: "/usr/local/bin/codex" }
+        : name === "@acme/community-cli" ? {
+          adapter,
+          provider: { ...providerDefinition, name, displayName: "Community CLI", builtin: false },
+          commandPath: "/usr/local/bin/community-cli",
+        }
+        : null),
   },
 }));
 
@@ -143,6 +155,25 @@ describe("inspectProviderIntegration", () => {
       error: "Hooks verification failed after install",
     });
     expect(report.ok).toBe(false);
+  });
+
+  it("installs integrations for a dynamically resolved provider without a static definition", async () => {
+    const report = await installAllForProvider("@acme/community-cli", "http://localhost:3000");
+
+    expect(report).toMatchObject({ provider: "@acme/community-cli", available: true, ok: true });
+    expect(adapter.mcp.install).toHaveBeenCalledOnce();
+    expect(adapter.hooks.install).toHaveBeenCalledOnce();
+    expect(adapter.skills.install).toHaveBeenCalledTimes(4);
+  });
+
+  it("does not retain third-party integration secrets in install reports", async () => {
+    const canary = "CANARY_PLUGIN_INSTALL_SECRET_9f2c";
+    adapter.mcp.install.mockRejectedValue(new Error(canary));
+
+    const report = await installAllForProvider("@acme/community-cli", "http://localhost:3000");
+
+    expect(report.mcp).toMatchObject({ ok: false, error: "MCP install failed" });
+    expect(JSON.stringify(report)).not.toContain(canary);
   });
 
   it.each([
