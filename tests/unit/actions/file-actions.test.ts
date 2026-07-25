@@ -3,6 +3,7 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import * as childProcess from "child_process";
+import path from "node:path";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("fs/promises");
@@ -19,8 +20,7 @@ vi.mock("ignore", () => {
 
 vi.mock("@/lib/fs-security", () => ({
   safeResolvePath: vi.fn((base: string, rel: string) => {
-    const nodePath = require("path");
-    const resolved = nodePath.resolve(base, rel);
+    const resolved = path.resolve(base, rel);
     if (!resolved.startsWith(base)) throw new Error("Path traversal attempt");
     return resolved;
   }),

@@ -17,6 +17,7 @@ vi.mock("node:fs", async (importOriginal) => {
 });
 
 import * as fs from "node:fs";
+import path from "node:path";
 import {
   getAssistantCacheDir,
   buildCacheFilename,
@@ -161,13 +162,11 @@ describe("stripCacheUuidSuffix", () => {
 
 describe("isAssistantCachePath", () => {
   it("ASSET-01: returns true for path inside assistant cache root", () => {
-    const path = require("path");
     const filePath = path.join("/mock/tower/storage", "cache", "assistant", "2026-04", "images", "foo.png");
     expect(isAssistantCachePath(filePath)).toBe(true);
   });
 
   it("ASSET-01: returns false for path outside assistant cache (in assets)", () => {
-    const path = require("path");
     const assetsPath = path.join("/mock/tower/storage", "assets", "proj123", "foo.png");
     expect(isAssistantCachePath(assetsPath)).toBe(false);
   });

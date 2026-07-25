@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports -- Preview tests spawn this fixture as a standalone CommonJS process. */
 // Mock dev server for preview tests.
 // Args:
 //   --port <n>           port to listen on (required)

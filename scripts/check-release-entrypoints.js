@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports -- This release verifier is a published CommonJS Node entrypoint. */
 const fs = require("node:fs");
 const path = require("node:path");
 

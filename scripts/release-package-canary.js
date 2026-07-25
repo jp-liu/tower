@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports -- This release verifier exposes CommonJS helpers consumed by its tests. */
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");

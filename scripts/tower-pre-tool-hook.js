@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports -- Claude invokes this hook directly as a CommonJS script. */
 /**
  * Tower PreToolUse Hook (shared by Claude Code + Codex CLI)
  *

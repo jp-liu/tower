@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- This predev script is invoked directly by Node as CommonJS. */
 /**
  * Ensure dev database exists before starting dev server.
  * Runs `prisma db push` + FTS init if the database file is missing.

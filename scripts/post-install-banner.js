@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports -- This published postinstall helper must run as CommonJS in consumer installs. */
 /**
  * Print a welcome banner after `npm install tower-studio`.
  * Skipped in CI to avoid polluting build logs.

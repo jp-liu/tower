@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports -- This published postinstall helper must run as CommonJS in consumer installs. */
 /**
  * npm pack strips execute permissions from binary files.
  * This script restores +x on native addon helpers that need it.

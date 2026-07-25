@@ -12,16 +12,14 @@ import {
 import { join } from "node:path";
 import { existsSync, unlinkSync } from "node:fs";
 import { revalidatePath } from "next/cache";
+import packageJson from "../../package.json";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function getTowerVersion(): string {
-  try {
-    const pkg = require("../../package.json");
-    return pkg.version ?? "unknown";
-  } catch { return "unknown"; }
+  return packageJson.version ?? "unknown";
 }
 
 async function getResolvedBackupsDir(): Promise<string> {

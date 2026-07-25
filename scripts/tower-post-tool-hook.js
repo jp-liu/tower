@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports -- Claude invokes this published hook directly as a CommonJS script. */
 /**
  * Tower PostToolUse Hook
  *

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireLocalhost } from "@/lib/internal-api-guard";
 import { join } from "node:path";
-import { existsSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, writeFileSync, mkdirSync, unlinkSync } from "node:fs";
 import { getBackupsDir } from "@/lib/tower-dir";
 import { validateFilename, readMetadataFromArchive } from "@/lib/backup";
 import { getConfigValue } from "@/actions/config-actions";
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     const meta = await readMetadataFromArchive(destPath);
     if (!meta || !meta.version) {
       // Clean up invalid file
-      try { require("node:fs").unlinkSync(destPath); } catch { /* ignore */ }
+      try { unlinkSync(destPath); } catch { /* ignore */ }
       return NextResponse.json({ error: "Invalid backup archive" }, { status: 400 });
     }
 

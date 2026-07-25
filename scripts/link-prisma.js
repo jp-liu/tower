@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports -- This published postinstall helper must run as CommonJS in consumer installs. */
 /**
  * Turbopack may rewrite external package names with content hashes
  * (for example `@prisma/client-<hash>` or `node-pty-<hash>`).

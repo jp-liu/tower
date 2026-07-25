@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { IncomingMessage } from "http";
+import { createServer } from "node:net";
 import { getSession, destroySession } from "./session-store";
 import { stripDeviceQueries } from "./strip-device-queries";
 import { readConfigValue } from "@/lib/config-reader";
@@ -122,7 +123,6 @@ function webSocketCloseCodeForPtyExit(exitCode: number | null | undefined): numb
 
 function isPortInUse(port: number, host: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const { createServer } = require("net") as typeof import("net");
     const tester = createServer();
     tester.once("error", () => resolve(true));
     tester.once("listening", () => { tester.close(() => resolve(false)); });

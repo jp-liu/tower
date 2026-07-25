@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports -- This build helper is invoked directly by Node as CommonJS. */
 /**
  * Three jobs on `.next/standalone/` before publish:
  *

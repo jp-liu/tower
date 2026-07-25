@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports -- This shipped release smoke entrypoint is executed directly as CommonJS. */
 const fs = require("fs");
 const http = require("http");
 const os = require("os");
@@ -241,6 +242,10 @@ function waitForExit(processHandle, timeoutMs) {
   ]);
 }
 
+function runtimePlatform() {
+  return process.platform;
+}
+
 async function stopChild() {
   if (!child) return;
   if (child.exitCode !== null) {
@@ -248,7 +253,7 @@ async function stopChild() {
     return;
   }
   try {
-    if (process.platform === "win32") {
+    if (runtimePlatform() === "win32") {
       execFileSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore" });
     } else {
       process.kill(-child.pid, "SIGTERM");
