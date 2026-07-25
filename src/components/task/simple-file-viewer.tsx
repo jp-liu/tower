@@ -14,31 +14,30 @@ interface SimpleFileViewerProps {
 /** Read-only plain-text fallback when Monaco extension isn't installed.
  * Used to keep search-result click usable: shows file content with line
  * numbers and scrolls/highlights the matched line. No syntax highlighting. */
-export function SimpleFileViewer({
+export function SimpleFileViewer(props: SimpleFileViewerProps) {
+  const viewerKey = `${props.worktreePath}:${props.selectedFilePath ?? "none"}`;
+  return <SimpleFileViewerState key={viewerKey} {...props} />;
+}
+
+function SimpleFileViewerState({
   worktreePath,
   selectedFilePath,
   selectedLine,
 }: SimpleFileViewerProps) {
   const { t } = useI18n();
   const [result, setResult] = useState<FileReadResult | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!!selectedFilePath);
   const [error, setError] = useState<string | null>(null);
   const lineRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!selectedFilePath) {
-      setResult(null);
-      setError(null);
-      return;
-    }
+    if (!selectedFilePath) return;
     const prefix = worktreePath.endsWith("/") ? worktreePath : worktreePath + "/";
     const relativePath = selectedFilePath.startsWith(prefix)
       ? selectedFilePath.slice(prefix.length)
       : selectedFilePath;
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
     readFileContent(worktreePath, relativePath)
       .then((r) => {
         if (!cancelled) setResult(r);

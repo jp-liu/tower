@@ -43,7 +43,11 @@ function formatRelativeTime(dateStr: string): string {
   }
 }
 
-export function FileHistoryPanel({
+export function FileHistoryPanel(props: FileHistoryPanelProps) {
+  return <FileHistoryPanelState key={`${props.worktreePath}:${props.relativePath}`} {...props} />;
+}
+
+function FileHistoryPanelState({
   worktreePath,
   relativePath,
   onSelectCommit,
@@ -54,9 +58,6 @@ export function FileHistoryPanel({
 
   useEffect(() => {
     if (!worktreePath || !relativePath) return;
-    setLoading(true);
-    setCommits([]);
-
     gitAction(worktreePath, "log-file", { file: relativePath })
       .then((res) => {
         const data = res as { commits?: Commit[] };

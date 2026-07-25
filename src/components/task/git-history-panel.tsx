@@ -43,7 +43,11 @@ export interface GitHistoryPanelProps {
 }
 
 
-export function GitHistoryPanel({
+export function GitHistoryPanel(props: GitHistoryPanelProps) {
+  return <GitHistoryPanelState key={props.worktreePath} {...props} />;
+}
+
+function GitHistoryPanelState({
   worktreePath,
   onSelectCommitFile,
 }: GitHistoryPanelProps) {
@@ -52,8 +56,10 @@ export function GitHistoryPanel({
   const [head, setHead] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedHash, setSelectedHash] = useState<string | null>(null);
-  const [commitFiles, setCommitFiles] = useState<CommitFile[]>([]);
-  const [loadingFiles, setLoadingFiles] = useState(false);
+  const [commitFileResult, setCommitFileResult] = useState<{
+    hash: string;
+    files: CommitFile[];
+  } | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     hash: string;
     x?: number;
@@ -65,7 +71,6 @@ export function GitHistoryPanel({
   useEffect(() => {
     if (!worktreePath) return;
     let cancelled = false;
-    setLoading(true);
     gitAction(worktreePath, "log-graph", {})
       .then((res) => {
         if (cancelled) return;
@@ -87,6 +92,7 @@ export function GitHistoryPanel({
   }, [worktreePath, refetchTick]);
 
   const handleActionComplete = () => {
+    setLoading(true);
     setRefetchTick((t) => t + 1);
   };
 
@@ -100,29 +106,26 @@ export function GitHistoryPanel({
   // needed now — per-file before/after content is fetched on demand when the
   // user clicks a file (via commit-file-content action).
   useEffect(() => {
-    if (!selectedHash || !worktreePath) {
-      setCommitFiles([]);
-      return;
-    }
+    if (!selectedHash || !worktreePath) return;
+    const hash = selectedHash;
     let cancelled = false;
-    setLoadingFiles(true);
-    gitAction(worktreePath, "show-commit", { hash: selectedHash })
+    gitAction(worktreePath, "show-commit", { hash })
       .then((res) => {
         if (cancelled) return;
         const data = res as { files?: CommitFile[] };
-        setCommitFiles(data.files ?? []);
+        setCommitFileResult({ hash, files: data.files ?? [] });
       })
       .catch(() => {
         if (cancelled) return;
-        setCommitFiles([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingFiles(false);
+        setCommitFileResult({ hash, files: [] });
       });
     return () => {
       cancelled = true;
     };
   }, [selectedHash, worktreePath]);
+
+  const commitFiles = commitFileResult?.hash === selectedHash ? commitFileResult.files : [];
+  const loadingFiles = !!selectedHash && commitFileResult?.hash !== selectedHash;
 
   const handleFileClick = async (filename: string) => {
     if (!selectedHash || !onSelectCommitFile) return;

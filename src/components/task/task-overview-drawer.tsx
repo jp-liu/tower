@@ -106,7 +106,12 @@ function CollapsibleDescription({ text }: { text: string }) {
   );
 }
 
-export function TaskOverviewDrawer({
+export function TaskOverviewDrawer(props: TaskOverviewDrawerProps) {
+  const drawerKey = `${props.open ? "open" : "closed"}:${props.taskId ?? "none"}`;
+  return <TaskOverviewDrawerState key={drawerKey} {...props} />;
+}
+
+function TaskOverviewDrawerState({
   open,
   onOpenChange,
   taskId,
@@ -125,12 +130,7 @@ export function TaskOverviewDrawer({
   const [previewAsset, setPreviewAsset] = useState<DrawerAsset | null>(null);
 
   useEffect(() => {
-    if (!taskId || !open) {
-      setTask(null);
-      setNotes([]);
-      setAssets([]);
-      return;
-    }
+    if (!taskId || !open) return;
     // Notes bound to this task — surfaces auto-generated overviews / insights
     // and any manual task notes right inside the asset's task drawer.
     getTaskNotes(taskId)

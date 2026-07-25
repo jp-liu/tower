@@ -36,16 +36,17 @@ export function formatBlameAge(dateStr: string | undefined): string {
   }
 }
 
-export function BlameList({ worktreePath, relativePath }: BlameListProps) {
+export function BlameList(props: BlameListProps) {
+  return <BlameListState key={`${props.worktreePath}:${props.relativePath}`} {...props} />;
+}
+
+function BlameListState({ worktreePath, relativePath }: BlameListProps) {
   const { t } = useI18n();
   const [lines, setLines] = useState<BlameLine[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!worktreePath || !relativePath) return;
-    setLoading(true);
-    setLines([]);
-
     gitAction(worktreePath, "blame", { file: relativePath })
       .then((res) => {
         const data = res as { lines?: BlameLine[] };

@@ -95,12 +95,13 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const { status: rgStatus } = useExtension("rg");
   const { status: monacoStatus } = useExtension("monaco");
   const [taskStatus, setTaskStatus] = useState(task.status);
-  // Sync taskStatus when server-side task prop changes (router.refresh, etc.)
-  useEffect(() => {
+  const [taskStatusSource, setTaskStatusSource] = useState(task.status);
+  if (taskStatusSource !== task.status) {
+    setTaskStatusSource(task.status);
     setTaskStatus(task.status);
-  }, [task.status]);
+  }
   const [diffData, setDiffData] = useState<DiffData | null>(null);
-  const [isLoadingDiff, setIsLoadingDiff] = useState(false);
+  const [loadedDiffKey, setLoadedDiffKey] = useState<string | null>(null);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
   const [diffFileRequest, setDiffFileRequest] = useState<DiffFileRequest | null>(null);
@@ -113,14 +114,22 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const [activeTab, setActiveTab] = useState<string | null>(null);
   // Inner sub-tab inside files: filetree | search | git. Initial pick is
   // the first available sub-tab given current extension state.
-  const [innerTab, setInnerTab] = useState<string>(() =>
+  const [selectedInnerTab, setInnerTab] = useState<string>(() =>
     monacoStatus.installed ? "filetree" : rgStatus.installed ? "search" : "git"
   );
+  const innerTab =
+    selectedInnerTab === "filetree" && !monacoStatus.installed
+      ? (rgStatus.installed ? "search" : "git")
+      : selectedInnerTab === "search" && !rgStatus.installed
+        ? (monacoStatus.installed ? "filetree" : "git")
+        : selectedInnerTab;
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [previewUrl, setPreviewUrl] = useState("");
   const [isExecuting, setIsExecuting] = useState(false);
   const [prompts, setPrompts] = useState<Array<{ id: string; name: string; isDefault: boolean }>>([]);
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
+  const [mergeCommitLog, setMergeCommitLog] = useState<string[]>([]);
   // Only show live terminal if execution is actively RUNNING
   const [activeWorktreePath, setActiveWorktreePath] = useState<string | null>(
     latestExecution?.status === "RUNNING" ? (latestExecution?.worktreePath ?? null) : null
@@ -130,6 +139,9 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     ? (task.subPath ? `${task.project.localPath}/${task.subPath}` : task.project.localPath)
     : null;
   const fileRootPath = latestExecution?.worktreePath ?? directCwd;
+  const diffRequestKey = `${task.id}:${taskStatus}`;
+  const shouldLoadDiff = taskStatus !== "TODO" && taskStatus !== "CANCELLED";
+  const isLoadingDiff = shouldLoadDiff && loadedDiffKey !== diffRequestKey;
 
   // Load available prompts
   useEffect(() => {
@@ -161,7 +173,6 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   useEffect(() => {
     if (taskStatus === "TODO" || taskStatus === "CANCELLED") return;
     let cancelled = false;
-    setIsLoadingDiff(true);
     fetch(`/api/tasks/${task.id}/diff`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -179,20 +190,10 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
         toast.error(t("taskPage.loadDiffFailed"));
       })
       .finally(() => {
-        if (!cancelled) setIsLoadingDiff(false);
+        if (!cancelled) setLoadedDiffKey(diffRequestKey);
       });
     return () => { cancelled = true; };
-  }, [task.id, taskStatus]);
-
-  // Inner sub-tab fallback: if the currently selected sub-tab becomes
-  // unavailable (extension uninstalled), fall back to the next available.
-  useEffect(() => {
-    if (innerTab === "filetree" && !monacoStatus.installed) {
-      setInnerTab(rgStatus.installed ? "search" : "git");
-    } else if (innerTab === "search" && !rgStatus.installed) {
-      setInnerTab(monacoStatus.installed ? "filetree" : "git");
-    }
-  }, [monacoStatus.installed, rgStatus.installed, innerTab]);
+  }, [task.id, taskStatus, diffRequestKey, t]);
 
   const handleExecute = useCallback(async () => {
     if (isExecuting) return;
@@ -257,7 +258,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
       setIsExecuting(false);
       toast.error(err instanceof Error ? err.message : String(err));
     }
-  }, [task.id]);
+  }, [task.id, removePortal]);
 
   const handleMergeComplete = useCallback(() => {
     setTaskStatus("DONE");
@@ -273,9 +274,6 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     });
     router.refresh();
   }, [router, t, task.id]);
-
-  const [showMergeDialog, setShowMergeDialog] = useState(false);
-  const [mergeCommitLog, setMergeCommitLog] = useState<string[]>([]);
 
   const handleComplete = useCallback(async () => {
     try {
@@ -305,7 +303,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     }
-  }, [task.id, router, t, latestExecution]);
+  }, [task.id, router, t]);
 
   const handleCommit = useCallback(async (message: string) => {
     try {

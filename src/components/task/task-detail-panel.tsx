@@ -41,7 +41,11 @@ interface TaskDiffData {
   branchDeleted?: boolean;
 }
 
-export function TaskDetailPanel({
+export function TaskDetailPanel(props: TaskDetailPanelProps) {
+  return <TaskDetailPanelState key={props.task.id} {...props} />;
+}
+
+function TaskDetailPanelState({
   task,
   workspaceId,
   projectLocalPath,
@@ -52,13 +56,14 @@ export function TaskDetailPanel({
   const { removePortal } = useTerminalPortal();
   const [activeTab, setActiveTab] = useState<TabType>("terminal");
   const [diffData, setDiffData] = useState<TaskDiffData | null>(null);
-  const [isLoadingDiff, setIsLoadingDiff] = useState(false);
+  const [loadedDiffKey, setLoadedDiffKey] = useState<string | null>(null);
   const [taskStatus, setTaskStatus] = useState(task.status);
+  const [taskStatusSource, setTaskStatusSource] = useState(task.status);
 
-  // Sync taskStatus when task prop changes (e.g. drag-and-drop status change)
-  useEffect(() => {
+  if (taskStatusSource !== task.status) {
+    setTaskStatusSource(task.status);
     setTaskStatus(task.status);
-  }, [task.status]);
+  }
 
   // Terminal + execution history state — reset when task changes
   const [activeWorktreePath, setActiveWorktreePath] = useState<string | null>(null);
@@ -66,15 +71,6 @@ export function TaskDetailPanel({
   const [executionLoaded, setExecutionLoaded] = useState(false);
   const [pastExecutions, setPastExecutions] = useState<TaskExecution[]>([]);
 
-  // Reset terminal state when switching tasks
-  useEffect(() => {
-    setActiveWorktreePath(null);
-    setIsExecuting(false);
-    setExecutionLoaded(false);
-    setPastExecutions([]);
-    setDiffData(null);
-    setActiveTab("terminal");
-  }, [task.id]);
   const [prompts, setPrompts] = useState<Array<{ id: string; name: string; isDefault: boolean }>>([]);
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
 
@@ -92,10 +88,6 @@ export function TaskDetailPanel({
 
   // Load executions: check for active terminal + build history
   useEffect(() => {
-    // Reset terminal state immediately to prevent showing previous task's terminal
-    setActiveWorktreePath(null);
-    setExecutionLoaded(false);
-
     let cancelled = false;
     getTaskExecutions(task.id).then((executions) => {
       if (cancelled) return;
@@ -110,13 +102,17 @@ export function TaskDetailPanel({
       setExecutionLoaded(true);
     });
     return () => { cancelled = true; };
-  }, [task.id]);
+  }, [task.id, projectLocalPath]);
+
+  const diffRequestKey = `${task.id}:${taskStatus}`;
+  const shouldLoadDiff =
+    activeTab === "changes" && taskStatus !== "TODO" && taskStatus !== "CANCELLED";
+  const isLoadingDiff = shouldLoadDiff && loadedDiffKey !== diffRequestKey;
 
   // Fetch diff when Changes tab is active and task has been executed
   useEffect(() => {
     if (activeTab !== "changes" || taskStatus === "TODO" || taskStatus === "CANCELLED") return;
     let cancelled = false;
-    setIsLoadingDiff(true);
     fetch(`/api/tasks/${task.id}/diff`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -126,9 +122,9 @@ export function TaskDetailPanel({
         if (!cancelled) setDiffData(data?.files || data?.branchDeleted ? data : null);
       })
       .catch(() => { if (!cancelled) setDiffData(null); })
-      .finally(() => { if (!cancelled) setIsLoadingDiff(false); });
+      .finally(() => { if (!cancelled) setLoadedDiffKey(diffRequestKey); });
     return () => { cancelled = true; };
-  }, [activeTab, taskStatus, task.id]);
+  }, [activeTab, taskStatus, task.id, diffRequestKey]);
 
   const handleExecute = useCallback(async () => {
     if (isExecuting) return;
@@ -147,7 +143,7 @@ export function TaskDetailPanel({
       setIsExecuting(false);
       toast.error(err instanceof Error && err.message ? err.message : t("terminal.startFailed"));
     }
-  }, [task.id, isExecuting, selectedPromptId, t]);
+  }, [task.id, isExecuting, selectedPromptId, t, removePortal]);
 
   const handleSessionEnd = useCallback(
     (exitCode: number) => {
@@ -162,7 +158,7 @@ export function TaskDetailPanel({
       });
       router.refresh();
     },
-    [router, task.id]
+    [router, task.id, removePortal]
   );
 
   const handleStop = useCallback(async () => {
@@ -175,7 +171,7 @@ export function TaskDetailPanel({
       setPastExecutions(execs.filter((e) => e.status !== "RUNNING"));
     });
     router.refresh();
-  }, [task.id, router]);
+  }, [task.id, router, removePortal]);
 
   const handleResume = useCallback(async (sessionId: string) => {
     setIsExecuting(true);
