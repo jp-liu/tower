@@ -49,6 +49,8 @@ export interface CliQueryOptions {
   maxTurns?: number;
   maxOutputTokens?: number;
   maxOutputBytes?: number;
+  /** Host-enforced request deadline for the complete CLI process tree. */
+  timeoutMs?: number;
   temperature?: number;
   /** Provider-known tool names or patterns to expose. The adapter translates these into CLI arguments. */
   tools?: string[];
@@ -107,6 +109,8 @@ export interface CliModel {
 
 export interface CliIntegrationState {
   installed: boolean;
+  /** Runtime health when the provider exposes a first-party connection probe. */
+  status?: "connected" | "disconnected" | "pending";
   detail?: string;
 }
 
@@ -122,6 +126,9 @@ export interface CliMcpServerOptions {
   envVars?: string[];
   scope?: "user" | "project" | "local";
   cwd?: string;
+  /** Optional request cancellation/deadline for runtime health inspection. */
+  signal?: AbortSignal;
+  timeoutMs?: number;
 }
 
 export interface CliHookOptions {
@@ -178,9 +185,22 @@ export abstract class BaseCliAdapter implements CliAdapter {
   }
 }
 
+/** Maps provider-specific MCP spellings back to the Host-supplied canonical tool name. */
+export function canonicalCliToolName(name: string, knownTools: readonly string[] = []): string {
+  for (const canonical of knownTools) {
+    if (name === canonical) return canonical;
+    const match = canonical.match(/^mcp__(.+?)__(.+)$/);
+    if (!match) continue;
+    const [, server, tool] = match;
+    if (name === `${server}.${tool}` || name === `mcp_${server}_${tool}`) return canonical;
+  }
+  return name;
+}
+
 const QUERY_ERROR_CODES = new Set<CliPluginErrorCode>([
   "AUTHENTICATION_FAILED", "PERMISSION_DENIED", "RATE_LIMITED", "NETWORK_ERROR",
   "CONTENT_SAFETY", "INVALID_REQUEST", "TOOL_ERROR", "TOOLING_UNAVAILABLE",
+  "ATTACHMENT_UNAVAILABLE",
   "CONNECTION_UNAVAILABLE", "NO_OUTPUT", "PROVIDER_FAILURE", "MODEL_NOT_AVAILABLE",
 ]);
 

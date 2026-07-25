@@ -1,0 +1,2 @@
+Configured MCP servers:
+tower-dev: node server.js - Connecting

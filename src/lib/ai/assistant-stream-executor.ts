@@ -12,7 +12,7 @@ import {
 import type { ApiMessage, ApiStreamEvent } from "@tower/ai-runtime";
 import type { CliQueryEvent, CliQueryOptions } from "@tower/ai-sdk";
 import { assistantTowerToolCatalog } from "@/mcp/tool-catalog";
-import { createAssistantToolBundle } from "./assistant-tool-bundle";
+import { createAssistantToolBundle, prepareAssistantCliPrompt } from "./assistant-tool-bundle";
 import {
   getApiRuntimeForResolvedTarget,
   resolveCapabilityPlan,
@@ -28,11 +28,21 @@ export interface AssistantStreamRequest {
   maxTurns?: number;
   maxOutputTokens?: number;
   maxOutputBytes?: number;
+  timeoutMs?: number;
   temperature?: number;
   signal?: AbortSignal;
   towerMcpServerName?: string;
   attachments?: string[];
   onAttempt?: (attempt: CapabilityAttemptSummary) => void | Promise<void>;
+}
+
+const DEFAULT_ASSISTANT_TIMEOUT_MS = 5 * 60_000;
+const MIN_ASSISTANT_TIMEOUT_MS = 1_000;
+const MAX_ASSISTANT_TIMEOUT_MS = 30 * 60_000;
+
+function boundedTimeoutMs(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) return DEFAULT_ASSISTANT_TIMEOUT_MS;
+  return Math.min(MAX_ASSISTANT_TIMEOUT_MS, Math.max(MIN_ASSISTANT_TIMEOUT_MS, Math.trunc(value)));
 }
 
 function activity(event: CliQueryEvent): CapabilityActivity | false {
@@ -84,8 +94,15 @@ async function ensureCliTooling(target: ResolvedCapabilityTarget, request: Assis
   if (!serverName || !target.cli.adapter.mcp) {
     throw { code: "TOOLING_UNAVAILABLE" };
   }
-  const state = await target.cli.adapter.mcp.inspect({ name: serverName, cwd: request.cwd });
-  if (!state.installed) throw { code: "TOOLING_UNAVAILABLE" };
+  const state = await target.cli.adapter.mcp.inspect({
+    name: serverName,
+    cwd: request.cwd,
+    signal: request.signal,
+    timeoutMs: boundedTimeoutMs(request.timeoutMs),
+  });
+  if (!state.installed || (state.status !== undefined && state.status !== "connected")) {
+    throw { code: "TOOLING_UNAVAILABLE" };
+  }
   return towerCliTools(serverName);
 }
 
@@ -95,17 +112,25 @@ async function* executeTarget(
   request: AssistantStreamRequest,
 ): AsyncIterable<CliQueryEvent> {
   let source: AsyncIterable<CliQueryEvent>;
+  const timeoutMs = boundedTimeoutMs(request.timeoutMs);
   if (target.kind === "cli") {
     if (!target.cli?.adapter.stream) throw capabilityError("invalid_request");
     const tools = await ensureCliTooling(target, request);
+    let prompt: string;
+    try {
+      prompt = await prepareAssistantCliPrompt({ prompt: request.prompt ?? "", attachments: request.attachments });
+    } catch {
+      throw { code: "ATTACHMENT_UNAVAILABLE" };
+    }
     const options: CliQueryOptions = {
-      prompt: request.prompt ?? "",
+      prompt,
       cwd: request.cwd,
       systemPrompt: request.systemPrompt,
       model: target.modelId,
       maxTurns: request.maxTurns,
       maxOutputTokens: request.maxOutputTokens,
       maxOutputBytes: request.maxOutputBytes,
+      timeoutMs,
       temperature: request.temperature,
       tools,
       allowedTools: tools,
@@ -123,6 +148,7 @@ async function* executeTarget(
       maxTurns: request.maxTurns,
       maxOutputTokens: request.maxOutputTokens,
       temperature: request.temperature,
+      timeoutMs,
       abortSignal: request.signal,
       tools: createAssistantToolBundle({ attachments: request.attachments }),
     }, { onActivity: (kind = "other") => context.onActivity(kind) });

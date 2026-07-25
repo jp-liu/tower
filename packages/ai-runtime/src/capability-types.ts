@@ -46,6 +46,7 @@ export type CapabilityErrorCode =
   | "content_safety"
   | "invalid_request"
   | "tooling_unavailable"
+  | "attachment_unavailable"
   | "tool_error"
   | "structured_output_invalid"
   | "unknown"

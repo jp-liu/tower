@@ -20,6 +20,13 @@ export interface CliProcessResult {
   durationMs: number;
 }
 
+export interface CliMcpProbeOptions {
+  name: string;
+  cwd?: string;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
 export type CliProcessStreamEvent =
   | { type: "stdout"; chunk: Uint8Array }
   | { type: "stderr"; chunk: Uint8Array }
@@ -29,6 +36,8 @@ export interface CliProcessExecutor {
   execute(spec: CliProcessSpec, options?: CliProcessRunOptions): Promise<CliProcessResult>;
   /** Optional Host-owned, shell-free process stream. Plugins must not spawn child processes directly. */
   stream?(spec: CliProcessSpec, options?: CliProcessRunOptions): AsyncIterable<CliProcessStreamEvent>;
+  /** Optional opaque health probe for an MCP server already configured in the provider CLI. */
+  probeMcpServer?(options: CliMcpProbeOptions): Promise<boolean>;
 }
 
 export interface RedactedLogger {

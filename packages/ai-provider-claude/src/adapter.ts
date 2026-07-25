@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import {
   CliPluginError,
+  canonicalCliToolName,
   collectCliQueryStream,
   classifyCliQueryFailure,
   streamProcessJsonLines,
@@ -44,7 +45,7 @@ interface InstallResult {
   error?: string;
 }
 
-type McpInstallOptions = Pick<CliMcpServerOptions, "scope" | "cwd">;
+type McpInstallOptions = Pick<CliMcpServerOptions, "scope" | "cwd" | "signal" | "timeoutMs">;
 type McpServerConfig = Required<Pick<CliMcpServerOptions, "name" | "command" | "args">>
   & Pick<CliMcpServerOptions, "env" | "envVars">;
 
@@ -111,9 +112,7 @@ export class ClaudeCliAdapter implements CliAdapter {
   };
 
   readonly mcp = {
-    inspect: async (options: CliMcpServerOptions) => ({
-      installed: await this.isMcpInstalled(options.name, options),
-    }),
+    inspect: async (options: CliMcpServerOptions) => this.inspectMcpConnection(options.name, options),
     install: async (options: CliMcpServerOptions) => {
       if (!options.command) throw new CliPluginError("INTEGRATION_FAILED", "MCP command is required");
       return integrationResult(await this.installMcp({
@@ -212,12 +211,14 @@ export class ClaudeCliAdapter implements CliAdapter {
     let sawFinish = false;
     let sawTextDelta = false;
     let sawReasoningDelta = false;
+    const toolNames = new Map<string, string>();
     for await (const line of streamProcessJsonLines(
       this.host.process,
       { command: this.command(), args, cwd: options.cwd },
       {
-      signal: options.signal ?? this.host.signal,
-      maxOutputBytes: options.maxOutputBytes,
+        signal: options.signal ?? this.host.signal,
+        timeoutMs: options.timeoutMs,
+        maxOutputBytes: options.maxOutputBytes,
       },
     )) {
       if (line.type === "malformed") continue;
@@ -258,7 +259,9 @@ export class ClaudeCliAdapter implements CliAdapter {
           } else if (block.type === "thinking" && !sawReasoningDelta && typeof block.thinking === "string") {
             yield { type: "reasoning", text: block.thinking };
           } else if (block.type === "tool_use" && typeof block.id === "string" && typeof block.name === "string") {
-            yield { type: "tool-call", toolCall: { id: block.id, name: block.name, input: block.input } };
+            const name = canonicalCliToolName(block.name, allowed);
+            toolNames.set(block.id, name);
+            yield { type: "tool-call", toolCall: { id: block.id, name, input: block.input } };
           }
         }
         const usage = claudeUsage(message?.usage);
@@ -275,6 +278,7 @@ export class ClaudeCliAdapter implements CliAdapter {
               type: "tool-result",
               toolResult: {
                 id: block.tool_use_id,
+                name: toolNames.get(block.tool_use_id),
                 output: block.content,
                 ...(block.is_error === true ? { error: { code: "TOOL_ERROR", message: "Claude tool execution failed" } } : {}),
               },
@@ -525,15 +529,29 @@ export class ClaudeCliAdapter implements CliAdapter {
   }
 
   async isMcpInstalled(name: string, opts: McpInstallOptions = {}): Promise<boolean> {
-    // `claude mcp get <name>` exits 0 when found, non-zero otherwise. Note: the
-    // command searches across all scopes -- sufficient for our "is it visible to
-    // Claude" check. If we ever need scope-specific detection, add `--scope`.
-    const cmd = this.command();
+    return (await this.inspectMcpConnection(name, opts)).installed;
+  }
+
+  private async inspectMcpConnection(name: string, opts: McpInstallOptions = {}) {
     try {
-      await this.runCli(cmd, ["mcp", "get", name], opts.cwd, 5000);
-      return true;
-    } catch {
-      return false;
+      const output = await this.runCli(
+        this.command(),
+        ["mcp", "get", name],
+        opts.cwd,
+        Math.min(opts.timeoutMs ?? 5_000, 5_000),
+        opts.signal,
+      );
+      if (/pending approval|\bpending\b/i.test(output)) {
+        return { installed: true, status: "pending" as const };
+      }
+      if (/✓\s*connected|\bstatus:\s*connected\b/i.test(output)) {
+        return { installed: true, status: "connected" as const };
+      }
+      return { installed: true, status: "disconnected" as const };
+    } catch (error) {
+      if (error instanceof CliPluginError
+        && (error.code === "PROCESS_TIMEOUT" || error.code === "PROCESS_CANCELLED")) throw error;
+      return { installed: false, status: "disconnected" as const };
     }
   }
 
@@ -655,10 +673,16 @@ export class ClaudeCliAdapter implements CliAdapter {
    * Run a CLI subcommand without a shell. Used for `claude mcp ...` operations.
    * Throws on non-zero exit or timeout.
    */
-  private async runCli(cmd: string, args: string[], cwd?: string, timeoutMs = 10000): Promise<string> {
+  private async runCli(
+    cmd: string,
+    args: string[],
+    cwd?: string,
+    timeoutMs = 10000,
+    signal?: AbortSignal,
+  ): Promise<string> {
     const result = await this.host.process.execute({ command: cmd, args, cwd }, {
       timeoutMs,
-      signal: this.host.signal,
+      signal: signal ?? this.host.signal,
     });
     if (result.exitCode !== 0) {
       throw new CliPluginError("INTEGRATION_FAILED", `Claude CLI exited with code ${result.exitCode ?? "signal"}`);

@@ -1,14 +1,27 @@
 // @vitest-environment node
+import fs from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import type { CliProcessExecutor } from "@tower/ai-sdk";
 vi.mock("server-only", () => ({}));
 import { providerRegistry } from "../providers";
 import {
   createProviderLogger,
+  ManagedCliProcessExecutor,
   mergeProviderProcess,
   profileForProvider,
   providerBaseEnvironment,
   terminalBaseEnvironment,
 } from "../provider-host";
+
+function processStream(stdout: string) {
+  return async function* () {
+    const bytes = Buffer.from(stdout);
+    for (let index = 0; index < bytes.length; index += 5) {
+      yield { type: "stdout" as const, chunk: bytes.subarray(index, index + 5) };
+    }
+    yield { type: "exit" as const, exitCode: 0, signal: null, durationMs: 1 };
+  };
+}
 
 describe("built-in provider host boundary", () => {
   it("merges legacy profile args before provider args and task env last", () => {
@@ -126,5 +139,56 @@ describe("built-in provider host boundary", () => {
     expect(logged).not.toContain("unit-test-secret-value");
     expect(logged).toContain("***REDACTED***");
     expect(logged).toContain("visible");
+  });
+
+  it.each([
+    ["mcp-probe-connected.jsonl", true],
+    ["mcp-probe-disconnected.jsonl", false],
+  ])("probes a configured Codex MCP transport inside the Host with %s", async (fixture, expected) => {
+    const execute = vi.fn(async () => ({
+      exitCode: 0,
+      signal: null,
+      stdout: fs.readFileSync(
+        new URL("../../../../packages/ai-provider-codex/test/fixtures/mcp-enabled.json", import.meta.url),
+        "utf8",
+      ),
+      stderr: "",
+      durationMs: 1,
+    }));
+    const stream = vi.fn(processStream(fs.readFileSync(
+      new URL(`../../../../packages/ai-provider-codex/test/fixtures/${fixture}`, import.meta.url),
+      "utf8",
+    )));
+    const executor = new ManagedCliProcessExecutor(
+      { execute, stream } as CliProcessExecutor,
+      "/bin/codex",
+      {},
+      new AbortController().signal,
+      "codex",
+    );
+
+    await expect(executor.probeMcpServer({ name: "tower-dev", cwd: "/work" })).resolves.toBe(expected);
+    expect(execute).toHaveBeenCalledWith(expect.objectContaining({
+      command: "/bin/codex",
+      args: ["mcp", "list", "--json"],
+    }), expect.objectContaining({ timeoutMs: 5_000 }));
+    expect(stream).toHaveBeenCalledWith(expect.objectContaining({
+      command: "node",
+      args: ["server.js"],
+      initialInput: expect.stringContaining('"method":"tools/list"'),
+    }), expect.objectContaining({ timeoutMs: 5_000 }));
+  });
+
+  it("rejects an injectable MCP server name before consulting provider configuration", async () => {
+    const execute = vi.fn();
+    const executor = new ManagedCliProcessExecutor(
+      { execute } as unknown as CliProcessExecutor,
+      "/bin/codex",
+      {},
+      new AbortController().signal,
+      "codex",
+    );
+    await expect(executor.probeMcpServer({ name: "tower;rm" })).resolves.toBe(false);
+    expect(execute).not.toHaveBeenCalled();
   });
 });

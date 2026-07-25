@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import {
   CliPluginError,
+  canonicalCliToolName,
   collectCliQueryStream,
   classifyCliQueryFailure,
   streamProcessJsonLines,
@@ -52,6 +53,11 @@ interface InstallResult {
   method: "cli" | "file" | "symlink";
   detail: string;
   error?: string;
+}
+
+interface CodexMcpServerState {
+  name: string;
+  enabled: boolean;
 }
 
 type McpInstallOptions = CliMcpServerOptions;
@@ -125,9 +131,7 @@ export class CodexCliAdapter implements CliAdapter {
   };
 
   readonly mcp = {
-    inspect: async (options: CliMcpServerOptions) => ({
-      installed: await this.isMcpInstalled(options.name, options),
-    }),
+    inspect: async (options: CliMcpServerOptions) => this.inspectMcpConnection(options),
     install: async (options: CliMcpServerOptions) => {
       if (!options.command) throw new CliPluginError("INTEGRATION_FAILED", "MCP command is required");
       return integrationResult(await this.installMcp({
@@ -235,7 +239,11 @@ export class CodexCliAdapter implements CliAdapter {
       tools.push(parsed.tool);
       byServer.set(parsed.server, tools);
     }
-    const configuredServers = await this.listMcpServers(options.cwd, options.signal);
+    const configuredServers = await this.listMcpServers(
+      options.cwd,
+      options.signal,
+      Math.min(options.timeoutMs ?? 5_000, 5_000),
+    );
     for (const server of byServer.keys()) {
       if (!configuredServers.some((entry) => entry.name === server && entry.enabled)) {
         throw new CliPluginError("TOOLING_UNAVAILABLE", "The requested Codex MCP server is unavailable");
@@ -255,7 +263,11 @@ export class CodexCliAdapter implements CliAdapter {
     for await (const line of streamProcessJsonLines(
       this.host.process,
       { command: this.command(), args, cwd: options.cwd },
-      { signal: options.signal ?? this.host.signal, maxOutputBytes: options.maxOutputBytes },
+      {
+        signal: options.signal ?? this.host.signal,
+        timeoutMs: options.timeoutMs,
+        maxOutputBytes: options.maxOutputBytes,
+      },
     )) {
       if (line.type === "malformed") continue;
       if (line.type === "exit") {
@@ -299,9 +311,10 @@ export class CodexCliAdapter implements CliAdapter {
         if (!id) continue;
         const server = typeof item.server === "string" ? item.server : "mcp";
         const tool = typeof item.tool === "string" ? item.tool : "unknown";
+        const name = canonicalCliToolName(`${server}.${tool}`, allowed);
         if (!startedTools.has(id)) {
           startedTools.add(id);
-          yield { type: "tool-call", toolCall: { id, name: `${server}.${tool}`, input: item.arguments ?? item.input } };
+          yield { type: "tool-call", toolCall: { id, name, input: item.arguments ?? item.input } };
         }
         if (event.type === "item.completed") {
           const failed = item.status === "failed" || item.error !== undefined;
@@ -309,7 +322,7 @@ export class CodexCliAdapter implements CliAdapter {
             type: "tool-result",
             toolResult: {
               id,
-              name: `${server}.${tool}`,
+              name,
               output: item.result,
               ...(failed ? { error: { code: "TOOL_ERROR", message: "Codex tool execution failed" } } : {}),
             },
@@ -578,16 +591,7 @@ export class CodexCliAdapter implements CliAdapter {
   }
 
   async isMcpInstalled(name: string, opts: McpInstallOptions): Promise<boolean> {
-    const cmd = this.command();
-    try {
-      await this.runCli(cmd, ["mcp", "get", name], opts.cwd, 5000);
-      if (name === "tower" || name.startsWith("tower-")) {
-        return this.hasMcpEnvVars(name, opts.envVars ?? []);
-      }
-      return true;
-    } catch {
-      return false;
-    }
+    return (await this.inspectMcpConnection({ ...opts, name })).installed;
   }
 
   // ===========================================================================
@@ -714,10 +718,36 @@ export class CodexCliAdapter implements CliAdapter {
     return result.stdout;
   }
 
-  private async listMcpServers(cwd?: string, signal?: AbortSignal): Promise<Array<{ name: string; enabled: boolean }>> {
+  private async inspectMcpConnection(options: CliMcpServerOptions) {
+    try {
+      const signal = options.signal ?? this.host.signal;
+      const timeoutMs = Math.min(options.timeoutMs ?? 5_000, 5_000);
+      const servers = await this.listMcpServers(options.cwd, signal, timeoutMs);
+      const server = servers.find((entry) => entry.name === options.name);
+      if (!server) return { installed: false, status: "disconnected" as const };
+      if (!server.enabled) return { installed: true, status: "pending" as const };
+      const connected = await this.host.process.probeMcpServer?.({
+        name: server.name,
+        cwd: options.cwd,
+        signal,
+        timeoutMs,
+      }) ?? false;
+      return { installed: true, status: connected ? "connected" as const : "disconnected" as const };
+    } catch (error) {
+      if (error instanceof CliPluginError
+        && (error.code === "PROCESS_TIMEOUT" || error.code === "PROCESS_CANCELLED")) throw error;
+      return { installed: false, status: "disconnected" as const };
+    }
+  }
+
+  private async listMcpServers(
+    cwd?: string,
+    signal?: AbortSignal,
+    timeoutMs = 5_000,
+  ): Promise<CodexMcpServerState[]> {
     const result = await this.host.process.execute(
       { command: this.command(), args: ["mcp", "list", "--json"], cwd },
-      { timeoutMs: 5_000, signal: signal ?? this.host.signal, maxOutputBytes: 256 * 1024 },
+      { timeoutMs, signal: signal ?? this.host.signal, maxOutputBytes: 256 * 1024 },
     );
     if (result.exitCode !== 0) {
       throw new CliPluginError("TOOLING_UNAVAILABLE", "Codex MCP configuration is unavailable");

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { isCliPluginManifestV1, type CliAdapter, type CliHostContext } from "@tower/ai-sdk";
+import { CliPluginError, isCliPluginManifestV1, type CliAdapter, type CliHostContext } from "@tower/ai-sdk";
 import { GeminiCliAdapter, geminiManifest } from "../src/index.js";
 
 function processStream(stdout = "", stderr = "", exitCode = 0) {
@@ -91,15 +91,32 @@ describe("Gemini provider", () => {
     });
   });
 
+  it("forwards the query timeout and exposes only the safe Host timeout", async () => {
+    const ctx = host();
+    vi.mocked(ctx.process.stream!).mockImplementationOnce(async function* (_spec, options) {
+      expect(options?.timeoutMs).toBe(1_234);
+      throw new CliPluginError("PROCESS_TIMEOUT", "Process timed out after 1234ms");
+    });
+    const error = await new GeminiCliAdapter(ctx).generate({
+      prompt: "PROMPT_CANARY",
+      timeoutMs: 1_234,
+    }).catch((cause: unknown) => cause);
+    expect(error).toMatchObject({ code: "PROCESS_TIMEOUT", message: "Process timed out after 1234ms" });
+    expect(JSON.stringify(error)).not.toMatch(/PROMPT_CANARY|STDERR_CANARY/);
+  });
+
   it("streams Gemini JSONL events under a Host-managed deny-by-default policy", async () => {
     const ctx = host();
     const writes: Array<{ path: string; contents: string }> = [];
+    const unlink = vi.fn(async (policyPath: string) => { void policyPath; });
     ctx.fileSystem!.writeText = (path, contents) => writes.push({ path, contents });
+    ctx.fileSystem!.unlink = unlink;
     const fixture = fs.readFileSync(new URL("./fixtures/stream.jsonl", import.meta.url), "utf8");
     vi.mocked(ctx.process.stream!).mockImplementationOnce(processStream(fixture));
     const events = [];
     for await (const event of new GeminiCliAdapter(ctx).stream({
       prompt: "PROMPT_CANARY",
+      timeoutMs: 12_345,
       tools: ["mcp__tower-dev__list_tasks", "mcp__other__blocked"],
       allowedTools: ["mcp__tower-dev__list_tasks"],
     })) events.push(event);
@@ -107,17 +124,89 @@ describe("Gemini provider", () => {
     expect(events).toContainEqual({ type: "session", sessionId: "gemini-session" });
     expect(events).toContainEqual({ type: "reasoning", text: "checking" });
     expect(events).toContainEqual({ type: "text", text: "Hello" });
-    expect(events).toContainEqual(expect.objectContaining({ type: "tool-call", toolCall: expect.objectContaining({ id: "tool-1" }) }));
-    expect(events).toContainEqual(expect.objectContaining({ type: "tool-result", toolResult: expect.objectContaining({ id: "tool-1" }) }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "tool-call", toolCall: expect.objectContaining({ id: "tool-1", name: "mcp__tower-dev__list_tasks" }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "tool-result", toolResult: expect.objectContaining({ id: "tool-1", name: "mcp__tower-dev__list_tasks" }),
+    }));
     expect(writes[0]?.contents).toContain('toolName = "*"\ndecision = "deny"');
     expect(writes[0]?.contents).toContain('mcpName = "tower-dev"');
     expect(ctx.process.stream).toHaveBeenCalledWith(expect.objectContaining({
       args: expect.arrayContaining([
-        "--output-format", "stream-json", "--admin-policy", "/tmp/provider/assistant-policy.toml",
+        "--output-format", "stream-json", "--admin-policy", expect.stringMatching(
+          /^\/tmp\/provider\/assistant-policy-[0-9a-f-]+\.toml$/,
+        ),
         "--allowed-mcp-server-names", "tower-dev", "--allowed-tools", "mcp_tower-dev_list_tasks",
       ]),
-    }), expect.any(Object));
+    }), expect.objectContaining({ timeoutMs: 12_345 }));
     expect(writes[0]?.contents).not.toContain("blocked");
+    expect(unlink).toHaveBeenCalledWith(writes[0]!.path);
+  });
+
+  it("isolates concurrent request policy files and removes both after completion", async () => {
+    const ctx = host();
+    const writes: Array<{ path: string; contents: string }> = [];
+    const unlink = vi.fn(async (policyPath: string) => { void policyPath; });
+    ctx.fileSystem!.writeText = (path, contents) => writes.push({ path, contents });
+    ctx.fileSystem!.unlink = unlink;
+    vi.mocked(ctx.process.stream!).mockImplementation(processStream('{"type":"result","status":"success"}\n'));
+    const adapter = new GeminiCliAdapter(ctx);
+    const consume = async (tool: string) => {
+      const events = [];
+      for await (const event of adapter.stream({ prompt: tool, tools: [tool], allowedTools: [tool] })) events.push(event);
+      return events;
+    };
+
+    await Promise.all([
+      consume("mcp__tower-one__list_tasks"),
+      consume("mcp__tower-two__create_task"),
+    ]);
+
+    expect(writes).toHaveLength(2);
+    expect(new Set(writes.map((write) => write.path)).size).toBe(2);
+    expect(writes.find((write) => write.contents.includes('mcpName = "tower-one"'))?.contents)
+      .not.toContain("tower-two");
+    expect(writes.find((write) => write.contents.includes('mcpName = "tower-two"'))?.contents)
+      .not.toContain("tower-one");
+    expect(unlink.mock.calls.map(([policyPath]) => policyPath).sort())
+      .toEqual(writes.map((write) => write.path).sort());
+  });
+
+  it.each([
+    ["error", "PROVIDER_FAILURE"],
+    ["abort", "PROCESS_CANCELLED"],
+  ] as const)("removes the request policy after a process %s", async (_case, code) => {
+    const ctx = host();
+    const writes: Array<{ path: string; contents: string }> = [];
+    const unlink = vi.fn(async (policyPath: string) => { void policyPath; });
+    ctx.fileSystem!.writeText = (policyPath, contents) => writes.push({ path: policyPath, contents });
+    ctx.fileSystem!.unlink = unlink;
+    vi.mocked(ctx.process.stream!).mockImplementationOnce(async function* () {
+      throw new CliPluginError(code, "safe failure");
+    });
+    const consume = async () => {
+      for await (const _event of new GeminiCliAdapter(ctx).stream({ prompt: "test" })) void _event;
+    };
+
+    await expect(consume()).rejects.toMatchObject({ code });
+    expect(unlink).toHaveBeenCalledWith(writes[0]!.path);
+  });
+
+  it.each([
+    ["mcp-connected.txt", { installed: true, status: "connected" }],
+    ["mcp-pending.txt", { installed: true, status: "pending" }],
+    ["mcp-disconnected.txt", { installed: true, status: "disconnected" }],
+  ])("derives MCP runtime health from Gemini's first-party %s output", async (fixture, expected) => {
+    const ctx = host();
+    vi.mocked(ctx.process.execute).mockResolvedValueOnce({
+      exitCode: 0,
+      signal: null,
+      stdout: fs.readFileSync(new URL(`./fixtures/${fixture}`, import.meta.url), "utf8"),
+      stderr: "",
+      durationMs: 1,
+    });
+    await expect(new GeminiCliAdapter(ctx).mcp.inspect({ name: "tower-dev" })).resolves.toEqual(expected);
   });
 
   it("uses stable Gemini MCP and Skills commands through the Host executor", async () => {

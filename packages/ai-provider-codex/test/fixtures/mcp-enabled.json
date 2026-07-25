@@ -1,0 +1,11 @@
+[
+  {
+    "name": "tower-dev",
+    "enabled": true,
+    "transport": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["server.js"]
+    }
+  }
+]

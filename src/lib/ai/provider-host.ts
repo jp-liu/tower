@@ -4,6 +4,7 @@ import type {
   CliAdapter,
   CliHostContext,
   CliPlugin,
+  CliMcpProbeOptions,
   CliProcessExecutor,
   CliProcessRunOptions,
   CliProcessResult,
@@ -12,7 +13,7 @@ import type {
   PlatformName,
   RedactedLogger,
 } from "@tower/ai-sdk";
-import { redactSensitiveRecord } from "@tower/ai-sdk";
+import { redactSensitiveRecord, streamProcessJsonLines } from "@tower/ai-sdk";
 import {
   CommandResolver,
   type CommandResolution,
@@ -62,12 +63,19 @@ export interface ProviderHostOptions {
   providerConfigDir?: string | null;
 }
 
-class ManagedCliProcessExecutor implements CliProcessExecutor {
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+export class ManagedCliProcessExecutor implements CliProcessExecutor {
   constructor(
     private readonly executor: CliProcessExecutor,
     private readonly commandPath: string | undefined,
     private readonly profile: LegacyCliProfileOverrides,
     private readonly signal: AbortSignal,
+    private readonly providerId: string,
   ) {}
 
   execute(spec: CliProcessSpec, options: CliProcessRunOptions = {}): Promise<CliProcessResult> {
@@ -85,6 +93,64 @@ class ManagedCliProcessExecutor implements CliProcessExecutor {
       ? mergeProviderProcess(spec, this.commandPath, this.profile)
       : mergeProviderProcess(spec, spec.command, this.profile);
     return this.executor.stream(merged, { ...options, signal: options.signal ?? this.signal });
+  }
+
+  async probeMcpServer(options: CliMcpProbeOptions): Promise<boolean> {
+    if (this.providerId !== "codex" || !/^[A-Za-z0-9_-]+$/.test(options.name)) return false;
+    const timeoutMs = Math.min(options.timeoutMs ?? 5_000, 5_000);
+    const result = await this.execute({
+      command: this.commandPath ?? "codex",
+      args: ["mcp", "list", "--json"],
+      cwd: options.cwd,
+    }, { timeoutMs, signal: options.signal, maxOutputBytes: 256 * 1024 });
+    if (result.exitCode !== 0 || !this.executor.stream) return false;
+
+    let entries: unknown;
+    try {
+      entries = JSON.parse(result.stdout);
+    } catch {
+      return false;
+    }
+    if (!Array.isArray(entries)) return false;
+    const configured = entries.find((entry) => record(entry)?.name === options.name);
+    const server = record(configured);
+    const transport = record(server?.transport);
+    if (server?.enabled !== true || transport?.type !== "stdio" || typeof transport.command !== "string") {
+      return false;
+    }
+    const args = Array.isArray(transport.args)
+      ? transport.args.filter((value): value is string => typeof value === "string")
+      : [];
+    const configuredEnv = record(transport.env);
+    const envPatch = configuredEnv
+      ? Object.fromEntries(Object.entries(configuredEnv).flatMap(([key, value]) =>
+          typeof value === "string" ? [[key, value]] : []
+        ))
+      : undefined;
+    const initialInput = [
+      { jsonrpc: "2.0", id: 1, method: "initialize", params: {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "tower-assistant-probe", version: "1" },
+      } },
+      { jsonrpc: "2.0", method: "notifications/initialized", params: {} },
+      { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
+    ].map((value) => JSON.stringify(value)).join("\n") + "\n";
+
+    for await (const line of streamProcessJsonLines(this.executor, {
+      command: transport.command,
+      args,
+      cwd: typeof transport.cwd === "string" ? transport.cwd : options.cwd,
+      envPatch,
+      initialInput,
+    }, { timeoutMs, signal: options.signal ?? this.signal, maxOutputBytes: 256 * 1024 })) {
+      if (line.type !== "json") continue;
+      const response = record(line.value);
+      if (response?.id !== 2) continue;
+      const tools = record(response.result)?.tools;
+      return Array.isArray(tools) && tools.length > 0;
+    }
+    return false;
   }
 }
 
@@ -203,6 +269,7 @@ export function createProviderHostContext(
       commandPath,
       { baseArgs: options.baseArgs, envPatch: options.envOverrides },
       signal,
+      providerId,
     ),
     fileSystem: new NodeCliHostFileSystem(),
     resources: {

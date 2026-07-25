@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { isCliPluginManifestV1, type CliHostContext } from "@tower/ai-sdk";
+import { CliPluginError, isCliPluginManifestV1, type CliHostContext } from "@tower/ai-sdk";
 import { CodexCliAdapter, codexManifest } from "../src/index.js";
 
 function processStream(stdout = "", stderr = "", exitCode = 0) {
@@ -20,6 +20,7 @@ function host(): CliHostContext {
     process: {
       execute: vi.fn(async () => ({ exitCode: 0, signal: null, stdout: "[]", stderr: "", durationMs: 1 })),
       stream: vi.fn(processStream()),
+      probeMcpServer: vi.fn(async () => false),
     },
     fileSystem: {
       exists: () => false, mkdir() {}, readText: () => "", writeText() {}, lstat: async () => null,
@@ -99,6 +100,20 @@ describe("Codex provider", () => {
     });
   });
 
+  it("forwards the query timeout and exposes only the safe Host timeout", async () => {
+    const ctx = host();
+    vi.mocked(ctx.process.stream!).mockImplementationOnce(async function* (_spec, options) {
+      expect(options?.timeoutMs).toBe(1_234);
+      throw new CliPluginError("PROCESS_TIMEOUT", "Process timed out after 1234ms");
+    });
+    const error = await new CodexCliAdapter(ctx).generate({
+      prompt: "PROMPT_CANARY",
+      timeoutMs: 1_234,
+    }).catch((cause: unknown) => cause);
+    expect(error).toMatchObject({ code: "PROCESS_TIMEOUT", message: "Process timed out after 1234ms" });
+    expect(JSON.stringify(error)).not.toMatch(/PROMPT_CANARY|STDERR_CANARY/);
+  });
+
   it("streams Codex JSONL items with paired MCP tools and safe headless arguments", async () => {
     const ctx = host();
     const fixture = fs.readFileSync(new URL("./fixtures/stream.jsonl", import.meta.url), "utf8");
@@ -116,6 +131,7 @@ describe("Codex provider", () => {
     const events = [];
     for await (const event of new CodexCliAdapter(ctx).stream({
       prompt: "PROMPT_CANARY",
+      timeoutMs: 12_345,
       tools: ["mcp__tower-dev__list_tasks", "mcp__other_server__blocked"],
       allowedTools: ["mcp__tower-dev__list_tasks"],
     })) events.push(event);
@@ -124,8 +140,12 @@ describe("Codex provider", () => {
     expect(events).toContainEqual({ type: "reasoning", text: "checking" });
     expect(events).toContainEqual({ type: "text", text: "Hello" });
     expect(events.filter((event) => event.type === "text")).toEqual([{ type: "text", text: "Hello" }]);
-    expect(events).toContainEqual(expect.objectContaining({ type: "tool-call", toolCall: expect.objectContaining({ id: "tool-1" }) }));
-    expect(events).toContainEqual(expect.objectContaining({ type: "tool-result", toolResult: expect.objectContaining({ id: "tool-1" }) }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "tool-call", toolCall: expect.objectContaining({ id: "tool-1", name: "mcp__tower-dev__list_tasks" }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "tool-result", toolResult: expect.objectContaining({ id: "tool-1", name: "mcp__tower-dev__list_tasks" }),
+    }));
     expect(ctx.process.stream).toHaveBeenCalledWith(expect.objectContaining({
       args: expect.arrayContaining([
         "--json", "--sandbox", "read-only", "--disable", "shell_tool",
@@ -133,9 +153,45 @@ describe("Codex provider", () => {
         "-c", "mcp_servers.tower-dev.enabled=true",
         "-c", 'mcp_servers.tower-dev.enabled_tools=["list_tasks"]',
       ]),
-    }), expect.any(Object));
+    }), expect.objectContaining({ timeoutMs: 12_345 }));
     expect(JSON.stringify(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args)).not.toContain("blocked");
     expect(JSON.stringify(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args)).not.toContain("CANARY_SECRET");
+  });
+
+  it.each([
+    ["mcp-probe-connected.jsonl", { installed: true, status: "connected" }],
+    ["mcp-probe-disconnected.jsonl", { installed: true, status: "disconnected" }],
+  ])("probes the configured Codex stdio MCP transport with %s", async (fixture, expected) => {
+    const ctx = host();
+    vi.mocked(ctx.process.execute).mockResolvedValueOnce({
+      exitCode: 0,
+      signal: null,
+      stdout: fs.readFileSync(new URL("./fixtures/mcp-enabled.json", import.meta.url), "utf8"),
+      stderr: "",
+      durationMs: 1,
+    });
+    vi.mocked(ctx.process.probeMcpServer!).mockResolvedValueOnce(fixture === "mcp-probe-connected.jsonl");
+    await expect(new CodexCliAdapter(ctx).mcp.inspect({ name: "tower-dev" })).resolves.toEqual(expected);
+    expect(ctx.process.probeMcpServer).toHaveBeenCalledWith(expect.objectContaining({
+      name: "tower-dev",
+      timeoutMs: 5_000,
+    }));
+  });
+
+  it("reports a disabled Codex MCP entry as pending without starting it", async () => {
+    const ctx = host();
+    vi.mocked(ctx.process.execute).mockResolvedValueOnce({
+      exitCode: 0,
+      signal: null,
+      stdout: fs.readFileSync(new URL("./fixtures/mcp-pending.json", import.meta.url), "utf8"),
+      stderr: "",
+      durationMs: 1,
+    });
+    await expect(new CodexCliAdapter(ctx).mcp.inspect({ name: "tower-dev" })).resolves.toEqual({
+      installed: true,
+      status: "pending",
+    });
+    expect(ctx.process.probeMcpServer).not.toHaveBeenCalled();
   });
 
   it("fails before query output when the requested MCP server is unavailable", async () => {

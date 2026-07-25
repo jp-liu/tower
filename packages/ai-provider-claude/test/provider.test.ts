@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { isCliPluginManifestV1, type CliHostContext } from "@tower/ai-sdk";
+import { CliPluginError, isCliPluginManifestV1, type CliHostContext } from "@tower/ai-sdk";
 import { ClaudeCliAdapter, claudeManifest, towerCliPlugin } from "../src/index.js";
 
 function processStream(stdout = "", stderr = "", exitCode = 0) {
@@ -100,6 +100,20 @@ describe("Claude provider", () => {
     await expect(adapter.generate({ prompt: "secret prompt" })).rejects.toMatchObject({ code: "NO_OUTPUT" });
   });
 
+  it("forwards the query timeout and exposes only the safe Host timeout", async () => {
+    const ctx = host();
+    vi.mocked(ctx.process.stream!).mockImplementationOnce(async function* (_spec, options) {
+      expect(options?.timeoutMs).toBe(1_234);
+      throw new CliPluginError("PROCESS_TIMEOUT", "Process timed out after 1234ms");
+    });
+    const error = await new ClaudeCliAdapter(ctx).generate({
+      prompt: "PROMPT_CANARY",
+      timeoutMs: 1_234,
+    }).catch((cause: unknown) => cause);
+    expect(error).toMatchObject({ code: "PROCESS_TIMEOUT", message: "Process timed out after 1234ms" });
+    expect(JSON.stringify(error)).not.toMatch(/PROMPT_CANARY|STDERR_CANARY/);
+  });
+
   it("streams Claude JSONL events and forwards the restricted tool contract", async () => {
     const ctx = host();
     const fixture = fs.readFileSync(new URL("./fixtures/stream.jsonl", import.meta.url), "utf8");
@@ -108,6 +122,7 @@ describe("Claude provider", () => {
     for await (const event of new ClaudeCliAdapter(ctx).stream({
       prompt: "PROMPT_CANARY",
       maxTurns: 4,
+      timeoutMs: 12_345,
       tools: ["mcp__tower-dev__list_tasks", "mcp__other__blocked"],
       allowedTools: ["mcp__tower-dev__list_tasks"],
     })) events.push(event);
@@ -115,15 +130,35 @@ describe("Claude provider", () => {
     expect(events).toContainEqual({ type: "session", sessionId: "claude-session" });
     expect(events).toContainEqual({ type: "text", text: "你好 " });
     expect(events).toContainEqual({ type: "reasoning", text: "check " });
-    expect(events).toContainEqual(expect.objectContaining({ type: "tool-call", toolCall: expect.objectContaining({ id: "tool-1" }) }));
-    expect(events).toContainEqual(expect.objectContaining({ type: "tool-result", toolResult: expect.objectContaining({ id: "tool-1" }) }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "tool-call", toolCall: expect.objectContaining({ id: "tool-1", name: "mcp__tower-dev__list_tasks" }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "tool-result", toolResult: expect.objectContaining({ id: "tool-1", name: "mcp__tower-dev__list_tasks" }),
+    }));
     expect(ctx.process.stream).toHaveBeenCalledWith(expect.objectContaining({
       args: expect.arrayContaining([
         "--output-format", "stream-json", "--tools", "mcp__tower-dev__list_tasks",
         "--max-turns", "4", "--allowedTools", "mcp__tower-dev__list_tasks",
       ]),
-    }), expect.any(Object));
+    }), expect.objectContaining({ timeoutMs: 12_345 }));
     expect(JSON.stringify(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args)).not.toContain("blocked");
+  });
+
+  it.each([
+    ["mcp-connected.txt", { installed: true, status: "connected" }],
+    ["mcp-pending.txt", { installed: true, status: "pending" }],
+    ["mcp-disconnected.txt", { installed: true, status: "disconnected" }],
+  ])("derives MCP runtime health from Claude's first-party %s output", async (fixture, expected) => {
+    const ctx = host();
+    vi.mocked(ctx.process.execute).mockResolvedValueOnce({
+      exitCode: 0,
+      signal: null,
+      stdout: fs.readFileSync(new URL(`./fixtures/${fixture}`, import.meta.url), "utf8"),
+      stderr: "",
+      durationMs: 1,
+    });
+    await expect(new ClaudeCliAdapter(ctx).mcp.inspect({ name: "tower-dev" })).resolves.toEqual(expected);
   });
 
   it("runs Hooks, MCP, and Skills through injected Host services", async () => {

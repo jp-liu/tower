@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 vi.mock("server-only", () => ({}));
-import { createAssistantToolBundle } from "../assistant-tool-bundle";
+import { createAssistantToolBundle, prepareAssistantCliPrompt } from "../assistant-tool-bundle";
 
 const roots: string[] = [];
 
@@ -68,6 +68,56 @@ describe("Assistant tool bundle", () => {
     });
     for (const attachment of ["link.txt", "large.txt", "binary.txt"]) {
       await expect(tools.read_attachment!.execute?.({ attachment: `2026-07/files/${attachment}` }))
+        .rejects.toMatchObject({ code: "tool_error", message: "A tool execution failed" });
+    }
+  });
+
+  it("prepares only current-message text attachments with concurrent request isolation", async () => {
+    const attachmentRoot = await root();
+    await fs.writeFile(path.join(attachmentRoot, "2026-07/files/first.txt"), "FIRST_CANARY");
+    await fs.writeFile(path.join(attachmentRoot, "2026-07/files/second.txt"), "SECOND_CANARY");
+
+    const [first, second] = await Promise.all([
+      prepareAssistantCliPrompt({
+        prompt: "first",
+        attachmentRoot,
+        attachments: ["2026-07/files/first.txt"],
+      }),
+      prepareAssistantCliPrompt({
+        prompt: "second",
+        attachmentRoot,
+        attachments: ["2026-07/files/second.txt"],
+      }),
+    ]);
+
+    expect(first).toContain("FIRST_CANARY");
+    expect(first).not.toContain("SECOND_CANARY");
+    expect(second).toContain("SECOND_CANARY");
+    expect(second).not.toContain("FIRST_CANARY");
+  });
+
+  it("rejects CLI attachment traversal, realpath escapes, oversized data, and unsupported MIME", async () => {
+    const attachmentRoot = await root();
+    const outsideRoot = await fs.mkdtemp(path.join(os.tmpdir(), "tower-outside-"));
+    roots.push(outsideRoot);
+    await fs.writeFile(path.join(outsideRoot, "secret.txt"), "secret");
+    await fs.symlink(path.join(outsideRoot, "secret.txt"), path.join(attachmentRoot, "2026-07/files/link.txt"));
+    await fs.writeFile(path.join(attachmentRoot, "2026-07/files/large.txt"), "12345");
+    await fs.writeFile(path.join(attachmentRoot, "2026-07/files/binary.txt"), Buffer.from([0, 1, 2]));
+    await fs.writeFile(
+      path.join(attachmentRoot, "2026-07/files/image.png"),
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    );
+
+    const cases = [
+      { attachments: ["../secret.txt"] },
+      { attachments: ["2026-07/files/link.txt"] },
+      { attachments: ["2026-07/files/large.txt"], maxAttachmentBytes: 4 },
+      { attachments: ["2026-07/files/binary.txt"] },
+      { attachments: ["2026-07/files/image.png"] },
+    ];
+    for (const options of cases) {
+      await expect(prepareAssistantCliPrompt({ prompt: "test", attachmentRoot, ...options }))
         .rejects.toMatchObject({ code: "tool_error", message: "A tool execution failed" });
     }
   });

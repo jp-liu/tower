@@ -3,6 +3,7 @@ import {
   BaseCliAdapter,
   CLI_PLUGIN_EXPORT_NAME,
   CLI_PLUGIN_EXPORT_PATH,
+  canonicalCliToolName,
   classifyCliQueryFailure,
   isCliAdapter,
   isCliPlugin,
@@ -58,6 +59,14 @@ describe("CLI plugin runtime guards", () => {
     expect(events).toContainEqual({ type: "tool-result", toolResult: {
       id: "call-1", name: "legacy_tool", output: { ok: true },
     } });
+  });
+
+  it("normalizes provider MCP spellings to the Host canonical tool name", () => {
+    const known = ["mcp__tower-dev__list_tasks"];
+    expect(canonicalCliToolName("mcp__tower-dev__list_tasks", known)).toBe(known[0]);
+    expect(canonicalCliToolName("tower-dev.list_tasks", known)).toBe(known[0]);
+    expect(canonicalCliToolName("mcp_tower-dev_list_tasks", known)).toBe(known[0]);
+    expect(canonicalCliToolName("unrelated", known)).toBe("unrelated");
   });
 
   it("decodes chunked UTF-8, CRLF, and an unterminated final JSONL line", async () => {
