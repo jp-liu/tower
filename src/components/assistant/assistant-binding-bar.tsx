@@ -32,16 +32,23 @@ export function AssistantBindingBar() {
   const projects = workspace?.projects ?? [];
 
   // Versions for the bound project. Refetched whenever the project changes.
-  const [versions, setVersions] = useState<VersionOption[]>([]);
+  const [versionResult, setVersionResult] = useState<{
+    projectId: string;
+    versions: VersionOption[];
+  } | null>(null);
+  const versions =
+    versionResult && versionResult.projectId === binding.projectId ? versionResult.versions : [];
   useEffect(() => {
-    if (!binding.projectId) {
-      setVersions([]);
-      return;
-    }
+    if (!binding.projectId) return;
+    const projectId = binding.projectId;
     let cancelled = false;
-    getVersionsForPicker(binding.projectId)
-      .then((vs) => { if (!cancelled) setVersions(vs); })
-      .catch(() => { if (!cancelled) setVersions([]); });
+    getVersionsForPicker(projectId)
+      .then((nextVersions) => {
+        if (!cancelled) setVersionResult({ projectId, versions: nextVersions });
+      })
+      .catch(() => {
+        if (!cancelled) setVersionResult({ projectId, versions: [] });
+      });
     return () => { cancelled = true; };
   }, [binding.projectId]);
 
