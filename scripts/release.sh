@@ -2,13 +2,13 @@
 #
 # Tower 一键发布脚本
 #
-#   ./scripts/release.sh            # patch 版本 (0.2.38 -> 0.2.39)
-#   ./scripts/release.sh minor      # minor 版本 (0.2.38 -> 0.3.0)
-#   ./scripts/release.sh major      # major 版本 (0.2.38 -> 1.0.0)
+#   ./scripts/release.sh            # patch 版本 (0.3.0 -> 0.3.1)
+#   ./scripts/release.sh minor      # minor 版本 (0.3.0 -> 0.4.0)
+#   ./scripts/release.sh major      # major 版本 (0.3.0 -> 1.0.0)
 #   ./scripts/release.sh 0.3.5      # 指定版本号
 #   ./scripts/release.sh --no-push  # 发布后只在本地 commit + tag，不 push
 #
-# 流程: 检查干净 -> pull -> bump 版本 -> 修 esbuild shim -> build -> npm publish -> commit -> tag -> push
+# 流程: 检查干净 -> pull -> bump 版本 -> 修 esbuild shim -> build -> 包结构门禁 -> npm publish -> commit -> tag -> push
 #
 # 内置约定 (可用环境变量覆盖):
 #   RELEASE_PROXY     发布代理        可选; 留空则沿用当前 shell/npm 环境
@@ -78,17 +78,21 @@ echo "  esbuild $(node_modules/.bin/esbuild --version) OK"
 step "pnpm build"
 pnpm build
 
-# --- 6. 发布 (覆盖大小写代理变量 + 公共 registry) ---
+# --- 6. 校验实际待发布包结构 ---
+step "pnpm release:pack:check"
+pnpm release:pack:check
+
+# --- 7. 发布 (覆盖大小写代理变量 + 公共 registry) ---
 step "npm publish ($NEW_VER -> $REGISTRY)"
 with_optional_proxy npm publish --registry "$REGISTRY"
 
-# --- 7. 提交 release ---
+# --- 8. 提交 release ---
 step "git commit"
 git add package.json
 git commit -m "chore(release): $NEW_VER"
 echo "  已提交 chore(release): $NEW_VER"
 
-# --- 8. 打 git tag (指向 release commit) ---
+# --- 9. 打 git tag (指向 release commit) ---
 step "git tag v$NEW_VER"
 if git rev-parse "v$NEW_VER" >/dev/null 2>&1; then
   die "tag v$NEW_VER 已存在, 请检查 (可能上次发布残留)"
@@ -96,7 +100,7 @@ fi
 git tag -a "v$NEW_VER" -m "tower-studio v$NEW_VER"
 echo "  已打 tag v$NEW_VER"
 
-# --- 9. 默认 push (含 tag) ---
+# --- 10. 默认 push (含 tag) ---
 if [ "$PUSH" -eq 1 ]; then
   step "git push (含 tag)"
   git push
