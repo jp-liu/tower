@@ -101,7 +101,10 @@ export function AssistantBindingBar() {
   return (
     <div className="flex items-center gap-2 px-4 py-1.5 border-t border-border bg-sidebar">
       <Select value={binding.workspaceId || NONE} onValueChange={onWorkspaceChange}>
-        <SelectTrigger className="h-7 flex-1 min-w-0 text-xs">
+        <SelectTrigger
+          className="h-7 flex-1 min-w-0 text-xs"
+          aria-label={t("assistant.binding.workspaceLabel")}
+        >
           <span className="truncate">
             {binding.workspaceName ?? binding.workspaceId ?? t("assistant.binding.allWorkspaces")}
           </span>
@@ -121,7 +124,11 @@ export function AssistantBindingBar() {
         onValueChange={onProjectChange}
         disabled={!binding.workspaceId}
       >
-        <SelectTrigger className="h-7 flex-1 min-w-0 text-xs" disabled={!binding.workspaceId}>
+        <SelectTrigger
+          className="h-7 flex-1 min-w-0 text-xs"
+          disabled={!binding.workspaceId}
+          aria-label={t("assistant.binding.projectLabel")}
+        >
           <span className="truncate">
             {binding.projectName ??
               (binding.workspaceId
@@ -144,7 +151,11 @@ export function AssistantBindingBar() {
         onValueChange={onVersionChange}
         disabled={!binding.projectId}
       >
-        <SelectTrigger className="h-7 flex-1 min-w-0 text-xs" disabled={!binding.projectId}>
+        <SelectTrigger
+          className="h-7 flex-1 min-w-0 text-xs"
+          disabled={!binding.projectId}
+          aria-label={t("assistant.binding.versionLabel")}
+        >
           <span className="truncate">
             {binding.versionName ??
               (binding.projectId

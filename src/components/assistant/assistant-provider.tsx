@@ -468,7 +468,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: text,
-          sessionId: requestToken.sessionId,
+          ...(requestToken.sessionId ? { sessionId: requestToken.sessionId } : {}),
           clientTurnId: nextId().replace(/[^A-Za-z0-9_-]/g, "_"),
           attachmentFilenames: options?.attachmentFilenames ?? [],
           // Session default scope — sent every turn so a mid-session switch takes
