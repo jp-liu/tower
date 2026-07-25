@@ -1,3 +1,25 @@
+## 0.3.0 (2026-07-25, prepared locally)
+
+> Release metadata only. This commit does not publish npm, create a tag, or create a GitHub Release.
+
+### User-visible capabilities
+
+* add AI Tools connections and five ordered capability slots
+* add built-in Claude Code, Codex CLI, and Gemini CLI providers plus four API protocols
+* add Tower-owned multi-turn Assistant sessions, attachments, tools, cancellation, and legacy Claude import
+* add trusted local third-party CLI plugin installation, permission review, configuration, and lifecycle controls
+* default the production CLI to `127.0.0.1` while preserving explicit host overrides
+
+### Migration and security
+
+* add one-shot migrations `0009-api-connections` through `0013-assistant-sessions` while preserving legacy profiles/config/transcripts
+* document plaintext local API key storage, full-backup inclusion, redaction, plugin trust boundaries, and non-compatible 0.2 rollback
+
+### Known limitations
+
+* workspace SDK/runtime/provider packages remain private and are not independently published
+* final standalone install/migration smoke and cross-module acceptance are deferred to the AI Tools 0.3 acceptance task
+
 ## [0.2.20](https://github.com/jp-liu/tower/compare/v0.2.19...v0.2.20) (2026-06-10)
 
 

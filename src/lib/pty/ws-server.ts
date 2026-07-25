@@ -6,12 +6,37 @@ import { readConfigValue } from "@/lib/config-reader";
 import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
 import { getPreviewSession } from "@/lib/preview/session-store";
 
-function getAllowedOrigins(): Set<string> {
-  const httpPort = parseInt(process.env.PORT || "3000", 10);
-  return new Set([
-    `http://localhost:${httpPort}`,
-    `http://127.0.0.1:${httpPort}`,
-  ]);
+function runtimeHost(): string {
+  const host = (process.env.TOWER_RUNTIME_HOST || "127.0.0.1").trim();
+  return host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+}
+
+function headerHostname(value: string): string | null {
+  try {
+    return new URL(`http://${value}`).hostname.replace(/^\[|\]$/g, "");
+  } catch {
+    return null;
+  }
+}
+
+export function isAllowedWsOrigin(
+  origin: string,
+  requestHost: string,
+  configuredHost = runtimeHost(),
+  httpPort = parseInt(process.env.PORT || "3000", 10),
+): boolean {
+  try {
+    const parsed = new URL(origin);
+    if (parsed.protocol !== "http:" || Number(parsed.port || "80") !== httpPort) return false;
+    const originHost = parsed.hostname.replace(/^\[|\]$/g, "");
+    if (["localhost", "127.0.0.1", "::1"].includes(originHost)) return true;
+    if (["0.0.0.0", "::"].includes(configuredHost)) {
+      return originHost === headerHostname(requestHost);
+    }
+    return originHost === configuredHost;
+  } catch {
+    return false;
+  }
 }
 
 // Keepalive: how long a PTY session survives after WS disconnect.
@@ -95,13 +120,13 @@ function webSocketCloseCodeForPtyExit(exitCode: number | null | undefined): numb
   return code;
 }
 
-function isPortInUse(port: number): Promise<boolean> {
+function isPortInUse(port: number, host: string): Promise<boolean> {
   return new Promise((resolve) => {
     const { createServer } = require("net") as typeof import("net");
     const tester = createServer();
     tester.once("error", () => resolve(true));
     tester.once("listening", () => { tester.close(() => resolve(false)); });
-    tester.listen(port, "127.0.0.1");
+    tester.listen(port, host);
   });
 }
 
@@ -129,6 +154,7 @@ export async function startWsServer(): Promise<void> {
   }
 
   const httpPort = parseInt(process.env.PORT || "3000", 10);
+  const host = runtimeHost();
   const defaultWsPort = httpPort + 1;
   const preferredPort = await readConfigValue<number>("terminal.wsPort", defaultWsPort);
 
@@ -136,7 +162,7 @@ export async function startWsServer(): Promise<void> {
   const MAX_RETRIES = 10;
   let wsPort = preferredPort;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const inUse = await isPortInUse(wsPort);
+    const inUse = await isPortInUse(wsPort, host);
     if (!inUse) break;
     if (attempt === MAX_RETRIES - 1) {
       console.error(`[ws-server] No free port found after trying ${preferredPort}–${wsPort} — skipping startup`);
@@ -146,7 +172,7 @@ export async function startWsServer(): Promise<void> {
     wsPort++;
   }
 
-  const wss = new WebSocketServer({ port: wsPort, host: "127.0.0.1", perMessageDeflate: false });
+  const wss = new WebSocketServer({ port: wsPort, host, perMessageDeflate: false });
   g.__wss = wss;
   g.__wsPort = wsPort;
   if (wsPort !== preferredPort) {
@@ -167,7 +193,7 @@ export async function startWsServer(): Promise<void> {
 
   wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     const origin = req.headers.origin ?? "";
-    if (!getAllowedOrigins().has(origin)) {
+    if (!isAllowedWsOrigin(origin, req.headers.host ?? "", host, httpPort)) {
       console.error(`[ws-server] Rejected origin: ${origin || "(none)"}`);
       ws.close(1008, "Forbidden");
       return;

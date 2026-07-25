@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
+const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "::1"];
 const LOOPBACK_IPS = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 const CUID_RE = /^c[a-z0-9]{20,30}$/;
 
@@ -11,17 +11,22 @@ const CUID_RE = /^c[a-z0-9]{20,30}$/;
  * Returns null if the request is from localhost (caller should proceed).
  *
  * Multi-layer detection:
- * 1. Reject if x-forwarded-for contains any non-loopback IP (proxy bypass prevention)
- * 2. Check `host` header — must start with `localhost`, `127.0.0.1`, or `[::1]`
+ * 1. In the default loopback mode, reject non-loopback forwarded clients.
+ * 2. Validate `host` against the resolved production bind host. An explicit
+ *    remote bind is an opt-in to remote access; wildcard binds accept the
+ *    concrete address used by the client.
  *
  * Note: This app is designed for local-only use on a developer machine.
  * If deployed behind a reverse proxy, add authentication middleware.
  */
 export function requireLocalhost(request: NextRequest): NextResponse | null {
+  const configuredHost = normalizeHost(process.env.TOWER_RUNTIME_HOST || "127.0.0.1");
+  const remoteBinding = !LOOPBACK_HOSTS.includes(configuredHost);
+
   // Layer 1: If x-forwarded-for is present, ALL IPs must be loopback.
   // Check this FIRST — a proxy sets this header, and if any IP is non-local, reject.
   const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
+  if (forwarded && !remoteBinding) {
     const ips = forwarded.split(",").map((ip) => ip.trim());
     const allLoopback = ips.every((ip) => LOOPBACK_IPS.has(ip));
     if (!allLoopback) {
@@ -31,12 +36,33 @@ export function requireLocalhost(request: NextRequest): NextResponse | null {
 
   // Layer 2: Check host header — must be a loopback address
   const host = request.headers.get("host") ?? "";
-  const isLocalhostHost = LOOPBACK_HOSTS.some((h) => host.startsWith(h));
-  if (!isLocalhostHost) {
+  if (!isRuntimeHostAllowed(host, configuredHost)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   return null;
+}
+
+function normalizeHost(host: string): string {
+  const value = host.trim();
+  return value.startsWith("[") && value.endsWith("]") ? value.slice(1, -1) : value;
+}
+
+function headerHostname(value: string): string | null {
+  try {
+    return new URL(`http://${value}`).hostname.replace(/^\[|\]$/g, "");
+  } catch {
+    return null;
+  }
+}
+
+export function isRuntimeHostAllowed(hostHeader: string, configuredHost: string): boolean {
+  const hostname = headerHostname(hostHeader);
+  if (!hostname) return false;
+  const resolved = normalizeHost(configuredHost);
+  if (LOOPBACK_HOSTS.includes(resolved)) return LOOPBACK_HOSTS.includes(hostname);
+  if (resolved === "0.0.0.0" || resolved === "::") return true;
+  return hostname === resolved;
 }
 
 /**

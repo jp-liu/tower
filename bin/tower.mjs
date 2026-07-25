@@ -11,7 +11,7 @@
  *
  * Options:
  *   -p, --port <port>    Server port (default: 3000)
- *   -H, --host <host>    Server host (default: 0.0.0.0)
+ *   -H, --host <host>    Server host (default: 127.0.0.1)
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
@@ -23,6 +23,7 @@ import { homedir } from "os";
 import { createHash } from "crypto";
 import { createRequire } from "module";
 import { createConnection } from "net";
+import { DEFAULT_HOST, resolveRuntimeNetwork } from "./network.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -62,13 +63,15 @@ const { values: flags, positionals } = parseArgs({
 
 const command = positionals[0] ?? "start";
 const PORT = parseInt(flags.port ?? process.env.PORT ?? "3000", 10);
-const HOST = flags.host ?? "0.0.0.0";
+const NETWORK = resolveRuntimeNetwork(flags.host ?? DEFAULT_HOST, PORT);
+const HOST = NETWORK.bindHost;
 
 // Next instrumentation runs during app.prepare(), before our HTTP server listens.
 // Expose the resolved CLI host/port early so WS startup and origin checks use
 // the actual runtime values instead of falling back to 3000/3001.
 process.env.PORT = String(PORT);
 process.env.HOST = HOST;
+process.env.TOWER_RUNTIME_HOST = HOST;
 
 // ─── Help ───
 if (flags.help) {
@@ -81,7 +84,7 @@ if (flags.help) {
 
   Options:
     -p, --port <port>   Server port (default: 3000)
-    -H, --host <host>   Server host (default: 0.0.0.0)
+    -H, --host <host>   Server host (default: 127.0.0.1)
     --no-open           Don't auto-open the browser on start
     -h, --help          Show help
     -v, --version       Show version
@@ -297,14 +300,14 @@ async function cmdStart() {
   // can find them — `process.cwd()` won't work once we chdir below.
   process.env.TOWER_PACKAGE_ROOT = PROJECT_ROOT;
 
-  log(`Tower starting on http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
+  log(`Tower starting on ${NETWORK.browserUrl} (bind ${HOST}:${PORT})`);
 
   // Standalone server expects its own directory as cwd so that
   // `.next/server/`, traced `node_modules/`, and the copied
   // `public/` resolve correctly.
   process.chdir(standaloneDir);
 
-  const browserUrl = `http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`;
+  const browserUrl = NETWORK.browserUrl;
 
   // ── Lifecycle: post-start ── (fires once the server accepts connections)
   postStart(browserUrl);
@@ -355,10 +358,8 @@ function postStart(url) {
  */
 function onServerReady(onReady) {
   const deadline = Date.now() + 15_000;
-  const probeHost = HOST === "0.0.0.0" ? "127.0.0.1" : HOST;
-
   const tryProbe = () => {
-    const sock = createConnection({ host: probeHost, port: PORT });
+    const sock = createConnection({ host: NETWORK.connectHost, port: PORT });
     sock.once("connect", () => {
       sock.end();
       onReady();

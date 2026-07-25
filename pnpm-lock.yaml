@@ -14,21 +14,6 @@ importers:
       '@prisma/client':
         specifier: ^6.19.2
         version: 6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)
-      '@tower/ai-provider-claude':
-        specifier: workspace:*
-        version: link:packages/ai-provider-claude
-      '@tower/ai-provider-codex':
-        specifier: workspace:*
-        version: link:packages/ai-provider-codex
-      '@tower/ai-provider-gemini':
-        specifier: workspace:*
-        version: link:packages/ai-provider-gemini
-      '@tower/ai-runtime':
-        specifier: workspace:*
-        version: link:packages/ai-runtime
-      '@tower/ai-sdk':
-        specifier: workspace:*
-        version: link:packages/ai-sdk
       '@vscode/ripgrep':
         specifier: 1.18.0
         version: 1.18.0
@@ -90,6 +75,21 @@ importers:
       '@testing-library/user-event':
         specifier: ^14.6.1
         version: 14.6.1(@testing-library/dom@10.4.1)
+      '@tower/ai-provider-claude':
+        specifier: workspace:*
+        version: link:packages/ai-provider-claude
+      '@tower/ai-provider-codex':
+        specifier: workspace:*
+        version: link:packages/ai-provider-codex
+      '@tower/ai-provider-gemini':
+        specifier: workspace:*
+        version: link:packages/ai-provider-gemini
+      '@tower/ai-runtime':
+        specifier: workspace:*
+        version: link:packages/ai-runtime
+      '@tower/ai-sdk':
+        specifier: workspace:*
+        version: link:packages/ai-sdk
       '@types/node':
         specifier: ^20
         version: 20.19.37

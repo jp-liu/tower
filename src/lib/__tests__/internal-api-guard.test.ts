@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { requireLocalhost, validateTaskId, validateProjectId } from "../internal-api-guard";
+import { isRuntimeHostAllowed, requireLocalhost, validateTaskId, validateProjectId } from "../internal-api-guard";
 import { NextRequest } from "next/server";
 
 function makeRequest(host: string, headers?: Record<string, string>): NextRequest {
@@ -93,6 +93,19 @@ describe("requireLocalhost", () => {
     const res = requireLocalhost(req);
     expect(res).not.toBeNull();
     expect(res!.status).toBe(403);
+  });
+});
+
+describe("runtime host override", () => {
+  it("keeps the default guard loopback-only", () => {
+    expect(isRuntimeHostAllowed("127.0.0.1:3000", "127.0.0.1")).toBe(true);
+    expect(isRuntimeHostAllowed("192.168.1.20:3000", "127.0.0.1")).toBe(false);
+  });
+
+  it("accepts an explicitly bound LAN host or a concrete wildcard address", () => {
+    expect(isRuntimeHostAllowed("192.168.1.20:3000", "192.168.1.20")).toBe(true);
+    expect(isRuntimeHostAllowed("192.168.1.20:3000", "0.0.0.0")).toBe(true);
+    expect(isRuntimeHostAllowed("[::1]:3000", "::1")).toBe(true);
   });
 });
 
