@@ -44,4 +44,20 @@ describe("0013 Assistant session migration", () => {
       await prisma.$disconnect();
     }
   });
+
+  it("rolls back every new table when an existing partial table is incompatible", async () => {
+    const prisma = await database();
+    try {
+      await prisma.$executeRawUnsafe(`CREATE VIEW "AssistantMessage" AS SELECT 'legacy' AS "id"`);
+
+      await expect(up(prisma)).rejects.toThrow();
+
+      const tables = await prisma.$queryRawUnsafe<Array<{ name: string; type: string }>>(
+        `SELECT "name", "type" FROM "sqlite_master" WHERE "name" LIKE 'Assistant%' ORDER BY "name"`,
+      );
+      expect(tables).toEqual([{ name: "AssistantMessage", type: "view" }]);
+    } finally {
+      await prisma.$disconnect();
+    }
+  });
 });

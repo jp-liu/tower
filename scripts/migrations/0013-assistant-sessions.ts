@@ -4,7 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 
 type MigrationClient = Pick<PrismaClient, "$executeRawUnsafe">;
 
-export async function up(prisma: MigrationClient): Promise<void> {
+async function applyMigration(prisma: MigrationClient): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "AssistantSession" (
       "id" TEXT NOT NULL PRIMARY KEY,
@@ -69,4 +69,8 @@ export async function up(prisma: MigrationClient): Promise<void> {
     `CREATE INDEX IF NOT EXISTS "AssistantMessage_status_idx" ON "AssistantMessage"("status")`,
   ];
   for (const statement of statements) await prisma.$executeRawUnsafe(statement);
+}
+
+export async function up(prisma: PrismaClient): Promise<void> {
+  await prisma.$transaction(async (transaction) => applyMigration(transaction));
 }
