@@ -205,8 +205,8 @@ export async function GET(request: NextRequest) {
     const remoteUrl = remotes.find((r) => r.name === "origin")?.refs?.fetch ?? "";
 
     // Ahead / behind
-    let ahead = status.ahead ?? 0;
-    let behind = status.behind ?? 0;
+    const ahead = status.ahead ?? 0;
+    const behind = status.behind ?? 0;
 
     // Commits
     const rawLimit = parseInt(request.nextUrl.searchParams.get("logLimit") || "20", 10);

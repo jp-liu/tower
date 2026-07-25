@@ -12,7 +12,7 @@ export function getBranchHead(cwd: string, branch: string): string | null {
     const out = execFileSync("git", ["rev-parse", branch], { cwd, encoding: "utf-8", timeout: GIT_TIMEOUT });
     const hash = out.trim();
     return hash || null;
-  } catch (_e) {
+  } catch {
     return null;
   }
 }
@@ -28,7 +28,7 @@ export function getDiffPatch(cwd: string, from: string, to: string): string {
       timeout: DIFF_TIMEOUT,
       maxBuffer: DIFF_MAX_BUFFER,
     });
-  } catch (_e) {
+  } catch {
     return "";
   }
 }
@@ -47,7 +47,7 @@ export function getDiffStat(cwd: string, from: string, to: string): DiffStat {
       files += 1;
     }
     return { additions, deletions, files };
-  } catch (_e) {
+  } catch {
     return { additions: 0, deletions: 0, files: 0 };
   }
 }

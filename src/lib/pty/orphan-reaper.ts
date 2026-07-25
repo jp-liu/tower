@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { isWindows } from "@/lib/platform";
 import { getSignalDir } from "@/lib/tower-dir";
 
 /**
@@ -111,7 +112,7 @@ export async function reapOrphanedProcesses(): Promise<number> {
     if (!isAlive(pid)) continue;
 
     // Windows has no POSIX process groups; skip group reaping there.
-    if (process.platform === "win32") continue;
+    if (isWindows()) continue;
 
     // Identity gate: only kill if it's still a CLI we spawned (guards pid reuse).
     if (!isTowerCli(pid)) continue;

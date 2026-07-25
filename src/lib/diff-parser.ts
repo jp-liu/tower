@@ -53,7 +53,6 @@ export function parseDiffOutput(
   }
 
   // Parse unified diff: split on lines matching `^diff --git a/.+ b/.+`
-  const DIFF_GIT_HEADER = /^diff --git a\/.+ b\/.+$/m;
   const diffHeaderRegex = /^diff --git a\/(.+) b\/(.+)$/;
 
   // Split into segments per file
