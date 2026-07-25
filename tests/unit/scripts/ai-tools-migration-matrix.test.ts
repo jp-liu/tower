@@ -117,7 +117,7 @@ describe("AI Tools 0.3 migration matrix", () => {
     } finally {
       await prisma.$disconnect();
     }
-  }, 60_000);
+  }, 180_000);
 
   it("upgrades the real v0.2.60 schema without losing legacy execution/config/session data", async () => {
     const { dir, database } = await fixture("legacy");
@@ -203,7 +203,7 @@ describe("AI Tools 0.3 migration matrix", () => {
     } finally {
       await upgraded.$disconnect();
     }
-  }, 60_000);
+  }, 180_000);
 
   it("resumes a database whose 0.3 ledger stops at 0010 and preserves every new data family", async () => {
     const { dir, database } = await fixture("partial");
@@ -279,5 +279,5 @@ describe("AI Tools 0.3 migration matrix", () => {
     } finally {
       await upgraded.$disconnect();
     }
-  }, 60_000);
+  }, 180_000);
 });

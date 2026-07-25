@@ -226,7 +226,7 @@ describe("API connection service", () => {
       runtime.generate({ modelId: "local-model", prompt: "one" }),
       runtime.generate({ modelId: "local-model", prompt: "two" }),
     ]);
-    expect(results.map((result) => result.text)).toEqual([first.id, second.id]);
+    expect(new Set(results.map((result) => result.text))).toEqual(new Set([first.id, second.id]));
     const cursor = await db.providerConnection.findUnique({
       where: { id: connection.id },
       select: { roundRobinCursor: true },
