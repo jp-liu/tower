@@ -2,12 +2,12 @@
 
 > Baseline: `feat/ai-tools-0.3` at `f2be6141715661f466ba1242e2df8db8807ed09c`
 > Acceptance worktree: `test/cmrziyswt001bcms4n3exb0if`
-> Verification date: 2026-07-25
+> Verification date: 2026-07-26
 
 This document is the release acceptance ledger for AI Tools 0.3. The authority is
 `docs/ai/ai-tools-architecture-decisions.md`, the parent goal requirements copied
 into task `cmrziyswt001bcms4n3exb0if`, and the focused implementation commits from
-`ca0ce6c` through `f2be614`.
+`ca0ce6c` through the final integrated HEAD beginning at `fd34d65`.
 
 ## Status rules
 
@@ -16,6 +16,9 @@ into task `cmrziyswt001bcms4n3exb0if`, and the focused implementation commits fr
 - **failed**: direct evidence contradicts the requirement.
 - **missing**: the required direct evidence has not been produced, including tests
   that exist in source but have not yet been run in this acceptance worktree.
+- **accepted-deviation**: the hub accepted a historical verification-procedure
+  deviation after a read-only impact audit; it is neither product proof nor a
+  current release-gate failure.
 
 Command exit codes and observed test counts are recorded in the execution ledger
 below. All runtime tests must use fake providers, temporary directories, temporary
@@ -100,7 +103,7 @@ ports, and no real credentials or provider network.
 
 | ID | Requirement | Direct evidence required | Status |
 |---|---|---|---|
-| UI-01 | AI Tools layout and CRUD workflows work at 1440x900, 1280x720, and 390x844. | Final Playwright run (3/3) asserts Settings/Assistant layout and no horizontal overflow at desktop, laptop, and mobile. The same serial fake-provider run completes API CRUD and plugin install/config/disable/enable/uninstall; its three final screenshots were asserted and deleted in teardown. | proved |
+| UI-01 | AI Tools layout and CRUD workflows work at 1440x900, 1280x720, and 390x844. | Final Playwright run (3/3) asserts Settings/Assistant layout and no horizontal overflow at desktop, laptop, and mobile. The same serial fake-provider run completes API CRUD and plugin install/config/disable/enable/uninstall. The original evidence screenshots were asserted/deleted once; the 2026-07-26 regression run explicitly asserted an empty screenshot directory. | proved |
 | UI-02 | API multi-Key, model/manual/headers/query; plugin lifecycle/config; and target ordering/model/effort/diagnostics work and persist after reload. | Real browser executes Key mask/reveal/copy/edit/add/test, model refresh/manual add, headers/query, slot diagnostics/reorder, reload persistence, and the complete local fixture-plugin lifecycle including plan, permission, schema config, disable, enable, and uninstall. | proved |
 | UI-03 | Long names/errors/models/Keys do not overflow; keyboard, focus, labels, and tooltips are usable; zh/en have no missing keys. | Browser seed includes long connection/model/error/Key values; DOM asserts no overflow, keyboard focus leaves body, every visible button has a label, capability icon hover exposes its tooltip, and both en/zh reload without untranslated keys. Focused final Settings rerun is 1/1. | proved |
 | UI-04 | Assistant UI covers session create/switch/reload/rename/delete/binding, text/tool/attachment, cancel/error, and legacy import. | Real browser selects the imported legacy session, verifies history/tool card and workspace/project/version bindings, creates a fresh session, streams text, uploads an attachment, cancels a turn, observes a controlled error, then renames and deletes the session. Focused run is 1/1. | proved |
@@ -109,19 +112,19 @@ ports, and no real credentials or provider network.
 
 | ID | Requirement | Direct evidence required | Status |
 |---|---|---|---|
-| REL-01 | Packaged `tower` binds only 127.0.0.1 by default. | `release:smoke` installed the tarball and served only `127.0.0.1:55072`; final browser smoke used `127.0.0.1:59638`. | proved |
+| REL-01 | Packaged `tower` binds only 127.0.0.1 by default. | Final `release:smoke` installed the tarball and served only `127.0.0.1:53229`; no wildcard test listener was opened. | proved |
 | REL-02 | `--host 0.0.0.0` override resolves correctly without exposing a real machine port. | `bin/network.test.mjs` is included in the passing root suite; no wildcard listener was started by acceptance. | proved |
 | REL-03 | Tarball install, first boot, migration, settings load, built-in registry, fixture plugin, fake connection/slot, and fake Summary/Assistant/Terminal plan work. | Final `release:smoke` installs the tarball from a local fixture registry, boots on a temporary loopback port, applies 13 migrations, loads Settings/built-ins, dynamically imports an unregistered local plugin, persists a fake API connection and all five slots, and executes packaged Summary, Assistant, and Terminal plans. | proved |
 | REL-04 | Full restore to a second temporary data directory preserves Keys, targets, plugin registry, and Assistant sessions. | `backup-ai-tools.test.ts` directly restores the full archive into a second temporary root and verifies the Key/models, five targets, rebased plugin registry, Assistant session/messages, and post-restore fake API request. | proved |
-| REL-05 | No real provider CLI/network/credentials, publish, tag, push, or organization action occurs. | No Provider network/credential/publish/tag/push/org action occurred. However, an early discarded UI smoke inherited real `PATH` and invoked CLI version/integration probes, so strict fake-only acceptance failed. Read-only audit found no timestamp evidence of writes: `~/.claude.json` 2026-07-25 21:27:03, `~/.claude/settings.json` 2026-07-24 17:08:28, `~/.codex/config.toml` 2026-07-25 21:27:55, and `~/.gemini/settings.json` 2026-07-21 09:58:04. No user file was modified during audit. | failed |
-| QG-01 | Full repository `pnpm test:run` passes with Harness injection variables cleared. | Final exact command exit 0: 204 passed + 6 skipped files; 1947 passed + 27 todo tests. `4b0e8b2` serializes fork-heavy fixtures. | proved |
-| QG-02 | `pnpm exec tsc --noEmit` passes. | Exit 0 after package and path fixes. | proved |
-| QG-03 | Full ESLint passes. | `pnpm lint` exit 1: 161 errors and 72 warnings (233 findings). Safe decomposition without rule/ignore changes: 44 CommonJS script `no-require-imports`, about 64 historical test `no-explicit-any`, about 41 React Compiler/effect/ref lifecycle findings across roughly 30 UI/version/Preview modules, and about 12 miscellaneous findings. This is too broad for a safe release-gate fix and remains failed. | failed |
+| REL-05 | No real provider CLI/network/credentials, publish, tag, push, or organization action occurs. | Hub-accepted procedural deviation: an early discarded UI smoke inherited real `PATH` and invoked local CLI version/integration probes. The read-only audit found no user-config write, Provider network request, or credential use: `~/.claude.json` 2026-07-25 21:27:03, `~/.claude/settings.json` 2026-07-24 17:08:28, `~/.codex/config.toml` 2026-07-25 21:27:55, and `~/.gemini/settings.json` 2026-07-21 09:58:04. Every 2026-07-26 final gate used temporary HOME/data, fake CLI executables, and local fake HTTP; no publish/tag/push/org action occurred. | accepted-deviation |
+| QG-01 | Full repository `pnpm test:run` passes with Harness injection variables cleared. | Final full run: 1950 passed, 19 failed, 27 todo across 204 passed/5 failed/6 skipped files. All 19 failures were isolated test-environment assumptions; `b21667a` fixes them and the instructed failed-file rerun is 5/5 files, 56/56 tests. Logical final aggregate is 209 passed/6 skipped files and 1969 passed/27 todo tests. `fd34d65`'s lightbox natural-dimensions/zoom/drag/backdrop regression test passed in the full run. | proved |
+| QG-02 | `pnpm exec tsc --noEmit` passes. | Final root typecheck exit 0 after the integrated ESLint/UI lifecycle changes; all five AI package builds also exit 0. | proved |
+| QG-03 | Full ESLint passes. | After removing 141 ignored, reproducible build artifacts left by earlier gates (without changing rules or ignores), `pnpm lint` exits 0 with 0 errors and 0 warnings. Integrated ESLint/UI lifecycle work is present through `fd34d65`. | proved |
 | QG-04 | Prisma generate and validate pass against a temporary SQLite URL. | Combined generate/validate command exit 0. | proved |
 | QG-05 | Every AI workspace package test and build passes. | Package tests exit 0: SDK 15, Claude 10, Codex 11, Gemini 14, Runtime 131 = 181; recursive builds exit 0. | proved |
 | QG-06 | MCP build passes with root esbuild available. | Exit 0, 3.8 MB bundle; root `esbuild` declared by `5a08f6a`. | proved |
 | QG-07 | Next production build passes without `generate is not a function`. | Raw inherited-shell `pnpm build` exit 0 after `710654b`; Next 16.2.1 compiled, typed, and generated 8/8 pages. | proved |
-| QG-08 | Release pack canary and full release smoke pass. | `release:pack:check` exit 0 (1993 files/44,118,920 bytes); `release:smoke` exit 0 after local fixture registry install of 140 packages. | proved |
+| QG-08 | Release pack canary and full release smoke pass. | `release:pack:check` exit 0 (2003 files/44,384,195 bytes); `release:smoke` exit 0 after local fixture registry install of 140 packages and verification of 13 migrations plus packaged fixture/API/Summary/Assistant/Terminal plans. | proved |
 | QG-09 | `git diff --check` passes. | Repeated after each commit and in final audit, exit 0. | proved |
 | QG-10 | Production port 3000 remains untouched and all acceptance servers/browsers/processes/ports are gone. | Final process/socket audit below; production PID 58740 remains listening on 3000. | proved |
 
@@ -155,7 +158,21 @@ ports, and no real credentials or provider network.
 | 2026-07-25 | Final Settings + Assistant browser workflows | 0 | 3/3 | 27.4 s serial run; final three screenshots created once and removed. Additional expanded Settings 1/1 (20.3 s) and Assistant 1/1 (8.1 s) passed without screenshots. |
 | 2026-07-25 | Tooltip browser assertion (role-name selector) | 1 | 0/1 | Product tooltip rendered without an accessible name; assertion selector corrected to direct visible content. Temporary process/data still removed by teardown. |
 | 2026-07-25 | Corrected Settings tooltip/browser workflow | 0 | 1/1 | 21.2 s; accessible trigger label plus visible hover content, no screenshots. |
-| 2026-07-25 | Read-only real-HOME impact audit | 0 | 4 mtimes | No timestamp evidence of CLI config writes; no user file was changed or restored. REL-05 remains failed because real probes occurred. |
+| 2026-07-25 | Read-only real-HOME impact audit | 0 | 4 mtimes | No timestamp evidence of CLI config writes; no user file was changed or restored. The hub later accepted REL-05 as a historical procedural deviation. |
+| 2026-07-26 | Final full `pnpm test:run --maxWorkers=1` | 1 | 1950 passed, 19 failed, 27 todo | 204 passed/5 failed/6 skipped files in 205.72 s. The failures exposed outer HOME/DB assumptions and one Select timing failure; no product assertion failed. |
+| 2026-07-26 | CLI plugin Select independent rerun | 0 | 5/5 | Confirmed the full-run Select failure was a timing-only test interaction; assertion was not relaxed. |
+| 2026-07-26 | Failed-file rerun after `b21667a` | 0 | 56/56 | All five previously failing files under canonical temporary HOME/DB and fake CLI PATH. |
+| 2026-07-26 | `pnpm lint` with stale ignored dist | 1 | 174 errors, 820 warnings | All 994 findings came from generated `dist` JavaScript left by earlier builds; no source finding. |
+| 2026-07-26 | Clean-checkout-equivalent `pnpm lint` | 0 | 0 errors, 0 warnings | Removed 141 ignored/reproducible dist files; no ESLint rule or ignore change. |
+| 2026-07-26 | AI package tests | 0 | 181/181 | SDK 15; Claude 10; Codex 11; Gemini 14; Runtime 131, all fake-only. |
+| 2026-07-26 | `pnpm ai:packages:build` | 0 | 5/5 packages | Public SDK, private Runtime, and three built-in CLI providers. |
+| 2026-07-26 | `pnpm exec tsc --noEmit` | 0 | root typecheck | Covers the integrated ESLint/UI lifecycle work through `fd34d65`. |
+| 2026-07-26 | Prisma generate + validate | 0 | 2/2 commands | Prisma 6.19.2, temporary HOME/data/database; schema valid. |
+| 2026-07-26 | `pnpm build` | 0 | 8/8 static pages | AI packages and 3.8 MB MCP bundle built; Next 16.2.1 compiled/typed successfully. Eight known NFT trace warnings remain. |
+| 2026-07-26 | `pnpm release:pack:check` | 0 | 2003 files | 44,384,195 unpacked bytes. |
+| 2026-07-26 | `pnpm release:smoke` | 0 | 13 migrations + 3 plans | 140 local-registry packages; loopback `127.0.0.1:53229`; fixture plugin, API, Summary, Assistant, Terminal verified. |
+| 2026-07-26 | Final fake-only Playwright E2E | 0 | 3/3 | Settings 16.9 s, Assistant 3.2 s, three-viewports 1.0 s; 24.8 s total. Screenshot directory asserted empty. |
+| 2026-07-26 | Final port/process/temp audit | 0 | 4 cleanup classes | No test listener/process/temp root remains; production PID 58740 on port 3000 is unchanged. |
 
 ## Defects and fixes
 
@@ -168,12 +185,15 @@ tarball smoke (`0e52c9e`), packaged dynamic imports (`872a4ac`), first-turn
 Assistant attachments/session payloads (`9ae9253`, `7513aa5`), and global
 icon/button binding labels (`931ec30`, `7513aa5`). Contract/browser evidence is
 split across `1132e7c`, `69dfd3a`, `4a24e3e`, `02972f3`, and `f9e6d55`.
+The hub-accepted ESLint integration through `fd34d65` adds the lightbox
+dimensions regression; `b21667a` makes the final gate independent of real HOME
+and outer database formatting, while `07fc33b` prevents duplicate screenshots.
 
 ## Final process and artifact audit
 
 Final audit confirms production PID 58740 remains on port 3000 with cwd
 `/Users/liujunping/project/f/tower/.next/standalone`. All temporary Tower
-acceptance ports (49987, 55072, 55662, 57239, 59638 and failed-attempt ports),
+acceptance ports (49987, 53229, 55072, 55662, 57239, 59638 and failed-attempt ports),
 Playwright Chromium processes, fixture registries, and `tower-{smoke,ui}-*`
 directories are gone. Two failed-browser-attempt roots that retained only empty
 temporary `home/.gemini` directories were removed with exact-path `rmdir` during
@@ -181,8 +201,13 @@ the final audit. Temporary screenshots and runtime databases were not committed.
 
 ## Final status
 
-**65 proved / 2 failed / 0 missing (67 total).** This gate remains incomplete:
-QG-03 (full ESLint) and REL-05 (strict fake-only execution) failed. All formerly
-missing P0/P1/P2 evidence now has a direct test, smoke, browser action, or read-only
-audit, but neither failed item is represented as passed and no release approval is
-claimed.
+**66 proved / 0 failed / 0 missing / 1 accepted-deviation (67 total).**
+
+**Release decision: PASS.** The AI Tools 0.3 product release gate is satisfied.
+REL-05 remains visible as a hub-accepted historical procedure deviation and is
+not counted as proof. Residual risks are limited to the eight non-fatal Next NFT
+trace warnings and the documented delta-verification method: after the sole full
+test run exposed isolated test-fixture assumptions, only the five failed files
+were rerun as instructed. No real Provider/network/credential action, external
+publish/tag/push, organization creation, or repeated screenshot occurred in the
+final gate.
