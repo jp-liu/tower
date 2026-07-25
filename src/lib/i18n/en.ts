@@ -253,6 +253,7 @@ export const en: Translations = {
   "settings.aiTools.connectionsDesc": "Manage local CLI and API connections together; capability slots below decide actual usage order.",
   "settings.aiTools.cliConnections": "CLI Connections",
   "settings.aiTools.cliConnectionsDesc": "Tower handles command discovery, Hello Probe, and local integrations without managing CLI credentials.",
+  "settings.aiTools.extension": "Extension",
   "settings.aiTools.apiConnections": "API Connections",
   "settings.aiTools.apiConnectionsDesc": "Create multiple protocol instances with independent keys, models, and request parameters.",
   "settings.aiTools.addConnection": "New Connection",

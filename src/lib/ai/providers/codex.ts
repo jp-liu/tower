@@ -8,6 +8,7 @@ export function createCodexProvider(): ProviderDefinition {
     name: "codex",
     displayName: "Codex CLI",
     agentFieldValue: "CODEX_CLI",
+    builtin: true,
     cli: {
       command: "codex",
       plugin: towerCliPlugin,

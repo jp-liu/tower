@@ -89,6 +89,7 @@ export class ProviderRegistry {
       results.push({
         name: p.name,
         displayName: p.displayName,
+        builtin: p.builtin === true,
         cli: { available: cliAvailable, version: cliVersion, commandPath, commandState },
         api: { available: apiAvailable, keyConfigured: apiKeyConfigured },
       });

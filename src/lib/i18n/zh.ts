@@ -264,6 +264,7 @@ export const zh = {
   "settings.aiTools.connectionsDesc": "统一管理本机 CLI 与 API 连接；实际使用顺序由下方能力插槽决定。",
   "settings.aiTools.cliConnections": "CLI 连接",
   "settings.aiTools.cliConnectionsDesc": "Tower 负责命令发现、Hello Probe 与本地集成，不接管 CLI 登录凭据。",
+  "settings.aiTools.extension": "扩展",
   "settings.aiTools.apiConnections": "API 连接",
   "settings.aiTools.apiConnectionsDesc": "可创建多个协议实例，分别维护密钥、模型与请求参数。",
   "settings.aiTools.addConnection": "新建连接",

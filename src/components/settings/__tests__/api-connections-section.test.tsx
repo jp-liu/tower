@@ -5,6 +5,7 @@ import { I18nProvider } from "@/lib/i18n";
 import { ApiConnectionsSection } from "../api-connections-section";
 
 const secret = "fixture-key-never-log";
+const backupSecret = "fixture-backup-never-log";
 const connection = {
   id: "api-1",
   connectionKey: null,
@@ -21,11 +22,18 @@ const connection = {
   queryParamsJson: "[]",
   headers: [{ id: "header-1", name: "Authorization", value: secret, enabled: true, sensitive: true }],
   queryParams: [],
-  apiKeys: [{
-    id: "key-1", connectionId: "api-1", label: "Primary", value: secret,
-    enabled: true, order: 0, testStatus: "ok", lastTestedAt: null, lastError: null,
-    createdAt: new Date(), updatedAt: new Date(),
-  }],
+  apiKeys: [
+    {
+      id: "key-1", connectionId: "api-1", label: "Primary", value: secret,
+      enabled: true, order: 0, testStatus: "ok", lastTestedAt: null, lastError: null,
+      createdAt: new Date(), updatedAt: new Date(),
+    },
+    {
+      id: "key-2", connectionId: "api-1", label: "Backup", value: backupSecret,
+      enabled: true, order: 1, testStatus: "untested", lastTestedAt: null, lastError: null,
+      createdAt: new Date(), updatedAt: new Date(),
+    },
+  ],
   models: [{
     id: "model-1", connectionId: "api-1", modelId: "manual/large-model-id",
     source: "manual", available: true, lastDiscoveredAt: null,
@@ -125,9 +133,11 @@ describe("ApiConnectionsSection", () => {
     await user.click(screen.getByRole("tab", { name: /Keys/ }));
     const keysPanel = activePanel();
     expect(document.body.innerHTML).not.toContain(secret);
-    await user.click(within(keysPanel).getByRole("button", { name: /显示完整值|Show full value/ }));
+    expect(document.body.innerHTML).not.toContain(backupSecret);
+    const primaryRow = within(keysPanel).getByText("Primary").closest("li")!;
+    await user.click(within(primaryRow).getByRole("button", { name: /显示完整值|Show full value/ }));
     expect(screen.getByDisplayValue(secret)).toBeInTheDocument();
-    await user.click(within(keysPanel).getByRole("button", { name: /复制|Copy/ }));
+    await user.click(within(primaryRow).getByRole("button", { name: /复制|Copy/ }));
     expect(clipboardSpy).toHaveBeenCalledWith(secret);
   });
 
@@ -137,12 +147,43 @@ describe("ApiConnectionsSection", () => {
     await user.click(await screen.findByRole("button", { name: /编辑|Edit/ }));
     await user.click(screen.getByRole("tab", { name: /Keys/ }));
     const keysPanel = activePanel();
-    await user.click(within(keysPanel).getByRole("button", { name: /^编辑$|^Edit$/ }));
+    const primaryRow = () => within(keysPanel).getByText("Primary").closest("li")!;
+    await user.click(within(primaryRow()).getByRole("switch"));
+    await waitFor(() => expect(actionMocks.updateApiKey).toHaveBeenCalledWith("api-1", "key-1", { enabled: false }));
+    await user.click(within(primaryRow()).getByRole("button", { name: /下移|Move down/ }));
+    await waitFor(() => expect(actionMocks.reorderApiKeys).toHaveBeenCalledWith("api-1", ["key-2", "key-1"]));
+    await user.click(within(primaryRow()).getByRole("button", { name: /测试此 Key|Test this Key/ }));
+    await waitFor(() => expect(actionMocks.testApiKey).toHaveBeenCalledWith("api-1", "key-1", "manual/large-model-id"));
+    await user.click(within(keysPanel).getByRole("button", { name: /整体测试|Test all keys/ }));
+    await waitFor(() => expect(actionMocks.testApiConnection).toHaveBeenCalledWith("api-1", "manual/large-model-id"));
+    await user.click(within(primaryRow()).getByRole("button", { name: /^编辑$|^Edit$/ }));
     const keyInput = screen.getByLabelText(/完整 Key|Full Key/);
     await user.clear(keyInput);
     await user.type(keyInput, "replacement-fixture-value");
     await user.click(within(keysPanel).getByRole("button", { name: /^保存$|^Save$/ }));
     await waitFor(() => expect(actionMocks.updateApiKey).toHaveBeenCalledWith("api-1", "key-1", expect.objectContaining({ value: "replacement-fixture-value" })));
+  });
+
+  it("adds and deletes Keys through dedicated pending actions", async () => {
+    const user = userEvent.setup();
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: /编辑|Edit/ }));
+    await user.click(screen.getByRole("tab", { name: /Keys/ }));
+    const keysPanel = activePanel();
+    await user.click(within(keysPanel).getByRole("button", { name: /新增 Key|Add Key/ }));
+    await user.type(screen.getByLabelText(/Key 标签|Key label/), "Rotation");
+    const newKeyInput = screen.getByLabelText(/完整 Key|Full Key/);
+    await user.type(newKeyInput, "fixture-new-key-value");
+    const newKeyForm = newKeyInput.closest<HTMLElement>("div.grid")!;
+    await user.click(within(newKeyForm).getByRole("button", { name: /^保存$|^Save$/ }));
+    await waitFor(() => expect(actionMocks.addApiKey).toHaveBeenCalledWith("api-1", { label: "Rotation", value: "fixture-new-key-value", enabled: true }));
+
+    const backupRow = within(keysPanel).getByText("Backup").closest("li")!;
+    await user.click(within(backupRow).getByRole("button", { name: /^删除$|^Delete$/ }));
+    const confirmTitle = await screen.findByRole("heading", { name: /删除.*Key|Delete.*Key/i });
+    const confirm = confirmTitle.closest<HTMLElement>('[role="dialog"]')!;
+    await user.click(within(confirm).getByRole("button", { name: /^删除$|^Delete$/ }));
+    await waitFor(() => expect(actionMocks.deleteApiKey).toHaveBeenCalledWith("api-1", "key-2"));
   });
 
   it("refreshes models and surfaces referenced-model deletion without pretending success", async () => {

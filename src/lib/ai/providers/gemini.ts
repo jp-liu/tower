@@ -8,6 +8,7 @@ export function createGeminiProvider(): ProviderDefinition {
     name: "gemini",
     displayName: "Gemini CLI",
     agentFieldValue: "GEMINI_CLI",
+    builtin: true,
     cli: {
       command: "gemini",
       plugin: towerCliPlugin,

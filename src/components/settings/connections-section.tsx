@@ -164,7 +164,9 @@ export function ConnectionsSection() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="break-words text-sm font-medium">{provider.displayName}</span>
-                        <Badge variant="outline">{t("label.builtin")}</Badge>
+                        <Badge variant="outline">
+                          {provider.builtin ? t("label.builtin") : t("settings.aiTools.extension")}
+                        </Badge>
                         <Badge variant={probeOk ? "secondary" : "outline"}>
                           {t(`settings.aiTools.status.${status}` as never)}
                         </Badge>

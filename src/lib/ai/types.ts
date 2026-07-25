@@ -85,6 +85,7 @@ export interface ProviderDefinition {
   name: string;
   displayName: string;
   agentFieldValue: string;
+  builtin?: boolean;
 
   cli?: {
     command: string;
@@ -108,6 +109,7 @@ export interface ProviderDefinition {
 export interface ProviderAvailability {
   name: string;
   displayName: string;
+  builtin: boolean;
   cli: {
     available: boolean;
     version: string | null;

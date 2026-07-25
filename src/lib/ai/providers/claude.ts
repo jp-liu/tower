@@ -8,6 +8,7 @@ export function createClaudeProvider(): ProviderDefinition {
     name: "claude",
     displayName: "Claude Code",
     agentFieldValue: "CLAUDE_CODE",
+    builtin: true,
     cli: {
       command: "claude",
       plugin: towerCliPlugin,
