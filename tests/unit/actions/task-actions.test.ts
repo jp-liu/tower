@@ -20,20 +20,11 @@ const testDb = new PrismaClient({
   datasourceUrl: `file:${getTowerDbFilePath()}`,
 });
 
-let createTaskFn: (data: {
-  title: string;
-  description?: string;
-  projectId: string;
-  priority?: string;
-  status?: string;
-  labelIds?: string[];
-  baseBranch?: string;
-}) => Promise<any>;
-let updateTaskFn: (
-  taskId: string,
-  data: { title?: string; description?: string; priority?: string; labelIds?: string[]; baseBranch?: string }
-) => Promise<any>;
-let updateTaskStatusFn: (taskId: string, status: string) => Promise<any>;
+type TaskActionsModule = typeof import("@/actions/task-actions");
+
+let createTaskFn: TaskActionsModule["createTask"];
+let updateTaskFn: TaskActionsModule["updateTask"];
+let updateTaskStatusFn: TaskActionsModule["updateTaskStatus"];
 
 const mockedRemoveWorktree = vi.mocked(removeWorktree);
 
@@ -45,9 +36,9 @@ beforeAll(async () => {
 
   // Dynamic import: task-actions.ts uses "use server" directive
   const mod = await import("@/actions/task-actions");
-  createTaskFn = mod.createTask as any;
-  updateTaskFn = mod.updateTask as any;
-  updateTaskStatusFn = mod.updateTaskStatus as any;
+  createTaskFn = mod.createTask;
+  updateTaskFn = mod.updateTask;
+  updateTaskStatusFn = mod.updateTaskStatus;
 
   // Create workspace and project for tests
   const workspace = await testDb.workspace.create({

@@ -15,12 +15,9 @@ const testDb = new PrismaClient({
   datasourceUrl: `file:${getTowerDbFilePath()}`,
 });
 
-let startTaskExecutionFn: (
-  taskId: string,
-  agent?: string,
-  worktreePath?: string,
-  worktreeBranch?: string
-) => Promise<any>;
+type AgentActionsModule = typeof import("@/actions/agent-actions");
+
+let startTaskExecutionFn: AgentActionsModule["startTaskExecution"];
 
 let workspaceId: string;
 let projectId: string;
@@ -31,7 +28,7 @@ beforeAll(async () => {
 
   // Dynamic import: agent-actions.ts uses "use server" directive
   const mod = await import("@/actions/agent-actions");
-  startTaskExecutionFn = mod.startTaskExecution as any;
+  startTaskExecutionFn = mod.startTaskExecution;
 
   // Create workspace, project, and task for tests
   const workspace = await testDb.workspace.create({
@@ -65,12 +62,12 @@ afterEach(async () => {
   await testDb.task.update({ where: { id: taskId }, data: { status: "TODO" } });
 });
 
-let getActiveExecutionsFn: () => Promise<any[]>;
+let getActiveExecutionsFn: AgentActionsModule["getActiveExecutionsAcrossWorkspaces"];
 
 describe("getActiveExecutionsAcrossWorkspaces", () => {
   beforeAll(async () => {
     const mod = await import("@/actions/agent-actions");
-    getActiveExecutionsFn = mod.getActiveExecutionsAcrossWorkspaces as any;
+    getActiveExecutionsFn = mod.getActiveExecutionsAcrossWorkspaces;
   });
 
   it("returns empty array when no RUNNING executions exist", async () => {
@@ -81,7 +78,7 @@ describe("getActiveExecutionsAcrossWorkspaces", () => {
     });
     const result = await getActiveExecutionsFn();
     expect(Array.isArray(result)).toBe(true);
-    expect(result.filter((e: any) => e.taskId === taskId)).toEqual([]);
+    expect(result.filter((execution) => execution.taskId === taskId)).toEqual([]);
   });
 
   it("returns RUNNING executions with full join chain", async () => {
@@ -95,8 +92,9 @@ describe("getActiveExecutionsAcrossWorkspaces", () => {
     });
 
     const result = await getActiveExecutionsFn();
-    const found = result.find((e: any) => e.executionId === execution.id);
+    const found = result.find((candidate) => candidate.executionId === execution.id);
     expect(found).toBeDefined();
+    if (!found) throw new Error("Expected the running execution in active results");
     expect(found).toMatchObject({
       executionId: execution.id,
       taskId,
@@ -120,7 +118,7 @@ describe("getActiveExecutionsAcrossWorkspaces", () => {
     });
 
     const result = await getActiveExecutionsFn();
-    const ids = result.map((e: any) => e.executionId);
+    const ids = result.map((execution) => execution.executionId);
     expect(ids).not.toContain(completed.id);
     expect(ids).not.toContain(failed.id);
 

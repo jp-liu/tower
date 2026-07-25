@@ -24,8 +24,10 @@ class MockRange {
   }
 }
 
-function makeMockMonaco() {
-  return { Range: MockRange as unknown as ConstructorParameters<typeof MockRange>[0] & (new (...args: number[]) => MockRange) };
+type MonacoApi = Parameters<typeof applyGutterDecorations>[1];
+
+function makeMockMonaco(): MonacoApi {
+  return { Range: MockRange };
 }
 
 // ── Mock Editor ───────────────────────────────────────────────────────────────
@@ -49,9 +51,9 @@ const hunk3: GutterHunk = { newStart: 20, newLines: 1, kind: "delete" };
 describe("applyGutterDecorations", () => {
   it("first call passes [] as oldIds and stores the returned IDs", () => {
     const editor = makeMockEditor(["id-0", "id-1"]);
-    const monaco = { Range: MockRange as unknown as typeof MockRange };
+    const monaco = makeMockMonaco();
 
-    const ids = applyGutterDecorations(editor, monaco as any, [hunk1, hunk2]);
+    const ids = applyGutterDecorations(editor, monaco, [hunk1, hunk2]);
 
     expect(editor.deltaDecorations).toHaveBeenCalledTimes(1);
     const [oldIds, next] = editor.deltaDecorations.mock.calls[0];
@@ -62,10 +64,10 @@ describe("applyGutterDecorations", () => {
 
   it("second call passes previous returned IDs as oldIds", () => {
     const editor = makeMockEditor(["id-0", "id-1"]);
-    const monaco = { Range: MockRange as unknown as typeof MockRange };
+    const monaco = makeMockMonaco();
 
     // First call — returns ["id-0", "id-1"]
-    applyGutterDecorations(editor, monaco as any, [hunk1, hunk2]);
+    applyGutterDecorations(editor, monaco, [hunk1, hunk2]);
 
     // Reset mock for clarity, but keep the editor reference
     editor.deltaDecorations.mockClear();
@@ -74,7 +76,7 @@ describe("applyGutterDecorations", () => {
       (_old: string[], next: unknown[]) => next.map((_, i) => `new-${i}`),
     );
 
-    applyGutterDecorations(editor, monaco as any, [hunk2]);
+    applyGutterDecorations(editor, monaco, [hunk2]);
 
     expect(editor.deltaDecorations).toHaveBeenCalledTimes(1);
     const [oldIds] = editor.deltaDecorations.mock.calls[0];
@@ -84,9 +86,9 @@ describe("applyGutterDecorations", () => {
 
   it("synthesizes correct decorations for each hunk kind", () => {
     const editor = makeMockEditor(["id-0", "id-1", "id-2"]);
-    const monaco = { Range: MockRange as unknown as typeof MockRange };
+    const monaco = makeMockMonaco();
 
-    applyGutterDecorations(editor, monaco as any, [hunk1, hunk2, hunk3]);
+    applyGutterDecorations(editor, monaco, [hunk1, hunk2, hunk3]);
 
     const [, next] = editor.deltaDecorations.mock.calls[0];
     const decorations = next as Array<{
@@ -112,10 +114,10 @@ describe("applyGutterDecorations", () => {
 
   it("handles zero newLines by treating span as 1 line", () => {
     const editor = makeMockEditor(["id-0"]);
-    const monaco = { Range: MockRange as unknown as typeof MockRange };
+    const monaco = makeMockMonaco();
 
     const hunk: GutterHunk = { newStart: 5, newLines: 0, kind: "delete" };
-    applyGutterDecorations(editor, monaco as any, [hunk]);
+    applyGutterDecorations(editor, monaco, [hunk]);
 
     const [, next] = editor.deltaDecorations.mock.calls[0];
     const dec = (next as Array<{ range: MockRange }>)[0];
@@ -127,9 +129,9 @@ describe("applyGutterDecorations", () => {
 describe("clearGutterDecorations", () => {
   it("calls deltaDecorations with previous IDs and [] to clear, then removes from WeakMap", () => {
     const editor = makeMockEditor(["id-0", "id-1"]);
-    const monaco = { Range: MockRange as unknown as typeof MockRange };
+    const monaco = makeMockMonaco();
 
-    applyGutterDecorations(editor, monaco as any, [hunk1, hunk2]);
+    applyGutterDecorations(editor, monaco, [hunk1, hunk2]);
     editor.deltaDecorations.mockClear();
 
     clearGutterDecorations(editor);

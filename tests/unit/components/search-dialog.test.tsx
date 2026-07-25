@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { SearchDialog } from "@/components/layout/search-dialog";
 import { I18nProvider } from "@/lib/i18n";
 
@@ -70,11 +71,8 @@ describe("SearchDialog - grouped All rendering", () => {
 
     // Type a query to trigger search
     const input = screen.getByPlaceholderText(/搜索/);
-    await vi.importActual("@testing-library/user-event").then(async (mod: any) => {
-      const userEvent = mod.default;
-      const user = userEvent.setup();
-      await user.type(input, "test");
-    });
+    const user = userEvent.setup();
+    await user.type(input, "test");
 
     // Wait for debounced search results
     await vi.waitFor(() => {
@@ -97,11 +95,8 @@ describe("SearchDialog - snippet rendering", () => {
     renderDialog();
 
     const input = screen.getByPlaceholderText(/搜索/);
-    await vi.importActual("@testing-library/user-event").then(async (mod: any) => {
-      const userEvent = mod.default;
-      const user = userEvent.setup();
-      await user.type(input, "note");
-    });
+    const user = userEvent.setup();
+    await user.type(input, "note");
 
     await vi.waitFor(() => {
       expect(screen.getByText("This is a snippet preview")).toBeInTheDocument();
@@ -118,11 +113,8 @@ describe("SearchDialog - snippet rendering", () => {
     renderDialog();
 
     const input = screen.getByPlaceholderText(/搜索/);
-    await vi.importActual("@testing-library/user-event").then(async (mod: any) => {
-      const userEvent = mod.default;
-      const user = userEvent.setup();
-      await user.type(input, "task");
-    });
+    const user = userEvent.setup();
+    await user.type(input, "task");
 
     await vi.waitFor(() => {
       expect(screen.getByText("Plain Task")).toBeInTheDocument();
@@ -152,8 +144,7 @@ describe("SearchDialog - race condition fix (SRCH-07)", () => {
     renderDialog();
 
     const input = screen.getByPlaceholderText(/搜索/);
-    const userEventMod = (await vi.importActual("@testing-library/user-event") as any).default;
-    const user = userEventMod.setup();
+    const user = userEvent.setup();
 
     // Type "stale" query (fires debounce after 250ms) then immediately type "fresh"
     // The "stale" debounce timer fires, globalSearch("stale") starts its 800ms delay

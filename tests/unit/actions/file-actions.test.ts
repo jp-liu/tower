@@ -1,14 +1,33 @@
 // @vitest-environment node
-import { vi, describe, it, expect, beforeEach } from "vitest";
+import { vi, describe, it, expect, beforeEach, type MockedFunction } from "vitest";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import * as childProcess from "child_process";
 import path from "node:path";
+import type { Dirent, PathLike, Stats } from "node:fs";
+import type { ExecFileSyncOptionsWithStringEncoding } from "node:child_process";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("fs/promises");
 vi.mock("fs");
 vi.mock("child_process");
+
+type ReaddirWithFileTypes = (
+  path: PathLike,
+  options: { withFileTypes: true },
+) => Promise<Dirent[]>;
+type ReadFileUtf8 = (path: PathLike, encoding: "utf8" | "utf-8") => Promise<string>;
+type StatDirectoryEntry = (path: PathLike) => Promise<Pick<Stats, "isDirectory">>;
+type ExecFileText = (
+  file: string,
+  args: readonly string[],
+  options: ExecFileSyncOptionsWithStringEncoding,
+) => string;
+
+const readdirMock = vi.mocked(fs.readdir) as unknown as MockedFunction<ReaddirWithFileTypes>;
+const readFileUtf8Mock = vi.mocked(fs.readFile) as unknown as MockedFunction<ReadFileUtf8>;
+const statMock = vi.mocked(fs.stat) as unknown as MockedFunction<StatDirectoryEntry>;
+const execFileTextMock = vi.mocked(childProcess.execFileSync) as unknown as MockedFunction<ExecFileText>;
 
 let mockIgnoreInstance: { add: ReturnType<typeof vi.fn>; ignores: ReturnType<typeof vi.fn> };
 
@@ -36,7 +55,7 @@ import {
 } from "@/actions/file-actions";
 import { safeResolvePath } from "@/lib/fs-security";
 
-function makeDirent(name: string, isDir: boolean) {
+function makeDirent(name: string, isDir: boolean): Dirent {
   return {
     name,
     isDirectory: () => isDir,
@@ -46,7 +65,13 @@ function makeDirent(name: string, isDir: boolean) {
     isFIFO: () => false,
     isSocket: () => false,
     isSymbolicLink: () => false,
+    parentPath: "/worktree",
+    path: "/worktree",
   };
+}
+
+function makeStat(isDirectory: boolean): Pick<Stats, "isDirectory"> {
+  return { isDirectory: () => isDirectory };
 }
 
 describe("listDirectory", () => {
@@ -61,11 +86,11 @@ describe("listDirectory", () => {
   });
 
   it("returns sorted entries with isDirectory flag", async () => {
-    vi.mocked(fs.readdir).mockResolvedValue([
+    readdirMock.mockResolvedValue([
       makeDirent("zebra.ts", false),
       makeDirent("alpha", true),
       makeDirent("beta.ts", false),
-    ] as any);
+    ]);
 
     const entries = await listDirectory("/worktree", ".");
     expect(entries[0].isDirectory).toBe(true);
@@ -81,11 +106,11 @@ describe("listDirectory", () => {
 
   it("filters gitignored entries", async () => {
     vi.mocked(fsSync.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFile).mockResolvedValue("node_modules\n" as any);
-    vi.mocked(fs.readdir).mockResolvedValue([
+    readFileUtf8Mock.mockResolvedValue("node_modules\n");
+    readdirMock.mockResolvedValue([
       makeDirent("src", true),
       makeDirent("node_modules", true),
-    ] as any);
+    ]);
 
     const entries = await listDirectory("/worktree", ".");
     const names = entries.map((e) => e.name);
@@ -95,10 +120,10 @@ describe("listDirectory", () => {
 
   it("always filters .git/ directory", async () => {
     vi.mocked(fsSync.existsSync).mockReturnValue(false);
-    vi.mocked(fs.readdir).mockResolvedValue([
+    readdirMock.mockResolvedValue([
       makeDirent(".git", true),
       makeDirent("src", true),
-    ] as any);
+    ]);
 
     const entries = await listDirectory("/worktree", ".");
     const names = entries.map((e) => e.name);
@@ -108,12 +133,12 @@ describe("listDirectory", () => {
 
   it("returns directories before files, then alphabetical", async () => {
     vi.mocked(fsSync.existsSync).mockReturnValue(false);
-    vi.mocked(fs.readdir).mockResolvedValue([
+    readdirMock.mockResolvedValue([
       makeDirent("zebra.ts", false),
       makeDirent("mango", true),
       makeDirent("apple.ts", false),
       makeDirent("banana", true),
-    ] as any);
+    ]);
 
     const entries = await listDirectory("/worktree", ".");
     expect(entries[0].name).toBe("banana");
@@ -212,7 +237,7 @@ describe("deleteEntry", () => {
   });
 
   it("deletes file for valid path", async () => {
-    vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => false } as any);
+    statMock.mockResolvedValue(makeStat(false));
     vi.mocked(fs.unlink).mockResolvedValue(undefined);
 
     await deleteEntry("/worktree", "src/old-file.ts");
@@ -230,7 +255,7 @@ describe("deleteEntry", () => {
   });
 
   it("recursively deletes directories with rm({ recursive: true })", async () => {
-    vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => true } as any);
+    statMock.mockResolvedValue(makeStat(true));
     vi.mocked(fs.rm).mockResolvedValue(undefined);
 
     await deleteEntry("/worktree", "src/old-dir");
@@ -251,8 +276,8 @@ describe("getGitStatus", () => {
   });
 
   it("parses M, A, D lines from git diff output", async () => {
-    vi.mocked(childProcess.execFileSync).mockReturnValue(
-      "M\tsrc/modified.ts\nA\tsrc/added.ts\nD\tsrc/deleted.ts\n" as any
+    execFileTextMock.mockReturnValue(
+      "M\tsrc/modified.ts\nA\tsrc/added.ts\nD\tsrc/deleted.ts\n"
     );
 
     const result = await getGitStatus("/worktree", "main", "task/123");
@@ -271,8 +296,8 @@ describe("getGitStatus", () => {
   });
 
   it("ignores unrecognized status letters", async () => {
-    vi.mocked(childProcess.execFileSync).mockReturnValue(
-      "M\tsrc/modified.ts\nR100\told.ts\tnew.ts\nA\tsrc/added.ts\n" as any
+    execFileTextMock.mockReturnValue(
+      "M\tsrc/modified.ts\nR100\told.ts\tnew.ts\nA\tsrc/added.ts\n"
     );
 
     const result = await getGitStatus("/worktree", "main", "task/123");
