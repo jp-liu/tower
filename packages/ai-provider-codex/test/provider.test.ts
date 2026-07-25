@@ -3,10 +3,24 @@ import { describe, expect, it, vi } from "vitest";
 import { isCliPluginManifestV1, type CliHostContext } from "@tower/ai-sdk";
 import { CodexCliAdapter, codexManifest } from "../src/index.js";
 
+function processStream(stdout = "", stderr = "", exitCode = 0) {
+  return async function* () {
+    const bytes = Buffer.from(stdout);
+    for (let index = 0; index < bytes.length; index += 5) {
+      yield { type: "stdout" as const, chunk: bytes.subarray(index, index + 5) };
+    }
+    if (stderr) yield { type: "stderr" as const, chunk: Buffer.from(stderr) };
+    yield { type: "exit" as const, exitCode, signal: null, durationMs: 1 };
+  };
+}
+
 function host(): CliHostContext {
   return {
     platform: "linux", arch: "x64", storageDir: "/tmp/provider", signal: new AbortController().signal,
-    process: { execute: vi.fn(async () => ({ exitCode: 0, signal: null, stdout: "ok", stderr: "", durationMs: 1 })) },
+    process: {
+      execute: vi.fn(async () => ({ exitCode: 0, signal: null, stdout: "[]", stderr: "", durationMs: 1 })),
+      stream: vi.fn(processStream()),
+    },
     fileSystem: {
       exists: () => false, mkdir() {}, readText: () => "", writeText() {}, lstat: async () => null,
       readLink: async () => "", symlink: async () => {}, unlink: async () => {},
@@ -78,17 +92,63 @@ describe("Codex provider", () => {
 
   it("reports safe rate-limit query failures without exposing stderr", async () => {
     const ctx = host();
-    vi.mocked(ctx.process.execute).mockResolvedValueOnce({
-      exitCode: 1,
-      signal: null,
-      stdout: "",
-      stderr: "429 quota exceeded SECRET",
-      durationMs: 1,
-    });
+    vi.mocked(ctx.process.stream!).mockImplementationOnce(processStream("", "429 quota exceeded SECRET", 1));
     await expect(new CodexCliAdapter(ctx).generate({ prompt: "secret prompt" })).rejects.toMatchObject({
       code: "RATE_LIMITED",
       message: "Codex query failed",
     });
+  });
+
+  it("streams Codex JSONL items with paired MCP tools and safe headless arguments", async () => {
+    const ctx = host();
+    const fixture = fs.readFileSync(new URL("./fixtures/stream.jsonl", import.meta.url), "utf8");
+    vi.mocked(ctx.process.execute).mockResolvedValueOnce({
+      exitCode: 0,
+      signal: null,
+      stdout: JSON.stringify([
+        { name: "tower-dev", enabled: true },
+        { name: "unrelated", enabled: true, transport: { env: { SECRET: "CANARY_SECRET" } } },
+      ]),
+      stderr: "",
+      durationMs: 1,
+    });
+    vi.mocked(ctx.process.stream!).mockImplementationOnce(processStream(fixture));
+    const events = [];
+    for await (const event of new CodexCliAdapter(ctx).stream({
+      prompt: "PROMPT_CANARY",
+      tools: ["mcp__tower-dev__list_tasks", "mcp__other_server__blocked"],
+      allowedTools: ["mcp__tower-dev__list_tasks"],
+    })) events.push(event);
+
+    expect(events).toContainEqual({ type: "session", sessionId: "codex-thread" });
+    expect(events).toContainEqual({ type: "reasoning", text: "checking" });
+    expect(events).toContainEqual({ type: "text", text: "Hello" });
+    expect(events.filter((event) => event.type === "text")).toEqual([{ type: "text", text: "Hello" }]);
+    expect(events).toContainEqual(expect.objectContaining({ type: "tool-call", toolCall: expect.objectContaining({ id: "tool-1" }) }));
+    expect(events).toContainEqual(expect.objectContaining({ type: "tool-result", toolResult: expect.objectContaining({ id: "tool-1" }) }));
+    expect(ctx.process.stream).toHaveBeenCalledWith(expect.objectContaining({
+      args: expect.arrayContaining([
+        "--json", "--sandbox", "read-only", "--disable", "shell_tool",
+        "-c", "mcp_servers.unrelated.enabled=false",
+        "-c", "mcp_servers.tower-dev.enabled=true",
+        "-c", 'mcp_servers.tower-dev.enabled_tools=["list_tasks"]',
+      ]),
+    }), expect.any(Object));
+    expect(JSON.stringify(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args)).not.toContain("blocked");
+    expect(JSON.stringify(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args)).not.toContain("CANARY_SECRET");
+  });
+
+  it("fails before query output when the requested MCP server is unavailable", async () => {
+    const ctx = host();
+    vi.mocked(ctx.process.execute).mockResolvedValueOnce({
+      exitCode: 0, signal: null, stdout: "[]", stderr: "", durationMs: 1,
+    });
+    await expect(new CodexCliAdapter(ctx).generate({
+      prompt: "PROMPT_CANARY",
+      tools: ["mcp__tower-dev__list_tasks"],
+      allowedTools: ["mcp__tower-dev__list_tasks"],
+    })).rejects.toMatchObject({ code: "TOOLING_UNAVAILABLE" });
+    expect(ctx.process.stream).not.toHaveBeenCalled();
   });
 
   it("runs Hooks, MCP, and Skills through injected Host services", async () => {

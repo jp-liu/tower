@@ -7,6 +7,7 @@ import {
   dynamicTool,
   generateText,
   jsonSchema,
+  stepCountIs,
   streamText,
   type LanguageModel,
   type ModelMessage,
@@ -180,14 +181,25 @@ function toolCallShape(call: Record<string, unknown>): ApiToolCall {
 }
 
 function toolResultShape(result: Record<string, unknown>): ApiToolResult {
+  const output = result.output;
+  const attachment = output && typeof output === "object" && !Array.isArray(output)
+    ? output as Record<string, unknown>
+    : null;
   return {
     toolCallId: String(result.toolCallId),
     toolName: String(result.toolName),
-    output: result.output,
+    output: attachment?._towerAttachment === true
+      ? {
+          attachment: attachment.attachment,
+          mimeType: attachment.mimeType,
+          size: attachment.size,
+        }
+      : output,
   };
 }
 
 function generationOptions(request: ApiGenerateRequest, context: ApiAttemptContext) {
+  const maxTurns = Math.min(20, Math.max(1, request.maxTurns ?? 8));
   return {
     ...promptOptions(request),
     instructions: request.system,
@@ -196,6 +208,7 @@ function generationOptions(request: ApiGenerateRequest, context: ApiAttemptConte
     abortSignal: request.abortSignal,
     timeout: request.timeoutMs,
     maxRetries: 0,
+    stopWhen: stepCountIs(maxTurns),
     tools: buildTools(request, context),
     onToolExecutionStart: () => context.onActivity("tool_call"),
   };
@@ -289,8 +302,21 @@ class VercelApiAdapter implements ApiAdapter {
         } else if (part.type === "tool-result") {
           context.onActivity("tool_result");
           yield { type: "tool-result", result: toolResultShape(part as unknown as Record<string, unknown>) };
+        } else if (part.type === "tool-error") {
+          context.onActivity("tool_result");
+          yield {
+            type: "tool-result",
+            result: {
+              toolCallId: String(part.toolCallId),
+              toolName: String(part.toolName),
+              output: null,
+              error: { code: "tool_error", message: "A tool execution failed" },
+            },
+          };
         } else if (part.type === "finish") {
-          yield { type: "finish", finishReason: part.finishReason, usage: usageShape(part.totalUsage) };
+          const usage = usageShape(part.totalUsage);
+          if (usage) yield { type: "usage", usage };
+          yield { type: "finish", finishReason: part.finishReason };
         }
       }
     } catch (error) {

@@ -3,13 +3,27 @@ import { describe, expect, it, vi } from "vitest";
 import { isCliPluginManifestV1, type CliHostContext } from "@tower/ai-sdk";
 import { ClaudeCliAdapter, claudeManifest, towerCliPlugin } from "../src/index.js";
 
+function processStream(stdout = "", stderr = "", exitCode = 0) {
+  return async function* () {
+    const bytes = Buffer.from(stdout);
+    for (let index = 0; index < bytes.length; index += 7) {
+      yield { type: "stdout" as const, chunk: bytes.subarray(index, index + 7) };
+    }
+    if (stderr) yield { type: "stderr" as const, chunk: Buffer.from(stderr) };
+    yield { type: "exit" as const, exitCode, signal: null, durationMs: 1 };
+  };
+}
+
 function host(): CliHostContext {
   return {
     platform: "linux",
     arch: "x64",
     storageDir: "/tmp/tower-provider-test",
     signal: new AbortController().signal,
-    process: { execute: vi.fn(async () => ({ exitCode: 0, signal: null, stdout: "ok", stderr: "", durationMs: 1 })) },
+    process: {
+      execute: vi.fn(async () => ({ exitCode: 0, signal: null, stdout: "ok", stderr: "", durationMs: 1 })),
+      stream: vi.fn(processStream()),
+    },
     fileSystem: {
       exists: () => false, mkdir() {}, readText: () => "", writeText() {},
       lstat: async () => null, readLink: async () => "", symlink: async () => {}, unlink: async () => {},
@@ -75,15 +89,41 @@ describe("Claude provider", () => {
 
   it("reports safe authentication and no-output query codes", async () => {
     const ctx = host();
-    vi.mocked(ctx.process.execute)
-      .mockResolvedValueOnce({ exitCode: 1, signal: null, stdout: "", stderr: "401 unauthorized SECRET", durationMs: 1 })
-      .mockResolvedValueOnce({ exitCode: 0, signal: null, stdout: "", stderr: "", durationMs: 1 });
+    vi.mocked(ctx.process.stream!)
+      .mockImplementationOnce(processStream("", "401 unauthorized SECRET", 1))
+      .mockImplementationOnce(processStream());
     const adapter = new ClaudeCliAdapter(ctx);
     await expect(adapter.generate({ prompt: "secret prompt" })).rejects.toMatchObject({
       code: "AUTHENTICATION_FAILED",
       message: "Claude query failed",
     });
     await expect(adapter.generate({ prompt: "secret prompt" })).rejects.toMatchObject({ code: "NO_OUTPUT" });
+  });
+
+  it("streams Claude JSONL events and forwards the restricted tool contract", async () => {
+    const ctx = host();
+    const fixture = fs.readFileSync(new URL("./fixtures/stream.jsonl", import.meta.url), "utf8");
+    vi.mocked(ctx.process.stream!).mockImplementationOnce(processStream(fixture));
+    const events = [];
+    for await (const event of new ClaudeCliAdapter(ctx).stream({
+      prompt: "PROMPT_CANARY",
+      maxTurns: 4,
+      tools: ["mcp__tower-dev__list_tasks", "mcp__other__blocked"],
+      allowedTools: ["mcp__tower-dev__list_tasks"],
+    })) events.push(event);
+
+    expect(events).toContainEqual({ type: "session", sessionId: "claude-session" });
+    expect(events).toContainEqual({ type: "text", text: "你好 " });
+    expect(events).toContainEqual({ type: "reasoning", text: "check " });
+    expect(events).toContainEqual(expect.objectContaining({ type: "tool-call", toolCall: expect.objectContaining({ id: "tool-1" }) }));
+    expect(events).toContainEqual(expect.objectContaining({ type: "tool-result", toolResult: expect.objectContaining({ id: "tool-1" }) }));
+    expect(ctx.process.stream).toHaveBeenCalledWith(expect.objectContaining({
+      args: expect.arrayContaining([
+        "--output-format", "stream-json", "--tools", "mcp__tower-dev__list_tasks",
+        "--max-turns", "4", "--allowedTools", "mcp__tower-dev__list_tasks",
+      ]),
+    }), expect.any(Object));
+    expect(JSON.stringify(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args)).not.toContain("blocked");
   });
 
   it("runs Hooks, MCP, and Skills through injected Host services", async () => {

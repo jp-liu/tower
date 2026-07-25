@@ -1,0 +1,7 @@
+{"type":"system","subtype":"init","session_id":"claude-session"}
+not-json
+{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"check "}}}
+{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"你好 "}}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"tool-1","name":"mcp__tower-dev__list_tasks","input":{"projectId":"p1"}}],"usage":{"input_tokens":10,"output_tokens":2,"cache_read_input_tokens":3}}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tool-1","content":{"tasks":[]}}]}}
+{"type":"result","subtype":"success","is_error":false,"session_id":"claude-session","stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":4,"cache_read_input_tokens":3}}

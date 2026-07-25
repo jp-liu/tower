@@ -326,6 +326,143 @@ describe("Vercel provider adapters", () => {
       models: [{ id: "local-model", capabilities: undefined, metadata: { id: "local-model", owned_by: "local" } }],
     });
   });
+
+  it("returns tool results to the model across multiple steps before final text", async () => {
+    const requests: Awaited<ReturnType<typeof inspectRequest>>[] = [];
+    const rawFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      requests.push(await inspectRequest(input, init));
+      const step = requests.length;
+      const response = step <= 2
+        ? {
+            id: `chatcmpl_${step}`,
+            model: "test-model",
+            choices: [{
+              message: {
+                role: "assistant",
+                content: null,
+                tool_calls: [{
+                  id: `call_${step}`,
+                  type: "function",
+                  function: { name: "lookup", arguments: JSON.stringify({ step }) },
+                }],
+              },
+              finish_reason: "tool_calls",
+            }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          }
+        : responseFor("openai-compatible");
+      return new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    const execute = vi.fn(async (input: unknown) => ({ acknowledged: input }));
+
+    const result = await createApiAdapter(config("openai-compatible"), rawFetch).generate({
+      modelId: "test-model",
+      prompt: "private prompt",
+      maxTurns: 3,
+      tools: {
+        lookup: {
+          description: "Look up a step",
+          inputSchema: {
+            type: "object",
+            properties: { step: { type: "number" } },
+            required: ["step"],
+            additionalProperties: false,
+          },
+          execute,
+        },
+      },
+    }, { credential: { id: "anonymous", value: "" }, onActivity: vi.fn() });
+
+    expect(requests).toHaveLength(3);
+    expect(execute.mock.calls).toEqual([[{ step: 1 }], [{ step: 2 }]]);
+    expect(result.text).toBe("OK");
+    expect(result.toolCalls.map((call) => call.toolCallId)).toEqual(["call_1", "call_2"]);
+    expect(result.toolResults.map((item) => item.toolCallId)).toEqual(["call_1", "call_2"]);
+    expect(requests.slice(1).every(({ body }) => body.includes('"role":"tool"'))).toBe(true);
+    expect(JSON.parse(requests[0]!.body).max_retries).toBeUndefined();
+  });
+
+  it("serializes provider-neutral tool history for a continuation request", async () => {
+    const requests: Awaited<ReturnType<typeof inspectRequest>>[] = [];
+    const rawFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      requests.push(await inspectRequest(input, init));
+      return new Response(JSON.stringify(responseFor("openai-compatible")), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    const result = await createApiAdapter(config("openai-compatible"), rawFetch).generate({
+      modelId: "test-model",
+      messages: [
+        { role: "user", content: "continue" },
+        {
+          role: "assistant",
+          content: [{ type: "tool-call", toolCallId: "historic-call", toolName: "lookup", input: { step: 0 } }],
+        },
+        {
+          role: "tool",
+          content: [{
+            type: "tool-result",
+            toolCallId: "historic-call",
+            toolName: "lookup",
+            output: { type: "json", value: { done: true } },
+          }],
+        },
+      ],
+      tools: { lookup: { inputSchema: { type: "object" } } },
+    }, { credential: { id: "anonymous", value: "" }, onActivity: vi.fn() });
+
+    expect(result.text).toBe("OK");
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.body).toContain("historic-call");
+    expect(requests[0]!.body).toContain('"role":"tool"');
+  });
+
+  it("stops the API tool loop at maxTurns without transport retries", async () => {
+    const requests: Awaited<ReturnType<typeof inspectRequest>>[] = [];
+    const rawFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      requests.push(await inspectRequest(input, init));
+      return new Response(JSON.stringify({
+        id: "chatcmpl_tool",
+        model: "test-model",
+        choices: [{
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [{
+              id: "call_once",
+              type: "function",
+              function: { name: "lookup", arguments: '{"step":1}' },
+            }],
+          },
+          finish_reason: "tool_calls",
+        }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+    const execute = vi.fn(async () => ({ ok: true }));
+
+    const result = await createApiAdapter(config("openai-compatible"), rawFetch).generate({
+      modelId: "test-model",
+      prompt: "private prompt",
+      maxTurns: 1,
+      tools: {
+        lookup: {
+          inputSchema: { type: "object", properties: { step: { type: "number" } } },
+          execute,
+        },
+      },
+    }, { credential: { id: "anonymous", value: "" }, onActivity: vi.fn() });
+
+    expect(requests).toHaveLength(1);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(result.text).toBe("");
+    expect(result.finishReason).toBe("tool-calls");
+  });
 });
 
 class FakeAdapter implements ApiAdapter {

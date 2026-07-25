@@ -8,6 +8,7 @@ import type {
   CliProcessRunOptions,
   CliProcessResult,
   CliProcessSpec,
+  CliProcessStreamEvent,
   PlatformName,
   RedactedLogger,
 } from "@tower/ai-sdk";
@@ -74,6 +75,16 @@ class ManagedCliProcessExecutor implements CliProcessExecutor {
       ? mergeProviderProcess(spec, this.commandPath, this.profile)
       : mergeProviderProcess(spec, spec.command, this.profile);
     return this.executor.execute(merged, { ...options, signal: options.signal ?? this.signal });
+  }
+
+  stream(spec: CliProcessSpec, options: CliProcessRunOptions = {}): AsyncIterable<CliProcessStreamEvent> {
+    if (!this.executor.stream) {
+      throw new Error("The provider Host does not support process streaming");
+    }
+    const merged = this.commandPath
+      ? mergeProviderProcess(spec, this.commandPath, this.profile)
+      : mergeProviderProcess(spec, spec.command, this.profile);
+    return this.executor.stream(merged, { ...options, signal: options.signal ?? this.signal });
   }
 }
 

@@ -3,10 +3,24 @@ import { describe, expect, it, vi } from "vitest";
 import { isCliPluginManifestV1, type CliAdapter, type CliHostContext } from "@tower/ai-sdk";
 import { GeminiCliAdapter, geminiManifest } from "../src/index.js";
 
+function processStream(stdout = "", stderr = "", exitCode = 0) {
+  return async function* () {
+    const bytes = Buffer.from(stdout);
+    for (let index = 0; index < bytes.length; index += 5) {
+      yield { type: "stdout" as const, chunk: bytes.subarray(index, index + 5) };
+    }
+    if (stderr) yield { type: "stderr" as const, chunk: Buffer.from(stderr) };
+    yield { type: "exit" as const, exitCode, signal: null, durationMs: 1 };
+  };
+}
+
 function host(): CliHostContext {
   return {
     platform: "linux", arch: "x64", storageDir: "/tmp/provider", signal: new AbortController().signal,
-    process: { execute: vi.fn(async () => ({ exitCode: 0, signal: null, stdout: "", stderr: "", durationMs: 1 })) },
+    process: {
+      execute: vi.fn(async () => ({ exitCode: 0, signal: null, stdout: "", stderr: "", durationMs: 1 })),
+      stream: vi.fn(processStream()),
+    },
     fileSystem: {
       exists: () => false, mkdir() {}, readText: () => "", writeText() {}, lstat: async () => null,
       readLink: async () => "", symlink: async () => {}, unlink: async () => {},
@@ -70,17 +84,40 @@ describe("Gemini provider", () => {
 
   it("reports safe network query failures without exposing output", async () => {
     const ctx = host();
-    vi.mocked(ctx.process.execute).mockResolvedValueOnce({
-      exitCode: 1,
-      signal: null,
-      stdout: "",
-      stderr: "fetch failed ECONNRESET SECRET",
-      durationMs: 1,
-    });
+    vi.mocked(ctx.process.stream!).mockImplementationOnce(processStream("", "fetch failed ECONNRESET SECRET", 1));
     await expect(new GeminiCliAdapter(ctx).generate({ prompt: "secret prompt" })).rejects.toMatchObject({
       code: "NETWORK_ERROR",
       message: "Gemini query failed",
     });
+  });
+
+  it("streams Gemini JSONL events under a Host-managed deny-by-default policy", async () => {
+    const ctx = host();
+    const writes: Array<{ path: string; contents: string }> = [];
+    ctx.fileSystem!.writeText = (path, contents) => writes.push({ path, contents });
+    const fixture = fs.readFileSync(new URL("./fixtures/stream.jsonl", import.meta.url), "utf8");
+    vi.mocked(ctx.process.stream!).mockImplementationOnce(processStream(fixture));
+    const events = [];
+    for await (const event of new GeminiCliAdapter(ctx).stream({
+      prompt: "PROMPT_CANARY",
+      tools: ["mcp__tower-dev__list_tasks", "mcp__other__blocked"],
+      allowedTools: ["mcp__tower-dev__list_tasks"],
+    })) events.push(event);
+
+    expect(events).toContainEqual({ type: "session", sessionId: "gemini-session" });
+    expect(events).toContainEqual({ type: "reasoning", text: "checking" });
+    expect(events).toContainEqual({ type: "text", text: "Hello" });
+    expect(events).toContainEqual(expect.objectContaining({ type: "tool-call", toolCall: expect.objectContaining({ id: "tool-1" }) }));
+    expect(events).toContainEqual(expect.objectContaining({ type: "tool-result", toolResult: expect.objectContaining({ id: "tool-1" }) }));
+    expect(writes[0]?.contents).toContain('toolName = "*"\ndecision = "deny"');
+    expect(writes[0]?.contents).toContain('mcpName = "tower-dev"');
+    expect(ctx.process.stream).toHaveBeenCalledWith(expect.objectContaining({
+      args: expect.arrayContaining([
+        "--output-format", "stream-json", "--admin-policy", "/tmp/provider/assistant-policy.toml",
+        "--allowed-mcp-server-names", "tower-dev", "--allowed-tools", "mcp_tower-dev_list_tasks",
+      ]),
+    }), expect.any(Object));
+    expect(writes[0]?.contents).not.toContain("blocked");
   });
 
   it("uses stable Gemini MCP and Skills commands through the Host executor", async () => {

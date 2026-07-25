@@ -6,6 +6,7 @@ import type {
   CliProcessResult,
   CliProcessRunOptions,
   CliProcessSpec,
+  CliProcessStreamEvent,
   PlatformName,
 } from "@tower/ai-sdk";
 import {
@@ -41,7 +42,7 @@ export function redactProcessDiagnostic(spec: CliProcessSpec): ProcessDiagnostic
 export function parseWindowsNpmShim(shimPath: string, contents: string): string[] {
   const directory = path.win32.dirname(shimPath);
   const expand = (value: string) => {
-    const expanded = value.replace(/%~?dp0%/gi, directory).replace(/\//g, "\\");
+    const expanded = value.replace(/%~?dp0%?/gi, directory).replace(/\//g, "\\");
     return path.win32.isAbsolute(expanded)
       ? path.win32.normalize(expanded)
       : path.win32.resolve(directory, expanded);
@@ -101,6 +102,50 @@ export interface ControlledProcessExecutorOptions {
   env?: RuntimeEnvironment;
   spawn?: typeof spawn;
   now?: () => number;
+  killTree?: (child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals) => void;
+}
+
+class ProcessEventQueue {
+  private values: CliProcessStreamEvent[] = [];
+  private waiters: Array<{
+    resolve: (value: IteratorResult<CliProcessStreamEvent>) => void;
+    reject: (error: unknown) => void;
+  }> = [];
+  private ended = false;
+  private failure: unknown;
+
+  push(value: CliProcessStreamEvent): void {
+    if (this.ended) return;
+    const waiter = this.waiters.shift();
+    if (waiter) waiter.resolve({ value, done: false });
+    else this.values.push(value);
+  }
+
+  clear(): void {
+    this.values = [];
+  }
+
+  end(error?: unknown): void {
+    if (this.ended) return;
+    this.ended = true;
+    this.failure = error;
+    if (error) this.clear();
+    for (const waiter of this.waiters.splice(0)) {
+      if (error) waiter.reject(error);
+      else waiter.resolve({ value: undefined, done: true });
+    }
+  }
+
+  next(): Promise<IteratorResult<CliProcessStreamEvent>> {
+    const value = this.values.shift();
+    if (value) return Promise.resolve({ value, done: false });
+    if (this.ended) {
+      return this.failure
+        ? Promise.reject(this.failure)
+        : Promise.resolve({ value: undefined, done: true });
+    }
+    return new Promise((resolve, reject) => this.waiters.push({ resolve, reject }));
+  }
 }
 
 export class ControlledProcessExecutor implements CliProcessExecutor {
@@ -108,15 +153,39 @@ export class ControlledProcessExecutor implements CliProcessExecutor {
   private readonly baseEnv: RuntimeEnvironment;
   private readonly spawnProcess: typeof spawn;
   private readonly now: () => number;
+  private readonly killTreeOverride?: ControlledProcessExecutorOptions["killTree"];
 
   constructor(options: ControlledProcessExecutorOptions = {}) {
     this.platform = options.platform ?? process.platform as PlatformName;
     this.baseEnv = options.env ?? process.env;
     this.spawnProcess = options.spawn ?? spawn;
     this.now = options.now ?? Date.now;
+    this.killTreeOverride = options.killTree;
   }
 
   async execute(spec: CliProcessSpec, options: CliProcessRunOptions = {}): Promise<CliProcessResult> {
+    const stdoutDecoder = new TextDecoder();
+    const stderrDecoder = new TextDecoder();
+    let stdout = "";
+    let stderr = "";
+    let exitCode: number | null = null;
+    let exitSignal: string | null = null;
+    let durationMs = 0;
+    for await (const event of this.stream(spec, options)) {
+      if (event.type === "stdout") stdout += stdoutDecoder.decode(event.chunk, { stream: true });
+      else if (event.type === "stderr") stderr += stderrDecoder.decode(event.chunk, { stream: true });
+      else {
+        exitCode = event.exitCode;
+        exitSignal = event.signal;
+        durationMs = event.durationMs;
+      }
+    }
+    stdout += stdoutDecoder.decode();
+    stderr += stderrDecoder.decode();
+    return { exitCode, signal: exitSignal, stdout, stderr, durationMs };
+  }
+
+  async *stream(spec: CliProcessSpec, options: CliProcessRunOptions = {}): AsyncIterable<CliProcessStreamEvent> {
     if (!spec.command.trim()) throw new CliPluginError("SPAWN_FAILED", "Process command is required");
     if (isShellCommandString(spec.command)) {
       throw new CliPluginError("SPAWN_FAILED", "Shell command strings are not allowed");
@@ -137,73 +206,121 @@ export class ControlledProcessExecutor implements CliProcessExecutor {
         cwd: spec.cwd,
         env: env as NodeJS.ProcessEnv,
         shell: false,
+        detached: this.platform !== "win32",
         windowsHide: true,
         stdio: ["pipe", "pipe", "pipe"],
       }) as ChildProcessWithoutNullStreams;
     } catch (cause) {
-      throw new CliPluginError("SPAWN_FAILED", `Failed to start ${spec.command}`, { cause });
+      void cause;
+      throw new CliPluginError("SPAWN_FAILED", "Failed to start provider process");
     }
 
     const maxOutputBytes = Math.max(1, options.maxOutputBytes ?? 1024 * 1024);
-    let stdout = "";
-    let stderr = "";
-    let stdoutBytes = 0;
-    let stderrBytes = 0;
-    const append = (current: string, currentBytes: number, chunk: Buffer): [string, number] => {
-      if (currentBytes >= maxOutputBytes) return [current, currentBytes];
-      const slice = chunk.subarray(0, maxOutputBytes - currentBytes);
-      return [current + slice.toString("utf8"), currentBytes + slice.length];
+    let outputBytes = 0;
+    const events = new ProcessEventQueue();
+    let closed = false;
+    let termination: "timeout" | "cancel" | "limit" | undefined;
+    const onChunk = (type: "stdout" | "stderr", value: Buffer | string) => {
+      if (termination) return;
+      const chunk = typeof value === "string" ? Buffer.from(value) : value;
+      outputBytes += chunk.byteLength;
+      if (outputBytes > maxOutputBytes) {
+        terminate("limit");
+        return;
+      }
+      events.push({ type, chunk: new Uint8Array(chunk) });
     };
     child.stdout.on("data", (chunk: Buffer) => {
-      [stdout, stdoutBytes] = append(stdout, stdoutBytes, chunk);
+      onChunk("stdout", chunk);
     });
     child.stderr.on("data", (chunk: Buffer) => {
-      [stderr, stderrBytes] = append(stderr, stderrBytes, chunk);
+      onChunk("stderr", chunk);
     });
 
     let timeout: ReturnType<typeof setTimeout> | undefined;
     let forceKillTimeout: ReturnType<typeof setTimeout> | undefined;
-    let termination: "timeout" | "cancel" | undefined;
-    const terminate = (reason: "timeout" | "cancel") => {
+    const killTree = (signal: NodeJS.Signals) => {
+      if (this.killTreeOverride) {
+        this.killTreeOverride(child, signal);
+        return;
+      }
+      if (this.platform === "win32" && child.pid) {
+        try {
+          this.spawnProcess("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+            shell: false,
+            windowsHide: true,
+            stdio: "ignore",
+          });
+        } catch {
+          child.kill(signal);
+        }
+        return;
+      }
+      try {
+        if (child.pid) process.kill(-child.pid, signal);
+        else child.kill(signal);
+      } catch {
+        child.kill(signal);
+      }
+    };
+    const terminate = (reason: "timeout" | "cancel" | "limit") => {
       if (termination) return;
       termination = reason;
-      child.kill("SIGTERM");
-      forceKillTimeout = setTimeout(() => child.kill("SIGKILL"), 500);
+      events.clear();
+      killTree("SIGTERM");
+      forceKillTimeout = setTimeout(() => killTree("SIGKILL"), 500);
       forceKillTimeout.unref();
+      const error = reason === "timeout"
+        ? new CliPluginError("PROCESS_TIMEOUT", `Process timed out after ${options.timeoutMs}ms`)
+        : reason === "limit"
+          ? new CliPluginError("PROCESS_OUTPUT_LIMIT", "Provider process output exceeded the configured limit")
+          : new CliPluginError("PROCESS_CANCELLED", "Process was cancelled");
+      events.end(error);
     };
     const abort = () => terminate("cancel");
     options.signal?.addEventListener("abort", abort, { once: true });
+    if (options.signal?.aborted) abort();
     if (options.timeoutMs !== undefined) {
       timeout = setTimeout(() => terminate("timeout"), Math.max(0, options.timeoutMs));
     }
+
+    child.stdin.on("error", () => {});
+    child.once("error", () => {
+      events.end(new CliPluginError("SPAWN_FAILED", "Provider process failed"));
+    });
+    child.once("close", (exitCode, signal) => {
+      closed = true;
+      if (forceKillTimeout) clearTimeout(forceKillTimeout);
+      if (termination === "timeout") {
+        events.end(new CliPluginError("PROCESS_TIMEOUT", `Process timed out after ${options.timeoutMs}ms`));
+      } else if (termination === "cancel") {
+        events.end(new CliPluginError("PROCESS_CANCELLED", "Process was cancelled"));
+      } else if (termination === "limit") {
+        events.end(new CliPluginError("PROCESS_OUTPUT_LIMIT", "Provider process output exceeded the configured limit"));
+      } else {
+        events.push({
+          type: "exit",
+          exitCode,
+          signal,
+          durationMs: Math.max(0, this.now() - startedAt),
+        });
+        events.end();
+      }
+    });
 
     if (spec.initialInput !== undefined) child.stdin.end(spec.initialInput);
     else child.stdin.end();
 
     try {
-      const result = await new Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
-        child.once("error", reject);
-        child.once("close", (exitCode, signal) => resolve({ exitCode, signal }));
-      });
-      if (termination === "timeout") {
-        throw new CliPluginError("PROCESS_TIMEOUT", `Process timed out after ${options.timeoutMs}ms`);
+      while (true) {
+        const event = await events.next();
+        if (event.done) break;
+        yield event.value;
       }
-      if (termination === "cancel") {
-        throw new CliPluginError("PROCESS_CANCELLED", "Process was cancelled");
-      }
-      return {
-        exitCode: result.exitCode,
-        signal: result.signal,
-        stdout,
-        stderr,
-        durationMs: Math.max(0, this.now() - startedAt),
-      };
-    } catch (cause) {
-      if (cause instanceof CliPluginError) throw cause;
-      throw new CliPluginError("SPAWN_FAILED", `Failed while running ${spec.command}`, { cause });
     } finally {
+      if (!closed && !termination) terminate("cancel");
       if (timeout) clearTimeout(timeout);
-      if (forceKillTimeout) clearTimeout(forceKillTimeout);
+      if (closed && forceKillTimeout) clearTimeout(forceKillTimeout);
       options.signal?.removeEventListener("abort", abort);
     }
   }

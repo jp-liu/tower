@@ -5,7 +5,7 @@ import {
   isCliPluginApiVersionCompatible,
   isCliPluginManifestV1,
 } from "./manifest.js";
-import { CliPluginError } from "./errors.js";
+import { CliPluginError, type CliPluginErrorCode } from "./errors.js";
 
 export type CliSessionMode =
   | { type: "fresh" }
@@ -50,7 +50,9 @@ export interface CliQueryOptions {
   maxOutputTokens?: number;
   maxOutputBytes?: number;
   temperature?: number;
+  /** Provider-known tool names or patterns to expose. The adapter translates these into CLI arguments. */
   tools?: string[];
+  /** Subset of provider-known tools that may execute without interactive approval. */
   allowedTools?: string[];
   settings?: Readonly<Record<string, unknown>>;
   signal?: AbortSignal;
@@ -66,13 +68,22 @@ export interface CliToolCall {
   id: string;
   name: string;
   input?: unknown;
+  /** @deprecated Tool output is emitted separately as a `tool-result` event. */
   output?: unknown;
+}
+
+export interface CliToolResult {
+  id: string;
+  name?: string;
+  output?: unknown;
+  error?: { code: string; message: string };
 }
 
 export type CliQueryEvent =
   | { type: "text"; text: string }
   | { type: "reasoning"; text: string }
   | { type: "tool-call"; toolCall: CliToolCall }
+  | { type: "tool-result"; toolResult: CliToolResult }
   | { type: "usage"; usage: CliTokenUsage }
   | { type: "session"; sessionId: string }
   | { type: "finish"; reason?: string }
@@ -82,6 +93,7 @@ export interface CliQueryResult {
   text: string | null;
   reasoning?: string;
   toolCalls?: CliToolCall[];
+  toolResults?: CliToolResult[];
   usage?: CliTokenUsage;
   sessionId?: string;
   finishReason?: string;
@@ -153,11 +165,44 @@ export abstract class BaseCliAdapter implements CliAdapter {
     const result = await this.generate(options);
     if (result.reasoning) yield { type: "reasoning", text: result.reasoning };
     if (result.text) yield { type: "text", text: result.text };
-    for (const toolCall of result.toolCalls ?? []) yield { type: "tool-call", toolCall };
+    for (const toolCall of result.toolCalls ?? []) {
+      yield { type: "tool-call", toolCall };
+      if (toolCall.output !== undefined) {
+        yield { type: "tool-result", toolResult: { id: toolCall.id, name: toolCall.name, output: toolCall.output } };
+      }
+    }
+    for (const toolResult of result.toolResults ?? []) yield { type: "tool-result", toolResult };
     if (result.usage) yield { type: "usage", usage: result.usage };
     if (result.sessionId) yield { type: "session", sessionId: result.sessionId };
     yield { type: "finish", reason: result.finishReason };
   }
+}
+
+const QUERY_ERROR_CODES = new Set<CliPluginErrorCode>([
+  "AUTHENTICATION_FAILED", "PERMISSION_DENIED", "RATE_LIMITED", "NETWORK_ERROR",
+  "CONTENT_SAFETY", "INVALID_REQUEST", "TOOL_ERROR", "TOOLING_UNAVAILABLE",
+  "CONNECTION_UNAVAILABLE", "NO_OUTPUT", "PROVIDER_FAILURE", "MODEL_NOT_AVAILABLE",
+]);
+
+/** Aggregate one canonical stream so `generate()` and `stream()` cannot drift. */
+export async function collectCliQueryStream(events: AsyncIterable<CliQueryEvent>): Promise<CliQueryResult> {
+  const result: CliQueryResult = { text: null };
+  for await (const event of events) {
+    if (event.type === "text") result.text = `${result.text ?? ""}${event.text}`;
+    else if (event.type === "reasoning") result.reasoning = `${result.reasoning ?? ""}${event.text}`;
+    else if (event.type === "tool-call") (result.toolCalls ??= []).push(event.toolCall);
+    else if (event.type === "tool-result") (result.toolResults ??= []).push(event.toolResult);
+    else if (event.type === "usage") result.usage = event.usage;
+    else if (event.type === "session") result.sessionId = event.sessionId;
+    else if (event.type === "finish") result.finishReason = event.reason;
+    else if (event.type === "error") {
+      const code = QUERY_ERROR_CODES.has(event.error.code as CliPluginErrorCode)
+        ? event.error.code as CliPluginErrorCode
+        : "PROVIDER_FAILURE";
+      throw new CliPluginError(code, event.error.message, { retryable: event.error.retryable });
+    }
+  }
+  return result;
 }
 
 export interface CliPlugin<TSettings extends Record<string, unknown> = Record<string, unknown>> {

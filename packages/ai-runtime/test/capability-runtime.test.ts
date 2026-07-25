@@ -45,6 +45,7 @@ describe("explicit capability fallback", () => {
     ["CONTENT_SAFETY", "content_safety"],
     ["INVALID_REQUEST", "invalid_request"],
     ["TOOL_ERROR", "tool_error"],
+    ["TOOLING_UNAVAILABLE", "tooling_unavailable"],
   ] as const)("maps CLI query code %s to %s", (rawCode, expected) => {
     expect(normalizeCapabilityError({ code: rawCode, message: "SECRET_OUTPUT" })).toMatchObject({
       code: expected,

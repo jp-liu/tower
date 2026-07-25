@@ -20,8 +20,15 @@ export interface CliProcessResult {
   durationMs: number;
 }
 
+export type CliProcessStreamEvent =
+  | { type: "stdout"; chunk: Uint8Array }
+  | { type: "stderr"; chunk: Uint8Array }
+  | { type: "exit"; exitCode: number | null; signal: string | null; durationMs: number };
+
 export interface CliProcessExecutor {
   execute(spec: CliProcessSpec, options?: CliProcessRunOptions): Promise<CliProcessResult>;
+  /** Optional Host-owned, shell-free process stream. Plugins must not spawn child processes directly. */
+  stream?(spec: CliProcessSpec, options?: CliProcessRunOptions): AsyncIterable<CliProcessStreamEvent>;
 }
 
 export interface RedactedLogger {

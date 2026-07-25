@@ -1,7 +1,9 @@
 import * as path from "node:path";
 import {
   CliPluginError,
+  collectCliQueryStream,
   classifyCliQueryFailure,
+  streamProcessJsonLines,
   type CliAdapter,
   type CliHostContext,
   type CliHookOptions,
@@ -10,6 +12,7 @@ import {
   type CliMcpServerOptions,
   type CliProcessSpec,
   type CliQueryOptions,
+  type CliQueryEvent,
   type CliQueryResult,
   type CliSessionFailure,
   type CliSessionFailureInput,
@@ -17,6 +20,32 @@ import {
   type CliSkillOptions,
   type CliHostResources,
 } from "@tower/ai-sdk";
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function codexTool(value: string): { server: string; tool: string } | null {
+  const mcp = value.match(/^mcp__(.+?)__(.+)$/);
+  if (mcp && /^[A-Za-z0-9_-]+$/.test(mcp[1]!)) return { server: mcp[1]!, tool: mcp[2]! };
+  const dot = value.indexOf(".");
+  const server = value.slice(0, dot);
+  return dot > 0 && /^[A-Za-z0-9_-]+$/.test(server)
+    ? { server, tool: value.slice(dot + 1) }
+    : null;
+}
+
+function codexUsage(value: unknown) {
+  const usage = record(value);
+  if (!usage) return undefined;
+  return {
+    inputTokens: typeof usage.input_tokens === "number" ? usage.input_tokens : undefined,
+    outputTokens: typeof usage.output_tokens === "number" ? usage.output_tokens : undefined,
+    cachedInputTokens: typeof usage.cached_input_tokens === "number" ? usage.cached_input_tokens : undefined,
+  };
+}
 
 interface InstallResult {
   ok: boolean;
@@ -177,20 +206,117 @@ export class CodexCliAdapter implements CliAdapter {
   }
 
   async generate(options: CliQueryOptions): Promise<CliQueryResult> {
-    const args = ["exec"];
+    const result = await collectCliQueryStream(this.stream(options));
+    if (!result.text?.trim() && !result.toolCalls?.length && !result.toolResults?.length) {
+      throw new CliPluginError("NO_OUTPUT", "Codex query returned no output");
+    }
+    return result;
+  }
+
+  async *stream(options: CliQueryOptions): AsyncIterable<CliQueryEvent> {
+    const args = [
+      "exec", "--json", "--sandbox", "read-only", "--skip-git-repo-check", "--ephemeral",
+      "--disable", "shell_tool",
+      "--disable", "unified_exec",
+      "--disable", "web_search",
+      "--disable", "search_tool",
+      "-c", 'approval_policy="never"',
+    ];
     if (options.systemPrompt) args.push("-c", `developer_instructions=${JSON.stringify(options.systemPrompt)}`);
     if (options.model) args.push("--model", options.model);
-    args.push(options.prompt);
-    const result = await this.host.process.execute({ command: this.command(), args, cwd: options.cwd }, {
-      signal: options.signal ?? this.host.signal,
-      maxOutputBytes: options.maxOutputBytes,
-    });
-    if (result.exitCode !== 0) {
-      throw new CliPluginError(classifyCliQueryFailure(`${result.stderr}\n${result.stdout}`), "Codex query failed");
+    const allowed = options.allowedTools?.length
+      ? (options.tools ?? options.allowedTools).filter((tool) => options.allowedTools!.includes(tool))
+      : options.tools ?? [];
+    const byServer = new Map<string, string[]>();
+    for (const value of allowed) {
+      const parsed = codexTool(value);
+      if (!parsed) continue;
+      const tools = byServer.get(parsed.server) ?? [];
+      tools.push(parsed.tool);
+      byServer.set(parsed.server, tools);
     }
-    const text = result.stdout.trim();
-    if (!text) throw new CliPluginError("NO_OUTPUT", "Codex query returned no output");
-    return { text };
+    const configuredServers = await this.listMcpServers(options.cwd, options.signal);
+    for (const server of byServer.keys()) {
+      if (!configuredServers.some((entry) => entry.name === server && entry.enabled)) {
+        throw new CliPluginError("TOOLING_UNAVAILABLE", "The requested Codex MCP server is unavailable");
+      }
+    }
+    for (const server of configuredServers) {
+      if (!byServer.has(server.name)) args.push("-c", `mcp_servers.${server.name}.enabled=false`);
+    }
+    for (const [server, tools] of byServer) {
+      args.push("-c", `mcp_servers.${server}.enabled=true`);
+      args.push("-c", `mcp_servers.${server}.enabled_tools=${JSON.stringify(tools)}`);
+    }
+    args.push(options.prompt);
+    let sawError = false;
+    let sawFinish = false;
+    const startedTools = new Set<string>();
+    for await (const line of streamProcessJsonLines(
+      this.host.process,
+      { command: this.command(), args, cwd: options.cwd },
+      { signal: options.signal ?? this.host.signal, maxOutputBytes: options.maxOutputBytes },
+    )) {
+      if (line.type === "malformed") continue;
+      if (line.type === "exit") {
+        if (line.exitCode !== 0 && !sawError) {
+          yield { type: "error", error: { code: classifyCliQueryFailure(line.stderr), message: "Codex query failed" } };
+        } else if (line.exitCode === 0 && !sawFinish) {
+          yield { type: "finish", reason: "stop" };
+        }
+        continue;
+      }
+      const event = record(line.value);
+      if (!event) continue;
+      if (event.type === "thread.started" && typeof event.thread_id === "string") {
+        yield { type: "session", sessionId: event.thread_id };
+        continue;
+      }
+      if (event.type === "turn.completed") {
+        const usage = codexUsage(event.usage);
+        if (usage) yield { type: "usage", usage };
+        sawFinish = true;
+        yield { type: "finish", reason: "stop" };
+        continue;
+      }
+      if (event.type === "turn.failed" || event.type === "error") {
+        sawError = true;
+        yield { type: "error", error: { code: "PROVIDER_FAILURE", message: "Codex query failed" } };
+        continue;
+      }
+      if (event.type !== "item.started" && event.type !== "item.updated" && event.type !== "item.completed") continue;
+      const item = record(event.item);
+      if (!item) continue;
+      const id = typeof item.id === "string" ? item.id : undefined;
+      if (item.type === "agent_message" && typeof item.text === "string" && event.type === "item.completed") {
+        yield { type: "text", text: item.text };
+      } else if (item.type === "reasoning" && event.type === "item.completed") {
+        const text = typeof item.text === "string"
+          ? item.text
+          : Array.isArray(item.summary) ? item.summary.filter((part): part is string => typeof part === "string").join("\n") : "";
+        if (text) yield { type: "reasoning", text };
+      } else if (item.type === "mcp_tool_call") {
+        if (!id) continue;
+        const server = typeof item.server === "string" ? item.server : "mcp";
+        const tool = typeof item.tool === "string" ? item.tool : "unknown";
+        if (!startedTools.has(id)) {
+          startedTools.add(id);
+          yield { type: "tool-call", toolCall: { id, name: `${server}.${tool}`, input: item.arguments ?? item.input } };
+        }
+        if (event.type === "item.completed") {
+          const failed = item.status === "failed" || item.error !== undefined;
+          yield {
+            type: "tool-result",
+            toolResult: {
+              id,
+              name: `${server}.${tool}`,
+              output: item.result,
+              ...(failed ? { error: { code: "TOOL_ERROR", message: "Codex tool execution failed" } } : {}),
+            },
+          };
+        }
+      }
+    }
   }
 
   // ===========================================================================
@@ -586,6 +712,29 @@ export class CodexCliAdapter implements CliAdapter {
       throw new CliPluginError("INTEGRATION_FAILED", `Codex CLI exited with code ${result.exitCode ?? "signal"}`);
     }
     return result.stdout;
+  }
+
+  private async listMcpServers(cwd?: string, signal?: AbortSignal): Promise<Array<{ name: string; enabled: boolean }>> {
+    const result = await this.host.process.execute(
+      { command: this.command(), args: ["mcp", "list", "--json"], cwd },
+      { timeoutMs: 5_000, signal: signal ?? this.host.signal, maxOutputBytes: 256 * 1024 },
+    );
+    if (result.exitCode !== 0) {
+      throw new CliPluginError("TOOLING_UNAVAILABLE", "Codex MCP configuration is unavailable");
+    }
+    try {
+      const parsed = JSON.parse(result.stdout) as unknown;
+      if (!Array.isArray(parsed)) throw new Error("invalid MCP list");
+      return parsed.flatMap((entry) => {
+        if (!entry || typeof entry !== "object") return [];
+        const value = entry as Record<string, unknown>;
+        return typeof value.name === "string" && /^[A-Za-z0-9_-]+$/.test(value.name)
+          ? [{ name: value.name, enabled: value.enabled === true }]
+          : [];
+      });
+    } catch {
+      throw new CliPluginError("TOOLING_UNAVAILABLE", "Codex MCP configuration is unavailable");
+    }
   }
 
   async models() {

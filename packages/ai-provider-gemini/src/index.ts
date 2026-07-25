@@ -22,7 +22,7 @@ export const geminiManifest = {
   compatibility: { tower: ">=0.2.60 <0.4.0", node: ">=18" },
   capabilities: {
     sessions: { fresh: true, resume: true, continue: true },
-    query: { generate: true },
+    query: { generate: true, stream: true },
     models: true,
     integrations: { mcp: true, hooks: false, skills: true },
   },

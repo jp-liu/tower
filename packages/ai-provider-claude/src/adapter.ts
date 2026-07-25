@@ -1,7 +1,9 @@
 import * as path from "node:path";
 import {
   CliPluginError,
+  collectCliQueryStream,
   classifyCliQueryFailure,
+  streamProcessJsonLines,
   type CliAdapter,
   type CliHostContext,
   type CliHookOptions,
@@ -10,6 +12,7 @@ import {
   type CliMcpServerOptions,
   type CliProcessSpec,
   type CliQueryOptions,
+  type CliQueryEvent,
   type CliQueryResult,
   type CliSessionFailure,
   type CliSessionFailureInput,
@@ -17,6 +20,22 @@ import {
   type CliSkillOptions,
   type CliHostResources,
 } from "@tower/ai-sdk";
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function claudeUsage(value: unknown) {
+  const usage = record(value);
+  if (!usage) return undefined;
+  return {
+    inputTokens: typeof usage.input_tokens === "number" ? usage.input_tokens : undefined,
+    outputTokens: typeof usage.output_tokens === "number" ? usage.output_tokens : undefined,
+    cachedInputTokens: typeof usage.cache_read_input_tokens === "number" ? usage.cache_read_input_tokens : undefined,
+  };
+}
 
 interface InstallResult {
   ok: boolean;
@@ -166,19 +185,117 @@ export class ClaudeCliAdapter implements CliAdapter {
   }
 
   async generate(options: CliQueryOptions): Promise<CliQueryResult> {
-    const args = ["--print", options.prompt];
+    const result = await collectCliQueryStream(this.stream(options));
+    if (!result.text?.trim() && !result.toolCalls?.length && !result.toolResults?.length) {
+      throw new CliPluginError("NO_OUTPUT", "Claude query returned no output");
+    }
+    return result;
+  }
+
+  async *stream(options: CliQueryOptions): AsyncIterable<CliQueryEvent> {
+    const allowed = options.allowedTools?.length
+      ? (options.tools ?? options.allowedTools).filter((tool) => options.allowedTools!.includes(tool))
+      : options.tools ?? [];
+    const args = [
+      "--print", options.prompt,
+      "--output-format", "stream-json",
+      "--verbose",
+      "--include-partial-messages",
+      "--permission-mode", "bypassPermissions",
+      "--tools", allowed.join(","),
+    ];
     if (options.systemPrompt) args.push("--append-system-prompt", options.systemPrompt);
     if (options.model) args.push("--model", options.model);
-    const result = await this.host.process.execute({ command: this.command(), args, cwd: options.cwd }, {
+    if (options.maxTurns !== undefined) args.push("--max-turns", String(options.maxTurns));
+    if (allowed.length) args.push("--allowedTools", allowed.join(","));
+    let sawError = false;
+    let sawFinish = false;
+    let sawTextDelta = false;
+    let sawReasoningDelta = false;
+    for await (const line of streamProcessJsonLines(
+      this.host.process,
+      { command: this.command(), args, cwd: options.cwd },
+      {
       signal: options.signal ?? this.host.signal,
       maxOutputBytes: options.maxOutputBytes,
-    });
-    if (result.exitCode !== 0) {
-      throw new CliPluginError(classifyCliQueryFailure(`${result.stderr}\n${result.stdout}`), "Claude query failed");
+      },
+    )) {
+      if (line.type === "malformed") continue;
+      if (line.type === "exit") {
+        if (line.exitCode !== 0 && !sawError) {
+          yield { type: "error", error: { code: classifyCliQueryFailure(line.stderr), message: "Claude query failed" } };
+        } else if (line.exitCode === 0 && !sawFinish) {
+          yield { type: "finish", reason: "stop" };
+        }
+        continue;
+      }
+      const event = record(line.value);
+      if (!event) continue;
+      if (event.type === "system" && event.subtype === "init") {
+        if (typeof event.session_id === "string") yield { type: "session", sessionId: event.session_id };
+        continue;
+      }
+      if (event.type === "stream_event") {
+        const streamEvent = record(event.event);
+        const delta = record(streamEvent?.delta);
+        if (streamEvent?.type === "content_block_delta" && delta?.type === "text_delta" && typeof delta.text === "string") {
+          sawTextDelta = true;
+          yield { type: "text", text: delta.text };
+        } else if (streamEvent?.type === "content_block_delta" && delta?.type === "thinking_delta" && typeof delta.thinking === "string") {
+          sawReasoningDelta = true;
+          yield { type: "reasoning", text: delta.thinking };
+        }
+        continue;
+      }
+      if (event.type === "assistant") {
+        const message = record(event.message);
+        const content = Array.isArray(message?.content) ? message.content : [];
+        for (const rawBlock of content) {
+          const block = record(rawBlock);
+          if (!block) continue;
+          if (block.type === "text" && !sawTextDelta && typeof block.text === "string") {
+            yield { type: "text", text: block.text };
+          } else if (block.type === "thinking" && !sawReasoningDelta && typeof block.thinking === "string") {
+            yield { type: "reasoning", text: block.thinking };
+          } else if (block.type === "tool_use" && typeof block.id === "string" && typeof block.name === "string") {
+            yield { type: "tool-call", toolCall: { id: block.id, name: block.name, input: block.input } };
+          }
+        }
+        const usage = claudeUsage(message?.usage);
+        if (usage) yield { type: "usage", usage };
+        continue;
+      }
+      if (event.type === "user") {
+        const message = record(event.message);
+        const content = Array.isArray(message?.content) ? message.content : [];
+        for (const rawBlock of content) {
+          const block = record(rawBlock);
+          if (block?.type === "tool_result" && typeof block.tool_use_id === "string") {
+            yield {
+              type: "tool-result",
+              toolResult: {
+                id: block.tool_use_id,
+                output: block.content,
+                ...(block.is_error === true ? { error: { code: "TOOL_ERROR", message: "Claude tool execution failed" } } : {}),
+              },
+            };
+          }
+        }
+        continue;
+      }
+      if (event.type === "result") {
+        if (typeof event.session_id === "string") yield { type: "session", sessionId: event.session_id };
+        const usage = claudeUsage(event.usage);
+        if (usage) yield { type: "usage", usage };
+        if (event.is_error === true || event.subtype !== "success") {
+          sawError = true;
+          yield { type: "error", error: { code: "PROVIDER_FAILURE", message: "Claude query failed" } };
+        } else {
+          sawFinish = true;
+          yield { type: "finish", reason: typeof event.stop_reason === "string" ? event.stop_reason : "stop" };
+        }
+      }
     }
-    const text = result.stdout.trim();
-    if (!text) throw new CliPluginError("NO_OUTPUT", "Claude query returned no output");
-    return { text };
   }
 
   // ===========================================================================

@@ -1,0 +1,7 @@
+{"type":"init","session_id":"gemini-session","model":"gemini-test"}
+malformed
+{"type":"message","role":"reasoning","content":"checking"}
+{"type":"message","role":"assistant","content":"Hello"}
+{"type":"tool_use","tool_id":"tool-1","tool_name":"mcp_tower-dev_list_tasks","parameters":{"projectId":"p1"}}
+{"type":"tool_result","tool_id":"tool-1","tool_name":"mcp_tower-dev_list_tasks","status":"success","output":{"tasks":[]}}
+{"type":"result","status":"success","stats":{"input_tokens":8,"output_tokens":4,"cached_input_tokens":2}}

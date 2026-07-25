@@ -71,6 +71,7 @@ function recordCliActivity(result: CliQueryResult, report: (activity: Capability
     report("tool_call");
     if (call.output !== undefined) report("tool_result");
   }
+  if (result.toolResults?.length) report("tool_result");
 }
 
 function boundedText(text: string | null | undefined, maxOutputChars?: number): string {

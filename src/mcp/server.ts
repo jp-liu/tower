@@ -1,34 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { workspaceTools } from "./tools/workspace-tools";
-import { projectTools } from "./tools/project-tools";
-import { taskTools } from "./tools/task-tools";
-import { labelTools } from "./tools/label-tools";
-import { searchTools } from "./tools/search-tools";
-import { knowledgeTools } from "./tools/knowledge-tools";
-import { noteAssetTools } from "./tools/note-asset-tools";
-import { terminalTools } from "./tools/terminal-tools";
-import { reportTools } from "./tools/report-tools";
-import { harnessTools } from "./tools/harness-tools";
-import { knowledgeBaseTools } from "./tools/knowledge-base-tools";
+import { towerToolCatalog } from "./tool-catalog";
 
 export function createServer(): McpServer {
   const server = new McpServer({ name: "tower", version: "0.1.0" });
 
-  const allTools = {
-    ...workspaceTools,
-    ...projectTools,
-    ...taskTools,
-    ...labelTools,
-    ...searchTools,
-    ...knowledgeTools,
-    ...noteAssetTools,
-    ...terminalTools,
-    ...reportTools,
-    ...harnessTools,
-    ...knowledgeBaseTools,
-  };
-
-  for (const [name, tool] of Object.entries(allTools)) {
+  for (const [name, tool] of Object.entries(towerToolCatalog)) {
     server.tool(
       name,
       tool.description,
@@ -41,11 +17,10 @@ export function createServer(): McpServer {
             content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
           };
         } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
+          void error;
           return {
             isError: true,
-            content: [{ type: "text" as const, text: errorMessage }],
+            content: [{ type: "text" as const, text: "Tool execution failed" }],
           };
         }
       }

@@ -1,13 +1,17 @@
 import {
   CliPluginError,
+  collectCliQueryStream,
   classifyCliQueryFailure,
+  streamProcessJsonLines,
   type CliAdapter,
   type CliHostContext,
   type CliHostResources,
+  type CliHostFileSystem,
   type CliIntegrationResult,
   type CliMcpServerOptions,
   type CliProcessSpec,
   type CliQueryOptions,
+  type CliQueryEvent,
   type CliQueryResult,
   type CliSessionFailure,
   type CliSessionFailureInput,
@@ -15,13 +19,45 @@ import {
   type CliSkillOptions,
 } from "@tower/ai-sdk";
 
-type ProviderHost = CliHostContext & { resources: CliHostResources };
+type ProviderHost = CliHostContext & { resources: CliHostResources; fileSystem: CliHostFileSystem };
 
 function requireProviderHost(host: CliHostContext): ProviderHost {
-  if (!host.resources) {
-    throw new CliPluginError("UNSUPPORTED_CAPABILITY", "Gemini provider requires Host resources");
+  if (!host.resources || !host.fileSystem) {
+    throw new CliPluginError("UNSUPPORTED_CAPABILITY", "Gemini provider requires Host resources and fileSystem");
   }
   return host as ProviderHost;
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function tomlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function geminiTool(value: string): { server?: string; tool: string } {
+  const claude = value.match(/^mcp__(.+?)__(.+)$/);
+  if (claude) return { server: claude[1]!, tool: claude[2]! };
+  const dot = value.indexOf(".");
+  if (dot > 0) return { server: value.slice(0, dot), tool: value.slice(dot + 1) };
+  return { tool: value };
+}
+
+function geminiUsage(value: unknown) {
+  const stats = record(value);
+  if (!stats) return undefined;
+  const totals = record(stats.tokens) ?? stats;
+  return {
+    inputTokens: typeof totals.input_tokens === "number" ? totals.input_tokens
+      : typeof totals.prompt === "number" ? totals.prompt : undefined,
+    outputTokens: typeof totals.output_tokens === "number" ? totals.output_tokens
+      : typeof totals.candidates === "number" ? totals.candidates : undefined,
+    cachedInputTokens: typeof totals.cached_input_tokens === "number" ? totals.cached_input_tokens
+      : typeof totals.cached === "number" ? totals.cached : undefined,
+  };
 }
 
 function combinedInitialInput(systemPrompt: string | undefined, prompt: string): string {
@@ -121,19 +157,111 @@ export class GeminiCliAdapter implements CliAdapter {
   }
 
   async generate(options: CliQueryOptions): Promise<CliQueryResult> {
-    const prompt = combinedInitialInput(options.systemPrompt, options.prompt);
-    const args = ["--prompt", prompt, "--output-format", "text"];
-    if (options.model) args.push("--model", options.model);
-    const result = await this.host.process.execute({ command: this.command(), args, cwd: options.cwd }, {
-      signal: options.signal ?? this.host.signal,
-      maxOutputBytes: options.maxOutputBytes,
-    });
-    if (result.exitCode !== 0) {
-      throw new CliPluginError(classifyCliQueryFailure(`${result.stderr}\n${result.stdout}`), "Gemini query failed");
+    const result = await collectCliQueryStream(this.stream(options));
+    if (!result.text?.trim() && !result.toolCalls?.length && !result.toolResults?.length) {
+      throw new CliPluginError("NO_OUTPUT", "Gemini query returned no output");
     }
-    const text = result.stdout.trim();
-    if (!text) throw new CliPluginError("NO_OUTPUT", "Gemini query returned no output");
-    return { text };
+    return result;
+  }
+
+  async *stream(options: CliQueryOptions): AsyncIterable<CliQueryEvent> {
+    const prompt = combinedInitialInput(options.systemPrompt, options.prompt);
+    const selectedTools = options.allowedTools?.length
+      ? (options.tools ?? options.allowedTools).filter((tool) => options.allowedTools!.includes(tool))
+      : options.tools ?? [];
+    const parsedTools = selectedTools.map(geminiTool);
+    const policyPath = `${this.host.storageDir}/assistant-policy.toml`;
+    this.host.fileSystem.mkdir(this.host.storageDir, { recursive: true });
+    const rules = [
+      '[[rule]]\ntoolName = "*"\ndecision = "deny"\npriority = 998\ninteractive = false',
+      ...parsedTools.map((tool) => [
+        "[[rule]]",
+        ...(tool.server ? [`mcpName = ${tomlString(tool.server)}`] : []),
+        `toolName = ${tomlString(tool.tool)}`,
+        'decision = "allow"',
+        "priority = 999",
+        "interactive = false",
+      ].join("\n")),
+    ];
+    this.host.fileSystem.writeText(policyPath, `${rules.join("\n\n")}\n`);
+    const args = [
+      "--prompt", prompt,
+      "--output-format", "stream-json",
+      "--approval-mode", "yolo",
+      "--admin-policy", policyPath,
+    ];
+    if (options.model) args.push("--model", options.model);
+    const servers = [...new Set(parsedTools.flatMap((tool) => tool.server ? [tool.server] : []))];
+    if (servers.length) args.push("--allowed-mcp-server-names", servers.join(","));
+    if (parsedTools.length) {
+      args.push("--allowed-tools", parsedTools.map((tool) =>
+        tool.server ? `mcp_${tool.server}_${tool.tool}` : tool.tool
+      ).join(","));
+    }
+    let sawError = false;
+    let sawFinish = false;
+    for await (const line of streamProcessJsonLines(
+      this.host.process,
+      { command: this.command(), args, cwd: options.cwd },
+      { signal: options.signal ?? this.host.signal, maxOutputBytes: options.maxOutputBytes },
+    )) {
+      if (line.type === "malformed") continue;
+      if (line.type === "exit") {
+        if (line.exitCode !== 0 && !sawError) {
+          yield { type: "error", error: { code: classifyCliQueryFailure(line.stderr), message: "Gemini query failed" } };
+        } else if (line.exitCode === 0 && !sawFinish) {
+          yield { type: "finish", reason: "stop" };
+        }
+        continue;
+      }
+      const event = record(line.value);
+      if (!event) continue;
+      if (event.type === "init") {
+        const sessionId = typeof event.session_id === "string" ? event.session_id
+          : typeof event.sessionId === "string" ? event.sessionId : undefined;
+        if (sessionId) yield { type: "session", sessionId };
+      } else if (event.type === "message" && typeof event.content === "string") {
+        if (event.thought === true || event.role === "reasoning") {
+          yield { type: "reasoning", text: event.content };
+        } else if (event.role === "assistant" || event.role === "model") {
+          yield { type: "text", text: event.content };
+        }
+      } else if (event.type === "tool_use") {
+        const id = typeof event.tool_id === "string" ? event.tool_id
+          : typeof event.id === "string" ? event.id : undefined;
+        if (!id) continue;
+        const name = typeof event.tool_name === "string" ? event.tool_name
+          : typeof event.name === "string" ? event.name : "unknown";
+        yield { type: "tool-call", toolCall: { id, name, input: event.parameters ?? event.input } };
+      } else if (event.type === "tool_result") {
+        const id = typeof event.tool_id === "string" ? event.tool_id
+          : typeof event.id === "string" ? event.id : undefined;
+        if (!id) continue;
+        const failed = event.status === "error" || event.error !== undefined;
+        yield {
+          type: "tool-result",
+          toolResult: {
+            id,
+            name: typeof event.tool_name === "string" ? event.tool_name : undefined,
+            output: event.output,
+            ...(failed ? { error: { code: "TOOL_ERROR", message: "Gemini tool execution failed" } } : {}),
+          },
+        };
+      } else if (event.type === "error") {
+        sawError = true;
+        yield { type: "error", error: { code: "PROVIDER_FAILURE", message: "Gemini query failed" } };
+      } else if (event.type === "result") {
+        const usage = geminiUsage(event.stats);
+        if (usage) yield { type: "usage", usage };
+        if (event.status === "error") {
+          sawError = true;
+          yield { type: "error", error: { code: "PROVIDER_FAILURE", message: "Gemini query failed" } };
+        } else {
+          sawFinish = true;
+          yield { type: "finish", reason: typeof event.status === "string" ? event.status : "stop" };
+        }
+      }
+    }
   }
 
   async models() {

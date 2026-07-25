@@ -47,9 +47,24 @@ export interface ApiCredential {
   value: string;
 }
 
+export type ApiMessageContentPart =
+  | { type: "text"; text: string }
+  | { type: "image"; image: string | Uint8Array; mediaType?: string }
+  | { type: "file"; data: string | Uint8Array; mediaType: string; filename?: string }
+  | { type: "reasoning"; text: string }
+  | { type: "tool-call"; toolCallId: string; toolName: string; input: unknown }
+  | {
+      type: "tool-result";
+      toolCallId: string;
+      toolName: string;
+      output:
+        | { type: "text" | "error-text"; value: string }
+        | { type: "json" | "error-json"; value: unknown };
+    };
+
 export interface ApiMessage {
-  role: "system" | "user" | "assistant";
-  content: string;
+  role: "system" | "user" | "assistant" | "tool";
+  content: string | ApiMessageContentPart[];
 }
 
 export type JsonSchema = Record<string, unknown>;
@@ -68,6 +83,8 @@ export interface ApiGenerateRequest {
   maxOutputTokens?: number;
   temperature?: number;
   timeoutMs?: number;
+  /** Maximum model/tool-loop steps. Clamped to 1..20 by the runtime. */
+  maxTurns?: number;
   abortSignal?: AbortSignal;
   tools?: Record<string, ApiToolDefinition>;
 }
@@ -88,6 +105,7 @@ export interface ApiToolResult {
   toolCallId: string;
   toolName: string;
   output: unknown;
+  error?: { code: "tool_error"; message: string };
 }
 
 export interface ApiGenerateResult {
@@ -108,7 +126,9 @@ export type ApiStreamEvent =
   | { type: "reasoning"; delta: string }
   | { type: "tool-call"; call: ApiToolCall }
   | { type: "tool-result"; result: ApiToolResult }
-  | { type: "finish"; finishReason: string; usage?: ApiGenerateResult["usage"] };
+  | { type: "usage"; usage: NonNullable<ApiGenerateResult["usage"]> }
+  | { type: "finish"; finishReason: string }
+  | { type: "error"; error: ApiRuntimeErrorShape };
 
 export interface DiscoveredApiModel {
   id: string;

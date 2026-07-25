@@ -1,0 +1,8 @@
+{"type":"thread.started","thread_id":"codex-thread"}
+broken-json
+{"type":"item.completed","item":{"id":"reason-1","type":"reasoning","text":"checking"}}
+{"type":"item.updated","item":{"id":"msg-1","type":"agent_message","text":"Hel"}}
+{"type":"item.completed","item":{"id":"msg-1","type":"agent_message","text":"Hello"}}
+{"type":"item.started","item":{"id":"tool-1","type":"mcp_tool_call","server":"tower-dev","tool":"list_tasks","arguments":{"projectId":"p1"},"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"tool-1","type":"mcp_tool_call","server":"tower-dev","tool":"list_tasks","status":"completed","result":{"tasks":[]}}}
+{"type":"turn.completed","usage":{"input_tokens":12,"cached_input_tokens":5,"output_tokens":6}}
