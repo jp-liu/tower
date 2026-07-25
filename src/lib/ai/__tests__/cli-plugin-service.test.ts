@@ -8,6 +8,12 @@ import { CliPluginRuntime, type NpmPackageProvider } from "@tower/ai-runtime";
 import { db } from "@/lib/db";
 import { CliPluginApplication, getCliPluginApplication } from "../cli-plugin-service";
 import { CLI_SECRET_MASK } from "../cli-plugin-shared";
+import { testPluginCliConnection } from "../cli-plugin-provider";
+import { generateCapabilityText } from "../capability-executor";
+import { resolveQueryAdapter, resolveTerminalTargetPlan } from "../capability-resolver";
+import { buildTerminalLaunch, terminalTargetSnapshot } from "../terminal-target";
+import { providerRegistry } from "../providers";
+import { isWindows } from "@/lib/platform";
 
 vi.mock("server-only", () => ({}));
 
@@ -47,6 +53,100 @@ afterEach(async () => {
 });
 
 describe("CLI plugin application lifecycle", () => {
+  it("carries an unregistered local plugin through install, test, slots, Terminal, and query", async () => {
+    if (isWindows()) return;
+    const source = await fixture();
+    const dataRoot = await fs.mkdtemp(path.join(os.tmpdir(), "tower-plugin-chain-data-"));
+    const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), "tower-plugin-chain-home-"));
+    const fakeBin = path.join(fakeHome, "bin");
+    temporaryRoots.push(dataRoot, fakeHome);
+    await fs.mkdir(fakeBin, { recursive: true });
+    const executable = path.join(fakeBin, "fixture-cli");
+    await fs.writeFile(executable, "#!/bin/sh\nprintf 'hello\\n'\n", { mode: 0o700 });
+
+    const originalConfigs = await db.aiCapabilityConfig.findMany({
+      where: { slot: { in: ["summary", "terminal"] } },
+      include: { targets: true },
+    });
+    vi.stubEnv("TOWER_DATA_DIR", dataRoot);
+    vi.stubEnv("HOME", fakeHome);
+    vi.stubEnv("PATH", `${fakeBin}${path.delimiter}/usr/bin:/bin`);
+
+    let application: CliPluginApplication | null = null;
+    try {
+      application = getCliPluginApplication();
+      const plan = await application.planLocal(source);
+      expect(providerRegistry.get(pluginId)).toBeUndefined();
+      await expect(application.install(plan.planDigest)).resolves.toMatchObject({ enabled: false });
+      await expect(application.confirmAndEnable(plan.planDigest)).resolves.toMatchObject({ enabled: true });
+
+      const connectionTest = await testPluginCliConnection(pluginId);
+      expect(connectionTest).toMatchObject({ state: "connected", command: executable, models: ["fixture"] });
+      const connection = await db.providerConnection.findUniqueOrThrow({ where: { connectionKey: `cli:${pluginId}` } });
+
+      for (const slot of ["summary", "terminal"] as const) {
+        const config = await db.aiCapabilityConfig.upsert({
+          where: { slot },
+          create: { slot, migrationStatus: "complete" },
+          update: { migrationStatus: "complete" },
+        });
+        await db.aiCapabilityTarget.deleteMany({ where: { capabilityConfigId: config.id } });
+        await db.aiCapabilityTarget.create({
+          data: {
+            capabilityConfigId: config.id, connectionId: connection.id, modelId: "fixture",
+            targetKey: `${pluginId}:fixture`, order: 0,
+          },
+        });
+      }
+
+      await expect(generateCapabilityText({ slot: "summary", prompt: "fixture query", cwd: source }))
+        .resolves.toBe("fixture-ok");
+      const query = await resolveQueryAdapter("summary");
+      await expect(query.adapter.query({ prompt: "legacy query", cwd: source, model: query.model }))
+        .resolves.toMatchObject({ content: "fixture-ok" });
+
+      const terminal = (await resolveTerminalTargetPlan({ cwd: source })).targets[0]!;
+      expect(terminal.preflightError).toBeUndefined();
+      expect(terminalTargetSnapshot(terminal)).toMatchObject({ connectionId: connection.id, modelId: "fixture" });
+      const launch = await buildTerminalLaunch(terminal, {
+        cwd: source, prompt: "terminal prompt", model: "fixture", mode: { type: "fresh" },
+      });
+      expect(launch.processSpec).toMatchObject({
+        command: executable,
+        args: ["terminal prompt"],
+      });
+    } finally {
+      for (const current of await db.aiCapabilityConfig.findMany({
+        where: { slot: { in: ["summary", "terminal"] } },
+      })) {
+        await db.aiCapabilityTarget.deleteMany({ where: { capabilityConfigId: current.id } });
+      }
+      for (const config of originalConfigs) {
+        await db.aiCapabilityConfig.upsert({
+          where: { slot: config.slot },
+          create: {
+            id: config.id, slot: config.slot, provider: config.provider, mode: config.mode,
+            model: config.model, migrationStatus: config.migrationStatus,
+          },
+          update: {
+            provider: config.provider, mode: config.mode, model: config.model,
+            migrationStatus: config.migrationStatus,
+          },
+        });
+        for (const target of config.targets) {
+          await db.aiCapabilityTarget.create({
+            data: {
+              id: target.id, capabilityConfigId: config.id, connectionId: target.connectionId,
+              modelId: target.modelId, targetKey: target.targetKey, order: target.order,
+            },
+          });
+        }
+      }
+      if (application) await application.uninstall(pluginId).catch(() => undefined);
+      vi.unstubAllEnvs();
+    }
+  }, 180_000);
+
   it("executes the npm plan, disabled install, permission confirmation, and uninstall lifecycle", async () => {
     const source = await fixture();
     const dataRoot = await fs.mkdtemp(path.join(os.tmpdir(), "tower-plugin-npm-data-"));
