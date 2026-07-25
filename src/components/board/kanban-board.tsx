@@ -151,7 +151,7 @@ export function KanbanBoard({
           y={contextMenu.y}
           taskId={contextMenu.task.id}
           currentStatus={contextMenu.task.status}
-          hasExecutions={((contextMenu.task as any)._count?.executions ?? 0) > 0}
+          hasExecutions={(contextMenu.task._count?.executions ?? 0) > 0}
           workspaceId={workspaceId ?? ""}
           onClose={() => setContextMenu(null)}
           onStatusChange={(taskId, status) => {

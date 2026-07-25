@@ -30,6 +30,8 @@ export type TaskWithLabels = Task & {
   labels: (TaskLabel & { label: Label })[];
   /** Present when the query includes the version relation (board, etc.) */
   version?: TaskVersionRef;
+  /** Present when the query includes execution counts for board actions. */
+  _count?: { executions: number };
 };
 
 export type BoardColumn = {

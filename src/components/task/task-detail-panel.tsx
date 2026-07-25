@@ -19,6 +19,7 @@ import { TaskNotesPanel } from "./task-notes-panel";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Task, TaskExecution } from "@prisma/client";
 import { useI18n } from "@/lib/i18n";
+import type { DiffFile } from "@/lib/diff-parser";
 
 interface TaskDetailPanelProps {
   task: Task & { version?: { id: string; number: string; name: string } | null };
@@ -28,6 +29,17 @@ interface TaskDetailPanelProps {
 }
 
 type TabType = "terminal" | "changes" | "notes";
+
+interface TaskDiffData {
+  files: DiffFile[];
+  totalAdded: number;
+  totalRemoved: number;
+  hasConflicts: boolean;
+  conflictFiles: string[];
+  commitCount: number;
+  hasUncommitted?: boolean;
+  branchDeleted?: boolean;
+}
 
 export function TaskDetailPanel({
   task,
@@ -39,7 +51,7 @@ export function TaskDetailPanel({
   const router = useRouter();
   const { removePortal } = useTerminalPortal();
   const [activeTab, setActiveTab] = useState<TabType>("terminal");
-  const [diffData, setDiffData] = useState<any>(null);
+  const [diffData, setDiffData] = useState<TaskDiffData | null>(null);
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
   const [taskStatus, setTaskStatus] = useState(task.status);
 

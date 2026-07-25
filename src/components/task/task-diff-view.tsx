@@ -8,18 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/lib/i18n";
-
-interface DiffFileEntry {
-  filename: string;
-  added: number;
-  removed: number;
-  isBinary: boolean;
-  patch: string;
-}
+import type { DiffFile } from "@/lib/diff-parser";
 
 interface TaskDiffViewProps {
   taskId: string;
-  files: DiffFileEntry[];
+  files: DiffFile[];
   totalAdded: number;
   totalRemoved: number;
   hasConflicts: boolean;
@@ -77,7 +70,7 @@ export function TaskDiffView({
       });
   };
 
-  const toggleFile = (file: DiffFileEntry) => {
+  const toggleFile = (file: DiffFile) => {
     const wasExpanded = expandedFiles.has(file.filename);
     setExpandedFiles((prev) => {
       const next = new Set(prev);

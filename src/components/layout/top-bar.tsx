@@ -52,6 +52,14 @@ interface TopBarProps {
   defaultWorkspaceId?: string;
 }
 
+interface ViewTransitionHandle {
+  ready: Promise<void>;
+}
+
+type ViewTransitionDocument = Document & {
+  startViewTransition: (update: () => void) => ViewTransitionHandle;
+};
+
 export function getInitials(name: string): string {
   const words = name.trim().split(/\s+/).filter((w) => w.length > 0);
   return words
@@ -85,7 +93,7 @@ function useThemeTransition() {
           Math.max(y, window.innerHeight - y)
         );
 
-        const transition = (document as any).startViewTransition(() => {
+        const transition = (document as ViewTransitionDocument).startViewTransition(() => {
           setTheme(next);
         });
 
