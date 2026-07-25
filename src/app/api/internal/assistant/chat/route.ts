@@ -10,8 +10,11 @@ import { streamAssistantTurn } from "@/lib/ai/assistant-stream-executor";
 import { recordCapabilityAttemptService } from "@/lib/ai/capability-config-service";
 import { assistantLegacyAdapter } from "@/lib/ai/assistant-legacy-adapter";
 import { buildAssistantCliPrompt, buildAssistantSystemPrompt } from "@/lib/ai/assistant-prompt";
+import { normalizeAssistantHistoryTurns } from "@/lib/ai/assistant-history";
 import {
   AssistantSessionError,
+  MAX_ASSISTANT_PARTS,
+  MAX_ASSISTANT_STREAM_BYTES,
   assistantMessagesToApi,
   assistantSessionIdSchema,
   assistantSessionService,
@@ -68,6 +71,36 @@ function safeToolOutput(value: unknown): string {
   return typeof safe === "string" ? safe : JSON.stringify(safe, null, 2);
 }
 
+const MAX_PERSISTED_ERROR_CHARS = 1024;
+
+function normalizeStreamingParts(parts: AssistantPart[]): AssistantPart[] {
+  const safe = normalizeAssistantParts(parts);
+  const bytes = Buffer.byteLength(JSON.stringify(safe));
+  if (safe.length >= MAX_ASSISTANT_PARTS || bytes > MAX_ASSISTANT_STREAM_BYTES) {
+    throw new AssistantSessionError("message_too_large", "Assistant output exceeded the persisted message limit");
+  }
+  return safe;
+}
+
+function appendStreamDelta(
+  parts: AssistantPart[],
+  type: "text" | "reasoning",
+  text: string,
+): AssistantPart[] {
+  const previous = parts.at(-1);
+  const candidate = previous?.type === type
+    ? [...parts.slice(0, -1), { ...previous, text: previous.text + text }]
+    : [...parts, { type, text }];
+  return normalizeStreamingParts(candidate);
+}
+
+function appendDiagnostic(parts: AssistantPart[], code: string, message: string): AssistantPart[] {
+  return normalizeAssistantParts([
+    ...parts,
+    { type: "error", code: code.slice(0, 128), message: message.slice(0, MAX_PERSISTED_ERROR_CHARS) },
+  ]);
+}
+
 export async function POST(request: NextRequest) {
   const blocked = requireLocalhost(request);
   if (blocked) return blocked;
@@ -118,6 +151,17 @@ export async function POST(request: NextRequest) {
     return jsonError(body.sessionId ? "session_unavailable" : "session_create_failed", 400);
   }
 
+  let historyTurns: number;
+  try {
+    historyTurns = normalizeAssistantHistoryTurns(
+      await readConfigValue<number>("assistant.historyTurns", 20),
+    );
+    await assistantSessionService.pruneHistory(sessionId, historyTurns);
+  } catch {
+    await cleanupUnstartedSession();
+    return jsonError("history_unavailable", 500);
+  }
+
   let history;
   try {
     history = trimAssistantHistory(await assistantSessionService.getMessages(sessionId));
@@ -155,6 +199,10 @@ export async function POST(request: NextRequest) {
       readConfigValue<number>("assistant.maxOutputBytes", 2 * 1024 * 1024),
       readConfigValue<"low" | "medium" | "high">("assistant.effort", "low"),
     ]);
+    maxOutputBytes = Math.min(
+      MAX_ASSISTANT_STREAM_BYTES,
+      Math.max(1, Number.isFinite(maxOutputBytes) ? Math.trunc(maxOutputBytes) : MAX_ASSISTANT_STREAM_BYTES),
+    );
     towerMcpServerName = buildTowerMcpConfig().name;
   } catch {
     await cleanupUnstartedSession();
@@ -172,6 +220,7 @@ export async function POST(request: NextRequest) {
       sessionId,
       clientTurnId: body.clientTurnId ?? `server_${randomUUID()}`,
       userParts,
+      historyTurns,
     });
   } catch (error) {
     await cleanupUnstartedSession();
@@ -230,24 +279,20 @@ export async function POST(request: NextRequest) {
         })) {
           if (turn.controller.signal.aborted) break;
           if (event.type === "text") {
-            const previous = parts.at(-1);
-            if (previous?.type === "text") previous.text += event.text;
-            else parts.push({ type: "text", text: event.text });
-            parts = normalizeAssistantParts(parts);
+            parts = appendStreamDelta(parts, "text", event.text);
             send({ type: "text_delta", content: event.text });
             await persist();
           } else if (event.type === "reasoning") {
-            const previous = parts.at(-1);
-            if (previous?.type === "reasoning") previous.text += event.text;
-            else parts.push({ type: "reasoning", text: event.text });
-            parts = normalizeAssistantParts(parts);
+            parts = appendStreamDelta(parts, "reasoning", event.text);
             send({ type: "reasoning_delta", content: event.text });
             await persist();
           } else if (event.type === "tool-call") {
             const toolCallId = event.toolCall.id;
             const safeInput = redactAssistantValue(event.toolCall.input);
-            parts.push({ type: "tool-call", toolCallId, toolName: event.toolCall.name, input: safeInput });
-            parts = normalizeAssistantParts(parts);
+            parts = normalizeStreamingParts([
+              ...parts,
+              { type: "tool-call", toolCallId, toolName: event.toolCall.name, input: safeInput },
+            ]);
             await persist(true);
             send({ type: "tool_start", content: event.toolCall.name, toolId: toolCallId });
             send({ type: "tool_use", content: event.toolCall.name, toolId: toolCallId, toolInput: safeInput });
@@ -258,8 +303,10 @@ export async function POST(request: NextRequest) {
             );
             const toolName = event.toolResult.name ?? matchingCall?.toolName ?? "tool";
             const output = redactAssistantValue(event.toolResult.output ?? event.toolResult.error?.message ?? "");
-            parts.push({ type: "tool-result", toolCallId, toolName, output, ...(event.toolResult.error ? { isError: true } : {}) });
-            parts = normalizeAssistantParts(parts);
+            parts = normalizeStreamingParts([
+              ...parts,
+              { type: "tool-result", toolCallId, toolName, output, ...(event.toolResult.error ? { isError: true } : {}) },
+            ]);
             await persist(true);
             send({ type: "tool_result", content: toolName, toolId: toolCallId, toolOutput: safeToolOutput(output), toolError: Boolean(event.toolResult.error) });
           } else if (event.type === "usage") {
@@ -268,11 +315,11 @@ export async function POST(request: NextRequest) {
             send({ type: "finish", finishReason: event.reason });
           } else if (event.type === "error") {
             const code = String(event.error.code || "provider_failure").slice(0, 128);
-            const message = String(event.error.message || "Assistant execution failed").slice(0, 16 * 1024);
-            parts.push({ type: "error", code, message });
+            const message = String(event.error.message || "Assistant execution failed").slice(0, MAX_PERSISTED_ERROR_CHARS);
+            parts = appendDiagnostic(parts, code, message);
             await assistantSessionService.finishTurn({
               sessionId, turnId: turn.turnId, assistantMessageId: turn.assistantMessageId,
-              parts, status: code === "cancelled" ? "INTERRUPTED" : "FAILED",
+              parts, status: code === "cancelled" ? "INTERRUPTED" : "FAILED", historyTurns,
             });
             terminal = true;
             if (code !== "cancelled") send({ type: "error", code, content: message });
@@ -284,26 +331,30 @@ export async function POST(request: NextRequest) {
           if (turn.controller.signal.aborted) {
             await assistantSessionService.finishTurn({
               sessionId, turnId: turn.turnId, assistantMessageId: turn.assistantMessageId,
-              parts, status: "INTERRUPTED",
+              parts, status: "INTERRUPTED", historyTurns,
             });
           } else {
             await assistantSessionService.finishTurn({
               sessionId, turnId: turn.turnId, assistantMessageId: turn.assistantMessageId,
-              parts, status: "COMPLETE",
+              parts, status: "COMPLETE", historyTurns,
             });
             send({ type: "done" });
           }
         }
-      } catch {
-        const interrupted = turn.controller.signal.aborted || closed;
-        const finalParts = interrupted ? parts : [...parts, { type: "error" as const, code: "provider_failure", message: "Assistant execution failed" }];
+      } catch (error) {
+        const outputLimited = error instanceof AssistantSessionError && error.code === "message_too_large";
+        if (outputLimited) abort();
+        const interrupted = !outputLimited && (turn.controller.signal.aborted || closed);
+        const code = outputLimited ? "output_limit" : "provider_failure";
+        const message = outputLimited ? "Assistant output exceeded the persisted message limit" : "Assistant execution failed";
+        const finalParts = interrupted ? parts : appendDiagnostic(parts, code, message);
         try {
           await assistantSessionService.finishTurn({
             sessionId, turnId: turn.turnId, assistantMessageId: turn.assistantMessageId,
-            parts: finalParts, status: interrupted ? "INTERRUPTED" : "FAILED",
+            parts: finalParts, status: interrupted ? "INTERRUPTED" : "FAILED", historyTurns,
           });
         } catch { assistantSessionService.releaseTurn(sessionId, turn.turnId); }
-        if (!interrupted) send({ type: "error", code: "provider_failure", content: "Assistant execution failed" });
+        if (!interrupted) send({ type: "error", code, content: message });
       } finally {
         clearInterval(keepalive);
         request.signal.removeEventListener("abort", abort);

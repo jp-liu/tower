@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireLocalhost } from "@/lib/internal-api-guard";
+import { readConfigValue } from "@/lib/config-reader";
+import { normalizeAssistantHistoryTurns } from "@/lib/ai/assistant-history";
 import {
   AssistantSessionError,
   assistantMessagesToClient,
@@ -76,6 +78,10 @@ export async function GET(request: NextRequest) {
   if (!assistantSessionIdSchema.safeParse(requestedId).success) return safeError("invalid_session_id", 400);
   try {
     const sessionId = await resolveTowerSessionId(requestedId);
+    const historyTurns = normalizeAssistantHistoryTurns(
+      await readConfigValue<number>("assistant.historyTurns", 20),
+    );
+    await assistantSessionService.pruneHistory(sessionId, historyTurns);
     const [session, messages] = await Promise.all([
       assistantSessionService.getSessionView(sessionId),
       assistantSessionService.getMessages(sessionId),

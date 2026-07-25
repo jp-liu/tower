@@ -71,6 +71,7 @@ describe("AssistantSessionService", () => {
       });
       expect(JSON.stringify(listed[0])).not.toContain("CLIENT_INJECTION");
       const messages = await sessions.getMessages(session.id);
+      expect(messages.some((message) => message.role === "SYSTEM")).toBe(false);
       const client = assistantMessagesToClient(messages);
       expect(client.find((message) => message.toolId === "tool-1")?.content).toContain("Result:");
       const api = assistantMessagesToApi(messages);
@@ -99,6 +100,7 @@ describe("AssistantSessionService", () => {
   it("retains a successful tool result and partial text when the turn fails", async () => {
     const { prisma, sessions } = await service();
     try {
+      const partial = "p".repeat(900_000);
       const session = await sessions.createSession();
       const turn = await sessions.beginTurn({
         sessionId: session.id,
@@ -113,17 +115,161 @@ describe("AssistantSessionService", () => {
         parts: [
           { type: "tool-call", toolCallId: "side-effect", toolName: "create_task", input: { title: "T" } },
           { type: "tool-result", toolCallId: "side-effect", toolName: "create_task", output: { id: "created" } },
-          { type: "text", text: "Created, but" },
+          { type: "text", text: partial },
           { type: "error", code: "provider_failure", message: "Assistant execution failed" },
         ],
       });
-      const stored = await prisma.assistantMessage.findUniqueOrThrow({ where: { id: turn.assistantMessageId } });
+      const messages = await sessions.getMessages(session.id);
+      const stored = messages.find((message) => message.id === turn.assistantMessageId)!;
       expect(stored.status).toBe("FAILED");
       expect(parseAssistantParts(stored.partsJson)).toEqual(expect.arrayContaining([
         expect.objectContaining({ type: "tool-result", toolCallId: "side-effect", output: { id: "created" } }),
-        expect.objectContaining({ type: "text", text: "Created, but" }),
+        expect.objectContaining({ type: "text", text: partial }),
         expect.objectContaining({ type: "error", code: "provider_failure" }),
       ]));
+    } finally {
+      await prisma.$disconnect();
+    }
+  });
+
+  it("keeps only the latest completed turns and deletes an old tool turn as one unit", async () => {
+    const { prisma, sessions } = await service();
+    try {
+      const session = await sessions.createSession();
+      const first = await sessions.beginTurn({
+        sessionId: session.id,
+        clientTurnId: "window_first_12345678",
+        userParts: [{ type: "text", text: "first user" }],
+        historyTurns: 100,
+      });
+      await sessions.finishTurn({
+        sessionId: session.id,
+        turnId: first.turnId,
+        assistantMessageId: first.assistantMessageId,
+        historyTurns: 100,
+        status: "COMPLETE",
+        parts: [
+          { type: "tool-call", toolCallId: "old-tool", toolName: "search", input: { query: "old" } },
+          { type: "tool-result", toolCallId: "old-tool", toolName: "search", output: { found: true } },
+        ],
+      });
+
+      for (const [index, text] of ["second", "third"].entries()) {
+        const turn = await sessions.beginTurn({
+          sessionId: session.id,
+          clientTurnId: `window_${text}_12345678`,
+          userParts: [{ type: "text", text: `${text} user` }],
+          historyTurns: 100,
+        });
+        await sessions.finishTurn({
+          sessionId: session.id,
+          turnId: turn.turnId,
+          assistantMessageId: turn.assistantMessageId,
+          historyTurns: index === 1 ? 2 : 100,
+          status: "COMPLETE",
+          parts: [{ type: "text", text: `${text} assistant` }],
+        });
+      }
+
+      expect(await prisma.assistantTurn.findUnique({ where: { id: first.turnId } })).toBeNull();
+      expect(await prisma.assistantMessage.count({ where: { turnId: first.turnId } })).toBe(0);
+      const restored = await sessions.getMessages(session.id);
+      expect(restored).toHaveLength(4);
+      expect(restored.map((message) => message.partsJson).join("\n")).not.toContain("old-tool");
+      expect(restored.map((message) => message.partsJson).join("\n")).toContain("second user");
+      expect(restored.map((message) => message.partsJson).join("\n")).toContain("third assistant");
+    } finally {
+      await prisma.$disconnect();
+    }
+  });
+
+  it("excludes the current streaming turn from history pruning", async () => {
+    const { prisma, sessions } = await service();
+    try {
+      const session = await sessions.createSession();
+      for (const text of ["old", "latest"]) {
+        const turn = await sessions.beginTurn({
+          sessionId: session.id,
+          clientTurnId: `stream_${text}_12345678`,
+          userParts: [{ type: "text", text }],
+          historyTurns: 100,
+        });
+        await sessions.finishTurn({
+          sessionId: session.id,
+          turnId: turn.turnId,
+          assistantMessageId: turn.assistantMessageId,
+          parts: [{ type: "text", text }],
+          status: "COMPLETE",
+          historyTurns: 100,
+        });
+      }
+      const active = await sessions.beginTurn({
+        sessionId: session.id,
+        clientTurnId: "stream_active_12345678",
+        userParts: [{ type: "text", text: "active" }],
+        historyTurns: 100,
+      });
+
+      expect(await sessions.pruneHistory(session.id, 1)).toBe(1);
+      expect(await prisma.assistantTurn.findUniqueOrThrow({ where: { id: active.turnId } })).toMatchObject({ status: "STREAMING" });
+      expect(await prisma.assistantMessage.count({ where: { turnId: active.turnId } })).toBe(2);
+      const restored = await sessions.getMessages(session.id);
+      expect(restored.map((message) => message.partsJson).join("\n")).not.toContain('"old"');
+      expect(restored.map((message) => message.partsJson).join("\n")).toContain('"latest"');
+      expect(restored.map((message) => message.partsJson).join("\n")).toContain('"active"');
+      sessions.releaseTurn(session.id, active.turnId);
+    } finally {
+      await prisma.$disconnect();
+    }
+  });
+
+  it("prunes old completed turns before applying the absolute history byte guard", async () => {
+    const { prisma, sessions } = await service();
+    try {
+      const session = await sessions.createSession();
+      const partsJson = JSON.stringify([{ type: "text", text: "x".repeat(940_000) }]);
+      for (let index = 0; index < 9; index += 1) {
+        const turnId = `at_00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
+        await prisma.assistantTurn.create({
+          data: {
+            id: turnId,
+            sessionId: session.id,
+            clientTurnId: `large_${index}_12345678`,
+            status: "COMPLETE",
+            completedAt: new Date(2026, 0, index + 1),
+          },
+        });
+        await prisma.assistantMessage.create({
+          data: {
+            id: `large-message-${index}`,
+            sessionId: session.id,
+            turnId,
+            sequence: index + 1,
+            role: "ASSISTANT",
+            partsJson,
+            status: "COMPLETE",
+          },
+        });
+      }
+      await expect(sessions.getMessages(session.id)).rejects.toMatchObject({ code: "history_too_large" });
+
+      const turn = await sessions.beginTurn({
+        sessionId: session.id,
+        clientTurnId: "large_next_12345678",
+        userParts: [{ type: "text", text: "continue" }],
+        historyTurns: 20,
+      });
+
+      expect(await prisma.assistantTurn.count({ where: { sessionId: session.id } })).toBeLessThan(10);
+      await sessions.finishTurn({
+        sessionId: session.id,
+        turnId: turn.turnId,
+        assistantMessageId: turn.assistantMessageId,
+        parts: [{ type: "text", text: "ok" }],
+        status: "COMPLETE",
+        historyTurns: 20,
+      });
+      await expect(sessions.getMessages(session.id)).resolves.not.toHaveLength(0);
     } finally {
       await prisma.$disconnect();
     }

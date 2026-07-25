@@ -19,6 +19,7 @@ describe("provider-neutral Assistant prompt", () => {
     expect(prompt).toContain("The user's name is \"Liu\"");
     expect(prompt).toContain("versionId=v1");
     expect(prompt).toContain("Global requests");
+    expect(prompt).not.toMatch(/\/tower|SKILL\.md|SKILL_REMINDER/);
   });
 
   it("replays bounded Tower history once for stateless CLI turns", () => {
@@ -30,5 +31,7 @@ describe("provider-neutral Assistant prompt", () => {
     expect(prompt).toContain("USER: first");
     expect(prompt).toContain("ASSISTANT: answer");
     expect(prompt).toContain("CURRENT USER: second");
+    expect(prompt).not.toContain("Tower's task-management operator");
+    expect(prompt).not.toMatch(/\/tower|SKILL\.md|SKILL_REMINDER/);
   });
 });

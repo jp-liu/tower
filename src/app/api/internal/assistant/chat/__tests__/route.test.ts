@@ -16,7 +16,10 @@ const mocks = vi.hoisted(() => ({
   deleteSession: vi.fn(async () => undefined),
   finishTurn: vi.fn(async () => undefined),
   updateAssistantMessage: vi.fn(async () => undefined),
+  pruneHistory: vi.fn(async () => 0),
+  getMessages: vi.fn(async () => []),
   releaseTurn: vi.fn(),
+  turnController: null as AbortController | null,
 }));
 
 vi.mock("server-only", () => ({}));
@@ -51,6 +54,8 @@ vi.mock("@/lib/ai/assistant-session-service", () => {
   const tower = z.string().regex(/^as_/);
   return {
     AssistantSessionError,
+    MAX_ASSISTANT_PARTS: 128,
+    MAX_ASSISTANT_STREAM_BYTES: 1024 * 1024 - 8 * 1024,
     assistantSessionIdSchema: z.string(),
     towerSessionIdSchema: tower,
     assistantMessagesToApi: () => mocks.apiHistory,
@@ -66,13 +71,14 @@ vi.mock("@/lib/ai/assistant-session-service", () => {
       deleteSession: mocks.deleteSession,
       getSession: async () => ({}),
       updateSession: async () => ({}),
-      getMessages: async () => [],
+      getMessages: mocks.getMessages,
       getSessionView: async () => mocks.sessionView,
+      pruneHistory: mocks.pruneHistory,
       beginTurn: async () => ({
         turnId: "at_11111111-1111-1111-1111-111111111111",
         userMessageId: "am_11111111-1111-1111-1111-111111111111",
         assistantMessageId: "am_22222222-2222-2222-2222-222222222222",
-        controller: new AbortController(),
+        controller: mocks.turnController!,
       }),
       updateAssistantMessage: mocks.updateAssistantMessage,
       finishTurn: mocks.finishTurn,
@@ -104,10 +110,13 @@ beforeEach(() => {
   mocks.attachmentParts = [];
   mocks.attachmentError = null;
   mocks.configError = false;
+  mocks.turnController = new AbortController();
   mocks.createSession.mockClear();
   mocks.deleteSession.mockClear();
   mocks.finishTurn.mockClear();
   mocks.updateAssistantMessage.mockClear();
+  mocks.pruneHistory.mockClear();
+  mocks.getMessages.mockClear();
   mocks.releaseTurn.mockClear();
 });
 
@@ -180,10 +189,37 @@ describe("Assistant chat SSE route", () => {
       systemPrompt: "system",
       maxTurns: 20,
       maxOutputTokens: 128000,
-      maxOutputBytes: 2 * 1024 * 1024,
+      maxOutputBytes: 1024 * 1024 - 8 * 1024,
       effort: "low",
       towerMcpServerName: "tower-test",
     });
+    expect(String(mocks.requests[0].prompt)).not.toContain("system");
+    expect((mocks.requests[0].messages as Array<{ role: string }>).some((message) => message.role === "system")).toBe(false);
+    expect(mocks.pruneHistory).toHaveBeenCalledWith("as_11111111-1111-1111-1111-111111111111", 20);
+    expect(mocks.pruneHistory.mock.invocationCallOrder[0]).toBeLessThan(mocks.getMessages.mock.invocationCallOrder[0]!);
+  });
+
+  it("keeps the last safe partial and fails without done when streamed output exceeds persistence", async () => {
+    const safeText = "a".repeat(700_000);
+    mocks.events = [
+      { type: "text", text: safeText },
+      { type: "reasoning", text: "b".repeat(400_000) },
+      { type: "finish", reason: "stop" },
+    ];
+
+    const parsed = events(await (await POST(request())).text());
+
+    expect(parsed.map((event) => event.type)).toEqual(["session", "text_delta", "error"]);
+    expect(parsed.some((event) => event.type === "done")).toBe(false);
+    expect(mocks.turnController?.signal.aborted).toBe(true);
+    expect(mocks.finishTurn).toHaveBeenCalledWith(expect.objectContaining({
+      status: "FAILED",
+      historyTurns: 20,
+      parts: [
+        { type: "text", text: safeText },
+        expect.objectContaining({ type: "error", code: "output_limit" }),
+      ],
+    }));
   });
 
   it("validates attachments before creating a new session", async () => {

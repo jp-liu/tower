@@ -43,6 +43,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  DEFAULT_ASSISTANT_HISTORY_TURNS,
+  MAX_ASSISTANT_HISTORY_TURNS,
+  MIN_ASSISTANT_HISTORY_TURNS,
+  normalizeAssistantHistoryTurns,
+} from "@/lib/ai/assistant-history";
 import { useI18n } from "@/lib/i18n";
 
 type Slot = "terminal" | "summary" | "dreaming" | "analysis" | "assistant";
@@ -102,10 +108,11 @@ export function CapabilitySlotsSection() {
   const [editorError, setEditorError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<null | { slot: Slot; target: Target }>(null);
   const [effort, setEffort] = useState("low");
+  const [historyTurns, setHistoryTurns] = useState(String(DEFAULT_ASSISTANT_HISTORY_TURNS));
 
   const load = useCallback(async () => {
     setLoadError(false);
-    const [configResult, terminal, summary, dreaming, analysis, assistant, diagnosticResult, effortValue] = await Promise.all([
+    const [configResult, terminal, summary, dreaming, analysis, assistant, diagnosticResult, effortValue, historyTurnsValue] = await Promise.all([
       listAiCapabilities(),
       getAiCapabilityChoices("terminal"),
       getAiCapabilityChoices("summary"),
@@ -114,6 +121,7 @@ export function CapabilitySlotsSection() {
       getAiCapabilityChoices("assistant"),
       getAiCapabilityDiagnostics({ limit: 25 }),
       getConfigValue("assistant.effort", "low"),
+      getConfigValue("assistant.historyTurns", DEFAULT_ASSISTANT_HISTORY_TURNS),
     ]);
     if (!configResult.ok || !terminal.ok || !summary.ok || !dreaming.ok || !analysis.ok || !assistant.ok) {
       setLoadError(true);
@@ -129,6 +137,7 @@ export function CapabilitySlotsSection() {
     }
     if (diagnosticResult.ok) setDiagnostics(diagnosticResult.data);
     setEffort(String(effortValue));
+    setHistoryTurns(String(normalizeAssistantHistoryTurns(historyTurnsValue)));
     setLoading(false);
   }, []);
 
@@ -220,6 +229,20 @@ export function CapabilitySlotsSection() {
       toast.error(t("settings.capabilitySlots.error.capability_operation_failed"));
     } finally {
       setPending((current) => ({ ...current, effort: false }));
+    }
+  }
+
+  async function saveHistoryTurns(value: string) {
+    const normalized = normalizeAssistantHistoryTurns(Number(value));
+    setHistoryTurns(String(normalized));
+    setPending((current) => ({ ...current, historyTurns: true }));
+    try {
+      await setConfigValue("assistant.historyTurns", normalized);
+      toast.success(t("settings.assistantCapability.updated"));
+    } catch {
+      toast.error(t("settings.capabilitySlots.error.capability_operation_failed"));
+    } finally {
+      setPending((current) => ({ ...current, historyTurns: false }));
     }
   }
 
@@ -319,19 +342,39 @@ export function CapabilitySlotsSection() {
             )}
 
             {slot === "assistant" && (
-              <div className="flex min-w-0 flex-wrap items-center gap-3 border-t bg-muted/20 px-4 py-3 sm:flex-nowrap">
-                <div className="min-w-0 flex-1">
-                  <Label htmlFor="assistant-effort">{t("settings.assistantCapability.effort")}</Label>
-                  <p className="text-[11px] text-muted-foreground">{t("settings.assistantCapability.effortDesc")}</p>
+              <div className="divide-y border-t bg-muted/20 px-4">
+                <div className="flex min-w-0 flex-wrap items-center gap-3 py-3 sm:flex-nowrap">
+                  <div className="min-w-0 flex-1">
+                    <Label htmlFor="assistant-effort">{t("settings.assistantCapability.effort")}</Label>
+                    <p className="text-[11px] text-muted-foreground">{t("settings.assistantCapability.effortDesc")}</p>
+                  </div>
+                  <Select value={effort} onValueChange={(value) => void saveEffort(value)} disabled={pending.effort}>
+                    <SelectTrigger id="assistant-effort" className="w-full sm:w-44">
+                      <span className="truncate">{t(`settings.assistantCapability.effort${effort[0]?.toUpperCase()}${effort.slice(1)}` as never)}</span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {EFFORT_OPTIONS.map((option) => <SelectItem key={option} value={option}>{t(`settings.assistantCapability.effort${option[0].toUpperCase()}${option.slice(1)}` as never)}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <Select value={effort} onValueChange={(value) => void saveEffort(value)} disabled={pending.effort}>
-                  <SelectTrigger id="assistant-effort" className="w-full sm:w-44">
-                    <span className="truncate">{t(`settings.assistantCapability.effort${effort[0]?.toUpperCase()}${effort.slice(1)}` as never)}</span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EFFORT_OPTIONS.map((option) => <SelectItem key={option} value={option}>{t(`settings.assistantCapability.effort${option[0].toUpperCase()}${option.slice(1)}` as never)}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <div className="flex min-w-0 flex-wrap items-center gap-3 py-3 sm:flex-nowrap">
+                  <div className="min-w-0 flex-1">
+                    <Label htmlFor="assistant-history-turns">{t("settings.assistantCapability.historyTurns")}</Label>
+                    <p className="text-[11px] text-muted-foreground">{t("settings.assistantCapability.historyTurnsDesc")}</p>
+                  </div>
+                  <Input
+                    id="assistant-history-turns"
+                    type="number"
+                    min={MIN_ASSISTANT_HISTORY_TURNS}
+                    max={MAX_ASSISTANT_HISTORY_TURNS}
+                    step={1}
+                    value={historyTurns}
+                    disabled={pending.historyTurns}
+                    onChange={(event) => setHistoryTurns(event.target.value)}
+                    onBlur={(event) => void saveHistoryTurns(event.currentTarget.value)}
+                    className="w-full sm:w-44"
+                  />
+                </div>
               </div>
             )}
 

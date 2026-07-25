@@ -40,7 +40,7 @@ describe("CapabilitySlotsSection", () => {
     actionMocks.listAiCapabilities.mockResolvedValue({ ok: true, data: configs() });
     actionMocks.getAiCapabilityChoices.mockImplementation(async (slot: string) => ({ ok: true, data: slot === "terminal" ? [cli] : [cli, api] }));
     actionMocks.getAiCapabilityDiagnostics.mockResolvedValue({ ok: true, data: [] });
-    actionMocks.getConfigValue.mockResolvedValue("low");
+    actionMocks.getConfigValue.mockImplementation(async (key: string) => key === "assistant.effort" ? "low" : 20);
     actionMocks.setConfigValue.mockResolvedValue(undefined);
     actionMocks.addAiCapabilityTarget.mockResolvedValue({ ok: true, data: {} });
     actionMocks.updateAiCapabilityTarget.mockResolvedValue({ ok: true, data: {} });
@@ -115,5 +115,16 @@ describe("CapabilitySlotsSection", () => {
     await user.click(await screen.findByText(/平衡|Balanced/));
     expect(actionMocks.setConfigValue).toHaveBeenCalledWith("assistant.effort", "medium");
     expect(actionMocks.setConfigValue).not.toHaveBeenCalledWith("assistant.model", expect.anything());
+  });
+
+  it("persists the Assistant conversation history window independently", async () => {
+    const user = userEvent.setup();
+    renderSection();
+    const input = await screen.findByLabelText(/保留对话轮次|Conversation history/);
+    await user.clear(input);
+    await user.type(input, "42");
+    await user.tab();
+    expect(actionMocks.setConfigValue).toHaveBeenCalledWith("assistant.historyTurns", 42);
+    expect(actionMocks.setConfigValue).not.toHaveBeenCalledWith("assistant.maxTurns", expect.anything());
   });
 });

@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { ApiMessage, ApiMessageContentPart } from "@tower/ai-runtime";
 import type { PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
+import { DEFAULT_ASSISTANT_HISTORY_TURNS, normalizeAssistantHistoryTurns } from "@/lib/ai/assistant-history";
 import { ATTACHMENT_SUBPATH_RE, MAX_ATTACHMENTS, classifyAttachmentSubPath } from "@/lib/attachment-utils";
 import { getAssistantCacheRoot } from "@/lib/file-utils";
 import { detectImageMime, isLikelyTextFile, TEXT_EXT_TO_MIME } from "@/lib/mime-magic";
@@ -16,6 +17,8 @@ export const MAX_ASSISTANT_MESSAGES = 1000;
 export const MAX_ASSISTANT_PARTS = 128;
 export const MAX_ASSISTANT_MESSAGE_BYTES = 1024 * 1024;
 export const MAX_ASSISTANT_HISTORY_BYTES = 8 * 1024 * 1024;
+export const ASSISTANT_FINALIZATION_RESERVE_BYTES = 8 * 1024;
+export const MAX_ASSISTANT_STREAM_BYTES = MAX_ASSISTANT_MESSAGE_BYTES - ASSISTANT_FINALIZATION_RESERVE_BYTES;
 const MAX_TOOL_SUMMARY_BYTES = 32 * 1024;
 
 export const towerSessionIdSchema = z.string().regex(/^as_[0-9a-f-]{36}$/i);
@@ -373,12 +376,64 @@ export class AssistantSessionService {
     return messages;
   }
 
+  async pruneHistory(sessionId: string, historyTurns = DEFAULT_ASSISTANT_HISTORY_TURNS): Promise<number> {
+    towerSessionIdSchema.parse(sessionId);
+    await this.reconcileInterrupted();
+    const keepTurns = normalizeAssistantHistoryTurns(historyTurns);
+    return this.client.$transaction(async (transaction) => {
+      const expired = await transaction.assistantTurn.findMany({
+        where: { sessionId, status: { not: "STREAMING" } },
+        orderBy: [{ completedAt: "desc" }, { startedAt: "desc" }],
+        skip: keepTurns,
+        select: { id: true },
+      });
+      if (!expired.length) return 0;
+      const turnIds = expired.map((turn) => turn.id);
+      await transaction.assistantMessage.deleteMany({ where: { sessionId, turnId: { in: turnIds } } });
+      const deleted = await transaction.assistantTurn.deleteMany({
+        where: { sessionId, id: { in: turnIds }, status: { not: "STREAMING" } },
+      });
+      return deleted.count;
+    });
+  }
+
+  private async pruneHistoryToByteBudget(sessionId: string, byteBudget: number): Promise<void> {
+    const totals = await this.client.$queryRawUnsafe<Array<{ bytes: bigint | number | null }>>(
+      `SELECT SUM(LENGTH(CAST("partsJson" AS BLOB))) AS "bytes" FROM "AssistantMessage" WHERE "sessionId" = ?`,
+      sessionId,
+    );
+    let remainingBytes = Number(totals[0]?.bytes ?? 0);
+    if (remainingBytes <= byteBudget) return;
+
+    const completedTurns = await this.client.assistantTurn.findMany({
+      where: { sessionId, status: { not: "STREAMING" } },
+      orderBy: [{ completedAt: "asc" }, { startedAt: "asc" }],
+      select: { id: true, messages: { select: { partsJson: true } } },
+    });
+    const expiredIds: string[] = [];
+    for (const turn of completedTurns) {
+      if (remainingBytes <= byteBudget) break;
+      expiredIds.push(turn.id);
+      remainingBytes -= turn.messages.reduce((bytes, message) => bytes + Buffer.byteLength(message.partsJson), 0);
+    }
+    if (!expiredIds.length) return;
+    await this.client.$transaction(async (transaction) => {
+      await transaction.assistantMessage.deleteMany({ where: { sessionId, turnId: { in: expiredIds } } });
+      await transaction.assistantTurn.deleteMany({
+        where: { sessionId, id: { in: expiredIds }, status: { not: "STREAMING" } },
+      });
+    });
+  }
+
   async beginTurn(options: {
-    sessionId: string; clientTurnId: string; userParts: AssistantPart[];
+    sessionId: string; clientTurnId: string; userParts: AssistantPart[]; historyTurns?: number;
   }): Promise<{ turnId: string; userMessageId: string; assistantMessageId: string; controller: AbortController }> {
     towerSessionIdSchema.parse(options.sessionId);
     clientTurnIdSchema.parse(options.clientTurnId);
     const userParts = normalizeAssistantParts(options.userParts);
+    await this.pruneHistory(options.sessionId, options.historyTurns);
+    const incomingBytes = Buffer.byteLength(JSON.stringify(userParts)) + MAX_ASSISTANT_MESSAGE_BYTES;
+    await this.pruneHistoryToByteBudget(options.sessionId, MAX_ASSISTANT_HISTORY_BYTES - incomingBytes);
     const current = activeTurns.get(options.sessionId);
     if (current) {
       current.controller.abort();
@@ -396,7 +451,6 @@ export class AssistantSessionService {
         `SELECT SUM(LENGTH(CAST("partsJson" AS BLOB))) AS "bytes" FROM "AssistantMessage" WHERE "sessionId" = ?`,
         options.sessionId,
       );
-      const incomingBytes = Buffer.byteLength(JSON.stringify(userParts)) + Buffer.byteLength("[]");
       if (Number(bytes[0]?.bytes ?? 0) + incomingBytes > MAX_ASSISTANT_HISTORY_BYTES) {
         throw new AssistantSessionError("history_too_large", "Assistant session history is too large");
       }
@@ -450,7 +504,7 @@ export class AssistantSessionService {
 
   async finishTurn(options: {
     sessionId: string; turnId: string; assistantMessageId: string; parts: AssistantPart[];
-    status: "COMPLETE" | "INTERRUPTED" | "FAILED";
+    status: "COMPLETE" | "INTERRUPTED" | "FAILED"; historyTurns?: number;
   }): Promise<void> {
     const parts = normalizeAssistantParts(options.parts);
     await this.client.$transaction([
@@ -465,6 +519,7 @@ export class AssistantSessionService {
       }),
     ]);
     if (activeTurns.get(options.sessionId)?.turnId === options.turnId) activeTurns.delete(options.sessionId);
+    await this.pruneHistory(options.sessionId, options.historyTurns);
   }
 
   releaseTurn(sessionId: string, turnId: string): void {
