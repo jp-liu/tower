@@ -155,11 +155,6 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     type: "string",
     label: "Assistant System Prompt",
   },
-  "assistant.model": {
-    defaultValue: "sonnet",
-    type: "string",
-    label: "Assistant Model",
-  },
   "assistant.effort": {
     defaultValue: "low",
     type: "string",
@@ -184,11 +179,6 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     defaultValue: "sidebar",
     type: "string",
     label: "Assistant Display Mode",
-  },
-  "assistant.communicationMode": {
-    defaultValue: "chat",
-    type: "string",
-    label: "Assistant Communication Mode",
   },
   "task.defaultUseWorktree": {
     defaultValue: true,
