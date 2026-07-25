@@ -425,15 +425,38 @@ export class AssistantSessionService {
     });
   }
 
+  async prepareHistory(options: {
+    sessionId: string;
+    historyTurns?: number;
+    reserveBytes?: number;
+  }): Promise<void> {
+    towerSessionIdSchema.parse(options.sessionId);
+    const reserveBytes = z.number().int().min(0).max(MAX_ASSISTANT_HISTORY_BYTES)
+      .parse(options.reserveBytes ?? 0);
+    const byteBudget = MAX_ASSISTANT_HISTORY_BYTES - reserveBytes;
+    await this.pruneHistory(options.sessionId, options.historyTurns);
+    await this.pruneHistoryToByteBudget(options.sessionId, byteBudget);
+    const totals = await this.client.$queryRawUnsafe<Array<{ bytes: bigint | number | null }>>(
+      `SELECT SUM(LENGTH(CAST("partsJson" AS BLOB))) AS "bytes" FROM "AssistantMessage" WHERE "sessionId" = ?`,
+      options.sessionId,
+    );
+    if (Number(totals[0]?.bytes ?? 0) > byteBudget) {
+      throw new AssistantSessionError("history_too_large", "Assistant session history is too large");
+    }
+  }
+
   async beginTurn(options: {
     sessionId: string; clientTurnId: string; userParts: AssistantPart[]; historyTurns?: number;
   }): Promise<{ turnId: string; userMessageId: string; assistantMessageId: string; controller: AbortController }> {
     towerSessionIdSchema.parse(options.sessionId);
     clientTurnIdSchema.parse(options.clientTurnId);
     const userParts = normalizeAssistantParts(options.userParts);
-    await this.pruneHistory(options.sessionId, options.historyTurns);
     const incomingBytes = Buffer.byteLength(JSON.stringify(userParts)) + MAX_ASSISTANT_MESSAGE_BYTES;
-    await this.pruneHistoryToByteBudget(options.sessionId, MAX_ASSISTANT_HISTORY_BYTES - incomingBytes);
+    await this.prepareHistory({
+      sessionId: options.sessionId,
+      historyTurns: options.historyTurns,
+      reserveBytes: incomingBytes,
+    });
     const current = activeTurns.get(options.sessionId);
     if (current) {
       current.controller.abort();
@@ -519,7 +542,7 @@ export class AssistantSessionService {
       }),
     ]);
     if (activeTurns.get(options.sessionId)?.turnId === options.turnId) activeTurns.delete(options.sessionId);
-    await this.pruneHistory(options.sessionId, options.historyTurns);
+    await this.prepareHistory({ sessionId: options.sessionId, historyTurns: options.historyTurns });
   }
 
   releaseTurn(sessionId: string, turnId: string): void {

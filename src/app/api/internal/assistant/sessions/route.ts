@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
     const historyTurns = normalizeAssistantHistoryTurns(
       await readConfigValue<number>("assistant.historyTurns", 20),
     );
-    await assistantSessionService.pruneHistory(sessionId, historyTurns);
+    await assistantSessionService.prepareHistory({ sessionId, historyTurns });
     const [session, messages] = await Promise.all([
       assistantSessionService.getSessionView(sessionId),
       assistantSessionService.getMessages(sessionId),

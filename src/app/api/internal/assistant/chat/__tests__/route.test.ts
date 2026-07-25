@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
   deleteSession: vi.fn(async () => undefined),
   finishTurn: vi.fn(async () => undefined),
   updateAssistantMessage: vi.fn(async () => undefined),
-  pruneHistory: vi.fn(async () => 0),
+  prepareHistory: vi.fn(async () => undefined),
   getMessages: vi.fn(async () => []),
   releaseTurn: vi.fn(),
   turnController: null as AbortController | null,
@@ -54,6 +54,7 @@ vi.mock("@/lib/ai/assistant-session-service", () => {
   const tower = z.string().regex(/^as_/);
   return {
     AssistantSessionError,
+    MAX_ASSISTANT_MESSAGE_BYTES: 1024 * 1024,
     MAX_ASSISTANT_PARTS: 128,
     MAX_ASSISTANT_STREAM_BYTES: 1024 * 1024 - 8 * 1024,
     assistantSessionIdSchema: z.string(),
@@ -73,7 +74,7 @@ vi.mock("@/lib/ai/assistant-session-service", () => {
       updateSession: async () => ({}),
       getMessages: mocks.getMessages,
       getSessionView: async () => mocks.sessionView,
-      pruneHistory: mocks.pruneHistory,
+      prepareHistory: mocks.prepareHistory,
       beginTurn: async () => ({
         turnId: "at_11111111-1111-1111-1111-111111111111",
         userMessageId: "am_11111111-1111-1111-1111-111111111111",
@@ -115,7 +116,7 @@ beforeEach(() => {
   mocks.deleteSession.mockClear();
   mocks.finishTurn.mockClear();
   mocks.updateAssistantMessage.mockClear();
-  mocks.pruneHistory.mockClear();
+  mocks.prepareHistory.mockClear();
   mocks.getMessages.mockClear();
   mocks.releaseTurn.mockClear();
 });
@@ -187,7 +188,7 @@ describe("Assistant chat SSE route", () => {
       ],
       attachments: ["2026-07/files/note.txt", "2026-07/images/design.png"],
       systemPrompt: "system",
-      maxTurns: 20,
+      maxTurns: 30,
       maxOutputTokens: 128000,
       maxOutputBytes: 1024 * 1024 - 8 * 1024,
       effort: "low",
@@ -195,8 +196,15 @@ describe("Assistant chat SSE route", () => {
     });
     expect(String(mocks.requests[0].prompt)).not.toContain("system");
     expect((mocks.requests[0].messages as Array<{ role: string }>).some((message) => message.role === "system")).toBe(false);
-    expect(mocks.pruneHistory).toHaveBeenCalledWith("as_11111111-1111-1111-1111-111111111111", 20);
-    expect(mocks.pruneHistory.mock.invocationCallOrder[0]).toBeLessThan(mocks.getMessages.mock.invocationCallOrder[0]!);
+    expect(mocks.prepareHistory).toHaveBeenCalledWith({
+      sessionId: "as_11111111-1111-1111-1111-111111111111",
+      historyTurns: 20,
+      reserveBytes: Buffer.byteLength(JSON.stringify([
+        { type: "text", text: "hello" },
+        ...mocks.attachmentParts,
+      ])) + 1024 * 1024,
+    });
+    expect(mocks.prepareHistory.mock.invocationCallOrder[0]).toBeLessThan(mocks.getMessages.mock.invocationCallOrder[0]!);
   });
 
   it("keeps the last safe partial and fails without done when streamed output exceeds persistence", async () => {

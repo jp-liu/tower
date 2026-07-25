@@ -13,6 +13,7 @@ import { buildAssistantCliPrompt, buildAssistantSystemPrompt } from "@/lib/ai/as
 import { normalizeAssistantHistoryTurns } from "@/lib/ai/assistant-history";
 import {
   AssistantSessionError,
+  MAX_ASSISTANT_MESSAGE_BYTES,
   MAX_ASSISTANT_PARTS,
   MAX_ASSISTANT_STREAM_BYTES,
   assistantMessagesToApi,
@@ -151,14 +152,31 @@ export async function POST(request: NextRequest) {
     return jsonError(body.sessionId ? "session_unavailable" : "session_create_failed", 400);
   }
 
+  let userParts: AssistantPart[];
+  try {
+    userParts = normalizeAssistantParts([
+      ...(body.message.trim() ? [{ type: "text" as const, text: body.message.trim() }] : []),
+      ...currentAttachmentParts,
+    ]);
+  } catch (error) {
+    await cleanupUnstartedSession();
+    const code = error instanceof AssistantSessionError ? error.code : "invalid_request";
+    return jsonError(code, 400);
+  }
+
   let historyTurns: number;
   try {
     historyTurns = normalizeAssistantHistoryTurns(
       await readConfigValue<number>("assistant.historyTurns", 20),
     );
-    await assistantSessionService.pruneHistory(sessionId, historyTurns);
-  } catch {
+    await assistantSessionService.prepareHistory({
+      sessionId,
+      historyTurns,
+      reserveBytes: Buffer.byteLength(JSON.stringify(userParts)) + MAX_ASSISTANT_MESSAGE_BYTES,
+    });
+  } catch (error) {
     await cleanupUnstartedSession();
+    if (error instanceof AssistantSessionError) return jsonError(error.code, 400);
     return jsonError("history_unavailable", 500);
   }
 
@@ -171,10 +189,6 @@ export async function POST(request: NextRequest) {
     return jsonError("history_unavailable", 500);
   }
 
-  const userParts: AssistantPart[] = [
-    ...(body.message.trim() ? [{ type: "text" as const, text: body.message.trim() }] : []),
-    ...currentAttachmentParts,
-  ];
   let session: Awaited<ReturnType<typeof assistantSessionService.getSessionView>>;
   let systemPrompt: string;
   let maxTurns: number;
@@ -194,7 +208,7 @@ export async function POST(request: NextRequest) {
     };
     [systemPrompt, maxTurns, maxOutputTokens, maxOutputBytes, effort] = await Promise.all([
       buildAssistantSystemPrompt(resolvedBinding),
-      readConfigValue<number>("assistant.maxTurns", 20),
+      readConfigValue<number>("assistant.maxTurns", 30),
       readConfigValue<number>("assistant.maxOutputTokens", 128000),
       readConfigValue<number>("assistant.maxOutputBytes", 2 * 1024 * 1024),
       readConfigValue<"low" | "medium" | "high">("assistant.effort", "low"),

@@ -8,6 +8,7 @@ import { up } from "../../../../scripts/migrations/0013-assistant-sessions";
 import {
   AssistantSessionError,
   AssistantSessionService,
+  MAX_ASSISTANT_MESSAGE_BYTES,
   attachmentParts,
   assistantMessagesToApi,
   assistantMessagesToClient,
@@ -223,7 +224,7 @@ describe("AssistantSessionService", () => {
     }
   });
 
-  it("prunes old completed turns before applying the absolute history byte guard", async () => {
+  it("prepares oversized bounded history before getMessages and opening the next turn", async () => {
     const { prisma, sessions } = await service();
     try {
       const session = await sessions.createSession();
@@ -252,6 +253,15 @@ describe("AssistantSessionService", () => {
         });
       }
       await expect(sessions.getMessages(session.id)).rejects.toMatchObject({ code: "history_too_large" });
+
+      const reserveBytes = Buffer.byteLength(JSON.stringify([{ type: "text", text: "continue" }]))
+        + MAX_ASSISTANT_MESSAGE_BYTES;
+      await sessions.prepareHistory({ sessionId: session.id, historyTurns: 20, reserveBytes });
+      const prepared = await sessions.getMessages(session.id);
+      expect(prepared).toHaveLength(7);
+      expect(prepared[0]?.id).toBe("large-message-2");
+      expect(prepared.at(-1)?.id).toBe("large-message-8");
+      expect(new Set(prepared.map((message) => message.turnId)).size).toBe(prepared.length);
 
       const turn = await sessions.beginTurn({
         sessionId: session.id,

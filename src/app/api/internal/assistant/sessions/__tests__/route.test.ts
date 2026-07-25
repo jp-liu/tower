@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   listImportedLegacyIds: vi.fn(),
   getSessionView: vi.fn(),
   getMessages: vi.fn(),
-  pruneHistory: vi.fn(),
+  prepareHistory: vi.fn(),
   getSession: vi.fn(),
   updateSession: vi.fn(),
   deleteSession: vi.fn(),
@@ -39,7 +39,7 @@ vi.mock("@/lib/ai/assistant-session-service", () => ({
     listImportedLegacyIds: mocks.listImportedLegacyIds,
     getSessionView: mocks.getSessionView,
     getMessages: mocks.getMessages,
-    pruneHistory: mocks.pruneHistory,
+    prepareHistory: mocks.prepareHistory,
     getSession: mocks.getSession,
     updateSession: mocks.updateSession,
     deleteSession: mocks.deleteSession,
@@ -78,7 +78,7 @@ beforeEach(() => {
   mocks.legacyImport.mockResolvedValue({ id: TOWER_ID });
   mocks.getSessionView.mockResolvedValue({ id: TOWER_ID, title: "Legacy" });
   mocks.getMessages.mockResolvedValue([{ id: "message" }]);
-  mocks.pruneHistory.mockResolvedValue(0);
+  mocks.prepareHistory.mockResolvedValue(undefined);
   mocks.getSession.mockResolvedValue({ id: TOWER_ID, legacySource: "claude-agent-sdk", legacyId: IMPORTED_LEGACY_ID });
   mocks.updateSession.mockResolvedValue({ id: TOWER_ID, title: "Renamed" });
   mocks.findImportedLegacy.mockResolvedValue(null);
@@ -97,8 +97,8 @@ describe("Assistant sessions route", () => {
     const response = await GET(request(`?sessionId=${NEW_LEGACY_ID}`));
     await expect(response.json()).resolves.toMatchObject({ sessionId: TOWER_ID, messages: [{ id: "message" }] });
     expect(mocks.legacyImport).toHaveBeenCalledWith(NEW_LEGACY_ID, expect.any(Object));
-    expect(mocks.pruneHistory).toHaveBeenCalledWith(TOWER_ID, 20);
-    expect(mocks.pruneHistory.mock.invocationCallOrder[0]).toBeLessThan(mocks.getMessages.mock.invocationCallOrder[0]!);
+    expect(mocks.prepareHistory).toHaveBeenCalledWith({ sessionId: TOWER_ID, historyTurns: 20 });
+    expect(mocks.prepareHistory.mock.invocationCallOrder[0]).toBeLessThan(mocks.getMessages.mock.invocationCallOrder[0]!);
   });
 
   it("persists a rename and reports a failed legacy-store sync without exposing the error", async () => {
