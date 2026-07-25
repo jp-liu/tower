@@ -35,6 +35,14 @@ vi.mock("@/lib/ai/cli-plugin-provider", () => ({
 
 import { POST, runtime } from "../route";
 
+function localRequest(body: Record<string, unknown>) {
+  return new NextRequest("http://localhost:3000/api/adapters/test", {
+    method: "POST",
+    body: JSON.stringify(body),
+    headers: { "content-type": "application/json", host: "localhost:3000" },
+  });
+}
+
 describe("adapter test route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -80,15 +88,17 @@ describe("adapter test route", () => {
     expect(mocks.disconnected).not.toHaveBeenCalled();
   });
 
+  it("requires an explicit provider instead of selecting Claude implicitly", async () => {
+    const response = await POST(localRequest({}));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ ok: false, error: "Invalid request body" });
+    expect(mocks.testEnvironment).not.toHaveBeenCalled();
+    expect(mocks.pluginProbe).not.toHaveBeenCalled();
+  });
+
   it("keeps a successful Hello Probe connected when integration installation throws", async () => {
     mocks.install.mockRejectedValue(new Error("hook storage unavailable"));
-    const request = new NextRequest("http://localhost:3000/api/adapters/test", {
-      method: "POST",
-      body: JSON.stringify({ provider: "codex" }),
-      headers: { "content-type": "application/json", host: "localhost:3000" },
-    });
-
-    const response = await POST(request);
+    const response = await POST(localRequest({ provider: "codex" }));
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -109,13 +119,7 @@ describe("adapter test route", () => {
       available: true,
       ok: true,
     });
-    const request = new NextRequest("http://localhost:3000/api/adapters/test", {
-      method: "POST",
-      body: JSON.stringify({ provider: "@acme/community-cli" }),
-      headers: { "content-type": "application/json", host: "localhost:3000" },
-    });
-
-    const response = await POST(request);
+    const response = await POST(localRequest({ provider: "@acme/community-cli" }));
     const body = await response.json();
 
     expect(body.ok).toBe(true);
@@ -127,7 +131,7 @@ describe("adapter test route", () => {
     expect(mocks.repair).not.toHaveBeenCalled();
   });
 
-  it("does not repair hooks for a dynamic plugin that exports hooks without declaring permission", async () => {
+  it("does not repair hooks for a dynamic plugin without declared permission", async () => {
     mocks.pluginProbe.mockResolvedValue({ version: "1.2.3" });
     mocks.resolveAdapter.mockResolvedValue({
       adapter: { hooks: { install: mocks.repair } },
@@ -139,14 +143,37 @@ describe("adapter test route", () => {
       ok: true,
     });
 
-    await POST(new NextRequest("http://localhost:3000/api/adapters/test", {
-      method: "POST",
-      body: JSON.stringify({ provider: "@acme/unapproved-hooks" }),
-      headers: { "content-type": "application/json", host: "localhost:3000" },
-    }));
+    await POST(localRequest({ provider: "@acme/unapproved-hooks" }));
 
     expect(mocks.pluginProbe).toHaveBeenCalledWith("@acme/unapproved-hooks");
     expect(mocks.resolveAdapter).not.toHaveBeenCalled();
     expect(mocks.repair).not.toHaveBeenCalled();
+  });
+
+  it("does not return third-party stderr or plugin-setting canaries", async () => {
+    const canary = "CANARY_PLUGIN_STDERR_SECRET_2f8d";
+    mocks.pluginProbe.mockRejectedValue(new Error(canary));
+    mocks.disconnected.mockResolvedValue(undefined);
+    const response = await POST(localRequest({ provider: "@fixture/community" }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      ok: false,
+      checks: [{ message: "Third-party CLI connection test failed" }],
+    });
+    expect(JSON.stringify(payload)).not.toContain(canary);
+  });
+
+  it("returns a stable outer error when persistence throws a canary", async () => {
+    const canary = "CANARY_ACTION_SECRET_7d1a";
+    mocks.pluginProbe.mockRejectedValue(new Error("probe failed"));
+    mocks.disconnected.mockRejectedValue(new Error(canary));
+    const response = await POST(localRequest({ provider: "@fixture/community" }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(payload).toEqual({ ok: false, error: "connection_test_failed" });
+    expect(JSON.stringify(payload)).not.toContain(canary);
   });
 });

@@ -115,6 +115,21 @@ describe("testEnvironment generic CLI probe", () => {
 
   afterEach(() => delete process.env.OPENAI_API_KEY);
 
+  it("does not select a default provider when the requested provider is unknown", async () => {
+    const { testEnvironment } = await import("@/lib/cli-test");
+    const result = await testEnvironment("/project", "community-fixture");
+
+    expect(result).toEqual({
+      ok: false,
+      checks: [{
+        name: "community-fixture_provider",
+        passed: false,
+        message: "CLI provider is not registered",
+      }],
+    });
+    expect(mockAdapter.buildHelloProbe).not.toHaveBeenCalled();
+  });
+
   it("accepts successful Codex probes that return plain stdout", async () => {
     processState.stdout = "hello\n";
 

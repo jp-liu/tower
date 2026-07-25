@@ -27,7 +27,7 @@ function extractVersion(checks: TestCheck[]): string | null {
 
 const bodySchema = z.object({
   adapterType: z.string().optional(),
-  provider: z.string().optional(),
+  provider: z.string().trim().min(1),
   cwd: z.string().optional(),
 });
 
@@ -100,13 +100,13 @@ export async function POST(request: NextRequest) {
             { name: `${provider}_hello`, passed: true, message: "Hello probe passed" },
           ],
         };
-      } catch (error) {
+      } catch {
         testResult = {
           ok: false,
           checks: [{
             name: `${provider}_hello`,
             passed: false,
-            message: error instanceof Error ? error.message : "probe_failed",
+            message: "Third-party CLI connection test failed",
           }],
         };
       }
@@ -159,9 +159,9 @@ export async function POST(request: NextRequest) {
 
     const response: TestAndInstallResult = { ...testResult, install };
     return NextResponse.json(response);
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Unknown error" },
+      { ok: false, error: "connection_test_failed" },
       { status: 500 }
     );
   }
