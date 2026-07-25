@@ -577,6 +577,7 @@ function SortableWorkspaceItem({
             <button
               className="mr-2 rounded-md p-1 text-muted-foreground opacity-0 transition-all hover:bg-background hover:text-foreground group-hover:opacity-100"
               onClick={(e) => e.stopPropagation()}
+              aria-label={`${ws.name} ${t("sidebar.more")}`}
             />
           }
         >

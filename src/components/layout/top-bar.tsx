@@ -208,6 +208,7 @@ export function TopBar({ onCreateProject, username, workspaces, defaultWorkspace
                   size="icon"
                   onClick={toggleTheme}
                   className="text-muted-foreground"
+                  aria-label={t("settings.theme")}
                 />
               }
             >
