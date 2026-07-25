@@ -24,6 +24,10 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "jsdom",
+    // Keep the full release gate deterministic when several Tower worktrees run
+    // concurrently. Many suites spawn real git/PTY fixture processes, so even a
+    // small fork pool can exhaust worker startup slots and starve 8s smoke waits.
+    maxWorkers: 1,
     setupFiles: ["./tests/setup.ts"],
     globalSetup: ["./tests/global-setup.ts"],
     include: ["tests/**/*.test.{ts,tsx}", "src/**/__tests__/**/*.test.{ts,tsx}"],
