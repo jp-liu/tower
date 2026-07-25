@@ -21,22 +21,30 @@ export function TextPreviewDialog({
   open,
   onOpenChange,
 }: TextPreviewDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="w-[min(960px,92vw)] max-w-none sm:max-w-none h-[85vh] max-h-[85vh] flex flex-col p-0 gap-0"
+      >
+        <h3 className="text-sm font-medium truncate px-5 py-3 border-b border-border/50">
+          {filename}
+        </h3>
+        <div className="flex-1 overflow-auto px-5 py-4">
+          {open && url ? <TextPreviewContent key={url} url={url} filename={filename} /> : null}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TextPreviewContent({ url, filename }: { url: string; filename: string }) {
   const { t } = useI18n();
-  const [content, setContent] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<
+    { status: "ready"; content: string } | { status: "error"; message: string } | null
+  >(null);
 
   useEffect(() => {
-    if (!open || !url) {
-      setContent(null);
-      setError(null);
-      return;
-    }
-
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setContent(null);
 
     fetch(url)
       .then((res) => {
@@ -51,30 +59,28 @@ export function TextPreviewDialog({
           throw new Error("FILE_TOO_LARGE");
         }
         if (!cancelled) {
-          setContent(text);
-          setLoading(false);
+          setResult({ status: "ready", content: text });
         }
       })
       .catch((err) => {
         if (!cancelled) {
-          if (err instanceof Error && err.message === "FILE_TOO_LARGE") {
-            setError(t("assets.fileTooLarge"));
-          } else {
-            setError(t("assets.previewError"));
-          }
-          setLoading(false);
+          const message =
+            err instanceof Error && err.message === "FILE_TOO_LARGE"
+              ? t("assets.fileTooLarge")
+              : t("assets.previewError");
+          setResult({ status: "error", message });
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [open, url, t]);
+  }, [url, t]);
 
   const ext = filename.split(".").pop()?.toLowerCase();
 
   const renderContent = () => {
-    if (loading) {
+    if (!result) {
       return (
         <div className="flex flex-col items-center justify-center py-12 gap-2">
           <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -83,13 +89,11 @@ export function TextPreviewDialog({
       );
     }
 
-    if (error) {
-      return <p className="text-sm text-destructive">{error}</p>;
+    if (result.status === "error") {
+      return <p className="text-sm text-destructive">{result.message}</p>;
     }
 
-    if (content === null) {
-      return null;
-    }
+    const { content } = result;
 
     if (ext === "md") {
       return (
@@ -121,16 +125,5 @@ export function TextPreviewDialog({
     );
   };
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="w-[min(960px,92vw)] max-w-none sm:max-w-none h-[85vh] max-h-[85vh] flex flex-col p-0 gap-0"
-      >
-        <h3 className="text-sm font-medium truncate px-5 py-3 border-b border-border/50">
-          {filename}
-        </h3>
-        <div className="flex-1 overflow-auto px-5 py-4">{renderContent()}</div>
-      </DialogContent>
-    </Dialog>
-  );
+  return renderContent();
 }

@@ -102,7 +102,9 @@ export function MissionsClient({
   const orderedControlsRef = useRef<TerminalControls[]>([]);
   const gridColsRef = useRef(2);
   const selectedIndexRef = useRef(selectedIndex);
-  selectedIndexRef.current = selectedIndex;
+  useEffect(() => {
+    selectedIndexRef.current = selectedIndex;
+  }, [selectedIndex]);
 
   const onRegisterControls = useCallback(
     (taskId: string, controls: TerminalControls | null) => {
@@ -480,20 +482,18 @@ export function MissionsClient({
     ? cards.filter((c) => c.workspaceId === filterWsId)
     : cards;
 
-  // Keep refs used by stable handlers in sync with current render.
-  orderedControlsRef.current = visibleCards
-    .map((c) => controlsRef.current.get(c.taskId))
-    .filter((c): c is TerminalControls => Boolean(c));
-  gridColsRef.current = gridCols;
-
-  // Clamp selectedIndex whenever the visible set shrinks so it stays in range.
+  // Keep refs used by native shortcut handlers in sync after commit.
   useEffect(() => {
-    setSelectedIndex((cur) => {
-      const len = visibleCards.length;
-      if (len === 0) return 0;
-      return Math.min(cur, len - 1);
-    });
-  }, [visibleCards.length]);
+    orderedControlsRef.current = visibleCards
+      .map((c) => controlsRef.current.get(c.taskId))
+      .filter((c): c is TerminalControls => Boolean(c));
+    gridColsRef.current = gridCols;
+  }, [visibleCards, gridCols]);
+
+  const maxSelectedIndex = Math.max(visibleCards.length - 1, 0);
+  if (selectedIndex > maxSelectedIndex) {
+    setSelectedIndex(maxSelectedIndex);
+  }
 
   // Running task IDs set (for picker to mark already-monitored tasks)
   const runningTaskIds = new Set(cards.map((c) => c.taskId));

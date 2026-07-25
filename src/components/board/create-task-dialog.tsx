@@ -102,7 +102,16 @@ interface CreateTaskDialogProps {
   defaultVersionId?: string | null;
 }
 
-export function CreateTaskDialog({
+export function CreateTaskDialog(props: CreateTaskDialogProps) {
+  const formKey = [
+    props.open ? "open" : "closed",
+    props.editTask?.id ?? "new",
+    props.projectLocalPath ?? "normal",
+  ].join(":");
+  return <CreateTaskDialogState key={formKey} {...props} />;
+}
+
+function CreateTaskDialogState({
   open,
   onOpenChange,
   onSubmit,
@@ -117,18 +126,28 @@ export function CreateTaskDialog({
   versions,
   defaultVersionId,
 }: CreateTaskDialogProps) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<Priority>("MEDIUM");
-  const [subPath, setSubPath] = useState("");
-  const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
+  const [title, setTitle] = useState(editTask?.title ?? prefillFromTask?.title ?? "");
+  const [description, setDescription] = useState(
+    editTask?.description ?? prefillFromTask?.description ?? "",
+  );
+  const [priority, setPriority] = useState<Priority>(
+    editTask?.priority ?? prefillFromTask?.priority ?? "MEDIUM",
+  );
+  const [subPath, setSubPath] = useState(editTask?.subPath ?? prefillFromTask?.subPath ?? "");
+  const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>(
+    editTask ? (editTaskLabelIds ?? []) : (prefillFromTask?.labelIds ?? []),
+  );
   const [branches, setBranches] = useState<string[]>([]);
-  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [branchesLoading, setBranchesLoading] = useState(
+    open && !!projectLocalPath && !editTask,
+  );
   const [selectedBranch, setSelectedBranch] = useState<string>("");
   const [branchOpen, setBranchOpen] = useState(false);
   const [useWorktree, setUseWorktree] = useState(true);
   const [autoStart, setAutoStart] = useState(false);
-  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(
+    editTask?.versionId ?? defaultVersionId ?? null,
+  );
   const { t } = useI18n();
 
   // Load task creation defaults (worktree / auto-start) from system config.
@@ -152,51 +171,9 @@ export function CreateTaskDialog({
   const isEditing = !!editTask;
   const isGitProject = !!projectLocalPath;
 
-  // Pre-fill when editing OR when create-with-prefill (duplicate task)
-  useEffect(() => {
-    if (editTask) {
-      setTitle(editTask.title);
-      setDescription(editTask.description ?? "");
-      setPriority(editTask.priority);
-      setSubPath(editTask.subPath ?? "");
-      setSelectedLabelIds(editTaskLabelIds ?? []);
-      setSelectedVersionId(editTask.versionId ?? null);
-    } else if (prefillFromTask) {
-      setTitle(prefillFromTask.title ?? "");
-      setDescription(prefillFromTask.description ?? "");
-      setPriority(prefillFromTask.priority ?? "MEDIUM");
-      setSubPath(prefillFromTask.subPath ?? "");
-      setSelectedLabelIds(prefillFromTask.labelIds ?? []);
-      setSelectedVersionId(defaultVersionId ?? null);
-    } else {
-      setTitle("");
-      setDescription("");
-      setPriority("MEDIUM");
-      setSubPath("");
-      setSelectedLabelIds([]);
-      setSelectedVersionId(defaultVersionId ?? null);
-    }
-  }, [editTask, editTaskLabelIds, prefillFromTask, defaultVersionId]);
-
-  // Reset when dialog closes
-  useEffect(() => {
-    if (!open && !editTask) {
-      setTitle("");
-      setDescription("");
-      setPriority("MEDIUM");
-      setSubPath("");
-      setSelectedLabelIds([]);
-      setBranches([]);
-      setSelectedBranch("");
-      setBranchOpen(false);
-      setSelectedVersionId(defaultVersionId ?? null);
-    }
-  }, [open, editTask, defaultVersionId]);
-
   // Load branches instantly from cache, then refresh after background fetch
   useEffect(() => {
     if (!open || !isGitProject || editTask) return;
-    setBranchesLoading(true);
     // 1. Load cached branches + current branch immediately (no network)
     Promise.all([
       getProjectBranches(projectLocalPath!),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,7 +32,12 @@ export interface ReleaseVersionDialogProps {
   onSuccess?: () => void;
 }
 
-export function ReleaseVersionDialog({
+export function ReleaseVersionDialog(props: ReleaseVersionDialogProps) {
+  const formKey = `${props.open ? "open" : "closed"}:${props.version?.id ?? "none"}`;
+  return <ReleaseVersionDialogState key={formKey} {...props} />;
+}
+
+function ReleaseVersionDialogState({
   open,
   onOpenChange,
   version,
@@ -42,13 +47,6 @@ export function ReleaseVersionDialog({
   const { t } = useI18n();
   const [selectedNextId, setSelectedNextId] = useState<string>("");
   const [isPending, startTransition] = useTransition();
-
-  // Reset selection when dialog opens or version changes
-  useEffect(() => {
-    if (open) {
-      setSelectedNextId("");
-    }
-  }, [open, version]);
 
   const selectedCandidate = candidates.find((c) => c.id === selectedNextId);
   const hasCandidates = candidates.length > 0;

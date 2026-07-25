@@ -129,7 +129,12 @@ export interface VersionDiffDialogProps {
   versionLabel?: string;
 }
 
-export function VersionDiffDialog({
+export function VersionDiffDialog(props: VersionDiffDialogProps) {
+  const dialogKey = `${props.open ? "open" : "closed"}:${props.versionId ?? "none"}`;
+  return <VersionDiffDialogState key={dialogKey} {...props} />;
+}
+
+function VersionDiffDialogState({
   open,
   onOpenChange,
   versionId,
@@ -142,8 +147,6 @@ export function VersionDiffDialog({
 
   useEffect(() => {
     if (!open || !versionId) return;
-    setFiles(null);
-    setEmpty(false);
     startTransition(async () => {
       const result = await getVersionDiff(versionId);
       if (!result) {

@@ -54,6 +54,16 @@ export function GridPresetPicker({ value, customValue, onChange }: GridPresetPic
   // Editable custom cols/rows (local state for inputs)
   const [customCols, setCustomCols] = useState(customValue?.cols ?? 2);
   const [customRows, setCustomRows] = useState(customValue?.rows ?? 2);
+  const [syncedCustomValue, setSyncedCustomValue] = useState(customValue);
+
+  if (
+    customValue &&
+    (customValue.cols !== syncedCustomValue?.cols || customValue.rows !== syncedCustomValue?.rows)
+  ) {
+    setSyncedCustomValue(customValue);
+    setCustomCols(customValue.cols);
+    setCustomRows(customValue.rows);
+  }
 
   // Config limits from settings
   const [limits, setLimits] = useState({ minCols: 1, maxCols: 5, minRows: 1, maxRows: 5 });
@@ -72,14 +82,6 @@ export function GridPresetPicker({ value, customValue, onChange }: GridPresetPic
       });
     });
   }, []);
-
-  // Sync external customValue into local state
-  useEffect(() => {
-    if (customValue) {
-      setCustomCols(customValue.cols);
-      setCustomRows(customValue.rows);
-    }
-  }, [customValue?.cols, customValue?.rows]);
 
   // Click-outside to close
   useEffect(() => {

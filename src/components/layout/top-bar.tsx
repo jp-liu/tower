@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useActionShortcut } from "@/lib/shortcuts";
 import { useUiDialogStore } from "@/stores/ui-dialog-store";
 import { useRouter } from "next/navigation";
@@ -128,24 +128,15 @@ export function TopBar({ onCreateProject, username, workspaces, defaultWorkspace
   const { resolvedTheme, toggleTheme, triggerRef } = useThemeTransition();
   const router = useRouter();
   const [showSearch, setShowSearch] = useState(false);
-  const [showCreateProject, setShowCreateProject] = useState(false);
-  const [showImportProject, setShowImportProject] = useState(false);
 
   // Global search shortcut (⌘K / Ctrl+K) via the action registry.
   useActionShortcut("global.search", () => setShowSearch(true));
 
-  // Bridge: the command palette opens these dialogs via the ui-dialog store.
+  // The command palette and top-bar buttons share one dialog state owner.
   const createProjectOpen = useUiDialogStore((s) => s.createProjectOpen);
   const importProjectOpen = useUiDialogStore((s) => s.importProjectOpen);
   const setCreateProjectOpen = useUiDialogStore((s) => s.setCreateProjectOpen);
   const setImportProjectOpen = useUiDialogStore((s) => s.setImportProjectOpen);
-
-  useEffect(() => {
-    if (createProjectOpen) setShowCreateProject(true);
-  }, [createProjectOpen]);
-  useEffect(() => {
-    if (importProjectOpen) setShowImportProject(true);
-  }, [importProjectOpen]);
 
   return (
     <>
@@ -255,7 +246,7 @@ export function TopBar({ onCreateProject, username, workspaces, defaultWorkspace
           <Button
             variant="outline"
             className="gap-1.5 ring-1 ring-border hover:bg-accent"
-            onClick={() => setShowImportProject(true)}
+            onClick={() => setImportProjectOpen(true)}
           >
             <FolderOpen className="h-3.5 w-3.5" />
             {t("topbar.importProject")}
@@ -264,7 +255,7 @@ export function TopBar({ onCreateProject, username, workspaces, defaultWorkspace
           <Button
             data-tour="create-project"
             className="gap-1.5 bg-primary/10 text-primary ring-1 ring-primary/25 hover:bg-primary/20"
-            onClick={() => setShowCreateProject(true)}
+            onClick={() => setCreateProjectOpen(true)}
           >
             <Plus className="h-3.5 w-3.5" />
             {t("topbar.newProject")}
@@ -301,11 +292,8 @@ export function TopBar({ onCreateProject, username, workspaces, defaultWorkspace
 
       {/* Create Project Dialog */}
       <CreateProjectDialog
-        open={showCreateProject}
-        onOpenChange={(open) => {
-          setShowCreateProject(open);
-          if (!open) setCreateProjectOpen(false);
-        }}
+        open={createProjectOpen}
+        onOpenChange={setCreateProjectOpen}
         onCreateProject={onCreateProject}
         workspaces={workspaces}
         defaultWorkspaceId={defaultWorkspaceId}
@@ -313,11 +301,8 @@ export function TopBar({ onCreateProject, username, workspaces, defaultWorkspace
 
       {/* Import Project Dialog */}
       <ImportProjectDialog
-        open={showImportProject}
-        onOpenChange={(open) => {
-          setShowImportProject(open);
-          if (!open) setImportProjectOpen(false);
-        }}
+        open={importProjectOpen}
+        onOpenChange={setImportProjectOpen}
         onCreateProject={onCreateProject}
         workspaces={workspaces}
         defaultWorkspaceId={defaultWorkspaceId}

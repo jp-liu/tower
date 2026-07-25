@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { setConfigValue } from "@/actions/config-actions";
 import type { Locale } from "@/lib/i18n";
 import type { TestResult } from "@/lib/cli-test";
 import type { GitPathRule } from "@/lib/git-url";
+import { useHydrated } from "@/hooks/use-hydrated";
 import {
   User,
   Terminal,
@@ -182,7 +183,7 @@ export default function OnboardingPage() {
   const router = useRouter();
   const { t, locale, setLocale } = useI18n();
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHydrated();
   const [step, setStep] = useState(1);
 
   // Step 1 state
@@ -199,8 +200,6 @@ export default function OnboardingPage() {
   const [previewIdx, setPreviewIdx] = useState(0);
   const [useFullPath, setUseFullPath] = useState(false);
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
-
-  useEffect(() => setMounted(true), []);
 
   const themeOptions = [
     { value: "light", label: <Sun className="h-4 w-4" /> },

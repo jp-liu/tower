@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useId } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,11 @@ import { isValidBranchPrefix, DEFAULT_BRANCH_PREFIX } from "@/lib/worktree-branc
 const LABEL_COLORS = ["#3b82f6", "#ef4444", "#f59e0b", "#10b981", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316"];
 
 const randomColor = () => LABEL_COLORS[Math.floor(Math.random() * LABEL_COLORS.length)];
+
+function colorForId(id: string): string {
+  const hash = [...id].reduce((value, char) => ((value * 31) + char.charCodeAt(0)) >>> 0, 0);
+  return LABEL_COLORS[hash % LABEL_COLORS.length];
+}
 
 /** Matches createLabelSchema — keep both in step. */
 const MAX_LABEL_NAME = 50;
@@ -98,11 +103,8 @@ function AddLabelRow({
   const { t } = useI18n();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  // Randomized on mount, not in the initializer: this is server rendered too, and
-  // a color picked twice would be a hydration mismatch.
-  const [color, setColor] = useState(LABEL_COLORS[0]);
-
-  useEffect(() => setColor(randomColor()), []);
+  const colorSeed = useId();
+  const [color, setColor] = useState(() => colorForId(colorSeed));
 
   const submit = async () => {
     if (!name.trim() || disabled) return;

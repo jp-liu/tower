@@ -10,7 +10,7 @@ interface UiDialogState {
 /**
  * Cross-component open flags for the top-bar's CreateProject / ImportProject
  * dialogs, so the command palette can trigger them without prop drilling.
- * The TopBar subscribes to these and syncs into its local dialog state.
+ * The TopBar and command palette both use these flags as the dialog state owner.
  */
 export const useUiDialogStore = create<UiDialogState>((set) => ({
   createProjectOpen: false,

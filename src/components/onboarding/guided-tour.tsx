@@ -71,11 +71,11 @@ export function GuidedTour({ onComplete }: GuidedTourProps) {
 
   // Watch for target element appearing in DOM (for steps that require navigation first)
   useEffect(() => {
-    updatePosition();
+    const initialFrame = requestAnimationFrame(updatePosition);
 
     let skipTimer: ReturnType<typeof setTimeout> | null = null;
 
-    if (!visible && step?.waitForTarget) {
+    if (step?.waitForTarget) {
       observerRef.current = new MutationObserver(() => {
         const el = findTarget();
         if (el) {
@@ -108,12 +108,13 @@ export function GuidedTour({ onComplete }: GuidedTourProps) {
     window.addEventListener("scroll", handleResize, true);
 
     return () => {
+      cancelAnimationFrame(initialFrame);
       observerRef.current?.disconnect();
       if (skipTimer) clearTimeout(skipTimer);
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("scroll", handleResize, true);
     };
-  }, [currentStep, step, findTarget, updatePosition, visible, handleComplete]);
+  }, [currentStep, step, findTarget, updatePosition, handleComplete]);
 
   // Re-position on any click (user may have navigated)
   useEffect(() => {
@@ -128,7 +129,7 @@ export function GuidedTour({ onComplete }: GuidedTourProps) {
     } else {
       handleComplete();
     }
-  }, [currentStep]);
+  }, [currentStep, handleComplete]);
 
   if (!step) return null;
 

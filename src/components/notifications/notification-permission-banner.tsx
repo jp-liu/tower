@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Bell } from "lucide-react";
+import { useHydrated } from "@/hooks/use-hydrated";
 
 interface NotificationPermissionBannerProps {
   onDismiss?: () => void;
@@ -11,26 +12,24 @@ interface NotificationPermissionBannerProps {
 
 export function NotificationPermissionBanner({ onDismiss }: NotificationPermissionBannerProps) {
   const { t } = useI18n();
-  const [show, setShow] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!("Notification" in window)) return;
-    if (window.Notification.permission === "default") {
-      setShow(true);
-    }
-  }, []);
+  const hydrated = useHydrated();
+  const [dismissed, setDismissed] = useState(false);
+  const show =
+    hydrated &&
+    "Notification" in window &&
+    window.Notification.permission === "default" &&
+    !dismissed;
 
   const handleAllow = async () => {
     const result = await window.Notification.requestPermission();
     if (result !== "default") {
-      setShow(false);
+      setDismissed(true);
       onDismiss?.();
     }
   };
 
   const handleDismiss = () => {
-    setShow(false);
+    setDismissed(true);
     onDismiss?.();
   };
 

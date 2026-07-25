@@ -80,7 +80,12 @@ function parseDateInput(value: string): Date | undefined {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function VersionFormDialog({
+export function VersionFormDialog(props: VersionFormDialogProps) {
+  const formKey = `${props.open ? "open" : "closed"}:${props.editVersion?.id ?? "new"}:${props.projectLocalPath ?? "normal"}`;
+  return <VersionFormDialogState key={formKey} {...props} />;
+}
+
+function VersionFormDialogState({
   open,
   onOpenChange,
   projectId,
@@ -93,49 +98,24 @@ export function VersionFormDialog({
   const { t } = useI18n();
   const isEditMode = !!editVersion;
 
-  const [number, setNumber] = useState("");
-  const [name, setName] = useState("");
-  const [typeId, setTypeId] = useState<string>("");
+  const [number, setNumber] = useState(editVersion?.number ?? "");
+  const [name, setName] = useState(editVersion?.name ?? "");
+  const [typeId, setTypeId] = useState<string>(editVersion?.typeId ?? "");
   const [types, setTypes] = useState<{ id: string; name: string }[]>([]);
   const [manageOpen, setManageOpen] = useState(false);
-  const [baseBranch, setBaseBranch] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [targetDate, setTargetDate] = useState("");
-  const [description, setDescription] = useState("");
+  const [baseBranch, setBaseBranch] = useState(editVersion?.baseBranch ?? defaultBaseBranch ?? "");
+  const [startDate, setStartDate] = useState(toDateInputValue(editVersion?.startDate));
+  const [targetDate, setTargetDate] = useState(toDateInputValue(editVersion?.targetDate));
+  const [description, setDescription] = useState(editVersion?.description ?? "");
   const [setCurrent, setSetCurrent] = useState(false);
 
   // Branch picker
   const [branches, setBranches] = useState<string[]>([]);
-  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [branchesLoading, setBranchesLoading] = useState(open && !!projectLocalPath);
   const [branchOpen, setBranchOpen] = useState(false);
   const isGitProject = !!projectLocalPath;
 
   const [isPending, startTransition] = useTransition();
-
-  // Reset / prefill fields when dialog opens or editVersion changes
-  useEffect(() => {
-    if (!open) return;
-
-    if (editVersion) {
-      setNumber(editVersion.number);
-      setName(editVersion.name);
-      setTypeId(editVersion.typeId ?? "");
-      setBaseBranch(editVersion.baseBranch ?? "");
-      setStartDate(toDateInputValue(editVersion.startDate));
-      setTargetDate(toDateInputValue(editVersion.targetDate));
-      setDescription(editVersion.description ?? "");
-      setSetCurrent(false);
-    } else {
-      setNumber("");
-      setName("");
-      setTypeId("");
-      setBaseBranch(defaultBaseBranch ?? "");
-      setStartDate("");
-      setTargetDate("");
-      setDescription("");
-      setSetCurrent(false);
-    }
-  }, [open, editVersion, defaultBaseBranch]);
 
   // Load workspace version types when dialog opens
   useEffect(() => {
@@ -145,11 +125,7 @@ export function VersionFormDialog({
 
   // Load git branches when dialog opens (cached first, then refresh remote)
   useEffect(() => {
-    if (!open || !isGitProject) {
-      setBranches([]);
-      return;
-    }
-    setBranchesLoading(true);
+    if (!open || !isGitProject) return;
     getProjectBranches(projectLocalPath!)
       .then(setBranches)
       .catch(() => setBranches([]))

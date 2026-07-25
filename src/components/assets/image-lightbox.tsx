@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RotateCcw } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { useHydrated } from "@/hooks/use-hydrated";
 
 export interface LightboxAsset {
   url: string;
@@ -39,7 +40,14 @@ export function ImageLightbox({
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHydrated();
+  const [scaleImageUrl, setScaleImageUrl] = useState(imageUrl);
+
+  if (scaleImageUrl !== imageUrl) {
+    setScaleImageUrl(imageUrl);
+    setScale(1);
+    setPan({ x: 0, y: 0 });
+  }
 
   const hasNav =
     !!assets && assets.length > 1 && typeof currentIndex === "number" && !!onIndexChange;
@@ -55,17 +63,6 @@ export function ImageLightbox({
   const hasMultiPage = totalPages > 1;
   const canPrevPage = hasNav && currentPage > 0;
   const canNextPage = hasNav && currentPage < totalPages - 1;
-
-  // Portal needs document — only render after mount
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Reset scale + pan whenever image changes
-  useEffect(() => {
-    setScale(1);
-    setPan({ x: 0, y: 0 });
-  }, [imageUrl]);
 
   // Lock body scroll while open
   useEffect(() => {
@@ -400,4 +397,3 @@ function ToolbarBtn({
     </button>
   );
 }
-
