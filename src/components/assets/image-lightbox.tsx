@@ -26,6 +26,7 @@ const MIN_SCALE = 0.1;
 const MAX_SCALE = 8;
 const ZOOM_STEP = 1.25;
 const GALLERY_PAGE_SIZE = 10;
+const INITIAL_IMAGE_DIMENSIONS = { width: 1, height: 1 };
 
 export function ImageLightbox({
   imageUrl,
@@ -43,11 +44,13 @@ export function ImageLightbox({
   const dragStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
   const mounted = useHydrated();
   const [scaleImageUrl, setScaleImageUrl] = useState(imageUrl);
+  const [imageDimensions, setImageDimensions] = useState(INITIAL_IMAGE_DIMENSIONS);
 
   if (scaleImageUrl !== imageUrl) {
     setScaleImageUrl(imageUrl);
     setScale(1);
     setPan({ x: 0, y: 0 });
+    setImageDimensions(INITIAL_IMAGE_DIMENSIONS);
   }
 
   const hasNav =
@@ -213,6 +216,13 @@ export function ImageLightbox({
     }
   };
 
+  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const { naturalWidth, naturalHeight } = e.currentTarget;
+    if (naturalWidth > 0 && naturalHeight > 0) {
+      setImageDimensions({ width: naturalWidth, height: naturalHeight });
+    }
+  };
+
   // Click anywhere outside the image (or on backdrop) closes the lightbox
   const handleStageClick = (e: React.MouseEvent<HTMLDivElement>) => {
     // Only close when click target is the stage itself (not the image — the
@@ -239,6 +249,7 @@ export function ImageLightbox({
 
       {/* Image stage — wheel-to-zoom + click-on-empty closes */}
       <div
+        data-testid="image-lightbox-stage"
         className={`absolute inset-0 flex items-center justify-center overflow-hidden select-none ${cursorClass}`}
         onClick={handleStageClick}
         onWheel={handleWheel}
@@ -247,9 +258,10 @@ export function ImageLightbox({
           <Image
             src={imageUrl}
             alt={filename}
-            width={1}
-            height={1}
+            width={imageDimensions.width}
+            height={imageDimensions.height}
             unoptimized
+            onLoad={handleImageLoad}
             onClick={handleImageClick}
             onPointerDown={handleImagePointerDown}
             onPointerMove={handleImagePointerMove}
