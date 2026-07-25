@@ -126,7 +126,7 @@ describe("globalSearch - note category", () => {
   });
 
   it("does not throw on malformed FTS5 query (unmatched quote) — falls back to LIKE", async () => {
-    const note = await testDb.projectNote.create({
+    await testDb.projectNote.create({
       data: {
         title: "unmatched quote test note",
         content: "this has unmatched content",

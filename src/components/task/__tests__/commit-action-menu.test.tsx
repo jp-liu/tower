@@ -6,7 +6,7 @@
  * - Mock dialog sub-components to avoid deep rendering
  * - Render with open={true} so menu content is always in DOM
  */
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import React from "react";
 import { I18nProvider } from "@/lib/i18n";
@@ -89,27 +89,31 @@ function renderMenu(props?: Partial<{
 
 // We need to import the component AFTER vi.mock calls — use a wrapper
 // that's defined after module-level mocks but uses a lazy reference.
-let CommitActionMenuWrapper: React.FC<{
+function CommitActionMenuWrapper({
+  commit,
+  currentHead,
+  onActionComplete,
+}: {
   commit: RawCommit;
   currentHead: string | null;
   onActionComplete?: () => void;
-}>;
+}) {
+  return (
+    <CommitActionMenu
+      worktreePath="/fake/path"
+      commit={commit}
+      currentHead={currentHead}
+      onActionComplete={onActionComplete}
+      open={true}
+      onOpenChange={vi.fn()}
+    />
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Import component under test
 // ---------------------------------------------------------------------------
 import { CommitActionMenu } from "../commit-action-menu";
-
-CommitActionMenuWrapper = ({ commit, currentHead, onActionComplete }) => (
-  <CommitActionMenu
-    worktreePath="/fake/path"
-    commit={commit}
-    currentHead={currentHead}
-    onActionComplete={onActionComplete}
-    open={true}
-    onOpenChange={vi.fn()}
-  />
-);
 
 afterEach(() => {
   cleanup();

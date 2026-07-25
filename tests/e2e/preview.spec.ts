@@ -10,7 +10,7 @@ import { test, expect } from "@playwright/test";
 // itself loads without import / setup errors.
 
 test.describe("Preview feature (E2E)", () => {
-  test("spec loads without errors", async ({ page: _page }) => {
+  test("spec loads without errors", async () => {
     expect(true).toBe(true);
   });
 

@@ -17,13 +17,6 @@ const mockPassingResult: TestResult = {
   ],
 };
 
-const mockFailingResult: TestResult = {
-  ok: false,
-  checks: [
-    { name: "claude_command_resolvable", passed: false, message: 'Command not found in PATH: "claude"' },
-  ],
-};
-
 // --- Helpers ---
 
 function renderWithI18n(ui: React.ReactElement) {

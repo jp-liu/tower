@@ -2,8 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, waitFor, cleanup, act } from "@testing-library/react";
 
 const mockListDirectory = vi.fn();
-const mockGetGitStatus = vi.fn(async (..._args: unknown[]) => ({}));
-const mockListAllFiles = vi.fn(async (..._args: unknown[]) => [] as string[]);
+const mockGetGitStatus = vi.fn(async (...args: unknown[]) => {
+  void args;
+  return {};
+});
+const mockListAllFiles = vi.fn(async (...args: unknown[]) => {
+  void args;
+  return [] as string[];
+});
 const mockToastError = vi.fn();
 const mockToastSuccess = vi.fn();
 const mockToastWarning = vi.fn();

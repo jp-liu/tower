@@ -5,7 +5,7 @@
  * Tests the CRITICAL path containment fix: filePath must be within
  * the project directory or /tmp. Prevents arbitrary file read.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import * as path from "path";
 
 // We test the path containment logic in isolation rather than the full route,

@@ -39,7 +39,7 @@ vi.mock("@monaco-editor/react", () => {
 // Mock next/dynamic — resolve the loader synchronously in tests
 // ---------------------------------------------------------------------------
 vi.mock("next/dynamic", () => ({
-  default: (loader: () => Promise<{ default: React.ComponentType<unknown> }>, _opts?: unknown) => {
+  default: (loader: () => Promise<{ default: React.ComponentType<unknown> }>) => {
     const LazyComponent = (props: Record<string, unknown>) => {
       const [Component, setComponent] = React.useState<React.ComponentType<unknown> | null>(null);
 

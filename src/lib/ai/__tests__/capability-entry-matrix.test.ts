@@ -82,7 +82,10 @@ afterEach(async () => {
 
 describe("one-shot production entry target matrix", () => {
   it("runs Summary and task overview through explicit CLI targets", async () => {
-    const generate = vi.fn(async (_options: CliQueryOptions): Promise<CliQueryResult> => ({ text: "CLI entry result" }));
+    const generate = vi.fn(async (options: CliQueryOptions): Promise<CliQueryResult> => {
+      void options;
+      return { text: "CLI entry result" };
+    });
     usePlan("summary", [cliTarget(generate)]);
 
     await expect(generateSummaryFromLog("terminal log", "/work", "execution")).resolves.toBe("CLI entry result");
@@ -92,9 +95,13 @@ describe("one-shot production entry target matrix", () => {
   });
 
   it("runs Summary and task overview through explicit API targets", async () => {
-    const generate = vi.fn(async (_request: { modelId: string }, _context?: unknown) => ({
-      text: "API entry result", reasoning: "", toolCalls: [], toolResults: [], finishReason: "stop",
-    }));
+    const generate = vi.fn(async (request: { modelId: string }, context?: unknown) => {
+      void request;
+      void context;
+      return {
+        text: "API entry result", reasoning: "", toolCalls: [], toolResults: [], finishReason: "stop",
+      };
+    });
     mocks.getApiRuntime.mockResolvedValue({ generate });
     usePlan("summary", [apiTarget()]);
 
@@ -105,9 +112,10 @@ describe("one-shot production entry target matrix", () => {
   });
 
   it("runs Dreaming structured parsing through an explicit CLI target", async () => {
-    const generate = vi.fn(async (_options: CliQueryOptions): Promise<CliQueryResult> => ({
-      text: JSON.stringify({ summary: "CLI dream", insights: [], shouldCreateNote: false }),
-    }));
+    const generate = vi.fn(async (options: CliQueryOptions): Promise<CliQueryResult> => {
+      void options;
+      return { text: JSON.stringify({ summary: "CLI dream", insights: [], shouldCreateNote: false }) };
+    });
     usePlan("dreaming", [cliTarget(generate)]);
 
     await expect(generateDreamingInsight("terminal log", "/work", null, "task"))
@@ -116,9 +124,11 @@ describe("one-shot production entry target matrix", () => {
   });
 
   it("runs Dreaming structured parsing through an explicit API target", async () => {
-    const generateStructured = vi.fn(async (_request: { modelId: string }, _context?: unknown) => ({
-      summary: "API dream", insights: [], shouldCreateNote: false,
-    }));
+    const generateStructured = vi.fn(async (request: { modelId: string }, context?: unknown) => {
+      void request;
+      void context;
+      return { summary: "API dream", insights: [], shouldCreateNote: false };
+    });
     mocks.getApiRuntime.mockResolvedValue({ generateStructured });
     usePlan("dreaming", [apiTarget()]);
 
@@ -128,7 +138,10 @@ describe("one-shot production entry target matrix", () => {
   });
 
   it("runs Project Analysis through an explicit CLI target", async () => {
-    const generate = vi.fn(async (_options: CliQueryOptions): Promise<CliQueryResult> => ({ text: "**Overview:** CLI analysis" }));
+    const generate = vi.fn(async (options: CliQueryOptions): Promise<CliQueryResult> => {
+      void options;
+      return { text: "**Overview:** CLI analysis" };
+    });
     usePlan("analysis", [cliTarget(generate)]);
     const directory = await projectDir();
 
@@ -137,9 +150,13 @@ describe("one-shot production entry target matrix", () => {
   });
 
   it("runs Project Analysis through an explicit API target", async () => {
-    const generate = vi.fn(async (_request: { modelId: string }, _context?: unknown) => ({
-      text: "**Overview:** API analysis", reasoning: "", toolCalls: [], toolResults: [], finishReason: "stop",
-    }));
+    const generate = vi.fn(async (request: { modelId: string }, context?: unknown) => {
+      void request;
+      void context;
+      return {
+        text: "**Overview:** API analysis", reasoning: "", toolCalls: [], toolResults: [], finishReason: "stop",
+      };
+    });
     mocks.getApiRuntime.mockResolvedValue({ generate });
     usePlan("analysis", [apiTarget()]);
     const directory = await projectDir();

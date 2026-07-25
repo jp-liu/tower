@@ -3,7 +3,6 @@ import {
   createWorkspaceSchema,
   updateWorkspaceSchema,
   createProjectSchema,
-  updateProjectSchema,
   createTaskSchema,
   updateTaskSchema,
   taskStatusSchema,

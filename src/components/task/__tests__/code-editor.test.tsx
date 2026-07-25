@@ -70,7 +70,7 @@ vi.mock("@monaco-editor/react", () => {
 // Mock next/dynamic to render the dynamic component directly (no lazy loading)
 // ---------------------------------------------------------------------------
 vi.mock("next/dynamic", () => ({
-  default: (loader: () => Promise<{ default: React.ComponentType<unknown> }>, _opts?: unknown) => {
+  default: (loader: () => Promise<{ default: React.ComponentType<unknown> }>) => {
     // Return a component that renders what the loader resolves to.
     // We use a state-driven approach so we can call the loader synchronously
     // in tests by resolving the promise immediately.

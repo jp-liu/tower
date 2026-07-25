@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it } from "vitest";
 
 describe("POST /api/tasks/[taskId]/merge", () => {
   it.todo("returns 400 when task is not IN_REVIEW");

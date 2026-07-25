@@ -60,29 +60,6 @@ async function ensureChatMode(page: import("@playwright/test").Page) {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: open the assistant panel via the top-bar Bot button
-// ---------------------------------------------------------------------------
-
-async function openAssistantPanel(page: import("@playwright/test").Page) {
-  // Click the Bot icon button in the top-bar
-  const assistantBtn = page.locator("button[aria-label='助手'], button[aria-label='Assistant']").first();
-  await assistantBtn.waitFor({ state: "visible", timeout: 8000 });
-  await assistantBtn.click();
-
-  // Wait for assistant panel to appear — the panel title bar contains a Bot icon
-  // and a title text "助手" / "Assistant". We wait for the close button to appear
-  // inside the panel to confirm it opened.
-  const closeBtn = page.locator("button[aria-label]").filter({ hasText: "" }).filter({
-    has: page.locator("svg"),
-  });
-
-  // More reliable: wait for the chat textarea to appear (confirms panel is open + chat mode)
-  await page
-    .locator("textarea[placeholder]")
-    .waitFor({ state: "visible", timeout: 10000 });
-}
-
-// ---------------------------------------------------------------------------
 // Test suite
 // ---------------------------------------------------------------------------
 
@@ -226,15 +203,6 @@ test.describe.serial("Chat Assistant Flow", () => {
 
       textarea.dispatchEvent(pasteEvent);
     });
-
-    // The ImageThumbnailStrip renders a container with thumbnail images.
-    // Each thumbnail is an <img> inside a relative h-12 w-12 div.
-    // Wait for at least one thumbnail image to appear inside the input area.
-    const thumbnail = page.locator("div.border-t").locator("img").first();
-
-    // Also check for the progress bar (uploading state) — it means paste was handled
-    // Use a broader check: any img in the assistant panel area
-    const thumbnailStrip = page.locator('[role="progressbar"], div.flex.flex-row.gap-2 img').first();
 
     // We wait for either the thumbnail img or the progress bar to appear
     // (upload may be fast or slow depending on network / server state)
