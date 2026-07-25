@@ -127,6 +127,19 @@ function validateTowerAnnotations(value: unknown): void {
   }
 }
 
+function validateIntegrationPermissions(manifest: CliPluginManifestV1): void {
+  const integrations = manifest.capabilities.integrations;
+  const required = [
+    ["mcp", "integration:mcp"],
+    ["hooks", "integration:hooks"],
+    ["skills", "integration:skills"],
+  ] as const;
+  if (required.some(([capability, permission]) =>
+    integrations?.[capability] === true && !manifest.permissions.includes(permission))) {
+    throw pluginError("INVALID_MANIFEST");
+  }
+}
+
 const ROOT_SCHEMA_KEYS = new Set([
   "$schema", "$id", "title", "description", "type", "properties", "required",
   "additionalProperties", "default", "x-tower",
@@ -151,6 +164,9 @@ function validateSchemaNode(schema: unknown, root = false): void {
         || schema.required.some((entry) => typeof entry !== "string" || !(entry in properties)))) {
       throw pluginError("INVALID_CONFIG_SCHEMA");
     }
+    if (isRecord(schema["x-tower"]) && schema["x-tower"].sensitive === true) {
+      throw pluginError("INVALID_CONFIG_SCHEMA");
+    }
     for (const property of Object.values(properties)) validateSchemaNode(property);
     return;
   }
@@ -159,6 +175,10 @@ function validateSchemaNode(schema: unknown, root = false): void {
     ? schema["x-tower"] as Record<string, unknown>
     : {};
   const control = annotation.control;
+  if (annotation.sensitive === true
+    && (schema.type !== "string" || (control !== undefined && control !== "text" && control !== "path"))) {
+    throw pluginError("INVALID_CONFIG_SCHEMA");
+  }
   if (schema.type === "string") {
     if (control !== undefined && !["text", "path", "select"].includes(String(control))) {
       throw pluginError("INVALID_CONFIG_SCHEMA");
@@ -185,6 +205,16 @@ function validateSchemaNode(schema: unknown, root = false): void {
   }
   if (schema.enum !== undefined && (!Array.isArray(schema.enum) || schema.enum.length === 0)) {
     throw pluginError("INVALID_CONFIG_SCHEMA");
+  }
+  if (schema.enum !== undefined) {
+    if (schema.type === "string" && schema.enum.some((value) => typeof value !== "string")) {
+      throw pluginError("INVALID_CONFIG_SCHEMA");
+    }
+    if ((schema.type === "number" || schema.type === "integer")
+      && schema.enum.some((value) => typeof value !== "number"
+        || (schema.type === "integer" && !Number.isInteger(value)))) {
+      throw pluginError("INVALID_CONFIG_SCHEMA");
+    }
   }
 }
 
@@ -393,6 +423,7 @@ export async function validatePluginPackage(options: ValidatePluginPackageOption
   if (packageJson.type !== "module") throw pluginError("INVALID_PACKAGE", packageJson.name);
   if (!isCliPluginManifestV1(packageJson.tower)) throw pluginError("INVALID_MANIFEST", packageJson.name);
   const manifest = packageJson.tower;
+  validateIntegrationPermissions(manifest);
   if (!isCliPluginApiVersionCompatible(manifest.apiVersion)) {
     throw pluginError("INCOMPATIBLE_PLUGIN", packageJson.name);
   }

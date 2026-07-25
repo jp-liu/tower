@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   CapabilityRuntimeError,
+  PluginRuntimeError,
   capabilityError,
   type AiCapabilitySlot,
   type CapabilityErrorShape,
@@ -57,6 +58,20 @@ const connectionSelect = {
 function preflight(code: CapabilityErrorShape["code"]): CapabilityErrorShape {
   const error = capabilityError(code);
   return { code: error.code, message: error.message };
+}
+
+function cliResolutionErrorCode(error: unknown): CapabilityErrorShape["code"] {
+  if (error instanceof PluginRuntimeError) {
+    if (error.code === "PLUGIN_DISABLED") return "connection_disabled";
+    if (error.code === "PLUGIN_NOT_FOUND") return "cli_not_found";
+    return "connection_unavailable";
+  }
+  if (!(error instanceof Error)) return "cli_not_found";
+  if (error.message === "plugin_disabled") return "connection_disabled";
+  if (error.message === "plugin_corrupt") return "connection_unavailable";
+  if (error.message === "plugin_not_found" || error.message === "cli_not_found") return "cli_not_found";
+  if (error.message === "cli_not_executable") return "cli_not_executable";
+  return error.message.includes("not runnable") ? "cli_not_executable" : "cli_not_found";
 }
 
 async function resolveStoredTarget(
@@ -133,10 +148,7 @@ async function resolveStoredTarget(
       cli: { adapter: resolved.adapter, provider: resolvedProvider, commandPath: resolved.commandPath },
     };
   } catch (error) {
-    const code = error instanceof Error && error.message.includes("not runnable")
-      ? "cli_not_executable"
-      : "cli_not_found";
-    return { ...base, kind: "cli", preflightError: preflight(code) };
+    return { ...base, kind: "cli", preflightError: preflight(cliResolutionErrorCode(error)) };
   }
 }
 

@@ -215,21 +215,29 @@ export async function inspectProviderIntegration(
   };
 
   const mcpConfig = buildTowerMcpConfig();
+  const manifest = provider?.cli?.plugin.manifest;
+  const permissions = new Set(manifest?.permissions ?? []);
+  const integrations = manifest?.capabilities.integrations;
   const [mcpInstalled, hooksInstalled, skillChecks] = await Promise.all([
-    check(async () => (await adapter.mcp?.inspect({ ...mcpConfig, scope: "user" }))?.installed ?? false),
-    check(async () => (await adapter.hooks?.inspect({}))?.installed ?? false),
+    integrations?.mcp && permissions.has("integration:mcp")
+      ? check(async () => (await adapter.mcp?.inspect({ ...mcpConfig, scope: "user" }))?.installed ?? false)
+      : false,
+    integrations?.hooks && permissions.has("integration:hooks")
+      ? check(async () => (await adapter.hooks?.inspect({}))?.installed ?? false)
+      : false,
     Promise.all(
       TOWER_SKILL_NAMES.map((name) =>
-        check(async () => (await adapter.skills?.inspect({
+        integrations?.skills && permissions.has("integration:skills")
+          ? check(async () => (await adapter.skills?.inspect({
           name,
           sourceDir: getTowerSkillSourceDir(name),
           scope: "user",
-        }))?.installed ?? false),
+          }))?.installed ?? false)
+          : false,
       ),
     ),
   ]);
   const skillsInstalled = skillChecks.every(Boolean);
-  const integrations = provider?.cli?.plugin.manifest.capabilities.integrations;
 
   return {
     mcpInstalled,
@@ -303,25 +311,28 @@ export async function installAllForProvider(
 
   const mcpConfig = buildTowerMcpConfig();
   const capabilities = provider.cli.plugin.manifest.capabilities.integrations;
+  const permissions = new Set(provider.cli.plugin.manifest.permissions);
   const includeProviderDetail = provider.builtin === true;
-  const mcp = adapter.mcp
+  const mcp = capabilities?.mcp && permissions.has("integration:mcp") && adapter.mcp
     ? await installIntegration("MCP", "cli", () => adapter.mcp!.install({ ...mcpConfig, scope: "user" }), includeProviderDetail)
-    : unsupportedIntegration("MCP");
-  const hooks = adapter.hooks
+    : capabilities?.mcp ? unsupportedIntegration("MCP") : undefined;
+  const hooks = capabilities?.hooks && permissions.has("integration:hooks") && adapter.hooks
     ? await installIntegration("Hooks", "file", () => adapter.hooks!.install({ apiUrl }), includeProviderDetail)
-    : unsupportedIntegration("Hooks");
+    : capabilities?.hooks ? unsupportedIntegration("Hooks") : undefined;
   // Install every task-terminal Tower skill. Report the first failure if any,
   // else the canonical `tower` result — ok reflects all of them.
   const skillResults = await Promise.all(
-    TOWER_SKILL_NAMES.map(async (name) => adapter.skills
+    TOWER_SKILL_NAMES.map(async (name) => capabilities?.skills
+      && permissions.has("integration:skills")
+      && adapter.skills
       ? installIntegration(`Skill ${name}`, "symlink", () => adapter.skills!.install({
           name,
           sourceDir: getTowerSkillSourceDir(name),
           scope: "user",
         }), includeProviderDetail)
-      : unsupportedIntegration("Skills")),
+      : capabilities?.skills ? unsupportedIntegration("Skills") : undefined),
   );
-  const skill = skillResults.find((r) => !r.ok) ?? skillResults[0];
+  const skill = skillResults.find((result) => result && !result.ok) ?? skillResults[0];
   const report: ProviderInstallReport = {
     provider: providerName,
     available: true,
@@ -330,9 +341,9 @@ export async function installAllForProvider(
     mcp,
     hooks,
     skill,
-    ok: (!capabilities?.mcp || mcp.ok)
-      && (!capabilities?.hooks || hooks.ok)
-      && (!capabilities?.skills || skill.ok),
+    ok: (!capabilities?.mcp || mcp?.ok === true)
+      && (!capabilities?.hooks || hooks?.ok === true)
+      && (!capabilities?.skills || skill?.ok === true),
   };
   const actual = await inspectProviderIntegration(providerName);
   return applyIntegrationVerification(report, actual, capabilities);

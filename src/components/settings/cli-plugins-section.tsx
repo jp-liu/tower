@@ -29,6 +29,7 @@ import {
   planLocalCliPlugin,
   planNpmCliPlugin,
   recoverCliPluginRegistry,
+  reviewInstalledCliPlugin,
   revealCliPluginSecret,
   saveCliPluginConnection,
   testCliPluginConnection,
@@ -129,7 +130,10 @@ function SettingsField({
   } else if (control === "select") {
     const selected = value === undefined ? null : String(value);
     input = (
-      <Select value={selected} onValueChange={(next) => onChange(next)}>
+      <Select value={selected} onValueChange={(next) => {
+        const option = schema.enum?.find((candidate) => String(candidate) === next);
+        if (option !== undefined) onChange(option);
+      }}>
         <SelectTrigger id={id} className="w-full"><span className="truncate">{selected ?? t("settings.cliPlugins.selectValue")}</span></SelectTrigger>
         <SelectContent>{(schema.enum ?? []).map((option) => <SelectItem key={String(option)} value={String(option)}>{String(option)}</SelectItem>)}</SelectContent>
       </Select>
@@ -214,6 +218,7 @@ export function CliPluginsSection() {
   const [directory, setDirectory] = useState("");
   const [plan, setPlan] = useState<SafeCliPluginPlan | null>(null);
   const [installed, setInstalled] = useState(false);
+  const [recoveringConfirmation, setRecoveringConfirmation] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [danger, setDanger] = useState<null | { type: "disable" | "uninstall"; plugin: Plugin }>(null);
   const [detail, setDetail] = useState<CliPluginConnectionDetail | null>(null);
@@ -247,6 +252,7 @@ export function CliPluginsSection() {
     setPlan(null);
     setInstalled(false);
     setDialogError(null);
+    setRecoveringConfirmation(false);
   }
 
   async function createPlan() {
@@ -310,6 +316,19 @@ export function CliPluginsSection() {
       toast.success(t("settings.cliPlugins.enabled"));
       await load();
       notifyConnectionsChanged();
+    } else toast.error(actionError(t, result.error.code));
+    setPending(null);
+  }
+
+  async function reviewInstalled(plugin: Plugin) {
+    setPending(`review-existing:${plugin.id}`);
+    const result = await reviewInstalledCliPlugin(plugin.id);
+    if (result.ok) {
+      resetInstall();
+      setSource(plugin.source);
+      setRecoveringConfirmation(true);
+      setPlan(result.data);
+      setInstallOpen(true);
     } else toast.error(actionError(t, result.error.code));
     setPending(null);
   }
@@ -448,6 +467,7 @@ export function CliPluginsSection() {
                     <span className="break-words text-sm font-medium">{plugin.displayName}</span>
                     <Badge variant="outline">{plugin.source}</Badge>
                     <Badge variant={plugin.health === "ready" ? "secondary" : plugin.health === "corrupt" ? "destructive" : "outline"}>{t(`settings.cliPlugins.health.${plugin.health}` as never)}</Badge>
+                    {!plugin.permissionConfirmed && <Badge variant="destructive">{t("settings.cliPlugins.permissionPending")}</Badge>}
                   </div>
                   <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{plugin.id} · {plugin.version}</p>
                   <div className="mt-1 flex flex-wrap gap-1">{plugin.permissions.map((permission) => <Badge key={permission} variant="outline">{permission}</Badge>)}</div>
@@ -457,7 +477,9 @@ export function CliPluginsSection() {
                   <Button variant="outline" onClick={() => void openConfiguration(plugin.id)} disabled={!plugin.enabled || pending !== null}><Pencil />{t("common.edit")}</Button>
                   {plugin.enabled
                     ? <Button variant="outline" onClick={() => setDanger({ type: "disable", plugin })}>{t("settings.cliPlugins.disable")}</Button>
-                    : <Button variant="outline" onClick={() => void enablePlugin(plugin.id)} disabled={pending !== null}>{pending === `enable-existing:${plugin.id}` && <Loader2 className="animate-spin" />}{t("settings.cliPlugins.enable")}</Button>}
+                    : plugin.permissionConfirmed
+                      ? <Button variant="outline" onClick={() => void enablePlugin(plugin.id)} disabled={pending !== null}>{pending === `enable-existing:${plugin.id}` && <Loader2 className="animate-spin" />}{t("settings.cliPlugins.enable")}</Button>
+                      : <Button variant="outline" onClick={() => void reviewInstalled(plugin)} disabled={pending !== null}>{pending === `review-existing:${plugin.id}` && <Loader2 className="animate-spin" />}{t("settings.cliPlugins.reviewAndEnable")}</Button>}
                   <Button variant="outline" onClick={() => { setSource(plugin.source); setPackageName(plugin.id); resetInstall(); setInstallOpen(true); }}><RefreshCw />{t("settings.cliPlugins.update")}</Button>
                   <Button variant="destructive" onClick={() => setDanger({ type: "uninstall", plugin })}><Trash2 />{t("settings.cliPlugins.uninstall")}</Button>
                 </div>
@@ -473,21 +495,21 @@ export function CliPluginsSection() {
             <DialogTitle>{t("settings.cliPlugins.add")}</DialogTitle>
             <DialogDescription>{t("settings.cliPlugins.installDesc")}</DialogDescription>
           </DialogHeader>
-          <Tabs value={source} onValueChange={(value) => {
+          {!recoveringConfirmation && <Tabs value={source} onValueChange={(value) => {
             if (value === source) return;
             setSource(value as InstallSource);
             resetInstall();
           }}>
             <TabsList className="grid w-full grid-cols-2"><TabsTrigger value="npm">npm</TabsTrigger><TabsTrigger value="local">{t("settings.cliPlugins.local")}</TabsTrigger></TabsList>
-          </Tabs>
-          {source === "npm" ? (
+          </Tabs>}
+          {!recoveringConfirmation && (source === "npm" ? (
             <div className="grid gap-3 sm:grid-cols-[1fr_10rem]">
               <div className="space-y-1.5"><Label htmlFor="plugin-package">{t("settings.cliPlugins.packageName")}</Label><Input id="plugin-package" value={packageName} onChange={(event) => { setPackageName(event.target.value); resetInstall(); }} placeholder="@scope/tower-cli-provider" /></div>
               <div className="space-y-1.5"><Label htmlFor="plugin-version">{t("settings.cliPlugins.exactVersion")}</Label><Input id="plugin-version" value={version} onChange={(event) => { setVersion(event.target.value); resetInstall(); }} placeholder="1.2.3" /></div>
             </div>
           ) : (
             <div className="space-y-1.5"><Label htmlFor="plugin-directory">{t("settings.cliPlugins.directory")}</Label><div className="flex gap-2"><FolderOpen className="mt-2.5 size-4 shrink-0" /><Input id="plugin-directory" className="font-mono" value={directory} onChange={(event) => { setDirectory(event.target.value); resetInstall(); }} /></div></div>
-          )}
+          ))}
           {!plan ? (
             <Button onClick={() => void createPlan()} disabled={!canPlan || pending !== null}>{pending === "plan" && <Loader2 className="animate-spin" />}{t("settings.cliPlugins.review")}</Button>
           ) : (

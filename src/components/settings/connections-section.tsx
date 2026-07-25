@@ -161,9 +161,10 @@ export function ConnectionsSection() {
               const enabled = stored?.enabled ?? true;
               const canToggle = Boolean(stored && stored.testStatus !== "untested");
               const probeOk = result?.ok ?? stored?.testOk ?? false;
-              const status = !provider.cli.available
-                ? provider.cli.commandState === "found" ? "notExecutable" : "notInstalled"
-                : stored?.testStatus ?? "untested";
+              const status = provider.cli.connectionStatus
+                ?? (!provider.cli.available
+                  ? provider.cli.commandState === "found" ? "notExecutable" : "notInstalled"
+                  : stored?.testStatus ?? "untested");
               return (
                 <li key={provider.name} className="px-4 py-3">
                   <div className="flex flex-wrap items-start gap-3 sm:flex-nowrap sm:items-center">

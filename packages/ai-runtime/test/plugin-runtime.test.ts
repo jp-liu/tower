@@ -283,6 +283,15 @@ describe("CLI plugin installation runtime", () => {
       code: "INVALID_CONFIG_SCHEMA",
     });
 
+    const missingPermissionRoot = await createFixture();
+    const missingPermissionPackage = await readPackageJson(missingPermissionRoot);
+    const missingPermissionManifest = missingPermissionPackage.tower as CliPluginManifestV1;
+    missingPermissionManifest.capabilities.integrations = { mcp: true };
+    await writePackageJson(missingPermissionRoot, missingPermissionPackage);
+    await expect(plugins.planLocalRegistration(missingPermissionRoot)).rejects.toMatchObject({
+      code: "INVALID_MANIFEST",
+    });
+
     const incompatibleRoot = await createFixture();
     const incompatiblePackage = await readPackageJson(incompatibleRoot);
     ((incompatiblePackage.tower as CliPluginManifestV1).compatibility).node = ">=999";
@@ -334,39 +343,54 @@ describe("CLI plugin installation runtime", () => {
     });
   });
 
-  it("disables an enabled plugin when an upgrade adds permissions", async () => {
+  it("requires the current plan confirmation after reinstall and every permission diff", async () => {
     const dataRoot = await temporaryDirectory();
     const provider = new FixtureNpmProvider();
     provider.add("1.0.0", await createFixture({ version: "1.0.0" }));
     provider.add("2.0.0", await createFixture({
       version: "2.0.0",
-      permissions: ["process:spawn", "network:provider"],
     }));
     provider.add("3.0.0", await createFixture({
       version: "3.0.0",
       permissions: ["process:spawn", "network:provider"],
+    }));
+    provider.add("4.0.0", await createFixture({
+      version: "4.0.0",
+      permissions: ["process:spawn"],
     }));
     const plugins = runtime(dataRoot, provider);
     const firstPlan = await plugins.planNpmInstall("@fixture/tower-cli", "1.0.0");
     await plugins.installNpm(firstPlan);
     await plugins.confirmAndEnable(firstPlan.pluginId, firstPlan);
 
-    const upgradePlan = await plugins.planNpmInstall("@fixture/tower-cli", "2.0.0");
-    expect(upgradePlan.permissions.added).toEqual(["network:provider"]);
-    const upgraded = await plugins.installNpm(upgradePlan);
-    expect(upgraded.enabled).toBe(false);
-    expect(upgraded.permissionConfirmation).toBeNull();
-    await expect(plugins.load(upgraded.id, host())).rejects.toMatchObject({ code: "PLUGIN_DISABLED" });
+    const reinstallPlan = await plugins.planNpmInstall("@fixture/tower-cli", "1.0.0");
+    const reinstalled = await plugins.installNpm(reinstallPlan);
+    expect(reinstalled).toMatchObject({ enabled: false, permissionConfirmation: null });
+    await expect(plugins.enable(reinstalled.id)).rejects.toMatchObject({ code: "PERMISSION_CONFIRMATION_REQUIRED" });
+    await expect(plugins.confirmAndEnable(reinstalled.id, firstPlan)).rejects.toMatchObject({ code: "INSTALL_PLAN_MISMATCH" });
+    await plugins.confirmAndEnable(reinstalled.id, reinstallPlan);
 
-    await plugins.confirmAndEnable(upgraded.id, upgradePlan);
-    const compatibleUpgradePlan = await plugins.planNpmInstall("@fixture/tower-cli", "3.0.0");
-    expect(compatibleUpgradePlan.permissions.added).toEqual([]);
-    const compatibleUpgrade = await plugins.installNpm(compatibleUpgradePlan);
-    expect(compatibleUpgrade.enabled).toBe(true);
-    expect(compatibleUpgrade.permissionConfirmation?.permissions).toEqual([
-      "network:provider",
-      "process:spawn",
-    ]);
+    const samePermissionsPlan = await plugins.planNpmInstall("@fixture/tower-cli", "2.0.0");
+    expect(samePermissionsPlan.permissions).toEqual({
+      requested: ["process:spawn"], added: [], removed: [],
+    });
+    const samePermissions = await plugins.installNpm(samePermissionsPlan);
+    expect(samePermissions).toMatchObject({ enabled: false, permissionConfirmation: null });
+    await expect(plugins.enable(samePermissions.id)).rejects.toMatchObject({ code: "PERMISSION_CONFIRMATION_REQUIRED" });
+    await plugins.confirmAndEnable(samePermissions.id, samePermissionsPlan);
+
+    const addedPlan = await plugins.planNpmInstall("@fixture/tower-cli", "3.0.0");
+    expect(addedPlan.permissions.added).toEqual(["network:provider"]);
+    const added = await plugins.installNpm(addedPlan);
+    expect(added).toMatchObject({ enabled: false, permissionConfirmation: null });
+    await plugins.confirmAndEnable(added.id, addedPlan);
+
+    const removedPlan = await plugins.planNpmInstall("@fixture/tower-cli", "4.0.0");
+    expect(removedPlan.permissions.removed).toEqual(["network:provider"]);
+    const removed = await plugins.installNpm(removedPlan);
+    expect(removed).toMatchObject({ enabled: false, permissionConfirmation: null });
+    await expect(plugins.enable(removed.id)).rejects.toMatchObject({ code: "PERMISSION_CONFIRMATION_REQUIRED" });
+    await plugins.confirmAndEnable(removed.id, removedPlan);
   });
 
   it("preserves the old install and registration when staged upgrade validation fails", async () => {

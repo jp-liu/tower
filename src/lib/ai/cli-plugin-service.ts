@@ -199,6 +199,14 @@ function parseJson<T>(value: string, fallback: T): T {
   }
 }
 
+function hasCurrentPermissionConfirmation(registration: PluginRegistration): boolean {
+  const confirmation = registration.permissionConfirmation;
+  return Boolean(confirmation
+    && confirmation.planDigest === registration.activationPlanDigest
+    && confirmation.permissions.length === registration.permissions.length
+    && registration.permissions.every((permission) => confirmation.permissions.includes(permission)));
+}
+
 function maskedSettings(schema: CliConfigSchema, settings: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(settings).map(([key, value]) => [
     key,
@@ -238,7 +246,7 @@ export class CliPluginApplication {
           enabled: registration.enabled,
           displayName: inspected.manifest.display.name,
           permissions: [...registration.permissions],
-          permissionConfirmed: registration.permissionConfirmation !== null,
+          permissionConfirmed: hasCurrentPermissionConfirmation(registration),
           installedAt: registration.installedAt,
           updatedAt: registration.updatedAt,
           health: registration.enabled ? "ready" as const : "disabled" as const,
@@ -252,7 +260,7 @@ export class CliPluginApplication {
           enabled: registration.enabled,
           displayName: registration.manifest.displayName,
           permissions: [...registration.permissions],
-          permissionConfirmed: registration.permissionConfirmation !== null,
+          permissionConfirmed: hasCurrentPermissionConfirmation(registration),
           installedAt: registration.installedAt,
           updatedAt: registration.updatedAt,
           health: "corrupt" as const,
@@ -275,6 +283,22 @@ export class CliPluginApplication {
     try {
       const plan = await this.runtime.planLocalRegistration(directory);
       if (BUILT_IN_PLUGIN_IDS.has(plan.pluginId)) throw new CliPluginApplicationError("invalid_input");
+      return this.rememberPlan(plan);
+    } catch (error) {
+      return mapRuntimeError(error);
+    }
+  }
+
+  async reviewInstalled(pluginId: string): Promise<SafeCliPluginPlan> {
+    try {
+      const registration = await this.runtime.get(pluginId);
+      if (!registration || registration.enabled) {
+        throw new CliPluginApplicationError(registration ? "invalid_input" : "plugin_not_found");
+      }
+      const plan = registration.source === "npm"
+        ? await this.runtime.planNpmInstall(registration.id, registration.version)
+        : await this.runtime.planLocalRegistration(registration.installPath);
+      if (plan.pluginId !== registration.id) throw new CliPluginApplicationError("plan_mismatch");
       return this.rememberPlan(plan);
     } catch (error) {
       return mapRuntimeError(error);

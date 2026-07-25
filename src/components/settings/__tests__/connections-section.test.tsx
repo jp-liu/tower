@@ -61,6 +61,19 @@ const providers = [
     cli: { available: true, version: null, commandPath: "/opt/lab/bin/lab", commandState: "runnable" },
     api: { available: false, keyConfigured: false },
   },
+  {
+    name: "pending",
+    displayName: "Pending Extension",
+    builtin: false,
+    cli: {
+      available: false,
+      version: "1.0.0",
+      commandPath: null,
+      commandState: null,
+      connectionStatus: "permissionRequired",
+    },
+    api: { available: false, keyConfigured: false },
+  },
 ] as const;
 
 function connection(provider: string, overrides: Record<string, unknown> = {}) {
@@ -122,6 +135,8 @@ describe("ConnectionsSection CLI connections", () => {
     expect(within(providerRow("Claude Code")).getByText(/已连接|Connected/)).toBeInTheDocument();
     expect(within(providerRow("Acme Extension")).getByText(/不可用|Unavailable/)).toBeInTheDocument();
     expect(within(providerRow("Lab Extension")).getByText(/未测试|Untested/)).toBeInTheDocument();
+    expect(within(providerRow("Pending Extension")).getByText(/权限待审查|Permission review required/)).toBeInTheDocument();
+    expect(within(providerRow("Pending Extension")).queryByText(/未安装|Not installed/)).not.toBeInTheDocument();
     expect(within(providerRow("Claude Code")).getByText("/opt/tower/bin/claude")).toBeInTheDocument();
   });
 

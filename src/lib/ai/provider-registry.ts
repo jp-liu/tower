@@ -144,6 +144,13 @@ export class ProviderRegistry {
     for (const plugin of plugins) {
       if (this.providers.has(plugin.id)) continue;
       const connection = connectionsByProvider.get(plugin.id);
+      const connectionStatus: NonNullable<ProviderAvailability["cli"]["connectionStatus"]> =
+        plugin.health === "corrupt" ? "pluginDamaged"
+          : !plugin.permissionConfirmed ? "permissionRequired"
+            : !plugin.enabled || connection?.enabled === false ? "pluginDisabled"
+              : connection?.testStatus === "connected" ? "connected"
+                : connection?.testStatus === "unavailable" ? "unavailable"
+                  : "untested";
       results.push({
         name: plugin.id,
         displayName: plugin.displayName,
@@ -152,7 +159,10 @@ export class ProviderRegistry {
           available: Boolean(plugin.enabled && plugin.health === "ready" && connection?.enabled && connection.testOk),
           version: connection?.resolvedVersion ?? null,
           commandPath: connection?.resolvedCommand ?? null,
-          commandState: connection?.testStatus === "connected" ? "connected" : null,
+          commandState: connection?.testStatus === "connected"
+            ? "connected"
+            : connection?.resolvedCommand ? "found" : null,
+          connectionStatus,
         },
         api: { available: false, keyConfigured: false },
       });
@@ -168,7 +178,8 @@ export class ProviderRegistry {
           available: false,
           version: connection.resolvedVersion,
           commandPath: connection.resolvedCommand,
-          commandState: null,
+          commandState: connection.resolvedCommand ? "found" : null,
+          connectionStatus: "pluginUninstalled",
         },
         api: { available: false, keyConfigured: false },
       });

@@ -10,6 +10,7 @@ const actionMocks = vi.hoisted(() => ({
   planNpmCliPlugin: vi.fn(),
   planLocalCliPlugin: vi.fn(),
   installCliPlugin: vi.fn(),
+  reviewInstalledCliPlugin: vi.fn(),
   confirmAndEnableCliPlugin: vi.fn(),
   disableCliPlugin: vi.fn(),
   enableCliPlugin: vi.fn(),
@@ -38,6 +39,21 @@ const plugin = {
   capabilities: { sessions: { fresh: true }, query: { generate: true }, models: true },
 };
 
+const safePlan = {
+  planDigest: "sha256-safe-plan-digest-value",
+  expiresAt: "2026-07-25T00:10:00.000Z",
+  operation: "install" as const,
+  pluginId: plugin.id,
+  source: "npm" as const,
+  fromVersion: null,
+  toVersion: plugin.version,
+  displayName: plugin.displayName,
+  description: "Community provider",
+  compatibility: { tower: ">=0.2.0", node: ">=20" },
+  capabilities: plugin.capabilities,
+  permissions: { requested: ["process:spawn"], added: ["process:spawn"], removed: [] },
+};
+
 function renderSection() {
   return render(<I18nProvider><CliPluginsSection /></I18nProvider>);
 }
@@ -47,6 +63,7 @@ describe("CLI plugin settings", () => {
     vi.clearAllMocks();
     actionMocks.listCliPlugins.mockResolvedValue({ ok: true, data: [plugin] });
     actionMocks.installCliPlugin.mockResolvedValue({ ok: true, data: { ...plugin, enabled: false } });
+    actionMocks.reviewInstalledCliPlugin.mockResolvedValue({ ok: true, data: safePlan });
     actionMocks.confirmAndEnableCliPlugin.mockResolvedValue({ ok: true, data: plugin });
     actionMocks.disableCliPlugin.mockResolvedValue({ ok: true, data: { disabled: true } });
     actionMocks.uninstallCliPlugin.mockResolvedValue({ ok: true, data: { uninstalled: true } });
@@ -57,20 +74,7 @@ describe("CLI plugin settings", () => {
     const user = userEvent.setup();
     actionMocks.planNpmCliPlugin.mockResolvedValue({
       ok: true,
-      data: {
-        planDigest: "sha256-safe-plan-digest-value",
-        expiresAt: "2026-07-25T00:10:00.000Z",
-        operation: "install",
-        pluginId: plugin.id,
-        source: "npm",
-        fromVersion: null,
-        toVersion: plugin.version,
-        displayName: plugin.displayName,
-        description: "Community provider",
-        compatibility: { tower: ">=0.2.0", node: ">=20" },
-        capabilities: plugin.capabilities,
-        permissions: { requested: ["process:spawn"], added: ["process:spawn"], removed: [] },
-      },
+      data: safePlan,
     });
     renderSection();
     await screen.findByText(plugin.displayName);
@@ -90,6 +94,28 @@ describe("CLI plugin settings", () => {
     await waitFor(() => expect(actionMocks.confirmAndEnableCliPlugin).toHaveBeenCalledWith("sha256-safe-plan-digest-value"));
   });
 
+  it("recovers permission review for an installed plugin after client or server state is lost", async () => {
+    const user = userEvent.setup();
+    actionMocks.listCliPlugins.mockResolvedValue({
+      ok: true,
+      data: [{ ...plugin, enabled: false, permissionConfirmed: false, health: "disabled" }],
+    });
+    renderSection();
+    await screen.findByText(plugin.displayName);
+    expect(screen.getByText(/权限待确认|Permission review required/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /审查权限并启用|Review permissions and enable/i }));
+    await waitFor(() => expect(actionMocks.reviewInstalledCliPlugin).toHaveBeenCalledWith(plugin.id));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).queryByLabelText(/npm 包名|npm package/i)).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/process:spawn/)).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: /安装（保持禁用）|Install disabled/i }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: /确认权限并启用|Confirm permissions and enable/i }));
+    expect(actionMocks.installCliPlugin).toHaveBeenCalledWith(safePlan.planDigest);
+    expect(actionMocks.confirmAndEnableCliPlugin).toHaveBeenCalledWith(safePlan.planDigest);
+  });
+
   it("renders Tower-owned connection fields and schema controls", async () => {
     const user = userEvent.setup();
     actionMocks.getCliPluginConnection.mockResolvedValue({
@@ -102,7 +128,7 @@ describe("CLI plugin settings", () => {
         commandOverride: null,
         baseArgs: [],
         envVars: [],
-        settings: { profile: CLI_SECRET_MASK, active: true, mode: "safe" },
+        settings: { profile: CLI_SECRET_MASK, active: true, mode: "safe", retries: 1 },
         configSchema: {
           $schema: "https://json-schema.org/draft/2020-12/schema",
           type: "object",
@@ -110,6 +136,7 @@ describe("CLI plugin settings", () => {
             profile: { type: "string", title: "Profile", "x-tower": { control: "text", sensitive: true } },
             active: { type: "boolean", title: "Active", "x-tower": { control: "switch" } },
             mode: { type: "string", title: "Mode", enum: ["safe", "fast"], "x-tower": { control: "select" } },
+            retries: { type: "integer", title: "Retries", enum: [1, 2], "x-tower": { control: "select" } },
           },
           additionalProperties: false,
         },
@@ -130,6 +157,13 @@ describe("CLI plugin settings", () => {
         models: ["community-fast", "community-safe"],
       },
     });
+    actionMocks.saveCliPluginConnection.mockImplementation(async (input) => ({
+      ok: true,
+      data: {
+        ...(await actionMocks.getCliPluginConnection()).data,
+        settings: input.settings,
+      },
+    }));
     renderSection();
     await screen.findByText(plugin.displayName);
     await user.click(screen.getByRole("button", { name: /^编辑$|^Edit$/i }));
@@ -143,8 +177,23 @@ describe("CLI plugin settings", () => {
       "connection-1",
       { kind: "setting", key: "profile" },
     ));
+    const revealedProfile = within(dialog).getByLabelText("Profile");
+    await waitFor(() => expect(revealedProfile).toHaveValue("default"));
+    expect(revealedProfile).not.toHaveAttribute("readonly");
+    await user.clear(revealedProfile);
+    await user.type(revealedProfile, "custom-profile");
+    const copyValue = vi.spyOn(navigator.clipboard, "writeText");
+    await user.click(within(dialog).getByRole("button", { name: /^复制$|^Copy$/i }));
+    expect(copyValue).toHaveBeenCalledWith("custom-profile");
     expect(within(dialog).getByText("Active")).toBeInTheDocument();
     expect(within(dialog).getByText("Mode")).toBeInTheDocument();
+    await user.click(within(dialog).getByLabelText("Retries"));
+    await user.click(screen.getByRole("option", { name: "2" }));
+    await user.click(within(dialog).getByRole("button", { name: /^保存$|^Save$/i }));
+    await waitFor(() => expect(actionMocks.saveCliPluginConnection).toHaveBeenCalled());
+    const savedSettings = actionMocks.saveCliPluginConnection.mock.calls[0]?.[0].settings;
+    expect(savedSettings).toMatchObject({ retries: 2 });
+    expect(typeof savedSettings.retries).toBe("number");
     expect(within(dialog).getByText("community-fast")).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: /测试连接|Test connection/i }));
     expect(await within(screen.getByRole("dialog")).findByText("/opt/acme/community-cli")).toBeInTheDocument();

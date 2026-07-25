@@ -115,6 +115,14 @@ export interface ProviderAvailability {
     version: string | null;
     commandPath: string | null;
     commandState: "not-found" | "found" | "runnable" | "connected" | null;
+    connectionStatus?:
+      | "untested"
+      | "connected"
+      | "unavailable"
+      | "pluginDisabled"
+      | "permissionRequired"
+      | "pluginDamaged"
+      | "pluginUninstalled";
   };
   api: { available: boolean; keyConfigured: boolean };
 }

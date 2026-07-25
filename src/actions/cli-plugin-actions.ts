@@ -81,6 +81,10 @@ export async function planLocalCliPlugin(directory: string) {
   return action(() => getCliPluginApplication().planLocal(directorySchema.parse(directory)));
 }
 
+export async function reviewInstalledCliPlugin(pluginId: string) {
+  return action(() => getCliPluginApplication().reviewInstalled(pluginIdSchema.parse(pluginId)));
+}
+
 export async function installCliPlugin(planDigest: string) {
   return action(
     () => getCliPluginApplication().install(digestSchema.parse(planDigest)),

@@ -30,6 +30,12 @@ async function fixture(): Promise<string> {
   const configSchema = JSON.parse(await fs.readFile(path.join(packageRoot, "config.schema.json"), "utf8"));
   configSchema.properties.profile.default = "default-profile";
   configSchema.properties.profile["x-tower"].sensitive = true;
+  configSchema.properties.retries = {
+    type: "integer",
+    enum: [1, 2, 3],
+    default: 1,
+    "x-tower": { control: "select", order: 2 },
+  };
   await fs.writeFile(path.join(packageRoot, "config.schema.json"), JSON.stringify(configSchema));
   return packageRoot;
 }
@@ -63,9 +69,16 @@ describe("CLI plugin application lifecycle", () => {
     const plan = await application.planNpm(pluginId, "1.0.0");
     expect(plan).toMatchObject({ source: "npm", pluginId, toVersion: "1.0.0" });
     await expect(application.install(plan.planDigest)).resolves.toMatchObject({ enabled: false });
-    await expect(application.confirmAndEnable(plan.planDigest)).resolves.toMatchObject({ enabled: true });
-    await application.uninstall(pluginId);
-    expect(await application.runtime.get(pluginId)).toBeNull();
+    const restarted = new CliPluginApplication({
+      dataRoot,
+      runtime: new CliPluginRuntime({ dataRoot, towerVersion: "0.3.0", npmProvider }),
+    });
+    const recoveredPlan = await restarted.reviewInstalled(pluginId);
+    expect(JSON.stringify(recoveredPlan)).not.toContain(dataRoot);
+    await expect(restarted.install(recoveredPlan.planDigest)).resolves.toMatchObject({ enabled: false });
+    await expect(restarted.confirmAndEnable(recoveredPlan.planDigest)).resolves.toMatchObject({ enabled: true });
+    await restarted.uninstall(pluginId);
+    expect(await restarted.runtime.get(pluginId)).toBeNull();
   });
 
   it("keeps plans server-side, requires install then confirmation, and preserves connection state", async () => {
@@ -92,34 +105,50 @@ describe("CLI plugin application lifecycle", () => {
 
     const installed = await application.install(plan.planDigest);
     expect(installed.enabled).toBe(false);
+    now = Date.parse(plan.expiresAt) + 1;
+    await expect(application.confirmAndEnable(plan.planDigest))
+      .rejects.toMatchObject({ code: "plan_expired" });
     await expect(application.confirmAndEnable("sha256-invalid-plan-digest"))
       .rejects.toMatchObject({ code: "plan_expired" });
-    const enabled = await application.confirmAndEnable(plan.planDigest);
+    const active = new CliPluginApplication({
+      dataRoot,
+      runtime: new CliPluginRuntime({ dataRoot, towerVersion: "0.3.0" }),
+      now: () => now,
+    });
+    expect((await active.list()).find((plugin) => plugin.id === pluginId))
+      .toMatchObject({ enabled: false, permissionConfirmed: false });
+    const recoveredPlan = await active.reviewInstalled(pluginId);
+    expect(JSON.stringify(recoveredPlan)).not.toContain(source);
+    await active.install(recoveredPlan.planDigest);
+    const enabled = await active.confirmAndEnable(recoveredPlan.planDigest);
     expect(enabled.enabled).toBe(true);
 
-    const detail = await application.getConnectionDetail(pluginId);
-    expect(detail.settings).toEqual({ profile: CLI_SECRET_MASK });
+    const detail = await active.getConnectionDetail(pluginId);
+    expect(detail.settings).toEqual({ profile: CLI_SECRET_MASK, retries: 1 });
     const secret = "CANARY_PLUGIN_SECRET_7d3f";
-    const saved = await application.saveConnection({
+    const saved = await active.saveConnection({
       connectionId: detail.id,
       name: "Community CLI",
       enabled: true,
       commandOverride: "/opt/community-cli",
       baseArgs: ["--json"],
       envVars: [{ id: "env-1", name: "COMMUNITY_API_TOKEN", value: secret, enabled: true, sensitive: false }],
-      settings: {},
+      settings: { profile: CLI_SECRET_MASK, retries: 2 },
     });
     expect(saved.envVars[0]).toMatchObject({ sensitive: true, value: CLI_SECRET_MASK });
     expect(JSON.stringify(saved)).not.toContain(secret);
-    await expect(application.revealConnectionSecret(detail.id, { kind: "environment", key: "env-1" }))
+    expect(saved.settings.retries).toBe(2);
+    const storedConnection = await db.providerConnection.findUnique({ where: { id: detail.id } });
+    expect(JSON.parse(storedConnection!.settingsJson).retries).toBe(2);
+    await expect(active.revealConnectionSecret(detail.id, { kind: "environment", key: "env-1" }))
       .resolves.toEqual({ value: secret });
-    expect(JSON.stringify(await application.list())).not.toContain(secret);
+    expect(JSON.stringify(await active.list())).not.toContain(secret);
 
-    await application.disable(pluginId);
+    await active.disable(pluginId);
     const disabledConnection = await db.providerConnection.findUnique({ where: { id: detail.id } });
     expect(disabledConnection).toMatchObject({ enabled: false, testStatus: "unavailable" });
-    await expect(application.enable(pluginId)).resolves.toMatchObject({ enabled: true });
-    await application.disable(pluginId);
+    await expect(active.enable(pluginId)).resolves.toMatchObject({ enabled: true });
+    await active.disable(pluginId);
     const capability = await db.aiCapabilityConfig.create({
       data: {
         slot: "plugin-service-test",
@@ -132,8 +161,8 @@ describe("CLI plugin application lifecycle", () => {
         },
       },
     });
-    await application.uninstall(pluginId);
-    expect(await application.runtime.get(pluginId)).toBeNull();
+    await active.uninstall(pluginId);
+    expect(await active.runtime.get(pluginId)).toBeNull();
     expect(await db.providerConnection.findUnique({ where: { id: detail.id } })).toMatchObject({
       provider: pluginId,
       enabled: false,
@@ -141,9 +170,9 @@ describe("CLI plugin application lifecycle", () => {
     expect(await db.aiCapabilityTarget.findMany({ where: { capabilityConfigId: capability.id } }))
       .toHaveLength(1);
 
-    const reinstall = await application.planLocal(source);
-    await application.install(reinstall.planDigest);
-    await application.confirmAndEnable(reinstall.planDigest);
+    const reinstall = await active.planLocal(source);
+    await active.install(reinstall.planDigest);
+    await active.confirmAndEnable(reinstall.planDigest);
     expect(await db.providerConnection.findUnique({ where: { id: detail.id } })).toMatchObject({
       name: "Community CLI",
       enabled: true,

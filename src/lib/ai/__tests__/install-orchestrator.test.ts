@@ -16,7 +16,10 @@ const providerDefinition = {
   builtin: true,
   cli: {
     adapter,
-    plugin: { manifest: { capabilities: { integrations: { mcp: true, hooks: true, skills: true } } } },
+    plugin: { manifest: {
+      capabilities: { integrations: { mcp: true, hooks: true, skills: true } },
+      permissions: ["integration:mcp", "integration:hooks", "integration:skills"],
+    } },
   },
 };
 
@@ -69,6 +72,9 @@ describe("inspectProviderIntegration", () => {
     adapter.mcp.inspect.mockResolvedValue({ installed: true });
     adapter.hooks.inspect.mockResolvedValue({ installed: true });
     adapter.skills.inspect.mockResolvedValue({ installed: true });
+    providerDefinition.cli.plugin.manifest.permissions = [
+      "integration:mcp", "integration:hooks", "integration:skills",
+    ];
   });
 
   it("declares every task-scoped Tower environment variable for MCP forwarding", () => {
@@ -174,6 +180,17 @@ describe("inspectProviderIntegration", () => {
 
     expect(report.mcp).toMatchObject({ ok: false, error: "MCP install failed" });
     expect(JSON.stringify(report)).not.toContain(canary);
+  });
+
+  it("does not invoke third-party integration adapters without corresponding permissions", async () => {
+    providerDefinition.cli.plugin.manifest.permissions = ["process:spawn"];
+
+    const report = await installAllForProvider("@acme/community-cli", "http://localhost:3000");
+
+    expect(report).toMatchObject({ available: true, ok: false });
+    expect(adapter.mcp.install).not.toHaveBeenCalled();
+    expect(adapter.hooks.install).not.toHaveBeenCalled();
+    expect(adapter.skills.install).not.toHaveBeenCalled();
   });
 
   it.each([

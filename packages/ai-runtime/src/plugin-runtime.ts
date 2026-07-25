@@ -210,6 +210,7 @@ export class CliPluginRuntime {
   async enable(pluginId: string): Promise<PluginRegistration> {
     return this.serialized(async () => this.registry.update(pluginId, (current) => {
       if (!current.permissionConfirmation
+        || current.permissionConfirmation.planDigest !== current.activationPlanDigest
         || !sameStringSet(current.permissions, current.permissionConfirmation.permissions)) {
         throw pluginError("PERMISSION_CONFIRMATION_REQUIRED", pluginId);
       }
@@ -279,6 +280,7 @@ export class CliPluginRuntime {
     if (!registration) throw pluginError("PLUGIN_NOT_FOUND", pluginId);
     if (!registration.enabled) throw pluginError("PLUGIN_DISABLED", pluginId);
     if (!registration.permissionConfirmation
+      || registration.permissionConfirmation.planDigest !== registration.activationPlanDigest
       || !sameStringSet(registration.permissions, registration.permissionConfirmation.permissions)) {
       throw pluginError("PERMISSION_CONFIRMATION_REQUIRED", pluginId);
     }
@@ -421,16 +423,6 @@ export class CliPluginRuntime {
     previous?: PluginRegistration,
   ): PluginRegistration {
     const timestamp = this.now().toISOString();
-    const priorConfirmationValid = Boolean(previous?.permissionConfirmation
-      && plan.permissions.added.length === 0
-      && previous.permissionConfirmation.permissions.every((permission) => plan.permissions.requested.includes(permission)));
-    const permissionConfirmation = priorConfirmationValid
-      ? {
-          permissions: [...plan.permissions.requested],
-          planDigest: previous!.permissionConfirmation!.planDigest,
-          confirmedAt: previous!.permissionConfirmation!.confirmedAt,
-        }
-      : null;
     return {
       id: plan.pluginId,
       version: plan.toVersion,
@@ -440,8 +432,8 @@ export class CliPluginRuntime {
       manifest: plan.manifest,
       permissions: [...plan.permissions.requested],
       activationPlanDigest: plan.planDigest,
-      permissionConfirmation,
-      enabled: Boolean(previous?.enabled && permissionConfirmation),
+      permissionConfirmation: null,
+      enabled: false,
       installedAt: previous?.installedAt ?? timestamp,
       updatedAt: timestamp,
     };

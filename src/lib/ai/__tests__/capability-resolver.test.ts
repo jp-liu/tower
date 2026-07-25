@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PluginRuntimeError } from "@tower/ai-runtime";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({
@@ -174,6 +175,19 @@ describe("explicit capability resolver", () => {
       cli: { commandPath: "/fake/community-cli", provider: { builtin: false } },
     });
     expect(target?.preflightError).toBeUndefined();
+  });
+
+  it.each([
+    [new Error("plugin_disabled"), "connection_disabled"],
+    [new PluginRuntimeError("PLUGIN_CORRUPT", "redacted"), "connection_unavailable"],
+    [new Error("cli_not_found"), "cli_not_found"],
+    [new Error("cli_not_executable"), "cli_not_executable"],
+  ] as const)("maps dynamic CLI resolution failures to stable preflight codes", async (error, code) => {
+    const community = { ...connection, provider: "@acme/community-cli" };
+    vi.mocked(providerRegistry.createResolvedCliAdapter).mockRejectedValueOnce(error);
+    mockDb.aiCapabilityConfig.findUnique.mockResolvedValue(configWith(community));
+
+    expect((await resolveCapabilityPlan("terminal")).targets[0]?.preflightError?.code).toBe(code);
   });
 
   it("resolves a fixed session by connection id without reading the slot", async () => {

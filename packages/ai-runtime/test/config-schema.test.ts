@@ -71,4 +71,33 @@ describe("safe CLI plugin configuration schemas", () => {
       code: "INVALID_CONFIG_SCHEMA",
     }));
   });
+
+  it.each([
+    { type: "boolean", "x-tower": { control: "switch", sensitive: true } },
+    { type: "number", "x-tower": { control: "number", sensitive: true } },
+    { type: "string", enum: ["a", "b"], "x-tower": { control: "select", sensitive: true } },
+    { type: "array", items: { type: "string" }, "x-tower": { control: "string-list", sensitive: true } },
+    { type: "object", additionalProperties: { type: "string" }, "x-tower": { control: "key-value", sensitive: true } },
+  ])("rejects unsupported sensitive field combinations", (property) => {
+    expect(() => validatePluginConfigSchema({
+      ...schema,
+      properties: { unsafe: property },
+    })).toThrowError(expect.objectContaining({ code: "INVALID_CONFIG_SCHEMA" }));
+  });
+
+  it("preserves numeric and integer select values", () => {
+    const numericSchema: CliConfigSchema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        retries: { type: "integer", enum: [1, 2, 3], "x-tower": { control: "select" } },
+      },
+      required: ["retries"],
+      additionalProperties: false,
+    };
+
+    expect(validatePluginSettings(numericSchema, { retries: 2 })).toEqual({ retries: 2 });
+    expect(() => validatePluginSettings(numericSchema, { retries: "2" }))
+      .toThrowError(expect.objectContaining({ code: "INVALID_CONFIG_SCHEMA" }));
+  });
 });

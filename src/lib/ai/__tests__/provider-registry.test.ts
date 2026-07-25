@@ -147,7 +147,13 @@ describe("ProviderRegistry", () => {
   });
 
   it("lists enabled plugin manifests without loading third-party adapter code", async () => {
-    dynamicMocks.listPlugins.mockResolvedValue([{ id: "@acme/community", displayName: "Community", enabled: true, health: "ready" }]);
+    dynamicMocks.listPlugins.mockResolvedValue([{
+      id: "@acme/community",
+      displayName: "Community",
+      enabled: true,
+      permissionConfirmed: true,
+      health: "ready",
+    }]);
     dynamicMocks.findMany.mockResolvedValue([{
       name: "Community",
       provider: "@acme/community",
@@ -164,8 +170,40 @@ describe("ProviderRegistry", () => {
       name: "@acme/community",
       displayName: "Community",
       builtin: false,
-      cli: expect.objectContaining({ available: true, commandPath: "/opt/community" }),
+      cli: expect.objectContaining({
+        available: true,
+        commandPath: "/opt/community",
+        connectionStatus: "connected",
+      }),
     })]);
     expect(dynamicMocks.resolvePlugin).not.toHaveBeenCalled();
+  });
+
+  it("reports installed plugin lifecycle states without treating them as missing commands", async () => {
+    dynamicMocks.listPlugins.mockResolvedValue([
+      { id: "@acme/pending", displayName: "Pending", enabled: false, permissionConfirmed: false, health: "disabled" },
+      { id: "@acme/disabled", displayName: "Disabled", enabled: false, permissionConfirmed: true, health: "disabled" },
+      { id: "@acme/damaged", displayName: "Damaged", enabled: false, permissionConfirmed: false, health: "corrupt" },
+      { id: "@acme/untested", displayName: "Untested", enabled: true, permissionConfirmed: true, health: "ready" },
+    ]);
+    dynamicMocks.findMany.mockResolvedValue([
+      { name: "Pending", provider: "@acme/pending", enabled: false, testOk: false, resolvedCommand: null, resolvedVersion: null, testStatus: "unavailable" },
+      { name: "Disabled", provider: "@acme/disabled", enabled: false, testOk: false, resolvedCommand: "/opt/disabled", resolvedVersion: "1", testStatus: "unavailable" },
+      { name: "Damaged", provider: "@acme/damaged", enabled: false, testOk: false, resolvedCommand: null, resolvedVersion: null, testStatus: "unavailable" },
+      { name: "Untested", provider: "@acme/untested", enabled: true, testOk: false, resolvedCommand: null, resolvedVersion: null, testStatus: "untested" },
+      { name: "Removed", provider: "@acme/removed", enabled: false, testOk: false, resolvedCommand: "/opt/removed", resolvedVersion: "1", testStatus: "unavailable" },
+    ]);
+
+    const states = new Map((await registry.getAvailableProviders()).map((provider) => [
+      provider.name,
+      provider.cli.connectionStatus,
+    ]));
+    expect(states).toEqual(new Map([
+      ["@acme/pending", "permissionRequired"],
+      ["@acme/disabled", "pluginDisabled"],
+      ["@acme/damaged", "pluginDamaged"],
+      ["@acme/untested", "untested"],
+      ["@acme/removed", "pluginUninstalled"],
+    ]));
   });
 });
