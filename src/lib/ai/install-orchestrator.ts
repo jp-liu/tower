@@ -256,8 +256,13 @@ export async function inspectProviderIntegration(
     return { mcpInstalled: false, hooksInstalled: false, skillsInstalled: false, ok: false };
   }
 
-  const { skillStates: _skillStates, ...status } = await inspectResolvedProviderIntegration(resolved);
-  return status;
+  const inspection = await inspectResolvedProviderIntegration(resolved);
+  return {
+    mcpInstalled: inspection.mcpInstalled,
+    hooksInstalled: inspection.hooksInstalled,
+    skillsInstalled: inspection.skillsInstalled,
+    ok: inspection.ok,
+  };
 }
 
 export async function inspectResolvedProviderIntegration(

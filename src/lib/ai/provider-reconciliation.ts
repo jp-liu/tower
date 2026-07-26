@@ -396,7 +396,13 @@ export async function inspectProviderIntegrations(input: {
         )
       : await providerRegistry.createResolvedCliAdapter(provider, input.cwd ?? getPackageRoot());
     if (!resolved) throw new Error("cli_not_found");
-    const { skillStates: _skillStates, ...integrations } = await inspectResolvedProviderIntegration(resolved);
+    const inspection = await inspectResolvedProviderIntegration(resolved);
+    const integrations = {
+      mcpInstalled: inspection.mcpInstalled,
+      hooksInstalled: inspection.hooksInstalled,
+      skillsInstalled: inspection.skillsInstalled,
+      ok: inspection.ok,
+    };
     return {
       provider,
       connectionId: connection?.id ?? resolved.connectionId,
