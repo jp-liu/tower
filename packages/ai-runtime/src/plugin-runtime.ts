@@ -230,7 +230,7 @@ export class CliPluginRuntime {
     const packageRoot = await this.fileSystem.realpath(path.resolve(directory)).catch((error) => {
       throw pluginError("INVALID_PACKAGE", undefined, error);
     });
-    const plugin = await this.validate(packageRoot);
+    const plugin = await this.validate(packageRoot, undefined, undefined, true);
     return createInstallPlan({
       source: "development",
       sourcePath: packageRoot,
@@ -248,7 +248,7 @@ export class CliPluginRuntime {
       const packageRoot = await this.fileSystem.realpath(path.resolve(plan.sourcePath!)).catch((error) => {
         throw pluginError("INVALID_PACKAGE", plan.pluginId, error);
       });
-      const plugin = await this.validate(packageRoot, undefined, plan.toVersion, false, plan.pluginId);
+      const plugin = await this.validate(packageRoot, undefined, plan.toVersion, true, plan.pluginId);
       return this.withLifecycleLock(plan.pluginId, () =>
         this.registry.transact(plan.pluginId, (current) => {
           const expected = createInstallPlan({
@@ -403,7 +403,9 @@ export class CliPluginRuntime {
 
     let loadedModule: Record<string, unknown>;
     try {
-      const cacheKey = encodeURIComponent(`${registration.version}:${registration.manifest.entryDigest}`);
+      const cacheKey = encodeURIComponent(
+        `${registration.version}:${registration.manifest.packageTreeDigest ?? registration.manifest.entryDigest}`,
+      );
       loadedModule = await this.importModule(`${pathToFileURL(pluginPackage.entryPath).href}?tower=${cacheKey}`);
     } catch (error) {
       throw pluginError("INVALID_PLUGIN_EXPORT", pluginId, error);
@@ -541,7 +543,22 @@ export class CliPluginRuntime {
       if (current
         && current.source === "catalog"
         && current.activationPlanDigest === receivedPlan.planDigest
-        && current.installPath === target) return current;
+        && current.installPath === target) {
+        const existing = await this.validate(
+          target,
+          undefined,
+          receivedPlan.toVersion,
+          true,
+          receivedPlan.pluginId,
+        ).catch((error) => {
+          throw pluginError("PLUGIN_CORRUPT", receivedPlan.pluginId, error);
+        });
+        if (stableJson(existing.manifestSummary) !== stableJson(current.manifest)
+          || stableJson(existing.manifestSummary) !== stableJson(staged.plugin.manifestSummary)) {
+          throw pluginError("PLUGIN_CORRUPT", receivedPlan.pluginId);
+        }
+        return current;
+      }
       const expected = this.catalogPlan(staged, current ?? undefined);
       if (!isMatchingPlan(expected, receivedPlan)) {
         throw pluginError("INSTALL_PLAN_MISMATCH", receivedPlan.pluginId);

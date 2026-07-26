@@ -83,11 +83,13 @@ function manifestSummary(
   manifest: CliPluginManifestV1,
   entryContents: Uint8Array,
   configSchemaContents: Uint8Array,
+  packageTreeDigest: string,
 ): PluginManifestSummary {
   return {
     digest: sha256(stableJson(manifest)),
     entryDigest: sha256(entryContents),
     configSchemaDigest: sha256(configSchemaContents),
+    packageTreeDigest,
     manifestVersion: manifest.manifestVersion,
     apiVersion: manifest.apiVersion,
     kind: manifest.kind,
@@ -289,26 +291,52 @@ async function resolveContainedFile(
 async function scanPackageTree(
   fileSystem: PluginFileSystem,
   packageRoot: string,
-): Promise<void> {
+): Promise<string> {
   const root = await fileSystem.realpath(packageRoot);
-  const visited = new Set<string>();
-  const visit = async (directory: string): Promise<void> => {
-    const realDirectory = await fileSystem.realpath(directory);
-    if (!isPathInside(root, realDirectory)) throw pluginError("ENTRY_ESCAPE");
-    if (visited.has(realDirectory)) return;
-    visited.add(realDirectory);
-    for (const entry of await fileSystem.readdir(realDirectory)) {
-      const entryPath = path.join(realDirectory, entry.name);
-      const realEntry = entry.type === "symlink" ? await fileSystem.realpath(entryPath) : entryPath;
-      if (!isPathInside(root, realEntry)) throw pluginError("ENTRY_ESCAPE");
-      const stats = await fileSystem.stat(realEntry);
-      if (stats.isDirectory()) await visit(realEntry);
-      if (stats.isFile() && path.extname(realEntry).toLowerCase() === ".node") {
+  const treeEntries: Array<Record<string, unknown>> = [];
+  const visit = async (directory: string, relativeDirectory: string): Promise<void> => {
+    const directoryEntries = await fileSystem.readdir(directory);
+    directoryEntries.sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+    for (const entry of directoryEntries) {
+      if (!entry.name
+        || entry.name === "."
+        || entry.name === ".."
+        || entry.name.includes("\0")
+        || entry.name.includes("/")
+        || entry.name.includes("\\")) throw pluginError("INVALID_PACKAGE");
+      const relativePath = relativeDirectory
+        ? `${relativeDirectory}/${entry.name}`
+        : entry.name;
+      const entryPath = path.join(directory, entry.name);
+      if (!isPathInside(root, entryPath)) throw pluginError("ENTRY_ESCAPE");
+      const before = await fileSystem.lstat(entryPath);
+      if (before.isSymbolicLink()) throw pluginError("ENTRY_ESCAPE");
+      if (before.isDirectory()) {
+        treeEntries.push({ path: relativePath, type: "directory" });
+        await visit(entryPath, relativePath);
+        continue;
+      }
+      if (!before.isFile()) throw pluginError("INVALID_PACKAGE");
+      if (path.posix.extname(relativePath).toLowerCase() === ".node") {
         throw pluginError("NATIVE_MODULE_REJECTED");
       }
+      const contents = await fileSystem.readFile(entryPath);
+      const after = await fileSystem.lstat(entryPath);
+      if (!after.isFile() || after.isSymbolicLink()) throw pluginError("ENTRY_ESCAPE");
+      treeEntries.push({
+        path: relativePath,
+        type: "file",
+        size: contents.byteLength,
+        digest: sha256(contents),
+      });
     }
   };
-  await visit(root);
+  await visit(root, "");
+  treeEntries.sort((left, right) => String(left.path) < String(right.path)
+    ? -1
+    : String(left.path) > String(right.path) ? 1 : 0);
+  // Modes are excluded so the digest is stable across tar extraction and supported host platforms.
+  return sha256(stableJson({ algorithm: "tower-package-tree-v1", entries: treeEntries }));
 }
 
 function esmExportTarget(exportsField: unknown): string | null {
@@ -412,6 +440,8 @@ export async function validatePluginPackage(options: ValidatePluginPackageOption
   const packageRoot = await options.fileSystem.realpath(options.packageRoot).catch((error) => {
     throw pluginError("INVALID_PACKAGE", options.expectedName, error);
   });
+  // Reject links and special files before any package-controlled path is opened or resolved.
+  const packageTreeDigest = await scanPackageTree(options.fileSystem, packageRoot);
   const packageJson = await readJson(options.fileSystem, path.join(packageRoot, "package.json"), "INVALID_PACKAGE");
   if (!isRecord(packageJson)
     || typeof packageJson.name !== "string"
@@ -458,7 +488,6 @@ export async function validatePluginPackage(options: ValidatePluginPackageOption
   const configSchemaPath = await resolveContainedFile(options.fileSystem, packageRoot, manifest.configSchema);
   const configSchemaContents = await options.fileSystem.readFile(configSchemaPath);
   validatePluginConfigSchema(await readJson(options.fileSystem, configSchemaPath, "INVALID_CONFIG_SCHEMA"));
-  await scanPackageTree(options.fileSystem, packageRoot);
 
   const dependencies = isRecord(packageJson.dependencies) ? Object.keys(packageJson.dependencies) : [];
   for (const dependency of dependencies) {
@@ -492,6 +521,7 @@ export async function validatePluginPackage(options: ValidatePluginPackageOption
       manifest,
       await options.fileSystem.readFile(entryPath),
       configSchemaContents,
+      packageTreeDigest,
     ),
   };
 }

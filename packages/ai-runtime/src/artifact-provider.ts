@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import path from "node:path";
 import * as tar from "tar";
 import type { CatalogArtifact, CatalogFetch } from "./catalog.js";
@@ -9,6 +10,16 @@ import { NodePluginFileSystem } from "./plugin-filesystem.js";
 
 export interface ExtensionArtifactProvider {
   stage(artifact: CatalogArtifact, destination: string): Promise<void>;
+}
+
+export const MAX_EXTENSION_ARCHIVE_ENTRIES = 4_096;
+export const MAX_EXTENSION_ARCHIVE_FILE_BYTES = 64 * 1024 * 1024;
+export const MAX_EXTENSION_ARCHIVE_EXPANDED_BYTES = 256 * 1024 * 1024;
+
+export interface ExtensionArchiveLimits {
+  maxEntries: number;
+  maxFileBytes: number;
+  maxExpandedBytes: number;
 }
 
 export function assertSafeArtifactPath(entryPath: string): void {
@@ -23,36 +34,160 @@ export function assertSafeArtifactPath(entryPath: string): void {
   }
 }
 
-async function inspectArtifact(tarballPath: string): Promise<void> {
+type TarEntry = Parameters<tar.Parser["filter"]>[1];
+
+function boundedLimit(value: number | undefined, hardLimit: number): number {
+  const resolved = value ?? hardLimit;
+  if (!Number.isSafeInteger(resolved) || resolved <= 0 || resolved > hardLimit) {
+    throw pluginError("ARTIFACT_INVALID");
+  }
+  return resolved;
+}
+
+function createArchiveFilter(limits: ExtensionArchiveLimits, onReject?: (error: Error) => void) {
   let rejected: unknown;
-  try {
-    await tar.t({
-      file: tarballPath,
-      filter(entryPath, entry) {
-        try {
-          assertSafeArtifactPath(entryPath);
-          if (!("type" in entry)
-            || (entry.type !== "File" && entry.type !== "Directory" && entry.type !== "OldFile")) {
-            throw pluginError("UNSAFE_ARCHIVE");
-          }
-          return true;
-        } catch (error) {
-          rejected ??= error;
-          return false;
+  let entries = 0;
+  let expandedBytes = 0;
+  const paths = new Set<string>();
+
+  const reject = (error: unknown) => {
+    if (rejected) return;
+    rejected = error;
+    onReject?.(error instanceof Error ? error : pluginError("UNSAFE_ARCHIVE"));
+  };
+
+  const acceptSize = (size: number) => {
+    entries += 1;
+    if (!Number.isSafeInteger(size)
+      || size < 0
+      || entries > limits.maxEntries
+      || size > limits.maxFileBytes
+      || expandedBytes > limits.maxExpandedBytes - size) {
+      throw pluginError("UNSAFE_ARCHIVE");
+    }
+    expandedBytes += size;
+  };
+
+  return {
+    filter(entryPath: string, entry: TarEntry): boolean {
+      try {
+        assertSafeArtifactPath(entryPath);
+        if (!("type" in entry)
+          || (entry.type !== "File" && entry.type !== "Directory" && entry.type !== "OldFile")
+          || !("size" in entry)
+          || ("invalid" in entry && entry.invalid)
+          || ("unsupported" in entry && entry.unsupported)) {
+          throw pluginError("UNSAFE_ARCHIVE");
         }
-      },
+        const normalizedPath = entryPath.replace(/\\/g, "/").replace(/\/+$/, "");
+        if (paths.has(normalizedPath)) throw pluginError("UNSAFE_ARCHIVE");
+        paths.add(normalizedPath);
+        if (entry.type === "Directory") {
+          if (entry.size !== 0) throw pluginError("UNSAFE_ARCHIVE");
+          acceptSize(0);
+          return true;
+        }
+        acceptSize(entry.size);
+        return true;
+      } catch (error) {
+        reject(error);
+        return false;
+      }
+    },
+    acceptMetadata(contents: string): void {
+      try {
+        acceptSize(Buffer.byteLength(contents));
+      } catch (error) {
+        reject(error);
+      }
+    },
+    assertAccepted(): void {
+      if (rejected) throw rejected;
+    },
+  };
+}
+
+async function inspectArtifact(tarballPath: string, limits: ExtensionArchiveLimits): Promise<void> {
+  let parser!: tar.Parser;
+  const validator = createArchiveFilter(limits, (error) => {
+    queueMicrotask(() => parser.abort(error));
+  });
+  try {
+    parser = new tar.Parser({
+      strict: true,
+      maxMetaEntrySize: Math.min(limits.maxFileBytes, limits.maxExpandedBytes),
+      filter: validator.filter,
+      onReadEntry: (entry) => entry.resume(),
     });
-    if (rejected) throw rejected;
+    parser.on("meta", (contents: string) => validator.acceptMetadata(contents));
+    await pipeTarball(tarballPath, parser, "end");
+    validator.assertAccepted();
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "UNSAFE_ARCHIVE") throw error;
     throw pluginError("UNSAFE_ARCHIVE", undefined, error);
   }
 }
 
+async function pipeTarball(
+  tarballPath: string,
+  target: tar.Parser,
+  completionEvent: "end" | "close",
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const input = createReadStream(tarballPath);
+    let settled = false;
+    const finish = (error?: unknown) => {
+      if (settled) return;
+      settled = true;
+      input.destroy();
+      if (error) reject(error);
+      else resolve();
+    };
+    input.once("error", finish);
+    target.once("error", finish);
+    target.once(completionEvent, () => finish());
+    input.pipe(target as unknown as NodeJS.WritableStream);
+  });
+}
+
+async function inspectExtractedTree(
+  fileSystem: PluginFileSystem,
+  destination: string,
+  limits: ExtensionArchiveLimits,
+): Promise<void> {
+  let entries = 0;
+  let expandedBytes = 0;
+  const visit = async (directory: string): Promise<void> => {
+    for (const entry of await fileSystem.readdir(directory)) {
+      entries += 1;
+      if (entries > limits.maxEntries) throw pluginError("UNSAFE_ARCHIVE");
+      const entryPath = path.join(directory, entry.name);
+      const stats = await fileSystem.lstat(entryPath);
+      if (stats.isSymbolicLink()) throw pluginError("UNSAFE_ARCHIVE");
+      if (stats.isDirectory()) {
+        await visit(entryPath);
+        continue;
+      }
+      if (!stats.isFile()
+        || !Number.isSafeInteger(stats.size)
+        || stats.size < 0
+        || stats.size > limits.maxFileBytes
+        || expandedBytes > limits.maxExpandedBytes - stats.size) {
+        throw pluginError("UNSAFE_ARCHIVE");
+      }
+      expandedBytes += stats.size;
+    }
+  };
+  await visit(destination);
+}
+
 export interface PrebuiltArtifactProviderOptions {
   fetchImpl?: CatalogFetch;
   fileSystem?: PluginFileSystem;
   maxBytes?: number;
+  maxArchiveEntries?: number;
+  maxArchiveFileBytes?: number;
+  maxArchiveExpandedBytes?: number;
 }
 
 async function readArtifactBody(response: Response, expectedBytes: number, maxBytes: number): Promise<Uint8Array> {
@@ -85,11 +220,17 @@ export class PrebuiltArtifactProvider implements ExtensionArtifactProvider {
   private readonly fetchImpl: CatalogFetch;
   private readonly fileSystem: PluginFileSystem;
   private readonly maxBytes: number;
+  private readonly archiveLimits: ExtensionArchiveLimits;
 
   constructor(options: PrebuiltArtifactProviderOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.fileSystem = options.fileSystem ?? new NodePluginFileSystem();
-    this.maxBytes = options.maxBytes ?? MAX_EXTENSION_ARTIFACT_BYTES;
+    this.maxBytes = boundedLimit(options.maxBytes, MAX_EXTENSION_ARTIFACT_BYTES);
+    this.archiveLimits = {
+      maxEntries: boundedLimit(options.maxArchiveEntries, MAX_EXTENSION_ARCHIVE_ENTRIES),
+      maxFileBytes: boundedLimit(options.maxArchiveFileBytes, MAX_EXTENSION_ARCHIVE_FILE_BYTES),
+      maxExpandedBytes: boundedLimit(options.maxArchiveExpandedBytes, MAX_EXTENSION_ARCHIVE_EXPANDED_BYTES),
+    };
   }
 
   async stage(artifact: CatalogArtifact, destination: string): Promise<void> {
@@ -118,36 +259,34 @@ export class PrebuiltArtifactProvider implements ExtensionArtifactProvider {
     const parent = path.dirname(destination);
     await this.fileSystem.mkdir(parent);
     const tarballPath = path.join(parent, "artifact.tgz");
-    await this.fileSystem.writeFile(tarballPath, contents);
-    await inspectArtifact(tarballPath);
-    await this.fileSystem.mkdir(destination);
     try {
-      let rejected: unknown;
-      await tar.x({
-        file: tarballPath,
+      await this.fileSystem.writeFile(tarballPath, contents);
+      await inspectArtifact(tarballPath, this.archiveLimits);
+      await this.fileSystem.mkdir(destination);
+      const extraction: { unpack?: tar.Unpack } = {};
+      const validator = createArchiveFilter(this.archiveLimits, (error) => {
+        queueMicrotask(() => extraction.unpack?.abort(error));
+      });
+      const unpack = new tar.Unpack({
         cwd: destination,
         strip: 1,
         preservePaths: false,
         strict: true,
-        filter(entryPath, entry) {
-          try {
-            assertSafeArtifactPath(entryPath);
-            if (!("type" in entry)
-              || (entry.type !== "File" && entry.type !== "Directory" && entry.type !== "OldFile")) {
-              throw pluginError("UNSAFE_ARCHIVE");
-            }
-            return true;
-          } catch (error) {
-            rejected ??= error;
-            return false;
-          }
-        },
+        maxMetaEntrySize: Math.min(this.archiveLimits.maxFileBytes, this.archiveLimits.maxExpandedBytes),
+        filter: validator.filter,
       });
-      if (rejected) throw rejected;
+      extraction.unpack = unpack;
+      unpack.on("meta", (contents: string) => validator.acceptMetadata(contents));
+      await pipeTarball(tarballPath, unpack, "close");
+      validator.assertAccepted();
+      // Recheck logical sizes after extraction so sparse files cannot bypass header accounting.
+      await inspectExtractedTree(this.fileSystem, destination, this.archiveLimits);
     } catch (error) {
       await this.fileSystem.rm(destination).catch(() => undefined);
       if (error instanceof Error && "code" in error && error.code === "UNSAFE_ARCHIVE") throw error;
       throw pluginError("UNSAFE_ARCHIVE", undefined, error);
+    } finally {
+      await this.fileSystem.rm(tarballPath).catch(() => undefined);
     }
   }
 }

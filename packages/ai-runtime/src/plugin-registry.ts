@@ -37,11 +37,17 @@ function isTimestamp(value: unknown): value is string {
   return typeof value === "string" && Number.isFinite(Date.parse(value));
 }
 
+function isSha256Digest(value: unknown): value is string {
+  return typeof value === "string" && /^sha256-[A-Za-z0-9+/]{43}=$/.test(value);
+}
+
 function isManifestSummary(value: unknown): boolean {
   return isRecord(value)
     && typeof value.digest === "string"
     && typeof value.entryDigest === "string"
     && typeof value.configSchemaDigest === "string"
+    // Missing tree digests remain parseable for v1 migrations and pre-digest registry v2 files.
+    && (value.packageTreeDigest === undefined || isSha256Digest(value.packageTreeDigest))
     && value.manifestVersion === 1
     && typeof value.apiVersion === "string"
     && value.kind === "cli-provider"
