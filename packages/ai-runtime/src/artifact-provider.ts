@@ -24,18 +24,25 @@ export function assertSafeArtifactPath(entryPath: string): void {
 }
 
 async function inspectArtifact(tarballPath: string): Promise<void> {
+  let rejected: unknown;
   try {
     await tar.t({
       file: tarballPath,
       filter(entryPath, entry) {
-        assertSafeArtifactPath(entryPath);
-        if (!("type" in entry)
-          || (entry.type !== "File" && entry.type !== "Directory" && entry.type !== "OldFile")) {
-          throw pluginError("UNSAFE_ARCHIVE");
+        try {
+          assertSafeArtifactPath(entryPath);
+          if (!("type" in entry)
+            || (entry.type !== "File" && entry.type !== "Directory" && entry.type !== "OldFile")) {
+            throw pluginError("UNSAFE_ARCHIVE");
+          }
+          return true;
+        } catch (error) {
+          rejected ??= error;
+          return false;
         }
-        return true;
       },
     });
+    if (rejected) throw rejected;
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "UNSAFE_ARCHIVE") throw error;
     throw pluginError("UNSAFE_ARCHIVE", undefined, error);
@@ -46,6 +53,32 @@ export interface PrebuiltArtifactProviderOptions {
   fetchImpl?: CatalogFetch;
   fileSystem?: PluginFileSystem;
   maxBytes?: number;
+}
+
+async function readArtifactBody(response: Response, expectedBytes: number, maxBytes: number): Promise<Uint8Array> {
+  if (!response.body) throw pluginError("ARTIFACT_DOWNLOAD_FAILED");
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const reader = response.body.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > expectedBytes || total > maxBytes) throw pluginError("ARTIFACT_SIZE_MISMATCH");
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (total !== expectedBytes) throw pluginError("ARTIFACT_SIZE_MISMATCH");
+  const contents = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    contents.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return contents;
 }
 
 export class PrebuiltArtifactProvider implements ExtensionArtifactProvider {
@@ -78,10 +111,7 @@ export class PrebuiltArtifactProvider implements ExtensionArtifactProvider {
     if (declaredLength !== null && Number(declaredLength) !== artifact.size) {
       throw pluginError("ARTIFACT_SIZE_MISMATCH");
     }
-    const contents = new Uint8Array(await response.arrayBuffer());
-    if (contents.byteLength !== artifact.size || contents.byteLength > this.maxBytes) {
-      throw pluginError("ARTIFACT_SIZE_MISMATCH");
-    }
+    const contents = await readArtifactBody(response, artifact.size, this.maxBytes);
     const digest = createHash("sha256").update(contents).digest("hex");
     if (digest !== artifact.sha256) throw pluginError("INTEGRITY_MISMATCH");
 
@@ -92,6 +122,7 @@ export class PrebuiltArtifactProvider implements ExtensionArtifactProvider {
     await inspectArtifact(tarballPath);
     await this.fileSystem.mkdir(destination);
     try {
+      let rejected: unknown;
       await tar.x({
         file: tarballPath,
         cwd: destination,
@@ -99,14 +130,20 @@ export class PrebuiltArtifactProvider implements ExtensionArtifactProvider {
         preservePaths: false,
         strict: true,
         filter(entryPath, entry) {
-          assertSafeArtifactPath(entryPath);
-          if (!("type" in entry)
-            || (entry.type !== "File" && entry.type !== "Directory" && entry.type !== "OldFile")) {
-            throw pluginError("UNSAFE_ARCHIVE");
+          try {
+            assertSafeArtifactPath(entryPath);
+            if (!("type" in entry)
+              || (entry.type !== "File" && entry.type !== "Directory" && entry.type !== "OldFile")) {
+              throw pluginError("UNSAFE_ARCHIVE");
+            }
+            return true;
+          } catch (error) {
+            rejected ??= error;
+            return false;
           }
-          return true;
         },
       });
+      if (rejected) throw rejected;
     } catch (error) {
       await this.fileSystem.rm(destination).catch(() => undefined);
       if (error instanceof Error && "code" in error && error.code === "UNSAFE_ARCHIVE") throw error;
