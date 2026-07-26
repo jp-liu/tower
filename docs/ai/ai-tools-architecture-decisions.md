@@ -1,7 +1,7 @@
 # AI Tools 接入架构决策
 
 > 状态：0.3.0 已实现本文标记的首版边界；“后续”内容仍是设计依据，不代表已经发布。
-> 最后更新：2026-07-25
+> 最后更新：2026-07-26
 
 ## 目标
 
@@ -134,6 +134,7 @@ AI Tools 设置页分为上下两层：
 - 预构建产物仍可使用 Node ESM 包布局：Manifest 位于 `package.json` 的 `tower` 字段，入口由 Manifest 的 `entry` 显式声明并且必须与标准 `exports["./tower-cli-provider"]` 一致。静态清单必须在加载扩展代码之前完成校验。
 - Manifest 至少包含 `manifestVersion`、`apiVersion`、`id`、`kind`、发布者、显示信息、入口、Tower/Node 兼容版本、能力、权限、配置 Schema，以及底层 CLI 依赖声明。
 - 底层 CLI 依赖声明包含依赖名称、主页、安装文档、支持版本范围、默认命令、别名/少量已知路径和版本探测参数；`managedByTower` 在首版必须为 `false`。
+- 发布者、Catalog、CLI 依赖和可选显示主页只接受 HTTPS URL；版本探测参数必须至少包含一个非空参数，避免意外启动裸交互 CLI。
 - `manifestVersion` 管清单格式，`apiVersion` 管运行时接口，扩展版本继续遵循 SemVer，三者不能混用。缺少新必填身份、入口或依赖字段的早期 v1 Provider 必须收到显式迁移诊断，不能被静默误读。
 - 配置采用 JSON Schema 2020-12；Tower 只增加 `x-tower` UI 标注，不允许插件注入 React 组件或设置页脚本。
 - 首版配置控件支持文本、数字、开关、单选、多选、路径、字符串列表和键值表，并支持顺序、分组、高级项和敏感值标记。
@@ -159,8 +160,10 @@ AI Tools 设置页分为上下两层：
 - Catalog 元数据只负责发现和展示，包含扩展 ID、版本、下载 HTTPS URL、SHA-256、字节大小和发布者等字段。Catalog 中复制的 CLI 依赖信息只用于展示，安装决策必须读取下载、校验后的运行时 Manifest。
 - Artifact 是预构建、不可变的 bundle/tarball。Tower 不在用户机器运行 `npm install`、生命周期脚本、任意 shell 或本地编译，也不接受原生模块。
 - 下载必须先进入 `~/.tower/extensions/.staging/`，并依次校验 HTTPS、响应/实际大小、SHA-256、归档路径穿越、symlink/hardlink、Manifest、配置 Schema、权限、Tower/Node 兼容性和底层 CLI 兼容性。
+- Artifact 硬限制为最多 4,096 个归档条目、单个普通文件最多 64 MiB、总逻辑解压大小最多 256 MiB；归档预检和实际解压使用同一组限制，解压后再按 `lstat` 的逻辑大小复核并拒绝稀疏、非普通或符号链接条目。
 - 只有全部校验通过后才能原子重命名到 `~/.tower/extensions/cli-provider/<id>/<version>-<digest>/`；registry 更新失败必须回滚新目录，升级失败必须保留旧注册和旧版本。
-- registry 使用可迁移的版本化格式。Runtime 读取并迁移旧 `~/.tower/ai/plugins/registry.v1.json` 注册，保留旧安装路径作为 `legacy` 来源；迁移不得修改或删除用户的旧目录。
+- 安装计划和 registry 保存确定性的 package-tree SHA-256：摘要覆盖排序后的安全相对目录/文件路径、文件字节和文件大小，明确不包含 mode 以保持跨平台确定性。Catalog/NPM 目标复用、inspect 和 load 均重新计算；任何嵌套依赖或其他文件变化都返回 `PLUGIN_CORRUPT`。
+- registry 使用可迁移的版本化格式。Runtime 读取并迁移旧 `~/.tower/ai/plugins/registry.v1.json` 注册，保留旧安装路径作为 `legacy` 来源；迁移不得修改或删除用户的旧目录。升级前缺少 package-tree 摘要的 v2 记录仍可读取和列出，但必须重新安装或重新注册后才能 inspect/load。
 - 本地目录注册必须显式记录为 `development` 来源并保持原目录不复制，供公共 SDK 作者调试。Catalog 安装记录为 `catalog` 来源。
 - 首版扩展仍是本地可信 Node.js 扩展，不承诺操作系统级沙箱；权限清单用于安装前提示、最小化上下文和审计。
 - 插件安装后默认禁用，用户确认权限并启用后才按需加载；Tower 启动时不得激活全部第三方插件。
