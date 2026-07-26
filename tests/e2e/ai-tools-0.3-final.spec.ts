@@ -662,7 +662,7 @@ test.describe.serial("AI Tools 0.3 final browser acceptance", () => {
       if (viewport.section === "assistant") {
         await page.getByRole("button", { name: "Assistant", exact: true }).click();
         await expect(page.getByText("Tower Assistant", { exact: true })).toBeVisible();
-        await expect(page.getByPlaceholder("Ask about your projects and tasks...")).toBeVisible();
+        await expect(page.getByRole("textbox", { name: "Type a message, Enter to send, Shift+Enter for new line" })).toBeVisible();
       } else if (viewport.section === "extensions") {
         await page.getByRole("button", { name: "Extensions", exact: true }).click();
         await expect(page.getByRole("heading", { name: "Provider catalog", exact: true })).toBeVisible();
