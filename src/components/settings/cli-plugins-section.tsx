@@ -66,6 +66,12 @@ type InstallSource = "npm" | "local";
 const DEFAULT_SENSITIVE_NAME = /(authorization|token|key|secret|password|passwd|credential|cookie)/i;
 const CONNECTIONS_CHANGED_EVENT = "tower:provider-connections-changed";
 
+function legacyInstallSource(source: Plugin["source"]): InstallSource | null {
+  if (source === "npm") return "npm";
+  if (source === "local" || source === "development") return "local";
+  return null;
+}
+
 function notifyConnectionsChanged() {
   window.dispatchEvent(new Event(CONNECTIONS_CHANGED_EVENT));
 }
@@ -321,16 +327,30 @@ export function CliPluginsSection() {
   }
 
   async function reviewInstalled(plugin: Plugin) {
+    const source = legacyInstallSource(plugin.source);
+    if (!source) {
+      toast.error(actionError(t, "invalid_input"));
+      return;
+    }
     setPending(`review-existing:${plugin.id}`);
     const result = await reviewInstalledCliPlugin(plugin.id);
     if (result.ok) {
       resetInstall();
-      setSource(plugin.source);
+      setSource(source);
       setRecoveringConfirmation(true);
       setPlan(result.data);
       setInstallOpen(true);
     } else toast.error(actionError(t, result.error.code));
     setPending(null);
+  }
+
+  function openLegacyUpdate(plugin: Plugin) {
+    const source = legacyInstallSource(plugin.source);
+    if (!source) return;
+    setSource(source);
+    setPackageName(plugin.id);
+    resetInstall();
+    setInstallOpen(true);
   }
 
   async function copyEnvValue(value: string) {
@@ -480,7 +500,7 @@ export function CliPluginsSection() {
                     : plugin.permissionConfirmed
                       ? <Button variant="outline" onClick={() => void enablePlugin(plugin.id)} disabled={pending !== null}>{pending === `enable-existing:${plugin.id}` && <Loader2 className="animate-spin" />}{t("settings.cliPlugins.enable")}</Button>
                       : <Button variant="outline" onClick={() => void reviewInstalled(plugin)} disabled={pending !== null}>{pending === `review-existing:${plugin.id}` && <Loader2 className="animate-spin" />}{t("settings.cliPlugins.reviewAndEnable")}</Button>}
-                  <Button variant="outline" onClick={() => { setSource(plugin.source); setPackageName(plugin.id); resetInstall(); setInstallOpen(true); }}><RefreshCw />{t("settings.cliPlugins.update")}</Button>
+                  {legacyInstallSource(plugin.source) && <Button variant="outline" onClick={() => openLegacyUpdate(plugin)}><RefreshCw />{t("settings.cliPlugins.update")}</Button>}
                   <Button variant="destructive" onClick={() => setDanger({ type: "uninstall", plugin })}><Trash2 />{t("settings.cliPlugins.uninstall")}</Button>
                 </div>
               </li>

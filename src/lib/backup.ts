@@ -103,6 +103,7 @@ export async function createArchive(
     if (existsSync(join(towerDir, "storage", "assets"))) entries.push(join("storage", "assets"));
     if (existsSync(join(towerDir, "assistant"))) entries.push("assistant");
     if (existsSync(join(towerDir, "ai"))) entries.push("ai");
+    if (existsSync(join(towerDir, "extensions"))) entries.push("extensions");
     if (existsSync(join(towerDir, "logs"))) entries.push("logs");
 
     await tar.create(
@@ -202,10 +203,13 @@ export async function extractArchive(archivePath: string, destDir: string): Prom
 // ---------------------------------------------------------------------------
 // Atomic swap: current → _old_tmp, extracted → current
 // ---------------------------------------------------------------------------
-const DIRS_TO_SWAP = ["database", join("storage", "assets"), "assistant", "ai", "logs"] as const;
+const DIRS_TO_SWAP = ["database", join("storage", "assets"), "assistant", "ai", "extensions", "logs"] as const;
 
-function rebasePluginRegistry(towerDir: string): void {
-  const registryPath = join(towerDir, "ai", "plugins", "registry.v1.json");
+function rebaseRegistryFile(
+  towerDir: string,
+  registryPath: string,
+  installPathFor: (record: { id?: unknown; source?: unknown; installPath: string }) => string | null,
+): void {
   if (!existsSync(registryPath)) return;
   const parsed = JSON.parse(readFileSync(registryPath, "utf8")) as unknown;
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
@@ -215,16 +219,45 @@ function rebasePluginRegistry(towerDir: string): void {
   let changed = false;
   for (const registration of Object.values(plugins as Record<string, unknown>)) {
     if (!registration || typeof registration !== "object" || Array.isArray(registration)) continue;
-    const record = registration as { installPath?: unknown };
+    const record = registration as { id?: unknown; source?: unknown; installPath?: unknown };
     if (typeof record.installPath !== "string") continue;
-    const packageDir = record.installPath.split(/[\\/]/).at(-1);
-    if (!packageDir || packageDir === "." || packageDir === "..") continue;
-    const restoredPath = join(towerDir, "ai", "plugins", "packages", packageDir);
+    const restoredPath = installPathFor({ ...record, installPath: record.installPath });
+    if (!restoredPath) continue;
     if (!existsSync(restoredPath) || record.installPath === restoredPath) continue;
     record.installPath = restoredPath;
     changed = true;
   }
   if (changed) writeFileSync(registryPath, `${JSON.stringify(parsed, null, 2)}\n`);
+}
+
+function rebasePluginRegistries(towerDir: string): void {
+  rebaseRegistryFile(
+    towerDir,
+    join(towerDir, "ai", "plugins", "registry.v1.json"),
+    (record) => {
+      const packageDir = record.installPath.split(/[\\/]/).at(-1);
+      return packageDir && packageDir !== "." && packageDir !== ".."
+        ? join(towerDir, "ai", "plugins", "packages", packageDir)
+        : null;
+    },
+  );
+  rebaseRegistryFile(
+    towerDir,
+    join(towerDir, "extensions", "registry.v2.json"),
+    (record) => {
+      const packageDir = record.installPath.split(/[\\/]/).at(-1);
+      if (!packageDir || packageDir === "." || packageDir === "..") return null;
+      if (record.source === "catalog" || record.source === "npm") {
+        return typeof record.id === "string"
+          ? join(towerDir, "extensions", "cli-provider", record.id, packageDir)
+          : null;
+      }
+      if (record.source === "legacy" || record.source === "local") {
+        return join(towerDir, "ai", "plugins", "packages", packageDir);
+      }
+      return null;
+    },
+  );
 }
 
 export function swapDirs(towerDir: string, extractedDir: string): void {
@@ -250,7 +283,7 @@ export function swapDirs(towerDir: string, extractedDir: string): void {
       }
     }
 
-    rebasePluginRegistry(towerDir);
+    rebasePluginRegistries(towerDir);
 
     rmSync(oldTmp, { recursive: true, force: true });
   } catch (err) {
@@ -281,7 +314,7 @@ export function deleteWalFiles(towerDir: string): void {
 // Wipe data dirs (for reset)
 // ---------------------------------------------------------------------------
 export function wipeTowerData(towerDir: string): void {
-  for (const rel of ["database", join("storage", "assets"), "assistant", "ai", "logs"]) {
+  for (const rel of ["database", join("storage", "assets"), "assistant", "ai", "extensions", "logs"]) {
     const dir = join(towerDir, rel);
     if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
   }

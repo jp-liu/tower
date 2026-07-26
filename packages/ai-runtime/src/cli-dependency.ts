@@ -22,8 +22,18 @@ export interface CliDependencyVerifier {
 }
 
 function safeEnvironment(source: RuntimeEnvironment): RuntimeEnvironment {
-  const allowed = ["PATH", "Path", "PATHEXT", "SystemRoot", "WINDIR", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA"];
-  return Object.fromEntries(allowed.flatMap((key) => source[key] === undefined ? [] : [[key, source[key]]]));
+  const allowed = [
+    "PATH", "Path", "PATHEXT", "SystemRoot", "WINDIR", "HOME", "USERPROFILE",
+    "APPDATA", "LOCALAPPDATA", "NODE_ENV",
+  ];
+  return {
+    NODE_ENV: source.NODE_ENV ?? "production",
+    ...Object.fromEntries(allowed.flatMap((key) => source[key] === undefined ? [] : [[key, source[key]]])),
+  };
+}
+
+function nodeEnvironment(value: string | undefined): "production" | "development" | "test" {
+  return value === "development" || value === "test" ? value : "production";
 }
 
 function execFileProcess(
@@ -33,7 +43,7 @@ function execFileProcess(
   return {
     async execute(spec, options = {}) {
       const target = await prepareSpawnTarget(spec.command, spec.args, platform, env);
-      const childEnv: NodeJS.ProcessEnv = { ...env };
+      const childEnv: NodeJS.ProcessEnv = { ...env, NODE_ENV: nodeEnvironment(env.NODE_ENV) };
       for (const [key, value] of Object.entries(spec.envPatch ?? {})) {
         if (value === null) delete childEnv[key];
         else childEnv[key] = value;
