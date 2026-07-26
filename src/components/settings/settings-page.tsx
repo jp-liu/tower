@@ -1169,7 +1169,7 @@ export function SettingsPage() {
                 </div>
                 <p className="text-xs text-muted-foreground">{t(row.descKey)}</p>
                 <div className="rounded-lg border border-border/50 bg-muted/30 p-3">
-                  <p className="line-clamp-3 whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">
+                  <p className="line-clamp-3 whitespace-pre-wrap break-words font-mono text-[11px] leading-4 text-muted-foreground">
                     {row.value}
                   </p>
                 </div>
@@ -1194,7 +1194,7 @@ export function SettingsPage() {
                 {t("settings.prompts.builtin.childDesc")}
               </p>
               <div className="rounded-lg border border-border/50 bg-muted/30 p-3">
-                <p className="line-clamp-3 whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">
+                <p className="line-clamp-3 whitespace-pre-wrap break-words font-mono text-[11px] leading-4 text-muted-foreground">
                   {builtinPrompts.childReviewPrompt}
                 </p>
               </div>

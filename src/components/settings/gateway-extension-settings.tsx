@@ -267,7 +267,7 @@ export function GatewayExtensionSettings() {
                           patch(gateway, { env: parsed.env });
                         }}
                         placeholder={t("settings.extensions.gateway.envPlaceholder")}
-                        className="min-h-24 font-mono text-xs"
+                        className="min-h-24 font-mono text-xs leading-4"
                       />
                       <p className="text-[11px] text-muted-foreground">{t("settings.extensions.gateway.envHint")}</p>
                     </div>
