@@ -48,7 +48,10 @@ export async function register() {
         );
         const results = await reconcileAllProviderIntegrations("startup");
         for (const result of results) {
-          console.error(`[init-tower] Provider reconciliation ${result.provider}: ${result.status}`);
+          const message = `[init-tower] Provider reconciliation ${result.provider}: ${result.status}`;
+          if (result.status === "connected") console.info(message);
+          else if (result.status === "partial") console.warn(message);
+          else console.error(message);
         }
       } catch {
         console.error("[init-tower] Provider reconciliation setup failed");

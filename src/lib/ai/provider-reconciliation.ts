@@ -1,6 +1,11 @@
 import "server-only";
 
-import { ControlledProcessExecutor } from "@tower/ai-runtime";
+import {
+  ControlledProcessExecutor,
+  capabilityError,
+  stableJson,
+  type CapabilityErrorShape,
+} from "@tower/ai-runtime";
 import { db } from "@/lib/db";
 import { getPackageRoot } from "@/lib/tower-paths";
 import {
@@ -60,7 +65,8 @@ interface ReconcileOptions {
   attempt?: number;
 }
 
-const active = new Map<string, Promise<ProviderReconciliationResult>>();
+const queueTails = new Map<string, Promise<void>>();
+const equivalentRequests = new Map<string, Promise<ProviderReconciliationResult>>();
 
 function towerApiUrl(): string {
   const port = Number.parseInt(process.env.PORT || "3000", 10);
@@ -362,18 +368,61 @@ async function reconcileProviderOnce(options: ReconcileOptions): Promise<Provide
 export function reconcileProviderIntegrations(
   options: ReconcileOptions,
 ): Promise<ProviderReconciliationResult> {
-  const key = options.connectionId ?? options.provider;
-  if (!key) return Promise.reject(new Error("Provider or connectionId is required"));
-  const pending = active.get(key);
-  if (pending) return pending;
-  const operation = (async () => {
-    const result = await reconcileProviderOnce(options);
-    if (result.status === "partial" && result.diagnosticCode === "integration_repair_failed") {
-      return reconcileProviderOnce({ ...options, attempt: 2 });
+  return enqueueReconciliation(options);
+}
+
+async function reconciliationQueueKey(options: ReconcileOptions): Promise<string> {
+  if (options.connectionId) return `connection:${options.connectionId}`;
+  if (!options.provider) throw new Error("Provider or connectionId is required");
+  const connection = await loadConnection(options);
+  return connection ? `connection:${connection.id}` : `provider:${options.provider}`;
+}
+
+function reconciliationRequestSignature(options: ReconcileOptions): string {
+  return stableJson({
+    provider: options.provider ?? null,
+    connectionId: options.connectionId ?? null,
+    trigger: options.trigger,
+    cwd: options.cwd ?? getPackageRoot(),
+    apiUrl: options.apiUrl ?? towerApiUrl(),
+    skipHello: options.skipHello === true,
+    helloAlreadySucceeded: options.helloAlreadySucceeded === true,
+  });
+}
+
+async function runReconciliationWithRetry(
+  options: ReconcileOptions,
+): Promise<ProviderReconciliationResult> {
+  const result = await reconcileProviderOnce(options);
+  if (result.diagnosticCode === "integration_repair_failed") {
+    return reconcileProviderOnce({ ...options, attempt: 2 });
+  }
+  return result;
+}
+
+async function enqueueReconciliation(
+  options: ReconcileOptions,
+): Promise<ProviderReconciliationResult> {
+  const queueKey = await reconciliationQueueKey(options);
+  const equivalentKey = `${queueKey}\n${reconciliationRequestSignature(options)}`;
+  const equivalent = equivalentRequests.get(equivalentKey);
+  if (equivalent) return equivalent;
+
+  const previous = queueTails.get(queueKey) ?? Promise.resolve();
+  const operation = previous
+    .catch(() => undefined)
+    .then(() => runReconciliationWithRetry(options));
+  const tail = operation.then(() => undefined, () => undefined);
+  queueTails.set(queueKey, tail);
+  equivalentRequests.set(equivalentKey, operation);
+
+  const cleanup = () => {
+    if (equivalentRequests.get(equivalentKey) === operation) {
+      equivalentRequests.delete(equivalentKey);
     }
-    return result;
-  })().finally(() => active.delete(key));
-  active.set(key, operation);
+    if (queueTails.get(queueKey) === tail) queueTails.delete(queueKey);
+  };
+  void operation.then(cleanup, cleanup);
   return operation;
 }
 
@@ -469,7 +518,23 @@ export async function reconcileAllProviderIntegrations(
   }));
 }
 
-export async function reconcileTerminalCapabilityTargets(cwd: string): Promise<void> {
+function terminalReconciliationError(
+  status: ProviderReconciliationStatus,
+): CapabilityErrorShape | null {
+  if (status === "connected") return null;
+  const code = status === "dependency-missing" || status === "plugin-uninstalled"
+    ? "cli_not_found"
+    : status === "plugin-disabled" || status === "permission-required"
+      ? "connection_disabled"
+      : "connection_unavailable";
+  const error = capabilityError(code);
+  return { code: error.code, message: error.message };
+}
+
+export async function reconcileTerminalCapabilityTargets(
+  cwd: string,
+): Promise<Map<string, CapabilityErrorShape>> {
+  const failures = new Map<string, CapabilityErrorShape>();
   const config = await db.aiCapabilityConfig.findUnique({
     where: { slot: "terminal" },
     select: {
@@ -482,30 +547,57 @@ export async function reconcileTerminalCapabilityTargets(cwd: string): Promise<v
     },
   });
   for (const target of config?.targets ?? []) {
-    if (target.connection.kind !== "cli" || !target.connection.enabled) continue;
-    await reconcileProviderIntegrations({
-      provider: target.connection.provider,
-      connectionId: target.connection.id,
-      trigger: "terminal-spawn",
-      cwd,
-    });
+    if (target.connection.kind !== "cli") continue;
+    if (!target.connection.enabled) {
+      failures.set(target.connection.id, terminalReconciliationError("plugin-disabled")!);
+      continue;
+    }
+    try {
+      const result = await reconcileProviderIntegrations({
+        provider: target.connection.provider,
+        connectionId: target.connection.id,
+        trigger: "terminal-spawn",
+        cwd,
+      });
+      const failure = terminalReconciliationError(result.status);
+      if (failure) failures.set(target.connection.id, failure);
+    } catch {
+      failures.set(target.connection.id, terminalReconciliationError("failed")!);
+    }
   }
+  return failures;
 }
 
 export async function reconcileTerminalExecutionBinding(
   binding: { connectionId: string | null; agent: string },
   cwd: string,
 ): Promise<void> {
+  let result: ProviderReconciliationResult | null = null;
   if (binding.connectionId) {
-    await reconcileProviderIntegrations({
-      connectionId: binding.connectionId,
-      trigger: "terminal-spawn",
-      cwd,
-    });
-    return;
+    try {
+      result = await reconcileProviderIntegrations({
+        connectionId: binding.connectionId,
+        trigger: "terminal-spawn",
+        cwd,
+      });
+    } catch {
+      throw capabilityError("connection_unavailable");
+    }
+  } else {
+    const provider = providerRegistry.getByAgentFieldValue(binding.agent);
+    if (provider?.cli) {
+      try {
+        result = await reconcileProviderIntegrations({
+          provider: provider.name,
+          trigger: "terminal-spawn",
+          cwd,
+        });
+      } catch {
+        throw capabilityError("connection_unavailable");
+      }
+    }
   }
-  const provider = providerRegistry.getByAgentFieldValue(binding.agent);
-  if (provider?.cli) {
-    await reconcileProviderIntegrations({ provider: provider.name, trigger: "terminal-spawn", cwd });
-  }
+  if (!result) return;
+  const failure = terminalReconciliationError(result.status);
+  if (failure) throw capabilityError(failure.code);
 }

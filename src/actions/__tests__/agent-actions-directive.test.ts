@@ -8,7 +8,7 @@ const fsMocks = vi.hoisted(() => ({
   rm: vi.fn(async () => {}),
 }));
 const reconciliationMocks = vi.hoisted(() => ({
-  reconcileTerminalCapabilityTargets: vi.fn(async () => {}),
+  reconcileTerminalCapabilityTargets: vi.fn(async () => new Map()),
   reconcileTerminalExecutionBinding: vi.fn(async () => {}),
 }));
 
@@ -464,6 +464,46 @@ describe("startPtyExecution directive selection", () => {
       modelId: "codex-model",
       targetId: "target-codex",
     });
+  });
+
+  it("falls back without spawning the primary when its integration reconciliation is not connected", async () => {
+    reconciliationMocks.reconcileTerminalCapabilityTargets.mockResolvedValueOnce(new Map([[
+      "connection-claude",
+      { code: "connection_unavailable", message: "The configured connection is unavailable" },
+    ]]));
+    vi.mocked(resolveTerminalTargetPlan).mockResolvedValue({
+      slot: "terminal",
+      targets: [terminalTarget("claude"), terminalTarget("codex", { order: 1 })],
+      migrationStatus: "complete",
+    } as never);
+    mockDb.task.findUnique.mockResolvedValue(taskWithLabels([]));
+
+    const result = await startPtyExecution("t1", "");
+
+    expect(result.connectionId).toBe("connection-codex");
+    expect(createSession).toHaveBeenCalledOnce();
+    expect(vi.mocked(createSession).mock.calls[0][1]).toBe("codex");
+  });
+
+  it("does not fallback or spawn when a fixed binding reconciliation fails", async () => {
+    reconciliationMocks.reconcileTerminalExecutionBinding.mockRejectedValueOnce(Object.assign(
+      new Error("The configured connection is unavailable"),
+      { code: "connection_unavailable" },
+    ));
+    mockDb.task.findUnique.mockResolvedValue(taskWithLabels([]));
+
+    await expect(startPtyExecution(
+      "t1",
+      "",
+      undefined,
+      undefined,
+      false,
+      { connectionId: "connection-claude", modelId: "claude-model", targetId: "target-claude" },
+    )).rejects.toMatchObject({ code: "connection_unavailable" });
+
+    expect(resolveFixedCliConnection).not.toHaveBeenCalled();
+    expect(resolveTerminalTargetPlan).not.toHaveBeenCalled();
+    expect(createSession).not.toHaveBeenCalled();
   });
 
   it("falls back when adapter process planning reports a spawn failure", async () => {

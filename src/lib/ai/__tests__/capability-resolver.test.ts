@@ -147,6 +147,16 @@ describe("explicit capability resolver", () => {
       .toBe("model_unavailable");
   });
 
+  it("does not resolve a CLI whose reconciliation cache is partial", async () => {
+    const partial = { ...connection, testStatus: "partial", testOk: true };
+    mockDb.aiCapabilityConfig.findUnique.mockResolvedValue(configWith(partial));
+
+    const target = (await resolveCapabilityPlan("terminal")).targets[0];
+
+    expect(target?.preflightError?.code).toBe("connection_unavailable");
+    expect(providerRegistry.createResolvedCliConnectionAdapter).not.toHaveBeenCalled();
+  });
+
   it("accepts CLI and API targets for non-terminal slots", async () => {
     const apiConnection = {
       ...connection,

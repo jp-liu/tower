@@ -117,6 +117,9 @@ async function resolveStoredTarget(
   if (!connection.testOk || connection.testStatus === "unavailable") {
     return { ...base, kind: connection.kind, preflightError: preflight("connection_unavailable") };
   }
+  if (connection.kind === "cli" && connection.testStatus !== "connected") {
+    return { ...base, kind: "cli", preflightError: preflight("connection_unavailable") };
+  }
 
   if (connection.kind === "api") {
     if (!target.modelId) {

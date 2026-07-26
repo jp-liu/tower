@@ -830,13 +830,17 @@ export async function startPtyExecution(
 
     // Reconcile real CLI config immediately before every PTY spawn. This also
     // lets a restored CLI recover an unavailable cached connection.
+    let terminalReconciliationFailures: Map<
+      string,
+      { code: ReturnType<typeof capabilityError>["code"]; message: string }
+    > | null = null;
     if (fixedTargetSnapshot) {
       await reconcileTerminalExecutionBinding({
         connectionId: fixedTargetSnapshot.connectionId,
         agent: "",
       }, cwd);
     } else {
-      await reconcileTerminalCapabilityTargets(cwd);
+      terminalReconciliationFailures = await reconcileTerminalCapabilityTargets(cwd);
     }
 
     // Resolve only after the final cwd is known. A fixed retry never reads the slot.
@@ -846,7 +850,12 @@ export async function startPtyExecution(
           fixedTargetSnapshot.modelId,
           { cwd, targetId: fixedTargetSnapshot.targetId },
         )]
-      : (await resolveTerminalTargetPlan({ cwd })).targets;
+      : (await resolveTerminalTargetPlan({ cwd })).targets.map((target) => {
+          const reconciliationFailure = terminalReconciliationFailures?.get(target.connectionId);
+          return reconciliationFailure
+            ? { ...target, preflightError: reconciliationFailure }
+            : target;
+        });
 
     // 6b. Record forkCommit
     // Worktree mode: merge-base between baseBranch and HEAD

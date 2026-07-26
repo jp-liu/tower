@@ -56,7 +56,10 @@ vi.mock("@tower/ai-runtime", async (importOriginal) => {
   };
 });
 
-import { reconcileProviderIntegrations } from "../provider-reconciliation";
+import {
+  reconcileProviderIntegrations,
+  reconcileTerminalCapabilityTargets,
+} from "../provider-reconciliation";
 
 function connection(overrides: Record<string, unknown> = {}) {
   return {
@@ -212,6 +215,241 @@ describe("provider integration reconciliation host", () => {
     expect(result).toMatchObject({ status: "connected", attempts: 2, fingerprint: "sha256:second" });
     expect(mocks.reconcile).toHaveBeenCalledTimes(2);
     expect(mocks.execute).toHaveBeenCalledOnce();
+  });
+
+  it("retries a failed integration repair during skipHello preflight", async () => {
+    mocks.connection = connection({ testOk: false, testStatus: "untested" });
+    mocks.reconcile
+      .mockResolvedValueOnce({
+        provider: "codex",
+        available: true,
+        ok: false,
+        integrationFingerprint: "sha256:first",
+        reconciledAt: "2026-07-26T00:00:00.000Z",
+        desired: { mcp: true, hooks: true, skills: true },
+        mcp: { ok: false, method: "cli", error: "MCP verification failed after install" },
+        hooks: { ok: true, method: "file" },
+        skill: { ok: true, method: "symlink" },
+      })
+      .mockResolvedValueOnce({
+        provider: "codex",
+        available: true,
+        ok: true,
+        integrationFingerprint: "sha256:second",
+        reconciledAt: "2026-07-26T00:00:01.000Z",
+        desired: { mcp: true, hooks: true, skills: true },
+        mcp: { ok: true, method: "cli" },
+        hooks: { ok: true, method: "file" },
+        skill: { ok: true, method: "symlink" },
+      });
+
+    const result = await reconcileProviderIntegrations({
+      connectionId: "connection-1",
+      trigger: "hello-success",
+      skipHello: true,
+    });
+
+    expect(result).toMatchObject({
+      status: "partial",
+      diagnosticCode: "hello_pending",
+      attempts: 2,
+      fingerprint: "sha256:second",
+    });
+    expect(mocks.reconcile).toHaveBeenCalledTimes(2);
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  it("serializes non-equivalent requests for the same connection and preserves each cwd", async () => {
+    let releaseFirst!: () => void;
+    const firstBlocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    mocks.resolveConnection
+      .mockImplementationOnce(async (_connection: unknown, cwd: string) => {
+        expect(cwd).toBe("/worktree/one");
+        await firstBlocked;
+        return resolvedProvider();
+      })
+      .mockImplementationOnce(async (_connection: unknown, cwd: string) => {
+        expect(cwd).toBe("/worktree/two");
+        return resolvedProvider();
+      });
+
+    const first = reconcileProviderIntegrations({
+      connectionId: "connection-1",
+      trigger: "startup",
+      cwd: "/worktree/one",
+    });
+    await vi.waitFor(() => expect(mocks.resolveConnection).toHaveBeenCalledTimes(1));
+    const second = reconcileProviderIntegrations({
+      connectionId: "connection-1",
+      trigger: "terminal-spawn",
+      cwd: "/worktree/two",
+    });
+    await Promise.resolve();
+    expect(mocks.resolveConnection).toHaveBeenCalledTimes(1);
+
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    expect(mocks.resolveConnection).toHaveBeenCalledTimes(2);
+    expect(mocks.resolveConnection.mock.calls.map((call) => call[1]))
+      .toEqual(["/worktree/one", "/worktree/two"]);
+  });
+
+  it("shares a fully equivalent in-flight reconciliation request", async () => {
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    mocks.reconcile.mockImplementationOnce(async () => {
+      await blocked;
+      return {
+        provider: "codex",
+        available: true,
+        ok: true,
+        integrationFingerprint: "sha256:shared",
+        reconciledAt: "2026-07-26T00:00:00.000Z",
+        desired: { mcp: true, hooks: true, skills: true },
+        mcp: { ok: true, method: "cli" },
+        hooks: { ok: true, method: "file" },
+        skill: { ok: true, method: "symlink" },
+      };
+    });
+    const request = {
+      connectionId: "connection-1",
+      trigger: "terminal-spawn" as const,
+      cwd: "/worktree/shared",
+    };
+
+    const first = reconcileProviderIntegrations(request);
+    await vi.waitFor(() => expect(mocks.reconcile).toHaveBeenCalledTimes(1));
+    const second = reconcileProviderIntegrations(request);
+    await Promise.resolve();
+    expect(mocks.resolveConnection).toHaveBeenCalledTimes(1);
+    expect(mocks.reconcile).toHaveBeenCalledTimes(1);
+
+    release();
+    await Promise.all([first, second]);
+
+    expect(mocks.resolveConnection).toHaveBeenCalledTimes(1);
+    expect(mocks.reconcile).toHaveBeenCalledTimes(1);
+  });
+
+  it("queues helloAlreadySucceeded behind skipHello and persists the final connected state", async () => {
+    mocks.connection = connection({ testOk: false, testStatus: "untested" });
+    let releasePreflight!: () => void;
+    const preflightBlocked = new Promise<void>((resolve) => { releasePreflight = resolve; });
+    mocks.reconcile.mockImplementationOnce(async () => {
+      await preflightBlocked;
+      return {
+        provider: "codex",
+        available: true,
+        ok: true,
+        integrationFingerprint: "sha256:preflight",
+        reconciledAt: "2026-07-26T00:00:00.000Z",
+        desired: { mcp: true, hooks: true, skills: true },
+        mcp: { ok: true, method: "cli" },
+        hooks: { ok: true, method: "file" },
+        skill: { ok: true, method: "symlink" },
+      };
+    });
+
+    const preflight = reconcileProviderIntegrations({
+      connectionId: "connection-1",
+      trigger: "hello-success",
+      skipHello: true,
+    });
+    await vi.waitFor(() => expect(mocks.reconcile).toHaveBeenCalledTimes(1));
+    const finalization = reconcileProviderIntegrations({
+      connectionId: "connection-1",
+      trigger: "hello-success",
+      helloAlreadySucceeded: true,
+    });
+    await Promise.resolve();
+    expect(mocks.reconcile).toHaveBeenCalledTimes(1);
+
+    releasePreflight();
+    const [preflightResult, finalResult] = await Promise.all([preflight, finalization]);
+
+    expect(preflightResult).toMatchObject({ status: "partial", diagnosticCode: "hello_pending" });
+    expect(finalResult).toMatchObject({ status: "connected", hello: "passed" });
+    expect(mocks.connection).toMatchObject({ testStatus: "connected", testOk: true });
+    expect(mocks.reconcile).toHaveBeenCalledTimes(2);
+  });
+
+  it("isolates one terminal candidate reconciliation exception and continues with the next", async () => {
+    const firstConnection = connection({ id: "connection-1", provider: "codex" });
+    const secondConnection = connection({ id: "connection-2", provider: "gemini" });
+    mocks.capabilityFindUnique.mockResolvedValue({
+      targets: [
+        { connection: { id: "connection-1", provider: "codex", kind: "cli", enabled: true } },
+        { connection: { id: "connection-2", provider: "gemini", kind: "cli", enabled: true } },
+      ],
+    });
+    mocks.registryGet.mockImplementation((provider: string) =>
+      provider === "codex" || provider === "gemini" ? { name: provider, cli: {} } : undefined);
+    mocks.findUnique.mockImplementation(async ({ where }: { where: { id?: string } }) =>
+      where.id === "connection-2" ? secondConnection : firstConnection);
+    mocks.reconcile
+      .mockRejectedValueOnce(new Error("temporary config failure"))
+      .mockResolvedValueOnce({
+        provider: "gemini",
+        available: true,
+        ok: true,
+        integrationFingerprint: "sha256:gemini",
+        reconciledAt: "2026-07-26T00:00:00.000Z",
+        desired: { mcp: true, hooks: false, skills: true },
+        mcp: { ok: true, method: "cli" },
+        skill: { ok: true, method: "symlink" },
+      });
+
+    const failures = await reconcileTerminalCapabilityTargets("/fixture/worktree");
+
+    expect(failures.get("connection-1")).toMatchObject({ code: "connection_unavailable" });
+    expect(failures.has("connection-2")).toBe(false);
+    expect(mocks.resolveConnection).toHaveBeenCalledTimes(2);
+  });
+
+  it("marks a candidate unavailable after repair verification exhausts its retry and keeps reconciling", async () => {
+    const firstConnection = connection({ id: "connection-1", provider: "codex" });
+    const secondConnection = connection({ id: "connection-2", provider: "gemini" });
+    mocks.capabilityFindUnique.mockResolvedValue({
+      targets: [
+        { connection: { id: "connection-1", provider: "codex", kind: "cli", enabled: true } },
+        { connection: { id: "connection-2", provider: "gemini", kind: "cli", enabled: true } },
+      ],
+    });
+    mocks.registryGet.mockImplementation((provider: string) =>
+      provider === "codex" || provider === "gemini" ? { name: provider, cli: {} } : undefined);
+    mocks.findUnique.mockImplementation(async ({ where }: { where: { id?: string } }) =>
+      where.id === "connection-2" ? secondConnection : firstConnection);
+    const failedReport = {
+      provider: "codex",
+      available: true,
+      ok: false,
+      integrationFingerprint: "sha256:failed",
+      reconciledAt: "2026-07-26T00:00:00.000Z",
+      desired: { mcp: true, hooks: true, skills: true },
+      mcp: { ok: false, method: "cli", error: "MCP verification failed after install" },
+      hooks: { ok: true, method: "file" },
+      skill: { ok: true, method: "symlink" },
+    };
+    mocks.reconcile
+      .mockResolvedValueOnce(failedReport)
+      .mockResolvedValueOnce(failedReport)
+      .mockResolvedValueOnce({
+        provider: "gemini",
+        available: true,
+        ok: true,
+        integrationFingerprint: "sha256:gemini",
+        reconciledAt: "2026-07-26T00:00:01.000Z",
+        desired: { mcp: true, hooks: false, skills: true },
+        mcp: { ok: true, method: "cli" },
+        skill: { ok: true, method: "symlink" },
+      });
+
+    const failures = await reconcileTerminalCapabilityTargets("/fixture/worktree");
+
+    expect(failures.get("connection-1")).toMatchObject({ code: "connection_unavailable" });
+    expect(failures.has("connection-2")).toBe(false);
+    expect(mocks.reconcile).toHaveBeenCalledTimes(3);
   });
 
   it("does not inspect, install, or run Hello when the CLI version is incompatible", async () => {
