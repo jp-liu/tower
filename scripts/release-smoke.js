@@ -348,7 +348,7 @@ async function preparePackagedAiFixtures(installedRoot, smokeEnv, baseUrl) {
   fs.mkdirSync(projectDir, { recursive: true });
   fs.mkdirSync(fakeBinDir, { recursive: true });
   const fakeCli = path.join(fakeBinDir, "fixture-cli");
-  fs.writeFileSync(fakeCli, "#!/bin/sh\nprintf 'packaged terminal output\\n'\n");
+  fs.writeFileSync(fakeCli, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  printf 'fixture-cli 1.0.0\\n'\nelse\n  printf 'packaged terminal output\\n'\nfi\n");
   fs.chmodSync(fakeCli, 0o700);
   const runtimeUrl = require("url").pathToFileURL(path.join(projectRoot, "packages", "ai-runtime", "dist", "index.js")).href;
   const registerScript = `
