@@ -5,6 +5,8 @@ description: AI Tools 0.3 用户能力、迁移、安全模型和已知限制
 
 > 状态：本仓库已准备 0.3.0 本地产物；尚未 npm publish、创建 tag 或 GitHub Release。
 
+集中验收结果与发布前人工检查见 [0.3.0 手工验收清单](/guide/acceptance-0.3.0)。当前结论为“可进入手工验收”，并非自动发布授权。
+
 ## 用户可见能力
 
 - AI Tools 设置页采用“连接在上、Terminal/Summary/Dreaming/Analysis/Assistant 五插槽在下”。
@@ -31,6 +33,7 @@ description: AI Tools 0.3 用户能力、迁移、安全模型和已知限制
 
 - `@tower/ai-sdk`、私有 Runtime 和官方 Provider 仍是 `private@0.1.0` workspace 包；本期未创建组织或发布独立 npm 包。
 - API Adapter 插件不开放；Terminal 仍只接受 CLI。
-- Assistant 临时附件缓存、CLI 插件 registry/安装目录不进入当前完整归档；恢复后插件需重新安装/确认。
+- Assistant 临时附件缓存不进入完整归档；API 凭据、五能力目标、CLI 插件 registry/安装目录和 Assistant 会话由完整备份覆盖。
 - 0.3 数据库不承诺回写兼容 0.2；降级必须恢复升级前备份。
-- 本次发布准备不替代最终跨模块验收；正式发布前仍需在隔离环境运行 standalone 安装/迁移 smoke 和全链路测试。
+- 官方 Catalog 仓库、GitHub Organization 和托管 URL 尚未获授权；建立前通过服务端 `TOWER_EXTENSION_CATALOG_URL` 或系统 Catalog URL 接入。
+- 当前代理可完成原字体 standalone build，但 Google Fonts/字体文件链路仍有间歇失败；正式发布前需在稳定代理或具备批准字体缓存的环境重跑 packaged smoke。不得通过移除产品字体绕过。

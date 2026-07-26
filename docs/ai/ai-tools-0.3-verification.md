@@ -1,8 +1,40 @@
 # AI Tools 0.3 Requirement-to-Evidence Verification
 
-> Baseline: `feat/ai-tools-0.3` at `f2be6141715661f466ba1242e2df8db8807ed09c`
-> Acceptance worktree: `test/cmrziyswt001bcms4n3exb0if`
+> Baseline: `feat/ai-tools-0.3` at `2362a0c`
+> Central acceptance worktree: `test/cms1hf3cc001fcmuhok2eswk9`
 > Verification date: 2026-07-26
+
+## Current centralized acceptance
+
+This section supersedes the historical execution conclusion later in this file.
+The current run used isolated HOME/data/SQLite roots, fake provider executables,
+a fake OpenAI-compatible endpoint, and a local HTTPS Catalog. Production PID
+58740 on port 3000 was not restarted, reused, or signalled.
+
+| Gate | Current result | Evidence |
+|---|---|---|
+| Frozen workspace install | PASS | `pnpm install --frozen-lockfile --ignore-scripts --prefer-offline`; lockfile and workspace graph were current. |
+| AI packages | PASS | 6 package typechecks/builds; SDK 15, Claude 10, Codex 11, Gemini 14, Runtime 149, Qwen 4: 203 tests. |
+| Catalog contracts | PASS | Source/index schema, generated HTTPS fixture index, Qwen artifact checksum, Runtime contract, and install plan validation. |
+| Root quality | PASS | Typecheck; ESLint 0 errors/0 warnings after removing ignored generated dist; Prisma generate/validate; 210 passed/6 skipped files and 2012 passed/27 todo tests. |
+| Next standalone build | PASS | Multiple isolated builds passed with Next 16.2.1 and 8/8 static pages. After an unproxied font-download failure, an explicit `127.0.0.1:7897` proxy build passed with the original fonts. Product font configuration was restored exactly to baseline in `24ba6f8`; no system-font substitution remains. |
+| Browser acceptance | PASS | Core serial run: Qwen Catalog/lifecycle/slot visibility, Settings/AI Tools, Assistant SSE/tool/attachment/cancel/error. Final visual run passed at 1440x900, 1280x720, and 390x844; five screenshots were inspected and deleted. |
+| Package canary | PASS | 2042 files, 44,561,442 unpacked bytes. |
+| Packaged release smoke | NOT COMPLETED | A proxied run reached Terminal and exposed two fixture defects, fixed in `94c1731` and `ad6fbff`. The final clean retry was again blocked by intermittent Google Fonts/font-file access during its internal build. No product workaround was retained; repeat on a stable proxy/cache before release. |
+| Loopback default | PASS | `bin/network.mjs` still defaults to `127.0.0.1`; port 3000 remained owned by the original production process. |
+
+Release-relevant defects fixed by this run are: local-directory Providers again
+expose Test/Edit controls (`ff1cf23`); mobile Settings/Assistant layout no longer
+collapses into a narrow clipped strip (`ff1cf23`); disabled dynamic Providers are
+not offered for new capability targets while existing broken targets retain their
+diagnostic (`6090ca2`). The E2E Catalog now covers ready/empty/unavailable states,
+Qwen install/permission/enable/disable/re-enable/damage/uninstall, all five slot
+selectors, and fake CLI missing/incompatible/compatible states (`ff1cf23`).
+
+The optional read-only host smoke found `/Users/liujunping/.local/bin/qwen` and
+parsed `0.21.0`, which satisfies `>=0.18.0 <1.0.0`. It ran with an isolated HOME,
+cleared provider credential variables, closed stdin, and invoked only
+`command -v qwen` plus `qwen --version`. It is not an automated pass condition.
 
 This document is the release acceptance ledger for AI Tools 0.3. The authority is
 `docs/ai/ai-tools-architecture-decisions.md`, the parent goal requirements copied
@@ -201,13 +233,16 @@ the final audit. Temporary screenshots and runtime databases were not committed.
 
 ## Final status
 
-**66 proved / 0 failed / 0 missing / 1 accepted-deviation (67 total).**
+**Central acceptance conclusion: CONDITIONAL PASS for manual acceptance; do not
+publish v0.3.0 yet.** Core AI Tools, Extensions, Qwen fixture integration,
+capability routing, Assistant, package contracts, root tests, and browser flows
+passed. The remaining automated release prerequisite is a packaged smoke in a
+build environment with Google Fonts access or an approved font cache. This run
+did not publish, push, tag, create a GitHub Organization, configure a production
+Catalog, access a real Provider account, send a real prompt, or consume quota.
 
-**Release decision: PASS.** The AI Tools 0.3 product release gate is satisfied.
-REL-05 remains visible as a hub-accepted historical procedure deviation and is
-not counted as proof. Residual risks are limited to the eight non-fatal Next NFT
-trace warnings and the documented delta-verification method: after the sole full
-test run exposed isolated test-fixture assumptions, only the five failed files
-were rerun as instructed. No real Provider/network/credential action, external
-publish/tag/push, organization creation, or repeated screenshot occurred in the
-final gate.
+The official Catalog repository/Organization/hosted URL is still unauthorized.
+Until it exists, operators must configure the server-side
+`TOWER_EXTENSION_CATALOG_URL` or the system Catalog URL. Manual acceptance items
+and external prerequisites are maintained in
+`docs/guide/acceptance-0.3.0.md`.
