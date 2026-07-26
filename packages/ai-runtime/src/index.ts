@@ -1,4 +1,7 @@
 export * from "./command-resolver.js";
+export * from "./catalog.js";
+export * from "./artifact-provider.js";
+export * from "./cli-dependency.js";
 export * from "./api-adapter.js";
 export * from "./api-config.js";
 export * from "./api-errors.js";

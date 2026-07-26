@@ -6,6 +6,7 @@ import {
   CLI_PLUGIN_EXPORT_PATH,
   isCliPluginApiVersionCompatible,
   isCliPluginManifestV1,
+  isLegacyCliPluginManifestV1,
   type CliPluginManifestV1,
   type CliPluginPermission,
   type CliConfigSchema,
@@ -91,6 +92,8 @@ function manifestSummary(
     apiVersion: manifest.apiVersion,
     kind: manifest.kind,
     displayName: manifest.display.name,
+    extensionId: manifest.id,
+    publisherId: manifest.publisher.id,
   };
 }
 
@@ -400,6 +403,7 @@ export interface ValidatePluginPackageOptions {
   nodeVersion?: string;
   expectedName?: string;
   expectedVersion?: string;
+  expectedId?: string;
   requireDependenciesInsidePackage?: boolean;
   resolveDependency?: (dependency: string, entryPath: string) => Promise<string | void>;
 }
@@ -421,9 +425,21 @@ export async function validatePluginPackage(options: ValidatePluginPackageOption
     throw pluginError("INVALID_PACKAGE", options.expectedName);
   }
   if (packageJson.type !== "module") throw pluginError("INVALID_PACKAGE", packageJson.name);
-  if (!isCliPluginManifestV1(packageJson.tower)) throw pluginError("INVALID_MANIFEST", packageJson.name);
+  if (!isCliPluginManifestV1(packageJson.tower)) {
+    if (isLegacyCliPluginManifestV1(packageJson.tower)) {
+      throw pluginError("MANIFEST_MIGRATION_REQUIRED", packageJson.name);
+    }
+    throw pluginError("INVALID_MANIFEST", packageJson.name);
+  }
   const manifest = packageJson.tower;
+  if (options.expectedId && manifest.id !== options.expectedId) {
+    throw pluginError("INVALID_MANIFEST", options.expectedId);
+  }
   validateIntegrationPermissions(manifest);
+  if (new Set(manifest.permissions).size !== manifest.permissions.length
+    || !semver.validRange(manifest.cliDependency.supportedVersions)) {
+    throw pluginError("INVALID_MANIFEST", manifest.id);
+  }
   if (!isCliPluginApiVersionCompatible(manifest.apiVersion)) {
     throw pluginError("INCOMPATIBLE_PLUGIN", packageJson.name);
   }
@@ -435,8 +451,10 @@ export async function validatePluginPackage(options: ValidatePluginPackageOption
   }
 
   const exportPath = providerExport(packageJson.exports);
-  if (!exportPath || !/\.(?:m?js)$/.test(exportPath)) throw pluginError("INVALID_PACKAGE", packageJson.name);
-  const entryPath = await resolveContainedFile(options.fileSystem, packageRoot, exportPath);
+  if (!exportPath || exportPath !== manifest.entry || !/\.(?:m?js)$/.test(exportPath)) {
+    throw pluginError("INVALID_PACKAGE", packageJson.name);
+  }
+  const entryPath = await resolveContainedFile(options.fileSystem, packageRoot, manifest.entry);
   const configSchemaPath = await resolveContainedFile(options.fileSystem, packageRoot, manifest.configSchema);
   const configSchemaContents = await options.fileSystem.readFile(configSchemaPath);
   validatePluginConfigSchema(await readJson(options.fileSystem, configSchemaPath, "INVALID_CONFIG_SCHEMA"));
@@ -466,6 +484,7 @@ export async function validatePluginPackage(options: ValidatePluginPackageOption
     packageRoot,
     packageName: packageJson.name,
     packageVersion: packageJson.version,
+    extensionId: manifest.id,
     entryPath,
     configSchemaPath,
     manifest,
@@ -494,20 +513,26 @@ export function permissionDiff(
 export function createInstallPlan(input: {
   source: PluginSource;
   sourcePath?: string;
+  packageName?: string;
+  pluginId?: string;
+  catalog?: PluginInstallPlan["catalog"];
+  dependency?: PluginInstallPlan["dependency"];
   plugin: ValidatedPluginPackage;
   integrity: string;
   previous?: PluginRegistration;
 }): PluginInstallPlan {
   const planBase = {
     version: PLUGIN_INSTALL_PLAN_VERSION,
-    operation: input.source === "local"
+    operation: input.source === "local" || input.source === "development"
       ? "register-local" as const
       : input.previous
         ? "upgrade" as const
         : "install" as const,
-    pluginId: input.plugin.packageName,
+    pluginId: input.pluginId ?? input.plugin.extensionId,
     source: input.source,
     ...(input.sourcePath ? { sourcePath: input.sourcePath } : {}),
+    ...(input.packageName ? { packageName: input.packageName } : {}),
+    ...(input.catalog ? { catalog: structuredClone(input.catalog) } : {}),
     fromVersion: input.previous?.version ?? null,
     fromActivationPlanDigest: input.previous?.activationPlanDigest ?? null,
     toVersion: input.plugin.packageVersion,
@@ -515,6 +540,7 @@ export function createInstallPlan(input: {
     manifest: input.plugin.manifestSummary,
     manifestData: structuredClone(input.plugin.manifest),
     permissions: permissionDiff(input.plugin.manifest.permissions, input.previous?.permissions),
+    ...(input.dependency ? { dependency: structuredClone(input.dependency) } : {}),
   };
   return { ...planBase, planDigest: sha256(stableJson(planBase)) };
 }
@@ -526,6 +552,8 @@ export function isMatchingPlan(expected: PluginInstallPlan, received: PluginInst
     pluginId: received.pluginId,
     source: received.source,
     ...(received.sourcePath ? { sourcePath: received.sourcePath } : {}),
+    ...(received.packageName ? { packageName: received.packageName } : {}),
+    ...(received.catalog ? { catalog: received.catalog } : {}),
     fromVersion: received.fromVersion,
     fromActivationPlanDigest: received.fromActivationPlanDigest,
     toVersion: received.toVersion,
@@ -533,6 +561,7 @@ export function isMatchingPlan(expected: PluginInstallPlan, received: PluginInst
     manifest: received.manifest,
     manifestData: received.manifestData,
     permissions: received.permissions,
+    ...(received.dependency ? { dependency: received.dependency } : {}),
   };
   return expected.planDigest === received.planDigest
     && sha256(stableJson(receivedBase)) === received.planDigest;

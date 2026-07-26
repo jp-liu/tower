@@ -36,19 +36,37 @@ export interface CliCommandManifest {
   default: string;
   aliases?: string[];
   knownPaths?: Partial<Record<SupportedPlatform, string[]>>;
-  versionArgs?: string[];
+  versionArgs: string[];
+}
+
+export interface CliPluginPublisher {
+  id: string;
+  name: string;
+  homepage?: string;
+}
+
+export interface CliDependencyManifest {
+  name: string;
+  homepage: string;
+  installDocs: string;
+  supportedVersions: string;
+  managedByTower: false;
 }
 
 export interface CliPluginManifestV1 {
   manifestVersion: typeof CLI_PLUGIN_MANIFEST_VERSION;
   apiVersion: CliPluginApiVersion;
+  id: string;
   kind: CliPluginKind;
+  publisher: CliPluginPublisher;
   display: {
     name: string;
     description?: string;
     homepage?: string;
   };
+  entry: string;
   command: CliCommandManifest;
+  cliDependency: CliDependencyManifest;
   compatibility: {
     tower: string;
     node: string;
@@ -80,10 +98,6 @@ function isString(value: unknown): value is string {
   return typeof value === "string";
 }
 
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every(isString);
-}
-
 function isNonEmptyStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(isNonEmptyString);
 }
@@ -100,19 +114,46 @@ function hasValidOptionalField(
   return !hasOwn(value, key) || validate(value[key]);
 }
 
+function isHttpsUrl(value: unknown): value is string {
+  if (!isNonEmptyString(value)) return false;
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function isStableIdentifier(value: unknown): value is string {
+  return isNonEmptyString(value)
+    && value.length <= 128
+    && /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/.test(value);
+}
+
+function isSafeRelativeFile(value: unknown): value is string {
+  return isNonEmptyString(value)
+    && /^\.\/[A-Za-z0-9._/-]+$/.test(value)
+    && !value.split(/[\\/]/).some((segment) => segment === ".." || segment === "");
+}
+
 /** Validate the static package.json `tower` field before plugin code is loaded. */
 export function isCliPluginManifestV1(value: unknown): value is CliPluginManifestV1 {
   if (!isRecord(value)) return false;
   if (value.manifestVersion !== CLI_PLUGIN_MANIFEST_VERSION || value.kind !== "cli-provider") return false;
   if (!isNonEmptyString(value.apiVersion) || !parseApiVersion(value.apiVersion)) return false;
+  if (!isStableIdentifier(value.id)) return false;
+  if (!isRecord(value.publisher)
+    || !isStableIdentifier(value.publisher.id)
+    || !isNonEmptyString(value.publisher.name)
+    || !hasValidOptionalField(value.publisher, "homepage", isHttpsUrl)) return false;
   if (!isRecord(value.display)
     || !isNonEmptyString(value.display.name)
     || !hasValidOptionalField(value.display, "description", isString)
     || !hasValidOptionalField(value.display, "homepage", isString)) return false;
 
+  if (!isSafeRelativeFile(value.entry)) return false;
   if (!isRecord(value.command) || !isNonEmptyString(value.command.default)) return false;
   if (!hasValidOptionalField(value.command, "aliases", isNonEmptyStringArray)
-    || !hasValidOptionalField(value.command, "versionArgs", isStringArray)) return false;
+    || !isNonEmptyStringArray(value.command.versionArgs)) return false;
   if (hasOwn(value.command, "knownPaths")) {
     if (!isRecord(value.command.knownPaths)) return false;
     for (const [platform, paths] of Object.entries(value.command.knownPaths)) {
@@ -120,6 +161,13 @@ export function isCliPluginManifestV1(value: unknown): value is CliPluginManifes
       if (!isNonEmptyStringArray(paths)) return false;
     }
   }
+
+  if (!isRecord(value.cliDependency)
+    || !isNonEmptyString(value.cliDependency.name)
+    || !isHttpsUrl(value.cliDependency.homepage)
+    || !isHttpsUrl(value.cliDependency.installDocs)
+    || !isNonEmptyString(value.cliDependency.supportedVersions)
+    || value.cliDependency.managedByTower !== false) return false;
 
   if (!isRecord(value.compatibility)
     || !isNonEmptyString(value.compatibility.tower)
@@ -148,6 +196,17 @@ export function isCliPluginManifestV1(value: unknown): value is CliPluginManifes
     || !value.permissions.every((permission) => typeof permission === "string"
       && CLI_PLUGIN_PERMISSIONS.has(permission as CliPluginPermission))) return false;
   return isNonEmptyString(value.configSchema);
+}
+
+/** Detect the pre-Catalog v1 shape so hosts can return a migration diagnostic. */
+export function isLegacyCliPluginManifestV1(value: unknown): boolean {
+  return isRecord(value)
+    && value.manifestVersion === CLI_PLUGIN_MANIFEST_VERSION
+    && value.kind === "cli-provider"
+    && (!hasOwn(value, "id")
+      || !hasOwn(value, "publisher")
+      || !hasOwn(value, "entry")
+      || !hasOwn(value, "cliDependency"));
 }
 
 function parseApiVersion(version: string): [major: number, minor: number] | null {

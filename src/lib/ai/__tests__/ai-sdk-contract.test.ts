@@ -17,17 +17,31 @@ import {
 const manifest: CliPluginManifestV1 = {
   manifestVersion: 1,
   apiVersion: CLI_PLUGIN_API_VERSION,
+  id: "example.test-cli",
   kind: "cli-provider",
+  publisher: {
+    id: "example",
+    name: "Example",
+    homepage: "https://example.com",
+  },
   display: {
     name: "Test CLI",
     description: "Test provider",
     homepage: "https://example.com/test-cli",
   },
+  entry: "./dist/provider.js",
   command: {
     default: "test-cli",
     aliases: ["test"],
     knownPaths: { darwin: ["/usr/local/bin/test-cli"] },
     versionArgs: ["--version"],
+  },
+  cliDependency: {
+    name: "Test CLI",
+    homepage: "https://example.com/test-cli",
+    installDocs: "https://example.com/test-cli/install",
+    supportedVersions: ">=1.0.0 <2.0.0",
+    managedByTower: false,
   },
   compatibility: { tower: ">=0.3.0", node: ">=20" },
   capabilities: {
@@ -105,12 +119,15 @@ describe("AI SDK CLI plugin contract", () => {
     expect(isCliPluginManifestV1({
       ...manifest,
       command: { ...manifest.command, versionArgs: [""] },
-    })).toBe(true);
+    })).toBe(false);
     expect(isCliPluginManifestV1({ ...manifest, kind: "api-provider" })).toBe(false);
     expect(isCliPluginManifestV1({ ...manifest, permissions: ["database:read"] })).toBe(false);
   });
 
   it.each([
+    ["id", { ...manifest, id: "Example/Test" }],
+    ["publisher", { ...manifest, publisher: { id: "Example", name: "Example" } }],
+    ["entry", { ...manifest, entry: "../provider.js" }],
     ["display.description", { ...manifest, display: { ...manifest.display, description: 1 } }],
     ["display.homepage", { ...manifest, display: { ...manifest.display, homepage: 1 } }],
     ["command.aliases", { ...manifest, command: { ...manifest.command, aliases: "test" } }],
@@ -122,6 +139,14 @@ describe("AI SDK CLI plugin contract", () => {
       command: { ...manifest.command, knownPaths: { darwin: [""] } },
     }],
     ["command.versionArgs", { ...manifest, command: { ...manifest.command, versionArgs: "--version" } }],
+    ["cliDependency homepage", {
+      ...manifest,
+      cliDependency: { ...manifest.cliDependency, homepage: "http://example.com" },
+    }],
+    ["cliDependency managedByTower", {
+      ...manifest,
+      cliDependency: { ...manifest.cliDependency, managedByTower: true },
+    }],
     ["compatibility.tower", { ...manifest, compatibility: { ...manifest.compatibility, tower: 1 } }],
     ["compatibility.node", { ...manifest, compatibility: { ...manifest.compatibility, node: 20 } }],
     ["sessions.resume", {

@@ -4,11 +4,14 @@ import { CodexCliAdapter } from "./adapter.js";
 export const codexManifest = {
   manifestVersion: 1,
   apiVersion: "1.0",
+  id: "tower.codex-cli",
   kind: "cli-provider",
+  publisher: { id: "tower", name: "Tower" },
   display: {
     name: "Codex CLI",
     description: "Official Tower provider for the OpenAI Codex CLI",
   },
+  entry: "./dist/index.js",
   command: {
     default: "codex",
     aliases: ["codex-cli"],
@@ -18,6 +21,13 @@ export const codexManifest = {
       win32: ["%APPDATA%\\npm\\codex.cmd"],
     },
     versionArgs: ["--version"],
+  },
+  cliDependency: {
+    name: "Codex CLI",
+    homepage: "https://github.com/openai/codex",
+    installDocs: "https://github.com/openai/codex#installation",
+    supportedVersions: ">=0.1.0",
+    managedByTower: false,
   },
   compatibility: { tower: ">=0.3.0 <0.4.0", node: ">=18" },
   capabilities: {

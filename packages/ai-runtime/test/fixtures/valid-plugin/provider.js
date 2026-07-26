@@ -3,9 +3,19 @@ globalThis.__towerFixtureLoads = (globalThis.__towerFixtureLoads ?? 0) + 1;
 const manifest = {
   manifestVersion: 1,
   apiVersion: "1.0",
+  id: "fixture.tower-cli",
   kind: "cli-provider",
+  publisher: { id: "fixture-labs", name: "Fixture Labs" },
   display: { name: "Fixture CLI" },
-  command: { default: "fixture-cli" },
+  entry: "./provider.js",
+  command: { default: "fixture-cli", versionArgs: ["--version"] },
+  cliDependency: {
+    name: "Fixture CLI",
+    homepage: "https://example.com/fixture-cli",
+    installDocs: "https://example.com/fixture-cli/install",
+    supportedVersions: ">=1.0.0 <2.0.0",
+    managedByTower: false,
+  },
   compatibility: { tower: ">=0.3.0 <1.0.0", node: ">=20" },
   capabilities: {
     sessions: { fresh: true },
