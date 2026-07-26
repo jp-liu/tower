@@ -112,8 +112,11 @@ AI Tools 设置页分为上下两层：
 
 - 抽取公共 CLI Adapter 基类/接口，并发布为可供第三方依赖的公共 npm 包。
 - Claude、Codex、Gemini 内置支持也使用这套公共接口实现，以验证扩展接口具备完整能力。
-- QCoder、Cursor、Kimi 等其他 CLI 可以由 Tower 官方或社区作为独立 npm 扩展包发布。
+- QCoder、Cursor、Kimi 等其他 CLI 可以由 Tower 官方或社区作为独立扩展发布。
 - 社区开发者可以自行实现 CLI Adapter；Tower 提供固定、稳定的接入点，定位类似 Raycast 的扩展契约。
+- 0.3.0 扩展系统首版只支持 `cli-provider`，不提供通用命令模板、任意脚本扩展或 API Provider 扩展。
+- 用户只有两条接入路径：从 Tower 扩展中心的受信任 Catalog 安装不可变产物，或使用公共 SDK 注册本地目录进行开发调试。正常安装不要求 npm 包名，也不在用户机器执行 npm 命令。
+- `o-tower` 是独立 Agent 产品，不进入本扩展 Catalog、Manifest 或 Runtime。
 
 ### 公共 SDK v1 边界
 
@@ -125,12 +128,13 @@ AI Tools 设置页分为上下两层：
 - MCP、Hooks、Skills 是三个独立的可选子接口，分别提供 `inspect`、`install`、`uninstall`。
 - Adapter 通过 Host Context 使用受控命令执行器、脱敏日志、插件存储路径、平台信息和取消信号；Tower 不向插件传递数据库对象、其他连接配置或 API Key。
 
-### Plugin Manifest 与配置 Schema
+### Extension Manifest 与配置 Schema
 
-- npm 包名是插件全局 ID，首版一个包只贡献一个 CLI Provider。
-- Manifest 使用 npm `package.json` 的 `tower` 字段，模块入口使用标准 `exports`；静态清单必须在加载扩展代码之前完成校验。
-- Manifest 至少包含 `manifestVersion`、`apiVersion`、`kind`、显示信息、默认命令、Tower/Node 兼容版本、能力声明、权限声明和配置 Schema 路径。
-- `manifestVersion` 管清单格式，`apiVersion` 管运行时接口；npm 包版本继续遵循 SemVer，三者不能混用。
+- Manifest v1 使用稳定扩展 `id`，一个产物只贡献一个 `cli-provider`。扩展 ID 不从下载 URL、npm 包名或本地目录名推导。
+- 预构建产物仍可使用 Node ESM 包布局：Manifest 位于 `package.json` 的 `tower` 字段，入口由 Manifest 的 `entry` 显式声明并且必须与标准 `exports["./tower-cli-provider"]` 一致。静态清单必须在加载扩展代码之前完成校验。
+- Manifest 至少包含 `manifestVersion`、`apiVersion`、`id`、`kind`、发布者、显示信息、入口、Tower/Node 兼容版本、能力、权限、配置 Schema，以及底层 CLI 依赖声明。
+- 底层 CLI 依赖声明包含依赖名称、主页、安装文档、支持版本范围、默认命令、别名/少量已知路径和版本探测参数；`managedByTower` 在首版必须为 `false`。
+- `manifestVersion` 管清单格式，`apiVersion` 管运行时接口，扩展版本继续遵循 SemVer，三者不能混用。缺少新必填身份、入口或依赖字段的早期 v1 Provider 必须收到显式迁移诊断，不能被静默误读。
 - 配置采用 JSON Schema 2020-12；Tower 只增加 `x-tower` UI 标注，不允许插件注入 React 组件或设置页脚本。
 - 首版配置控件支持文本、数字、开关、单选、多选、路径、字符串列表和键值表，并支持顺序、分组、高级项和敏感值标记。
 - Connection 的名称、启用状态、命令覆盖、基础参数和高级环境变量由 Tower 统一管理；插件 Schema 只描述自己的 `settings`。
@@ -145,13 +149,28 @@ AI Tools 设置页分为上下两层：
 - 自动解析路径只作为诊断缓存，不替代原始命令配置；每次启动前重新验证，失效时自动重新解析。
 - 连接状态区分未找到、已找到、可运行和已连接；`--version` 成功后仍需执行最小 Hello Probe 才算连接成功。
 - 多个候选同时存在时默认遵循 PATH 顺序，并在设置页展示路径和版本供用户切换。
+- 安装前必须使用相同的共享 command resolver 核验 Manifest 声明的底层 CLI。探测只使用 `execFile` 语义和参数数组，使用短超时、最小安全环境且禁止 shell。
+- CLI 缺失、不可执行、版本无法解析或版本不满足 Manifest 范围时阻止安装，并返回包含依赖、路径、检测版本和安装文档的结构化诊断。
+- Tower 只核验第三方 CLI；不负责安装、更新、登录或修改其配置。
 
-### 插件安装与信任边界
+### Catalog、Artifact 与安装信任边界
 
-- 首版插件是本地可信 Node.js 扩展，不承诺操作系统级沙箱；权限清单用于安装前提示、最小化上下文和审计。
-- npm 安装固定精确版本并校验包完整性，不执行安装脚本；插件必须发布已打包的 ESM 入口，不在用户机器编译原生模块。
+- 官方与社区扩展通过受控仓库/CI 产物进入 Tower 官方 Catalog。Catalog 是受信任的静态 HTTPS 索引，也允许测试 fixture；它不是 npm Marketplace。
+- Catalog 元数据只负责发现和展示，包含扩展 ID、版本、下载 HTTPS URL、SHA-256、字节大小和发布者等字段。Catalog 中复制的 CLI 依赖信息只用于展示，安装决策必须读取下载、校验后的运行时 Manifest。
+- Artifact 是预构建、不可变的 bundle/tarball。Tower 不在用户机器运行 `npm install`、生命周期脚本、任意 shell 或本地编译，也不接受原生模块。
+- 下载必须先进入 `~/.tower/extensions/.staging/`，并依次校验 HTTPS、响应/实际大小、SHA-256、归档路径穿越、symlink/hardlink、Manifest、配置 Schema、权限、Tower/Node 兼容性和底层 CLI 兼容性。
+- 只有全部校验通过后才能原子重命名到 `~/.tower/extensions/cli-provider/<id>/<version>-<digest>/`；registry 更新失败必须回滚新目录，升级失败必须保留旧注册和旧版本。
+- registry 使用可迁移的版本化格式。Runtime 读取并迁移旧 `~/.tower/ai/plugins/registry.v1.json` 注册，保留旧安装路径作为 `legacy` 来源；迁移不得修改或删除用户的旧目录。
+- 本地目录注册必须显式记录为 `development` 来源并保持原目录不复制，供公共 SDK 作者调试。Catalog 安装记录为 `catalog` 来源。
+- 首版扩展仍是本地可信 Node.js 扩展，不承诺操作系统级沙箱；权限清单用于安装前提示、最小化上下文和审计。
 - 插件安装后默认禁用，用户确认权限并启用后才按需加载；Tower 启动时不得激活全部第三方插件。
 - 更新先验证新版本再原子切换，失败时保留旧版本；同时支持本地目录开发模式。
+
+### Runtime 与应用层边界
+
+- 私有 Runtime 提供稳定的 `list`、Catalog 发现/安装计划、`install`、`enable`、`disable`、`uninstall`、`recheck` 和本地目录注册接口。
+- 现有 npm 插件 Runtime 暂作旧版兼容读取与迁移入口，不再是正常用户安装协议；内置 Claude/Codex/Gemini、API 连接、五插槽、Assistant 和 Terminal 继续使用既有 Provider/能力 Runtime。
+- 本阶段只建立 Catalog/Artifact、Manifest、registry 和安装安全底座。设置页“扩展中心”以及 server actions 切换到这些接口由后续应用层任务接通，在接通前不得宣称 Catalog 安装 UI 已完成。
 
 ## 包与组织规划
 
@@ -212,6 +231,7 @@ API Key 与登录密码不同：Tower 调用上游模型时必须取回原值，
 
 - 创建外部组织/npm scope 并正式发布 `@tower/ai-sdk` 或 Provider 包。
 - 对外开放任意 API Adapter 插件。
-- 评估更强的插件隔离、签名/审核和 registry 分发机制。
+- 接通设置页扩展中心的 Catalog 浏览、安装、升级和结构化 CLI 诊断交互，移除正常用户路径中的 npm 包名输入。
+- 评估更强的插件隔离和 Artifact 签名/审核机制。
 
 上述后续项在 0.3.0 均未完成，不应在用户资料中写成已发布能力。
