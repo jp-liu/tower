@@ -48,7 +48,7 @@ export const qwenManifest = {
   cliDependency: {
     name: "Qwen Code CLI",
     homepage: "https://github.com/QwenLM/qwen-code",
-    installDocs: "https://qwenlm.github.io/qwen-code-docs/en/users/overview/",
+    installDocs: "https://qwenlm.github.io/qwen-code-docs/en/users/installation/",
     supportedVersions: ">=0.18.0 <1.0.0",
     managedByTower: false,
   },
