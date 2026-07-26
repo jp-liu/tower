@@ -404,11 +404,13 @@ export function CapabilitySlotsSection() {
                   <span className="truncate">{selectedChoice ? `${selectedChoice.name} · ${selectedChoice.kind.toUpperCase()} · ${t(`settings.aiTools.status.${selectedChoice.testStatus}` as never)}` : t("settings.capabilitySlots.selectConnection")}</span>
                 </SelectTrigger>
                 <SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
-                  {editor && choices[editor.slot].map((choice) => (
-                    <SelectItem key={choice.id} value={choice.id}>
-                      {choice.name} · {choice.kind.toUpperCase()} · {t(`settings.aiTools.status.${choice.testStatus}` as never)}
-                    </SelectItem>
-                  ))}
+                  {editor && choices[editor.slot]
+                    .filter((choice) => choice.enabled || editor.target?.connectionId === choice.id)
+                    .map((choice) => (
+                      <SelectItem key={choice.id} value={choice.id}>
+                        {choice.name} · {choice.kind.toUpperCase()} · {t(`settings.aiTools.status.${choice.testStatus}` as never)}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
               {editor?.slot === "terminal" && <p className="text-[11px] text-muted-foreground">{t("settings.capabilitySlots.terminalCliOnly")}</p>}

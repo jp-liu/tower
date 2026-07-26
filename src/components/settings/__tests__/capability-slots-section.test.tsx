@@ -68,6 +68,19 @@ describe("CapabilitySlotsSection", () => {
     expect(screen.queryByText(/API · API/)).not.toBeInTheDocument();
   });
 
+  it("does not offer disabled provider connections for a new target", async () => {
+    const disabled = { ...cli, id: "cli-disabled", name: "Qwen Code", enabled: false, testStatus: "unavailable", testOk: false };
+    actionMocks.getAiCapabilityChoices.mockResolvedValue({ ok: true, data: [cli, disabled] });
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findAllByText(/未配置目标|No targets configured/);
+    const assistant = screen.getByText(/AI 助手|AI Assistant/).closest("article")!;
+    await user.click(within(assistant).getByRole("button", { name: /新增目标|Add target/ }));
+    await user.click(screen.getByLabelText(/连接|Connection/));
+    expect(await screen.findByRole("option", { name: /Codex · CLI/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Qwen Code/ })).not.toBeInTheDocument();
+  });
+
   it("requires an API model before saving a non-terminal target", async () => {
     const user = userEvent.setup();
     renderSection();
