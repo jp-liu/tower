@@ -175,6 +175,34 @@ AI Tools 设置页分为上下两层：
 - 现有 npm 插件 Runtime 暂作旧版兼容读取与迁移入口，不再是正常用户安装协议；内置 Claude/Codex/Gemini、API 连接、五插槽、Assistant 和 Terminal 继续使用既有 Provider/能力 Runtime。
 - 本阶段只建立 Catalog/Artifact、Manifest、registry 和安装安全底座。设置页“扩展中心”以及 server actions 切换到这些接口由后续应用层任务接通，在接通前不得宣称 Catalog 安装 UI 已完成。
 
+### CLI Provider 集成 Reconciliation 契约
+
+内置 Claude/Codex/Gemini 和已启用的 `cli-provider` 扩展必须进入同一个 Host 生命周期。静态 Provider Map 只保存内置实现；平台能力中心使用异步枚举接口合并内置 Provider、扩展 registry 和 CLI Connection。动态扩展只有在产物完整、已启用、当前安装计划的全部权限已经确认时才进入可执行集合，枚举本身不得加载第三方代码。Terminal、能力插槽和 CLI query 在选中具体 Connection 后再通过统一解析接口加载对应 Adapter，因此新增动态 Provider 不需要修改 Tower 的静态源码注册。
+
+Tower Host 是集成期望状态的唯一所有者。Host 根据当前 Tower 包、数据目录和本机 API URL 构造 MCP/Hooks/Skills 参数；根据 Manifest capability 与已确认的 `integration:mcp`、`integration:hooks`、`integration:skills` 权限决定目标集成。Provider 只通过公共 SDK Adapter 的三个可选子接口实现自身配置格式和实际操作，每个接口都必须提供幂等的 `inspect/install/uninstall`。Host Context 只提供受控进程、脱敏日志、插件存储和获准的 Provider 配置路径，不传递数据库对象、其他 Connection、API Key 或未声明权限对应的资源。
+
+一次 reconciliation 固定执行以下状态机：
+
+1. 读取扩展启用/权限确认与 Connection 配置，计算 desired integrations；禁用、卸载、产物损坏或权限未确认时停止，不加载 Adapter、不注入。
+2. 统一解析 CLI 命令并校验 Manifest 声明的支持版本。CLI 缺失时记录 `dependency-missing`，版本不满足时记录 `dependency-incompatible`，两者均保持扩展安装状态但跳过集成和 Hello。
+3. 使用 Adapter 子接口 `inspect` CLI 的真实用户级配置，只对缺失项调用 `install`，已存在项不得重复写入。
+4. 再次 `inspect` 验证全部 desired integrations；验证结果而非 `install` 返回值决定最终集成状态。
+5. 在需要连接核验的触发点执行最小 Hello；只有依赖、集成核验和 Hello 各自的结果都已记录后才更新 Connection 缓存与安全诊断。
+
+CLI 配置文件和 Provider CLI 的实际检查结果是事实来源，`ProviderConnection` 仅缓存最近一次结果。Host 稳定计算 integration fingerprint，至少覆盖 Tower 集成 schema/Tower 版本、Provider 或扩展版本、解析后的命令路径、CLI 版本、目标集合集及相关非敏感配置摘要。摘要使用键排序后的结构化数据和 SHA-256；敏感 settings、环境变量值、API Key、完整 Provider 错误不得进入 fingerprint、数据库诊断或日志。缓存同时记录最近 reconciliation 时间、触发原因、各集成的 `not-requested/missing/installed/failed` 状态和脱敏错误码。路径或版本变化必然改变 fingerprint；即使 fingerprint 未变，也必须按触发策略重新 inspect，不能因数据库显示已安装而跳过事实检查。
+
+| 触发点 | 枚举范围 | 行为 |
+|---|---|---|
+| Tower Node 启动 | 内置 + 已启用且权限已确认的动态 Provider | 后台 inspect/repair；依赖恢复后再 Hello |
+| 扩展安装并确认启用 | 当前扩展 | 首次 reconciliation；安装但未确认时不运行 |
+| 扩展升级或重新启用 | 当前扩展 | 复用原权限确认；新增权限使确认失效并阻止静默注入 |
+| CLI Hello 成功 | 当前 Connection | 以已成功 Hello 为前提执行 inspect/repair/verify 并缓存 |
+| Terminal 会话 spawn 前 | 本次候选 CLI Connection | 同步 reconciliation；失败目标进入既有 fallback，不先启动 PTY |
+| 解析命令路径或 CLI 版本变化 | 当前 Connection | fingerprint 失效，重新 inspect/repair/verify，随后 Hello |
+| 用户“重新检测并修复” | 指定 Connection 或全部合规 CLI Provider | 应用层显式 inspect/reconcile/repair，返回结构化状态 |
+
+应用层必须提供只读 `inspect` 与可修复的 `reconcile/repair` 接口，供后续设置页调用；本阶段不要求制作扩展中心 UI。Host 对同一 Connection 的并发 reconciliation 做进程内合并，失败保留可重试诊断，不卸载或更新第三方 CLI，不执行登录，不访问真实 Provider 网络之外的最小 Hello。测试必须使用临时 HOME/TOWER_DATA_DIR、fake CLI/Adapter 和临时配置，禁止读写真实 Provider 配置目录。
+
 ## 包与组织规划
 
 - 当前仓库先建立 workspace packages，区分公共 `ai-sdk`、私有 `ai-runtime`、官方 CLI Providers、公共 `agent-sdk` 和 `o-tower` 等 Agent 包。
