@@ -4,7 +4,6 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
   CliPluginRuntime,
-  PluginRuntimeError,
   StaticHttpExtensionCatalog,
   latestCatalogVersion,
   validatePluginSettings,
@@ -13,6 +12,7 @@ import {
   type ExtensionCatalog,
   type PluginInstallPlan,
   type PluginRegistration,
+  type PluginRuntimeErrorCode,
 } from "@tower/ai-runtime";
 import type { CliConfigSchema, CliPluginManifestV1, CliPluginPermission } from "@tower/ai-sdk";
 import { db } from "@/lib/db";
@@ -73,6 +73,16 @@ export class CliPluginApplicationError extends Error {
     super(SAFE_ERROR_MESSAGES[code]);
     this.name = "CliPluginApplicationError";
   }
+}
+
+export function isCliPluginApplicationError(
+  error: unknown,
+): error is Pick<CliPluginApplicationError, "code" | "diagnostic"> {
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && typeof error.code === "string"
+    && Object.hasOwn(SAFE_ERROR_MESSAGES, error.code);
 }
 
 export interface SafeCliPluginPlan {
@@ -186,45 +196,51 @@ function towerVersion(): string {
 }
 
 function mapRuntimeError(error: unknown): never {
-  if (error instanceof CliPluginApplicationError) throw error;
-  if (!(error instanceof PluginRuntimeError)) throw new CliPluginApplicationError("operation_failed");
-  if (error.code === "CATALOG_UNAVAILABLE") throw new CliPluginApplicationError("catalog_unavailable");
-  if (error.code === "CATALOG_INVALID") throw new CliPluginApplicationError("catalog_invalid");
-  if (error.code === "CATALOG_ENTRY_NOT_FOUND") throw new CliPluginApplicationError("catalog_entry_not_found");
-  if (error.code === "INVALID_PACKAGE_NAME"
-    || error.code === "INVALID_PACKAGE_VERSION"
-    || error.code === "INVALID_PACKAGE"
-    || error.code === "INVALID_MANIFEST"
-    || error.code === "INVALID_CONFIG_SCHEMA"
-    || error.code === "ENTRY_ESCAPE"
-    || error.code === "NATIVE_MODULE_REJECTED"
-    || error.code === "DEPENDENCY_UNAVAILABLE"
-    || error.code === "UNSAFE_ARCHIVE") {
+  if (isCliPluginApplicationError(error)) {
+    throw new CliPluginApplicationError(error.code, error.diagnostic);
+  }
+  const runtimeError = typeof error === "object" && error !== null && "code" in error
+    && typeof error.code === "string"
+    ? error as { code: PluginRuntimeErrorCode; diagnostic?: unknown }
+    : null;
+  if (!runtimeError) throw new CliPluginApplicationError("operation_failed");
+  if (runtimeError.code === "CATALOG_UNAVAILABLE") throw new CliPluginApplicationError("catalog_unavailable");
+  if (runtimeError.code === "CATALOG_INVALID") throw new CliPluginApplicationError("catalog_invalid");
+  if (runtimeError.code === "CATALOG_ENTRY_NOT_FOUND") throw new CliPluginApplicationError("catalog_entry_not_found");
+  if (runtimeError.code === "INVALID_PACKAGE_NAME"
+    || runtimeError.code === "INVALID_PACKAGE_VERSION"
+    || runtimeError.code === "INVALID_PACKAGE"
+    || runtimeError.code === "INVALID_MANIFEST"
+    || runtimeError.code === "INVALID_CONFIG_SCHEMA"
+    || runtimeError.code === "ENTRY_ESCAPE"
+    || runtimeError.code === "NATIVE_MODULE_REJECTED"
+    || runtimeError.code === "DEPENDENCY_UNAVAILABLE"
+    || runtimeError.code === "UNSAFE_ARCHIVE") {
     throw new CliPluginApplicationError("invalid_input");
   }
-  if (error.code === "PACKAGE_NOT_FOUND") throw new CliPluginApplicationError("package_not_found");
-  if (error.code === "INCOMPATIBLE_PLUGIN") throw new CliPluginApplicationError("plugin_incompatible");
-  if (error.code === "PLUGIN_NOT_FOUND") throw new CliPluginApplicationError("plugin_not_found");
-  if (error.code === "PLUGIN_DISABLED") throw new CliPluginApplicationError("plugin_disabled");
-  if (error.code === "PLUGIN_CORRUPT"
-    || error.code === "INTEGRITY_MISMATCH"
-    || error.code === "INVALID_PLUGIN_EXPORT"
-    || error.code === "INVALID_ADAPTER") {
+  if (runtimeError.code === "PACKAGE_NOT_FOUND") throw new CliPluginApplicationError("package_not_found");
+  if (runtimeError.code === "INCOMPATIBLE_PLUGIN") throw new CliPluginApplicationError("plugin_incompatible");
+  if (runtimeError.code === "PLUGIN_NOT_FOUND") throw new CliPluginApplicationError("plugin_not_found");
+  if (runtimeError.code === "PLUGIN_DISABLED") throw new CliPluginApplicationError("plugin_disabled");
+  if (runtimeError.code === "PLUGIN_CORRUPT"
+    || runtimeError.code === "INTEGRITY_MISMATCH"
+    || runtimeError.code === "INVALID_PLUGIN_EXPORT"
+    || runtimeError.code === "INVALID_ADAPTER") {
     throw new CliPluginApplicationError("plugin_corrupt");
   }
-  if (error.code === "PERMISSION_CONFIRMATION_REQUIRED") {
+  if (runtimeError.code === "PERMISSION_CONFIRMATION_REQUIRED") {
     throw new CliPluginApplicationError("permission_required");
   }
-  if (error.code === "CLI_DEPENDENCY_UNAVAILABLE") {
-    const diagnostic = error.diagnostic as CliDependencyDiagnostic | undefined;
+  if (runtimeError.code === "CLI_DEPENDENCY_UNAVAILABLE") {
+    const diagnostic = runtimeError.diagnostic as CliDependencyDiagnostic | undefined;
     if (diagnostic?.state === "missing") throw new CliPluginApplicationError("cli_not_found", diagnostic);
     if (diagnostic?.state === "version-incompatible") {
       throw new CliPluginApplicationError("cli_incompatible", diagnostic);
     }
     throw new CliPluginApplicationError("probe_failed", diagnostic);
   }
-  if (error.code === "INSTALL_PLAN_MISMATCH") throw new CliPluginApplicationError("plan_mismatch");
-  if (error.code === "REGISTRY_CORRUPT") throw new CliPluginApplicationError("registry_corrupt");
+  if (runtimeError.code === "INSTALL_PLAN_MISMATCH") throw new CliPluginApplicationError("plan_mismatch");
+  if (runtimeError.code === "REGISTRY_CORRUPT") throw new CliPluginApplicationError("registry_corrupt");
   throw new CliPluginApplicationError("operation_failed");
 }
 

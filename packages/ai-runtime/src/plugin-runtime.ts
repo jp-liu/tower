@@ -230,7 +230,7 @@ export class CliPluginRuntime {
     const packageRoot = await this.fileSystem.realpath(path.resolve(directory)).catch((error) => {
       throw pluginError("INVALID_PACKAGE", undefined, error);
     });
-    const plugin = await this.validate(packageRoot, undefined, undefined, true);
+    const plugin = await this.validate(packageRoot, undefined, undefined, false, undefined, true);
     return createInstallPlan({
       source: "development",
       sourcePath: packageRoot,
@@ -248,7 +248,7 @@ export class CliPluginRuntime {
       const packageRoot = await this.fileSystem.realpath(path.resolve(plan.sourcePath!)).catch((error) => {
         throw pluginError("INVALID_PACKAGE", plan.pluginId, error);
       });
-      const plugin = await this.validate(packageRoot, undefined, plan.toVersion, true, plan.pluginId);
+      const plugin = await this.validate(packageRoot, undefined, plan.toVersion, false, plan.pluginId, true);
       return this.withLifecycleLock(plan.pluginId, () =>
         this.registry.transact(plan.pluginId, (current) => {
           const expected = createInstallPlan({
@@ -669,6 +669,7 @@ export class CliPluginRuntime {
     expectedVersion?: string,
     requireDependenciesInsidePackage = false,
     expectedId?: string,
+    developmentMode = false,
   ) {
     return validatePluginPackage({
       fileSystem: this.fileSystem,
@@ -679,6 +680,7 @@ export class CliPluginRuntime {
       expectedVersion,
       requireDependenciesInsidePackage,
       expectedId,
+      developmentMode,
     });
   }
 

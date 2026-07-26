@@ -25,6 +25,14 @@ const actionMocks = vi.hoisted(() => ({
 
 vi.mock("@/actions/cli-plugin-actions", () => actionMocks);
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("@/components/layout/folder-browser-dialog", async () => {
+  const { createPortal } = await import("react-dom");
+  return {
+    FolderBrowserDialog: ({ open, onSelect }: { open: boolean; onSelect(path: string): void }) => open
+      ? createPortal(<button type="button" onClick={() => onSelect("/tmp/qwen-provider-dev")}>Pick fixture directory</button>, document.body)
+      : null,
+  };
+});
 
 const dependency = {
   dependency: "Qwen Code CLI",
@@ -133,6 +141,11 @@ describe("CLI plugin settings", () => {
     expect(await screen.findByText(plugin.displayName)).toBeInTheDocument();
     expect(screen.getByText(/Tower 不负责安装或登录|Tower does not install or sign in/i)).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "Tool Provider" }));
+    expect(await screen.findByText(/暂无此类型扩展|No extensions of this type/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "CLI Provider" }));
+    expect(await screen.findByText(plugin.displayName)).toBeInTheDocument();
+
     await user.type(screen.getByRole("searchbox", { name: /搜索 Provider Catalog|Search provider catalog/i }), "not-found");
     await waitFor(() => expect(actionMocks.listCliProviderCatalog).toHaveBeenLastCalledWith("not-found"));
     expect(await screen.findByText(/没有匹配的 Provider|No matching providers/i)).toBeInTheDocument();
@@ -145,7 +158,7 @@ describe("CLI plugin settings", () => {
     });
 
     renderSection();
-    expect(await screen.findByText(/Catalog 不可用|Catalog unavailable/i)).toBeInTheDocument();
+    expect(await screen.findByText(/尚未配置扩展 Catalog|Extension catalog not configured/i)).toBeInTheDocument();
     expect(screen.queryByText(/private\.invalid/)).not.toBeInTheDocument();
   });
 
@@ -212,7 +225,9 @@ describe("CLI plugin settings", () => {
     await user.click(screen.getByRole("button", { name: /注册本地目录|Register local directory/i }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).queryByLabelText(/npm 包名|npm package/i)).not.toBeInTheDocument();
-    await user.type(within(dialog).getByLabelText(/插件目录|Plugin directory/i), "/tmp/qwen-provider-dev");
+    expect(within(dialog).getByLabelText(/插件目录|Plugin directory/i)).toHaveAttribute("readonly");
+    await user.click(within(dialog).getByRole("button", { name: /选择目录|Choose directory/i }));
+    await user.click(await screen.findByRole("button", { name: "Pick fixture directory" }));
     await user.click(within(dialog).getByRole("button", { name: /审查安装计划|Review install plan/i }));
 
     await waitFor(() => expect(actionMocks.planLocalCliPlugin).toHaveBeenCalledWith("/tmp/qwen-provider-dev"));

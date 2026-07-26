@@ -357,6 +357,26 @@ describe("CLI plugin installation runtime", () => {
     });
   });
 
+  it("accepts workspace-linked dependencies for local development registrations", async () => {
+    const packageRoot = await createFixture({ dependencies: { "fixture-dependency": "1.0.0" } });
+    const dependencyRoot = await temporaryDirectory("tower-plugin-dependency-");
+    await fs.writeFile(path.join(dependencyRoot, "package.json"), JSON.stringify({
+      name: "fixture-dependency",
+      version: "1.0.0",
+      type: "module",
+      exports: "./index.js",
+    }));
+    await fs.writeFile(path.join(dependencyRoot, "index.js"), "export const value = true;\n");
+    await fs.mkdir(path.join(packageRoot, "node_modules"), { recursive: true });
+    await fs.symlink(dependencyRoot, path.join(packageRoot, "node_modules", "fixture-dependency"));
+
+    const plugins = runtime(await temporaryDirectory());
+    await expect(plugins.planLocalRegistration(packageRoot)).resolves.toMatchObject({
+      source: "development",
+      pluginId: "fixture.tower-cli",
+    });
+  });
+
   it("requires the current plan confirmation after reinstall and every permission diff", async () => {
     const dataRoot = await temporaryDirectory();
     const provider = new FixtureNpmProvider();

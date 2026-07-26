@@ -5,6 +5,7 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
+  ChevronsUpDown,
   Clipboard,
   DatabaseZap,
   Eye,
@@ -54,6 +55,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -130,6 +140,7 @@ export function ApiConnectionsSection() {
     action: () => Promise<void>;
   }>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
+  const [presetOpen, setPresetOpen] = useState(false);
 
   const current = useMemo(
     () => connections.find((connection) => connection.id === editingId) ?? null,
@@ -171,6 +182,7 @@ export function ApiConnectionsSection() {
     setDraft(EMPTY_DRAFT);
     setInlineError(null);
     setTab("details");
+    setPresetOpen(false);
     setDialogOpen(true);
   }
 
@@ -190,10 +202,12 @@ export function ApiConnectionsSection() {
     setNewKeyOpen(false);
     setEditingKey(null);
     setTab("details");
+    setPresetOpen(false);
     setDialogOpen(true);
   }
 
   function applyPreset(value: string | null) {
+    setPresetOpen(false);
     if (!value || value === CUSTOM_PRESET) {
       setDraft((currentDraft) => ({ ...currentDraft, presetId: null }));
       return;
@@ -577,29 +591,65 @@ export function ApiConnectionsSection() {
             <DialogDescription>{t("settings.aiTools.connectionDialogDesc")}</DialogDescription>
           </DialogHeader>
 
-          <Tabs value={tab} onValueChange={(value) => setTab(value ?? "details")} className="flex min-h-0 flex-1 flex-col gap-0">
-            <TabsList variant="line" className="mx-4 w-[calc(100%-2rem)] shrink-0 justify-start overflow-x-auto">
+          <Tabs value={tab} onValueChange={(value) => setTab(value ?? "details")} className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden">
+            <TabsList variant="line" className="mx-4 grid h-10 w-[calc(100%-2rem)] shrink-0 grid-cols-3 overflow-hidden">
               <TabsTrigger value="details">{t("settings.aiTools.details")}</TabsTrigger>
               <TabsTrigger value="keys" disabled={!editingId}>{t("settings.aiTools.keys")}</TabsTrigger>
               <TabsTrigger value="models" disabled={!editingId}>{t("settings.aiTools.models")}</TabsTrigger>
             </TabsList>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            <div className="no-scrollbar min-h-0 flex-1 overscroll-contain overflow-y-auto px-4 py-4">
               <TabsContent value="details" className="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label htmlFor="api-preset">{t("settings.aiTools.preset")}</Label>
-                    <Select value={draft.presetId ?? CUSTOM_PRESET} onValueChange={applyPreset}>
-                      <SelectTrigger id="api-preset" className="w-full">
+                    <Popover open={presetOpen} onOpenChange={setPresetOpen}>
+                      <PopoverTrigger
+                        render={
+                          <Button
+                            id="api-preset"
+                            type="button"
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={presetOpen}
+                            className="w-full justify-between font-normal"
+                          />
+                        }
+                      >
                         <span className="truncate">
                           {draft.presetId ? presets.find((item) => item.id === draft.presetId)?.name : t("settings.aiTools.customCompatible")}
                         </span>
-                      </SelectTrigger>
-                      <SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-xl">
-                        <SelectItem value={CUSTOM_PRESET}>{t("settings.aiTools.customCompatible")}</SelectItem>
-                        {presets.map((preset) => <SelectItem key={preset.id} value={preset.id}>{preset.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                        <ChevronsUpDown className="shrink-0 text-muted-foreground" />
+                      </PopoverTrigger>
+                      <PopoverContent align="start" className="w-[min(40rem,calc(100vw-3rem))] p-0">
+                        <Command>
+                          <CommandInput placeholder={t("settings.aiTools.presetSearch")} />
+                          <CommandList>
+                            <CommandEmpty>{t("settings.aiTools.presetNoResults")}</CommandEmpty>
+                            <CommandGroup>
+                              <CommandItem
+                                value={`${CUSTOM_PRESET} ${t("settings.aiTools.customCompatible")}`}
+                                data-checked={!draft.presetId}
+                                onSelect={() => applyPreset(CUSTOM_PRESET)}
+                              >
+                                {t("settings.aiTools.customCompatible")}
+                              </CommandItem>
+                              {presets.map((preset) => (
+                                <CommandItem
+                                  key={preset.id}
+                                  value={`${preset.name} ${preset.id} ${preset.protocol}`}
+                                  data-checked={draft.presetId === preset.id}
+                                  onSelect={() => applyPreset(preset.id)}
+                                >
+                                  <span className="min-w-0 flex-1 truncate">{preset.name}</span>
+                                  <span className="shrink-0 text-xs text-muted-foreground">{preset.protocol}</span>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="api-name">{t("settings.aiTools.connectionName")}</Label>
@@ -774,7 +824,7 @@ export function ApiConnectionsSection() {
           </Tabs>
 
           {inlineError && <p className="mx-4 break-words text-xs text-destructive" role="alert">{inlineError}</p>}
-          <DialogFooter className="shrink-0 border-t px-4 py-3">
+          <DialogFooter className="mx-0 mb-0 shrink-0 rounded-none border-t px-4 py-3">
             {editingId && current && (
               <Button variant="destructive" onClick={() => requestDeleteConnection(current)} className="sm:mr-auto">
                 <Trash2 />{t("common.delete")}

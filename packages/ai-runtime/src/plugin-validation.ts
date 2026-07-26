@@ -291,6 +291,7 @@ async function resolveContainedFile(
 async function scanPackageTree(
   fileSystem: PluginFileSystem,
   packageRoot: string,
+  ignoredRootDirectories: ReadonlySet<string> = new Set(),
 ): Promise<string> {
   const root = await fileSystem.realpath(packageRoot);
   const treeEntries: Array<Record<string, unknown>> = [];
@@ -304,6 +305,7 @@ async function scanPackageTree(
         || entry.name.includes("\0")
         || entry.name.includes("/")
         || entry.name.includes("\\")) throw pluginError("INVALID_PACKAGE");
+      if (!relativeDirectory && ignoredRootDirectories.has(entry.name)) continue;
       const relativePath = relativeDirectory
         ? `${relativeDirectory}/${entry.name}`
         : entry.name;
@@ -433,6 +435,7 @@ export interface ValidatePluginPackageOptions {
   expectedVersion?: string;
   expectedId?: string;
   requireDependenciesInsidePackage?: boolean;
+  developmentMode?: boolean;
   resolveDependency?: (dependency: string, entryPath: string) => Promise<string | void>;
 }
 
@@ -441,7 +444,11 @@ export async function validatePluginPackage(options: ValidatePluginPackageOption
     throw pluginError("INVALID_PACKAGE", options.expectedName, error);
   });
   // Reject links and special files before any package-controlled path is opened or resolved.
-  const packageTreeDigest = await scanPackageTree(options.fileSystem, packageRoot);
+  const packageTreeDigest = await scanPackageTree(
+    options.fileSystem,
+    packageRoot,
+    options.developmentMode ? new Set(["node_modules"]) : undefined,
+  );
   const packageJson = await readJson(options.fileSystem, path.join(packageRoot, "package.json"), "INVALID_PACKAGE");
   if (!isRecord(packageJson)
     || typeof packageJson.name !== "string"

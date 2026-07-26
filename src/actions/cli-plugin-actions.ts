@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   CliPluginApplicationError,
   getCliPluginApplication,
+  isCliPluginApplicationError,
   type CliEnvironmentVariable,
 } from "@/lib/ai/cli-plugin-service";
 import { testPluginCliConnection } from "@/lib/ai/cli-plugin-provider";
@@ -62,13 +63,14 @@ const secretReferenceSchema = z.discriminatedUnion("kind", [
 ]);
 
 function failure(error: unknown): ActionResult<never> {
-  if (error instanceof CliPluginApplicationError) {
+  if (isCliPluginApplicationError(error)) {
+    const safeError = new CliPluginApplicationError(error.code, error.diagnostic);
     return {
       ok: false,
       error: {
-        code: error.code,
-        message: error.message,
-        ...(error.diagnostic ? { diagnostic: error.diagnostic } : {}),
+        code: safeError.code,
+        message: safeError.message,
+        ...(safeError.diagnostic ? { diagnostic: safeError.diagnostic } : {}),
       },
     };
   }

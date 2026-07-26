@@ -86,7 +86,10 @@ describe("ApiConnectionsSection", () => {
     actionMocks.listApiConnections.mockResolvedValue({ ok: true, data: [connection] });
     actionMocks.listApiConnectionPresets.mockResolvedValue({
       source: "fixture", generatedAt: "2026-01-01",
-      presets: [{ id: "preset-openai", name: "OpenAI", protocol: "openai", baseUrl: "https://api.openai.com/v1", docsUrl: "https://example.test", logoId: "openai" }],
+      presets: [
+        { id: "preset-openai", name: "OpenAI", protocol: "openai", baseUrl: "https://api.openai.com/v1", docsUrl: "https://example.test", logoId: "openai" },
+        { id: "preset-anthropic", name: "Anthropic", protocol: "anthropic", baseUrl: "https://api.anthropic.com", docsUrl: "https://example.test/anthropic", logoId: "anthropic" },
+      ],
     });
     for (const name of [
       "createApiConnection", "updateApiConnection", "setApiConnectionEnabled", "addApiKey",
@@ -118,7 +121,10 @@ describe("ApiConnectionsSection", () => {
     renderSection();
     await user.click(await screen.findByRole("button", { name: /新建连接|New Connection/ }));
     await user.click(screen.getByLabelText(/本地预设|Local preset/));
-    expect(await screen.findByText("OpenAI")).toBeInTheDocument();
+    const presetSearch = await screen.findByPlaceholderText(/搜索预设名称|Search presets/i);
+    await user.type(presetSearch, "anth");
+    expect(await screen.findByText("Anthropic")).toBeInTheDocument();
+    expect(screen.queryByText("OpenAI")).not.toBeInTheDocument();
     await user.keyboard("{Escape}");
     const addButtons = screen.getAllByRole("button", { name: /新增参数|Add parameter/ });
     await user.click(addButtons[0]);

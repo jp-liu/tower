@@ -28,7 +28,7 @@ export function SegmentedControl<T extends string>({
           type="button"
           onClick={() => onChange(opt.value)}
           className={cn(
-            "rounded px-3 py-1 text-sm transition-colors",
+            "shrink-0 whitespace-nowrap rounded px-3 py-1 text-sm transition-colors",
             value === opt.value
               ? "bg-background text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"

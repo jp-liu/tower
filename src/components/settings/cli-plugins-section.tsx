@@ -41,6 +41,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FolderBrowserDialog } from "@/components/layout/folder-browser-dialog";
 import {
   Dialog,
   DialogContent,
@@ -51,6 +52,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -67,6 +69,7 @@ type Plugin = Extract<PluginResult, { ok: true }>["data"][number];
 type CatalogResult = Awaited<ReturnType<typeof listCliProviderCatalog>>;
 type CatalogItem = Extract<CatalogResult, { ok: true }>["data"][number];
 type InstallMode = "catalog" | "local";
+type ExtensionKindFilter = "all" | "cli-provider" | "tool-provider" | "agent-provider";
 type DependencyDiagnostic = {
   dependency: string;
   state: "missing" | "probe-failed" | "version-incompatible" | "ready";
@@ -226,11 +229,13 @@ export function CliPluginsSection() {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [kindFilter, setKindFilter] = useState<ExtensionKindFilter>("all");
   const [pending, setPending] = useState<string | null>(null);
   const [installOpen, setInstallOpen] = useState(false);
   const [installMode, setInstallMode] = useState<InstallMode>("catalog");
   const [catalogTarget, setCatalogTarget] = useState<null | { item: CatalogItem; version: string }>(null);
   const [directory, setDirectory] = useState("");
+  const [directoryPickerOpen, setDirectoryPickerOpen] = useState(false);
   const [plan, setPlan] = useState<SafeCliPluginPlan | null>(null);
   const [installed, setInstalled] = useState(false);
   const [recoveringConfirmation, setRecoveringConfirmation] = useState(false);
@@ -385,6 +390,7 @@ export function CliPluginsSection() {
   function openDeveloperRegistration() {
     setInstallMode("local");
     setCatalogTarget(null);
+    setDirectory("");
     resetInstall();
     setInstallOpen(true);
   }
@@ -496,6 +502,10 @@ export function CliPluginsSection() {
 
   const canPlan = installMode === "catalog" ? Boolean(catalogTarget) : Boolean(directory.trim());
   const developerPlugins = plugins.filter((plugin) => plugin.source !== "catalog");
+  const filteredCatalog = kindFilter === "all"
+    ? catalog
+    : catalog.filter((item) => item.kind === kindFilter);
+  const catalogNotConfigured = catalogError === "catalog_unavailable";
   const schemaFields = useMemo(() => detail ? schemaProperties(detail.configSchema) : [], [detail]);
 
   return (
@@ -515,20 +525,38 @@ export function CliPluginsSection() {
             {t("settings.cliPlugins.refreshCatalog")}
           </Button>
         </div>
-        <div className="relative max-w-xl">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <Input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="pl-9"
-            placeholder={t("settings.cliPlugins.searchPlaceholder")}
-            aria-label={t("settings.cliPlugins.searchLabel")}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <SegmentedControl
+            value={kindFilter}
+            onChange={setKindFilter}
+            className="grid w-full grid-cols-2 sm:inline-flex sm:w-auto"
+            options={[
+              { value: "all", label: t("settings.cliPlugins.filterAll") },
+              { value: "cli-provider", label: "CLI Provider" },
+              { value: "tool-provider", label: "Tool Provider" },
+              { value: "agent-provider", label: "Agent Provider" },
+            ]}
           />
+          <div className="relative w-full sm:max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <Input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="pl-9"
+              placeholder={t("settings.cliPlugins.searchPlaceholder")}
+              aria-label={t("settings.cliPlugins.searchLabel")}
+            />
+          </div>
         </div>
         {catalogLoading ? (
           <div className="grid gap-3" aria-label={t("settings.cliPlugins.loadingCatalog")}>
             {[0, 1].map((item) => <div key={item} className="h-36 animate-pulse rounded-md border bg-muted/30" />)}
+          </div>
+        ) : catalogNotConfigured ? (
+          <div className="rounded-md border border-dashed px-4 py-6">
+            <p className="text-sm font-medium">{t("settings.cliPlugins.catalogNotConfigured")}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{t("settings.cliPlugins.catalogNotConfiguredDesc")}</p>
           </div>
         ) : catalogError ? (
           <div className="flex min-h-28 flex-wrap items-center justify-between gap-3 rounded-md border border-destructive/30 px-4 py-5" role="alert">
@@ -538,14 +566,14 @@ export function CliPluginsSection() {
             </div>
             <Button variant="outline" onClick={() => void loadCatalog(search)}>{t("settings.cliPlugins.refreshCatalog")}</Button>
           </div>
-        ) : catalog.length === 0 ? (
+        ) : filteredCatalog.length === 0 ? (
           <div className="rounded-md border border-dashed px-4 py-8 text-center">
-            <p className="text-sm font-medium">{search ? t("settings.cliPlugins.noSearchResults") : t("settings.cliPlugins.catalogEmpty")}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{search ? t("settings.cliPlugins.noSearchResultsDesc") : t("settings.cliPlugins.catalogEmptyDesc")}</p>
+            <p className="text-sm font-medium">{search ? t("settings.cliPlugins.noSearchResults") : kindFilter === "all" ? t("settings.cliPlugins.catalogEmpty") : t("settings.cliPlugins.typeEmpty")}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{search ? t("settings.cliPlugins.noSearchResultsDesc") : kindFilter === "all" ? t("settings.cliPlugins.catalogEmptyDesc") : t("settings.cliPlugins.typeEmptyDesc")}</p>
           </div>
         ) : (
           <ul className="grid gap-3">
-            {catalog.map((item) => {
+            {filteredCatalog.map((item) => {
               const plugin = item.installed;
               const release = item.versions.find((version) => version.version === item.latestVersion) ?? item.versions[0];
               const dependency = plugin?.dependency;
@@ -655,7 +683,21 @@ export function CliPluginsSection() {
             <div className="space-y-1.5"><Label htmlFor="catalog-version">{t("settings.cliPlugins.version")}</Label><Select value={catalogTarget.version} onValueChange={(value) => { if (value) { setCatalogTarget({ ...catalogTarget, version: value }); resetInstall(); } }}><SelectTrigger id="catalog-version" className="w-full"><span>{catalogTarget.version}</span></SelectTrigger><SelectContent>{catalogTarget.item.versions.map((release) => <SelectItem key={release.version} value={release.version}>{release.version}</SelectItem>)}</SelectContent></Select></div>
           </div>}
           {!recoveringConfirmation && installMode === "local" && (
-            <div className="space-y-1.5"><Label htmlFor="plugin-directory">{t("settings.cliPlugins.directory")}</Label><div className="flex gap-2"><FolderOpen className="mt-2.5 size-4 shrink-0" /><Input id="plugin-directory" className="font-mono" value={directory} onChange={(event) => { setDirectory(event.target.value); resetInstall(); }} /></div></div>
+            <div className="space-y-1.5">
+              <Label htmlFor="plugin-directory">{t("settings.cliPlugins.directory")}</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="plugin-directory"
+                  className="min-w-0 flex-1 font-mono"
+                  value={directory}
+                  placeholder={t("settings.cliPlugins.selectDirectoryPlaceholder")}
+                  readOnly
+                />
+                <Button type="button" variant="outline" onClick={() => setDirectoryPickerOpen(true)}>
+                  <FolderOpen />{t("settings.cliPlugins.selectDirectory")}
+                </Button>
+              </div>
+            </div>
           )}
           {!plan ? (
             <Button onClick={() => void createPlan()} disabled={!canPlan || pending !== null}>{pending === "plan" && <Loader2 className="animate-spin" />}{t("settings.cliPlugins.review")}</Button>
@@ -693,6 +735,15 @@ export function CliPluginsSection() {
           <DialogFooter><Button variant="outline" onClick={() => setInstallOpen(false)}>{t("common.cancel")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <FolderBrowserDialog
+        open={directoryPickerOpen}
+        onOpenChange={setDirectoryPickerOpen}
+        onSelect={(selectedPath) => {
+          setDirectory(selectedPath);
+          resetInstall();
+        }}
+      />
 
       <Dialog open={detail !== null} onOpenChange={(open) => { if (!open) setDetail(null); }}>
         <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-lg sm:max-w-2xl">
