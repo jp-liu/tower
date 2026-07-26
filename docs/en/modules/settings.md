@@ -15,7 +15,7 @@ description: Global settings, AI Tools, CLI plugins, and data management
 - OpenAI, OpenAI Compatible, Anthropic, and Google API: editable base URL, custom headers/query parameters, per-key health checks and round-robin, discovered plus manual models.
 - Tower trims base URLs and removes a trailing slash but never appends `/v1`.
 - API keys are plaintext in local SQLite, masked by default, and available to reveal, copy, or edit. Normal logs and errors redact them.
-- Third-party CLI plugins install from an exact npm version or local development directory. Permission review precedes enablement; configuration, disable, re-enable, and uninstall are supported.
+- Third-party CLI providers are discovered and installed from the server catalog in Extensions. They remain disabled until permissions are confirmed and the CLI is healthy. A separate developer entry still registers local directories in place.
 
 ## Capability slots
 

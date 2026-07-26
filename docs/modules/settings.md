@@ -13,7 +13,7 @@ description: 全局设置、AI Tools、CLI 插件与数据管理
 - OpenAI、OpenAI Compatible、Anthropic、Google API：支持可编辑 base URL、自定义 header/query、多 Key 测试与 round-robin、模型发现和手动模型。
 - base URL 只做 trim 和移除末尾 `/`，不会自动添加 `/v1`。
 - API Key 在本地 SQLite 明文保存，默认掩码但可显示、复制和编辑；普通日志和错误脱敏。
-- 第三方 CLI 插件通过 npm 精确版本或本地开发目录安装。用户审阅权限后才能启用，并可配置、禁用、重新启用或卸载。
+- 第三方 CLI Provider 从「扩展」页的服务端 Catalog 发现和安装，默认禁用；确认权限且 CLI 健康后才进入 AI Tools。开发调试仍可在独立入口注册本地目录。
 
 ## 能力插槽
 

@@ -40,7 +40,7 @@ description: "@tower/ai-sdk Manifest v1, adapters, schemas, and trust boundary"
 }
 ```
 
-Tower validates `package.json#tower`, exact npm version, Tower/Node range, permissions, entry, and schema before loading plugin code. V1 allows one provider per package; the package name is the global ID and the named export is `towerCliPlugin`.
+Tower validates `package.json#tower`, catalog version, Tower/Node range, CLI dependency, permissions, entry, and schema before loading plugin code. V1 allows one provider per package; manifest `id` is the global extension ID and the named export is `towerCliPlugin`.
 
 ## Adapter contract
 
@@ -75,9 +75,40 @@ Configuration uses JSON Schema 2020-12. `x-tower` supports `control`, `order`, `
 
 The host owns connection name, enabled state, command override, base args, and advanced environment. Plugin schemas describe only `settings`; secrets must be marked sensitive and must not enter logs, errors, manifests, or registry summaries.
 
+## Catalog contribution and build
+
+The repository layout can move as a unit to a future standalone extension repository:
+
+```text
+extensions/
+  cli-providers/<provider>/     # provider source, manifest, schema, tests
+  catalog/sources/*.json        # reviewable extension/version declarations
+  catalog/schema/*.json         # source and generated-index schemas
+scripts/build-extension-catalog.ts
+```
+
+To contribute a release:
+
+1. Depend only on `@tower/ai-sdk` and Host Context, then run the provider's typecheck, tests, and build.
+2. Add or update a declaration under `extensions/catalog/sources/`; its ID, publisher, and version must match the package manifest.
+3. Run `pnpm extensions:catalog:build -- --base-url https://<authorized-host>/<path>/ --output <directory>`. An authorized publication workflow supplies the base URL; the repository does not assume an organization, domain, or publication location.
+4. The generator validates both schemas and packages only the prebuilt `dist` plus config schema. It removes scripts and dependency metadata, normalizes ordering and mtimes, and emits SHA-256, byte size, and `index.v1.json`.
+5. Validate through temporary HTTPS/fake fetch fixtures before an authorized workflow uploads anything. Never use real provider credentials during contribution tests.
+
+Tower reads the index URL on the server from `TOWER_EXTENSION_CATALOG_URL`, falling back to the `extensions.catalogUrl` system-config key. Browsers must never submit catalog/artifact URLs or local paths. Runtime HTTPS, response-size, SHA-256, archive-safety, and atomic-install limits still apply.
+
+For local debugging, build the provider and register its absolute directory under Settings -> Extensions -> Developer mode. The `development` registration references source in place and does not copy it into the extension install store.
+
+## Qwen Code sample
+
+`extensions/cli-providers/qwen-code` is a community sample outside the static `ProviderRegistry`. It probes `qwen --version` with range `>=0.18.0 <1.0.0`. Terminal sessions use the interactive CLI; query uses the documented headless `--prompt` and `--output-format json/stream-json` flags, with contract mappings for `--resume`, `--continue`, `--model`, and `--max-session-turns`.
+
+The extension requests only `process:spawn` and `network:provider` and declares only implemented Terminal/query capabilities. Tower does not install `@qwen-code/qwen-code`, configure a Qwen base URL/token, perform login, or modify `~/.qwen`; the user and Qwen CLI own those responsibilities.
+
 ## Trust and install boundary
 
-- npm installs require exact SemVer, verified registry integrity, safe archive paths, and valid static metadata. Install scripts are disabled; native modules and escaping entries are rejected.
+- Normal installation accepts only exact catalog versions and immutable artifacts. The npm runtime remains for legacy registrations and is absent from the normal UI.
+- Artifacts require HTTPS, bounded sizes, SHA-256, safe archive paths, and valid static metadata. Lifecycle scripts, dependency trees, native modules, and escaping entries are rejected.
 - Plugins start disabled and load on demand after permission confirmation. Permission changes require confirmation. Updates validate in staging before an atomic switch.
 - Manifest permissions gate process spawning, provider config, network, MCP, Hooks, and Skills. Plugins remain trusted local Node.js code, not an OS sandbox.
 

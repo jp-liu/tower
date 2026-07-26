@@ -12,7 +12,8 @@ description: AI Tools 0.3 用户能力、迁移、安全模型和已知限制
 - OpenAI、OpenAI Compatible、Anthropic、Google API 连接，含自定义 base URL/header/query、多 Key 健康检查/round-robin、模型发现和手动模型。
 - 五插槽使用显式主备顺序，只在首活动前回退；Terminal 会话固定 connection/model。
 - Tower 自有 Assistant 多轮会话、旧 Claude 会话按需导入、附件、Tower 工具、SSE 和取消。
-- 第三方 CLI Provider 的 npm 精确版本安装、权限确认、配置、禁用/卸载与本地开发目录。
+- 扩展中心的 CLI Provider Catalog 浏览、搜索、安装/更新、权限确认、禁用/卸载，以及独立的本地开发目录入口。
+- 不进入内置注册表的 Qwen Code 社区 Provider 样板；依赖用户自行安装和登录 Qwen Code CLI。
 - 生产 CLI 默认从全网卡改为 `127.0.0.1`；显式 `--host` 保持可用。
 
 ## 迁移与兼容

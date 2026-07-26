@@ -173,7 +173,7 @@ AI Tools 设置页分为上下两层：
 
 - 私有 Runtime 提供稳定的 `list`、Catalog 发现/安装计划、`install`、`enable`、`disable`、`uninstall`、`recheck` 和本地目录注册接口。
 - 现有 npm 插件 Runtime 暂作旧版兼容读取与迁移入口，不再是正常用户安装协议；内置 Claude/Codex/Gemini、API 连接、五插槽、Assistant 和 Terminal 继续使用既有 Provider/能力 Runtime。
-- 本阶段只建立 Catalog/Artifact、Manifest、registry 和安装安全底座。设置页“扩展中心”以及 server actions 切换到这些接口由后续应用层任务接通，在接通前不得宣称 Catalog 安装 UI 已完成。
+- 设置页“扩展中心”和 server actions 已接通上述接口。Catalog URL 只从服务端 `TOWER_EXTENSION_CATALOG_URL` 或系统配置键 `extensions.catalogUrl` 读取；浏览器只接收经过裁剪的目录、计划和结构化诊断，不接收 URL、文件路径或底层错误。
 
 ### CLI Provider 集成 Reconciliation 契约
 
@@ -262,7 +262,6 @@ API Key 与登录密码不同：Tower 调用上游模型时必须取回原值，
 
 - 创建外部组织/npm scope 并正式发布 `@tower/ai-sdk` 或 Provider 包。
 - 对外开放任意 API Adapter 插件。
-- 接通设置页扩展中心的 Catalog 浏览、安装、升级和结构化 CLI 诊断交互，移除正常用户路径中的 npm 包名输入。
 - 评估更强的插件隔离和 Artifact 签名/审核机制。
 
 上述后续项在 0.3.0 均未完成，不应在用户资料中写成已发布能力。

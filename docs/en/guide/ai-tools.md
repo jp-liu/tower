@@ -41,11 +41,15 @@ Cancellation, safety refusal, invalid configuration, and tool execution errors d
 
 Tower-owned multi-turn sessions support workspace/project/version bindings, image/text attachments, SSE, Tower tool cards, and cancellation. Legacy Claude Assistant sessions remain visible and are copied on demand when first opened. Tower does not automatically delete or rewrite the original transcript. Imported history can continue with another configured provider.
 
-## Third-party CLI plugins
+## CLI provider extensions
 
-Install an exact npm package version or select an absolute local development directory. Tower verifies integrity, manifest, entry, schema, and permissions without running npm install scripts. Plugins start disabled and load only after permission confirmation. You can then edit command/arguments/environment/schema settings, disable, re-enable, or uninstall.
+Browse or search versioned extensions in Settings -> Extensions -> Provider catalog. A plan shows publisher, version change, capabilities, permissions, Tower/Node compatibility, and the underlying CLI dependency. Tower downloads an immutable artifact from the server-configured HTTPS catalog and verifies size, SHA-256, archive paths, manifest, schema, and compatibility. The normal UI accepts neither npm package names nor arbitrary download URLs.
 
-Plugins are trusted local Node.js code, not an OS sandbox. Install only packages you trust.
+An installed extension remains disabled until its permissions are explicitly confirmed. Only enabled, confirmed, healthy dynamic CLI connections appear in AI Tools and the five capability slots. An update that adds permissions requires confirmation again. Disabling or uninstalling preserves existing slot references but makes them unavailable.
+
+The Qwen Code community extension requires an existing `qwen` command in `>=0.18.0 <1.0.0`. Tower does not install `@qwen-code/qwen-code`, sign in, or manage Qwen tokens, base URL, or user configuration. The sample declares Terminal sessions and CLI query only; it does not claim model discovery, MCP, Hooks, or Skills integrations.
+
+Developer mode registers an absolute local directory in place for provider iteration. Extensions are trusted local Node.js code, not an OS sandbox.
 
 ## Diagnostics
 
@@ -58,6 +62,7 @@ Plugins are trusted local Node.js code, not an OS sandbox. Install only packages
 | API `429` | Check quota/rate limit; healthy keys can rotate only before activity |
 | `model unavailable` | Refresh or add the exact model ID manually, then update the slot |
 | Plugin damaged | Check integrity/local path, reinstall, or recover the registry |
+| CLI version incompatible | Update the underlying CLI to the range shown on the extension card; Tower will not update it |
 | Permission required | Review and explicitly confirm the declared permissions |
 | `slot unconfigured` | Add at least one enabled, connected target to the slot |
 

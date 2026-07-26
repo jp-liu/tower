@@ -12,7 +12,8 @@ description: AI Tools 0.3 features, migration, security, and known limitations
 - OpenAI, OpenAI Compatible, Anthropic, and Google API connections with custom base URL/headers/query, per-key health and round-robin, discovery plus manual models.
 - Explicit ordered fallback stops after first activity; Terminal pins connection/model.
 - Tower-owned multi-turn Assistant sessions, on-demand legacy Claude import, attachments, Tower tools, SSE, and cancellation.
-- Third-party CLI provider installation by exact npm version, permission review, configuration, disable/uninstall, and local development directories.
+- Extension-center CLI provider catalog browsing, search, install/update, permission review, disable/uninstall, and a separate local developer-directory path.
+- A Qwen Code community provider sample outside the built-in registry; users install and authenticate the Qwen Code CLI themselves.
 - Production CLI defaults to `127.0.0.1`; explicit `--host` remains available.
 
 ## Migration and compatibility

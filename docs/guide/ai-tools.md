@@ -41,11 +41,15 @@ API Key 以明文存入本机 SQLite。界面默认掩码，但本机用户可�
 
 Assistant 使用 Tower 自有多轮会话，支持 workspace/project/version 绑定、图片和文本附件、SSE 流式输出、Tower 工具卡以及取消。旧 Claude Assistant 会话仍会出现在列表中，第一次打开时按需复制导入；原 transcript 不会被自动删除或改写。导入后可以用其他已配置 Provider 继续对话。
 
-## 第三方 CLI 插件
+## CLI Provider 扩展
 
-在「CLI 插件」中输入 npm 包名和**精确版本**，或选择本地开发目录。Tower 先下载/读取并校验完整性、Manifest、入口、Schema 和权限，不执行 npm install script。插件默认禁用；确认权限后才安装并启用。之后可编辑连接名称、命令、参数、环境和插件 Schema 配置，也可禁用、重新启用或卸载。
+在「设置 -> 扩展」的 Provider Catalog 中浏览或搜索版本化扩展。选择版本后，安装计划会展示 Publisher、版本变化、能力、权限、Tower/Node 兼容范围及底层 CLI 依赖。Tower 从服务端配置的 HTTPS Catalog 下载不可变 Artifact，并校验大小、SHA-256、归档路径、Manifest、Schema 和兼容性；普通界面不接受 npm 包名或任意下载 URL。
 
-本地开发模式直接引用绝对目录，适合迭代；目录损坏或入口变化会显示插件损坏。插件是本地可信 Node.js 代码，不是操作系统沙箱，只安装你信任的包。
+安装完成后扩展保持禁用。只有明确确认权限并启用后，它才会成为 AI Tools 的动态 CLI Connection，并可分配到五个能力插槽。更新新增权限时必须重新确认；禁用或卸载后既有插槽引用会保留，但不可执行。扩展损坏、CLI 缺失或版本不兼容时也不会进入 AI Tools 可选连接。
+
+Qwen Code 社区扩展依赖本机 `qwen` 命令，支持 `>=0.18.0 <1.0.0`。Tower 不安装 `@qwen-code/qwen-code`，不执行登录，也不管理 Qwen 的 token、base URL 或用户配置；请先按 Qwen Code 文档完成这些步骤。该样板只声明 Terminal 会话与 CLI query，没有声明模型发现、MCP、Hooks 或 Skills 集成。
+
+「开发者模式」可注册本地绝对目录，直接引用源码且不复制，适合 Provider 调试。插件是本地可信 Node.js 代码，不是操作系统沙箱，只安装或注册你信任的代码。
 
 ## 常见诊断
 
@@ -58,6 +62,7 @@ Assistant 使用 Tower 自有多轮会话，支持 workspace/project/version 绑
 | API `429` | 检查额度/限流；健康多 Key 可在首活动前轮换 |
 | `model unavailable` | 刷新模型或手动填写准确 model ID，再更新插槽目标 |
 | 插件损坏 | 检查安装完整性/本地目录，重新安装或恢复 registry |
+| CLI 版本不兼容 | 按扩展卡片显示的范围更新底层 CLI；Tower 不会替你升级 |
 | 权限待确认 | 审阅权限清单并显式确认；未确认时插件不会加载 |
 | `slot unconfigured` | 给对应插槽添加至少一个已启用、已连接的目标 |
 

@@ -42,7 +42,7 @@ description: "@tower/ai-sdk Manifest v1、Adapter、Schema 与信任边界"
 }
 ```
 
-Tower 在加载插件代码前校验 `package.json#tower`、精确 npm 版本、Tower/Node 兼容范围、权限、入口和 Schema。一个包在 v1 只提供一个 CLI Provider，包名就是全局插件 ID；命名导出固定为 `towerCliPlugin`。
+Tower 在加载插件代码前校验 `package.json#tower`、Catalog 版本、Tower/Node 兼容范围、CLI 依赖、权限、入口和 Schema。一个包在 v1 只提供一个 CLI Provider；Manifest `id` 是全局扩展 ID，命名导出固定为 `towerCliPlugin`。
 
 ## Adapter
 
@@ -110,9 +110,40 @@ Terminal process spec 必须是结构化 `command + args + cwd + envPatch + init
 
 Connection 名称、启用状态、命令覆盖、基础参数和高级环境变量由 Host 统一管理。插件 Schema 只描述插件 `settings`；secret 必须标记 `sensitive`，不得进入日志、错误、Manifest 或注册表摘要。
 
+## Catalog 贡献与构建
+
+当前仓库保留了可整体迁移到独立扩展仓库的源码布局：
+
+```text
+extensions/
+  cli-providers/<provider>/     # Provider 源码、Manifest、Schema、测试
+  catalog/sources/*.json        # 可审查的扩展与版本声明
+  catalog/schema/*.json         # 源码和生成索引 Schema
+scripts/build-extension-catalog.ts
+```
+
+贡献一个版本时：
+
+1. 只依赖 `@tower/ai-sdk` 和 Host Context，实现 Provider 并运行自身 typecheck/test/build。
+2. 在 `extensions/catalog/sources/` 添加或更新声明；`id`、Publisher 和版本必须与包 Manifest 一致。
+3. 运行 `pnpm extensions:catalog:build -- --base-url https://<authorized-host>/<path>/ --output <directory>`。基础 URL 必须由获授权的发布流程传入，仓库不预设组织、域名或发布地址。
+4. 生成器校验源码 Schema 和 Runtime index Schema，将预构建 `dist` 与配置 Schema 打包；Artifact 会移除 scripts、dependencies 和 devDependencies，使用稳定排序/mtime，生成 SHA-256、大小和 `index.v1.json`。
+5. 在临时 HTTPS/fake fetch 环境验证索引与 Artifact，再由后续获授权的发布流程上传。不要提交凭据，也不要在贡献流程访问真实 Provider 账号。
+
+Tower 服务端从 `TOWER_EXTENSION_CATALOG_URL` 读取 index URL；数据库系统配置 `extensions.catalogUrl` 是无环境覆盖时的备用值。不得让浏览器提交 Catalog URL、Artifact URL 或本地路径。运行时继续强制 HTTPS、响应大小、SHA-256、归档安全和原子安装限制。
+
+本地调试不需要 Catalog：构建 Provider 后，在「设置 -> 扩展 -> 开发者模式」注册其绝对目录。它会标记为 `development`，源码原地引用，不复制到扩展安装区。
+
+## Qwen Code 样板
+
+`extensions/cli-providers/qwen-code` 是不进入静态 `ProviderRegistry` 的社区样板。它用 `qwen --version` 探测 `>=0.18.0 <1.0.0`，Terminal 会话使用 Qwen 交互 CLI，query 使用官方 headless `--prompt` 与 `--output-format json/stream-json` 参数，并支持 `--resume`、`--continue`、`--model` 和 `--max-session-turns` 对应的契约能力。
+
+该扩展只声明 `process:spawn` 和 `network:provider`，且只声明实际实现的 Terminal/query 能力。Tower 不安装 `@qwen-code/qwen-code`，不配置 Qwen base URL/token，不执行登录，也不改写 `~/.qwen`；Qwen Code CLI 及其账号状态完全由用户和 Qwen 工具负责。
+
 ## 信任与安装边界
 
-- npm 只接受精确 SemVer，校验 registry integrity 和 tar 路径，拒绝原生模块/逃逸入口，不执行 install scripts；依赖安装使用 `--ignore-scripts`。
+- 正常安装只接受 Catalog 中的精确版本和不可变 Artifact；npm Runtime 仅为旧注册兼容，不在普通用户界面出现。
+- Artifact 校验 HTTPS、响应/实际大小、SHA-256 和 tar 路径，拒绝 lifecycle script、依赖树、原生模块与逃逸入口。
 - 插件默认禁用，权限确认后按需加载；权限变化必须重新确认。更新先 staging 验证后原子切换，失败保留旧版本。
 - Host Context 只提供受控进程、插件存储、平台、脱敏日志和取消信号，不提供 Prisma、其他连接或 API Key。
 - `process:spawn`、provider config、network、MCP/Hooks/Skills 均需 Manifest 权限；声明不等于操作系统沙箱。
