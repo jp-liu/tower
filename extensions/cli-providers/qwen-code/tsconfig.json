@@ -1,0 +1,8 @@
+{
+  "extends": "../../../packages/ai-sdk/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"]
+}

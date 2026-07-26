@@ -1,5 +1,6 @@
 packages:
   - packages/*
+  - extensions/cli-providers/*
 
 ignoredBuiltDependencies:
   - '@prisma/engines'
