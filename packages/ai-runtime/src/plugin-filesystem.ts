@@ -11,6 +11,7 @@ export interface PluginFileStat {
   isFile(): boolean;
   isDirectory(): boolean;
   isSymbolicLink(): boolean;
+  size: number;
   mtimeMs: number;
 }
 

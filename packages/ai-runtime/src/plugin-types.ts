@@ -11,6 +11,8 @@ export interface PluginManifestSummary {
   digest: string;
   entryDigest: string;
   configSchemaDigest: string;
+  /** Sorted directory/file paths and file bytes; filesystem modes are intentionally excluded. */
+  packageTreeDigest?: string;
   manifestVersion: number;
   apiVersion: string;
   kind: "cli-provider";

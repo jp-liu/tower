@@ -99,6 +99,10 @@ function isString(value: unknown): value is string {
 }
 
 function isNonEmptyStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length > 0 && value.every(isNonEmptyString);
+}
+
+function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(isNonEmptyString);
 }
 
@@ -148,17 +152,17 @@ export function isCliPluginManifestV1(value: unknown): value is CliPluginManifes
   if (!isRecord(value.display)
     || !isNonEmptyString(value.display.name)
     || !hasValidOptionalField(value.display, "description", isString)
-    || !hasValidOptionalField(value.display, "homepage", isString)) return false;
+    || !hasValidOptionalField(value.display, "homepage", isHttpsUrl)) return false;
 
   if (!isSafeRelativeFile(value.entry)) return false;
   if (!isRecord(value.command) || !isNonEmptyString(value.command.default)) return false;
-  if (!hasValidOptionalField(value.command, "aliases", isNonEmptyStringArray)
+  if (!hasValidOptionalField(value.command, "aliases", isStringArray)
     || !isNonEmptyStringArray(value.command.versionArgs)) return false;
   if (hasOwn(value.command, "knownPaths")) {
     if (!isRecord(value.command.knownPaths)) return false;
     for (const [platform, paths] of Object.entries(value.command.knownPaths)) {
       if (!(["darwin", "linux", "win32"] as string[]).includes(platform)) return false;
-      if (!isNonEmptyStringArray(paths)) return false;
+      if (!isStringArray(paths)) return false;
     }
   }
 
