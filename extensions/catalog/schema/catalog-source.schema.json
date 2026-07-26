@@ -7,21 +7,21 @@
   "properties": {
     "$schema": { "type": "string" },
     "schemaVersion": { "const": 1 },
-    "packageDir": { "type": "string", "minLength": 1 },
+    "packageDir": { "$ref": "#/$defs/nonEmptyString" },
     "extension": {
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "kind", "publisher", "display", "versions"],
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$" },
+        "id": { "$ref": "#/$defs/stableId" },
         "kind": { "const": "cli-provider" },
         "publisher": {
           "type": "object",
           "additionalProperties": false,
           "required": ["id", "name"],
           "properties": {
-            "id": { "type": "string" },
-            "name": { "type": "string" }
+            "id": { "$ref": "#/$defs/stableId" },
+            "name": { "$ref": "#/$defs/nonEmptyString" }
           }
         },
         "display": {
@@ -29,18 +29,39 @@
           "additionalProperties": false,
           "required": ["name"],
           "properties": {
-            "name": { "type": "string" },
+            "name": { "$ref": "#/$defs/nonEmptyString" },
             "description": { "type": "string" },
-            "homepage": { "type": "string", "format": "uri" }
+            "homepage": { "$ref": "#/$defs/httpsUrl" }
           }
         },
         "versions": {
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "type": "string" }
+          "items": { "$ref": "#/$defs/semver" }
         }
       }
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "stableId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "httpsUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^[Hh][Tt][Tt][Pp][Ss]://"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
     }
   }
 }

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import * as tar from "tar";
 import { z } from "zod";
 import {
+  isHttpsUrl,
   parseExtensionCatalog,
   type CatalogExtension,
   type ExtensionCatalogIndexV1,
@@ -17,23 +18,31 @@ interface CatalogSource {
   extension: Omit<CatalogExtension, "versions"> & { versions: string[] };
 }
 
+const EXACT_SEMVER_PATTERN = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const stableIdSchema = z.string().min(1).max(128)
+  .regex(/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/);
+const nonEmptyStringSchema = z.string().refine((value) => value.trim().length > 0);
+const httpsUrlSchema = z.string().refine(isHttpsUrl);
+const exactVersionSchema = z.string().regex(EXACT_SEMVER_PATTERN);
+
 const catalogSourceSchema = z.object({
   $schema: z.string().optional(),
   schemaVersion: z.literal(1),
-  packageDir: z.string().trim().min(1),
+  packageDir: nonEmptyStringSchema,
   extension: z.object({
-    id: z.string().regex(/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/),
+    id: stableIdSchema,
     kind: z.literal("cli-provider"),
     publisher: z.object({
-      id: z.string().trim().min(1),
-      name: z.string().trim().min(1),
+      id: stableIdSchema,
+      name: nonEmptyStringSchema,
     }).strict(),
     display: z.object({
-      name: z.string().trim().min(1),
+      name: nonEmptyStringSchema,
       description: z.string().optional(),
-      homepage: z.url().optional(),
+      homepage: httpsUrlSchema.optional(),
     }).strict(),
-    versions: z.array(z.string().trim().min(1)).min(1),
+    versions: z.array(exactVersionSchema).min(1)
+      .refine((versions) => new Set(versions).size === versions.length),
   }).strict(),
 }).strict();
 
@@ -173,13 +182,16 @@ function option(name: string): string | undefined {
 
 const currentFile = fileURLToPath(import.meta.url);
 if (process.argv[1] && path.resolve(process.argv[1]) === currentFile) {
-  const repoRoot = path.resolve(import.meta.dirname, "..");
+  const repoRoot = path.resolve(path.dirname(currentFile), "..");
   const baseUrl = option("--base-url") ?? process.env.TOWER_EXTENSION_CATALOG_BASE_URL;
   if (!baseUrl) throw new Error("Pass --base-url or TOWER_EXTENSION_CATALOG_BASE_URL");
-  await buildExtensionCatalog({
+  buildExtensionCatalog({
     repoRoot,
     sourceDir: path.join(repoRoot, "extensions/catalog/sources"),
     outputDir: path.resolve(option("--output") ?? path.join(repoRoot, "extensions/catalog/generated")),
     baseUrl,
+  }).catch((error: unknown) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
   });
 }

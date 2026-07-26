@@ -51,5 +51,56 @@ jobs:
           pnpm exec prisma db push --skip-generate --accept-data-loss
           pnpm exec tsx prisma/init-fts.ts
 
+      - name: Build AI SDK and Qwen Code extension fixtures
+        run: |
+          pnpm --filter @tower/ai-sdk build
+          pnpm --filter tower-extension-qwen-code build
+
       - name: Test
         run: pnpm test:run
+
+  catalog:
+    name: extension catalog
+    runs-on: ubuntu-latest
+    env:
+      CATALOG_OUTPUT_DIR: "${{ runner.temp }}/tower-extension-catalog"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build catalog runtime and Qwen Code extension
+        run: |
+          pnpm --filter @tower/ai-sdk build
+          pnpm --filter @tower/ai-runtime build
+          pnpm --filter tower-extension-qwen-code build
+
+      - name: Generate extension catalog
+        run: >-
+          pnpm exec tsx scripts/build-extension-catalog.ts
+          --base-url https://catalog.example.test/ci/
+          --output "$CATALOG_OUTPUT_DIR"
+
+      - name: Validate catalog with runtime
+        run: pnpm extensions:catalog:validate -- --input "$CATALOG_OUTPUT_DIR"
+
+      - name: Retain generated catalog
+        uses: actions/upload-artifact@v4
+        with:
+          name: tower-extension-catalog-${{ github.sha }}
+          path: ${{ env.CATALOG_OUTPUT_DIR }}
+          if-no-files-found: error
+          retention-days: 7
