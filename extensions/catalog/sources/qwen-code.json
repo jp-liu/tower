@@ -1,0 +1,19 @@
+{
+  "$schema": "../schema/catalog-source.schema.json",
+  "schemaVersion": 1,
+  "packageDir": "extensions/cli-providers/qwen-code",
+  "extension": {
+    "id": "community.qwen-code",
+    "kind": "cli-provider",
+    "publisher": {
+      "id": "tower-community",
+      "name": "Tower Community"
+    },
+    "display": {
+      "name": "Qwen Code",
+      "description": "Community provider for the Qwen Code CLI",
+      "homepage": "https://github.com/QwenLM/qwen-code"
+    },
+    "versions": ["0.1.0"]
+  }
+}
