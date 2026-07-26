@@ -9,7 +9,7 @@ description: AI Tools、扩展中心、Qwen Provider 与发布前置的最终人
 
 ## 发布阻断项
 
-- [ ] 在可访问 Google Fonts 或具备批准字体缓存的隔离构建机运行 `pnpm release:smoke`，确认打包安装、13 个迁移、Settings、Summary、Assistant 和 Terminal plan 全部通过。
+- [x] 集中验收已在原字体配置恢复后通过 `127.0.0.1:7897` 代理运行 `pnpm release:smoke`：打包安装、13 个迁移、Settings、Summary、Assistant 和 Terminal plan 全部通过。更换发布构建环境时仍须提供稳定代理或批准字体缓存。
 - [ ] 确认服务默认只监听 `127.0.0.1`；仅在明确需要时传入 `--host`。
 - [ ] 决定并授权官方 Catalog 仓库、GitHub Organization 和 HTTPS 托管 URL。建立前设置服务端 `TOWER_EXTENSION_CATALOG_URL` 或系统 Catalog URL。
 - [ ] 手工确认 v0.3.0 后再决定 publish/tag/Release；本清单完成不等于自动发布授权。
@@ -41,5 +41,6 @@ description: AI Tools、扩展中心、Qwen Provider 与发布前置的最终人
 ## 可视与清理
 
 - [ ] 在 1440x900、1280x720、390x844 检查 Settings、AI Tools、Extensions 和 Assistant，无横向溢出、按钮覆盖或不可读禁用原因。
+- [ ] 在 390x844 用键盘打开 TopBar“项目操作”菜单，确认“导入项目”和“新建项目”均可发现、可打开且不溢出。
 - [ ] 确认键盘焦点、表单标签、图标提示和中英文文案可访问。
 - [ ] 确认没有遗留测试服务、浏览器、临时数据库或监听端口，生产 3000 进程未被重启或复用。

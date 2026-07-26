@@ -16,18 +16,19 @@ a fake OpenAI-compatible endpoint, and a local HTTPS Catalog. Production PID
 | Frozen workspace install | PASS | `pnpm install --frozen-lockfile --ignore-scripts --prefer-offline`; lockfile and workspace graph were current. |
 | AI packages | PASS | 6 package typechecks/builds; SDK 15, Claude 10, Codex 11, Gemini 14, Runtime 149, Qwen 4: 203 tests. |
 | Catalog contracts | PASS | Source/index schema, generated HTTPS fixture index, Qwen artifact checksum, Runtime contract, and install plan validation. |
-| Root quality | PASS | Typecheck; ESLint 0 errors/0 warnings after removing ignored generated dist; Prisma generate/validate; 210 passed/6 skipped files and 2012 passed/27 todo tests. |
-| Next standalone build | PASS | Multiple isolated builds passed with Next 16.2.1 and 8/8 static pages. After an unproxied font-download failure, an explicit `127.0.0.1:7897` proxy build passed with the original fonts. Product font configuration was restored exactly to baseline in `24ba6f8`; no system-font substitution remains. |
-| Browser acceptance | PASS | Core serial run: Qwen Catalog/lifecycle/slot visibility, Settings/AI Tools, Assistant SSE/tool/attachment/cancel/error. Final visual run passed at 1440x900, 1280x720, and 390x844; five screenshots were inspected and deleted. |
-| Package canary | PASS | 2042 files, 44,561,442 unpacked bytes. |
-| Packaged release smoke | NOT COMPLETED | A proxied run reached Terminal and exposed two fixture defects, fixed in `94c1731` and `ad6fbff`. The final clean retry was again blocked by intermittent Google Fonts/font-file access during its internal build. No product workaround was retained; repeat on a stable proxy/cache before release. |
+| Root quality | PASS | The final exact isolated run passed 210/216 files (6 skipped) and 2012/2039 tests (27 todo) in 148.57 s. AI package builds ran before root `tsc`; ESLint and Prisma gates are recorded below. |
+| Next standalone build | PASS | After restoring the original fonts in `24ba6f8`, a clean worktree-local build used Node 24's `--use-env-proxy` with `127.0.0.1:7897`, compiled Next 16.2.1, generated 8/8 static pages, and emitted 21 self-hosted WOFF2 assets. `src/app/layout.tsx` and `src/app/globals.css` remain byte-for-byte unchanged from `2362a0c`. |
+| Browser acceptance | PASS | Core serial run: Qwen Catalog/lifecycle/slot visibility, Settings/AI Tools, Assistant SSE/tool/attachment/cancel/error. The final 390x844 regression check proves the narrow TopBar project menu is visible, keyboard-operable, opens both project dialogs, and remains inside the viewport; all five viewports have no horizontal overflow. |
+| Package canary | PASS | 2042 files, 44,562,188 unpacked bytes. |
+| Packaged release smoke | PASS | The final smoke rebuilt the original-font standalone artifact through the same proxy, installed 140 packages into an isolated prefix, served only `127.0.0.1:58422`, applied 13 migrations, and verified the fixture plugin, API, Summary, Assistant, and Terminal plans. |
 | Loopback default | PASS | `bin/network.mjs` still defaults to `127.0.0.1`; port 3000 remained owned by the original production process. |
 
 Release-relevant defects fixed by this run are: local-directory Providers again
 expose Test/Edit controls (`ff1cf23`); mobile Settings/Assistant layout no longer
 collapses into a narrow clipped strip (`ff1cf23`); disabled dynamic Providers are
 not offered for new capability targets while existing broken targets retain their
-diagnostic (`6090ca2`). The E2E Catalog now covers ready/empty/unavailable states,
+diagnostic (`6090ca2`); narrow viewports retain keyboard-accessible Import Project
+and New Project actions (`39b77bc`). The E2E Catalog now covers ready/empty/unavailable states,
 Qwen install/permission/enable/disable/re-enable/damage/uninstall, all five slot
 selectors, and fake CLI missing/incompatible/compatible states (`ff1cf23`).
 
@@ -48,9 +49,9 @@ into task `cmrziyswt001bcms4n3exb0if`, and the focused implementation commits fr
 - **failed**: direct evidence contradicts the requirement.
 - **missing**: the required direct evidence has not been produced, including tests
   that exist in source but have not yet been run in this acceptance worktree.
-- **accepted-deviation**: the hub accepted a historical verification-procedure
-  deviation after a read-only impact audit; it is neither product proof nor a
-  current release-gate failure.
+- **procedural-deviation**: execution departed from the isolation procedure. An
+  impact audit can bound observed effects, but it cannot prove that unobserved
+  reads, network traffic, or writes did not occur.
 
 Command exit codes and observed test counts are recorded in the execution ledger
 below. All runtime tests must use fake providers, temporary directories, temporary
@@ -135,7 +136,7 @@ ports, and no real credentials or provider network.
 
 | ID | Requirement | Direct evidence required | Status |
 |---|---|---|---|
-| UI-01 | AI Tools layout and CRUD workflows work at 1440x900, 1280x720, and 390x844. | Final Playwright run (3/3) asserts Settings/Assistant layout and no horizontal overflow at desktop, laptop, and mobile. The same serial fake-provider run completes API CRUD and plugin install/config/disable/enable/uninstall. The original evidence screenshots were asserted/deleted once; the 2026-07-26 regression run explicitly asserted an empty screenshot directory. | proved |
+| UI-01 | AI Tools layout and CRUD workflows work at 1440x900, 1280x720, and 390x844. | Final Playwright runs assert Settings/Assistant layout and no horizontal overflow at desktop, laptop, and mobile. At 390x844, the TopBar Project actions trigger stays in bounds, opens by keyboard, exposes Import/New Project, and both items open their dialogs. The same serial fake-provider run completes API CRUD and plugin install/config/disable/enable/uninstall. | proved |
 | UI-02 | API multi-Key, model/manual/headers/query; plugin lifecycle/config; and target ordering/model/effort/diagnostics work and persist after reload. | Real browser executes Key mask/reveal/copy/edit/add/test, model refresh/manual add, headers/query, slot diagnostics/reorder, reload persistence, and the complete local fixture-plugin lifecycle including plan, permission, schema config, disable, enable, and uninstall. | proved |
 | UI-03 | Long names/errors/models/Keys do not overflow; keyboard, focus, labels, and tooltips are usable; zh/en have no missing keys. | Browser seed includes long connection/model/error/Key values; DOM asserts no overflow, keyboard focus leaves body, every visible button has a label, capability icon hover exposes its tooltip, and both en/zh reload without untranslated keys. Focused final Settings rerun is 1/1. | proved |
 | UI-04 | Assistant UI covers session create/switch/reload/rename/delete/binding, text/tool/attachment, cancel/error, and legacy import. | Real browser selects the imported legacy session, verifies history/tool card and workspace/project/version bindings, creates a fresh session, streams text, uploads an attachment, cancels a turn, observes a controlled error, then renames and deletes the session. Focused run is 1/1. | proved |
@@ -144,19 +145,19 @@ ports, and no real credentials or provider network.
 
 | ID | Requirement | Direct evidence required | Status |
 |---|---|---|---|
-| REL-01 | Packaged `tower` binds only 127.0.0.1 by default. | Final `release:smoke` installed the tarball and served only `127.0.0.1:53229`; no wildcard test listener was opened. | proved |
+| REL-01 | Packaged `tower` binds only 127.0.0.1 by default. | Final post-font-restoration `release:smoke` installed the tarball and served only `127.0.0.1:58422`; no wildcard test listener was opened. | proved |
 | REL-02 | `--host 0.0.0.0` override resolves correctly without exposing a real machine port. | `bin/network.test.mjs` is included in the passing root suite; no wildcard listener was started by acceptance. | proved |
-| REL-03 | Tarball install, first boot, migration, settings load, built-in registry, fixture plugin, fake connection/slot, and fake Summary/Assistant/Terminal plan work. | Final `release:smoke` installs the tarball from a local fixture registry, boots on a temporary loopback port, applies 13 migrations, loads Settings/built-ins, dynamically imports an unregistered local plugin, persists a fake API connection and all five slots, and executes packaged Summary, Assistant, and Terminal plans. | proved |
+| REL-03 | Tarball install, first boot, migration, settings load, built-in registry, fixture plugin, fake connection/slot, and fake Summary/Assistant/Terminal plan work. | Final `release:smoke` rebuilt after `24ba6f8`, installed the tarball from a local fixture registry, booted on `127.0.0.1:58422`, applied 13 migrations, loaded Settings/built-ins, dynamically imported an unregistered local plugin, persisted a fake API connection and all five slots, and executed packaged Summary, Assistant, and Terminal plans. | proved |
 | REL-04 | Full restore to a second temporary data directory preserves Keys, targets, plugin registry, and Assistant sessions. | `backup-ai-tools.test.ts` directly restores the full archive into a second temporary root and verifies the Key/models, five targets, rebased plugin registry, Assistant session/messages, and post-restore fake API request. | proved |
-| REL-05 | No real provider CLI/network/credentials, publish, tag, push, or organization action occurs. | Hub-accepted procedural deviation: an early discarded UI smoke inherited real `PATH` and invoked local CLI version/integration probes. The read-only audit found no user-config write, Provider network request, or credential use: `~/.claude.json` 2026-07-25 21:27:03, `~/.claude/settings.json` 2026-07-24 17:08:28, `~/.codex/config.toml` 2026-07-25 21:27:55, and `~/.gemini/settings.json` 2026-07-21 09:58:04. Every 2026-07-26 final gate used temporary HOME/data, fake CLI executables, and local fake HTTP; no publish/tag/push/org action occurred. | accepted-deviation |
-| QG-01 | Full repository `pnpm test:run` passes with Harness injection variables cleared. | Final full run: 1950 passed, 19 failed, 27 todo across 204 passed/5 failed/6 skipped files. Eighteen failures were isolated outer-environment assumptions and one was a Select timing failure that passed independently without assertion changes; `b21667a` fixes the fixture assumptions and the instructed failed-file rerun is 5/5 files, 56/56 tests. Logical final aggregate is 209 passed/6 skipped files and 1969 passed/27 todo tests. `fd34d65`'s lightbox natural-dimensions/zoom/drag/backdrop regression test passed in the full run. | proved |
-| QG-02 | `pnpm exec tsc --noEmit` passes. | Final root typecheck exit 0 after the integrated ESLint/UI lifecycle changes; all five AI package builds also exit 0. | proved |
-| QG-03 | Full ESLint passes. | After removing 141 ignored, reproducible build artifacts left by earlier gates (without changing rules or ignores), `pnpm lint` exits 0 with 0 errors and 0 warnings. Integrated ESLint/UI lifecycle work is present through `fd34d65`. | proved |
+| REL-05 | No real provider CLI/network/credentials, publish, tag, push, or organization action occurs. | **Procedural deviation, no observed writes.** An earlier discarded UI smoke inherited the real `PATH` and ran installed Claude/Codex/Gemini binary discovery/version checks plus read-only MCP/hook/skill integration-state detection. The follow-up audit recorded mtimes for `~/.claude.json`, `~/.claude/settings.json`, `~/.codex/config.toml`, and `~/.gemini/settings.json`; none changed during the observed window, and no file was restored or modified. This proves only no observed mtime write to those four paths: it did not capture syscalls or Provider network and cannot prove the absence of other reads, traffic, or side effects. The optional Qwen smoke ran only `command -v qwen` and `qwen --version`; the version command used an isolated HOME with credentials cleared and stdin closed. Real `~/.qwen` was neither read nor mtime-audited, so Qwen evidence is limited to process isolation and parsed version `0.21.0`. No later step probed a real Provider; all final gates used fake CLIs/local HTTP. No publish/tag/push/org action occurred. | procedural-deviation |
+| QG-01 | Full repository `pnpm test:run` passes with Harness injection variables cleared. | One final exact `pnpm test:run --maxWorkers=1` used an isolated HOME/data/SQLite root, fake CLI PATH, cleared credentials and Harness variables, and exited 0: 210 passed/6 skipped files, 2012 passed/27 todo tests, 148.57 s. This replaces the earlier failed-run-plus-partial-rerun composite. | proved |
+| QG-02 | `pnpm exec tsc --noEmit` passes. | Required clean-worktree order was explicit: `pnpm ai:packages:build` exited 0 for all five workspace packages, then root `pnpm exec tsc --noEmit` exited 0. Qwen's affected package build also exited 0 before Catalog/Playwright. | proved |
+| QG-03 | Full ESLint passes. | After removing ignored, reproducible build artifacts (without changing rules or ignores), the final post-fix `pnpm lint` exits 0 with 0 errors and 0 warnings. | proved |
 | QG-04 | Prisma generate and validate pass against a temporary SQLite URL. | Combined generate/validate command exit 0. | proved |
-| QG-05 | Every AI workspace package test and build passes. | Package tests exit 0: SDK 15, Claude 10, Codex 11, Gemini 14, Runtime 131 = 181; recursive builds exit 0. | proved |
+| QG-05 | Every new or affected AI package test and build passes. | Package tests exit 0: SDK 15, Claude 10, Codex 11, Gemini 14, Runtime 149, Qwen 4 = 203. The five workspace package builds and separate Qwen build exit 0. | proved |
 | QG-06 | MCP build passes with root esbuild available. | Exit 0, 3.8 MB bundle; root `esbuild` declared by `5a08f6a`. | proved |
-| QG-07 | Next production build passes without `generate is not a function`. | Raw inherited-shell `pnpm build` exit 0 after `710654b`; Next 16.2.1 compiled, typed, and generated 8/8 pages. | proved |
-| QG-08 | Release pack canary and full release smoke pass. | `release:pack:check` exit 0 (2003 files/44,384,195 bytes); `release:smoke` exit 0 after local fixture registry install of 140 packages and verification of 13 migrations plus packaged fixture/API/Summary/Assistant/Terminal plans. | proved |
+| QG-07 | Next production build passes without `generate is not a function`. | Final worktree-local `pnpm build` ran after font restoration with Node 24 `--use-env-proxy` through `127.0.0.1:7897`; Next 16.2.1 compiled, typed, generated 8/8 pages, and emitted the original fonts as 21 WOFF2 assets. | proved |
+| QG-08 | Release pack canary and full release smoke pass. | `release:pack:check` exit 0 (2042 files/44,562,188 bytes); the final post-font-restoration `release:smoke` exit 0 after rebuilding, local fixture registry install of 140 packages, loopback boot at `127.0.0.1:58422`, and verification of 13 migrations plus packaged fixture/API/Summary/Assistant/Terminal plans. | proved |
 | QG-09 | `git diff --check` passes. | Repeated after each commit and in final audit, exit 0. | proved |
 | QG-10 | Production port 3000 remains untouched and all acceptance servers/browsers/processes/ports are gone. | Final process/socket audit below; production PID 58740 remains listening on 3000. | proved |
 
@@ -190,7 +191,7 @@ ports, and no real credentials or provider network.
 | 2026-07-25 | Final Settings + Assistant browser workflows | 0 | 3/3 | 27.4 s serial run; final three screenshots created once and removed. Additional expanded Settings 1/1 (20.3 s) and Assistant 1/1 (8.1 s) passed without screenshots. |
 | 2026-07-25 | Tooltip browser assertion (role-name selector) | 1 | 0/1 | Product tooltip rendered without an accessible name; assertion selector corrected to direct visible content. Temporary process/data still removed by teardown. |
 | 2026-07-25 | Corrected Settings tooltip/browser workflow | 0 | 1/1 | 21.2 s; accessible trigger label plus visible hover content, no screenshots. |
-| 2026-07-25 | Read-only real-HOME impact audit | 0 | 4 mtimes | No timestamp evidence of CLI config writes; no user file was changed or restored. The hub later accepted REL-05 as a historical procedural deviation. |
+| 2026-07-25 | Read-only real-HOME impact audit | 0 | 4 mtimes | Procedural deviation, no observed writes: no mtime change at the four audited Claude/Codex/Gemini paths and no file restored. This evidence does not cover unobserved reads, network, other paths, or Qwen config. |
 | 2026-07-26 | Final full `pnpm test:run --maxWorkers=1` | 1 | 1950 passed, 19 failed, 27 todo | 204 passed/5 failed/6 skipped files in 205.72 s. The failures exposed outer HOME/DB assumptions and one Select timing failure; no product assertion failed. |
 | 2026-07-26 | CLI plugin Select independent rerun | 0 | 5/5 | Confirmed the full-run Select failure was a timing-only test interaction; assertion was not relaxed. |
 | 2026-07-26 | Failed-file rerun after `b21667a` | 0 | 56/56 | All five previously failing files under canonical temporary HOME/DB and fake CLI PATH. |
@@ -205,6 +206,15 @@ ports, and no real credentials or provider network.
 | 2026-07-26 | `pnpm release:smoke` | 0 | 13 migrations + 3 plans | 140 local-registry packages; loopback `127.0.0.1:53229`; fixture plugin, API, Summary, Assistant, Terminal verified. |
 | 2026-07-26 | Final fake-only Playwright E2E | 0 | 3/3 | Settings 16.9 s, Assistant 3.2 s, three-viewports 1.0 s; 24.8 s total. Screenshot directory asserted empty. |
 | 2026-07-26 | Final port/process/temp audit | 0 | 4 cleanup classes | No test listener/process/temp root remains; production PID 58740 on port 3000 is unchanged. |
+| 2026-07-26 | Required build/typecheck order | 0 | 5 package builds + root typecheck | `pnpm ai:packages:build` completed before `pnpm exec tsc --noEmit`; Qwen build also passed before Catalog E2E. |
+| 2026-07-26 | Original-font Next build | 0 | 8/8 pages + 21 WOFF2 assets | Worktree `.next` was regenerated after `24ba6f8` with Node 24 `--use-env-proxy` and local proxy `127.0.0.1:7897`; font source files have zero diff from `2362a0c`. |
+| 2026-07-26 | Mobile project-actions Playwright regression | 0 | 1/1 | Five viewport loop passed in 10.8 s; at 390x844 the menu and both dialogs are keyboard reachable and do not overflow. |
+| 2026-07-26 | Final exact isolated `pnpm test:run --maxWorkers=1` | 0 | 2012 passed, 27 todo | 210 passed/6 skipped files in 148.57 s; isolated HOME/data/SQLite, fake CLI PATH, cleared credentials/Harness variables. |
+| 2026-07-26 | Final package canary | 0 | 2042 files | 44,562,188 unpacked bytes. |
+| 2026-07-26 | Final post-font-restoration `release:smoke` | 0 | 13 migrations + 3 plans | Rebuilt original-font artifact, installed 140 packages, served `127.0.0.1:58422`, and verified fixture plugin/API/Summary/Assistant/Terminal. |
+| 2026-07-26 | Final full ESLint | 0 | 0 errors, 0 warnings | Ran after removing ignored reproducible build outputs; no rule or ignore was changed. |
+| 2026-07-26 | VitePress documentation build | 0 | all pages | Installed from the independent frozen docs lockfile with `--ignore-workspace`; VitePress 1.6.4 build completed successfully. |
+| 2026-07-26 | Final process/port/temp audit | 0 | no task process/listener/root | Port 58422 was released; no Playwright/Vitest/Next/pnpm task process remains; exact task temp roots and two empty earlier E2E roots were removed. Production PID 58740 is unchanged. |
 
 ## Defects and fixes
 
@@ -225,21 +235,22 @@ and outer database formatting, while `07fc33b` prevents duplicate screenshots.
 
 Final audit confirms production PID 58740 remains on port 3000 with cwd
 `/Users/liujunping/project/f/tower/.next/standalone`. All temporary Tower
-acceptance ports (49987, 53229, 55072, 55662, 57239, 59638 and failed-attempt ports),
+acceptance ports (49987, 53229, 55072, 55662, 57239, 58422, 59638 and failed-attempt ports),
 Playwright Chromium processes, fixture registries, and `tower-{smoke,ui}-*`
 directories are gone. Two failed-browser-attempt roots that retained only empty
-temporary `home/.gemini` directories were removed with exact-path `rmdir` during
+temporary `home/.gemini` directories were removed by exact-path cleanup during
 the final audit. Temporary screenshots and runtime databases were not committed.
 
 ## Final status
 
-**Central acceptance conclusion: CONDITIONAL PASS for manual acceptance; do not
-publish v0.3.0 yet.** Core AI Tools, Extensions, Qwen fixture integration,
-capability routing, Assistant, package contracts, root tests, and browser flows
-passed. The remaining automated release prerequisite is a packaged smoke in a
-build environment with Google Fonts access or an approved font cache. This run
-did not publish, push, tag, create a GitHub Organization, configure a production
-Catalog, access a real Provider account, send a real prompt, or consume quota.
+**Central acceptance conclusion: PASS for manual acceptance; do not publish
+v0.3.0 yet.** Core AI Tools, Extensions, Qwen fixture integration, capability
+routing, Assistant, package contracts, the exact full root suite, browser flows,
+the original-font production build, and the packaged release smoke passed. This
+run did not publish, push, tag, create a GitHub Organization, configure a
+production Catalog, access a real Provider account, send a real prompt, or
+consume quota. REL-05 remains a documented procedural deviation with bounded
+evidence, not a claim of Hub acceptance.
 
 The official Catalog repository/Organization/hosted URL is still unauthorized.
 Until it exists, operators must configure the server-side

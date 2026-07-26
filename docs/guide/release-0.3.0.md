@@ -36,4 +36,4 @@ description: AI Tools 0.3 用户能力、迁移、安全模型和已知限制
 - Assistant 临时附件缓存不进入完整归档；API 凭据、五能力目标、CLI 插件 registry/安装目录和 Assistant 会话由完整备份覆盖。
 - 0.3 数据库不承诺回写兼容 0.2；降级必须恢复升级前备份。
 - 官方 Catalog 仓库、GitHub Organization 和托管 URL 尚未获授权；建立前通过服务端 `TOWER_EXTENSION_CATALOG_URL` 或系统 Catalog URL 接入。
-- 当前代理可完成原字体 standalone build，但 Google Fonts/字体文件链路仍有间歇失败；正式发布前需在稳定代理或具备批准字体缓存的环境重跑 packaged smoke。不得通过移除产品字体绕过。
+- 集中验收已在恢复原始 DM Sans、Geist、Geist Mono、JetBrains Mono 后，通过 Node 24 `--use-env-proxy` 和本机 `127.0.0.1:7897` 代理完成 standalone build 与 packaged smoke。无直连字体网络的构建环境仍需配置稳定代理或批准的字体缓存；不得通过移除或替换产品字体绕过。
