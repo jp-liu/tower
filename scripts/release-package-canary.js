@@ -11,6 +11,7 @@ const REQUIRED_FILES = [
   "bin/network.mjs",
   ".next/standalone/server.js",
   "prisma/schema.prisma",
+  "scripts/link-embedded-packages.js",
   "scripts/run-migrations.ts",
   "scripts/migrations/0009-api-connections.ts",
   "scripts/migrations/0010-capability-targets.ts",
@@ -41,11 +42,21 @@ const REQUIRED_AI_RUNTIME_DEPENDENCIES = [
   "@ai-sdk/provider",
   "ai",
 ];
+const REQUIRED_EMBEDDED_RUNTIME_DEPENDENCIES = [
+  ...REQUIRED_AI_RUNTIME_DEPENDENCIES,
+  "ajv",
+  "semver",
+  "tar",
+];
 const REQUIRED_PREFIXES = ["skills/", "extensions/"];
 const FORBIDDEN = [
-  /(^|\/)test-results\//,
-  /(^|\/)tests?\/fixtures?\//,
-  /(^|\/)packages\/[^/]+\/tests?\//,
+  /^test-results\//,
+  /^tests?\//,
+  /(^|\/)(?:packages|extensions)\/(?:[^/]+\/)*tests?\//,
+  /(^|\/)[^/]+\.(?:test|spec)\.[cm]?[jt]sx?$/,
+  /(^|\/)(?:vitest|playwright)\.config\.[cm]?[jt]s$/,
+  /(^|\/)\.npmrc$/i,
+  /(^|\/)(?:npm-token|auth-token|tokens?|credentials?|secrets?)(?:\.[^/]*)?$/i,
   /(^|\/)\.tower(?:-dev)?\//,
   /(^|\/)\.worktrees?\//,
   /(^|\/)\.cache\//,
@@ -75,8 +86,9 @@ function assertReleasePackage(pack, pkg, runtimePkg) {
     errors.push(`production dependencies contain workspace protocols: ${workspaceRuntimeDeps.map(([name]) => name).join(", ")}`);
   }
   if (runtimePkg) {
-    for (const dependency of REQUIRED_AI_RUNTIME_DEPENDENCIES) {
+    for (const dependency of REQUIRED_EMBEDDED_RUNTIME_DEPENDENCIES) {
       if (!runtimePkg.dependencies?.[dependency]) errors.push(`AI runtime dependency missing: ${dependency}`);
+      if (!pkg.dependencies?.[dependency]) errors.push(`CLI dependency missing for embedded AI runtime: ${dependency}`);
     }
   }
   for (const file of REQUIRED_FILES) {
@@ -109,5 +121,11 @@ function main() {
   }
 }
 
-module.exports = { assertReleasePackage, FORBIDDEN, REQUIRED_AI_RUNTIME_DEPENDENCIES, REQUIRED_FILES };
+module.exports = {
+  assertReleasePackage,
+  FORBIDDEN,
+  REQUIRED_AI_RUNTIME_DEPENDENCIES,
+  REQUIRED_EMBEDDED_RUNTIME_DEPENDENCIES,
+  REQUIRED_FILES,
+};
 if (require.main === module) main();

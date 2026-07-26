@@ -27,6 +27,7 @@
     "prisma/pre-migration.sql",
     "scripts/init-db.ts",
     "scripts/generate-prisma-client.js",
+    "scripts/link-embedded-packages.js",
     "scripts/link-prisma.js",
     "scripts/fix-native-permissions.js",
     "scripts/post-install-banner.js",
@@ -54,7 +55,8 @@
     "packages/ai-provider-gemini/config.schema.json",
     "docs/licenses/models.dev-MIT.md",
     "skills/",
-    "extensions/",
+    "extensions/catalog/",
+    "extensions/tower-agent/",
     "tsconfig.json"
   ],
   "scripts": {
@@ -89,7 +91,7 @@
     "mcp": "node dist/mcp-server.cjs",
     "mcp:build": "esbuild src/mcp/index.ts --bundle --platform=node --target=node18 --format=cjs --outfile=dist/mcp-server.cjs --external:@prisma/client --external:@modelcontextprotocol/sdk --external:@opentelemetry/api --alias:@=./src",
     "mcp:dev": "tsx src/mcp/index.ts",
-    "postinstall": "node scripts/generate-prisma-client.js && node scripts/link-prisma.js && node scripts/fix-native-permissions.js && node scripts/post-install-banner.js"
+    "postinstall": "node scripts/link-embedded-packages.js && node scripts/generate-prisma-client.js && node scripts/link-prisma.js && node scripts/fix-native-permissions.js && node scripts/post-install-banner.js"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -100,12 +102,21 @@
     ]
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "4.0.20",
+    "@ai-sdk/google": "4.0.24",
+    "@ai-sdk/openai": "4.0.20",
+    "@ai-sdk/openai-compatible": "3.0.14",
+    "@ai-sdk/provider": "4.0.3",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "@prisma/client": "^6.19.2",
     "@vscode/ripgrep": "1.18.0",
+    "ai": "7.0.18",
+    "ajv": "8.18.0",
     "node-pty": "^1.1.0",
     "prisma": "^6.19.2",
+    "semver": "7.7.4",
     "server-only": "0.0.1",
+    "tar": "7.5.13",
     "tinykeys": "^4.0.0",
     "tsx": "^4.21.0",
     "ws": "^8.20.0"

@@ -1,4 +1,4 @@
-## [0.3.0](https://github.com/jp-liu/tower/compare/v0.2.60...v0.3.0) (2026-07-26)
+## [0.3.0](https://github.com/tower-org/tower/compare/v0.2.60...v0.3.0) (2026-07-26)
 
 ### User-visible capabilities
 

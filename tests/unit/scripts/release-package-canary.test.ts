@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 const require = createRequire(import.meta.url);
 const {
   assertReleasePackage,
-  REQUIRED_AI_RUNTIME_DEPENDENCIES,
+  REQUIRED_EMBEDDED_RUNTIME_DEPENDENCIES,
   REQUIRED_FILES,
 } = require("../../../scripts/release-package-canary.js");
 
@@ -16,10 +16,10 @@ const manifest = {
     registry: "https://registry.npmjs.org/",
     provenance: true,
   },
-  dependencies: { prisma: "^6.19.2" },
+  dependencies: Object.fromEntries(REQUIRED_EMBEDDED_RUNTIME_DEPENDENCIES.map((name: string) => [name, "1.0.0"])),
 };
 const runtimeManifest = {
-  dependencies: Object.fromEntries(REQUIRED_AI_RUNTIME_DEPENDENCIES.map((name: string) => [name, "1.0.0"])),
+  dependencies: Object.fromEntries(REQUIRED_EMBEDDED_RUNTIME_DEPENDENCIES.map((name: string) => [name, "1.0.0"])),
 };
 
 function pack(extra: string[] = []) {
@@ -35,14 +35,26 @@ function pack(extra: string[] = []) {
 
 describe("release package canary", () => {
   it("accepts the complete release surface", () => {
-    expect(assertReleasePackage(pack(), manifest, runtimeManifest)).toMatchObject({ unpackedSize: 2 });
+    expect(assertReleasePackage(pack([
+      ".next/standalone/.next/server/app/api/adapters/test/route.js",
+    ]), manifest, runtimeManifest)).toMatchObject({ unpackedSize: 2 });
   });
 
-  it("rejects missing runtime files and private data", () => {
-    const incomplete = pack(["database/tower.db", "packages/ai-runtime/test/plugin-runtime.test.ts"]);
+  it("rejects missing runtime files", () => {
+    const incomplete = pack();
     incomplete.files = incomplete.files.filter((entry: { path: string }) => entry.path !== "packages/ai-sdk/dist/index.js");
     expect(() => assertReleasePackage(incomplete, manifest, runtimeManifest)).toThrow(/missing required file/);
-    expect(() => assertReleasePackage(incomplete, manifest, runtimeManifest)).toThrow(/forbidden files/);
+  });
+
+  it.each([
+    ".npmrc",
+    "auth-token.txt",
+    "database/tower.db",
+    "extensions/cli-providers/qwen-code/test/provider.test.ts",
+    "extensions/cli-providers/qwen-code/src/provider.spec.ts",
+    "extensions/cli-providers/qwen-code/vitest.config.ts",
+  ])("rejects private or test artifact %s", (artifact) => {
+    expect(() => assertReleasePackage(pack([artifact]), manifest, runtimeManifest)).toThrow(/forbidden files/);
   });
 
   it("rejects workspace protocols in production dependencies", () => {
@@ -55,5 +67,10 @@ describe("release package canary", () => {
   it("rejects a missing upstream AI SDK dependency", () => {
     expect(() => assertReleasePackage(pack(), manifest, { dependencies: {} }))
       .toThrow(/AI runtime dependency missing/);
+  });
+
+  it("rejects a missing CLI dependency required by the embedded runtime", () => {
+    expect(() => assertReleasePackage(pack(), { ...manifest, dependencies: {} }, runtimeManifest))
+      .toThrow(/CLI dependency missing for embedded AI runtime/);
   });
 });

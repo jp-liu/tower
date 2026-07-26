@@ -31,6 +31,41 @@ let registry = null;
 let upstream = null;
 const upstreamRequests = [];
 
+const INSTALLED_RELEASE_PATHS = {
+  towerBin: "bin/tower.mjs",
+  aiSdk: "packages/ai-sdk/dist/index.js",
+  aiRuntime: "packages/ai-runtime/dist/index.js",
+  claudeProvider: "packages/ai-provider-claude/dist/index.js",
+  codexProvider: "packages/ai-provider-codex/dist/index.js",
+  geminiProvider: "packages/ai-provider-gemini/dist/index.js",
+  towerSkill: "skills/tower/SKILL.md",
+  towerAskSkill: "skills/tower-ask/SKILL.md",
+  towerBridgeSkill: "skills/tower-bridge/SKILL.md",
+  towerGoalSkill: "skills/tower-goal/SKILL.md",
+};
+
+function assertPathInside(root, candidate, label) {
+  const relative = path.relative(root, candidate);
+  if (relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))) {
+    return;
+  }
+  throw new Error(`Installed release path escaped temporary package root: ${label}=${candidate}`);
+}
+
+function assertInstalledReleasePaths(installedRoot) {
+  const resolvedRoot = fs.realpathSync(installedRoot);
+  const paths = {};
+  for (const [label, relativePath] of Object.entries(INSTALLED_RELEASE_PATHS)) {
+    const candidate = path.join(resolvedRoot, relativePath);
+    if (!fs.existsSync(candidate)) throw new Error(`Installed release path missing: ${label}=${candidate}`);
+    const resolvedCandidate = fs.realpathSync(candidate);
+    assertPathInside(resolvedRoot, resolvedCandidate, label);
+    paths[label] = resolvedCandidate;
+  }
+  console.log(`[release:smoke] Verified ${Object.keys(paths).length} embedded Runtime/Provider/skills paths inside ${resolvedRoot}`);
+  return { installedRoot: resolvedRoot, paths };
+}
+
 function cleanEnvironment(overrides = {}) {
   const env = { ...process.env, ...overrides };
   for (const key of [
@@ -339,7 +374,7 @@ function requestApp(pathname, body) {
   });
 }
 
-async function preparePackagedAiFixtures(installedRoot, smokeEnv, baseUrl) {
+async function preparePackagedAiFixtures(installedRelease, smokeEnv, baseUrl) {
   const fixtureDir = path.join(baseDir, "fixture-provider");
   const projectDir = path.join(baseDir, "fixture-project");
   const fakeBinDir = path.join(baseDir, "fake-bin");
@@ -351,7 +386,7 @@ async function preparePackagedAiFixtures(installedRoot, smokeEnv, baseUrl) {
   const fakeCli = path.join(fakeBinDir, "fixture-cli");
   fs.writeFileSync(fakeCli, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  printf 'fixture-cli 1.0.0\\n'\nelse\n  printf 'packaged terminal output\\n'\nfi\n");
   fs.chmodSync(fakeCli, 0o700);
-  const runtimeUrl = require("url").pathToFileURL(path.join(projectRoot, "packages", "ai-runtime", "dist", "index.js")).href;
+  const runtimeUrl = require("url").pathToFileURL(installedRelease.paths.aiRuntime).href;
   const registerScript = `
     import(process.argv[1]).then(async ({ CliPluginRuntime }) => {
       const runtime = new CliPluginRuntime({ dataRoot: process.argv[2], towerVersion: '0.3.0' });
@@ -361,7 +396,7 @@ async function preparePackagedAiFixtures(installedRoot, smokeEnv, baseUrl) {
     });
   `;
   execFileSync(process.execPath, ["-e", registerScript, runtimeUrl, dataDir, fixtureDir], {
-    cwd: projectRoot,
+    cwd: installedRelease.installedRoot,
     stdio: "inherit",
     env: smokeEnv,
   });
@@ -418,7 +453,7 @@ async function preparePackagedAiFixtures(installedRoot, smokeEnv, baseUrl) {
     main().finally(() => db.$disconnect());
   `;
   execFileSync(process.execPath, ["-e", seedScript, projectDir, fakeCli, baseUrl], {
-    cwd: installedRoot,
+    cwd: installedRelease.installedRoot,
     stdio: "inherit",
     env: { ...smokeEnv, DATABASE_URL: `file:${path.join(dataDir, "database", "tower.db")}` },
   });
@@ -444,10 +479,10 @@ async function waitForServer(pid) {
   throw new Error(`Smoke server did not become reachable.\n\nLog tail:\n${logs.slice(-4000)}`);
 }
 
-async function startPackagedApp(towerBin, smokeEnv) {
+async function startPackagedApp(towerBin, smokeEnv, installedRoot) {
   const logFd = fs.openSync(logPath, "a");
   child = spawn(towerBin, ["--port", port, "--no-open"], {
-    cwd: projectRoot,
+    cwd: installedRoot,
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: smokeEnv,
@@ -512,6 +547,9 @@ async function main() {
 
   const towerBin = path.join(prefixDir, "bin", "tower");
   const installedRoot = path.join(prefixDir, "lib", "node_modules", pkg.name);
+  const installedRelease = assertInstalledReleasePaths(installedRoot);
+  assertPathInside(fs.realpathSync(prefixDir), installedRelease.installedRoot, "installed package root");
+  assertPathInside(installedRelease.installedRoot, fs.realpathSync(towerBin), "tower shim");
   const smokeEnv = {
     ...cleanEnvironment(),
     HOME: homeDir,
@@ -519,11 +557,15 @@ async function main() {
     NPM_CONFIG_CACHE: cacheDir,
     TOWER_NO_OPEN: "1",
   };
-  const version = execFileSync(towerBin, ["--version"], { encoding: "utf8", env: smokeEnv }).trim();
+  const version = execFileSync(towerBin, ["--version"], {
+    cwd: installedRelease.installedRoot,
+    encoding: "utf8",
+    env: smokeEnv,
+  }).trim();
   if (version !== `tower v${pkg.version}`) throw new Error(`Version mismatch: ${version}`);
   console.log(`[release:smoke] Installed version: ${version}`);
   console.log("[release:smoke] Starting packaged app");
-  await startPackagedApp(towerBin, smokeEnv);
+  await startPackagedApp(towerBin, smokeEnv, installedRelease.installedRoot);
 
   const migrationIds = fs.readdirSync(path.join(installedRoot, "scripts", "migrations"))
     .filter((name) => /^\d.*\.(?:ts|mjs|js)$/.test(name))
@@ -551,10 +593,10 @@ async function main() {
 
   console.log("[release:smoke] Preparing packaged fixture plugin and explicit capability plans");
   const fakeAiBaseUrl = await startFakeAiUpstream();
-  await preparePackagedAiFixtures(installedRoot, smokeEnv, fakeAiBaseUrl);
+  await preparePackagedAiFixtures(installedRelease, smokeEnv, fakeAiBaseUrl);
   smokeEnv.PATH = `${path.join(baseDir, "fake-bin")}${path.delimiter}${smokeEnv.PATH ?? ""}`;
   await stopChild();
-  await startPackagedApp(towerBin, smokeEnv);
+  await startPackagedApp(towerBin, smokeEnv, installedRelease.installedRoot);
 
   const assistant = await requestApp("/api/internal/assistant/chat", {
     message: "packaged assistant smoke",
