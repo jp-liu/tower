@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { providerRegistry } from "@/lib/ai/providers";
+import { getRegisteredProviderAvailability } from "@/lib/ai/provider-registry";
 import type { AiSlot } from "@/lib/ai/types";
 import {
   CapabilityServiceError,
@@ -93,7 +94,7 @@ export async function getAvailableProviders() {
 }
 
 export async function getRegisteredProviders() {
-  return providerRegistry.getRegisteredProviders();
+  return getRegisteredProviderAvailability(providerRegistry.getAll());
 }
 
 type CapabilityActionResult<T> =

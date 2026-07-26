@@ -20,6 +20,29 @@ function declaredIntegrations(capabilities: {
   };
 }
 
+/** Build the settings snapshot without touching the file system or spawning CLIs. */
+export function getRegisteredProviderAvailability(
+  providers: ProviderDefinition[],
+): ProviderAvailability[] {
+  return providers.map((provider) => {
+    const apiKeyConfigured = provider.api ? Boolean(process.env[provider.api.keyEnvVar]) : false;
+    return {
+      name: provider.name,
+      displayName: provider.displayName,
+      builtin: provider.builtin === true,
+      cli: {
+        available: false,
+        version: null,
+        commandPath: null,
+        commandState: null,
+        integrations: declaredIntegrations(provider.cli?.plugin.manifest.capabilities),
+        connectionStatus: "untested",
+      },
+      api: { available: apiKeyConfigured, keyConfigured: apiKeyConfigured },
+    };
+  });
+}
+
 export interface CliProviderRegistration {
   id: string;
   displayName: string;
@@ -223,27 +246,6 @@ export class ProviderRegistry {
       if (p.cli?.command) commands.push(p.cli.command);
     }
     return commands;
-  }
-
-  /** Return static built-in definitions without touching the file system or spawning CLIs. */
-  getRegisteredProviders(): ProviderAvailability[] {
-    return this.getAll().map((provider) => {
-      const apiKeyConfigured = provider.api ? Boolean(process.env[provider.api.keyEnvVar]) : false;
-      return {
-        name: provider.name,
-        displayName: provider.displayName,
-        builtin: provider.builtin === true,
-        cli: {
-          available: false,
-          version: null,
-          commandPath: null,
-          commandState: null,
-          integrations: declaredIntegrations(provider.cli?.plugin.manifest.capabilities),
-          connectionStatus: "untested",
-        },
-        api: { available: apiKeyConfigured, keyConfigured: apiKeyConfigured },
-      };
-    });
   }
 
   async getAvailableProviders(): Promise<ProviderAvailability[]> {

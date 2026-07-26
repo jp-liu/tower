@@ -22,7 +22,7 @@ vi.mock("../cli-plugin-service", () => ({
 }));
 vi.mock("../cli-plugin-provider", () => ({ resolvePluginCliConnection: dynamicMocks.resolvePlugin }));
 
-import { ProviderRegistry } from "../provider-registry";
+import { getRegisteredProviderAvailability, ProviderRegistry } from "../provider-registry";
 import type { ProviderDefinition } from "../types";
 
 function makeClaudeProvider(): ProviderDefinition {
@@ -98,6 +98,20 @@ describe("ProviderRegistry", () => {
   it("lists all providers", () => {
     registry.register(makeClaudeProvider());
     expect(registry.getAll()).toHaveLength(1);
+  });
+
+  it("builds a registered snapshot from definitions without a registry instance method", () => {
+    expect(getRegisteredProviderAvailability([makeClaudeProvider()])).toEqual([
+      expect.objectContaining({
+        name: "claude",
+        builtin: true,
+        cli: expect.objectContaining({
+          available: false,
+          integrations: { mcp: true, hooks: true, skills: true },
+          connectionStatus: "untested",
+        }),
+      }),
+    ]);
   });
 
   it("returns null query adapter for unregistered provider", () => {
