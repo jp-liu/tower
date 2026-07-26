@@ -225,6 +225,27 @@ export class ProviderRegistry {
     return commands;
   }
 
+  /** Return static built-in definitions without touching the file system or spawning CLIs. */
+  getRegisteredProviders(): ProviderAvailability[] {
+    return this.getAll().map((provider) => {
+      const apiKeyConfigured = provider.api ? Boolean(process.env[provider.api.keyEnvVar]) : false;
+      return {
+        name: provider.name,
+        displayName: provider.displayName,
+        builtin: provider.builtin === true,
+        cli: {
+          available: false,
+          version: null,
+          commandPath: null,
+          commandState: null,
+          integrations: declaredIntegrations(provider.cli?.plugin.manifest.capabilities),
+          connectionStatus: "untested",
+        },
+        api: { available: apiKeyConfigured, keyConfigured: apiKeyConfigured },
+      };
+    });
+  }
+
   async getAvailableProviders(): Promise<ProviderAvailability[]> {
     const results: ProviderAvailability[] = [];
     for (const p of this.providers.values()) {

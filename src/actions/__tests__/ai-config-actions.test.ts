@@ -48,6 +48,8 @@ const connected = {
   hooksInstalled: false,
   skillsInstalled: false,
   installLog: null,
+  resolvedCommand: "/usr/local/bin/codex",
+  resolvedVersion: "1.0.0",
 };
 
 describe("ai-config-actions", () => {

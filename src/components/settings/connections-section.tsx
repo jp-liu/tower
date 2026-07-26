@@ -7,12 +7,13 @@ import {
   CircleDashed,
   Loader2,
   PlugZap,
+  RefreshCw,
   ShieldCheck,
   TerminalSquare,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getAvailableProviders } from "@/actions/ai-config-actions";
+import { getAvailableProviders, getRegisteredProviders } from "@/actions/ai-config-actions";
 import {
   getProviderConnections,
   setCliProviderEnabled,
@@ -27,6 +28,90 @@ import type { ProviderAvailability } from "@/lib/ai/types";
 import { ApiConnectionsSection } from "./api-connections-section";
 
 const CONNECTIONS_CHANGED_EVENT = "tower:provider-connections-changed";
+const PROVIDER_PROBE_TTL_MS = 60_000;
+
+type ProviderSnapshot = {
+  providers: ProviderAvailability[];
+  connections: ProviderConnectionRow[];
+  checkedAt: number;
+};
+
+let providerSnapshot: ProviderSnapshot | null = null;
+let providerRefresh: Promise<ProviderAvailability[]> | null = null;
+
+export function invalidateProviderAvailabilityCache() {
+  providerSnapshot = null;
+  providerRefresh = null;
+}
+
+function cachedConnectionStatus(connection: ProviderConnectionRow | undefined) {
+  if (!connection) return "untested" as const;
+  if (!connection.enabled) return "pluginDisabled" as const;
+  if (connection.testStatus === "dependency-missing") return "dependencyMissing" as const;
+  if (connection.testStatus === "dependency-incompatible") return "dependencyIncompatible" as const;
+  if (connection.testOk) return "connected" as const;
+  if (connection.testStatus === "unavailable") return "unavailable" as const;
+  return "untested" as const;
+}
+
+function mergePersistedProviders(
+  registered: ProviderAvailability[],
+  connections: ProviderConnectionRow[],
+  previous: ProviderAvailability[] = [],
+): ProviderAvailability[] {
+  const connectionsByProvider = new Map(connections.map((connection) => [connection.provider, connection]));
+  const previousByProvider = new Map(previous.map((provider) => [provider.name, provider]));
+  const registeredNames = new Set(registered.map((provider) => provider.name));
+  const builtIns = registered.map((provider) => {
+    const connection = connectionsByProvider.get(provider.name);
+    return {
+      ...provider,
+      cli: {
+        ...provider.cli,
+        available: Boolean(connection?.enabled && connection.testOk),
+        version: connection?.resolvedVersion ?? connection?.version ?? null,
+        commandPath: connection?.resolvedCommand ?? null,
+        commandState: connection?.testOk
+          ? "connected" as const
+          : connection?.resolvedCommand ? "found" as const : null,
+        connectionStatus: cachedConnectionStatus(connection),
+      },
+    };
+  });
+  const extensions = connections
+    .filter((connection) => !registeredNames.has(connection.provider))
+    .map((connection): ProviderAvailability => {
+      const prior = previousByProvider.get(connection.provider);
+      return {
+        name: connection.provider,
+        displayName: prior?.displayName ?? connection.name,
+        builtin: false,
+        cli: {
+          available: connection.enabled && connection.testOk,
+          version: connection.resolvedVersion ?? connection.version,
+          commandPath: connection.resolvedCommand,
+          commandState: connection.testOk
+            ? "connected"
+            : connection.resolvedCommand ? "found" : null,
+          integrations: prior?.cli.integrations ?? {
+            mcp: connection.mcpInstalled,
+            hooks: connection.hooksInstalled,
+            skills: connection.skillsInstalled,
+          },
+          connectionStatus: cachedConnectionStatus(connection),
+        },
+        api: { available: false, keyConfigured: false },
+      };
+    });
+  return [...builtIns, ...extensions];
+}
+
+function refreshProviderAvailability() {
+  providerRefresh ??= getAvailableProviders().finally(() => {
+    providerRefresh = null;
+  });
+  return providerRefresh;
+}
 
 type ProbeResult = {
   ok: boolean;
@@ -48,33 +133,54 @@ function StatusIcon({ ok }: { ok: boolean }) {
 
 export function ConnectionsSection() {
   const { t } = useI18n();
-  const [providers, setProviders] = useState<ProviderAvailability[]>([]);
-  const [connections, setConnections] = useState<ProviderConnectionRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [providers, setProviders] = useState<ProviderAvailability[]>(() => providerSnapshot?.providers ?? []);
+  const [connections, setConnections] = useState<ProviderConnectionRow[]>(() => providerSnapshot?.connections ?? []);
+  const [loading, setLoading] = useState(() => providerSnapshot === null);
+  const [refreshing, setRefreshing] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, ProbeResult>>({});
   const [loadError, setLoadError] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options: { forcePersisted?: boolean; forceProbe?: boolean } = {}) => {
     setLoadError(false);
+    let snapshot = providerSnapshot;
     try {
-      const [available, persisted] = await Promise.all([
-        getAvailableProviders(),
-        getProviderConnections(),
-      ]);
+      if (!snapshot || options.forcePersisted) {
+        const [registered, persisted] = await Promise.all([
+          getRegisteredProviders(),
+          getProviderConnections(),
+        ]);
+        snapshot = {
+          providers: mergePersistedProviders(registered, persisted, snapshot?.providers),
+          connections: persisted,
+          checkedAt: snapshot?.checkedAt ?? 0,
+        };
+        providerSnapshot = snapshot;
+      }
+      setProviders(snapshot.providers);
+      setConnections(snapshot.connections);
+      setLoading(false);
+
+      const probeExpired = snapshot.checkedAt === 0
+        || Date.now() - snapshot.checkedAt >= PROVIDER_PROBE_TTL_MS;
+      if (!options.forceProbe && !probeExpired) return;
+      setRefreshing(true);
+      const available = await refreshProviderAvailability();
+      snapshot = { ...snapshot, providers: available, checkedAt: Date.now() };
+      providerSnapshot = snapshot;
       setProviders(available);
-      setConnections(persisted);
     } catch {
-      setLoadError(true);
+      if (!snapshot) setLoadError(true);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     void load();
-    const reload = () => { void load(); };
+    const reload = () => { void load({ forcePersisted: true, forceProbe: true }); };
     window.addEventListener(CONNECTIONS_CHANGED_EVENT, reload);
     return () => window.removeEventListener(CONNECTIONS_CHANGED_EVENT, reload);
   }, [load]);
@@ -95,7 +201,7 @@ export function ConnectionsSection() {
       });
       const result = await response.json() as ProbeResult;
       setResults((current) => ({ ...current, [provider]: result }));
-      await load();
+      await load({ forcePersisted: true });
     } catch {
       setResults((current) => ({
         ...current,
@@ -110,7 +216,7 @@ export function ConnectionsSection() {
     setToggling(provider);
     try {
       await setCliProviderEnabled(provider, enabled);
-      await load();
+      await load({ forcePersisted: true });
       toast.success(t(enabled ? "settings.aiTools.enabled" : "settings.aiTools.disabled"));
     } catch {
       toast.error(t("settings.aiTools.cliEnableRequiresTest"));
@@ -139,7 +245,28 @@ export function ConnectionsSection() {
             <h3 className="text-sm font-medium">{t("settings.aiTools.cliConnections")}</h3>
             <p className="text-xs text-muted-foreground">{t("settings.aiTools.cliConnectionsDesc")}</p>
           </div>
-          <Badge variant="outline">CLI</Badge>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="outline">CLI</Badge>
+            <Tooltip>
+              <TooltipTrigger
+                render={(
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={t("settings.aiTools.refreshProviders")}
+                    disabled={refreshing}
+                    onClick={() => void load({ forcePersisted: true, forceProbe: true })}
+                  />
+                )}
+              >
+                <RefreshCw className={refreshing ? "animate-spin" : undefined} aria-hidden />
+              </TooltipTrigger>
+              <TooltipContent>{refreshing
+                ? t("settings.aiTools.refreshingProviders")
+                : t("settings.aiTools.refreshProviders")}</TooltipContent>
+            </Tooltip>
+          </div>
         </div>
 
         {loading ? (

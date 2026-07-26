@@ -248,6 +248,8 @@ export const en: Translations = {
   "settings.aiTools.cliVerificationDesc": "Verify AI CLI tools are correctly installed",
   "settings.aiTools.testConnection": "Test Connection",
   "settings.aiTools.testing": "Testing...",
+  "settings.aiTools.refreshProviders": "Refresh local CLI status",
+  "settings.aiTools.refreshingProviders": "Checking local CLIs in the background",
   "settings.aiTools.testPassed": "All checks passed",
   "settings.aiTools.testFailed": "Some checks failed",
   "settings.aiTools.connections": "Connections",

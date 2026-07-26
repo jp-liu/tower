@@ -92,6 +92,10 @@ export async function getAvailableProviders() {
   return providerRegistry.getAvailableProviders();
 }
 
+export async function getRegisteredProviders() {
+  return providerRegistry.getRegisteredProviders();
+}
+
 type CapabilityActionResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: { code: string; message: string } };

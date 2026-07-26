@@ -259,6 +259,8 @@ export const zh = {
   "settings.aiTools.cliVerificationDesc": "验证 AI 工具命令行是否已正确安装",
   "settings.aiTools.testConnection": "测试连接",
   "settings.aiTools.testing": "测试中...",
+  "settings.aiTools.refreshProviders": "刷新本机 CLI 状态",
+  "settings.aiTools.refreshingProviders": "正在后台检查本机 CLI",
   "settings.aiTools.testPassed": "检测通过",
   "settings.aiTools.testFailed": "部分检测未通过",
   "settings.aiTools.connections": "连接",

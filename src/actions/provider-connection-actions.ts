@@ -27,6 +27,8 @@ export interface ProviderConnectionRow {
   hooksInstalled: boolean;
   skillsInstalled: boolean;
   installLog: string | null;
+  resolvedCommand: string | null;
+  resolvedVersion: string | null;
 }
 
 function cliConnectionKey(provider: string): string {
@@ -156,6 +158,8 @@ export async function getProviderConnection(provider: string): Promise<ProviderC
       hooksInstalled: true,
       skillsInstalled: true,
       installLog: true,
+      resolvedCommand: true,
+      resolvedVersion: true,
     },
   });
 }
@@ -179,6 +183,8 @@ export async function getProviderConnections(): Promise<ProviderConnectionRow[]>
       hooksInstalled: true,
       skillsInstalled: true,
       installLog: true,
+      resolvedCommand: true,
+      resolvedVersion: true,
     },
     orderBy: { provider: "asc" },
   });

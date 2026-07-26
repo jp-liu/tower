@@ -2,16 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { I18nProvider } from "@/lib/i18n";
-import { ConnectionsSection } from "../connections-section";
+import { ConnectionsSection, invalidateProviderAvailabilityCache } from "../connections-section";
 
 const actionMocks = vi.hoisted(() => ({
   getAvailableProviders: vi.fn(),
+  getRegisteredProviders: vi.fn(),
   getProviderConnections: vi.fn(),
   setCliProviderEnabled: vi.fn(),
 }));
 
 vi.mock("@/actions/ai-config-actions", () => ({
   getAvailableProviders: actionMocks.getAvailableProviders,
+  getRegisteredProviders: actionMocks.getRegisteredProviders,
 }));
 vi.mock("@/actions/provider-connection-actions", () => ({
   getProviderConnections: actionMocks.getProviderConnections,
@@ -93,6 +95,8 @@ function connection(provider: string, overrides: Record<string, unknown> = {}) {
     hooksInstalled: true,
     skillsInstalled: true,
     installLog: null,
+    resolvedCommand: `/opt/tower/bin/${provider}`,
+    resolvedVersion: "1.0.0",
     ...overrides,
   };
 }
@@ -110,6 +114,7 @@ function providerRow(name: string) {
 describe("ConnectionsSection CLI connections", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    invalidateProviderAvailabilityCache();
     persisted = [
       connection("claude", { hooksInstalled: false }),
       connection("acme", {
@@ -120,6 +125,7 @@ describe("ConnectionsSection CLI connections", () => {
       connection("gemini", { hooksInstalled: false }),
     ];
     actionMocks.getAvailableProviders.mockResolvedValue(providers);
+    actionMocks.getRegisteredProviders.mockResolvedValue(providers.filter((provider) => provider.builtin));
     actionMocks.getProviderConnections.mockImplementation(async () => persisted);
     actionMocks.setCliProviderEnabled.mockResolvedValue(undefined);
     vi.stubGlobal("fetch", vi.fn());
@@ -143,6 +149,32 @@ describe("ConnectionsSection CLI connections", () => {
     expect(within(providerRow("Pending Extension")).getByText(/权限待审查|Permission review required/)).toBeInTheDocument();
     expect(within(providerRow("Pending Extension")).queryByText(/未安装|Not installed/)).not.toBeInTheDocument();
     expect(within(providerRow("Claude Code")).getByText("/opt/tower/bin/claude")).toBeInTheDocument();
+  });
+
+  it("renders persisted connections before the live CLI probe finishes", async () => {
+    let finishProbe!: (value: typeof providers) => void;
+    actionMocks.getAvailableProviders.mockReturnValue(new Promise((resolve) => {
+      finishProbe = resolve;
+    }));
+
+    renderSection();
+
+    expect(await screen.findByText("Claude Code")).toBeInTheDocument();
+    expect(within(providerRow("Claude Code")).getByText(/已连接|Connected/)).toBeInTheDocument();
+    expect(actionMocks.getAvailableProviders).toHaveBeenCalledTimes(1);
+    finishProbe(providers);
+    await screen.findByText("Acme Extension");
+  });
+
+  it("reuses the live snapshot when the AI Tools section remounts within the TTL", async () => {
+    const first = renderSection();
+    await screen.findByText("Acme Extension");
+    await waitFor(() => expect(actionMocks.getAvailableProviders).toHaveBeenCalledTimes(1));
+    first.unmount();
+
+    renderSection();
+    expect(await screen.findByText("Claude Code")).toBeInTheDocument();
+    expect(actionMocks.getAvailableProviders).toHaveBeenCalledTimes(1);
   });
 
   it("shows MCP, Hooks, Skills and a readable degraded state", async () => {
