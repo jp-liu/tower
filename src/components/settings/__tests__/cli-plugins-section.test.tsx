@@ -7,7 +7,8 @@ import { CLI_SECRET_MASK } from "@/lib/ai/cli-plugin-shared";
 
 const actionMocks = vi.hoisted(() => ({
   listCliPlugins: vi.fn(),
-  planNpmCliPlugin: vi.fn(),
+  listCliProviderCatalog: vi.fn(),
+  planCatalogCliPlugin: vi.fn(),
   planLocalCliPlugin: vi.fn(),
   installCliPlugin: vi.fn(),
   reviewInstalledCliPlugin: vi.fn(),
@@ -25,18 +26,61 @@ const actionMocks = vi.hoisted(() => ({
 vi.mock("@/actions/cli-plugin-actions", () => actionMocks);
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
+const dependency = {
+  dependency: "Qwen Code CLI",
+  state: "ready" as const,
+  commandPath: "/opt/homebrew/bin/qwen",
+  detectedVersion: "0.18.0",
+  supportedVersions: ">=0.18.0 <1.0.0",
+  homepage: "https://qwenlm.github.io/qwen-code-docs/",
+  installDocs: "https://qwenlm.github.io/qwen-code-docs/en/users/installation/",
+  managedByTower: false as const,
+};
+
 const plugin = {
-  id: "@acme/community-cli",
-  version: "1.2.3",
-  source: "npm" as const,
+  id: "community.qwen-code",
+  version: "0.1.0",
+  source: "catalog" as const,
   enabled: true,
-  displayName: "Acme Community CLI",
-  permissions: ["process:spawn"],
+  displayName: "Qwen Code",
+  permissions: ["process:spawn", "network:provider"],
   permissionConfirmed: true,
   installedAt: "2026-07-25T00:00:00.000Z",
   updatedAt: "2026-07-25T00:00:00.000Z",
   health: "ready" as const,
-  capabilities: { sessions: { fresh: true }, query: { generate: true }, models: true },
+  dependency,
+  capabilities: {
+    sessions: { fresh: true, resume: true, continue: true },
+    query: { generate: true, stream: true },
+    models: false,
+    integrations: { mcp: false, hooks: false, skills: false },
+  },
+};
+
+const catalogItem = {
+  id: plugin.id,
+  kind: "cli-provider" as const,
+  publisher: { id: "tower-community", name: "Tower Community" },
+  display: {
+    name: plugin.displayName,
+    description: "Use an existing Qwen Code CLI installation from Tower.",
+    homepage: dependency.homepage,
+  },
+  latestVersion: plugin.version,
+  versions: [{
+    version: plugin.version,
+    cliDependency: {
+      name: dependency.dependency,
+      command: "qwen",
+      versionArgs: ["--version"],
+      supportedVersions: dependency.supportedVersions,
+      homepage: dependency.homepage,
+      installDocs: dependency.installDocs,
+      managedByTower: false as const,
+    },
+  }],
+  installed: plugin,
+  updateAvailable: false,
 };
 
 const safePlan = {
@@ -44,14 +88,21 @@ const safePlan = {
   expiresAt: "2026-07-25T00:10:00.000Z",
   operation: "install" as const,
   pluginId: plugin.id,
-  source: "npm" as const,
+  source: "catalog" as const,
   fromVersion: null,
   toVersion: plugin.version,
   displayName: plugin.displayName,
-  description: "Community provider",
+  description: catalogItem.display.description,
+  publisher: catalogItem.publisher,
+  cliDependency: catalogItem.versions[0].cliDependency,
+  dependency,
   compatibility: { tower: ">=0.2.0", node: ">=20" },
   capabilities: plugin.capabilities,
-  permissions: { requested: ["process:spawn"], added: ["process:spawn"], removed: [] },
+  permissions: {
+    requested: ["process:spawn", "network:provider"],
+    added: ["process:spawn", "network:provider"],
+    removed: [],
+  },
 };
 
 function renderSection() {
@@ -62,6 +113,7 @@ describe("CLI plugin settings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     actionMocks.listCliPlugins.mockResolvedValue({ ok: true, data: [plugin] });
+    actionMocks.listCliProviderCatalog.mockResolvedValue({ ok: true, data: [catalogItem] });
     actionMocks.installCliPlugin.mockResolvedValue({ ok: true, data: { ...plugin, enabled: false } });
     actionMocks.reviewInstalledCliPlugin.mockResolvedValue({ ok: true, data: safePlan });
     actionMocks.confirmAndEnableCliPlugin.mockResolvedValue({ ok: true, data: plugin });
@@ -70,28 +122,100 @@ describe("CLI plugin settings", () => {
     actionMocks.revealCliPluginSecret.mockResolvedValue({ ok: true, data: { value: "default" } });
   });
 
-  it("reviews a safe permission diff before separate install and enable calls", async () => {
+  it("loads and searches the CLI provider catalog", async () => {
     const user = userEvent.setup();
-    actionMocks.planNpmCliPlugin.mockResolvedValue({
+    actionMocks.listCliProviderCatalog.mockImplementation(async (query: string) => ({
+      ok: true,
+      data: query === "not-found" ? [] : [catalogItem],
+    }));
+
+    renderSection();
+    expect(await screen.findByText(plugin.displayName)).toBeInTheDocument();
+    expect(screen.getByText(/Tower 不负责安装或登录|Tower does not install or sign in/i)).toBeInTheDocument();
+
+    await user.type(screen.getByRole("searchbox", { name: /搜索 Provider Catalog|Search provider catalog/i }), "not-found");
+    await waitFor(() => expect(actionMocks.listCliProviderCatalog).toHaveBeenLastCalledWith("not-found"));
+    expect(await screen.findByText(/没有匹配的 Provider|No matching providers/i)).toBeInTheDocument();
+  });
+
+  it("renders a safe catalog-unavailable state", async () => {
+    actionMocks.listCliProviderCatalog.mockResolvedValue({
+      ok: false,
+      error: { code: "catalog_unavailable", message: "https://private.invalid/catalog.json failed" },
+    });
+
+    renderSection();
+    expect(await screen.findByText(/Catalog 不可用|Catalog unavailable/i)).toBeInTheDocument();
+    expect(screen.queryByText(/private\.invalid/)).not.toBeInTheDocument();
+  });
+
+  it("reviews a catalog plan before separate disabled install and permission enable calls", async () => {
+    const user = userEvent.setup();
+    const availableItem = { ...catalogItem, installed: null };
+    actionMocks.listCliPlugins.mockResolvedValue({ ok: true, data: [] });
+    actionMocks.listCliProviderCatalog.mockResolvedValue({ ok: true, data: [availableItem] });
+    actionMocks.planCatalogCliPlugin.mockResolvedValue({
       ok: true,
       data: safePlan,
     });
     renderSection();
     await screen.findByText(plugin.displayName);
-    await user.click(screen.getByRole("button", { name: /添加 CLI 插件|Add CLI plugin/i }));
+    await user.click(screen.getByRole("button", { name: /^安装$|^Install$/i }));
     const dialog = screen.getByRole("dialog");
-    await user.type(within(dialog).getByLabelText(/npm 包名|npm package/i), plugin.id);
-    await user.type(within(dialog).getByLabelText(/精确版本|Exact version/i), plugin.version);
+    expect(within(dialog).queryByLabelText(/npm 包名|npm package/i)).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: /审查安装计划|Review install plan/i }));
-    await waitFor(() => expect(actionMocks.planNpmCliPlugin).toHaveBeenCalledWith(plugin.id, plugin.version));
-    expect(await screen.findByText("process:spawn")).toBeInTheDocument();
+    await waitFor(() => expect(actionMocks.planCatalogCliPlugin).toHaveBeenCalledWith(plugin.id, plugin.version));
+    expect(await within(dialog).findByText(/process:spawn/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/network:provider/)).toBeInTheDocument();
+    expect(within(dialog).getByText("Tower Community")).toBeInTheDocument();
     const plannedDialog = screen.getByRole("dialog");
-    expect(within(plannedDialog).getByText(/新增|Added/i)).toBeInTheDocument();
+    expect(within(plannedDialog).getAllByText(/新增|Added/i)).toHaveLength(2);
 
     await user.click(within(plannedDialog).getByRole("button", { name: /安装（保持禁用）|Install disabled/i }));
     await waitFor(() => expect(actionMocks.installCliPlugin).toHaveBeenCalledWith("sha256-safe-plan-digest-value"));
+    expect(await within(screen.getByRole("dialog")).findByText(/已安装并保持禁用|installed and remains disabled/i)).toBeInTheDocument();
+    expect(actionMocks.confirmAndEnableCliPlugin).not.toHaveBeenCalled();
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: /确认权限并启用|Confirm permissions and enable/i }));
     await waitFor(() => expect(actionMocks.confirmAndEnableCliPlugin).toHaveBeenCalledWith("sha256-safe-plan-digest-value"));
+  });
+
+  it("blocks plan continuation and shows a safe missing CLI diagnostic", async () => {
+    const user = userEvent.setup();
+    const missing = { ...dependency, state: "missing" as const, commandPath: null, detectedVersion: null };
+    actionMocks.listCliPlugins.mockResolvedValue({ ok: true, data: [] });
+    actionMocks.listCliProviderCatalog.mockResolvedValue({ ok: true, data: [{ ...catalogItem, installed: null }] });
+    actionMocks.planCatalogCliPlugin.mockResolvedValue({
+      ok: false,
+      error: { code: "cli_not_found", message: "private command resolution details", diagnostic: missing },
+    });
+
+    renderSection();
+    await screen.findByText(plugin.displayName);
+    await user.click(screen.getByRole("button", { name: /^安装$|^Install$/i }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: /审查安装计划|Review install plan/i }));
+
+    expect(await screen.findByText(/未找到插件 CLI 命令|CLI command was not found/i)).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByText((content) => content.includes(dependency.supportedVersions))).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /打开 CLI 安装文档|Open CLI installation docs/i })).toHaveAttribute("href", dependency.installDocs);
+    expect(actionMocks.installCliPlugin).not.toHaveBeenCalled();
+  });
+
+  it("keeps local directory registration in a separate developer flow", async () => {
+    const user = userEvent.setup();
+    actionMocks.planLocalCliPlugin.mockResolvedValue({
+      ok: true,
+      data: { ...safePlan, source: "development" },
+    });
+
+    renderSection();
+    await screen.findByText(plugin.displayName);
+    await user.click(screen.getByRole("button", { name: /注册本地目录|Register local directory/i }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).queryByLabelText(/npm 包名|npm package/i)).not.toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText(/插件目录|Plugin directory/i), "/tmp/qwen-provider-dev");
+    await user.click(within(dialog).getByRole("button", { name: /审查安装计划|Review install plan/i }));
+
+    await waitFor(() => expect(actionMocks.planLocalCliPlugin).toHaveBeenCalledWith("/tmp/qwen-provider-dev"));
   });
 
   it("recovers permission review for an installed plugin after client or server state is lost", async () => {
@@ -99,6 +223,10 @@ describe("CLI plugin settings", () => {
     actionMocks.listCliPlugins.mockResolvedValue({
       ok: true,
       data: [{ ...plugin, enabled: false, permissionConfirmed: false, health: "disabled" }],
+    });
+    actionMocks.listCliProviderCatalog.mockResolvedValue({
+      ok: true,
+      data: [{ ...catalogItem, installed: { ...plugin, enabled: false, permissionConfirmed: false, health: "disabled" } }],
     });
     renderSection();
     await screen.findByText(plugin.displayName);
@@ -188,7 +316,7 @@ describe("CLI plugin settings", () => {
     expect(within(dialog).getByText("Active")).toBeInTheDocument();
     expect(within(dialog).getByText("Mode")).toBeInTheDocument();
     await user.click(within(dialog).getByLabelText("Retries"));
-    await user.click(screen.getByRole("option", { name: "2" }));
+    await user.click(await screen.findByRole("option", { name: "2" }));
     await user.click(within(dialog).getByRole("button", { name: /^保存$|^Save$/i }));
     await waitFor(() => expect(actionMocks.saveCliPluginConnection).toHaveBeenCalled());
     const savedSettings = actionMocks.saveCliPluginConnection.mock.calls[0]?.[0].settings;

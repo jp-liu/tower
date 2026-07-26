@@ -230,6 +230,69 @@ describe("CLI plugin application lifecycle", () => {
     expect(await runtime.get(pluginId)).toBeNull();
   });
 
+  it("requires confirmation again when a catalog update adds a permission", async () => {
+    const source = await fixture();
+    const dataRoot = await fs.mkdtemp(path.join(os.tmpdir(), "tower-plugin-catalog-update-"));
+    temporaryRoots.push(dataRoot);
+    const catalog = new FixtureExtensionCatalog({
+      schemaVersion: 1,
+      extensions: [{
+        id: pluginId,
+        kind: "cli-provider",
+        publisher: { id: "fixture-labs", name: "Fixture Labs" },
+        display: { name: "Fixture CLI" },
+        versions: ["1.0.0", "1.1.0"].map((version) => ({
+          version,
+          artifact: {
+            url: `https://catalog.example.test/fixture-cli-${version}.tgz`,
+            sha256: version === "1.0.0" ? "1".repeat(64) : "2".repeat(64),
+            size: 1,
+          },
+        })),
+      }],
+    });
+    const application = new CliPluginApplication({
+      dataRoot,
+      catalog,
+      runtime: new CliPluginRuntime({
+        dataRoot,
+        towerVersion: "0.3.0",
+        cliDependencyVerifier: readyVerifier(),
+        artifactProvider: {
+          stage: async (_artifact, destination) => fs.cp(source, destination, { recursive: true }),
+        },
+      }),
+    });
+
+    const initial = await application.planCatalog(pluginId, "1.0.0");
+    await application.install(initial.planDigest);
+    await application.confirmAndEnable(initial.planDigest);
+
+    const packagePath = path.join(source, "package.json");
+    const packageJson = JSON.parse(await fs.readFile(packagePath, "utf8"));
+    packageJson.version = "1.1.0";
+    packageJson.tower.permissions.push("filesystem:plugin-storage");
+    await fs.writeFile(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
+
+    const update = await application.planCatalog(pluginId, "1.1.0");
+    expect(update).toMatchObject({
+      operation: "upgrade",
+      fromVersion: "1.0.0",
+      toVersion: "1.1.0",
+      permissions: { added: ["filesystem:plugin-storage"] },
+    });
+    await expect(application.install(update.planDigest)).resolves.toMatchObject({
+      version: "1.1.0",
+      enabled: false,
+      permissionConfirmed: false,
+    });
+    await expect(application.enable(pluginId)).rejects.toMatchObject({ code: "permission_required" });
+    await expect(application.confirmAndEnable(update.planDigest)).resolves.toMatchObject({
+      enabled: true,
+      permissionConfirmed: true,
+    });
+  });
+
   it("carries an unregistered local plugin through install, test, slots, Terminal, and query", async () => {
     if (isWindows()) return;
     const source = await fixture();
