@@ -676,6 +676,32 @@ test.describe.serial("AI Tools 0.3 final browser acceptance", () => {
         const sidebarBox = await page.locator("aside").first().boundingBox();
         expect(sidebarBox?.width).toBeLessThanOrEqual(56);
       }
+      if (viewport.name === "mobile-extensions") {
+        const projectActions = page.locator("header").getByRole("button", { name: "Project actions" });
+        await expect(projectActions).toBeVisible();
+        const actionsBox = await projectActions.boundingBox();
+        expect(actionsBox?.x).toBeGreaterThanOrEqual(0);
+        expect((actionsBox?.x ?? 0) + (actionsBox?.width ?? 0)).toBeLessThanOrEqual(viewport.width);
+
+        await projectActions.focus();
+        await page.keyboard.press("Enter");
+        const importProject = page.getByRole("menuitem", { name: "Import Project" });
+        const newProject = page.getByRole("menuitem", { name: "New Project" });
+        await expect(importProject).toBeVisible();
+        await expect(newProject).toBeVisible();
+
+        await importProject.focus();
+        await page.keyboard.press("Enter");
+        await expect(page.getByRole("heading", { name: "Import Project" })).toBeVisible();
+        await page.keyboard.press("Escape");
+
+        await projectActions.focus();
+        await page.keyboard.press("Enter");
+        await newProject.focus();
+        await page.keyboard.press("Enter");
+        await expect(page.getByRole("heading", { name: "New Project" })).toBeVisible();
+        await page.keyboard.press("Escape");
+      }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
       if (!skipScreenshots) {
         await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}.png`), fullPage: false });

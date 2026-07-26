@@ -5,7 +5,18 @@ import { useActionShortcut } from "@/lib/shortcuts";
 import { useUiDialogStore } from "@/stores/ui-dialog-store";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Search, Settings, Plus, Command, Globe, FolderOpen, Bot, Sun, Moon } from "lucide-react";
+import {
+  Search,
+  Settings,
+  Plus,
+  Command,
+  Globe,
+  FolderOpen,
+  Bot,
+  Sun,
+  Moon,
+  MoreHorizontal,
+} from "lucide-react";
 
 // GitHub mark — lucide-react dropped brand icons in v0.488+, inline SVG instead.
 function GithubMark({ className }: { className?: string }) {
@@ -260,6 +271,31 @@ export function TopBar({ onCreateProject, username, workspaces, defaultWorkspace
             <Plus className="h-3.5 w-3.5" />
             {t("topbar.newProject")}
           </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="lg:hidden"
+                  aria-label={t("topbar.projectActions")}
+                />
+              }
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" sideOffset={8} className="w-48">
+              <DropdownMenuItem onClick={() => setImportProjectOpen(true)}>
+                <FolderOpen className="mr-2 h-3.5 w-3.5" />
+                {t("topbar.importProject")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setCreateProjectOpen(true)}>
+                <Plus className="mr-2 h-3.5 w-3.5" />
+                {t("topbar.newProject")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* User Avatar + Dropdown (Settings inside) */}
           <DropdownMenu>

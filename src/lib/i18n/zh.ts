@@ -31,6 +31,7 @@ export const zh = {
   // Top bar
   "topbar.newProject": "新建项目",
   "topbar.importProject": "导入项目",
+  "topbar.projectActions": "项目操作",
   "topbar.searchPlaceholder": "搜索任务、项目、仓库、笔记、资源...",
   "topbar.github": "GitHub",
   // Project creation
