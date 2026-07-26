@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { I18nProvider } from "@/lib/i18n";
-import { CliPluginsSection } from "../cli-plugins-section";
+import { CliPluginsSection, invalidateCliPluginCache } from "../cli-plugins-section";
 import { CLI_SECRET_MASK } from "@/lib/ai/cli-plugin-shared";
 
 const actionMocks = vi.hoisted(() => ({
@@ -120,6 +120,7 @@ function renderSection() {
 describe("CLI plugin settings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    invalidateCliPluginCache();
     actionMocks.listCliPlugins.mockResolvedValue({ ok: true, data: [plugin] });
     actionMocks.listCliProviderCatalog.mockResolvedValue({ ok: true, data: [catalogItem] });
     actionMocks.installCliPlugin.mockResolvedValue({ ok: true, data: { ...plugin, enabled: false } });
@@ -132,10 +133,6 @@ describe("CLI plugin settings", () => {
 
   it("loads and searches the CLI provider catalog", async () => {
     const user = userEvent.setup();
-    actionMocks.listCliProviderCatalog.mockImplementation(async (query: string) => ({
-      ok: true,
-      data: query === "not-found" ? [] : [catalogItem],
-    }));
 
     renderSection();
     expect(await screen.findByText(plugin.displayName)).toBeInTheDocument();
@@ -147,8 +144,34 @@ describe("CLI plugin settings", () => {
     expect(await screen.findByText(plugin.displayName)).toBeInTheDocument();
 
     await user.type(screen.getByRole("searchbox", { name: /搜索 Provider Catalog|Search provider catalog/i }), "not-found");
-    await waitFor(() => expect(actionMocks.listCliProviderCatalog).toHaveBeenLastCalledWith("not-found"));
     expect(await screen.findByText(/没有匹配的 Provider|No matching providers/i)).toBeInTheDocument();
+    expect(actionMocks.listCliProviderCatalog).toHaveBeenCalledTimes(1);
+    expect(actionMocks.listCliProviderCatalog).toHaveBeenCalledWith("");
+  });
+
+  it("reuses extension data when the settings section remounts", async () => {
+    const first = renderSection();
+    await screen.findByText(plugin.displayName);
+    await waitFor(() => {
+      expect(actionMocks.listCliPlugins).toHaveBeenCalledTimes(1);
+      expect(actionMocks.listCliProviderCatalog).toHaveBeenCalledTimes(1);
+    });
+    first.unmount();
+
+    renderSection();
+    expect(await screen.findByText(plugin.displayName)).toBeInTheDocument();
+    expect(actionMocks.listCliPlugins).toHaveBeenCalledTimes(1);
+    expect(actionMocks.listCliProviderCatalog).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetches the catalog again only when refresh is requested", async () => {
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText(plugin.displayName);
+    await user.click(screen.getByRole("button", { name: /刷新 Catalog|Refresh Catalog/i }));
+
+    await waitFor(() => expect(actionMocks.listCliProviderCatalog).toHaveBeenCalledTimes(2));
+    expect(actionMocks.listCliPlugins).toHaveBeenCalledTimes(1);
   });
 
   it("renders a safe catalog-unavailable state", async () => {

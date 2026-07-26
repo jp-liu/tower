@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  Activity,
   Check,
   CircleAlert,
   CircleDashed,
   Loader2,
   PlugZap,
   RefreshCw,
-  ShieldCheck,
   TerminalSquare,
   X,
 } from "lucide-react";
@@ -349,7 +349,7 @@ export function ConnectionsSection() {
                         >
                           {isTesting
                             ? <Loader2 className="animate-spin" aria-hidden />
-                            : <ShieldCheck aria-hidden />}
+                            : <Activity aria-hidden />}
                         </TooltipTrigger>
                         <TooltipContent>{t("settings.aiTools.testConnection")}</TooltipContent>
                       </Tooltip>

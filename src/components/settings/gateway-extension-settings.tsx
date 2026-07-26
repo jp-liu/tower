@@ -36,6 +36,16 @@ const EXTENSION_BY_GATEWAY = {
 const CONFIG_KEY = "harness.gatewayConfig";
 const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+type GatewaySnapshot = { config: GatewayConfigMap; status: GatewayStatusMap };
+
+let gatewaySnapshot: GatewaySnapshot | null = null;
+let gatewayRequest: Promise<GatewaySnapshot> | null = null;
+
+export function invalidateGatewaySettingsCache() {
+  gatewaySnapshot = null;
+  gatewayRequest = null;
+}
+
 function envToText(env: Record<string, string> | undefined): string {
   return Object.entries(env ?? {})
     .map(([key, value]) => `${key}=${value}`)
@@ -76,35 +86,54 @@ function fromLegacyTargets(targets: LegacyTarget[]): GatewayConfigMap {
   return map;
 }
 
+function requestGatewaySnapshot() {
+  gatewayRequest ??= Promise.all([
+    getConfigValue<GatewayConfigMap>(CONFIG_KEY, {}),
+    getConfigValue<LegacyTarget[]>("harness.targets", []),
+    checkExtension("tower-agent-openclaw"),
+    checkExtension("tower-agent-hermes"),
+  ]).then(([stored, targets, openclawStatus, hermesStatus]) => {
+    const legacy = fromLegacyTargets(Array.isArray(targets) ? targets : []);
+    return {
+      config: {
+        openclaw: { ...(legacy.openclaw ?? {}), ...(stored.openclaw ?? {}) },
+        hermes: { ...(legacy.hermes ?? {}), ...(stored.hermes ?? {}) },
+      },
+      status: {
+        openclaw: { installed: openclawStatus.installed, version: openclawStatus.version },
+        hermes: { installed: hermesStatus.installed, version: hermesStatus.version },
+      },
+    };
+  }).finally(() => {
+    gatewayRequest = null;
+  });
+  return gatewayRequest;
+}
+
 export function GatewayExtensionSettings() {
   const { t } = useI18n();
   const tk = (k: string) => t(k as Parameters<typeof t>[0]);
-  const [config, setConfig] = useState<GatewayConfigMap>({});
-  const [status, setStatus] = useState<GatewayStatusMap>({});
-  const [loading, setLoading] = useState(true);
+  const [config, setConfig] = useState<GatewayConfigMap>(() => gatewaySnapshot?.config ?? {});
+  const [status, setStatus] = useState<GatewayStatusMap>(() => gatewaySnapshot?.status ?? {});
+  const [loading, setLoading] = useState(() => gatewaySnapshot === null);
   const [saving, startSave] = useTransition();
   const [installing, setInstalling] = useState<Gateway | null>(null);
   const [refreshing, setRefreshing] = useState<Gateway | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      getConfigValue<GatewayConfigMap>(CONFIG_KEY, {}),
-      getConfigValue<LegacyTarget[]>("harness.targets", []),
-      checkExtension("tower-agent-openclaw"),
-      checkExtension("tower-agent-hermes"),
-    ])
-      .then(([stored, targets, openclawStatus, hermesStatus]) => {
-        const legacy = fromLegacyTargets(Array.isArray(targets) ? targets : []);
-        setConfig({
-          openclaw: { ...(legacy.openclaw ?? {}), ...(stored.openclaw ?? {}) },
-          hermes: { ...(legacy.hermes ?? {}), ...(stored.hermes ?? {}) },
-        });
-        setStatus({
-          openclaw: { installed: openclawStatus.installed, version: openclawStatus.version },
-          hermes: { installed: hermesStatus.installed, version: hermesStatus.version },
-        });
+    if (gatewaySnapshot) return;
+    let active = true;
+    void requestGatewaySnapshot()
+      .then((snapshot) => {
+        gatewaySnapshot = snapshot;
+        if (!active) return;
+        setConfig(snapshot.config);
+        setStatus(snapshot.status);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
   }, []);
 
   const patch = (gateway: Gateway, next: Partial<GatewayRuntimeConfig>) => {
@@ -119,6 +148,15 @@ export function GatewayExtensionSettings() {
 
   const save = async (nextConfig = config) => {
     await setConfigValue(CONFIG_KEY, nextConfig);
+    gatewaySnapshot = { config: nextConfig, status };
+  };
+
+  const updateStatus = (gateway: Gateway, next: { installed: boolean; version?: string }) => {
+    setStatus((current) => {
+      const updated = { ...current, [gateway]: next };
+      gatewaySnapshot = { config, status: updated };
+      return updated;
+    });
   };
 
   const saveWithToast = () => {
@@ -150,10 +188,7 @@ export function GatewayExtensionSettings() {
         return;
       }
       const nextStatus = await checkExtension(EXTENSION_BY_GATEWAY[gateway]);
-      setStatus((current) => ({
-        ...current,
-        [gateway]: { installed: nextStatus.installed, version: nextStatus.version },
-      }));
+      updateStatus(gateway, { installed: nextStatus.installed, version: nextStatus.version });
       toast.success(wasInstalled ? t("settings.extensions.gateway.updateSuccess") : t("settings.extensions.gateway.installSuccess"));
     } catch (err) {
       toast.error(`${t("settings.extensions.gateway.installFailed")}：${err instanceof Error ? err.message : String(err)}`);
@@ -166,10 +201,7 @@ export function GatewayExtensionSettings() {
     setRefreshing(gateway);
     try {
       const nextStatus = await checkExtension(EXTENSION_BY_GATEWAY[gateway]);
-      setStatus((current) => ({
-        ...current,
-        [gateway]: { installed: nextStatus.installed, version: nextStatus.version },
-      }));
+      updateStatus(gateway, { installed: nextStatus.installed, version: nextStatus.version });
     } finally {
       setRefreshing(null);
     }

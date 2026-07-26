@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Activity,
   Check,
   CircleAlert,
   Clipboard,
@@ -80,6 +81,34 @@ type DependencyDiagnostic = {
 };
 const DEFAULT_SENSITIVE_NAME = /(authorization|token|key|secret|password|passwd|credential|cookie)/i;
 const CONNECTIONS_CHANGED_EVENT = "tower:provider-connections-changed";
+
+type ResourceSnapshot<T> = { data: T; error: string | null };
+
+let pluginSnapshot: ResourceSnapshot<Plugin[]> | null = null;
+let catalogSnapshot: ResourceSnapshot<CatalogItem[]> | null = null;
+let pluginRequest: Promise<PluginResult> | null = null;
+let catalogRequest: Promise<CatalogResult> | null = null;
+
+export function invalidateCliPluginCache() {
+  pluginSnapshot = null;
+  catalogSnapshot = null;
+  pluginRequest = null;
+  catalogRequest = null;
+}
+
+function requestPlugins() {
+  pluginRequest ??= listCliPlugins().finally(() => {
+    pluginRequest = null;
+  });
+  return pluginRequest;
+}
+
+function requestCatalog() {
+  catalogRequest ??= listCliProviderCatalog("").finally(() => {
+    catalogRequest = null;
+  });
+  return catalogRequest;
+}
 
 function notifyConnectionsChanged() {
   window.dispatchEvent(new Event(CONNECTIONS_CHANGED_EVENT));
@@ -222,12 +251,12 @@ function SettingsField({
 
 export function CliPluginsSection() {
   const { t } = useI18n();
-  const [plugins, setPlugins] = useState<Plugin[]>([]);
-  const [catalog, setCatalog] = useState<CatalogItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [catalogLoading, setCatalogLoading] = useState(true);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [plugins, setPlugins] = useState<Plugin[]>(() => pluginSnapshot?.data ?? []);
+  const [catalog, setCatalog] = useState<CatalogItem[]>(() => catalogSnapshot?.data ?? []);
+  const [loading, setLoading] = useState(() => pluginSnapshot === null);
+  const [loadError, setLoadError] = useState<string | null>(() => pluginSnapshot?.error ?? null);
+  const [catalogLoading, setCatalogLoading] = useState(() => catalogSnapshot === null);
+  const [catalogError, setCatalogError] = useState<string | null>(() => catalogSnapshot?.error ?? null);
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState<ExtensionKindFilter>("all");
   const [pending, setPending] = useState<string | null>(null);
@@ -253,24 +282,41 @@ export function CliPluginsSection() {
     state: string;
   }>>([]);
 
-  const load = useCallback(async () => {
-    const result = await listCliPlugins();
+  const load = useCallback(async (force = false) => {
+    if (!force && pluginSnapshot) {
+      setPlugins(pluginSnapshot.data);
+      setLoadError(pluginSnapshot.error);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const result = await requestPlugins();
     if (result.ok) {
+      pluginSnapshot = { data: result.data, error: null };
       setPlugins(result.data);
       setLoadError(null);
     } else {
+      pluginSnapshot = { data: [], error: result.error.code };
       setLoadError(result.error.code);
     }
     setLoading(false);
   }, []);
 
-  const loadCatalog = useCallback(async (query: string) => {
+  const loadCatalog = useCallback(async (force = false) => {
+    if (!force && catalogSnapshot) {
+      setCatalog(catalogSnapshot.data);
+      setCatalogError(catalogSnapshot.error);
+      setCatalogLoading(false);
+      return;
+    }
     setCatalogLoading(true);
-    const result = await listCliProviderCatalog(query);
+    const result = await requestCatalog();
     if (result.ok) {
+      catalogSnapshot = { data: result.data, error: null };
       setCatalog(result.data);
       setCatalogError(null);
     } else {
+      catalogSnapshot = { data: [], error: result.error.code };
       setCatalogError(result.error.code);
     }
     setCatalogLoading(false);
@@ -282,9 +328,9 @@ export function CliPluginsSection() {
   }, [load]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { void loadCatalog(search); }, 250);
+    const timer = window.setTimeout(() => { void loadCatalog(); }, 0);
     return () => window.clearTimeout(timer);
-  }, [loadCatalog, search]);
+  }, [loadCatalog]);
 
   function resetInstall() {
     setPlan(null);
@@ -314,8 +360,7 @@ export function CliPluginsSection() {
     const result = await installCliPlugin(plan.planDigest);
     if (result.ok) {
       setInstalled(true);
-      await load();
-      await loadCatalog(search);
+      await load(true);
       notifyConnectionsChanged();
     } else setDialogError(actionError(t, result.error.code));
     setPending(null);
@@ -328,8 +373,7 @@ export function CliPluginsSection() {
     if (result.ok) {
       setInstallOpen(false);
       resetInstall();
-      await load();
-      await loadCatalog(search);
+      await load(true);
       notifyConnectionsChanged();
       toast.success(t("settings.cliPlugins.enabled"));
     } else setDialogError(actionError(t, result.error.code));
@@ -347,8 +391,7 @@ export function CliPluginsSection() {
     if (!result.ok) toast.error(actionError(t, result.error.code));
     else {
       toast.success(t(current.type === "disable" ? "settings.cliPlugins.disabled" : "settings.cliPlugins.uninstalled"));
-      await load();
-      await loadCatalog(search);
+      await load(true);
       notifyConnectionsChanged();
     }
     setPending(null);
@@ -359,8 +402,7 @@ export function CliPluginsSection() {
     const result = await enableCliPlugin(pluginId);
     if (result.ok) {
       toast.success(t("settings.cliPlugins.enabled"));
-      await load();
-      await loadCatalog(search);
+      await load(true);
       notifyConnectionsChanged();
     } else toast.error(actionError(t, result.error.code));
     setPending(null);
@@ -467,8 +509,7 @@ export function CliPluginsSection() {
       setDetail(result.data);
       setSettings(result.data.settings);
       toast.success(t("settings.cliPlugins.configurationSaved"));
-      await load();
-      await loadCatalog(search);
+      await load(true);
       notifyConnectionsChanged();
     } else toast.error(actionError(t, result.error.code));
     setPending(null);
@@ -480,7 +521,7 @@ export function CliPluginsSection() {
     const candidates = result.ok ? result.data.candidates : [];
     if (result.ok) toast.success(t("settings.cliPlugins.testPassed"));
     else toast.error(actionError(t, result.error.code));
-    await load();
+    await load(true);
     notifyConnectionsChanged();
     if (detail?.pluginId === pluginId) {
       await openConfiguration(pluginId);
@@ -494,17 +535,29 @@ export function CliPluginsSection() {
     const result = await recoverCliPluginRegistry();
     if (result.ok) {
       toast.success(t("settings.cliPlugins.registryRecovered"));
-      await load();
-      await loadCatalog(search);
+      await load(true);
     } else toast.error(actionError(t, result.error.code));
     setPending(null);
   }
 
   const canPlan = installMode === "catalog" ? Boolean(catalogTarget) : Boolean(directory.trim());
   const developerPlugins = plugins.filter((plugin) => plugin.source !== "catalog");
-  const filteredCatalog = kindFilter === "all"
-    ? catalog
-    : catalog.filter((item) => item.kind === kindFilter);
+  const pluginsById = useMemo(() => new Map(plugins.map((plugin) => [plugin.id, plugin])), [plugins]);
+  const filteredCatalog = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    return catalog.filter((item) => {
+      if (kindFilter !== "all" && item.kind !== kindFilter) return false;
+      if (!query) return true;
+      const release = item.versions.find((version) => version.version === item.latestVersion) ?? item.versions[0];
+      return [
+        item.id,
+        item.display.name,
+        item.display.description,
+        item.publisher.name,
+        release?.cliDependency?.name,
+      ].some((value) => value?.toLocaleLowerCase().includes(query));
+    });
+  }, [catalog, kindFilter, search]);
   const catalogNotConfigured = catalogError === "catalog_unavailable";
   const schemaFields = useMemo(() => detail ? schemaProperties(detail.configSchema) : [], [detail]);
 
@@ -518,7 +571,7 @@ export function CliPluginsSection() {
           </div>
           <Button
             variant="outline"
-            onClick={() => void loadCatalog(search)}
+            onClick={() => void loadCatalog(true)}
             disabled={catalogLoading}
           >
             <RefreshCw className={catalogLoading ? "animate-spin" : undefined} />
@@ -564,7 +617,7 @@ export function CliPluginsSection() {
               <p className="text-sm font-medium text-destructive">{t("settings.cliPlugins.catalogUnavailable")}</p>
               <p className="mt-1 text-xs text-muted-foreground">{actionError(t, catalogError)}</p>
             </div>
-            <Button variant="outline" onClick={() => void loadCatalog(search)}>{t("settings.cliPlugins.refreshCatalog")}</Button>
+            <Button variant="outline" onClick={() => void loadCatalog(true)}>{t("settings.cliPlugins.refreshCatalog")}</Button>
           </div>
         ) : filteredCatalog.length === 0 ? (
           <div className="rounded-md border border-dashed px-4 py-8 text-center">
@@ -574,7 +627,7 @@ export function CliPluginsSection() {
         ) : (
           <ul className="grid gap-3">
             {filteredCatalog.map((item) => {
-              const plugin = item.installed;
+              const plugin = pluginsById.get(item.id);
               const release = item.versions.find((version) => version.version === item.latestVersion) ?? item.versions[0];
               const dependency = plugin?.dependency;
               const dependencyBlocksEnable = plugin?.health === "dependency-missing"
@@ -620,7 +673,7 @@ export function CliPluginsSection() {
                         <Button onClick={() => openCatalogPlan(item)} disabled={pending !== null}><PackagePlus />{t("settings.extensions.install")}</Button>
                       ) : (
                         <>
-                          <Button variant="outline" onClick={() => void testConnection(plugin.id)} disabled={!plugin.enabled || pending !== null}>{pending === `test:${plugin.id}` && <Loader2 className="animate-spin" />}<ShieldCheck />{t("settings.aiTools.testConnection")}</Button>
+                          <Button variant="outline" onClick={() => void testConnection(plugin.id)} disabled={!plugin.enabled || pending !== null}>{pending === `test:${plugin.id}` ? <Loader2 className="animate-spin" /> : <Activity />}{t("settings.aiTools.testConnection")}</Button>
                           <Button variant="outline" onClick={() => void openConfiguration(plugin.id)} disabled={!plugin.enabled || pending !== null}><Pencil />{t("common.edit")}</Button>
                           {plugin.enabled
                             ? <Button variant="outline" onClick={() => setDanger({ type: "disable", plugin })}>{t("settings.cliPlugins.disable")}</Button>
@@ -661,7 +714,7 @@ export function CliPluginsSection() {
                 <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{plugin.id} · {plugin.version}</p>
               </div>
               <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
-                <Button variant="outline" onClick={() => void testConnection(plugin.id)} disabled={!plugin.enabled || pending !== null}>{pending === `test:${plugin.id}` && <Loader2 className="animate-spin" />}<ShieldCheck />{t("settings.aiTools.testConnection")}</Button>
+                <Button variant="outline" onClick={() => void testConnection(plugin.id)} disabled={!plugin.enabled || pending !== null}>{pending === `test:${plugin.id}` ? <Loader2 className="animate-spin" /> : <Activity />}{t("settings.aiTools.testConnection")}</Button>
                 <Button variant="outline" onClick={() => void openConfiguration(plugin.id)} disabled={!plugin.enabled || pending !== null}><Pencil />{t("common.edit")}</Button>
                 {!plugin.enabled && !plugin.permissionConfirmed && <Button variant="outline" onClick={() => void reviewInstalled(plugin)}>{t("settings.cliPlugins.reviewAndEnable")}</Button>}
                 {plugin.enabled ? <Button variant="outline" onClick={() => setDanger({ type: "disable", plugin })}>{t("settings.cliPlugins.disable")}</Button> : plugin.permissionConfirmed && <Button variant="outline" onClick={() => void enablePlugin(plugin.id)}>{t("settings.cliPlugins.enable")}</Button>}
@@ -772,7 +825,7 @@ export function CliPluginsSection() {
             {detail.models.length > 0 && <div className="space-y-2 border-t pt-4"><h3 className="text-sm font-medium">{t("settings.cliPlugins.models")}</h3><div className="flex flex-wrap gap-1">{detail.models.map((model) => <Badge key={model} variant="outline">{model}</Badge>)}</div></div>}
             <div className="flex flex-wrap items-center gap-2 border-t pt-4"><Badge variant={detail.testOk ? "secondary" : "outline"}>{t(`settings.aiTools.status.${detail.testStatus}` as never)}</Badge>{detail.resolvedCommand && <span className="break-all font-mono text-[11px] text-muted-foreground">{detail.resolvedCommand} · {detail.resolvedVersion ?? t("settings.aiTools.versionUnknown")}</span>}</div>
           </div>}
-          <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => detail && void testConnection(detail.pluginId)} disabled={pending !== null}>{t("settings.aiTools.testConnection")}</Button><Button onClick={() => void saveConfiguration()} disabled={pending !== null}>{pending === "save-config" && <Loader2 className="animate-spin" />}{t("common.save")}</Button></DialogFooter>
+          <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => detail && void testConnection(detail.pluginId)} disabled={pending !== null}>{pending?.startsWith("test:") ? <Loader2 className="animate-spin" /> : <Activity />}{t("settings.aiTools.testConnection")}</Button><Button onClick={() => void saveConfiguration()} disabled={pending !== null}>{pending === "save-config" && <Loader2 className="animate-spin" />}{t("common.save")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
