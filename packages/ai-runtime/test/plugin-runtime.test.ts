@@ -78,6 +78,7 @@ async function createFixture(options: {
   packageJson.version = options.version ?? packageJson.version;
   if (options.dependencies) packageJson.dependencies = options.dependencies;
   const manifest = packageJson.tower as CliPluginManifestV1;
+  if (options.name) manifest.id = options.name.replace(/^@/, "").replace(/\//g, ".");
   if (options.permissions) manifest.permissions = options.permissions;
   await writePackageJson(packageRoot, packageJson);
   await syncProviderManifest(packageRoot);
@@ -304,7 +305,7 @@ describe("CLI plugin installation runtime", () => {
     const escapingPackage = await readPackageJson(escapingRoot);
     escapingPackage.exports = { "./tower-cli-provider": { import: ".\\..\\outside.js" } };
     await writePackageJson(escapingRoot, escapingPackage);
-    await expect(plugins.planLocalRegistration(escapingRoot)).rejects.toMatchObject({ code: "ENTRY_ESCAPE" });
+    await expect(plugins.planLocalRegistration(escapingRoot)).rejects.toMatchObject({ code: "INVALID_PACKAGE" });
   });
 
   it("accepts import-only ESM dependencies and rejects missing or native modules", async () => {
@@ -325,7 +326,7 @@ describe("CLI plugin installation runtime", () => {
     const plugins = runtime(await temporaryDirectory(), provider);
     const plan = await plugins.planNpmInstall("@fixture/tower-cli", "1.0.0");
     expect(plan).toMatchObject({
-      pluginId: "@fixture/tower-cli",
+      pluginId: "fixture.tower-cli",
     });
     await plugins.installNpm(plan);
     await plugins.confirmAndEnable(plan.pluginId, plan);
@@ -506,7 +507,7 @@ describe("CLI plugin installation runtime", () => {
     const plugins = runtime(await temporaryDirectory());
     const plan = await plugins.planLocalRegistration(packageRoot);
     const registered = await plugins.registerLocal(plan);
-    expect(registered.source).toBe("local");
+    expect(registered.source).toBe("development");
     expect(registered.installPath).toBe(await fs.realpath(packageRoot));
     expect(registered.enabled).toBe(false);
     await plugins.confirmAndEnable(registered.id, plan);
@@ -582,7 +583,7 @@ describe("plugin registry durability", () => {
     const plans = await Promise.all(packages.map((packageRoot, index) => runtimes[index].planLocalRegistration(packageRoot)));
     await Promise.all(plans.map((plan, index) => runtimes[index].registerLocal(plan)));
     expect((await runtime(dataRoot).list()).map((plugin) => plugin.id)).toEqual(
-      Array.from({ length: 6 }, (_, index) => `@fixture/plugin-${index}`),
+      Array.from({ length: 6 }, (_, index) => `fixture.plugin-${index}`),
     );
   });
 
@@ -613,7 +614,7 @@ describe("plugin registry durability", () => {
 
     await expect(staleInstall).rejects.toMatchObject({ code: "INSTALL_PLAN_MISMATCH" });
     expect(await winnerRuntime.get(initial.id)).toMatchObject({
-      source: "local",
+      source: "development",
       version: "1.0.0",
       installPath: winner.installPath,
     });
@@ -768,7 +769,7 @@ describe("plugin registry durability", () => {
 
     await expect(staleUninstall).rejects.toMatchObject({ code: "UNINSTALL_FAILED" });
     expect(await registeringRuntime.get(firstPlan.pluginId)).toMatchObject({
-      source: "local",
+      source: "development",
       version: "2.0.0",
       installPath: winner.installPath,
     });
@@ -783,7 +784,7 @@ describe("plugin registry durability", () => {
     await expect(registry.list()).rejects.toMatchObject({ code: "REGISTRY_CORRUPT" });
     const recovery = await registry.recover();
     expect(recovery).toMatchObject({ recovered: true });
-    expect(recovery.backupFileName).toMatch(/^registry\.v1\.corrupt\.\d+\.json$/);
+    expect(recovery.backupFileName).toMatch(/^registry\.v2\.corrupt\.\d+\.json$/);
     expect(await registry.list()).toEqual([]);
   });
 });

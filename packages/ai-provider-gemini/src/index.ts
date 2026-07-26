@@ -4,11 +4,14 @@ import { GeminiCliAdapter } from "./adapter.js";
 export const geminiManifest = {
   manifestVersion: 1,
   apiVersion: "1.0",
+  id: "tower.gemini-cli",
   kind: "cli-provider",
+  publisher: { id: "tower", name: "Tower" },
   display: {
     name: "Gemini CLI",
     description: "Official Tower provider for the Google Gemini CLI",
   },
+  entry: "./dist/index.js",
   command: {
     default: "gemini",
     aliases: ["gemini-cli"],
@@ -18,6 +21,13 @@ export const geminiManifest = {
       win32: ["%APPDATA%\\npm\\gemini.cmd"],
     },
     versionArgs: ["--version"],
+  },
+  cliDependency: {
+    name: "Gemini CLI",
+    homepage: "https://github.com/google-gemini/gemini-cli",
+    installDocs: "https://github.com/google-gemini/gemini-cli#installation",
+    supportedVersions: ">=0.1.0",
+    managedByTower: false,
   },
   compatibility: { tower: ">=0.3.0 <0.4.0", node: ">=18" },
   capabilities: {

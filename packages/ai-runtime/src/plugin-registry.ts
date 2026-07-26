@@ -45,7 +45,9 @@ function isManifestSummary(value: unknown): boolean {
     && value.manifestVersion === 1
     && typeof value.apiVersion === "string"
     && value.kind === "cli-provider"
-    && typeof value.displayName === "string";
+    && typeof value.displayName === "string"
+    && (value.extensionId === undefined || typeof value.extensionId === "string")
+    && (value.publisherId === undefined || typeof value.publisherId === "string");
 }
 
 function isPermissionConfirmation(value: unknown): boolean {
@@ -55,12 +57,19 @@ function isPermissionConfirmation(value: unknown): boolean {
     && isTimestamp(value.confirmedAt));
 }
 
-function isRegistration(value: unknown, id: string): value is PluginRegistration {
+function isRegistration(value: unknown, id: string, legacyV1 = false): value is PluginRegistration {
   if (!isRecord(value)) return false;
   return value.id === id
     && typeof value.version === "string"
     && typeof value.integrity === "string"
-    && (value.source === "npm" || value.source === "local")
+    && (legacyV1
+      ? value.source === "npm" || value.source === "local"
+      : value.source === "catalog"
+        || value.source === "development"
+        || value.source === "npm"
+        || value.source === "local"
+        || value.source === "legacy")
+    && (value.sourceLocator === undefined || typeof value.sourceLocator === "string")
     && typeof value.installPath === "string"
     && path.isAbsolute(value.installPath)
     && isManifestSummary(value.manifest)
@@ -87,6 +96,28 @@ function parseRegistry(contents: string): PluginRegistryData {
   }
 }
 
+function parseLegacyRegistry(contents: string): PluginRegistration[] {
+  try {
+    const value = JSON.parse(contents) as unknown;
+    if (!isRecord(value)
+      || value.version !== 1
+      || !isRecord(value.plugins)
+      || Object.entries(value.plugins).some(([id, registration]) => !isRegistration(registration, id, true))) {
+      throw new Error("Invalid legacy plugin registry structure");
+    }
+    return Object.values(value.plugins).map((registration) => {
+      const parsed = registration as PluginRegistration;
+      return {
+        ...parsed,
+        source: parsed.source === "local" ? "development" : "legacy",
+        ...(parsed.source === "npm" ? { sourceLocator: parsed.id } : {}),
+      };
+    });
+  } catch (error) {
+    throw pluginError("REGISTRY_CORRUPT", undefined, error);
+  }
+}
+
 export interface PluginRegistryOptions {
   dataRoot: string;
   fileSystem?: PluginFileSystem;
@@ -102,21 +133,34 @@ export class PluginRegistry {
   readonly packagesDir: string;
   readonly stagingDir: string;
   readonly registryPath: string;
+  readonly legacyRegistryPath: string;
   private readonly fileSystem: PluginFileSystem;
   private queue: Promise<void> = Promise.resolve();
+  private initialization: Promise<void> | null = null;
 
   constructor(options: PluginRegistryOptions) {
     if (!path.isAbsolute(options.dataRoot)) throw new TypeError("Plugin dataRoot must be absolute");
     this.fileSystem = options.fileSystem ?? new NodePluginFileSystem();
-    this.baseDir = path.join(path.resolve(options.dataRoot), "ai", "plugins");
-    this.packagesDir = path.join(this.baseDir, "packages");
+    const dataRoot = path.resolve(options.dataRoot);
+    this.baseDir = path.join(dataRoot, "extensions");
+    this.packagesDir = path.join(this.baseDir, "cli-provider");
     this.stagingDir = path.join(this.baseDir, ".staging");
-    this.registryPath = path.join(this.baseDir, "registry.v1.json");
+    this.registryPath = path.join(this.baseDir, "registry.v2.json");
+    this.legacyRegistryPath = path.join(dataRoot, "ai", "plugins", "registry.v1.json");
   }
 
   async initialize(): Promise<void> {
-    await this.fileSystem.mkdir(this.packagesDir);
-    await this.fileSystem.mkdir(this.stagingDir);
+    if (!this.initialization) {
+      this.initialization = (async () => {
+        await this.fileSystem.mkdir(this.packagesDir);
+        await this.fileSystem.mkdir(this.stagingDir);
+        await this.migrateLegacyRegistry();
+      })().catch((error) => {
+        this.initialization = null;
+        throw error;
+      });
+    }
+    await this.initialization;
   }
 
   async list(): Promise<PluginRegistration[]> {
@@ -185,7 +229,7 @@ export class PluginRegistry {
           return { recovered: false };
         } catch (error) {
           if (!(error instanceof Error) || !("code" in error) || error.code !== "REGISTRY_CORRUPT") throw error;
-          const backupFileName = `registry.v1.corrupt.${Date.now()}.json`;
+          const backupFileName = `registry.v2.corrupt.${Date.now()}.json`;
           await this.fileSystem.rename(this.registryPath, path.join(this.baseDir, backupFileName));
           await this.fileSystem.atomicWrite(this.registryPath, `${JSON.stringify(emptyRegistry(), null, 2)}\n`);
           return { recovered: true, backupFileName };
@@ -209,6 +253,31 @@ export class PluginRegistry {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return emptyRegistry();
       if (error instanceof Error && "code" in error && error.code === "REGISTRY_CORRUPT") throw error;
       throw pluginError("REGISTRY_CORRUPT", undefined, error);
+    }
+  }
+
+  private async migrateLegacyRegistry(): Promise<void> {
+    if (await this.exists(this.registryPath) || !await this.exists(this.legacyRegistryPath)) return;
+    const release = await this.fileSystem.acquireLock(`${this.registryPath}.migration.lock`);
+    try {
+      if (await this.exists(this.registryPath)) return;
+      const legacy = parseLegacyRegistry(
+        (await this.fileSystem.readFile(this.legacyRegistryPath)).toString("utf8"),
+      );
+      const migrated = emptyRegistry();
+      for (const registration of legacy) migrated.plugins[registration.id] = registration;
+      await this.fileSystem.atomicWrite(this.registryPath, `${JSON.stringify(migrated, null, 2)}\n`);
+    } finally {
+      await release();
+    }
+  }
+
+  private async exists(target: string): Promise<boolean> {
+    try {
+      await this.fileSystem.access(target);
+      return true;
+    } catch {
+      return false;
     }
   }
 

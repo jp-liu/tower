@@ -10,6 +10,16 @@ import {
 } from "@tower/ai-sdk";
 import { pluginError } from "./plugin-errors.js";
 import { PluginRuntimeError } from "./plugin-errors.js";
+import type { ExtensionArtifactProvider } from "./artifact-provider.js";
+import { PrebuiltArtifactProvider } from "./artifact-provider.js";
+import type { CliDependencyDiagnostic, CliDependencyVerifier } from "./cli-dependency.js";
+import { SafeCliDependencyVerifier } from "./cli-dependency.js";
+import {
+  findCatalogVersion,
+  type CatalogExtension,
+  type CatalogExtensionVersion,
+  type ExtensionCatalog,
+} from "./catalog.js";
 import type { PluginFileSystem } from "./plugin-filesystem.js";
 import { NodePluginFileSystem } from "./plugin-filesystem.js";
 import {
@@ -45,6 +55,8 @@ export interface CliPluginRuntimeOptions {
   nodeVersion?: string;
   fileSystem?: PluginFileSystem;
   npmProvider?: NpmPackageProvider;
+  artifactProvider?: ExtensionArtifactProvider;
+  cliDependencyVerifier?: CliDependencyVerifier;
   importModule?: PluginModuleImporter;
   now?: () => Date;
 }
@@ -54,6 +66,15 @@ interface StagedNpmPackage {
   packageRoot: string;
   resolution: NpmPackageResolution;
   plugin: ValidatedPluginPackage;
+}
+
+interface StagedCatalogPackage {
+  temporaryRoot: string;
+  packageRoot: string;
+  extension: CatalogExtension;
+  release: CatalogExtensionVersion;
+  plugin: ValidatedPluginPackage;
+  dependency: CliDependencyDiagnostic;
 }
 
 function sameStringSet(left: string[], right: string[]): boolean {
@@ -74,10 +95,18 @@ function installationDirectoryName(plan: PluginInstallPlan): string {
     .slice(0, 16)}`;
 }
 
+function catalogInstallationDirectoryName(plan: PluginInstallPlan): string {
+  const digest = plan.catalog?.artifact.sha256;
+  if (!digest) throw pluginError("INSTALL_PLAN_MISMATCH", plan.pluginId);
+  return `${plan.toVersion}-${digest}`;
+}
+
 export class CliPluginRuntime {
   readonly registry: PluginRegistry;
   private readonly fileSystem: PluginFileSystem;
   private readonly npmProvider: NpmPackageProvider;
+  private readonly artifactProvider: ExtensionArtifactProvider;
+  private readonly cliDependencyVerifier: CliDependencyVerifier;
   private readonly towerVersion: string;
   private readonly nodeVersion: string;
   private readonly importModule: PluginModuleImporter;
@@ -88,6 +117,8 @@ export class CliPluginRuntime {
     this.fileSystem = options.fileSystem ?? new NodePluginFileSystem();
     this.registry = new PluginRegistry({ dataRoot: options.dataRoot, fileSystem: this.fileSystem });
     this.npmProvider = options.npmProvider ?? new DefaultNpmPackageProvider({ fileSystem: this.fileSystem });
+    this.artifactProvider = options.artifactProvider ?? new PrebuiltArtifactProvider({ fileSystem: this.fileSystem });
+    this.cliDependencyVerifier = options.cliDependencyVerifier ?? new SafeCliDependencyVerifier();
     this.towerVersion = options.towerVersion;
     this.nodeVersion = options.nodeVersion ?? process.versions.node;
     this.importModule = options.importModule ?? (async (specifier) => import(
@@ -108,14 +139,73 @@ export class CliPluginRuntime {
     return this.registry.recover();
   }
 
+  async readCatalog(catalog: ExtensionCatalog) {
+    return catalog.read();
+  }
+
+  async planCatalogInstall(
+    catalog: ExtensionCatalog,
+    extensionId: string,
+    version: string,
+  ): Promise<PluginInstallPlan> {
+    const { extension, release } = findCatalogVersion(await catalog.read(), extensionId, version);
+    const staged = await this.stageCatalogPackage(extension, release);
+    try {
+      return this.catalogPlan(staged, await this.registry.get(extensionId) ?? undefined);
+    } finally {
+      await this.fileSystem.rm(staged.temporaryRoot).catch(() => undefined);
+    }
+  }
+
+  async installCatalog(plan: PluginInstallPlan): Promise<PluginRegistration> {
+    if (plan.source !== "catalog" || !plan.catalog) {
+      throw pluginError("INSTALL_PLAN_MISMATCH", plan.pluginId);
+    }
+    const catalog = plan.catalog;
+    return this.serialized(async () => {
+      const extension: CatalogExtension = {
+        id: plan.pluginId,
+        kind: "cli-provider",
+        publisher: structuredClone(catalog.publisher),
+        display: { name: plan.manifestData.display.name },
+        versions: [],
+      };
+      const release: CatalogExtensionVersion = {
+        version: plan.toVersion,
+        artifact: structuredClone(catalog.artifact),
+      };
+      const staged = await this.stageCatalogPackage(extension, release);
+      try {
+        return await this.commitCatalogPackage(staged, plan);
+      } finally {
+        await this.fileSystem.rm(staged.temporaryRoot).catch(() => undefined);
+      }
+    });
+  }
+
+  async recheck(pluginId: string): Promise<CliDependencyDiagnostic> {
+    const inspected = await this.inspect(pluginId);
+    try {
+      return await this.cliDependencyVerifier.verify(inspected.manifest);
+    } catch (error) {
+      if (error instanceof PluginRuntimeError
+        && error.code === "CLI_DEPENDENCY_UNAVAILABLE"
+        && error.diagnostic) return error.diagnostic as CliDependencyDiagnostic;
+      throw error;
+    }
+  }
+
   async planNpmInstall(packageName: string, version: string): Promise<PluginInstallPlan> {
-    const staged = await this.stageNpmPackage(packageName, version);
+    const registered = await this.registry.get(packageName);
+    const resolvedPackageName = registered?.sourceLocator ?? packageName;
+    const staged = await this.stageNpmPackage(resolvedPackageName, version);
     try {
       return createInstallPlan({
         source: "npm",
+        packageName: staged.plugin.packageName,
         plugin: staged.plugin,
         integrity: staged.resolution.integrity,
-        previous: await this.registry.get(packageName) ?? undefined,
+        previous: await this.registry.get(staged.plugin.extensionId) ?? undefined,
       });
     } finally {
       await this.fileSystem.rm(staged.temporaryRoot).catch(() => undefined);
@@ -123,9 +213,11 @@ export class CliPluginRuntime {
   }
 
   async installNpm(plan: PluginInstallPlan): Promise<PluginRegistration> {
-    if (plan.source !== "npm") throw pluginError("INSTALL_PLAN_MISMATCH", plan.pluginId);
+    if (plan.source !== "npm" || !plan.packageName) {
+      throw pluginError("INSTALL_PLAN_MISMATCH", plan.pluginId);
+    }
     return this.serialized(async () => {
-      const staged = await this.stageNpmPackage(plan.pluginId, plan.toVersion);
+      const staged = await this.stageNpmPackage(plan.packageName!, plan.toVersion);
       try {
         return await this.commitNpmPackage(staged, plan);
       } finally {
@@ -140,27 +232,27 @@ export class CliPluginRuntime {
     });
     const plugin = await this.validate(packageRoot);
     return createInstallPlan({
-      source: "local",
+      source: "development",
       sourcePath: packageRoot,
       plugin,
       integrity: this.localIntegrity(plugin),
-      previous: await this.registry.get(plugin.packageName) ?? undefined,
+      previous: await this.registry.get(plugin.extensionId) ?? undefined,
     });
   }
 
   async registerLocal(plan: PluginInstallPlan): Promise<PluginRegistration> {
-    if (plan.source !== "local" || !plan.sourcePath) {
+    if ((plan.source !== "local" && plan.source !== "development") || !plan.sourcePath) {
       throw pluginError("INSTALL_PLAN_MISMATCH", plan.pluginId);
     }
     return this.serialized(async () => {
       const packageRoot = await this.fileSystem.realpath(path.resolve(plan.sourcePath!)).catch((error) => {
         throw pluginError("INVALID_PACKAGE", plan.pluginId, error);
       });
-      const plugin = await this.validate(packageRoot, plan.pluginId, plan.toVersion);
+      const plugin = await this.validate(packageRoot, undefined, plan.toVersion, false, plan.pluginId);
       return this.withLifecycleLock(plan.pluginId, () =>
         this.registry.transact(plan.pluginId, (current) => {
           const expected = createInstallPlan({
-            source: "local",
+            source: plan.source,
             sourcePath: packageRoot,
             plugin,
             integrity: this.localIntegrity(plugin),
@@ -229,7 +321,9 @@ export class CliPluginRuntime {
       const snapshot = await this.registry.get(pluginId);
       if (!snapshot) throw pluginError("PLUGIN_NOT_FOUND", pluginId);
       const container = this.packageContainer(pluginId);
-      if (snapshot.source === "npm") {
+      const validatesManagedPath = snapshot.source === "npm" || snapshot.source === "catalog";
+      const removesManagedContainer = snapshot.source !== "legacy" && snapshot.source !== "local";
+      if (validatesManagedPath) {
         const installPath = path.resolve(snapshot.installPath);
         if (installPath === container || !isPathInside(container, installPath)) {
           throw pluginError("UNINSTALL_FAILED", pluginId);
@@ -244,7 +338,7 @@ export class CliPluginRuntime {
             this.registry.stagingDir,
             `.uninstall-${packageDirectoryName(pluginId)}-${randomUUID()}`,
           );
-          const containerExists = await this.exists(container);
+          const containerExists = removesManagedContainer && await this.exists(container);
           let movedToTrash = false;
           try {
             if (containerExists) {
@@ -290,16 +384,20 @@ export class CliPluginRuntime {
     const packageRoot = await this.resolveRegisteredRoot(registration);
     const pluginPackage = await this.validate(
       packageRoot,
-      registration.id,
+      registration.source === "npm" ? registration.sourceLocator : undefined,
       registration.version,
-      registration.source === "npm",
+      registration.source === "npm" || registration.source === "catalog",
+      registration.source === "catalog" || registration.source === "development"
+        ? registration.id
+        : undefined,
     ).catch((error) => {
       throw pluginError("PLUGIN_CORRUPT", pluginId, error);
     });
     if (stableJson(pluginPackage.manifestSummary) !== stableJson(registration.manifest)) {
       throw pluginError("PLUGIN_CORRUPT", pluginId);
     }
-    if (registration.source === "local" && this.localIntegrity(pluginPackage) !== registration.integrity) {
+    if ((registration.source === "local" || registration.source === "development")
+      && this.localIntegrity(pluginPackage) !== registration.integrity) {
       throw pluginError("PLUGIN_CORRUPT", pluginId);
     }
 
@@ -331,9 +429,12 @@ export class CliPluginRuntime {
     const packageRoot = await this.resolveRegisteredRoot(registration);
     const pluginPackage = await this.validate(
       packageRoot,
-      registration.id,
+      registration.source === "npm" ? registration.sourceLocator : undefined,
       registration.version,
-      registration.source === "npm",
+      registration.source === "npm" || registration.source === "catalog",
+      registration.source === "catalog" || registration.source === "development"
+        ? registration.id
+        : undefined,
     ).catch((error) => {
       throw pluginError("PLUGIN_CORRUPT", pluginId, error);
     });
@@ -382,6 +483,108 @@ export class CliPluginRuntime {
     }
   }
 
+  private async stageCatalogPackage(
+    extension: CatalogExtension,
+    release: CatalogExtensionVersion,
+  ): Promise<StagedCatalogPackage> {
+    assertExactSemVer(release.version);
+    await this.registry.initialize();
+    const temporaryRoot = await this.fileSystem.mkdtemp(path.join(this.registry.stagingDir, ".install-"));
+    const packageRoot = path.join(temporaryRoot, "package");
+    try {
+      await this.artifactProvider.stage(release.artifact, packageRoot);
+      const plugin = await this.validate(
+        packageRoot,
+        undefined,
+        release.version,
+        true,
+        extension.id,
+      );
+      if (plugin.manifest.publisher.id !== extension.publisher.id
+        || plugin.manifest.publisher.name !== extension.publisher.name) {
+        throw pluginError("INVALID_MANIFEST", extension.id);
+      }
+      const dependency = await this.cliDependencyVerifier.verify(plugin.manifest);
+      return { temporaryRoot, packageRoot, extension, release, plugin, dependency };
+    } catch (error) {
+      await this.fileSystem.rm(temporaryRoot).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  private catalogPlan(
+    staged: StagedCatalogPackage,
+    previous?: PluginRegistration,
+  ): PluginInstallPlan {
+    return createInstallPlan({
+      source: "catalog",
+      pluginId: staged.extension.id,
+      catalog: {
+        publisher: staged.extension.publisher,
+        artifact: staged.release.artifact,
+      },
+      plugin: staged.plugin,
+      integrity: `sha256:${staged.release.artifact.sha256}`,
+      dependency: staged.dependency,
+      previous,
+    });
+  }
+
+  private async commitCatalogPackage(
+    staged: StagedCatalogPackage,
+    receivedPlan: PluginInstallPlan,
+  ): Promise<PluginRegistration> {
+    const container = this.packageContainer(receivedPlan.pluginId);
+    const target = path.join(container, catalogInstallationDirectoryName(receivedPlan));
+    return this.withLifecycleLock(receivedPlan.pluginId, async () => {
+      const current = await this.registry.get(receivedPlan.pluginId);
+      if (current
+        && current.source === "catalog"
+        && current.activationPlanDigest === receivedPlan.planDigest
+        && current.installPath === target) return current;
+      const expected = this.catalogPlan(staged, current ?? undefined);
+      if (!isMatchingPlan(expected, receivedPlan)) {
+        throw pluginError("INSTALL_PLAN_MISMATCH", receivedPlan.pluginId);
+      }
+
+      await this.fileSystem.mkdir(container);
+      const targetExisted = await this.exists(target);
+      let moved = false;
+      if (targetExisted) {
+        const existing = await this.validate(
+          target,
+          undefined,
+          receivedPlan.toVersion,
+          true,
+          receivedPlan.pluginId,
+        ).catch((error) => {
+          throw pluginError("INSTALL_FAILED", receivedPlan.pluginId, error);
+        });
+        if (stableJson(existing.manifestSummary) !== stableJson(staged.plugin.manifestSummary)) {
+          throw pluginError("INSTALL_FAILED", receivedPlan.pluginId);
+        }
+      } else {
+        await this.fileSystem.rename(staged.packageRoot, target);
+        moved = true;
+      }
+      try {
+        return await this.registry.transact(receivedPlan.pluginId, (latest) => {
+          if (!this.sameOptionalRegistration(latest, current)) {
+            throw pluginError("INSTALL_PLAN_MISMATCH", receivedPlan.pluginId);
+          }
+          const registration = this.createRegistration(expected, target, latest ?? undefined);
+          return { next: registration, result: registration };
+        });
+      } catch (error) {
+        if (moved) {
+          await this.fileSystem.rm(target).catch(() => undefined);
+          await this.removeContainerIfEmpty(container);
+        }
+        throw error;
+      }
+    });
+  }
+
   private async commitNpmPackage(
     staged: StagedNpmPackage,
     receivedPlan: PluginInstallPlan,
@@ -396,6 +599,7 @@ export class CliPluginRuntime {
           return await this.registry.transact(receivedPlan.pluginId, (current) => {
             const expected = createInstallPlan({
               source: "npm",
+              packageName: staged.plugin.packageName,
               plugin: staged.plugin,
               integrity: staged.resolution.integrity,
               previous: current ?? undefined,
@@ -430,6 +634,7 @@ export class CliPluginRuntime {
       version: plan.toVersion,
       integrity: plan.integrity,
       source: plan.source,
+      ...(plan.packageName ? { sourceLocator: plan.packageName } : {}),
       installPath,
       manifest: plan.manifest,
       permissions: [...plan.permissions.requested],
@@ -446,6 +651,7 @@ export class CliPluginRuntime {
     expectedName?: string,
     expectedVersion?: string,
     requireDependenciesInsidePackage = false,
+    expectedId?: string,
   ) {
     return validatePluginPackage({
       fileSystem: this.fileSystem,
@@ -455,6 +661,7 @@ export class CliPluginRuntime {
       expectedName,
       expectedVersion,
       requireDependenciesInsidePackage,
+      expectedId,
     });
   }
 
@@ -469,7 +676,7 @@ export class CliPluginRuntime {
   private async resolveRegisteredRoot(registration: PluginRegistration): Promise<string> {
     try {
       const root = await this.fileSystem.realpath(registration.installPath);
-      if (registration.source === "npm") {
+      if (registration.source === "npm" || registration.source === "catalog") {
         const packagesRoot = await this.fileSystem.realpath(this.registry.packagesDir);
         if (!isPathInside(packagesRoot, root)) throw pluginError("ENTRY_ESCAPE", registration.id);
       }
@@ -482,14 +689,24 @@ export class CliPluginRuntime {
   private sameRegistration(left: PluginRegistration, right: PluginRegistration): boolean {
     return left.id === right.id
       && left.source === right.source
+      && left.sourceLocator === right.sourceLocator
       && left.version === right.version
       && left.integrity === right.integrity
       && left.installPath === right.installPath
       && left.activationPlanDigest === right.activationPlanDigest;
   }
 
+  private sameOptionalRegistration(
+    left: PluginRegistration | null,
+    right: PluginRegistration | null,
+  ): boolean {
+    return left === null || right === null
+      ? left === right
+      : this.sameRegistration(left, right);
+  }
+
   private packageContainer(pluginId: string): string {
-    return path.join(this.registry.packagesDir, packageDirectoryName(pluginId));
+    return path.join(this.registry.packagesDir, pluginId);
   }
 
   private async withLifecycleLock<T>(pluginId: string, operation: () => Promise<T>): Promise<T> {
