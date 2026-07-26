@@ -430,7 +430,7 @@ export const zh = {
   "settings.cliPlugins.health.dependency-missing": "缺少 CLI",
   "settings.cliPlugins.health.dependency-incompatible": "CLI 不兼容",
   "settings.cliPlugins.health.probe-failed": "版本探测失败",
-  "settings.cliPlugins.enableBlocked": "无法启用：{reason}。请先修复 Qwen Code CLI 依赖。",
+  "settings.cliPlugins.enableBlocked": "无法启用：{reason}。请先修复底层 CLI 依赖。",
   "settings.cliPlugins.error.catalog_unavailable": "服务端 Catalog 未配置或暂时无法访问。",
   "settings.cliPlugins.error.catalog_invalid": "服务端 Catalog 返回内容无效。",
   "settings.cliPlugins.error.catalog_entry_not_found": "该扩展版本已不在 Catalog 中，请刷新后重试。",

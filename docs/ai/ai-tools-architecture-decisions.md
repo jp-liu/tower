@@ -173,7 +173,7 @@ AI Tools 设置页分为上下两层：
 
 - 私有 Runtime 提供稳定的 `list`、Catalog 发现/安装计划、`install`、`enable`、`disable`、`uninstall`、`recheck` 和本地目录注册接口。
 - 现有 npm 插件 Runtime 暂作旧版兼容读取与迁移入口，不再是正常用户安装协议；内置 Claude/Codex/Gemini、API 连接、五插槽、Assistant 和 Terminal 继续使用既有 Provider/能力 Runtime。
-- 设置页“扩展中心”和 server actions 已接通上述接口。Catalog URL 只从服务端 `TOWER_EXTENSION_CATALOG_URL` 或系统配置键 `extensions.catalogUrl` 读取；浏览器只接收经过裁剪的目录、计划和结构化诊断，不接收 URL、文件路径或底层错误。
+- 设置页“扩展中心”和 server actions 已接通上述接口。Catalog URL 只从服务端 `TOWER_EXTENSION_CATALOG_URL` 或系统配置键 `extensions.catalogUrl` 读取；浏览器只接收经过裁剪的目录、计划和结构化诊断，不接收 Catalog/Artifact URL、Host 安装路径或底层错误。经过 Schema 校验的 Publisher 主页、CLI 安装文档和命令诊断除外。
 
 ### CLI Provider 集成 Reconciliation 契约
 

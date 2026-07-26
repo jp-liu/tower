@@ -579,8 +579,9 @@ export function CliPluginsSection() {
                         </p>}
                       </div>}
                       <div className="mt-3 flex flex-wrap gap-1.5">
-                        <Badge variant="outline">Terminal</Badge>
-                        <Badge variant="outline">Query</Badge>
+                        <Badge variant="outline">CLI Provider</Badge>
+                        {plugin?.capabilities && Object.values(plugin.capabilities.sessions).some(Boolean) && <Badge variant="outline">Terminal</Badge>}
+                        {plugin?.capabilities && Object.values(plugin.capabilities.query).some(Boolean) && <Badge variant="outline">Query</Badge>}
                         {plugin?.capabilities?.models && <Badge variant="outline">Models</Badge>}
                         {Object.entries(plugin?.capabilities?.integrations ?? {}).filter(([, enabled]) => enabled).map(([name]) => <Badge key={name} variant="outline">{name.toUpperCase()}</Badge>)}
                       </div>
@@ -668,8 +669,9 @@ export function CliPluginsSection() {
               </div>
               <div className="flex flex-wrap gap-1">
                 {Object.entries(plan.capabilities.integrations ?? {}).filter(([, enabled]) => enabled).map(([name]) => <Badge key={name} variant="outline">{name.toUpperCase()}</Badge>)}
+                {Object.values(plan.capabilities.sessions).some(Boolean) && <Badge variant="outline">Terminal</Badge>}
+                {Object.values(plan.capabilities.query).some(Boolean) && <Badge variant="outline">Query</Badge>}
                 {plan.capabilities.models && <Badge variant="outline">Models</Badge>}
-                <Badge variant="outline">Query</Badge>
               </div>
               <div className="space-y-1 text-xs">
                 <p className="font-medium">{t("settings.cliPlugins.permissions")}</p>

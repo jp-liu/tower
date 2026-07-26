@@ -419,7 +419,7 @@ export const en: Translations = {
   "settings.cliPlugins.health.dependency-missing": "CLI missing",
   "settings.cliPlugins.health.dependency-incompatible": "CLI incompatible",
   "settings.cliPlugins.health.probe-failed": "Version probe failed",
-  "settings.cliPlugins.enableBlocked": "Cannot enable: {reason}. Fix the Qwen Code CLI dependency first.",
+  "settings.cliPlugins.enableBlocked": "Cannot enable: {reason}. Fix the underlying CLI dependency first.",
   "settings.cliPlugins.error.catalog_unavailable": "The server catalog is not configured or cannot be reached.",
   "settings.cliPlugins.error.catalog_invalid": "The server catalog response is invalid.",
   "settings.cliPlugins.error.catalog_entry_not_found": "This extension version is no longer in the catalog. Refresh and retry.",
