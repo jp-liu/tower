@@ -381,10 +381,10 @@ async function preparePackagedAiFixtures(installedRoot, smokeEnv, baseUrl) {
         update: { status: 'TODO' },
       });
       await db.providerConnection.upsert({
-        where: { connectionKey: 'cli:@fixture/tower-cli' },
+        where: { connectionKey: 'cli:fixture.tower-cli' },
         create: {
-          id: 'release-cli', connectionKey: 'cli:@fixture/tower-cli', name: 'Packaged Fixture CLI', kind: 'cli',
-          provider: '@fixture/tower-cli', enabled: true, testStatus: 'connected', testOk: true,
+          id: 'release-cli', connectionKey: 'cli:fixture.tower-cli', name: 'Packaged Fixture CLI', kind: 'cli',
+          provider: 'fixture.tower-cli', enabled: true, testStatus: 'connected', testOk: true,
           commandOverride: process.argv[2], resolvedCommand: process.argv[2], resolvedVersion: '1.0.0',
         },
         update: { enabled: true, testStatus: 'connected', testOk: true, commandOverride: process.argv[2] },
