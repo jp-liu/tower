@@ -5,14 +5,14 @@ description: AI Tools、扩展中心、Qwen Provider 与发布前置的最终人
 
 # 0.3.0 手工验收清单
 
-自动化结论为“可进入手工验收”，不会自动 publish、push、tag 或创建 Release。
+隔离自动化集中门禁已经通过；2026-07-26 的 v0.3.0 外部发布已获用户授权。publish、push、tag 和 Release 仍由发布任务在凭据与权限确认后显式执行。
 
 ## 发布阻断项
 
 - [x] 集中验收已在原字体配置恢复后通过 `127.0.0.1:7897` 代理运行 `pnpm release:smoke`：打包安装、13 个迁移、Settings、Summary、Assistant 和 Terminal plan 全部通过。更换发布构建环境时仍须提供稳定代理或批准字体缓存。
-- [ ] 确认服务默认只监听 `127.0.0.1`；仅在明确需要时传入 `--host`。
+- [x] packaged smoke 已确认服务默认只监听 `127.0.0.1`；仅在明确需要时传入 `--host`。
 - [ ] 决定并授权官方 Catalog 仓库、GitHub Organization 和 HTTPS 托管 URL。建立前设置服务端 `TOWER_EXTENSION_CATALOG_URL` 或系统 Catalog URL。
-- [ ] 手工确认 v0.3.0 后再决定 publish/tag/Release；本清单完成不等于自动发布授权。
+- [x] 用户已确认 2026-07-26 发布 v0.3.0，并授权按现有 npm/GitHub/远端权限边界执行 publish/tag/Release。
 
 ## Extensions 与 Qwen
 

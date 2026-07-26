@@ -54,7 +54,7 @@ description: 0.2 数据迁移、兼容范围、备份和回滚说明
 | Assistant persona/旧 transcript 所在 `assistant` | 包含 |
 | 日志目录 | 包含；应用日志应已脱敏 |
 | Assistant 临时附件 `storage/cache/assistant` | **不包含**；长期需要的文件应保存为项目资产 |
-| CLI 插件 registry、安装/staging、插件 storage（`ai/`） | **不包含**；数据库连接配置会恢复，但插件需重新安装/确认 |
+| CLI 插件 registry、安装/staging、插件 storage（`ai/`） | 包含；恢复后 install path 会重定位到新的 Tower 数据目录 |
 | CLI 自己的登录/token/base URL | 不属于 Tower 数据目录，也不由 Tower 备份 |
 | Git worktree、用户仓库、截图、开发缓存 | 不包含 |
 

@@ -3,7 +3,7 @@ title: 0.3.0 Release Notes
 description: AI Tools 0.3 features, migration, security, and known limitations
 ---
 
-> Status: the repository is prepared for a local 0.3.0 artifact. No npm publish, tag, or GitHub Release has been created.
+The 0.3.0 release candidate passed the isolated centralized gate. External publication remains an explicit release-owner action after npm, GitHub, and remote permissions are confirmed.
 
 ## User-visible features
 
@@ -29,8 +29,8 @@ Startup syncs Prisma schema, then runs ledger migrations `0009-api-connections` 
 
 ## Known limitations
 
-- `@tower/ai-sdk`, private Runtime, and official providers remain `private@0.1.0` workspace packages. No organization or standalone npm package was published.
+- The public `tower-studio` package is version `0.3.0`; `@tower/ai-sdk`, the private Runtime, official providers, and the Qwen artifact remain embedded `private@0.1.0` workspace packages and are not published independently.
 - API adapter plugins are not open; Terminal remains CLI-only.
-- Assistant temporary attachment cache and CLI plugin registry/install directories are outside current full archives; plugins require reinstall/confirmation after restore.
+- Assistant temporary attachment cache remains outside full archives. API credentials, capability targets, CLI plugin registry/install directories, and Assistant sessions are included.
 - 0.3 databases are not promised write-compatible with 0.2; downgrade requires a pre-upgrade backup.
-- Final isolated standalone install/migration smoke and cross-module acceptance remain required before external publication.
+- The official hosted extension Catalog is not part of this release; operators must configure an approved HTTPS Catalog URL.

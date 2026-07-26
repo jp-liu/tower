@@ -3,9 +3,7 @@ title: 0.3.0 发布说明
 description: AI Tools 0.3 用户能力、迁移、安全模型和已知限制
 ---
 
-> 状态：本仓库已准备 0.3.0 本地产物；尚未 npm publish、创建 tag 或 GitHub Release。
-
-集中验收结果与发布前人工检查见 [0.3.0 手工验收清单](/guide/acceptance-0.3.0)。当前结论为“可进入手工验收”，并非自动发布授权。
+0.3.0 发布候选已经通过隔离的集中门禁；校验结果和发布前人工检查见 [0.3.0 手工验收清单](/guide/acceptance-0.3.0)。外部发布仍由发布负责人在确认 npm、GitHub 和远端权限后显式执行。
 
 ## 用户可见能力
 
@@ -31,7 +29,7 @@ description: AI Tools 0.3 用户能力、迁移、安全模型和已知限制
 
 ## 已知限制
 
-- `@tower/ai-sdk`、私有 Runtime 和官方 Provider 仍是 `private@0.1.0` workspace 包；本期未创建组织或发布独立 npm 包。
+- 根包 `tower-studio` 发布为 `0.3.0`；`@tower/ai-sdk`、私有 Runtime、官方 Provider 和 Qwen artifact 仍是内嵌的 `private@0.1.0` workspace 包，不独立发布 npm。
 - API Adapter 插件不开放；Terminal 仍只接受 CLI。
 - Assistant 临时附件缓存不进入完整归档；API 凭据、五能力目标、CLI 插件 registry/安装目录和 Assistant 会话由完整备份覆盖。
 - 0.3 数据库不承诺回写兼容 0.2；降级必须恢复升级前备份。

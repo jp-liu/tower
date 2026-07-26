@@ -1,6 +1,4 @@
-## 0.3.0 (2026-07-25, prepared locally)
-
-> Release metadata only. This commit does not publish npm, create a tag, or create a GitHub Release.
+## [0.3.0](https://github.com/jp-liu/tower/compare/v0.2.60...v0.3.0) (2026-07-26)
 
 ### User-visible capabilities
 
@@ -18,7 +16,12 @@
 ### Known limitations
 
 * workspace SDK/runtime/provider packages remain private and are not independently published
-* final standalone install/migration smoke and cross-module acceptance are deferred to the AI Tools 0.3 acceptance task
+* the official hosted extension Catalog is not part of this release; operators must configure an approved HTTPS Catalog URL
+
+### Release validation
+
+* pass the isolated centralized gate for frozen install, type checking, ESLint, unit/component tests, workspace and Qwen builds, Catalog validation, production build, package canary, and standalone install/migration smoke
+* keep real Provider accounts, API keys, CLI login state, and the existing production service outside the release gate
 
 ## [0.2.20](https://github.com/jp-liu/tower/compare/v0.2.19...v0.2.20) (2026-06-10)
 

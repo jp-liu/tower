@@ -52,7 +52,7 @@ Migrations are idempotent and do not automatically delete credentials.
 | Assistant persona/legacy transcript directory | Included |
 | Logs | Included; application logs should already be redacted |
 | Assistant temporary attachments under `storage/cache/assistant` | **Not included**; preserve important files as project assets |
-| CLI plugin registry, install/staging, and plugin storage under `ai/` | **Not included**; DB connection settings restore, but plugins require reinstall/confirmation |
+| CLI plugin registry, install/staging, and plugin storage under `ai/` | Included; restored install paths are rebased to the new Tower data root |
 | CLI-owned login/token/base URL | Outside Tower and not backed up |
 | Git worktrees, repositories, screenshots, development caches | Not included |
 
