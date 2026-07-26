@@ -382,14 +382,16 @@ export class CliPluginRuntime {
     }
 
     const packageRoot = await this.resolveRegisteredRoot(registration);
+    const developmentMode = registration.source === "local" || registration.source === "development";
     const pluginPackage = await this.validate(
       packageRoot,
       registration.source === "npm" ? registration.sourceLocator : undefined,
       registration.version,
       registration.source === "npm" || registration.source === "catalog",
-      registration.source === "catalog" || registration.source === "development"
+      registration.source === "catalog" || developmentMode
         ? registration.id
         : undefined,
+      developmentMode,
     ).catch((error) => {
       throw pluginError("PLUGIN_CORRUPT", pluginId, error);
     });
@@ -429,14 +431,16 @@ export class CliPluginRuntime {
     const registration = await this.registry.get(pluginId);
     if (!registration) throw pluginError("PLUGIN_NOT_FOUND", pluginId);
     const packageRoot = await this.resolveRegisteredRoot(registration);
+    const developmentMode = registration.source === "local" || registration.source === "development";
     const pluginPackage = await this.validate(
       packageRoot,
       registration.source === "npm" ? registration.sourceLocator : undefined,
       registration.version,
       registration.source === "npm" || registration.source === "catalog",
-      registration.source === "catalog" || registration.source === "development"
+      registration.source === "catalog" || developmentMode
         ? registration.id
         : undefined,
+      developmentMode,
     ).catch((error) => {
       throw pluginError("PLUGIN_CORRUPT", pluginId, error);
     });

@@ -371,10 +371,17 @@ describe("CLI plugin installation runtime", () => {
     await fs.symlink(dependencyRoot, path.join(packageRoot, "node_modules", "fixture-dependency"));
 
     const plugins = runtime(await temporaryDirectory());
-    await expect(plugins.planLocalRegistration(packageRoot)).resolves.toMatchObject({
+    const plan = await plugins.planLocalRegistration(packageRoot);
+    expect(plan).toMatchObject({
       source: "development",
       pluginId: "fixture.tower-cli",
     });
+    await plugins.registerLocal(plan);
+    await expect(plugins.inspect(plan.pluginId)).resolves.toMatchObject({
+      manifest: { id: "fixture.tower-cli" },
+    });
+    await plugins.confirmAndEnable(plan.pluginId, plan);
+    await expect(plugins.load(plan.pluginId, host())).resolves.toBeDefined();
   });
 
   it("requires the current plan confirmation after reinstall and every permission diff", async () => {

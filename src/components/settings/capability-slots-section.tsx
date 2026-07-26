@@ -1,48 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  ArrowDown,
-  ArrowUp,
   BarChart3,
   BookOpen,
   Bot,
   Brain,
   CircleAlert,
-  CircleDashed,
   Clock3,
   Loader2,
-  Pencil,
-  Plus,
   Route,
   Terminal,
-  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  addAiCapabilityTarget,
-  deleteAiCapabilityTarget,
   getAiCapabilityChoices,
   getAiCapabilityDiagnostics,
   listAiCapabilities,
-  reorderAiCapabilityTargets,
-  updateAiCapabilityTarget,
+  replaceAiCapabilityTargets,
 } from "@/actions/ai-config-actions";
 import { getConfigValue, setConfigValue } from "@/actions/config-actions";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DEFAULT_ASSISTANT_HISTORY_TURNS,
   MAX_ASSISTANT_HISTORY_TURNS,
@@ -59,6 +40,19 @@ type ChoiceResult = Awaited<ReturnType<typeof getAiCapabilityChoices>>;
 type Choice = Extract<ChoiceResult, { ok: true }>["data"][number];
 type DiagnosticsResult = Awaited<ReturnType<typeof getAiCapabilityDiagnostics>>;
 type Diagnostic = Extract<DiagnosticsResult, { ok: true }>["data"][number];
+type TargetRole = "primary" | "fallback";
+
+type TargetOption = {
+  value: string;
+  connectionId: string;
+  modelId: string | null;
+  name: string;
+  kind: string;
+  testStatus: string;
+  testOk: boolean;
+  enabled: boolean;
+  available: boolean;
+};
 
 const SLOT_META = [
   { slot: "terminal", icon: Terminal, desc: "terminalDesc" },
@@ -70,25 +64,77 @@ const SLOT_META = [
 
 const EFFORT_OPTIONS = ["low", "medium", "high"] as const;
 const CONNECTIONS_CHANGED_EVENT = "tower:provider-connections-changed";
+const EMPTY_TARGET = "__tower_empty_target__";
 
-function IconButton({ label, children, ...props }: React.ComponentProps<typeof Button> & { label: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger render={<Button type="button" variant="ghost" size="icon" aria-label={label} {...props} />}>
-        {children}
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  );
+function targetValue(connectionId: string, modelId: string | null) {
+  return JSON.stringify([connectionId, modelId]);
 }
 
-function unavailableReason(choice: Choice, modelId: string | null) {
-  if (!choice.enabled) return "connectionDisabled";
-  if (!choice.testOk) return "connectionFailed";
-  if (choice.kind === "api" && modelId) {
-    const model = choice.models.find((item) => item.modelId === modelId);
-    if (!model || !model.available) return "modelUnavailable";
+function optionLabel(option: TargetOption, cliDefaultModel: string) {
+  const target = option.kind === "api"
+    ? option.modelId
+    : option.modelId || cliDefaultModel;
+  return `${option.name} · ${target}`;
+}
+
+function targetOptions(slotChoices: Choice[], currentTargets: Target[]): TargetOption[] {
+  const options = new Map<string, TargetOption>();
+  for (const choice of slotChoices) {
+    if (choice.kind === "api") {
+      for (const model of choice.models) {
+        const value = targetValue(choice.id, model.modelId);
+        options.set(value, {
+          value,
+          connectionId: choice.id,
+          modelId: model.modelId,
+          name: choice.name,
+          kind: choice.kind,
+          testStatus: choice.testStatus,
+          testOk: choice.testOk,
+          enabled: choice.enabled,
+          available: model.available,
+        });
+      }
+    } else {
+      const value = targetValue(choice.id, null);
+      options.set(value, {
+        value,
+        connectionId: choice.id,
+        modelId: null,
+        name: choice.name,
+        kind: choice.kind,
+        testStatus: choice.testStatus,
+        testOk: choice.testOk,
+        enabled: choice.enabled,
+        available: true,
+      });
+    }
   }
+
+  // Keep legacy/custom model selections visible until the user replaces them.
+  for (const target of currentTargets) {
+    const value = targetValue(target.connectionId, target.modelId);
+    if (options.has(value)) continue;
+    options.set(value, {
+      value,
+      connectionId: target.connectionId,
+      modelId: target.modelId,
+      name: target.connection.name,
+      kind: target.connection.kind,
+      testStatus: target.connection.testStatus,
+      testOk: target.connection.testOk,
+      enabled: target.connection.enabled,
+      available: target.connection.kind === "cli",
+    });
+  }
+  return [...options.values()];
+}
+
+function unavailableReason(option: TargetOption | undefined) {
+  if (!option) return "connectionMissing";
+  if (!option.enabled) return "connectionDisabled";
+  if (!option.testOk) return "connectionFailed";
+  if (!option.available) return "modelUnavailable";
   return null;
 }
 
@@ -102,11 +148,6 @@ export function CapabilitySlotsSection() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [pending, setPending] = useState<Record<string, boolean>>({});
-  const [editor, setEditor] = useState<null | { slot: Slot; target: Target | null }>(null);
-  const [connectionId, setConnectionId] = useState("");
-  const [modelId, setModelId] = useState("");
-  const [editorError, setEditorError] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<null | { slot: Slot; target: Target }>(null);
   const [effort, setEffort] = useState("low");
   const [historyTurns, setHistoryTurns] = useState(String(DEFAULT_ASSISTANT_HISTORY_TURNS));
 
@@ -156,65 +197,51 @@ export function CapabilitySlotsSection() {
     return t(`settings.capabilitySlots.error.${code ?? "capability_operation_failed"}` as never);
   }
 
-  function openTargetEditor(slot: Slot, target: Target | null) {
-    setEditor({ slot, target });
-    setConnectionId(target?.connectionId ?? "");
-    setModelId(target?.modelId ?? "");
-    setEditorError(null);
-  }
-
-  const selectedChoice = useMemo(
-    () => editor ? choices[editor.slot].find((choice) => choice.id === connectionId) ?? null : null,
-    [choices, connectionId, editor],
-  );
-
-  async function saveTarget() {
-    if (!editor || !connectionId) return;
-    if (selectedChoice?.kind === "api" && !modelId.trim()) {
-      setEditorError(t("settings.capabilitySlots.apiModelRequired"));
-      return;
-    }
-    const key = `save:${editor.slot}:${editor.target?.id ?? "new"}`;
-    markPending(key, true);
-    const input = { connectionId, modelId: modelId.trim() || null };
-    const result = editor.target
-      ? await updateAiCapabilityTarget(editor.slot, editor.target.id, input)
-      : await addAiCapabilityTarget(editor.slot, input);
-    if (!result.ok) {
-      setEditorError(actionError(result.error.code));
-      markPending(key, false);
-      return;
-    }
-    setEditor(null);
-    await load();
-    markPending(key, false);
-    toast.success(t("settings.capabilitySlots.saved"));
-  }
-
-  async function removeTarget() {
-    if (!deleteTarget) return;
-    const { slot, target } = deleteTarget;
-    setDeleteTarget(null);
-    const key = `delete:${target.id}`;
-    markPending(key, true);
-    const result = await deleteAiCapabilityTarget(slot, target.id);
-    if (!result.ok) toast.error(actionError(result.error.code));
-    else await load();
-    markPending(key, false);
-  }
-
-  async function moveTarget(slot: Slot, index: number, direction: -1 | 1) {
+  async function selectTarget(slot: Slot, role: TargetRole, value: string | null) {
     const config = configs.find((item) => item.slot === slot);
     if (!config) return;
-    const destination = index + direction;
-    if (destination < 0 || destination >= config.targets.length) return;
-    const ids = config.targets.map((target) => target.id);
-    [ids[index], ids[destination]] = [ids[destination], ids[index]];
-    const key = `reorder:${slot}`;
+    const options = targetOptions(choices[slot], config.targets);
+    const selected = value && value !== EMPTY_TARGET
+      ? options.find((option) => option.value === value)
+      : null;
+    if (value !== EMPTY_TARGET && !selected) return;
+
+    const currentPrimary = config.targets[0] ?? null;
+    const currentFallback = config.targets[1] ?? null;
+    const primaryValue = currentPrimary
+      ? targetValue(currentPrimary.connectionId, currentPrimary.modelId)
+      : null;
+    const fallbackValue = currentFallback
+      ? targetValue(currentFallback.connectionId, currentFallback.modelId)
+      : null;
+    const nextPrimaryValue = role === "primary" ? selected?.value ?? null : primaryValue;
+    let nextFallbackValue = role === "fallback" ? selected?.value ?? null : fallbackValue;
+    if (!nextPrimaryValue || nextPrimaryValue === nextFallbackValue) nextFallbackValue = null;
+
+    const existingByValue = new Map(config.targets.map((target) => [
+      targetValue(target.connectionId, target.modelId),
+      target,
+    ]));
+    const nextValues = [nextPrimaryValue, nextFallbackValue].filter((item): item is string => Boolean(item));
+    const inputs = nextValues.map((targetSelection) => {
+      const option = options.find((candidate) => candidate.value === targetSelection)!;
+      const existing = existingByValue.get(targetSelection);
+      return {
+        ...(existing ? { targetId: existing.id } : {}),
+        connectionId: option.connectionId,
+        modelId: option.modelId,
+      };
+    });
+
+    const key = `select:${slot}`;
     markPending(key, true);
-    const result = await reorderAiCapabilityTargets(slot, ids);
-    if (!result.ok) toast.error(actionError(result.error.code));
-    else await load();
+    const result = await replaceAiCapabilityTargets(slot, inputs);
+    if (!result.ok) {
+      toast.error(actionError(result.error.code));
+    } else {
+      await load();
+      toast.success(t("settings.capabilitySlots.saved"));
+    }
     markPending(key, false);
   }
 
@@ -272,11 +299,14 @@ export function CapabilitySlotsSection() {
       ) : SLOT_META.map(({ slot, icon: Icon, desc }) => {
         const config = configs.find((item) => item.slot === slot);
         const targets = config?.targets ?? [];
+        const options = targetOptions(choices[slot], targets);
+        const primaryValue = targets[0] ? targetValue(targets[0].connectionId, targets[0].modelId) : EMPTY_TARGET;
+        const fallbackValue = targets[1] ? targetValue(targets[1].connectionId, targets[1].modelId) : EMPTY_TARGET;
         const recent = diagnostics.find((attempt) => attempt.slot === slot);
         const migrationWarning = config && config.migrationStatus !== "complete" && config.migrationStatus !== "defaulted" && config.migrationStatus !== "missing";
         return (
           <article key={slot} className="overflow-hidden rounded-lg border bg-card">
-            <div className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3 sm:flex-nowrap">
+            <div className="border-b px-4 py-3">
               <div className="flex min-w-0 gap-2.5">
                 <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
                 <div className="min-w-0">
@@ -284,7 +314,6 @@ export function CapabilitySlotsSection() {
                   <p className="text-xs text-muted-foreground">{t(`settings.capabilitySlots.${desc}` as never)}</p>
                 </div>
               </div>
-              <Button onClick={() => openTargetEditor(slot, null)}><Plus />{t("settings.capabilitySlots.addTarget")}</Button>
             </div>
 
             {migrationWarning && (
@@ -294,52 +323,73 @@ export function CapabilitySlotsSection() {
               </div>
             )}
 
-            {targets.length === 0 ? (
-              <div className="flex items-center gap-2 px-4 py-5 text-sm text-muted-foreground">
-                <CircleDashed className="size-4" aria-hidden />
-                {t("settings.capabilitySlots.unconfigured")}
-              </div>
-            ) : (
-              <ol className="divide-y">
-                {targets.map((target, index) => {
-                  const choice = choices[slot].find((item) => item.id === target.connectionId);
-                  const reason = choice ? unavailableReason(choice, target.modelId) : "connectionMissing";
-                  const model = choice?.models.find((item) => item.modelId === target.modelId);
-                  return (
-                    <li key={target.id} className="flex min-w-0 flex-wrap items-center gap-2 px-4 py-3 sm:flex-nowrap">
-                      <Badge variant={index === 0 ? "default" : "outline"}>
-                        {index === 0 ? t("settings.capabilitySlots.primary") : `${t("settings.capabilitySlots.fallback")} ${index}`}
-                      </Badge>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="break-words text-sm font-medium">{target.connection.name}</span>
-                          <Badge variant="outline">{target.connection.kind.toUpperCase()}</Badge>
-                          <Badge variant={target.connection.testOk ? "secondary" : "destructive"}>
-                            {t(`settings.aiTools.status.${target.connection.testStatus}` as never)}
-                          </Badge>
-                        </div>
-                        <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
-                          {target.modelId || t("settings.capabilitySlots.cliDefaultModel")}
-                          {model ? ` · ${model.source}` : ""}
-                        </p>
-                        {reason && (
-                          <p className="mt-1 flex items-center gap-1 text-xs text-destructive">
-                            <CircleAlert className="size-3.5 shrink-0" aria-hidden />
-                            {t(`settings.capabilitySlots.diagnostic.${reason}` as never)}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-1">
-                        <IconButton label={t("settings.capabilitySlots.moveUp")} disabled={index === 0 || pending[`reorder:${slot}`]} onClick={() => void moveTarget(slot, index, -1)}><ArrowUp /></IconButton>
-                        <IconButton label={t("settings.capabilitySlots.moveDown")} disabled={index === targets.length - 1 || pending[`reorder:${slot}`]} onClick={() => void moveTarget(slot, index, 1)}><ArrowDown /></IconButton>
-                        <IconButton label={t("common.edit")} onClick={() => openTargetEditor(slot, target)}><Pencil /></IconButton>
-                        <IconButton label={t("common.delete")} disabled={pending[`delete:${target.id}`]} onClick={() => setDeleteTarget({ slot, target })}><Trash2 /></IconButton>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ol>
-            )}
+            <div className="grid px-4 py-4 md:grid-cols-2 md:divide-x">
+              {(["primary", "fallback"] as const).map((role) => {
+                const value = role === "primary" ? primaryValue : fallbackValue;
+                const selectedOption = options.find((option) => option.value === value);
+                const reason = value === EMPTY_TARGET ? null : unavailableReason(selectedOption);
+                const oppositeValue = role === "primary" ? fallbackValue : primaryValue;
+                return (
+                  <div
+                    key={role}
+                    className={role === "primary"
+                      ? "min-w-0 pb-4 md:pr-4 md:pb-0"
+                      : "min-w-0 border-t pt-4 md:border-t-0 md:pt-0 md:pl-4"}
+                  >
+                    <div className="mb-2">
+                      <Label htmlFor={`${slot}-${role}`}>{t(`settings.capabilitySlots.${role}` as never)}</Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        {t(`settings.capabilitySlots.${role}Desc` as never)}
+                      </p>
+                    </div>
+                    <Select
+                      value={value}
+                      onValueChange={(nextValue) => void selectTarget(slot, role, nextValue)}
+                      disabled={pending[`select:${slot}`] || (role === "fallback" && primaryValue === EMPTY_TARGET)}
+                    >
+                      <SelectTrigger id={`${slot}-${role}`} className="w-full">
+                        <span className="truncate">
+                          {selectedOption
+                            ? optionLabel(selectedOption, t("settings.capabilitySlots.cliDefaultModel"))
+                            : role === "primary"
+                              ? t("settings.capabilitySlots.selectPrimary")
+                              : t("settings.capabilitySlots.noFallback")}
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-xl">
+                        <SelectItem value={EMPTY_TARGET}>
+                          {role === "primary"
+                            ? t("settings.capabilitySlots.unconfigured")
+                            : t("settings.capabilitySlots.noFallback")}
+                        </SelectItem>
+                        {options
+                          .filter((option) => option.enabled || option.value === value)
+                          .map((option) => (
+                            <SelectItem
+                              key={option.value}
+                              value={option.value}
+                              disabled={option.value === oppositeValue}
+                            >
+                              {optionLabel(option, t("settings.capabilitySlots.cliDefaultModel"))}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedOption && (
+                      <p className="mt-1.5 truncate text-[11px] text-muted-foreground">
+                        {selectedOption.kind.toUpperCase()} · {t(`settings.aiTools.status.${selectedOption.testStatus}` as never)}
+                      </p>
+                    )}
+                    {reason && (
+                      <p className="mt-1.5 flex items-center gap-1 text-xs text-destructive">
+                        <CircleAlert className="size-3.5 shrink-0" aria-hidden />
+                        {t(`settings.capabilitySlots.diagnostic.${reason}` as never)}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
 
             {slot === "assistant" && (
               <div className="divide-y border-t bg-muted/20 px-4">
@@ -389,83 +439,6 @@ export function CapabilitySlotsSection() {
           </article>
         );
       })}
-
-      <Dialog open={editor !== null} onOpenChange={(open) => { if (!open) setEditor(null); }}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-lg sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editor?.target ? t("settings.capabilitySlots.editTarget") : t("settings.capabilitySlots.addTarget")}</DialogTitle>
-            <DialogDescription>{t("settings.capabilitySlots.targetDialogDesc")}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="slot-connection">{t("settings.capabilitySlots.connection")}</Label>
-              <Select value={connectionId || null} onValueChange={(value) => { setConnectionId(value ?? ""); setModelId(""); setEditorError(null); }}>
-                <SelectTrigger id="slot-connection" className="w-full">
-                  <span className="truncate">{selectedChoice ? `${selectedChoice.name} · ${selectedChoice.kind.toUpperCase()} · ${t(`settings.aiTools.status.${selectedChoice.testStatus}` as never)}` : t("settings.capabilitySlots.selectConnection")}</span>
-                </SelectTrigger>
-                <SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
-                  {editor && choices[editor.slot]
-                    .filter((choice) => choice.enabled || editor.target?.connectionId === choice.id)
-                    .map((choice) => (
-                      <SelectItem key={choice.id} value={choice.id}>
-                        {choice.name} · {choice.kind.toUpperCase()} · {t(`settings.aiTools.status.${choice.testStatus}` as never)}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              {editor?.slot === "terminal" && <p className="text-[11px] text-muted-foreground">{t("settings.capabilitySlots.terminalCliOnly")}</p>}
-            </div>
-
-            {selectedChoice?.kind === "api" ? (
-              <div className="space-y-1.5">
-                <Label htmlFor="slot-model">{t("settings.capabilitySlots.model")}</Label>
-                <Select value={modelId || null} onValueChange={(value) => setModelId(value ?? "")}>
-                  <SelectTrigger id="slot-model" className="w-full">
-                    <span className="truncate">{modelId || t("settings.capabilitySlots.selectModel")}</span>
-                  </SelectTrigger>
-                  <SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
-                    {selectedChoice.models.map((model) => (
-                      <SelectItem key={model.modelId} value={model.modelId}>
-                        {model.modelId} · {model.source} · {model.available ? t("settings.aiTools.available") : t("settings.aiTools.unavailable")}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : selectedChoice ? (
-              <div className="space-y-1.5">
-                <Label htmlFor="slot-cli-model">{t("settings.capabilitySlots.modelOptional")}</Label>
-                <Input id="slot-cli-model" value={modelId} onChange={(event) => setModelId(event.target.value)} placeholder={t("settings.capabilitySlots.cliDefaultModel")} className="font-mono" />
-              </div>
-            ) : null}
-
-            {selectedChoice && unavailableReason(selectedChoice, modelId || null) && (
-              <p className="flex gap-2 text-xs text-destructive">
-                <CircleAlert className="size-4 shrink-0" aria-hidden />
-                {t(`settings.capabilitySlots.diagnostic.${unavailableReason(selectedChoice, modelId || null)}` as never)}
-              </p>
-            )}
-            {editorError && <p className="text-xs text-destructive" role="alert">{editorError}</p>}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditor(null)}>{t("common.cancel")}</Button>
-            <Button onClick={() => void saveTarget()} disabled={!connectionId || pending[`save:${editor?.slot}:${editor?.target?.id ?? "new"}`]}>{t("common.save")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
-        <DialogContent className="rounded-lg sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t("settings.capabilitySlots.deleteTarget")}</DialogTitle>
-            <DialogDescription>{t("settings.capabilitySlots.deleteTargetConfirm")}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>{t("common.cancel")}</Button>
-            <Button variant="destructive" onClick={() => void removeTarget()}>{t("common.delete")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </section>
   );
 }

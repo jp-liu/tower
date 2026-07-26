@@ -10,18 +10,14 @@ const api = { id: "api-1", connectionKey: null, name: "API", kind: "api", provid
 
 const actionMocks = vi.hoisted(() => ({
   listAiCapabilities: vi.fn(), getAiCapabilityChoices: vi.fn(), getAiCapabilityDiagnostics: vi.fn(),
-  addAiCapabilityTarget: vi.fn(), updateAiCapabilityTarget: vi.fn(), deleteAiCapabilityTarget: vi.fn(),
-  reorderAiCapabilityTargets: vi.fn(), getConfigValue: vi.fn(), setConfigValue: vi.fn(),
+  replaceAiCapabilityTargets: vi.fn(), getConfigValue: vi.fn(), setConfigValue: vi.fn(),
 }));
 
 vi.mock("@/actions/ai-config-actions", () => ({
   listAiCapabilities: actionMocks.listAiCapabilities,
   getAiCapabilityChoices: actionMocks.getAiCapabilityChoices,
   getAiCapabilityDiagnostics: actionMocks.getAiCapabilityDiagnostics,
-  addAiCapabilityTarget: actionMocks.addAiCapabilityTarget,
-  updateAiCapabilityTarget: actionMocks.updateAiCapabilityTarget,
-  deleteAiCapabilityTarget: actionMocks.deleteAiCapabilityTarget,
-  reorderAiCapabilityTargets: actionMocks.reorderAiCapabilityTargets,
+  replaceAiCapabilityTargets: actionMocks.replaceAiCapabilityTargets,
 }));
 vi.mock("@/actions/config-actions", () => ({ getConfigValue: actionMocks.getConfigValue, setConfigValue: actionMocks.setConfigValue }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -42,30 +38,28 @@ describe("CapabilitySlotsSection", () => {
     actionMocks.getAiCapabilityDiagnostics.mockResolvedValue({ ok: true, data: [] });
     actionMocks.getConfigValue.mockImplementation(async (key: string) => key === "assistant.effort" ? "low" : 20);
     actionMocks.setConfigValue.mockResolvedValue(undefined);
-    actionMocks.addAiCapabilityTarget.mockResolvedValue({ ok: true, data: {} });
-    actionMocks.updateAiCapabilityTarget.mockResolvedValue({ ok: true, data: {} });
-    actionMocks.deleteAiCapabilityTarget.mockResolvedValue({ ok: true, data: {} });
-    actionMocks.reorderAiCapabilityTargets.mockResolvedValue({ ok: true, data: {} });
+    actionMocks.replaceAiCapabilityTargets.mockResolvedValue({ ok: true, data: {} });
   });
 
-  it("renders exactly five unconfigured slots without a fabricated Claude target", async () => {
+  it("renders exactly five direct Primary and Fallback selectors without a fabricated Claude target", async () => {
     renderSection();
-    expect(await screen.findAllByText(/未配置目标|No targets configured/)).toHaveLength(5);
+    expect(await screen.findAllByLabelText("Primary")).toHaveLength(5);
+    expect(screen.getAllByLabelText("Fallback")).toHaveLength(5);
     expect(screen.queryByText(/^Claude$/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /新增目标|Add target/ })).not.toBeInTheDocument();
     for (const title of [/终端执行|Terminal/, /任务摘要|Task Summary/, /知识沉淀|Knowledge Insights/, /项目分析|Project Analysis/, /AI 助手|AI Assistant/]) {
       expect(screen.getByRole("heading", { level: 3, name: title })).toBeInTheDocument();
     }
   });
 
-  it("filters API connections out of the Terminal target editor", async () => {
+  it("filters API connections out of the Terminal Primary selector", async () => {
     const user = userEvent.setup();
     renderSection();
-    await screen.findAllByText(/未配置目标|No targets configured/);
+    await screen.findAllByLabelText("Primary");
     const terminal = screen.getByText(/终端执行|Terminal/).closest("article")!;
-    await user.click(within(terminal).getByRole("button", { name: /新增目标|Add target/ }));
-    await user.click(screen.getByLabelText(/连接|Connection/));
-    expect(await screen.findByText(/Codex · CLI/)).toBeInTheDocument();
-    expect(screen.queryByText(/API · API/)).not.toBeInTheDocument();
+    await user.click(within(terminal).getByLabelText("Primary"));
+    expect(await screen.findByRole("option", { name: /Codex/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /API/ })).not.toBeInTheDocument();
   });
 
   it("does not offer disabled provider connections for a new target", async () => {
@@ -73,28 +67,27 @@ describe("CapabilitySlotsSection", () => {
     actionMocks.getAiCapabilityChoices.mockResolvedValue({ ok: true, data: [cli, disabled] });
     const user = userEvent.setup();
     renderSection();
-    await screen.findAllByText(/未配置目标|No targets configured/);
+    await screen.findAllByLabelText("Primary");
     const assistant = screen.getByText(/AI 助手|AI Assistant/).closest("article")!;
-    await user.click(within(assistant).getByRole("button", { name: /新增目标|Add target/ }));
-    await user.click(screen.getByLabelText(/连接|Connection/));
-    expect(await screen.findByRole("option", { name: /Codex · CLI/ })).toBeInTheDocument();
+    await user.click(within(assistant).getByLabelText("Primary"));
+    expect(await screen.findByRole("option", { name: /Codex/ })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /Qwen Code/ })).not.toBeInTheDocument();
   });
 
-  it("requires an API model before saving a non-terminal target", async () => {
+  it("selects an API connection and model as one Primary suite", async () => {
     const user = userEvent.setup();
     renderSection();
-    await screen.findAllByText(/未配置目标|No targets configured/);
+    await screen.findAllByLabelText("Primary");
     const summary = screen.getByText(/任务摘要|Task Summary/).closest("article")!;
-    await user.click(within(summary).getByRole("button", { name: /新增目标|Add target/ }));
-    await user.click(screen.getByLabelText(/连接|Connection/));
-    await user.click(await screen.findByRole("option", { name: /API · API/ }));
-    await user.click(screen.getByRole("button", { name: /^保存$|^Save$/ }));
-    expect(screen.getByRole("alert")).toHaveTextContent(/API 目标必须选择模型|API targets require a model/);
-    expect(actionMocks.addAiCapabilityTarget).not.toHaveBeenCalled();
+    await user.click(within(summary).getByLabelText("Primary"));
+    await user.click(await screen.findByRole("option", { name: /API · model-a/ }));
+    await waitFor(() => expect(actionMocks.replaceAiCapabilityTargets).toHaveBeenCalledWith("summary", [{
+      connectionId: "api-1",
+      modelId: "model-a",
+    }]));
   });
 
-  it("labels primary and ordered fallbacks and supports reordering", async () => {
+  it("updates the fixed Fallback directly without reordering controls", async () => {
     const targets = [
       { id: "target-1", connectionId: "cli-1", modelId: null, order: 0, connection: cli },
       { id: "target-2", connectionId: "api-1", modelId: "model-a", order: 1, connection: api },
@@ -102,11 +95,15 @@ describe("CapabilitySlotsSection", () => {
     actionMocks.listAiCapabilities.mockResolvedValue({ ok: true, data: configs({ summary: { targets } }) });
     const user = userEvent.setup();
     renderSection();
-    expect(await screen.findByText("Primary")).toBeInTheDocument();
-    expect(screen.getByText(/Fallback 1/)).toBeInTheDocument();
-    const fallback = screen.getByText(/Fallback 1/).closest("li")!;
-    await user.click(within(fallback).getByRole("button", { name: /上移目标|Move target up/ }));
-    await waitFor(() => expect(actionMocks.reorderAiCapabilityTargets).toHaveBeenCalledWith("summary", ["target-2", "target-1"]));
+    const summary = (await screen.findByText(/任务摘要|Task Summary/)).closest("article")!;
+    expect(within(summary).queryByRole("button", { name: /上移目标|Move target up/ })).not.toBeInTheDocument();
+    await user.click(within(summary).getByLabelText("Fallback"));
+    await user.click(await screen.findByRole("option", { name: /不使用备用套件|No fallback suite/ }));
+    await waitFor(() => expect(actionMocks.replaceAiCapabilityTargets).toHaveBeenCalledWith("summary", [{
+      targetId: "target-1",
+      connectionId: "cli-1",
+      modelId: null,
+    }]));
   });
 
   it("shows migration and unavailable diagnostics without prompt or secret fields", async () => {
@@ -123,7 +120,7 @@ describe("CapabilitySlotsSection", () => {
   it("keeps Assistant effort while model selection stays on explicit targets", async () => {
     const user = userEvent.setup();
     renderSection();
-    await screen.findAllByText(/未配置目标|No targets configured/);
+    await screen.findAllByLabelText("Primary");
     await user.click(screen.getByLabelText(/思考等级|Thinking effort/));
     await user.click(await screen.findByText(/平衡|Balanced/));
     expect(actionMocks.setConfigValue).toHaveBeenCalledWith("assistant.effort", "medium");

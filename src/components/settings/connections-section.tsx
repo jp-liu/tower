@@ -7,6 +7,7 @@ import {
   CircleDashed,
   Loader2,
   PlugZap,
+  ShieldCheck,
   TerminalSquare,
   X,
 } from "lucide-react";
@@ -20,6 +21,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 import type { ProviderAvailability } from "@/lib/ai/types";
 import { ApiConnectionsSection } from "./api-connections-section";
@@ -194,8 +196,8 @@ export function ConnectionsSection() {
                         <span>{provider.cli.version ?? t("settings.aiTools.versionUnknown")}</span>
                       </div>
                     </div>
-                    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-                      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <div className="flex w-full items-center justify-between border-t pt-3 sm:w-auto sm:justify-end sm:border-t-0 sm:pt-0">
+                      <label className="flex items-center gap-2 text-xs text-muted-foreground sm:border-r sm:pr-4">
                         <Switch
                           checked={enabled}
                           disabled={!provider.builtin || toggling === provider.name || !canToggle}
@@ -204,14 +206,26 @@ export function ConnectionsSection() {
                         />
                         {enabled ? t("settings.aiTools.enabledLabel") : t("settings.aiTools.disabledLabel")}
                       </label>
-                      <Button
-                        variant="outline"
-                        onClick={() => void testProvider(provider.name)}
-                        disabled={isTesting || testing !== null || !provider.cli.available}
-                      >
-                        {isTesting && <Loader2 className="animate-spin" aria-hidden />}
-                        {isTesting ? t("settings.aiTools.testing") : t("settings.aiTools.testConnection")}
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={(
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="ml-2"
+                              aria-label={isTesting ? t("settings.aiTools.testing") : t("settings.aiTools.testConnection")}
+                              onClick={() => void testProvider(provider.name)}
+                              disabled={isTesting || testing !== null || !provider.cli.available}
+                            />
+                          )}
+                        >
+                          {isTesting
+                            ? <Loader2 className="animate-spin" aria-hidden />
+                            : <ShieldCheck aria-hidden />}
+                        </TooltipTrigger>
+                        <TooltipContent>{t("settings.aiTools.testConnection")}</TooltipContent>
+                      </Tooltip>
                     </div>
                   </div>
 

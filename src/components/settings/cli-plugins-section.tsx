@@ -706,10 +706,10 @@ export function CliPluginsSection() {
               <div className="flex flex-wrap items-center gap-2"><strong className="text-sm">{plan.displayName}</strong><Badge variant="outline">{plan.fromVersion ? `${plan.fromVersion} -> ${plan.toVersion}` : plan.toVersion}</Badge><Badge variant="outline">{plan.operation}</Badge><Badge variant="outline">{plan.publisher.name}</Badge></div>
               {plan.description && <p className="text-xs text-muted-foreground">{plan.description}</p>}
               <p className="text-xs">{t("settings.cliPlugins.compatibility")}: Tower {plan.compatibility.tower} · Node {plan.compatibility.node}</p>
-              <div className="rounded-md bg-background/70 px-3 py-2 text-xs">
-                <p className="font-medium">{plan.cliDependency.name}</p>
-                <p className="mt-0.5 break-all font-mono text-[11px] text-muted-foreground">{plan.cliDependency.command} · {plan.cliDependency.supportedVersions}</p>
-                <p className="mt-1 text-muted-foreground">{t("settings.cliPlugins.cliBoundary")}</p>
+              <div className="rounded-md bg-background/70 px-3 py-2">
+                <p className="text-sm font-medium leading-5">{plan.cliDependency.name}</p>
+                <p className="mt-0.5 break-all font-mono text-[10px] leading-4 text-muted-foreground">{plan.cliDependency.command} · {plan.cliDependency.supportedVersions}</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("settings.cliPlugins.cliBoundary")}</p>
               </div>
               <div className="flex flex-wrap gap-1">
                 {Object.entries(plan.capabilities.integrations ?? {}).filter(([, enabled]) => enabled).map(([name]) => <Badge key={name} variant="outline">{name.toUpperCase()}</Badge>)}
