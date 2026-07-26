@@ -5,12 +5,15 @@
  * state is stale.
  */
 
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import * as path from "node:path";
-import type { CliAdapter as SdkCliAdapter, CliIntegrationResult } from "@tower/ai-sdk";
+import type { CliIntegrationResult } from "@tower/ai-sdk";
+import { stableJson } from "@tower/ai-runtime";
 import type { InstallResult, McpServerConfig } from "./types";
 import { providerRegistry } from "./providers";
+import type { ResolvedCliProvider } from "./provider-registry";
 import { getTowerDbPath, getTowerDir } from "../tower-dir";
 import { migrateLegacyTowerMcp, type MigrationReport } from "./migrate-legacy-mcp";
 import { getPackageRoot } from "../tower-paths";
@@ -78,6 +81,11 @@ export interface ProviderInstallReport {
   available: boolean;
   /** Startup skips reinstall when this matches the current Tower runtime. */
   integrationFingerprint?: string;
+  reconciledAt?: string;
+  providerVersion?: string;
+  commandPath?: string;
+  cliVersion?: string | null;
+  desired?: { mcp: boolean; hooks: boolean; skills: boolean };
   migration?: MigrationReport;
   mcp?: InstallResult;
   hooks?: InstallResult;
@@ -91,6 +99,10 @@ export interface ProviderIntegrationStatus {
   hooksInstalled: boolean;
   skillsInstalled: boolean;
   ok: boolean;
+}
+
+export interface ProviderIntegrationInspection extends ProviderIntegrationStatus {
+  skillStates: boolean[];
 }
 
 function asInstallResult(
@@ -114,6 +126,46 @@ function unsupportedIntegration(name: string): InstallResult {
     detail: `${name} unsupported`,
     error: `Provider manifest declares ${name} unsupported`,
   };
+}
+
+function alreadyCurrent(method: InstallResult["method"]): InstallResult {
+  return { ok: true, method, detail: "already current" };
+}
+
+function desiredIntegrations(resolved: ResolvedCliProvider) {
+  const capabilities = resolved.manifest.capabilities.integrations;
+  const permissions = new Set(resolved.manifest.permissions);
+  return {
+    mcp: capabilities?.mcp === true && permissions.has("integration:mcp"),
+    hooks: capabilities?.hooks === true && permissions.has("integration:hooks"),
+    skills: capabilities?.skills === true && permissions.has("integration:skills"),
+  };
+}
+
+function buildResolvedIntegrationFingerprint(
+  apiUrl: string,
+  resolved: ResolvedCliProvider,
+  desired: ReturnType<typeof desiredIntegrations>,
+): string {
+  const mcp = buildTowerMcpConfig();
+  const digest = createHash("sha256").update(stableJson({
+    schema: TOWER_INTEGRATION_SCHEMA_VERSION,
+    towerVersion: packageJson.version,
+    provider: resolved.provider.name,
+    providerVersion: resolved.providerVersion,
+    commandPath: resolved.commandPath,
+    cliVersion: resolved.version,
+    desired,
+    configurationDigest: resolved.configurationDigest,
+    tower: {
+      root: getPackageRoot(),
+      dataDir: getTowerDir(),
+      apiUrl,
+      mcp: { name: mcp.name, command: mcp.command, args: mcp.args, envKeys: Object.keys(mcp.env ?? {}).sort() },
+      skills: TOWER_SKILL_NAMES,
+    },
+  })).digest("hex");
+  return `sha256:${digest}`;
 }
 
 async function installIntegration(
@@ -200,11 +252,19 @@ export async function inspectProviderIntegration(
   const resolved = await providerRegistry
     .createResolvedCliAdapter(providerName, getPackageRoot())
     .catch(() => null);
-  const adapter = resolved?.adapter;
-  const provider = resolved?.provider ?? providerRegistry.get(providerName);
-  if (!adapter) {
+  if (!resolved) {
     return { mcpInstalled: false, hooksInstalled: false, skillsInstalled: false, ok: false };
   }
+
+  const { skillStates: _skillStates, ...status } = await inspectResolvedProviderIntegration(resolved);
+  return status;
+}
+
+export async function inspectResolvedProviderIntegration(
+  resolved: ResolvedCliProvider,
+): Promise<ProviderIntegrationInspection> {
+  const adapter = resolved.adapter;
+  const desired = desiredIntegrations(resolved);
 
   const check = async (fn: () => Promise<boolean>): Promise<boolean> => {
     try {
@@ -215,19 +275,16 @@ export async function inspectProviderIntegration(
   };
 
   const mcpConfig = buildTowerMcpConfig();
-  const manifest = provider?.cli?.plugin.manifest;
-  const permissions = new Set(manifest?.permissions ?? []);
-  const integrations = manifest?.capabilities.integrations;
   const [mcpInstalled, hooksInstalled, skillChecks] = await Promise.all([
-    integrations?.mcp && permissions.has("integration:mcp")
+    desired.mcp
       ? check(async () => (await adapter.mcp?.inspect({ ...mcpConfig, scope: "user" }))?.installed ?? false)
       : false,
-    integrations?.hooks && permissions.has("integration:hooks")
+    desired.hooks
       ? check(async () => (await adapter.hooks?.inspect({}))?.installed ?? false)
       : false,
     Promise.all(
       TOWER_SKILL_NAMES.map((name) =>
-        integrations?.skills && permissions.has("integration:skills")
+        desired.skills
           ? check(async () => (await adapter.skills?.inspect({
           name,
           sourceDir: getTowerSkillSourceDir(name),
@@ -243,9 +300,10 @@ export async function inspectProviderIntegration(
     mcpInstalled,
     hooksInstalled,
     skillsInstalled,
-    ok: (!integrations?.mcp || mcpInstalled)
-      && (!integrations?.hooks || hooksInstalled)
-      && (!integrations?.skills || skillsInstalled),
+    skillStates: skillChecks,
+    ok: (!desired.mcp || mcpInstalled)
+      && (!desired.hooks || hooksInstalled)
+      && (!desired.skills || skillsInstalled),
   };
 }
 
@@ -259,27 +317,26 @@ export async function shouldRefreshProviderIntegration(
   connection: RecordedProviderIntegration | null,
   integrationFingerprint: string,
 ): Promise<boolean> {
-  if (!isRecordedIntegrationCurrent(providerName, connection, integrationFingerprint)) return true;
+  if (!isRecordedIntegrationCurrent(connection, integrationFingerprint)) return true;
   return !(await inspectProviderIntegration(providerName)).ok;
 }
 
 function isRecordedIntegrationCurrent(
-  providerName: string,
   connection: RecordedProviderIntegration | null,
   integrationFingerprint: string,
 ): boolean {
   if (!connection?.testOk) return false;
-  const integrations = providerRegistry.get(providerName)?.cli?.plugin.manifest.capabilities.integrations;
-  if ((integrations?.mcp && !connection.mcpInstalled)
-    || (integrations?.hooks && !connection.hooksInstalled)
-    || (integrations?.skills && !connection.skillsInstalled)) {
-    return false;
-  }
   if (!connection.installLog) return false;
 
   try {
-    const report = JSON.parse(connection.installLog) as { integrationFingerprint?: unknown };
-    return report.integrationFingerprint === integrationFingerprint;
+    const report = JSON.parse(connection.installLog) as {
+      integrationFingerprint?: unknown;
+      desired?: { mcp?: unknown; hooks?: unknown; skills?: unknown };
+    };
+    return report.integrationFingerprint === integrationFingerprint
+      && (!report.desired?.mcp || connection.mcpInstalled)
+      && (!report.desired?.hooks || connection.hooksInstalled)
+      && (!report.desired?.skills || connection.skillsInstalled);
   } catch {
     return false;
   }
@@ -296,13 +353,28 @@ export async function installAllForProvider(
   providerName: string,
   apiUrl: string,
 ): Promise<ProviderInstallReport> {
-  const integrationFingerprint = buildTowerIntegrationFingerprint(apiUrl);
   const resolved = await providerRegistry.createResolvedCliAdapter(providerName, getPackageRoot()).catch(() => null);
-  const provider = resolved?.provider ?? providerRegistry.get(providerName);
-  if (!resolved || !provider?.cli) {
-    return { provider: providerName, available: false, integrationFingerprint, ok: false };
+  if (!resolved) {
+    return {
+      provider: providerName,
+      available: false,
+      integrationFingerprint: buildTowerIntegrationFingerprint(apiUrl),
+      reconciledAt: new Date().toISOString(),
+      ok: false,
+    };
   }
-  const adapter: SdkCliAdapter = resolved.adapter;
+  return reconcileResolvedProviderIntegrations(resolved, apiUrl);
+}
+
+export async function reconcileResolvedProviderIntegrations(
+  resolved: ResolvedCliProvider,
+  apiUrl: string,
+): Promise<ProviderInstallReport> {
+  const providerName = resolved.provider.name;
+  const adapter = resolved.adapter;
+  const desired = desiredIntegrations(resolved);
+  const integrationFingerprint = buildResolvedIntegrationFingerprint(apiUrl, resolved, desired);
+  const actualBefore = await inspectResolvedProviderIntegration(resolved);
 
   // Migrate first — this is a one-time cleanup of where older Tower wrote the
   // entry. Only Claude has a legacy entry; for other providers it's a no-op.
@@ -310,26 +382,29 @@ export async function installAllForProvider(
     providerName === "claude" ? migrateLegacyTowerMcp() : undefined;
 
   const mcpConfig = buildTowerMcpConfig();
-  const capabilities = provider.cli.plugin.manifest.capabilities.integrations;
-  const permissions = new Set(provider.cli.plugin.manifest.permissions);
-  const includeProviderDetail = provider.builtin === true;
-  const mcp = capabilities?.mcp && permissions.has("integration:mcp") && adapter.mcp
-    ? await installIntegration("MCP", "cli", () => adapter.mcp!.install({ ...mcpConfig, scope: "user" }), includeProviderDetail)
+  const capabilities = resolved.manifest.capabilities.integrations;
+  const includeProviderDetail = resolved.provider.builtin === true;
+  const mcp = desired.mcp && adapter.mcp
+    ? actualBefore.mcpInstalled
+      ? alreadyCurrent("cli")
+      : await installIntegration("MCP", "cli", () => adapter.mcp!.install({ ...mcpConfig, scope: "user" }), includeProviderDetail)
     : capabilities?.mcp ? unsupportedIntegration("MCP") : undefined;
-  const hooks = capabilities?.hooks && permissions.has("integration:hooks") && adapter.hooks
-    ? await installIntegration("Hooks", "file", () => adapter.hooks!.install({ apiUrl }), includeProviderDetail)
+  const hooks = desired.hooks && adapter.hooks
+    ? actualBefore.hooksInstalled
+      ? alreadyCurrent("file")
+      : await installIntegration("Hooks", "file", () => adapter.hooks!.install({ apiUrl }), includeProviderDetail)
     : capabilities?.hooks ? unsupportedIntegration("Hooks") : undefined;
   // Install every task-terminal Tower skill. Report the first failure if any,
   // else the canonical `tower` result — ok reflects all of them.
   const skillResults = await Promise.all(
-    TOWER_SKILL_NAMES.map(async (name) => capabilities?.skills
-      && permissions.has("integration:skills")
-      && adapter.skills
-      ? installIntegration(`Skill ${name}`, "symlink", () => adapter.skills!.install({
-          name,
-          sourceDir: getTowerSkillSourceDir(name),
-          scope: "user",
-        }), includeProviderDetail)
+    TOWER_SKILL_NAMES.map(async (name, index) => desired.skills && adapter.skills
+      ? actualBefore.skillStates[index]
+        ? alreadyCurrent("symlink")
+        : installIntegration(`Skill ${name}`, "symlink", () => adapter.skills!.install({
+            name,
+            sourceDir: getTowerSkillSourceDir(name),
+            scope: "user",
+          }), includeProviderDetail)
       : capabilities?.skills ? unsupportedIntegration("Skills") : undefined),
   );
   const skill = skillResults.find((result) => result && !result.ok) ?? skillResults[0];
@@ -337,16 +412,21 @@ export async function installAllForProvider(
     provider: providerName,
     available: true,
     integrationFingerprint,
+    reconciledAt: new Date().toISOString(),
+    providerVersion: resolved.providerVersion,
+    commandPath: resolved.commandPath,
+    cliVersion: resolved.version,
+    desired,
     migration,
     mcp,
     hooks,
     skill,
-    ok: (!capabilities?.mcp || mcp?.ok === true)
-      && (!capabilities?.hooks || hooks?.ok === true)
-      && (!capabilities?.skills || skill?.ok === true),
+    ok: (!desired.mcp || mcp?.ok === true)
+      && (!desired.hooks || hooks?.ok === true)
+      && (!desired.skills || skill?.ok === true),
   };
-  const actual = await inspectProviderIntegration(providerName);
-  return applyIntegrationVerification(report, actual, capabilities);
+  const actual = await inspectResolvedProviderIntegration(resolved);
+  return applyIntegrationVerification(report, actual, desired);
 }
 
 function applyIntegrationVerification(

@@ -8,6 +8,7 @@ import {
   type CliEnvironmentVariable,
 } from "@/lib/ai/cli-plugin-service";
 import { testPluginCliConnection } from "@/lib/ai/cli-plugin-provider";
+import { reconcileProviderIntegrations } from "@/lib/ai/provider-reconciliation";
 import type { CliPluginSecretReference } from "@/lib/ai/cli-plugin-shared";
 
 type ActionResult<T> =
@@ -93,10 +94,11 @@ export async function installCliPlugin(planDigest: string) {
 }
 
 export async function confirmAndEnableCliPlugin(planDigest: string) {
-  return action(
-    () => getCliPluginApplication().confirmAndEnable(digestSchema.parse(planDigest)),
-    true,
-  );
+  return action(async () => {
+    const plugin = await getCliPluginApplication().confirmAndEnable(digestSchema.parse(planDigest));
+    await reconcileProviderIntegrations({ provider: plugin.id, trigger: "extension-enabled" });
+    return plugin;
+  }, true);
 }
 
 export async function disableCliPlugin(pluginId: string) {
@@ -107,10 +109,11 @@ export async function disableCliPlugin(pluginId: string) {
 }
 
 export async function enableCliPlugin(pluginId: string) {
-  return action(
-    () => getCliPluginApplication().enable(pluginIdSchema.parse(pluginId)),
-    true,
-  );
+  return action(async () => {
+    const plugin = await getCliPluginApplication().enable(pluginIdSchema.parse(pluginId));
+    await reconcileProviderIntegrations({ provider: plugin.id, trigger: "extension-enabled" });
+    return plugin;
+  }, true);
 }
 
 export async function uninstallCliPlugin(pluginId: string) {
@@ -137,10 +140,17 @@ export async function saveCliPluginConnection(input: {
   envVars: CliEnvironmentVariable[];
   settings: Record<string, unknown>;
 }) {
-  return action(
-    () => getCliPluginApplication().saveConnection(saveConnectionSchema.parse(input)),
-    true,
-  );
+  return action(async () => {
+    const connection = await getCliPluginApplication().saveConnection(saveConnectionSchema.parse(input));
+    if (connection.enabled) {
+      await reconcileProviderIntegrations({
+        provider: connection.pluginId,
+        connectionId: connection.id,
+        trigger: "dependency-changed",
+      });
+    }
+    return connection;
+  }, true);
 }
 
 export async function revealCliPluginSecret(
@@ -158,7 +168,19 @@ export async function testCliPluginConnection(pluginId: string) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 50_000);
     try {
-      return await testPluginCliConnection(pluginIdSchema.parse(pluginId), controller.signal);
+      const parsedPluginId = pluginIdSchema.parse(pluginId);
+      await reconcileProviderIntegrations({
+        provider: parsedPluginId,
+        trigger: "hello-success",
+        skipHello: true,
+      });
+      const probe = await testPluginCliConnection(parsedPluginId, controller.signal);
+      const reconciliation = await reconcileProviderIntegrations({
+        provider: parsedPluginId,
+        trigger: "hello-success",
+        helloAlreadySucceeded: true,
+      });
+      return { ...probe, reconciliation };
     } finally {
       clearTimeout(timeout);
     }

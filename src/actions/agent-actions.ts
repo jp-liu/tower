@@ -14,6 +14,10 @@ import {
 } from "@/lib/ai/capability-resolver";
 import { recordCapabilityAttemptService } from "@/lib/ai/capability-config-service";
 import {
+  reconcileTerminalCapabilityTargets,
+  reconcileTerminalExecutionBinding,
+} from "@/lib/ai/provider-reconciliation";
+import {
   buildTerminalLaunch,
   resolveExecutionTerminalTarget,
   terminalTargetSnapshot,
@@ -279,6 +283,7 @@ export async function resumePtyExecution(
 
   // Resume is pinned to the exact connection/model snapshot on the original execution.
   // Legacy rows are mapped once through their unique cli:<provider> connection.
+  await reconcileTerminalExecutionBinding(prevExec, cwd);
   const fixedTarget = await resolveExecutionTerminalTarget(prevExec, cwd);
   const fixedSnapshot = terminalTargetSnapshot(fixedTarget);
 
@@ -482,6 +487,7 @@ export async function continueLatestPtyExecution(
   const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
 
   // Continue is fixed to the latest execution's exact connection and model.
+  await reconcileTerminalExecutionBinding(latestExec, cwd);
   const fixedTarget = await resolveExecutionTerminalTarget(latestExec, cwd);
   const fixedSnapshot = terminalTargetSnapshot(fixedTarget);
 
@@ -820,6 +826,17 @@ export async function startPtyExecution(
         data: { status: "IN_PROGRESS" },
       });
       revalidatePath("/workspaces");
+    }
+
+    // Reconcile real CLI config immediately before every PTY spawn. This also
+    // lets a restored CLI recover an unavailable cached connection.
+    if (fixedTargetSnapshot) {
+      await reconcileTerminalExecutionBinding({
+        connectionId: fixedTargetSnapshot.connectionId,
+        agent: "",
+      }, cwd);
+    } else {
+      await reconcileTerminalCapabilityTargets(cwd);
     }
 
     // Resolve only after the final cwd is known. A fixed retry never reads the slot.

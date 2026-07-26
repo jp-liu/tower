@@ -1,29 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { existsSync } from "fs";
-import { testEnvironment, type TestResult, type TestCheck } from "@/lib/cli-test";
+import { testEnvironment, type TestResult } from "@/lib/cli-test";
 import { db } from "@/lib/db";
 import {
-  installAllForProvider,
   type ProviderInstallReport,
 } from "@/lib/ai/install-orchestrator";
+import { reconcileProviderIntegrations } from "@/lib/ai/provider-reconciliation";
 import { providerRegistry } from "@/lib/ai/providers";
 import { testPluginCliConnection } from "@/lib/ai/cli-plugin-provider";
 import { requireLocalhost } from "@/lib/internal-api-guard";
 import {
-  markProviderConnected,
   markProviderDisconnected,
 } from "@/actions/provider-connection-actions";
 
 export const runtime = "nodejs";
-
-/** Pull the CLI version string out of the probe checks for telemetry. */
-function extractVersion(checks: TestCheck[]): string | null {
-  const versionCheck = checks.find((c) => c.name.endsWith("_version"));
-  if (!versionCheck) return null;
-  const match = versionCheck.message.match(/Version:\s*(.+)$/);
-  return match ? match[1].trim() : null;
-}
 
 const bodySchema = z.object({
   adapterType: z.string().optional(),
@@ -67,24 +58,20 @@ export async function POST(request: NextRequest) {
       resolvedCwd = cwd;
     }
 
-    // Pre-flight: rewrite any stale Tower hook paths in the provider's
-    // settings file. Older versions (0.2.5/0.2.6) wrote `.next/standalone/
-    // scripts/*.js` paths that don't exist on the user's disk; if we let the
-    // hello probe run against those, Claude on Windows hangs after
-    // `hook_started` and the probe never reaches the install step below
-    // (which is where the upsert would normally fix it). Repair-only: no new
-    // hook entries are added.
+    // Version-check and repair Tower-owned integrations before the connection
+    // test owns the Hello probe. This also replaces the old static-only Hook
+    // preflight and keeps incompatible/missing CLIs free of config writes.
     if (provider) {
       try {
-        const definition = providerRegistry.get(provider);
-        const manifest = definition?.cli?.plugin.manifest;
-        if (definition?.builtin
-          && manifest?.capabilities.integrations?.hooks === true
-          && manifest.permissions.includes("integration:hooks")) {
-          await definition.cli?.adapter.hooks?.install({ repairOnly: true });
-        }
+        await reconcileProviderIntegrations({
+          provider,
+          trigger: "hello-success",
+          apiUrl: `${request.nextUrl.protocol}//${request.nextUrl.host}`,
+          cwd: resolvedCwd,
+          skipHello: true,
+        });
       } catch {
-        // Best-effort — proceed with the probe even if repair fails.
+        // The test below still returns its normal dependency/Hello diagnostics.
       }
     }
 
@@ -114,20 +101,21 @@ export async function POST(request: NextRequest) {
       testResult = await testEnvironment(resolvedCwd, provider);
     }
 
-    // On a successful probe, run the integration installer (MCP via CLI, hooks
-    // via file, skill via symlink) AND record the outcome to ProviderConnection
-    // so capability slots can gate selection on this row. This replaces the old
-    // startup-time auto-injection — see .notes/ai-provider-integration.md.
+    // A successful Hello finalizes the preflight reconciliation cache so
+    // capability slots can select this exact connection.
     let install: ProviderInstallReport | undefined;
     if (provider) {
       if (testResult.ok) {
         try {
           const apiUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-          install = await installAllForProvider(provider, apiUrl);
-          await markProviderConnected(provider, {
-            version: extractVersion(testResult.checks),
-            report: install,
+          const reconciliation = await reconcileProviderIntegrations({
+            provider,
+            trigger: "hello-success",
+            apiUrl,
+            cwd: resolvedCwd,
+            helloAlreadySucceeded: true,
           });
+          install = reconciliation.report;
         } catch (err) {
           install = {
             provider,
@@ -141,19 +129,28 @@ export async function POST(request: NextRequest) {
             "[adapters/test] install error:",
             providerRegistry.get(provider) ? err : "third-party integration failed",
           );
-          // The Hello Probe already succeeded. Integration failures are a
-          // degraded connection, not a disconnected CLI.
-          await markProviderConnected(provider, {
-            version: extractVersion(testResult.checks),
-            report: install,
-          });
         }
       } else {
         // Probe failed — make sure the slot system can't pick this provider.
         const failedCheck = testResult.checks.find((c) => !c.passed && !c.name.endsWith("_api_key"));
-        await markProviderDisconnected(provider, {
-          reason: failedCheck?.message ?? "test failed",
+        const dependencyFailure = failedCheck?.name.endsWith("_command_resolvable")
+          || failedCheck?.name.endsWith("_version_compatibility");
+        const cached = await db.providerConnection.findUnique({
+          where: { connectionKey: `cli:${provider}` },
+          select: { testStatus: true },
         });
+        if (dependencyFailure) {
+          await reconcileProviderIntegrations({
+            provider,
+            trigger: "dependency-changed",
+            cwd: resolvedCwd,
+          });
+        } else if (cached?.testStatus !== "dependency-missing"
+          && cached?.testStatus !== "dependency-incompatible") {
+          await markProviderDisconnected(provider, {
+            reason: failedCheck?.message ?? "test failed",
+          });
+        }
       }
     }
 

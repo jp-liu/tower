@@ -39,69 +39,19 @@ export async function register() {
       setInterval(() => void runSweep(), 6 * 60 * 60 * 1000);
     }
 
-    // Auto-refresh Tower integrations when the recorded fingerprint is stale
-    // or the real user-scope config is incomplete. The database is only a
-    // cache: reinstalling a provider CLI may delete hooks/MCP/skills while the
-    // previous successful install record remains current.
-    // Fire-and-forget: a slow CLI probe must not block server startup.
+    // Re-register enabled dynamic providers and reconcile real CLI config in
+    // the background. Startup must not be delayed by provider probes.
     void (async () => {
       try {
-        const { providerRegistry } = await import("@/lib/ai/providers");
-        const { providerRefreshVersion, repairHooksBeforeResolve } = await import(
-          "@/lib/ai/provider-startup-refresh"
+        const { reconcileAllProviderIntegrations } = await import(
+          "@/lib/ai/provider-reconciliation"
         );
-        const {
-          buildTowerIntegrationFingerprint,
-          installAllForProvider,
-          shouldRefreshProviderIntegration,
-        } = await import("@/lib/ai/install-orchestrator");
-        const { getProviderConnection, markProviderConnected } = await import(
-          "@/actions/provider-connection-actions"
-        );
-        const httpPort = parseInt(process.env.PORT || "3000", 10);
-        const apiUrl = `http://localhost:${httpPort}`;
-        const integrationFingerprint = buildTowerIntegrationFingerprint(apiUrl);
-        for (const provider of providerRegistry.getAll()) {
-          if (!provider.cli) continue;
-          try {
-            // Stale-path repair is independent of CLI availability and MCP
-            // status: settings.json may still list hooks from a previous
-            // Tower install even if the CLI binary is gone from PATH right
-            // now (issue #8). Refresh only existing entries — never adds new.
-            const resolved = await repairHooksBeforeResolve(
-              provider.cli.adapter,
-              () => providerRegistry.createResolvedCliAdapter(provider.name, process.cwd()),
-            ).catch(() => null);
-            if (!resolved) continue;
-            const connection = await getProviderConnection(provider.name);
-            if (!(await shouldRefreshProviderIntegration(
-              provider.name,
-              connection,
-              integrationFingerprint,
-            ))) {
-              console.error(`[init-tower] Tower integration for ${provider.name} is up to date`);
-              continue;
-            }
-            const report = await installAllForProvider(provider.name, apiUrl);
-            await markProviderConnected(provider.name, {
-              version: providerRefreshVersion(resolved.version, connection?.version),
-              report,
-            });
-            if (report.ok) {
-              console.error(`[init-tower] Auto-refreshed Tower integration for ${provider.name} (user scope)`);
-            } else {
-              console.error(`[init-tower] Auto-refresh for ${provider.name} reported issues:`, {
-                mcp: report.mcp?.ok,
-                hooks: report.hooks?.ok,
-                skill: report.skill?.ok,
-              });
-            }
-          } catch (err) {
-            console.error(`[init-tower] Auto-install failed for ${provider.name}:`, err);
-          }
+        const results = await reconcileAllProviderIntegrations("startup");
+        for (const result of results) {
+          console.error(`[init-tower] Provider reconciliation ${result.provider}: ${result.status}`);
         }
-      } catch (err) {
-        console.error("[init-tower] Provider auto-install setup failed:", err);
+      } catch {
+        console.error("[init-tower] Provider reconciliation setup failed");
       }
     })();
   }

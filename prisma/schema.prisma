@@ -527,7 +527,7 @@ model ProviderConnection {
   /// CLI plugin id or API protocol: openai/openai-compatible/anthropic/google.
   provider         String
   enabled          Boolean              @default(true)
-  /// untested | connected | partial | unavailable
+  /// untested | connected | partial | unavailable | dependency-missing | dependency-incompatible
   testStatus       String               @default("untested")
   lastTestedAt     DateTime?
   /// Compatibility gate for the existing CLI capability resolver.
