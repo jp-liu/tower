@@ -1,7 +1,15 @@
 {
-  "name": "@tower/ai-runtime",
+  "name": "@tower-org/ai-runtime",
   "version": "0.1.0",
   "description": "Private Tower host runtime for CLI provider plugins",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tower-org/tower.git",
+    "directory": "packages/ai-runtime"
+  },
+  "homepage": "https://github.com/tower-org/tower/tree/main/packages/ai-runtime#readme",
+  "bugs": { "url": "https://github.com/tower-org/tower/issues" },
   "private": true,
   "type": "module",
   "exports": {
@@ -24,7 +32,7 @@
     "@ai-sdk/openai": "4.0.20",
     "@ai-sdk/openai-compatible": "3.0.14",
     "@ai-sdk/provider": "4.0.3",
-    "@tower/ai-sdk": "workspace:*",
+    "@tower-org/ai-sdk": "workspace:*",
     "ai": "7.0.18",
     "ajv": "8.18.0",
     "semver": "7.7.4",

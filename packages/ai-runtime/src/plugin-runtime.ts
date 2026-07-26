@@ -7,7 +7,7 @@ import {
   isCliPlugin,
   type CliAdapter,
   type CliHostContext,
-} from "@tower/ai-sdk";
+} from "@tower-org/ai-sdk";
 import { pluginError } from "./plugin-errors.js";
 import { PluginRuntimeError } from "./plugin-errors.js";
 import type { ExtensionArtifactProvider } from "./artifact-provider.js";

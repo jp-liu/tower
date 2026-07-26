@@ -1,4 +1,4 @@
-import type { CliConfigSchema, CliPluginManifestV1, CliPluginPermission } from "@tower/ai-sdk";
+import type { CliConfigSchema, CliPluginManifestV1, CliPluginPermission } from "@tower-org/ai-sdk";
 import type { CatalogArtifact, CatalogPublisher } from "./catalog.js";
 import type { CliDependencyDiagnostic } from "./cli-dependency.js";
 

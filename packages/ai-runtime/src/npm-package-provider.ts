@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import path from "node:path";
 import * as tar from "tar";
-import { isWindows, type PlatformName } from "@tower/ai-sdk";
+import { isWindows, type PlatformName } from "@tower-org/ai-sdk";
 import { findCommandPath } from "./paths.js";
 import { prepareSpawnTarget } from "./process-executor.js";
 import { assertExactSemVer, assertValidPackageName } from "./plugin-validation.js";

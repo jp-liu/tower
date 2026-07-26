@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
-import { createApiAdapter, PluginRegistry } from "@tower/ai-runtime";
+import { createApiAdapter, PluginRegistry } from "@tower-org/ai-runtime";
 import { afterEach, describe, expect, it } from "vitest";
 import { createArchive, extractArchive, swapDirs, type BackupMetadata } from "../backup";
 

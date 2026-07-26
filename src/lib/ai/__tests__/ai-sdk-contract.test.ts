@@ -12,7 +12,7 @@ import {
   type CliPluginManifestV1,
   type CliQueryResult,
   type CliSessionOptions,
-} from "@tower/ai-sdk";
+} from "@tower-org/ai-sdk";
 
 const manifest: CliPluginManifestV1 = {
   manifestVersion: 1,

@@ -7,8 +7,8 @@ const runtimeMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("@tower/ai-runtime", async () => {
-  const actual = await vi.importActual<typeof import("@tower/ai-runtime")>("@tower/ai-runtime");
+vi.mock("@tower-org/ai-runtime", async () => {
+  const actual = await vi.importActual<typeof import("@tower-org/ai-runtime")>("@tower-org/ai-runtime");
   return {
     ...actual,
     createApiAdapter: vi.fn(() => ({
@@ -19,7 +19,7 @@ vi.mock("@tower/ai-runtime", async () => {
   };
 });
 
-import { ApiRuntimeError } from "@tower/ai-runtime";
+import { ApiRuntimeError } from "@tower-org/ai-runtime";
 import { db } from "@/lib/db";
 import {
   addApiKeyService,

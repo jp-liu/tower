@@ -260,7 +260,7 @@ API Key 与登录密码不同：Tower 调用上游模型时必须取回原值，
 
 ## 后续
 
-- 创建外部组织/npm scope 并正式发布 `@tower/ai-sdk` 或 Provider 包。
+- 创建外部组织/npm scope 并正式发布 `@tower-org/ai-sdk` 或 Provider 包。
 - 对外开放任意 API Adapter 插件。
 - 评估更强的插件隔离和 Artifact 签名/审核机制。
 

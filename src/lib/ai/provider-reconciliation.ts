@@ -5,7 +5,7 @@ import {
   capabilityError,
   stableJson,
   type CapabilityErrorShape,
-} from "@tower/ai-runtime";
+} from "@tower-org/ai-runtime";
 import { db } from "@/lib/db";
 import { getPackageRoot } from "@/lib/tower-paths";
 import {

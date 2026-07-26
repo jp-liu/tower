@@ -1,4 +1,4 @@
-import { providerVersion, towerCliPlugin } from "@tower/ai-provider-gemini";
+import { providerVersion, towerCliPlugin } from "@tower-org/ai-provider-gemini";
 import type { ProviderDefinition } from "../types";
 import { createBuiltInAdapter } from "../provider-host";
 

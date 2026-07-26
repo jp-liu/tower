@@ -1,7 +1,7 @@
 // @vitest-environment node
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { CliPluginError, type CliProcessExecutor } from "@tower/ai-sdk";
+import { CliPluginError, type CliProcessExecutor } from "@tower-org/ai-sdk";
 import {
   CommandResolver,
   ControlledProcessExecutor,
@@ -9,7 +9,7 @@ import {
   parseWindowsNpmShim,
   prepareSpawnTarget,
   redactProcessDiagnostic,
-} from "@tower/ai-runtime";
+} from "@tower-org/ai-runtime";
 
 const success = (stdout = "tool 1.0.0") => ({
   exitCode: 0,

@@ -8,14 +8,14 @@ import type {
   CliProcessSpec,
   CliProcessStreamEvent,
   PlatformName,
-} from "@tower/ai-sdk";
+} from "@tower-org/ai-sdk";
 import {
   CliPluginError,
   isShellCommandString,
   isWindows,
   quoteForCmd,
   redactSensitiveRecord,
-} from "@tower/ai-sdk";
+} from "@tower-org/ai-sdk";
 import type { RuntimeEnvironment } from "./paths.js";
 
 export interface SpawnTarget {

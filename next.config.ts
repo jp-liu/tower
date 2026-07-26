@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Self-contained build: traced deps land in `.next/standalone/node_modules/`,
-  // so `npm i tower-studio -g` no longer re-downloads the dependency graph.
+  // so `npm i -g @tower-org/cli` no longer re-downloads the dependency graph.
   output: "standalone",
   // Dev and prod must not share a build dir, or `pnpm dev` clobbers the prod
   // `.next/standalone` that `pnpm start` (bin/tower.mjs) loads. The `dev` script

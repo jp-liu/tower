@@ -29,9 +29,9 @@ description: AI Tools 0.3 用户能力、迁移、安全模型和已知限制
 
 ## 已知限制
 
-- 根包 `tower-studio` 发布为 `0.3.0`；`@tower/ai-sdk`、私有 Runtime、官方 Provider 和 Qwen artifact 仍是内嵌的 `private@0.1.0` workspace 包，不独立发布 npm。
+- 根包 `@tower-org/cli` 发布为 `0.3.0`，命令保持 `tower`；`@tower-org/ai-sdk`、私有 Runtime、官方 Provider 和 Qwen artifact 仍是内嵌的 `private@0.1.0` workspace 包，不独立发布 npm。
 - API Adapter 插件不开放；Terminal 仍只接受 CLI。
 - Assistant 临时附件缓存不进入完整归档；API 凭据、五能力目标、CLI 插件 registry/安装目录和 Assistant 会话由完整备份覆盖。
 - 0.3 数据库不承诺回写兼容 0.2；降级必须恢复升级前备份。
-- 官方 Catalog 仓库、GitHub Organization 和托管 URL 尚未获授权；建立前通过服务端 `TOWER_EXTENSION_CATALOG_URL` 或系统 Catalog URL 接入。
+- 官方 Catalog 托管 URL 尚未获授权；建立前通过服务端 `TOWER_EXTENSION_CATALOG_URL` 或系统 Catalog URL 接入。官方 Provider 的稳定 `publisher.id` 仍为 `tower`，不会随 npm scope 变化。
 - 集中验收已在恢复原始 DM Sans、Geist、Geist Mono、JetBrains Mono 后，通过 Node 24 `--use-env-proxy` 和本机 `127.0.0.1:7897` 代理完成 standalone build 与 packaged smoke。无直连字体网络的构建环境仍需配置稳定代理或批准的字体缓存；不得通过移除或替换产品字体绕过。

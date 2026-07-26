@@ -239,7 +239,7 @@ export function TopBar({ onCreateProject, username, workspaces, defaultWorkspace
                   variant="ghost"
                   size="icon"
                   onClick={() =>
-                    window.open("https://github.com/jp-liu/tower", "_blank", "noopener,noreferrer")
+                    window.open("https://github.com/tower-org/tower", "_blank", "noopener,noreferrer")
                   }
                   className="hidden text-muted-foreground md:inline-flex"
                   aria-label={t("topbar.github")}

@@ -29,8 +29,8 @@ Startup syncs Prisma schema, then runs ledger migrations `0009-api-connections` 
 
 ## Known limitations
 
-- The public `tower-studio` package is version `0.3.0`; `@tower/ai-sdk`, the private Runtime, official providers, and the Qwen artifact remain embedded `private@0.1.0` workspace packages and are not published independently.
+- The public `@tower-org/cli` package is version `0.3.0` and keeps the `tower` command. `@tower-org/ai-sdk`, the private Runtime, official providers, and the Qwen artifact remain embedded `private@0.1.0` workspace packages and are not published independently.
 - API adapter plugins are not open; Terminal remains CLI-only.
 - Assistant temporary attachment cache remains outside full archives. API credentials, capability targets, CLI plugin registry/install directories, and Assistant sessions are included.
 - 0.3 databases are not promised write-compatible with 0.2; downgrade requires a pre-upgrade backup.
-- The official hosted extension Catalog is not part of this release; operators must configure an approved HTTPS Catalog URL.
+- The official hosted extension Catalog is not part of this release; operators must configure an approved HTTPS Catalog URL. Official providers keep the stable `publisher.id` value `tower`; npm scope ownership does not change extension trust identity.

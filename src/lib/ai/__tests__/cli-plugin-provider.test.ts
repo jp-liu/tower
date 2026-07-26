@@ -10,8 +10,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("@tower/ai-runtime", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@tower/ai-runtime")>();
+vi.mock("@tower-org/ai-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tower-org/ai-runtime")>();
   return {
     ...actual,
     CommandResolver: class {

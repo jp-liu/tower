@@ -2,8 +2,8 @@ import os from "node:os";
 import { constants as fsConstants, existsSync } from "node:fs";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { PlatformName } from "@tower/ai-sdk";
-import { isWindows } from "@tower/ai-sdk";
+import type { PlatformName } from "@tower-org/ai-sdk";
+import { isWindows } from "@tower-org/ai-sdk";
 
 export type RuntimeEnvironment = Record<string, string | undefined>;
 

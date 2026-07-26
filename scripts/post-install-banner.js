@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* eslint-disable @typescript-eslint/no-require-imports -- This published postinstall helper must run as CommonJS in consumer installs. */
 /**
- * Print a welcome banner after `npm install tower-studio`.
+ * Print a welcome banner after `npm install -g @tower-org/cli`.
  * Skipped in CI to avoid polluting build logs.
  */
 const fs = require("fs");
@@ -29,13 +29,13 @@ const underline = (s) => c("4", s);
 
 const lines = [
   ``,
-  `${green("✓")} ${bold(`tower-studio v${version} installed`)}`,
+  `${green("✓")} ${bold(`@tower-org/cli v${version} installed`)}`,
   ``,
   `  ${dim("Next steps:")}`,
   `    ${cyan("tower")}         Start server (default http://localhost:3000)`,
   `    ${cyan("tower -h")}      Show all commands and options`,
   ``,
-  `  Docs: ${underline("https://github.com/jp-liu/tower")}`,
+  `  Docs: ${underline("https://github.com/tower-org/tower")}`,
   ``,
 ];
 

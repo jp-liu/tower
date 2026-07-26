@@ -9,7 +9,13 @@ const {
 } = require("../../../scripts/release-package-canary.js");
 
 const manifest = {
+  name: "@tower-org/cli",
   version: "0.3.0",
+  publishConfig: {
+    access: "public",
+    registry: "https://registry.npmjs.org/",
+    provenance: true,
+  },
   dependencies: { prisma: "^6.19.2" },
 };
 const runtimeManifest = {
@@ -18,6 +24,7 @@ const runtimeManifest = {
 
 function pack(extra: string[] = []) {
   return {
+    name: "@tower-org/cli",
     version: "0.3.0",
     size: 1,
     unpackedSize: 2,
@@ -41,7 +48,7 @@ describe("release package canary", () => {
   it("rejects workspace protocols in production dependencies", () => {
     expect(() => assertReleasePackage(pack(), {
       ...manifest,
-      dependencies: { "@tower/ai-runtime": "workspace:*" },
+      dependencies: { "@tower-org/ai-runtime": "workspace:*" },
     }, runtimeManifest)).toThrow(/workspace protocols/);
   });
 

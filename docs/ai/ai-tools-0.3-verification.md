@@ -64,7 +64,7 @@ ports, and no real credentials or provider network.
 | ID | Requirement | Direct evidence | Status |
 |---|---|---|---|
 | ARC-01 | Public CLI SDK and private host Runtime are separate packages. | `packages/ai-sdk/package.json` exports the public contract; `packages/ai-runtime/package.json` is the private host runtime and depends on the SDK. | proved |
-| ARC-02 | Claude, Codex, and Gemini use the public plugin contract, without a private built-in route. | Each `packages/ai-provider-{claude,codex,gemini}/src/index.ts` imports `defineCliPlugin` from `@tower/ai-sdk`; focused commits `31d1beb`, `59c7654`. | proved |
+| ARC-02 | Claude, Codex, and Gemini use the public plugin contract, without a private built-in route. | Each `packages/ai-provider-{claude,codex,gemini}/src/index.ts` imports `defineCliPlugin` from `@tower-org/ai-sdk`; focused commits `31d1beb`, `59c7654`. | proved |
 | ARC-03 | API calls use the thin Runtime adapter for OpenAI, OpenAI Compatible, Anthropic, and Google. | `packages/ai-runtime/src/api-types.ts` defines exactly four protocols; `api-adapter.ts` constructs all four Vercel AI SDK providers. Runtime request proof is API-01..04. | proved |
 | ARC-04 | Five explicit capability slots exist: Terminal, Summary, Dreaming, Analysis, Assistant. | `packages/ai-runtime/src/capability-types.ts` defines the exact five-slot tuple; `prisma/schema.prisma` persists capability targets. Runtime proof is SLOT-01..04. | proved |
 | ARC-05 | Connection instances, models, multi-Key state, targets, plugins, Terminal snapshots, and Assistant history are persisted. | `prisma/schema.prisma`; migrations `0009` through `0013`. Data-preservation proof is MIG-01..06. | proved |

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import type { CliAdapter as SdkCliAdapter, CliPluginManifestV1 } from "@tower/ai-sdk";
-import { evaluateCliDependency, stableJson, type CliDependencyDiagnostic } from "@tower/ai-runtime";
+import type { CliAdapter as SdkCliAdapter, CliPluginManifestV1 } from "@tower-org/ai-sdk";
+import { evaluateCliDependency, stableJson, type CliDependencyDiagnostic } from "@tower-org/ai-runtime";
 import type { AiQueryAdapter, ProviderDefinition, ProviderAvailability } from "./types";
 import { db } from "@/lib/db";
 import { getCliPluginApplication } from "./cli-plugin-service";

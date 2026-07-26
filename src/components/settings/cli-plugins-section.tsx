@@ -21,7 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { CliConfigSchema } from "@tower/ai-sdk";
+import type { CliConfigSchema } from "@tower-org/ai-sdk";
 import {
   confirmAndEnableCliPlugin,
   disableCliPlugin,

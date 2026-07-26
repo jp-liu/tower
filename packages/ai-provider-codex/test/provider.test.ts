@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { CliPluginError, isCliPluginManifestV1, type CliHostContext } from "@tower/ai-sdk";
+import { CliPluginError, isCliPluginManifestV1, type CliHostContext } from "@tower-org/ai-sdk";
 import { CodexCliAdapter, codexManifest } from "../src/index.js";
 
 function processStream(stdout = "", stderr = "", exitCode = 0) {

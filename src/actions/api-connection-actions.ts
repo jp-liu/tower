@@ -1,6 +1,6 @@
 "use server";
 
-import { API_PRESET_SNAPSHOT } from "@tower/ai-runtime";
+import { API_PRESET_SNAPSHOT } from "@tower-org/ai-runtime";
 import {
   addApiKeyService,
   addManualApiModelService,

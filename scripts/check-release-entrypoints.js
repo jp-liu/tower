@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* eslint-disable @typescript-eslint/no-require-imports -- This release verifier is a published CommonJS Node entrypoint. */
+/* eslint-disable @typescript-eslint/no-require-imports -- This release verifier is a published CommonJS entrypoint. */
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -7,32 +7,29 @@ const projectRoot = path.join(__dirname, "..");
 const pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
 const releaseShell = fs.readFileSync(path.join(projectRoot, "scripts", "release.sh"), "utf8");
 
-function assertSequence(label, actual, expected) {
-  if (actual.length !== expected.length || actual.some((command, index) => command !== expected[index])) {
-    throw new Error(`${label}: expected ${expected.join(" -> ")}, got ${actual.join(" -> ")}`);
-  }
+function assertEqual(label, actual, expected) {
+  if (actual !== expected) throw new Error(`${label}: expected ${expected}, got ${actual}`);
 }
 
-assertSequence("package.json#release", pkg.scripts.release.split(" && "), [
-  "pnpm build",
-  "pnpm release:pack:check",
-  "npm pack",
-]);
-assertSequence("package.json#release:publish", pkg.scripts["release:publish"].split(" && "), [
-  "pnpm build",
-  "pnpm release:pack:check",
-  "npm publish",
-]);
-const shellCommands = releaseShell.split("\n").map((line) => line.trim());
-const releaseShellSequence = [
-  "pnpm build",
-  "pnpm release:pack:check",
-  'with_optional_proxy npm publish --registry "$REGISTRY"',
-];
-assertSequence(
-  "scripts/release.sh",
-  shellCommands.filter((line) => releaseShellSequence.includes(line)),
-  releaseShellSequence,
-);
+function assertContains(label, source, expected) {
+  if (!source.includes(expected)) throw new Error(`${label}: missing ${expected}`);
+}
 
-console.log("[release:entrypoints:check] release, release:publish, and release.sh enforce the package canary");
+assertEqual("package.json#release", pkg.scripts.release, "bash scripts/release.sh");
+assertEqual("package.json#release:publish", pkg.scripts["release:publish"], "bash scripts/release.sh --publish");
+assertContains("package.json#release:prepare", pkg.scripts["release:prepare"], "pnpm release:gate");
+assertContains("package.json#release:prepare", pkg.scripts["release:prepare"], "pnpm release:pack:check");
+
+const prepareIndex = releaseShell.indexOf("pnpm release:prepare");
+const packIndex = releaseShell.indexOf("npm pack --dry-run");
+const publishIndex = releaseShell.indexOf("npm publish --access public --provenance");
+if (prepareIndex < 0 || packIndex < prepareIndex || publishIndex < packIndex) {
+  throw new Error("scripts/release.sh must prepare, pack dry-run, then publish in that order");
+}
+assertContains("scripts/release.sh", releaseShell, "TOWER_RELEASE_APPROVED");
+assertContains("scripts/release.sh", releaseShell, "git@github.com:tower-org/tower.git");
+for (const forbidden of ["git pull", "git tag", "git push", "gh release create"]) {
+  if (releaseShell.includes(forbidden)) throw new Error(`scripts/release.sh must not run ${forbidden}`);
+}
+
+console.log("[release:entrypoints:check] release entrypoints enforce gate, pack dry-run, explicit approval, and public provenance");

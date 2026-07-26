@@ -37,11 +37,11 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "server-only": path.resolve(__dirname, "./tests/server-only.ts"),
-      "@tower/ai-runtime": path.resolve(__dirname, "./packages/ai-runtime/src/index.ts"),
-      "@tower/ai-sdk": path.resolve(__dirname, "./packages/ai-sdk/src/index.ts"),
-      "@tower/ai-provider-claude": path.resolve(__dirname, "./packages/ai-provider-claude/src/index.ts"),
-      "@tower/ai-provider-codex": path.resolve(__dirname, "./packages/ai-provider-codex/src/index.ts"),
-      "@tower/ai-provider-gemini": path.resolve(__dirname, "./packages/ai-provider-gemini/src/index.ts"),
+      "@tower-org/ai-runtime": path.resolve(__dirname, "./packages/ai-runtime/src/index.ts"),
+      "@tower-org/ai-sdk": path.resolve(__dirname, "./packages/ai-sdk/src/index.ts"),
+      "@tower-org/ai-provider-claude": path.resolve(__dirname, "./packages/ai-provider-claude/src/index.ts"),
+      "@tower-org/ai-provider-codex": path.resolve(__dirname, "./packages/ai-provider-codex/src/index.ts"),
+      "@tower-org/ai-provider-gemini": path.resolve(__dirname, "./packages/ai-provider-gemini/src/index.ts"),
     },
   },
 });

@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ApiMessage } from "@tower/ai-runtime";
+import type { ApiMessage } from "@tower-org/ai-runtime";
 import { db } from "@/lib/db";
 import type { AssistantBinding } from "./assistant-session-service";
 

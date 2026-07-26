@@ -1,7 +1,7 @@
 import "server-only";
 
-import { capabilityError } from "@tower/ai-runtime";
-import type { CliSessionOptions } from "@tower/ai-sdk";
+import { capabilityError } from "@tower-org/ai-runtime";
+import type { CliSessionOptions } from "@tower-org/ai-sdk";
 import { db } from "@/lib/db";
 import {
   resolveFixedCliConnection,

@@ -1,7 +1,15 @@
 {
-  "name": "@tower/ai-provider-claude",
+  "name": "@tower-org/ai-provider-claude",
   "version": "0.1.0",
   "description": "Official Claude Code CLI provider for Tower",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tower-org/tower.git",
+    "directory": "packages/ai-provider-claude"
+  },
+  "homepage": "https://github.com/tower-org/tower/tree/main/packages/ai-provider-claude#readme",
+  "bugs": { "url": "https://github.com/tower-org/tower/issues" },
   "private": true,
   "type": "module",
   "exports": {
@@ -15,7 +23,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --config vitest.config.ts"
   },
-  "dependencies": { "@tower/ai-sdk": "workspace:*" },
+  "dependencies": { "@tower-org/ai-sdk": "workspace:*" },
   "tower": {
     "manifestVersion": 1,
     "apiVersion": "1.0",

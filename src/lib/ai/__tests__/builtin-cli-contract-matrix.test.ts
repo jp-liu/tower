@@ -1,16 +1,16 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
-import { CommandResolver } from "@tower/ai-runtime";
+import { CommandResolver } from "@tower-org/ai-runtime";
 import {
   CliPluginError,
   type CliAdapter,
   type CliHostContext,
   type CliPluginManifestV1,
   type CliProcessExecutor,
-} from "@tower/ai-sdk";
-import { ClaudeCliAdapter, claudeManifest } from "@tower/ai-provider-claude";
-import { CodexCliAdapter, codexManifest } from "@tower/ai-provider-codex";
-import { GeminiCliAdapter, geminiManifest } from "@tower/ai-provider-gemini";
+} from "@tower-org/ai-sdk";
+import { ClaudeCliAdapter, claudeManifest } from "@tower-org/ai-provider-claude";
+import { CodexCliAdapter, codexManifest } from "@tower-org/ai-provider-codex";
+import { GeminiCliAdapter, geminiManifest } from "@tower-org/ai-provider-gemini";
 
 type ProviderCase = {
   id: string;

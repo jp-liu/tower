@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CliConfigSchema } from "@tower/ai-sdk";
+import type { CliConfigSchema } from "@tower-org/ai-sdk";
 import {
   validatePluginConfigSchema,
   validatePluginSettings,

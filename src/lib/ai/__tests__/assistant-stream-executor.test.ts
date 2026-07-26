@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CliPluginError, type CliQueryEvent, type CliQueryOptions } from "@tower/ai-sdk";
+import { CliPluginError, type CliQueryEvent, type CliQueryOptions } from "@tower-org/ai-sdk";
 import type { ResolvedCapabilityTarget } from "../capability-resolver";
 
 const mocks = vi.hoisted(() => ({

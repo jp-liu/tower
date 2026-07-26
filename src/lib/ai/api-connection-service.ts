@@ -15,7 +15,7 @@ import {
   type ApiConnectionRuntimeConfig,
   type ApiCredential,
   type ApiRuntimeCursor,
-} from "@tower/ai-runtime";
+} from "@tower-org/ai-runtime";
 import { db } from "@/lib/db";
 
 const configEntrySchema = z.object({

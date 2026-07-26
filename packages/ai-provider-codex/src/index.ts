@@ -1,4 +1,4 @@
-import { defineCliPlugin, type CliPluginManifestV1 } from "@tower/ai-sdk";
+import { defineCliPlugin, type CliPluginManifestV1 } from "@tower-org/ai-sdk";
 import { CodexCliAdapter } from "./adapter.js";
 
 export const providerVersion = "0.1.0";

@@ -53,7 +53,7 @@ jobs:
 
       - name: Build AI SDK and Qwen Code extension fixtures
         run: |
-          pnpm --filter @tower/ai-sdk build
+          pnpm --filter @tower-org/ai-sdk build
           pnpm --filter tower-extension-qwen-code build
 
       - name: Test
@@ -84,8 +84,8 @@ jobs:
 
       - name: Build catalog runtime and Qwen Code extension
         run: |
-          pnpm --filter @tower/ai-sdk build
-          pnpm --filter @tower/ai-runtime build
+          pnpm --filter @tower-org/ai-sdk build
+          pnpm --filter @tower-org/ai-runtime build
           pnpm --filter tower-extension-qwen-code build
 
       - name: Generate extension catalog

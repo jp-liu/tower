@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
-import type { CliHostContext, CliProcessStreamEvent } from "@tower/ai-sdk";
+import type { CliHostContext, CliProcessStreamEvent } from "@tower-org/ai-sdk";
 import { QwenCodeAdapter, qwenManifest } from "../src/index.js";
 
 function host(events: CliProcessStreamEvent[] = []) {
@@ -28,7 +28,7 @@ describe("Qwen Code community provider", () => {
   it("keeps the package manifest and public SDK manifest aligned", async () => {
     const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
     expect(packageJson.tower).toEqual(qwenManifest);
-    expect(packageJson.dependencies).toEqual({ "@tower/ai-sdk": "workspace:*" });
+    expect(packageJson.dependencies).toEqual({ "@tower-org/ai-sdk": "workspace:*" });
     expect(qwenManifest.cliDependency).toMatchObject({
       name: "Qwen Code CLI",
       supportedVersions: ">=0.18.0 <1.0.0",

@@ -1,8 +1,8 @@
 import { constants as fsConstants, promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { CliProcessExecutor, CliProcessSpec, PlatformName } from "@tower/ai-sdk";
-import { isWindows } from "@tower/ai-sdk";
+import type { CliProcessExecutor, CliProcessSpec, PlatformName } from "@tower-org/ai-sdk";
+import { isWindows } from "@tower-org/ai-sdk";
 import { ControlledProcessExecutor } from "./process-executor.js";
 import {
   commandPathCandidates,

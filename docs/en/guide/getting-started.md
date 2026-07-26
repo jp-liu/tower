@@ -10,10 +10,19 @@ description: Steps to install and run the Tower project
 
 ## Installation
 
+### Public npm package
+
+```bash
+npm install -g @tower-org/cli
+tower
+```
+
+`tower` listens on `127.0.0.1:3000` by default. The steps below are for source development.
+
 ### 1. Clone the Repository
 
 ```bash
-git clone <repo-url> tower
+git clone https://github.com/tower-org/tower.git tower
 cd tower
 ```
 

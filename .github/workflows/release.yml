@@ -1,0 +1,60 @@
+name: Publish npm package
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Exact package release to publish (for example @tower-org/cli@0.3.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-production
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish with provenance
+    runs-on: ubuntu-latest
+    environment: npm-production
+    steps:
+      - name: Require repository release enablement
+        env:
+          NPM_RELEASE_ENABLED: ${{ vars.NPM_RELEASE_ENABLED }}
+        run: test "$NPM_RELEASE_ENABLED" = "true"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org/
+          scope: tower-org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate exact release confirmation
+        env:
+          RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          expected="$(node -p "require('./package.json').name + '@' + require('./package.json').version")"
+          test "$RELEASE_CONFIRMATION" = "$expected"
+          printf 'TOWER_RELEASE_APPROVED=%s\n' "$expected" >> "$GITHUB_ENV"
+
+      - name: Publish scoped public package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm release:publish

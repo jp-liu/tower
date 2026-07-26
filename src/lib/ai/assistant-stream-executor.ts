@@ -8,9 +8,9 @@ import {
   type CapabilityActivity,
   type CapabilityAttemptContext,
   type CapabilityAttemptSummary,
-} from "@tower/ai-runtime";
-import type { ApiMessage, ApiStreamEvent } from "@tower/ai-runtime";
-import type { CliQueryEvent, CliQueryOptions } from "@tower/ai-sdk";
+} from "@tower-org/ai-runtime";
+import type { ApiMessage, ApiStreamEvent } from "@tower-org/ai-runtime";
+import type { CliQueryEvent, CliQueryOptions } from "@tower-org/ai-sdk";
 import { assistantTowerToolCatalog } from "@/mcp/tool-catalog";
 import { createAssistantToolBundle, prepareAssistantCliRequest } from "./assistant-tool-bundle";
 import {

@@ -22,8 +22,17 @@ AI 任务调度平台 — 通过可视化看板管理、调度、执行 AI 辅�
 
 ### 安装
 
+安装公共 CLI，并使用默认回环地址启动 Tower：
+
 ```bash
-git clone <repo-url>
+npm install -g @tower-org/cli
+tower
+```
+
+从源码开发：
+
+```bash
+git clone https://github.com/tower-org/tower.git
 cd tower
 pnpm install
 

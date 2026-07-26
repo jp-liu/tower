@@ -58,8 +58,16 @@ const FORBIDDEN = [
 function assertReleasePackage(pack, pkg, runtimePkg) {
   const errors = [];
   const files = new Set(pack.files.map((entry) => entry.path));
+  if (pack.name !== "@tower-org/cli" || pkg.name !== "@tower-org/cli") {
+    errors.push(`expected package name @tower-org/cli, got manifest=${pkg.name} pack=${pack.name}`);
+  }
   if (pack.version !== "0.3.0" || pkg.version !== "0.3.0") {
-    errors.push(`expected tower-studio@0.3.0, got manifest=${pkg.version} pack=${pack.version}`);
+    errors.push(`expected @tower-org/cli@0.3.0, got manifest=${pkg.version} pack=${pack.version}`);
+  }
+  if (pkg.publishConfig?.access !== "public"
+    || pkg.publishConfig?.registry !== "https://registry.npmjs.org/"
+    || pkg.publishConfig?.provenance !== true) {
+    errors.push("public scoped package must enforce npmjs registry, public access, and provenance");
   }
   const workspaceRuntimeDeps = Object.entries(pkg.dependencies || {})
     .filter(([, value]) => String(value).startsWith("workspace:"));

@@ -1,6 +1,6 @@
 ---
 title: CLI Provider 开发
-description: "@tower/ai-sdk Manifest v1、Adapter、Schema 与信任边界"
+description: "@tower-org/ai-sdk Manifest v1、Adapter、Schema 与信任边界"
 ---
 
 ## 发布状态
@@ -52,7 +52,7 @@ import {
   BaseCliAdapter,
   defineCliPlugin,
   type CliPluginManifestV1,
-} from "@tower/ai-sdk";
+} from "@tower-org/ai-sdk";
 
 const manifest = packageJson.tower as CliPluginManifestV1;
 
@@ -124,7 +124,7 @@ scripts/build-extension-catalog.ts
 
 贡献一个版本时：
 
-1. 只依赖 `@tower/ai-sdk` 和 Host Context，实现 Provider 并运行自身 typecheck/test/build。
+1. 只依赖 `@tower-org/ai-sdk` 和 Host Context，实现 Provider 并运行自身 typecheck/test/build。
 2. 在 `extensions/catalog/sources/` 添加或更新声明；`id`、Publisher 和版本必须与包 Manifest 一致。
 3. 运行 `pnpm extensions:catalog:build -- --base-url https://<authorized-host>/<path>/ --output <directory>`。基础 URL 必须由获授权的发布流程传入，仓库不预设组织、域名或发布地址。
 4. 生成器校验源码 Schema 和 Runtime index Schema，将预构建 `dist` 与配置 Schema 打包；Artifact 会移除 scripts、dependencies 和 devDependencies，使用稳定排序/mtime，生成 SHA-256、大小和 `index.v1.json`。

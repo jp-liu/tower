@@ -20,7 +20,7 @@ import {
   redactSensitiveRecord,
   toForwardSlash as sdkToForwardSlash,
   type PlatformName,
-} from "@tower/ai-sdk";
+} from "@tower-org/ai-sdk";
 import {
   defaultSupplementalPaths,
   findCommandPath,
@@ -28,7 +28,7 @@ import {
   mergePathEnvironment,
   prepareSpawnTarget,
   type LegacyCommandLookup,
-} from "@tower/ai-runtime";
+} from "@tower-org/ai-runtime";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -426,4 +426,4 @@ export {
   type DetectedEditor,
   type DetectedShell,
   type DetectedTerminalApp,
-} from "@tower/ai-runtime";
+} from "@tower-org/ai-runtime";

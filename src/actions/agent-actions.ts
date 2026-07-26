@@ -36,7 +36,7 @@ import {
   capabilityError,
   executeTerminalPrestartFallback,
   normalizeCapabilityError,
-} from "@tower/ai-runtime";
+} from "@tower-org/ai-runtime";
 
 export interface ActiveExecutionInfo {
   executionId: string;

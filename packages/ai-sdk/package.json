@@ -1,7 +1,15 @@
 {
-  "name": "@tower/ai-sdk",
+  "name": "@tower-org/ai-sdk",
   "version": "0.1.0",
   "description": "Public CLI provider contracts for Tower AI Tools",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tower-org/tower.git",
+    "directory": "packages/ai-sdk"
+  },
+  "homepage": "https://github.com/tower-org/tower/tree/main/packages/ai-sdk#readme",
+  "bugs": { "url": "https://github.com/tower-org/tower/issues" },
   "private": true,
   "type": "module",
   "exports": {

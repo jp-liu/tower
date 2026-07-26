@@ -8,6 +8,7 @@ const { execFileSync, spawn } = require("child_process");
 
 const projectRoot = path.join(__dirname, "..");
 const pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf-8"));
+const publishedPackageSpec = process.env.TOWER_SMOKE_PACKAGE_SPEC?.trim() || null;
 let port = process.env.TOWER_SMOKE_PORT || null;
 const host = "127.0.0.1";
 const stamp = `${Date.now()}`;
@@ -458,32 +459,41 @@ async function startPackagedApp(towerBin, smokeEnv) {
 
 async function main() {
   port = port || await findFreePort();
-  console.log(`[release:smoke] Building ${pkg.name}@${pkg.version}`);
-  run("pnpm", ["build"]);
+  const expectedPackageSpec = `${pkg.name}@${pkg.version}`;
+  let installTarget;
+  let registryUrl;
+  if (publishedPackageSpec) {
+    if (publishedPackageSpec !== expectedPackageSpec) {
+      throw new Error(`Published smoke requires ${expectedPackageSpec}, got ${publishedPackageSpec}`);
+    }
+    installTarget = publishedPackageSpec;
+    registryUrl = "https://registry.npmjs.org/";
+    console.log(`[release:smoke] Installing ${installTarget} from the public npm registry`);
+  } else {
+    console.log(`[release:smoke] Building ${pkg.name}@${pkg.version}`);
+    run("pnpm", ["build"]);
 
-  console.log("[release:smoke] Packing tarball");
-  const tarball = execFileSync("npm", ["pack", "--cache", cacheDir, "--pack-destination", baseDir], {
-    cwd: projectRoot,
-    encoding: "utf-8",
-    env: process.env,
-  })
-    .trim()
-    .split("\n")
-    .pop();
+    console.log("[release:smoke] Packing tarball");
+    const tarball = execFileSync("npm", ["pack", "--cache", cacheDir, "--pack-destination", baseDir], {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      env: process.env,
+    })
+      .trim()
+      .split("\n")
+      .pop();
 
-  if (!tarball) {
-    throw new Error("npm pack did not return a tarball name");
+    if (!tarball) throw new Error("npm pack did not return a tarball name");
+    installTarget = path.join(baseDir, tarball);
+    console.log("[release:smoke] Starting local dependency registry fixture");
+    registryUrl = await startLocalRegistry();
+    console.log("[release:smoke] Installing tarball into temporary prefix");
   }
 
-  const tarballPath = path.join(baseDir, tarball);
-
-  console.log("[release:smoke] Starting local dependency registry fixture");
-  const registryUrl = await startLocalRegistry();
-  console.log("[release:smoke] Installing tarball into temporary prefix");
   await runAsync("npm", [
     "install",
     "-g",
-    tarballPath,
+    installTarget,
     "--prefix",
     prefixDir,
     "--cache",
@@ -492,7 +502,13 @@ async function main() {
     registryUrl,
     "--no-audit",
     "--no-fund",
-  ]);
+  ], {
+    env: cleanEnvironment({
+      HOME: homeDir,
+      TOWER_DATA_DIR: dataDir,
+      NPM_CONFIG_CACHE: cacheDir,
+    }),
+  });
 
   const towerBin = path.join(prefixDir, "bin", "tower");
   const installedRoot = path.join(prefixDir, "lib", "node_modules", pkg.name);
@@ -505,6 +521,7 @@ async function main() {
   };
   const version = execFileSync(towerBin, ["--version"], { encoding: "utf8", env: smokeEnv }).trim();
   if (version !== `tower v${pkg.version}`) throw new Error(`Version mismatch: ${version}`);
+  console.log(`[release:smoke] Installed version: ${version}`);
   console.log("[release:smoke] Starting packaged app");
   await startPackagedApp(towerBin, smokeEnv);
 

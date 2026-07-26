@@ -10,14 +10,14 @@ import {
   stableJson,
   type CommandResolution,
   validatePluginSettings,
-} from "@tower/ai-runtime";
+} from "@tower-org/ai-runtime";
 import type {
   CliAdapter,
   CliConfigSchema,
   CliPlugin,
   CliProcessSpec,
   PlatformName,
-} from "@tower/ai-sdk";
+} from "@tower-org/ai-sdk";
 import { db } from "@/lib/db";
 import { getTowerDir } from "@/lib/tower-dir";
 import {

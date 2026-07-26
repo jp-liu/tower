@@ -13,7 +13,7 @@ import {
   type ExtensionArtifactProvider,
   type ExtensionCatalogIndexV1,
   type NpmPackageProvider,
-} from "@tower/ai-runtime";
+} from "@tower-org/ai-runtime";
 import { db } from "@/lib/db";
 import { CliPluginApplication, getCliPluginApplication } from "../cli-plugin-service";
 import { CLI_SECRET_MASK } from "../cli-plugin-shared";

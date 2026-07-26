@@ -9,7 +9,7 @@ import {
   assertCatalogJsonSchema,
   parseExtensionCatalog,
   type ExtensionCatalogIndexV1,
-} from "@tower/ai-runtime";
+} from "@tower-org/ai-runtime";
 
 async function readJson(filePath: string): Promise<unknown> {
   return JSON.parse(await fs.readFile(filePath, "utf8")) as unknown;

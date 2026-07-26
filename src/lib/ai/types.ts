@@ -1,9 +1,9 @@
 // src/lib/ai/types.ts
 
-import type { CliAdapter as SdkCliAdapter, CliPlugin } from "@tower/ai-sdk";
+import type { CliAdapter as SdkCliAdapter, CliPlugin } from "@tower-org/ai-sdk";
 
 // Legacy Hermes gateway integration types. Task-terminal providers use the
-// public @tower/ai-sdk contract exclusively.
+// public @tower-org/ai-sdk contract exclusively.
 
 export interface McpServerConfig {
   /** Unique name for the MCP server (e.g. "tower") */

@@ -10,10 +10,19 @@ description: 安装和运行 Tower 项目的步骤
 
 ## 安装步骤
 
+### npm 公共包
+
+```bash
+npm install -g @tower-org/cli
+tower
+```
+
+`tower` 默认监听 `127.0.0.1:3000`。以下步骤用于从源码开发。
+
 ### 1. 克隆仓库
 
 ```bash
-git clone <repo-url> tower
+git clone https://github.com/tower-org/tower.git tower
 cd tower
 ```
 

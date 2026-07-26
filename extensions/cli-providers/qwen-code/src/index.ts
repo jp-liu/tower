@@ -13,7 +13,7 @@ import {
   type CliSessionFailure,
   type CliSessionFailureInput,
   type CliSessionOptions,
-} from "@tower/ai-sdk";
+} from "@tower-org/ai-sdk";
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)

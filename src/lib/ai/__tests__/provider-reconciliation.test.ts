@@ -46,8 +46,8 @@ vi.mock("../cli-plugin-service", () => ({
   getCliPluginApplication: () => ({ list: mocks.listPlugins }),
 }));
 vi.mock("@/lib/tower-paths", () => ({ getPackageRoot: () => "/fixture/tower" }));
-vi.mock("@tower/ai-runtime", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@tower/ai-runtime")>();
+vi.mock("@tower-org/ai-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tower-org/ai-runtime")>();
   return {
     ...actual,
     ControlledProcessExecutor: class {

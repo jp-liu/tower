@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { providerRegistry } from "./ai/providers";
-import { ControlledProcessExecutor, evaluateCliDependency } from "@tower/ai-runtime";
+import { ControlledProcessExecutor, evaluateCliDependency } from "@tower-org/ai-runtime";
 import {
   createBuiltInAdapter,
   providerBaseEnvironment,

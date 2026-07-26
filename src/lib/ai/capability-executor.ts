@@ -7,8 +7,8 @@ import {
   type AiCapabilitySlot,
   type CapabilityActivity,
   type CapabilityAttemptContext,
-} from "@tower/ai-runtime";
-import type { CliQueryResult } from "@tower/ai-sdk";
+} from "@tower-org/ai-runtime";
+import type { CliQueryResult } from "@tower-org/ai-sdk";
 import {
   getApiRuntimeForResolvedTarget,
   resolveCapabilityPlan,

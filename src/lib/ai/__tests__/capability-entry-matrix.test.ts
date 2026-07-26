@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CliAdapter, CliQueryOptions, CliQueryResult } from "@tower/ai-sdk";
-import type { AiCapabilitySlot } from "@tower/ai-runtime";
+import type { CliAdapter, CliQueryOptions, CliQueryResult } from "@tower-org/ai-sdk";
+import type { AiCapabilitySlot } from "@tower-org/ai-runtime";
 import type { ResolvedCapabilityTarget } from "../capability-resolver";
 import type { TaskChangeData } from "@/lib/task-overview-format";
 

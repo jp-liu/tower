@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import semver from "semver";
-import type { CliPluginManifestV1, CliProcessResult, CliProcessSpec, PlatformName } from "@tower/ai-sdk";
+import type { CliPluginManifestV1, CliProcessResult, CliProcessSpec, PlatformName } from "@tower-org/ai-sdk";
 import { CommandResolver, type CommandResolution } from "./command-resolver.js";
 import { pluginError } from "./plugin-errors.js";
 import { prepareSpawnTarget } from "./process-executor.js";

@@ -10,7 +10,7 @@ import {
   type CliPluginManifestV1,
   type CliPluginPermission,
   type CliConfigSchema,
-} from "@tower/ai-sdk";
+} from "@tower-org/ai-sdk";
 import { pluginError } from "./plugin-errors.js";
 import type { PluginFileSystem } from "./plugin-filesystem.js";
 import type {

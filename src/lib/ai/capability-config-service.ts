@@ -7,7 +7,7 @@ import {
   isAiCapabilitySlot,
   type AiCapabilitySlot,
   type CapabilityAttemptSummary,
-} from "@tower/ai-runtime";
+} from "@tower-org/ai-runtime";
 import { db } from "@/lib/db";
 
 export type CapabilityServiceErrorCode =

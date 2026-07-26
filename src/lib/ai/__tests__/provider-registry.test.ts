@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import type { CliAdapter, CliPlugin } from "@tower/ai-sdk";
+import type { CliAdapter, CliPlugin } from "@tower-org/ai-sdk";
 
 const hostMocks = vi.hoisted(() => ({
   createBuiltInAdapter: vi.fn(() => ({})),

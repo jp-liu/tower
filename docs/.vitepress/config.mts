@@ -125,7 +125,7 @@ export default defineConfig({
   themeConfig: {
     logo: "/logo.png",
     socialLinks: [
-      { icon: "github", link: "https://github.com/jp-liu/tower" },
+      { icon: "github", link: "https://github.com/tower-org/tower" },
     ],
   },
 });

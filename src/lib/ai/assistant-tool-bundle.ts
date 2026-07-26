@@ -3,7 +3,7 @@ import "server-only";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { ApiRuntimeError, type ApiToolDefinition } from "@tower/ai-runtime";
+import { ApiRuntimeError, type ApiToolDefinition } from "@tower-org/ai-runtime";
 import { ATTACHMENT_SUBPATH_RE, MAX_ATTACHMENTS, classifyAttachmentSubPath } from "@/lib/attachment-utils";
 import { getAssistantCacheRoot } from "@/lib/file-utils";
 import { detectImageMime, isLikelyTextFile, TEXT_EXT_TO_MIME } from "@/lib/mime-magic";

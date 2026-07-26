@@ -49,7 +49,7 @@ format stabilizes.
 1. User installs Tower:
 
    ```bash
-   npm install -g tower-studio
+   npm install -g @tower-org/cli
    tower
    ```
 

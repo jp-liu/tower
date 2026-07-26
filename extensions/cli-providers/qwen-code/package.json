@@ -2,6 +2,14 @@
   "name": "tower-extension-qwen-code",
   "version": "0.1.0",
   "description": "Community Qwen Code CLI provider for Tower",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tower-org/tower.git",
+    "directory": "extensions/cli-providers/qwen-code"
+  },
+  "homepage": "https://github.com/tower-org/tower/tree/main/extensions/cli-providers/qwen-code#readme",
+  "bugs": { "url": "https://github.com/tower-org/tower/issues" },
   "private": true,
   "type": "module",
   "exports": {
@@ -20,7 +28,7 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@tower/ai-sdk": "workspace:*"
+    "@tower-org/ai-sdk": "workspace:*"
   },
   "tower": {
     "manifestVersion": 1,

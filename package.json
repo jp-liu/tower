@@ -1,7 +1,21 @@
 {
-  "name": "tower-studio",
+  "name": "@tower-org/cli",
   "version": "0.3.0",
   "description": "AI Task Orchestration Platform — Kanban + Terminal + Code Editor + MCP",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tower-org/tower.git"
+  },
+  "homepage": "https://github.com/tower-org/tower#readme",
+  "bugs": {
+    "url": "https://github.com/tower-org/tower/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
+    "provenance": true
+  },
   "bin": {
     "tower": "bin/tower.mjs"
   },
@@ -47,12 +61,14 @@
     "predev": "pnpm ai:packages:build && TOWER_DATA_DIR=\"$HOME/.tower-dev\" DATABASE_URL=\"file:$HOME/.tower-dev/database/tower.db\" node scripts/ensure-dev-db.js && pnpm db:migrate && pnpm mcp:build",
     "dev": "NEXT_DISTDIR=.next-dev TOWER_DATA_DIR=\"$HOME/.tower-dev\" DATABASE_URL=\"file:$HOME/.tower-dev/database/tower.db\" env -u NODE_ENV -u TURBOPACK next dev --webpack -H 127.0.0.1 -p 9022",
     "build": "pnpm ai:packages:build && pnpm mcp:build && rm -rf .next && env -u __NEXT_PRIVATE_STANDALONE_CONFIG -u __NEXT_PRIVATE_ORIGIN -u TURBOPACK next build && find .next -name '*.map' -delete && cp -R .next/static .next/standalone/.next/ && cp -R public .next/standalone/ && node scripts/prune-standalone-natives.js",
-    "release": "pnpm build && pnpm release:pack:check && npm pack",
+    "release": "bash scripts/release.sh",
+    "release:gate": "node scripts/release-gate.js",
+    "release:prepare": "pnpm release:gate && pnpm build && pnpm release:pack:check && pnpm release:entrypoints:check",
     "release:smoke": "node scripts/release-smoke.js",
+    "release:smoke:published": "TOWER_SMOKE_PACKAGE_SPEC='@tower-org/cli@0.3.0' node scripts/release-smoke.js",
     "release:pack:check": "node scripts/release-package-canary.js",
     "release:entrypoints:check": "node scripts/check-release-entrypoints.js",
-    "release:publish": "pnpm build && pnpm release:pack:check && npm publish",
-    "release:ship": "bash scripts/release.sh",
+    "release:publish": "bash scripts/release.sh --publish",
     "start": "node bin/tower.mjs",
     "lint": "eslint",
     "db:generate": "prisma generate",
@@ -68,7 +84,7 @@
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
     "ai:presets:update": "tsx scripts/update-ai-presets.ts",
     "ai:packages:build": "pnpm --filter './packages/**' -r build",
-    "extensions:catalog:build": "pnpm --filter @tower/ai-sdk build && pnpm --filter tower-extension-qwen-code build && tsx scripts/build-extension-catalog.ts",
+    "extensions:catalog:build": "pnpm --filter @tower-org/ai-sdk build && pnpm --filter tower-extension-qwen-code build && tsx scripts/build-extension-catalog.ts",
     "extensions:catalog:validate": "tsx scripts/validate-extension-catalog.mts",
     "mcp": "node dist/mcp-server.cjs",
     "mcp:build": "esbuild src/mcp/index.ts --bundle --platform=node --target=node18 --format=cjs --outfile=dist/mcp-server.cjs --external:@prisma/client --external:@modelcontextprotocol/sdk --external:@opentelemetry/api --alias:@=./src",
@@ -95,11 +111,11 @@
     "ws": "^8.20.0"
   },
   "devDependencies": {
-    "@tower/ai-provider-claude": "workspace:*",
-    "@tower/ai-provider-codex": "workspace:*",
-    "@tower/ai-provider-gemini": "workspace:*",
-    "@tower/ai-runtime": "workspace:*",
-    "@tower/ai-sdk": "workspace:*",
+    "@tower-org/ai-provider-claude": "workspace:*",
+    "@tower-org/ai-provider-codex": "workspace:*",
+    "@tower-org/ai-provider-gemini": "workspace:*",
+    "@tower-org/ai-runtime": "workspace:*",
+    "@tower-org/ai-sdk": "workspace:*",
     "@anthropic-ai/claude-agent-sdk": "^0.2.114",
     "@base-ui/react": "^1.3.0",
     "@dnd-kit/core": "^6.3.1",

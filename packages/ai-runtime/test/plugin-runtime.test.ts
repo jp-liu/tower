@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CliHostContext, CliPluginManifestV1, CliPluginPermission } from "@tower/ai-sdk";
+import type { CliHostContext, CliPluginManifestV1, CliPluginPermission } from "@tower-org/ai-sdk";
 import {
   CliPluginRuntime,
   DefaultNpmPackageProvider,

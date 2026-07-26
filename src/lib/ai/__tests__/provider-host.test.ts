@@ -1,7 +1,7 @@
 // @vitest-environment node
 import fs from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import type { CliProcessExecutor } from "@tower/ai-sdk";
+import type { CliProcessExecutor } from "@tower-org/ai-sdk";
 vi.mock("server-only", () => ({}));
 import { providerRegistry } from "../providers";
 import {

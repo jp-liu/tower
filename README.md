@@ -22,8 +22,17 @@ Integrates terminal, code editor, file tree, live preview, and MCP toolchain int
 
 ### Installation
 
+Install the public CLI and start Tower on its loopback default:
+
 ```bash
-git clone <repo-url>
+npm install -g @tower-org/cli
+tower
+```
+
+For source development:
+
+```bash
+git clone https://github.com/tower-org/tower.git
 cd tower
 pnpm install
 

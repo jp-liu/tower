@@ -12,14 +12,14 @@ import type {
   CliProcessStreamEvent,
   PlatformName,
   RedactedLogger,
-} from "@tower/ai-sdk";
-import { redactSensitiveRecord, streamProcessJsonLines } from "@tower/ai-sdk";
+} from "@tower-org/ai-sdk";
+import { redactSensitiveRecord, streamProcessJsonLines } from "@tower-org/ai-sdk";
 import {
   CommandResolver,
   type CommandResolution,
   ControlledProcessExecutor,
   NodeCliHostFileSystem,
-} from "@tower/ai-runtime";
+} from "@tower-org/ai-runtime";
 import { getPackageRoot } from "@/lib/tower-paths";
 import { ensurePathInEnv, stripClaudeNestingEnv, stripTowerRuntimeEnv } from "@/lib/platform";
 

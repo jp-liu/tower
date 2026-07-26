@@ -13,8 +13,8 @@ import {
   type PluginInstallPlan,
   type PluginRegistration,
   type PluginRuntimeErrorCode,
-} from "@tower/ai-runtime";
-import type { CliConfigSchema, CliPluginManifestV1, CliPluginPermission } from "@tower/ai-sdk";
+} from "@tower-org/ai-runtime";
+import type { CliConfigSchema, CliPluginManifestV1, CliPluginPermission } from "@tower-org/ai-sdk";
 import { db } from "@/lib/db";
 import { getTowerDir } from "@/lib/tower-dir";
 import { getPackageRoot } from "@/lib/tower-paths";

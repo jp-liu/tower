@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { PluginRuntimeError } from "@tower/ai-runtime";
+import { PluginRuntimeError } from "@tower-org/ai-runtime";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({

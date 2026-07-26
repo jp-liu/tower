@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as tar from "tar";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CliPluginManifestV1 } from "@tower/ai-sdk";
+import type { CliPluginManifestV1 } from "@tower-org/ai-sdk";
 import {
   CliPluginRuntime,
   CommandResolver,

@@ -8,7 +8,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@tower/ai-sdk": path.resolve(import.meta.dirname, "../ai-sdk/src/index.ts"),
+      "@tower-org/ai-sdk": path.resolve(import.meta.dirname, "../ai-sdk/src/index.ts"),
     },
   },
 });

@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import * as tar from "tar";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseExtensionCatalog } from "@tower/ai-runtime";
+import { parseExtensionCatalog } from "@tower-org/ai-runtime";
 import { buildExtensionCatalog } from "../../../scripts/build-extension-catalog";
 import {
   assertJsonSchema,

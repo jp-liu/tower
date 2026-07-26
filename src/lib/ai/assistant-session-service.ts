@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import type { ApiMessage, ApiMessageContentPart } from "@tower/ai-runtime";
+import type { ApiMessage, ApiMessageContentPart } from "@tower-org/ai-runtime";
 import type { PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
 import { DEFAULT_ASSISTANT_HISTORY_TURNS, normalizeAssistantHistoryTurns } from "@/lib/ai/assistant-history";

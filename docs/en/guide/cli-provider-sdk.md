@@ -1,6 +1,6 @@
 ---
 title: CLI Provider Development
-description: "@tower/ai-sdk Manifest v1, adapters, schemas, and trust boundary"
+description: "@tower-org/ai-sdk Manifest v1, adapters, schemas, and trust boundary"
 ---
 
 ## Publication status
@@ -89,7 +89,7 @@ scripts/build-extension-catalog.ts
 
 To contribute a release:
 
-1. Depend only on `@tower/ai-sdk` and Host Context, then run the provider's typecheck, tests, and build.
+1. Depend only on `@tower-org/ai-sdk` and Host Context, then run the provider's typecheck, tests, and build.
 2. Add or update a declaration under `extensions/catalog/sources/`; its ID, publisher, and version must match the package manifest.
 3. Run `pnpm extensions:catalog:build -- --base-url https://<authorized-host>/<path>/ --output <directory>`. An authorized publication workflow supplies the base URL; the repository does not assume an organization, domain, or publication location.
 4. The generator validates both schemas and packages only the prebuilt `dist` plus config schema. It removes scripts and dependency metadata, normalizes ordering and mtimes, and emits SHA-256, byte size, and `index.v1.json`.

@@ -7,8 +7,8 @@ import {
   type AiCapabilitySlot,
   type CapabilityErrorShape,
   type CapabilityTarget,
-} from "@tower/ai-runtime";
-import type { CliAdapter } from "@tower/ai-sdk";
+} from "@tower-org/ai-runtime";
+import type { CliAdapter } from "@tower-org/ai-sdk";
 import { db } from "@/lib/db";
 import { providerRegistry } from "./providers";
 import { AiProviderError } from "./types";

@@ -1,6 +1,6 @@
 import { execFileSync } from "child_process";
 import { existsSync } from "fs";
-import { CapabilityRuntimeError } from "@tower/ai-runtime";
+import { CapabilityRuntimeError } from "@tower-org/ai-runtime";
 import { db } from "@/lib/db";
 import { generateSummaryFromLog, generateDreamingInsight, type DreamingResult } from "@/lib/claude-session";
 import { SESSION_INSIGHT_CATEGORY } from "@/lib/constants";

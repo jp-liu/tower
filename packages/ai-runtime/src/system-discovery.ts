@@ -1,7 +1,7 @@
 import { constants as fsConstants, promises as fs } from "node:fs";
 import path from "node:path";
-import type { PlatformName } from "@tower/ai-sdk";
-import { isWindows } from "@tower/ai-sdk";
+import type { PlatformName } from "@tower-org/ai-sdk";
+import { isWindows } from "@tower-org/ai-sdk";
 import {
   findCommandPath,
   type FindCommandPathOptions,

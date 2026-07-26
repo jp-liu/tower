@@ -1,5 +1,5 @@
 import type { ProviderDefinition } from "../types";
-import { providerVersion, towerCliPlugin } from "@tower/ai-provider-claude";
+import { providerVersion, towerCliPlugin } from "@tower-org/ai-provider-claude";
 import { createBuiltInAdapter } from "../provider-host";
 
 export function createClaudeProvider(): ProviderDefinition {

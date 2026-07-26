@@ -20,7 +20,7 @@ import { execFileSync } from "child_process";
 import { existsSync } from "fs";
 import { db } from "@/lib/db";
 import { syncNoteToFts } from "@/lib/fts";
-import { CapabilityRuntimeError } from "@tower/ai-runtime";
+import { CapabilityRuntimeError } from "@tower-org/ai-runtime";
 import { generateCapabilityText } from "@/lib/ai/capability-executor";
 import { getConfigValue } from "@/actions/config-actions";
 import { resolveTaskDiffSource } from "@/lib/task-diff-resolver";

@@ -20,7 +20,7 @@ import {
   type CliSessionFailureInput,
   type CliSessionOptions,
   type CliSkillOptions,
-} from "@tower/ai-sdk";
+} from "@tower-org/ai-sdk";
 
 type ProviderHost = CliHostContext & { resources: CliHostResources; fileSystem: CliHostFileSystem };
 

@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import type { CliHostFileSystem } from "@tower/ai-sdk";
+import type { CliHostFileSystem } from "@tower-org/ai-sdk";
 
 /** Node implementation supplied by Tower to built-in and community providers alike. */
 export class NodeCliHostFileSystem implements CliHostFileSystem {

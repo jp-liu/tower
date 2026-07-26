@@ -1,8 +1,8 @@
 // @vitest-environment node
-import type { CliAdapter, CliPluginManifestV1 } from "@tower/ai-sdk";
-import { claudeManifest } from "@tower/ai-provider-claude";
-import { codexManifest } from "@tower/ai-provider-codex";
-import { geminiManifest } from "@tower/ai-provider-gemini";
+import type { CliAdapter, CliPluginManifestV1 } from "@tower-org/ai-sdk";
+import { claudeManifest } from "@tower-org/ai-provider-claude";
+import { codexManifest } from "@tower-org/ai-provider-codex";
+import { geminiManifest } from "@tower-org/ai-provider-gemini";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { adapter } = vi.hoisted(() => ({
