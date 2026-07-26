@@ -1,6 +1,8 @@
 import { defineCliPlugin, type CliPluginManifestV1 } from "@tower/ai-sdk";
 import { GeminiCliAdapter } from "./adapter.js";
 
+export const providerVersion = "0.1.0";
+
 export const geminiManifest = {
   manifestVersion: 1,
   apiVersion: "1.0",

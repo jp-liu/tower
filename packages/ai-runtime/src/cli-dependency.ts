@@ -21,6 +21,32 @@ export interface CliDependencyVerifier {
   verify(manifest: CliPluginManifestV1): Promise<CliDependencyDiagnostic>;
 }
 
+/** Evaluate an already resolved command without probing or loading provider code. */
+export function evaluateCliDependency(
+  manifest: CliPluginManifestV1,
+  commandPath: string | null,
+  rawVersion: string | null,
+): CliDependencyDiagnostic {
+  const dependency = manifest.cliDependency;
+  const detectedVersion = rawVersion ? semver.coerce(rawVersion)?.version ?? null : null;
+  const base = {
+    dependency: dependency.name,
+    commandPath,
+    detectedVersion,
+    supportedVersions: dependency.supportedVersions,
+    homepage: dependency.homepage,
+    installDocs: dependency.installDocs,
+    managedByTower: false as const,
+  };
+  if (!commandPath) return { ...base, state: "missing" };
+  if (!detectedVersion) return { ...base, state: "probe-failed" };
+  if (!semver.validRange(dependency.supportedVersions)
+    || !semver.satisfies(detectedVersion, dependency.supportedVersions)) {
+    return { ...base, state: "version-incompatible" };
+  }
+  return { ...base, state: "ready" };
+}
+
 function safeEnvironment(source: RuntimeEnvironment): RuntimeEnvironment {
   const allowed = [
     "PATH", "Path", "PATHEXT", "SystemRoot", "WINDIR", "HOME", "USERPROFILE",
@@ -102,7 +128,6 @@ export class SafeCliDependencyVerifier implements CliDependencyVerifier {
   }
 
   async verify(manifest: CliPluginManifestV1): Promise<CliDependencyDiagnostic> {
-    const dependency = manifest.cliDependency;
     const knownPaths = manifest.command.knownPaths?.[this.platform] ?? [];
     const resolution: CommandResolution = await this.resolver.resolve({
       defaultCommand: manifest.command.default,
@@ -114,27 +139,13 @@ export class SafeCliDependencyVerifier implements CliDependencyVerifier {
       env: this.env,
     });
     const selected = resolution.selected;
-    const detectedVersion = selected?.version ? semver.coerce(selected.version)?.version ?? null : null;
-    const base = {
-      dependency: dependency.name,
-      commandPath: selected?.path ?? null,
-      detectedVersion,
-      supportedVersions: dependency.supportedVersions,
-      homepage: dependency.homepage,
-      installDocs: dependency.installDocs,
-      managedByTower: false as const,
-    };
-    let diagnostic: CliDependencyDiagnostic;
-    if (!selected || selected.state === "not-found") {
-      diagnostic = { ...base, state: "missing" };
-    } else if (selected.state !== "runnable" || !detectedVersion) {
-      diagnostic = { ...base, state: "probe-failed" };
-    } else if (!semver.validRange(dependency.supportedVersions)
-      || !semver.satisfies(detectedVersion, dependency.supportedVersions)) {
-      diagnostic = { ...base, state: "version-incompatible" };
-    } else {
-      diagnostic = { ...base, state: "ready" };
-    }
+    const diagnostic = selected && selected.state !== "not-found"
+      ? evaluateCliDependency(
+          manifest,
+          selected.path,
+          selected.state === "runnable" ? selected.version : null,
+        )
+      : evaluateCliDependency(manifest, null, null);
     if (diagnostic.state !== "ready") {
       throw pluginError("CLI_DEPENDENCY_UNAVAILABLE", manifest.id, undefined, diagnostic);
     }

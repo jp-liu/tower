@@ -1,5 +1,5 @@
 import type { ProviderDefinition } from "../types";
-import { towerCliPlugin } from "@tower/ai-provider-codex";
+import { providerVersion, towerCliPlugin } from "@tower/ai-provider-codex";
 import { createBuiltInAdapter } from "../provider-host";
 
 export function createCodexProvider(): ProviderDefinition {
@@ -7,6 +7,7 @@ export function createCodexProvider(): ProviderDefinition {
   return {
     name: "codex",
     displayName: "Codex CLI",
+    version: providerVersion,
     agentFieldValue: "CODEX_CLI",
     builtin: true,
     cli: {

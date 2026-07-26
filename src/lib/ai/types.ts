@@ -84,6 +84,8 @@ export interface AiQueryAdapter {
 export interface ProviderDefinition {
   name: string;
   displayName: string;
+  /** Provider package version, distinct from the detected third-party CLI version. */
+  version?: string;
   agentFieldValue: string;
   builtin?: boolean;
 
@@ -124,6 +126,8 @@ export interface ProviderAvailability {
       | "untested"
       | "connected"
       | "unavailable"
+      | "dependencyMissing"
+      | "dependencyIncompatible"
       | "pluginDisabled"
       | "permissionRequired"
       | "pluginDamaged"

@@ -5,12 +5,15 @@ import os from "node:os";
 import path from "node:path";
 import {
   CommandResolver,
+  evaluateCliDependency,
   PluginRuntimeError,
+  stableJson,
   type CommandResolution,
   validatePluginSettings,
 } from "@tower/ai-runtime";
 import type {
   CliAdapter,
+  CliConfigSchema,
   CliPlugin,
   CliProcessSpec,
   PlatformName,
@@ -43,8 +46,13 @@ export interface CliPluginConnectionRecord {
 export interface ResolvedPluginCli {
   adapter: CliAdapter;
   provider: ProviderDefinition;
+  manifest: CliPlugin["manifest"];
   commandPath: string;
   version: string | null;
+  providerVersion: string;
+  connectionId: string;
+  configurationDigest: string;
+  dependency: ReturnType<typeof evaluateCliDependency>;
   resolution: CommandResolution;
 }
 
@@ -75,6 +83,27 @@ function enabledEnvironment(entries: CliEnvironmentVariable[]): Record<string, s
 function providerConfigDir(defaultCommand: string): string {
   const name = defaultCommand.split(/[\\/]/).at(-1)?.replace(/\.(?:cmd|exe|bat)$/i, "") ?? "cli";
   return path.join(os.homedir(), `.${name.replace(/[^a-z0-9._-]/gi, "-")}`);
+}
+
+function configurationDigest(
+  connection: CliPluginConnectionRecord,
+  schema: CliConfigSchema,
+  settings: Record<string, unknown>,
+  environment: CliEnvironmentVariable[],
+): string {
+  const safeSettings = Object.fromEntries(Object.entries(settings)
+    .filter(([key]) => schema.properties?.[key]?.["x-tower"]?.sensitive !== true));
+  const safeEnvironment = environment
+    .map(({ name, enabled }) => ({ name, enabled }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const baseArgShape = parseJson<string[]>(connection.baseArgsJson, [])
+    .map((argument) => argument.startsWith("-") ? argument.split("=", 1)[0] : "<value>");
+  return createHash("sha256").update(stableJson({
+    commandOverride: connection.commandOverride,
+    baseArgShape,
+    environment: safeEnvironment,
+    settings: safeSettings,
+  })).digest("hex");
 }
 
 function wrapConnectionAdapter(
@@ -152,7 +181,8 @@ export async function resolvePluginCliConnection(
     { applyDefaults: true },
   );
   const baseArgs = parseJson<string[]>(connection.baseArgsJson, []);
-  const envPatch = enabledEnvironment(parseJson<CliEnvironmentVariable[]>(connection.envVarsJson, []));
+  const environmentEntries = parseJson<CliEnvironmentVariable[]>(connection.envVarsJson, []);
+  const envPatch = enabledEnvironment(environmentEntries);
   const environment = { ...providerBaseEnvironment(connection.provider), ...envPatch };
   const signal = options.signal ?? new AbortController().signal;
   const allowsProviderConfig = registration.permissions.includes("filesystem:provider-config");
@@ -170,15 +200,11 @@ export async function resolvePluginCliConnection(
     },
   );
 
-  let probeAdapter: CliAdapter | null = null;
-  if (options.hello) {
-    probeAdapter = await application.runtime.load(connection.provider, makeHost(), settings);
-  }
   const resolver = new CommandResolver({
     platform: process.platform as PlatformName,
     env: environment,
   });
-  const resolution = await resolver.resolve({
+  const resolutionRequest = {
     commandOverride: connection.commandOverride ?? undefined,
     defaultCommand: inspected.manifest.command.default,
     aliases: inspected.manifest.command.aliases,
@@ -188,9 +214,22 @@ export async function resolvePluginCliConnection(
     env: environment,
     signal,
     cacheKey: connection.id,
-    ...(probeAdapter?.buildHelloProbe ? {
+  };
+  let resolution = await resolver.resolve(resolutionRequest);
+  let selected = resolution.selected;
+  if (!selected || selected.state === "not-found") throw new Error("cli_not_found");
+  if (selected.state === "found") throw new Error("cli_not_executable");
+  const dependency = evaluateCliDependency(inspected.manifest, selected.path, selected.version);
+  if (dependency.state !== "ready") throw new Error("cli_dependency_incompatible");
+
+  if (options.hello) {
+    const probeAdapter = await application.runtime.load(connection.provider, makeHost(selected.path), settings);
+    if (!probeAdapter.buildHelloProbe) throw new Error("probe_failed");
+    resolution = await resolver.resolve({
+      ...resolutionRequest,
+      commandOverride: selected.path,
       helloProbe: (candidate) => mergeProviderProcess(
-        probeAdapter!.buildHelloProbe!({
+        probeAdapter.buildHelloProbe!({
           command: candidate.path,
           cwd,
           prompt: "Respond with just the word hello",
@@ -199,12 +238,10 @@ export async function resolvePluginCliConnection(
         { baseArgs, envPatch },
       ),
       helloTimeoutMs: 45_000,
-    } : {}),
-  });
-  const selected = resolution.selected;
-  if (!selected || selected.state === "not-found") throw new Error("cli_not_found");
-  if (selected.state === "found") throw new Error("cli_not_executable");
-  if (options.hello && selected.state !== "connected") throw new Error("probe_failed");
+    });
+    selected = resolution.selected;
+    if (!selected || selected.state !== "connected") throw new Error("probe_failed");
+  }
 
   const adapter = await application.runtime.load(connection.provider, makeHost(selected.path), settings);
   const managedAdapter = wrapConnectionAdapter(adapter, selected.path, baseArgs, envPatch);
@@ -215,6 +252,7 @@ export async function resolvePluginCliConnection(
   const provider: ProviderDefinition = {
     name: connection.provider,
     displayName: inspected.manifest.display.name,
+    version: registration.version,
     agentFieldValue: "CLI_PLUGIN",
     builtin: false,
     cli: {
@@ -228,8 +266,13 @@ export async function resolvePluginCliConnection(
   return {
     adapter: managedAdapter,
     provider,
+    manifest: inspected.manifest,
     commandPath: selected.path,
     version: selected.version,
+    providerVersion: registration.version,
+    connectionId: connection.id,
+    configurationDigest: configurationDigest(connection, inspected.configSchema, settings, environmentEntries),
+    dependency,
     resolution,
   };
 }
@@ -304,13 +347,15 @@ export async function testPluginCliConnection(pluginId: string, signal?: AbortSi
       ? error.code === "PLUGIN_DISABLED" ? "plugin_disabled"
         : error.code === "PLUGIN_NOT_FOUND" ? "plugin_not_found"
           : "plugin_corrupt"
-      : error instanceof Error && [
+      : error instanceof Error && error.message === "cli_dependency_incompatible" ? "cli_incompatible"
+        : error instanceof Error && [
       "plugin_disabled", "plugin_not_found", "cli_not_found", "cli_not_executable", "probe_failed",
     ].includes(error.message) ? error.message as CliPluginApplicationErrorCode : "probe_failed";
     await db.providerConnection.update({
       where: { id: connection.id },
       data: {
-        testStatus: "unavailable",
+        testStatus: code === "cli_not_found" ? "dependency-missing"
+          : code === "cli_incompatible" ? "dependency-incompatible" : "unavailable",
         testOk: false,
         lastTestedAt: new Date(),
         diagnosticsJson: JSON.stringify({ code }),

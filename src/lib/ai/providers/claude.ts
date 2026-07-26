@@ -1,5 +1,5 @@
 import type { ProviderDefinition } from "../types";
-import { towerCliPlugin } from "@tower/ai-provider-claude";
+import { providerVersion, towerCliPlugin } from "@tower/ai-provider-claude";
 import { createBuiltInAdapter } from "../provider-host";
 
 export function createClaudeProvider(): ProviderDefinition {
@@ -7,6 +7,7 @@ export function createClaudeProvider(): ProviderDefinition {
   return {
     name: "claude",
     displayName: "Claude Code",
+    version: providerVersion,
     agentFieldValue: "CLAUDE_CODE",
     builtin: true,
     cli: {

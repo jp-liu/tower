@@ -1,4 +1,4 @@
-import { towerCliPlugin } from "@tower/ai-provider-gemini";
+import { providerVersion, towerCliPlugin } from "@tower/ai-provider-gemini";
 import type { ProviderDefinition } from "../types";
 import { createBuiltInAdapter } from "../provider-host";
 
@@ -7,6 +7,7 @@ export function createGeminiProvider(): ProviderDefinition {
   return {
     name: "gemini",
     displayName: "Gemini CLI",
+    version: providerVersion,
     agentFieldValue: "GEMINI_CLI",
     builtin: true,
     cli: {

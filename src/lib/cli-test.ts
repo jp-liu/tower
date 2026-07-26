@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { providerRegistry } from "./ai/providers";
-import { ControlledProcessExecutor } from "@tower/ai-runtime";
+import { ControlledProcessExecutor, evaluateCliDependency } from "@tower/ai-runtime";
 import {
   createBuiltInAdapter,
   providerBaseEnvironment,
@@ -183,6 +183,18 @@ async function testWithAdapter(
     passed: true,
     message: selected.version ? `Version: ${selected.version}` : "Version: unknown",
   });
+
+  const dependency = evaluateCliDependency(provider.cli.plugin.manifest, selected.path, selected.version);
+  if (dependency.state !== "ready") {
+    checks.push({
+      name: `${providerName}_version_compatibility`,
+      passed: false,
+      message: dependency.state === "version-incompatible"
+        ? `Detected CLI version is incompatible with ${dependency.supportedVersions}`
+        : "CLI version could not be verified",
+    });
+    return { ok: false, checks };
+  }
 
   // Authentication remains owned by the CLI; Tower never reads or reports credential values.
   checks.push({

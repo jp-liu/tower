@@ -28,6 +28,7 @@ export type CliPluginApplicationErrorCode =
   | "plugin_corrupt"
   | "cli_not_found"
   | "cli_not_executable"
+  | "cli_incompatible"
   | "probe_failed"
   | "permission_required"
   | "plan_expired"
@@ -44,6 +45,7 @@ const SAFE_ERROR_MESSAGES: Record<CliPluginApplicationErrorCode, string> = {
   plugin_corrupt: "The installed plugin is damaged or no longer matches its registration",
   cli_not_found: "The plugin CLI command could not be found",
   cli_not_executable: "The plugin CLI command is not runnable",
+  cli_incompatible: "The plugin CLI version is not compatible with this provider",
   probe_failed: "The plugin CLI Hello probe failed",
   permission_required: "The plugin permissions must be confirmed",
   plan_expired: "The plugin plan expired; create a new plan",
