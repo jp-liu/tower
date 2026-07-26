@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { DM_Sans, Geist, Geist_Mono, JetBrains_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LayoutClient } from "@/components/layout/layout-client";
 import { I18nProvider } from "@/lib/i18n";
@@ -11,27 +10,6 @@ import { db } from "@/lib/db";
 import { getOnboardingStatus } from "@/actions/onboarding-actions";
 import { listAllExtensionStatus } from "@/actions/extension-actions";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-const dmSans = DM_Sans({
-  variable: "--font-dm-sans",
-  subsets: ["latin"],
-  style: ["normal", "italic"],
-});
-
-const jetBrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "AI Task Platform - Tower",
@@ -61,9 +39,7 @@ export default async function RootLayout({
 
   return (
     <html lang="zh-CN" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} ${dmSans.variable} ${jetBrainsMono.variable} antialiased`}
-      >
+      <body className="antialiased">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <TooltipProvider>
             <I18nProvider>
