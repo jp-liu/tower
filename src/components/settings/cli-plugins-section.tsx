@@ -7,12 +7,14 @@ import {
   Clipboard,
   Eye,
   EyeOff,
+  ExternalLink,
   FolderOpen,
   Loader2,
   PackagePlus,
   Pencil,
   Plus,
   RefreshCw,
+  Search,
   ShieldCheck,
   Trash2,
   X,
@@ -25,9 +27,10 @@ import {
   enableCliPlugin,
   getCliPluginConnection,
   installCliPlugin,
+  listCliProviderCatalog,
   listCliPlugins,
+  planCatalogCliPlugin,
   planLocalCliPlugin,
-  planNpmCliPlugin,
   recoverCliPluginRegistry,
   reviewInstalledCliPlugin,
   revealCliPluginSecret,
@@ -36,7 +39,7 @@ import {
   uninstallCliPlugin,
 } from "@/actions/cli-plugin-actions";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -50,7 +53,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/lib/i18n";
 import type {
@@ -62,15 +64,19 @@ import { CLI_SECRET_MASK } from "@/lib/ai/cli-plugin-shared";
 
 type PluginResult = Awaited<ReturnType<typeof listCliPlugins>>;
 type Plugin = Extract<PluginResult, { ok: true }>["data"][number];
-type InstallSource = "npm" | "local";
+type CatalogResult = Awaited<ReturnType<typeof listCliProviderCatalog>>;
+type CatalogItem = Extract<CatalogResult, { ok: true }>["data"][number];
+type InstallMode = "catalog" | "local";
+type DependencyDiagnostic = {
+  dependency: string;
+  state: "missing" | "probe-failed" | "version-incompatible" | "ready";
+  commandPath: string | null;
+  detectedVersion: string | null;
+  supportedVersions: string;
+  installDocs: string;
+};
 const DEFAULT_SENSITIVE_NAME = /(authorization|token|key|secret|password|passwd|credential|cookie)/i;
 const CONNECTIONS_CHANGED_EVENT = "tower:provider-connections-changed";
-
-function legacyInstallSource(source: Plugin["source"]): InstallSource | null {
-  if (source === "npm") return "npm";
-  if (source === "local" || source === "development") return "local";
-  return null;
-}
 
 function notifyConnectionsChanged() {
   window.dispatchEvent(new Event(CONNECTIONS_CHANGED_EVENT));
@@ -214,18 +220,22 @@ function SettingsField({
 export function CliPluginsSection() {
   const { t } = useI18n();
   const [plugins, setPlugins] = useState<Plugin[]>([]);
+  const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const [pending, setPending] = useState<string | null>(null);
   const [installOpen, setInstallOpen] = useState(false);
-  const [source, setSource] = useState<InstallSource>("npm");
-  const [packageName, setPackageName] = useState("");
-  const [version, setVersion] = useState("");
+  const [installMode, setInstallMode] = useState<InstallMode>("catalog");
+  const [catalogTarget, setCatalogTarget] = useState<null | { item: CatalogItem; version: string }>(null);
   const [directory, setDirectory] = useState("");
   const [plan, setPlan] = useState<SafeCliPluginPlan | null>(null);
   const [installed, setInstalled] = useState(false);
   const [recoveringConfirmation, setRecoveringConfirmation] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [dialogDiagnostic, setDialogDiagnostic] = useState<DependencyDiagnostic | null>(null);
   const [danger, setDanger] = useState<null | { type: "disable" | "uninstall"; plugin: Plugin }>(null);
   const [detail, setDetail] = useState<CliPluginConnectionDetail | null>(null);
   const [baseArgsText, setBaseArgsText] = useState("");
@@ -249,26 +259,47 @@ export function CliPluginsSection() {
     setLoading(false);
   }, []);
 
+  const loadCatalog = useCallback(async (query: string) => {
+    setCatalogLoading(true);
+    const result = await listCliProviderCatalog(query);
+    if (result.ok) {
+      setCatalog(result.data);
+      setCatalogError(null);
+    } else {
+      setCatalogError(result.error.code);
+    }
+    setCatalogLoading(false);
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadCatalog(search); }, 250);
+    return () => window.clearTimeout(timer);
+  }, [loadCatalog, search]);
+
   function resetInstall() {
     setPlan(null);
     setInstalled(false);
     setDialogError(null);
+    setDialogDiagnostic(null);
     setRecoveringConfirmation(false);
   }
 
   async function createPlan() {
     setPending("plan");
     setDialogError(null);
-    const result = source === "npm"
-      ? await planNpmCliPlugin(packageName, version)
+    const result = installMode === "catalog" && catalogTarget
+      ? await planCatalogCliPlugin(catalogTarget.item.id, catalogTarget.version)
       : await planLocalCliPlugin(directory);
     if (result.ok) setPlan(result.data);
-    else setDialogError(actionError(t, result.error.code));
+    else {
+      setDialogError(actionError(t, result.error.code));
+      setDialogDiagnostic(result.error.diagnostic ?? null);
+    }
     setPending(null);
   }
 
@@ -279,6 +310,7 @@ export function CliPluginsSection() {
     if (result.ok) {
       setInstalled(true);
       await load();
+      await loadCatalog(search);
       notifyConnectionsChanged();
     } else setDialogError(actionError(t, result.error.code));
     setPending(null);
@@ -292,6 +324,7 @@ export function CliPluginsSection() {
       setInstallOpen(false);
       resetInstall();
       await load();
+      await loadCatalog(search);
       notifyConnectionsChanged();
       toast.success(t("settings.cliPlugins.enabled"));
     } else setDialogError(actionError(t, result.error.code));
@@ -310,6 +343,7 @@ export function CliPluginsSection() {
     else {
       toast.success(t(current.type === "disable" ? "settings.cliPlugins.disabled" : "settings.cliPlugins.uninstalled"));
       await load();
+      await loadCatalog(search);
       notifyConnectionsChanged();
     }
     setPending(null);
@@ -321,22 +355,19 @@ export function CliPluginsSection() {
     if (result.ok) {
       toast.success(t("settings.cliPlugins.enabled"));
       await load();
+      await loadCatalog(search);
       notifyConnectionsChanged();
     } else toast.error(actionError(t, result.error.code));
     setPending(null);
   }
 
   async function reviewInstalled(plugin: Plugin) {
-    const source = legacyInstallSource(plugin.source);
-    if (!source) {
-      toast.error(actionError(t, "invalid_input"));
-      return;
-    }
     setPending(`review-existing:${plugin.id}`);
     const result = await reviewInstalledCliPlugin(plugin.id);
     if (result.ok) {
       resetInstall();
-      setSource(source);
+      setInstallMode(plugin.source === "development" || plugin.source === "local" ? "local" : "catalog");
+      setCatalogTarget(null);
       setRecoveringConfirmation(true);
       setPlan(result.data);
       setInstallOpen(true);
@@ -344,11 +375,16 @@ export function CliPluginsSection() {
     setPending(null);
   }
 
-  function openLegacyUpdate(plugin: Plugin) {
-    const source = legacyInstallSource(plugin.source);
-    if (!source) return;
-    setSource(source);
-    setPackageName(plugin.id);
+  function openCatalogPlan(item: CatalogItem, version = item.latestVersion) {
+    setInstallMode("catalog");
+    setCatalogTarget({ item, version });
+    resetInstall();
+    setInstallOpen(true);
+  }
+
+  function openDeveloperRegistration() {
+    setInstallMode("local");
+    setCatalogTarget(null);
     resetInstall();
     setInstallOpen(true);
   }
@@ -426,6 +462,7 @@ export function CliPluginsSection() {
       setSettings(result.data.settings);
       toast.success(t("settings.cliPlugins.configurationSaved"));
       await load();
+      await loadCatalog(search);
       notifyConnectionsChanged();
     } else toast.error(actionError(t, result.error.code));
     setPending(null);
@@ -452,91 +489,183 @@ export function CliPluginsSection() {
     if (result.ok) {
       toast.success(t("settings.cliPlugins.registryRecovered"));
       await load();
+      await loadCatalog(search);
     } else toast.error(actionError(t, result.error.code));
     setPending(null);
   }
 
-  const canPlan = source === "npm" ? packageName.trim() && version.trim() : directory.trim();
+  const canPlan = installMode === "catalog" ? Boolean(catalogTarget) : Boolean(directory.trim());
+  const developerPlugins = plugins.filter((plugin) => plugin.source !== "catalog");
   const schemaFields = useMemo(() => detail ? schemaProperties(detail.configSchema) : [], [detail]);
 
   return (
     <>
-      <div className="overflow-hidden rounded-lg border bg-card">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+      <section className="space-y-3" aria-labelledby="provider-catalog-heading">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="text-sm font-medium">{t("settings.cliPlugins.title")}</h3>
-            <p className="text-xs text-muted-foreground">{t("settings.cliPlugins.desc")}</p>
+            <h3 id="provider-catalog-heading" className="text-sm font-medium">{t("settings.cliPlugins.catalogTitle")}</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">{t("settings.cliPlugins.catalogDesc")}</p>
           </div>
-          <Button onClick={() => { resetInstall(); setInstallOpen(true); }}><PackagePlus />{t("settings.cliPlugins.add")}</Button>
+          <Button
+            variant="outline"
+            onClick={() => void loadCatalog(search)}
+            disabled={catalogLoading}
+          >
+            <RefreshCw className={catalogLoading ? "animate-spin" : undefined} />
+            {t("settings.cliPlugins.refreshCatalog")}
+          </Button>
         </div>
-        {loading ? (
-          <div className="relative h-24"><Loader2 className="absolute inset-0 m-auto size-5 animate-spin" /></div>
-        ) : loadError ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-5 text-sm text-destructive">
+        <div className="relative max-w-xl">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <Input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="pl-9"
+            placeholder={t("settings.cliPlugins.searchPlaceholder")}
+            aria-label={t("settings.cliPlugins.searchLabel")}
+          />
+        </div>
+        {catalogLoading ? (
+          <div className="grid gap-3" aria-label={t("settings.cliPlugins.loadingCatalog")}>
+            {[0, 1].map((item) => <div key={item} className="h-36 animate-pulse rounded-md border bg-muted/30" />)}
+          </div>
+        ) : catalogError ? (
+          <div className="flex min-h-28 flex-wrap items-center justify-between gap-3 rounded-md border border-destructive/30 px-4 py-5" role="alert">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-destructive">{t("settings.cliPlugins.catalogUnavailable")}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{actionError(t, catalogError)}</p>
+            </div>
+            <Button variant="outline" onClick={() => void loadCatalog(search)}>{t("settings.cliPlugins.refreshCatalog")}</Button>
+          </div>
+        ) : catalog.length === 0 ? (
+          <div className="rounded-md border border-dashed px-4 py-8 text-center">
+            <p className="text-sm font-medium">{search ? t("settings.cliPlugins.noSearchResults") : t("settings.cliPlugins.catalogEmpty")}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{search ? t("settings.cliPlugins.noSearchResultsDesc") : t("settings.cliPlugins.catalogEmptyDesc")}</p>
+          </div>
+        ) : (
+          <ul className="grid gap-3">
+            {catalog.map((item) => {
+              const plugin = item.installed;
+              const release = item.versions.find((version) => version.version === item.latestVersion) ?? item.versions[0];
+              const dependency = plugin?.dependency;
+              const dependencyBlocksEnable = plugin?.health === "dependency-missing"
+                || plugin?.health === "dependency-incompatible"
+                || plugin?.health === "probe-failed";
+              return (
+                <li key={item.id} className="min-w-0 rounded-md border bg-card px-4 py-4">
+                  <div className="flex min-w-0 flex-wrap items-start gap-4 sm:flex-nowrap">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="break-words text-sm font-semibold">{item.display.name}</span>
+                        <Badge variant="outline">v{item.latestVersion}</Badge>
+                        <Badge variant="outline">{item.publisher.name}</Badge>
+                        {item.updateAvailable && <Badge>{t("settings.cliPlugins.updateAvailable")}</Badge>}
+                        {plugin && <Badge variant={plugin.health === "ready" ? "secondary" : plugin.health === "corrupt" ? "destructive" : "outline"}>{t(`settings.cliPlugins.health.${plugin.health}` as never)}</Badge>}
+                        {plugin && !plugin.permissionConfirmed && <Badge variant="destructive">{t("settings.cliPlugins.permissionPending")}</Badge>}
+                      </div>
+                      {item.display.description && <p className="mt-1 break-words text-xs text-muted-foreground">{item.display.description}</p>}
+                      <p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">{item.id}</p>
+                      {release?.cliDependency && <div className="mt-3 rounded-md bg-muted/40 px-3 py-2 text-xs">
+                        <p className="font-medium">{t("settings.cliPlugins.requiresCli", { name: release.cliDependency.name })}</p>
+                        <p className="mt-0.5 break-words text-muted-foreground">
+                          {t("settings.cliPlugins.cliBoundary")} {t("settings.cliPlugins.supportedVersions", { range: release.cliDependency.supportedVersions })}
+                        </p>
+                        {dependency && <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
+                          {dependency.commandPath ?? release.cliDependency.name} · {dependency.detectedVersion ?? t("settings.aiTools.versionUnknown")}
+                        </p>}
+                        {dependencyBlocksEnable && <p className="mt-1 text-destructive">
+                          {t("settings.cliPlugins.enableBlocked", { reason: t(`settings.cliPlugins.health.${plugin.health}` as never) })}
+                        </p>}
+                      </div>}
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        <Badge variant="outline">Terminal</Badge>
+                        <Badge variant="outline">Query</Badge>
+                        {plugin?.capabilities?.models && <Badge variant="outline">Models</Badge>}
+                        {Object.entries(plugin?.capabilities?.integrations ?? {}).filter(([, enabled]) => enabled).map(([name]) => <Badge key={name} variant="outline">{name.toUpperCase()}</Badge>)}
+                      </div>
+                    </div>
+                    <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:max-w-72 sm:justify-end">
+                      {item.display.homepage && <a href={item.display.homepage} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "ghost", size: "icon" })} aria-label={t("settings.extensions.visitHomepage")}><ExternalLink /></a>}
+                      {!plugin ? (
+                        <Button onClick={() => openCatalogPlan(item)} disabled={pending !== null}><PackagePlus />{t("settings.extensions.install")}</Button>
+                      ) : (
+                        <>
+                          <Button variant="outline" onClick={() => void testConnection(plugin.id)} disabled={!plugin.enabled || pending !== null}>{pending === `test:${plugin.id}` && <Loader2 className="animate-spin" />}<ShieldCheck />{t("settings.aiTools.testConnection")}</Button>
+                          <Button variant="outline" onClick={() => void openConfiguration(plugin.id)} disabled={!plugin.enabled || pending !== null}><Pencil />{t("common.edit")}</Button>
+                          {plugin.enabled
+                            ? <Button variant="outline" onClick={() => setDanger({ type: "disable", plugin })}>{t("settings.cliPlugins.disable")}</Button>
+                            : plugin.permissionConfirmed
+                              ? <Button variant="outline" onClick={() => void enablePlugin(plugin.id)} disabled={pending !== null || plugin.health === "corrupt" || dependencyBlocksEnable} title={dependencyBlocksEnable ? t(`settings.cliPlugins.health.${plugin.health}` as never) : undefined}>{pending === `enable-existing:${plugin.id}` && <Loader2 className="animate-spin" />}{t("settings.cliPlugins.enable")}</Button>
+                              : <Button variant="outline" onClick={() => void reviewInstalled(plugin)} disabled={pending !== null || plugin.health === "corrupt"}>{pending === `review-existing:${plugin.id}` && <Loader2 className="animate-spin" />}{t("settings.cliPlugins.reviewAndEnable")}</Button>}
+                          {item.updateAvailable && <Button variant="outline" onClick={() => openCatalogPlan(item)}><RefreshCw />{t("settings.cliPlugins.update")}</Button>}
+                          <Button variant="destructive" onClick={() => setDanger({ type: "uninstall", plugin })}><Trash2 />{t("settings.cliPlugins.uninstall")}</Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section className="space-y-3 border-t pt-5" aria-labelledby="developer-extensions-heading">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-0">
+            <h3 id="developer-extensions-heading" className="text-sm font-medium">{t("settings.cliPlugins.developerMode")}</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">{t("settings.cliPlugins.developerModeDesc")}</p>
+          </div>
+          <Button variant="outline" onClick={openDeveloperRegistration}><FolderOpen />{t("settings.cliPlugins.registerLocal")}</Button>
+        </div>
+        {loading ? <div className="h-16 animate-pulse rounded-md border bg-muted/30" /> : loadError ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-4 py-4 text-sm text-destructive">
             <span>{actionError(t, loadError)}</span>
             <Button variant="outline" onClick={() => void recover()} disabled={pending === "recover"}><RefreshCw />{t("settings.cliPlugins.recover")}</Button>
           </div>
-        ) : plugins.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-muted-foreground">{t("settings.cliPlugins.empty")}</p>
-        ) : (
-          <ul className="divide-y">
-            {plugins.map((plugin) => (
-              <li key={plugin.id} className="flex min-w-0 flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="break-words text-sm font-medium">{plugin.displayName}</span>
-                    <Badge variant="outline">{plugin.source}</Badge>
-                    <Badge variant={plugin.health === "ready" ? "secondary" : plugin.health === "corrupt" ? "destructive" : "outline"}>{t(`settings.cliPlugins.health.${plugin.health}` as never)}</Badge>
-                    {!plugin.permissionConfirmed && <Badge variant="destructive">{t("settings.cliPlugins.permissionPending")}</Badge>}
-                  </div>
-                  <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{plugin.id} · {plugin.version}</p>
-                  <div className="mt-1 flex flex-wrap gap-1">{plugin.permissions.map((permission) => <Badge key={permission} variant="outline">{permission}</Badge>)}</div>
-                </div>
-                <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
-                  <Button variant="outline" onClick={() => void testConnection(plugin.id)} disabled={!plugin.enabled || pending !== null}>{pending === `test:${plugin.id}` && <Loader2 className="animate-spin" />}<ShieldCheck />{t("settings.aiTools.testConnection")}</Button>
-                  <Button variant="outline" onClick={() => void openConfiguration(plugin.id)} disabled={!plugin.enabled || pending !== null}><Pencil />{t("common.edit")}</Button>
-                  {plugin.enabled
-                    ? <Button variant="outline" onClick={() => setDanger({ type: "disable", plugin })}>{t("settings.cliPlugins.disable")}</Button>
-                    : plugin.permissionConfirmed
-                      ? <Button variant="outline" onClick={() => void enablePlugin(plugin.id)} disabled={pending !== null}>{pending === `enable-existing:${plugin.id}` && <Loader2 className="animate-spin" />}{t("settings.cliPlugins.enable")}</Button>
-                      : <Button variant="outline" onClick={() => void reviewInstalled(plugin)} disabled={pending !== null}>{pending === `review-existing:${plugin.id}` && <Loader2 className="animate-spin" />}{t("settings.cliPlugins.reviewAndEnable")}</Button>}
-                  {legacyInstallSource(plugin.source) && <Button variant="outline" onClick={() => openLegacyUpdate(plugin)}><RefreshCw />{t("settings.cliPlugins.update")}</Button>}
-                  <Button variant="destructive" onClick={() => setDanger({ type: "uninstall", plugin })}><Trash2 />{t("settings.cliPlugins.uninstall")}</Button>
-                </div>
-              </li>
-            ))}
+        ) : developerPlugins.length === 0 ? <p className="rounded-md border border-dashed px-4 py-5 text-sm text-muted-foreground">{t("settings.cliPlugins.developerEmpty")}</p> : (
+          <ul className="divide-y rounded-md border">
+            {developerPlugins.map((plugin) => <li key={plugin.id} className="flex min-w-0 flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-1.5"><span className="break-words text-sm font-medium">{plugin.displayName}</span><Badge variant="outline">{plugin.source}</Badge><Badge variant={plugin.health === "ready" ? "secondary" : plugin.health === "corrupt" ? "destructive" : "outline"}>{t(`settings.cliPlugins.health.${plugin.health}` as never)}</Badge></div>
+                <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{plugin.id} · {plugin.version}</p>
+              </div>
+              <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+                {!plugin.enabled && !plugin.permissionConfirmed && <Button variant="outline" onClick={() => void reviewInstalled(plugin)}>{t("settings.cliPlugins.reviewAndEnable")}</Button>}
+                {plugin.enabled ? <Button variant="outline" onClick={() => setDanger({ type: "disable", plugin })}>{t("settings.cliPlugins.disable")}</Button> : plugin.permissionConfirmed && <Button variant="outline" onClick={() => void enablePlugin(plugin.id)}>{t("settings.cliPlugins.enable")}</Button>}
+                <Button variant="destructive" onClick={() => setDanger({ type: "uninstall", plugin })}><Trash2 />{t("settings.cliPlugins.uninstall")}</Button>
+              </div>
+            </li>)}
           </ul>
         )}
-      </div>
+      </section>
 
       <Dialog open={installOpen} onOpenChange={(open) => { setInstallOpen(open); if (!open) resetInstall(); }}>
         <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-lg sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>{t("settings.cliPlugins.add")}</DialogTitle>
+            <DialogTitle>{installMode === "catalog" ? t("settings.cliPlugins.installProvider") : t("settings.cliPlugins.registerLocal")}</DialogTitle>
             <DialogDescription>{t("settings.cliPlugins.installDesc")}</DialogDescription>
           </DialogHeader>
-          {!recoveringConfirmation && <Tabs value={source} onValueChange={(value) => {
-            if (value === source) return;
-            setSource(value as InstallSource);
-            resetInstall();
-          }}>
-            <TabsList className="grid w-full grid-cols-2"><TabsTrigger value="npm">npm</TabsTrigger><TabsTrigger value="local">{t("settings.cliPlugins.local")}</TabsTrigger></TabsList>
-          </Tabs>}
-          {!recoveringConfirmation && (source === "npm" ? (
-            <div className="grid gap-3 sm:grid-cols-[1fr_10rem]">
-              <div className="space-y-1.5"><Label htmlFor="plugin-package">{t("settings.cliPlugins.packageName")}</Label><Input id="plugin-package" value={packageName} onChange={(event) => { setPackageName(event.target.value); resetInstall(); }} placeholder="@scope/tower-cli-provider" /></div>
-              <div className="space-y-1.5"><Label htmlFor="plugin-version">{t("settings.cliPlugins.exactVersion")}</Label><Input id="plugin-version" value={version} onChange={(event) => { setVersion(event.target.value); resetInstall(); }} placeholder="1.2.3" /></div>
-            </div>
-          ) : (
+          {!recoveringConfirmation && installMode === "catalog" && catalogTarget && <div className="grid gap-3 sm:grid-cols-[1fr_10rem]">
+            <div className="min-w-0"><p className="break-words text-sm font-medium">{catalogTarget.item.display.name}</p><p className="mt-1 break-all text-xs text-muted-foreground">{catalogTarget.item.id} · {catalogTarget.item.publisher.name}</p></div>
+            <div className="space-y-1.5"><Label htmlFor="catalog-version">{t("settings.cliPlugins.version")}</Label><Select value={catalogTarget.version} onValueChange={(value) => { if (value) { setCatalogTarget({ ...catalogTarget, version: value }); resetInstall(); } }}><SelectTrigger id="catalog-version" className="w-full"><span>{catalogTarget.version}</span></SelectTrigger><SelectContent>{catalogTarget.item.versions.map((release) => <SelectItem key={release.version} value={release.version}>{release.version}</SelectItem>)}</SelectContent></Select></div>
+          </div>}
+          {!recoveringConfirmation && installMode === "local" && (
             <div className="space-y-1.5"><Label htmlFor="plugin-directory">{t("settings.cliPlugins.directory")}</Label><div className="flex gap-2"><FolderOpen className="mt-2.5 size-4 shrink-0" /><Input id="plugin-directory" className="font-mono" value={directory} onChange={(event) => { setDirectory(event.target.value); resetInstall(); }} /></div></div>
-          ))}
+          )}
           {!plan ? (
             <Button onClick={() => void createPlan()} disabled={!canPlan || pending !== null}>{pending === "plan" && <Loader2 className="animate-spin" />}{t("settings.cliPlugins.review")}</Button>
           ) : (
             <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-              <div className="flex flex-wrap items-center gap-2"><strong className="text-sm">{plan.displayName}</strong><Badge variant="outline">{plan.toVersion}</Badge><Badge variant="outline">{plan.operation}</Badge></div>
+              <div className="flex flex-wrap items-center gap-2"><strong className="text-sm">{plan.displayName}</strong><Badge variant="outline">{plan.fromVersion ? `${plan.fromVersion} -> ${plan.toVersion}` : plan.toVersion}</Badge><Badge variant="outline">{plan.operation}</Badge><Badge variant="outline">{plan.publisher.name}</Badge></div>
               {plan.description && <p className="text-xs text-muted-foreground">{plan.description}</p>}
               <p className="text-xs">{t("settings.cliPlugins.compatibility")}: Tower {plan.compatibility.tower} · Node {plan.compatibility.node}</p>
+              <div className="rounded-md bg-background/70 px-3 py-2 text-xs">
+                <p className="font-medium">{plan.cliDependency.name}</p>
+                <p className="mt-0.5 break-all font-mono text-[11px] text-muted-foreground">{plan.cliDependency.command} · {plan.cliDependency.supportedVersions}</p>
+                <p className="mt-1 text-muted-foreground">{t("settings.cliPlugins.cliBoundary")}</p>
+              </div>
               <div className="flex flex-wrap gap-1">
                 {Object.entries(plan.capabilities.integrations ?? {}).filter(([, enabled]) => enabled).map(([name]) => <Badge key={name} variant="outline">{name.toUpperCase()}</Badge>)}
                 {plan.capabilities.models && <Badge variant="outline">Models</Badge>}
@@ -548,10 +677,15 @@ export function CliPluginsSection() {
                 {plan.permissions.removed.map((permission) => <p key={permission} className="font-mono text-muted-foreground line-through">{permission} · {t("settings.cliPlugins.removed")}</p>)}
               </div>
               {!installed ? <Button onClick={() => void install()} disabled={pending !== null}>{pending === "install" && <Loader2 className="animate-spin" />}{t("settings.cliPlugins.installDisabled")}</Button>
-                : <Button onClick={() => void confirmEnable()} disabled={pending !== null}>{pending === "enable" && <Loader2 className="animate-spin" />}<ShieldCheck />{t("settings.cliPlugins.confirmEnable")}</Button>}
+                : <div className="space-y-2"><p className="text-xs text-muted-foreground" role="status">{t("settings.cliPlugins.installedDisabledNotice")}</p><Button onClick={() => void confirmEnable()} disabled={pending !== null}>{pending === "enable" && <Loader2 className="animate-spin" />}<ShieldCheck />{t("settings.cliPlugins.confirmEnable")}</Button></div>}
             </div>
           )}
           {dialogError && <p className="flex gap-2 text-xs text-destructive" role="alert"><CircleAlert className="size-4 shrink-0" />{dialogError}</p>}
+          {dialogDiagnostic && <div className="rounded-md border border-destructive/30 px-3 py-2 text-xs" role="status">
+            <p className="font-medium">{dialogDiagnostic.dependency}</p>
+            <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{dialogDiagnostic.commandPath ?? t("settings.cliPlugins.commandNotFound")} · {dialogDiagnostic.detectedVersion ?? t("settings.aiTools.versionUnknown")} · {dialogDiagnostic.supportedVersions}</p>
+            <a href={dialogDiagnostic.installDocs} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline", size: "sm", className: "mt-2" })}><ExternalLink />{t("settings.cliPlugins.openCliDocs")}</a>
+          </div>}
           <DialogFooter><Button variant="outline" onClick={() => setInstallOpen(false)}>{t("common.cancel")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>

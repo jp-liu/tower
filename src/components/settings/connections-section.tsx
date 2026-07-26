@@ -23,7 +23,6 @@ import { Switch } from "@/components/ui/switch";
 import { useI18n } from "@/lib/i18n";
 import type { ProviderAvailability } from "@/lib/ai/types";
 import { ApiConnectionsSection } from "./api-connections-section";
-import { CliPluginsSection } from "./cli-plugins-section";
 
 const CONNECTIONS_CHANGED_EVENT = "tower:provider-connections-changed";
 
@@ -256,8 +255,6 @@ export function ConnectionsSection() {
           </ul>
         )}
       </div>
-
-      <CliPluginsSection />
 
       <ApiConnectionsSection />
     </section>
