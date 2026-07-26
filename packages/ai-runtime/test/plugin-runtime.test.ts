@@ -215,6 +215,7 @@ describe("CLI plugin installation runtime", () => {
 
     expect(globalThis.__towerFixtureLoads).toBeUndefined();
     const plan = await plugins.planNpmInstall("@fixture/tower-cli", "1.0.0");
+    expect(plan.manifest.packageTreeDigest).toMatch(/^sha256-/);
     expect(plan.permissions).toEqual({
       requested: ["process:spawn"],
       added: ["process:spawn"],
@@ -306,6 +307,10 @@ describe("CLI plugin installation runtime", () => {
     escapingPackage.exports = { "./tower-cli-provider": { import: ".\\..\\outside.js" } };
     await writePackageJson(escapingRoot, escapingPackage);
     await expect(plugins.planLocalRegistration(escapingRoot)).rejects.toMatchObject({ code: "INVALID_PACKAGE" });
+
+    const symlinkRoot = await createFixture();
+    await fs.symlink(path.join(symlinkRoot, "provider.js"), path.join(symlinkRoot, "linked-provider.js"));
+    await expect(plugins.planLocalRegistration(symlinkRoot)).rejects.toMatchObject({ code: "ENTRY_ESCAPE" });
   });
 
   it("accepts import-only ESM dependencies and rejects missing or native modules", async () => {
@@ -331,6 +336,14 @@ describe("CLI plugin installation runtime", () => {
     await plugins.installNpm(plan);
     await plugins.confirmAndEnable(plan.pluginId, plan);
     await expect(plugins.load(plan.pluginId, host())).resolves.toBeDefined();
+
+    const installed = await plugins.get(plan.pluginId);
+    await fs.writeFile(
+      path.join(installed!.installPath, "node_modules", "fixture-dependency", "index.js"),
+      "export default false;",
+    );
+    await expect(plugins.inspect(plan.pluginId)).rejects.toMatchObject({ code: "PLUGIN_CORRUPT" });
+    await expect(plugins.load(plan.pluginId, host())).rejects.toMatchObject({ code: "PLUGIN_CORRUPT" });
 
     await fs.rm(dependency, { recursive: true });
     await expect(plugins.planNpmInstall("@fixture/tower-cli", "1.0.0")).rejects.toMatchObject({
@@ -519,11 +532,14 @@ describe("CLI plugin installation runtime", () => {
 
   it("detects damaged installed files with a stable path-free error", async () => {
     const packageRoot = await createFixture();
+    const helperPath = path.join(packageRoot, "lib", "helper.js");
+    await fs.mkdir(path.dirname(helperPath), { recursive: true });
+    await fs.writeFile(helperPath, "export const helper = true;\n");
     const plugins = runtime(await temporaryDirectory());
     const plan = await plugins.planLocalRegistration(packageRoot);
     await plugins.registerLocal(plan);
     await plugins.confirmAndEnable(plan.pluginId, plan);
-    await fs.writeFile(path.join(packageRoot, "provider.js"), "export const changed = true;");
+    await fs.writeFile(helperPath, "export const helper = false;\n");
     const error = await plugins.load(plan.pluginId, host()).catch((caught) => caught);
     expect(error).toMatchObject({ code: "PLUGIN_CORRUPT", message: "Installed plugin files do not match the registry" });
     expect(error.message).not.toContain(packageRoot);
@@ -574,6 +590,27 @@ export const towerCliPlugin = {
 });
 
 describe("plugin registry durability", () => {
+  it("reads pre-tree-digest registry v2 entries but requires re-registration before inspection", async () => {
+    const dataRoot = await temporaryDirectory();
+    const packageRoot = await createFixture();
+    const plugins = runtime(dataRoot);
+    const plan = await plugins.planLocalRegistration(packageRoot);
+    await plugins.registerLocal(plan);
+    const registryDocument = JSON.parse(await fs.readFile(plugins.registry.registryPath, "utf8")) as {
+      plugins: Record<string, { manifest: { packageTreeDigest?: string } }>;
+    };
+    delete registryDocument.plugins[plan.pluginId]!.manifest.packageTreeDigest;
+    await fs.writeFile(plugins.registry.registryPath, `${JSON.stringify(registryDocument, null, 2)}\n`);
+
+    const migratedRuntime = runtime(dataRoot);
+    await expect(migratedRuntime.list()).resolves.toHaveLength(1);
+    await expect(migratedRuntime.inspect(plan.pluginId)).rejects.toMatchObject({ code: "PLUGIN_CORRUPT" });
+
+    registryDocument.plugins[plan.pluginId]!.manifest.packageTreeDigest = "invalid";
+    await fs.writeFile(plugins.registry.registryPath, `${JSON.stringify(registryDocument, null, 2)}\n`);
+    await expect(runtime(dataRoot).list()).rejects.toMatchObject({ code: "REGISTRY_CORRUPT" });
+  });
+
   it("serializes concurrent writers across runtime instances without losing registrations", async () => {
     const dataRoot = await temporaryDirectory();
     const packages = await Promise.all(Array.from({ length: 6 }, (_, index) => createFixture({

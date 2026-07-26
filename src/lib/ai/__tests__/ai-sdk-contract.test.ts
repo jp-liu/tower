@@ -130,6 +130,12 @@ describe("AI SDK CLI plugin contract", () => {
     ["entry", { ...manifest, entry: "../provider.js" }],
     ["display.description", { ...manifest, display: { ...manifest.display, description: 1 } }],
     ["display.homepage", { ...manifest, display: { ...manifest.display, homepage: 1 } }],
+    ["display.homepage javascript", {
+      ...manifest,
+      display: { ...manifest.display, homepage: "javascript:alert(1)" },
+    }],
+    ["display.homepage file", { ...manifest, display: { ...manifest.display, homepage: "file:///tmp/plugin" } }],
+    ["display.homepage http", { ...manifest, display: { ...manifest.display, homepage: "http://example.com" } }],
     ["command.aliases", { ...manifest, command: { ...manifest.command, aliases: "test" } }],
     ["command.aliases empty entry", { ...manifest, command: { ...manifest.command, aliases: [""] } }],
     ["command.knownPaths", { ...manifest, command: { ...manifest.command, knownPaths: { darwin: "/bin/test" } } }],
@@ -139,6 +145,7 @@ describe("AI SDK CLI plugin contract", () => {
       command: { ...manifest.command, knownPaths: { darwin: [""] } },
     }],
     ["command.versionArgs", { ...manifest, command: { ...manifest.command, versionArgs: "--version" } }],
+    ["command.versionArgs empty", { ...manifest, command: { ...manifest.command, versionArgs: [] } }],
     ["cliDependency homepage", {
       ...manifest,
       cliDependency: { ...manifest.cliDependency, homepage: "http://example.com" },

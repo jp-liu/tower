@@ -20,6 +20,7 @@ import {
   type CliDependencyDiagnostic,
   type CliDependencyVerifier,
   type ExtensionCatalogIndexV1,
+  type PrebuiltArtifactProviderOptions,
 } from "../src/index.js";
 
 const fixtureRoot = fileURLToPath(new URL("./fixtures/valid-plugin", import.meta.url));
@@ -31,13 +32,30 @@ async function temporaryDirectory(): Promise<string> {
   return directory;
 }
 
-async function createArtifact(options: { symlink?: boolean } = {}) {
+async function createArtifact(options: { symlink?: boolean; dependency?: boolean } = {}) {
   const root = await temporaryDirectory();
   const archiveRoot = path.join(root, "archive");
   const packageRoot = path.join(archiveRoot, "package");
   await fs.cp(fixtureRoot, packageRoot, { recursive: true });
   if (options.symlink) {
     await fs.symlink("provider.js", path.join(packageRoot, "linked-provider.js"));
+  }
+  if (options.dependency) {
+    const packageJsonPath = path.join(packageRoot, "package.json");
+    const packageJson = JSON.parse(await fs.readFile(packageJsonPath, "utf8")) as Record<string, unknown>;
+    packageJson.dependencies = { "fixture-dependency": "1.0.0" };
+    await fs.writeFile(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
+    const dependencyRoot = path.join(packageRoot, "node_modules", "fixture-dependency");
+    await fs.mkdir(dependencyRoot, { recursive: true });
+    await fs.writeFile(path.join(dependencyRoot, "package.json"), JSON.stringify({
+      name: "fixture-dependency",
+      version: "1.0.0",
+      type: "module",
+      exports: "./index.js",
+    }));
+    await fs.writeFile(path.join(dependencyRoot, "index.js"), "export const dependencyValue = true;\n");
+    const providerPath = path.join(packageRoot, "provider.js");
+    await fs.writeFile(providerPath, `import "fixture-dependency";\n${await fs.readFile(providerPath, "utf8")}`);
   }
   const tarballPath = path.join(root, "extension.tgz");
   await tar.c({ gzip: true, cwd: archiveRoot, file: tarballPath }, ["package"]);
@@ -46,6 +64,26 @@ async function createArtifact(options: { symlink?: boolean } = {}) {
     contents,
     artifact: {
       url: "https://catalog.example.test/fixture.tgz",
+      sha256: createHash("sha256").update(contents).digest("hex"),
+      size: contents.byteLength,
+    } satisfies CatalogArtifact,
+  };
+}
+
+async function createSizedArtifact(fileSizes: number[]) {
+  const root = await temporaryDirectory();
+  const archiveRoot = path.join(root, "archive");
+  const packageRoot = path.join(archiveRoot, "package");
+  await fs.mkdir(packageRoot, { recursive: true });
+  await Promise.all(fileSizes.map((size, index) =>
+    fs.writeFile(path.join(packageRoot, `file-${index}.js`), Buffer.alloc(size))));
+  const tarballPath = path.join(root, "extension.tgz");
+  await tar.c({ gzip: true, cwd: archiveRoot, file: tarballPath }, ["package"]);
+  const contents = await fs.readFile(tarballPath);
+  return {
+    contents,
+    artifact: {
+      url: "https://catalog.example.test/quota-fixture.tgz",
       sha256: createHash("sha256").update(contents).digest("hex"),
       size: contents.byteLength,
     } satisfies CatalogArtifact,
@@ -73,8 +111,13 @@ function catalogDocument(artifact: CatalogArtifact): ExtensionCatalogIndexV1 {
   };
 }
 
-function artifactProvider(contents: Uint8Array, headers: Record<string, string> = {}) {
+function artifactProvider(
+  contents: Uint8Array,
+  headers: Record<string, string> = {},
+  options: Omit<PrebuiltArtifactProviderOptions, "fetchImpl"> = {},
+) {
   return new PrebuiltArtifactProvider({
+    ...options,
     fetchImpl: async () => new Response(
       contents.buffer.slice(contents.byteOffset, contents.byteOffset + contents.byteLength) as ArrayBuffer,
       {
@@ -237,11 +280,40 @@ describe("prebuilt artifact safety", () => {
       path.join(root, "package"),
     )).rejects.toMatchObject({ code: "UNSAFE_ARCHIVE" });
   });
+
+  it.each([
+    {
+      name: "a file whose declared size exceeds the per-file limit",
+      fileSizes: [1_024],
+      limits: { maxArchiveFileBytes: 512 },
+    },
+    {
+      name: "declared file sizes whose total exceeds the expanded-byte limit",
+      fileSizes: [400, 400],
+      limits: { maxArchiveExpandedBytes: 700 },
+    },
+    {
+      name: "more entries than the archive entry limit",
+      fileSizes: [1, 1],
+      limits: { maxArchiveEntries: 2 },
+    },
+  ])("rejects $name and cleans extraction state", async ({ fileSizes, limits }) => {
+    const root = await temporaryDirectory();
+    const destination = path.join(root, "package");
+    const { contents, artifact } = await createSizedArtifact(fileSizes);
+
+    await expect(artifactProvider(contents, {}, limits).stage(
+      artifact,
+      destination,
+    )).rejects.toMatchObject({ code: "UNSAFE_ARCHIVE" });
+    await expect(fs.access(destination)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(fs.access(path.join(root, "artifact.tgz"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
 });
 
 describe("catalog installation lifecycle", () => {
   it("installs atomically to the immutable directory and is idempotent", async () => {
-    const { contents, artifact } = await createArtifact();
+    const { contents, artifact } = await createArtifact({ dependency: true });
     const dataRoot = await temporaryDirectory();
     const { verifier } = readyDependencyVerifier();
     const runtime = new CliPluginRuntime({
@@ -255,6 +327,7 @@ describe("catalog installation lifecycle", () => {
     expect(await fs.readdir(runtime.registry.stagingDir)).toEqual([]);
 
     const installed = await runtime.installCatalog(plan);
+    expect(installed.manifest.packageTreeDigest).toMatch(/^sha256-/);
     expect(installed).toMatchObject({
       id: "fixture.tower-cli",
       source: "catalog",
@@ -270,6 +343,12 @@ describe("catalog installation lifecycle", () => {
     await expect(fs.access(path.join(installed.installPath, "script-ran"))).rejects.toMatchObject({ code: "ENOENT" });
     expect(await runtime.installCatalog(plan)).toEqual(installed);
     expect(await fs.readdir(path.dirname(installed.installPath))).toEqual([path.basename(installed.installPath)]);
+
+    await fs.writeFile(
+      path.join(installed.installPath, "node_modules", "fixture-dependency", "index.js"),
+      "export const dependencyValue = false;\n",
+    );
+    await expect(runtime.installCatalog(plan)).rejects.toMatchObject({ code: "PLUGIN_CORRUPT" });
   });
 
   it("rolls back a staged install when the registry commit fails", async () => {
