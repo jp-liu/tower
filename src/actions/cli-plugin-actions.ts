@@ -13,13 +13,30 @@ import type { CliPluginSecretReference } from "@/lib/ai/cli-plugin-shared";
 
 type ActionResult<T> =
   | { ok: true; data: T }
-  | { ok: false; error: { code: string; message: string } };
+  | {
+      ok: false;
+      error: {
+        code: string;
+        message: string;
+        diagnostic?: {
+          dependency: string;
+          state: "missing" | "probe-failed" | "version-incompatible" | "ready";
+          commandPath: string | null;
+          detectedVersion: string | null;
+          supportedVersions: string;
+          homepage: string;
+          installDocs: string;
+          managedByTower: false;
+        };
+      };
+    };
 
 const packageNameSchema = z.string().trim().min(1).max(214);
 const exactVersionSchema = z.string().trim().min(1).max(100);
 const directorySchema = z.string().trim().min(1).max(4_096);
 const digestSchema = z.string().trim().min(20).max(256);
 const pluginIdSchema = z.string().trim().min(1).max(214);
+const searchSchema = z.string().trim().max(200);
 const environmentVariableSchema = z.object({
   id: z.string().trim().min(1).max(200),
   name: z.string().trim().min(1).max(200).regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
@@ -46,7 +63,14 @@ const secretReferenceSchema = z.discriminatedUnion("kind", [
 
 function failure(error: unknown): ActionResult<never> {
   if (error instanceof CliPluginApplicationError) {
-    return { ok: false, error: { code: error.code, message: error.message } };
+    return {
+      ok: false,
+      error: {
+        code: error.code,
+        message: error.message,
+        ...(error.diagnostic ? { diagnostic: error.diagnostic } : {}),
+      },
+    };
   }
   return {
     ok: false,
@@ -69,6 +93,17 @@ async function action<T>(operation: () => Promise<T>, mutate = false): Promise<A
 
 export async function listCliPlugins() {
   return action(() => getCliPluginApplication().list());
+}
+
+export async function listCliProviderCatalog(search = "") {
+  return action(() => getCliPluginApplication().listCatalog(searchSchema.parse(search)));
+}
+
+export async function planCatalogCliPlugin(extensionId: string, version: string) {
+  return action(() => getCliPluginApplication().planCatalog(
+    pluginIdSchema.parse(extensionId),
+    exactVersionSchema.parse(version),
+  ));
 }
 
 export async function planNpmCliPlugin(packageName: string, version: string) {

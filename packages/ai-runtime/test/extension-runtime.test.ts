@@ -10,10 +10,12 @@ import {
   CliPluginRuntime,
   CommandResolver,
   FixtureExtensionCatalog,
+  MAX_EXTENSION_CATALOG_BYTES,
   NodePluginFileSystem,
   PluginRegistry,
   PrebuiltArtifactProvider,
   SafeCliDependencyVerifier,
+  StaticHttpExtensionCatalog,
   assertSafeArtifactPath,
   parseExtensionCatalog,
   type CatalogArtifact,
@@ -201,6 +203,23 @@ describe("extension catalog contract", () => {
     for (const value of invalidCases) {
       expect(() => parseExtensionCatalog(value)).toThrowError(expect.objectContaining({ code: "CATALOG_INVALID" }));
     }
+  });
+
+  it("bounds static catalog responses before parsing", async () => {
+    const declared = new StaticHttpExtensionCatalog(
+      "https://catalog.example.test/index.json",
+      async () => new Response("{}", {
+        status: 200,
+        headers: { "content-length": String(MAX_EXTENSION_CATALOG_BYTES + 1) },
+      }),
+    );
+    await expect(declared.read()).rejects.toMatchObject({ code: "CATALOG_INVALID" });
+
+    const streamed = new StaticHttpExtensionCatalog(
+      "https://catalog.example.test/index.json",
+      async () => new Response(" ".repeat(MAX_EXTENSION_CATALOG_BYTES + 1), { status: 200 }),
+    );
+    await expect(streamed.read()).rejects.toMatchObject({ code: "CATALOG_INVALID" });
   });
 
   it("keeps catalog CLI dependency metadata display-only", async () => {

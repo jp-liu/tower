@@ -2,6 +2,7 @@ import semver from "semver";
 import { pluginError } from "./plugin-errors.js";
 
 export const EXTENSION_CATALOG_VERSION = 1 as const;
+export const MAX_EXTENSION_CATALOG_BYTES = 2 * 1024 * 1024;
 export const MAX_EXTENSION_ARTIFACT_BYTES = 100 * 1024 * 1024;
 
 export interface CatalogPublisher {
@@ -187,13 +188,43 @@ export class StaticHttpExtensionCatalog implements ExtensionCatalog {
     if (!response.ok || (response.url && !isHttpsUrl(response.url))) {
       throw pluginError("CATALOG_UNAVAILABLE");
     }
+    const declaredLength = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_EXTENSION_CATALOG_BYTES) {
+      throw pluginError("CATALOG_INVALID");
+    }
     try {
-      return parseExtensionCatalog(await response.json());
+      const bytes = await readBoundedResponse(response, MAX_EXTENSION_CATALOG_BYTES);
+      return parseExtensionCatalog(JSON.parse(new TextDecoder().decode(bytes)));
     } catch (error) {
       if (error instanceof Error && "code" in error) throw error;
       throw pluginError("CATALOG_INVALID", undefined, error);
     }
   }
+}
+
+async function readBoundedResponse(response: Response, limit: number): Promise<Uint8Array> {
+  if (!response.body) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > limit) throw pluginError("CATALOG_INVALID");
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return result;
 }
 
 export class FixtureExtensionCatalog implements ExtensionCatalog {
@@ -213,4 +244,8 @@ export function findCatalogVersion(
   const release = extension?.versions.find((entry) => entry.version === version);
   if (!extension || !release) throw pluginError("CATALOG_ENTRY_NOT_FOUND", extensionId);
   return { extension, release };
+}
+
+export function latestCatalogVersion(extension: CatalogExtension): CatalogExtensionVersion {
+  return [...extension.versions].sort((left, right) => semver.rcompare(left.version, right.version))[0]!;
 }

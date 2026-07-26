@@ -4,6 +4,7 @@ declare module "semver" {
     validRange(range: string): string | null;
     satisfies(version: string, range: string): boolean;
     coerce(version: string): { version: string } | null;
+    rcompare(left: string, right: string): number;
   }
 
   const semver: SemVerApi;

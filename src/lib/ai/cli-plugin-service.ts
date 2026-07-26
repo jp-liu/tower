@@ -5,7 +5,12 @@ import path from "node:path";
 import {
   CliPluginRuntime,
   PluginRuntimeError,
+  StaticHttpExtensionCatalog,
+  latestCatalogVersion,
   validatePluginSettings,
+  type CatalogExtensionVersion,
+  type CliDependencyDiagnostic,
+  type ExtensionCatalog,
   type PluginInstallPlan,
   type PluginRegistration,
 } from "@tower/ai-runtime";
@@ -21,6 +26,9 @@ const BUILT_IN_PLUGIN_IDS = new Set(["claude", "codex", "gemini"]);
 
 export type CliPluginApplicationErrorCode =
   | "invalid_input"
+  | "catalog_unavailable"
+  | "catalog_invalid"
+  | "catalog_entry_not_found"
   | "package_not_found"
   | "plugin_incompatible"
   | "plugin_not_found"
@@ -38,6 +46,9 @@ export type CliPluginApplicationErrorCode =
 
 const SAFE_ERROR_MESSAGES: Record<CliPluginApplicationErrorCode, string> = {
   invalid_input: "The plugin request is invalid",
+  catalog_unavailable: "The extension catalog is not configured or unavailable",
+  catalog_invalid: "The extension catalog is invalid",
+  catalog_entry_not_found: "The extension version is no longer available",
   package_not_found: "The plugin package could not be resolved",
   plugin_incompatible: "The plugin is not compatible with this Tower instance",
   plugin_not_found: "The plugin is not installed",
@@ -55,7 +66,10 @@ const SAFE_ERROR_MESSAGES: Record<CliPluginApplicationErrorCode, string> = {
 };
 
 export class CliPluginApplicationError extends Error {
-  constructor(public readonly code: CliPluginApplicationErrorCode) {
+  constructor(
+    public readonly code: CliPluginApplicationErrorCode,
+    public readonly diagnostic?: CliDependencyDiagnostic,
+  ) {
     super(SAFE_ERROR_MESSAGES[code]);
     this.name = "CliPluginApplicationError";
   }
@@ -71,6 +85,16 @@ export interface SafeCliPluginPlan {
   toVersion: string;
   displayName: string;
   description: string | null;
+  publisher: { id: string; name: string };
+  cliDependency: {
+    name: string;
+    command: string;
+    supportedVersions: string;
+    homepage: string;
+    installDocs: string;
+    managedByTower: false;
+  };
+  dependency: CliDependencyDiagnostic | null;
   compatibility: CliPluginManifestV1["compatibility"];
   capabilities: CliPluginManifestV1["capabilities"];
   permissions: {
@@ -90,8 +114,23 @@ export interface CliPluginListItem {
   permissionConfirmed: boolean;
   installedAt: string;
   updatedAt: string;
-  health: "ready" | "disabled" | "corrupt";
+  health: "ready" | "disabled" | "corrupt" | "dependency-missing" | "dependency-incompatible" | "probe-failed";
+  dependency: CliDependencyDiagnostic | null;
   capabilities: CliPluginManifestV1["capabilities"] | null;
+}
+
+export interface CliProviderCatalogItem {
+  id: string;
+  kind: "cli-provider";
+  publisher: { id: string; name: string };
+  display: { name: string; description: string | null; homepage: string | null };
+  latestVersion: string;
+  versions: Array<{
+    version: string;
+    cliDependency: CatalogExtensionVersion["cliDependency"] | null;
+  }>;
+  installed: CliPluginListItem | null;
+  updateAvailable: boolean;
 }
 
 export interface CliEnvironmentVariable {
@@ -131,6 +170,8 @@ interface CliPluginApplicationOptions {
   database?: typeof db;
   now?: () => number;
   pendingPlans?: Map<string, PendingPlan>;
+  catalog?: ExtensionCatalog | null;
+  catalogFactory?: () => Promise<ExtensionCatalog | null>;
 }
 
 function towerVersion(): string {
@@ -147,6 +188,9 @@ function towerVersion(): string {
 function mapRuntimeError(error: unknown): never {
   if (error instanceof CliPluginApplicationError) throw error;
   if (!(error instanceof PluginRuntimeError)) throw new CliPluginApplicationError("operation_failed");
+  if (error.code === "CATALOG_UNAVAILABLE") throw new CliPluginApplicationError("catalog_unavailable");
+  if (error.code === "CATALOG_INVALID") throw new CliPluginApplicationError("catalog_invalid");
+  if (error.code === "CATALOG_ENTRY_NOT_FOUND") throw new CliPluginApplicationError("catalog_entry_not_found");
   if (error.code === "INVALID_PACKAGE_NAME"
     || error.code === "INVALID_PACKAGE_VERSION"
     || error.code === "INVALID_PACKAGE"
@@ -171,6 +215,14 @@ function mapRuntimeError(error: unknown): never {
   if (error.code === "PERMISSION_CONFIRMATION_REQUIRED") {
     throw new CliPluginApplicationError("permission_required");
   }
+  if (error.code === "CLI_DEPENDENCY_UNAVAILABLE") {
+    const diagnostic = error.diagnostic as CliDependencyDiagnostic | undefined;
+    if (diagnostic?.state === "missing") throw new CliPluginApplicationError("cli_not_found", diagnostic);
+    if (diagnostic?.state === "version-incompatible") {
+      throw new CliPluginApplicationError("cli_incompatible", diagnostic);
+    }
+    throw new CliPluginApplicationError("probe_failed", diagnostic);
+  }
   if (error.code === "INSTALL_PLAN_MISMATCH") throw new CliPluginApplicationError("plan_mismatch");
   if (error.code === "REGISTRY_CORRUPT") throw new CliPluginApplicationError("registry_corrupt");
   throw new CliPluginApplicationError("operation_failed");
@@ -187,6 +239,12 @@ function safePlan(plan: PluginInstallPlan, expiresAt: number): SafeCliPluginPlan
     toVersion: plan.toVersion,
     displayName: plan.manifestData.display.name,
     description: plan.manifestData.display.description ?? null,
+    publisher: structuredClone(plan.catalog?.publisher ?? plan.manifestData.publisher),
+    cliDependency: {
+      ...structuredClone(plan.manifestData.cliDependency),
+      command: plan.manifestData.command.default,
+    },
+    dependency: plan.dependency ? structuredClone(plan.dependency) : null,
     compatibility: structuredClone(plan.manifestData.compatibility),
     capabilities: structuredClone(plan.manifestData.capabilities),
     permissions: structuredClone(plan.permissions),
@@ -222,6 +280,7 @@ export class CliPluginApplication {
   private readonly database: typeof db;
   private readonly now: () => number;
   private readonly pendingPlans: Map<string, PendingPlan>;
+  private readonly catalogFactory: () => Promise<ExtensionCatalog | null>;
 
   constructor(options: CliPluginApplicationOptions) {
     this.runtime = options.runtime;
@@ -229,6 +288,7 @@ export class CliPluginApplication {
     this.database = options.database ?? db;
     this.now = options.now ?? Date.now;
     this.pendingPlans = options.pendingPlans ?? new Map();
+    this.catalogFactory = options.catalogFactory ?? (async () => options.catalog ?? null);
   }
 
   async list(): Promise<CliPluginListItem[]> {
@@ -240,7 +300,15 @@ export class CliPluginApplication {
     }
     return Promise.all(registrations.map(async (registration) => {
       try {
+        const dependency = await this.runtime.recheck(registration.id);
         const inspected = await this.runtime.inspect(registration.id);
+        const health = dependency.state === "missing"
+          ? "dependency-missing" as const
+          : dependency.state === "version-incompatible"
+            ? "dependency-incompatible" as const
+            : dependency.state === "probe-failed"
+              ? "probe-failed" as const
+              : registration.enabled ? "ready" as const : "disabled" as const;
         return {
           id: registration.id,
           version: registration.version,
@@ -251,7 +319,8 @@ export class CliPluginApplication {
           permissionConfirmed: hasCurrentPermissionConfirmation(registration),
           installedAt: registration.installedAt,
           updatedAt: registration.updatedAt,
-          health: registration.enabled ? "ready" as const : "disabled" as const,
+          health,
+          dependency,
           capabilities: structuredClone(inspected.manifest.capabilities),
         };
       } catch {
@@ -266,10 +335,77 @@ export class CliPluginApplication {
           installedAt: registration.installedAt,
           updatedAt: registration.updatedAt,
           health: "corrupt" as const,
+          dependency: null,
           capabilities: null,
         };
       }
     }));
+  }
+
+  async listCatalog(search = ""): Promise<CliProviderCatalogItem[]> {
+    try {
+      const catalog = await this.requireCatalog();
+      const [index, installed] = await Promise.all([
+        this.runtime.readCatalog(catalog),
+        this.list(),
+      ]);
+      const installedById = new Map(installed.map((plugin) => [plugin.id, plugin]));
+      const query = search.trim().toLocaleLowerCase();
+      return index.extensions
+        .filter((extension) => {
+          if (!query) return true;
+          const dependencyNames = extension.versions
+            .map((release) => release.cliDependency?.name ?? "")
+            .join(" ");
+          return [
+            extension.id,
+            extension.display.name,
+            extension.display.description ?? "",
+            extension.publisher.id,
+            extension.publisher.name,
+            dependencyNames,
+          ].join(" ").toLocaleLowerCase().includes(query);
+        })
+        .map((extension) => {
+          const latest = latestCatalogVersion(extension);
+          const current = installedById.get(extension.id) ?? null;
+          return {
+            id: extension.id,
+            kind: extension.kind,
+            publisher: structuredClone(extension.publisher),
+            display: {
+              name: extension.display.name,
+              description: extension.display.description ?? null,
+              homepage: extension.display.homepage ?? null,
+            },
+            latestVersion: latest.version,
+            versions: [...extension.versions]
+              .sort((left, right) => right.version.localeCompare(left.version, undefined, { numeric: true }))
+              .map((release) => ({
+                version: release.version,
+                cliDependency: release.cliDependency ? structuredClone(release.cliDependency) : null,
+              })),
+            installed: current,
+            updateAvailable: Boolean(current && current.version !== latest.version),
+          };
+        })
+        .sort((left, right) => left.display.name.localeCompare(right.display.name));
+    } catch (error) {
+      return mapRuntimeError(error);
+    }
+  }
+
+  async planCatalog(extensionId: string, version: string): Promise<SafeCliPluginPlan> {
+    if (BUILT_IN_PLUGIN_IDS.has(extensionId)) throw new CliPluginApplicationError("invalid_input");
+    try {
+      return this.rememberPlan(await this.runtime.planCatalogInstall(
+        await this.requireCatalog(),
+        extensionId,
+        version,
+      ));
+    } catch (error) {
+      return mapRuntimeError(error);
+    }
   }
 
   async planNpm(packageName: string, version: string): Promise<SafeCliPluginPlan> {
@@ -297,9 +433,11 @@ export class CliPluginApplication {
       if (!registration || registration.enabled) {
         throw new CliPluginApplicationError(registration ? "invalid_input" : "plugin_not_found");
       }
-      const plan = registration.source === "npm"
-        ? await this.runtime.planNpmInstall(registration.id, registration.version)
-        : await this.runtime.planLocalRegistration(registration.installPath);
+      const plan = registration.source === "catalog"
+        ? await this.runtime.planCatalogInstall(await this.requireCatalog(), registration.id, registration.version)
+        : registration.source === "npm"
+          ? await this.runtime.planNpmInstall(registration.id, registration.version)
+          : await this.runtime.planLocalRegistration(registration.installPath);
       if (plan.pluginId !== registration.id) throw new CliPluginApplicationError("plan_mismatch");
       return this.rememberPlan(plan);
     } catch (error) {
@@ -310,9 +448,11 @@ export class CliPluginApplication {
   async install(planDigest: string): Promise<CliPluginListItem> {
     const pending = this.requirePlan(planDigest, false);
     try {
-      const registration = pending.plan.source === "npm"
-        ? await this.runtime.installNpm(pending.plan)
-        : await this.runtime.registerLocal(pending.plan);
+      const registration = pending.plan.source === "catalog"
+        ? await this.runtime.installCatalog(pending.plan)
+        : pending.plan.source === "npm"
+          ? await this.runtime.installNpm(pending.plan)
+          : await this.runtime.registerLocal(pending.plan);
       pending.installed = true;
       await this.database.providerConnection.upsert({
         where: { connectionKey: `cli:${registration.id}` },
@@ -343,6 +483,7 @@ export class CliPluginApplication {
   async confirmAndEnable(planDigest: string): Promise<CliPluginListItem> {
     const pending = this.requirePlan(planDigest, true);
     try {
+      await this.assertDependencyReady(pending.plan.pluginId);
       const registration = await this.runtime.confirmAndEnable(pending.plan.pluginId, pending.plan);
       await this.database.providerConnection.upsert({
         where: { connectionKey: `cli:${registration.id}` },
@@ -388,6 +529,7 @@ export class CliPluginApplication {
 
   async enable(pluginId: string): Promise<CliPluginListItem> {
     try {
+      await this.assertDependencyReady(pluginId);
       const registration = await this.runtime.enable(pluginId);
       await this.database.providerConnection.updateMany({
         where: { connectionKey: `cli:${pluginId}`, kind: "cli" },
@@ -562,6 +704,22 @@ export class CliPluginApplication {
     return safePlan(plan, expiresAt);
   }
 
+  private async requireCatalog(): Promise<ExtensionCatalog> {
+    const catalog = await this.catalogFactory();
+    if (!catalog) throw new CliPluginApplicationError("catalog_unavailable");
+    return catalog;
+  }
+
+  private async assertDependencyReady(pluginId: string): Promise<void> {
+    const diagnostic = await this.runtime.recheck(pluginId);
+    if (diagnostic.state === "ready") return;
+    if (diagnostic.state === "missing") throw new CliPluginApplicationError("cli_not_found", diagnostic);
+    if (diagnostic.state === "version-incompatible") {
+      throw new CliPluginApplicationError("cli_incompatible", diagnostic);
+    }
+    throw new CliPluginApplicationError("probe_failed", diagnostic);
+  }
+
   private requirePlan(planDigest: string, mustBeInstalled: boolean): PendingPlan {
     const pending = this.pendingPlans.get(planDigest);
     if (!pending || pending.expiresAt <= this.now()) {
@@ -587,6 +745,28 @@ export function getCliPluginApplication(): CliPluginApplication {
     application = new CliPluginApplication({
       dataRoot,
       runtime: new CliPluginRuntime({ dataRoot, towerVersion: towerVersion() }),
+      catalogFactory: async () => {
+        const environmentUrl = process.env.TOWER_EXTENSION_CATALOG_URL?.trim();
+        const row = environmentUrl ? null : await db.systemConfig.findUnique({
+          where: { key: "extensions.catalogUrl" },
+          select: { value: true },
+        });
+        let configured = environmentUrl;
+        if (!configured && row) {
+          try {
+            const value = JSON.parse(row.value) as unknown;
+            configured = typeof value === "string" ? value.trim() : undefined;
+          } catch {
+            throw new CliPluginApplicationError("catalog_invalid");
+          }
+        }
+        if (!configured) return null;
+        try {
+          return new StaticHttpExtensionCatalog(configured);
+        } catch {
+          throw new CliPluginApplicationError("catalog_invalid");
+        }
+      },
     });
     applications.set(key, application);
   }

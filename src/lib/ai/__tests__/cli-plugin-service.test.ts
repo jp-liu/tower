@@ -4,7 +4,16 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CliPluginRuntime, type NpmPackageProvider } from "@tower/ai-runtime";
+import {
+  CliPluginRuntime,
+  FixtureExtensionCatalog,
+  PluginRuntimeError,
+  type CliDependencyDiagnostic,
+  type CliDependencyVerifier,
+  type ExtensionArtifactProvider,
+  type ExtensionCatalogIndexV1,
+  type NpmPackageProvider,
+} from "@tower/ai-runtime";
 import { db } from "@/lib/db";
 import { CliPluginApplication, getCliPluginApplication } from "../cli-plugin-service";
 import { CLI_SECRET_MASK } from "../cli-plugin-shared";
@@ -24,6 +33,21 @@ const temporaryRoots: string[] = [];
 const packageName = "@fixture/app-service-cli";
 const pluginId = "fixture.tower-cli";
 const fixtureIntegrity = `sha512-${Buffer.alloc(64, 7).toString("base64")}`;
+
+function readyVerifier(): CliDependencyVerifier {
+  return {
+    verify: async (manifest) => ({
+      dependency: manifest.cliDependency.name,
+      state: "ready",
+      commandPath: "/opt/fixture-cli",
+      detectedVersion: "1.2.3",
+      supportedVersions: manifest.cliDependency.supportedVersions,
+      homepage: manifest.cliDependency.homepage,
+      installDocs: manifest.cliDependency.installDocs,
+      managedByTower: false,
+    }),
+  };
+}
 
 async function fixture(): Promise<string> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "tower-plugin-app-"));
@@ -54,6 +78,158 @@ afterEach(async () => {
 });
 
 describe("CLI plugin application lifecycle", () => {
+  it("discovers, searches, plans, and installs a catalog provider disabled before permission review", async () => {
+    const source = await fixture();
+    const dataRoot = await fs.mkdtemp(path.join(os.tmpdir(), "tower-plugin-catalog-data-"));
+    temporaryRoots.push(dataRoot);
+    const ready: CliDependencyDiagnostic = {
+      dependency: "Fixture CLI",
+      state: "ready",
+      commandPath: "/opt/fixture-cli",
+      detectedVersion: "1.2.3",
+      supportedVersions: ">=1.0.0 <2.0.0",
+      homepage: "https://example.com/fixture-cli",
+      installDocs: "https://example.com/fixture-cli/install",
+      managedByTower: false,
+    };
+    let dependency = ready;
+    const verifier: CliDependencyVerifier = {
+      verify: vi.fn(async () => {
+        if (dependency.state === "ready") return dependency;
+        throw new PluginRuntimeError(
+          "CLI_DEPENDENCY_UNAVAILABLE",
+          "fixture dependency unavailable",
+          { diagnostic: dependency },
+        );
+      }),
+    };
+    const artifactProvider: ExtensionArtifactProvider = {
+      stage: async (_artifact, destination) => fs.cp(source, destination, { recursive: true }),
+    };
+    const catalogDocument: ExtensionCatalogIndexV1 = {
+      schemaVersion: 1,
+      extensions: [{
+        id: pluginId,
+        kind: "cli-provider",
+        publisher: { id: "fixture-labs", name: "Fixture Labs" },
+        display: {
+          name: "Fixture CLI",
+          description: "Fixture community provider",
+          homepage: "https://example.com/fixture-cli",
+        },
+        versions: [{
+          version: "1.0.0",
+          artifact: {
+            url: "https://catalog.example.test/fixture-cli-1.0.0.tgz",
+            sha256: "1".repeat(64),
+            size: 1,
+          },
+          cliDependency: {
+            name: "Fixture CLI",
+            supportedVersions: ">=1.0.0 <2.0.0",
+            installDocs: "https://example.com/fixture-cli/install",
+          },
+        }],
+      }],
+    };
+    const application = new CliPluginApplication({
+      dataRoot,
+      catalog: new FixtureExtensionCatalog(catalogDocument),
+      runtime: new CliPluginRuntime({
+        dataRoot,
+        towerVersion: "0.3.0",
+        artifactProvider,
+        cliDependencyVerifier: verifier,
+      }),
+    });
+
+    await expect(application.listCatalog("no match")).resolves.toEqual([]);
+    await expect(application.listCatalog("fixture labs")).resolves.toMatchObject([{
+      id: pluginId,
+      latestVersion: "1.0.0",
+      installed: null,
+      updateAvailable: false,
+    }]);
+    const plan = await application.planCatalog(pluginId, "1.0.0");
+    expect(plan).toMatchObject({
+      source: "catalog",
+      publisher: { id: "fixture-labs", name: "Fixture Labs" },
+      cliDependency: { name: "Fixture CLI", command: "fixture-cli", managedByTower: false },
+      dependency: { state: "ready", detectedVersion: "1.2.3" },
+    });
+    await expect(application.install(plan.planDigest)).resolves.toMatchObject({
+      id: pluginId,
+      enabled: false,
+      permissionConfirmed: false,
+      health: "disabled",
+    });
+    await expect(application.listCatalog()).resolves.toMatchObject([{
+      installed: { id: pluginId, enabled: false },
+    }]);
+
+    dependency = { ...ready, state: "version-incompatible", detectedVersion: "2.0.0" };
+    await expect(application.confirmAndEnable(plan.planDigest)).rejects.toMatchObject({
+      code: "cli_incompatible",
+      diagnostic: { state: "version-incompatible", detectedVersion: "2.0.0" },
+    });
+    dependency = ready;
+    await expect(application.confirmAndEnable(plan.planDigest)).resolves.toMatchObject({
+      enabled: true,
+      permissionConfirmed: true,
+    });
+    await application.uninstall(pluginId);
+    expect(await application.runtime.get(pluginId)).toBeNull();
+  });
+
+  it("returns a structured dependency diagnostic without exposing catalog transport details", async () => {
+    const source = await fixture();
+    const dataRoot = await fs.mkdtemp(path.join(os.tmpdir(), "tower-plugin-catalog-missing-"));
+    temporaryRoots.push(dataRoot);
+    const missing: CliDependencyDiagnostic = {
+      dependency: "Fixture CLI",
+      state: "missing",
+      commandPath: null,
+      detectedVersion: null,
+      supportedVersions: ">=1.0.0 <2.0.0",
+      homepage: "https://example.com/fixture-cli",
+      installDocs: "https://example.com/fixture-cli/install",
+      managedByTower: false,
+    };
+    const catalog = new FixtureExtensionCatalog({
+      schemaVersion: 1,
+      extensions: [{
+        id: pluginId,
+        kind: "cli-provider",
+        publisher: { id: "fixture-labs", name: "Fixture Labs" },
+        display: { name: "Fixture CLI" },
+        versions: [{
+          version: "1.0.0",
+          artifact: {
+            url: "https://private-catalog.example.test/secret-path.tgz",
+            sha256: "2".repeat(64),
+            size: 1,
+          },
+        }],
+      }],
+    });
+    const runtime = new CliPluginRuntime({
+      dataRoot,
+      towerVersion: "0.3.0",
+      artifactProvider: { stage: async (_artifact, destination) => fs.cp(source, destination, { recursive: true }) },
+      cliDependencyVerifier: {
+        verify: async () => {
+          throw new PluginRuntimeError("CLI_DEPENDENCY_UNAVAILABLE", "missing", { diagnostic: missing });
+        },
+      },
+    });
+    const application = new CliPluginApplication({ dataRoot, runtime, catalog });
+
+    const error = await application.planCatalog(pluginId, "1.0.0").catch((caught) => caught);
+    expect(error).toMatchObject({ code: "cli_not_found", diagnostic: missing });
+    expect(JSON.stringify(error)).not.toContain("private-catalog");
+    expect(await runtime.get(pluginId)).toBeNull();
+  });
+
   it("carries an unregistered local plugin through install, test, slots, Terminal, and query", async () => {
     if (isWindows()) return;
     const source = await fixture();
@@ -172,7 +348,12 @@ describe("CLI plugin application lifecycle", () => {
     };
     const application = new CliPluginApplication({
       dataRoot,
-      runtime: new CliPluginRuntime({ dataRoot, towerVersion: "0.3.0", npmProvider }),
+      runtime: new CliPluginRuntime({
+        dataRoot,
+        towerVersion: "0.3.0",
+        npmProvider,
+        cliDependencyVerifier: readyVerifier(),
+      }),
     });
 
     const plan = await application.planNpm(packageName, "1.0.0");
@@ -180,7 +361,12 @@ describe("CLI plugin application lifecycle", () => {
     await expect(application.install(plan.planDigest)).resolves.toMatchObject({ enabled: false });
     const restarted = new CliPluginApplication({
       dataRoot,
-      runtime: new CliPluginRuntime({ dataRoot, towerVersion: "0.3.0", npmProvider }),
+      runtime: new CliPluginRuntime({
+        dataRoot,
+        towerVersion: "0.3.0",
+        npmProvider,
+        cliDependencyVerifier: readyVerifier(),
+      }),
     });
     const recoveredPlan = await restarted.reviewInstalled(pluginId);
     expect(JSON.stringify(recoveredPlan)).not.toContain(dataRoot);
@@ -197,7 +383,11 @@ describe("CLI plugin application lifecycle", () => {
     let now = Date.parse("2026-07-25T00:00:00Z");
     const application = new CliPluginApplication({
       dataRoot,
-      runtime: new CliPluginRuntime({ dataRoot, towerVersion: "0.3.0" }),
+      runtime: new CliPluginRuntime({
+        dataRoot,
+        towerVersion: "0.3.0",
+        cliDependencyVerifier: readyVerifier(),
+      }),
       now: () => now,
     });
 
@@ -221,7 +411,11 @@ describe("CLI plugin application lifecycle", () => {
       .rejects.toMatchObject({ code: "plan_expired" });
     const active = new CliPluginApplication({
       dataRoot,
-      runtime: new CliPluginRuntime({ dataRoot, towerVersion: "0.3.0" }),
+      runtime: new CliPluginRuntime({
+        dataRoot,
+        towerVersion: "0.3.0",
+        cliDependencyVerifier: readyVerifier(),
+      }),
       now: () => now,
     });
     expect((await active.list()).find((plugin) => plugin.id === pluginId))
