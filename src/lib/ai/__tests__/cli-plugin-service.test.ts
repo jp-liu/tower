@@ -21,7 +21,8 @@ const fixtureRoot = fileURLToPath(
   new URL("../../../../packages/ai-runtime/test/fixtures/valid-plugin", import.meta.url),
 );
 const temporaryRoots: string[] = [];
-const pluginId = "@fixture/app-service-cli";
+const packageName = "@fixture/app-service-cli";
+const pluginId = "fixture.tower-cli";
 const fixtureIntegrity = `sha512-${Buffer.alloc(64, 7).toString("base64")}`;
 
 async function fixture(): Promise<string> {
@@ -30,7 +31,7 @@ async function fixture(): Promise<string> {
   const packageRoot = path.join(root, "plugin");
   await fs.cp(fixtureRoot, packageRoot, { recursive: true });
   const packageJson = JSON.parse(await fs.readFile(path.join(packageRoot, "package.json"), "utf8"));
-  packageJson.name = pluginId;
+  packageJson.name = packageName;
   packageJson.tower.compatibility.tower = ">=0.3.0 <1.0.0";
   await fs.writeFile(path.join(packageRoot, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
   const configSchema = JSON.parse(await fs.readFile(path.join(packageRoot, "config.schema.json"), "utf8"));
@@ -166,7 +167,7 @@ describe("CLI plugin application lifecycle", () => {
       runtime: new CliPluginRuntime({ dataRoot, towerVersion: "0.3.0", npmProvider }),
     });
 
-    const plan = await application.planNpm(pluginId, "1.0.0");
+    const plan = await application.planNpm(packageName, "1.0.0");
     expect(plan).toMatchObject({ source: "npm", pluginId, toVersion: "1.0.0" });
     await expect(application.install(plan.planDigest)).resolves.toMatchObject({ enabled: false });
     const restarted = new CliPluginApplication({

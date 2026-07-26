@@ -209,7 +209,7 @@ describe("AI SDK CLI plugin contract", () => {
 
   it("rejects invalid manifests before an adapter is created", () => {
     expect(() => defineCliPlugin({
-      manifest: { ...manifest, command: { default: "" } },
+      manifest: { ...manifest, command: { ...manifest.command, default: "" } },
       createAdapter: (context) => new TestAdapter(context),
     })).toThrowError(CliPluginError);
   });
