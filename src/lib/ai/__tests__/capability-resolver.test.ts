@@ -55,10 +55,26 @@ const connection: TestConnection = {
   apiKeys: [],
 };
 
+const claudeProvider = providerRegistry.get("claude")!;
 const resolvedCli = {
-  adapter: providerRegistry.get("claude")!.cli!.adapter,
+  adapter: claudeProvider.cli!.adapter,
+  provider: claudeProvider,
+  manifest: claudeProvider.cli!.plugin.manifest,
+  providerVersion: claudeProvider.version!,
   commandPath: "/fake/claude",
   version: "1",
+  connectionId: connection.id,
+  configurationDigest: "safe-digest",
+  dependency: {
+    dependency: "Claude Code CLI",
+    state: "ready" as const,
+    commandPath: "/fake/claude",
+    detectedVersion: "1.0.0",
+    supportedVersions: ">=1.0.0",
+    homepage: "https://example.com",
+    installDocs: "https://example.com/install",
+    managedByTower: false as const,
+  },
 };
 
 function configWith(targetConnection: TestConnection = connection, modelId: string | null = null) {

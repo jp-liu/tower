@@ -38,6 +38,13 @@ function makeClaudeProvider(): ProviderDefinition {
         manifest: {
           display: { name: "Claude Code" },
           command: { default: "claude" },
+          cliDependency: {
+            name: "Claude Code CLI",
+            homepage: "https://example.invalid/claude",
+            installDocs: "https://example.invalid/claude/install",
+            supportedVersions: ">=1.0.0",
+            managedByTower: false,
+          },
           capabilities: { integrations: { mcp: true, hooks: true, skills: true } },
           permissions: ["integration:mcp", "integration:hooks", "integration:skills"],
         },
@@ -144,6 +151,7 @@ describe("ProviderRegistry", () => {
           version: null,
           commandPath: "/opt/extensions/acme",
           commandState: "found",
+          connectionStatus: "dependencyMissing",
           integrations: { mcp: true, hooks: true, skills: true },
         },
       }),
@@ -154,12 +162,14 @@ describe("ProviderRegistry", () => {
     dynamicMocks.listPlugins.mockResolvedValue([{
       id: "@acme/community",
       displayName: "Community",
+      version: "1.2.3",
       enabled: true,
       permissionConfirmed: true,
       health: "ready",
       capabilities: { integrations: {} },
     }]);
     dynamicMocks.findMany.mockResolvedValue([{
+      id: "community-connection",
       name: "Community",
       provider: "@acme/community",
       enabled: true,
@@ -182,6 +192,45 @@ describe("ProviderRegistry", () => {
         integrations: { mcp: false, hooks: false, skills: false },
       }),
     })]);
+    expect(dynamicMocks.resolvePlugin).not.toHaveBeenCalled();
+  });
+
+  it("enumerates built-in and only eligible dynamic CLI providers without loading adapters", async () => {
+    registry.register(makeClaudeProvider());
+    dynamicMocks.listPlugins.mockResolvedValue([
+      {
+        id: "@acme/ready",
+        displayName: "Ready CLI",
+        version: "2.0.0",
+        enabled: true,
+        permissionConfirmed: true,
+        health: "ready",
+        capabilities: { integrations: { mcp: true } },
+      },
+      {
+        id: "@acme/pending",
+        displayName: "Pending CLI",
+        version: "2.0.0",
+        enabled: true,
+        permissionConfirmed: false,
+        health: "ready",
+        capabilities: { integrations: { mcp: true } },
+      },
+    ]);
+    dynamicMocks.findMany.mockResolvedValue([
+      { id: "ready-connection", provider: "@acme/ready", enabled: true },
+      { id: "pending-connection", provider: "@acme/pending", enabled: true },
+    ]);
+
+    await expect(registry.listCliProviders()).resolves.toEqual([
+      expect.objectContaining({ id: "claude", builtin: true }),
+      expect.objectContaining({
+        id: "@acme/ready",
+        builtin: false,
+        providerVersion: "2.0.0",
+        connectionId: "ready-connection",
+      }),
+    ]);
     expect(dynamicMocks.resolvePlugin).not.toHaveBeenCalled();
   });
 
@@ -234,6 +283,24 @@ describe("ProviderRegistry", () => {
       hooks: false,
       skills: true,
     });
+  });
+
+  it("marks a runnable built-in CLI unavailable when its detected version is incompatible", async () => {
+    hostMocks.resolveBuiltInCommandResolution.mockResolvedValue({
+      state: "runnable",
+      selected: { state: "runnable", path: "/opt/claude", version: "0.0.1" },
+    });
+    registry.register(makeClaudeProvider());
+
+    await expect(registry.getAvailableProviders()).resolves.toEqual([
+      expect.objectContaining({
+        name: "claude",
+        cli: expect.objectContaining({
+          available: false,
+          connectionStatus: "dependencyIncompatible",
+        }),
+      }),
+    ]);
   });
 
   it("reports installed plugin lifecycle states without treating them as missing commands", async () => {

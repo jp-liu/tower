@@ -78,6 +78,13 @@ describe("dynamic CLI plugin connection resolution", () => {
           knownPaths: { darwin: ["/opt/community"] },
           versionArgs: ["version"],
         },
+        cliDependency: {
+          name: "Community CLI",
+          homepage: "https://example.invalid/community",
+          installDocs: "https://example.invalid/community/install",
+          supportedVersions: ">=1.0.0 <2.0.0",
+          managedByTower: false,
+        },
         capabilities: { sessions: { fresh: true }, query: { generate: true }, models: true },
       },
       configSchema,
@@ -173,5 +180,32 @@ describe("dynamic CLI plugin connection resolution", () => {
       expect.any(AbortSignal),
       expect.objectContaining({ providerConfigDir: null }),
     );
+  });
+
+  it("keeps secret argument and environment values out of the configuration fingerprint", async () => {
+    const resolveWithSecrets = (argumentSecret: string, environmentSecret: string) =>
+      resolvePluginCliConnection({
+        id: "connection-1",
+        provider: "@acme/community-cli",
+        enabled: true,
+        commandOverride: "/custom/community",
+        baseArgsJson: JSON.stringify([`--token=${argumentSecret}`, "positional-secret"]),
+        envVarsJson: JSON.stringify([{
+          id: "token",
+          name: "COMMUNITY_TOKEN",
+          value: environmentSecret,
+          enabled: true,
+          sensitive: true,
+        }]),
+        settingsJson: "{}",
+      }, "/workspace");
+
+    const first = await resolveWithSecrets("ARG_CANARY_ONE", "ENV_CANARY_ONE");
+    const second = await resolveWithSecrets("ARG_CANARY_TWO", "ENV_CANARY_TWO");
+
+    expect(first.configurationDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(second.configurationDigest).toBe(first.configurationDigest);
+    expect(JSON.stringify({ first: first.configurationDigest, second: second.configurationDigest }))
+      .not.toMatch(/ARG_CANARY|ENV_CANARY|positional-secret/);
   });
 });

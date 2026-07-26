@@ -44,6 +44,13 @@ vi.mock("@/lib/ai/providers", () => ({
               plugin: {
                 manifest: {
                   command: { default: "codex", aliases: [], versionArgs: ["--version"] },
+                  cliDependency: {
+                    name: "Codex CLI",
+                    supportedVersions: ">=0.1.0",
+                    homepage: "https://example.com",
+                    installDocs: "https://example.com/install",
+                    managedByTower: false,
+                  },
                 },
               },
               adapter: mockAdapter,

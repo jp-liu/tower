@@ -12,13 +12,21 @@ const mocks = vi.hoisted(() => ({
   projectFindFirst: vi.fn(),
   registryGet: vi.fn(),
   resolveAdapter: vi.fn(),
+  reconcile: vi.fn(),
+  connectionFindUnique: vi.fn(),
 }));
 
 vi.mock("@/lib/cli-test", () => ({
   testEnvironment: mocks.testEnvironment,
 }));
-vi.mock("@/lib/db", () => ({ db: { project: { findFirst: mocks.projectFindFirst } } }));
+vi.mock("@/lib/db", () => ({ db: {
+  project: { findFirst: mocks.projectFindFirst },
+  providerConnection: { findUnique: mocks.connectionFindUnique },
+} }));
 vi.mock("@/lib/ai/install-orchestrator", () => ({ installAllForProvider: mocks.install }));
+vi.mock("@/lib/ai/provider-reconciliation", () => ({
+  reconcileProviderIntegrations: mocks.reconcile,
+}));
 vi.mock("@/actions/provider-connection-actions", () => ({
   markProviderConnected: mocks.connected,
   markProviderDisconnected: mocks.disconnected,
@@ -50,6 +58,10 @@ describe("adapter test route", () => {
       ok: true,
       checks: [{ name: "codex_version", passed: true, message: "Version: 0.145.0" }],
     });
+    mocks.connectionFindUnique.mockResolvedValue(null);
+    mocks.reconcile.mockImplementation(async (input: { provider: string }) => ({
+      report: await mocks.install(input.provider, "http://localhost:3000"),
+    }));
     mocks.registryGet.mockImplementation((provider: string) => provider === "codex"
       ? {
           builtin: true,
@@ -104,12 +116,18 @@ describe("adapter test route", () => {
     expect(response.status).toBe(200);
     expect(body.ok).toBe(true);
     expect(body.install.ok).toBe(false);
-    expect(mocks.connected).toHaveBeenCalledWith("codex", {
-      version: "0.145.0",
-      report: expect.objectContaining({ provider: "codex", available: true, ok: false }),
-    });
+    expect(mocks.reconcile).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "codex",
+      trigger: "hello-success",
+      helloAlreadySucceeded: true,
+    }));
+    expect(mocks.reconcile).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "codex",
+      trigger: "hello-success",
+      skipHello: true,
+    }));
     expect(mocks.disconnected).not.toHaveBeenCalled();
-    expect(mocks.repair).toHaveBeenCalledWith({ repairOnly: true });
+    expect(mocks.repair).not.toHaveBeenCalled();
   });
 
   it("uses the dynamic plugin Hello probe for providers without static definitions", async () => {

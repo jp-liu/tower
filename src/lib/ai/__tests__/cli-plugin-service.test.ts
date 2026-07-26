@@ -63,7 +63,15 @@ describe("CLI plugin application lifecycle", () => {
     temporaryRoots.push(dataRoot, fakeHome);
     await fs.mkdir(fakeBin, { recursive: true });
     const executable = path.join(fakeBin, "fixture-cli");
-    await fs.writeFile(executable, "#!/bin/sh\nprintf 'hello\\n'\n", { mode: 0o700 });
+    await fs.writeFile(executable, [
+      "#!/bin/sh",
+      "if [ \"$1\" = \"--version\" ]; then",
+      "  printf 'fixture-cli 1.2.3\\n'",
+      "else",
+      "  printf 'hello\\n'",
+      "fi",
+      "",
+    ].join("\n"), { mode: 0o700 });
 
     const originalConfigs = await db.aiCapabilityConfig.findMany({
       where: { slot: { in: ["summary", "terminal"] } },

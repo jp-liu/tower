@@ -7,6 +7,10 @@ const fsMocks = vi.hoisted(() => ({
   readFile: vi.fn(async () => "selected instructions"),
   rm: vi.fn(async () => {}),
 }));
+const reconciliationMocks = vi.hoisted(() => ({
+  reconcileTerminalCapabilityTargets: vi.fn(async () => {}),
+  reconcileTerminalExecutionBinding: vi.fn(async () => {}),
+}));
 
 vi.mock("fs/promises", async (importOriginal) => ({
   ...await importOriginal<typeof import("fs/promises")>(),
@@ -76,6 +80,9 @@ vi.mock("@/lib/ai/providers", () => ({
     })),
   },
 }));
+vi.mock("@/lib/ai/provider-reconciliation", () => ({
+  ...reconciliationMocks,
+}));
 
 import { db } from "@/lib/db";
 import { createSession, destroySession } from "@/lib/pty/session-store";
@@ -86,6 +93,10 @@ import {
   resolveTerminalTargetPlan,
 } from "@/lib/ai/capability-resolver";
 import { providerRegistry } from "@/lib/ai/providers";
+import {
+  reconcileTerminalCapabilityTargets,
+  reconcileTerminalExecutionBinding,
+} from "@/lib/ai/provider-reconciliation";
 import { createWorktree } from "@/lib/worktree";
 import {
   continueLatestPtyExecution,
@@ -226,6 +237,9 @@ describe("startPtyExecution directive selection", () => {
 
     await startPtyExecution("t1", "");
 
+    expect(reconcileTerminalCapabilityTargets).toHaveBeenCalledWith(process.cwd());
+    expect(vi.mocked(reconcileTerminalCapabilityTargets).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(resolveTerminalTargetPlan).mock.invocationCallOrder[0]!);
     const directive = injectedDirective();
     expect(directive).toContain("## Tower Workbench");
     expect(directive).not.toContain("## About Tower");
@@ -621,6 +635,7 @@ describe("startPtyExecution directive selection", () => {
 
     await resumePtyExecution("t1", "session-1");
 
+    expect(reconcileTerminalExecutionBinding).toHaveBeenCalledWith(previous, process.cwd());
     expect(resolveFixedCliConnection).toHaveBeenCalledWith(
       "connection-codex",
       "codex-model",
