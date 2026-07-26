@@ -3,7 +3,7 @@ title: 0.3.0 Release Notes
 description: AI Tools 0.3 features, migration, security, and known limitations
 ---
 
-The 0.3.0 release candidate passed the isolated centralized gate. External publication remains an explicit release-owner action after npm, GitHub, and remote permissions are confirmed.
+The local 0.3.0 release-candidate results are recorded in the acceptance material. External publication is paused; the production build, package canary, and standalone smoke must be rerun after stable font build access is restored.
 
 ## User-visible features
 

@@ -20,7 +20,8 @@
 
 ### Release validation
 
-* pass the isolated centralized gate for frozen install, type checking, ESLint, unit/component tests, workspace and Qwen builds, Catalog validation, production build, package canary, and standalone install/migration smoke
+* pass the latest isolated frozen install, database migration, type checking, ESLint, unit/component tests, workspace and Qwen builds, Catalog validation, and documentation build
+* require a stable font build connection before rerunning the final production build, package canary, and standalone install/migration smoke
 * keep real Provider accounts, API keys, CLI login state, and the existing production service outside the release gate
 
 ## [0.2.20](https://github.com/jp-liu/tower/compare/v0.2.19...v0.2.20) (2026-06-10)

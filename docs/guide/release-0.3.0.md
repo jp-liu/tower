@@ -3,7 +3,7 @@ title: 0.3.0 发布说明
 description: AI Tools 0.3 用户能力、迁移、安全模型和已知限制
 ---
 
-0.3.0 发布候选已经通过隔离的集中门禁；校验结果和发布前人工检查见 [0.3.0 手工验收清单](/guide/acceptance-0.3.0)。外部发布仍由发布负责人在确认 npm、GitHub 和远端权限后显式执行。
+0.3.0 本地发布候选的校验结果和发布前人工检查见 [0.3.0 手工验收清单](/guide/acceptance-0.3.0)。当前外部发布已暂停；生产 build、package canary 与 standalone smoke 需在稳定字体网络恢复后重跑。
 
 ## 用户可见能力
 

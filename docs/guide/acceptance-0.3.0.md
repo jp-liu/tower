@@ -5,14 +5,14 @@ description: AI Tools、扩展中心、Qwen Provider 与发布前置的最终人
 
 # 0.3.0 手工验收清单
 
-隔离自动化集中门禁已经通过；2026-07-26 的 v0.3.0 外部发布已获用户授权。publish、push、tag 和 Release 仍由发布任务在凭据与权限确认后显式执行。
+隔离自动化集中门禁记录见 [v0.3.0 本地发布候选记录](/releases/v0.3.0-readiness)。2026-07-26 的最新决定已暂停全部外部发布；`tower-org` / `@tower-org` 命名与迁移矩阵确认前，不得 publish、push、tag 或创建 Release。
 
 ## 发布阻断项
 
 - [x] 集中验收已在原字体配置恢复后通过 `127.0.0.1:7897` 代理运行 `pnpm release:smoke`：打包安装、13 个迁移、Settings、Summary、Assistant 和 Terminal plan 全部通过。更换发布构建环境时仍须提供稳定代理或批准字体缓存。
 - [x] packaged smoke 已确认服务默认只监听 `127.0.0.1`；仅在明确需要时传入 `--host`。
 - [ ] 决定并授权官方 Catalog 仓库、GitHub Organization 和 HTTPS 托管 URL。建立前设置服务端 `TOWER_EXTENSION_CATALOG_URL` 或系统 Catalog URL。
-- [x] 用户已确认 2026-07-26 发布 v0.3.0，并授权按现有 npm/GitHub/远端权限边界执行 publish/tag/Release。
+- [ ] 等待 `tower-org` / `@tower-org` 命名与迁移矩阵确认后重新授权 publish/tag/Release；不得向旧 scope 或旧包名发布。
 
 ## Extensions 与 Qwen
 
