@@ -2294,7 +2294,7 @@ export function SettingsPage() {
     <div className="flex h-full flex-col bg-background">
       {/* Top header bar */}
       <div className="flex-shrink-0 border-b bg-card/50 backdrop-blur-sm">
-        <div className="mx-auto max-w-5xl px-6">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6">
           {/* Title row */}
           <div className="flex items-center justify-between pb-3 pt-5">
             <div>
@@ -2396,7 +2396,7 @@ export function SettingsPage() {
 
       {/* Scrollable content area */}
       <div className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-4xl px-6 py-8">
+        <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
           {/* Section header with colored icon badge */}
           {activeConfig && (
             <div className="mb-6 flex items-start gap-4">

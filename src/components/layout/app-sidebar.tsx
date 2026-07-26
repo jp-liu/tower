@@ -74,10 +74,14 @@ export function AppSidebar({ workspaces }: AppSidebarProps) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(false);
 
-  // Read collapsed state from localStorage after hydration to avoid mismatch
+  // Read collapsed state after hydration and keep narrow viewports usable.
   useEffect(() => {
     const saved = localStorage.getItem("sidebar-collapsed");
-    if (saved === "true") setCollapsed(true);
+    const compactViewport = window.matchMedia("(max-width: 767px)");
+    const applyViewport = () => setCollapsed(compactViewport.matches || saved === "true");
+    applyViewport();
+    compactViewport.addEventListener("change", applyViewport);
+    return () => compactViewport.removeEventListener("change", applyViewport);
   }, []);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);

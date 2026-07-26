@@ -1,9 +1,11 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { promises as fs } from "node:fs";
 import http, { type Server } from "node:http";
+import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 import net from "node:net";
+import { promisify } from "node:util";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 
@@ -11,17 +13,22 @@ const projectRoot = path.resolve(__dirname, "../..");
 const keyOriginal = "UI_CANARY_KEY_4f18_original";
 const keyEdited = "UI_CANARY_KEY_4f18_edited";
 const longConnectionName = `Browser Fake API ${"long-name-".repeat(10)}`;
+const execFileAsync = promisify(execFile);
 
 let temporaryRoot = "";
 let dataRoot = "";
 let databasePath = "";
 let tower: ChildProcess | null = null;
 let upstream: Server | null = null;
+let catalogServer: https.Server | null = null;
+let catalogMode: "ready" | "empty" | "unavailable" = "ready";
 let appOrigin = "";
 let upstreamBaseUrl = "";
+let catalogUrl = "";
 let screenshotDir = "";
 let fixturePluginDir = "";
 let fixtureCliPath = "";
+let qwenCliPath = "";
 
 async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -43,7 +50,7 @@ async function waitForApp(origin: string, processHandle: ChildProcess): Promise<
     if (processHandle.exitCode !== null) throw new Error(`Tower exited early with ${processHandle.exitCode}`);
     try {
       const response = await fetch(`${origin}/settings`);
-      if (response.status > 0) return;
+      if (response.ok) return;
     } catch {}
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
@@ -114,6 +121,62 @@ async function startFakeUpstream(): Promise<string> {
   const address = upstream.address();
   if (!address || typeof address === "string") throw new Error("fake upstream bind failed");
   return `http://127.0.0.1:${address.port}/v1`;
+}
+
+async function startFixtureCatalog(): Promise<string> {
+  const certificate = path.join(temporaryRoot, "catalog-cert.pem");
+  const key = path.join(temporaryRoot, "catalog-key.pem");
+  const outputDir = path.join(temporaryRoot, "catalog");
+  await execFileAsync("openssl", [
+    "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+    "-keyout", key, "-out", certificate, "-subj", "/CN=127.0.0.1", "-days", "1",
+  ]);
+  catalogServer = https.createServer({
+    cert: await fs.readFile(certificate),
+    key: await fs.readFile(key),
+  }, async (request, response) => {
+    if (catalogMode === "unavailable") {
+      request.socket.destroy();
+      return;
+    }
+    const pathname = new URL(request.url ?? "/", "https://127.0.0.1").pathname;
+    if (pathname === "/index.v1.json" && catalogMode === "empty") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ schemaVersion: 1, extensions: [] }));
+      return;
+    }
+    const target = path.resolve(outputDir, pathname.replace(/^\/+/, ""));
+    if (!target.startsWith(`${path.resolve(outputDir)}${path.sep}`)) {
+      response.writeHead(404).end();
+      return;
+    }
+    try {
+      const contents = await fs.readFile(target);
+      response.writeHead(200, {
+        "content-type": pathname.endsWith(".json") ? "application/json" : "application/gzip",
+        "content-length": String(contents.byteLength),
+      });
+      response.end(contents);
+    } catch {
+      response.writeHead(404).end();
+    }
+  });
+  await new Promise<void>((resolve, reject) => {
+    catalogServer!.once("error", reject);
+    catalogServer!.listen(0, "127.0.0.1", resolve);
+  });
+  const address = catalogServer.address();
+  if (!address || typeof address === "string") throw new Error("fixture catalog bind failed");
+  const origin = `https://127.0.0.1:${address.port}`;
+  await execFileAsync(path.join(projectRoot, "node_modules", ".bin", "tsx"), [
+    path.join(projectRoot, "scripts", "build-extension-catalog.ts"),
+    "--base-url", `${origin}/`, "--output", outputDir,
+  ], { cwd: projectRoot });
+  return `${origin}/index.v1.json`;
+}
+
+async function writeFakeQwen(version: string): Promise<void> {
+  await fs.writeFile(qwenCliPath, `#!/bin/sh\nprintf 'qwen fake ${version}\\n'\n`, { mode: 0o700 });
 }
 
 async function seedUiDatabase(): Promise<void> {
@@ -210,10 +273,14 @@ test.describe.serial("AI Tools 0.3 final browser acceptance", () => {
     await fs.cp(path.join(projectRoot, "packages", "ai-runtime", "test", "fixtures", "valid-plugin"), fixturePluginDir, { recursive: true });
     for (const command of ["claude", "codex", "gemini", "fixture-cli"]) {
       const executable = path.join(fakeBin, command);
-      await fs.writeFile(executable, `#!/bin/sh\nprintf '${command} fake 0.3.0\\n'\n`, { mode: 0o700 });
+      const version = command === "fixture-cli" ? "1.1.0" : "0.3.0";
+      await fs.writeFile(executable, `#!/bin/sh\nprintf '${command} fake ${version}\\n'\n`, { mode: 0o700 });
       if (command === "fixture-cli") fixtureCliPath = executable;
     }
+    qwenCliPath = path.join(fakeBin, "qwen");
+    await writeFakeQwen("0.19.0");
     upstreamBaseUrl = await startFakeUpstream();
+    catalogUrl = await startFixtureCatalog();
     const port = await freePort();
     appOrigin = `http://127.0.0.1:${port}`;
     const env: NodeJS.ProcessEnv = {
@@ -223,6 +290,8 @@ test.describe.serial("AI Tools 0.3 final browser acceptance", () => {
       DATABASE_URL: `file:${databasePath}`,
       PATH: `${fakeBin}${path.delimiter}/usr/local/bin:/usr/bin:/bin`,
       TOWER_NO_OPEN: "1",
+      TOWER_EXTENSION_CATALOG_URL: catalogUrl,
+      NODE_TLS_REJECT_UNAUTHORIZED: "0",
     };
     for (const key of ["TOWER_TASK_ID", "TOWER_TASK_TITLE", "CALLBACK_URL", "__NEXT_PRIVATE_ORIGIN", "__NEXT_PRIVATE_STANDALONE_CONFIG"]) {
       delete env[key];
@@ -240,7 +309,114 @@ test.describe.serial("AI Tools 0.3 final browser acceptance", () => {
   test.afterAll(async () => {
     await stopProcess(tower);
     if (upstream) await new Promise<void>((resolve) => upstream!.close(() => resolve()));
+    if (catalogServer) await new Promise<void>((resolve) => catalogServer!.close(() => resolve()));
+    const evidenceDir = process.env.TOWER_EVIDENCE_DIR;
+    if (evidenceDir && screenshotDir) {
+      await fs.mkdir(evidenceDir, { recursive: true });
+      await fs.cp(screenshotDir, evidenceDir, { recursive: true });
+      await fs.copyFile(path.join(temporaryRoot, "tower.log"), path.join(evidenceDir, "tower.log"));
+    }
     if (temporaryRoot) await fs.rm(temporaryRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  });
+
+  test("Qwen HTTPS catalog discovery, lifecycle, slot visibility, diagnostics, and damage", async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await page.goto(`${appOrigin}/settings`);
+    await page.evaluate(() => localStorage.setItem("locale", "en"));
+    await page.reload();
+    await page.getByRole("button", { name: "Extensions", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Provider catalog", exact: true })).toBeVisible();
+
+    const search = page.getByRole("searchbox", { name: "Search provider catalog" });
+    const qwenRow = () => page.locator("li").filter({ has: page.getByText("Qwen Code", { exact: true }) }).first();
+    await expect(qwenRow()).toContainText("Tower Community");
+    await expect(qwenRow()).toContainText("Requires Qwen Code CLI");
+    await expect(qwenRow()).toContainText(">=0.18.0 <1.0.0");
+    await expect(qwenRow()).toContainText("Tower does not install or sign in to this CLI");
+    expect(await qwenRow().evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+
+    await search.fill("no-such-provider");
+    await expect(page.getByText("No matching providers", { exact: true })).toBeVisible();
+    await search.fill("");
+    await expect(qwenRow()).toBeVisible();
+
+    catalogMode = "empty";
+    await page.getByRole("button", { name: "Refresh catalog", exact: true }).first().click();
+    await expect(page.getByText("No providers published", { exact: true })).toBeVisible();
+    catalogMode = "unavailable";
+    await page.getByRole("button", { name: "Refresh catalog", exact: true }).first().click();
+    await expect(page.getByText("Catalog unavailable", { exact: true })).toBeVisible();
+    catalogMode = "ready";
+    await page.getByRole("button", { name: "Refresh catalog", exact: true }).first().click();
+    await expect(qwenRow()).toBeVisible();
+
+    await qwenRow().getByRole("button", { name: "Install", exact: true }).click();
+    const installDialog = page.getByRole("dialog");
+    await installDialog.getByRole("button", { name: "Review install plan", exact: true }).click();
+    await expect(installDialog).toContainText("Tower Community");
+    await expect(installDialog).toContainText("qwen · >=0.18.0 <1.0.0");
+    await expect(installDialog).toContainText("process:spawn");
+    await expect(installDialog).toContainText("network:provider");
+    await installDialog.getByRole("button", { name: "Install disabled", exact: true }).click();
+    await expect(installDialog.getByRole("status")).toContainText("remains disabled");
+    await installDialog.getByRole("button", { name: "Confirm permissions and enable", exact: true }).click();
+    await expect(qwenRow()).toContainText("Ready");
+
+    await page.getByRole("button", { name: "AI Tools", exact: true }).click();
+    await expect(page.getByText("Qwen Code", { exact: true }).first()).toBeVisible();
+    for (const slot of ["Terminal", "Task Summary", "Knowledge Insights", "Project Analysis", "AI Assistant"]) {
+      const card = page.getByRole("heading", { name: slot, exact: true }).locator("xpath=ancestor::article");
+      await card.getByRole("button", { name: "Add target", exact: true }).click();
+      const targetDialog = page.getByRole("dialog");
+      await targetDialog.getByRole("combobox", { name: "Connection" }).click();
+      await expect(page.getByRole("option").filter({ hasText: "Qwen Code" })).toBeVisible();
+      await page.keyboard.press("Escape");
+      await targetDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    }
+
+    await page.getByRole("button", { name: "Extensions", exact: true }).click();
+    await writeFakeQwen("0.1.0");
+    await page.reload();
+    await page.getByRole("button", { name: "Extensions", exact: true }).click();
+    await expect(qwenRow()).toContainText("CLI incompatible");
+    await fs.rename(qwenCliPath, `${qwenCliPath}.missing`);
+    await page.reload();
+    await page.getByRole("button", { name: "Extensions", exact: true }).click();
+    await expect(qwenRow()).toContainText("CLI missing");
+    await fs.rename(`${qwenCliPath}.missing`, qwenCliPath);
+    await writeFakeQwen("0.19.0");
+    await page.reload();
+    await page.getByRole("button", { name: "Extensions", exact: true }).click();
+    await expect(qwenRow()).toContainText("Ready");
+
+    await qwenRow().getByRole("button", { name: "Disable", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Confirm", exact: true }).click();
+    await expect(qwenRow().getByRole("button", { name: "Enable", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "AI Tools", exact: true }).click();
+    const assistantCard = page.getByRole("heading", { name: "AI Assistant", exact: true }).locator("xpath=ancestor::article");
+    await assistantCard.getByRole("button", { name: "Add target", exact: true }).click();
+    await page.getByRole("dialog").getByRole("combobox", { name: "Connection" }).click();
+    await expect(page.getByRole("option").filter({ hasText: "Qwen Code" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("option")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Extensions", exact: true }).click();
+    await qwenRow().getByRole("button", { name: "Enable", exact: true }).click();
+    await expect(qwenRow()).toContainText("Ready");
+    const qwenInstallContainer = path.join(dataRoot, "extensions", "cli-provider", "community.qwen-code");
+    const installedVersions = await fs.readdir(qwenInstallContainer);
+    expect(installedVersions).toHaveLength(1);
+    await fs.appendFile(path.join(qwenInstallContainer, installedVersions[0]!, "dist", "index.js"), "\n// acceptance damage\n");
+    await page.reload();
+    await page.getByRole("button", { name: "Extensions", exact: true }).click();
+    await expect(qwenRow()).toContainText("Damaged");
+    await qwenRow().getByRole("button", { name: "Uninstall", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Confirm", exact: true }).click();
+    await expect(qwenRow().getByRole("button", { name: "Install", exact: true })).toBeVisible();
+    await context.close();
   });
 
   test("settings Key, models, parameters, slots, persistence, accessibility, and i18n", async ({ browser }) => {
@@ -337,16 +513,16 @@ test.describe.serial("AI Tools 0.3 final browser acceptance", () => {
     await expect(page.getByText("All checks passed")).toBeVisible();
     await page.getByRole("dialog").getByRole("button", { name: "Cancel", exact: true }).click();
 
-    await page.getByRole("button", { name: "Add CLI plugin" }).click();
+    await page.getByRole("button", { name: "Extensions", exact: true }).click();
+    await page.getByRole("button", { name: "Register local directory", exact: true }).click();
     const installDialog = page.getByRole("dialog");
-    await installDialog.getByRole("tab", { name: "Local directory" }).click();
     await installDialog.getByLabel("Plugin directory").fill(fixturePluginDir);
     await installDialog.getByRole("button", { name: "Review install plan" }).click();
     await expect(installDialog.getByText("process:spawn", { exact: false })).toBeVisible();
     await installDialog.getByRole("button", { name: "Install disabled" }).click();
     await installDialog.getByRole("button", { name: "Confirm permissions and enable" }).click();
     const pluginRow = page.locator("li")
-      .filter({ hasText: "@fixture/tower-cli" })
+      .filter({ has: page.getByText("Fixture CLI", { exact: true }) })
       .filter({ has: page.getByRole("button", { name: "Edit", exact: true }) })
       .first();
     await expect(pluginRow.getByText("Fixture CLI", { exact: true })).toBeVisible();
@@ -368,7 +544,8 @@ test.describe.serial("AI Tools 0.3 final browser acceptance", () => {
     await pluginRow.getByRole("button", { name: "Uninstall", exact: true }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Confirm", exact: true }).click();
     await expect(pluginRow).toHaveCount(0);
-    const preservedPluginConnection = page.locator("li").filter({ hasText: "@fixture/tower-cli" }).first();
+    await page.getByRole("button", { name: "AI Tools", exact: true }).click();
+    const preservedPluginConnection = page.locator("li").filter({ hasText: "Configured Browser Fixture" }).first();
     await expect(preservedPluginConnection.getByText("Plugin uninstalled", { exact: true })).toBeVisible();
 
     await page.keyboard.press("Home");
@@ -403,7 +580,11 @@ test.describe.serial("AI Tools 0.3 final browser acceptance", () => {
     await page.goto(`${appOrigin}/settings`);
     await page.evaluate(() => localStorage.setItem("locale", "en"));
     await page.reload();
-    await page.getByRole("button", { name: "Assistant", exact: true }).click();
+    const assistantButton = page.getByRole("button", { name: "Assistant", exact: true });
+    const languageButton = page.getByRole("button", { name: "中", exact: true });
+    const [assistantBox, languageBox] = await Promise.all([assistantButton.boundingBox(), languageButton.boundingBox()]);
+    expect((assistantBox?.x ?? 0) + (assistantBox?.width ?? 0)).toBeLessThanOrEqual(languageBox?.x ?? 0);
+    await assistantButton.click();
     await page.getByRole("button", { name: "Sessions" }).click();
     await page.getByRole("menuitem").filter({ hasText: "Imported Legacy Browser Session" }).click();
     await expect(page.getByText("seeded browser assistant", { exact: true })).toBeVisible();
@@ -466,9 +647,11 @@ test.describe.serial("AI Tools 0.3 final browser acceptance", () => {
   test("final three viewport layout assertions with optional evidence screenshots", async ({ browser }) => {
     const skipScreenshots = process.env.TOWER_SKIP_EVIDENCE_SCREENSHOTS === "1";
     const viewports = [
-      { name: "desktop", width: 1440, height: 900, assistant: false },
-      { name: "laptop", width: 1280, height: 720, assistant: false },
-      { name: "mobile", width: 390, height: 844, assistant: true },
+      { name: "desktop-ai-tools", width: 1440, height: 900, section: "ai-tools" },
+      { name: "desktop-extensions", width: 1440, height: 900, section: "extensions" },
+      { name: "laptop-ai-tools", width: 1280, height: 720, section: "ai-tools" },
+      { name: "mobile-assistant", width: 390, height: 844, section: "assistant" },
+      { name: "mobile-extensions", width: 390, height: 844, section: "extensions" },
     ];
     for (const viewport of viewports) {
       const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height } });
@@ -476,12 +659,22 @@ test.describe.serial("AI Tools 0.3 final browser acceptance", () => {
       await page.goto(`${appOrigin}/settings`);
       await page.evaluate(() => localStorage.setItem("locale", "en"));
       await page.reload();
-      if (viewport.assistant) {
+      if (viewport.section === "assistant") {
         await page.getByRole("button", { name: "Assistant", exact: true }).click();
         await expect(page.getByText("Tower Assistant", { exact: true })).toBeVisible();
+        await expect(page.getByPlaceholder("Ask about your projects and tasks...")).toBeVisible();
+      } else if (viewport.section === "extensions") {
+        await page.getByRole("button", { name: "Extensions", exact: true }).click();
+        await expect(page.getByRole("heading", { name: "Provider catalog", exact: true })).toBeVisible();
+        await expect(page.getByText("Qwen Code", { exact: true })).toBeVisible();
       } else {
         await page.getByRole("button", { name: "AI Tools", exact: true }).click();
         await expect(page.getByRole("heading", { name: "Connections", exact: true })).toBeVisible();
+        await expect(page.getByText("Claude Code", { exact: true })).toBeVisible();
+      }
+      if (viewport.width < 768) {
+        const sidebarBox = await page.locator("aside").first().boundingBox();
+        expect(sidebarBox?.width).toBeLessThanOrEqual(56);
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
       if (!skipScreenshots) {
@@ -490,7 +683,13 @@ test.describe.serial("AI Tools 0.3 final browser acceptance", () => {
       await context.close();
     }
     expect((await fs.readdir(screenshotDir)).sort()).toEqual(
-      skipScreenshots ? [] : ["desktop.png", "laptop.png", "mobile.png"],
+      skipScreenshots ? [] : [
+        "desktop-ai-tools.png",
+        "desktop-extensions.png",
+        "laptop-ai-tools.png",
+        "mobile-assistant.png",
+        "mobile-extensions.png",
+      ],
     );
   });
 });

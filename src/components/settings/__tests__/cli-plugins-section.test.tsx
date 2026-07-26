@@ -246,6 +246,11 @@ describe("CLI plugin settings", () => {
 
   it("renders Tower-owned connection fields and schema controls", async () => {
     const user = userEvent.setup();
+    actionMocks.listCliPlugins.mockResolvedValue({
+      ok: true,
+      data: [{ ...plugin, source: "development" }],
+    });
+    actionMocks.listCliProviderCatalog.mockResolvedValue({ ok: true, data: [] });
     actionMocks.getCliPluginConnection.mockResolvedValue({
       ok: true,
       data: {

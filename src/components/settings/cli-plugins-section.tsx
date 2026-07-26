@@ -633,6 +633,8 @@ export function CliPluginsSection() {
                 <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{plugin.id} · {plugin.version}</p>
               </div>
               <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+                <Button variant="outline" onClick={() => void testConnection(plugin.id)} disabled={!plugin.enabled || pending !== null}>{pending === `test:${plugin.id}` && <Loader2 className="animate-spin" />}<ShieldCheck />{t("settings.aiTools.testConnection")}</Button>
+                <Button variant="outline" onClick={() => void openConfiguration(plugin.id)} disabled={!plugin.enabled || pending !== null}><Pencil />{t("common.edit")}</Button>
                 {!plugin.enabled && !plugin.permissionConfirmed && <Button variant="outline" onClick={() => void reviewInstalled(plugin)}>{t("settings.cliPlugins.reviewAndEnable")}</Button>}
                 {plugin.enabled ? <Button variant="outline" onClick={() => setDanger({ type: "disable", plugin })}>{t("settings.cliPlugins.disable")}</Button> : plugin.permissionConfirmed && <Button variant="outline" onClick={() => void enablePlugin(plugin.id)}>{t("settings.cliPlugins.enable")}</Button>}
                 <Button variant="destructive" onClick={() => setDanger({ type: "uninstall", plugin })}><Trash2 />{t("settings.cliPlugins.uninstall")}</Button>

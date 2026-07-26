@@ -174,12 +174,12 @@ function LayoutInner({
         <div className={hideSidebar ? "hidden" : "contents"}>
           <AppSidebar workspaces={workspaces} />
         </div>
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <TopBar onCreateProject={handleCreateProject} username={username} workspaces={workspaces} defaultWorkspaceId={activeWorkspaceId} />
-          <div className="flex flex-1 overflow-hidden">
+          <div className="flex min-w-0 flex-1 overflow-hidden">
             {/* Push sidebar: flex sibling of main, inside content area below TopBar (per RESEARCH.md Pattern 2) */}
             {sidebarPanel}
-            <main className={`flex-1 bg-background ${hideSidebar ? "overflow-hidden" : "overflow-auto"}`}>
+            <main className={`min-w-0 flex-1 bg-background ${hideSidebar ? "overflow-hidden" : "overflow-auto"}`}>
               <ErrorBoundary>{children}</ErrorBoundary>
             </main>
           </div>

@@ -83,7 +83,7 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
 
   const containerClass =
     mode === "sidebar"
-      ? "min-w-[320px] max-w-[480px] w-[30vw] shrink-0 border-r border-border flex flex-col bg-sidebar overflow-hidden"
+      ? "w-full min-w-0 max-w-[480px] shrink-0 border-r border-border bg-sidebar flex flex-col overflow-hidden sm:w-[30vw] sm:min-w-[320px]"
       : "flex flex-col h-full overflow-hidden";
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);

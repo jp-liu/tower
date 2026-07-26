@@ -140,19 +140,19 @@ export function TopBar({ onCreateProject, username, workspaces, defaultWorkspace
 
   return (
     <>
-      <header className="flex h-12 items-center justify-between border-b border-border bg-background/80 px-5 backdrop-blur-sm">
-        <div className="w-40" />
+      <header className="grid h-12 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center border-b border-border bg-background/80 px-2 backdrop-blur-sm sm:px-5 xl:grid-cols-[10rem_minmax(0,1fr)_auto]">
+        <div className="hidden w-40 xl:block" />
 
         {/* Search + Assistant group */}
-        <div className="flex items-center gap-2">
+        <div className="flex w-full min-w-0 items-center gap-2 justify-self-start xl:justify-self-center">
           <Button
             variant="outline"
             onClick={() => setShowSearch(true)}
-            className="h-8 w-[400px] justify-start gap-2 bg-muted/50 text-muted-foreground hover:bg-muted"
+            className="h-8 w-9 min-w-0 justify-start gap-2 bg-muted/50 px-2 text-muted-foreground hover:bg-muted sm:w-auto sm:max-w-[400px] sm:flex-1 sm:px-3"
           >
             <Search className="h-3.5 w-3.5" />
-            <span className="flex-1 text-left" suppressHydrationWarning>{t("topbar.searchPlaceholder")}</span>
-            <kbd className="mr-1 flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-mono">
+            <span className="hidden min-w-0 flex-1 truncate text-left sm:block" suppressHydrationWarning>{t("topbar.searchPlaceholder")}</span>
+            <kbd className="mr-1 hidden items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] md:flex">
               <Command className="h-2.5 w-2.5" />K
             </kbd>
           </Button>
@@ -179,7 +179,7 @@ export function TopBar({ onCreateProject, username, workspaces, defaultWorkspace
         </div>
 
         {/* Right Actions */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
           {/* Language Toggle */}
           <Tooltip>
             <TooltipTrigger
@@ -230,7 +230,7 @@ export function TopBar({ onCreateProject, username, workspaces, defaultWorkspace
                   onClick={() =>
                     window.open("https://github.com/jp-liu/tower", "_blank", "noopener,noreferrer")
                   }
-                  className="text-muted-foreground"
+                  className="hidden text-muted-foreground md:inline-flex"
                   aria-label={t("topbar.github")}
                 />
               }
@@ -241,11 +241,11 @@ export function TopBar({ onCreateProject, username, workspaces, defaultWorkspace
           </Tooltip>
 
           {/* Divider */}
-          <div className="h-4 w-px bg-border" />
+          <div className="hidden h-4 w-px bg-border lg:block" />
 
           <Button
             variant="outline"
-            className="gap-1.5 ring-1 ring-border hover:bg-accent"
+            className="hidden gap-1.5 ring-1 ring-border hover:bg-accent lg:inline-flex"
             onClick={() => setImportProjectOpen(true)}
           >
             <FolderOpen className="h-3.5 w-3.5" />
@@ -254,7 +254,7 @@ export function TopBar({ onCreateProject, username, workspaces, defaultWorkspace
 
           <Button
             data-tour="create-project"
-            className="gap-1.5 bg-primary/10 text-primary ring-1 ring-primary/25 hover:bg-primary/20"
+            className="hidden gap-1.5 bg-primary/10 text-primary ring-1 ring-primary/25 hover:bg-primary/20 lg:inline-flex"
             onClick={() => setCreateProjectOpen(true)}
           >
             <Plus className="h-3.5 w-3.5" />
