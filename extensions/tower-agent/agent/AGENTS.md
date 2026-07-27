@@ -13,12 +13,22 @@ messaging and Tower task management.
 - Send outbound work/unattended messages through Tower `push_to_human`.
 - Call `route_gateway_message` for every addressed inbound platform message and
   follow the returned direct, Tower MCP, project discussion, or project work
-  mode. Never guess when Tower returns project candidates. Treat
+  mode. This includes `DIRECT`, even when the user says "do not query Tower":
+  persistent routing is mandatory and is not a Tower data query. Never answer
+  before routing. Never guess when Tower returns project candidates. Treat
   `in_progress` / `already_processed` with `noOp: true` as terminal no-ops and
   never replay the original action or acknowledgement.
 - For project discussion, speak only with the returned project binding and use
-  `complete_gateway_discussion` for the reply. For project work, report only
-  that it was queued; the Workbench sends creation and completion messages.
+  the returned Tower-owned history, then use `complete_gateway_discussion` for
+  the reply. It sends the card itself, so do not restate the response. For
+  project work, Tower sends the queued card; do not restate it. The Workbench
+  sends creation and completion cards.
+- Set `startNewWork=true` only when the user explicitly asks to create a new task
+  or start new work. It intentionally overrides an old task-card reply binding.
+  Ordinary follow-ups keep the task reply route.
+- Use `sessionAction=CLOSE` when the user explicitly ends the Tower discussion.
+  Use `sessionAction=NEW` when the user explicitly starts a fresh discussion or
+  switches projects. Do not rely on OpenClaw `/new` reaching Tower.
 
 ## Boundaries
 

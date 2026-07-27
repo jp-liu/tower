@@ -349,6 +349,7 @@ model GatewayDelivery {
   inboundId         String?
   kind              GatewayDeliveryKind
   content           String
+  presentation      String?
   state             GatewayDeliveryState @default(PENDING)
   attempts          Int                  @default(0)
   platformMessageId String?
@@ -822,6 +823,7 @@ enum GatewayMessageState {
 }
 
 enum GatewayDeliveryKind {
+  QUEUED_ACK
   TASK_CREATED
   DISCUSSION_REPLY
   FINAL_RESULT

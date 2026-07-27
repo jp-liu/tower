@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { up } from "../../../../scripts/migrations/0017-gateway-sessions";
+import { up as addGatewayPresentation } from "../../../../scripts/migrations/0018-gateway-delivery-presentation";
 
 const clients: PrismaClient[] = [];
 const directories: string[] = [];
@@ -92,5 +93,18 @@ describe("0017 gateway sessions migration", () => {
     const indexes = (await schemaObjects(prisma, "index")).map((row) => row.name);
     expect(indexes.filter((name) => name === "HarnessDelivery_platformMessageId_key")).toHaveLength(1);
     expect(indexes.filter((name) => name === "HarnessDelivery_taskId_idx")).toHaveLength(1);
+  });
+});
+
+describe("0018 gateway delivery presentation migration", () => {
+  it("adds the persisted presentation payload idempotently", async () => {
+    const prisma = await database();
+    await up(prisma);
+
+    await addGatewayPresentation(prisma);
+    await addGatewayPresentation(prisma);
+
+    const columns = await prisma.$queryRawUnsafe<Array<{ name: string }>>(`PRAGMA table_info("GatewayDelivery")`);
+    expect(columns.map((column) => column.name)).toContain("presentation");
   });
 });

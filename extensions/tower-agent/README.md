@@ -81,14 +81,16 @@ Workbench terminal; see troubleshooting below.
 
 ## Routing Contract
 
-Every addressed inbound message is classified before work begins:
+Every addressed inbound message, including `DIRECT`, is persisted and
+classified through `route_gateway_message` before work begins. "Do not query
+Tower" never bypasses this routing call.
 
 | Intent | Owner | Enters Workbench | Creates a user task | Reply and persistence |
 |---|---|---:|---:|---|
 | `DIRECT` | OpenClaw, or a configured external operator | No | No | Ordinary gateway reply. Tower deduplicates the inbound route, but does not claim a complete durable history of ordinary chat replies. |
 | `TOWER` | `o-tower` through Tower MCP | No | Not by routing itself | Query or simple mutation runs in the gateway. Confirm a mutation only after its MCP call succeeds. |
-| `PROJECT_DISCUSSION` | A separate project-bound Assistant session | No | No | Reply is persisted as an idempotent `GatewayDelivery` and sent through OpenClaw. The same thread/project discussion binding is reused. |
-| `PROJECT_WORK` | The project's resident Workbench | Yes, through a durable event | Only after the Workbench successfully calls `create_task` | Queue acknowledgement first; a separate task-created confirmation follows, then a reviewed final result. |
+| `PROJECT_DISCUSSION` | A separate project-bound Assistant session | No | No | Each turn is stored in `AssistantMessage`; a native-card reply is persisted and anchored to the current inbound message. |
+| `PROJECT_WORK` | The project's resident Workbench | Yes, through a durable event | Only after the Workbench successfully calls `create_task` | Native queue card first; a real-data task-created card follows, then a reviewed final-result card. |
 
 Project discussion never creates a WorkItem, child task, or Workbench queue
 event. Project work is the only route that enters the durable Workbench event
@@ -98,6 +100,14 @@ user task.
 For project work, **queued is not created**. The initial result only means Tower
 persisted the inbound request and its `GATEWAY_WORK_REQUEST`. A task exists only
 after the separate confirmation contains its real Tower task id.
+
+Recent discussion context uses the configurable `assistant.historyTurns`
+window and reports truncation. An explicit "结束 Tower 讨论" maps to
+`sessionAction=CLOSE`; starting fresh or switching projects maps to
+`sessionAction=NEW`. OpenClaw `/new` reloads only its own conversation and does
+not close Tower history. An old card reply can restore its persisted discussion.
+Explicit new-task/start-new-work requests set `startNewWork=true` and override
+an old task-card binding; ordinary follow-ups still route to that task.
 
 ## Feishu Acceptance Script
 
@@ -125,14 +135,15 @@ for the original message are idempotent.
 
 ## Reliability And Recovery
 
-Tower persists project-discussion replies, task-created confirmations, and final
-results before sending them through OpenClaw. Each has a stable semantic
+Tower persists queue acknowledgements, project-discussion replies, task-created
+confirmations, and final results before sending them through OpenClaw. Each has a stable semantic
 deduplication key. Failed sends are retried, stale send claims are recovered,
-and successful deliveries are not sent twice.
+and successful deliveries are not sent twice. Native-card payloads and current
+message reply anchors stay identical on retry.
 
 Tower also persists project-work inbound state and Workbench events. On Tower
-startup it reopens Workbenches for queued requests and retries pending or failed
-deliveries. Therefore, after a Tower restart, wait for recovery instead of
+startup it reopens Workbenches for queued requests, restores a safe drain
+boundary, and retries pending or failed deliveries. Therefore, after a Tower restart, wait for recovery instead of
 submitting the same request again.
 
 ## Troubleshooting
@@ -146,10 +157,9 @@ submitting the same request again.
 - Open Tower **Missions** or the project Workbench and check whether its resident
   terminal is running. A busy Workbench receives the event only at a completed
   turn boundary.
-- A long-running Workbench started before the Tower update may not have the new
-  system directive or hooks. Stop that old execution and use its normal
-  Continue/Retry flow to start a fresh Workbench session. The persisted event is
-  then drained at a safe boundary; do not recreate the work request.
+- Tower restart recovery starts or continues the Workbench and opens the safe
+  drain boundary automatically. A queued request should not require a manual
+  Stop/Continue cycle; inspect recovery logs if it remains pending.
 
 ### Old Profile Or Skill Is Still Active
 

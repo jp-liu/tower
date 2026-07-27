@@ -13,9 +13,17 @@ import { readConfigValue } from "@/lib/config-reader";
 import { ensureTowerTask } from "@/lib/instrumentation-tasks";
 import { logger } from "@/lib/logger";
 import { scoreProject } from "@/lib/project-score";
-import { enqueueWorkbenchEvent } from "@/lib/workbench/coordinator";
+import { enqueueWorkbenchEvent, openWorkbenchDrainBoundary } from "@/lib/workbench/coordinator";
 import { extractTowerTaskId, findHarnessDeliveryByPlatformMessageId } from "./delivery-map";
 import { parseGatewaySendOutput } from "./gateway-output";
+import {
+  discussionPresentation,
+  extractTaskGoal,
+  finalResultPresentation,
+  queuedPresentation,
+  taskCreatedPresentation,
+  type GatewayMessagePresentation,
+} from "./gateway-presentation";
 import { sendViaHarnessGateway, type HarnessGatewaySendResult } from "./gateway-send";
 
 export const GATEWAY_CHANNEL_BINDINGS_KEY = "harness.channelBindings";
@@ -23,6 +31,7 @@ export const GATEWAY_RECENT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const INBOUND_CLAIM_LEASE_MS = 60_000;
 const DELIVERY_RETRY_BASE_MS = 5_000;
 const DELIVERY_RETRY_MAX_MS = 5 * 60_000;
+const DISCUSSION_HISTORY_CHAR_LIMIT = 12_000;
 const log = logger.create("gateway-router");
 
 export interface GatewayChannelBinding {
@@ -48,6 +57,8 @@ export interface GatewayInboundRequest {
   project?: string;
   intent: GatewayRequestKind;
   content: string;
+  sessionAction?: "CONTINUE" | "NEW" | "CLOSE";
+  startNewWork?: boolean;
 }
 
 export interface GatewayProjectCandidate {
@@ -99,6 +110,10 @@ export type GatewayRouteResult =
       resolution: string;
       deduped: boolean;
       instructions: string;
+      history: {
+        messages: Array<{ role: "USER" | "ASSISTANT"; text: string }>;
+        truncated: boolean;
+      };
     }
   | {
       mode: "project_work";
@@ -109,7 +124,15 @@ export type GatewayRouteResult =
       resolution: string;
       deduped: boolean;
       queued: true;
+      acknowledgement: { ok: boolean; deduped?: boolean; error?: string };
       workbench: { mode: string; executionId: string | null } | { error: string };
+      instructions: string;
+    }
+  | {
+      mode: "discussion_closed";
+      inboundId: string;
+      closedSessionIds: string[];
+      deduped: boolean;
       instructions: string;
     };
 
@@ -193,6 +216,13 @@ function sessionBindingKey(input: GatewayInboundRequest, kind: GatewaySessionKin
     kind,
     projectId,
   ].join("\n"))}`;
+}
+
+function explicitlyStartsNewWork(input: GatewayInboundRequest): boolean {
+  if (input.startNewWork) return true;
+  if (input.intent !== "PROJECT_WORK") return false;
+  return /(?:创建|新建).{0,8}新任务|开始.{0,8}新工作|create.{0,16}new task|start.{0,16}new work/iu
+    .test(input.content);
 }
 
 async function loadProjects(where?: Prisma.ProjectWhereInput): Promise<GatewayProject[]> {
@@ -292,7 +322,6 @@ async function resolveBoundSession(input: GatewayInboundRequest) {
     gateway: normalize(input.gateway),
     platform: normalize(input.platform),
     chatId: normalizeChatId(input.chatId),
-    status: "ACTIVE" as const,
   };
   if (anchors.length === 0) {
     const senderId = input.senderId?.trim();
@@ -300,6 +329,7 @@ async function resolveBoundSession(input: GatewayInboundRequest) {
     return db.gatewaySession.findFirst({
       where: {
         ...base,
+        status: "ACTIVE",
         senderId,
         kind: input.intent === "PROJECT_DISCUSSION" ? "DISCUSSION" : "WORKBENCH",
         lastActivityAt: { gte: new Date(Date.now() - GATEWAY_RECENT_SESSION_TTL_MS) },
@@ -311,6 +341,7 @@ async function resolveBoundSession(input: GatewayInboundRequest) {
   return db.gatewaySession.findFirst({
     where: {
       ...base,
+      status: { in: ["ACTIVE", "CLOSED"] },
       OR: [
         { threadId: { in: anchors } },
         { rootMessageId: { in: anchors } },
@@ -324,11 +355,12 @@ async function resolveBoundSession(input: GatewayInboundRequest) {
 async function resolveProject(
   input: GatewayInboundRequest,
   binding: GatewayChannelBinding | null,
+  options: { ignoreSessionBindings?: boolean } = {},
 ): Promise<
   | { project: GatewayProject; resolution: string }
   | { candidates: GatewayProjectCandidate[]; reason: "ambiguous" | "not_found" | "not_allowed" }
 > {
-  if (input.replyToMessageId?.trim()) {
+  if (!options.ignoreSessionBindings && input.replyToMessageId?.trim()) {
     const delivery = await db.gatewayDelivery.findFirst({
       where: { platformMessageId: input.replyToMessageId.trim(), state: "DELIVERED" },
       orderBy: { deliveredAt: "desc" },
@@ -351,7 +383,7 @@ async function resolveProject(
     }
   }
 
-  const boundSession = await resolveBoundSession(input);
+  const boundSession = options.ignoreSessionBindings ? null : await resolveBoundSession(input);
   if (boundSession) {
     if (!projectAllowed(boundSession.projectId, binding, boundSession.project.workspaceId)) {
       return { candidates: [], reason: "not_allowed" };
@@ -552,6 +584,195 @@ async function ensureSession(
   }
 }
 
+function discussionClientTurnId(inboundId: string): string {
+  return `gateway_${inboundId}`;
+}
+
+async function discussionHistoryTurns(): Promise<number> {
+  const configured = await readConfigValue<number>("assistant.historyTurns", 20);
+  if (!Number.isFinite(configured)) return 20;
+  return Math.min(100, Math.max(1, Math.trunc(configured)));
+}
+
+async function closeDiscussionSessions(
+  input: GatewayInboundRequest,
+  rotateBindingKey = false,
+): Promise<string[]> {
+  const anchors = [input.threadId, input.rootMessageId]
+    .map((value) => value?.trim())
+    .filter(Boolean) as string[];
+  const repliedDelivery = input.replyToMessageId?.trim()
+    ? await db.gatewayDelivery.findFirst({
+        where: { platformMessageId: input.replyToMessageId.trim(), state: "DELIVERED" },
+        select: { sessionId: true },
+      })
+    : null;
+  const rows = await db.gatewaySession.findMany({
+    where: {
+      gateway: normalize(input.gateway),
+      platform: normalize(input.platform),
+      chatId: normalizeChatId(input.chatId),
+      kind: "DISCUSSION",
+      status: "ACTIVE",
+      ...(repliedDelivery
+        ? { id: repliedDelivery.sessionId }
+        : anchors.length > 0
+          ? { OR: [{ threadId: { in: anchors } }, { rootMessageId: { in: anchors } }] }
+          : input.senderId?.trim()
+            ? { senderId: input.senderId.trim() }
+            : { id: "__missing_discussion_binding__" }),
+    },
+    select: { id: true, bindingKey: true },
+  });
+  if (rows.length === 0) return [];
+  await db.$transaction(rows.map((row) => db.gatewaySession.update({
+    where: { id: row.id },
+    data: {
+      status: "CLOSED",
+      ...(rotateBindingKey ? { bindingKey: `${row.bindingKey}:closed:${row.id}` } : {}),
+    },
+  })));
+  return rows.map((row) => row.id);
+}
+
+async function beginDiscussionTurn(sessionId: string, inboundId: string, content: string): Promise<void> {
+  const clientTurnId = discussionClientTurnId(inboundId);
+  await db.$transaction(async (transaction) => {
+    const existing = await transaction.assistantTurn.findUnique({
+      where: { sessionId_clientTurnId: { sessionId, clientTurnId } },
+      select: { id: true },
+    });
+    if (existing) return;
+    const last = await transaction.assistantMessage.findFirst({
+      where: { sessionId },
+      orderBy: { sequence: "desc" },
+      select: { sequence: true },
+    });
+    const turnId = `at_${randomUUID()}`;
+    const userMessageId = `am_${randomUUID()}`;
+    const assistantMessageId = `am_${randomUUID()}`;
+    const sequence = (last?.sequence ?? -1) + 1;
+    await transaction.assistantTurn.create({
+      data: { id: turnId, sessionId, clientTurnId, userMessageId, assistantMessageId },
+    });
+    await transaction.assistantMessage.createMany({ data: [
+      {
+        id: userMessageId,
+        sessionId,
+        turnId,
+        sequence,
+        role: "USER",
+        partsJson: JSON.stringify([{ type: "text", text: content.trim() }]),
+        status: "COMPLETE",
+      },
+      {
+        id: assistantMessageId,
+        sessionId,
+        turnId,
+        sequence: sequence + 1,
+        role: "ASSISTANT",
+        partsJson: "[]",
+        status: "STREAMING",
+      },
+    ] });
+    await transaction.assistantSession.update({
+      where: { id: sessionId },
+      data: { lastMessageAt: new Date() },
+    });
+  });
+}
+
+function textFromParts(partsJson: string): string {
+  try {
+    const parts = JSON.parse(partsJson) as Array<{ type?: string; text?: string }>;
+    return parts.filter((part) => part.type === "text" && typeof part.text === "string")
+      .map((part) => part.text!.trim())
+      .filter(Boolean)
+      .join("\n");
+  } catch {
+    return "";
+  }
+}
+
+async function loadDiscussionHistory(sessionId: string): Promise<{
+  messages: Array<{ role: "USER" | "ASSISTANT"; text: string }>;
+  truncated: boolean;
+}> {
+  const keepTurns = await discussionHistoryTurns();
+  const turns = await db.assistantTurn.findMany({
+    where: { sessionId, status: "COMPLETE" },
+    orderBy: [{ completedAt: "desc" }, { startedAt: "desc" }],
+    take: keepTurns + 1,
+    include: { messages: { orderBy: { sequence: "asc" } } },
+  });
+  let truncated = turns.length > keepTurns;
+  const messages = turns.slice(0, keepTurns).reverse().flatMap((turn) =>
+    turn.messages.flatMap((message) => {
+      if (message.role !== "USER" && message.role !== "ASSISTANT") return [];
+      const text = textFromParts(message.partsJson);
+      return text ? [{ role: message.role, text }] : [];
+    }),
+  );
+  let chars = messages.reduce((sum, message) => sum + message.text.length, 0);
+  while (messages.length > 0 && chars > DISCUSSION_HISTORY_CHAR_LIMIT) {
+    chars -= messages.shift()!.text.length;
+    truncated = true;
+  }
+  return { messages, truncated };
+}
+
+async function completeDiscussionTurn(inboundId: string, response: string): Promise<string> {
+  const inbound = await db.gatewayInbound.findUnique({
+    where: { id: inboundId },
+    select: { session: { select: { assistantSessionId: true } } },
+  });
+  const sessionId = inbound?.session?.assistantSessionId;
+  if (!sessionId) throw new Error("Gateway discussion Assistant session not found");
+  const requested = response.trim();
+  const canonical = await db.$transaction(async (transaction) => {
+    const turn = await transaction.assistantTurn.findUnique({
+      where: { sessionId_clientTurnId: { sessionId, clientTurnId: discussionClientTurnId(inboundId) } },
+      include: { messages: { where: { role: "ASSISTANT" }, take: 1 } },
+    });
+    if (!turn?.messages[0]) throw new Error("Gateway discussion turn not found");
+    const message = turn.messages[0];
+    if (turn.status === "COMPLETE") return textFromParts(message.partsJson) || requested;
+    const claimed = await transaction.assistantTurn.updateMany({
+      // Assistant startup reconciliation may mark externally generated gateway
+      // turns INTERRUPTED because they do not occupy its process-local active map.
+      // Any non-complete gateway turn is still recoverable by this durable callback.
+      where: { id: turn.id, status: { not: "COMPLETE" } },
+      data: { status: "COMPLETE", completedAt: new Date() },
+    });
+    if (claimed.count === 0) {
+      const settled = await transaction.assistantMessage.findUniqueOrThrow({ where: { id: message.id } });
+      return textFromParts(settled.partsJson) || requested;
+    }
+    await transaction.assistantMessage.update({
+      where: { id: message.id },
+      data: { partsJson: JSON.stringify([{ type: "text", text: requested }]), status: "COMPLETE" },
+    });
+    await transaction.assistantSession.update({ where: { id: sessionId }, data: { lastMessageAt: new Date() } });
+    return requested;
+  });
+  const expired = await db.assistantTurn.findMany({
+    where: { sessionId, status: { not: "STREAMING" } },
+    orderBy: [{ completedAt: "desc" }, { startedAt: "desc" }],
+    // Keep a bounded Tower-owned audit history while the configurable window
+    // below controls how many recent turns are restored into each agent turn.
+    skip: 100,
+    select: { id: true },
+  });
+  if (expired.length > 0) {
+    const ids = expired.map((item) => item.id);
+    await db.$transaction([
+      db.assistantMessage.deleteMany({ where: { sessionId, turnId: { in: ids } } }),
+      db.assistantTurn.deleteMany({ where: { sessionId, id: { in: ids }, status: { not: "STREAMING" } } }),
+    ]);
+  }
+  return canonical;
+}
+
 async function defaultEnsureWorkbench(taskId: string) {
   const result = await continueOrStartTaskExecution(taskId);
   return { mode: result.mode, executionId: result.executionId };
@@ -575,6 +796,7 @@ function workbenchPrompt(input: GatewayInboundRequest, inboundId: string, projec
 export async function routeGatewayInbound(
   input: GatewayInboundRequest,
   ensureWorkbench: EnsureWorkbench = defaultEnsureWorkbench,
+  sender: DeliverySender = sendViaHarnessGateway,
 ): Promise<GatewayRouteResult> {
   const created = await createInbound(input);
   if (created.deduped && !created.inbound.response) {
@@ -643,7 +865,25 @@ export async function routeGatewayInbound(
   }
 
   const binding = await channelBinding(input);
-  const reply = await resolveTaskBinding(input);
+  if (input.sessionAction === "CLOSE") {
+    const closedSessionIds = await closeDiscussionSessions(input);
+    const result: GatewayRouteResult = {
+      mode: "discussion_closed",
+      inboundId: created.inbound.id,
+      closedSessionIds,
+      deduped: created.deduped,
+      instructions: closedSessionIds.length > 0
+        ? "The Tower discussion binding is closed. Confirm closure without continuing the old project context."
+        : "No active Tower discussion binding matched this message. Confirm that there was nothing to close.",
+    };
+    await saveRoute(created.inbound.id, result, "PROCESSED");
+    return result;
+  }
+  if (input.sessionAction === "NEW") await closeDiscussionSessions(input, true);
+
+  const reply = explicitlyStartsNewWork(input) || input.sessionAction === "NEW"
+    ? null
+    : await resolveTaskBinding(input);
   if (reply) {
     if (!projectAllowed(reply.project.projectId, binding, reply.project.workspaceId)) {
       const denied: GatewayRouteResult = {
@@ -681,7 +921,9 @@ export async function routeGatewayInbound(
     return result;
   }
 
-  const resolved = await resolveProject(input, binding);
+  const resolved = await resolveProject(input, binding, {
+    ignoreSessionBindings: input.sessionAction === "NEW",
+  });
   if ("candidates" in resolved) {
     const result: GatewayRouteResult = {
       mode: "needs_project_selection",
@@ -696,6 +938,8 @@ export async function routeGatewayInbound(
 
   if (input.intent === "PROJECT_DISCUSSION") {
     const session = await ensureSession(input, "DISCUSSION", resolved.project);
+    await beginDiscussionTurn(session.assistantSessionId!, created.inbound.id, input.content);
+    const history = await loadDiscussionHistory(session.assistantSessionId!);
     const result: GatewayRouteResult = {
       mode: "project_discussion",
       inboundId: created.inbound.id,
@@ -704,7 +948,8 @@ export async function routeGatewayInbound(
       project: candidate(resolved.project),
       resolution: resolved.resolution,
       deduped: created.deduped,
-      instructions: `You are discussing with the ${resolved.project.name} project Workbench context. Use projectId=${resolved.project.projectId} for ask_project_knowledge and other scoped Tower tools. Do not answer as an unbound general Tower assistant. Prepare the project-aware response, then call complete_gateway_discussion with inboundId=${created.inbound.id}; that tool replies idempotently to the original external thread.`,
+      history,
+      instructions: `You are discussing the ${resolved.project.name} project with Tower-owned history. Use projectId=${resolved.project.projectId} for ask_project_knowledge and other scoped Tower tools. Use the returned history messages as recent context${history.truncated ? "; earlier turns were truncated" : ""}. Do not answer as an unbound general Tower assistant. Prepare the project-aware response, then call complete_gateway_discussion with inboundId=${created.inbound.id}; that tool persists the assistant turn, sends one idempotent native card replying to the current inbound message, and releases this turn's execution resources.`,
     };
     await db.gatewayInbound.update({ where: { id: created.inbound.id }, data: { sessionId: session.id } });
     await saveRoute(created.inbound.id, result, "PROCESSING");
@@ -752,8 +997,15 @@ export async function routeGatewayInbound(
     resolution: resolved.resolution,
     deduped: created.deduped,
     queued: true,
+    acknowledgement: await deliverGatewayResponse({
+      inboundId: created.inbound.id,
+      kind: "QUEUED_ACK",
+      content: `Queued for ${resolved.project.name} Workbench. No task has been created yet.`,
+      presentation: queuedPresentation({ projectName: resolved.project.name, inboundId: created.inbound.id }),
+      dedupKey: `gateway-queued:${created.inbound.id}`,
+    }, sender),
     workbench,
-    instructions: `Queued for the ${resolved.project.name} Workbench. Do not say a task was created yet. Tower will send a separate confirmation only after create_task succeeds, then a final result after Workbench review.`,
+    instructions: `Tower already sent an idempotent native card saying the request is queued for the ${resolved.project.name} Workbench. Do not restate it and do not say a task was created yet. Tower will send a separate confirmation only after create_task succeeds, then a final result after Workbench review.`,
   };
   await saveRoute(created.inbound.id, result, "QUEUED");
   return result;
@@ -782,9 +1034,15 @@ async function createOrGetDelivery(input: {
   inboundId: string;
   kind: GatewayDeliveryKind;
   content: string;
+  presentation?: GatewayMessagePresentation;
 }) {
   try {
-    return await db.gatewayDelivery.create({ data: input });
+    return await db.gatewayDelivery.create({
+      data: {
+        ...input,
+        presentation: input.presentation ? JSON.stringify(input.presentation) : null,
+      },
+    });
   } catch (error) {
     if (!isUniqueConstraintError(error)) throw error;
     return db.gatewayDelivery.findUniqueOrThrow({ where: { dedupKey: input.dedupKey } });
@@ -796,6 +1054,7 @@ export async function deliverGatewayResponse(
     inboundId: string;
     kind: GatewayDeliveryKind;
     content: string;
+    presentation?: GatewayMessagePresentation;
     dedupKey: string;
   },
   sender: DeliverySender = sendViaHarnessGateway,
@@ -812,6 +1071,7 @@ export async function deliverGatewayResponse(
     inboundId: inbound.id,
     kind: input.kind,
     content: input.content,
+    presentation: input.presentation,
   });
   if (delivery.state === "DELIVERED") return { ok: true, deduped: true, deliveryId: delivery.id };
 
@@ -844,9 +1104,10 @@ export async function deliverGatewayResponse(
       gateway: inbound.session.gateway,
       downstream: inbound.session.platform,
       dest: inbound.session.chatId,
-      message: input.content,
+      message: current.content,
+      presentation: current.presentation ? JSON.parse(current.presentation) : undefined,
       scope: "work",
-      replyToMessageId: inbound.rootMessageId || inbound.platformMessageId,
+      replyToMessageId: inbound.platformMessageId,
       threadId: inbound.threadId,
     });
   } catch (error) {
@@ -885,13 +1146,20 @@ export async function completeGatewayDiscussion(
   response: string,
   sender: DeliverySender = sendViaHarnessGateway,
 ) {
+  const canonical = await completeDiscussionTurn(inboundId, response);
+  const inbound = await db.gatewayInbound.findUnique({
+    where: { id: inboundId },
+    select: { session: { select: { project: { select: { name: true } } } } },
+  });
+  if (!inbound?.session) throw new Error("Gateway discussion session not found");
   const result = await deliverGatewayResponse({
     inboundId,
     kind: "DISCUSSION_REPLY",
-    content: response.trim(),
+    content: canonical,
+    presentation: discussionPresentation(inbound.session.project.name, canonical),
     dedupKey: `gateway-discussion:${inboundId}`,
   }, sender);
-  if (result.ok) await completeGatewayInbound(inboundId, { mode: "project_discussion", delivered: true, response });
+  if (result.ok) await completeGatewayInbound(inboundId, { mode: "project_discussion", delivered: true, response: canonical });
   return result;
 }
 
@@ -910,7 +1178,24 @@ export async function confirmGatewayTaskCreated(
   if (!reviewer || reviewer !== inbound.session.workbenchTaskId) {
     throw new Error("Task creation must be confirmed by the bound project Workbench");
   }
-  const task = await db.task.findUnique({ where: { id: taskId }, select: { id: true, title: true, projectId: true } });
+  const task = await db.task.findUnique({
+    where: { id: taskId },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      priority: true,
+      status: true,
+      baseBranch: true,
+      projectId: true,
+      project: { select: { name: true, workspace: { select: { name: true } } } },
+      executions: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { status: true, branch: true, worktreeBranch: true },
+      },
+    },
+  });
   if (!task || task.projectId !== inbound.session.projectId) throw new Error("Created task does not belong to the gateway project");
   if (inbound.createdTaskId && inbound.createdTaskId !== task.id) {
     throw new Error("Gateway request already confirmed a different task");
@@ -919,12 +1204,31 @@ export async function confirmGatewayTaskCreated(
   const content = [
     `Task created: ${task.title}`,
     `Project: ${inbound.session.project.name}`,
+    `Priority: ${task.priority}`,
+    `Status: ${task.status}`,
+    `Workspace: ${task.project.workspace.name}`,
+    `Branch: ${task.executions[0]?.worktreeBranch || task.executions[0]?.branch || task.baseBranch || "none"}`,
+    `Goal: ${extractTaskGoal(task.description)}`,
+    `Auto-started: ${task.executions.length > 0 ? `yes (${task.executions[0]!.status})` : "no"}`,
     `Tower task: ${task.id}`,
   ].join("\n");
+  const execution = task.executions[0];
   return deliverGatewayResponse({
     inboundId,
     kind: "TASK_CREATED",
     content,
+    presentation: taskCreatedPresentation({
+      taskId: task.id,
+      title: task.title,
+      projectName: task.project.name,
+      priority: task.priority,
+      status: task.status,
+      workspaceName: task.project.workspace.name,
+      branch: execution?.worktreeBranch || execution?.branch || task.baseBranch || "未创建分支",
+      goal: extractTaskGoal(task.description),
+      autoStarted: Boolean(execution),
+      executionStatus: execution?.status,
+    }),
     dedupKey: `gateway-task-created:${inboundId}:${task.id}`,
   }, sender);
 }
@@ -988,6 +1292,14 @@ export async function completeGatewayWork(input: {
     inboundId: input.inboundId,
     kind: "FINAL_RESULT",
     content,
+    presentation: finalResultPresentation({
+      taskId: task.id,
+      title: task.title,
+      summary,
+      commitId,
+      commitMessage: commit.message,
+      branch,
+    }),
     dedupKey: `gateway-final:${input.inboundId}:${task.id}`,
   }, sender);
   if (result.ok) {
@@ -1054,6 +1366,7 @@ export async function retryGatewayDeliveries(
 export async function recoverQueuedGatewayWork(
   ensureWorkbench: EnsureWorkbench = defaultEnsureWorkbench,
   limit = 100,
+  sender: DeliverySender = sendViaHarnessGateway,
 ) {
   const rows = await db.gatewayInbound.findMany({
     where: { intent: "PROJECT_WORK", state: { in: ["QUEUED", "PROCESSING"] }, sessionId: { not: null } },
@@ -1105,7 +1418,19 @@ export async function recoverQueuedGatewayWork(
       if (event.event.state === "CONSUMED" && inbound.state === "QUEUED") {
         await db.gatewayInbound.update({ where: { id: inbound.id }, data: { state: "PROCESSING" } });
       }
-      await ensureWorkbench(taskId);
+      await deliverGatewayResponse({
+        inboundId: inbound.id,
+        kind: "QUEUED_ACK",
+        content: `Queued for ${project.name} Workbench. No task has been created yet.`,
+        presentation: queuedPresentation({ projectName: project.name, inboundId: inbound.id }),
+        dedupKey: `gateway-queued:${inbound.id}`,
+      }, sender);
+      const resumed = await ensureWorkbench(taskId);
+      if (resumed.mode !== "already_running") {
+        // A server restart loses the process-local boundary set. A newly resumed
+        // PTY starts at a safe empty-input boundary, so re-open it once here.
+        openWorkbenchDrainBoundary(taskId);
+      }
       started++;
       await db.gatewayInbound.update({ where: { id: inbound.id }, data: { lastError: null } });
     } catch (error) {
