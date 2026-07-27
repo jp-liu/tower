@@ -79,10 +79,11 @@ not use this recency fallback.
 
 Duplicate inbound callbacks never replay an actionable route. `QUEUED` or live
 `PROCESSING` rows return `in_progress` with `noOp: true`; `PROCESSED` rows return
-`already_processed` with `noOp: true`. Only a stale claim for a route that is
-safe to retry (task relay or discussion generation) can return its original
-action again. Durable Workbench work remains a no-op and is recovered through
-the coordinator path.
+`already_processed` with `noOp: true`. Only stale project-discussion generation
+can return its original action again. Task replies are never lease-replayed:
+terminal relay has no persistent injection checkpoint, so every duplicate stays
+a no-op even after the claim lease expires. Durable Workbench work also remains
+a no-op and is recovered through the coordinator path.
 
 ## Workbench Queueing
 

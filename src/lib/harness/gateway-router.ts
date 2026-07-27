@@ -614,7 +614,7 @@ export async function routeGatewayInbound(
       };
     }
     if (created.inbound.state === "PROCESSING") {
-      const recoverable = cached.mode === "task_reply" || cached.mode === "project_discussion";
+      const recoverable = cached.mode === "project_discussion";
       const stale = Date.now() - created.inbound.updatedAt.getTime() >= INBOUND_CLAIM_LEASE_MS;
       if (!recoverable || !stale) {
         return {

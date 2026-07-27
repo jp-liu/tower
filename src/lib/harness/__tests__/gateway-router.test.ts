@@ -241,6 +241,21 @@ describe("gateway inbound routing", () => {
       originalMode: "task_reply",
     });
     expect(duplicate).not.toHaveProperty("instructions");
+
+    await db.gatewayInbound.update({
+      where: { id: first.inboundId },
+      data: { updatedAt: new Date(Date.now() - 2 * 60_000) },
+    });
+    const staleDuplicate = await routeGatewayInbound(request, vi.fn());
+    expect(staleDuplicate).toMatchObject({
+      mode: "in_progress",
+      inboundId: first.inboundId,
+      noOp: true,
+      state: "PROCESSING",
+      originalMode: "task_reply",
+    });
+    expect(staleDuplicate).not.toHaveProperty("instructions");
+    expect(staleDuplicate.mode).not.toBe("task_reply");
   });
 
   it("uses the sender's recent project before the channel default", async () => {
