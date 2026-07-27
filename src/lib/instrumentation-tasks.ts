@@ -27,11 +27,23 @@ export async function cleanupStaleExecutions() {
   }
 
   try {
-    const { recoverWorkbenchEventClaims } = await import("@/lib/workbench/coordinator");
-    const recovered = await recoverWorkbenchEventClaims();
-    if (recovered > 0) log.warn(`Recovered ${recovered} stale Workbench event claim(s)`);
+    const {
+      recoverMissingWorkbenchExecutionEvents,
+      recoverWorkbenchEventClaims,
+    } = await import("@/lib/workbench/coordinator");
+    const recoveredClaims = await recoverWorkbenchEventClaims();
+    if (recoveredClaims > 0) {
+      log.warn(`Recovered ${recoveredClaims} stale Workbench event claim(s)`);
+    }
+    const missing = await recoverMissingWorkbenchExecutionEvents();
+    if (missing.recovered > 0 || missing.failed > 0) {
+      log.warn(
+        `Workbench missing-event recovery scanned ${missing.scanned}, ` +
+        `recovered ${missing.recovered}, failed ${missing.failed}`,
+      );
+    }
   } catch (error) {
-    log.error("Workbench event claim recovery failed", error);
+    log.error("Workbench event startup recovery failed", error);
   }
 
   try {

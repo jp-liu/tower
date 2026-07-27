@@ -74,8 +74,32 @@ still wait for that boundary instead of relying on mid-turn PTY behavior.
 
 If the parent is not running, pending rows remain in SQLite. Starting or
 resuming the parent does not inject into a booting TUI; its next stop hook opens
-the natural drain boundary. Server startup recovers expired claims, so a crash
-cannot strand work in `PROCESSING`.
+the natural drain boundary. Server startup first recovers expired claims, then
+reconciles finalized child executions that have no corresponding review or
+failure event. This closes the crash window between updating `TaskExecution`
+and inserting the inbox row without coupling PTY finalization to a larger
+transaction.
+
+## Final Consistency Recovery
+
+`TaskExecution.status` and `endedAt` are the durable completion facts. The
+`0016-workbench-events-checkpoint` migration records
+`workbench.eventsEnabledAt`, using the original `0014-workbench-events`
+migration timestamp. Recovery only scans parent-owned `COMPLETED` and `FAILED`
+executions at or after that lower bound, so upgrading an existing database does
+not replay historical work.
+
+For each missing execution, recovery calls the same
+`enqueueChildExecutionResult` producer used by PTY exit. Existing stop-hook and
+completion fallback reviews satisfy a successful execution; an existing
+failure event satisfies a failed execution. The unique execution review guard
+and stable execution dedup keys make repeated startup passes safe. A missing or
+invalid checkpoint fails closed by skipping the scan and logging a warning.
+Each pass is bounded to 500 executions; subsequent starts can repeat it.
+
+PTY exit dispatch catches and logs transient enqueue failures, so an async
+`onExit` callback cannot leak a rejected promise. The execution remains in its
+terminal state and is repaired by the next startup reconciliation.
 
 ## Compatibility And Semantics
 
@@ -106,3 +130,7 @@ cannot strand work in `PROCESSING`.
   `deliver` callback without changing persistence or aggregation.
 - `recoverWorkbenchEventClaims()` releases expired processing leases during
   startup or an operator-triggered recovery pass.
+- `recoverMissingWorkbenchExecutionEvents()` reconciles post-checkpoint terminal
+  executions with the inbox. It is bounded, repeatable, and returns scan,
+  recovery, and failure counts for startup instrumentation or future gateway
+  health reporting.

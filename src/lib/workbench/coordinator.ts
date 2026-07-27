@@ -19,6 +19,8 @@ export const WORKBENCH_NORMAL_COALESCE_MS = 750;
 export const WORKBENCH_HIGH_COALESCE_MS = 100;
 export const WORKBENCH_CLAIM_LEASE_MS = 60_000;
 export const WORKBENCH_MAX_BATCH_SIZE = 50;
+export const WORKBENCH_RECOVERY_BATCH_SIZE = 500;
+export const WORKBENCH_EVENTS_ENABLED_AT_KEY = "workbench.eventsEnabledAt";
 const SUBMIT_DELAY_MS = 80;
 
 export type WorkbenchEventKind =
@@ -440,4 +442,92 @@ export async function recoverWorkbenchEventClaims(now = new Date()): Promise<num
     data: { state: "PENDING", claimToken: null, claimedAt: null },
   });
   return result.count;
+}
+
+export interface MissingWorkbenchExecutionRecoveryResult {
+  checkpoint: Date | null;
+  scanned: number;
+  recovered: number;
+  failed: number;
+  skipped: boolean;
+}
+
+function parseWorkbenchCheckpoint(value: string): Date | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (typeof parsed !== "string") return null;
+    const date = new Date(parsed);
+    return Number.isNaN(date.getTime()) ? null : date;
+  } catch {
+    return null;
+  }
+}
+
+export async function recoverMissingWorkbenchExecutionEvents(): Promise<MissingWorkbenchExecutionRecoveryResult> {
+  const config = await db.systemConfig.findUnique({
+    where: { key: WORKBENCH_EVENTS_ENABLED_AT_KEY },
+    select: { value: true },
+  });
+  const checkpoint = config ? parseWorkbenchCheckpoint(config.value) : null;
+  if (!checkpoint) {
+    log.warn("Missing or invalid Workbench event recovery checkpoint; historical scan skipped");
+    return { checkpoint: null, scanned: 0, recovered: 0, failed: 0, skipped: true };
+  }
+
+  const executions = await db.taskExecution.findMany({
+    where: {
+      endedAt: { gte: checkpoint },
+      task: { parentTaskId: { not: null } },
+      OR: [
+        {
+          status: "COMPLETED",
+          workbenchEvents: {
+            none: { kind: { in: ["CHILD_REVIEW_REQUIRED", "CHILD_DECISION_REQUIRED"] } },
+          },
+        },
+        {
+          status: "FAILED",
+          workbenchEvents: { none: { kind: "CHILD_EXECUTION_FAILED" } },
+        },
+      ],
+    },
+    orderBy: [{ endedAt: "asc" }, { createdAt: "asc" }],
+    take: WORKBENCH_RECOVERY_BATCH_SIZE,
+    select: {
+      id: true,
+      status: true,
+      exitCode: true,
+      task: { select: { id: true, title: true } },
+    },
+  });
+
+  let recovered = 0;
+  let failed = 0;
+  for (const execution of executions) {
+    try {
+      const result = await enqueueChildExecutionResult({
+        taskId: execution.task.id,
+        taskTitle: execution.task.title,
+        executionId: execution.id,
+        status: execution.status as "COMPLETED" | "FAILED",
+        exitCode: execution.exitCode ?? undefined,
+      });
+      if (result.enqueued && !result.deduped) recovered++;
+    } catch (error) {
+      failed++;
+      log.error("Failed to recover missing Workbench execution event", error, {
+        executionId: execution.id,
+        taskId: execution.task.id,
+        status: execution.status,
+      });
+    }
+  }
+
+  return {
+    checkpoint,
+    scanned: executions.length,
+    recovered,
+    failed,
+    skipped: false,
+  };
 }

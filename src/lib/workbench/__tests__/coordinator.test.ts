@@ -22,13 +22,24 @@ async function database(): Promise<PrismaClient> {
   tempDirs.push(dir);
   const client = new PrismaClient({ datasourceUrl: `file:${join(dir, "coordinator.db")}` });
   await client.$executeRawUnsafe(`PRAGMA foreign_keys=ON`);
-  await client.$executeRawUnsafe(`CREATE TABLE "Task" ("id" TEXT NOT NULL PRIMARY KEY, "parentTaskId" TEXT)`);
+  await client.$executeRawUnsafe(`CREATE TABLE "Task" ("id" TEXT NOT NULL PRIMARY KEY, "title" TEXT NOT NULL DEFAULT '', "parentTaskId" TEXT)`);
   await client.$executeRawUnsafe(`
     CREATE TABLE "TaskExecution" (
       "id" TEXT NOT NULL PRIMARY KEY,
       "taskId" TEXT NOT NULL,
       "status" TEXT NOT NULL,
+      "endedAt" DATETIME,
+      "exitCode" INTEGER,
       "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await client.$executeRawUnsafe(`
+    CREATE TABLE "SystemConfig" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "key" TEXT NOT NULL UNIQUE,
+      "value" TEXT NOT NULL,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
   await client.$executeRawUnsafe(`
@@ -44,7 +55,7 @@ async function database(): Promise<PrismaClient> {
   `);
   await up(client);
   await addExecutionReviewKey(client);
-  await client.$executeRawUnsafe(`INSERT INTO "Task" ("id", "parentTaskId") VALUES ('parent', NULL), ('child-a', 'parent'), ('child-b', 'parent'), ('child-c', 'parent')`);
+  await client.$executeRawUnsafe(`INSERT INTO "Task" ("id", "title", "parentTaskId") VALUES ('parent', 'Parent', NULL), ('child-a', 'Child A', 'parent'), ('child-b', 'Child B', 'parent'), ('child-c', 'Child C', 'parent')`);
   await client.$executeRawUnsafe(`INSERT INTO "TaskExecution" ("id", "taskId", "status") VALUES ('parent-exec', 'parent', 'RUNNING')`);
   return client;
 }
@@ -280,6 +291,104 @@ describe("Workbench durable coordinator", () => {
       executionId: "top-level-exec",
       status: "COMPLETED",
     })).resolves.toEqual({ enqueued: false });
+    expect(await prisma.workbenchEvent.count()).toBe(0);
+  });
+
+  it("recovers a completed execution whose event insert was lost before a crash", async () => {
+    const { recoverMissingWorkbenchExecutionEvents } = await import("@/lib/workbench/coordinator");
+    await prisma.systemConfig.create({
+      data: {
+        key: "workbench.eventsEnabledAt",
+        value: JSON.stringify("2026-07-27T00:00:00.000Z"),
+      },
+    });
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "TaskExecution" ("id", "taskId", "status", "endedAt") VALUES (?, ?, ?, ?)`,
+      "crash-success",
+      "child-a",
+      "COMPLETED",
+      new Date("2026-07-27T00:01:00.000Z"),
+    );
+
+    await expect(recoverMissingWorkbenchExecutionEvents()).resolves.toMatchObject({
+      scanned: 1,
+      recovered: 1,
+      failed: 0,
+      skipped: false,
+    });
+    expect(await prisma.workbenchEvent.findFirst()).toMatchObject({
+      sourceTaskId: "child-a",
+      executionId: "crash-success",
+      kind: "CHILD_REVIEW_REQUIRED",
+    });
+  });
+
+  it("does not recover executions that already have stop, fallback, or failure events", async () => {
+    const { enqueueChildExecutionResult, enqueueWorkbenchEvent, recoverMissingWorkbenchExecutionEvents } = await import("@/lib/workbench/coordinator");
+    await prisma.systemConfig.create({
+      data: {
+        key: "workbench.eventsEnabledAt",
+        value: JSON.stringify("2026-07-27T00:00:00.000Z"),
+      },
+    });
+    for (const [id, status] of [
+      ["has-stop", "COMPLETED"],
+      ["has-fallback", "COMPLETED"],
+      ["has-failure", "FAILED"],
+    ] as const) {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "TaskExecution" ("id", "taskId", "status", "endedAt") VALUES (?, 'child-a', ?, ?)`,
+        id,
+        status,
+        new Date("2026-07-27T00:01:00.000Z"),
+      );
+    }
+    await enqueueWorkbenchEvent({
+      parentTaskId: "parent",
+      sourceTaskId: "child-a",
+      executionId: "has-stop",
+      kind: "CHILD_REVIEW_REQUIRED",
+      dedupKey: "stop-existing",
+      reviewProducer: "STOP_HOOK",
+      payload: { childTaskId: "child-a", childTitle: "Child A" },
+    });
+    await enqueueChildExecutionResult({
+      taskId: "child-a", taskTitle: "Child A", executionId: "has-fallback", status: "COMPLETED",
+    });
+    await enqueueChildExecutionResult({
+      taskId: "child-a", taskTitle: "Child A", executionId: "has-failure", status: "FAILED",
+    });
+
+    await expect(recoverMissingWorkbenchExecutionEvents()).resolves.toMatchObject({
+      scanned: 0,
+      recovered: 0,
+      failed: 0,
+    });
+    expect(await prisma.workbenchEvent.count()).toBe(3);
+  });
+
+  it("does not replay historical executions that ended before the checkpoint", async () => {
+    const { recoverMissingWorkbenchExecutionEvents } = await import("@/lib/workbench/coordinator");
+    await prisma.systemConfig.create({
+      data: {
+        key: "workbench.eventsEnabledAt",
+        value: JSON.stringify("2026-07-27T00:10:00.000Z"),
+      },
+    });
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "TaskExecution" ("id", "taskId", "status", "endedAt") VALUES (?, ?, ?, ?)`,
+      "historical-success",
+      "child-a",
+      "COMPLETED",
+      new Date("2026-07-27T00:09:59.000Z"),
+    );
+
+    await expect(recoverMissingWorkbenchExecutionEvents()).resolves.toMatchObject({
+      scanned: 0,
+      recovered: 0,
+      failed: 0,
+      skipped: false,
+    });
     expect(await prisma.workbenchEvent.count()).toBe(0);
   });
 });

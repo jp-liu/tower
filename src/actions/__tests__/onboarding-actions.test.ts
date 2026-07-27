@@ -13,12 +13,13 @@ vi.mock("@/lib/db", () => ({
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 const mockLogInfo = vi.fn();
+const mockLogError = vi.fn();
 vi.mock("@/lib/logger", () => ({
   logger: {
     create: vi.fn(() => ({
       info: mockLogInfo,
       warn: vi.fn(),
-      error: vi.fn(),
+      error: mockLogError,
     })),
   },
 }));
@@ -339,6 +340,24 @@ describe("onboarding-actions", () => {
         executionId: "exec2",
         status: "FAILED",
       });
+    });
+
+    it("logs a durable enqueue failure without rejecting the PTY onExit callback", async () => {
+      mockEnqueueChildExecutionResult.mockRejectedValueOnce(new Error("database is locked"));
+      const payload: TaskCompletionPayload = {
+        taskId: "task3",
+        taskTitle: "Recoverable Task",
+        status: "COMPLETED",
+        executionId: "exec3",
+        workspaceId: "ws3",
+      };
+
+      await expect(dispatchTaskCompletionEvent(payload)).resolves.toBeUndefined();
+      expect(mockLogError).toHaveBeenCalledWith(
+        "Durable Workbench completion enqueue failed; startup recovery will retry",
+        expect.objectContaining({ message: "database is locked" }),
+        { taskId: "task3", executionId: "exec3", status: "COMPLETED" },
+      );
     });
 
     it("swallows errors silently (best-effort)", async () => {
