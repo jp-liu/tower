@@ -13,7 +13,11 @@ import { readConfigValue } from "@/lib/config-reader";
 import { ensureTowerTask } from "@/lib/instrumentation-tasks";
 import { logger } from "@/lib/logger";
 import { scoreProject } from "@/lib/project-score";
-import { enqueueWorkbenchEvent, openWorkbenchDrainBoundary } from "@/lib/workbench/coordinator";
+import {
+  enqueueWorkbenchEvent,
+  openWorkbenchDrainBoundary,
+  restoreWorkbenchDrainBoundary,
+} from "@/lib/workbench/coordinator";
 import { extractTowerTaskId, findHarnessDeliveryByPlatformMessageId } from "./delivery-map";
 import { parseGatewaySendOutput } from "./gateway-output";
 import {
@@ -1367,6 +1371,7 @@ export async function recoverQueuedGatewayWork(
   ensureWorkbench: EnsureWorkbench = defaultEnsureWorkbench,
   limit = 100,
   sender: DeliverySender = sendViaHarnessGateway,
+  restoreBoundary: (taskId: string) => boolean = restoreWorkbenchDrainBoundary,
 ) {
   const rows = await db.gatewayInbound.findMany({
     where: { intent: "PROJECT_WORK", state: { in: ["QUEUED", "PROCESSING"] }, sessionId: { not: null } },
@@ -1430,6 +1435,11 @@ export async function recoverQueuedGatewayWork(
         // A server restart loses the process-local boundary set. A newly resumed
         // PTY starts at a safe empty-input boundary, so re-open it once here.
         openWorkbenchDrainBoundary(taskId);
+      } else {
+        // `already_running` can mean either an active turn or an idle TUI whose
+        // process-local drain token was lost during a server/module restart.
+        // Restore only when the live PTY retained an authoritative Stop signal.
+        restoreBoundary(taskId);
       }
       started++;
       await db.gatewayInbound.update({ where: { id: inbound.id }, data: { lastError: null } });

@@ -113,6 +113,7 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 任务可以**被另一个任务派生**：子任务的 `parentTaskId` 指回父任务，子任务描述里带一段 `## 来源` 注明「父任务派生」。父子间不需要新造中途通道，**复用既有的 stop hook fan-out**：
 
 - 子任务**一轮结束**（stop hook）→ `POST /api/internal/hooks/stop` fan-out 到 `notify-parent`（`src/lib/derive/notify-parent.ts`）。
+- Codex 同时保留 Stop hook 与 `agent-turn-complete` notifier；两条路径使用同一个 Codex turn id 去重。回合完成即持久化父任务事件，不依赖关闭仍在复用的 PTY。
 - `notifyParentOnChildStop` 找到父任务后先按稳定 `dedupKey` 写入 `WorkbenchEvent`；父任务没运行时事件仍保留，不再丢弃。
 - 父任务自己的 stop hook 是安全 drain 边界：同一父任务短时间内的普通完成、待决策和失败事件聚合为一个 review batch，并持久化成 `TaskMessage(SYSTEM)` 后才写入 PTY。投递失败会回到 `PENDING`，过期 claim 可在启动时恢复。
 - 所有 provider 的 execution completion 都走统一 fallback：FAILED 始终产生高优先级事件；COMPLETED 仅在该 execution 没有 stop-hook review/decision 时补一个普通 review。两类 producer 通过唯一 `executionReviewKey` 原子竞争，避免重复。

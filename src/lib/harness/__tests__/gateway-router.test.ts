@@ -5,6 +5,7 @@ import {
   hasWorkbenchDrainBoundary,
   resetWorkbenchDrainBoundariesForTests,
 } from "@/lib/workbench/boundary";
+import { openWorkbenchDrainBoundary } from "@/lib/workbench/coordinator";
 import {
   GATEWAY_CHANNEL_BINDINGS_KEY,
   GATEWAY_RECENT_SESSION_TTL_MS,
@@ -624,6 +625,56 @@ describe("gateway inbound routing", () => {
         dedupKey: `gateway-work:${routed.inboundId}`,
       },
     })).toMatchObject({ kind: "GATEWAY_WORK_REQUEST", state: "PENDING" });
+  });
+
+  it("restores a lost boundary for an already-running idle Workbench", async () => {
+    const routed = await routeGatewayInbound(
+      inbound({ project: alphaId, intent: "PROJECT_WORK", content: "Recover after Tower restart" }),
+      vi.fn(async () => ({ mode: "already_running", executionId: "live-workbench" })),
+      successfulSender("om_restart_queue_ack"),
+    );
+    expect(routed.mode).toBe("project_work");
+    if (routed.mode !== "project_work") return;
+
+    resetWorkbenchDrainBoundariesForTests();
+    const ensure = vi.fn(async () => ({ mode: "already_running", executionId: "live-workbench" }));
+    const restore = vi.fn((taskId: string) => {
+      openWorkbenchDrainBoundary(taskId);
+      return true;
+    });
+
+    await expect(recoverQueuedGatewayWork(
+      ensure,
+      100,
+      successfulSender("om_restart_retry_ack"),
+      restore,
+    )).resolves.toEqual({ scanned: 1, started: 1, failed: 0 });
+    expect(restore).toHaveBeenCalledOnce();
+    expect(restore).toHaveBeenCalledWith(routed.workbenchTaskId);
+    expect(hasWorkbenchDrainBoundary(routed.workbenchTaskId)).toBe(true);
+  });
+
+  it("does not restore a boundary while an already-running Workbench is busy", async () => {
+    const routed = await routeGatewayInbound(
+      inbound({ project: alphaId, intent: "PROJECT_WORK", content: "Queue while the Workbench is busy" }),
+      vi.fn(async () => ({ mode: "already_running", executionId: "busy-workbench" })),
+      successfulSender("om_busy_queue_ack"),
+    );
+    expect(routed.mode).toBe("project_work");
+    if (routed.mode !== "project_work") return;
+
+    resetWorkbenchDrainBoundariesForTests();
+    const restore = vi.fn(() => false);
+    await expect(recoverQueuedGatewayWork(
+      vi.fn(async () => ({ mode: "already_running", executionId: "busy-workbench" })),
+      100,
+      successfulSender("om_busy_retry_ack"),
+      restore,
+    )).resolves.toEqual({ scanned: 1, started: 1, failed: 0 });
+    expect(restore).toHaveBeenCalledWith(routed.workbenchTaskId);
+    expect(hasWorkbenchDrainBoundary(routed.workbenchTaskId)).toBe(false);
+    expect(await db.workbenchEvent.findFirst({ where: { dedupKey: `gateway-work:${routed.inboundId}` } }))
+      .toMatchObject({ state: "PENDING" });
   });
 });
 

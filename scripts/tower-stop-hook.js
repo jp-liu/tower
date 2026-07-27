@@ -61,6 +61,12 @@ function extractLastAssistant(transcriptPath) {
   return { text: "", eventId: "" };
 }
 
+function resolveTurnEventId(data, transcriptEventId) {
+  return typeof data?.turn_id === "string" && data.turn_id.trim()
+    ? data.turn_id.trim()
+    : transcriptEventId;
+}
+
 function main() {
   // Always drain stdin first — Claude Code writes the hook payload there
   // and if we exit before reading it, Windows libuv can crash the parent
@@ -96,7 +102,8 @@ function main() {
     try { data = JSON.parse(input); } catch { process.exit(0); }
 
     const sessionId = data.session_id || "";
-    const { text: lastReply, eventId } = extractLastAssistant(data.transcript_path);
+    const { text: lastReply, eventId: transcriptEventId } = extractLastAssistant(data.transcript_path);
+    const eventId = resolveTurnEventId(data, transcriptEventId);
 
     // POST to Tower
     const url = new URL("/api/internal/hooks/stop", apiUrl);
@@ -124,4 +131,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { extractLastAssistant };
+module.exports = { extractLastAssistant, resolveTurnEventId };

@@ -388,32 +388,36 @@ export class CodexCliAdapter implements CliAdapter {
 
       if (managedOnlyPolicyPath) {
         if (this.hasManagedTowerHooks(managedOnlyPolicyPath)) {
-          this.removeCodexNotifyFallback();
+          this.ensureCodexTurnNotifier();
           return {
             ok: true,
             method: "file",
-            detail: `${managedOnlyPolicyPath} (managed Tower hooks active)`,
+            detail: `${managedOnlyPolicyPath} (managed Tower hooks and turn-complete notifier active)`,
           };
         }
 
         // `--dangerously-bypass-hook-trust` cannot override managed-only source
-        // filtering. Keep notify only as the completion fallback for this
-        // enterprise-policy case.
-        this.ensureCodexNotifyFallback();
+        // filtering. The notifier below is also required when managed hooks do
+        // run: it is an independent, idempotent Codex turn-complete producer.
+        this.ensureCodexTurnNotifier();
         return {
           ok: true,
           method: "file",
           detail:
-            `${this.getHooksPath()} (turn-complete notify fallback active; ` +
+            `${this.getHooksPath()} (turn-complete notifier active; ` +
             `managed hooks policy: ${managedOnlyPolicyPath})`,
         };
       }
 
-      // Tower-launched Codex sessions pass --dangerously-bypass-hook-trust, so
-      // these hooks run immediately on first install. Remove a prior managed
-      // fallback to prevent duplicate Stop callbacks.
-      this.removeCodexNotifyFallback();
-      return { ok: true, method: "file", detail: this.getHooksPath() };
+      // Keep Codex's documented external turn-complete notifier alongside the
+      // Stop hook. Both carry the same turn id, so Tower deduplicates them while
+      // retaining a callback if either delivery path misses a turn.
+      this.ensureCodexTurnNotifier();
+      return {
+        ok: true,
+        method: "file",
+        detail: `${this.getHooksPath()} (turn-complete notifier active)`,
+      };
     } catch (err) {
       return {
         ok: false,
@@ -428,7 +432,8 @@ export class CodexCliAdapter implements CliAdapter {
    * Repair stale Tower hook paths in-place -- `~/.codex/hooks.toml` may still
    * contain entries that 0.2.5/0.2.6 wrote with broken paths under
    * `.next/standalone/scripts/`. Rewrite ONLY existing entries to the
-   * current `TOWER_PACKAGE_ROOT`; never adds new ones.
+   * current `TOWER_PACKAGE_ROOT`; never adds new hook entries. It also restores
+   * the independent Codex turn-complete notifier when an older install removed it.
    */
   async repairHookPaths(): Promise<void> {
     try {
@@ -461,6 +466,7 @@ export class CodexCliAdapter implements CliAdapter {
         this.writeHooks(hooks);
         this.ensureHooksFeatureEnabled();
       }
+      this.ensureCodexTurnNotifier();
     } catch {
       // Best-effort -- never throw out of a repair call.
     }
@@ -512,7 +518,7 @@ export class CodexCliAdapter implements CliAdapter {
       }
 
       this.writeHooks(hooks);
-      this.removeCodexNotifyFallback();
+      this.removeCodexTurnNotifier();
       return { ok: true, method: "file", detail: this.getHooksPath() };
     } catch (err) {
       return {
@@ -526,7 +532,9 @@ export class CodexCliAdapter implements CliAdapter {
 
   async isHooksInstalled(): Promise<boolean> {
     const managedOnlyPolicyPath = this.getManagedOnlyHooksPolicyPath();
-    if (managedOnlyPolicyPath && this.hasManagedTowerHooks(managedOnlyPolicyPath)) return true;
+    if (managedOnlyPolicyPath && this.hasManagedTowerHooks(managedOnlyPolicyPath)) {
+      return this.isCodexTurnNotifierInstalled();
+    }
 
     const hooks = this.readHooks();
     const required: Array<[string, string]> = [
@@ -538,8 +546,7 @@ export class CodexCliAdapter implements CliAdapter {
     const hooksInstalled = required.every(([event, filename]) =>
       this.hasHook(this.getHookArray(hooks, event), filename)
     ) && this.isHooksFeatureEnabled();
-    if (!hooksInstalled) return false;
-    return !managedOnlyPolicyPath || this.isCodexNotifyFallbackInstalled();
+    return hooksInstalled && this.isCodexTurnNotifierInstalled();
   }
 
   // ===========================================================================
@@ -926,7 +933,7 @@ export class CodexCliAdapter implements CliAdapter {
       .replace(/\\/g, "/");
   }
 
-  private ensureCodexNotifyFallback(): void {
+  private ensureCodexTurnNotifier(): void {
     const existing = this.readTopLevelNotify();
     const scriptPath = this.getCodexNotifyScriptPath();
     let chain: string[] = [];
@@ -947,14 +954,14 @@ export class CodexCliAdapter implements CliAdapter {
     this.writeTopLevelNotify(notify);
   }
 
-  private removeCodexNotifyFallback(): void {
+  private removeCodexTurnNotifier(): void {
     const existing = this.readTopLevelNotify();
     if (!existing?.some((part) => part.includes("tower-codex-notify.js"))) return;
     const chain = this.decodeNotifyChain(existing);
     this.writeTopLevelNotify(chain.length > 0 ? chain : null);
   }
 
-  private isCodexNotifyFallbackInstalled(): boolean {
+  private isCodexTurnNotifierInstalled(): boolean {
     const existing = this.readTopLevelNotify();
     return existing?.includes(this.getCodexNotifyScriptPath()) ?? false;
   }

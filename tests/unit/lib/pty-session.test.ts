@@ -133,6 +133,15 @@ describe("PtySession", () => {
       session.write("hello");
       expect(mockPty.write).not.toHaveBeenCalled();
     });
+
+    it("keeps a completed-turn boundary until the next terminal input", () => {
+      expect(session.isAtTurnBoundary).toBe(false);
+      session.markTurnComplete();
+      expect(session.isAtTurnBoundary).toBe(true);
+
+      session.write("next turn");
+      expect(session.isAtTurnBoundary).toBe(false);
+    });
   });
 
   describe("resize", () => {

@@ -6,8 +6,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { childStopDedupKey } from "@/lib/workbench/coordinator";
 
 const require = createRequire(import.meta.url);
-const { extractLastAssistant } = require("../../../scripts/tower-stop-hook.js") as {
+const { extractLastAssistant, resolveTurnEventId } = require("../../../scripts/tower-stop-hook.js") as {
   extractLastAssistant(path: string): { text: string; eventId: string };
+  resolveTurnEventId(data: unknown, transcriptEventId: string): string;
 };
 const tempDirs: string[] = [];
 
@@ -24,6 +25,12 @@ afterEach(async () => {
 });
 
 describe("Tower stop hook transcript identity", () => {
+  it("uses Codex's stable turn_id before the unstable transcript fallback", () => {
+    expect(resolveTurnEventId({ turn_id: "turn-codex-1" }, "transcript-record-1"))
+      .toBe("turn-codex-1");
+    expect(resolveTurnEventId({}, "transcript-record-1")).toBe("transcript-record-1");
+  });
+
   it("deduplicates retries of the same tool-only assistant turn", async () => {
     const path = await transcript([{
       uuid: "assistant-tool-turn-1",
