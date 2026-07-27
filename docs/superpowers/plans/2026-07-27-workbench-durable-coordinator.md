@@ -95,7 +95,13 @@ completion fallback reviews satisfy a successful execution; an existing
 failure event satisfies a failed execution. The unique execution review guard
 and stable execution dedup keys make repeated startup passes safe. A missing or
 invalid checkpoint fails closed by skipping the scan and logging a warning.
-Each pass is bounded to 500 executions; subsequent starts can repeat it.
+Recovery reads batches of 500 until no eligible row remains. Successful and
+deduplicated rows naturally leave the missing-event query; failed execution IDs
+are excluded from later batches in the same pass, so each row is attempted at
+most once and cannot hold the queue in place. The result and startup log report
+`remaining` and `truncated` explicitly when another pass is required. Batch
+size and an optional scan limit are injectable for focused tests and
+operational callers.
 
 PTY exit dispatch catches and logs transient enqueue failures, so an async
 `onExit` callback cannot leak a rejected promise. The execution remains in its
@@ -131,6 +137,6 @@ terminal state and is repaired by the next startup reconciliation.
 - `recoverWorkbenchEventClaims()` releases expired processing leases during
   startup or an operator-triggered recovery pass.
 - `recoverMissingWorkbenchExecutionEvents()` reconciles post-checkpoint terminal
-  executions with the inbox. It is bounded, repeatable, and returns scan,
-  recovery, and failure counts for startup instrumentation or future gateway
-  health reporting.
+  executions with the inbox. It is batched, repeatable, and returns batch,
+  scan, recovery, failure, remaining, and truncation data for startup
+  instrumentation or future gateway health reporting.

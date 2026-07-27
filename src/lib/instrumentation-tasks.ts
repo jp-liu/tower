@@ -36,10 +36,12 @@ export async function cleanupStaleExecutions() {
       log.warn(`Recovered ${recoveredClaims} stale Workbench event claim(s)`);
     }
     const missing = await recoverMissingWorkbenchExecutionEvents();
-    if (missing.recovered > 0 || missing.failed > 0) {
+    if (missing.recovered > 0 || missing.failed > 0 || missing.remaining > 0) {
       log.warn(
-        `Workbench missing-event recovery scanned ${missing.scanned}, ` +
-        `recovered ${missing.recovered}, failed ${missing.failed}`,
+        `Workbench missing-event recovery ran ${missing.batches} batch(es), ` +
+        `scanned ${missing.scanned}, recovered ${missing.recovered}, ` +
+        `failed ${missing.failed}, remaining ${missing.remaining}, ` +
+        `truncated ${missing.truncated}`,
       );
     }
   } catch (error) {

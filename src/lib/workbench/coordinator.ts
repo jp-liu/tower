@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { Prisma } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import { buildChildReviewPrompt } from "@/lib/derive/child-review-prompt";
@@ -446,10 +447,18 @@ export async function recoverWorkbenchEventClaims(now = new Date()): Promise<num
 
 export interface MissingWorkbenchExecutionRecoveryResult {
   checkpoint: Date | null;
+  batches: number;
   scanned: number;
   recovered: number;
   failed: number;
+  remaining: number;
+  truncated: boolean;
   skipped: boolean;
+}
+
+export interface MissingWorkbenchExecutionRecoveryOptions {
+  batchSize?: number;
+  scanLimit?: number;
 }
 
 function parseWorkbenchCheckpoint(value: string): Date | null {
@@ -463,7 +472,9 @@ function parseWorkbenchCheckpoint(value: string): Date | null {
   }
 }
 
-export async function recoverMissingWorkbenchExecutionEvents(): Promise<MissingWorkbenchExecutionRecoveryResult> {
+export async function recoverMissingWorkbenchExecutionEvents(
+  options: MissingWorkbenchExecutionRecoveryOptions = {},
+): Promise<MissingWorkbenchExecutionRecoveryResult> {
   const config = await db.systemConfig.findUnique({
     where: { key: WORKBENCH_EVENTS_ENABLED_AT_KEY },
     select: { value: true },
@@ -471,63 +482,118 @@ export async function recoverMissingWorkbenchExecutionEvents(): Promise<MissingW
   const checkpoint = config ? parseWorkbenchCheckpoint(config.value) : null;
   if (!checkpoint) {
     log.warn("Missing or invalid Workbench event recovery checkpoint; historical scan skipped");
-    return { checkpoint: null, scanned: 0, recovered: 0, failed: 0, skipped: true };
+    return {
+      checkpoint: null,
+      batches: 0,
+      scanned: 0,
+      recovered: 0,
+      failed: 0,
+      remaining: 0,
+      truncated: false,
+      skipped: true,
+    };
   }
 
-  const executions = await db.taskExecution.findMany({
-    where: {
-      endedAt: { gte: checkpoint },
-      task: { parentTaskId: { not: null } },
-      OR: [
-        {
-          status: "COMPLETED",
-          workbenchEvents: {
-            none: { kind: { in: ["CHILD_REVIEW_REQUIRED", "CHILD_DECISION_REQUIRED"] } },
-          },
+  const missingWhere: Prisma.TaskExecutionWhereInput = {
+    endedAt: { gte: checkpoint },
+    task: { parentTaskId: { not: null } },
+    OR: [
+      {
+        status: "COMPLETED",
+        workbenchEvents: {
+          none: { kind: { in: ["CHILD_REVIEW_REQUIRED", "CHILD_DECISION_REQUIRED"] } },
         },
-        {
-          status: "FAILED",
-          workbenchEvents: { none: { kind: "CHILD_EXECUTION_FAILED" } },
-        },
-      ],
-    },
-    orderBy: [{ endedAt: "asc" }, { createdAt: "asc" }],
-    take: WORKBENCH_RECOVERY_BATCH_SIZE,
-    select: {
-      id: true,
-      status: true,
-      exitCode: true,
-      task: { select: { id: true, title: true } },
-    },
-  });
+      },
+      {
+        status: "FAILED",
+        workbenchEvents: { none: { kind: "CHILD_EXECUTION_FAILED" } },
+      },
+    ],
+  };
+  const batchSize = Number.isInteger(options.batchSize) && options.batchSize! > 0
+    ? options.batchSize!
+    : WORKBENCH_RECOVERY_BATCH_SIZE;
+  const scanLimit = Number.isInteger(options.scanLimit) && options.scanLimit! > 0
+    ? options.scanLimit!
+    : Number.POSITIVE_INFINITY;
 
+  let batches = 0;
+  let scanned = 0;
   let recovered = 0;
   let failed = 0;
-  for (const execution of executions) {
-    try {
-      const result = await enqueueChildExecutionResult({
-        taskId: execution.task.id,
-        taskTitle: execution.task.title,
-        executionId: execution.id,
-        status: execution.status as "COMPLETED" | "FAILED",
-        exitCode: execution.exitCode ?? undefined,
-      });
-      if (result.enqueued && !result.deduped) recovered++;
-    } catch (error) {
-      failed++;
-      log.error("Failed to recover missing Workbench execution event", error, {
-        executionId: execution.id,
-        taskId: execution.task.id,
-        status: execution.status,
-      });
+  const failedExecutionIds: string[] = [];
+
+  while (scanned < scanLimit) {
+    const pageWhere: Prisma.TaskExecutionWhereInput = failedExecutionIds.length > 0
+      ? {
+          AND: [
+            missingWhere,
+            { id: { notIn: failedExecutionIds } },
+          ],
+        }
+      : missingWhere;
+    const executions = await db.taskExecution.findMany({
+      where: pageWhere,
+      orderBy: [{ endedAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+      take: Math.min(batchSize, scanLimit - scanned),
+      select: {
+        id: true,
+        status: true,
+        exitCode: true,
+        task: { select: { id: true, title: true } },
+      },
+    });
+    if (executions.length === 0) break;
+
+    batches++;
+    for (const execution of executions) {
+      scanned++;
+      try {
+        const result = await enqueueChildExecutionResult({
+          taskId: execution.task.id,
+          taskTitle: execution.task.title,
+          executionId: execution.id,
+          status: execution.status as "COMPLETED" | "FAILED",
+          exitCode: execution.exitCode ?? undefined,
+        });
+        if (result.enqueued && !result.deduped) recovered++;
+      } catch (error) {
+        failed++;
+        failedExecutionIds.push(execution.id);
+        log.error("Failed to recover missing Workbench execution event", error, {
+          executionId: execution.id,
+          taskId: execution.task.id,
+          status: execution.status,
+        });
+      }
     }
+  }
+
+  const remaining = await db.taskExecution.count({ where: missingWhere });
+  const unattempted = await db.taskExecution.count({
+    where: failedExecutionIds.length > 0
+      ? { AND: [missingWhere, { id: { notIn: failedExecutionIds } }] }
+      : missingWhere,
+  });
+  const truncated = unattempted > 0;
+  if (remaining > 0) {
+    log.warn("Workbench execution-event recovery left records for a later retry", {
+      scanned,
+      recovered,
+      failed,
+      remaining,
+      truncated,
+    });
   }
 
   return {
     checkpoint,
-    scanned: executions.length,
+    batches,
+    scanned,
     recovered,
     failed,
+    remaining,
+    truncated,
     skipped: false,
   };
 }

@@ -323,6 +323,101 @@ describe("Workbench durable coordinator", () => {
     });
   });
 
+  it("continues recovery until more than one batch of missing executions is exhausted", async () => {
+    const { recoverMissingWorkbenchExecutionEvents } = await import("@/lib/workbench/coordinator");
+    await prisma.systemConfig.create({
+      data: {
+        key: "workbench.eventsEnabledAt",
+        value: JSON.stringify("2026-07-27T00:00:00.000Z"),
+      },
+    });
+    for (let index = 0; index < 5; index++) {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "TaskExecution" ("id", "taskId", "status", "endedAt") VALUES (?, ?, ?, ?)`,
+        `multi-batch-${index}`,
+        "child-a",
+        "COMPLETED",
+        new Date(`2026-07-27T00:0${index + 1}:00.000Z`),
+      );
+    }
+
+    await expect(recoverMissingWorkbenchExecutionEvents({ batchSize: 2 })).resolves.toMatchObject({
+      batches: 3,
+      scanned: 5,
+      recovered: 5,
+      failed: 0,
+      remaining: 0,
+      truncated: false,
+      skipped: false,
+    });
+    expect(await prisma.workbenchEvent.count()).toBe(5);
+  });
+
+  it("skips a persistently failing execution for this pass without blocking later rows", async () => {
+    const { recoverMissingWorkbenchExecutionEvents } = await import("@/lib/workbench/coordinator");
+    await prisma.systemConfig.create({
+      data: {
+        key: "workbench.eventsEnabledAt",
+        value: JSON.stringify("2026-07-27T00:00:00.000Z"),
+      },
+    });
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "TaskExecution" ("id", "taskId", "status", "endedAt") VALUES (?, 'child-a', 'COMPLETED', ?), (?, 'child-a', 'COMPLETED', ?)`,
+      "recover-fails",
+      new Date("2026-07-27T00:01:00.000Z"),
+      "recover-after-failure",
+      new Date("2026-07-27T00:02:00.000Z"),
+    );
+    await prisma.$executeRawUnsafe(`
+      CREATE TRIGGER "reject_recovery_event"
+      BEFORE INSERT ON "WorkbenchEvent"
+      WHEN NEW."executionId" = 'recover-fails'
+      BEGIN
+        SELECT RAISE(FAIL, 'forced recovery failure');
+      END
+    `);
+
+    await expect(recoverMissingWorkbenchExecutionEvents({ batchSize: 1 })).resolves.toMatchObject({
+      batches: 2,
+      scanned: 2,
+      recovered: 1,
+      failed: 1,
+      remaining: 1,
+      truncated: false,
+      skipped: false,
+    });
+    expect(await prisma.workbenchEvent.findMany({ select: { executionId: true } })).toEqual([
+      { executionId: "recover-after-failure" },
+    ]);
+  });
+
+  it("reports remaining work when an explicit scan limit truncates the pass", async () => {
+    const { recoverMissingWorkbenchExecutionEvents } = await import("@/lib/workbench/coordinator");
+    await prisma.systemConfig.create({
+      data: {
+        key: "workbench.eventsEnabledAt",
+        value: JSON.stringify("2026-07-27T00:00:00.000Z"),
+      },
+    });
+    for (let index = 0; index < 3; index++) {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "TaskExecution" ("id", "taskId", "status", "endedAt") VALUES (?, 'child-a', 'COMPLETED', ?)`,
+        `limited-${index}`,
+        new Date(`2026-07-27T00:0${index + 1}:00.000Z`),
+      );
+    }
+
+    await expect(recoverMissingWorkbenchExecutionEvents({ batchSize: 2, scanLimit: 2 })).resolves.toMatchObject({
+      batches: 1,
+      scanned: 2,
+      recovered: 2,
+      failed: 0,
+      remaining: 1,
+      truncated: true,
+      skipped: false,
+    });
+  });
+
   it("does not recover executions that already have stop, fallback, or failure events", async () => {
     const { enqueueChildExecutionResult, enqueueWorkbenchEvent, recoverMissingWorkbenchExecutionEvents } = await import("@/lib/workbench/coordinator");
     await prisma.systemConfig.create({

@@ -6,9 +6,12 @@ const mocks = vi.hoisted(() => ({
   recoverClaims: vi.fn().mockResolvedValue(0),
   recoverMissing: vi.fn().mockResolvedValue({
     checkpoint: new Date("2026-07-27T00:00:00.000Z"),
+    batches: 0,
     scanned: 0,
     recovered: 0,
     failed: 0,
+    remaining: 0,
+    truncated: false,
     skipped: false,
   }),
   reap: vi.fn().mockResolvedValue(0),
