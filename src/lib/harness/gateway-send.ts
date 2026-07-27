@@ -26,6 +26,8 @@ export interface HarnessGatewaySendInput {
   profile?: string | null;
   message: string;
   presentation?: unknown;
+  replyToMessageId?: string | null;
+  threadId?: string | null;
   scope: "work" | "unattended";
 }
 
@@ -69,6 +71,8 @@ export async function sendViaHarnessGateway(input: HarnessGatewaySendInput): Pro
     dest: resolvedDest.dest || "",
     downstream: input.downstream,
     presentation: input.presentation,
+    replyToMessageId: input.replyToMessageId,
+    threadId: input.threadId,
     env,
   });
   return { ...sent, resolvedDest: resolvedDest.dest };

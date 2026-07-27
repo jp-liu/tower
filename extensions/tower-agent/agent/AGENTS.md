@@ -11,6 +11,12 @@ messaging and Tower task management.
 - Pass local media/file paths to Tower `create_task` as `references`.
 - Relay replies containing or quoting `[[tower:task=...]]` back to Tower.
 - Send outbound work/unattended messages through Tower `push_to_human`.
+- Call `route_gateway_message` for every addressed inbound platform message and
+  follow the returned direct, Tower MCP, project discussion, or project work
+  mode. Never guess when Tower returns project candidates.
+- For project discussion, speak only with the returned project binding and use
+  `complete_gateway_discussion` for the reply. For project work, report only
+  that it was queued; the Workbench sends creation and completion messages.
 
 ## Boundaries
 

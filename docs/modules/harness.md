@@ -19,8 +19,8 @@ Harness 是 Tower 的**无人值守协作体系**。当任务长时间自主运�
 
 - **Tower 自己不接飞书/微信，也不直接发消息**（旧的内置 SDK 发送栈已删除）。
 - 真正的收发外包给**外部网关 Hermes / OpenClaw**（独立仓库 / 外部服务）。
-- Tower 只做三件胶水事：**登记问题、挂起任务（park）、回复回灌唤醒（resume）**。
-- 平台线程 ↔ 任务的映射维护在网关侧，靠出站消息里携带的口令 `[[tower:task=<id>]]` 关联——人的回复带回这个 token，网关就知道该回灌给哪个任务。
+- Tower 负责**登记问题、park/resume、持久化项目会话、可靠排队与出站重试**；网关仍只负责平台 transport 和首跳分类。
+- 旧 ask/task 回复继续靠 `[[tower:task=<id>]]` 与投递映射；普通项目消息由 Tower 保存 platform/chat/thread/root message ↔ project 会话绑定。
 
 > **配套图**（`docs/diagrams/` 下自包含 HTML，可独立打开）：
 > - 无人值守消息中继：`docs/diagrams/tower-harness-flow.html`（EN：`-en.html`）
@@ -37,11 +37,13 @@ Task Agent (MCP 工具)
 Tower（登记 + park/resume，只记录不直连平台）
    │  push_to_human 经网关 CLI 出站
    ▼
-外部网关 Hermes / OpenClaw ──► 飞书 / 微信 / … （线程↔任务映射在网关侧）
+外部网关 Hermes / OpenClaw ──► 飞书 / 微信 / …
    ▲
    │  人的回复（携带 [[tower:task=<id>]] token）
    ▼
 relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入活终端
+
+普通入站 ──► route_gateway_message ──► 网关直答 / Tower MCP / 项目讨论会话 / WorkbenchEvent
 ```
 
 图见 `docs/diagrams/tower-harness-flow.html`（中）/ `tower-harness-flow-en.html`（英）。
@@ -50,7 +52,7 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 - 出站消息体**必须**包含 `[[tower:task=<id>]]` token，否则人的回复无法归属到任务，任务会永远卡住。
 - 发送目标（群 / 人）在「工作」场景由调用方通过 `to` 指定；「无人值守」场景走配置好的 owner/home 目标。
 
-### 四个消息工具及关系
+### 消息工具及关系
 
 这四个工具最容易混淆，务必分清「**发没发**」和「**park 不 park**」两个维度：
 
@@ -75,6 +77,8 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 - **「只登记不发 ↔ 真发 + 顺带登记」= `ask_human` vs `push_to_human`**：前者是纯状态原语，后者是先发再登记的上层封装。
 
 `list_notify_targets` 是发送前的入口：读取当前 scope 的活跃通道，返回**照做即可的发送指令**，告诉 Agent 走哪个网关、要不要 park。`tower-ask` / `tower-goal` 技能内部就是先调它、再照指令发。
+
+`route_gateway_message` 是普通渠道入站入口。它先持久化去重，再严格按 reply/task binding → thread/session binding → 显式项目 → 唯一 identify_project → 用户最近项目 → 渠道默认项目解析。项目讨论必须以 `complete_gateway_discussion` 回原 thread；项目工作只排入 Workbench，只有 Workbench 在 `create_task` 真正成功后才能调用 `confirm_gateway_task_created`，审查通过后调用 `complete_gateway_work`。
 
 ### 通知中心 `/harness`
 
@@ -151,6 +155,7 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 ### MCP Tools (`src/mcp/tools/harness-tools.ts`)
 
 - `list_notify_targets` / `push_to_human` / `ask_human` / `notify_human` / `reply_to_ask` / `relay_channel_reply`
+- `route_gateway_message` / `complete_gateway_discussion` / `confirm_gateway_task_created` / `complete_gateway_work`
 
 ### 核心库 (`src/lib/harness/`)
 
@@ -159,6 +164,8 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 | `gateway-send.ts` | 经 Hermes / OpenClaw 网关 CLI 出站发送 |
 | `gateway-config.ts` | 网关运行时配置（显示名等） |
 | `delivery-map.ts` | 平台消息 ID ↔ 任务的投递映射，`[[tower:task=...]]` token 提取 |
+| `gateway-router.ts` | 入站去重、会话绑定、项目解析、Workbench 排队、可靠完成回传 |
+| `gateway-output.ts` | Hermes/OpenClaw 发送结果的结构化 message id 提取 |
 | `unattended-signal.ts` | 无人值守信号文件 `unattended-<taskId>` 写删，供 PreToolUse hook 读 |
 
 ### 父子派生 (`src/lib/derive/`)
@@ -190,6 +197,7 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 | `POST /ask` | 登记 OPEN 问题 + 挂起 execution（PAUSED） |
 | `POST /reply` | 回灌回复、resume 任务；无 OPEN 问题返回 409 `no_pending` |
 | `POST /notify` | 登记一条进展日志 |
+| `POST/PATCH/PUT /gateway` | 入站路由、完成登记、讨论/任务结果可靠回传与重试 |
 
 ### 通知中心
 

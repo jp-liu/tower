@@ -27,7 +27,8 @@ const SUBMIT_DELAY_MS = 80;
 export type WorkbenchEventKind =
   | "CHILD_REVIEW_REQUIRED"
   | "CHILD_DECISION_REQUIRED"
-  | "CHILD_EXECUTION_FAILED";
+  | "CHILD_EXECUTION_FAILED"
+  | "GATEWAY_WORK_REQUEST";
 
 export type WorkbenchEventPriority = "NORMAL" | "HIGH";
 
@@ -38,6 +39,9 @@ export interface WorkbenchEventPayload {
   question?: string;
   executionId?: string;
   exitCode?: number;
+  gatewayInboundId?: string;
+  gatewaySessionId?: string;
+  gatewayMessage?: string;
 }
 
 export interface EnqueueWorkbenchEventInput {
@@ -233,6 +237,8 @@ function eventHeading(kind: WorkbenchEventKind): string {
       return "DECISION REQUIRED";
     case "CHILD_EXECUTION_FAILED":
       return "EXECUTION FAILED";
+    case "GATEWAY_WORK_REQUEST":
+      return "GATEWAY WORK REQUEST";
     default:
       return "REVIEW REQUIRED";
   }
@@ -248,9 +254,16 @@ export function buildWorkbenchBatchPrompt(events: WorkbenchEventRecord[], batchK
     })}\n\n[Tower durable batch: ${batchKey}]`;
   }
 
+  if (events.length === 1 && events[0].kind === "GATEWAY_WORK_REQUEST") {
+    const payload = parsePayload(events[0]);
+    return `${payload.gatewayMessage || "[Gateway project work request]\nNo message content was stored."}\n\n[Tower durable batch: ${batchKey}]`;
+  }
+
   const items = events.map((event, index) => {
     const payload = parsePayload(event);
-    const detail = event.kind === "CHILD_DECISION_REQUIRED"
+    const detail = event.kind === "GATEWAY_WORK_REQUEST"
+      ? `Inbound: ${payload.gatewayInboundId ?? "unknown"}\n   ${(payload.gatewayMessage || "(no gateway message)").slice(0, 8000)}`
+      : event.kind === "CHILD_DECISION_REQUIRED"
       ? `Question: ${(payload.question || payload.childReply || "(no question text)").slice(0, 1600)}`
       : event.kind === "CHILD_EXECUTION_FAILED"
         ? `Execution: ${payload.executionId ?? event.executionId ?? "unknown"}; exit code: ${payload.exitCode ?? "unknown"}`
@@ -372,6 +385,21 @@ export async function drainWorkbenchEvents(
         lastError: null,
       },
     });
+    const gatewayInboundIds = events.flatMap((event) => {
+      const id = parsePayload(event).gatewayInboundId?.trim();
+      return id ? [id] : [];
+    });
+    if (gatewayInboundIds.length > 0) {
+      await db.gatewayInbound.updateMany({
+        where: { id: { in: gatewayInboundIds }, state: "QUEUED" },
+        data: { state: "PROCESSING", lastError: null },
+      }).catch((error) => {
+        log.warn("Workbench batch consumed but gateway inbound state update failed", {
+          batchKey,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
     return { batchKey, eventCount: events.length, delivered: true };
   } catch (error) {
     await releaseClaim(token, error);

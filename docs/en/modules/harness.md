@@ -21,8 +21,8 @@ The core design is a **relay model**:
 
 - **Tower does not connect to Feishu/WeChat and does not send messages itself** (the old built-in SDK send stack has been removed).
 - The actual sending and receiving are outsourced to the external gateways **Hermes / OpenClaw** (separate repos / external services).
-- Tower does only three glue jobs: **record the question, park the task, and resume it when the reply is injected**.
-- The platform-thread ↔ task mapping is maintained on the gateway side, keyed by the token `[[tower:task=<id>]]` carried in every outbound message — the human's reply brings the token back, so the gateway knows which task to route it to.
+- Tower owns **question recording, park/resume, durable project sessions, reliable queueing, and outbound retry**; the gateway still owns platform transport and first-hop classification.
+- Legacy ask/task replies keep using `[[tower:task=<id>]]` and delivery mappings. Ordinary project messages use Tower-owned platform/chat/thread/root-message ↔ project session bindings.
 
 > **Companion diagrams** (self-contained HTML under `docs/diagrams/`, openable standalone):
 > - Unattended message relay: `docs/diagrams/tower-harness-flow-en.html` (ZH: drop the `-en`)
@@ -39,11 +39,13 @@ Task Agent (MCP tools)
 Tower (record + park/resume; records only, never talks to platforms directly)
    │  push_to_human sends out via the gateway CLI
    ▼
-External gateway Hermes / OpenClaw ──► Feishu / WeChat / … (thread↔task map lives on the gateway)
+External gateway Hermes / OpenClaw ──► Feishu / WeChat / …
    ▲
    │  human reply (carries the [[tower:task=<id>]] token)
    ▼
 relay_channel_reply / reply_to_ask ──► resume the parked task, inject into the live terminal
+
+ordinary inbound ──► route_gateway_message ──► gateway direct / Tower MCP / project discussion / WorkbenchEvent
 ```
 
 See `docs/diagrams/tower-harness-flow-en.html` (EN) / `tower-harness-flow.html` (ZH).
@@ -52,7 +54,7 @@ See `docs/diagrams/tower-harness-flow-en.html` (EN) / `tower-harness-flow.html` 
 - The outbound body **must** contain the `[[tower:task=<id>]]` token, otherwise the human's reply cannot be attributed to a task and the task stays stuck forever.
 - The send destination (group / person) is passed by the caller via `to` for the "work" scope; the "unattended" scope uses a configured owner/home destination.
 
-### The four message tools and how they relate
+### Message tools and how they relate
 
 These four are the easiest to confuse. Keep two axes straight: **does it actually send** and **does it park the task**.
 
@@ -77,6 +79,8 @@ These four are the easiest to confuse. Keep two axes straight: **does it actuall
 - **"records only, no send ↔ actually sends + records too" = `ask_human` vs `push_to_human`**: the former is a pure state primitive, the latter a send-then-record wrapper.
 
 `list_notify_targets` is the pre-send entry point: it reads the active channel for the current scope and returns **ready-to-follow send instructions** telling the agent which gateway to use and whether to park. The `tower-ask` / `tower-goal` skills internally call it first, then do what it says.
+
+`route_gateway_message` is the ordinary inbound entry point. It persists and deduplicates first, then resolves reply/task binding → thread/session binding → explicit project → one identify_project match → sender's recent project → channel default. Project discussion replies use `complete_gateway_discussion`. Project work is only queued for the Workbench; the Workbench calls `confirm_gateway_task_created` after a real `create_task` result and `complete_gateway_work` after review.
 
 ### Notification center `/harness`
 
@@ -153,6 +157,7 @@ The decision looks at just two axes — **has a parent or not** × **is a human 
 ### MCP Tools (`src/mcp/tools/harness-tools.ts`)
 
 - `list_notify_targets` / `push_to_human` / `ask_human` / `notify_human` / `reply_to_ask` / `relay_channel_reply`
+- `route_gateway_message` / `complete_gateway_discussion` / `confirm_gateway_task_created` / `complete_gateway_work`
 
 ### Core Library (`src/lib/harness/`)
 
@@ -161,6 +166,8 @@ The decision looks at just two axes — **has a parent or not** × **is a human 
 | `gateway-send.ts` | Outbound send via the Hermes / OpenClaw gateway CLI |
 | `gateway-config.ts` | Gateway runtime config (display name, profile, env) |
 | `delivery-map.ts` | Platform message id ↔ task delivery mapping; `[[tower:task=...]]` token extraction |
+| `gateway-router.ts` | Inbound deduplication, session binding, project resolution, Workbench queueing, and reliable completion delivery |
+| `gateway-output.ts` | Structured message-id extraction from Hermes/OpenClaw send output |
 | `harness-message.ts` | Message lifecycle (OPEN/ANSWERED/…); Tower records only, never sends |
 | `unattended-signal.ts` | Write/remove the `unattended-<taskId>` signal file read by the PreToolUse hook |
 
@@ -193,6 +200,7 @@ The decision looks at just two axes — **has a parent or not** × **is a human 
 | `POST /ask` | Record an OPEN question + park the execution (PAUSED) |
 | `POST /reply` | Inject the reply, resume the task; no OPEN ask → 409 |
 | `POST /notify` | Record one progress-log line |
+| `POST/PATCH/PUT /gateway` | Inbound routing, completion acknowledgement, and retryable discussion/task replies |
 
 ### Notification Center
 

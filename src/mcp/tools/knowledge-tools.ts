@@ -1,65 +1,10 @@
 import { z } from "zod";
 import { db } from "../db";
+import { scoreProject } from "@/lib/project-score";
 
-// Scoring constants
-const NAME_EXACT = 1.0;
-const NAME_STARTS_WITH = 0.9;
-const NAME_CONTAINS = 0.75;
-const ALIAS_EXACT = 0.85;
-const ALIAS_STARTS_WITH = 0.75;
-const ALIAS_CONTAINS = 0.6;
-const DESC_CONTAINS = 0.4;
+export { scoreProject } from "@/lib/project-score";
+
 const MIN_CONFIDENCE = 0.3;
-
-interface ProjectFields {
-  name: string;
-  alias: string | null;
-  description?: string | null;
-}
-
-/**
- * Score a project against a query string.
- * Returns a confidence value between 0 and 1.
- * Name match > alias match > description match.
- */
-export function scoreProject(project: ProjectFields, query: string): number {
-  const q = query.toLowerCase();
-  const name = project.name.toLowerCase();
-
-  // Name scoring
-  let nameScore = 0;
-  if (name === q) {
-    nameScore = NAME_EXACT;
-  } else if (name.startsWith(q)) {
-    nameScore = NAME_STARTS_WITH;
-  } else if (name.includes(q)) {
-    nameScore = NAME_CONTAINS;
-  }
-
-  // Alias scoring
-  let aliasScore = 0;
-  if (project.alias) {
-    const alias = project.alias.toLowerCase();
-    if (alias === q) {
-      aliasScore = ALIAS_EXACT;
-    } else if (alias.startsWith(q)) {
-      aliasScore = ALIAS_STARTS_WITH;
-    } else if (alias.includes(q)) {
-      aliasScore = ALIAS_CONTAINS;
-    }
-  }
-
-  // Description scoring
-  let descScore = 0;
-  if (project.description) {
-    const desc = project.description.toLowerCase();
-    if (desc.includes(q)) {
-      descScore = DESC_CONTAINS;
-    }
-  }
-
-  return Math.max(nameScore, aliasScore, descScore);
-}
 
 export const knowledgeTools = {
   identify_project: {

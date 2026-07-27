@@ -9,6 +9,8 @@ export interface OpenClawSendInput {
   dest: string;
   downstream?: string | null;
   presentation?: unknown;
+  replyToMessageId?: string | null;
+  threadId?: string | null;
   env?: Record<string, string>;
 }
 
@@ -23,6 +25,8 @@ export async function sendViaOpenClaw(
 
   const presentationJson = input.presentation ? JSON.stringify(input.presentation) : null;
   const primaryArgs = ["message", "send", "--channel", channel, "--target", target];
+  if (input.replyToMessageId?.trim()) primaryArgs.push("--reply-to", input.replyToMessageId.trim());
+  if (input.threadId?.trim()) primaryArgs.push("--thread-id", input.threadId.trim());
   if (presentationJson) primaryArgs.push("--presentation", presentationJson);
   else if (input.message.trim()) primaryArgs.push("--message", input.message);
   primaryArgs.push("--json");
@@ -30,10 +34,17 @@ export async function sendViaOpenClaw(
   const argSets = presentationJson
     ? [
         primaryArgs,
+        [
+          "message", "send", "--channel", channel, "--target", target,
+          ...(input.replyToMessageId?.trim() ? ["--reply-to", input.replyToMessageId.trim()] : []),
+          ...(input.threadId?.trim() ? ["--thread-id", input.threadId.trim()] : []),
+          "--message", input.message, "--json",
+        ],
         ["message", "send", "--channel", channel, "--target", target, "--message", input.message, "--json"],
         ["message", "send", channel, target, input.message],
       ]
     : [
+        primaryArgs,
         ["message", "send", "--channel", channel, "--target", target, "--message", input.message, "--json"],
         ["message", "send", channel, target, input.message],
       ];

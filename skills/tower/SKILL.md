@@ -43,6 +43,7 @@ The must-follow rules. Everything else is operational detail below.
 10. **Platform replies go through `relay_channel_reply`** when they contain or quote `[[tower:task=...]]`. Pass `platform`, `chatId`, `platformMessageId`, and `quotedText` when available; it disambiguates ask replies vs work-channel replies. For direct UI/operator replies to a parked ask, `reply_to_ask` is still valid.
 11. **Unattended send/receive** follows [references/unattended-messaging.md](references/unattended-messaging.md): Hermes/OpenClaw can send via `push_to_human`; every outbound ask/notify carries `[[tower:task=<taskId>]]`.
 12. **Auto-start handoff is callback-driven.** After `create_task` reports that execution started, end the current turn and wait for Tower to inject the child-completion review message. Do not sleep, poll status/output, inspect the child worktree, or otherwise babysit it. Poll only when the user explicitly asks for progress or when recovering from a suspected missed callback.
+13. **Gateway messages route before action.** A gateway bridge calls `route_gateway_message` for every inbound platform message. Follow its mode; never guess an ambiguous project, never say project work created a task while it is only queued, and use `complete_gateway_discussion` / `confirm_gateway_task_created` / `complete_gateway_work` for their corresponding durable replies.
 
 ---
 

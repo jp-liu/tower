@@ -54,6 +54,7 @@ model Project {
   versions     Version[]
   facts        ProjectFact[]
   assistantSessions AssistantSession[]
+  gatewaySessions GatewaySession[]
 
   @@index([workspaceId])
   @@index([groupId])
@@ -255,6 +256,114 @@ model HarnessMessage {
 
   @@index([taskId, kind, state])
   @@index([state])
+}
+
+// Platform delivery mapping for legacy [[tower:task=...]] ask/reply routing.
+// Kept separate from GatewayDelivery because this row maps an already-sent
+// harness message, while GatewayDelivery owns retryable gateway responses.
+model HarnessDelivery {
+  id                String   @id
+  harnessMessageId  String
+  taskId            String
+  platform          String
+  chatId            String
+  platformMessageId String   @unique
+  scope             String
+  expectReply       Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  @@index([taskId])
+}
+
+// Durable external-channel binding. WORKBENCH sessions route project work to
+// the resident Tower task; DISCUSSION sessions reuse a project-bound
+// AssistantSession and therefore never occupy the Workbench PTY.
+model GatewaySession {
+  id                 String               @id @default(cuid())
+  bindingKey         String               @unique
+  gateway            String
+  platform           String
+  chatId             String
+  threadId           String?
+  rootMessageId      String?
+  senderId           String?
+  kind               GatewaySessionKind
+  status             GatewaySessionStatus @default(ACTIVE)
+  projectId          String
+  workbenchTaskId    String?
+  assistantSessionId String?
+  lastActivityAt     DateTime             @default(now())
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  inbounds   GatewayInbound[]
+  deliveries GatewayDelivery[]
+
+  @@index([platform, chatId, threadId, status])
+  @@index([projectId, kind, status])
+  @@index([senderId, lastActivityAt])
+}
+
+// One row per inbound platform message. dedupKey is stable across gateway
+// retries; Workbench-bound rows remain QUEUED until their durable event crosses
+// a completed-turn boundary.
+model GatewayInbound {
+  id                String              @id @default(cuid())
+  dedupKey          String              @unique
+  sessionId         String?
+  gateway           String
+  platform          String
+  chatId            String
+  senderId          String?
+  platformMessageId String
+  threadId          String?
+  rootMessageId     String?
+  replyToMessageId  String?
+  intent            GatewayRequestKind
+  content           String
+  state             GatewayMessageState @default(RECEIVED)
+  createdTaskId     String?
+  response          String?
+  attempts          Int                 @default(0)
+  lastError         String?
+  processedAt       DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  session    GatewaySession?   @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  deliveries GatewayDelivery[]
+
+  @@index([platform, chatId, platformMessageId])
+  @@index([sessionId, state, createdAt])
+  @@index([senderId, processedAt])
+  @@index([createdTaskId])
+}
+
+// Retryable response to the original external message. A stable dedupKey
+// prevents duplicate create confirmations and completion callbacks.
+model GatewayDelivery {
+  id                String               @id @default(cuid())
+  dedupKey          String               @unique
+  sessionId         String
+  inboundId         String?
+  kind              GatewayDeliveryKind
+  content           String
+  state             GatewayDeliveryState @default(PENDING)
+  attempts          Int                  @default(0)
+  platformMessageId String?
+  lastError         String?
+  nextAttemptAt     DateTime?
+  deliveredAt       DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  session GatewaySession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  inbound GatewayInbound? @relation(fields: [inboundId], references: [id], onDelete: SetNull)
+
+  @@index([state, nextAttemptAt, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([inboundId])
 }
 
 enum HarnessState {
@@ -673,6 +782,7 @@ enum WorkbenchEventKind {
   CHILD_REVIEW_REQUIRED
   CHILD_DECISION_REQUIRED
   CHILD_EXECUTION_FAILED
+  GATEWAY_WORK_REQUEST
 }
 
 enum WorkbenchEventPriority {
@@ -684,6 +794,45 @@ enum WorkbenchEventState {
   PENDING
   PROCESSING
   CONSUMED
+}
+
+enum GatewaySessionKind {
+  WORKBENCH
+  DISCUSSION
+}
+
+enum GatewaySessionStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum GatewayRequestKind {
+  DIRECT
+  TOWER
+  PROJECT_DISCUSSION
+  PROJECT_WORK
+}
+
+enum GatewayMessageState {
+  RECEIVED
+  QUEUED
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+enum GatewayDeliveryKind {
+  TASK_CREATED
+  DISCUSSION_REPLY
+  FINAL_RESULT
+  FAILURE
+}
+
+enum GatewayDeliveryState {
+  PENDING
+  SENDING
+  DELIVERED
+  FAILED
 }
 
 enum MessageRole {

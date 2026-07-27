@@ -1,9 +1,13 @@
 import { z } from "zod";
 import { extractTowerTaskId, findHarnessDeliveryByPlatformMessageId, recordHarnessDelivery } from "@/lib/harness/delivery-map";
 import { readHarnessGatewayRuntimeConfig } from "@/lib/harness/gateway-config";
+import { parseGatewaySendOutput } from "@/lib/harness/gateway-output";
+
+export { parseGatewaySendOutput } from "@/lib/harness/gateway-output";
 
 const PORT = process.env.PORT ?? "3000";
 const BRIDGE = `http://localhost:${PORT}/api/internal/harness`;
+const GATEWAY_BRIDGE = `${BRIDGE}/gateway`;
 const TERMINAL_BRIDGE = `http://localhost:${PORT}/api/internal/terminal`;
 const CUID_RE = /^c[a-z0-9]{20,30}$/;
 
@@ -161,6 +165,48 @@ async function resolveActiveTarget(taskId: string, explicitScope?: "work" | "una
     (x) => x?.active && x.gateway && (x.scope ?? "unattended") === scope,
   );
   return { task, scope, active };
+}
+
+type RelayChannelReplyArgs = {
+  text: string;
+  taskId?: string;
+  platform?: string;
+  chatId?: string;
+  platformMessageId?: string;
+  quotedText?: string;
+};
+
+export async function relayChannelReply(args: RelayChannelReplyArgs) {
+  const delivery = args.platformMessageId
+    ? await findHarnessDeliveryByPlatformMessageId(args.platformMessageId)
+    : null;
+  const taskId = delivery?.taskId || args.taskId || extractTowerTaskId(args.quotedText) || extractTowerTaskId(args.text);
+  if (!taskId) return { error: "No tower task token found", no_task_token: true };
+  const err = validateMcpTaskId(taskId);
+  if (err) return { error: err, taskId };
+
+  const chatScope = delivery ? null : await resolveScopeFromInboundChat(args.platform, args.chatId);
+  const shouldAnswerAsk =
+    delivery?.expectReply ??
+    (chatScope === "work" ? false : !!(await getOpenAskForRelay(taskId)));
+  const replyText = await buildExternalReplyText(taskId, args);
+  if (shouldAnswerAsk) {
+    const res = await fetch(`${BRIDGE}/reply`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ taskId, text: replyText, allowRetry: false }),
+    });
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (res.status !== 409) {
+      if (!res.ok) return { error: data?.error ?? "reply failed", status: res.status, taskId };
+      return { ok: true, mode: "ask_reply", taskId, injected: data.injected, delivery, chatScope };
+    }
+    if (delivery?.expectReply) return { no_pending: true, taskId, delivery };
+  }
+
+  const injected = await injectChannelReply(taskId, replyText);
+  if (injected.ok) return { ok: true, mode: "terminal_reply", taskId, delivery, chatScope, resumed: injected.resumed };
+  return { error: injected.error, status: injected.status, taskId, delivery, chatScope };
 }
 
 export const harnessTools = {
@@ -342,39 +388,151 @@ export const harnessTools = {
       platformMessageId: z.string().optional().describe("The Feishu/WeChat message id being replied to, if available"),
       quotedText: z.string().optional().describe("Quoted/replied-to message text, if available"),
     }),
-    handler: async (args: { text: string; taskId?: string; platform?: string; chatId?: string; platformMessageId?: string; quotedText?: string }) => {
-      const delivery = args.platformMessageId
-        ? await findHarnessDeliveryByPlatformMessageId(args.platformMessageId)
-        : null;
-      const taskId = delivery?.taskId || args.taskId || extractTowerTaskId(args.quotedText) || extractTowerTaskId(args.text);
-      if (!taskId) {
-        return { error: "No tower task token found", no_task_token: true };
-      }
-      const err = validateMcpTaskId(taskId);
-      if (err) return { error: err, taskId };
+    handler: relayChannelReply,
+  },
 
-      const chatScope = delivery ? null : await resolveScopeFromInboundChat(args.platform, args.chatId);
-      const shouldAnswerAsk =
-        delivery?.expectReply ??
-        (chatScope === "work" ? false : !!(await getOpenAskForRelay(taskId)));
-      const replyText = await buildExternalReplyText(taskId, args);
-      if (shouldAnswerAsk) {
-        const res = await fetch(`${BRIDGE}/reply`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ taskId, text: replyText, allowRetry: false }),
-        });
-        const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-        if (res.status !== 409) {
-          if (!res.ok) return { error: data?.error ?? "reply failed", status: res.status, taskId };
-          return { ok: true, mode: "ask_reply", taskId, injected: data.injected, delivery, chatScope };
+  route_gateway_message: {
+    description:
+      "Persist and route one inbound gateway message. Call this before handling any ordinary Feishu/WeChat/etc. " +
+      "message. Classify intent as DIRECT (ordinary Q&A or external operator work), TOWER (Tower query/simple " +
+      "command), PROJECT_DISCUSSION, or PROJECT_WORK. Tower applies reply/task binding, thread/session binding, " +
+      "explicit project, identify_project, recent-user project, and channel default in that strict order. It " +
+      "returns candidates instead of guessing. Task replies preserve parked ask vs work-channel behavior; project " +
+      "work is durably queued for the project Workbench; discussions get an independent project-bound session.",
+    schema: z.object({
+      gateway: z.enum(["hermes", "openclaw"]),
+      platform: z.string().min(1).max(64),
+      chatId: z.string().min(1).max(512),
+      platformMessageId: z.string().min(1).max(512).describe("Unique id of this inbound platform message"),
+      senderId: z.string().max(512).optional(),
+      threadId: z.string().max(512).optional(),
+      rootMessageId: z.string().max(512).optional(),
+      replyToMessageId: z.string().max(512).optional().describe("Platform message id this inbound message replies to"),
+      quotedText: z.string().max(16000).optional(),
+      taskId: z.string().optional(),
+      project: z.string().max(512).optional().describe("Explicit project id, name, alias, or identify_project query from the user"),
+      intent: z.enum(["DIRECT", "TOWER", "PROJECT_DISCUSSION", "PROJECT_WORK"]),
+      content: z.string().min(1).max(16000),
+    }),
+    handler: async (args: {
+      gateway: "hermes" | "openclaw";
+      platform: string;
+      chatId: string;
+      platformMessageId: string;
+      senderId?: string;
+      threadId?: string;
+      rootMessageId?: string;
+      replyToMessageId?: string;
+      quotedText?: string;
+      taskId?: string;
+      project?: string;
+      intent: "DIRECT" | "TOWER" | "PROJECT_DISCUSSION" | "PROJECT_WORK";
+      content: string;
+    }) => {
+      const res = await fetch(GATEWAY_BRIDGE, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const routed = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) return { error: routed.error ?? "gateway routing failed", status: res.status };
+      if (routed.mode !== "task_reply") return routed;
+
+      const relayed = await relayChannelReply({
+        text: args.content,
+        taskId: String(routed.taskId || ""),
+        platform: args.platform,
+        chatId: args.chatId,
+        platformMessageId: args.replyToMessageId,
+        quotedText: args.quotedText,
+      });
+      if (!("ok" in relayed) || !relayed.ok) return { ...routed, relay: relayed };
+      let recorded = false;
+      let recordError = "gateway reply outcome could not be recorded";
+      for (let attempt = 0; attempt < 3 && !recorded; attempt++) {
+        try {
+          const completion = await fetch(GATEWAY_BRIDGE, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ inboundId: routed.inboundId, response: relayed }),
+          });
+          if (completion.ok) {
+            recorded = true;
+          } else {
+            const body = (await completion.json().catch(() => ({}))) as { error?: string };
+            recordError = body.error || `gateway reply outcome returned ${completion.status}`;
+          }
+        } catch (error) {
+          recordError = error instanceof Error ? error.message : String(error);
         }
-        if (delivery?.expectReply) return { no_pending: true, taskId, delivery };
       }
+      if (!recorded) return { ...routed, relay: relayed, recordError };
+      return { ...routed, relay: relayed };
+    },
+  },
 
-      const injected = await injectChannelReply(taskId, replyText);
-      if (injected.ok) return { ok: true, mode: "terminal_reply", taskId, delivery, chatScope, resumed: injected.resumed };
-      return { error: injected.error, status: injected.status, taskId, delivery, chatScope };
+  complete_gateway_discussion: {
+    description:
+      "Send the project-aware answer for a route_gateway_message PROJECT_DISCUSSION result back to the original " +
+      "platform thread. Delivery is persisted and idempotent. Call this after using the returned project context; " +
+      "do not restate the response in the gateway's final output after this tool sends it.",
+    schema: z.object({
+      inboundId: z.string().min(1).max(128),
+      response: z.string().min(1).max(16000),
+    }),
+    handler: async (args: { inboundId: string; response: string }) => {
+      const res = await fetch(GATEWAY_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "discussion", ...args }),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "discussion delivery failed", status: res.status };
+    },
+  },
+
+  confirm_gateway_task_created: {
+    description:
+      "Workbench-only: confirm a PROJECT_WORK request after create_task actually returned the child task id. " +
+      "Tower validates the task belongs to the bound project and sends one idempotent confirmation containing " +
+      "the title and Tower locator. Never call before create_task succeeds.",
+    schema: z.object({
+      inboundId: z.string().min(1).max(128),
+      taskId: z.string().min(1).max(128).describe("The real task id returned by create_task"),
+    }),
+    handler: async (args: { inboundId: string; taskId: string }) => {
+      const reviewerTaskId = process.env.TOWER_TASK_ID?.trim();
+      if (!reviewerTaskId) return { error: "confirm_gateway_task_created must run inside the bound Workbench terminal" };
+      const res = await fetch(GATEWAY_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "task_created", reviewerTaskId, ...args }),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "task confirmation failed", status: res.status };
+    },
+  },
+
+  complete_gateway_work: {
+    description:
+      "Workbench-only: after reviewing and accepting a gateway-created child task, reply to the original external " +
+      "thread with the task title, reviewed result, commit id/message, branch, and Tower task locator. Tower " +
+      "requires the caller to be the bound Workbench and the task to be DONE; repeated callbacks are idempotent.",
+    schema: z.object({
+      inboundId: z.string().min(1).max(128),
+      taskId: z.string().min(1).max(128),
+      resultSummary: z.string().min(1).max(8000).optional(),
+    }),
+    handler: async (args: { inboundId: string; taskId: string; resultSummary?: string }) => {
+      const reviewerTaskId = process.env.TOWER_TASK_ID?.trim();
+      if (!reviewerTaskId) return { error: "complete_gateway_work must run inside the bound Workbench terminal" };
+      const res = await fetch(GATEWAY_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "final", reviewerTaskId, ...args }),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "final gateway delivery failed", status: res.status };
     },
   },
 
@@ -487,67 +645,6 @@ export const harnessTools = {
     },
   },
 };
-
-export function parseGatewaySendOutput(output: string): { platform?: string; chat_id?: string; message_id?: string } | null {
-  try {
-    const parsed = JSON.parse(output) as unknown;
-    const messageId =
-      findStringByKeys(parsed, ["message_id", "messageId", "platformMessageId", "openMessageId"]) ??
-      findStringByPattern(parsed, /^om_[A-Za-z0-9_-]+$/);
-    if (!messageId) return null;
-    return {
-      platform: findStringByKeys(parsed, ["platform", "channel", "downstream"]),
-      chat_id: findStringByKeys(parsed, ["chat_id", "chatId", "target", "to", "destination"]),
-      message_id: messageId,
-    };
-  } catch {
-    const messageId =
-      output.match(/\b(message_id|messageId|platformMessageId|\u98de\u4e66\u6d88\u606f\s*ID|message\s*id)\b[^A-Za-z0-9_-]*(om_[A-Za-z0-9_-]+)/i)?.[2] ??
-      output.match(/\bom_[A-Za-z0-9_-]+\b/)?.[0];
-    if (!messageId) return null;
-    const platform = output.match(/\b(platform|channel)\b[^A-Za-z0-9_-]*([A-Za-z0-9_-]+)/i)?.[2];
-    const chatId =
-      output.match(/\b(chat_id|chatId|target|to)\b[^A-Za-z0-9:_-]*([A-Za-z]+:[A-Za-z0-9:_-]+)/i)?.[2] ??
-      output.match(/\b(chat_id|chatId|target|to)\b[^A-Za-z0-9:_-]*(oc_[A-Za-z0-9_-]+)/i)?.[2];
-    return {
-      ...(platform ? { platform } : {}),
-      ...(chatId ? { chat_id: chatId } : {}),
-      message_id: messageId,
-    };
-  }
-}
-
-function findStringByKeys(value: unknown, keys: string[]): string | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = findStringByKeys(item, keys);
-      if (found) return found;
-    }
-    return undefined;
-  }
-  const obj = value as Record<string, unknown>;
-  for (const key of keys) {
-    const raw = obj[key];
-    if (typeof raw === "string" && raw.trim()) return raw.trim();
-  }
-  for (const raw of Object.values(obj)) {
-    const found = findStringByKeys(raw, keys);
-    if (found) return found;
-  }
-  return undefined;
-}
-
-function findStringByPattern(value: unknown, pattern: RegExp): string | undefined {
-  if (typeof value === "string" && pattern.test(value)) return value;
-  if (!value || typeof value !== "object") return undefined;
-  const children = Array.isArray(value) ? value : Object.values(value as Record<string, unknown>);
-  for (const child of children) {
-    const found = findStringByPattern(child, pattern);
-    if (found) return found;
-  }
-  return undefined;
-}
 
 async function getOpenAskForRelay(taskId: string): Promise<boolean> {
   const res = await fetch(`${BRIDGE}/pending?taskId=${encodeURIComponent(taskId)}`);

@@ -53,6 +53,14 @@ async function database(): Promise<PrismaClient> {
       "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  await client.$executeRawUnsafe(`
+    CREATE TABLE "GatewayInbound" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "state" TEXT NOT NULL,
+      "lastError" TEXT,
+      "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
   await up(client);
   await addExecutionReviewKey(client);
   await client.$executeRawUnsafe(`INSERT INTO "Task" ("id", "title", "parentTaskId") VALUES ('parent', 'Parent', NULL), ('child-a', 'Child A', 'parent'), ('child-b', 'Child B', 'parent'), ('child-c', 'Child C', 'parent')`);
@@ -132,6 +140,37 @@ describe("Workbench durable coordinator", () => {
       delivered: false,
       eventCount: 0,
     });
+  });
+
+  it("delivers a gateway request through the durable boundary and advances its queue state", async () => {
+    const { drainWorkbenchEvents, enqueueWorkbenchEvent } = await import("@/lib/workbench/coordinator");
+    await prisma.$executeRawUnsafe(`INSERT INTO "GatewayInbound" ("id", "state") VALUES ('gateway-in-1', 'QUEUED')`);
+    await enqueueWorkbenchEvent({
+      parentTaskId: "parent",
+      sourceTaskId: "parent",
+      kind: "GATEWAY_WORK_REQUEST",
+      dedupKey: "gateway-work:gateway-in-1",
+      payload: {
+        childTaskId: "parent",
+        childTitle: "Gateway request",
+        gatewayInboundId: "gateway-in-1",
+        gatewaySessionId: "gateway-session-1",
+        gatewayMessage: "[Gateway project work request]\nCreate the import task.",
+      },
+    });
+
+    const prompts: string[] = [];
+    await expect(drainWorkbenchEvents("parent", async (batch) => {
+      prompts.push(batch.prompt);
+    })).resolves.toMatchObject({ delivered: true, eventCount: 1 });
+
+    expect(prompts[0]).toContain("Create the import task.");
+    const gatewayRows = await prisma.$queryRawUnsafe<Array<{ state: string; lastError: string | null }>>(
+      `SELECT "state", "lastError" FROM "GatewayInbound" WHERE "id" = 'gateway-in-1'`,
+    );
+    expect(gatewayRows[0]).toMatchObject({ state: "PROCESSING", lastError: null });
+    expect(await prisma.workbenchEvent.findFirst({ where: { dedupKey: "gateway-work:gateway-in-1" } }))
+      .toMatchObject({ state: "CONSUMED" });
   });
 
   it("returns failed deliveries to pending and reuses the durable batch message on retry", async () => {

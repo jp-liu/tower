@@ -49,6 +49,22 @@ export async function cleanupStaleExecutions() {
   }
 
   try {
+    const { recoverQueuedGatewayWork, retryGatewayDeliveries } = await import("@/lib/harness/gateway-router");
+    const [queued, deliveries] = await Promise.all([
+      recoverQueuedGatewayWork(),
+      retryGatewayDeliveries(),
+    ]);
+    if (queued.scanned > 0 || deliveries.scanned > 0) {
+      log.info(
+        `Gateway recovery scanned ${queued.scanned} queued request(s) and ${deliveries.scanned} delivery row(s); ` +
+        `started ${queued.started}, delivered ${deliveries.delivered}, failed ${queued.failed + deliveries.failed}`,
+      );
+    }
+  } catch (error) {
+    log.error("Gateway session startup recovery failed", error);
+  }
+
+  try {
     const { reapOrphanedProcesses } = await import("@/lib/pty/orphan-reaper");
     const killed = await reapOrphanedProcesses();
     if (killed > 0) {
