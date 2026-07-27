@@ -115,6 +115,7 @@ This path was fixed in commit `ecab514`. Implemented across `src/lib/pty/{sessio
 A task can be **derived by another task**: the child's `parentTaskId` points back to the parent, and the child's description carries a `## 来源` section noting "父任务派生" (derived by parent). Parent and child need no new mid-run channel — they **reuse the existing stop-hook fan-out**:
 
 - When the child **ends a turn** (stop hook) → `POST /api/internal/hooks/stop` fans out to `notify-parent` (`src/lib/derive/notify-parent.ts`).
+- Codex keeps both its Stop hook and the `agent-turn-complete` notifier. Both paths use the same Codex turn id for deduplication, so completing a turn persists the parent event without requiring the reusable PTY to close.
 - `notifyParentOnChildStop` resolves the parent and first persists a `WorkbenchEvent` under a stable `dedupKey`; events remain pending while the parent is not running instead of being dropped.
 - The parent's own stop hook is the safe drain boundary. Ordinary completion, decision, and failure events for one parent are coalesced into one review batch, persisted as a `TaskMessage(SYSTEM)`, and only then written to the PTY. Failed delivery returns to `PENDING`; expired claims are recovered at startup.
 - Every provider's execution completion uses one fallback: FAILED always creates a high-priority event, while COMPLETED adds a normal review only when that execution has no stop-hook review/decision. The producers atomically compete on a unique `executionReviewKey` to avoid duplicates.

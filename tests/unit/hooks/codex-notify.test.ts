@@ -44,6 +44,7 @@ describe("tower-codex-notify", () => {
       JSON.stringify({
         type: "agent-turn-complete",
         "thread-id": "thread-123",
+        "turn-id": "turn-456",
         "last-assistant-message": "Implemented and verified.",
       }),
     ], {
@@ -64,6 +65,7 @@ describe("tower-codex-notify", () => {
         body: {
           taskId: "task-123",
           sessionId: "thread-123",
+          eventId: "turn-456",
           lastReply: "Implemented and verified.",
         },
       },

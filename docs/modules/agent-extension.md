@@ -69,20 +69,20 @@ openclaw status --all
 /new
 ```
 
-`/new` 必须是一条独立消息。它让该 OpenClaw 会话重新加载刚注入的 profile 和 skills；应在 gateway 重启后执行，并对每个待验收会话分别执行。它不会删除 Tower 中已持久化的队列和项目绑定，也不会刷新 Tower 内已经运行很久的 Workbench 终端。
+`/new` 必须是一条独立消息。它让该 OpenClaw 会话重新加载刚注入的 profile 和 skills；应在 gateway 重启后执行，并对每个待验收会话分别执行。它不会删除或关闭 Tower 中已持久化的队列、项目讨论历史和绑定，也不会刷新 Tower 内已经运行很久的 Workbench 终端。
 
 完整顺序是：**更新并启动 Tower -> 更新/重新注入 Tower Agent -> 重启 OpenClaw gateway -> 在受影响飞书会话发送 `/new` -> 开始验收**。
 
 ## 四类消息路由
 
-所有被机器人接收并需要处理的消息，都应先调用 `route_gateway_message` 分类，再按返回模式执行。
+所有被机器人接收并需要处理的消息，包括 `DIRECT`，都必须先调用 `route_gateway_message` 持久化并分类，再按返回模式执行。用户说“不要查询 Tower”也不能跳过：持久化路由不是业务数据查询。
 
 | 路由 | 职责边界 | 进入 Workbench | 创建用户任务 | 回复链路与持久化 |
 |------|----------|----------------|--------------|------------------|
 | `DIRECT` | 普通问答，或委托给已配置的第三方 operator | 否 | 否 | OpenClaw 直接回复。Tower 会持久化并去重入站路由，但不承诺普通聊天回复的完整 Tower-owned 历史。 |
 | `TOWER` | 在网关内调用 Tower MCP 做查询或简单操作 | 否 | 路由本身不创建；只有用户明确要求且 MCP 成功时才可能创建 | 网关直接回复；任何写操作只能在工具成功后确认。 |
-| `PROJECT_DISCUSSION` | 使用独立、项目绑定的 Assistant 讨论会话 | 否 | **否，不创建 WorkItem 或子任务** | 调用 `complete_gateway_discussion`；Tower 持久化幂等、可重试的 `GatewayDelivery`，再经 OpenClaw 回原飞书会话。 |
-| `PROJECT_WORK` | 把工程工作交给项目常驻 Workbench 调研、下发、审查 | 是，只经持久化事件队列 | Workbench 成功调用 `create_task` 后才创建 | 先仅返回“已排队”；随后单独发送真实任务创建确认；审查通过后再单独发送最终结果。 |
+| `PROJECT_DISCUSSION` | 使用独立、项目绑定的 Assistant 讨论会话 | 否 | **否，不创建 WorkItem 或子任务** | 每轮写入 `AssistantMessage`；`complete_gateway_discussion` 持久化原生卡片并回复当前入站消息，同时保留 thread。 |
+| `PROJECT_WORK` | 把工程工作交给项目常驻 Workbench 调研、下发、审查 | 是，只经持久化事件队列 | Workbench 成功调用 `create_task` 后才创建 | Tower 先发原生“已排队”卡片；随后发真实数据创建卡片；审查通过后发最终结果卡片。 |
 
 项目讨论和项目工作必须严格分开：
 
@@ -94,6 +94,10 @@ openclaw status --all
 - 子任务完成后还要经过 Workbench 审查并转为 `DONE`，`complete_gateway_work` 才能发送最终结果。
 
 项目解析会优先使用回复绑定、现有线程绑定和用户明确提供的项目 id/名称/别名。仍有多个候选时必须让用户选择，不能擅自挑最高分项目。无显式线程的连续讨论按“群聊 + 发送者 + 会话类型”复用，最近项目回退七天后失效；显式线程绑定不使用这项过期回退。
+
+项目讨论按 `assistant.historyTurns` 恢复最近轮次，过长上下文会截断并显式标记。每轮回复完成后释放本轮执行资源，但讨论绑定和最多 100 轮 Tower-owned 历史继续保留；回复旧讨论卡片可以恢复绑定。创建任务不会关闭讨论。用户明确说“结束 Tower 讨论”时传 `sessionAction=CLOSE`；明确开始新讨论或切换项目时传 `sessionAction=NEW`。OpenClaw `/new` 不会透传为 Tower 关闭信号，因此不能用它结束 Tower 讨论。
+
+回复旧任务卡片时，普通追问仍路由到原任务；只有用户明确说“创建新任务”或“开始新工作”时才传 `startNewWork=true`，覆盖旧任务回复绑定。
 
 ## 飞书真实渠道验收
 
@@ -147,15 +151,15 @@ openclaw status --all
 
 按时间顺序验收三种不同结果：
 
-1. 首次回复只能表示“请求已排队到 `<项目名>` Workbench”，不能出现“任务已创建”的承诺。
-2. Workbench 实际调用 `create_task` 成功后，飞书收到一条独立创建确认，其中含真实任务标题和 Tower task id；此时才能在 Tower 看板或任务详情中核对该任务。
-3. 子任务完成且经 Workbench 审查接受后，飞书收到独立最终结果，其中含审查后的摘要、commit、branch 和同一个 Tower task id。
+1. 首次收到“小塔 · 已排队”卡片，只表示请求进入 `<项目名>` Workbench，不能出现“任务已创建”的承诺。
+2. Workbench 实际调用 `create_task` 成功后，飞书收到“小塔 · 任务已创建”卡片，其中基于服务端真实数据展示标题、项目、优先级、状态、工作区、分支、任务 ID、目标和是否自动启动；此时才能在 Tower 核对任务。
+3. 子任务完成且经 Workbench 审查接受后，飞书收到“小塔 · 任务已完成”卡片，其中含审查后的摘要、commit、branch 和同一个 Tower task id。
 
 如果只收到“已排队”，验收状态仍是等待创建，不能判定任务创建成功。
 
 ## 可靠投递与幂等
 
-Tower 会先持久化项目讨论回复、真实任务创建确认和最终结果，再通过 OpenClaw 发送到原飞书会话。这三类 `GatewayDelivery` 都有稳定的语义去重键：
+Tower 会先持久化“已排队”、项目讨论回复、真实任务创建确认和最终结果的文本回退与原生卡片 payload，再通过 OpenClaw 回复当前入站 `platformMessageId` 并保留 `threadId`。这四类 `GatewayDelivery` 都有稳定的语义去重键：
 
 - 发送失败后保留为 `FAILED` 并按退避时间重试；
 - Tower 启动时恢复过期的 `SENDING` claim，并重试到期消息；
@@ -171,12 +175,12 @@ Tower 会先持久化项目讨论回复、真实任务创建确认和最终结�
 1. 不要重发同一工作请求。用户手工重发会产生新的飞书 message id，可能被视为第二项工作；只有同一 callback 的重试会被幂等去重。
 2. 确认新 Tower 进程仍在运行，并检查启动/运行日志中的 `Gateway recovery`、`Workbench` 或 gateway delivery 错误。
 3. 打开 Tower **Missions** 或对应项目 Workbench，确认常驻 Workbench 终端是否运行。忙碌终端不会被直接写入；持久化事件要等当前 turn 完成后的安全边界。
-4. 如果 Workbench 是升级前就一直存在的长会话，它可能还没有加载新的 system directive 或 hooks。停止旧执行，再通过正常的 **Continue/Retry** 流程启动新 Workbench 会话。队列已经持久化，新会话会在安全边界继续消费，不要重新创建工作请求。
-5. `/new` 只刷新 OpenClaw 的飞书会话，不能替代上述 Workbench 重启。这正是 `PROJECT_WORK` 可能保持 `PENDING`、而 Tower 查询和项目讨论仍正常的典型场景。
+4. Tower 重启恢复会自动启动或 Continue Workbench，并为新 PTY 恢复一次安全消费边界；不应再要求手工 Stop/Continue。若仍然 `PENDING`，检查恢复日志，不要重建请求。
+5. `/new` 只刷新 OpenClaw 的飞书会话，既不关闭 Tower 讨论，也不能代替 Workbench 恢复。
 
 ### Tower 服务重启后的队列恢复
 
-Tower 启动会扫描 `QUEUED`/`PROCESSING` 的项目工作，确保对应 Workbench 启动，并重试待发送或失败的 delivery。重启后先观察恢复日志和原飞书线程，不要立即重复发送请求。持久化事件和去重键用于恢复原请求，而不是生成一个新请求。
+Tower 启动会扫描 `QUEUED`/`PROCESSING` 的项目工作，确保对应 Workbench 启动，恢复安全消费边界，并重试待发送或失败的 delivery。重启后先观察恢复日志和原飞书线程，不要立即重复发送请求。持久化事件和去重键用于恢复原请求，而不是生成一个新请求。
 
 ### Profile 或 skill 仍是旧版本
 
@@ -198,8 +202,8 @@ openclaw status --all
 ## 当前限制
 
 - Tower Agent 默认只安装 Tower 能力，不安装飞书 MCP、凭据或第三方 operator。
-- 项目讨论有独立项目绑定会话和持久化回复投递，但目前没有完整的 Tower-owned discussion history UI。
-- 当前文档不承诺特殊飞书卡片样式；验收以实际文本回复、task id 和 Tower 状态为准。
+- 项目讨论历史已由 Tower 持久化，但目前没有完整的 discussion history UI。
+- 原生卡片依赖 OpenClaw `--presentation` 支持；旧版 OpenClaw 会降级为持久化的文本回退。
 - 共享群聊如需限制可访问工作区/项目，可配置 `harness.channelBindings`；目前不要假定已有专门的可视化管理页面。
 
 ## 能力路由

@@ -56,6 +56,14 @@ export function getSession(taskId: string): PtySession | undefined {
   return sessions.get(taskId);
 }
 
+/** Preserve the safe turn boundary on the live PTY object across route/module reloads. */
+export function markSessionTurnComplete(taskId: string): boolean {
+  const session = sessions.get(taskId);
+  if (!session || session.killed) return false;
+  session.markTurnComplete();
+  return true;
+}
+
 /**
  * Remove a session from the registry and kill its whole process group (claude
  * CLI + its MCP/LSP children) — killing only the immediate child would orphan

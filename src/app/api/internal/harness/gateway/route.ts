@@ -27,6 +27,8 @@ const inboundSchema = z.object({
   project: z.string().trim().min(1).max(512).optional(),
   intent: z.enum(["DIRECT", "TOWER", "PROJECT_DISCUSSION", "PROJECT_WORK"]),
   content: z.string().trim().min(1).max(16_000),
+  sessionAction: z.enum(["CONTINUE", "NEW", "CLOSE"]).optional(),
+  startNewWork: z.boolean().optional(),
 }).strict();
 
 const completionSchema = z.discriminatedUnion("action", [

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { broadcastNotification } from "@/lib/pty/ws-server";
 import { notifyParentOnChildDecision, notifyParentOnChildStop } from "@/lib/derive/notify-parent";
 import { getOpenAsk } from "@/lib/harness/harness-message";
-import { destroySession } from "@/lib/pty/session-store";
+import { destroySession, markSessionTurnComplete } from "@/lib/pty/session-store";
 import { openWorkbenchDrainBoundary } from "@/lib/workbench/coordinator";
 
 export const runtime = "nodejs";
@@ -80,6 +80,11 @@ export async function POST(request: NextRequest) {
     select: { id: true },
   });
   const childContext = { sessionId, eventId, executionId: execution?.id ?? null };
+
+  // This provider callback is the authoritative end-of-turn signal. Keep that
+  // fact on the live PTY object so a later startup/module recovery can restore
+  // a lost drain token without treating a busy terminal as safe.
+  markSessionTurnComplete(task.id);
 
   // Harness park 分叉：这次回合结束若是「等人回复」（有 PENDING 请求）而非「做完」，
   // 就 kill 掉空闲 PTY 省资源即返回。execution 已在 ask_human 时置 PAUSED → onExit guard

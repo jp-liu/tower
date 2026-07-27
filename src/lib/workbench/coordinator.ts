@@ -461,6 +461,18 @@ export function openWorkbenchDrainBoundary(parentTaskId: string): void {
   scheduleReadyParentDrain(parentTaskId, "NORMAL");
 }
 
+/**
+ * Recreate only the disposable drain token after a server/module restart. The
+ * live PTY owns the stronger BUSY/IDLE fact, so recovery cannot inject into an
+ * already-running agent turn merely because the in-memory token disappeared.
+ */
+export function restoreWorkbenchDrainBoundary(parentTaskId: string): boolean {
+  const session = getSession(parentTaskId);
+  if (!session || session.killed || !session.isAtTurnBoundary) return false;
+  openWorkbenchDrainBoundary(parentTaskId);
+  return true;
+}
+
 export async function recoverWorkbenchEventClaims(now = new Date()): Promise<number> {
   const expiredBefore = new Date(now.getTime() - WORKBENCH_CLAIM_LEASE_MS);
   const result = await db.workbenchEvent.updateMany({

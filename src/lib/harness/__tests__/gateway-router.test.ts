@@ -2,6 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import {
+  hasWorkbenchDrainBoundary,
+  resetWorkbenchDrainBoundariesForTests,
+} from "@/lib/workbench/boundary";
+import { openWorkbenchDrainBoundary } from "@/lib/workbench/coordinator";
+import {
   GATEWAY_CHANNEL_BINDINGS_KEY,
   GATEWAY_RECENT_SESSION_TTL_MS,
   completeGatewayDiscussion,
@@ -13,6 +18,7 @@ import {
   routeGatewayInbound,
   type GatewayInboundRequest,
 } from "../gateway-router";
+import type { HarnessGatewaySendInput } from "../gateway-send";
 
 let workspaceId: string;
 let alphaId: string;
@@ -29,6 +35,17 @@ function inbound(overrides: Partial<GatewayInboundRequest> = {}): GatewayInbound
     content: "Discuss the next release",
     ...overrides,
   };
+}
+
+function successfulSender(messageId = `om_sent_${randomUUID()}`) {
+  return vi.fn(async (input: HarnessGatewaySendInput) => {
+    void input;
+    return {
+      ok: true as const,
+      output: JSON.stringify({ channel: "feishu", chat_id: "oc_gateway_test", message_id: messageId }),
+      resolvedDest: "feishu:oc_gateway_test",
+    };
+  });
 }
 
 async function configureChannel(input: {
@@ -77,6 +94,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   resetGatewayDeliveryRetrySchedulerForTests();
+  resetWorkbenchDrainBoundariesForTests();
   vi.useRealTimers();
   const assistantIds = await db.gatewaySession.findMany({
     where: { project: { workspaceId } },
@@ -86,7 +104,9 @@ afterEach(async () => {
     where: { id: { in: assistantIds.flatMap((row) => row.assistantSessionId ? [row.assistantSessionId] : []) } },
   });
   await db.workspace.delete({ where: { id: workspaceId } });
-  await db.systemConfig.deleteMany({ where: { key: GATEWAY_CHANNEL_BINDINGS_KEY } });
+  await db.systemConfig.deleteMany({
+    where: { key: { in: [GATEWAY_CHANNEL_BINDINGS_KEY, "assistant.historyTurns"] } },
+  });
   vi.restoreAllMocks();
 });
 
@@ -172,7 +192,7 @@ describe("gateway inbound routing", () => {
       threadId: "omt_thread_1",
       intent: "PROJECT_WORK",
       content: "Implement this change",
-    }), vi.fn(async () => ({ mode: "already_running", executionId: "wb-exec" })));
+    }), vi.fn(async () => ({ mode: "already_running", executionId: "wb-exec" })), successfulSender());
     expect(threadBound).toMatchObject({
       mode: "project_work",
       project: { projectId: alphaId },
@@ -397,12 +417,168 @@ describe("gateway inbound routing", () => {
     });
   });
 
+  it("persists discussion turns and restores only the configured recent context", async () => {
+    await db.systemConfig.upsert({
+      where: { key: "assistant.historyTurns" },
+      create: { key: "assistant.historyTurns", value: "2" },
+      update: { value: "2" },
+    });
+    let sessionId = "";
+    for (let index = 1; index <= 3; index++) {
+      const routed = await routeGatewayInbound(inbound({
+        platformMessageId: `om_history_${index}`,
+        project: index === 1 ? alphaId : undefined,
+        threadId: "omt_history",
+        content: `question ${index}`,
+      }), vi.fn());
+      expect(routed.mode).toBe("project_discussion");
+      if (routed.mode !== "project_discussion") return;
+      sessionId = routed.assistantSessionId;
+      await completeGatewayDiscussion(routed.inboundId, `answer ${index}`, successfulSender(`om_history_answer_${index}`));
+    }
+
+    const followup = await routeGatewayInbound(inbound({
+      platformMessageId: "om_history_4",
+      threadId: "omt_history",
+      content: "question 4",
+    }), vi.fn());
+    expect(followup.mode).toBe("project_discussion");
+    if (followup.mode !== "project_discussion") return;
+    expect(followup.assistantSessionId).toBe(sessionId);
+    expect(followup.history.truncated).toBe(true);
+    expect(followup.history.messages.map((message) => message.text)).toEqual([
+      "question 2", "answer 2", "question 3", "answer 3",
+    ]);
+    expect(await db.assistantMessage.count({ where: { sessionId } })).toBe(8);
+    expect(await db.assistantTurn.count({ where: { sessionId } })).toBe(4);
+  });
+
+  it("completes a discussion turn after Assistant startup reconciliation interrupts it", async () => {
+    const routed = await routeGatewayInbound(inbound({
+      platformMessageId: "om_reconciled_turn",
+      project: alphaId,
+      threadId: "omt_reconciled_turn",
+    }), vi.fn());
+    expect(routed.mode).toBe("project_discussion");
+    if (routed.mode !== "project_discussion") return;
+    const turn = await db.assistantTurn.findFirstOrThrow({
+      where: { sessionId: routed.assistantSessionId },
+    });
+    await db.$transaction([
+      db.assistantTurn.update({
+        where: { id: turn.id },
+        data: { status: "INTERRUPTED", completedAt: new Date() },
+      }),
+      db.assistantMessage.updateMany({
+        where: { turnId: turn.id, role: "ASSISTANT" },
+        data: { status: "INTERRUPTED" },
+      }),
+    ]);
+
+    await completeGatewayDiscussion(
+      routed.inboundId,
+      "Recovered discussion answer",
+      successfulSender("om_reconciled_answer"),
+    );
+    expect(await db.assistantTurn.findUnique({ where: { id: turn.id } }))
+      .toMatchObject({ status: "COMPLETE" });
+    expect(await db.assistantMessage.findFirst({ where: { turnId: turn.id, role: "ASSISTANT" } }))
+      .toMatchObject({ status: "COMPLETE", partsJson: expect.stringContaining("Recovered discussion answer") });
+  });
+
+  it("closes an explicit discussion and restores it when an old reply is used", async () => {
+    const first = await routeGatewayInbound(inbound({
+      platformMessageId: "om_lifecycle_first",
+      project: alphaId,
+      threadId: "omt_lifecycle",
+    }), vi.fn());
+    expect(first.mode).toBe("project_discussion");
+    if (first.mode !== "project_discussion") return;
+    await completeGatewayDiscussion(first.inboundId, "Lifecycle answer", successfulSender("om_lifecycle_answer"));
+
+    const closed = await routeGatewayInbound(inbound({
+      platformMessageId: "om_lifecycle_close",
+      replyToMessageId: "om_lifecycle_answer",
+      threadId: "omt_lifecycle",
+      sessionAction: "CLOSE",
+      content: "结束讨论",
+    }), vi.fn());
+    expect(closed).toMatchObject({ mode: "discussion_closed", closedSessionIds: [first.sessionId] });
+    expect(await db.gatewaySession.findUnique({ where: { id: first.sessionId } }))
+      .toMatchObject({ status: "CLOSED" });
+
+    const restored = await routeGatewayInbound(inbound({
+      platformMessageId: "om_lifecycle_restore",
+      replyToMessageId: "om_lifecycle_answer",
+      threadId: "omt_lifecycle",
+      content: "继续旧讨论",
+    }), vi.fn());
+    expect(restored).toMatchObject({
+      mode: "project_discussion",
+      sessionId: first.sessionId,
+      assistantSessionId: first.assistantSessionId,
+      resolution: "reply_message_binding",
+    });
+    expect(await db.gatewaySession.findUnique({ where: { id: first.sessionId } }))
+      .toMatchObject({ status: "ACTIVE" });
+  });
+
+  it("closes the old binding and creates a new one on an explicit project switch", async () => {
+    const first = await routeGatewayInbound(inbound({
+      platformMessageId: "om_switch_first",
+      project: alphaId,
+      threadId: "omt_switch_project",
+    }), vi.fn());
+    expect(first.mode).toBe("project_discussion");
+    if (first.mode !== "project_discussion") return;
+
+    const switched = await routeGatewayInbound(inbound({
+      platformMessageId: "om_switch_second",
+      project: betaId,
+      threadId: "omt_switch_project",
+      sessionAction: "NEW",
+      content: "Switch to the beta project",
+    }), vi.fn());
+    expect(switched).toMatchObject({
+      mode: "project_discussion",
+      project: { projectId: betaId },
+      resolution: "explicit_project",
+    });
+    if (switched.mode !== "project_discussion") return;
+    expect(switched.sessionId).not.toBe(first.sessionId);
+    expect(switched.assistantSessionId).not.toBe(first.assistantSessionId);
+    expect(await db.gatewaySession.findUnique({ where: { id: first.sessionId } }))
+      .toMatchObject({ status: "CLOSED" });
+  });
+
+  it("lets an explicit new-work intent override an old task reply binding", async () => {
+    const task = await db.task.create({ data: { title: "Old task", projectId: alphaId } });
+    const followup = await routeGatewayInbound(inbound({
+      platformMessageId: "om_old_task_followup",
+      taskId: task.id,
+      intent: "PROJECT_DISCUSSION",
+      content: "What is the current status?",
+    }), vi.fn());
+    expect(followup).toMatchObject({ mode: "task_reply", taskId: task.id });
+
+    const newWork = await routeGatewayInbound(inbound({
+      platformMessageId: "om_explicit_new_work",
+      taskId: task.id,
+      project: alphaId,
+      intent: "PROJECT_WORK",
+      content: "Create a new task for a separate implementation",
+    }), vi.fn(async () => ({ mode: "already_running", executionId: "workbench-exec" })), successfulSender());
+    expect(newWork).toMatchObject({ mode: "project_work", project: { projectId: alphaId } });
+    expect(newWork.mode).not.toBe("task_reply");
+  });
+
   it("queues one durable event while a Workbench is busy and retries idempotent recovery", async () => {
     const ensure = vi.fn()
       .mockResolvedValueOnce({ mode: "already_running", executionId: "running-exec" });
     const request = inbound({ project: alphaId, intent: "PROJECT_WORK", content: "Build the import flow" });
 
-    const first = await routeGatewayInbound(request, ensure);
+    const sender = successfulSender("om_queue_ack");
+    const first = await routeGatewayInbound(request, ensure, sender);
     const retry = await routeGatewayInbound(request, ensure);
 
     expect(first).toMatchObject({ mode: "project_work", queued: true, workbench: { mode: "already_running" } });
@@ -415,6 +591,11 @@ describe("gateway inbound routing", () => {
     });
     expect(retry).not.toHaveProperty("instructions");
     expect(ensure).toHaveBeenCalledTimes(1);
+    expect(sender).toHaveBeenCalledTimes(1);
+    expect(sender.mock.calls[0][0]).toMatchObject({
+      replyToMessageId: request.platformMessageId,
+      presentation: { title: "小塔 · 已排队", tone: "warning" },
+    });
     expect(await db.gatewayInbound.count({ where: { platformMessageId: request.platformMessageId } })).toBe(1);
     expect(await db.workbenchEvent.count({ where: { dedupKey: { startsWith: "gateway-work:" } } })).toBe(1);
     expect(await db.workbenchEvent.findFirst({ where: { dedupKey: { startsWith: "gateway-work:" } } }))
@@ -427,6 +608,7 @@ describe("gateway inbound routing", () => {
     const routed = await routeGatewayInbound(
       inbound({ project: alphaId, intent: "PROJECT_WORK", content: "Recover this queued request" }),
       vi.fn(async () => ({ mode: "started", executionId: "initial-exec" })),
+      successfulSender("om_initial_queue_ack"),
     );
     expect(routed.mode).toBe("project_work");
     if (routed.mode !== "project_work") return;
@@ -436,12 +618,63 @@ describe("gateway inbound routing", () => {
 
     await expect(recoverQueuedGatewayWork(ensure)).resolves.toEqual({ scanned: 1, started: 1, failed: 0 });
     expect(ensure).toHaveBeenCalledWith(routed.workbenchTaskId);
+    expect(hasWorkbenchDrainBoundary(routed.workbenchTaskId)).toBe(true);
     expect(await db.workbenchEvent.findFirst({
       where: {
         parentTaskId: routed.workbenchTaskId,
         dedupKey: `gateway-work:${routed.inboundId}`,
       },
     })).toMatchObject({ kind: "GATEWAY_WORK_REQUEST", state: "PENDING" });
+  });
+
+  it("restores a lost boundary for an already-running idle Workbench", async () => {
+    const routed = await routeGatewayInbound(
+      inbound({ project: alphaId, intent: "PROJECT_WORK", content: "Recover after Tower restart" }),
+      vi.fn(async () => ({ mode: "already_running", executionId: "live-workbench" })),
+      successfulSender("om_restart_queue_ack"),
+    );
+    expect(routed.mode).toBe("project_work");
+    if (routed.mode !== "project_work") return;
+
+    resetWorkbenchDrainBoundariesForTests();
+    const ensure = vi.fn(async () => ({ mode: "already_running", executionId: "live-workbench" }));
+    const restore = vi.fn((taskId: string) => {
+      openWorkbenchDrainBoundary(taskId);
+      return true;
+    });
+
+    await expect(recoverQueuedGatewayWork(
+      ensure,
+      100,
+      successfulSender("om_restart_retry_ack"),
+      restore,
+    )).resolves.toEqual({ scanned: 1, started: 1, failed: 0 });
+    expect(restore).toHaveBeenCalledOnce();
+    expect(restore).toHaveBeenCalledWith(routed.workbenchTaskId);
+    expect(hasWorkbenchDrainBoundary(routed.workbenchTaskId)).toBe(true);
+  });
+
+  it("does not restore a boundary while an already-running Workbench is busy", async () => {
+    const routed = await routeGatewayInbound(
+      inbound({ project: alphaId, intent: "PROJECT_WORK", content: "Queue while the Workbench is busy" }),
+      vi.fn(async () => ({ mode: "already_running", executionId: "busy-workbench" })),
+      successfulSender("om_busy_queue_ack"),
+    );
+    expect(routed.mode).toBe("project_work");
+    if (routed.mode !== "project_work") return;
+
+    resetWorkbenchDrainBoundariesForTests();
+    const restore = vi.fn(() => false);
+    await expect(recoverQueuedGatewayWork(
+      vi.fn(async () => ({ mode: "already_running", executionId: "busy-workbench" })),
+      100,
+      successfulSender("om_busy_retry_ack"),
+      restore,
+    )).resolves.toEqual({ scanned: 1, started: 1, failed: 0 });
+    expect(restore).toHaveBeenCalledWith(routed.workbenchTaskId);
+    expect(hasWorkbenchDrainBoundary(routed.workbenchTaskId)).toBe(false);
+    expect(await db.workbenchEvent.findFirst({ where: { dedupKey: `gateway-work:${routed.inboundId}` } }))
+      .toMatchObject({ state: "PENDING" });
   });
 });
 
@@ -450,12 +683,29 @@ describe("gateway confirmations and delivery retry", () => {
     const routed = await routeGatewayInbound(
       inbound({ project: alphaId, intent: "PROJECT_WORK", content: "Implement gateway callbacks" }),
       vi.fn(async () => ({ mode: "already_running", executionId: "workbench-exec" })),
+      successfulSender("om_confirmation_queue_ack"),
     );
     expect(routed.mode).toBe("project_work");
     if (routed.mode !== "project_work") return;
 
-    const child = await db.task.create({ data: { title: "Gateway callback implementation", projectId: alphaId } });
-    const sender = vi.fn(async (sendInput: { message: string; replyToMessageId?: string | null }) => ({
+    const child = await db.task.create({
+      data: {
+        title: "Gateway callback implementation",
+        description: "## 目标\nImplement reliable gateway callbacks.\n\n## 来源\nGateway",
+        priority: "HIGH",
+        baseBranch: "main",
+        projectId: alphaId,
+      },
+    });
+    const execution = await db.taskExecution.create({
+      data: {
+        taskId: child.id,
+        status: "RUNNING",
+        worktreeBranch: "feat/gateway-callbacks",
+        startedAt: new Date(),
+      },
+    });
+    const sender = vi.fn(async (sendInput: HarnessGatewaySendInput) => ({
       ok: true as const,
       output: JSON.stringify({ channel: "feishu", chat_id: "oc_gateway_test", message_id: "om_sent" }),
       resolvedDest: "feishu:oc_gateway_test",
@@ -473,11 +723,17 @@ describe("gateway confirmations and delivery retry", () => {
     expect(sender).toHaveBeenCalledTimes(1);
     expect(sender.mock.calls[0][0].message).toContain(`Task created: ${child.title}`);
     expect(sender.mock.calls[0][0].message).toContain(`Tower task: ${child.id}`);
+    expect(sender.mock.calls[0][0].presentation).toMatchObject({
+      title: "小塔 · 任务已创建",
+      tone: "success",
+    });
+    expect(JSON.stringify(sender.mock.calls[0][0].presentation)).toContain("Implement reliable gateway callbacks");
+    expect(JSON.stringify(sender.mock.calls[0][0].presentation)).toContain("已自动启动：是（RUNNING）");
 
     await db.task.update({ where: { id: child.id }, data: { status: "DONE", doneAt: new Date() } });
-    await db.taskExecution.create({
+    await db.taskExecution.update({
+      where: { id: execution.id },
       data: {
-        taskId: child.id,
         status: "COMPLETED",
         summary: "Implemented and verified callbacks",
         gitLog: "abc1234 feat(task): connect gateway callbacks",
@@ -517,6 +773,10 @@ describe("gateway confirmations and delivery retry", () => {
     expect(finalMessage).toContain("Commit: abc1234 feat(task): connect gateway callbacks");
     expect(finalMessage).toContain("Branch: feat/gateway-callbacks");
     expect(finalMessage).toContain(`Tower task: ${child.id}`);
+    expect(sender.mock.calls[1][0].presentation).toMatchObject({
+      title: "小塔 · 任务已完成",
+      tone: "success",
+    });
   });
 
   it("persists a failed discussion delivery and retries it against the original message", async () => {
@@ -538,8 +798,9 @@ describe("gateway confirmations and delivery retry", () => {
     await expect(retryGatewayDeliveries(retrySender, new Date(Date.now() + 10 * 60_000)))
       .resolves.toEqual({ scanned: 1, delivered: 1, failed: 0 });
     expect(retrySender).toHaveBeenCalledWith(expect.objectContaining({
-      replyToMessageId: "om_original",
+      replyToMessageId: request.platformMessageId,
       threadId: "omt_discussion",
+      presentation: expect.objectContaining({ title: "小塔 · 项目讨论" }),
     }));
     expect(await db.gatewayDelivery.findFirst({ where: { inboundId: routed.inboundId } }))
       .toMatchObject({ state: "DELIVERED", attempts: 2, platformMessageId: "om_retry_success" });
@@ -569,7 +830,7 @@ describe("gateway confirmations and delivery retry", () => {
     expect(sender).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(1);
 
-    await expect(completeGatewayDiscussion(routed.inboundId, "Retry this answer", sender))
+    await expect(completeGatewayDiscussion(routed.inboundId, "A changed retry answer", sender))
       .resolves.toMatchObject({ ok: false, deduped: true, pendingRetry: true });
     expect(sender).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(1);
@@ -580,6 +841,11 @@ describe("gateway confirmations and delivery retry", () => {
       .toMatchObject({ state: "DELIVERED", attempts: 2, platformMessageId: "om_auto_retry_success" });
     expect(await db.gatewayInbound.findUnique({ where: { id: routed.inboundId } }))
       .toMatchObject({ state: "PROCESSED" });
+    const storedAssistant = await db.assistantMessage.findFirst({
+      where: { sessionId: routed.assistantSessionId, role: "ASSISTANT" },
+    });
+    expect(storedAssistant?.partsJson).toContain("Retry this answer");
+    expect(storedAssistant?.partsJson).not.toContain("changed retry answer");
     expect(vi.getTimerCount()).toBe(0);
   });
 });

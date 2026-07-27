@@ -27,8 +27,9 @@ The gateway layer adds no replacement for `Task`, `WorkItem`, or `TaskGroup`.
 - `GatewayInbound` is the deduplicated inbound envelope and queue state. Its
   stable key includes gateway, platform, chat, and platform message id.
 - `GatewayDelivery` is an idempotent, retryable reply to the original channel.
-  Creation confirmations, discussion responses, and final results each have a
-  stable semantic deduplication key.
+  Queue acknowledgements, creation confirmations, discussion responses, and
+  final results each have a stable semantic deduplication key. Both the text
+  fallback and native-card payload are persisted for stable retries.
 - `HarnessDelivery` remains the compatibility mapping for
   `[[tower:task=...]]`, parked asks, and work-channel task replies.
 - `WorkbenchEvent` remains the only durable inbox that can inject project work
@@ -66,6 +67,13 @@ projects without choosing a default project.
 5. the sender's most recently active allowed project session;
 6. the channel's optional default project.
 
+Every addressed inbound message, including `DIRECT`, must pass through this
+route before the gateway answers. User wording such as "do not query Tower"
+does not bypass routing persistence. `startNewWork=true` is reserved for an
+explicit create-new-task/start-new-work request and overrides an old task reply
+binding. `sessionAction=NEW` skips the old discussion binding for an explicit
+fresh discussion or project switch.
+
 Every step is constrained by the channel workspace and project allowlist. More
 than one remaining match returns candidates and requires selection. No route is
 allowed to choose the highest-scored candidate when alternatives remain.
@@ -76,6 +84,22 @@ same person while preventing participants in a group chat from sharing context.
 Sender-based session/recent-project lookup expires after seven days; an old
 project is never selected silently forever. Explicit thread/root bindings do
 not use this recency fallback.
+
+## Discussion History And Lifecycle
+
+Each `PROJECT_DISCUSSION` inbound creates a Tower-owned `AssistantTurn` with
+paired user and assistant `AssistantMessage` rows. Each route restores the
+latest configurable `assistant.historyTurns` completed turns, bounded to 12,000
+characters, and reports when older context was truncated. Stored history is
+bounded to 100 completed turns per discussion.
+
+Completing a reply settles the turn and releases per-turn execution resources,
+while its `GatewaySession` binding remains durable. Tower/OpenClaw restarts do
+not erase it, and replying to an old delivered discussion card can reactivate a
+closed binding. Creating a task does not close a discussion. Use
+`sessionAction=CLOSE` for an explicit Tower-side close and `sessionAction=NEW`
+for a fresh discussion/project switch. OpenClaw `/new` is not a Tower close
+signal and is never relied on for this lifecycle.
 
 Duplicate inbound callbacks never replay an actionable route. `QUEUED` or live
 `PROCESSING` rows return `in_progress` with `noOp: true`; `PROCESSED` rows return
@@ -93,10 +117,16 @@ then started or resumed idempotently.
 
 - A live busy Workbench receives no direct PTY write. The event remains pending
   until `openWorkbenchDrainBoundary` observes a completed turn.
+- The live PTY separately retains an authoritative `BUSY`/`IDLE` turn state:
+  every input marks it busy and a provider Stop/turn-complete callback marks it
+  idle. If a Tower route/module restart loses only the disposable drain token,
+  startup recovery recreates that token for `already_running + IDLE`; it never
+  infers safety from a quiet buffer or injects into `already_running + BUSY`.
 - A stopped Workbench is started or resumed, but the durable event still waits
   for that safe boundary.
-- Startup recovery reopens Workbenches with queued requests and retries pending
-  or failed outbound deliveries.
+- Startup recovery reopens Workbenches with queued requests, restores one safe
+  drain boundary for a newly started/continued PTY or a live idle PTY, and
+  retries pending or failed outbound deliveries.
 - A repeated platform callback reuses the same inbound row, Workbench event,
   and delivery rows.
 
@@ -108,7 +138,8 @@ The Workbench prompt carries the stable gateway inbound id.
 2. Only after the call returns a real task id may it call
    `confirm_gateway_task_created`. Tower validates the caller is the bound
    Workbench and the task belongs to the bound project before sending a
-   confirmation with title and Tower task id.
+   confirmation card from server data: title, project, priority, status,
+   workspace, branch, task id, goal, and whether execution auto-started.
 3. Child completion enters the existing durable review inbox.
 4. After review, the Workbench moves the accepted child to `DONE` and calls
    `complete_gateway_work`.
@@ -116,6 +147,8 @@ The Workbench prompt carries the stable gateway inbound id.
    original message/thread with title, reviewed summary, commit id/message,
    branch, and Tower task id.
 
+All four durable cards reply to the current inbound `platformMessageId` while
+preserving `threadId`; later rounds never pin their reply to the thread root.
 Failed sends remain `FAILED` with exponential retry time. The earliest due
 delivery owns one process-local `unref` timer; additional failures only move
 that timer earlier and cannot create concurrent retry loops. Startup recovery

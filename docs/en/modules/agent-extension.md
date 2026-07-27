@@ -100,7 +100,7 @@ group or private chat**:
 
 `/new` makes that OpenClaw conversation load the newly injected profile and
 skills. Send it after the gateway restart and separately in every conversation
-under test. It does not remove Tower's durable queue or project bindings, and
+under test. It does not remove or close Tower's durable queue, discussion history, or project bindings, and
 it does not refresh a long-running Tower Workbench terminal.
 
 The complete order is: **update and start Tower -> update/reinject Tower Agent
@@ -109,15 +109,16 @@ The complete order is: **update and start Tower -> update/reinject Tower Agent
 
 ## The Four Routes
 
-Every addressed inbound message must call `route_gateway_message` before work
-begins and follow the returned mode.
+Every addressed inbound message, including `DIRECT`, must call
+`route_gateway_message` before work begins and follow the returned mode. "Do not
+query Tower" does not bypass durable routing, which is not a business-data query.
 
 | Route | Responsibility | Workbench | User task creation | Reply and persistence |
 |---|---|---:|---:|---|
 | `DIRECT` | Ordinary Q&A or delegation to a configured external operator | No | No | OpenClaw replies directly. Tower persists and deduplicates the inbound route, but does not claim a complete Tower-owned history of ordinary chat replies. |
 | `TOWER` | Tower MCP query or simple command in the gateway | No | Not by routing itself; only an explicitly requested successful MCP mutation may create one | The gateway replies directly. Confirm a mutation only after the tool succeeds. |
-| `PROJECT_DISCUSSION` | A separate project-bound Assistant discussion session | No | **No WorkItem or child task** | `complete_gateway_discussion` creates an idempotent, retryable `GatewayDelivery`, which Tower sends through OpenClaw to the original Feishu conversation. |
-| `PROJECT_WORK` | Research, dispatch, and review by the project's resident Workbench | Yes, only through the durable event queue | Only after the Workbench successfully calls `create_task` | A queue acknowledgement comes first, then a separate task-created confirmation, and finally a reviewed result. |
+| `PROJECT_DISCUSSION` | A separate project-bound Assistant discussion session | No | **No WorkItem or child task** | Each turn is stored in `AssistantMessage`; `complete_gateway_discussion` persists a native card replying to the current inbound message while preserving the thread. |
+| `PROJECT_WORK` | Research, dispatch, and review by the project's resident Workbench | Yes, only through the durable event queue | Only after the Workbench successfully calls `create_task` | Tower sends native queued, real-data task-created, and reviewed final-result cards. |
 
 Project discussion and project work are deliberately separate:
 
@@ -139,6 +140,15 @@ ask the user to choose rather than select the highest score. Consecutive
 threadless discussions reuse a chat + sender + session-kind binding; the recent
 project fallback expires after seven days. Explicit thread bindings do not use
 that expiry fallback.
+
+Discussion restores the latest `assistant.historyTurns` turns and marks truncated
+context. Per-turn execution resources are released after reply completion while
+the binding and up to 100 Tower-owned turns remain durable. Replying to an old
+discussion card can restore it, and task creation does not close it. Use
+`sessionAction=CLOSE` for an explicit Tower discussion close and
+`sessionAction=NEW` for a fresh discussion/project switch. OpenClaw `/new` is
+not a Tower close signal. Ordinary old-task follow-ups keep task routing; only
+an explicit new-task/start-new-work request sets `startNewWork=true` to override it.
 
 ## Feishu Channel Acceptance
 
@@ -197,11 +207,11 @@ In <project name>, do this work: add gateway acceptance documentation.
 
 Accept three distinct results in this order:
 
-1. The first response says only that the request was queued for the project
+1. A "小塔 · 已排队" card says only that the request was queued for the project
    Workbench. It must not claim that a task was created.
-2. After the Workbench successfully calls `create_task`, a separate Feishu
-   message contains the real task title and Tower task id. Only then verify the
-   task on the Tower board or detail page.
+2. After `create_task`, a "小塔 · 任务已创建" card contains server-authoritative
+   title, project, priority, status, workspace, branch, task id, goal, and
+   auto-start state. Only then verify the task in Tower.
 3. After the child finishes and the Workbench accepts its review, a separate
    final message contains the reviewed summary, commit, branch, and the same
    Tower task id.
@@ -211,8 +221,8 @@ task creation.
 
 ## Reliable Delivery And Idempotency
 
-Tower persists project-discussion replies, real task-created confirmations, and
-final results before sending them through OpenClaw. These `GatewayDelivery`
+Tower persists queued acknowledgements, project-discussion replies, task-created
+confirmations, and final results, including their native-card payloads, before sending them through OpenClaw. These `GatewayDelivery`
 records have stable semantic deduplication keys:
 
 - failed sends remain `FAILED` and retry with backoff;
@@ -238,18 +248,16 @@ audit log of all gateway conversations.
 3. Open Tower **Missions** or the project's Workbench and check the resident
    terminal. A busy terminal receives no direct write; the durable event waits
    for a completed-turn safe boundary.
-4. A Workbench that remained open across the upgrade may not have loaded the
-   new system directive or hooks. Stop that old execution and use the normal
-   **Continue/Retry** flow to start a fresh Workbench session. The persisted
-   event will drain at a safe boundary; do not recreate the work request.
-5. `/new` refreshes only the OpenClaw/Feishu session. It cannot replace a
-   Workbench restart. This is the characteristic case where `PROJECT_WORK`
-   stays `PENDING` while Tower queries and project discussion still work.
+4. Tower restart recovery starts or continues the Workbench and restores a safe
+   drain boundary automatically. It should not require a manual Stop/Continue;
+   inspect recovery logs if the event remains pending.
+5. `/new` refreshes only OpenClaw/Feishu. It neither closes a Tower discussion
+   nor replaces Workbench recovery.
 
 ### Recovery After A Tower Restart
 
 At startup Tower scans `QUEUED`/`PROCESSING` project work, ensures its Workbench
-is running, and retries pending or failed deliveries. After a restart, observe
+is running, restores a safe drain boundary, and retries pending or failed deliveries. After a restart, observe
 the recovery logs and original Feishu thread before sending anything again.
 Persistence and deduplication recover the original request; they do not create
 a replacement request.
@@ -281,10 +289,10 @@ openclaw status --all
 
 - Tower Agent installs Tower capability only. It does not install Feishu MCP,
   credentials, or third-party operators.
-- Project discussion has a project-bound session and durable reply delivery,
-  but no complete Tower-owned discussion history UI today.
-- No special Feishu card style is promised. Acceptance uses actual text, the
-  task id, and Tower state.
+- Project discussion history is Tower-owned, but there is no complete discussion
+  history UI today.
+- Native cards require OpenClaw `--presentation`; older versions fall back to
+  the same persisted text payload.
 - Shared chats can be restricted with `harness.channelBindings`; do not assume a
   dedicated visual management page exists today.
 

@@ -226,6 +226,8 @@ describe("Codex provider", () => {
       .resolves.toMatchObject({ installed: true });
     expect(writes.find((item) => item.path.endsWith("hooks.json"))?.contents)
       .toContain("request_user_input");
+    expect(writes.findLast((item) => item.path.endsWith("config.toml"))?.contents)
+      .toContain('notify = ["node","/opt/tower/scripts/tower-codex-notify.js"]');
     await expect(adapter.mcp.install({
       name: "tower",
       command: "node",
@@ -248,5 +250,25 @@ describe("Codex provider", () => {
       }),
       expect.any(Object),
     );
+  });
+
+  it("keeps the turn-complete notifier beside user hooks and chains an existing notifier", async () => {
+    const ctx = host();
+    const files = new Map<string, string>([
+      ["/tmp/.codex/config.toml", 'notify = ["notify-send","Codex"]\n\n[features]\nhooks = true\n'],
+      ["/tmp/.codex/hooks.json", JSON.stringify({ hooks: {} })],
+    ]);
+    ctx.fileSystem!.exists = (filePath) => files.has(filePath) || filePath === "/tmp/.codex";
+    ctx.fileSystem!.readText = (filePath) => files.get(filePath) ?? "";
+    ctx.fileSystem!.writeText = (filePath, contents) => { files.set(filePath, contents); };
+    const adapter = new CodexCliAdapter(ctx);
+
+    await expect(adapter.hooks.install({ apiUrl: "http://localhost:3000" }))
+      .resolves.toMatchObject({ installed: true });
+
+    const config = files.get("/tmp/.codex/config.toml") ?? "";
+    expect(config).toContain('notify = ["node","/opt/tower/scripts/tower-codex-notify.js","--chain-base64"');
+    expect(config).not.toContain('notify = ["notify-send","Codex"]');
+    await expect(adapter.hooks.inspect()).resolves.toEqual({ installed: true });
   });
 });

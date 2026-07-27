@@ -102,6 +102,7 @@ function main() {
   const stopBody = JSON.stringify({
     taskId,
     sessionId,
+    eventId: typeof event["turn-id"] === "string" ? event["turn-id"] : "",
     lastReply:
       typeof event["last-assistant-message"] === "string"
         ? event["last-assistant-message"].slice(0, 2000)

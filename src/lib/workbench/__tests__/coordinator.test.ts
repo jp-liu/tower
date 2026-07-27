@@ -220,6 +220,31 @@ describe("Workbench durable coordinator", () => {
     });
   });
 
+  it("restores a lost drain token only for a live PTY at a completed-turn boundary", async () => {
+    const { getSession } = await import("@/lib/pty/session-store");
+    const { restoreWorkbenchDrainBoundary } = await import("@/lib/workbench/coordinator");
+    const {
+      hasWorkbenchDrainBoundary,
+      resetWorkbenchDrainBoundariesForTests,
+    } = await import("@/lib/workbench/boundary");
+
+    vi.mocked(getSession).mockReturnValue({
+      killed: false,
+      isAtTurnBoundary: false,
+    } as never);
+    expect(restoreWorkbenchDrainBoundary("parent")).toBe(false);
+    expect(hasWorkbenchDrainBoundary("parent")).toBe(false);
+
+    vi.mocked(getSession).mockReturnValue({
+      killed: false,
+      isAtTurnBoundary: true,
+    } as never);
+    expect(restoreWorkbenchDrainBoundary("parent")).toBe(true);
+    expect(hasWorkbenchDrainBoundary("parent")).toBe(true);
+
+    resetWorkbenchDrainBoundariesForTests();
+  });
+
   it("associates a final failed execution with its parent-owned high-priority event", async () => {
     const { enqueueChildExecutionFailure } = await import("@/lib/workbench/coordinator");
     await prisma.$executeRawUnsafe(

@@ -399,6 +399,10 @@ export const harnessTools = {
       "explicit project, identify_project, recent-user project, and channel default in that strict order. It " +
       "returns candidates instead of guessing. Task replies preserve parked ask vs work-channel behavior; project " +
       "work is durably queued for the project Workbench; discussions get an independent project-bound session. " +
+      "DIRECT must still pass through this tool even when the user says not to query Tower: routing persistence is " +
+      "not a Tower data query. Set startNewWork only for an explicit create-new-task/start-new-work request, so it " +
+      "can override an old task-card reply; ordinary task follow-ups keep their reply binding. Use sessionAction=CLOSE " +
+      "for an explicit Tower discussion close, and NEW when explicitly switching projects or starting a fresh discussion. " +
       "Duplicate callbacks return in_progress/already_processed with noOp=true; never repeat the original action.",
     schema: z.object({
       gateway: z.enum(["hermes", "openclaw"]),
@@ -414,6 +418,8 @@ export const harnessTools = {
       project: z.string().max(512).optional().describe("Explicit project id, name, alias, or identify_project query from the user"),
       intent: z.enum(["DIRECT", "TOWER", "PROJECT_DISCUSSION", "PROJECT_WORK"]),
       content: z.string().min(1).max(16000),
+      sessionAction: z.enum(["CONTINUE", "NEW", "CLOSE"]).optional(),
+      startNewWork: z.boolean().optional().describe("True only when the user explicitly asks to create a new task or start new work, including while replying to an old task message"),
     }),
     handler: async (args: {
       gateway: "hermes" | "openclaw";
@@ -429,6 +435,8 @@ export const harnessTools = {
       project?: string;
       intent: "DIRECT" | "TOWER" | "PROJECT_DISCUSSION" | "PROJECT_WORK";
       content: string;
+      sessionAction?: "CONTINUE" | "NEW" | "CLOSE";
+      startNewWork?: boolean;
     }) => {
       const res = await fetch(GATEWAY_BRIDGE, {
         method: "POST",
