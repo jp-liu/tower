@@ -1,53 +1,89 @@
 /**
- * 派生中枢：子任务发生事件时通知【父任务】—— 把消息写进父任务的 PTY 唤醒它。
+ * Compatibility producer for child-to-parent review notifications.
  *
- * 当前触发点：子任务 stop hook（回合结束）→ notifyParentOnChildStop。
- * 设计成独立模块，将来别的父子事件（子任务报错、需要输入等）也走这里，
- * stop route 只是它的第一个调用方（见 .claude/rules/process-lifecycle.md 的 fan-out 约定）。
- *
- * 规则：本任务有 parentTaskId 且父任务 PTY 仍活着才推；否则跳过
- * （用户设定：父任务没启动就不发）。best-effort —— 失败只 warn，绝不抛错影响 stop 主流程。
+ * This function intentionally does not touch the parent PTY. It persists a
+ * deduplicated Workbench event; the coordinator drains it only at the parent's
+ * completed-turn boundary.
  */
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/pty/session-store";
-import { planTerminalWrite } from "@/lib/pty/terminal-submit";
-import { buildChildReviewPrompt } from "@/lib/derive/child-review-prompt";
+import {
+  childStopDedupKey,
+  enqueueWorkbenchEvent,
+  type WorkbenchEventKind,
+} from "@/lib/workbench/coordinator";
 
-// 消息体与回车必须分两次写、间隔一拍，否则 Claude TUI 会把尾部 CR 折进文本而不提交。
-const SUBMIT_DELAY_MS = 80;
+interface ChildStopContext {
+  sessionId?: string;
+  eventId?: string;
+  executionId?: string | null;
+}
 
-/**
- * 子任务一轮结束 → 若有在跑的父任务，写一段 review 引导 prompt 进父任务 PTY 唤醒它。
- * @param childTaskId 结束的子任务 id
- * @param childTitle  子任务标题
- * @param lastReply   子任务最后一条回复（供父任务初判，可空）
- */
-export async function notifyParentOnChildStop(
+async function persistChildStopEvent(input: {
+  childTaskId: string;
+  childTitle: string;
+  lastReply: string;
+  question?: string;
+  kind: Extract<WorkbenchEventKind, "CHILD_REVIEW_REQUIRED" | "CHILD_DECISION_REQUIRED">;
+  context?: ChildStopContext;
+}): Promise<{ enqueued: boolean; deduped?: boolean }> {
+  const child = await db.task.findUnique({
+    where: { id: input.childTaskId },
+    select: { parentTaskId: true },
+  });
+  if (!child?.parentTaskId) return { enqueued: false };
+
+  const result = await enqueueWorkbenchEvent({
+    parentTaskId: child.parentTaskId,
+    sourceTaskId: input.childTaskId,
+    executionId: input.context?.executionId ?? null,
+    kind: input.kind,
+    priority: input.kind === "CHILD_DECISION_REQUIRED" ? "HIGH" : "NORMAL",
+    dedupKey: childStopDedupKey({
+      taskId: input.childTaskId,
+      sessionId: input.context?.sessionId,
+      eventId: input.context?.eventId,
+      lastReply: input.lastReply,
+      kind: input.kind,
+    }),
+    payload: {
+      childTaskId: input.childTaskId,
+      childTitle: input.childTitle,
+      childReply: input.lastReply,
+      question: input.question,
+      executionId: input.context?.executionId ?? undefined,
+    },
+  });
+  return { enqueued: true, deduped: result.deduped };
+}
+
+export function notifyParentOnChildStop(
   childTaskId: string,
   childTitle: string,
-  lastReply: string
-): Promise<void> {
-  try {
-    const child = await db.task.findUnique({
-      where: { id: childTaskId },
-      select: { parentTaskId: true },
-    });
-    const parentId = child?.parentTaskId;
-    if (!parentId) return; // 不是派生任务，无父可通知
+  lastReply: string,
+  context?: ChildStopContext,
+) {
+  return persistChildStopEvent({
+    childTaskId,
+    childTitle,
+    lastReply,
+    kind: "CHILD_REVIEW_REQUIRED",
+    context,
+  });
+}
 
-    const parentSession = getSession(parentId);
-    if (!parentSession || parentSession.killed) return; // 父任务没在跑 → 跳过
-
-    const text = buildChildReviewPrompt({ childTitle, childTaskId, childReply: lastReply });
-    const { body, submitKey } = planTerminalWrite(text, true);
-    if (body) parentSession.write(body);
-    if (submitKey) {
-      setTimeout(() => {
-        const s = getSession(parentId);
-        if (s && !s.killed) s.write(submitKey);
-      }, SUBMIT_DELAY_MS);
-    }
-  } catch (err) {
-    console.warn("[notify-parent] failed to notify parent task:", err);
-  }
+export function notifyParentOnChildDecision(
+  childTaskId: string,
+  childTitle: string,
+  lastReply: string,
+  question: string,
+  context?: ChildStopContext,
+) {
+  return persistChildStopEvent({
+    childTaskId,
+    childTitle,
+    lastReply,
+    question,
+    kind: "CHILD_DECISION_REQUIRED",
+    context,
+  });
 }

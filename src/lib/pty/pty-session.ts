@@ -1,6 +1,7 @@
 import * as pty from "node-pty";
 import { ensurePathInEnv, isWindows, stripClaudeNestingEnv, stripTowerRuntimeEnv } from "@/lib/platform";
 import { planTerminalWrite } from "./terminal-submit";
+import { closeWorkbenchDrainBoundary } from "@/lib/workbench/boundary";
 
 export class PtySession {
   readonly taskId: string;
@@ -134,6 +135,9 @@ export class PtySession {
 
   write(data: string): void {
     if (!this.killed) {
+      // Any input starts a new turn. A completed-turn Workbench drain boundary
+      // must not survive into that turn and later inject while the agent is busy.
+      closeWorkbenchDrainBoundary(this.taskId);
       // NTFY-07: user input resets idle timer
       this._resetIdleTimer();
       this._pty.write(data);

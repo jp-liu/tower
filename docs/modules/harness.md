@@ -107,8 +107,8 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 任务可以**被另一个任务派生**：子任务的 `parentTaskId` 指回父任务，子任务描述里带一段 `## 来源` 注明「父任务派生」。父子间不需要新造中途通道，**复用既有的 stop hook fan-out**：
 
 - 子任务**一轮结束**（stop hook）→ `POST /api/internal/hooks/stop` fan-out 到 `notify-parent`（`src/lib/derive/notify-parent.ts`）。
-- `notifyParentOnChildStop` 找到父任务：**仅当父任务 PTY 还活着**才把一段 review 引导 prompt（`child-review-prompt.ts`）写进父任务 PTY 唤醒它；父任务没在跑就跳过（用户设定）。
-- 唤醒是 best-effort：失败只 warn，绝不抛错影响子任务的 stop 主流程。消息体与回车分两次写、间隔一拍（`SUBMIT_DELAY_MS`），否则 Claude TUI 会把尾部 CR 折进文本不提交。
+- `notifyParentOnChildStop` 找到父任务后先按稳定 `dedupKey` 写入 `WorkbenchEvent`；父任务没运行时事件仍保留，不再丢弃。
+- 父任务自己的 stop hook 是安全 drain 边界：同一父任务短时间内的普通完成、待决策和失败事件聚合为一个 review batch，并持久化成 `TaskMessage(SYSTEM)` 后才写入 PTY。投递失败会回到 `PENDING`，过期 claim 可在启动时恢复。
 
 于是「子任务中途求助父任务」不需要专门的中途通道——**把 blocker 作为收尾回复结束回合**就够了，stop hook 会 surface 到父任务。父任务在 review 时定夺，用 `send_task_terminal_input` 把决策注入子任务终端回灌。
 
@@ -164,8 +164,15 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 
 | 文件 | 说明 |
 |------|------|
-| `notify-parent.ts` | 子任务 stop → 写父任务 PTY 唤醒；父任务 PTY 活着才推 |
+| `notify-parent.ts` | 子任务 stop → 去重写入 Workbench 持久化事件 inbox |
 | `child-review-prompt.ts` | 父任务唤醒引导 prompt（含「别原样打回」防环规则） |
+
+### Workbench 协调器 (`src/lib/workbench/`)
+
+| 文件 | 说明 |
+|------|------|
+| `coordinator.ts` | 事件入库、claim lease、批量聚合、失败释放与边界 drain |
+| `boundary.ts` | 父任务已结束当前回合的进程内门闩；任何新 PTY 输入都会关闭 |
 
 ### Hook 脚本 (`scripts/`)
 

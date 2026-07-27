@@ -27,6 +27,14 @@ export async function cleanupStaleExecutions() {
   }
 
   try {
+    const { recoverWorkbenchEventClaims } = await import("@/lib/workbench/coordinator");
+    const recovered = await recoverWorkbenchEventClaims();
+    if (recovered > 0) log.warn(`Recovered ${recovered} stale Workbench event claim(s)`);
+  } catch (error) {
+    log.error("Workbench event claim recovery failed", error);
+  }
+
+  try {
     const { reapOrphanedProcesses } = await import("@/lib/pty/orphan-reaper");
     const killed = await reapOrphanedProcesses();
     if (killed > 0) {

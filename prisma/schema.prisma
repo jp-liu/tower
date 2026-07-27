@@ -158,6 +158,8 @@ model Task {
   notes      ProjectNote[]
   assets     ProjectAsset[]
   harnessMessages HarnessMessage[]
+  workbenchParentEvents WorkbenchEvent[] @relation("WorkbenchEventParent")
+  workbenchSourceEvents WorkbenchEvent[] @relation("WorkbenchEventSource")
   version    Version?        @relation(fields: [versionId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
@@ -197,9 +199,40 @@ model TaskExecution {
 
   task     Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
   messages TaskMessage[]
+  workbenchEvents WorkbenchEvent[]
 
   @@index([taskId])
   @@index([insightNoteId])
+}
+
+// Durable child-to-supervisor inbox. Producers only insert/deduplicate by dedupKey;
+// a parent consumes the rows in one aggregated batch at a completed-turn PTY boundary.
+model WorkbenchEvent {
+  id           String                 @id @default(cuid())
+  parentTaskId String
+  sourceTaskId String
+  executionId  String?
+  kind         WorkbenchEventKind
+  priority     WorkbenchEventPriority @default(NORMAL)
+  dedupKey     String                 @unique
+  payload      String
+  state        WorkbenchEventState    @default(PENDING)
+  claimToken   String?
+  claimedAt    DateTime?
+  attempts     Int                    @default(0)
+  lastError    String?
+  consumedAt   DateTime?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  parentTask Task           @relation("WorkbenchEventParent", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  sourceTask Task           @relation("WorkbenchEventSource", fields: [sourceTaskId], references: [id], onDelete: Cascade)
+  execution  TaskExecution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
+
+  @@index([parentTaskId, state, priority, createdAt])
+  @@index([sourceTaskId])
+  @@index([executionId])
+  @@index([state, claimedAt])
 }
 
 // 无人值守：一张表记所有 harness→人 的消息（ask/notify/done/failed）—— 纯记录/日志，Tower 不发送。
@@ -633,6 +666,23 @@ enum ExecutionStatus {
   PAUSED
   COMPLETED
   FAILED
+}
+
+enum WorkbenchEventKind {
+  CHILD_REVIEW_REQUIRED
+  CHILD_DECISION_REQUIRED
+  CHILD_EXECUTION_FAILED
+}
+
+enum WorkbenchEventPriority {
+  NORMAL
+  HIGH
+}
+
+enum WorkbenchEventState {
+  PENDING
+  PROCESSING
+  CONSUMED
 }
 
 enum MessageRole {

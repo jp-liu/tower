@@ -116,6 +116,15 @@ export async function dispatchTaskCompletionEvent(
     const { broadcastNotification } = await import("@/lib/pty/ws-server");
     broadcastNotification({ ...payload, type: "completion" });
 
+    if (payload.status === "FAILED") {
+      const { enqueueChildExecutionFailure } = await import("@/lib/workbench/coordinator");
+      await enqueueChildExecutionFailure({
+        taskId: payload.taskId,
+        taskTitle: payload.taskTitle,
+        executionId: payload.executionId,
+      });
+    }
+
     // Done/failed is no longer auto-recorded by the backend: unattended is a run-time state the
     // agent enters via the tower-goal skill, which the backend can't infer. Pushing the result on
     // done/failure is the goal-activated agent's own job (tower-ask + ask_human park). The onExit

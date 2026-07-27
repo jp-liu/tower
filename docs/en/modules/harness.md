@@ -109,8 +109,8 @@ This path was fixed in commit `ecab514`. Implemented across `src/lib/pty/{sessio
 A task can be **derived by another task**: the child's `parentTaskId` points back to the parent, and the child's description carries a `## 来源` section noting "父任务派生" (derived by parent). Parent and child need no new mid-run channel — they **reuse the existing stop-hook fan-out**:
 
 - When the child **ends a turn** (stop hook) → `POST /api/internal/hooks/stop` fans out to `notify-parent` (`src/lib/derive/notify-parent.ts`).
-- `notifyParentOnChildStop` finds the parent: **only if the parent's PTY is still alive** does it write a review-guidance prompt (`child-review-prompt.ts`) into the parent's PTY to wake it; if the parent is not running it skips (user's rule).
-- Waking is best-effort: on failure it only warns, never throws into the child's stop path. The body and the carriage return are written twice with a beat between (`SUBMIT_DELAY_MS`), otherwise the Claude TUI folds the trailing CR into the text and never submits.
+- `notifyParentOnChildStop` resolves the parent and first persists a `WorkbenchEvent` under a stable `dedupKey`; events remain pending while the parent is not running instead of being dropped.
+- The parent's own stop hook is the safe drain boundary. Ordinary completion, decision, and failure events for one parent are coalesced into one review batch, persisted as a `TaskMessage(SYSTEM)`, and only then written to the PTY. Failed delivery returns to `PENDING`; expired claims are recovered at startup.
 
 So "a child asking the parent mid-run" needs no dedicated mid-run channel — **ending the turn with the blocker as the final reply** is enough; the stop hook surfaces it to the parent. The parent decides during its review and injects the decision back into the child's terminal via `send_task_terminal_input`.
 
@@ -167,8 +167,15 @@ The decision looks at just two axes — **has a parent or not** × **is a human 
 
 | File | Description |
 |------|-------------|
-| `notify-parent.ts` | Child stop → write the parent's PTY to wake it; only pushes if the parent PTY is alive |
+| `notify-parent.ts` | Child stop → deduplicated insert into the durable Workbench event inbox |
 | `child-review-prompt.ts` | The parent-wake guidance prompt (incl. the "don't bounce it back" anti-loop rule) |
+
+### Workbench coordinator (`src/lib/workbench/`)
+
+| File | Description |
+|------|-------------|
+| `coordinator.ts` | Event enqueue, claim leases, batch aggregation, retry release, and boundary drain |
+| `boundary.ts` | In-process completed-turn latch; any new PTY input closes it |
 
 ### Hook scripts (`scripts/`)
 
