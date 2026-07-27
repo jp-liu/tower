@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { up } from "../../../../scripts/migrations/0014-workbench-events";
+import { up as addExecutionReviewKey } from "../../../../scripts/migrations/0015-workbench-execution-review-key";
 
 const tempDirs: string[] = [];
 let prisma: PrismaClient;
@@ -42,6 +43,7 @@ async function database(): Promise<PrismaClient> {
     )
   `);
   await up(client);
+  await addExecutionReviewKey(client);
   await client.$executeRawUnsafe(`INSERT INTO "Task" ("id", "parentTaskId") VALUES ('parent', NULL), ('child-a', 'parent'), ('child-b', 'parent'), ('child-c', 'parent')`);
   await client.$executeRawUnsafe(`INSERT INTO "TaskExecution" ("id", "taskId", "status") VALUES ('parent-exec', 'parent', 'RUNNING')`);
   return client;
@@ -188,5 +190,96 @@ describe("Workbench durable coordinator", () => {
       kind: "CHILD_EXECUTION_FAILED",
       priority: "HIGH",
     });
+  });
+
+  it("does not duplicate a successful exit when its stop-hook review already exists", async () => {
+    const { enqueueChildExecutionResult, enqueueWorkbenchEvent } = await import("@/lib/workbench/coordinator");
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "TaskExecution" ("id", "taskId", "status") VALUES ('child-success', 'child-a', 'COMPLETED')`,
+    );
+    const hook = await enqueueWorkbenchEvent({
+      parentTaskId: "parent",
+      sourceTaskId: "child-a",
+      executionId: "child-success",
+      kind: "CHILD_REVIEW_REQUIRED",
+      dedupKey: "child-stop:review:child-a:session:turn-final",
+      reviewProducer: "STOP_HOOK",
+      payload: { childTaskId: "child-a", childTitle: "Child A", childReply: "done" },
+    });
+
+    await expect(enqueueChildExecutionResult({
+      taskId: "child-a",
+      taskTitle: "Child A",
+      executionId: "child-success",
+      status: "COMPLETED",
+    })).resolves.toEqual({ enqueued: true, deduped: true });
+
+    expect(await prisma.workbenchEvent.count()).toBe(1);
+    expect(await prisma.workbenchEvent.findFirst()).toMatchObject({
+      id: hook.event.id,
+      dedupKey: "child-stop:review:child-a:session:turn-final",
+    });
+  });
+
+  it("creates a successful-exit review fallback when no stop hook exists", async () => {
+    const { childCompletionDedupKey, enqueueChildExecutionResult } = await import("@/lib/workbench/coordinator");
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "TaskExecution" ("id", "taskId", "status") VALUES ('child-success', 'child-a', 'COMPLETED')`,
+    );
+
+    await expect(enqueueChildExecutionResult({
+      taskId: "child-a",
+      taskTitle: "Child A",
+      executionId: "child-success",
+      status: "COMPLETED",
+    })).resolves.toEqual({ enqueued: true, deduped: false });
+
+    expect(await prisma.workbenchEvent.findFirst()).toMatchObject({
+      parentTaskId: "parent",
+      sourceTaskId: "child-a",
+      executionId: "child-success",
+      kind: "CHILD_REVIEW_REQUIRED",
+      priority: "NORMAL",
+      dedupKey: childCompletionDedupKey("child-a", "child-success"),
+      executionReviewKey: "execution-review:child-a:child-success",
+    });
+  });
+
+  it("does not duplicate a fallback when a late stop-hook callback arrives", async () => {
+    const { enqueueChildExecutionResult, enqueueWorkbenchEvent } = await import("@/lib/workbench/coordinator");
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "TaskExecution" ("id", "taskId", "status") VALUES ('child-success', 'child-a', 'COMPLETED')`,
+    );
+    await enqueueChildExecutionResult({
+      taskId: "child-a",
+      taskTitle: "Child A",
+      executionId: "child-success",
+      status: "COMPLETED",
+    });
+
+    const lateHook = await enqueueWorkbenchEvent({
+      parentTaskId: "parent",
+      sourceTaskId: "child-a",
+      executionId: "child-success",
+      kind: "CHILD_REVIEW_REQUIRED",
+      dedupKey: "child-stop:review:child-a:session:late-turn",
+      reviewProducer: "STOP_HOOK",
+      payload: { childTaskId: "child-a", childTitle: "Child A", childReply: "done" },
+    });
+
+    expect(lateHook.deduped).toBe(true);
+    expect(await prisma.workbenchEvent.count()).toBe(1);
+  });
+
+  it("does not create a successful-exit fallback for a task without a parent", async () => {
+    const { enqueueChildExecutionResult } = await import("@/lib/workbench/coordinator");
+
+    await expect(enqueueChildExecutionResult({
+      taskId: "parent",
+      taskTitle: "Top-level task",
+      executionId: "top-level-exec",
+      status: "COMPLETED",
+    })).resolves.toEqual({ enqueued: false });
+    expect(await prisma.workbenchEvent.count()).toBe(0);
   });
 });

@@ -44,6 +44,7 @@ export interface EnqueueWorkbenchEventInput {
   kind: WorkbenchEventKind;
   priority?: WorkbenchEventPriority;
   dedupKey: string;
+  reviewProducer?: "STOP_HOOK" | "COMPLETION_FALLBACK";
   payload: WorkbenchEventPayload;
 }
 
@@ -55,6 +56,7 @@ export interface WorkbenchEventRecord {
   kind: WorkbenchEventKind;
   priority: WorkbenchEventPriority;
   dedupKey: string;
+  executionReviewKey: string | null;
   payload: string;
   attempts: number;
   createdAt: Date;
@@ -96,39 +98,83 @@ export function childFailureDedupKey(taskId: string, executionId: string): strin
   return `child-exit:CHILD_EXECUTION_FAILED:${taskId}:${executionId}`;
 }
 
+export function childCompletionDedupKey(taskId: string, executionId: string): string {
+  return `child-exit:CHILD_REVIEW_REQUIRED:${taskId}:${executionId}`;
+}
+
+function executionReviewGuardKey(taskId: string, executionId: string): string {
+  return `execution-review:${taskId}:${executionId}`;
+}
+
 function isUniqueConstraintError(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2002");
 }
 
 export async function enqueueWorkbenchEvent(input: EnqueueWorkbenchEventInput) {
+  const executionReviewKey = input.reviewProducer && input.executionId
+    ? executionReviewGuardKey(input.sourceTaskId, input.executionId)
+    : null;
+  const data = {
+    parentTaskId: input.parentTaskId,
+    sourceTaskId: input.sourceTaskId,
+    executionId: input.executionId ?? null,
+    kind: input.kind,
+    priority: input.priority ?? "NORMAL",
+    dedupKey: input.dedupKey,
+    executionReviewKey,
+    payload: JSON.stringify(input.payload),
+  };
   let event;
   let deduped = false;
   try {
-    event = await db.workbenchEvent.create({
-      data: {
-        parentTaskId: input.parentTaskId,
-        sourceTaskId: input.sourceTaskId,
-        executionId: input.executionId ?? null,
-        kind: input.kind,
-        priority: input.priority ?? "NORMAL",
-        dedupKey: input.dedupKey,
-        payload: JSON.stringify(input.payload),
-      },
-    });
+    event = await db.workbenchEvent.create({ data });
   } catch (error) {
     if (!isUniqueConstraintError(error)) throw error;
-    deduped = true;
-    event = await db.workbenchEvent.findUniqueOrThrow({ where: { dedupKey: input.dedupKey } });
+    const exact = await db.workbenchEvent.findUnique({ where: { dedupKey: input.dedupKey } });
+    if (exact) {
+      event = exact;
+      deduped = true;
+    } else if (executionReviewKey) {
+      const guardOwner = await db.workbenchEvent.findUnique({ where: { executionReviewKey } });
+      if (!guardOwner) throw error;
+
+      const guardOwnerIsFallback = guardOwner.dedupKey === childCompletionDedupKey(
+        input.sourceTaskId,
+        input.executionId!,
+      );
+      if (input.reviewProducer === "COMPLETION_FALLBACK" || guardOwnerIsFallback) {
+        // The first producer for this execution already guaranteed one review.
+        // A fallback never duplicates a stop event; a late stop never duplicates
+        // a fallback that may already be scheduled or consumed.
+        event = guardOwner;
+        deduped = true;
+      } else {
+        // A prior stop turn owns the execution-level guard. This is a distinct
+        // later stop turn, so retain per-turn semantics without competing for it.
+        try {
+          event = await db.workbenchEvent.create({
+            data: { ...data, executionReviewKey: null },
+          });
+        } catch (retryError) {
+          if (!isUniqueConstraintError(retryError)) throw retryError;
+          event = await db.workbenchEvent.findUniqueOrThrow({ where: { dedupKey: input.dedupKey } });
+          deduped = true;
+        }
+      }
+    } else {
+      throw error;
+    }
   }
 
   scheduleReadyParentDrain(input.parentTaskId, input.priority ?? "NORMAL");
   return { event, deduped };
 }
 
-export async function enqueueChildExecutionFailure(input: {
+export async function enqueueChildExecutionResult(input: {
   taskId: string;
   taskTitle: string;
   executionId: string;
+  status: "COMPLETED" | "FAILED";
   exitCode?: number;
 }): Promise<{ enqueued: boolean; deduped?: boolean }> {
   const task = await db.task.findUnique({
@@ -137,21 +183,37 @@ export async function enqueueChildExecutionFailure(input: {
   });
   if (!task?.parentTaskId) return { enqueued: false };
 
+  const failed = input.status === "FAILED";
   const result = await enqueueWorkbenchEvent({
     parentTaskId: task.parentTaskId,
     sourceTaskId: input.taskId,
     executionId: input.executionId,
-    kind: "CHILD_EXECUTION_FAILED",
-    priority: "HIGH",
-    dedupKey: childFailureDedupKey(input.taskId, input.executionId),
+    kind: failed ? "CHILD_EXECUTION_FAILED" : "CHILD_REVIEW_REQUIRED",
+    priority: failed ? "HIGH" : "NORMAL",
+    dedupKey: failed
+      ? childFailureDedupKey(input.taskId, input.executionId)
+      : childCompletionDedupKey(input.taskId, input.executionId),
+    reviewProducer: failed ? undefined : "COMPLETION_FALLBACK",
     payload: {
       childTaskId: input.taskId,
       childTitle: input.taskTitle,
+      childReply: failed
+        ? undefined
+        : "Execution completed successfully without a provider stop-hook review event.",
       executionId: input.executionId,
       exitCode: input.exitCode,
     },
   });
   return { enqueued: true, deduped: result.deduped };
+}
+
+export function enqueueChildExecutionFailure(input: {
+  taskId: string;
+  taskTitle: string;
+  executionId: string;
+  exitCode?: number;
+}) {
+  return enqueueChildExecutionResult({ ...input, status: "FAILED" });
 }
 
 function parsePayload(event: WorkbenchEventRecord): WorkbenchEventPayload {

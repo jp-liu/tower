@@ -28,9 +28,9 @@ vi.mock("@/lib/pty/ws-server", () => ({
   broadcastNotification: mockBroadcastNotification,
 }));
 
-const mockEnqueueChildExecutionFailure = vi.fn().mockResolvedValue({ enqueued: true });
+const mockEnqueueChildExecutionResult = vi.fn().mockResolvedValue({ enqueued: true });
 vi.mock("@/lib/workbench/coordinator", () => ({
-  enqueueChildExecutionFailure: mockEnqueueChildExecutionFailure,
+  enqueueChildExecutionResult: mockEnqueueChildExecutionResult,
 }));
 
 import { db } from "@/lib/db";
@@ -314,7 +314,12 @@ describe("onboarding-actions", () => {
       expect(mockBroadcastNotification).toHaveBeenCalledWith(
         expect.objectContaining({ ...payload, type: "completion" })
       );
-      expect(mockEnqueueChildExecutionFailure).not.toHaveBeenCalled();
+      expect(mockEnqueueChildExecutionResult).toHaveBeenCalledWith({
+        taskId: "task1",
+        taskTitle: "Test Task",
+        executionId: "exec1",
+        status: "COMPLETED",
+      });
     });
 
     it("persists a failed child execution for parent review", async () => {
@@ -328,10 +333,11 @@ describe("onboarding-actions", () => {
 
       await dispatchTaskCompletionEvent(payload);
 
-      expect(mockEnqueueChildExecutionFailure).toHaveBeenCalledWith({
+      expect(mockEnqueueChildExecutionResult).toHaveBeenCalledWith({
         taskId: "task2",
         taskTitle: "Failing Task",
         executionId: "exec2",
+        status: "FAILED",
       });
     });
 

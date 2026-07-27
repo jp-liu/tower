@@ -111,6 +111,7 @@ A task can be **derived by another task**: the child's `parentTaskId` points bac
 - When the child **ends a turn** (stop hook) → `POST /api/internal/hooks/stop` fans out to `notify-parent` (`src/lib/derive/notify-parent.ts`).
 - `notifyParentOnChildStop` resolves the parent and first persists a `WorkbenchEvent` under a stable `dedupKey`; events remain pending while the parent is not running instead of being dropped.
 - The parent's own stop hook is the safe drain boundary. Ordinary completion, decision, and failure events for one parent are coalesced into one review batch, persisted as a `TaskMessage(SYSTEM)`, and only then written to the PTY. Failed delivery returns to `PENDING`; expired claims are recovered at startup.
+- Every provider's execution completion uses one fallback: FAILED always creates a high-priority event, while COMPLETED adds a normal review only when that execution has no stop-hook review/decision. The producers atomically compete on a unique `executionReviewKey` to avoid duplicates.
 
 So "a child asking the parent mid-run" needs no dedicated mid-run channel — **ending the turn with the blocker as the final reply** is enough; the stop hook surfaces it to the parent. The parent decides during its review and injects the decision back into the child's terminal via `send_task_terminal_input`.
 

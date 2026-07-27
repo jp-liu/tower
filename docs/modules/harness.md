@@ -109,6 +109,7 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 - 子任务**一轮结束**（stop hook）→ `POST /api/internal/hooks/stop` fan-out 到 `notify-parent`（`src/lib/derive/notify-parent.ts`）。
 - `notifyParentOnChildStop` 找到父任务后先按稳定 `dedupKey` 写入 `WorkbenchEvent`；父任务没运行时事件仍保留，不再丢弃。
 - 父任务自己的 stop hook 是安全 drain 边界：同一父任务短时间内的普通完成、待决策和失败事件聚合为一个 review batch，并持久化成 `TaskMessage(SYSTEM)` 后才写入 PTY。投递失败会回到 `PENDING`，过期 claim 可在启动时恢复。
+- 所有 provider 的 execution completion 都走统一 fallback：FAILED 始终产生高优先级事件；COMPLETED 仅在该 execution 没有 stop-hook review/decision 时补一个普通 review。两类 producer 通过唯一 `executionReviewKey` 原子竞争，避免重复。
 
 于是「子任务中途求助父任务」不需要专门的中途通道——**把 blocker 作为收尾回复结束回合**就够了，stop hook 会 surface 到父任务。父任务在 review 时定夺，用 `send_task_terminal_input` 把决策注入子任务终端回灌。
 

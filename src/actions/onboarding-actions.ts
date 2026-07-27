@@ -116,15 +116,6 @@ export async function dispatchTaskCompletionEvent(
     const { broadcastNotification } = await import("@/lib/pty/ws-server");
     broadcastNotification({ ...payload, type: "completion" });
 
-    if (payload.status === "FAILED") {
-      const { enqueueChildExecutionFailure } = await import("@/lib/workbench/coordinator");
-      await enqueueChildExecutionFailure({
-        taskId: payload.taskId,
-        taskTitle: payload.taskTitle,
-        executionId: payload.executionId,
-      });
-    }
-
     // Done/failed is no longer auto-recorded by the backend: unattended is a run-time state the
     // agent enters via the tower-goal skill, which the backend can't infer. Pushing the result on
     // done/failure is the goal-activated agent's own job (tower-ask + ask_human park). The onExit
@@ -132,4 +123,16 @@ export async function dispatchTaskCompletionEvent(
   } catch {
     // Best-effort: notifications are non-critical
   }
+
+  // Provider-neutral parent coordination is durable and separate from the
+  // best-effort browser notification above. COMPLETED is a fallback for CLIs
+  // without Stop hooks; the execution review guard suppresses it when a Stop
+  // event already exists. FAILED always remains a distinct high-priority event.
+  const { enqueueChildExecutionResult } = await import("@/lib/workbench/coordinator");
+  await enqueueChildExecutionResult({
+    taskId: payload.taskId,
+    taskTitle: payload.taskTitle,
+    executionId: payload.executionId,
+    status: payload.status,
+  });
 }

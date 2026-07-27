@@ -215,6 +215,7 @@ model WorkbenchEvent {
   kind         WorkbenchEventKind
   priority     WorkbenchEventPriority @default(NORMAL)
   dedupKey     String                 @unique
+  executionReviewKey String?          @unique
   payload      String
   state        WorkbenchEventState    @default(PENDING)
   claimToken   String?

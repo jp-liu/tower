@@ -35,6 +35,8 @@ introduced.
 task and optional execution. It stores:
 
 - a caller-supplied stable `dedupKey` with a unique index;
+- an optional unique `executionReviewKey` that arbitrates the first review
+  between a provider stop hook and the provider-neutral successful-exit fallback;
 - event kind and priority;
 - a JSON payload snapshot suitable for review after the child terminal exits;
 - `PENDING -> PROCESSING -> CONSUMED` state, claim token/time, attempts,
@@ -85,12 +87,18 @@ cannot strand work in `PROCESSING`.
   behavior remain intact.
 - `CHILD_DECISION_REQUIRED` and `CHILD_EXECUTION_FAILED` are high priority and
   rendered before ordinary `CHILD_REVIEW_REQUIRED` items.
+- Every final execution path calls `enqueueChildExecutionResult`. Failures always
+  create a high-priority event. Successful exits create a normal review fallback
+  only when no stop-hook review/decision owns that execution's review guard.
 
 ## Reusable Interface
 
 - `enqueueWorkbenchEvent(input)` is the producer boundary for later Session and
   gateway stages. The producer owns the stable `dedupKey`; retries return the
   existing row.
+- `enqueueChildExecutionResult(input)` is the provider-neutral terminal fallback.
+  Stop and completion producers compete on `executionReviewKey`, while distinct
+  later stop turns keep their per-turn `dedupKey` behavior.
 - `openWorkbenchDrainBoundary(parentTaskId)` schedules a drain only after the
   parent's completed-turn signal.
 - `drainWorkbenchEvents(parentTaskId, deliver)` claims, aggregates, delivers,

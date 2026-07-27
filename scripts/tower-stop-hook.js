@@ -38,7 +38,7 @@ function extractLastAssistant(transcriptPath) {
       try { obj = JSON.parse(line); } catch { continue; }
       const msg = obj.message || obj;
       const role = msg.role || obj.type;
-      if (role !== "assistant" || !msg.content) continue;
+      if (role !== "assistant") continue;
       let text = "";
       if (Array.isArray(msg.content)) {
         text = msg.content
@@ -49,11 +49,11 @@ function extractLastAssistant(transcriptPath) {
       } else if (typeof msg.content === "string") {
         text = msg.content.trim();
       }
-      if (text) {
-        const crypto = require("crypto");
-        const stableId = obj.uuid || msg.id || obj.id || crypto.createHash("sha256").update(line).digest("hex");
-        return { text: text.slice(0, 2000), eventId: String(stableId) };
-      }
+      // A tool-only assistant turn has no displayable text but is still a real,
+      // distinct stop event. Derive identity from the record, never from text.
+      const crypto = require("crypto");
+      const stableId = obj.uuid || msg.id || obj.id || crypto.createHash("sha256").update(line).digest("hex");
+      return { text: text.slice(0, 2000), eventId: String(stableId) };
     }
   } catch {
     /* best effort — transcript unreadable */
@@ -122,4 +122,6 @@ function main() {
   });
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = { extractLastAssistant };
