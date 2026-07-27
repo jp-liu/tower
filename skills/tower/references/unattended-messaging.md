@@ -84,6 +84,7 @@ After the human replies on the platform:
    - If the referenced outbound message was an ask, Tower marks it answered, resumes the task, and injects the reply.
    - If the referenced outbound message was a work-channel notify, Tower injects the reply into the live task terminal without consuming any unrelated open ask on the same task.
 4. Follow the returned mode. Ambiguous project routes return candidates and require selection; project work is only queued at this point and must not be described as a created task.
+   - `in_progress` and `already_processed` always carry `noOp: true`: acknowledge nothing and do not repeat the original answer, Tower mutation, discussion generation, or queue confirmation.
 
 ## Non-task messages (create / query)
 

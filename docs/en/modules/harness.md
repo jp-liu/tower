@@ -82,6 +82,8 @@ These four are the easiest to confuse. Keep two axes straight: **does it actuall
 
 `route_gateway_message` is the ordinary inbound entry point. It persists and deduplicates first, then resolves reply/task binding → thread/session binding → explicit project → one identify_project match → sender's recent project → channel default. Project discussion replies use `complete_gateway_discussion`. Project work is only queued for the Workbench; the Workbench calls `confirm_gateway_task_created` after a real `create_task` result and `complete_gateway_work` after review.
 
+A duplicate platform message never replays an action: processing/queued rows return `in_progress + noOp`, while completed rows return `already_processed + noOp`. Threadless discussions reuse a chat + sender scoped session, with recent project context expiring after seven days. Failed deliveries are retried at `nextAttemptAt` by one process-local `unref` timer in addition to startup recovery.
+
 ### Notification center `/harness`
 
 The `/harness` route is the human-facing surface for this system — a table laying out every outbound message and its reply:

@@ -398,7 +398,8 @@ export const harnessTools = {
       "command), PROJECT_DISCUSSION, or PROJECT_WORK. Tower applies reply/task binding, thread/session binding, " +
       "explicit project, identify_project, recent-user project, and channel default in that strict order. It " +
       "returns candidates instead of guessing. Task replies preserve parked ask vs work-channel behavior; project " +
-      "work is durably queued for the project Workbench; discussions get an independent project-bound session.",
+      "work is durably queued for the project Workbench; discussions get an independent project-bound session. " +
+      "Duplicate callbacks return in_progress/already_processed with noOp=true; never repeat the original action.",
     schema: z.object({
       gateway: z.enum(["hermes", "openclaw"]),
       platform: z.string().min(1).max(64),

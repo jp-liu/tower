@@ -80,6 +80,8 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 
 `route_gateway_message` 是普通渠道入站入口。它先持久化去重，再严格按 reply/task binding → thread/session binding → 显式项目 → 唯一 identify_project → 用户最近项目 → 渠道默认项目解析。项目讨论必须以 `complete_gateway_discussion` 回原 thread；项目工作只排入 Workbench，只有 Workbench 在 `create_task` 真正成功后才能调用 `confirm_gateway_task_created`，审查通过后调用 `complete_gateway_work`。
 
+重复 platform message 不会重放动作：处理中/排队中返回 `in_progress + noOp`，已处理返回 `already_processed + noOp`。无 thread/root 的讨论按 chat + sender 隔离并复用会话，最近项目上下文 7 天过期。失败投递除启动恢复外，还由单例 `unref` 定时器按 `nextAttemptAt` 自动重试。
+
 ### 通知中心 `/harness`
 
 `/harness` 路由是这套体系的人机界面——一张表格铺开所有出站消息与回复：

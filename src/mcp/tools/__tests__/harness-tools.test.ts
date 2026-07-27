@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { vi, describe, it, expect, beforeEach } from "vitest";
+import { vi, describe, it, expect, beforeEach, afterAll } from "vitest";
 
 vi.mock("@/lib/db", () => ({
   db: { task: { findUnique: vi.fn() } },
@@ -30,9 +30,14 @@ const OTHER_TASK_ID = "clbbbbbbbbbbbbbbbbbbbbbb";
 
 beforeEach(() => {
   vi.unstubAllEnvs();
+  vi.stubEnv("TOWER_TASK_ID", "");
   findUnique.mockReset();
   readCfg.mockReset();
   readCfg.mockResolvedValue([]);
+});
+
+afterAll(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("list_notify_targets — taskId invariant", () => {

@@ -11,6 +11,7 @@ import { continueOrStartTaskExecution } from "@/actions/agent-actions";
 import { db } from "@/lib/db";
 import { readConfigValue } from "@/lib/config-reader";
 import { ensureTowerTask } from "@/lib/instrumentation-tasks";
+import { logger } from "@/lib/logger";
 import { scoreProject } from "@/lib/project-score";
 import { enqueueWorkbenchEvent } from "@/lib/workbench/coordinator";
 import { extractTowerTaskId, findHarnessDeliveryByPlatformMessageId } from "./delivery-map";
@@ -18,8 +19,11 @@ import { parseGatewaySendOutput } from "./gateway-output";
 import { sendViaHarnessGateway, type HarnessGatewaySendResult } from "./gateway-send";
 
 export const GATEWAY_CHANNEL_BINDINGS_KEY = "harness.channelBindings";
+export const GATEWAY_RECENT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
+const INBOUND_CLAIM_LEASE_MS = 60_000;
 const DELIVERY_RETRY_BASE_MS = 5_000;
 const DELIVERY_RETRY_MAX_MS = 5 * 60_000;
+const log = logger.create("gateway-router");
 
 export interface GatewayChannelBinding {
   gateway?: string;
@@ -58,10 +62,12 @@ type GatewayProject = GatewayProjectCandidate & { description: string | null };
 
 export type GatewayRouteResult =
   | {
-      mode: "in_progress";
+      mode: "in_progress" | "already_processed";
       inboundId: string;
       deduped: true;
-      instructions: string;
+      noOp: true;
+      state: "PROCESSING" | "QUEUED" | "PROCESSED";
+      originalMode?: string;
     }
   | {
       mode: "task_reply";
@@ -114,6 +120,33 @@ type EnsureWorkbench = (taskId: string) => Promise<{
 
 type DeliverySender = (input: Parameters<typeof sendViaHarnessGateway>[0]) => Promise<HarnessGatewaySendResult>;
 
+let deliveryRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let deliveryRetryScheduledAt: number | null = null;
+
+function scheduleGatewayDeliveryRetry(nextAttemptAt: Date, sender: DeliverySender): void {
+  const scheduledAt = Math.max(Date.now(), nextAttemptAt.getTime());
+  if (deliveryRetryTimer && deliveryRetryScheduledAt !== null && deliveryRetryScheduledAt <= scheduledAt) return;
+  if (deliveryRetryTimer) clearTimeout(deliveryRetryTimer);
+  deliveryRetryScheduledAt = scheduledAt;
+  deliveryRetryTimer = setTimeout(() => {
+    deliveryRetryTimer = null;
+    deliveryRetryScheduledAt = null;
+    void retryGatewayDeliveries(sender).catch((error) => {
+      log.warn("Scheduled gateway delivery retry failed", error);
+      scheduleGatewayDeliveryRetry(new Date(Date.now() + DELIVERY_RETRY_BASE_MS), sender);
+    });
+  }, Math.max(0, scheduledAt - Date.now()));
+  if (typeof deliveryRetryTimer === "object" && "unref" in deliveryRetryTimer) {
+    deliveryRetryTimer.unref();
+  }
+}
+
+export function resetGatewayDeliveryRetrySchedulerForTests(): void {
+  if (deliveryRetryTimer) clearTimeout(deliveryRetryTimer);
+  deliveryRetryTimer = null;
+  deliveryRetryScheduledAt = null;
+}
+
 function normalize(value: string | null | undefined): string {
   return String(value ?? "").trim().toLowerCase();
 }
@@ -145,7 +178,10 @@ function inboundDedupKey(input: GatewayInboundRequest): string {
 }
 
 function sessionAnchor(input: GatewayInboundRequest): string {
-  return input.threadId?.trim() || input.rootMessageId?.trim() || input.platformMessageId.trim();
+  const thread = input.threadId?.trim() || input.rootMessageId?.trim();
+  if (thread) return `thread:${thread}`;
+  const sender = normalize(input.senderId);
+  return sender ? `sender:${sender}` : `message:${input.platformMessageId.trim()}`;
 }
 
 function sessionBindingKey(input: GatewayInboundRequest, kind: GatewaySessionKind, projectId: string): string {
@@ -252,12 +288,29 @@ async function resolveBoundSession(input: GatewayInboundRequest) {
   const anchors = [input.replyToMessageId, input.threadId, input.rootMessageId]
     .map((value) => value?.trim())
     .filter(Boolean) as string[];
-  if (anchors.length === 0) return null;
+  const base = {
+    gateway: normalize(input.gateway),
+    platform: normalize(input.platform),
+    chatId: normalizeChatId(input.chatId),
+    status: "ACTIVE" as const,
+  };
+  if (anchors.length === 0) {
+    const senderId = input.senderId?.trim();
+    if (!senderId) return null;
+    return db.gatewaySession.findFirst({
+      where: {
+        ...base,
+        senderId,
+        kind: input.intent === "PROJECT_DISCUSSION" ? "DISCUSSION" : "WORKBENCH",
+        lastActivityAt: { gte: new Date(Date.now() - GATEWAY_RECENT_SESSION_TTL_MS) },
+      },
+      orderBy: { lastActivityAt: "desc" },
+      include: { project: { include: { workspace: { select: { name: true } } } } },
+    });
+  }
   return db.gatewaySession.findFirst({
     where: {
-      platform: normalize(input.platform),
-      chatId: normalizeChatId(input.chatId),
-      status: "ACTIVE",
+      ...base,
       OR: [
         { threadId: { in: anchors } },
         { rootMessageId: { in: anchors } },
@@ -358,6 +411,7 @@ async function resolveProject(
         platform: normalize(input.platform),
         senderId: input.senderId.trim(),
         status: "ACTIVE",
+        lastActivityAt: { gte: new Date(Date.now() - GATEWAY_RECENT_SESSION_TTL_MS) },
         ...(binding?.defaultWorkspaceId ? { project: { workspaceId: binding.defaultWorkspaceId } } : {}),
         ...(binding?.allowedProjectIds?.length ? { projectId: { in: binding.allowedProjectIds } } : {}),
       },
@@ -524,12 +578,13 @@ export async function routeGatewayInbound(
 ): Promise<GatewayRouteResult> {
   const created = await createInbound(input);
   if (created.deduped && !created.inbound.response) {
-    if (Date.now() - created.inbound.updatedAt.getTime() < 60_000) {
+    if (Date.now() - created.inbound.updatedAt.getTime() < INBOUND_CLAIM_LEASE_MS) {
       return {
         mode: "in_progress",
         inboundId: created.inbound.id,
         deduped: true,
-        instructions: "This platform message is already being routed. Do not process or answer it again.",
+        noOp: true,
+        state: created.inbound.state === "QUEUED" ? "QUEUED" : "PROCESSING",
       };
     }
     await db.gatewayInbound.update({
@@ -538,34 +593,53 @@ export async function routeGatewayInbound(
     });
   }
   if (created.deduped && created.inbound.response) {
+    if (created.inbound.state === "PROCESSED") {
+      return {
+        mode: "already_processed",
+        inboundId: created.inbound.id,
+        deduped: true,
+        noOp: true,
+        state: "PROCESSED",
+      };
+    }
     const cached = JSON.parse(created.inbound.response) as GatewayRouteResult;
-    if (cached.mode === "task_reply" && created.inbound.state === "PROCESSING") {
-      if (Date.now() - created.inbound.updatedAt.getTime() < 60_000) {
+    if (created.inbound.state === "QUEUED") {
+      return {
+        mode: "in_progress",
+        inboundId: created.inbound.id,
+        deduped: true,
+        noOp: true,
+        state: "QUEUED",
+        originalMode: cached.mode,
+      };
+    }
+    if (created.inbound.state === "PROCESSING") {
+      const recoverable = cached.mode === "task_reply" || cached.mode === "project_discussion";
+      const stale = Date.now() - created.inbound.updatedAt.getTime() >= INBOUND_CLAIM_LEASE_MS;
+      if (!recoverable || !stale) {
         return {
           mode: "in_progress",
           inboundId: created.inbound.id,
           deduped: true,
-          instructions: "This platform reply is already being relayed. Do not inject or answer it again.",
+          noOp: true,
+          state: "PROCESSING",
+          originalMode: cached.mode,
         };
       }
       await db.gatewayInbound.update({
         where: { id: created.inbound.id },
-        data: { attempts: { increment: 1 }, lastError: "Recovered stale task-reply relay" },
+        data: { attempts: { increment: 1 }, lastError: `Recovered stale ${cached.mode} claim` },
       });
+      return { ...cached, deduped: true };
     }
-    if (cached.mode === "project_work" && created.inbound.state === "QUEUED") {
-      try {
-        const workbench = await ensureWorkbench(cached.workbenchTaskId);
-        return { ...cached, deduped: true, workbench };
-      } catch (error) {
-        return {
-          ...cached,
-          deduped: true,
-          workbench: { error: error instanceof Error ? error.message : String(error) },
-        };
-      }
-    }
-    return { ...cached, deduped: true };
+    return {
+      mode: "already_processed",
+      inboundId: created.inbound.id,
+      deduped: true,
+      noOp: true,
+      state: "PROCESSED",
+      originalMode: cached.mode,
+    };
   }
 
   const binding = await channelBinding(input);
@@ -697,9 +771,9 @@ export async function completeGatewayInbound(inboundId: string, response: unknow
   });
 }
 
-function retryAt(attempts: number): Date {
+function retryAt(attempts: number, from = new Date()): Date {
   const delay = Math.min(DELIVERY_RETRY_MAX_MS, DELIVERY_RETRY_BASE_MS * 2 ** Math.max(0, attempts - 1));
-  return new Date(Date.now() + delay);
+  return new Date(from.getTime() + delay);
 }
 
 async function createOrGetDelivery(input: {
@@ -725,6 +799,7 @@ export async function deliverGatewayResponse(
     dedupKey: string;
   },
   sender: DeliverySender = sendViaHarnessGateway,
+  claimAt = new Date(),
 ) {
   const inbound = await db.gatewayInbound.findUnique({
     where: { id: input.inboundId },
@@ -741,10 +816,27 @@ export async function deliverGatewayResponse(
   if (delivery.state === "DELIVERED") return { ok: true, deduped: true, deliveryId: delivery.id };
 
   const claimed = await db.gatewayDelivery.updateMany({
-    where: { id: delivery.id, state: { in: ["PENDING", "FAILED"] } },
+    where: {
+      id: delivery.id,
+      OR: [
+        { state: "PENDING" },
+        { state: "FAILED", OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: claimAt } }] },
+      ],
+    },
     data: { state: "SENDING", attempts: { increment: 1 }, lastError: null, nextAttemptAt: null },
   });
-  if (claimed.count === 0) return { ok: true, deduped: true, inProgress: true, deliveryId: delivery.id };
+  if (claimed.count === 0) {
+    const pending = await db.gatewayDelivery.findUniqueOrThrow({ where: { id: delivery.id } });
+    if (pending.state === "DELIVERED") return { ok: true, deduped: true, deliveryId: delivery.id };
+    return {
+      ok: false,
+      deduped: true,
+      inProgress: pending.state === "SENDING",
+      pendingRetry: pending.state === "FAILED",
+      deliveryId: delivery.id,
+      error: pending.lastError || "Gateway delivery is already in progress",
+    };
+  }
   const current = await db.gatewayDelivery.findUniqueOrThrow({ where: { id: delivery.id } });
   let sent: HarnessGatewaySendResult;
   try {
@@ -761,14 +853,16 @@ export async function deliverGatewayResponse(
     sent = { ok: false, output: error instanceof Error ? error.message : String(error) };
   }
   if (!sent.ok) {
+    const nextAttemptAt = retryAt(current.attempts, claimAt);
     await db.gatewayDelivery.update({
       where: { id: delivery.id },
       data: {
         state: "FAILED",
         lastError: sent.output.slice(0, 2000),
-        nextAttemptAt: retryAt(current.attempts),
+        nextAttemptAt,
       },
     });
+    scheduleGatewayDeliveryRetry(nextAttemptAt, sender);
     return { ok: false, deliveryId: delivery.id, error: sent.output };
   }
 
@@ -934,7 +1028,7 @@ export async function retryGatewayDeliveries(
       kind: row.kind,
       content: row.content,
       dedupKey: row.dedupKey,
-    }, sender);
+    }, sender, now);
     if (result.ok) {
       delivered++;
       if (row.kind === "DISCUSSION_REPLY" || row.kind === "FINAL_RESULT") {
@@ -945,6 +1039,15 @@ export async function retryGatewayDeliveries(
       }
     } else failed++;
   }
+  const next = await db.gatewayDelivery.findFirst({
+    where: {
+      state: { in: ["PENDING", "FAILED"] },
+      nextAttemptAt: { not: null },
+    },
+    orderBy: { nextAttemptAt: "asc" },
+    select: { nextAttemptAt: true },
+  });
+  if (next?.nextAttemptAt) scheduleGatewayDeliveryRetry(next.nextAttemptAt, sender);
   return { scanned: rows.length, delivered, failed };
 }
 

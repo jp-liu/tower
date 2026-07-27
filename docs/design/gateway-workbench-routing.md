@@ -70,6 +70,20 @@ Every step is constrained by the channel workspace and project allowlist. More
 than one remaining match returns candidates and requires selection. No route is
 allowed to choose the highest-scored candidate when alternatives remain.
 
+Threadless messages use a stable chat + sender + session-kind anchor. This
+preserves one discussion Assistant session for consecutive messages from the
+same person while preventing participants in a group chat from sharing context.
+Sender-based session/recent-project lookup expires after seven days; an old
+project is never selected silently forever. Explicit thread/root bindings do
+not use this recency fallback.
+
+Duplicate inbound callbacks never replay an actionable route. `QUEUED` or live
+`PROCESSING` rows return `in_progress` with `noOp: true`; `PROCESSED` rows return
+`already_processed` with `noOp: true`. Only a stale claim for a route that is
+safe to retry (task relay or discussion generation) can return its original
+action again. Durable Workbench work remains a no-op and is recovered through
+the coordinator path.
+
 ## Workbench Queueing
 
 `PROJECT_WORK` creates or reuses the project's resident Tower task, persists the
@@ -101,9 +115,11 @@ The Workbench prompt carries the stable gateway inbound id.
    original message/thread with title, reviewed summary, commit id/message,
    branch, and Tower task id.
 
-Failed sends remain `FAILED` with exponential retry time. A stale `SENDING`
-claim is recovered after restart. Successful semantic deliveries are immutable
-and repeated calls return the prior result without sending twice.
+Failed sends remain `FAILED` with exponential retry time. The earliest due
+delivery owns one process-local `unref` timer; additional failures only move
+that timer earlier and cannot create concurrent retry loops. Startup recovery
+also schedules future rows and recovers stale `SENDING` claims. Successful
+semantic deliveries are immutable and repeated calls never send twice.
 
 ## Legacy Reply Compatibility
 

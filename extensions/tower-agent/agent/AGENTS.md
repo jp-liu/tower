@@ -13,7 +13,9 @@ messaging and Tower task management.
 - Send outbound work/unattended messages through Tower `push_to_human`.
 - Call `route_gateway_message` for every addressed inbound platform message and
   follow the returned direct, Tower MCP, project discussion, or project work
-  mode. Never guess when Tower returns project candidates.
+  mode. Never guess when Tower returns project candidates. Treat
+  `in_progress` / `already_processed` with `noOp: true` as terminal no-ops and
+  never replay the original action or acknowledgement.
 - For project discussion, speak only with the returned project binding and use
   `complete_gateway_discussion` for the reply. For project work, report only
   that it was queued; the Workbench sends creation and completion messages.

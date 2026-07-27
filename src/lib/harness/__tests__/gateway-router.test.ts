@@ -3,10 +3,12 @@ import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import {
   GATEWAY_CHANNEL_BINDINGS_KEY,
+  GATEWAY_RECENT_SESSION_TTL_MS,
   completeGatewayDiscussion,
   completeGatewayWork,
   confirmGatewayTaskCreated,
   recoverQueuedGatewayWork,
+  resetGatewayDeliveryRetrySchedulerForTests,
   retryGatewayDeliveries,
   routeGatewayInbound,
   type GatewayInboundRequest,
@@ -74,6 +76,8 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  resetGatewayDeliveryRetrySchedulerForTests();
+  vi.useRealTimers();
   const assistantIds = await db.gatewaySession.findMany({
     where: { project: { workspaceId } },
     select: { assistantSessionId: true },
@@ -95,9 +99,32 @@ describe("gateway inbound routing", () => {
     const duplicate = await routeGatewayInbound(request, ensure);
 
     expect(first).toMatchObject({ mode: "gateway_direct", deduped: false });
-    expect(duplicate).toMatchObject({ mode: "gateway_direct", deduped: true });
+    expect(duplicate).toEqual({
+      mode: "already_processed",
+      inboundId: first.inboundId,
+      deduped: true,
+      noOp: true,
+      state: "PROCESSED",
+    });
+    expect(duplicate).not.toHaveProperty("instructions");
     expect(ensure).not.toHaveBeenCalled();
     expect(await db.gatewayInbound.count({ where: { platformMessageId: request.platformMessageId } })).toBe(1);
+  });
+
+  it("does not execute a duplicate Tower command twice", async () => {
+    const request = inbound({ intent: "TOWER", content: "Move task A to done" });
+
+    const first = await routeGatewayInbound(request, vi.fn());
+    const duplicate = await routeGatewayInbound(request, vi.fn());
+
+    expect(first).toMatchObject({ mode: "tower_mcp", deduped: false });
+    expect(duplicate).toMatchObject({
+      mode: "already_processed",
+      inboundId: first.inboundId,
+      noOp: true,
+      state: "PROCESSED",
+    });
+    expect(duplicate).not.toHaveProperty("instructions");
   });
 
   it("does not process a concurrent duplicate while its first route is still claimed", async () => {
@@ -193,6 +220,29 @@ describe("gateway inbound routing", () => {
     });
   });
 
+  it("does not relay a duplicate task reply twice", async () => {
+    const task = await db.task.create({ data: { title: "Reply target", projectId: alphaId } });
+    const request = inbound({
+      platformMessageId: "om_duplicate_task_reply",
+      taskId: task.id,
+      intent: "PROJECT_DISCUSSION",
+      content: "One task reply",
+    });
+
+    const first = await routeGatewayInbound(request, vi.fn());
+    const duplicate = await routeGatewayInbound(request, vi.fn());
+
+    expect(first).toMatchObject({ mode: "task_reply", taskId: task.id });
+    expect(duplicate).toMatchObject({
+      mode: "in_progress",
+      inboundId: first.inboundId,
+      noOp: true,
+      state: "PROCESSING",
+      originalMode: "task_reply",
+    });
+    expect(duplicate).not.toHaveProperty("instructions");
+  });
+
   it("uses the sender's recent project before the channel default", async () => {
     await configureChannel({ allowedProjectIds: [alphaId, betaId], defaultProjectId: alphaId });
     await routeGatewayInbound(inbound({
@@ -200,6 +250,10 @@ describe("gateway inbound routing", () => {
       threadId: "recent-thread",
       senderId: "ou_recent",
     }), vi.fn());
+    await db.gatewaySession.updateMany({
+      where: { senderId: "ou_recent" },
+      data: { chatId: "oc_previous_chat" },
+    });
 
     const recent = await routeGatewayInbound(inbound({
       platformMessageId: "om_recent_followup",
@@ -237,17 +291,115 @@ describe("gateway inbound routing", () => {
     expect(await db.workbenchEvent.count()).toBe(0);
   });
 
+  it("returns no-op results for duplicate discussions before and after delivery", async () => {
+    const request = inbound({ project: alphaId, content: "Discuss this once" });
+    const first = await routeGatewayInbound(request, vi.fn());
+    expect(first.mode).toBe("project_discussion");
+    if (first.mode !== "project_discussion") return;
+
+    const concurrent = await routeGatewayInbound(request, vi.fn());
+    expect(concurrent).toMatchObject({
+      mode: "in_progress",
+      inboundId: first.inboundId,
+      noOp: true,
+      state: "PROCESSING",
+      originalMode: "project_discussion",
+    });
+    expect(concurrent).not.toHaveProperty("instructions");
+
+    const sender = vi.fn(async () => ({ ok: true as const, output: JSON.stringify({ message_id: "om_discussion_once" }) }));
+    await completeGatewayDiscussion(first.inboundId, "One answer", sender);
+    const completed = await routeGatewayInbound(request, vi.fn());
+    expect(completed).toMatchObject({
+      mode: "already_processed",
+      inboundId: first.inboundId,
+      noOp: true,
+      state: "PROCESSED",
+    });
+    expect(completed).not.toHaveProperty("instructions");
+    expect(sender).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses an unthreaded discussion for the same chat and sender", async () => {
+    const first = await routeGatewayInbound(inbound({
+      platformMessageId: "om_sender_first",
+      project: alphaId,
+      senderId: "ou_stable_sender",
+    }), vi.fn());
+    const second = await routeGatewayInbound(inbound({
+      platformMessageId: "om_sender_second",
+      senderId: "ou_stable_sender",
+    }), vi.fn());
+
+    expect(first.mode).toBe("project_discussion");
+    expect(second.mode).toBe("project_discussion");
+    if (first.mode !== "project_discussion" || second.mode !== "project_discussion") return;
+    expect(second.assistantSessionId).toBe(first.assistantSessionId);
+    expect(second.sessionId).toBe(first.sessionId);
+    expect(second.resolution).toBe("thread_session_binding");
+  });
+
+  it("isolates unthreaded discussion sessions by sender in a group chat", async () => {
+    await configureChannel({ allowedProjectIds: [alphaId, betaId], defaultProjectId: alphaId });
+    const first = await routeGatewayInbound(inbound({
+      platformMessageId: "om_sender_a",
+      senderId: "ou_sender_a",
+    }), vi.fn());
+    const second = await routeGatewayInbound(inbound({
+      platformMessageId: "om_sender_b",
+      senderId: "ou_sender_b",
+    }), vi.fn());
+
+    expect(first.mode).toBe("project_discussion");
+    expect(second.mode).toBe("project_discussion");
+    if (first.mode !== "project_discussion" || second.mode !== "project_discussion") return;
+    expect(second.assistantSessionId).not.toBe(first.assistantSessionId);
+    expect(second.sessionId).not.toBe(first.sessionId);
+  });
+
+  it("does not use an expired session as the sender's recent project", async () => {
+    await configureChannel({ allowedProjectIds: [alphaId, betaId], defaultProjectId: betaId });
+    const first = await routeGatewayInbound(inbound({
+      platformMessageId: "om_expired_first",
+      project: alphaId,
+      senderId: "ou_expired_sender",
+    }), vi.fn());
+    expect(first.mode).toBe("project_discussion");
+    if (first.mode !== "project_discussion") return;
+    await db.gatewaySession.update({
+      where: { id: first.sessionId },
+      data: { lastActivityAt: new Date(Date.now() - GATEWAY_RECENT_SESSION_TTL_MS - 1_000) },
+    });
+
+    const next = await routeGatewayInbound(inbound({
+      platformMessageId: "om_after_expiry",
+      senderId: "ou_expired_sender",
+    }), vi.fn());
+    expect(next).toMatchObject({
+      mode: "project_discussion",
+      project: { projectId: betaId },
+      resolution: "channel_default_project",
+    });
+  });
+
   it("queues one durable event while a Workbench is busy and retries idempotent recovery", async () => {
     const ensure = vi.fn()
-      .mockResolvedValueOnce({ mode: "already_running", executionId: "running-exec" })
-      .mockResolvedValueOnce({ mode: "continued", executionId: "recovered-exec" });
+      .mockResolvedValueOnce({ mode: "already_running", executionId: "running-exec" });
     const request = inbound({ project: alphaId, intent: "PROJECT_WORK", content: "Build the import flow" });
 
     const first = await routeGatewayInbound(request, ensure);
     const retry = await routeGatewayInbound(request, ensure);
 
     expect(first).toMatchObject({ mode: "project_work", queued: true, workbench: { mode: "already_running" } });
-    expect(retry).toMatchObject({ mode: "project_work", deduped: true, workbench: { mode: "continued" } });
+    expect(retry).toMatchObject({
+      mode: "in_progress",
+      deduped: true,
+      noOp: true,
+      state: "QUEUED",
+      originalMode: "project_work",
+    });
+    expect(retry).not.toHaveProperty("instructions");
+    expect(ensure).toHaveBeenCalledTimes(1);
     expect(await db.gatewayInbound.count({ where: { platformMessageId: request.platformMessageId } })).toBe(1);
     expect(await db.workbenchEvent.count({ where: { dedupKey: { startsWith: "gateway-work:" } } })).toBe(1);
     expect(await db.workbenchEvent.findFirst({ where: { dedupKey: { startsWith: "gateway-work:" } } }))
@@ -378,5 +530,41 @@ describe("gateway confirmations and delivery retry", () => {
       .toMatchObject({ state: "DELIVERED", attempts: 2, platformMessageId: "om_retry_success" });
     expect(await db.gatewayInbound.findUnique({ where: { id: routed.inboundId } }))
       .toMatchObject({ state: "PROCESSED" });
+  });
+
+  it("automatically retries one failed delivery without duplicate timers or sends", async () => {
+    const routed = await routeGatewayInbound(inbound({
+      project: alphaId,
+      rootMessageId: "om_auto_retry_root",
+      threadId: "omt_auto_retry",
+    }), vi.fn());
+    expect(routed.mode).toBe("project_discussion");
+    if (routed.mode !== "project_discussion") return;
+
+    vi.useFakeTimers({ now: new Date("2026-07-27T08:00:00.000Z") });
+    const sender = vi.fn()
+      .mockResolvedValueOnce({ ok: false as const, output: "temporary automatic retry failure" })
+      .mockResolvedValueOnce({
+        ok: true as const,
+        output: JSON.stringify({ message_id: "om_auto_retry_success", channel: "feishu" }),
+      });
+
+    await expect(completeGatewayDiscussion(routed.inboundId, "Retry this answer", sender))
+      .resolves.toMatchObject({ ok: false, error: "temporary automatic retry failure" });
+    expect(sender).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(1);
+
+    await expect(completeGatewayDiscussion(routed.inboundId, "Retry this answer", sender))
+      .resolves.toMatchObject({ ok: false, deduped: true, pendingRetry: true });
+    expect(sender).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.waitFor(() => expect(sender).toHaveBeenCalledTimes(2));
+    expect(await db.gatewayDelivery.findFirst({ where: { inboundId: routed.inboundId } }))
+      .toMatchObject({ state: "DELIVERED", attempts: 2, platformMessageId: "om_auto_retry_success" });
+    expect(await db.gatewayInbound.findUnique({ where: { id: routed.inboundId } }))
+      .toMatchObject({ state: "PROCESSED" });
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
