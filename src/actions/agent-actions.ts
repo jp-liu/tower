@@ -452,9 +452,28 @@ export async function continueLatestPtyExecution(
   if (!task.project?.localPath) throw new Error("Project has no local path configured");
   const previousTaskStatus = task.status;
 
-  // Find the latest execution to reuse its worktree path
+  // Find the latest resumable terminal execution. Non-PTY compatibility rows
+  // have no terminal binding, but historically defaulted `agent` to
+  // CLAUDE_CODE. Treating one of those rows as terminal history would map it to
+  // Claude and pin a fresh continuation there, bypassing the configured
+  // Terminal capability slot.
+  //
+  // A captured session is resumable even when it predates target snapshots.
+  // Without a session, require a non-legacy snapshot written by the PTY start
+  // path. A legacy mapping without a session may have originated from a
+  // compatibility row and is therefore not safe terminal history.
   const latestExec = await db.taskExecution.findFirst({
-    where: { taskId },
+    where: {
+      taskId,
+      OR: [
+        { sessionId: { not: null } },
+        {
+          connectionId: { not: null },
+          targetId: { not: null },
+          NOT: { targetId: { startsWith: "legacy:" } },
+        },
+      ],
+    },
     orderBy: { createdAt: "desc" },
   });
 
