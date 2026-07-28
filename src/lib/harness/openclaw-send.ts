@@ -77,11 +77,15 @@ export async function sendViaOpenClaw(
   let lastOutput = "";
   for (const args of argSets) {
     try {
-      const { stdout, stderr } = await execFileAsync(cmd, args, {
+      const result = await execFileAsync(cmd, args, {
         timeout: 60_000,
         maxBuffer: 1024 * 1024,
         env: { ...process.env, ...(input.env ?? {}) },
       });
+      // Node's execFile has a custom promisify result object. Some compatible
+      // launchers and test doubles expose stdout directly, so accept both.
+      const stdout = typeof result === "string" ? result : result.stdout;
+      const stderr = typeof result === "string" ? "" : result.stderr;
       const output = `${stdout}${stderr}`.trim();
       const parsed = parseGatewaySendOutput(output);
       if (!parsed?.message_id) {

@@ -205,7 +205,8 @@ describe("resolveHarnessDestination", () => {
 
 describe("sendViaHarnessGateway", () => {
   it("sends OpenClaw presentation cards without duplicating the text fallback", async () => {
-    execFileMock.mockImplementation((_cmd, _args, _options, cb) => cb(null, "sent", ""));
+    execFileMock.mockImplementation((_cmd, _args, _options, cb) =>
+      cb(null, '{"message_id":"om_presentation"}', ""));
 
     const presentation = {
       title: "Tower",
@@ -236,7 +237,8 @@ describe("sendViaHarnessGateway", () => {
   it("falls back to plain text when OpenClaw does not support presentation", async () => {
     execFileMock
       .mockImplementationOnce((_cmd, _args, _options, cb) => cb({ stderr: "unknown option --presentation" }))
-      .mockImplementationOnce((_cmd, _args, _options, cb) => cb(null, "sent", ""));
+      .mockImplementationOnce((_cmd, _args, _options, cb) =>
+        cb(null, '{"message_id":"om_fallback"}', ""));
 
     const r = await sendViaHarnessGateway({
       gateway: "openclaw",
