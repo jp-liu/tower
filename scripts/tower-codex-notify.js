@@ -131,7 +131,7 @@ async function main() {
     : crypto.createHash("sha256").update(payload).digest("hex");
   const body = {
     taskId,
-    executionId: process.env.TOWER_EXECUTION_ID || "",
+    ...(process.env.TOWER_EXECUTION_ID ? { executionId: process.env.TOWER_EXECUTION_ID } : {}),
     sessionId,
     eventId,
     lastReply:

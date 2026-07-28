@@ -115,7 +115,7 @@ describe("POST /api/internal/hooks/stop", () => {
       },
     });
     const { POST } = await import("../route");
-    const response = await POST(new NextRequest("http://localhost/api/internal/hooks/stop", {
+    const request = () => new NextRequest("http://localhost/api/internal/hooks/stop", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -125,11 +125,23 @@ describe("POST /api/internal/hooks/stop", () => {
         eventId: "codex-turn-late",
         lastReply: "6662049",
       }),
-    }));
+    });
+    const response = await POST(request());
 
     expect(response.status).toBe(200);
     expect(await db.taskExecution.findUnique({ where: { id: execution.id } }))
       .toMatchObject({ status: "COMPLETED", exitCode: 0, summary: "6662049" });
+    expect(await db.workbenchEvent.findUnique({ where: { id: staleFailure.id } }))
+      .toMatchObject({ state: "CONSUMED" });
+    expect(await db.workbenchEvent.count({
+      where: { executionId: execution.id, kind: "CHILD_REVIEW_REQUIRED" },
+    })).toBe(1);
+
+    await db.workbenchEvent.update({
+      where: { id: staleFailure.id },
+      data: { state: "PENDING", consumedAt: null },
+    });
+    expect((await POST(request())).status).toBe(200);
     expect(await db.workbenchEvent.findUnique({ where: { id: staleFailure.id } }))
       .toMatchObject({ state: "CONSUMED" });
     expect(await db.workbenchEvent.count({

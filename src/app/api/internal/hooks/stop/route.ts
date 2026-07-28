@@ -137,20 +137,23 @@ export async function POST(request: NextRequest) {
         where: { id: task.id, status: "IN_PROGRESS" },
         data: { status: "IN_REVIEW" },
       }),
-      db.workbenchEvent.updateMany({
-        where: {
-          executionId: execution.id,
-          kind: "CHILD_EXECUTION_FAILED",
-          state: { in: ["PENDING", "PROCESSING"] },
-        },
-        data: {
-          state: "CONSUMED",
-          claimToken: null,
-          claimedAt: null,
-          consumedAt: new Date(),
-        },
-      }),
     ]);
+  }
+
+  if (task.parentTaskId && execution && executionId && eventId) {
+    await db.workbenchEvent.updateMany({
+      where: {
+        executionId: execution.id,
+        kind: "CHILD_EXECUTION_FAILED",
+        state: { in: ["PENDING", "PROCESSING"] },
+      },
+      data: {
+        state: "CONSUMED",
+        claimToken: null,
+        claimedAt: null,
+        consumedAt: new Date(),
+      },
+    });
   }
 
   // Fan-out 消费者 2（派生中枢）：子任务事件只做去重持久化。父终端是否运行

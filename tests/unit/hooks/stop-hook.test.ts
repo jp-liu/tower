@@ -19,8 +19,10 @@ vi.mock("@/lib/pty/ws-server", () => ({
 }));
 
 const mockDestroySession = vi.fn();
+const mockMarkSessionTurnComplete = vi.fn();
 vi.mock("@/lib/pty/session-store", () => ({
   destroySession: mockDestroySession,
+  markSessionTurnComplete: mockMarkSessionTurnComplete,
 }));
 
 const mockNotifyParent = vi.fn();
