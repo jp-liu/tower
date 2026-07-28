@@ -88,4 +88,36 @@ describe("POST /api/internal/hooks/stop", () => {
     expect(retry.status).toBe(200);
     expect(await db.workbenchEvent.count({ where: { sourceTaskId: child.id } })).toBe(1);
   });
+
+  it("repairs a startup-orphaned execution when the stable Codex event arrives late", async () => {
+    const workspace = await db.workspace.create({ data: { name: `late-stop-${randomUUID()}` } });
+    workspaceIds.push(workspace.id);
+    const project = await db.project.create({
+      data: { name: "Late stop project", workspaceId: workspace.id, localPath: process.cwd() },
+    });
+    const parent = await db.task.create({ data: { title: "Parent", projectId: project.id } });
+    const child = await db.task.create({
+      data: { title: "Child", projectId: project.id, parentTaskId: parent.id, status: "IN_PROGRESS" },
+    });
+    const execution = await db.taskExecution.create({
+      data: { taskId: child.id, status: "FAILED", startedAt: new Date(), endedAt: new Date() },
+    });
+    const { POST } = await import("../route");
+    const response = await POST(new NextRequest("http://localhost/api/internal/hooks/stop", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        taskId: child.id,
+        executionId: execution.id,
+        sessionId: "codex-thread-late",
+        eventId: "codex-turn-late",
+        lastReply: "6662049",
+      }),
+    }));
+
+    expect(response.status).toBe(200);
+    expect(await db.taskExecution.findUnique({ where: { id: execution.id } }))
+      .toMatchObject({ status: "COMPLETED", exitCode: 0, summary: "6662049" });
+    expect(await db.workbenchEvent.count({ where: { executionId: execution.id } })).toBe(1);
+  });
 });

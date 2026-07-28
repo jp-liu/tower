@@ -110,10 +110,19 @@ export async function POST(request: NextRequest) {
   // Codex's agent-turn-complete notify is the authoritative terminal event for
   // derived one-shot work. Persist the terminal state before publishing review
   // so a PTY exit race or server restart cannot leave RUNNING behind.
-  if (task.parentTaskId && execution?.status === "RUNNING") {
+  const authoritativeLateCompletion = execution?.status === "FAILED" && executionId && eventId;
+  if (task.parentTaskId && execution && (execution.status === "RUNNING" || authoritativeLateCompletion)) {
     await db.$transaction([
       db.taskExecution.updateMany({
-        where: { id: execution.id, status: "RUNNING" },
+        where: {
+          id: execution.id,
+          OR: [
+            { status: "RUNNING" },
+            // Startup conservatively marks orphaned PTYs FAILED. A later
+            // provider event with both stable ids is stronger evidence.
+            { status: "FAILED", exitCode: null },
+          ],
+        },
         data: {
           status: "COMPLETED",
           endedAt: new Date(),
