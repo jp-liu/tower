@@ -6,6 +6,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { up } from "../../../../scripts/migrations/0017-gateway-sessions";
 import { up as addGatewayPresentation } from "../../../../scripts/migrations/0018-gateway-delivery-presentation";
+import {
+  HISTORICAL_SENT_UNVERIFIED_DELIVERIES,
+  up as quarantineHistoricalGatewayDeliveries,
+} from "../../../../scripts/migrations/0020-gateway-sent-unverified";
 
 const clients: PrismaClient[] = [];
 const directories: string[] = [];
@@ -106,5 +110,80 @@ describe("0018 gateway delivery presentation migration", () => {
 
     const columns = await prisma.$queryRawUnsafe<Array<{ name: string }>>(`PRAGMA table_info("GatewayDelivery")`);
     expect(columns.map((column) => column.name)).toContain("presentation");
+  });
+});
+
+describe("0020 gateway sent-unverified migration", () => {
+  it("quarantines only the five exact platform sends and remains idempotent", async () => {
+    const prisma = await database();
+    await prisma.$executeRawUnsafe(`CREATE TABLE "Project" ("id" TEXT NOT NULL PRIMARY KEY)`);
+    await prisma.$executeRawUnsafe(`INSERT INTO "Project" ("id") VALUES ('project')`);
+    await up(prisma);
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "GatewaySession" (` +
+      `"id", "bindingKey", "gateway", "platform", "chatId", "kind", "projectId"` +
+      `) VALUES ('session', 'binding', 'openclaw', 'feishu', 'oc_group', 'PROJECT_WORK', 'project')`,
+    );
+    for (const [id, platformMessageId] of HISTORICAL_SENT_UNVERIFIED_DELIVERIES) {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "GatewayDelivery" (` +
+        `"id", "dedupKey", "sessionId", "kind", "content", "state", "attempts", "platformMessageId", "lastError"` +
+        `) VALUES (?, ?, 'session', 'DISCUSSION_REPLY', 'sent content', 'FAILED', 1, ?, 'contract mismatch')`,
+        id,
+        `dedup:${id}`,
+        platformMessageId,
+      );
+    }
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "GatewayDelivery" (` +
+      `"id", "dedupKey", "sessionId", "kind", "content", "state", "attempts", "platformMessageId", "nextAttemptAt"` +
+      `) VALUES ('retryable', 'dedup:retryable', 'session', 'FINAL_RESULT', 'not sent', 'FAILED', 1, NULL, CURRENT_TIMESTAMP)`,
+    );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "GatewayDelivery" (` +
+      `"id", "dedupKey", "sessionId", "kind", "content", "state", "attempts", "platformMessageId", "nextAttemptAt"` +
+      `) VALUES ('other-sent', 'dedup:other-sent', 'session', 'FINAL_RESULT', 'other sent', 'FAILED', 1, ?, CURRENT_TIMESTAMP)`,
+      HISTORICAL_SENT_UNVERIFIED_DELIVERIES[0][1],
+    );
+
+    await quarantineHistoricalGatewayDeliveries(prisma);
+    await quarantineHistoricalGatewayDeliveries(prisma);
+
+    const quarantined = await prisma.$queryRawUnsafe<Array<{
+      id: string;
+      state: string;
+      platformMessageId: string | null;
+      nextAttemptAt: string | null;
+      lastError: string | null;
+    }>>(
+      `SELECT "id", "state", "platformMessageId", "nextAttemptAt", "lastError" ` +
+      `FROM "GatewayDelivery" WHERE "state" = 'SENT_UNVERIFIED' ORDER BY "id"`,
+    );
+    expect(quarantined.map((row) => [row.id, row.platformMessageId])).toEqual(
+      [...HISTORICAL_SENT_UNVERIFIED_DELIVERIES].sort(([left], [right]) => left.localeCompare(right)),
+    );
+    expect(quarantined.every((row) => row.nextAttemptAt === null)).toBe(true);
+    expect(quarantined.every((row) => row.lastError?.includes("manual review required"))).toBe(true);
+
+    const untouched = await prisma.$queryRawUnsafe<Array<{ id: string; state: string; nextAttemptAt: string | null }>>(
+      `SELECT "id", "state", "nextAttemptAt" FROM "GatewayDelivery" ` +
+      `WHERE "id" IN ('retryable', 'other-sent') ORDER BY "id"`,
+    );
+    expect(untouched).toEqual([
+      { id: "other-sent", state: "FAILED", nextAttemptAt: expect.anything() },
+      { id: "retryable", state: "FAILED", nextAttemptAt: expect.anything() },
+    ]);
+
+    const [exactId] = HISTORICAL_SENT_UNVERIFIED_DELIVERIES[0];
+    await prisma.$executeRawUnsafe(
+      `UPDATE "GatewayDelivery" SET "state" = 'FAILED', "platformMessageId" = 'om_wrong', "nextAttemptAt" = CURRENT_TIMESTAMP WHERE "id" = ?`,
+      exactId,
+    );
+    await quarantineHistoricalGatewayDeliveries(prisma);
+    const mismatched = await prisma.$queryRawUnsafe<Array<{ state: string; platformMessageId: string }>>(
+      `SELECT "state", "platformMessageId" FROM "GatewayDelivery" WHERE "id" = ?`,
+      exactId,
+    );
+    expect(mismatched).toEqual([{ state: "FAILED", platformMessageId: "om_wrong" }]);
   });
 });

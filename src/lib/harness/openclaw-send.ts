@@ -28,13 +28,36 @@ interface OpenClawConfig {
   channels?: { feishu?: OpenClawFeishuConfig };
 }
 
+type FeishuContext = {
+  appId: string;
+  appSecret: string;
+  domain: string;
+};
+
+type FeishuMessageReceipt = {
+  message_id?: string;
+  chat_id?: string;
+  parent_id?: string;
+  root_id?: string;
+  msg_type?: string;
+};
+
+export function normalizeFeishuChatTarget(value: string | null | undefined):
+  | { ok: true; chatId: string }
+  | { ok: false; error: string } {
+  const raw = value?.trim() || "";
+  if (!raw) return { ok: false, error: "Feishu chat destination is required" };
+  const match = raw.match(/^(?:feishu:)?(?:chat:)?(oc_[A-Za-z0-9_-]+)$/i);
+  if (!match) return { ok: false, error: `Invalid Feishu chat destination: ${raw}` };
+  return { ok: true, chatId: match[1] };
+}
+
 export async function sendViaOpenClaw(
   input: OpenClawSendInput,
 ): Promise<
   | { ok: true; output: string; metadata: GatewaySendMetadata }
   | { ok: false; output: string; metadata?: GatewaySendMetadata }
 > {
-  const cmd = process.env.OPENCLAW_CLI_PATH || resolveOpenClawCommand();
   const channel = input.downstream?.trim();
   const target = input.dest.trim();
   if (!channel) return { ok: false, output: "OpenClaw downstream channel is required (e.g. slack, whatsapp, telegram)" };
@@ -42,12 +65,18 @@ export async function sendViaOpenClaw(
 
   const replyTo = input.replyToMessageId?.trim();
   const verifyNativeFeishuReply = channel.toLowerCase() === "feishu" && Boolean(replyTo);
-  // OpenClaw 2026.6 accepts --reply-to with --presentation but its durable
-  // presentation path can still create a top-level Feishu card. Text replies
-  // use the native reply path and remain an allowed presentation fallback.
-  const presentationJson = input.presentation && !verifyNativeFeishuReply
-    ? JSON.stringify(input.presentation)
-    : null;
+  if (verifyNativeFeishuReply) {
+    return sendNativeFeishuCardReply({
+      message: input.message,
+      presentation: input.presentation,
+      replyToMessageId: replyTo!,
+      dest: target,
+      env: input.env,
+    });
+  }
+
+  const cmd = process.env.OPENCLAW_CLI_PATH || resolveOpenClawCommand();
+  const presentationJson = input.presentation ? JSON.stringify(input.presentation) : null;
   const primaryArgs = ["message", "send", "--channel", channel, "--target", target];
   if (input.replyToMessageId?.trim()) primaryArgs.push("--reply-to", input.replyToMessageId.trim());
   if (input.threadId?.trim()) primaryArgs.push("--thread-id", input.threadId.trim());
@@ -92,24 +121,9 @@ export async function sendViaOpenClaw(
         lastOutput = `OpenClaw did not return a platform message id: ${output}`;
         break;
       }
-      let metadata: GatewaySendMetadata = parsed;
+      const metadata: GatewaySendMetadata = parsed;
       if (replyTo) {
-        if (verifyNativeFeishuReply) {
-          const receipt = await verifyOpenClawFeishuReply({
-            messageId: parsed.message_id,
-            replyToMessageId: replyTo,
-            dest: target,
-            env: input.env,
-          });
-          if (!receipt.ok) {
-            return {
-              ok: false,
-              output: `OpenClaw sent ${parsed.message_id}, but Feishu reply verification failed: ${receipt.error}`,
-              metadata: parsed,
-            };
-          }
-          metadata = receipt.metadata;
-        } else if (parsed.send_mode !== "reply" || parsed.reply_to_message_id !== replyTo) {
+        if (parsed.send_mode !== "reply" || parsed.reply_to_message_id !== replyTo) {
           return {
             ok: false,
             output: `OpenClaw did not confirm native reply target ${replyTo}`,
@@ -142,68 +156,202 @@ export async function verifyOpenClawFeishuReply(input: {
   | { ok: false; error: string }
 > {
   try {
-    const configPath = input.env?.OPENCLAW_CONFIG_PATH?.trim()
-      || process.env.OPENCLAW_CONFIG_PATH?.trim()
-      || join(input.env?.OPENCLAW_STATE_DIR?.trim() || process.env.OPENCLAW_STATE_DIR?.trim() || join(homedir(), ".openclaw"), "openclaw.json");
-    const config = JSON.parse(await readFile(configPath, "utf8")) as OpenClawConfig;
-    const feishu = config.channels?.feishu;
-    const appId = typeof feishu?.appId === "string" ? feishu.appId.trim() : "";
-    const appSecret = typeof feishu?.appSecret === "string" ? feishu.appSecret.trim() : "";
-    const domain = typeof feishu?.domain === "string" && feishu.domain.trim()
-      ? feishu.domain.trim().replace(/\/$/, "")
-      : "https://open.feishu.cn";
-    if (!appId || !appSecret) return { ok: false, error: "OpenClaw Feishu credentials are not directly verifiable" };
-
-    const authResponse = await fetch(`${domain}/open-apis/auth/v3/tenant_access_token/internal`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ app_id: appId, app_secret: appSecret }),
-      signal: AbortSignal.timeout(10_000),
+    const target = normalizeFeishuChatTarget(input.dest);
+    if (!target.ok) return target;
+    const replyToMessageId = input.replyToMessageId.trim();
+    if (!replyToMessageId) return { ok: false, error: "Feishu reply parent message id is required" };
+    const context = await readFeishuContext(input.env);
+    const token = await getFeishuTenantToken(context);
+    if (!token.ok) return token;
+    return readAndVerifyFeishuReply({
+      context,
+      token: token.token,
+      messageId: input.messageId,
+      replyToMessageId,
+      expectedChatId: target.chatId,
     });
-    const auth = await authResponse.json() as { code?: number; msg?: string; tenant_access_token?: string };
-    if (!authResponse.ok || !auth.tenant_access_token) {
-      return { ok: false, error: `Feishu auth failed (${auth.code ?? authResponse.status}: ${auth.msg ?? "unknown"})` };
-    }
-
-    const messageResponse = await fetch(
-      `${domain}/open-apis/im/v1/messages/${encodeURIComponent(input.messageId)}`,
-      {
-        headers: { authorization: `Bearer ${auth.tenant_access_token}` },
-        signal: AbortSignal.timeout(10_000),
-      },
-    );
-    const body = await messageResponse.json() as {
-      code?: number;
-      msg?: string;
-      data?: { items?: Array<{ message_id?: string; chat_id?: string; parent_id?: string; root_id?: string }> };
-    };
-    const item = body.data?.items?.find((candidate) => candidate.message_id === input.messageId);
-    if (!messageResponse.ok || !item) {
-      return { ok: false, error: `Feishu message receipt unavailable (${body.code ?? messageResponse.status}: ${body.msg ?? "unknown"})` };
-    }
-    const expectedChatId = input.dest.replace(/^feishu:/i, "");
-    if (item.chat_id !== expectedChatId) {
-      return { ok: false, error: `receipt chat mismatch (expected ${expectedChatId}, got ${item.chat_id ?? "unknown"})` };
-    }
-    if (item.parent_id !== input.replyToMessageId) {
-      return {
-        ok: false,
-        error: `receipt is not a native reply (expected parent ${input.replyToMessageId}, got ${item.parent_id ?? "none"})`,
-      };
-    }
-    return {
-      ok: true,
-      metadata: {
-        platform: "feishu",
-        chat_id: item.chat_id,
-        message_id: item.message_id,
-        reply_to_message_id: item.parent_id,
-        send_mode: "reply",
-      },
-    };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
+}
+
+async function sendNativeFeishuCardReply(input: {
+  message: string;
+  presentation?: unknown;
+  replyToMessageId: string;
+  dest: string;
+  env?: Record<string, string>;
+}): Promise<
+  | { ok: true; output: string; metadata: GatewaySendMetadata }
+  | { ok: false; output: string; metadata?: GatewaySendMetadata }
+> {
+  const target = normalizeFeishuChatTarget(input.dest);
+  if (!target.ok) return { ok: false, output: target.error };
+  if (!input.replyToMessageId.trim()) return { ok: false, output: "Feishu reply parent message id is required" };
+
+  try {
+    const context = await readFeishuContext(input.env);
+    const token = await getFeishuTenantToken(context);
+    if (!token.ok) return { ok: false, output: token.error };
+    const card = toFeishuInteractiveCard(input.presentation, input.message);
+    const response = await fetch(
+      `${context.domain}/open-apis/im/v1/messages/${encodeURIComponent(input.replyToMessageId)}/reply`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token.token}`,
+          "content-type": "application/json; charset=utf-8",
+        },
+        body: JSON.stringify({ msg_type: "interactive", content: JSON.stringify(card) }),
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    const body = await response.json() as {
+      code?: number;
+      msg?: string;
+      data?: FeishuMessageReceipt;
+    };
+    const messageId = body.data?.message_id?.trim();
+    if (!response.ok || body.code !== 0 || !messageId) {
+      return {
+        ok: false,
+        output: `Feishu native reply failed (${body.code ?? response.status}: ${body.msg ?? "missing message_id"})`,
+        ...(messageId ? { metadata: { platform: "feishu", message_id: messageId } } : {}),
+      };
+    }
+    const verified = await readAndVerifyFeishuReply({
+      context,
+      token: token.token,
+      messageId,
+      replyToMessageId: input.replyToMessageId,
+      expectedChatId: target.chatId,
+    });
+    if (!verified.ok) {
+      return {
+        ok: false,
+        output: `Feishu sent ${messageId}, but native reply verification failed: ${verified.error}`,
+        metadata: {
+          platform: "feishu",
+          message_id: messageId,
+          chat_id: verified.receipt?.chat_id ?? body.data?.chat_id,
+          reply_to_message_id: verified.receipt?.parent_id ?? body.data?.parent_id,
+          msg_type: verified.receipt?.msg_type ?? body.data?.msg_type,
+        },
+      };
+    }
+    return { ok: true, output: JSON.stringify(body), metadata: verified.metadata };
+  } catch (error) {
+    return { ok: false, output: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+async function readFeishuContext(env?: Record<string, string>): Promise<FeishuContext> {
+  const configPath = env?.OPENCLAW_CONFIG_PATH?.trim()
+    || process.env.OPENCLAW_CONFIG_PATH?.trim()
+    || join(env?.OPENCLAW_STATE_DIR?.trim() || process.env.OPENCLAW_STATE_DIR?.trim() || join(homedir(), ".openclaw"), "openclaw.json");
+  const config = JSON.parse(await readFile(configPath, "utf8")) as OpenClawConfig;
+  const feishu = config.channels?.feishu;
+  const appId = typeof feishu?.appId === "string" ? feishu.appId.trim() : "";
+  const appSecret = typeof feishu?.appSecret === "string" ? feishu.appSecret.trim() : "";
+  if (!appId || !appSecret) throw new Error("OpenClaw Feishu credentials are not directly available");
+  const domain = typeof feishu?.domain === "string" && feishu.domain.trim()
+    ? feishu.domain.trim().replace(/\/$/, "")
+    : "https://open.feishu.cn";
+  return { appId, appSecret, domain };
+}
+
+async function getFeishuTenantToken(context: FeishuContext): Promise<
+  { ok: true; token: string } | { ok: false; error: string }
+> {
+  const response = await fetch(`${context.domain}/open-apis/auth/v3/tenant_access_token/internal`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ app_id: context.appId, app_secret: context.appSecret }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  const body = await response.json() as { code?: number; msg?: string; tenant_access_token?: string };
+  if (!response.ok || !body.tenant_access_token) {
+    return { ok: false, error: `Feishu auth failed (${body.code ?? response.status}: ${body.msg ?? "unknown"})` };
+  }
+  return { ok: true, token: body.tenant_access_token };
+}
+
+async function readAndVerifyFeishuReply(input: {
+  context: FeishuContext;
+  token: string;
+  messageId: string;
+  replyToMessageId: string;
+  expectedChatId: string;
+}): Promise<
+  | { ok: true; metadata: GatewaySendMetadata }
+  | { ok: false; error: string; receipt?: FeishuMessageReceipt }
+> {
+  const response = await fetch(
+    `${input.context.domain}/open-apis/im/v1/messages/${encodeURIComponent(input.messageId)}`,
+    {
+      headers: { authorization: `Bearer ${input.token}` },
+      signal: AbortSignal.timeout(10_000),
+    },
+  );
+  const body = await response.json() as {
+    code?: number;
+    msg?: string;
+    data?: { items?: FeishuMessageReceipt[] };
+  };
+  const item = body.data?.items?.find((candidate) => candidate.message_id === input.messageId);
+  if (!response.ok || !item) {
+    return { ok: false, error: `Feishu message receipt unavailable (${body.code ?? response.status}: ${body.msg ?? "unknown"})` };
+  }
+  if (item.chat_id !== input.expectedChatId) {
+    return { ok: false, error: `receipt chat mismatch (expected ${input.expectedChatId}, got ${item.chat_id ?? "unknown"})`, receipt: item };
+  }
+  if (item.parent_id !== input.replyToMessageId) {
+    return { ok: false, error: `receipt is not a native reply (expected parent ${input.replyToMessageId}, got ${item.parent_id ?? "none"})`, receipt: item };
+  }
+  if (item.msg_type !== "interactive") {
+    return { ok: false, error: `receipt message type mismatch (expected interactive, got ${item.msg_type ?? "unknown"})`, receipt: item };
+  }
+  return {
+    ok: true,
+    metadata: {
+      platform: "feishu",
+      chat_id: item.chat_id,
+      message_id: item.message_id,
+      reply_to_message_id: item.parent_id,
+      msg_type: item.msg_type,
+      send_mode: "reply",
+    },
+  };
+}
+
+function toFeishuInteractiveCard(presentation: unknown, fallbackMessage: string): Record<string, unknown> {
+  const value = presentation && typeof presentation === "object"
+    ? presentation as { title?: unknown; tone?: unknown; blocks?: unknown }
+    : {};
+  const title = typeof value.title === "string" && value.title.trim() ? value.title.trim() : "Tower";
+  const blocks = Array.isArray(value.blocks) ? value.blocks : [{ type: "text", text: fallbackMessage }];
+  const elements = blocks.flatMap((block): Array<Record<string, unknown>> => {
+    if (!block || typeof block !== "object") return [];
+    const item = block as { type?: unknown; text?: unknown };
+    if (item.type === "divider") return [{ tag: "hr" }];
+    if (typeof item.text !== "string" || !item.text.trim()) return [];
+    if (item.type === "context") {
+      return [{ tag: "note", elements: [{ tag: "plain_text", content: item.text }] }];
+    }
+    return [{ tag: "div", text: { tag: "lark_md", content: item.text } }];
+  });
+  const template = {
+    info: "blue",
+    success: "green",
+    warning: "orange",
+    danger: "red",
+    neutral: "grey",
+  }[typeof value.tone === "string" ? value.tone : "neutral"] || "grey";
+  return {
+    config: { wide_screen_mode: true },
+    header: { template, title: { tag: "plain_text", content: title } },
+    elements: elements.length > 0 ? elements : [{ tag: "div", text: { tag: "lark_md", content: fallbackMessage } }],
+  };
 }
 
 function resolveOpenClawCommand(): string {

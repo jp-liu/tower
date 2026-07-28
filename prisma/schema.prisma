@@ -362,6 +362,9 @@ model GatewayDelivery {
   state             GatewayDeliveryState @default(PENDING)
   attempts          Int                  @default(0)
   platformMessageId String?
+  platformChatId    String?
+  platformParentId  String?
+  platformMessageType String?
   lastError         String?
   nextAttemptAt     DateTime?
   deliveredAt       DateTime?
@@ -843,6 +846,7 @@ enum GatewayDeliveryState {
   PENDING
   SENDING
   DELIVERED
+  SENT_UNVERIFIED
   FAILED
 }
 

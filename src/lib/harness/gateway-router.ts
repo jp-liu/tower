@@ -179,7 +179,7 @@ function normalize(value: string | null | undefined): string {
 }
 
 function normalizeChatId(value: string | null | undefined): string {
-  return normalize(value).replace(/^(feishu|lark|wechat|weixin):/, "");
+  return normalize(value).replace(/^(?:feishu|lark|wechat|weixin):/, "").replace(/^chat:/, "");
 }
 
 function digest(value: string): string {
@@ -1078,6 +1078,17 @@ export async function deliverGatewayResponse(
     presentation: input.presentation,
   });
   if (delivery.state === "DELIVERED") return { ok: true, deduped: true, deliveryId: delivery.id };
+  if (delivery.state === "SENT_UNVERIFIED") {
+    return {
+      ok: false,
+      deduped: true,
+      sent: true,
+      requiresManualReview: true,
+      deliveryId: delivery.id,
+      platformMessageId: delivery.platformMessageId,
+      error: delivery.lastError || "Platform send exists, but the delivery contract requires manual review",
+    };
+  }
 
   const claimed = await db.gatewayDelivery.updateMany({
     where: {
@@ -1092,6 +1103,17 @@ export async function deliverGatewayResponse(
   if (claimed.count === 0) {
     const pending = await db.gatewayDelivery.findUniqueOrThrow({ where: { id: delivery.id } });
     if (pending.state === "DELIVERED") return { ok: true, deduped: true, deliveryId: delivery.id };
+    if (pending.state === "SENT_UNVERIFIED") {
+      return {
+        ok: false,
+        deduped: true,
+        sent: true,
+        requiresManualReview: true,
+        deliveryId: pending.id,
+        platformMessageId: pending.platformMessageId,
+        error: pending.lastError || "Platform send exists, but the delivery contract requires manual review",
+      };
+    }
     return {
       ok: false,
       deduped: true,
@@ -1125,40 +1147,73 @@ export async function deliverGatewayResponse(
     await db.gatewayDelivery.update({
       where: { id: delivery.id },
       data: {
-        state: "FAILED",
+        state: unverifiedPlatformSend ? "SENT_UNVERIFIED" : "FAILED",
         platformMessageId: sent.metadata?.message_id ?? null,
+        platformChatId: sent.metadata?.chat_id ?? null,
+        platformParentId: sent.metadata?.reply_to_message_id ?? null,
+        platformMessageType: sent.metadata?.msg_type ?? null,
         lastError: sent.output.slice(0, 2000),
         nextAttemptAt,
       },
     });
+    if (unverifiedPlatformSend) {
+      log.warn("Gateway delivery sent but contract verification failed; automatic retry disabled", {
+        deliveryId: delivery.id,
+        platformMessageId: sent.metadata?.message_id,
+        platformChatId: sent.metadata?.chat_id,
+        platformParentId: sent.metadata?.reply_to_message_id,
+        platformMessageType: sent.metadata?.msg_type,
+        error: sent.output.slice(0, 2000),
+      });
+    }
     if (nextAttemptAt) scheduleGatewayDeliveryRetry(nextAttemptAt, sender);
     return { ok: false, deliveryId: delivery.id, error: sent.output };
   }
 
   const metadata = sent.metadata ?? parseGatewaySendOutput(sent.output);
   const expectedReply = inbound.platformMessageId.trim();
+  const requiresFeishuCardReceipt = normalize(inbound.session.platform) === "feishu";
   if (
     !metadata?.message_id ||
     metadata.send_mode !== "reply" ||
-    metadata.reply_to_message_id !== expectedReply
+    metadata.reply_to_message_id !== expectedReply ||
+    (requiresFeishuCardReceipt && normalizeChatId(metadata.chat_id) !== normalizeChatId(inbound.session.chatId)) ||
+    (requiresFeishuCardReceipt && metadata.msg_type !== "interactive")
   ) {
     const error = [
       "Gateway could not confirm native reply delivery",
       `expected reply target=${expectedReply}`,
       `actual mode=${metadata?.send_mode ?? "unknown"}`,
       `actual target=${metadata?.reply_to_message_id ?? "unknown"}`,
+      `expected chat=${normalizeChatId(inbound.session.chatId)}`,
+      `actual chat=${normalizeChatId(metadata?.chat_id) || "unknown"}`,
+      `expected message type=${requiresFeishuCardReceipt ? "interactive" : "platform-native"}`,
+      `actual message type=${metadata?.msg_type ?? "unknown"}`,
       `message id=${metadata?.message_id ?? "unknown"}`,
     ].join("; ");
     const nextAttemptAt = metadata?.message_id ? null : retryAt(current.attempts, claimAt);
     await db.gatewayDelivery.update({
       where: { id: delivery.id },
       data: {
-        state: "FAILED",
+        state: metadata?.message_id ? "SENT_UNVERIFIED" : "FAILED",
         platformMessageId: metadata?.message_id ?? null,
+        platformChatId: metadata?.chat_id ?? null,
+        platformParentId: metadata?.reply_to_message_id ?? null,
+        platformMessageType: metadata?.msg_type ?? null,
         lastError: error,
         nextAttemptAt,
       },
     });
+    if (metadata?.message_id) {
+      log.warn("Gateway delivery sent but receipt contract was incomplete; automatic retry disabled", {
+        deliveryId: delivery.id,
+        platformMessageId: metadata.message_id,
+        platformChatId: metadata.chat_id,
+        platformParentId: metadata.reply_to_message_id,
+        platformMessageType: metadata.msg_type,
+        error,
+      });
+    }
     if (nextAttemptAt) scheduleGatewayDeliveryRetry(nextAttemptAt, sender);
     return { ok: false, deliveryId: delivery.id, error };
   }
@@ -1167,6 +1222,9 @@ export async function deliverGatewayResponse(
     data: {
       state: "DELIVERED",
       platformMessageId: metadata?.message_id ?? null,
+      platformChatId: metadata?.chat_id ?? null,
+      platformParentId: metadata?.reply_to_message_id ?? null,
+      platformMessageType: metadata?.msg_type ?? null,
       deliveredAt: new Date(),
       nextAttemptAt: null,
       lastError: null,
@@ -1378,6 +1436,19 @@ export async function retryGatewayDeliveries(
   await db.gatewayDelivery.updateMany({
     where: {
       state: "SENDING",
+      platformMessageId: { not: null },
+      updatedAt: { lt: new Date(now.getTime() - 60_000) },
+    },
+    data: {
+      state: "SENT_UNVERIFIED",
+      nextAttemptAt: null,
+      lastError: "Stale delivery claim has a platform message id; automatic retry disabled pending manual review",
+    },
+  });
+  await db.gatewayDelivery.updateMany({
+    where: {
+      state: "SENDING",
+      platformMessageId: null,
       updatedAt: { lt: new Date(now.getTime() - 60_000) },
     },
     data: { state: "FAILED", nextAttemptAt: now, lastError: "Stale delivery claim recovered" },

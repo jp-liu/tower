@@ -332,8 +332,8 @@ async function preStart() {
 /**
  * Run one-shot data migrations (scripts/migrations/) that haven't been applied
  * to this database yet. Delegated to a tsx runner that tracks applied ids in
- * the AppliedMigration table. A migration failure is non-fatal (logged +
- * retried next start) — see scripts/run-migrations.ts.
+ * the AppliedMigration table. A migration failure blocks startup and is
+ * retried next start — see scripts/run-migrations.ts.
  */
 function runPendingMigrations() {
   const tsxBin = resolveBin("tsx", "tsx");

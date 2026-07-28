@@ -44,8 +44,10 @@ function successfulSender(messageId = `om_sent_${randomUUID()}`) {
       ok: true as const,
       output: JSON.stringify({ channel: "feishu", chat_id: "oc_gateway_test", message_id: messageId }),
       metadata: {
+        chat_id: "oc_gateway_test",
         message_id: messageId,
         reply_to_message_id: input.replyToMessageId ?? undefined,
+        msg_type: "interactive",
         send_mode: "reply" as const,
       },
       resolvedDest: "feishu:oc_gateway_test",
@@ -230,7 +232,7 @@ describe("gateway inbound routing", () => {
     await completeGatewayDiscussion(betaDiscussion.inboundId, "Beta project answer", vi.fn(async (input: HarnessGatewaySendInput) => ({
       ok: true as const,
       output: JSON.stringify({ message_id: "om_beta_answer", channel: "feishu" }),
-      metadata: { message_id: "om_beta_answer", reply_to_message_id: input.replyToMessageId!, send_mode: "reply" as const },
+      metadata: { chat_id: "oc_gateway_test", message_id: "om_beta_answer", reply_to_message_id: input.replyToMessageId!, msg_type: "interactive", send_mode: "reply" as const },
     })));
 
     const deliveryBound = await routeGatewayInbound(inbound({
@@ -717,7 +719,7 @@ describe("gateway confirmations and delivery retry", () => {
     const sender = vi.fn(async (sendInput: HarnessGatewaySendInput) => ({
       ok: true as const,
       output: JSON.stringify({ channel: "feishu", chat_id: "oc_gateway_test", message_id: "om_sent" }),
-      metadata: { message_id: "om_sent", reply_to_message_id: sendInput.replyToMessageId!, send_mode: "reply" as const },
+      metadata: { chat_id: "oc_gateway_test", message_id: "om_sent", reply_to_message_id: sendInput.replyToMessageId!, msg_type: "interactive", send_mode: "reply" as const },
       resolvedDest: "feishu:oc_gateway_test",
       sendInput,
     }));
@@ -825,7 +827,6 @@ describe("gateway confirmations and delivery retry", () => {
     const routed = await routeGatewayInbound(request, vi.fn());
     expect(routed.mode).toBe("project_discussion");
     if (routed.mode !== "project_discussion") return;
-
     const failedSender = vi.fn(async () => ({ ok: false as const, output: "temporary gateway failure" }));
     await expect(completeGatewayDiscussion(routed.inboundId, "Project-aware answer", failedSender))
       .resolves.toMatchObject({ ok: false, error: "temporary gateway failure" });
@@ -835,7 +836,7 @@ describe("gateway confirmations and delivery retry", () => {
     const retrySender = vi.fn(async (input: HarnessGatewaySendInput) => ({
       ok: true as const,
       output: JSON.stringify({ message_id: "om_retry_success", channel: "feishu" }),
-      metadata: { message_id: "om_retry_success", reply_to_message_id: input.replyToMessageId!, send_mode: "reply" as const },
+      metadata: { chat_id: "oc_gateway_test", message_id: "om_retry_success", reply_to_message_id: input.replyToMessageId!, msg_type: "interactive", send_mode: "reply" as const },
     }));
     await expect(retryGatewayDeliveries(retrySender, new Date(Date.now() + 10 * 60_000)))
       .resolves.toEqual({ scanned: 1, delivered: 1, failed: 0 });
@@ -855,6 +856,7 @@ describe("gateway confirmations and delivery retry", () => {
     const routed = await routeGatewayInbound(request, vi.fn());
     expect(routed.mode).toBe("project_discussion");
     if (routed.mode !== "project_discussion") return;
+    vi.useFakeTimers({ now: new Date("2026-07-28T04:00:00.000Z") });
 
     const sender = vi.fn(async () => ({
       ok: false as const,
@@ -865,14 +867,34 @@ describe("gateway confirmations and delivery retry", () => {
       .resolves.toMatchObject({ ok: false });
     expect(await db.gatewayDelivery.findFirst({ where: { inboundId: routed.inboundId } }))
       .toMatchObject({
-        state: "FAILED",
+        state: "SENT_UNVERIFIED",
         attempts: 1,
         platformMessageId: "om_unverified_send",
         nextAttemptAt: null,
+        lastError: "platform message exists but has no parent_id",
       });
 
+    await expect(completeGatewayDiscussion(routed.inboundId, "Do not duplicate this", sender))
+      .resolves.toMatchObject({
+        ok: false,
+        deduped: true,
+        sent: true,
+        requiresManualReview: true,
+        platformMessageId: "om_unverified_send",
+      });
     await expect(retryGatewayDeliveries(sender, new Date(Date.now() + 60 * 60_000)))
       .resolves.toEqual({ scanned: 0, delivered: 0, failed: 0 });
+    expect(vi.getTimerCount()).toBe(0);
+
+    const delivery = await db.gatewayDelivery.findFirstOrThrow({ where: { inboundId: routed.inboundId } });
+    await db.gatewayDelivery.update({
+      where: { id: delivery.id },
+      data: { state: "SENDING", updatedAt: new Date(Date.now() - 2 * 60_000) },
+    });
+    await expect(retryGatewayDeliveries(sender, new Date()))
+      .resolves.toEqual({ scanned: 0, delivered: 0, failed: 0 });
+    expect(await db.gatewayDelivery.findUniqueOrThrow({ where: { id: delivery.id } }))
+      .toMatchObject({ state: "SENT_UNVERIFIED", nextAttemptAt: null });
     expect(sender).toHaveBeenCalledTimes(1);
   });
 
@@ -891,7 +913,7 @@ describe("gateway confirmations and delivery retry", () => {
       .mockImplementationOnce(async (input: HarnessGatewaySendInput) => ({
         ok: true as const,
         output: JSON.stringify({ message_id: "om_auto_retry_success", channel: "feishu" }),
-        metadata: { message_id: "om_auto_retry_success", reply_to_message_id: input.replyToMessageId!, send_mode: "reply" as const },
+        metadata: { chat_id: "oc_gateway_test", message_id: "om_auto_retry_success", reply_to_message_id: input.replyToMessageId!, msg_type: "interactive", send_mode: "reply" as const },
       }));
 
     await expect(completeGatewayDiscussion(routed.inboundId, "Retry this answer", sender))

@@ -3,6 +3,7 @@ export interface GatewaySendMetadata {
   chat_id?: string;
   message_id?: string;
   reply_to_message_id?: string;
+  msg_type?: string;
   send_mode?: "reply" | "top_level";
 }
 
@@ -20,6 +21,7 @@ export function parseGatewaySendOutput(output: string): GatewaySendMetadata | nu
       reply_to_message_id: findStringByKeys(parsed, [
         "reply_to_message_id", "replyToMessageId", "replyToId", "reply_to",
       ]),
+      msg_type: findStringByKeys(parsed, ["msg_type", "msgType", "message_type", "messageType"]),
       send_mode: normalizeSendMode(findStringByKeys(parsed, ["send_mode", "sendMode", "mode", "via"])),
     };
   } catch {
