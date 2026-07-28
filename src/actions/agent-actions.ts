@@ -62,6 +62,19 @@ export interface TerminalExecutionResult extends TerminalTargetSnapshot {
 
 const log = logger.create("agent-actions");
 
+function refreshWorkspaces(): void {
+  try {
+    revalidatePath("/workspaces");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("static generation store missing in revalidatePath")) {
+      log.info("Skipped workspace revalidation outside a request context");
+      return;
+    }
+    throw error;
+  }
+}
+
 const SIGNAL_DIR = getSignalDir();
 
 function taskEnvironment(input: {
@@ -115,7 +128,7 @@ async function failTerminalPrestart(input: {
       ? rm(input.tempDir, { recursive: true, force: true }).catch(() => {})
       : Promise.resolve(),
   ]);
-  revalidatePath("/workspaces");
+  refreshWorkspaces();
 }
 
 async function writeExitSignal(taskId: string, exitCode: number): Promise<void> {
@@ -137,7 +150,7 @@ export async function sendTaskMessage(taskId: string, content: string) {
     },
   });
 
-  revalidatePath("/workspaces");
+  refreshWorkspaces();
   return { userMessage };
 }
 
@@ -172,7 +185,7 @@ export async function startTaskExecution(
     data: { status: "IN_PROGRESS" },
   });
 
-  revalidatePath("/workspaces");
+  refreshWorkspaces();
   return execution;
 }
 
@@ -181,7 +194,7 @@ export async function stopTaskExecution(executionId: string, status: "COMPLETED"
     where: { id: executionId },
     data: { status, endedAt: new Date() },
   });
-  revalidatePath("/workspaces");
+  refreshWorkspaces();
   return execution;
 }
 
@@ -231,7 +244,7 @@ export async function stopPtyExecution(taskId: string): Promise<void> {
     );
   }
 
-  revalidatePath("/workspaces");
+  refreshWorkspaces();
 }
 
 export async function getTaskExecutions(taskId: string) {
@@ -305,7 +318,7 @@ export async function resumePtyExecution(
       where: { id: taskId },
       data: { status: "IN_PROGRESS" },
     });
-    revalidatePath("/workspaces");
+    refreshWorkspaces();
 
     const usernameVal = await readConfigValue<string>("onboarding.username", "");
 
@@ -512,7 +525,7 @@ export async function continueLatestPtyExecution(
       where: { id: taskId },
       data: { status: "IN_PROGRESS" },
     });
-    revalidatePath("/workspaces");
+    refreshWorkspaces();
 
     const usernameVal = await readConfigValue<string>("onboarding.username", "");
 
@@ -829,7 +842,7 @@ export async function startPtyExecution(
         where: { id: taskId },
         data: { status: "IN_PROGRESS" },
       });
-      revalidatePath("/workspaces");
+      refreshWorkspaces();
     }
 
     // Reconcile real CLI config immediately before every PTY spawn. This also

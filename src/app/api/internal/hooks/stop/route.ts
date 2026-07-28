@@ -84,6 +84,9 @@ export async function POST(request: NextRequest) {
     orderBy: { createdAt: "desc" },
     select: { id: true, status: true },
   });
+  if (executionId && !execution) {
+    return NextResponse.json({ error: "Execution does not belong to task" }, { status: 409 });
+  }
   const childContext = { sessionId, eventId, executionId: execution?.id ?? null };
 
   // This provider callback is the authoritative end-of-turn signal. Keep that
@@ -133,6 +136,19 @@ export async function POST(request: NextRequest) {
       db.task.updateMany({
         where: { id: task.id, status: "IN_PROGRESS" },
         data: { status: "IN_REVIEW" },
+      }),
+      db.workbenchEvent.updateMany({
+        where: {
+          executionId: execution.id,
+          kind: "CHILD_EXECUTION_FAILED",
+          state: { in: ["PENDING", "PROCESSING"] },
+        },
+        data: {
+          state: "CONSUMED",
+          claimToken: null,
+          claimedAt: null,
+          consumedAt: new Date(),
+        },
       }),
     ]);
   }

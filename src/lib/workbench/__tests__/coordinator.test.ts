@@ -98,8 +98,15 @@ describe("Workbench durable coordinator", () => {
     expect(duplicate.deduped).toBe(true);
     expect(duplicate.event.id).toBe(first.event.id);
     expect(await prisma.workbenchEvent.count()).toBe(1);
-    expect(childStopDedupKey({ taskId: "child-a", sessionId: "s1", eventId: "turn-1", kind: "CHILD_REVIEW_REQUIRED" }))
-      .toBe(childStopDedupKey({ taskId: "child-a", sessionId: "s1", eventId: "turn-1", kind: "CHILD_REVIEW_REQUIRED" }));
+    const stable = childStopDedupKey({
+      taskId: "child-a", executionId: "exec-1", sessionId: "s1", eventId: "turn-1", kind: "CHILD_REVIEW_REQUIRED",
+    });
+    expect(stable).toBe(childStopDedupKey({
+      taskId: "child-a", executionId: "exec-1", sessionId: "changed-session", eventId: "turn-1", kind: "CHILD_REVIEW_REQUIRED",
+    }));
+    expect(stable).not.toBe(childStopDedupKey({
+      taskId: "child-a", executionId: "exec-2", sessionId: "s1", eventId: "turn-1", kind: "CHILD_REVIEW_REQUIRED",
+    }));
     expect(buildWorkbenchBatchPrompt([first.event], "wb-single")).toContain(
       "Please review as the hub:",
     );

@@ -14,6 +14,24 @@ export async function register() {
     const { startWsServer } = await import("@/lib/pty/ws-server");
     await startWsServer();
 
+    // Codex writes completion callbacks durably before posting them. Polling is
+    // intentionally short so a transient local HTTP/startup race converges in
+    // under five seconds without requiring another server restart.
+    const gCompletion = globalThis as typeof globalThis & { __providerCompletionRecoveryStarted?: boolean };
+    if (!gCompletion.__providerCompletionRecoveryStarted) {
+      gCompletion.__providerCompletionRecoveryStarted = true;
+      const recover = async () => {
+        const { recoverPendingProviderCompletions } = await import(
+          "@/lib/terminal/provider-completion-recovery"
+        );
+        await recoverPendingProviderCompletions();
+      };
+      const first = setTimeout(() => void recover(), 250);
+      first.unref?.();
+      const interval = setInterval(() => void recover(), 2_000);
+      interval.unref?.();
+    }
+
     // Ensure .tower/ directory exists for the assistant persona
     const { ensureTowerDir } = await import("@/lib/init-tower");
     ensureTowerDir();

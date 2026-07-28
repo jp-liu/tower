@@ -53,6 +53,7 @@ describe("POST /api/internal/hooks/stop", () => {
 
     const body = JSON.stringify({
       taskId: child.id,
+      executionId: execution.id,
       sessionId: "codex-thread-1",
       eventId: "codex-turn-1",
       lastReply: "Implemented and verified.",
@@ -102,6 +103,17 @@ describe("POST /api/internal/hooks/stop", () => {
     const execution = await db.taskExecution.create({
       data: { taskId: child.id, status: "FAILED", startedAt: new Date(), endedAt: new Date() },
     });
+    const staleFailure = await db.workbenchEvent.create({
+      data: {
+        parentTaskId: parent.id,
+        sourceTaskId: child.id,
+        executionId: execution.id,
+        kind: "CHILD_EXECUTION_FAILED",
+        priority: "HIGH",
+        dedupKey: `child-exit:CHILD_EXECUTION_FAILED:${child.id}:${execution.id}`,
+        payload: JSON.stringify({ childTaskId: child.id, executionId: execution.id }),
+      },
+    });
     const { POST } = await import("../route");
     const response = await POST(new NextRequest("http://localhost/api/internal/hooks/stop", {
       method: "POST",
@@ -118,6 +130,10 @@ describe("POST /api/internal/hooks/stop", () => {
     expect(response.status).toBe(200);
     expect(await db.taskExecution.findUnique({ where: { id: execution.id } }))
       .toMatchObject({ status: "COMPLETED", exitCode: 0, summary: "6662049" });
-    expect(await db.workbenchEvent.count({ where: { executionId: execution.id } })).toBe(1);
+    expect(await db.workbenchEvent.findUnique({ where: { id: staleFailure.id } }))
+      .toMatchObject({ state: "CONSUMED" });
+    expect(await db.workbenchEvent.count({
+      where: { executionId: execution.id, kind: "CHILD_REVIEW_REQUIRED" },
+    })).toBe(1);
   });
 });

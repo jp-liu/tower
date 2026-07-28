@@ -41,6 +41,7 @@ async function persistChildStopEvent(input: {
     reviewProducer: input.context?.executionId ? "STOP_HOOK" : undefined,
     dedupKey: childStopDedupKey({
       taskId: input.childTaskId,
+      executionId: input.context?.executionId,
       sessionId: input.context?.sessionId,
       eventId: input.context?.eventId,
       lastReply: input.lastReply,

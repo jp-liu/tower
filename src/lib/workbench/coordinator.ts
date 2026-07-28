@@ -92,13 +92,15 @@ function digest(value: string): string {
 
 export function childStopDedupKey(input: {
   taskId: string;
+  executionId?: string | null;
   sessionId?: string | null;
   eventId?: string | null;
   lastReply?: string | null;
   kind: "CHILD_REVIEW_REQUIRED" | "CHILD_DECISION_REQUIRED";
 }): string {
   const sourceEvent = input.eventId?.trim() || digest(input.lastReply?.trim() || "(empty-reply)");
-  return ["child-stop", input.kind, input.taskId, input.sessionId?.trim() || "no-session", sourceEvent].join(":");
+  const execution = input.executionId?.trim() || input.sessionId?.trim() || "no-execution";
+  return ["child-stop", input.kind, input.taskId, execution, sourceEvent].join(":");
 }
 
 export function childFailureDedupKey(taskId: string, executionId: string): string {
