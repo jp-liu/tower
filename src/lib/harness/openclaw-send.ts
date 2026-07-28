@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolveCommandPathSync } from "@/lib/platform";
+import { parseGatewaySendOutput, type GatewaySendMetadata } from "./gateway-output";
 
 const execFileAsync = promisify(execFile);
 
@@ -16,7 +17,10 @@ export interface OpenClawSendInput {
 
 export async function sendViaOpenClaw(
   input: OpenClawSendInput,
-): Promise<{ ok: true; output: string } | { ok: false; output: string }> {
+): Promise<
+  | { ok: true; output: string; metadata: GatewaySendMetadata }
+  | { ok: false; output: string; metadata?: undefined }
+> {
   const cmd = process.env.OPENCLAW_CLI_PATH || resolveOpenClawCommand();
   const channel = input.downstream?.trim();
   const target = input.dest.trim();
@@ -31,22 +35,23 @@ export async function sendViaOpenClaw(
   else if (input.message.trim()) primaryArgs.push("--message", input.message);
   primaryArgs.push("--json");
 
+  // A reply is part of the delivery contract. Presentation may degrade to
+  // text, but no compatibility path is allowed to drop --reply-to.
+  const replyArgs = input.replyToMessageId?.trim()
+    ? ["--reply-to", input.replyToMessageId.trim()]
+    : [];
   const argSets = presentationJson
     ? [
         primaryArgs,
         [
           "message", "send", "--channel", channel, "--target", target,
-          ...(input.replyToMessageId?.trim() ? ["--reply-to", input.replyToMessageId.trim()] : []),
+          ...replyArgs,
           ...(input.threadId?.trim() ? ["--thread-id", input.threadId.trim()] : []),
           "--message", input.message, "--json",
         ],
-        ["message", "send", "--channel", channel, "--target", target, "--message", input.message, "--json"],
-        ["message", "send", channel, target, input.message],
       ]
     : [
         primaryArgs,
-        ["message", "send", "--channel", channel, "--target", target, "--message", input.message, "--json"],
-        ["message", "send", channel, target, input.message],
       ];
 
   let lastOutput = "";
@@ -57,7 +62,21 @@ export async function sendViaOpenClaw(
         maxBuffer: 1024 * 1024,
         env: { ...process.env, ...(input.env ?? {}) },
       });
-      return { ok: true, output: `${stdout}${stderr}`.trim() };
+      const output = `${stdout}${stderr}`.trim();
+      const parsed = parseGatewaySendOutput(output);
+      if (!parsed?.message_id) {
+        lastOutput = `OpenClaw did not return a platform message id: ${output}`;
+        break;
+      }
+      const replyTo = input.replyToMessageId?.trim();
+      return {
+        ok: true,
+        output,
+        metadata: {
+          ...parsed,
+          ...(replyTo ? { reply_to_message_id: replyTo, send_mode: "reply" as const } : {}),
+        },
+      };
     } catch (err) {
       const e = err as { stdout?: string; stderr?: string; message?: string };
       lastOutput = (e.stdout || e.stderr || e.message || String(err)).trim();

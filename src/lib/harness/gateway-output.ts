@@ -1,4 +1,12 @@
-export function parseGatewaySendOutput(output: string): { platform?: string; chat_id?: string; message_id?: string } | null {
+export interface GatewaySendMetadata {
+  platform?: string;
+  chat_id?: string;
+  message_id?: string;
+  reply_to_message_id?: string;
+  send_mode?: "reply" | "top_level";
+}
+
+export function parseGatewaySendOutput(output: string): GatewaySendMetadata | null {
   try {
     const parsed = JSON.parse(output) as unknown;
     const messageId =
@@ -9,6 +17,10 @@ export function parseGatewaySendOutput(output: string): { platform?: string; cha
       platform: findStringByKeys(parsed, ["platform", "channel", "downstream"]),
       chat_id: findStringByKeys(parsed, ["chat_id", "chatId", "target", "to", "destination"]),
       message_id: messageId,
+      reply_to_message_id: findStringByKeys(parsed, [
+        "reply_to_message_id", "replyToMessageId", "replyToId", "reply_to",
+      ]),
+      send_mode: normalizeSendMode(findStringByKeys(parsed, ["send_mode", "sendMode", "mode", "via"])),
     };
   } catch {
     const messageId =
@@ -25,6 +37,13 @@ export function parseGatewaySendOutput(output: string): { platform?: string; cha
       message_id: messageId,
     };
   }
+}
+
+function normalizeSendMode(value: string | undefined): "reply" | "top_level" | undefined {
+  if (!value) return undefined;
+  if (/^(reply|native_reply)$/i.test(value)) return "reply";
+  if (/^(top_level|direct|create)$/i.test(value)) return "top_level";
+  return undefined;
 }
 
 function findStringByKeys(value: unknown, keys: string[]): string | undefined {

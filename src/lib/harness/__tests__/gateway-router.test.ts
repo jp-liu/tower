@@ -43,6 +43,11 @@ function successfulSender(messageId = `om_sent_${randomUUID()}`) {
     return {
       ok: true as const,
       output: JSON.stringify({ channel: "feishu", chat_id: "oc_gateway_test", message_id: messageId }),
+      metadata: {
+        message_id: messageId,
+        reply_to_message_id: input.replyToMessageId ?? undefined,
+        send_mode: "reply" as const,
+      },
       resolvedDest: "feishu:oc_gateway_test",
     };
   });
@@ -222,9 +227,10 @@ describe("gateway inbound routing", () => {
     }), vi.fn());
     expect(betaDiscussion.mode).toBe("project_discussion");
     if (betaDiscussion.mode !== "project_discussion") return;
-    await completeGatewayDiscussion(betaDiscussion.inboundId, "Beta project answer", vi.fn(async () => ({
+    await completeGatewayDiscussion(betaDiscussion.inboundId, "Beta project answer", vi.fn(async (input: HarnessGatewaySendInput) => ({
       ok: true as const,
       output: JSON.stringify({ message_id: "om_beta_answer", channel: "feishu" }),
+      metadata: { message_id: "om_beta_answer", reply_to_message_id: input.replyToMessageId!, send_mode: "reply" as const },
     })));
 
     const deliveryBound = await routeGatewayInbound(inbound({
@@ -342,7 +348,7 @@ describe("gateway inbound routing", () => {
     });
     expect(concurrent).not.toHaveProperty("instructions");
 
-    const sender = vi.fn(async () => ({ ok: true as const, output: JSON.stringify({ message_id: "om_discussion_once" }) }));
+    const sender = successfulSender("om_discussion_once");
     await completeGatewayDiscussion(first.inboundId, "One answer", sender);
     const completed = await routeGatewayInbound(request, vi.fn());
     expect(completed).toMatchObject({
@@ -708,6 +714,7 @@ describe("gateway confirmations and delivery retry", () => {
     const sender = vi.fn(async (sendInput: HarnessGatewaySendInput) => ({
       ok: true as const,
       output: JSON.stringify({ channel: "feishu", chat_id: "oc_gateway_test", message_id: "om_sent" }),
+      metadata: { message_id: "om_sent", reply_to_message_id: sendInput.replyToMessageId!, send_mode: "reply" as const },
       resolvedDest: "feishu:oc_gateway_test",
       sendInput,
     }));
@@ -779,6 +786,37 @@ describe("gateway confirmations and delivery retry", () => {
     });
   });
 
+  it("recovers a create-before-confirm crash by linking the existing task once", async () => {
+    const routed = await routeGatewayInbound(
+      inbound({ intent: "PROJECT_WORK", project: alphaId, content: "Create one read-only child task" }),
+      vi.fn(async () => ({ mode: "started", executionId: "workbench-exec" })),
+      successfulSender("om_queued"),
+    );
+    expect(routed.mode).toBe("project_work");
+    if (routed.mode !== "project_work") return;
+
+    const child = await db.task.create({
+      data: { title: "Existing child", projectId: alphaId, parentTaskId: routed.workbenchTaskId },
+    });
+    await db.gatewayTaskLink.create({ data: { inboundId: routed.inboundId, taskId: child.id } });
+
+    const sender = successfulSender("om_created");
+    const ensureWorkbench = vi.fn();
+    await expect(recoverQueuedGatewayWork(ensureWorkbench, 100, sender))
+      .resolves.toMatchObject({ scanned: 1, started: 1, failed: 0 });
+    expect(ensureWorkbench).not.toHaveBeenCalled();
+    expect(await db.gatewayInbound.findUnique({ where: { id: routed.inboundId } }))
+      .toMatchObject({ createdTaskId: child.id, state: "PROCESSING" });
+    expect(await db.task.count({ where: { parentTaskId: routed.workbenchTaskId } })).toBe(1);
+    expect(await db.gatewayDelivery.count({
+      where: { inboundId: routed.inboundId, kind: "TASK_CREATED" },
+    })).toBe(1);
+
+    await expect(recoverQueuedGatewayWork(ensureWorkbench, 100, sender))
+      .resolves.toMatchObject({ scanned: 1, started: 1, failed: 0 });
+    expect(sender).toHaveBeenCalledTimes(1);
+  });
+
   it("persists a failed discussion delivery and retries it against the original message", async () => {
     const request = inbound({ project: alphaId, rootMessageId: "om_original", threadId: "omt_discussion" });
     const routed = await routeGatewayInbound(request, vi.fn());
@@ -791,9 +829,10 @@ describe("gateway confirmations and delivery retry", () => {
     expect(await db.gatewayDelivery.findFirst({ where: { inboundId: routed.inboundId } }))
       .toMatchObject({ state: "FAILED", attempts: 1, lastError: "temporary gateway failure" });
 
-    const retrySender = vi.fn(async () => ({
+    const retrySender = vi.fn(async (input: HarnessGatewaySendInput) => ({
       ok: true as const,
       output: JSON.stringify({ message_id: "om_retry_success", channel: "feishu" }),
+      metadata: { message_id: "om_retry_success", reply_to_message_id: input.replyToMessageId!, send_mode: "reply" as const },
     }));
     await expect(retryGatewayDeliveries(retrySender, new Date(Date.now() + 10 * 60_000)))
       .resolves.toEqual({ scanned: 1, delivered: 1, failed: 0 });
@@ -820,10 +859,11 @@ describe("gateway confirmations and delivery retry", () => {
     vi.useFakeTimers({ now: new Date("2026-07-27T08:00:00.000Z") });
     const sender = vi.fn()
       .mockResolvedValueOnce({ ok: false as const, output: "temporary automatic retry failure" })
-      .mockResolvedValueOnce({
+      .mockImplementationOnce(async (input: HarnessGatewaySendInput) => ({
         ok: true as const,
         output: JSON.stringify({ message_id: "om_auto_retry_success", channel: "feishu" }),
-      });
+        metadata: { message_id: "om_auto_retry_success", reply_to_message_id: input.replyToMessageId!, send_mode: "reply" as const },
+      }));
 
     await expect(completeGatewayDiscussion(routed.inboundId, "Retry this answer", sender))
       .resolves.toMatchObject({ ok: false, error: "temporary automatic retry failure" });

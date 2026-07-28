@@ -169,6 +169,15 @@ model Task {
   @@index([parentTaskId])
 }
 
+// Written in the same transaction as task creation, before the Workbench can
+// confirm delivery. The unique keys make crash recovery idempotent both ways.
+model GatewayTaskLink {
+  id        String   @id @default(cuid())
+  inboundId String   @unique
+  taskId    String   @unique
+  createdAt DateTime @default(now())
+}
+
 model TaskExecution {
   id             String          @id @default(cuid())
   taskId         String

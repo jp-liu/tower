@@ -25,14 +25,14 @@ export async function POST(request: NextRequest) {
   const blocked = requireLocalhost(request);
   if (blocked) return blocked;
 
-  let body: { taskId?: string; sessionId?: string; eventId?: string; lastReply?: string };
+  let body: { taskId?: string; executionId?: string; sessionId?: string; eventId?: string; lastReply?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { taskId, sessionId, eventId, lastReply } = body;
+  const { taskId, executionId, sessionId, eventId, lastReply } = body;
   if (!taskId || typeof taskId !== "string") {
     return NextResponse.json({ error: "taskId required" }, { status: 400 });
   }
@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
     select: {
       id: true,
       title: true,
+      parentTaskId: true,
       project: {
         select: {
           name: true,
@@ -74,10 +75,14 @@ export async function POST(request: NextRequest) {
   const execution = await db.taskExecution.findFirst({
     where: {
       taskId: task.id,
-      ...(sessionId ? { sessionId } : { status: "RUNNING" as const }),
+      ...(executionId
+        ? { id: executionId }
+        : sessionId
+          ? { sessionId }
+          : { status: "RUNNING" as const }),
     },
     orderBy: { createdAt: "desc" },
-    select: { id: true },
+    select: { id: true, status: true },
   });
   const childContext = { sessionId, eventId, executionId: execution?.id ?? null };
 
@@ -102,6 +107,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, parked: true });
   }
 
+  // Codex's agent-turn-complete notify is the authoritative terminal event for
+  // derived one-shot work. Persist the terminal state before publishing review
+  // so a PTY exit race or server restart cannot leave RUNNING behind.
+  if (task.parentTaskId && execution?.status === "RUNNING") {
+    await db.$transaction([
+      db.taskExecution.updateMany({
+        where: { id: execution.id, status: "RUNNING" },
+        data: {
+          status: "COMPLETED",
+          endedAt: new Date(),
+          exitCode: 0,
+          summary: lastReply?.trim().slice(0, 8000) || undefined,
+        },
+      }),
+      db.task.updateMany({
+        where: { id: task.id, status: "IN_PROGRESS" },
+        data: { status: "IN_REVIEW" },
+      }),
+    ]);
+  }
+
   // Fan-out 消费者 2（派生中枢）：子任务事件只做去重持久化。父终端是否运行
   // 不影响入库；实际 review batch 由父任务自己的安全回合边界统一 drain。
   await notifyParentOnChildStop(task.id, task.title, lastReply ?? "", childContext);
@@ -109,6 +135,8 @@ export async function POST(request: NextRequest) {
   // This task's own turn has now completed. Any child events already pending,
   // or arriving shortly after this response, may be drained at this safe TUI boundary.
   openWorkbenchDrainBoundary(task.id);
+
+  if (task.parentTaskId) destroySession(task.id);
 
   return NextResponse.json({ ok: true });
 }

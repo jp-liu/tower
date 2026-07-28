@@ -66,9 +66,11 @@ describe("POST /api/internal/hooks/stop", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true });
     expect(mocks.markSessionTurnComplete).toHaveBeenCalledWith(child.id);
-    expect(mocks.destroySession).not.toHaveBeenCalled();
+    expect(mocks.destroySession).toHaveBeenCalledWith(child.id);
     expect(await db.taskExecution.findUnique({ where: { id: execution.id } }))
-      .toMatchObject({ status: "RUNNING", endedAt: null });
+      .toMatchObject({ status: "COMPLETED", exitCode: 0, summary: "Implemented and verified." });
+    expect(await db.task.findUnique({ where: { id: child.id } }))
+      .toMatchObject({ status: "IN_REVIEW" });
     expect(await db.workbenchEvent.findFirst({ where: { sourceTaskId: child.id } })).toMatchObject({
       parentTaskId: parent.id,
       executionId: execution.id,

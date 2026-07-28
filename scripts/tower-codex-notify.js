@@ -101,6 +101,7 @@ function main() {
   const sessionId = typeof event["thread-id"] === "string" ? event["thread-id"] : "";
   const stopBody = JSON.stringify({
     taskId,
+    executionId: process.env.TOWER_EXECUTION_ID || "",
     sessionId,
     eventId: typeof event["turn-id"] === "string" ? event["turn-id"] : "",
     lastReply:

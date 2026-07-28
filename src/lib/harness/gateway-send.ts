@@ -5,6 +5,7 @@ import { sendViaHermes } from "@/lib/harness/hermes-send";
 import { sendViaOpenClaw } from "@/lib/harness/openclaw-send";
 import { resolveCommandPathSync } from "@/lib/platform";
 import { readHarnessGatewayRuntimeConfig } from "./gateway-config";
+import type { GatewaySendMetadata } from "./gateway-output";
 
 export type HarnessGateway = "hermes" | "openclaw";
 
@@ -35,6 +36,7 @@ export interface HarnessGatewaySendResult {
   ok: boolean;
   output: string;
   resolvedDest?: string | null;
+  metadata?: GatewaySendMetadata;
 }
 
 export async function sendViaHarnessGateway(input: HarnessGatewaySendInput): Promise<HarnessGatewaySendResult> {

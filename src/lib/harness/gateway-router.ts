@@ -793,7 +793,7 @@ function workbenchPrompt(input: GatewayInboundRequest, inboundId: string, projec
     "",
     input.content.trim(),
     "",
-    "Handle this as the resident project Workbench. Research and dispatch through create_task; do not implement the work in the Workbench terminal. Only after create_task returns a real task id, call confirm_gateway_task_created with this inbound id and that task id. After the child result is reviewed and accepted, call complete_gateway_work with the same inbound id, the task id, and the reviewed result summary. Those tools own idempotent replies to the original external thread.",
+    `Handle this as the resident project Workbench. Research and dispatch through create_task; do not implement the work in the Workbench terminal. Pass gatewayInboundId=${inboundId} to create_task so a crash after creation can recover the same task. Only after create_task returns a real task id, call confirm_gateway_task_created with this inbound id and that task id. After the child result is reviewed and accepted, call complete_gateway_work with the same inbound id, the task id, and the reviewed result summary. Those tools own idempotent replies to the original external thread.`,
   ].filter((line) => line !== null).join("\n");
 }
 
@@ -1131,7 +1131,28 @@ export async function deliverGatewayResponse(
     return { ok: false, deliveryId: delivery.id, error: sent.output };
   }
 
-  const metadata = parseGatewaySendOutput(sent.output);
+  const metadata = sent.metadata ?? parseGatewaySendOutput(sent.output);
+  const expectedReply = inbound.platformMessageId.trim();
+  if (
+    !metadata?.message_id ||
+    metadata.send_mode !== "reply" ||
+    metadata.reply_to_message_id !== expectedReply
+  ) {
+    const error = [
+      "Gateway could not confirm native reply delivery",
+      `expected reply target=${expectedReply}`,
+      `actual mode=${metadata?.send_mode ?? "unknown"}`,
+      `actual target=${metadata?.reply_to_message_id ?? "unknown"}`,
+      `message id=${metadata?.message_id ?? "unknown"}`,
+    ].join("; ");
+    const nextAttemptAt = retryAt(current.attempts, claimAt);
+    await db.gatewayDelivery.update({
+      where: { id: delivery.id },
+      data: { state: "FAILED", lastError: error, nextAttemptAt },
+    });
+    scheduleGatewayDeliveryRetry(nextAttemptAt, sender);
+    return { ok: false, deliveryId: delivery.id, error };
+  }
   await db.gatewayDelivery.update({
     where: { id: delivery.id },
     data: {
@@ -1204,7 +1225,32 @@ export async function confirmGatewayTaskCreated(
   if (inbound.createdTaskId && inbound.createdTaskId !== task.id) {
     throw new Error("Gateway request already confirmed a different task");
   }
-  await db.gatewayInbound.update({ where: { id: inboundId }, data: { createdTaskId: task.id } });
+  await db.$transaction(async (tx) => {
+    const linked = await tx.gatewayTaskLink.findUnique({
+      where: { inboundId },
+      select: { taskId: true },
+    });
+    if (linked && linked.taskId !== task.id) {
+      throw new Error("Gateway request is already durably linked to a different task");
+    }
+    await tx.gatewayTaskLink.upsert({
+      where: { inboundId },
+      create: { inboundId, taskId: task.id },
+      update: {},
+    });
+    await tx.task.updateMany({
+      where: { id: task.id, parentTaskId: null },
+      data: { parentTaskId: inbound.session!.workbenchTaskId },
+    });
+    await tx.gatewayInbound.update({
+      where: { id: inboundId },
+      data: { createdTaskId: task.id, state: "PROCESSING", lastError: null },
+    });
+    await tx.workbenchEvent.updateMany({
+      where: { dedupKey: `gateway-work:${inboundId}`, state: { not: "CONSUMED" } },
+      data: { state: "CONSUMED", claimToken: null, claimedAt: null, consumedAt: new Date() },
+    });
+  });
   const content = [
     `Task created: ${task.title}`,
     `Project: ${inbound.session.project.name}`,
@@ -1385,6 +1431,48 @@ export async function recoverQueuedGatewayWork(
     const taskId = inbound.session?.workbenchTaskId;
     if (!taskId) continue;
     try {
+      const durableLink = await db.gatewayTaskLink.findUnique({
+        where: { inboundId: inbound.id },
+        select: { taskId: true },
+      });
+      let linkedTask = durableLink ? { id: durableLink.taskId } : null;
+      if (!linkedTask && inbound.createdTaskId) {
+        linkedTask = await db.task.findUnique({
+          where: { id: inbound.createdTaskId },
+          select: { id: true },
+        });
+      }
+      if (!linkedTask) {
+        // Legacy crash window (before gatewayInboundId existed): only recover
+        // when exactly one child of this Workbench was created after the inbound.
+        const candidates = await db.task.findMany({
+          where: {
+            projectId: inbound.session!.projectId,
+            OR: [
+              { parentTaskId: taskId, createdAt: { gte: inbound.createdAt } },
+              // Pre-link legacy window: the real incident created its task
+              // seconds after the request but lost parent metadata as well.
+              // Keep this deliberately narrow and require one unique match.
+              {
+                parentTaskId: null,
+                createdAt: {
+                  gte: inbound.createdAt,
+                  lte: new Date(inbound.createdAt.getTime() + 2 * 60_000),
+                },
+              },
+            ],
+          },
+          orderBy: { createdAt: "asc" },
+          take: 2,
+          select: { id: true },
+        });
+        if (candidates.length === 1) linkedTask = candidates[0]!;
+      }
+      if (linkedTask) {
+        await confirmGatewayTaskCreated(inbound.id, linkedTask.id, taskId, sender);
+        started++;
+        continue;
+      }
       const queuedInput: GatewayInboundRequest = {
         gateway: inbound.gateway,
         platform: inbound.platform,

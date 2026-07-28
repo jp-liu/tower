@@ -107,7 +107,13 @@ function main() {
 
     // POST to Tower
     const url = new URL("/api/internal/hooks/stop", apiUrl);
-    const payload = JSON.stringify({ taskId, sessionId, eventId, lastReply });
+    const payload = JSON.stringify({
+      taskId,
+      executionId: process.env.TOWER_EXECUTION_ID || "",
+      sessionId,
+      eventId,
+      lastReply,
+    });
     const mod = url.protocol === "https:" ? https : http;
 
     const req = mod.request({

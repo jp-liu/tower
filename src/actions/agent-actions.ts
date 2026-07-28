@@ -69,6 +69,7 @@ function taskEnvironment(input: {
   taskTitle: string;
   callbackUrl?: string;
   hasParent?: boolean;
+  executionId?: string;
 }): Record<string, string> {
   const env: Record<string, string> = {
     TOWER_TASK_ID: input.taskId,
@@ -77,6 +78,7 @@ function taskEnvironment(input: {
     TOWER_API_URL: `http://localhost:${process.env.PORT || "3000"}`,
     TOWER_SIGNAL_DIR: SIGNAL_DIR,
   };
+  if (input.executionId) env.TOWER_EXECUTION_ID = input.executionId;
   if (input.callbackUrl) env.CALLBACK_URL = input.callbackUrl;
   if (input.hasParent) env.TOWER_HAS_PARENT = "1";
   return env;
@@ -318,6 +320,7 @@ export async function resumePtyExecution(
       taskTitle: task.title,
       callbackUrl: prevExec.callbackUrl ?? undefined,
       hasParent: !!task.parentTaskId,
+      executionId: execution.id,
     }),
     });
 
@@ -523,6 +526,7 @@ export async function continueLatestPtyExecution(
       taskId,
       taskTitle: task.title,
       hasParent: !!task.parentTaskId,
+      executionId: execution.id,
     }),
     });
 
@@ -939,6 +943,7 @@ export async function startPtyExecution(
               taskTitle: task.title,
               callbackUrl: callbackUrl ?? undefined,
               hasParent: !!task.parentTaskId,
+              executionId: execution.id,
             }),
           });
         } catch (error) {
