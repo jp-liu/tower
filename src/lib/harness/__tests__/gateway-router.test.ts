@@ -622,7 +622,8 @@ describe("gateway inbound routing", () => {
     await db.workbenchEvent.deleteMany({ where: { dedupKey: `gateway-work:${routed.inboundId}` } });
     const ensure = vi.fn(async () => ({ mode: "continued", executionId: "recovered-exec" }));
 
-    await expect(recoverQueuedGatewayWork(ensure)).resolves.toEqual({ scanned: 1, started: 1, failed: 0 });
+    await expect(recoverQueuedGatewayWork(ensure, 100, successfulSender(), undefined, { projectId: alphaId }))
+      .resolves.toEqual({ scanned: 1, started: 1, failed: 0 });
     expect(ensure).toHaveBeenCalledWith(routed.workbenchTaskId);
     expect(hasWorkbenchDrainBoundary(routed.workbenchTaskId)).toBe(true);
     expect(await db.workbenchEvent.findFirst({
@@ -654,6 +655,7 @@ describe("gateway inbound routing", () => {
       100,
       successfulSender("om_restart_retry_ack"),
       restore,
+      { projectId: alphaId },
     )).resolves.toEqual({ scanned: 1, started: 1, failed: 0 });
     expect(restore).toHaveBeenCalledOnce();
     expect(restore).toHaveBeenCalledWith(routed.workbenchTaskId);
@@ -676,6 +678,7 @@ describe("gateway inbound routing", () => {
       100,
       successfulSender("om_busy_retry_ack"),
       restore,
+      { projectId: alphaId },
     )).resolves.toEqual({ scanned: 1, started: 1, failed: 0 });
     expect(restore).toHaveBeenCalledWith(routed.workbenchTaskId);
     expect(hasWorkbenchDrainBoundary(routed.workbenchTaskId)).toBe(false);
@@ -802,7 +805,7 @@ describe("gateway confirmations and delivery retry", () => {
 
     const sender = successfulSender("om_created");
     const ensureWorkbench = vi.fn();
-    await expect(recoverQueuedGatewayWork(ensureWorkbench, 100, sender))
+    await expect(recoverQueuedGatewayWork(ensureWorkbench, 100, sender, undefined, { projectId: alphaId }))
       .resolves.toMatchObject({ scanned: 1, started: 1, failed: 0 });
     expect(ensureWorkbench).not.toHaveBeenCalled();
     expect(await db.gatewayInbound.findUnique({ where: { id: routed.inboundId } }))
@@ -812,7 +815,7 @@ describe("gateway confirmations and delivery retry", () => {
       where: { inboundId: routed.inboundId, kind: "TASK_CREATED" },
     })).toBe(1);
 
-    await expect(recoverQueuedGatewayWork(ensureWorkbench, 100, sender))
+    await expect(recoverQueuedGatewayWork(ensureWorkbench, 100, sender, undefined, { projectId: alphaId }))
       .resolves.toMatchObject({ scanned: 1, started: 1, failed: 0 });
     expect(sender).toHaveBeenCalledTimes(1);
   });
@@ -845,6 +848,32 @@ describe("gateway confirmations and delivery retry", () => {
       .toMatchObject({ state: "DELIVERED", attempts: 2, platformMessageId: "om_retry_success" });
     expect(await db.gatewayInbound.findUnique({ where: { id: routed.inboundId } }))
       .toMatchObject({ state: "PROCESSED" });
+  });
+
+  it("does not replay a platform send whose native reply target cannot be verified", async () => {
+    const request = inbound({ project: alphaId, rootMessageId: "om_unverified_root" });
+    const routed = await routeGatewayInbound(request, vi.fn());
+    expect(routed.mode).toBe("project_discussion");
+    if (routed.mode !== "project_discussion") return;
+
+    const sender = vi.fn(async () => ({
+      ok: false as const,
+      output: "platform message exists but has no parent_id",
+      metadata: { message_id: "om_unverified_send" },
+    }));
+    await expect(completeGatewayDiscussion(routed.inboundId, "Do not duplicate this", sender))
+      .resolves.toMatchObject({ ok: false });
+    expect(await db.gatewayDelivery.findFirst({ where: { inboundId: routed.inboundId } }))
+      .toMatchObject({
+        state: "FAILED",
+        attempts: 1,
+        platformMessageId: "om_unverified_send",
+        nextAttemptAt: null,
+      });
+
+    await expect(retryGatewayDeliveries(sender, new Date(Date.now() + 60 * 60_000)))
+      .resolves.toEqual({ scanned: 0, delivered: 0, failed: 0 });
+    expect(sender).toHaveBeenCalledTimes(1);
   });
 
   it("automatically retries one failed delivery without duplicate timers or sends", async () => {

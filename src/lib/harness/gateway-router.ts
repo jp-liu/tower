@@ -1084,7 +1084,7 @@ export async function deliverGatewayResponse(
       id: delivery.id,
       OR: [
         { state: "PENDING" },
-        { state: "FAILED", OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: claimAt } }] },
+        { state: "FAILED", nextAttemptAt: { lte: claimAt } },
       ],
     },
     data: { state: "SENDING", attempts: { increment: 1 }, lastError: null, nextAttemptAt: null },
@@ -1118,16 +1118,20 @@ export async function deliverGatewayResponse(
     sent = { ok: false, output: error instanceof Error ? error.message : String(error) };
   }
   if (!sent.ok) {
-    const nextAttemptAt = retryAt(current.attempts, claimAt);
+    // A platform message id means the send happened, but its reply semantics
+    // could not be verified. Do not auto-retry and create a duplicate card.
+    const unverifiedPlatformSend = Boolean(sent.metadata?.message_id);
+    const nextAttemptAt = unverifiedPlatformSend ? null : retryAt(current.attempts, claimAt);
     await db.gatewayDelivery.update({
       where: { id: delivery.id },
       data: {
         state: "FAILED",
+        platformMessageId: sent.metadata?.message_id ?? null,
         lastError: sent.output.slice(0, 2000),
         nextAttemptAt,
       },
     });
-    scheduleGatewayDeliveryRetry(nextAttemptAt, sender);
+    if (nextAttemptAt) scheduleGatewayDeliveryRetry(nextAttemptAt, sender);
     return { ok: false, deliveryId: delivery.id, error: sent.output };
   }
 
@@ -1145,12 +1149,17 @@ export async function deliverGatewayResponse(
       `actual target=${metadata?.reply_to_message_id ?? "unknown"}`,
       `message id=${metadata?.message_id ?? "unknown"}`,
     ].join("; ");
-    const nextAttemptAt = retryAt(current.attempts, claimAt);
+    const nextAttemptAt = metadata?.message_id ? null : retryAt(current.attempts, claimAt);
     await db.gatewayDelivery.update({
       where: { id: delivery.id },
-      data: { state: "FAILED", lastError: error, nextAttemptAt },
+      data: {
+        state: "FAILED",
+        platformMessageId: metadata?.message_id ?? null,
+        lastError: error,
+        nextAttemptAt,
+      },
     });
-    scheduleGatewayDeliveryRetry(nextAttemptAt, sender);
+    if (nextAttemptAt) scheduleGatewayDeliveryRetry(nextAttemptAt, sender);
     return { ok: false, deliveryId: delivery.id, error };
   }
   await db.gatewayDelivery.update({
@@ -1375,8 +1384,10 @@ export async function retryGatewayDeliveries(
   });
   const rows = await db.gatewayDelivery.findMany({
     where: {
-      state: { in: ["PENDING", "FAILED"] },
-      OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
+      OR: [
+        { state: "PENDING" },
+        { state: "FAILED", nextAttemptAt: { lte: now } },
+      ],
     },
     orderBy: { createdAt: "asc" },
     take: limit,
@@ -1418,9 +1429,15 @@ export async function recoverQueuedGatewayWork(
   limit = 100,
   sender: DeliverySender = sendViaHarnessGateway,
   restoreBoundary: (taskId: string) => boolean = restoreWorkbenchDrainBoundary,
+  options: { projectId?: string } = {},
 ) {
   const rows = await db.gatewayInbound.findMany({
-    where: { intent: "PROJECT_WORK", state: { in: ["QUEUED", "PROCESSING"] }, sessionId: { not: null } },
+    where: {
+      intent: "PROJECT_WORK",
+      state: { in: ["QUEUED", "PROCESSING"] },
+      sessionId: { not: null },
+      ...(options.projectId ? { session: { projectId: options.projectId } } : {}),
+    },
     include: { session: { include: { project: { include: { workspace: { select: { name: true } } } } } } },
     orderBy: { createdAt: "asc" },
     take: limit,
@@ -1447,6 +1464,7 @@ export async function recoverQueuedGatewayWork(
         // when exactly one child of this Workbench was created after the inbound.
         const candidates = await db.task.findMany({
           where: {
+            id: { not: taskId },
             projectId: inbound.session!.projectId,
             OR: [
               { parentTaskId: taskId, createdAt: { gte: inbound.createdAt } },

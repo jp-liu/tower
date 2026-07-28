@@ -36,6 +36,7 @@ export interface HarnessGatewaySendResult {
   ok: boolean;
   output: string;
   resolvedDest?: string | null;
+  /** Platform-observed receipt. On failure, message_id means a send occurred but could not be verified. */
   metadata?: GatewaySendMetadata;
 }
 
