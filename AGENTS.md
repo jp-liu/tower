@@ -153,7 +153,7 @@ Replace `<project-root>` with the absolute path to this repository.
 
 ## Available MCP Tools
 
-35 tools across 10 categories.
+54 tools across 11 categories.
 
 ### Workspace Tools (`src/mcp/tools/workspace-tools.ts`)
 
@@ -239,6 +239,24 @@ Replace `<project-root>` with the absolute path to this repository.
 |------|-------------|------------|
 | `daily_summary` | Today's work summary — completed tasks, in-progress tasks with last chat summary, grouped by workspace → project | `date?` (YYYY-MM-DD) |
 | `daily_todo` | All pending tasks (TODO/IN_PROGRESS/IN_REVIEW), sorted by priority severity | `workspaceId?`, `projectId?`, `status?`, `priority?` |
+
+### Harness Tools (`src/mcp/tools/harness-tools.ts`)
+
+18 tools cover unattended messaging, gateway routing, durable Workbench
+handoff, diagnostics, scoped recovery, and remote project provisioning.
+
+- Messaging: `list_notify_targets`, `push_to_human`, `ask_human`,
+  `notify_human`, `reply_to_ask`, `relay_channel_reply`
+- Gateway: `route_gateway_message`, `route_gateway_query`,
+  `read_gateway_project_context`, `complete_gateway_discussion`
+- Workbench: `ack_workbench_batch`, `resolve_workbench_batch`,
+  `confirm_gateway_task_created`, `complete_gateway_work`
+- Operations: `diagnose_gateway_request`, `recover_gateway_request`,
+  `get_gateway_runtime_health`, `provision_remote_project`
+
+`route_gateway_query` is the capability-scoped NON_OWNER entry and cannot
+create work. The other mutating/diagnostic/provisioning tools are exposed only
+to OWNER by the OpenClaw sender tool policy.
 
 ---
 

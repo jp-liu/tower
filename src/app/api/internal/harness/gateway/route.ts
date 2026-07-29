@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireLocalhost } from "@/lib/internal-api-guard";
+import { requireSignedInternalRequest } from "@/lib/internal-api-auth";
 import {
   completeGatewayDiscussion,
   completeGatewayInbound,
@@ -59,7 +59,7 @@ function failure(error: unknown) {
 }
 
 export async function POST(request: NextRequest) {
-  const blocked = requireLocalhost(request);
+  const blocked = await requireSignedInternalRequest(request);
   if (blocked) return blocked;
   const parsed = inboundSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid gateway inbound message" }, { status: 400 });
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const blocked = requireLocalhost(request);
+  const blocked = await requireSignedInternalRequest(request);
   if (blocked) return blocked;
   const parsed = z.object({ inboundId: z.string().min(1).max(128), response: z.unknown() })
     .strict()
@@ -86,7 +86,7 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const blocked = requireLocalhost(request);
+  const blocked = await requireSignedInternalRequest(request);
   if (blocked) return blocked;
   const parsed = completionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid gateway action" }, { status: 400 });

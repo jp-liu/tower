@@ -15,12 +15,32 @@ const log = logger.create("instrumentation");
 export async function cleanupStaleExecutions() {
   try {
     await initDb();
-    const result = await db.taskExecution.updateMany({
+    const { getSession } = await import("@/lib/pty/session-store");
+    const running = await db.taskExecution.findMany({
       where: { status: "RUNNING" },
+      select: { id: true, taskId: true },
+    });
+    const staleIds = running
+      .filter(({ taskId }) => {
+        const session = getSession(taskId);
+        return !session || session.killed;
+      })
+      .map(({ id }) => id);
+    const result = await db.taskExecution.updateMany({
+      where: { id: { in: staleIds }, status: "RUNNING" },
       data: { status: "FAILED", endedAt: new Date() },
     });
     if (result.count > 0) {
       log.warn(`Cleaned up ${result.count} stale RUNNING execution(s)`);
+      await db.workbenchRuntime.updateMany({
+        where: { executionId: { in: staleIds } },
+        data: {
+          state: "STOPPED",
+          activeBatchId: null,
+          blockedReason: "Server restarted and the previous terminal session was not recoverable",
+          lastHeartbeatAt: new Date(),
+        },
+      });
     }
   } catch (error) {
     log.error("Stale execution cleanup failed", error);

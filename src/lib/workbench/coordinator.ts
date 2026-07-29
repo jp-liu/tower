@@ -1,11 +1,14 @@
 import "server-only";
 
-import type { Prisma } from "@prisma/client";
+import type { Prisma, WorkbenchRuntimeState } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { db } from "@/lib/db";
 import { buildChildReviewPrompt } from "@/lib/derive/child-review-prompt";
 import { logger } from "@/lib/logger";
-import { getSession } from "@/lib/pty/session-store";
+import { getSession, markSessionTurnComplete } from "@/lib/pty/session-store";
 import { planTerminalWrite } from "@/lib/pty/terminal-submit";
 import {
   hasWorkbenchDrainBoundary,
@@ -19,10 +22,15 @@ const log = logger.create("workbench-coordinator");
 export const WORKBENCH_NORMAL_COALESCE_MS = 750;
 export const WORKBENCH_HIGH_COALESCE_MS = 100;
 export const WORKBENCH_CLAIM_LEASE_MS = 60_000;
+export const WORKBENCH_ACK_LEASE_MS = 120_000;
 export const WORKBENCH_MAX_BATCH_SIZE = 50;
 export const WORKBENCH_RECOVERY_BATCH_SIZE = 500;
 export const WORKBENCH_EVENTS_ENABLED_AT_KEY = "workbench.eventsEnabledAt";
-const SUBMIT_DELAY_MS = 80;
+// Workbench batches are substantially larger than ordinary terminal messages.
+// Claude Code keeps treating a CR as pasted content while it is still ingesting
+// the preceding multi-line write, so the generic 80 ms bridge delay can leave the
+// whole request sitting in the editor without submitting it.
+const WORKBENCH_SUBMIT_DELAY_MS = 500;
 
 export type WorkbenchEventKind =
   | "CHILD_REVIEW_REQUIRED"
@@ -84,7 +92,168 @@ export interface WorkbenchDrainResult {
   delivered: boolean;
 }
 
+export interface WorkbenchBatchTransitionResult {
+  batchId: string;
+  state: "ACKED" | "RESOLVED";
+  eventCount: number;
+  noOp: boolean;
+}
+
 export type WorkbenchBatchDelivery = (batch: WorkbenchDrainBatch) => Promise<void>;
+export type EnsureWorkbenchRunning = (taskId: string) => Promise<{
+  mode: "already_running" | "continued" | "started";
+  executionId: string | null;
+}>;
+
+export interface WorkbenchReconcileResult {
+  scanned: number;
+  woken: number;
+  busy: number;
+  failed: number;
+}
+
+export interface WorkbenchRuntimeSnapshot {
+  taskId: string;
+  executionId: string | null;
+  generation: number;
+  state: WorkbenchRuntimeState;
+  activeBatchId: string | null;
+  pendingEvents: number;
+  oldestPendingAt: Date | null;
+  lastHeartbeatAt: Date;
+  lastTurnCompletedAt: Date | null;
+  blockedReason: string | null;
+  lastError: string | null;
+}
+
+/**
+ * Refresh the persisted operational projection from the durable inbox plus the
+ * current execution. Generation changes only when a different execution owns
+ * the resident Workbench, making restarts visible without changing inbox ids.
+ */
+export async function recordWorkbenchRuntime(
+  parentTaskId: string,
+  state: WorkbenchRuntimeState,
+  input: {
+    activeBatchId?: string | null;
+    blockedReason?: string | null;
+    lastError?: string | null;
+    turnCompleted?: boolean;
+    executionId?: string | null;
+  } = {},
+): Promise<WorkbenchRuntimeSnapshot> {
+  const [existing, execution, pending, oldest, activeBatch] = await Promise.all([
+    db.workbenchRuntime.findUnique({ where: { taskId: parentTaskId } }),
+    input.executionId === undefined
+      ? db.taskExecution.findFirst({
+          where: { taskId: parentTaskId, status: "RUNNING" },
+          orderBy: { createdAt: "desc" },
+          select: { id: true },
+        })
+      : Promise.resolve(input.executionId ? { id: input.executionId } : null),
+    db.workbenchEvent.count({
+      where: { parentTaskId, state: { in: ["PENDING", "PROCESSING"] } },
+    }),
+    db.workbenchEvent.findFirst({
+      where: { parentTaskId, state: { in: ["PENDING", "PROCESSING"] } },
+      orderBy: { createdAt: "asc" },
+      select: { createdAt: true },
+    }),
+    input.activeBatchId === undefined
+      ? db.workbenchBatch.findFirst({
+          where: { parentTaskId, state: { in: ["CLAIMED", "DISPATCHED", "ACKED"] } },
+          orderBy: { createdAt: "desc" },
+          select: { id: true },
+        })
+      : Promise.resolve(input.activeBatchId ? { id: input.activeBatchId } : null),
+  ]);
+  const executionId = execution?.id ?? null;
+  const generation = existing
+    ? existing.generation + (executionId && executionId !== existing.executionId ? 1 : 0)
+    : 1;
+  const now = new Date();
+  return db.workbenchRuntime.upsert({
+    where: { taskId: parentTaskId },
+    create: {
+      taskId: parentTaskId,
+      executionId,
+      generation,
+      state,
+      activeBatchId: activeBatch?.id ?? null,
+      pendingEvents: pending,
+      oldestPendingAt: oldest?.createdAt ?? null,
+      lastHeartbeatAt: now,
+      lastTurnCompletedAt: input.turnCompleted ? now : null,
+      blockedReason: input.blockedReason ?? null,
+      lastError: input.lastError ?? null,
+    },
+    update: {
+      executionId,
+      generation,
+      state,
+      activeBatchId: activeBatch?.id ?? null,
+      pendingEvents: pending,
+      oldestPendingAt: oldest?.createdAt ?? null,
+      lastHeartbeatAt: now,
+      ...(input.turnCompleted ? { lastTurnCompletedAt: now } : {}),
+      blockedReason: input.blockedReason ?? null,
+      lastError: input.lastError ?? null,
+    },
+  });
+}
+
+export async function heartbeatActiveWorkbenchRuntimes(): Promise<number> {
+  const executions = await db.taskExecution.findMany({
+    where: {
+      status: "RUNNING",
+      task: {
+        labels: { some: { label: { name: "Tower", isBuiltin: true } } },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    distinct: ["taskId"],
+    select: { id: true, taskId: true },
+  });
+  for (const execution of executions) {
+    const session = getSession(execution.taskId);
+    const activeBatch = await db.workbenchBatch.findFirst({
+      where: {
+        parentTaskId: execution.taskId,
+        state: { in: ["CLAIMED", "DISPATCHED", "ACKED"] },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    const state: WorkbenchRuntimeState = !session || session.killed
+      ? "DEGRADED"
+      : activeBatch
+        ? "BUSY"
+        : session.isAtTurnBoundary
+          ? "IDLE"
+          : "BUSY";
+    await recordWorkbenchRuntime(execution.taskId, state, {
+      executionId: execution.id,
+      activeBatchId: activeBatch?.id ?? null,
+      blockedReason: !session || session.killed
+        ? "Database execution is RUNNING but no live terminal session exists"
+        : activeBatch
+          ? "Workbench is processing a durable batch"
+          : session.isAtTurnBoundary
+            ? null
+            : "Provider turn in progress",
+    });
+  }
+  return executions.length;
+}
+
+function countBatchEvents(eventIds: string): number {
+  try {
+    const parsed = JSON.parse(eventIds);
+    return Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    return 0;
+  }
+}
 
 function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -247,18 +416,26 @@ function eventHeading(kind: WorkbenchEventKind): string {
 }
 
 export function buildWorkbenchBatchPrompt(events: WorkbenchEventRecord[], batchKey: string): string {
+  const protocol = [
+    "",
+    `[Tower durable batch: ${batchKey}]`,
+    `Delivery protocol: call ack_workbench_batch({ batchId: "${batchKey}" }) immediately after reading this request.`,
+    `After every item in this batch has been handled or durably delegated, call resolve_workbench_batch({ batchId: "${batchKey}" }).`,
+    "A replay with the same batch id is not new work; inspect existing task links/state and continue idempotently.",
+  ].join("\n");
+
   if (events.length === 1 && events[0].kind === "CHILD_REVIEW_REQUIRED") {
     const payload = parsePayload(events[0]);
     return `${buildChildReviewPrompt({
       childTitle: payload.childTitle,
       childTaskId: payload.childTaskId,
       childReply: payload.childReply ?? "",
-    })}\n\n[Tower durable batch: ${batchKey}]`;
+    })}${protocol}`;
   }
 
   if (events.length === 1 && events[0].kind === "GATEWAY_WORK_REQUEST") {
     const payload = parsePayload(events[0]);
-    return `${payload.gatewayMessage || "[Gateway project work request]\nNo message content was stored."}\n\n[Tower durable batch: ${batchKey}]`;
+    return `${payload.gatewayMessage || "[Gateway project work request]\nNo message content was stored."}${protocol}`;
   }
 
   const items = events.map((event, index) => {
@@ -280,7 +457,7 @@ export function buildWorkbenchBatchPrompt(events: WorkbenchEventRecord[], batchK
     ...items,
     "",
     "Review each item as the hub. Inspect the child's commits before terminal output when commits exist. Do not mark a child DONE until its result is verified. Answer decision requests downward; send concrete feedback for incomplete work; stop and move only verified work to DONE. Record the decisions in project notes.",
-  ].join("\n");
+  ].join("\n") + protocol;
 }
 
 async function claimWorkbenchEvents(parentTaskId: string): Promise<{ token: string; events: WorkbenchEventRecord[] }> {
@@ -290,9 +467,10 @@ async function claimWorkbenchEvents(parentTaskId: string): Promise<{ token: stri
       where: {
         parentTaskId,
         state: "PROCESSING",
+        batchId: null,
         OR: [{ claimedAt: { lt: expiredBefore } }, { claimedAt: null }],
       },
-      data: { state: "PENDING", claimToken: null, claimedAt: null },
+      data: { state: "PENDING", claimToken: null, claimedAt: null, batchId: null },
     });
 
     const pending = await tx.workbenchEvent.findMany({
@@ -311,6 +489,7 @@ async function claimWorkbenchEvents(parentTaskId: string): Promise<{ token: stri
         claimToken: token,
         claimedAt,
         attempts: { increment: 1 },
+        batchId: null,
         lastError: null,
       },
     });
@@ -331,6 +510,7 @@ async function releaseClaim(token: string, error: unknown): Promise<void> {
       state: "PENDING",
       claimToken: null,
       claimedAt: null,
+      batchId: null,
       lastError: message.slice(0, 2000),
     },
   });
@@ -359,33 +539,60 @@ export async function drainWorkbenchEvents(
   };
 
   try {
-    await db.taskMessage.upsert({
-      where: { id: batchKey },
-      update: {},
-      create: {
-        id: batchKey,
-        taskId: parentTaskId,
-        executionId: batch.parentExecutionId,
-        role: "SYSTEM",
-        content: batch.prompt,
-        metadata: JSON.stringify({
-          type: "workbench_event_batch",
-          batchKey,
-          eventIds: batch.eventIds,
-        }),
-      },
+    await db.$transaction(async (tx) => {
+      await tx.workbenchBatch.upsert({
+        where: { id: batchKey },
+        update: {
+          parentTaskId,
+          eventIds: JSON.stringify(batch.eventIds),
+          prompt: batch.prompt,
+          state: "CLAIMED",
+          lastError: null,
+          dispatchedAt: null,
+          ackedAt: null,
+          resolvedAt: null,
+        },
+        create: {
+          id: batchKey,
+          parentTaskId,
+          eventIds: JSON.stringify(batch.eventIds),
+          prompt: batch.prompt,
+        },
+      });
+      await tx.workbenchEvent.updateMany({
+        where: { state: "PROCESSING", claimToken: token },
+        data: { batchId: batchKey },
+      });
+      await tx.taskMessage.upsert({
+        where: { id: batchKey },
+        update: {},
+        create: {
+          id: batchKey,
+          taskId: parentTaskId,
+          executionId: batch.parentExecutionId,
+          role: "SYSTEM",
+          content: batch.prompt,
+          metadata: JSON.stringify({
+            type: "workbench_event_batch",
+            batchKey,
+            eventIds: batch.eventIds,
+          }),
+        },
+      });
     });
     await deliver(batch);
-    const consumedAt = new Date();
-    await db.workbenchEvent.updateMany({
-      where: { state: "PROCESSING", claimToken: token },
+    await db.workbenchBatch.update({
+      where: { id: batchKey },
       data: {
-        state: "CONSUMED",
-        claimToken: null,
-        claimedAt: null,
-        consumedAt,
+        state: "DISPATCHED",
+        dispatchAttempts: { increment: 1 },
+        dispatchedAt: new Date(),
         lastError: null,
       },
+    });
+    await recordWorkbenchRuntime(parentTaskId, "BUSY", {
+      activeBatchId: batchKey,
+      blockedReason: "Waiting for Workbench batch acknowledgement",
     });
     const gatewayInboundIds = events.flatMap((event) => {
       const id = parsePayload(event).gatewayInboundId?.trim();
@@ -396,7 +603,7 @@ export async function drainWorkbenchEvents(
         where: { id: { in: gatewayInboundIds }, state: "QUEUED" },
         data: { state: "PROCESSING", lastError: null },
       }).catch((error) => {
-        log.warn("Workbench batch consumed but gateway inbound state update failed", {
+        log.warn("Workbench batch dispatched but gateway inbound state update failed", {
           batchKey,
           error: error instanceof Error ? error.message : String(error),
         });
@@ -404,7 +611,19 @@ export async function drainWorkbenchEvents(
     }
     return { batchKey, eventCount: events.length, delivered: true };
   } catch (error) {
+    await db.workbenchBatch.updateMany({
+      where: { id: batchKey, state: { in: ["CLAIMED", "DISPATCHED"] } },
+      data: {
+        state: "FAILED",
+        lastError: (error instanceof Error ? error.message : String(error)).slice(0, 2000),
+      },
+    }).catch(() => undefined);
     await releaseClaim(token, error);
+    await recordWorkbenchRuntime(parentTaskId, "DEGRADED", {
+      activeBatchId: batchKey,
+      blockedReason: "Workbench batch delivery failed",
+      lastError: error instanceof Error ? error.message : String(error),
+    }).catch(() => undefined);
     log.warn("Workbench batch delivery failed; events returned to pending", {
       parentTaskId,
       batchKey,
@@ -414,13 +633,97 @@ export async function drainWorkbenchEvents(
   }
 }
 
+export async function acknowledgeWorkbenchBatch(
+  batchId: string,
+  parentTaskId: string,
+): Promise<WorkbenchBatchTransitionResult> {
+  const result = await db.$transaction(async (tx) => {
+    const batch = await tx.workbenchBatch.findUnique({ where: { id: batchId } });
+    if (!batch) throw new Error(`Unknown Workbench batch: ${batchId}`);
+    if (batch.parentTaskId !== parentTaskId) {
+      throw new Error(`Workbench batch ${batchId} belongs to a different parent task`);
+    }
+    if (batch.state === "RESOLVED" || batch.state === "ACKED") {
+      return {
+        batchId,
+        state: batch.state,
+        eventCount: countBatchEvents(batch.eventIds),
+        noOp: true,
+      };
+    }
+    if (batch.state !== "DISPATCHED") {
+      throw new Error(`Workbench batch ${batchId} is ${batch.state}, not DISPATCHED`);
+    }
+    const consumedAt = new Date();
+    const events = await tx.workbenchEvent.updateMany({
+      where: { batchId, state: "PROCESSING" },
+      data: {
+        state: "CONSUMED",
+        claimToken: null,
+        claimedAt: null,
+        consumedAt,
+        lastError: null,
+      },
+    });
+    await tx.workbenchBatch.update({
+      where: { id: batchId },
+      data: { state: "ACKED", ackedAt: consumedAt, lastError: null },
+    });
+    return { batchId, state: "ACKED" as const, eventCount: events.count, noOp: false };
+  });
+  await recordWorkbenchRuntime(parentTaskId, "BUSY", {
+    activeBatchId: batchId,
+    blockedReason: "Workbench acknowledged the batch and is processing it",
+  });
+  return result;
+}
+
+export async function resolveWorkbenchBatch(
+  batchId: string,
+  parentTaskId: string,
+): Promise<WorkbenchBatchTransitionResult> {
+  const result = await db.$transaction(async (tx) => {
+    const batch = await tx.workbenchBatch.findUnique({ where: { id: batchId } });
+    if (!batch) throw new Error(`Unknown Workbench batch: ${batchId}`);
+    if (batch.parentTaskId !== parentTaskId) {
+      throw new Error(`Workbench batch ${batchId} belongs to a different parent task`);
+    }
+    if (batch.state === "RESOLVED") {
+      return {
+        batchId,
+        state: "RESOLVED" as const,
+        eventCount: countBatchEvents(batch.eventIds),
+        noOp: true,
+      };
+    }
+    if (batch.state !== "ACKED") {
+      throw new Error(`Workbench batch ${batchId} must be ACKED before it can be resolved`);
+    }
+    await tx.workbenchBatch.update({
+      where: { id: batchId },
+      data: { state: "RESOLVED", resolvedAt: new Date() },
+    });
+    return {
+      batchId,
+      state: "RESOLVED" as const,
+      eventCount: countBatchEvents(batch.eventIds),
+      noOp: false,
+    };
+  });
+  await recordWorkbenchRuntime(parentTaskId, "IDLE", {
+    activeBatchId: null,
+    turnCompleted: true,
+  });
+  return result;
+}
+
 export async function deliverWorkbenchBatchToParent(batch: WorkbenchDrainBatch): Promise<void> {
   const session = getSession(batch.parentTaskId);
   if (!session || session.killed) throw new Error("Parent terminal is not running");
   const { body, submitKey } = planTerminalWrite(batch.prompt, true);
   if (body) session.write(body);
   if (submitKey) {
-    await new Promise((resolve) => setTimeout(resolve, SUBMIT_DELAY_MS));
+    await new Promise((resolve) => setTimeout(resolve, WORKBENCH_SUBMIT_DELAY_MS));
     const current = getSession(batch.parentTaskId);
     if (!current || current !== session || current.killed) {
       throw new Error("Parent terminal exited before batch submit");
@@ -475,16 +778,215 @@ export function restoreWorkbenchDrainBoundary(parentTaskId: string): boolean {
   return true;
 }
 
+function claudeTranscriptEndedAtTurnBoundary(sessionId: string): boolean {
+  const projectsDir = path.join(os.homedir(), ".claude", "projects");
+  let projectDirs: fs.Dirent[];
+  try {
+    projectDirs = fs.readdirSync(projectsDir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  const filename = `${sessionId}.jsonl`;
+  const transcriptPath = projectDirs
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(projectsDir, entry.name, filename))
+    .find((candidate) => fs.existsSync(candidate));
+  if (!transcriptPath) return false;
+
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(transcriptPath, "r");
+    const stat = fs.fstatSync(fd);
+    const length = Math.min(stat.size, 256 * 1024);
+    const buffer = Buffer.alloc(length);
+    fs.readSync(fd, buffer, 0, length, stat.size - length);
+    const lines = buffer.toString("utf8").split("\n");
+    for (let index = lines.length - 1; index >= 0; index--) {
+      const line = lines[index]?.trim();
+      if (!line) continue;
+      let record: {
+        type?: string;
+        message?: { role?: string; stop_reason?: string | null };
+      };
+      try {
+        record = JSON.parse(line) as typeof record;
+      } catch {
+        continue;
+      }
+      const role = record.message?.role;
+      if (record.type !== "assistant" && record.type !== "user" && role !== "assistant" && role !== "user") {
+        continue;
+      }
+      return (record.type === "assistant" || role === "assistant")
+        && record.message?.stop_reason === "end_turn";
+    }
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+  return false;
+}
+
+/**
+ * Recover the authoritative provider boundary when Tower missed the HTTP Stop
+ * callback during a restart. Claude persists `stop_reason=end_turn` before it
+ * invokes hooks, so this remains safe when terminal-output idleness would not.
+ */
+export async function restoreWorkbenchBoundaryFromProviderTranscript(parentTaskId: string): Promise<boolean> {
+  const session = getSession(parentTaskId);
+  if (!session || session.killed) return false;
+  const execution = await db.taskExecution.findFirst({
+    where: {
+      taskId: parentTaskId,
+      status: "RUNNING",
+      agent: "CLAUDE_CODE",
+      sessionId: { not: null },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { sessionId: true },
+  });
+  if (!execution?.sessionId || !claudeTranscriptEndedAtTurnBoundary(execution.sessionId)) return false;
+  if (!markSessionTurnComplete(parentTaskId)) return false;
+  openWorkbenchDrainBoundary(parentTaskId);
+  return true;
+}
+
+async function defaultEnsureWorkbenchRunning(taskId: string) {
+  const { continueOrStartTaskExecution } = await import("@/actions/agent-actions");
+  const result = await continueOrStartTaskExecution(taskId);
+  return { mode: result.mode, executionId: result.executionId };
+}
+
+/**
+ * Database-driven Workbench consumer reconciliation.
+ *
+ * Enqueue-time timers are only a latency optimization. This scan is the durable
+ * trigger: after a process/module restart, or when an enqueue happened while the
+ * Workbench was busy, every PENDING parent is revisited until it can be safely
+ * delivered at a provider-confirmed turn boundary.
+ */
+export async function reconcilePendingWorkbenchEvents(
+  ensureWorkbench: EnsureWorkbenchRunning = defaultEnsureWorkbenchRunning,
+): Promise<WorkbenchReconcileResult> {
+  const parents = await db.workbenchEvent.findMany({
+    where: { state: "PENDING" },
+    distinct: ["parentTaskId"],
+    orderBy: { createdAt: "asc" },
+    select: { parentTaskId: true },
+  });
+  const result: WorkbenchReconcileResult = {
+    scanned: parents.length,
+    woken: 0,
+    busy: 0,
+    failed: 0,
+  };
+
+  for (const { parentTaskId } of parents) {
+    try {
+      const live = getSession(parentTaskId);
+      if (live && !live.killed) {
+        if (
+          !restoreWorkbenchDrainBoundary(parentTaskId)
+          && !await restoreWorkbenchBoundaryFromProviderTranscript(parentTaskId)
+        ) {
+          await recordWorkbenchRuntime(parentTaskId, "BUSY", {
+            blockedReason: "Provider turn in progress",
+          });
+          result.busy++;
+          continue;
+        }
+      } else {
+        const resumed = await ensureWorkbench(parentTaskId);
+        if (resumed.mode === "already_running") {
+          if (
+            !restoreWorkbenchDrainBoundary(parentTaskId)
+            && !await restoreWorkbenchBoundaryFromProviderTranscript(parentTaskId)
+          ) {
+            await recordWorkbenchRuntime(parentTaskId, "BUSY", {
+              blockedReason: "Provider turn in progress",
+            });
+            result.busy++;
+            continue;
+          }
+        } else {
+          // A newly started/resumed CLI begins at an empty-input boundary.
+          openWorkbenchDrainBoundary(parentTaskId);
+        }
+      }
+      await recordWorkbenchRuntime(parentTaskId, "IDLE", {
+        blockedReason: null,
+      });
+      result.woken++;
+    } catch (error) {
+      result.failed++;
+      const message = error instanceof Error ? error.message : String(error);
+      await db.workbenchEvent.updateMany({
+        where: { parentTaskId, state: "PENDING" },
+        data: { lastError: message.slice(0, 2000) },
+      });
+      await recordWorkbenchRuntime(parentTaskId, "BLOCKED", {
+        blockedReason: "Workbench reconciliation failed",
+        lastError: message,
+      }).catch(() => undefined);
+      log.warn("Pending Workbench event reconciliation failed", {
+        parentTaskId,
+        error: message,
+      });
+    }
+  }
+  return result;
+}
+
 export async function recoverWorkbenchEventClaims(now = new Date()): Promise<number> {
   const expiredBefore = new Date(now.getTime() - WORKBENCH_CLAIM_LEASE_MS);
-  const result = await db.workbenchEvent.updateMany({
-    where: {
-      state: "PROCESSING",
-      OR: [{ claimedAt: { lt: expiredBefore } }, { claimedAt: null }],
-    },
-    data: { state: "PENDING", claimToken: null, claimedAt: null },
+  const ackExpiredBefore = new Date(now.getTime() - WORKBENCH_ACK_LEASE_MS);
+  const recovery = await db.$transaction(async (tx) => {
+    const expired = await tx.workbenchEvent.findMany({
+      where: {
+        state: "PROCESSING",
+        OR: [
+          { batchId: null, claimedAt: { lt: expiredBefore } },
+          { batchId: null, claimedAt: null },
+          { batch: { state: "DISPATCHED", dispatchedAt: { lt: ackExpiredBefore } } },
+          { batch: { state: "FAILED" } },
+        ],
+      },
+      select: { id: true, batchId: true },
+    });
+    if (expired.length === 0) return { count: 0, parentTaskIds: [] as string[] };
+    const batchIds = [...new Set(expired.flatMap((event) => event.batchId ? [event.batchId] : []))];
+    if (batchIds.length > 0) {
+      await tx.workbenchBatch.updateMany({
+        where: { id: { in: batchIds }, state: { in: ["CLAIMED", "DISPATCHED"] } },
+        data: { state: "FAILED", lastError: "Workbench did not acknowledge the dispatched batch before its lease expired" },
+      });
+    }
+    const result = await tx.workbenchEvent.updateMany({
+      where: { id: { in: expired.map((event) => event.id) }, state: "PROCESSING" },
+      data: {
+        state: "PENDING",
+        claimToken: null,
+        claimedAt: null,
+        batchId: null,
+        lastError: "Workbench batch acknowledgement timed out; returned to pending",
+      },
+    });
+    const parents = await tx.workbenchEvent.findMany({
+      where: { id: { in: expired.map((event) => event.id) } },
+      distinct: ["parentTaskId"],
+      select: { parentTaskId: true },
+    });
+    return { count: result.count, parentTaskIds: parents.map((parent) => parent.parentTaskId) };
   });
-  return result.count;
+  for (const parentTaskId of recovery.parentTaskIds) {
+    await recordWorkbenchRuntime(parentTaskId, "BLOCKED", {
+      activeBatchId: null,
+      blockedReason: "Batch acknowledgement timed out; work returned to pending",
+      lastError: "Workbench batch acknowledgement timed out",
+    }).catch(() => undefined);
+  }
+  return recovery.count;
 }
 
 export interface MissingWorkbenchExecutionRecoveryResult {

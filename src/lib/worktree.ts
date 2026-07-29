@@ -1,5 +1,15 @@
 import { execFileSync } from "child_process";
-import { existsSync, symlinkSync, lstatSync, readdirSync, mkdirSync, type Dirent } from "fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readlinkSync,
+  readdirSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+  type Dirent,
+} from "fs";
 import { mkdir } from "fs/promises";
 import path from "path";
 import os from "os";
@@ -79,8 +89,8 @@ export async function createWorktree(
   if (alreadyExists) {
     // Reuse path: still (re)ensure node_modules links. The worktree may have
     // been created before deps were installed, so the links could be missing.
-    // symlinkNodeModules is idempotent — it skips targets that already exist.
-    symlinkNodeModules(localPath, worktreePath);
+    // Dependency preparation is idempotent and migrates legacy shared links.
+    prepareWorktreeDependencies(localPath, worktreePath);
     return { worktreePath, worktreeBranch };
   }
 
@@ -130,8 +140,8 @@ export async function createWorktree(
     );
   }
 
-  // Symlink node_modules from main project to worktree (avoids reinstalling deps)
-  symlinkNodeModules(localPath, worktreePath);
+  // Prepare dependencies without allowing worktree installs to mutate the main checkout.
+  prepareWorktreeDependencies(localPath, worktreePath);
 
   return { worktreePath, worktreeBranch };
 }
@@ -182,33 +192,109 @@ function findPackageDirs(root: string): string[] {
 }
 
 /**
- * Creates symlinks for node_modules (and the Next.js `.next` cache) from the
- * main project to the worktree, so worktrees don't require reinstalling deps.
+ * Makes installed dependencies and Next.js caches available in a worktree.
+ * pnpm projects get an isolated offline install backed by pnpm's shared content
+ * store; other package managers retain the legacy dependency-directory links.
  *
  * Scans the whole source repo for every directory containing a `package.json`
- * — front-end, back-end, and nested monorepo packages alike — and links each
- * one's dependency dirs at the matching location in the worktree. This makes
- * no assumption about project type (front/back); a package.json is enough.
+ * — front-end, back-end, and nested monorepo packages alike. This makes no
+ * assumption about project type (front/back); a package.json is enough.
  *
  * Idempotent and best-effort: a missing source dir is skipped (and logged for
  * node_modules), an already-present target is left untouched, and any single
  * symlink failure is logged without aborting the rest.
  */
 /**
- * Dependency/cache directory names that Tower symlinks into a worktree (per
- * package dir) instead of reinstalling. These are the only entries
- * `symlinkNodeModules` ever creates, so they are also the only ones the
- * status filters below treat as Tower-injected noise.
+ * Dependency/cache directory names that Tower injects into a worktree. pnpm
+ * node_modules directories are isolated real directories; other entries are
+ * links. These are the only names the status filter treats as Tower noise.
  */
 export const WORKTREE_LINKED_DIRS = ["node_modules", ".next"] as const;
+export const WORKTREE_DEPENDENCY_MARKER = ".tower-worktree-deps";
 
-function symlinkNodeModules(projectRoot: string, worktreePath: string): void {
+function symlinkPointsTo(target: string, source: string): boolean {
+  try {
+    const linkedPath = readlinkSync(target);
+    return path.resolve(path.dirname(target), linkedPath) === path.resolve(source);
+  } catch {
+    return false;
+  }
+}
+
+function ensureIsolatedPnpmModules(
+  projectRoot: string,
+  worktreePath: string,
+  packageDirs: string[]
+): void {
+  const log = logger.create("worktree");
+  const rootTarget = path.join(worktreePath, "node_modules");
+  let needsInstall = !existsSync(rootTarget);
+
+  for (const pkgDir of packageDirs) {
+    const rel = pkgDir ? path.join(pkgDir, "node_modules") : "node_modules";
+    const source = path.join(projectRoot, rel);
+    const target = path.join(worktreePath, rel);
+    try {
+      const stat = lstatSync(target);
+      if (stat.isSymbolicLink() && symlinkPointsTo(target, source)) {
+        unlinkSync(target);
+        needsInstall = true;
+      }
+    } catch {
+      // A missing package-local directory is created by the workspace install.
+    }
+  }
+
+  if (needsInstall) {
+    try {
+      execFileSync(
+        "pnpm install --offline --frozen-lockfile --ignore-scripts",
+        {
+          cwd: worktreePath,
+          encoding: "utf-8",
+          timeout: 120000,
+          stdio: ["ignore", "pipe", "pipe"],
+          env: { ...process.env, CI: "true" },
+          shell: true,
+        }
+      );
+      log.info("Installed isolated pnpm dependencies from the local store", { worktreePath });
+    } catch (err) {
+      log.warn("Failed to install isolated pnpm dependencies", {
+        worktreePath,
+        error: String(err),
+      });
+      return;
+    }
+  }
+
+  for (const pkgDir of packageDirs) {
+    const target = path.join(worktreePath, pkgDir, "node_modules");
+    if (!existsSync(target)) continue;
+    try {
+      writeFileSync(path.join(target, WORKTREE_DEPENDENCY_MARKER), "");
+    } catch (err) {
+      log.warn(`Failed to mark isolated dependencies at ${target}`, { error: String(err) });
+    }
+  }
+}
+
+function prepareWorktreeDependencies(projectRoot: string, worktreePath: string): void {
   const log = logger.create("worktree");
   // Dependency/cache directories that should be shared into the worktree.
   const dirs = WORKTREE_LINKED_DIRS;
+  const packageDirs = findPackageDirs(projectRoot);
+  const isolatePnpmModules =
+    existsSync(path.join(projectRoot, "pnpm-lock.yaml")) &&
+    existsSync(path.join(projectRoot, "node_modules", ".pnpm"));
 
-  for (const pkgDir of findPackageDirs(projectRoot)) {
+  if (isolatePnpmModules) {
+    ensureIsolatedPnpmModules(projectRoot, worktreePath, packageDirs);
+  }
+
+  for (const pkgDir of packageDirs) {
     for (const dir of dirs) {
+      if (isolatePnpmModules && dir === "node_modules") continue;
       const rel = pkgDir ? path.join(pkgDir, dir) : dir;
       const source = path.join(projectRoot, rel);
       const target = path.join(worktreePath, rel);
@@ -220,10 +306,10 @@ function symlinkNodeModules(projectRoot: string, worktreePath: string): void {
         continue;
       }
 
-      // Skip if target already exists (real dir or existing symlink)
+      // Skip if target already exists (real dir or existing symlink).
       try {
         lstatSync(target);
-        continue; // exists — don't overwrite
+        continue;
       } catch {
         // Does not exist — proceed to create symlink
       }
@@ -235,7 +321,7 @@ function symlinkNodeModules(projectRoot: string, worktreePath: string): void {
         symlinkSync(source, target, "junction"); // "junction" works on Windows too
         log.info(`Symlinked ${rel}`, { from: source, to: target });
       } catch (err) {
-        log.warn(`Failed to symlink ${rel}`, { error: String(err) });
+        log.warn(`Failed to link ${rel}`, { error: String(err) });
       }
     }
   }
@@ -286,11 +372,11 @@ export async function removeWorktree(
 
 /**
  * True if a repo-relative path (as emitted by `git status`) points at a
- * Tower-injected dependency symlink (`node_modules` / `.next`) inside the
+ * Tower-injected dependency/cache entry (`node_modules` / `.next`) inside the
  * worktree.
  *
- * Why this exists: Tower symlinks these dirs into every worktree package (see
- * `symlinkNodeModules`). A `.gitignore` rule written with a trailing slash
+ * Why this exists: Tower injects these dirs into worktrees (see
+ * `prepareWorktreeDependencies`). A `.gitignore` rule written with a trailing slash
  * (`node_modules/`) matches *directories only* — but git treats a symlink as a
  * file, so the rule never matches the link and git reports it as untracked.
  * Those entries are not user changes and must not count toward "worktree dirty".
@@ -305,7 +391,13 @@ export function isTowerLinkedDir(relPath: string, worktreeRoot: string): boolean
   const base = path.basename(cleaned);
   if (!(WORKTREE_LINKED_DIRS as readonly string[]).includes(base)) return false;
   try {
-    return lstatSync(path.join(worktreeRoot, cleaned)).isSymbolicLink();
+    const absolutePath = path.join(worktreeRoot, cleaned);
+    const stat = lstatSync(absolutePath);
+    return stat.isSymbolicLink() || (
+      base === "node_modules" &&
+      stat.isDirectory() &&
+      existsSync(path.join(absolutePath, WORKTREE_DEPENDENCY_MARKER))
+    );
   } catch {
     return false;
   }

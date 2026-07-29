@@ -11,7 +11,7 @@ import { logger } from "@/lib/logger";
 import { visibleTaskWhere, archivedTaskWhere } from "@/lib/task-archive";
 import { getArchiveDelayDays } from "@/actions/config-actions";
 import type { I18nMessage } from "@/lib/i18n/render";
-import type { TaskStatus, Priority } from "@prisma/client";
+import type { GatewayDeliveryKind, Priority, TaskStatus } from "@prisma/client";
 
 const log = logger.create("task-actions");
 
@@ -49,7 +49,20 @@ export async function createTask(data: {
   return task;
 }
 
-export async function updateTaskStatus(taskId: string, status: TaskStatus) {
+export interface GatewayCompletionOutbox {
+  dedupKey: string;
+  sessionId: string;
+  inboundId: string;
+  kind: GatewayDeliveryKind;
+  content: string;
+  presentation?: string | null;
+}
+
+export async function updateTaskStatus(
+  taskId: string,
+  status: TaskStatus,
+  options?: { gatewayCompletionOutbox?: GatewayCompletionOutbox },
+) {
   taskStatusSchema.parse(status);
 
   // Completing/cancelling a task whose execution is still RUNNING (e.g. Mission
@@ -93,19 +106,49 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus) {
     }
   }
 
-  const task = await db.task.update({
-    where: { id: taskId },
-    // 进入 DONE 记录时间戳作为归档基准；离开 DONE 清空（编辑已完成任务不会重置倒计时）。
-    // Leaving the active loop (DONE/CANCELLED/IN_REVIEW) ends tower-goal mode → clear the flag.
-    data: {
-      status,
-      doneAt: status === "DONE" ? new Date() : null,
-      ...(status === "DONE" || status === "CANCELLED" || status === "IN_REVIEW"
-        ? { unattended: false }
-        : {}),
-    },
-    include: { project: true },
-  });
+  const statusData = {
+    status,
+    doneAt: status === "DONE" ? new Date() : null,
+    ...(status === "DONE" || status === "CANCELLED" || status === "IN_REVIEW"
+      ? { unattended: false }
+      : {}),
+  };
+  const includeProject = { project: true } as const;
+  const outbox = options?.gatewayCompletionOutbox;
+  if (outbox && status !== "DONE") {
+    throw new Error("Gateway completion outbox can only be persisted with DONE");
+  }
+  // A reviewed gateway task and its FINAL_RESULT outbox row cross one database
+  // commit boundary. The platform send happens later and is retryable; a crash
+  // can therefore delay a reply, but can no longer lose it after Task=DONE.
+  const task = outbox
+    ? await db.$transaction(async (tx) => {
+        const updated = await tx.task.update({
+          where: { id: taskId },
+          data: statusData,
+          include: includeProject,
+        });
+        await tx.gatewayDelivery.upsert({
+          where: { dedupKey: outbox.dedupKey },
+          update: {},
+          create: {
+            dedupKey: outbox.dedupKey,
+            sessionId: outbox.sessionId,
+            inboundId: outbox.inboundId,
+            kind: outbox.kind,
+            content: outbox.content,
+            presentation: outbox.presentation ?? null,
+          },
+        });
+        return updated;
+      })
+    : await db.task.update({
+        where: { id: taskId },
+        // 进入 DONE 记录时间戳作为归档基准；离开 DONE 清空（编辑已完成任务不会重置倒计时）。
+        // Leaving the active loop (DONE/CANCELLED/IN_REVIEW) ends tower-goal mode → clear the flag.
+        data: statusData,
+        include: includeProject,
+      });
 
   // Leaving the active loop clears goal mode → remove the PreToolUse hook's signal file too.
   if (status === "DONE" || status === "CANCELLED" || status === "IN_REVIEW") {

@@ -1,5 +1,5 @@
 import { join, dirname, isAbsolute, relative } from "node:path";
-import { existsSync, mkdirSync, statSync, readdirSync, rmSync, renameSync, unlinkSync, writeFileSync, readFileSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, statSync, readdirSync, rmSync, renameSync, unlinkSync, writeFileSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import * as tar from "tar";
 
@@ -32,13 +32,27 @@ export interface BackupInfo {
 const LOCK_FILE = ".lock";
 
 export function acquireLock(backupsDir: string): void {
+  mkdirSync(backupsDir, { recursive: true, mode: 0o700 });
   const lockPath = join(backupsDir, LOCK_FILE);
   if (existsSync(lockPath)) {
     const pid = parseInt(readFileSync(lockPath, "utf-8").trim(), 10);
     try { process.kill(pid, 0); throw new Error("Another backup operation is in progress"); }
     catch (e: unknown) { if (e instanceof Error && e.message.includes("Another backup")) throw e; }
+    try { unlinkSync(lockPath); } catch { /* a concurrent owner will win the atomic create below */ }
   }
-  writeFileSync(lockPath, String(process.pid));
+  try {
+    const fd = openSync(lockPath, "wx", 0o600);
+    try {
+      writeFileSync(fd, String(process.pid));
+    } finally {
+      closeSync(fd);
+    }
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") {
+      throw new Error("Another backup operation is in progress");
+    }
+    throw error;
+  }
 }
 
 export function releaseLock(backupsDir: string): void {
@@ -93,6 +107,8 @@ export async function createArchive(
 ): Promise<BackupInfo> {
   const filename = backupFilename(auto);
   const outPath = join(backupsDir, filename);
+  mkdirSync(backupsDir, { recursive: true, mode: 0o700 });
+  try { chmodSync(backupsDir, 0o700); } catch { /* non-POSIX filesystem */ }
 
   const metaPath = join(towerDir, "metadata.json");
   writeFileSync(metaPath, JSON.stringify(metadata, null, 2));
@@ -110,6 +126,7 @@ export async function createArchive(
       { gzip: true, file: outPath, cwd: towerDir },
       entries,
     );
+    try { chmodSync(outPath, 0o600); } catch { /* non-POSIX filesystem */ }
 
     const st = statSync(outPath);
     return {

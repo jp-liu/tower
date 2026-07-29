@@ -16,9 +16,12 @@ import {
   resetGatewayDeliveryRetrySchedulerForTests,
   retryGatewayDeliveries,
   routeGatewayInbound,
+  routeGatewayProjectQuery,
+  readGatewayProjectContext,
   type GatewayInboundRequest,
 } from "../gateway-router";
 import type { HarnessGatewaySendInput } from "../gateway-send";
+import { diagnoseGatewayRequest } from "../gateway-diagnostics";
 
 let workspaceId: string;
 let alphaId: string;
@@ -58,6 +61,7 @@ function successfulSender(messageId = `om_sent_${randomUUID()}`) {
 async function configureChannel(input: {
   defaultProjectId?: string;
   allowedProjectIds?: string[];
+  defaultWorkspaceId?: string;
 } = {}) {
   await db.systemConfig.upsert({
     where: { key: GATEWAY_CHANNEL_BINDINGS_KEY },
@@ -66,7 +70,9 @@ async function configureChannel(input: {
         gateway: "openclaw",
         platform: "feishu",
         chatId: "oc_gateway_test",
-        defaultWorkspaceId: workspaceId,
+        defaultWorkspaceId: input.defaultWorkspaceId === undefined
+          ? workspaceId
+          : input.defaultWorkspaceId || undefined,
         ...input,
       }]),
     },
@@ -76,7 +82,9 @@ async function configureChannel(input: {
         gateway: "openclaw",
         platform: "feishu",
         chatId: "oc_gateway_test",
-        defaultWorkspaceId: workspaceId,
+        defaultWorkspaceId: input.defaultWorkspaceId === undefined
+          ? workspaceId
+          : input.defaultWorkspaceId || undefined,
         ...input,
       }]),
     },
@@ -114,6 +122,7 @@ afterEach(async () => {
   await db.systemConfig.deleteMany({
     where: { key: { in: [GATEWAY_CHANNEL_BINDINGS_KEY, "assistant.historyTurns"] } },
   });
+  await db.gatewayInbound.deleteMany({ where: { chatId: "oc_gateway_test" } });
   vi.restoreAllMocks();
 });
 
@@ -152,6 +161,144 @@ describe("gateway inbound routing", () => {
       state: "PROCESSED",
     });
     expect(duplicate).not.toHaveProperty("instructions");
+  });
+
+  it("rate-limits a sender before dispatching more trusted-channel work", async () => {
+    await db.gatewayInbound.createMany({
+      data: Array.from({ length: 30 }, (_, index) => ({
+        dedupKey: `rate-sender-${index}`,
+        gateway: "openclaw",
+        platform: "feishu",
+        chatId: "oc_gateway_test",
+        senderId: "ou_gateway_user",
+        platformMessageId: `rate-message-${index}`,
+        intent: "DIRECT" as const,
+        content: "read-only query",
+        state: "PROCESSED",
+      })),
+    });
+
+    const ensure = vi.fn();
+    const routed = await routeGatewayInbound(inbound({
+      platformMessageId: "rate-message-blocked",
+      intent: "PROJECT_WORK",
+      content: "Create and start more work",
+    }), ensure);
+
+    expect(routed).toMatchObject({
+      mode: "rate_limited",
+      scope: "sender",
+      retryAfterSeconds: 60,
+    });
+    expect(ensure).not.toHaveBeenCalled();
+    expect(await db.workbenchEvent.count({ where: { kind: "GATEWAY_WORK_REQUEST" } })).toBe(0);
+  });
+
+  it("applies a hard queued-work cap before accepting more channel work", async () => {
+    await db.gatewayInbound.createMany({
+      data: Array.from({ length: 51 }, (_, index) => ({
+        dedupKey: `queue-cap-${index}`,
+        gateway: "openclaw",
+        platform: "feishu",
+        chatId: "oc_gateway_test",
+        senderId: `queue-sender-${index}`,
+        platformMessageId: `queue-message-${index}`,
+        intent: "PROJECT_WORK" as const,
+        content: "queued work",
+        state: "QUEUED",
+      })),
+    });
+
+    const ensure = vi.fn();
+    const routed = await routeGatewayInbound(inbound({
+      platformMessageId: "queue-message-blocked",
+      intent: "PROJECT_WORK",
+      content: "Create and start more work",
+    }), ensure);
+
+    expect(routed).toMatchObject({
+      mode: "rate_limited",
+      scope: "queue",
+      retryAfterSeconds: 120,
+    });
+    expect(ensure).not.toHaveBeenCalled();
+  });
+
+  it("keeps the non-owner capability project-read-only even when the message asks for work", async () => {
+    const task = await db.task.create({ data: { title: "Existing private task", projectId: alphaId } });
+    const request = inbound({
+      project: alphaId,
+      intent: "PROJECT_WORK",
+      taskId: task.id,
+      content: "Create a task, run the terminal, and modify the repository",
+    });
+
+    const routed = await routeGatewayProjectQuery(request);
+
+    expect(routed).toMatchObject({
+      mode: "project_discussion",
+      project: { projectId: alphaId },
+    });
+    expect(routed.mode).not.toBe("task_reply");
+    expect(routed.mode).not.toBe("project_work");
+    expect(await db.workbenchEvent.count({ where: { kind: "GATEWAY_WORK_REQUEST" } })).toBe(0);
+
+    const context = await readGatewayProjectContext(routed.inboundId, "What is the current project status?");
+    expect(context).toMatchObject({
+      inboundId: routed.inboundId,
+      project: { projectId: alphaId, workspaceId },
+    });
+    expect(context.tasks).toContainEqual(expect.objectContaining({ title: "Existing private task" }));
+    expect(context.knowledge.projects[0]).not.toHaveProperty("localPath");
+  });
+
+  it("routes work requests for REVIEW_ONLY projects into discussion without starting a Workbench", async () => {
+    await db.project.update({ where: { id: alphaId }, data: { accessMode: "REVIEW_ONLY" } });
+
+    const routed = await routeGatewayInbound(inbound({
+      project: alphaId,
+      intent: "PROJECT_WORK",
+      content: "Install dependencies and implement the requested change",
+    }), vi.fn());
+
+    expect(routed).toMatchObject({
+      mode: "project_discussion",
+      project: { projectId: alphaId },
+    });
+    if (routed.mode === "project_discussion") {
+      expect(routed.instructions).toContain("REVIEW_ONLY");
+    }
+    expect(await db.workbenchEvent.count({ where: { kind: "GATEWAY_WORK_REQUEST" } })).toBe(0);
+  });
+
+  it("fails closed when a non-owner channel has no configured project scope", async () => {
+    await db.systemConfig.delete({ where: { key: GATEWAY_CHANNEL_BINDINGS_KEY } });
+
+    await expect(routeGatewayProjectQuery(inbound({ project: alphaId }))).resolves.toMatchObject({
+      mode: "needs_project_selection",
+      candidates: [],
+      reason: "not_allowed",
+    });
+  });
+
+  it("fails closed when a non-owner channel binding has neither a workspace nor projects", async () => {
+    await configureChannel({ defaultWorkspaceId: "", allowedProjectIds: [] });
+
+    await expect(routeGatewayProjectQuery(inbound({ project: alphaId }))).resolves.toMatchObject({
+      mode: "needs_project_selection",
+      candidates: [],
+      reason: "not_allowed",
+    });
+  });
+
+  it("rechecks non-owner project scope when project context is read", async () => {
+    const routed = await routeGatewayProjectQuery(inbound({ project: alphaId }));
+    expect(routed).toMatchObject({ mode: "project_discussion" });
+
+    await db.systemConfig.delete({ where: { key: GATEWAY_CHANNEL_BINDINGS_KEY } });
+
+    await expect(readGatewayProjectContext(routed.inboundId, "status"))
+      .rejects.toThrow("not authorized");
   });
 
   it("does not process a concurrent duplicate while its first route is still claimed", async () => {
@@ -602,7 +749,7 @@ describe("gateway inbound routing", () => {
     expect(sender).toHaveBeenCalledTimes(1);
     expect(sender.mock.calls[0][0]).toMatchObject({
       replyToMessageId: request.platformMessageId,
-      presentation: { title: "小塔 · 已排队", tone: "warning" },
+      presentation: { title: "⏳ 小塔 · 请求已进入工作台", tone: "warning" },
     });
     expect(await db.gatewayInbound.count({ where: { platformMessageId: request.platformMessageId } })).toBe(1);
     expect(await db.workbenchEvent.count({ where: { dedupKey: { startsWith: "gateway-work:" } } })).toBe(1);
@@ -610,6 +757,61 @@ describe("gateway inbound routing", () => {
       .toMatchObject({ state: "PENDING", sourceTaskId: first.mode === "project_work" ? first.workbenchTaskId : "" });
     expect(await db.gatewayInbound.findFirst({ where: { platformMessageId: request.platformMessageId } }))
       .toMatchObject({ state: "QUEUED", createdTaskId: null });
+  });
+
+  it("correlates one platform message through routing, Workbench, task, and delivery stages", async () => {
+    const request = inbound({
+      project: alphaId,
+      intent: "PROJECT_WORK",
+      content: "Build a diagnostic trace",
+    });
+    const routed = await routeGatewayInbound(
+      request,
+      vi.fn(async () => ({ mode: "already_running", executionId: "trace-workbench" })),
+      successfulSender("om_trace_queue"),
+    );
+    expect(routed.mode).toBe("project_work");
+    if (routed.mode !== "project_work") return;
+
+    const diagnostic = await diagnoseGatewayRequest({ platformMessageId: request.platformMessageId });
+
+    expect(diagnostic).toMatchObject({
+      traceId: routed.inboundId,
+      source: { platformMessageId: request.platformMessageId },
+      project: { projectId: alphaId },
+      event: { state: "PENDING" },
+    });
+    expect(diagnostic.stages.map((item) => item.name)).toEqual([
+      "platform_ingress",
+      "tower_route",
+      "workbench_inbox",
+      "workbench_runtime",
+      "child_task",
+      "platform_delivery",
+    ]);
+    expect(diagnostic.deliveries).toContainEqual(expect.objectContaining({
+      kind: "QUEUED_ACK",
+      state: "DELIVERED",
+      platformMessageId: "om_trace_queue",
+    }));
+    expect(JSON.stringify(diagnostic)).not.toContain(process.cwd());
+  });
+
+  it("opens the initial boundary after starting a Workbench for new gateway work", async () => {
+    const ensure = vi.fn(async () => ({
+      mode: "started" as const,
+      executionId: "fresh-workbench",
+    }));
+    const routed = await routeGatewayInbound(
+      inbound({ project: alphaId, intent: "PROJECT_WORK", content: "Wake the new Workbench" }),
+      ensure,
+      successfulSender("om_initial_boundary_ack"),
+    );
+    expect(routed.mode).toBe("project_work");
+    if (routed.mode !== "project_work") return;
+
+    expect(ensure).toHaveBeenCalledWith(routed.workbenchTaskId);
+    expect(hasWorkbenchDrainBoundary(routed.workbenchTaskId)).toBe(true);
   });
 
   it("recreates a missing durable event and resumes an unstarted Workbench", async () => {
@@ -634,6 +836,49 @@ describe("gateway inbound routing", () => {
         dedupKey: `gateway-work:${routed.inboundId}`,
       },
     })).toMatchObject({ kind: "GATEWAY_WORK_REQUEST", state: "PENDING" });
+  });
+
+  it("requeues a consumed gateway event when a resident Workbench returned to a turn boundary", async () => {
+    const routed = await routeGatewayInbound(
+      inbound({ project: alphaId, intent: "PROJECT_WORK", content: "Recover abandoned delivery" }),
+      vi.fn(async () => ({ mode: "started", executionId: "initial-exec" })),
+      successfulSender("om_abandoned_queue_ack"),
+    );
+    expect(routed.mode).toBe("project_work");
+    if (routed.mode !== "project_work") return;
+    await db.workbenchEvent.update({
+      where: { dedupKey: `gateway-work:${routed.inboundId}` },
+      data: { state: "CONSUMED", consumedAt: new Date() },
+    });
+    await db.gatewayInbound.update({
+      where: { id: routed.inboundId },
+      data: { state: "PROCESSING" },
+    });
+    await db.taskExecution.create({
+      data: {
+        taskId: routed.workbenchTaskId,
+        status: "RUNNING",
+        startedAt: new Date(),
+      },
+    });
+    const ensure = vi.fn(async () => ({ mode: "continued" as const, executionId: "retry-exec" }));
+    const restore = vi.fn(() => true);
+
+    await expect(recoverQueuedGatewayWork(
+      ensure,
+      100,
+      successfulSender("om_abandoned_retry"),
+      restore,
+      { projectId: alphaId },
+    )).resolves.toEqual({ scanned: 1, started: 1, failed: 0 });
+    expect(await db.workbenchEvent.findUnique({
+      where: { dedupKey: `gateway-work:${routed.inboundId}` },
+    })).toMatchObject({
+      state: "PENDING",
+      lastError: expect.stringContaining("exited before creating a task"),
+    });
+    expect(restore).toHaveBeenCalledWith(routed.workbenchTaskId);
+    expect(ensure).toHaveBeenCalledWith(routed.workbenchTaskId);
   });
 
   it("restores a lost boundary for an already-running idle Workbench", async () => {
@@ -690,6 +935,64 @@ describe("gateway inbound routing", () => {
 });
 
 describe("gateway confirmations and delivery retry", () => {
+  it("keeps Task=DONE and a retryable FINAL_RESULT outbox when the platform send fails", async () => {
+    const routed = await routeGatewayInbound(
+      inbound({ project: alphaId, intent: "PROJECT_WORK", content: "Verify atomic completion" }),
+      vi.fn(async () => ({ mode: "already_running", executionId: "workbench-exec" })),
+      successfulSender("om_atomic_queue"),
+    );
+    expect(routed.mode).toBe("project_work");
+    if (routed.mode !== "project_work") return;
+
+    const child = await db.task.create({
+      data: {
+        title: "Atomic completion child",
+        projectId: alphaId,
+        parentTaskId: routed.workbenchTaskId,
+        status: "IN_REVIEW",
+      },
+    });
+    await db.taskExecution.create({
+      data: {
+        taskId: child.id,
+        status: "COMPLETED",
+        summary: "Atomic result",
+        branchTipCommit: "deadbee",
+        endedAt: new Date(),
+      },
+    });
+    await confirmGatewayTaskCreated(
+      routed.inboundId,
+      child.id,
+      routed.workbenchTaskId,
+      successfulSender("om_atomic_created"),
+    );
+    const failingSender = vi.fn(async () => ({
+      ok: false as const,
+      output: "temporary Feishu transport failure",
+    }));
+    await expect(completeGatewayWork({
+      inboundId: routed.inboundId,
+      taskId: child.id,
+      reviewerTaskId: routed.workbenchTaskId,
+      resultSummary: "Reviewed atomically",
+    }, failingSender)).resolves.toMatchObject({ ok: false });
+
+    expect(await db.task.findUnique({ where: { id: child.id } })).toMatchObject({
+      status: "DONE",
+    });
+    expect(await db.gatewayDelivery.findUnique({
+      where: { dedupKey: `gateway-final:${routed.inboundId}:${child.id}` },
+    })).toMatchObject({
+      kind: "FINAL_RESULT",
+      state: "FAILED",
+      attempts: 1,
+      lastError: "temporary Feishu transport failure",
+    });
+    expect(await db.gatewayInbound.findUnique({ where: { id: routed.inboundId } }))
+      .toMatchObject({ state: "PROCESSING" });
+  });
+
   it("confirms only a real created task and sends the reviewed final result once", async () => {
     const routed = await routeGatewayInbound(
       inbound({ project: alphaId, intent: "PROJECT_WORK", content: "Implement gateway callbacks" }),
@@ -736,13 +1039,13 @@ describe("gateway confirmations and delivery retry", () => {
     expect(sender.mock.calls[0][0].message).toContain(`Task created: ${child.title}`);
     expect(sender.mock.calls[0][0].message).toContain(`Tower task: ${child.id}`);
     expect(sender.mock.calls[0][0].presentation).toMatchObject({
-      title: "小塔 · 任务已创建",
+      title: "🚀 小塔 · 任务已创建",
       tone: "success",
     });
     expect(JSON.stringify(sender.mock.calls[0][0].presentation)).toContain("Implement reliable gateway callbacks");
-    expect(JSON.stringify(sender.mock.calls[0][0].presentation)).toContain("已自动启动：是（RUNNING）");
+    expect(JSON.stringify(sender.mock.calls[0][0].presentation)).toContain("已启动 · 执行中");
 
-    await db.task.update({ where: { id: child.id }, data: { status: "DONE", doneAt: new Date() } });
+    await db.task.update({ where: { id: child.id }, data: { status: "IN_REVIEW", doneAt: null } });
     await db.taskExecution.update({
       where: { id: execution.id },
       data: {
@@ -772,6 +1075,15 @@ describe("gateway confirmations and delivery retry", () => {
       reviewerTaskId: routed.workbenchTaskId,
       resultSummary: "Reviewed and accepted",
     }, sender)).resolves.toMatchObject({ ok: true, deduped: false });
+    expect(await db.task.findUnique({ where: { id: child.id } })).toMatchObject({
+      status: "DONE",
+    });
+    expect(await db.gatewayDelivery.findUnique({
+      where: { dedupKey: `gateway-final:${routed.inboundId}:${child.id}` },
+    })).toMatchObject({
+      kind: "FINAL_RESULT",
+      state: "DELIVERED",
+    });
     await expect(completeGatewayWork({
       inboundId: routed.inboundId,
       taskId: child.id,
@@ -786,7 +1098,7 @@ describe("gateway confirmations and delivery retry", () => {
     expect(finalMessage).toContain("Branch: feat/gateway-callbacks");
     expect(finalMessage).toContain(`Tower task: ${child.id}`);
     expect(sender.mock.calls[1][0].presentation).toMatchObject({
-      title: "小塔 · 任务已完成",
+      title: "✅ 小塔 · 任务已完成",
       tone: "success",
     });
   });
@@ -806,10 +1118,13 @@ describe("gateway confirmations and delivery retry", () => {
     await db.gatewayTaskLink.create({ data: { inboundId: routed.inboundId, taskId: child.id } });
 
     const sender = successfulSender("om_created");
-    const ensureWorkbench = vi.fn();
+    const ensureWorkbench = vi.fn(async () => ({
+      mode: "already_running" as const,
+      executionId: "workbench-exec",
+    }));
     await expect(recoverQueuedGatewayWork(ensureWorkbench, 100, sender, undefined, { projectId: alphaId }))
       .resolves.toMatchObject({ scanned: 1, started: 1, failed: 0 });
-    expect(ensureWorkbench).not.toHaveBeenCalled();
+    expect(ensureWorkbench).toHaveBeenCalledWith(routed.workbenchTaskId);
     expect(await db.gatewayInbound.findUnique({ where: { id: routed.inboundId } }))
       .toMatchObject({ createdTaskId: child.id, state: "PROCESSING" });
     expect(await db.task.count({ where: { parentTaskId: routed.workbenchTaskId } })).toBe(1);
@@ -843,7 +1158,7 @@ describe("gateway confirmations and delivery retry", () => {
     expect(retrySender).toHaveBeenCalledWith(expect.objectContaining({
       replyToMessageId: request.platformMessageId,
       threadId: "omt_discussion",
-      presentation: expect.objectContaining({ title: "小塔 · 项目讨论" }),
+      presentation: expect.objectContaining({ title: "💬 小塔 · 项目讨论" }),
     }));
     expect(await db.gatewayDelivery.findFirst({ where: { inboundId: routed.inboundId } }))
       .toMatchObject({ state: "DELIVERED", attempts: 2, platformMessageId: "om_retry_success" });

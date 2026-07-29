@@ -22,6 +22,9 @@ vi.mock("@/lib/init-tower", () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   vi.resetModules();
+  delete (globalThis as typeof globalThis & {
+    __towerInstrumentationRegistration?: Promise<void>;
+  }).__towerInstrumentationRegistration;
   process.env.NEXT_RUNTIME = "nodejs";
 });
 

@@ -99,6 +99,15 @@ export const taskTools = {
       references?: string[];
       gatewayInboundId?: string;
     }) => {
+      const projectAccess = await db.project.findUnique({
+        where: { id: args.projectId },
+        select: { accessMode: true },
+      });
+      if (projectAccess?.accessMode === "REVIEW_ONLY") {
+        throw new Error(
+          "REVIEW_ONLY projects cannot create executable tasks. Discuss and generate the review through read-only project context, or ask the owner to change the project to FULL_WORK.",
+        );
+      }
       // Resolve worktree / auto-start: explicit arg wins, else fall back to the
       // user's saved global default. On the very first MCP create_task where
       // neither default has been confirmed AND the caller didn't specify, ask

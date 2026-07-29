@@ -45,7 +45,12 @@ describe("0015 Workbench execution review guard migration", () => {
       );
       expect(columns.map((column) => column.name)).toContain("executionReviewKey");
       expect(indexes.map((row) => row.name)).toContain("WorkbenchEvent_executionReviewKey_key");
-      const events = await prisma.workbenchEvent.findMany({ orderBy: { id: "asc" } });
+      // This fixture intentionally stops at migration 0015, while the generated
+      // current Prisma Client already expects later columns such as batchId.
+      // Query only the column under test so the historical fixture remains valid.
+      const events = await prisma.$queryRawUnsafe<Array<{ executionReviewKey: string | null }>>(
+        `SELECT "executionReviewKey" FROM "WorkbenchEvent" ORDER BY "id" ASC`,
+      );
       expect(events.map((event) => event.executionReviewKey)).toEqual([
         "execution-review:child:exec",
         null,

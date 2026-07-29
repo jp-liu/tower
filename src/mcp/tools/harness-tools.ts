@@ -2,12 +2,18 @@ import { z } from "zod";
 import { extractTowerTaskId, findHarnessDeliveryByPlatformMessageId, recordHarnessDelivery } from "@/lib/harness/delivery-map";
 import { readHarnessGatewayRuntimeConfig } from "@/lib/harness/gateway-config";
 import { parseGatewaySendOutput } from "@/lib/harness/gateway-output";
+import { signedInternalFetch as fetch } from "@/lib/internal-api-signing";
 
 export { parseGatewaySendOutput } from "@/lib/harness/gateway-output";
 
 const PORT = process.env.PORT ?? "3000";
 const BRIDGE = `http://localhost:${PORT}/api/internal/harness`;
 const GATEWAY_BRIDGE = `${BRIDGE}/gateway`;
+const GATEWAY_QUERY_BRIDGE = `${BRIDGE}/gateway-query`;
+const GATEWAY_DIAGNOSTICS_BRIDGE = `${BRIDGE}/gateway-diagnostics`;
+const GATEWAY_RUNTIME_HEALTH_BRIDGE = `${BRIDGE}/gateway-runtime-health`;
+const REMOTE_PROJECT_BRIDGE = `${BRIDGE}/remote-project`;
+const WORKBENCH_BATCH_BRIDGE = `http://localhost:${PORT}/api/internal/workbench/batch`;
 const TERMINAL_BRIDGE = `http://localhost:${PORT}/api/internal/terminal`;
 const CUID_RE = /^c[a-z0-9]{20,30}$/;
 
@@ -480,6 +486,175 @@ export const harnessTools = {
     },
   },
 
+  route_gateway_query: {
+    description:
+      "Read-only gateway entry for a non-owner in a trusted channel. It durably binds the inbound message to " +
+      "one allowed project discussion and can never relay a task reply, create a task, start a terminal, or enqueue " +
+      "Workbench work. Use the returned candidates instead of guessing. After routing, call " +
+      "read_gateway_project_context and then complete_gateway_discussion.",
+    schema: z.object({
+      gateway: z.enum(["hermes", "openclaw"]),
+      platform: z.string().min(1).max(64),
+      chatId: z.string().min(1).max(512),
+      platformMessageId: z.string().min(1).max(512),
+      senderId: z.string().max(512).optional(),
+      threadId: z.string().max(512).optional(),
+      rootMessageId: z.string().max(512).optional(),
+      replyToMessageId: z.string().max(512).optional(),
+      quotedText: z.string().max(16000).optional(),
+      project: z.string().max(512).optional(),
+      content: z.string().min(1).max(16000),
+      sessionAction: z.enum(["CONTINUE", "NEW", "CLOSE"]).optional(),
+    }),
+    handler: async (args: {
+      gateway: "hermes" | "openclaw";
+      platform: string;
+      chatId: string;
+      platformMessageId: string;
+      senderId?: string;
+      threadId?: string;
+      rootMessageId?: string;
+      replyToMessageId?: string;
+      quotedText?: string;
+      project?: string;
+      content: string;
+      sessionAction?: "CONTINUE" | "NEW" | "CLOSE";
+    }) => {
+      const res = await fetch(GATEWAY_QUERY_BRIDGE, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "gateway project query failed", status: res.status };
+    },
+  },
+
+  read_gateway_project_context: {
+    description:
+      "Read project knowledge and recent task status only through the project binding created by " +
+      "route_gateway_query. The caller cannot supply a project id, workspace id, or local path, so this tool " +
+      "cannot escape the trusted channel's allowed project scope.",
+    schema: z.object({
+      inboundId: z.string().min(1).max(128),
+      question: z.string().min(1).max(8000),
+    }),
+    handler: async (args: { inboundId: string; question: string }) => {
+      const res = await fetch(GATEWAY_QUERY_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "gateway project context failed", status: res.status };
+    },
+  },
+
+  diagnose_gateway_request: {
+    description:
+      "OWNER diagnostics for one external request. Correlates the platform message, Tower inbound route, " +
+      "durable Workbench event/batch/runtime, child task/execution, and every outbound delivery into ordered " +
+      "stages. Use this instead of manually querying tables or guessing from one terminal log.",
+    schema: z.object({
+      inboundId: z.string().min(1).max(128).optional(),
+      platformMessageId: z.string().min(1).max(512).optional(),
+    }).refine((value) => value.inboundId || value.platformMessageId, {
+      message: "inboundId or platformMessageId is required",
+    }),
+    handler: async (args: { inboundId?: string; platformMessageId?: string }) => {
+      const res = await fetch(GATEWAY_DIAGNOSTICS_BRIDGE, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "gateway diagnostics failed", status: res.status };
+    },
+  },
+
+  recover_gateway_request: {
+    description:
+      "OWNER-only safe recovery for one diagnosed gateway inbound id. Retries only failed deliveries that have " +
+      "no platform message id and reopens only that request's durable Workbench path. It never auto-resends a " +
+      "SENT_UNVERIFIED card because the platform may already contain it.",
+    schema: z.object({
+      inboundId: z.string().min(1).max(128),
+    }),
+    handler: async (args: { inboundId: string }) => {
+      const res = await fetch(GATEWAY_DIAGNOSTICS_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "gateway recovery failed", status: res.status };
+    },
+  },
+
+  get_gateway_runtime_health: {
+    description:
+      "OWNER runtime diagnostics for OpenClaw or Hermes. Reads bounded service health and recent warning/error " +
+      "logs, redacts credentials and home paths, and can filter by a Tower trace id or platform message id. " +
+      "Use together with diagnose_gateway_request to distinguish gateway failures from Tower/Workbench failures.",
+    schema: z.object({
+      gateway: z.enum(["openclaw", "hermes"]),
+      trace: z.string().min(1).max(512).optional(),
+      includeLogs: z.boolean().optional().default(true),
+    }),
+    handler: async (args: { gateway: "openclaw" | "hermes"; trace?: string; includeLogs?: boolean }) => {
+      const res = await fetch(GATEWAY_RUNTIME_HEALTH_BRIDGE, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "gateway runtime health failed", status: res.status };
+    },
+  },
+
+  provision_remote_project: {
+    description:
+      "OWNER-only remote Git project orchestrator. PROVISION requires gitUrl, workspaceId, and an absolute " +
+      "localRoot; when any is missing it returns needsInput instead of guessing. It clones with Git directly, " +
+      "registers the Tower project, creates its resident Workbench, and never installs dependencies or runs " +
+      "repository scripts. REVIEW_ONLY is the default. SET_MODE explicitly changes REVIEW_ONLY/FULL_WORK. " +
+      "STATUS reports the durable registration.",
+    schema: z.object({
+      action: z.enum(["PROVISION", "SET_MODE", "STATUS"]),
+      gitUrl: z.string().max(2000).optional(),
+      workspaceId: z.string().max(128).optional(),
+      localRoot: z.string().max(2000).optional(),
+      name: z.string().max(200).optional(),
+      directoryName: z.string().max(200).optional(),
+      projectId: z.string().max(128).optional(),
+      accessMode: z.enum(["REVIEW_ONLY", "FULL_WORK"]).optional(),
+    }),
+    handler: async (args: {
+      action: "PROVISION" | "SET_MODE" | "STATUS";
+      gitUrl?: string;
+      workspaceId?: string;
+      localRoot?: string;
+      name?: string;
+      directoryName?: string;
+      projectId?: string;
+      accessMode?: "REVIEW_ONLY" | "FULL_WORK";
+    }) => {
+      if ((args.action === "SET_MODE" || args.action === "STATUS") && !args.projectId) {
+        return { error: "projectId is required for SET_MODE and STATUS" };
+      }
+      if (args.action === "SET_MODE" && !args.accessMode) {
+        return { error: "accessMode is required for SET_MODE" };
+      }
+      const res = await fetch(REMOTE_PROJECT_BRIDGE, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "remote project provisioning failed", status: res.status };
+    },
+  },
+
   complete_gateway_discussion: {
     description:
       "Send the project-aware answer for a route_gateway_message PROJECT_DISCUSSION result back to the original " +
@@ -497,6 +672,53 @@ export const harnessTools = {
       });
       const data = await res.json().catch(() => ({}));
       return res.ok ? data : { error: (data as { error?: unknown }).error ?? "discussion delivery failed", status: res.status };
+    },
+  },
+
+  ack_workbench_batch: {
+    description:
+      "Workbench-only: acknowledge that the resident Workbench actually received and read a durable batch. " +
+      "Call this immediately when a prompt contains '[Tower durable batch: wb-...]'. PTY delivery alone does " +
+      "not consume the inbox rows; this acknowledgement does. Repeated calls are idempotent.",
+    schema: z.object({
+      batchId: z.string().trim().min(1).max(128),
+    }),
+    handler: async (args: { batchId: string }) => {
+      const parentTaskId = process.env.TOWER_TASK_ID?.trim();
+      if (!parentTaskId) return { error: "ack_workbench_batch must run inside the bound Workbench terminal" };
+      const res = await fetch(WORKBENCH_BATCH_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "ack", parentTaskId, batchId: args.batchId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : {
+        error: (data as { error?: unknown }).error ?? "Workbench batch acknowledgement failed",
+        status: res.status,
+      };
+    },
+  },
+
+  resolve_workbench_batch: {
+    description:
+      "Workbench-only: mark an acknowledged durable batch fully handled. Call only after every item in the " +
+      "batch has been completed or durably delegated. The batch must be ACKED first; repeated calls are idempotent.",
+    schema: z.object({
+      batchId: z.string().trim().min(1).max(128),
+    }),
+    handler: async (args: { batchId: string }) => {
+      const parentTaskId = process.env.TOWER_TASK_ID?.trim();
+      if (!parentTaskId) return { error: "resolve_workbench_batch must run inside the bound Workbench terminal" };
+      const res = await fetch(WORKBENCH_BATCH_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "resolve", parentTaskId, batchId: args.batchId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : {
+        error: (data as { error?: unknown }).error ?? "Workbench batch resolution failed",
+        status: res.status,
+      };
     },
   },
 
@@ -526,7 +748,9 @@ export const harnessTools = {
     description:
       "Workbench-only: after reviewing and accepting a gateway-created child task, reply to the original external " +
       "thread with the task title, reviewed result, commit id/message, branch, and Tower task locator. Tower " +
-      "requires the caller to be the bound Workbench and the task to be DONE; repeated callbacks are idempotent.",
+      "requires the caller to be the bound Workbench and the task to be IN_REVIEW (or already DONE for recovery). " +
+      "This call atomically moves an accepted IN_REVIEW task to DONE and creates its retryable FINAL_RESULT outbox; " +
+      "do not call move_task(DONE) first. Repeated callbacks are idempotent.",
     schema: z.object({
       inboundId: z.string().min(1).max(128),
       taskId: z.string().min(1).max(128),

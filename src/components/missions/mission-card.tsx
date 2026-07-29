@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, ArrowUpRight, X, TerminalSquare, Check } from "lucide-react";
+import { GripVertical, ArrowUpRight, X, TerminalSquare, Check, Activity, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -42,6 +42,53 @@ function ElapsedTime({ startedAt, paused }: { startedAt: string | null; paused: 
     <span className="text-[11px] text-muted-foreground ml-1 shrink-0">
       {minutes}m {seconds}s
     </span>
+  );
+}
+
+function WorkbenchHealthBadge({ execution }: { execution: ActiveExecutionInfo }) {
+  const runtime = execution.workbenchRuntime;
+  if (!execution.isSystemTask) return null;
+  if (!runtime) {
+    return (
+      <Badge variant="outline" className="text-[10px] text-muted-foreground shrink-0">
+        <Activity className="h-3 w-3 mr-1" />
+        未上报
+      </Badge>
+    );
+  }
+  const unhealthy = runtime.state === "BLOCKED" || runtime.state === "DEGRADED";
+  const detail = [
+    `Workbench generation ${runtime.generation}`,
+    `state=${runtime.state}`,
+    `pending=${runtime.pendingEvents}`,
+    runtime.activeBatchId ? `batch=${runtime.activeBatchId}` : null,
+    runtime.blockedReason,
+    runtime.lastError,
+    `heartbeat=${new Date(runtime.lastHeartbeatAt).toLocaleString()}`,
+  ].filter(Boolean).join("\n");
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Badge
+            variant="outline"
+            className={
+              unhealthy
+                ? "text-[10px] text-amber-600 border-amber-500/40 bg-amber-500/10 shrink-0"
+                : "text-[10px] text-emerald-600 border-emerald-500/40 bg-emerald-500/10 shrink-0"
+            }
+            title={detail}
+          />
+        }
+      >
+        {unhealthy
+          ? <AlertTriangle className="h-3 w-3 mr-1" />
+          : <Activity className="h-3 w-3 mr-1" />}
+        G{runtime.generation} · {runtime.state}
+        {runtime.pendingEvents > 0 ? ` · ${runtime.pendingEvents}` : ""}
+      </TooltipTrigger>
+      <TooltipContent className="max-w-sm whitespace-pre-line">{detail}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -134,6 +181,7 @@ export function MissionCard({
         </div>
 
         {/* Status badge */}
+        <WorkbenchHealthBadge execution={execution} />
         {isRemoving ? (
           <Badge
             variant="outline"

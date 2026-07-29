@@ -30,12 +30,14 @@ model Project {
   description String?
   type           ProjectType     @default(NORMAL)
   gitUrl         String?
+  repositoryKey  String?     @unique
   localPath      String?
   projectType    ProjectCategory @default(FRONTEND)
   previewCommand String?
   previewPort    Int?
   previewPreset  String?
   previewInstallCommand String?
+  accessMode     ProjectAccessMode @default(NORMAL)
   // 知识库：groupId 把同一产品的多个仓库（前后端/trace/需求）归入一个 ProductGroup，
   // 问答时自动把同组兄弟项目一起纳入检索。knowledgeDir 是 repo 内知识库目录（相对 localPath），
   // 留空则用约定默认（见 src/lib/knowledge.ts DEFAULT_KNOWLEDGE_DIR）。
@@ -161,6 +163,8 @@ model Task {
   harnessMessages HarnessMessage[]
   workbenchParentEvents WorkbenchEvent[] @relation("WorkbenchEventParent")
   workbenchSourceEvents WorkbenchEvent[] @relation("WorkbenchEventSource")
+  workbenchBatches WorkbenchBatch[]
+  workbenchRuntime WorkbenchRuntime?
   version    Version?        @relation(fields: [versionId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
@@ -226,6 +230,7 @@ model WorkbenchEvent {
   priority     WorkbenchEventPriority @default(NORMAL)
   dedupKey     String                 @unique
   executionReviewKey String?          @unique
+  batchId      String?
   payload      String
   state        WorkbenchEventState    @default(PENDING)
   claimToken   String?
@@ -239,11 +244,61 @@ model WorkbenchEvent {
   parentTask Task           @relation("WorkbenchEventParent", fields: [parentTaskId], references: [id], onDelete: Cascade)
   sourceTask Task           @relation("WorkbenchEventSource", fields: [sourceTaskId], references: [id], onDelete: Cascade)
   execution  TaskExecution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  batch      WorkbenchBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   @@index([parentTaskId, state, priority, createdAt])
   @@index([sourceTaskId])
   @@index([executionId])
+  @@index([batchId])
   @@index([state, claimedAt])
+}
+
+/// Durable acknowledgement boundary between the coordinator and the resident
+/// Workbench agent. PTY delivery only advances a batch to DISPATCHED. The agent
+/// must explicitly acknowledge it before the associated inbox rows are consumed.
+model WorkbenchBatch {
+  id               String              @id
+  parentTaskId     String
+  eventIds         String
+  prompt           String
+  state            WorkbenchBatchState @default(CLAIMED)
+  dispatchAttempts Int                 @default(0)
+  dispatchedAt     DateTime?
+  ackedAt          DateTime?
+  resolvedAt       DateTime?
+  lastError        String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  parentTask Task             @relation(fields: [parentTaskId], references: [id], onDelete: Cascade)
+  events     WorkbenchEvent[]
+
+  @@index([parentTaskId, state, createdAt])
+  @@index([state, dispatchedAt])
+}
+
+/// Persisted operational projection for one resident project Workbench. This
+/// is observability state, not the inbox source of truth: WorkbenchEvent and
+/// WorkbenchBatch remain authoritative for replay and acknowledgement.
+model WorkbenchRuntime {
+  taskId              String                @id
+  executionId         String?
+  generation          Int                   @default(1)
+  state               WorkbenchRuntimeState @default(STARTING)
+  activeBatchId       String?
+  pendingEvents       Int                   @default(0)
+  oldestPendingAt     DateTime?
+  lastHeartbeatAt     DateTime               @default(now())
+  lastTurnCompletedAt DateTime?
+  blockedReason       String?
+  lastError           String?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([state, lastHeartbeatAt])
+  @@index([executionId])
 }
 
 // 无人值守：一张表记所有 harness→人 的消息（ask/notify/done/failed）—— 纯记录/日志，Tower 不发送。
@@ -768,6 +823,12 @@ enum ProjectType {
   GIT
 }
 
+enum ProjectAccessMode {
+  NORMAL
+  REVIEW_ONLY
+  FULL_WORK
+}
+
 enum TaskStatus {
   TODO
   IN_PROGRESS
@@ -807,6 +868,23 @@ enum WorkbenchEventState {
   PENDING
   PROCESSING
   CONSUMED
+}
+
+enum WorkbenchBatchState {
+  CLAIMED
+  DISPATCHED
+  ACKED
+  RESOLVED
+  FAILED
+}
+
+enum WorkbenchRuntimeState {
+  STARTING
+  IDLE
+  BUSY
+  BLOCKED
+  DEGRADED
+  STOPPED
 }
 
 enum GatewaySessionKind {

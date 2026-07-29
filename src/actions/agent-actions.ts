@@ -53,6 +53,15 @@ export interface ActiveExecutionInfo {
   startedAt: string | null; // ISO string for serialization
   /** Task carries the builtin "Tower" label → a system/workbench task, not completable via merge. */
   isSystemTask: boolean;
+  workbenchRuntime: {
+    generation: number;
+    state: "STARTING" | "IDLE" | "BUSY" | "BLOCKED" | "DEGRADED" | "STOPPED";
+    activeBatchId: string | null;
+    pendingEvents: number;
+    lastHeartbeatAt: string;
+    blockedReason: string | null;
+    lastError: string | null;
+  } | null;
 }
 
 export interface TerminalExecutionResult extends TerminalTargetSnapshot {
@@ -243,6 +252,16 @@ export async function stopPtyExecution(taskId: string): Promise<void> {
       execution.id, taskId, 0, terminalBuffer, summaryPath, execution.forkCommit
     );
   }
+  await db.workbenchRuntime.updateMany({
+    where: { taskId },
+    data: {
+      executionId: execution?.id ?? null,
+      state: "STOPPED",
+      activeBatchId: null,
+      blockedReason: "Workbench terminal was stopped",
+      lastHeartbeatAt: new Date(),
+    },
+  });
 
   refreshWorkspaces();
 }
@@ -748,6 +767,11 @@ export async function startPtyExecution(
   if (!task.project?.localPath) {
     throw new Error("Project has no local path configured");
   }
+  if (task.project.accessMode === "REVIEW_ONLY") {
+    throw new Error(
+      "REVIEW_ONLY projects cannot start terminal execution. The owner must explicitly change the project to FULL_WORK first.",
+    );
+  }
 
   // 1a. Enforce concurrency limit
   const maxConcurrent = await readConfigValue<number>("system.maxConcurrentExecutions", 20);
@@ -1149,6 +1173,7 @@ export async function getActiveExecutionsAcrossWorkspaces(): Promise<ActiveExecu
             include: { workspace: true },
           },
           labels: { include: { label: true } },
+          workbenchRuntime: true,
         },
       },
     },
@@ -1168,5 +1193,16 @@ export async function getActiveExecutionsAcrossWorkspaces(): Promise<ActiveExecu
     startedAt: e.startedAt?.toISOString() ?? null,
     // Builtin "Tower" label marks system/workbench tasks (same check the MCP report tools use).
     isSystemTask: e.task.labels.some((tl) => tl.label.name === "Tower" && tl.label.isBuiltin),
+    workbenchRuntime: e.task.workbenchRuntime
+      ? {
+          generation: e.task.workbenchRuntime.generation,
+          state: e.task.workbenchRuntime.state,
+          activeBatchId: e.task.workbenchRuntime.activeBatchId,
+          pendingEvents: e.task.workbenchRuntime.pendingEvents,
+          lastHeartbeatAt: e.task.workbenchRuntime.lastHeartbeatAt.toISOString(),
+          blockedReason: e.task.workbenchRuntime.blockedReason,
+          lastError: e.task.workbenchRuntime.lastError,
+        }
+      : null,
   }));
 }
