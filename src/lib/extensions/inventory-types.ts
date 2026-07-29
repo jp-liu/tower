@@ -1,8 +1,6 @@
-export type ExtensionKind =
-  | "tower-component"
-  | "cli-provider"
-  | "gateway-adapter"
-  | "system-dependency";
+import type { ExtensionKind as PackageExtensionKind } from "@tower-org/extension-sdk";
+
+export type ExtensionKind = PackageExtensionKind | "system-dependency";
 
 export type ExtensionSourceType =
   | "builtin"
@@ -71,4 +69,3 @@ export interface ExtensionInventoryItem {
   deployments?: ExtensionDeploymentState[];
   diagnostics: ExtensionDiagnostic[];
 }
-

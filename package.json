@@ -140,6 +140,7 @@
     "@tower-org/ai-provider-gemini": "workspace:*",
     "@tower-org/ai-runtime": "workspace:*",
     "@tower-org/ai-sdk": "workspace:*",
+    "@tower-org/extension-sdk": "workspace:*",
     "@anthropic-ai/claude-agent-sdk": "^0.2.114",
     "@base-ui/react": "^1.3.0",
     "@dnd-kit/core": "^6.3.1",

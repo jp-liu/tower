@@ -15,7 +15,7 @@ export default defineConfig({
       "server-only": path.resolve(__dirname, "./tests/server-only.ts"),
       "@tower-org/ai-runtime": path.resolve(__dirname, "./packages/ai-runtime/src/index.ts"),
       "@tower-org/ai-sdk": path.resolve(__dirname, "./packages/ai-sdk/src/index.ts"),
+      "@tower-org/extension-sdk": path.resolve(__dirname, "./packages/extension-sdk/src/index.ts"),
     },
   },
 });
-
