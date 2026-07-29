@@ -22,6 +22,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 vi.mock("@/lib/platform", () => ({
+  ensurePathInEnv: (env: Record<string, string | undefined>) => env,
   resolveCommandPathSync: () => "openclaw",
 }));
 

@@ -3,7 +3,7 @@ import { readConfigValue } from "@/lib/config-reader";
 import { db } from "@/lib/db";
 import { sendViaHermes } from "@/lib/harness/hermes-send";
 import { sendViaOpenClaw } from "@/lib/harness/openclaw-send";
-import { resolveCommandPathSync } from "@/lib/platform";
+import { ensurePathInEnv, resolveCommandPathSync } from "@/lib/platform";
 import { readHarnessGatewayRuntimeConfig } from "./gateway-config";
 import type { GatewaySendMetadata } from "./gateway-output";
 
@@ -235,7 +235,11 @@ async function findDestinationInOpenClawDirectory(input: {
     const { stdout } = await execFilePromise(
       cmd,
       ["directory", "groups", "list", "--channel", input.platform, "--query", raw, "--json", "--limit", "10"],
-      { timeout: 20_000, maxBuffer: 1024 * 1024, env: { ...process.env, ...(input.env ?? {}) } },
+      {
+        timeout: 20_000,
+        maxBuffer: 1024 * 1024,
+        env: ensurePathInEnv({ ...process.env, ...(input.env ?? {}) }) as NodeJS.ProcessEnv,
+      },
     );
     const parsed = JSON.parse(stdout) as Array<{ id?: string; name?: string }>;
     const normalized = normalizeName(raw);

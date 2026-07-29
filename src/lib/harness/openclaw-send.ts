@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { resolveCommandPathSync } from "@/lib/platform";
+import { ensurePathInEnv, resolveCommandPathSync } from "@/lib/platform";
 import { parseGatewaySendOutput, type GatewaySendMetadata } from "./gateway-output";
 
 const execFileAsync = promisify(execFile);
@@ -76,6 +76,10 @@ export async function sendViaOpenClaw(
   }
 
   const cmd = process.env.OPENCLAW_CLI_PATH || resolveOpenClawCommand();
+  const spawnEnv = ensurePathInEnv({
+    ...process.env,
+    ...(input.env ?? {}),
+  }) as NodeJS.ProcessEnv;
   const presentationJson = input.presentation ? JSON.stringify(input.presentation) : null;
   const primaryArgs = ["message", "send", "--channel", channel, "--target", target];
   if (input.replyToMessageId?.trim()) primaryArgs.push("--reply-to", input.replyToMessageId.trim());
@@ -109,7 +113,7 @@ export async function sendViaOpenClaw(
       const result = await execFileAsync(cmd, args, {
         timeout: 60_000,
         maxBuffer: 1024 * 1024,
-        env: { ...process.env, ...(input.env ?? {}) },
+        env: spawnEnv,
       });
       // Node's execFile has a custom promisify result object. Some compatible
       // launchers and test doubles expose stdout directly, so accept both.
