@@ -106,10 +106,17 @@ describe("OpenClaw Feishu send adapter", () => {
     await expect(sendViaOpenClaw({
       message: "fallback text must not replace the card",
       presentation: {
-        title: "小塔 · 项目讨论",
+        title: "💬 小塔 · 项目讨论",
         tone: "info",
         blocks: [
-          { type: "text", text: "Card body" },
+          { type: "section", title: "讨论结论", text: "Card body" },
+          {
+            type: "fields",
+            fields: [
+              { label: "状态", value: "执行中" },
+              { label: "优先级", value: "🔵 低" },
+            ],
+          },
           { type: "divider" },
           { type: "context", text: "Project context" },
         ],
@@ -137,8 +144,13 @@ describe("OpenClaw Feishu send adapter", () => {
     const payload = JSON.parse(String(request.body));
     expect(payload).toMatchObject({ msg_type: "interactive" });
     const card = JSON.parse(payload.content);
-    expect(card.header.title.content).toBe("小塔 · 项目讨论");
+    expect(card.header.title.content).toBe("💬 小塔 · 项目讨论");
     expect(JSON.stringify(card.elements)).toContain("Card body");
+    expect(JSON.stringify(card.elements)).toContain("执行中");
+    expect(card.elements).toContainEqual(expect.objectContaining({
+      tag: "div",
+      fields: expect.any(Array),
+    }));
     expect(String(request.body)).not.toContain("fallback text must not replace the card");
   });
 

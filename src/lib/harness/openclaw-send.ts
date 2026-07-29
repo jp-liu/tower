@@ -324,7 +324,7 @@ async function readAndVerifyFeishuReply(input: {
   };
 }
 
-function toFeishuInteractiveCard(presentation: unknown, fallbackMessage: string): Record<string, unknown> {
+export function toFeishuInteractiveCard(presentation: unknown, fallbackMessage: string): Record<string, unknown> {
   const value = presentation && typeof presentation === "object"
     ? presentation as { title?: unknown; tone?: unknown; blocks?: unknown }
     : {};
@@ -332,8 +332,44 @@ function toFeishuInteractiveCard(presentation: unknown, fallbackMessage: string)
   const blocks = Array.isArray(value.blocks) ? value.blocks : [{ type: "text", text: fallbackMessage }];
   const elements = blocks.flatMap((block): Array<Record<string, unknown>> => {
     if (!block || typeof block !== "object") return [];
-    const item = block as { type?: unknown; text?: unknown };
+    const item = block as {
+      type?: unknown;
+      text?: unknown;
+      title?: unknown;
+      fields?: unknown;
+    };
     if (item.type === "divider") return [{ tag: "hr" }];
+    if (item.type === "fields" && Array.isArray(item.fields)) {
+      const fields = item.fields.flatMap((field): Array<Record<string, unknown>> => {
+        if (!field || typeof field !== "object") return [];
+        const value = field as { label?: unknown; value?: unknown };
+        if (typeof value.label !== "string" || typeof value.value !== "string") return [];
+        if (!value.label.trim() || !value.value.trim()) return [];
+        return [{
+          is_short: true,
+          text: {
+            tag: "lark_md",
+            content: `**${value.label.trim()}**\n${value.value.trim()}`,
+          },
+        }];
+      });
+      return fields.length > 0 ? [{ tag: "div", fields }] : [];
+    }
+    if (
+      item.type === "section"
+      && typeof item.title === "string"
+      && item.title.trim()
+      && typeof item.text === "string"
+      && item.text.trim()
+    ) {
+      return [{
+        tag: "div",
+        text: {
+          tag: "lark_md",
+          content: `**${item.title.trim()}**\n${item.text.trim()}`,
+        },
+      }];
+    }
     if (typeof item.text !== "string" || !item.text.trim()) return [];
     if (item.type === "context") {
       return [{ tag: "note", elements: [{ tag: "plain_text", content: item.text }] }];
@@ -348,7 +384,10 @@ function toFeishuInteractiveCard(presentation: unknown, fallbackMessage: string)
     neutral: "grey",
   }[typeof value.tone === "string" ? value.tone : "neutral"] || "grey";
   return {
-    config: { wide_screen_mode: true },
+    config: {
+      wide_screen_mode: true,
+      enable_forward: true,
+    },
     header: { template, title: { tag: "plain_text", content: title } },
     elements: elements.length > 0 ? elements : [{ tag: "div", text: { tag: "lark_md", content: fallbackMessage } }],
   };

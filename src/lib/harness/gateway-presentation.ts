@@ -3,6 +3,8 @@ export type GatewayMessagePresentation = {
   tone: "info" | "success" | "warning" | "danger" | "neutral";
   blocks: Array<
     | { type: "text"; text: string }
+    | { type: "section"; title: string; text: string }
+    | { type: "fields"; fields: Array<{ label: string; value: string }> }
     | { type: "divider" }
     | { type: "context"; text: string }
   >;
@@ -13,6 +15,36 @@ function bounded(value: string | null | undefined, max = 2_000): string {
   return text.length > max ? `${text.slice(0, max - 3)}...` : text;
 }
 
+function statusLabel(value: string): string {
+  return {
+    TODO: "待处理",
+    PENDING: "准备中",
+    RUNNING: "执行中",
+    IN_PROGRESS: "执行中",
+    IN_REVIEW: "待审核",
+    COMPLETED: "已完成",
+    DONE: "已完成",
+    FAILED: "执行失败",
+    CANCELLED: "已取消",
+  }[value.toUpperCase()] || value;
+}
+
+function priorityLabel(value: string): string {
+  return {
+    CRITICAL: "🔴 紧急",
+    HIGH: "🟠 高",
+    MEDIUM: "🟡 中",
+    LOW: "🔵 低",
+  }[value.toUpperCase()] || value;
+}
+
+function branchLabel(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  return !normalized || normalized === "none" || normalized === "未创建分支"
+    ? "默认工作树"
+    : value;
+}
+
 export function extractTaskGoal(description: string | null): string {
   if (!description?.trim()) return "未提供";
   const match = description.match(/(?:^|\n)##\s*目标\s*\n([\s\S]*?)(?=\n##\s|$)/u);
@@ -21,12 +53,12 @@ export function extractTaskGoal(description: string | null): string {
 
 export function discussionPresentation(projectName: string, response: string): GatewayMessagePresentation {
   return {
-    title: "小塔 · 项目讨论",
+    title: "💬 小塔 · 项目讨论",
     tone: "info",
     blocks: [
-      { type: "text", text: bounded(response, 16_000) },
+      { type: "section", title: "讨论结论", text: bounded(response, 16_000) },
       { type: "divider" },
-      { type: "context", text: `项目：${projectName}` },
+      { type: "context", text: `📁 ${projectName} · 只读讨论` },
     ],
   };
 }
@@ -36,15 +68,23 @@ export function queuedPresentation(input: {
   inboundId: string;
 }): GatewayMessagePresentation {
   return {
-    title: "小塔 · 已排队",
+    title: "⏳ 小塔 · 请求已进入工作台",
     tone: "warning",
     blocks: [
       {
-        type: "text",
-        text: `请求已排队到 ${input.projectName} Workbench。任务尚未创建，创建成功后会另发确认。`,
+        type: "section",
+        title: "正在编排",
+        text: "Workbench 已接收请求，正在确认项目上下文并准备任务。创建成功后会在此消息下继续反馈。",
+      },
+      {
+        type: "fields",
+        fields: [
+          { label: "项目", value: input.projectName },
+          { label: "当前阶段", value: "排队 / 解析请求" },
+        ],
       },
       { type: "divider" },
-      { type: "context", text: `请求 ID：${input.inboundId}` },
+      { type: "context", text: `请求 ID · ${input.inboundId}` },
     ],
   };
 }
@@ -62,27 +102,30 @@ export function taskCreatedPresentation(input: {
   executionStatus?: string | null;
 }): GatewayMessagePresentation {
   const autoStart = input.autoStarted
-    ? `是${input.executionStatus ? `（${input.executionStatus}）` : ""}`
-    : "否";
+    ? `已启动${input.executionStatus ? ` · ${statusLabel(input.executionStatus)}` : ""}`
+    : "未自动启动";
   return {
-    title: "小塔 · 任务已创建",
+    title: "🚀 小塔 · 任务已创建",
     tone: "success",
     blocks: [
       {
         type: "text",
-        text: [
-          `任务标题：${input.title}`,
-          `项目：${input.projectName}`,
-          `优先级：${input.priority}`,
-          `状态：${input.status}`,
-          `工作区：${input.workspaceName}`,
-          `分支：${input.branch}`,
-          `任务目标：${bounded(input.goal, 1_200)}`,
-          `已自动启动：${autoStart}`,
-        ].join("\n"),
+        text: `**${bounded(input.title, 240)}**`,
       },
+      {
+        type: "fields",
+        fields: [
+          { label: "状态", value: statusLabel(input.status) },
+          { label: "优先级", value: priorityLabel(input.priority) },
+          { label: "项目", value: input.projectName },
+          { label: "工作区", value: input.workspaceName },
+          { label: "执行", value: autoStart },
+          { label: "分支", value: branchLabel(input.branch) },
+        ],
+      },
+      { type: "section", title: "任务目标", text: bounded(input.goal, 1_200) },
       { type: "divider" },
-      { type: "context", text: `任务 ID：${input.taskId}` },
+      { type: "context", text: `任务 ID · ${input.taskId}` },
     ],
   };
 }
@@ -96,20 +139,28 @@ export function finalResultPresentation(input: {
   branch: string;
 }): GatewayMessagePresentation {
   return {
-    title: "小塔 · 任务已完成",
+    title: "✅ 小塔 · 任务已完成",
     tone: "success",
     blocks: [
       {
         type: "text",
-        text: [
-          `任务标题：${input.title}`,
-          `结果：${bounded(input.summary, 8_000)}`,
-          `提交：${input.commitId} ${input.commitMessage}`,
-          `分支：${input.branch}`,
-        ].join("\n"),
+        text: `**${bounded(input.title, 240)}**`,
+      },
+      { type: "section", title: "验收结果", text: bounded(input.summary, 8_000) },
+      {
+        type: "fields",
+        fields: [
+          {
+            label: "代码提交",
+            value: input.commitId === "none"
+              ? "无提交"
+              : `${input.commitId}${input.commitMessage ? ` · ${bounded(input.commitMessage, 160)}` : ""}`,
+          },
+          { label: "分支", value: branchLabel(input.branch) },
+        ],
       },
       { type: "divider" },
-      { type: "context", text: `任务 ID：${input.taskId}` },
+      { type: "context", text: `任务 ID · ${input.taskId}` },
     ],
   };
 }
