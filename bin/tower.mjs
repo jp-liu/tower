@@ -310,6 +310,27 @@ function requireBuiltService() {
   }
 }
 
+function waitSync(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+function bootstrapLaunchAgent(target) {
+  let loaded = null;
+  // launchctl may return EIO briefly while a previous KeepAlive instance is
+  // still being torn down. Retry the same idempotent bootstrap rather than
+  // leaving Tower stopped after an otherwise valid service install.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    loaded = launchctl(["bootstrap", serviceDomain(), SERVICE_PLIST]);
+    if (loaded.status === 0) return loaded;
+    if (attempt < 4) waitSync(250 * (attempt + 1));
+  }
+  logError(
+    `Unable to bootstrap ${target} after 5 attempts: ` +
+    (loaded?.stderr || loaded?.stdout || "launchctl bootstrap failed").trim(),
+  );
+  process.exit(1);
+}
+
 function cmdMacService(action) {
   const target = `${serviceDomain()}/${SERVICE_LABEL}`;
   if (action === "install") {
@@ -318,11 +339,7 @@ function cmdMacService(action) {
     writeFileSync(SERVICE_PLIST, servicePlist(), { encoding: "utf-8", mode: 0o600 });
     try { chmodSync(SERVICE_PLIST, 0o600); } catch { /* non-POSIX filesystem */ }
     launchctl(["bootout", target]);
-    const loaded = launchctl(["bootstrap", serviceDomain(), SERVICE_PLIST]);
-    if (loaded.status !== 0) {
-      logError((loaded.stderr || loaded.stdout || "launchctl bootstrap failed").trim());
-      process.exit(1);
-    }
+    bootstrapLaunchAgent(target);
     const started = launchctl(["kickstart", "-k", target]);
     if (started.status !== 0) {
       logError((started.stderr || started.stdout || "launchctl kickstart failed").trim());
