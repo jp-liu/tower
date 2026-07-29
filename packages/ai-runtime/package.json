@@ -36,7 +36,7 @@
     "ai": "7.0.18",
     "ajv": "8.18.0",
     "semver": "7.7.4",
-    "tar": "7.5.13"
+    "tar": "7.5.22"
   },
   "devDependencies": {
     "@types/node": "^20",
