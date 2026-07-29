@@ -161,6 +161,7 @@ model Task {
   notes      ProjectNote[]
   assets     ProjectAsset[]
   harnessMessages HarnessMessage[]
+  harnessOutbounds HarnessOutbound[]
   workbenchParentEvents WorkbenchEvent[] @relation("WorkbenchEventParent")
   workbenchSourceEvents WorkbenchEvent[] @relation("WorkbenchEventSource")
   workbenchBatches WorkbenchBatch[]
@@ -262,6 +263,10 @@ model WorkbenchBatch {
   eventIds         String
   prompt           String
   state            WorkbenchBatchState @default(CLAIMED)
+  generation       Int                 @default(1)
+  leaseToken       String?
+  leaseExpiresAt   DateTime?
+  lastHeartbeatAt  DateTime?
   dispatchAttempts Int                 @default(0)
   dispatchedAt     DateTime?
   ackedAt          DateTime?
@@ -275,6 +280,7 @@ model WorkbenchBatch {
 
   @@index([parentTaskId, state, createdAt])
   @@index([state, dispatchedAt])
+  @@index([state, leaseExpiresAt])
 }
 
 /// Persisted operational projection for one resident project Workbench. This
@@ -317,9 +323,48 @@ model HarnessMessage {
   createdAt    DateTime @default(now())
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  outbound HarnessOutbound?
 
   @@index([taskId, kind, state])
   @@index([state])
+}
+
+// Durable outbox for task-to-human sends. The intent and HarnessMessage are
+// created before the external side effect. A stale SENDING claim is never
+// blindly retried because the platform may already have accepted it.
+model HarnessOutbound {
+  id                String               @id @default(cuid())
+  dedupKey          String               @unique
+  taskId            String
+  executionId       String?
+  harnessMessageId  String               @unique
+  gateway           String
+  downstream        String?
+  dest              String?
+  requestedTo       String?
+  profile           String?
+  scope             String
+  expectReply       Boolean              @default(false)
+  message           String
+  presentation      String?
+  state             HarnessOutboundState @default(PENDING)
+  attempts          Int                  @default(0)
+  claimToken        String?
+  claimExpiresAt    DateTime?
+  platform          String?
+  platformChatId    String?
+  platformMessageId String?
+  lastError         String?
+  nextAttemptAt     DateTime?
+  deliveredAt       DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  task    Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  harnessMessage HarnessMessage @relation(fields: [harnessMessageId], references: [id], onDelete: Cascade)
+
+  @@index([state, nextAttemptAt, createdAt])
+  @@index([taskId, createdAt])
 }
 
 // Platform delivery mapping for legacy [[tower:task=...]] ask/reply routing.
@@ -435,12 +480,21 @@ model GatewayDelivery {
 }
 
 enum HarnessState {
+  PENDING_DELIVERY
   OPEN
   ANSWERED
   CANCELLED
   IGNORED
   EXPIRED
   CLOSED
+}
+
+enum HarnessOutboundState {
+  PENDING
+  SENDING
+  DELIVERED
+  SENT_UNVERIFIED
+  FAILED
 }
 
 model TaskMessage {
@@ -816,6 +870,22 @@ model AppliedMigration {
   /// Migration id = filename without extension, e.g. "0001-insight-category".
   id        String   @id
   appliedAt DateTime @default(now())
+}
+
+// Database-wide ownership lease. One Tower data directory may be controlled by
+// only one runtime; process-local globalThis guards remain an optimization.
+model TowerRuntimeLease {
+  id              String   @id
+  ownerId         String
+  pid             Int
+  port            Int?
+  generation      Int      @default(1)
+  expiresAt       DateTime
+  lastHeartbeatAt DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([expiresAt])
 }
 
 enum ProjectType {

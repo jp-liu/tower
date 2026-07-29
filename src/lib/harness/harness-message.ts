@@ -44,18 +44,26 @@ export async function createAskMessage(args: {
   executionId?: string | null;
   question: string;
 }): Promise<{ messageId: string; execPaused: boolean }> {
-  await cancelOpenAsks(args.taskId);
-  const { messageId } = await recordHarnessMessage({
-    taskId: args.taskId,
-    executionId: args.executionId ?? null,
-    kind: "ask",
-    content: args.question,
+  return db.$transaction(async (tx) => {
+    await tx.harnessMessage.updateMany({
+      where: { taskId: args.taskId, kind: "ask", state: "OPEN" },
+      data: { state: "CANCELLED" },
+    });
+    const row = await tx.harnessMessage.create({
+      data: {
+        taskId: args.taskId,
+        executionId: args.executionId ?? null,
+        kind: "ask",
+        content: args.question,
+        state: "OPEN",
+      },
+    });
+    const paused = await tx.taskExecution.updateMany({
+      where: { taskId: args.taskId, status: "RUNNING" },
+      data: { status: "PAUSED" },
+    });
+    return { messageId: row.id, execPaused: paused.count > 0 };
   });
-  const paused = await db.taskExecution.updateMany({
-    where: { taskId: args.taskId, status: "RUNNING" },
-    data: { status: "PAUSED" },
-  });
-  return { messageId, execPaused: paused.count > 0 };
 }
 
 /** 该任务当前待回复的 ask（kind=ask AND state=OPEN 最新）；无则 null。 */

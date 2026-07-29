@@ -23,6 +23,7 @@ export const WORKBENCH_NORMAL_COALESCE_MS = 750;
 export const WORKBENCH_HIGH_COALESCE_MS = 100;
 export const WORKBENCH_CLAIM_LEASE_MS = 60_000;
 export const WORKBENCH_ACK_LEASE_MS = 120_000;
+export const WORKBENCH_PROCESSING_LEASE_MS = 5 * 60_000;
 export const WORKBENCH_MAX_BATCH_SIZE = 50;
 export const WORKBENCH_RECOVERY_BATCH_SIZE = 500;
 export const WORKBENCH_EVENTS_ENABLED_AT_KEY = "workbench.eventsEnabledAt";
@@ -79,6 +80,8 @@ export interface WorkbenchEventRecord {
 
 export interface WorkbenchDrainBatch {
   batchKey: string;
+  generation: number;
+  leaseToken: string;
   parentTaskId: string;
   parentExecutionId: string | null;
   eventIds: string[];
@@ -88,12 +91,15 @@ export interface WorkbenchDrainBatch {
 
 export interface WorkbenchDrainResult {
   batchKey?: string;
+  generation?: number;
+  leaseToken?: string;
   eventCount: number;
   delivered: boolean;
 }
 
 export interface WorkbenchBatchTransitionResult {
   batchId: string;
+  generation: number;
   state: "ACKED" | "RESOLVED";
   eventCount: number;
   noOp: boolean;
@@ -415,12 +421,18 @@ function eventHeading(kind: WorkbenchEventKind): string {
   }
 }
 
-export function buildWorkbenchBatchPrompt(events: WorkbenchEventRecord[], batchKey: string): string {
+export function buildWorkbenchBatchPrompt(
+  events: WorkbenchEventRecord[],
+  batchKey: string,
+  lease: { generation: number; leaseToken: string } = { generation: 1, leaseToken: "legacy" },
+): string {
   const protocol = [
     "",
     `[Tower durable batch: ${batchKey}]`,
-    `Delivery protocol: call ack_workbench_batch({ batchId: "${batchKey}" }) immediately after reading this request.`,
-    `After every item in this batch has been handled or durably delegated, call resolve_workbench_batch({ batchId: "${batchKey}" }).`,
+    `Delivery generation: ${lease.generation}`,
+    `Delivery protocol: call ack_workbench_batch({ batchId: "${batchKey}", leaseToken: "${lease.leaseToken}" }) immediately after reading this request.`,
+    `After every item in this batch has been handled or durably delegated, call resolve_workbench_batch({ batchId: "${batchKey}", leaseToken: "${lease.leaseToken}" }).`,
+    "For work taking longer than five minutes, renew responsibility with heartbeat_workbench_batch using the same batch id and lease token.",
     "A replay with the same batch id is not new work; inspect existing task links/state and continue idempotently.",
   ].join("\n");
 
@@ -529,13 +541,26 @@ export async function drainWorkbenchEvents(
     orderBy: { createdAt: "desc" },
     select: { id: true },
   });
+  const runtime = await recordWorkbenchRuntime(parentTaskId, "BUSY", {
+    executionId: parentExecution?.id ?? null,
+    blockedReason: "Claiming durable Workbench batch",
+  });
+  const leaseToken = randomUUID();
+  const claimedAt = new Date();
+  const claimExpiresAt = new Date(claimedAt.getTime() + WORKBENCH_CLAIM_LEASE_MS);
+  const prompt = buildWorkbenchBatchPrompt(events, batchKey, {
+    generation: runtime.generation,
+    leaseToken,
+  });
   const batch: WorkbenchDrainBatch = {
     batchKey,
+    generation: runtime.generation,
+    leaseToken,
     parentTaskId,
     parentExecutionId: parentExecution?.id ?? null,
     eventIds: events.map((event) => event.id),
     events,
-    prompt: buildWorkbenchBatchPrompt(events, batchKey),
+    prompt,
   };
 
   try {
@@ -547,6 +572,10 @@ export async function drainWorkbenchEvents(
           eventIds: JSON.stringify(batch.eventIds),
           prompt: batch.prompt,
           state: "CLAIMED",
+          generation: batch.generation,
+          leaseToken: batch.leaseToken,
+          leaseExpiresAt: claimExpiresAt,
+          lastHeartbeatAt: claimedAt,
           lastError: null,
           dispatchedAt: null,
           ackedAt: null,
@@ -557,6 +586,10 @@ export async function drainWorkbenchEvents(
           parentTaskId,
           eventIds: JSON.stringify(batch.eventIds),
           prompt: batch.prompt,
+          generation: batch.generation,
+          leaseToken: batch.leaseToken,
+          leaseExpiresAt: claimExpiresAt,
+          lastHeartbeatAt: claimedAt,
         },
       });
       await tx.workbenchEvent.updateMany({
@@ -565,7 +598,17 @@ export async function drainWorkbenchEvents(
       });
       await tx.taskMessage.upsert({
         where: { id: batchKey },
-        update: {},
+        update: {
+          executionId: batch.parentExecutionId,
+          content: batch.prompt,
+          metadata: JSON.stringify({
+            type: "workbench_event_batch",
+            batchKey,
+            generation: batch.generation,
+            leaseToken: batch.leaseToken,
+            eventIds: batch.eventIds,
+          }),
+        },
         create: {
           id: batchKey,
           taskId: parentTaskId,
@@ -575,21 +618,29 @@ export async function drainWorkbenchEvents(
           metadata: JSON.stringify({
             type: "workbench_event_batch",
             batchKey,
+            generation: batch.generation,
+            leaseToken: batch.leaseToken,
             eventIds: batch.eventIds,
           }),
         },
       });
     });
     await deliver(batch);
-    await db.workbenchBatch.update({
-      where: { id: batchKey },
+    const dispatchedAt = new Date();
+    const dispatched = await db.workbenchBatch.updateMany({
+      where: { id: batchKey, state: "CLAIMED", leaseToken: batch.leaseToken },
       data: {
         state: "DISPATCHED",
         dispatchAttempts: { increment: 1 },
-        dispatchedAt: new Date(),
+        dispatchedAt,
+        leaseExpiresAt: new Date(dispatchedAt.getTime() + WORKBENCH_ACK_LEASE_MS),
+        lastHeartbeatAt: dispatchedAt,
         lastError: null,
       },
     });
+    if (dispatched.count !== 1) {
+      throw new Error(`Workbench batch ${batchKey} lost its delivery lease before dispatch`);
+    }
     await recordWorkbenchRuntime(parentTaskId, "BUSY", {
       activeBatchId: batchKey,
       blockedReason: "Waiting for Workbench batch acknowledgement",
@@ -609,10 +660,20 @@ export async function drainWorkbenchEvents(
         });
       });
     }
-    return { batchKey, eventCount: events.length, delivered: true };
+    return {
+      batchKey,
+      generation: batch.generation,
+      leaseToken: batch.leaseToken,
+      eventCount: events.length,
+      delivered: true,
+    };
   } catch (error) {
     await db.workbenchBatch.updateMany({
-      where: { id: batchKey, state: { in: ["CLAIMED", "DISPATCHED"] } },
+      where: {
+        id: batchKey,
+        state: { in: ["CLAIMED", "DISPATCHED"] },
+        leaseToken: batch.leaseToken,
+      },
       data: {
         state: "FAILED",
         lastError: (error instanceof Error ? error.message : String(error)).slice(0, 2000),
@@ -629,13 +690,20 @@ export async function drainWorkbenchEvents(
       batchKey,
       error: error instanceof Error ? error.message : String(error),
     });
-    return { batchKey, eventCount: events.length, delivered: false };
+    return {
+      batchKey,
+      generation: batch.generation,
+      leaseToken: batch.leaseToken,
+      eventCount: events.length,
+      delivered: false,
+    };
   }
 }
 
 export async function acknowledgeWorkbenchBatch(
   batchId: string,
   parentTaskId: string,
+  leaseToken: string,
 ): Promise<WorkbenchBatchTransitionResult> {
   const result = await db.$transaction(async (tx) => {
     const batch = await tx.workbenchBatch.findUnique({ where: { id: batchId } });
@@ -643,10 +711,34 @@ export async function acknowledgeWorkbenchBatch(
     if (batch.parentTaskId !== parentTaskId) {
       throw new Error(`Workbench batch ${batchId} belongs to a different parent task`);
     }
-    if (batch.state === "RESOLVED" || batch.state === "ACKED") {
+    if (batch.state === "RESOLVED") {
       return {
         batchId,
+        generation: batch.generation,
         state: batch.state,
+        eventCount: countBatchEvents(batch.eventIds),
+        noOp: true,
+      };
+    }
+    if (batch.leaseToken !== leaseToken) {
+      throw new Error(`Workbench batch ${batchId} lease token is stale`);
+    }
+    if (!batch.leaseExpiresAt || batch.leaseExpiresAt.getTime() <= Date.now()) {
+      throw new Error(`Workbench batch ${batchId} lease has expired`);
+    }
+    if (batch.state === "ACKED") {
+      const heartbeatAt = new Date();
+      await tx.workbenchBatch.update({
+        where: { id: batchId },
+        data: {
+          leaseExpiresAt: new Date(heartbeatAt.getTime() + WORKBENCH_PROCESSING_LEASE_MS),
+          lastHeartbeatAt: heartbeatAt,
+        },
+      });
+      return {
+        batchId,
+        generation: batch.generation,
+        state: "ACKED" as const,
         eventCount: countBatchEvents(batch.eventIds),
         noOp: true,
       };
@@ -654,22 +746,27 @@ export async function acknowledgeWorkbenchBatch(
     if (batch.state !== "DISPATCHED") {
       throw new Error(`Workbench batch ${batchId} is ${batch.state}, not DISPATCHED`);
     }
-    const consumedAt = new Date();
-    const events = await tx.workbenchEvent.updateMany({
+    const ackedAt = new Date();
+    const eventCount = await tx.workbenchEvent.count({
       where: { batchId, state: "PROCESSING" },
-      data: {
-        state: "CONSUMED",
-        claimToken: null,
-        claimedAt: null,
-        consumedAt,
-        lastError: null,
-      },
     });
     await tx.workbenchBatch.update({
       where: { id: batchId },
-      data: { state: "ACKED", ackedAt: consumedAt, lastError: null },
+      data: {
+        state: "ACKED",
+        ackedAt,
+        leaseExpiresAt: new Date(ackedAt.getTime() + WORKBENCH_PROCESSING_LEASE_MS),
+        lastHeartbeatAt: ackedAt,
+        lastError: null,
+      },
     });
-    return { batchId, state: "ACKED" as const, eventCount: events.count, noOp: false };
+    return {
+      batchId,
+      generation: batch.generation,
+      state: "ACKED" as const,
+      eventCount,
+      noOp: false,
+    };
   });
   await recordWorkbenchRuntime(parentTaskId, "BUSY", {
     activeBatchId: batchId,
@@ -681,6 +778,7 @@ export async function acknowledgeWorkbenchBatch(
 export async function resolveWorkbenchBatch(
   batchId: string,
   parentTaskId: string,
+  leaseToken: string,
 ): Promise<WorkbenchBatchTransitionResult> {
   const result = await db.$transaction(async (tx) => {
     const batch = await tx.workbenchBatch.findUnique({ where: { id: batchId } });
@@ -691,22 +789,46 @@ export async function resolveWorkbenchBatch(
     if (batch.state === "RESOLVED") {
       return {
         batchId,
+        generation: batch.generation,
         state: "RESOLVED" as const,
         eventCount: countBatchEvents(batch.eventIds),
         noOp: true,
       };
     }
+    if (batch.leaseToken !== leaseToken) {
+      throw new Error(`Workbench batch ${batchId} lease token is stale`);
+    }
+    if (!batch.leaseExpiresAt || batch.leaseExpiresAt.getTime() <= Date.now()) {
+      throw new Error(`Workbench batch ${batchId} lease has expired`);
+    }
     if (batch.state !== "ACKED") {
       throw new Error(`Workbench batch ${batchId} must be ACKED before it can be resolved`);
     }
+    const resolvedAt = new Date();
+    const events = await tx.workbenchEvent.updateMany({
+      where: { batchId, state: "PROCESSING" },
+      data: {
+        state: "CONSUMED",
+        claimToken: null,
+        claimedAt: null,
+        consumedAt: resolvedAt,
+        lastError: null,
+      },
+    });
     await tx.workbenchBatch.update({
       where: { id: batchId },
-      data: { state: "RESOLVED", resolvedAt: new Date() },
+      data: {
+        state: "RESOLVED",
+        resolvedAt,
+        leaseExpiresAt: null,
+        lastHeartbeatAt: resolvedAt,
+      },
     });
     return {
       batchId,
+      generation: batch.generation,
       state: "RESOLVED" as const,
-      eventCount: countBatchEvents(batch.eventIds),
+      eventCount: events.count,
       noOp: false,
     };
   });
@@ -715,6 +837,33 @@ export async function resolveWorkbenchBatch(
     turnCompleted: true,
   });
   return result;
+}
+
+export async function heartbeatWorkbenchBatch(
+  batchId: string,
+  parentTaskId: string,
+  leaseToken: string,
+): Promise<{ batchId: string; generation: number; state: "ACKED"; leaseExpiresAt: Date }> {
+  const heartbeatAt = new Date();
+  const leaseExpiresAt = new Date(heartbeatAt.getTime() + WORKBENCH_PROCESSING_LEASE_MS);
+  const updated = await db.workbenchBatch.updateMany({
+    where: {
+      id: batchId,
+      parentTaskId,
+      state: "ACKED",
+      leaseToken,
+      leaseExpiresAt: { gt: heartbeatAt },
+    },
+    data: { lastHeartbeatAt: heartbeatAt, leaseExpiresAt },
+  });
+  if (updated.count !== 1) {
+    throw new Error(`Workbench batch ${batchId} is not owned by this active lease`);
+  }
+  const batch = await db.workbenchBatch.findUniqueOrThrow({
+    where: { id: batchId },
+    select: { generation: true },
+  });
+  return { batchId, generation: batch.generation, state: "ACKED", leaseExpiresAt };
 }
 
 export async function deliverWorkbenchBatchToParent(batch: WorkbenchDrainBatch): Promise<void> {
@@ -942,48 +1091,91 @@ export async function recoverWorkbenchEventClaims(now = new Date()): Promise<num
   const expiredBefore = new Date(now.getTime() - WORKBENCH_CLAIM_LEASE_MS);
   const ackExpiredBefore = new Date(now.getTime() - WORKBENCH_ACK_LEASE_MS);
   const recovery = await db.$transaction(async (tx) => {
-    const expired = await tx.workbenchEvent.findMany({
+    const expiredBatches = await tx.workbenchBatch.findMany({
       where: {
-        state: "PROCESSING",
         OR: [
-          { batchId: null, claimedAt: { lt: expiredBefore } },
-          { batchId: null, claimedAt: null },
-          { batch: { state: "DISPATCHED", dispatchedAt: { lt: ackExpiredBefore } } },
-          { batch: { state: "FAILED" } },
+          {
+            state: { in: ["CLAIMED", "DISPATCHED", "ACKED"] },
+            leaseExpiresAt: { lt: now },
+          },
+          {
+            state: "CLAIMED",
+            leaseExpiresAt: null,
+            updatedAt: { lt: expiredBefore },
+          },
+          {
+            state: "DISPATCHED",
+            leaseExpiresAt: null,
+            dispatchedAt: { lt: ackExpiredBefore },
+          },
+          {
+            state: "ACKED",
+            leaseExpiresAt: null,
+            ackedAt: { lt: new Date(now.getTime() - WORKBENCH_PROCESSING_LEASE_MS) },
+          },
+          { state: "FAILED" },
         ],
       },
-      select: { id: true, batchId: true },
+      select: { id: true, parentTaskId: true, state: true },
+    });
+    const expiredBatchIds = expiredBatches.map((batch) => batch.id);
+    const expired = await tx.workbenchEvent.findMany({
+      where: {
+        OR: [
+          {
+            state: "PROCESSING",
+            batchId: null,
+            claimedAt: { lt: expiredBefore },
+          },
+          {
+            state: "PROCESSING",
+            batchId: null,
+            claimedAt: null,
+          },
+          ...(expiredBatchIds.length > 0
+            ? [{
+                state: { in: ["PROCESSING", "CONSUMED"] },
+                batchId: { in: expiredBatchIds },
+              } satisfies Prisma.WorkbenchEventWhereInput]
+            : []),
+        ],
+      },
+      select: { id: true, batchId: true, parentTaskId: true },
     });
     if (expired.length === 0) return { count: 0, parentTaskIds: [] as string[] };
     const batchIds = [...new Set(expired.flatMap((event) => event.batchId ? [event.batchId] : []))];
     if (batchIds.length > 0) {
       await tx.workbenchBatch.updateMany({
-        where: { id: { in: batchIds }, state: { in: ["CLAIMED", "DISPATCHED"] } },
-        data: { state: "FAILED", lastError: "Workbench did not acknowledge the dispatched batch before its lease expired" },
+        where: { id: { in: batchIds }, state: { in: ["CLAIMED", "DISPATCHED", "ACKED", "FAILED"] } },
+        data: {
+          state: "FAILED",
+          leaseExpiresAt: null,
+          lastError: "Workbench batch responsibility lease expired; replaying the same batch id",
+        },
       });
     }
     const result = await tx.workbenchEvent.updateMany({
-      where: { id: { in: expired.map((event) => event.id) }, state: "PROCESSING" },
+      where: {
+        id: { in: expired.map((event) => event.id) },
+        state: { in: ["PROCESSING", "CONSUMED"] },
+      },
       data: {
         state: "PENDING",
         claimToken: null,
         claimedAt: null,
         batchId: null,
-        lastError: "Workbench batch acknowledgement timed out; returned to pending",
+        consumedAt: null,
+        lastError: "Workbench responsibility lease expired; returned to pending for same-batch replay",
       },
     });
-    const parents = await tx.workbenchEvent.findMany({
-      where: { id: { in: expired.map((event) => event.id) } },
-      distinct: ["parentTaskId"],
-      select: { parentTaskId: true },
-    });
-    return { count: result.count, parentTaskIds: parents.map((parent) => parent.parentTaskId) };
+    const parentTaskIds = [...new Set(expired.map((event) => event.parentTaskId))];
+    return { count: result.count, parentTaskIds };
   });
   for (const parentTaskId of recovery.parentTaskIds) {
     await recordWorkbenchRuntime(parentTaskId, "BLOCKED", {
       activeBatchId: null,
-      blockedReason: "Batch acknowledgement timed out; work returned to pending",
-      lastError: "Workbench batch acknowledgement timed out",
+      blockedReason: "Batch responsibility lease expired; work returned to pending",
+      lastError: "Workbench batch lease expired",
     }).catch(() => undefined);
   }
   return recovery.count;

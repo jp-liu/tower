@@ -3,6 +3,7 @@ import "server-only";
 import { execFile } from "node:child_process";
 import os from "node:os";
 import { promisify } from "node:util";
+import { db } from "@/lib/db";
 
 const execFileAsync = promisify(execFile);
 const MAX_OUTPUT = 160_000;
@@ -78,13 +79,47 @@ function summarizeOpenClawStatus(output: string) {
   }
 }
 
+async function towerControlPlaneHealth() {
+  const now = new Date();
+  const [lease, outbounds, batches] = await Promise.all([
+    db.towerRuntimeLease.findUnique({ where: { id: "tower-runtime" } }),
+    db.harnessOutbound.groupBy({ by: ["state"], _count: { _all: true } }),
+    db.workbenchBatch.groupBy({
+      by: ["state"],
+      where: { state: { in: ["CLAIMED", "DISPATCHED", "ACKED", "FAILED"] } },
+      _count: { _all: true },
+    }),
+  ]);
+  return {
+    runtimeLease: lease
+      ? {
+          pid: lease.pid,
+          port: lease.port,
+          generation: lease.generation,
+          owned: lease.expiresAt > now,
+          expiresAt: lease.expiresAt.toISOString(),
+          lastHeartbeatAt: lease.lastHeartbeatAt.toISOString(),
+        }
+      : null,
+    harnessOutbounds: Object.fromEntries(
+      outbounds.map((row) => [row.state, row._count._all]),
+    ),
+    activeWorkbenchBatches: Object.fromEntries(
+      batches.map((row) => [row.state, row._count._all]),
+    ),
+  };
+}
+
 export async function getGatewayRuntimeHealth(input: {
   gateway: GatewayRuntimeKind;
   trace?: string;
   includeLogs?: boolean;
 }) {
   if (input.gateway === "openclaw") {
-    const status = await run("openclaw", ["gateway", "status", "--json"]);
+    const [status, tower] = await Promise.all([
+      run("openclaw", ["gateway", "status", "--json"]),
+      towerControlPlaneHealth(),
+    ]);
     const logs = input.includeLogs === false
       ? null
       : await run("openclaw", [
@@ -102,6 +137,7 @@ export async function getGatewayRuntimeHealth(input: {
       gateway: "openclaw" as const,
       healthy: status.ok && Boolean((summarizeOpenClawStatus(status.output) as { rpcOk?: unknown }).rpcOk),
       status: status.ok ? summarizeOpenClawStatus(status.output) : { error: status.error },
+      tower,
       logs: logs
         ? logs.ok
           ? { matchedTrace: Boolean(input.trace && logs.output.toLowerCase().includes(input.trace.toLowerCase())), lines: boundedLogLines(logs.output, input.trace) }
@@ -110,10 +146,11 @@ export async function getGatewayRuntimeHealth(input: {
     };
   }
 
-  const [status, gatewayLogs, errorLogs] = await Promise.all([
+  const [status, gatewayLogs, errorLogs, tower] = await Promise.all([
     run("hermes", ["status", "--all"], 12_000),
     input.includeLogs === false ? Promise.resolve(null) : run("hermes", ["logs", "gateway", "-n", "120"], 8_000),
     input.includeLogs === false ? Promise.resolve(null) : run("hermes", ["logs", "errors", "-n", "120"], 8_000),
+    towerControlPlaneHealth(),
   ]);
   const combinedLogs = [gatewayLogs, errorLogs]
     .flatMap((result) => result?.ok ? result.output.split(/\r?\n/) : [])
@@ -122,6 +159,7 @@ export async function getGatewayRuntimeHealth(input: {
     gateway: "hermes" as const,
     healthy: status.ok && !/\b(failed|not running|unavailable)\b/i.test(status.output),
     status: status.ok ? { summary: status.output.slice(0, 8_000) } : { error: status.error },
+    tower,
     logs: input.includeLogs === false
       ? null
       : {

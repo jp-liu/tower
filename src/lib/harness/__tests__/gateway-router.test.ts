@@ -196,7 +196,7 @@ describe("gateway inbound routing", () => {
 
   it("applies a hard queued-work cap before accepting more channel work", async () => {
     await db.gatewayInbound.createMany({
-      data: Array.from({ length: 51 }, (_, index) => ({
+      data: Array.from({ length: 50 }, (_, index) => ({
         dedupKey: `queue-cap-${index}`,
         gateway: "openclaw",
         platform: "feishu",

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSignedInternalRequest } from "@/lib/internal-api-auth";
 import {
   acknowledgeWorkbenchBatch,
+  heartbeatWorkbenchBatch,
   resolveWorkbenchBatch,
 } from "@/lib/workbench/coordinator";
 
@@ -14,11 +15,19 @@ const schema = z.discriminatedUnion("action", [
     action: z.literal("ack"),
     batchId: z.string().trim().min(1).max(128),
     parentTaskId: z.string().trim().min(1).max(128),
+    leaseToken: z.string().trim().min(1).max(128),
+  }).strict(),
+  z.object({
+    action: z.literal("heartbeat"),
+    batchId: z.string().trim().min(1).max(128),
+    parentTaskId: z.string().trim().min(1).max(128),
+    leaseToken: z.string().trim().min(1).max(128),
   }).strict(),
   z.object({
     action: z.literal("resolve"),
     batchId: z.string().trim().min(1).max(128),
     parentTaskId: z.string().trim().min(1).max(128),
+    leaseToken: z.string().trim().min(1).max(128),
   }).strict(),
 ]);
 
@@ -31,8 +40,22 @@ export async function PUT(request: NextRequest) {
   }
   try {
     const result = parsed.data.action === "ack"
-      ? await acknowledgeWorkbenchBatch(parsed.data.batchId, parsed.data.parentTaskId)
-      : await resolveWorkbenchBatch(parsed.data.batchId, parsed.data.parentTaskId);
+      ? await acknowledgeWorkbenchBatch(
+          parsed.data.batchId,
+          parsed.data.parentTaskId,
+          parsed.data.leaseToken,
+        )
+      : parsed.data.action === "heartbeat"
+        ? await heartbeatWorkbenchBatch(
+            parsed.data.batchId,
+            parsed.data.parentTaskId,
+            parsed.data.leaseToken,
+          )
+        : await resolveWorkbenchBatch(
+            parsed.data.batchId,
+            parsed.data.parentTaskId,
+            parsed.data.leaseToken,
+          );
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(

@@ -41,6 +41,9 @@ const GATEWAY_RATE_WINDOW_MS = 60_000;
 const GATEWAY_SENDER_RATE_LIMIT = 30;
 const GATEWAY_CHAT_RATE_LIMIT = 120;
 const GATEWAY_CHAT_QUEUE_LIMIT = 50;
+const GATEWAY_GLOBAL_QUEUE_LIMIT = 500;
+const GATEWAY_PROJECT_QUEUE_LIMIT = 100;
+const WORKBENCH_ACTIVE_EVENT_LIMIT = 100;
 const DELIVERY_RETRY_BASE_MS = 5_000;
 const DELIVERY_RETRY_MAX_MS = 5 * 60_000;
 const DISCUSSION_HISTORY_CHAR_LIMIT = 12_000;
@@ -113,7 +116,7 @@ export type GatewayRouteResult =
       mode: "rate_limited";
       inboundId: string;
       deduped: boolean;
-      scope: "sender" | "chat" | "queue";
+      scope: "sender" | "chat" | "queue" | "global" | "project" | "workbench";
       retryAfterSeconds: number;
       instructions: string;
     }
@@ -975,7 +978,7 @@ export async function routeGatewayInbound(
   }
 
   const rateWindowStart = new Date(Date.now() - GATEWAY_RATE_WINDOW_MS);
-  const [senderCount, chatCount, queuedCount] = await Promise.all([
+  const [senderCount, chatCount, queuedCount, globalQueuedCount] = await Promise.all([
     input.senderId
       ? db.gatewayInbound.count({
           where: {
@@ -1000,9 +1003,12 @@ export async function routeGatewayInbound(
         state: "QUEUED",
       },
     }),
+    db.gatewayInbound.count({ where: { state: "QUEUED" } }),
   ]);
-  const limitedScope: "sender" | "chat" | "queue" | null =
-    queuedCount > GATEWAY_CHAT_QUEUE_LIMIT
+  const limitedScope: "sender" | "chat" | "queue" | "global" | null =
+    globalQueuedCount >= GATEWAY_GLOBAL_QUEUE_LIMIT
+      ? "global"
+      : queuedCount >= GATEWAY_CHAT_QUEUE_LIMIT
       ? "queue"
       : senderCount > GATEWAY_SENDER_RATE_LIMIT
         ? "sender"
@@ -1015,8 +1021,8 @@ export async function routeGatewayInbound(
       inboundId: created.inbound.id,
       deduped: false,
       scope: limitedScope,
-      retryAfterSeconds: limitedScope === "queue" ? 120 : 60,
-      instructions: limitedScope === "queue"
+      retryAfterSeconds: limitedScope === "queue" || limitedScope === "global" ? 120 : 60,
+      instructions: limitedScope === "queue" || limitedScope === "global"
         ? "This trusted channel already has too many queued Workbench requests. Do not create or retry work now; ask the OWNER to wait or diagnose the backlog."
         : "The sender or trusted channel exceeded the Tower gateway rate limit. Do not call other Tower tools for this message; ask the user to retry after the reported delay.",
     };
@@ -1136,10 +1142,53 @@ export async function routeGatewayInbound(
 
   const workbenchTaskId = await ensureTowerTask(resolved.project.projectId, resolved.project.name);
   const session = await ensureSession(input, "WORKBENCH", resolved.project, workbenchTaskId);
-  await db.gatewayInbound.update({
-    where: { id: created.inbound.id },
-    data: { sessionId: session.id, state: "QUEUED" },
+  const admission = await db.$transaction(async (tx) => {
+    const [projectQueued, workbenchEvents, globalQueued] = await Promise.all([
+      tx.gatewayInbound.count({
+        where: {
+          state: "QUEUED",
+          session: { projectId: resolved.project.projectId },
+        },
+      }),
+      tx.workbenchEvent.count({
+        where: {
+          parentTaskId: workbenchTaskId,
+          state: { in: ["PENDING", "PROCESSING"] },
+        },
+      }),
+      tx.gatewayInbound.count({ where: { state: "QUEUED" } }),
+    ]);
+    const scope: "global" | "project" | "workbench" | null =
+      globalQueued >= GATEWAY_GLOBAL_QUEUE_LIMIT
+        ? "global"
+        : projectQueued >= GATEWAY_PROJECT_QUEUE_LIMIT
+          ? "project"
+          : workbenchEvents >= WORKBENCH_ACTIVE_EVENT_LIMIT
+            ? "workbench"
+            : null;
+    if (!scope) {
+      await tx.gatewayInbound.update({
+        where: { id: created.inbound.id },
+        data: { sessionId: session.id, state: "QUEUED" },
+      });
+    }
+    return { scope, projectQueued, workbenchEvents, globalQueued };
   });
+  if (admission.scope) {
+    const result: GatewayRouteResult = {
+      mode: "rate_limited",
+      inboundId: created.inbound.id,
+      deduped: false,
+      scope: admission.scope,
+      retryAfterSeconds: 120,
+      instructions:
+        `Tower admission control rejected this request at the ${admission.scope} quota ` +
+        `(projectQueued=${admission.projectQueued}, workbenchEvents=${admission.workbenchEvents}, ` +
+        `globalQueued=${admission.globalQueued}). Ask the OWNER to wait or diagnose the backlog.`,
+    };
+    await saveRoute(created.inbound.id, result, "PROCESSED");
+    return result;
+  }
   await enqueueWorkbenchEvent({
     parentTaskId: workbenchTaskId,
     sourceTaskId: workbenchTaskId,

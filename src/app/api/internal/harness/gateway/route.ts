@@ -26,7 +26,10 @@ const inboundSchema = z.object({
   taskId: z.string().trim().min(1).max(128).optional(),
   project: z.string().trim().min(1).max(512).optional(),
   intent: z.enum(["DIRECT", "TOWER", "PROJECT_DISCUSSION", "PROJECT_WORK"]),
-  content: z.string().trim().min(1).max(16_000),
+  content: z.string().trim().min(1).max(16_000).refine(
+    (value) => Buffer.byteLength(value, "utf8") <= 64_000,
+    "Gateway payload exceeds the 64 KB storage budget",
+  ),
   sessionAction: z.enum(["CONTINUE", "NEW", "CLOSE"]).optional(),
   startNewWork: z.boolean().optional(),
 }).strict();

@@ -3,6 +3,33 @@ const instrumentationGlobal = globalThis as typeof globalThis & {
 };
 
 async function registerNodeRuntime() {
+    const {
+      acquireTowerRuntimeLease,
+      heartbeatTowerRuntimeLease,
+      RUNTIME_LEASE_HEARTBEAT_MS,
+      towerRuntimeOwnerId,
+    } = await import("@/lib/runtime-leader");
+    const runtimeOwnerId = towerRuntimeOwnerId();
+    await acquireTowerRuntimeLease(runtimeOwnerId);
+    let runtimeLeaseHeartbeatFailures = 0;
+    const runtimeLeaseHeartbeat = setInterval(() => {
+      void heartbeatTowerRuntimeLease(runtimeOwnerId).then((owned) => {
+        runtimeLeaseHeartbeatFailures = 0;
+        if (!owned) {
+          console.error("[runtime-leader] Database runtime lease was lost; terminating to prevent split brain");
+          process.exit(78);
+        }
+      }).catch((error) => {
+        runtimeLeaseHeartbeatFailures++;
+        console.error("[runtime-leader] Database runtime heartbeat failed:", error);
+        if (runtimeLeaseHeartbeatFailures >= 3) {
+          console.error("[runtime-leader] Lease could expire before the next safe heartbeat; terminating");
+          process.exit(78);
+        }
+      });
+    }, RUNTIME_LEASE_HEARTBEAT_MS);
+    runtimeLeaseHeartbeat.unref?.();
+
     const { pruneOrphanedWorktrees, cleanupStaleExecutions, ensureTowerLabel, ensureDefaultWorkspace } = await import(
       "@/lib/instrumentation-tasks"
     );
@@ -97,6 +124,33 @@ async function registerNodeRuntime() {
       };
       setTimeout(() => void recoverGateway(), 1_000);
       setInterval(() => void recoverGateway(), 10_000);
+    }
+
+    // Durable task-to-human outbox. A send intent is committed before the
+    // platform side effect. Stale in-flight claims become SENT_UNVERIFIED and
+    // are never blindly duplicated.
+    const gHarnessOutbound = globalThis as typeof globalThis & {
+      __harnessOutboundRecoveryStarted?: boolean;
+      __harnessOutboundRecoveryRunning?: boolean;
+    };
+    if (!gHarnessOutbound.__harnessOutboundRecoveryStarted) {
+      gHarnessOutbound.__harnessOutboundRecoveryStarted = true;
+      const recoverOutbounds = async () => {
+        if (gHarnessOutbound.__harnessOutboundRecoveryRunning) return;
+        gHarnessOutbound.__harnessOutboundRecoveryRunning = true;
+        try {
+          const { recoverHarnessOutbounds } = await import(
+            "@/lib/harness/harness-outbound"
+          );
+          await recoverHarnessOutbounds();
+        } catch (error) {
+          console.error("[harness-outbound] Durable recovery failed:", error);
+        } finally {
+          gHarnessOutbound.__harnessOutboundRecoveryRunning = false;
+        }
+      };
+      setTimeout(() => void recoverOutbounds(), 1_500);
+      setInterval(() => void recoverOutbounds(), 10_000);
     }
 
     // Ensure .tower/ directory exists for the assistant persona

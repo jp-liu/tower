@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { extractTowerTaskId, findHarnessDeliveryByPlatformMessageId, recordHarnessDelivery } from "@/lib/harness/delivery-map";
+import { extractTowerTaskId, findHarnessDeliveryByPlatformMessageId } from "@/lib/harness/delivery-map";
 import { readHarnessGatewayRuntimeConfig } from "@/lib/harness/gateway-config";
-import { parseGatewaySendOutput } from "@/lib/harness/gateway-output";
 import { signedInternalFetch as fetch } from "@/lib/internal-api-signing";
 
 export { parseGatewaySendOutput } from "@/lib/harness/gateway-output";
@@ -12,6 +11,7 @@ const GATEWAY_BRIDGE = `${BRIDGE}/gateway`;
 const GATEWAY_QUERY_BRIDGE = `${BRIDGE}/gateway-query`;
 const GATEWAY_DIAGNOSTICS_BRIDGE = `${BRIDGE}/gateway-diagnostics`;
 const GATEWAY_RUNTIME_HEALTH_BRIDGE = `${BRIDGE}/gateway-runtime-health`;
+const HARNESS_OUTBOUND_BRIDGE = `${BRIDGE}/outbound`;
 const REMOTE_PROJECT_BRIDGE = `${BRIDGE}/remote-project`;
 const WORKBENCH_BATCH_BRIDGE = `http://localhost:${PORT}/api/internal/workbench/batch`;
 const TERMINAL_BRIDGE = `http://localhost:${PORT}/api/internal/terminal`;
@@ -285,18 +285,25 @@ export const harnessTools = {
 
   push_to_human: {
     description:
-      "Atomically push a task message to the configured human channel, then record it in Tower. " +
-      "For Hermes/OpenClaw channels, this tool sends through the gateway CLI first; only if the send succeeds does it " +
-      "call ask_human (park, when expectReply=true) or notify_human (record only). Use this instead of manually " +
-      "sending + ask_human for gateway-backed work/unattended channels.",
+      "Durably enqueue a task-to-human message before any external send. Tower's outbox worker claims and sends it, " +
+      "then atomically records the platform receipt, activates the ask, and parks the task when expectReply=true. " +
+      "Failed sends remain retryable; an in-flight crash becomes SENT_UNVERIFIED instead of being blindly resent.",
     schema: z.object({
       taskId: z.string().optional().describe("The current task id (TOWER_TASK_ID); defaults to the terminal's TOWER_TASK_ID when present"),
       message: z.string().min(1).max(4000).describe("Message body to send to the human/group"),
       scope: z.enum(["work", "unattended"]).optional().describe("Channel scope. Omit to derive from goal mode."),
       to: z.string().optional().describe("Destination for work messages: group/person name, Tower alias, or platform id. Optional for unattended home routes."),
       expectReply: z.boolean().optional().describe("If true, record with ask_human and park. Defaults true for unattended, false for work."),
+      dedupKey: z.string().min(1).max(256).optional().describe("Stable caller key for an intentional logical send. Reusing it returns the same durable outbound."),
     }),
-    handler: async (args: { taskId?: string; message: string; scope?: "work" | "unattended"; to?: string; expectReply?: boolean }) => {
+    handler: async (args: {
+      taskId?: string;
+      message: string;
+      scope?: "work" | "unattended";
+      to?: string;
+      expectReply?: boolean;
+      dedupKey?: string;
+    }) => {
       const bound = resolveTaskForCurrentTerminal(args.taskId);
       if ("error" in bound) return { error: bound.error, taskId: args.taskId };
       const { taskId } = bound;
@@ -330,53 +337,27 @@ export const harnessTools = {
         scope,
         taskTitle: task.title ?? null,
       });
-      const { sendViaHarnessGateway } = await import("@/lib/harness/gateway-send");
-      const sent = await sendViaHarnessGateway({
-        gateway: active.gateway,
-        message: body,
-        presentation,
-        dest: active.dest,
-        to: args.to,
-        downstream: active.downstream,
-        profile: active.profile,
-        scope,
-      });
-      if (!sent.ok) return { error: `${active.gateway} send failed`, output: sent.output };
-
       const expectReply = args.expectReply ?? scope === "unattended";
-      const endpoint = expectReply ? "ask" : "notify";
-      const payload = expectReply
-        ? { taskId, question: args.message }
-        : { taskId, message: args.message };
-      const res = await fetch(`${BRIDGE}/${endpoint}`, {
+      const res = await fetch(HARNESS_OUTBOUND_BRIDGE, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      if (!res.ok) return { error: data?.error ?? `${endpoint} failed`, status: res.status, sent: true };
-      const sentMeta = parseGatewaySendOutput(sent.output);
-      const harnessMessageId = String((expectReply ? data.requestId : data.messageId) || "");
-      if (sentMeta?.message_id && harnessMessageId) {
-        await recordHarnessDelivery({
-          harnessMessageId,
+        body: JSON.stringify({
           taskId,
-          platform: sentMeta.platform || active.downstream || "hermes",
-          chatId: sentMeta.chat_id || sent.resolvedDest || active.dest || args.to || "",
-          platformMessageId: sentMeta.message_id,
+          gateway: active.gateway,
+          downstream: active.downstream ?? null,
+          dest: active.dest ?? null,
+          requestedTo: args.to ?? null,
+          profile: active.profile ?? null,
           scope,
           expectReply,
-        });
-      }
-      return {
-        ok: true,
-        sent: true,
-        parked: expectReply,
-        scope,
-        requestId: data.requestId,
-        messageId: data.messageId,
-        output: sent.output,
-      };
+          message: body,
+          presentation,
+          dedupKey: args.dedupKey ?? null,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) return { error: data?.error ?? "durable outbound enqueue failed", status: res.status };
+      return { ok: true, scope, expectReply, ...data };
     },
   },
 
@@ -679,21 +660,47 @@ export const harnessTools = {
     description:
       "Workbench-only: acknowledge that the resident Workbench actually received and read a durable batch. " +
       "Call this immediately when a prompt contains '[Tower durable batch: wb-...]'. PTY delivery alone does " +
-      "not consume the inbox rows; this acknowledgement does. Repeated calls are idempotent.",
+      "not consume the inbox rows; only resolve_workbench_batch releases responsibility. The lease token fences " +
+      "stale Workbench executions. Repeated calls renew the processing lease and are idempotent.",
     schema: z.object({
       batchId: z.string().trim().min(1).max(128),
+      leaseToken: z.string().trim().min(1).max(128),
     }),
-    handler: async (args: { batchId: string }) => {
+    handler: async (args: { batchId: string; leaseToken: string }) => {
       const parentTaskId = process.env.TOWER_TASK_ID?.trim();
       if (!parentTaskId) return { error: "ack_workbench_batch must run inside the bound Workbench terminal" };
       const res = await fetch(WORKBENCH_BATCH_BRIDGE, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "ack", parentTaskId, batchId: args.batchId }),
+        body: JSON.stringify({ action: "ack", parentTaskId, ...args }),
       });
       const data = await res.json().catch(() => ({}));
       return res.ok ? data : {
         error: (data as { error?: unknown }).error ?? "Workbench batch acknowledgement failed",
+        status: res.status,
+      };
+    },
+  },
+
+  heartbeat_workbench_batch: {
+    description:
+      "Workbench-only: renew an ACKED durable batch responsibility lease while long-running review/delegation " +
+      "continues. Use the exact leaseToken from the batch prompt. A stale token is rejected.",
+    schema: z.object({
+      batchId: z.string().trim().min(1).max(128),
+      leaseToken: z.string().trim().min(1).max(128),
+    }),
+    handler: async (args: { batchId: string; leaseToken: string }) => {
+      const parentTaskId = process.env.TOWER_TASK_ID?.trim();
+      if (!parentTaskId) return { error: "heartbeat_workbench_batch must run inside the bound Workbench terminal" };
+      const res = await fetch(WORKBENCH_BATCH_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "heartbeat", parentTaskId, ...args }),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : {
+        error: (data as { error?: unknown }).error ?? "Workbench batch heartbeat failed",
         status: res.status,
       };
     },
@@ -705,14 +712,15 @@ export const harnessTools = {
       "batch has been completed or durably delegated. The batch must be ACKED first; repeated calls are idempotent.",
     schema: z.object({
       batchId: z.string().trim().min(1).max(128),
+      leaseToken: z.string().trim().min(1).max(128),
     }),
-    handler: async (args: { batchId: string }) => {
+    handler: async (args: { batchId: string; leaseToken: string }) => {
       const parentTaskId = process.env.TOWER_TASK_ID?.trim();
       if (!parentTaskId) return { error: "resolve_workbench_batch must run inside the bound Workbench terminal" };
       const res = await fetch(WORKBENCH_BATCH_BRIDGE, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "resolve", parentTaskId, batchId: args.batchId }),
+        body: JSON.stringify({ action: "resolve", parentTaskId, ...args }),
       });
       const data = await res.json().catch(() => ({}));
       return res.ok ? data : {

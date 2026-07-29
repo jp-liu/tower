@@ -212,7 +212,10 @@ describe("Workbench durable batch tools", () => {
     vi.stubGlobal("fetch", fetchMock);
     vi.stubEnv("TOWER_TASK_ID", TASK_ID);
 
-    await expect(harnessTools.ack_workbench_batch.handler({ batchId: "wb-123" })).resolves.toMatchObject({
+    await expect(harnessTools.ack_workbench_batch.handler({
+      batchId: "wb-123",
+      leaseToken: "lease-123",
+    })).resolves.toMatchObject({
       state: "ACKED",
       noOp: false,
     });
@@ -220,13 +223,21 @@ describe("Workbench durable batch tools", () => {
       "http://localhost:3000/api/internal/workbench/batch",
       expect.objectContaining({
         method: "PUT",
-        body: JSON.stringify({ action: "ack", parentTaskId: TASK_ID, batchId: "wb-123" }),
+        body: JSON.stringify({
+          action: "ack",
+          parentTaskId: TASK_ID,
+          batchId: "wb-123",
+          leaseToken: "lease-123",
+        }),
       }),
     );
   });
 
   it("rejects resolution outside a bound Workbench terminal", async () => {
-    await expect(harnessTools.resolve_workbench_batch.handler({ batchId: "wb-123" })).resolves.toEqual({
+    await expect(harnessTools.resolve_workbench_batch.handler({
+      batchId: "wb-123",
+      leaseToken: "lease-123",
+    })).resolves.toEqual({
       error: "resolve_workbench_batch must run inside the bound Workbench terminal",
     });
   });
