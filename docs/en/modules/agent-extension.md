@@ -207,14 +207,15 @@ In <project name>, do this work: add gateway acceptance documentation.
 
 Accept three distinct results in this order:
 
-1. A "小塔 · 已排队" card says only that the request was queued for the project
+1. A "⏳ 小塔 · 请求已进入工作台" card says only that the request was queued for the project
    Workbench. It must not claim that a task was created.
-2. After `create_task`, a "小塔 · 任务已创建" card contains server-authoritative
-   title, project, priority, status, workspace, branch, task id, goal, and
-   auto-start state. Only then verify the task in Tower.
-3. After the child finishes and the Workbench accepts its review, a separate
-   final message contains the reviewed summary, commit, branch, and the same
-   Tower task id.
+2. After `create_task`, a "🚀 小塔 · 任务已创建" card presents server-authoritative
+   status, priority, project, workspace, execution mode, and branch in a compact
+   two-column grid, with the goal in its own section. Only then verify the task
+   in Tower.
+3. After the child finishes and the Workbench accepts its review, a
+   "✅ 小塔 · 任务已完成" card separates the reviewed result from commit/branch
+   metadata and retains the same Tower task id.
 
 Receiving only the queue acknowledgement means acceptance is still waiting for
 task creation.

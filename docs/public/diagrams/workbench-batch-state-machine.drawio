@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="26.0.0">
+  <diagram id="workbench-batch-state-machine" name="批次状态机">
+    <mxGraphModel dx="1460" dy="760" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1460" pageHeight="760" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="2" value="Workbench 持久批次状态机" style="text;html=1;align=left;verticalAlign=middle;fontSize=24;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="1">
+          <mxGeometry x="50" y="30" width="800" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="3" value="WorkbenchEvent&#xa;PENDING" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=15;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="170" width="200" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="4" value="WorkbenchBatch&#xa;CLAIMED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=15;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="330" y="170" width="200" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="5" value="WorkbenchBatch&#xa;DISPATCHED&#xa;事件仍 PROCESSING" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=15;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="600" y="160" width="220" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="6" value="WorkbenchBatch&#xa;ACKED&#xa;事件变 CONSUMED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=15;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="890" y="160" width="220" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="7" value="WorkbenchBatch&#xa;RESOLVED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=15;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="170" width="200" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="8" value="WorkbenchBatch&#xa;FAILED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=15;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="600" y="430" width="220" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="9" value="失败条件&#xa;• PTY 写入 / 提交失败&#xa;• 120 秒未收到 ACK" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff5f5;strokeColor=#b85450;align=left;spacingLeft=12;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="890" y="410" width="260" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="10" value="可靠性边界&#xa;DISPATCHED 只证明 Tower 写过 PTY&#xa;ACKED 才证明 Workbench 已读取" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;align=left;spacingLeft=12;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="60" y="400" width="330" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="11" value="原子领取&#xa;创建稳定 batch id" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;exitX=1;exitY=0.5;entryX=0;entryY=0.5;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="3" target="4">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="12" value="PTY 写入并提交" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;exitX=1;exitY=0.5;entryX=0;entryY=0.5;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="4" target="5">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="13" value="ack_workbench_batch" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;strokeColor=#9673a6;fontColor=#6b3f7a;exitX=1;exitY=0.5;entryX=0;entryY=0.5;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="5" target="6">
+          <mxGeometry x="0" y="0" relative="1" as="geometry">
+            <mxPoint x="0" y="-12" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="14" value="resolve_workbench_batch" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;strokeColor=#82b366;fontColor=#3f6f3f;exitX=1;exitY=0.5;entryX=0;entryY=0.5;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="6" target="7">
+          <mxGeometry x="0" y="0" relative="1" as="geometry">
+            <mxPoint x="0" y="-12" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="15" value="投递失败" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;strokeColor=#b85450;fontColor=#8a3030;exitX=0.5;exitY=1;entryX=0.25;entryY=0;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="4" target="8">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="430" y="350"/>
+              <mxPoint x="660" y="350"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="16" value="ACK 超时" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;strokeColor=#b85450;fontColor=#8a3030;exitX=0.5;exitY=1;entryX=0.75;entryY=0;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="5" target="8">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="17" value="原因说明" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=none;dashed=1;strokeColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="8" target="9">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="18" value="清除 batchId，返回 PENDING&#xa;下一轮按同一业务去重键恢复" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;strokeColor=#b85450;fontColor=#8a3030;exitX=0.5;exitY=1;entryX=0;entryY=0.5;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="8" target="3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="710" y="620"/>
+              <mxPoint x="30" y="620"/>
+              <mxPoint x="30" y="215"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="19" value="幂等重复调用：ACKED / RESOLVED 保持原状态，不重复消费" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3fbf3;strokeColor=#82b366;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="890" y="600" width="490" height="70" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

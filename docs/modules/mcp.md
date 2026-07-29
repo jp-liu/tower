@@ -75,4 +75,4 @@ MCP stdio 进程无法访问内存中的 PTY 会话，通过内部 HTTP 路由�
 | `note-asset-tools.ts` | 2 | manage_notes / manage_assets |
 | `terminal-tools.ts` | 6 | 启动执行 + 终端输出/输入/状态 + 关闭终端 + 启动/继续终端 |
 | `report-tools.ts` | 2 | daily_summary / daily_todo |
-| `harness-tools.ts` | 10 | 无人值守消息 + 网关会话路由：新增 route_gateway_message / complete_gateway_discussion / confirm_gateway_task_created / complete_gateway_work（详见 [Harness 模块](./harness)） |
+| `harness-tools.ts` | 18 | 无人值守消息、OWNER/可信群能力路由、Workbench ACK/审查、单条诊断与恢复、远程项目接入（详见 [Harness 模块](./harness)） |

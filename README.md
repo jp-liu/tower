@@ -60,6 +60,21 @@ pnpm start
 
 Production binds to `127.0.0.1` by default. Use `pnpm start -- --host 0.0.0.0` or an explicit LAN address only when remote access is intentional.
 
+### Optional unattended service
+
+After a production build, users who want Tower to start automatically can opt in:
+
+```bash
+tower service install
+tower service status
+tower service remove
+```
+
+Tower uses a per-user macOS LaunchAgent on macOS and a per-user Windows Task
+Scheduler entry on Windows. Installation is optional; developers can continue
+to run `tower start` manually. Do not run the manual server and the unattended
+service on the same port at the same time.
+
 ## Core Concepts
 
 ```

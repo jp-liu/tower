@@ -60,6 +60,20 @@ pnpm start
 
 生产模式默认只监听 `127.0.0.1`。只有确实需要远程访问时才使用 `pnpm start -- --host 0.0.0.0` 或明确的局域网地址。
 
+### 可选无人值守服务
+
+完成生产构建后，需要开机或登录后自动启动 Tower 的用户可以自行选择安装：
+
+```bash
+tower service install
+tower service status
+tower service remove
+```
+
+macOS 使用当前用户的 LaunchAgent，Windows 使用当前用户的任务计划程序。
+该能力不是必选项；开发阶段仍可手动运行 `tower start`。不要让手动服务和
+无人值守服务同时占用同一个端口。
+
 ## 核心概念
 
 ```

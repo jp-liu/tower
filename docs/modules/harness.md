@@ -43,7 +43,8 @@ Tower（登记 + park/resume，只记录不直连平台）
    ▼
 relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入活终端
 
-普通入站 ──► route_gateway_message ──► 网关直答 / Tower MCP / 项目讨论会话 / WorkbenchEvent
+普通入站 ──► OpenClaw 身份/可信群门禁 ──► route_gateway_message / route_gateway_query
+                                             └─► 项目讨论会话 / WorkbenchEvent
 ```
 
 图见 `docs/diagrams/tower-harness-flow.html`（中）/ `tower-harness-flow-en.html`（英）。
@@ -78,7 +79,23 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 
 `list_notify_targets` 是发送前的入口：读取当前 scope 的活跃通道，返回**照做即可的发送指令**，告诉 Agent 走哪个网关、要不要 park。`tower-ask` / `tower-goal` 技能内部就是先调它、再照指令发。
 
-`route_gateway_message` 是普通渠道入站入口。它先持久化去重，再严格按 reply/task binding → thread/session binding → 显式项目 → 唯一 identify_project → 用户最近项目 → 渠道默认项目解析。项目讨论必须以 `complete_gateway_discussion` 回原 thread；项目工作只排入 Workbench，只有 Workbench 在 `create_task` 真正成功后才能调用 `confirm_gateway_task_created`，审查通过后调用 `complete_gateway_work`。
+`route_gateway_message` 是 OWNER 普通渠道入站入口。`route_gateway_query` 是
+可信群 NON_OWNER 的能力受限入口：它固定为项目讨论，不能转 task reply、创建
+任务、启动终端或排入 Workbench；随后只能通过 inbound 绑定读取项目级上下文。
+两者都先持久化去重，再严格按 reply/task binding → thread/session binding →
+显式项目 → 唯一 identify_project → 用户最近项目 → 渠道默认项目解析。项目讨论
+必须以 `complete_gateway_discussion` 回原 thread；项目工作只排入 Workbench。
+Workbench 读到持久批次后必须先调用 `ack_workbench_batch`，处理或稳定委派后
+调用 `resolve_workbench_batch`。只有 `create_task` 真正成功后才能调用
+`confirm_gateway_task_created`。审查通过时直接调用 `complete_gateway_work`，
+不要先调用 `move_task(DONE)`；该工具会在同一数据库事务内将任务转为 `DONE`
+并创建 `FINAL_RESULT` outbox，随后再执行可重试的平台发送。
+
+OWNER 排障优先使用 `diagnose_gateway_request`，它把平台入站、Tower 路由、
+Workbench event/batch/runtime、子任务和平台 delivery 关联为一条阶段时间线。
+`recover_gateway_request` 只恢复指定 inbound，且不会自动重发
+`SENT_UNVERIFIED`。`get_gateway_runtime_health` 补充 OpenClaw/Hermes 的脱敏
+健康状态和关联日志。
 
 重复 platform message 不会重放动作：处理中/排队中返回 `in_progress + noOp`，已处理返回 `already_processed + noOp`。无 thread/root 的讨论按 chat + sender 隔离并复用会话，最近项目上下文 7 天过期。失败投递除启动恢复外，还由单例 `unref` 定时器按 `nextAttemptAt` 自动重试。
 
@@ -158,7 +175,10 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 ### MCP Tools (`src/mcp/tools/harness-tools.ts`)
 
 - `list_notify_targets` / `push_to_human` / `ask_human` / `notify_human` / `reply_to_ask` / `relay_channel_reply`
-- `route_gateway_message` / `complete_gateway_discussion` / `confirm_gateway_task_created` / `complete_gateway_work`
+- `route_gateway_message` / `route_gateway_query` / `read_gateway_project_context`
+- `complete_gateway_discussion` / `confirm_gateway_task_created` / `complete_gateway_work`
+- `diagnose_gateway_request` / `recover_gateway_request` / `get_gateway_runtime_health`
+- `provision_remote_project`
 
 ### 核心库 (`src/lib/harness/`)
 
@@ -168,6 +188,9 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 | `gateway-config.ts` | 网关运行时配置（显示名等） |
 | `delivery-map.ts` | 平台消息 ID ↔ 任务的投递映射，`[[tower:task=...]]` token 提取 |
 | `gateway-router.ts` | 入站去重、会话绑定、项目解析、Workbench 排队、可靠完成回传 |
+| `gateway-diagnostics.ts` | 单条外部请求的跨层 trace 与受控恢复 |
+| `gateway-runtime-health.ts` | OpenClaw/Hermes 健康状态、关联日志和脱敏 |
+| `remote-project-provisioner.ts` | OWNER 远程 Git 接入、幂等登记与 REVIEW_ONLY/FULL_WORK |
 | `gateway-output.ts` | Hermes/OpenClaw 发送结果的结构化 message id 提取 |
 | `unattended-signal.ts` | 无人值守信号文件 `unattended-<taskId>` 写删，供 PreToolUse hook 读 |
 

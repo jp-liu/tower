@@ -53,6 +53,25 @@ pnpm start
 
 “更新”就是重新注入流程。它会用当前 Tower 包内的版本刷新 `SOUL.md`、`AGENTS.md`、`TOOLS.md`、Tower MCP 配置和 `tower` skill，同时保留 OpenClaw agent 条目中不归 Tower 管理的其他字段。
 
+### OWNER 与可信群安全策略
+
+设置页同时维护两张前置名单：
+
+- **OWNER IDs**：每行 `platform:senderId`。只有这些平台身份可以私聊
+  o-tower，并获得完整 Tower 工具。
+- **Trusted Channels**：每行 `platform:chatId`。只有这些群可以路由到
+  o-tower；群内仍要求真实 @。
+
+OpenClaw 在 agent 路由前执行私聊/群 allowlist，并在同一个 `o-tower`
+profile 内按 sender 切换 Tool Surface。可信群中的 NON_OWNER 只有
+`route_gateway_query`、`read_gateway_project_context` 和
+`complete_gateway_discussion`；陌生群不会进入 o-tower。Tower 不维护第二套
+sender RBAC，也不接受自然语言自报 OWNER。
+
+更新名单时，安装器会以当前名单为事实来源，移除该 profile 在对应平台上的
+旧群绑定，避免历史授权残留。完整设计、验收与排障见
+`docs/design/o-tower-personal-assistant-security-and-operations.md`。
+
 ### 3. 重启网关并刷新飞书会话
 
 严格按下面顺序执行：
@@ -88,10 +107,11 @@ openclaw status --all
 
 - 项目讨论复用独立的项目绑定讨论会话，不进入 Workbench，不创建 `WorkItem`、子任务或 `WorkbenchEvent`。
 - 项目工作才会持久化一个 `GATEWAY_WORK_REQUEST`，进入 Workbench 的安全边界队列。
+- PTY 写入只把持久批次标成 `DISPATCHED`；Workbench 必须调用 `ack_workbench_batch` 后事件才算 `CONSUMED`，处理或稳定委派后再调用 `resolve_workbench_batch`。120 秒没有 ACK 会自动重排。
 - 项目常驻 Workbench 是内部协调基础设施，不等于用户请求创建的任务。
 - `PROJECT_WORK` 返回 `queued: true` 只表示入站消息和 Workbench 事件已经持久化，**不表示任务已经创建**。
 - 只有 Workbench 的 `create_task` 返回真实 task id 后，`confirm_gateway_task_created` 才能发出创建确认。
-- 子任务完成后还要经过 Workbench 审查并转为 `DONE`，`complete_gateway_work` 才能发送最终结果。
+- 子任务完成后先进入 `IN_REVIEW`；Workbench 审查通过后直接调用 `complete_gateway_work`。该调用会原子地转为 `DONE` 并创建最终回执 outbox，不要提前调用 `move_task(DONE)`。
 
 项目解析会优先使用回复绑定、现有线程绑定和用户明确提供的项目 id/名称/别名。仍有多个候选时必须让用户选择，不能擅自挑最高分项目。无显式线程的连续讨论按“群聊 + 发送者 + 会话类型”复用，最近项目回退七天后失效；显式线程绑定不使用这项过期回退。
 
@@ -151,9 +171,9 @@ openclaw status --all
 
 按时间顺序验收三种不同结果：
 
-1. 首次收到“小塔 · 已排队”卡片，只表示请求进入 `<项目名>` Workbench，不能出现“任务已创建”的承诺。
-2. Workbench 实际调用 `create_task` 成功后，飞书收到“小塔 · 任务已创建”卡片，其中基于服务端真实数据展示标题、项目、优先级、状态、工作区、分支、任务 ID、目标和是否自动启动；此时才能在 Tower 核对任务。
-3. 子任务完成且经 Workbench 审查接受后，飞书收到“小塔 · 任务已完成”卡片，其中含审查后的摘要、commit、branch 和同一个 Tower task id。
+1. 首次收到“⏳ 小塔 · 请求已进入工作台”卡片，只表示请求进入 `<项目名>` Workbench，不能出现“任务已创建”的承诺。
+2. Workbench 实际调用 `create_task` 成功后，飞书收到“🚀 小塔 · 任务已创建”卡片。卡片以两列字段展示状态、优先级、项目、工作区、执行方式和分支，目标单独成节；此时才能在 Tower 核对任务。
+3. 子任务完成且经 Workbench 审查接受后，飞书收到“✅ 小塔 · 任务已完成”卡片。验收结果与 commit/branch 元数据分区展示，并使用同一个 Tower task id。
 
 如果只收到“已排队”，验收状态仍是等待创建，不能判定任务创建成功。
 
@@ -204,7 +224,10 @@ openclaw status --all
 - Tower Agent 默认只安装 Tower 能力，不安装飞书 MCP、凭据或第三方 operator。
 - 项目讨论历史已由 Tower 持久化，但目前没有完整的 discussion history UI。
 - 原生卡片依赖 OpenClaw `--presentation` 支持；旧版 OpenClaw 会降级为持久化的文本回退。
-- 共享群聊如需限制可访问工作区/项目，可配置 `harness.channelBindings`；目前不要假定已有专门的可视化管理页面。
+- 共享群聊的入口由 Trusted Channels 限制，项目范围可继续用
+  `harness.channelBindings` 收窄；目前后者没有专门的可视化管理页面。
+- `REVIEW_ONLY` 是 Workbench 工作流约束，不是操作系统沙箱；不可信仓库执行
+  仍需容器/虚拟机/只读挂载。
 
 ## 能力路由
 

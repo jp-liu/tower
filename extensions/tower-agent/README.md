@@ -97,6 +97,33 @@ event. Project work is the only route that enters the durable Workbench event
 queue. The resident Workbench itself is infrastructure and is not the requested
 user task.
 
+## Owner and trusted-channel enforcement
+
+Tower's OpenClaw installer can write an `accessPolicy` with platform owner IDs
+and trusted channel IDs. OpenClaw enforces those identities before routing and
+uses per-agent `toolsBySender` to expose two surfaces on the same `o-tower`
+profile:
+
+- OWNER: all Tower tools;
+- trusted-channel NON_OWNER: `route_gateway_query`,
+  `read_gateway_project_context`, and `complete_gateway_discussion` only.
+
+Unknown DMs and groups do not route to o-tower. Removed groups are removed from
+the managed profile bindings on update, so stale authorization does not remain.
+Tower does not infer owner identity from prompts.
+
+The owner-only surface also includes correlated request diagnostics, scoped
+recovery, redacted OpenClaw/Hermes health logs, and the remote Git project
+provisioner. Remote provisioning requires an explicit workspace and absolute
+local root, does not install dependencies or execute repository scripts, and
+defaults to `REVIEW_ONLY`.
+
+PTY delivery is not treated as consumption. A durable batch remains
+`DISPATCHED` until the bound Workbench calls `ack_workbench_batch`; the inbox
+events become `CONSUMED` in that acknowledgement transaction. The Workbench
+calls `resolve_workbench_batch` after all items are handled or durably
+delegated. An unacknowledged batch is returned to pending after 120 seconds.
+
 For project work, **queued is not created**. The initial result only means Tower
 persisted the inbound request and its `GATEWAY_WORK_REQUEST`. A task exists only
 after the separate confirmation contains its real Tower task id.

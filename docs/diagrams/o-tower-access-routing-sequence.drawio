@@ -1,0 +1,148 @@
+<mxfile>
+  <diagram id="seqlayout" name="o-tower access, work, callback and diagnostics">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="sender" value="飞书 / 其他平台" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;size=40;participant=umlActor;verticalAlign=bottom;spacingBottom=-14;labelBackgroundColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="100" height="1670" as="geometry"/>
+        </mxCell>
+        <mxCell id="policy" value="OpenClaw 身份与可信群策略" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;size=40;" vertex="1" parent="1">
+          <mxGeometry x="330" y="40" width="100" height="1670" as="geometry"/>
+        </mxCell>
+        <mxCell id="agent" value="o-tower Tool Surface" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;size=40;" vertex="1" parent="1">
+          <mxGeometry x="620" y="40" width="100" height="1670" as="geometry"/>
+        </mxCell>
+        <mxCell id="tower" value="Tower Router / Trace / Outbox" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;size=40;" vertex="1" parent="1">
+          <mxGeometry x="910" y="40" width="100" height="1670" as="geometry"/>
+        </mxCell>
+        <mxCell id="workbench" value="Workbench 审查器" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;size=40;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="40" width="100" height="1670" as="geometry"/>
+        </mxCell>
+        <mxCell id="runtime" value="CLI / OpenClaw / Hermes" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;size=40;" vertex="1" parent="1">
+          <mxGeometry x="1490" y="40" width="100" height="1670" as="geometry"/>
+        </mxCell>
+        <mxCell id="act0" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;outlineConnect=0;fillColor=#ffffff;" vertex="1" parent="policy">
+          <mxGeometry x="45" y="150" width="10" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="act1" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;outlineConnect=0;fillColor=#ffffff;" vertex="1" parent="tower">
+          <mxGeometry x="45" y="410" width="10" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="act2" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;outlineConnect=0;fillColor=#ffffff;" vertex="1" parent="agent">
+          <mxGeometry x="45" y="360" width="10" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="act3" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;outlineConnect=0;fillColor=#ffffff;" vertex="1" parent="runtime">
+          <mxGeometry x="45" y="970" width="10" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="act4" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;outlineConnect=0;fillColor=#ffffff;" vertex="1" parent="runtime">
+          <mxGeometry x="45" y="1430" width="10" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="act5" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;outlineConnect=0;fillColor=#ffffff;" vertex="1" parent="tower">
+          <mxGeometry x="45" y="720" width="10" height="810" as="geometry"/>
+        </mxCell>
+        <mxCell id="act6" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;outlineConnect=0;fillColor=#ffffff;" vertex="1" parent="agent">
+          <mxGeometry x="45" y="670" width="10" height="910" as="geometry"/>
+        </mxCell>
+        <mxCell id="act7" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;outlineConnect=0;fillColor=#ffffff;" vertex="1" parent="policy">
+          <mxGeometry x="45" y="310" width="10" height="1320" as="geometry"/>
+        </mxCell>
+        <mxCell id="act8" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;outlineConnect=0;fillColor=#ffffff;" vertex="1" parent="sender">
+          <mxGeometry x="45" y="770" width="10" height="860" as="geometry"/>
+        </mxCell>
+        <mxCell id="act9" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;outlineConnect=0;fillColor=#ffffff;" vertex="1" parent="workbench">
+          <mxGeometry x="45" y="820" width="10" height="810" as="geometry"/>
+        </mxCell>
+        <mxCell id="note0" value="陌生群：在进入 o-tower 前拒绝" style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="400" y="110" width="163" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="m1" value="平台签名事件 + senderId + chatId" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.0898;entryX=0;entryY=0.0;" edge="1" parent="1" source="sender" target="act0">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m2" value="非可信群：权限不足" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;curved=0;rounded=0;strokeColor=#999999;fontColor=#999999;exitX=0;exitY=1.0;entryX=0.5;entryY=0.1198;" edge="1" parent="1" source="act0" target="sender">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="note3" value="可信群 NON_OWNER：只有项目只读工具" style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="690" y="270" width="184" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="m4" value="@机器人查询已绑定工作区项目" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.1856;entryX=0;entryY=0.0;" edge="1" parent="1" source="sender" target="act7">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m5" value="project-reader allowlist" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=1;exitY=0.0379;entryX=0;entryY=0.0;" edge="1" parent="1" source="act7" target="act2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m6" value="route_gateway_query" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=1;exitY=0.3333;entryX=0;entryY=0.0;" edge="1" parent="1" source="act2" target="act1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m7" value="绑定项目上下文（无本地路径 / 无个人数据）" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;curved=0;rounded=0;strokeColor=#999999;fontColor=#999999;exitX=0;exitY=1.0;entryX=1;entryY=0.6667;" edge="1" parent="1" source="act1" target="act2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m8" value="引用原消息回复项目答案" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;curved=0;rounded=0;strokeColor=#999999;fontColor=#999999;exitX=0;exitY=1.0;entryX=0.5;entryY=0.3054;" edge="1" parent="1" source="act2" target="sender">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="note9" value="OWNER：入口只路由 / 查询；所有写操作由 Workbench 执行" style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="690" y="580" width="177" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="m10" value="OWNER 工作请求" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.3713;entryX=0;entryY=0.2348;" edge="1" parent="1" source="sender" target="act7">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m11" value="OWNER 路由 + 只读查询 Tool Surface" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=1;exitY=0.2727;entryX=0;entryY=0.0;" edge="1" parent="1" source="act7" target="act6">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m12" value="route_gateway_message" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=1;exitY=0.0549;entryX=0;entryY=0.0;" edge="1" parent="1" source="act6" target="act5">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m13" value="持久化 outbox：已排队" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;curved=0;rounded=0;exitX=0;exitY=0.0617;entryX=1;entryY=0.0;" edge="1" parent="1" source="act5" target="act8">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m14" value="持久 Batch" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=1;exitY=0.1235;entryX=0;entryY=0.0;" edge="1" parent="1" source="act5" target="act9">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m15" value="ACK batch" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0;exitY=0.0617;entryX=1;entryY=0.1852;" edge="1" parent="1" source="act9" target="act5">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m16" value="create_task + confirm_gateway_task_created" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0;exitY=0.1235;entryX=1;entryY=0.2469;" edge="1" parent="1" source="act9" target="act5">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m17" value="启动受管 CLI 任务" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=1;exitY=0.3086;entryX=0;entryY=0.0;" edge="1" parent="1" source="act5" target="act3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m18" value="结果 / 证据 / 状态" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;curved=0;rounded=0;strokeColor=#999999;fontColor=#999999;exitX=0;exitY=1.0;entryX=1;entryY=0.3704;" edge="1" parent="1" source="act3" target="act5">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m19" value="进入 IN_REVIEW" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=1;exitY=0.4321;entryX=0;entryY=0.3086;" edge="1" parent="1" source="act5" target="act9">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m20" value="complete_gateway_work" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0;exitY=0.3704;entryX=1;entryY=0.4938;" edge="1" parent="1" source="act9" target="act5">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m21" value="同一原消息线程：最终结果" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;curved=0;rounded=0;exitX=0;exitY=0.5556;entryX=1;entryY=0.4651;" edge="1" parent="1" source="act5" target="act8">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="note22" value="OWNER 诊断：一次关联全链路，不靠人工查表" style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="980" y="1240" width="191" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="m23" value="诊断这条消息" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=1;exitY=0.593;entryX=0;entryY=0.7348;" edge="1" parent="1" source="act8" target="act7">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m24" value="OWNER 诊断查询工具集" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=1;exitY=0.7727;entryX=0;entryY=0.7253;" edge="1" parent="1" source="act7" target="act6">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m25" value="diagnose_gateway_request" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=1;exitY=0.7802;entryX=0;entryY=0.8148;" edge="1" parent="1" source="act6" target="act5">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m26" value="健康状态 + 脱敏关联日志" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=1;exitY=0.8765;entryX=0;entryY=0.0;" edge="1" parent="1" source="act5" target="act4">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m27" value="OpenClaw / Hermes / CLI 证据" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;curved=0;rounded=0;strokeColor=#999999;fontColor=#999999;exitX=0;exitY=1.0;entryX=1;entryY=0.9383;" edge="1" parent="1" source="act4" target="act5">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m28" value="首个未完成阶段 + 建议动作" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;curved=0;rounded=0;strokeColor=#999999;fontColor=#999999;exitX=0;exitY=1.0;entryX=1;entryY=0.9451;" edge="1" parent="1" source="act5" target="act6">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m29" value="诊断结论；必要时受控恢复" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;curved=0;rounded=0;strokeColor=#999999;fontColor=#999999;exitX=0;exitY=1.0;entryX=1;entryY=0.9419;" edge="1" parent="1" source="act6" target="act8">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
