@@ -52,20 +52,25 @@ Workbench 网关把飞书、微信及 OpenClaw/Hermes 支持的平台接入 Towe
 
 1. 平台事件经过签名验证，携带稳定的 `senderId`、`chatId` 和消息 ID。
 2. Tower 先写入 `GatewayInbound`，再回复排队卡片。
-3. 项目 Workbench 通过持久 batch 获取请求并显式 ACK。
+3. 项目 Workbench 通过带租约和 fencing token 的持久 batch 获取请求并显式 ACK。
 4. Workbench 创建唯一的 `GatewayTaskLink`，随后启动子任务。
 5. 子任务进入 `IN_REVIEW` 后，由 Workbench 核对原始约束和证据。
 6. `Task=DONE` 与 `FINAL_RESULT/PENDING` 原子提交。
 7. Outbox 以原平台消息为 parent 投递引用卡片，并使用稳定键去重。
+8. 只有 `resolve_workbench_batch` 成功后，关联事件才最终变为 `CONSUMED`。
 
 ## 可靠性不变量
 
 - 一个 inbound 最多关联一个外部工作任务。
-- PTY 收到文本不代表事件已消费，只有 ACK 才能推进 checkpoint。
+- PTY 收到文本和 ACK 都不代表事件已最终消费；只有 `RESOLVED` 才释放处理责任。
+- `CLAIMED`、`DISPATCHED`、`ACKED` 都有租约；租约过期会以同一 batch ID 安全重放。
+- ACK、heartbeat 和 resolve 必须携带当前 generation 的 lease token，旧终端不能确认新批次。
 - 服务重启后从 SQLite inbox/outbox 恢复，不依赖终端画面或内存。
+- 无人值守提问先持久化 `HarnessOutbound` 和 ask intent，再由 worker 发送；失败可恢复。
+- 一个 Tower 数据库同一时刻只允许一个 runtime leader，避免两个扫描器同时拥有 PTY。
 - `REVIEW_ONLY` 项目不能创建可执行任务或启动终端。
 - OpenClaw 入口只拥有路由、只读查询和诊断工具。
-- sender、chat 和可信群排队数量均有限流与硬上限。
+- sender、chat、项目、Workbench 和全局排队数量均有限流与硬上限。
 
 ## 远程项目模式
 
@@ -81,6 +86,7 @@ Git 地址会转换为规范化 `repositoryKey`，并发接入相同仓库时只
 
 - `diagnose_gateway_request`：按 inbound 或平台消息 ID 查看阶段时间线。
 - `get_gateway_runtime_health`：查看 Tower、OpenClaw/Hermes 健康与脱敏日志。
+- 运行健康还包含 runtime leader、Workbench 租约批次和 Harness outbox 状态。
 - Missions Workbench 卡片：查看 generation、heartbeat、batch 和阻塞原因。
 - `tower service status`：查看操作系统守护状态。
 
@@ -89,3 +95,4 @@ Git 地址会转换为规范化 `repositoryKey`，并发接入相同仓库时只
 - [访问与权限路由时序图](/diagrams/o-tower-access-routing-sequence.drawio.png)
 - [Workbench 可靠架构图](/diagrams/workbench-reliable-architecture.drawio.png)
 - [Batch 状态机](/diagrams/workbench-batch-state-machine.drawio.png)
+- [无人值守外发 Outbox](/diagrams/harness-outbox-state-machine.drawio.png)

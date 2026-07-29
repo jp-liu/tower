@@ -54,24 +54,36 @@ Colleagues may only query projects in the workspace bound to a trusted channel:
 
 1. A verified platform event carries stable sender, chat, and message IDs.
 2. Tower persists `GatewayInbound` before sending the queued card.
-3. The resident Workbench receives a durable batch and explicitly ACKs it.
+3. The resident Workbench receives a leased, fenced durable batch and
+   explicitly ACKs it.
 4. Workbench creates the unique `GatewayTaskLink`, then starts the child task.
 5. After the child enters `IN_REVIEW`, Workbench verifies the original
    constraints and evidence.
 6. `Task=DONE` and `FINAL_RESULT/PENDING` are committed atomically.
 7. The outbox replies to the original platform message and deduplicates with a
    stable semantic key.
+8. Associated events become `CONSUMED` only after
+   `resolve_workbench_batch` succeeds.
 
 ## Reliability invariants
 
 - One inbound can bind at most one external work task.
-- Writing text to a PTY does not consume an event; only an ACK advances the
-  checkpoint.
+- Neither a PTY write nor ACK finally consumes an event; only `RESOLVED`
+  releases processing responsibility.
+- `CLAIMED`, `DISPATCHED`, and `ACKED` are leased. An expired lease replays the
+  same batch ID safely.
+- ACK, heartbeat, and resolve carry the current generation's lease token, so a
+  stale terminal cannot confirm a newer delivery.
 - After a restart, Tower recovers from the SQLite inbox/outbox rather than a
   terminal screen or in-memory state.
+- Unattended human messages persist a `HarnessOutbound` and ask intent before a
+  worker sends them.
+- One Tower database admits one runtime leader at a time, preventing competing
+  scanners from owning the same PTYs.
 - A `REVIEW_ONLY` project cannot create an executable task or start a terminal.
 - OpenClaw ingress receives only routing, read-only query, and diagnostic tools.
-- Sender, chat, and trusted-channel queue limits prevent resource exhaustion.
+- Sender, chat, project, Workbench, and global queue limits prevent resource
+  exhaustion.
 
 ## Remote project modes
 
@@ -89,7 +101,7 @@ and local root when the owner did not provide them.
 - `diagnose_gateway_request`: inspect the stage timeline by inbound or platform
   message ID.
 - `get_gateway_runtime_health`: inspect Tower and OpenClaw/Hermes health with
-  redacted logs.
+  redacted logs, the runtime leader, leased batches, and Harness outbox state.
 - Missions Workbench card: inspect generation, heartbeat, batch, and block
   reasons.
 - `tower service status`: inspect the operating-system service.
@@ -99,3 +111,4 @@ and local root when the owner did not provide them.
 - [Access and permission routing sequence](/diagrams/o-tower-access-routing-sequence.drawio.png)
 - [Reliable Workbench architecture](/diagrams/workbench-reliable-architecture.drawio.png)
 - [Batch state machine](/diagrams/workbench-batch-state-machine.drawio.png)
+- [Unattended outbound outbox](/diagrams/harness-outbox-state-machine.drawio.png)

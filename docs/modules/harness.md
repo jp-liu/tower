@@ -61,21 +61,24 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 |------|:---:|:---:|------|
 | `ask_human` | ❌ 只登记 | ✅ park | 底层状态原语：登记一个 OPEN 问题 + 挂起任务等回复 |
 | `notify_human` | ❌ 只登记 | ❌ 不 park | 底层状态原语：登记一条进展日志，继续干活 |
-| `push_to_human` | ✅ 真发 + 登记 | 按 `expectReply` | 上层一站式封装：先经网关发出，成功后再自动转调 ask/notify |
+| `push_to_human` | ✅ 持久化 + 真发 | 按 `expectReply` | 先写 Outbox 与 ask intent，再由 worker 发送并原子登记结果 |
 | `reply_to_ask` / `relay_channel_reply` | —（回灌方向） | resume | 把人的回复注入被 park 的任务并唤醒 |
 
 **`ask_human`** —— 只**登记 OPEN 问题 + PARK 任务**（结束当前回合、PTY 保活等回复），**它自己不发消息**。是底层状态原语，和 `reply_to_ask` 配对（park ↔ resume）。调用后必须立即停手等回复。
 
 **`notify_human`** —— 只登记一条日志、**不 park**、继续往下干；同样**不发**。用于里程碑 / 进展播报 / 无需回复的 FYI。
 
-**`push_to_human`** —— **发送 + 登记，一站式**。先经网关 CLI 把消息真的发出去，**成功后**再按 `expectReply` 自动转调 `ask_human`（`true` → park）或 `notify_human`（`false`）。是上层封装，**仅支持 Hermes / OpenClaw** 网关。这是有网关场景下的首选：省去「手动发 + 手动 ask」两步。
+**`push_to_human`** —— **持久化 + 发送 + 登记，一站式**。Tower 先在同一事务内创建
+`HarnessMessage(PENDING_DELIVERY)` 与 `HarnessOutbound`，随后 worker 经 Hermes / OpenClaw
+发送。收到可验证的平台 message id 后，delivery 映射、OPEN ask 和任务 park 在同一事务完成。
+明确失败保持可重试；已有发送证据但回执不完整时进入 `SENT_UNVERIFIED`，不盲目重发。
 
 **`reply_to_ask` / `relay_channel_reply`** —— 回灌方向。把人在平台上的回复带回 Tower：标记 OPEN 问题为已答、resume 被 park 的任务、把回复作为任务的下一条消息注入活终端。`relay_channel_reply` 额外负责从入站平台消息里解析 `[[tower:task=...]]` token 并按投递映射决定「答 ask」还是「注入工作群讨论」。
 
 **两组别混：**
 
 - **「停下等回复 ↔ 回复时 resume」= `ask_human` ↔ `reply_to_ask`**：同一个流程的两头（一个 park、一个唤醒）。
-- **「只登记不发 ↔ 真发 + 顺带登记」= `ask_human` vs `push_to_human`**：前者是纯状态原语，后者是先发再登记的上层封装。
+- **「只登记不发 ↔ 持久化后真发」= `ask_human` vs `push_to_human`**：前者是纯状态原语，后者是 durable outbox 封装。
 
 `list_notify_targets` 是发送前的入口：读取当前 scope 的活跃通道，返回**照做即可的发送指令**，告诉 Agent 走哪个网关、要不要 park。`tower-ask` / `tower-goal` 技能内部就是先调它、再照指令发。
 

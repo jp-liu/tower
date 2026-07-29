@@ -153,7 +153,7 @@ Replace `<project-root>` with the absolute path to this repository.
 
 ## Available MCP Tools
 
-54 tools across 11 categories.
+55 tools across 11 categories.
 
 ### Workspace Tools (`src/mcp/tools/workspace-tools.ts`)
 
@@ -242,7 +242,7 @@ Replace `<project-root>` with the absolute path to this repository.
 
 ### Harness Tools (`src/mcp/tools/harness-tools.ts`)
 
-18 tools cover unattended messaging, gateway routing, durable Workbench
+19 tools cover unattended messaging, gateway routing, durable Workbench
 handoff, diagnostics, scoped recovery, and remote project provisioning.
 
 - Messaging: `list_notify_targets`, `push_to_human`, `ask_human`,
@@ -250,7 +250,8 @@ handoff, diagnostics, scoped recovery, and remote project provisioning.
 - Gateway: `route_gateway_message`, `route_gateway_query`,
   `read_gateway_project_context`, `complete_gateway_discussion`
 - Workbench: `ack_workbench_batch`, `resolve_workbench_batch`,
-  `confirm_gateway_task_created`, `complete_gateway_work`
+  `heartbeat_workbench_batch`, `confirm_gateway_task_created`,
+  `complete_gateway_work`
 - Operations: `diagnose_gateway_request`, `recover_gateway_request`,
   `get_gateway_runtime_health`, `provision_remote_project`
 

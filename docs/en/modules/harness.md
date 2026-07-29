@@ -62,21 +62,27 @@ These four are the easiest to confuse. Keep two axes straight: **does it actuall
 |------|:---:|:---:|---------|
 | `ask_human` | ❌ records only | ✅ park | Low-level state primitive: record an OPEN question + park the task waiting for a reply |
 | `notify_human` | ❌ records only | ❌ no park | Low-level state primitive: log one progress line, keep working |
-| `push_to_human` | ✅ sends + records | per `expectReply` | High-level one-stop wrapper: send via gateway first, then auto-delegate to ask/notify |
+| `push_to_human` | ✅ persists + sends | per `expectReply` | Persist an outbox and ask intent first, then send and record atomically |
 | `reply_to_ask` / `relay_channel_reply` | — (inbound) | resume | Inject the human's reply into a parked task and wake it |
 
 **`ask_human`** — only **records an OPEN question + PARKs the task** (ends the current turn, keeps the PTY alive waiting for a reply); **it does not send anything itself**. It is a low-level state primitive, paired with `reply_to_ask` (park ↔ resume). After calling it you must stop immediately and wait.
 
 **`notify_human`** — only logs a line, does **not** park, keeps working; likewise **does not send**. Use it for milestones / progress broadcasts / FYIs that need no reply.
 
-**`push_to_human`** — **send + record, one-stop**. It sends the message out via the gateway CLI first, and **only after the send succeeds** does it auto-delegate to `ask_human` (`true` → park) or `notify_human` (`false`) based on `expectReply`. It is a high-level wrapper and **only supports the Hermes / OpenClaw** gateways. This is the preferred path when a gateway is configured — it collapses the "send manually + ask manually" two-step.
+**`push_to_human`** — **persist + send + record, one-stop**. Tower first
+creates `HarnessMessage(PENDING_DELIVERY)` and `HarnessOutbound` in one
+transaction. A worker then sends through Hermes / OpenClaw. After a verifiable
+platform message ID is returned, delivery mapping, OPEN ask, and task parking
+commit together. Explicit failures remain retryable; send evidence without a
+complete receipt becomes `SENT_UNVERIFIED` and is not blindly resent.
 
 **`reply_to_ask` / `relay_channel_reply`** — the inbound direction. They bring the human's platform reply back into Tower: mark the OPEN question ANSWERED, resume the parked task, and inject the reply as the task's next message into the live terminal. `relay_channel_reply` additionally parses the `[[tower:task=...]]` token out of the inbound platform message and, via the delivery mapping, decides whether to "answer the ask" or "inject into a work-group discussion".
 
 **Don't mix the two pairings:**
 
 - **"stop and wait for a reply ↔ resume on reply" = `ask_human` ↔ `reply_to_ask`**: the two ends of one flow (one parks, one wakes).
-- **"records only, no send ↔ actually sends + records too" = `ask_human` vs `push_to_human`**: the former is a pure state primitive, the latter a send-then-record wrapper.
+- **"records only ↔ persists before sending" = `ask_human` vs `push_to_human`**:
+  the former is a state primitive; the latter is a durable outbox wrapper.
 
 `list_notify_targets` is the pre-send entry point: it reads the active channel for the current scope and returns **ready-to-follow send instructions** telling the agent which gateway to use and whether to park. The `tower-ask` / `tower-goal` skills internally call it first, then do what it says.
 

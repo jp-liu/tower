@@ -46,13 +46,13 @@
         <mxCell id="m6" value="安全边界投递 WorkbenchBatch(DISPATCHED)" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.2708;entryX=0.5;entryY=0.2708;" edge="1" parent="1" source="coordinator" target="workbench">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="m7" value="ack_workbench_batch(batchId)" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.3056;entryX=0.5;entryY=0.3056;" edge="1" parent="1" source="workbench" target="coordinator">
+        <mxCell id="m7" value="ack_workbench_batch(batchId, leaseToken)" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.3056;entryX=0.5;entryY=0.3056;" edge="1" parent="1" source="workbench" target="coordinator">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="m8" value="事务：Batch=ACKED + Event=CONSUMED" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.3403;entryX=0.5;entryY=0.3403;" edge="1" parent="1" source="coordinator" target="db">
+        <mxCell id="m8" value="Batch=ACKED + 续租；Event 仍 PROCESSING" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.3403;entryX=0.5;entryY=0.3403;" edge="1" parent="1" source="coordinator" target="db">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="m9" value="约束：ACK 前不算消费；120 秒无 ACK 则 FAILED 并重放" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.375;entryX=0.5;entryY=0.3958;" edge="1" parent="1" source="db" target="db">
+        <mxCell id="m9" value="约束：处理中 heartbeat；任一租约过期则同 batch ID 重放" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.375;entryX=0.5;entryY=0.3958;" edge="1" parent="1" source="db" target="db">
           <mxGeometry relative="1" as="geometry">
             <Array as="points"><mxPoint x="810" y="580"/><mxPoint x="810" y="610"/></Array>
           </mxGeometry>
@@ -100,10 +100,10 @@
             <Array as="points"><mxPoint x="590" y="1270"/><mxPoint x="590" y="1300"/></Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="m23" value="resolve_workbench_batch(batchId)" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.9028;entryX=0.5;entryY=0.9028;" edge="1" parent="1" source="workbench" target="coordinator">
+        <mxCell id="m23" value="resolve_workbench_batch(batchId, leaseToken)" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.9028;entryX=0.5;entryY=0.9028;" edge="1" parent="1" source="workbench" target="coordinator">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="m24" value="Batch=RESOLVED；Runtime=IDLE" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.9375;entryX=0.5;entryY=0.9375;" edge="1" parent="1" source="coordinator" target="db">
+        <mxCell id="m24" value="事务：Batch=RESOLVED + Event=CONSUMED；Runtime=IDLE" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.9375;entryX=0.5;entryY=0.9375;" edge="1" parent="1" source="coordinator" target="db">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
       </root>

@@ -44,8 +44,8 @@ Workbench 创建子任务、等待执行、审查结果，最后通过可靠 out
 
 ```text
 PTY 写入成功       = DISPATCHED
-Workbench 主动 ACK = ACKED，同时事件才变为 CONSUMED
-处理或稳定委派完成 = RESOLVED
+Workbench 主动 ACK = ACKED，续租处理责任，事件仍是 PROCESSING
+处理或稳定委派完成 = RESOLVED，同时事件才变为 CONSUMED
 ```
 
 ## 3. 批次状态机
@@ -58,11 +58,11 @@ Workbench 主动 ACK = ACKED，同时事件才变为 CONSUMED
 | 状态 | 含义 | 可观察事实 |
 |---|---|---|
 | `PENDING` | 事件已持久化，等待安全投递 | 重启不会丢 |
-| `CLAIMED` | Coordinator 已原子领取并创建批次 | 其他扫描器不能重复领取 |
+| `CLAIMED` | Coordinator 已原子领取并创建带租约的批次 | 其他扫描器不能重复领取；过期可恢复 |
 | `DISPATCHED` | 文本已写入 PTY 并提交 | 还不能说 Agent 已收到 |
-| `ACKED` | Workbench 调用 `ack_workbench_batch` | 事件此时才进入 `CONSUMED` |
-| `RESOLVED` | Workbench 调用 `resolve_workbench_batch` | 批次已处理或已稳定委派 |
-| `FAILED` | 投递失败或 ACK 超时 | 事件返回 `PENDING`，等待重放 |
+| `ACKED` | Workbench 携带 lease token 调用 `ack_workbench_batch` | 只确认已接手；事件仍是 `PROCESSING` |
+| `RESOLVED` | Workbench 携带同一 token 调用 `resolve_workbench_batch` | 同事务把事件变为 `CONSUMED` |
+| `FAILED` | 投递失败或任何处理中租约过期 | 事件返回 `PENDING`，同 batch ID 等待重放 |
 
 批次 ID 由事件集合稳定计算。相同批次被重放时，Workbench 必须把它当成恢复，不是新请求。
 任务链接、网关 delivery 和主要完成操作都有稳定去重键，因此恢复应继续原任务，而不是重复创建。
@@ -88,17 +88,19 @@ Workbench 主动 ACK = ACKED，同时事件才变为 CONSUMED
 3. OpenClaw 收到 `project_work` 后结束当前回合；后续写操作只属于项目 Workbench。
 4. 后台 reconciler 每 2 秒扫描 `PENDING`，确保重启后也有人继续推进。
 5. 只有 Provider 已确认上一轮结束，Coordinator 才领取事件并向 Workbench PTY 投递。
-6. 投递后批次是 `DISPATCHED`，事件仍是 `PROCESSING`。
-7. Workbench 读到提示后立即调用 `ack_workbench_batch`；Tower 原子地把批次设为 `ACKED`，
-   同时把关联事件设为 `CONSUMED`。
+6. 投递后批次是 `DISPATCHED`，事件仍是 `PROCESSING`；批次携带 generation、lease token
+   与明确的过期时间。
+7. Workbench 读到提示后立即用同一 lease token 调用 `ack_workbench_batch`；Tower 只把批次
+   设为 `ACKED` 并续租，事件仍是 `PROCESSING`。长处理通过
+   `heartbeat_workbench_batch` 续租。
 8. Workbench 调研并调用 `create_task`。拿到真实 task id 后才调用
    `confirm_gateway_task_created`。
 9. 子任务完成后再次通过 `WorkbenchEvent` 回到 Workbench；Workbench 审查通过才将任务置为
    `IN_REVIEW` 后由 Workbench 调用 `complete_gateway_work`；该调用在同一事务中写入
    `DONE` 与 `FINAL_RESULT/PENDING`，不再先单独调用 `move_task(DONE)`。
 10. 每一张飞书卡片都先写入 `GatewayDelivery`，再幂等发送到原消息线程。
-11. Workbench 完成当前批次中的所有事项或已稳定委派后，调用
-    `resolve_workbench_batch`。
+11. Workbench 完成当前批次中的所有事项或已稳定委派后，用同一 lease token 调用
+    `resolve_workbench_batch`；批次与关联事件在同一事务变为 `RESOLVED + CONSUMED`。
 
 ## 5. 超时与重启时会发生什么
 
@@ -107,12 +109,16 @@ Workbench 主动 ACK = ACKED，同时事件才变为 CONSUMED
 | Tower 在事件入库后重启 | reconciler 从 SQLite 重新发现 `PENDING` |
 | Workbench 正忙 | 不注入，事件保持 `PENDING` |
 | PTY 写入失败 | 批次 `FAILED`，事件立即退回 `PENDING` |
-| PTY 写入成功但 120 秒无 ACK | 批次 `FAILED`，事件退回 `PENDING` 并重放 |
-| ACK 后、创建任务前退出 | gateway watchdog 将未完成工作重新排队 |
+| 创建 `CLAIMED` 后进程退出 | claim 租约过期，事件退回 `PENDING`，同一 batch ID 重放 |
+| PTY 写入成功但无 ACK | dispatch 租约过期，事件退回 `PENDING` 并重放 |
+| ACK 后、resolve 前退出 | processing 租约过期；普通事件与 gateway work 都能通用恢复 |
 | 任务已创建、确认前崩溃 | `GatewayTaskLink` 恢复同一任务并补发确认 |
 | 飞书发送失败 | `GatewayDelivery` 按去重键重试，不重新执行任务 |
 | `DONE` 后发送前崩溃 | 同一事务已创建 `FINAL_RESULT/PENDING`，watchdog 继续发送 |
 | Workbench 卡住或终端丢失 | `WorkbenchRuntime` 显示 `BLOCKED` / `DEGRADED` 与具体原因 |
+| 无人值守外发前退出 | `HarnessOutbound=PENDING`，恢复 worker 继续发送 |
+| 平台已收但本地回执不完整 | `SENT_UNVERIFIED`，激活 ask/park 但不重复发送 |
+| 第二个 Tower 连接同一 DB | runtime leader lease 拒绝启动，避免双扫描器和双 PTY owner |
 
 这里最重要的原则是：**数据库记录的是已证实的事实，而不是对终端行为的猜测。**
 
@@ -134,9 +140,9 @@ Workbench 主动 ACK = ACKED，同时事件才变为 CONSUMED
 
 1. 没有 Provider turn-complete 证据，不向忙碌 PTY 注入。
 2. PTY 写入成功不等于消费成功。
-3. `WorkbenchEvent` 只有在同批次 ACK 时才能进入 `CONSUMED`。
-4. 未 ACK 的 `DISPATCHED` 批次必须可超时恢复。
-5. ACK 和 resolve 必须校验 `parentTaskId`，其他任务不能确认该批次。
+3. `WorkbenchEvent` 只有在同批次 `RESOLVED` 的事务中才能进入 `CONSUMED`。
+4. `CLAIMED`、`DISPATCHED`、`ACKED` 都必须持有有界租约并可超时恢复。
+5. ACK、heartbeat 和 resolve 必须同时校验 `parentTaskId` 与 lease token。
 6. 所有 ACK、resolve、任务确认和 delivery 操作必须幂等。
 7. 外部回复来自服务端持久化状态，不直接转发未经审查的终端输出。
 8. `Task=DONE` 与 `FINAL_RESULT/PENDING` 必须同事务提交。
@@ -144,6 +150,9 @@ Workbench 主动 ACK = ACKED，同时事件才变为 CONSUMED
 10. 外部消息入口不能直接创建任务或启动执行；所有写操作必须有绑定 Workbench 和持久
     `GatewayInbound`。
 11. trusted channel 必须同时受 sender/chat 速率限制和 queued-work 硬上限保护。
+12. 一个 SQLite 数据库同一时刻只能有一个 Tower runtime leader。
+13. 无人值守外发必须先写持久 outbox 与 ask intent，再访问外部平台。
+14. admission control 同时约束 chat、project、Workbench 与 global backlog。
 
 ## 8. 代码与数据位置
 
@@ -155,13 +164,13 @@ Workbench 主动 ACK = ACKED，同时事件才变为 CONSUMED
 | 网关路由与 watchdog | `src/lib/harness/gateway-router.ts` |
 | 后台 reconciler 启动 | `src/instrumentation.ts` |
 | 数据模型 | `prisma/schema.prisma` |
-| 迁移 | `scripts/migrations/0021-workbench-batch-ack.ts`、`0022-workbench-runtime.ts` |
+| 迁移 | `scripts/migrations/0025-workbench-batch-leases.ts`、`0026-harness-outbox.ts`、`0027-runtime-leader-lease.ts` |
 | Coordinator 测试 | `src/lib/workbench/__tests__/coordinator.test.ts` |
 | Gateway 恢复测试 | `src/lib/harness/__tests__/gateway-router.test.ts` |
 
 生产数据默认位于 `~/.tower/database/tower.db`。排查时最有价值的是同时查看
 `GatewayInbound`、`WorkbenchEvent`、`WorkbenchBatch`、`WorkbenchRuntime`、`GatewayTaskLink` 和
-`GatewayDelivery`，不要只看终端画面。
+`GatewayDelivery`、`HarnessOutbound` 与 `TowerRuntimeLease`，不要只看终端画面。
 
 ## 9. 验收清单
 
@@ -170,15 +179,18 @@ Workbench 主动 ACK = ACKED，同时事件才变为 CONSUMED
 | 普通讨论 | 回复原消息，不创建任务 |
 | 项目工作排队 | 收到“已排队”卡片，尚不宣称已创建 |
 | Workbench 投递 | 批次先 `DISPATCHED`，事件仍 `PROCESSING` |
-| Workbench ACK | 批次 `ACKED`，事件同步变 `CONSUMED` |
+| Workbench ACK | 批次 `ACKED`，事件仍为 `PROCESSING`，租约已续期 |
 | 真实任务创建 | 有 `GatewayTaskLink`，飞书收到“任务已创建”卡片 |
 | 子任务审查 | 未经 Workbench 接受不能发送最终结果 |
 | 批次完成 | 批次最终为 `RESOLVED` |
 | 最终回传 | `FINAL_RESULT` delivery 为 `DELIVERED`，回复原线程且只发一次 |
-| ACK 超时 | 120 秒后事件回 `PENDING`，批次变 `FAILED` |
+| 任一处理租约超时 | `CLAIMED/DISPATCHED/ACKED` 事件回 `PENDING`，批次变 `FAILED` |
+| Workbench resolve | 批次 `RESOLVED`，事件在同一事务变 `CONSUMED` |
 | Tower 重启 | 不重新发飞书请求也能继续原链路 |
 | 原子完成 | 模拟飞书发送失败后，任务是 `DONE` 且 `FINAL_RESULT` 保持 `FAILED/PENDING` 可重试 |
-| Missions 健康态 | Workbench 卡片显示 generation、状态、积压；悬停可见心跳、批次和阻塞原因 |
+| Outbound 崩溃恢复 | 发送前崩溃可重试；发送证据不完整进入 `SENT_UNVERIFIED` 且不重复发 |
+| 双实例保护 | 第二个 runtime 无法取得同一数据库的 leader lease |
+| Missions 健康态 | Workbench 卡片显示 generation、状态、积压；运行健康可见租约和 outbox |
 
 ## 10. 阅读顺序
 
