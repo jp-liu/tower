@@ -220,6 +220,8 @@ describe("tower agent extension installer", () => {
             "tower__route_gateway_message",
             "tower__list_tasks",
             "tower__complete_gateway_discussion",
+            "tower__recover_gateway_request",
+            "tower__provision_remote_project",
             "session_status",
           ]),
         },
@@ -239,6 +241,13 @@ describe("tower agent extension installer", () => {
       (agent?.tools as { toolsBySender?: Record<string, { allow?: string[] }> })
         .toolsBySender?.["channel:feishu:ou_owner"]?.allow,
     ).not.toContain("tower__create_task");
+    expect(
+      (agent?.tools as { toolsBySender?: Record<string, { allow?: string[] }> })
+        .toolsBySender?.["*"]?.allow,
+    ).not.toEqual(expect.arrayContaining([
+      "tower__recover_gateway_request",
+      "tower__provision_remote_project",
+    ]));
     expect(cfg.channels.feishu).toMatchObject({
       dmPolicy: "allowlist",
       allowFrom: ["ou_owner"],

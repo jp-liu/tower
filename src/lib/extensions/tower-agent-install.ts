@@ -35,6 +35,8 @@ const OPENCLAW_OWNER_GATEWAY_TOOLS = [
   "tower__get_task_terminal_output",
   "tower__get_gateway_runtime_health",
   "tower__diagnose_gateway_request",
+  "tower__recover_gateway_request",
+  "tower__provision_remote_project",
 ] as const;
 const OPENCLAW_TOWER_GROUP_PROMPT =
   "Use only the Tower tools exposed for the verified sender. Every inbound message must be routed first. " +
