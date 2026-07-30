@@ -36,8 +36,16 @@ export interface HarnessOutboundDispatchResult {
   lastError: string | null;
 }
 
-function stableOutboundKey(input: EnqueueHarnessOutboundInput): string {
-  if (input.dedupKey?.trim()) return `harness:${input.taskId}:${input.dedupKey.trim()}`;
+function stableOutboundKey(input: EnqueueHarnessOutboundInput): {
+  base: string;
+  explicit: boolean;
+} {
+  if (input.dedupKey?.trim()) {
+    return {
+      base: `harness:${input.taskId}:${input.dedupKey.trim()}`,
+      explicit: true,
+    };
+  }
   const digest = createHash("sha256")
     .update(JSON.stringify({
       taskId: input.taskId,
@@ -51,7 +59,23 @@ function stableOutboundKey(input: EnqueueHarnessOutboundInput): string {
     }))
     .digest("hex")
     .slice(0, 32);
-  return `harness:${input.taskId}:${digest}`;
+  return {
+    base: `harness:${input.taskId}:${digest}`,
+    explicit: false,
+  };
+}
+
+function canReuseImplicitOutbound(outbound: {
+  state: HarnessOutbound["state"];
+  expectReply: boolean;
+  harnessMessage: { state: string };
+}): boolean {
+  if (outbound.harnessMessage.state === "PENDING_DELIVERY" || outbound.harnessMessage.state === "OPEN") {
+    return true;
+  }
+  // A crashed in-flight send has an unknown platform outcome. Even when a
+  // notification has no OPEN lifecycle, do not risk duplicating it implicitly.
+  return outbound.state === "SENT_UNVERIFIED" && !outbound.expectReply;
 }
 
 function isUniqueConstraintError(error: unknown): boolean {
@@ -83,7 +107,7 @@ async function activateHarnessMessage(
     messageId?: string | null;
     error?: string | null;
   },
-): Promise<boolean> {
+): Promise<void> {
   if (outbound.expectReply) {
     await tx.harnessMessage.updateMany({
       where: {
@@ -99,12 +123,12 @@ async function activateHarnessMessage(
     where: { id: outbound.harnessMessageId },
     data: { state: outbound.expectReply ? "OPEN" : "CLOSED" },
   });
-  const paused = outbound.expectReply
-    ? await tx.taskExecution.updateMany({
-        where: { taskId: outbound.taskId, status: "RUNNING" },
-        data: { status: "PAUSED" },
-      })
-    : { count: 0 };
+  if (outbound.expectReply) {
+    await tx.taskExecution.updateMany({
+      where: { taskId: outbound.taskId, status: "RUNNING" },
+      data: { status: "PAUSED" },
+    });
+  }
 
   if (receipt.messageId) {
     const platform = receipt.platform?.trim() || outbound.downstream?.trim() || outbound.gateway;
@@ -146,21 +170,22 @@ async function activateHarnessMessage(
       lastError: receipt.error?.slice(0, 2000) || null,
     },
   });
-  return paused.count > 0;
 }
 
 async function rowResult(
   outboundId: string,
   deduped: boolean,
-  parked = false,
 ): Promise<HarnessOutboundDispatchResult> {
-  const row = await db.harnessOutbound.findUniqueOrThrow({ where: { id: outboundId } });
+  const row = await db.harnessOutbound.findUniqueOrThrow({
+    where: { id: outboundId },
+    include: { harnessMessage: { select: { state: true } } },
+  });
   return {
     outboundId,
     state: row.state,
     deduped,
     sent: row.state === "DELIVERED" || row.state === "SENT_UNVERIFIED",
-    parked: parked || (row.expectReply && (row.state === "DELIVERED" || row.state === "SENT_UNVERIFIED")),
+    parked: row.expectReply && row.harnessMessage.state === "OPEN",
     platformMessageId: row.platformMessageId,
     lastError: row.lastError,
   };
@@ -169,11 +194,40 @@ async function rowResult(
 export async function enqueueHarnessOutbound(
   input: EnqueueHarnessOutboundInput,
 ): Promise<HarnessOutboundDispatchResult> {
-  const dedupKey = stableOutboundKey(input);
+  const stableKey = stableOutboundKey(input);
+  let attemptedDedupKey = stableKey.base;
   let outbound: HarnessOutbound;
   let deduped = false;
   try {
-    outbound = await db.$transaction(async (tx) => {
+    const selected = await db.$transaction(async (tx) => {
+      if (stableKey.explicit) {
+        const existing = await tx.harnessOutbound.findUnique({
+          where: { dedupKey: stableKey.base },
+        });
+        if (existing) return { outbound: existing, deduped: true };
+      } else {
+        const lifecycleWhere = {
+          OR: [
+            { dedupKey: stableKey.base },
+            { dedupKey: { startsWith: `${stableKey.base}:cycle:` } },
+          ],
+        } satisfies Prisma.HarnessOutboundWhereInput;
+        const latest = await tx.harnessOutbound.findFirst({
+          where: lifecycleWhere,
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          include: { harnessMessage: { select: { state: true } } },
+        });
+        if (latest && canReuseImplicitOutbound(latest)) {
+          return { outbound: latest, deduped: true };
+        }
+        const lifecycleCount = latest
+          ? await tx.harnessOutbound.count({ where: lifecycleWhere })
+          : 0;
+        attemptedDedupKey = lifecycleCount === 0
+          ? stableKey.base
+          : `${stableKey.base}:cycle:${lifecycleCount + 1}`;
+      }
+
       const task = await tx.task.findUnique({
         where: { id: input.taskId },
         select: {
@@ -196,9 +250,9 @@ export async function enqueueHarnessOutbound(
           state: "PENDING_DELIVERY",
         },
       });
-      return tx.harnessOutbound.create({
+      const created = await tx.harnessOutbound.create({
         data: {
-          dedupKey,
+          dedupKey: attemptedDedupKey,
           taskId: input.taskId,
           executionId: task.executions[0]?.id ?? null,
           harnessMessageId: message.id,
@@ -213,10 +267,15 @@ export async function enqueueHarnessOutbound(
           presentation: input.presentation === undefined ? null : JSON.stringify(input.presentation),
         },
       });
+      return { outbound: created, deduped: false };
     });
+    outbound = selected.outbound;
+    deduped = selected.deduped;
   } catch (error) {
     if (!isUniqueConstraintError(error)) throw error;
-    outbound = await db.harnessOutbound.findUniqueOrThrow({ where: { dedupKey } });
+    outbound = await db.harnessOutbound.findUniqueOrThrow({
+      where: { dedupKey: attemptedDedupKey },
+    });
     deduped = true;
   }
   if (outbound.state === "PENDING" || outbound.state === "FAILED") {
@@ -271,25 +330,23 @@ export async function dispatchHarnessOutbound(
   const metadata = sent.metadata ?? parseGatewaySendOutput(sent.output) ?? undefined;
   const messageId = metadata?.message_id?.trim() || null;
   if (sent.ok && messageId) {
-    let parked = false;
     await db.$transaction(async (tx) => {
       const current = await tx.harnessOutbound.findUniqueOrThrow({ where: { id: outbound.id } });
       if (current.state !== "SENDING" || current.claimToken !== claimToken) return;
-      parked = await activateHarnessMessage(tx, current, "DELIVERED", {
+      await activateHarnessMessage(tx, current, "DELIVERED", {
         platform: metadata?.platform,
         chatId: metadata?.chat_id || sent.resolvedDest,
         messageId,
       });
     });
-    return rowResult(outbound.id, deduped, parked);
+    return rowResult(outbound.id, deduped);
   }
 
   if (sent.ok || messageId) {
-    let parked = false;
     await db.$transaction(async (tx) => {
       const current = await tx.harnessOutbound.findUniqueOrThrow({ where: { id: outbound.id } });
       if (current.state !== "SENDING" || current.claimToken !== claimToken) return;
-      parked = await activateHarnessMessage(tx, current, "SENT_UNVERIFIED", {
+      await activateHarnessMessage(tx, current, "SENT_UNVERIFIED", {
         platform: metadata?.platform,
         chatId: metadata?.chat_id || sent.resolvedDest,
         messageId,
@@ -298,7 +355,7 @@ export async function dispatchHarnessOutbound(
           : `Platform may have accepted the message before failure: ${sent.output}`,
       });
     });
-    return rowResult(outbound.id, deduped, parked);
+    return rowResult(outbound.id, deduped);
   }
 
   await db.harnessOutbound.updateMany({

@@ -172,4 +172,124 @@ describe("durable harness outbound", () => {
     expect(second.deduped).toBe(true);
     expect(send).toHaveBeenCalledTimes(1);
   });
+
+  it("deduplicates concurrent implicit retries within one open ask lifecycle", async () => {
+    const fixture = await taskFixture();
+    send.mockResolvedValue({
+      ok: true,
+      output: "sent",
+      resolvedDest: "oc_takeoff",
+      metadata: { platform: "feishu", chat_id: "oc_takeoff", message_id: "om_concurrent" },
+    });
+    const input = {
+      taskId: fixture.task.id,
+      gateway: "openclaw" as const,
+      downstream: "feishu",
+      dest: "oc_takeoff",
+      scope: "unattended" as const,
+      expectReply: true,
+      message: "One concurrent question",
+    };
+
+    const [first, second] = await Promise.all([
+      enqueueHarnessOutbound(input),
+      enqueueHarnessOutbound(input),
+    ]);
+
+    expect(first.outboundId).toBe(second.outboundId);
+    expect([first.deduped, second.deduped]).toContain(true);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts a new implicit ask lifecycle after an identical prior ask was answered", async () => {
+    const fixture = await taskFixture();
+    send
+      .mockResolvedValueOnce({
+        ok: true,
+        output: "sent",
+        resolvedDest: "oc_takeoff",
+        metadata: { platform: "feishu", chat_id: "oc_takeoff", message_id: "om_cycle_1" },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        output: "sent",
+        resolvedDest: "oc_takeoff",
+        metadata: { platform: "feishu", chat_id: "oc_takeoff", message_id: "om_cycle_2" },
+      });
+    const input = {
+      taskId: fixture.task.id,
+      gateway: "openclaw" as const,
+      downstream: "feishu",
+      dest: "oc_takeoff",
+      scope: "unattended" as const,
+      expectReply: true,
+      message: "Please confirm the same decision",
+    };
+
+    const first = await enqueueHarnessOutbound(input);
+    const firstOutbound = await db.harnessOutbound.findUniqueOrThrow({
+      where: { id: first.outboundId },
+    });
+    await db.$transaction([
+      db.harnessMessage.update({
+        where: { id: firstOutbound.harnessMessageId },
+        data: { state: "ANSWERED", replyText: "yes", repliedAt: new Date() },
+      }),
+      db.taskExecution.update({
+        where: { id: fixture.execution.id },
+        data: { status: "RUNNING" },
+      }),
+    ]);
+
+    const second = await enqueueHarnessOutbound(input);
+
+    expect(second).toMatchObject({
+      state: "DELIVERED",
+      deduped: false,
+      sent: true,
+      parked: true,
+      platformMessageId: "om_cycle_2",
+    });
+    expect(second.outboundId).not.toBe(first.outboundId);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(await db.harnessOutbound.count({ where: { taskId: fixture.task.id } })).toBe(2);
+  });
+
+  it("reports an explicitly deduplicated answered ask as no longer parked", async () => {
+    const fixture = await taskFixture();
+    send.mockResolvedValue({
+      ok: true,
+      output: "sent",
+      resolvedDest: "oc_takeoff",
+      metadata: { platform: "feishu", chat_id: "oc_takeoff", message_id: "om_answered" },
+    });
+    const input = {
+      taskId: fixture.task.id,
+      gateway: "openclaw" as const,
+      downstream: "feishu",
+      dest: "oc_takeoff",
+      scope: "unattended" as const,
+      expectReply: true,
+      message: "One logical decision",
+      dedupKey: "decision-1",
+    };
+    const first = await enqueueHarnessOutbound(input);
+    const outbound = await db.harnessOutbound.findUniqueOrThrow({
+      where: { id: first.outboundId },
+    });
+    await db.harnessMessage.update({
+      where: { id: outbound.harnessMessageId },
+      data: { state: "ANSWERED", replyText: "done", repliedAt: new Date() },
+    });
+
+    const repeated = await enqueueHarnessOutbound(input);
+
+    expect(repeated).toMatchObject({
+      outboundId: first.outboundId,
+      deduped: true,
+      sent: true,
+      parked: false,
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+  });
 });
