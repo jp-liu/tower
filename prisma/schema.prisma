@@ -15,48 +15,48 @@ model Workspace {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  projects      Project[]
-  labels        Label[]
-  prompts       AgentPrompt[]
-  versionTypes  VersionType[]
-  productGroups ProductGroup[]
+  projects          Project[]
+  labels            Label[]
+  prompts           AgentPrompt[]
+  versionTypes      VersionType[]
+  productGroups     ProductGroup[]
   assistantSessions AssistantSession[]
 }
 
 model Project {
-  id          String      @id @default(cuid())
-  name        String
-  alias       String?
-  description String?
-  type           ProjectType     @default(NORMAL)
-  gitUrl         String?
-  repositoryKey  String?     @unique
-  localPath      String?
-  projectType    ProjectCategory @default(FRONTEND)
-  previewCommand String?
-  previewPort    Int?
-  previewPreset  String?
+  id                    String            @id @default(cuid())
+  name                  String
+  alias                 String?
+  description           String?
+  type                  ProjectType       @default(NORMAL)
+  gitUrl                String?
+  repositoryKey         String?           @unique
+  localPath             String?
+  projectType           ProjectCategory   @default(FRONTEND)
+  previewCommand        String?
+  previewPort           Int?
+  previewPreset         String?
   previewInstallCommand String?
-  accessMode     ProjectAccessMode @default(NORMAL)
+  accessMode            ProjectAccessMode @default(NORMAL)
   // 知识库：groupId 把同一产品的多个仓库（前后端/trace/需求）归入一个 ProductGroup，
   // 问答时自动把同组兄弟项目一起纳入检索。knowledgeDir 是 repo 内知识库目录（相对 localPath），
   // 留空则用约定默认（见 src/lib/knowledge.ts DEFAULT_KNOWLEDGE_DIR）。
-  groupId        String?
-  knowledgeDir   String?
-  workspaceId    String
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  groupId               String?
+  knowledgeDir          String?
+  workspaceId           String
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
-  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group        ProductGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  tasks        Task[]
-  repositories Repository[]
-  notes        ProjectNote[]
-  assets       ProjectAsset[]
-  versions     Version[]
-  facts        ProjectFact[]
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             ProductGroup?      @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  tasks             Task[]
+  repositories      Repository[]
+  notes             ProjectNote[]
+  assets            ProjectAsset[]
+  versions          Version[]
+  facts             ProjectFact[]
   assistantSessions AssistantSession[]
-  gatewaySessions GatewaySession[]
+  gatewaySessions   GatewaySession[]
 
   @@index([workspaceId])
   @@index([groupId])
@@ -95,23 +95,23 @@ model ProjectFact {
 }
 
 model Label {
-  id          String  @id @default(cuid())
-  name        String
-  color       String  @default("#94a3b8")
+  id           String   @id @default(cuid())
+  name         String
+  color        String   @default("#94a3b8")
   /// null = system-level (visible in every workspace); set = scoped to that workspace
-  workspaceId String?
+  workspaceId  String?
   /// Protection bit only: builtin labels cannot be edited or deleted. Does NOT
   /// imply system-level visibility — that is `workspaceId: null`.
-  isBuiltin   Boolean @default(false)
+  isBuiltin    Boolean  @default(false)
   /// Worktree branch prefix: a task carrying this label branches as
   /// `<branchPrefix>/<taskId>`. null = no opinion, fall back to the default.
   branchPrefix String?
   /// What kind of task this label fits — read by create_task (MCP) to pick a
   /// label by meaning rather than guessing from the name. null = no guidance.
-  description String?
-  createdAt   DateTime @default(now())
+  description  String?
+  createdAt    DateTime @default(now())
 
-  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace?  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   tasks     TaskLabel[]
 
   @@index([workspaceId])
@@ -128,45 +128,46 @@ model TaskLabel {
 }
 
 model Task {
-  id          String     @id @default(cuid())
-  title       String
-  description String?
-  status      TaskStatus @default(TODO)
-  priority    Priority   @default(MEDIUM)
-  order       Int        @default(0)
-  pinned      Boolean    @default(false)
-  promptId    String?
-  baseBranch  String?
-  subPath     String?
-  parentTaskId String?   // 派生来源：派生此任务的父任务 id（父任务终端注入的 TOWER_TASK_ID）。裸字符串无 relation，与 promptId 同惯例
+  id                     String     @id @default(cuid())
+  title                  String
+  description            String?
+  status                 TaskStatus @default(TODO)
+  priority               Priority   @default(MEDIUM)
+  order                  Int        @default(0)
+  pinned                 Boolean    @default(false)
+  promptId               String?
+  baseBranch             String?
+  subPath                String?
+  parentTaskId           String? // 派生来源：派生此任务的父任务 id（父任务终端注入的 TOWER_TASK_ID）。裸字符串无 relation，与 promptId 同惯例
   previewCommandOverride String?
   previewPortOverride    Int?
-  projectId   String
-  versionId   String?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  doneAt      DateTime?  // 进入 DONE 的时间戳，用于「归档期限」判定（离开 DONE 时清空）
+  projectId              String
+  versionId              String?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+  doneAt                 DateTime? // 进入 DONE 的时间戳，用于「归档期限」判定（离开 DONE 时清空）
 
   // Goal-mode runtime marker (NOT a task-creation setting). Set to true only when the
   // agent activates the tower-goal skill at run time (set_goal_mode), and auto-cleared
   // when the task leaves the active loop (Stop / DONE / CANCELLED / IN_REVIEW). While true,
   // list_notify_targets defaults the scope to 'unattended' (reach the owner). Tower only
   // records + park/resume — it never sends and never stores platform bindings.
-  unattended    Boolean   @default(false)
+  unattended Boolean @default(false)
 
-  project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  executions TaskExecution[]
-  messages   TaskMessage[]
-  labels     TaskLabel[]
-  notes      ProjectNote[]
-  assets     ProjectAsset[]
-  harnessMessages HarnessMessage[]
-  harnessOutbounds HarnessOutbound[]
-  workbenchParentEvents WorkbenchEvent[] @relation("WorkbenchEventParent")
-  workbenchSourceEvents WorkbenchEvent[] @relation("WorkbenchEventSource")
-  workbenchBatches WorkbenchBatch[]
-  workbenchRuntime WorkbenchRuntime?
-  version    Version?        @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  project               Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  executions            TaskExecution[]
+  messages              TaskMessage[]
+  labels                TaskLabel[]
+  notes                 ProjectNote[]
+  assets                ProjectAsset[]
+  harnessMessages       HarnessMessage[]
+  harnessOutbounds      HarnessOutbound[]
+  workbenchParentEvents WorkbenchEvent[]  @relation("WorkbenchEventParent")
+  workbenchSourceEvents WorkbenchEvent[]  @relation("WorkbenchEventSource")
+  workbenchBatches      WorkbenchBatch[]
+  workbenchRuntime      WorkbenchRuntime?
+  gatewayTaskLink       GatewayTaskLink?
+  version               Version?          @relation(fields: [versionId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
   @@index([status])
@@ -181,39 +182,42 @@ model GatewayTaskLink {
   inboundId String   @unique
   taskId    String   @unique
   createdAt DateTime @default(now())
+
+  inbound GatewayInbound @relation(fields: [inboundId], references: [id], onDelete: Cascade)
+  task    Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
 }
 
 model TaskExecution {
-  id             String          @id @default(cuid())
-  taskId         String
-  agent          String          @default("CLAUDE_CODE")
-  config         String?         @default("DEFAULT")
-  connectionId   String?
-  modelId        String?
-  targetId       String?
-  status         ExecutionStatus @default(PENDING)
-  branch         String?
-  sessionId      String?
-  worktreePath   String?
-  worktreeBranch String?
-  startedAt      DateTime?
-  endedAt        DateTime?
-  summary        String?
-  gitLog         String?
-  gitStats       String?
-  exitCode       Int?
-  callbackUrl    String?
-  terminalLog    String?
+  id              String          @id @default(cuid())
+  taskId          String
+  agent           String          @default("CLAUDE_CODE")
+  config          String?         @default("DEFAULT")
+  connectionId    String?
+  modelId         String?
+  targetId        String?
+  status          ExecutionStatus @default(PENDING)
+  branch          String?
+  sessionId       String?
+  worktreePath    String?
+  worktreeBranch  String?
+  startedAt       DateTime?
+  endedAt         DateTime?
+  summary         String?
+  gitLog          String?
+  gitStats        String?
+  exitCode        Int?
+  callbackUrl     String?
+  terminalLog     String?
   forkCommit      String?
   mergeCommit     String?
   branchTipCommit String?
-  createdAt      DateTime        @default(now())
+  createdAt       DateTime        @default(now())
 
-  insightNoteId   String?
-  insightNote     ProjectNote? @relation(fields: [insightNoteId], references: [id], onDelete: SetNull)
+  insightNoteId String?
+  insightNote   ProjectNote? @relation(fields: [insightNoteId], references: [id], onDelete: SetNull)
 
-  task     Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  messages TaskMessage[]
+  task            Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  messages        TaskMessage[]
   workbenchEvents WorkbenchEvent[]
 
   @@index([taskId])
@@ -223,28 +227,28 @@ model TaskExecution {
 // Durable child-to-supervisor inbox. Producers only insert/deduplicate by dedupKey;
 // a parent consumes the rows in one aggregated batch at a completed-turn PTY boundary.
 model WorkbenchEvent {
-  id           String                 @id @default(cuid())
-  parentTaskId String
-  sourceTaskId String
-  executionId  String?
-  kind         WorkbenchEventKind
-  priority     WorkbenchEventPriority @default(NORMAL)
-  dedupKey     String                 @unique
-  executionReviewKey String?          @unique
-  batchId      String?
-  payload      String
-  state        WorkbenchEventState    @default(PENDING)
-  claimToken   String?
-  claimedAt    DateTime?
-  attempts     Int                    @default(0)
-  lastError    String?
-  consumedAt   DateTime?
-  createdAt    DateTime               @default(now())
-  updatedAt    DateTime               @updatedAt
+  id                 String                 @id @default(cuid())
+  parentTaskId       String
+  sourceTaskId       String
+  executionId        String?
+  kind               WorkbenchEventKind
+  priority           WorkbenchEventPriority @default(NORMAL)
+  dedupKey           String                 @unique
+  executionReviewKey String?                @unique
+  batchId            String?
+  payload            String
+  state              WorkbenchEventState    @default(PENDING)
+  claimToken         String?
+  claimedAt          DateTime?
+  attempts           Int                    @default(0)
+  lastError          String?
+  consumedAt         DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
 
-  parentTask Task           @relation("WorkbenchEventParent", fields: [parentTaskId], references: [id], onDelete: Cascade)
-  sourceTask Task           @relation("WorkbenchEventSource", fields: [sourceTaskId], references: [id], onDelete: Cascade)
-  execution  TaskExecution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  parentTask Task            @relation("WorkbenchEventParent", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  sourceTask Task            @relation("WorkbenchEventSource", fields: [sourceTaskId], references: [id], onDelete: Cascade)
+  execution  TaskExecution?  @relation(fields: [executionId], references: [id], onDelete: SetNull)
   batch      WorkbenchBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   @@index([parentTaskId, state, priority, createdAt])
@@ -294,12 +298,12 @@ model WorkbenchRuntime {
   activeBatchId       String?
   pendingEvents       Int                   @default(0)
   oldestPendingAt     DateTime?
-  lastHeartbeatAt     DateTime               @default(now())
+  lastHeartbeatAt     DateTime              @default(now())
   lastTurnCompletedAt DateTime?
   blockedReason       String?
   lastError           String?
-  createdAt           DateTime               @default(now())
-  updatedAt           DateTime               @updatedAt
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
@@ -312,17 +316,17 @@ model WorkbenchRuntime {
 // - notify/done/failed 是日志行，出生即 CLOSED，不参与「待回复」过滤。
 // - 不变量：待回复 = kind='ask' AND state='OPEN'。回复内容记在 replyText（reply_to_ask 写入）。
 model HarnessMessage {
-  id           String   @id @default(cuid())
-  taskId       String
-  executionId  String?
-  kind         String   // "ask" | "notify" | "done" | "failed"（映射 OutboundKind）
-  content      String
-  replyText    String?
-  repliedAt    DateTime?
-  state        HarnessState @default(OPEN)
-  createdAt    DateTime @default(now())
+  id          String       @id @default(cuid())
+  taskId      String
+  executionId String?
+  kind        String // "ask" | "notify" | "done" | "failed"（映射 OutboundKind）
+  content     String
+  replyText   String?
+  repliedAt   DateTime?
+  state       HarnessState @default(OPEN)
+  createdAt   DateTime     @default(now())
 
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task     Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
   outbound HarnessOutbound?
 
   @@index([taskId, kind, state])
@@ -360,7 +364,7 @@ model HarnessOutbound {
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
 
-  task    Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task           Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
   harnessMessage HarnessMessage @relation(fields: [harnessMessageId], references: [id], onDelete: Cascade)
 
   @@index([state, nextAttemptAt, createdAt])
@@ -442,6 +446,7 @@ model GatewayInbound {
 
   session    GatewaySession?   @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   deliveries GatewayDelivery[]
+  taskLink   GatewayTaskLink?
 
   @@index([platform, chatId, platformMessageId])
   @@index([sessionId, state, createdAt])
@@ -452,24 +457,24 @@ model GatewayInbound {
 // Retryable response to the original external message. A stable dedupKey
 // prevents duplicate create confirmations and completion callbacks.
 model GatewayDelivery {
-  id                String               @id @default(cuid())
-  dedupKey          String               @unique
-  sessionId         String
-  inboundId         String?
-  kind              GatewayDeliveryKind
-  content           String
-  presentation      String?
-  state             GatewayDeliveryState @default(PENDING)
-  attempts          Int                  @default(0)
-  platformMessageId String?
-  platformChatId    String?
-  platformParentId  String?
+  id                  String               @id @default(cuid())
+  dedupKey            String               @unique
+  sessionId           String
+  inboundId           String?
+  kind                GatewayDeliveryKind
+  content             String
+  presentation        String?
+  state               GatewayDeliveryState @default(PENDING)
+  attempts            Int                  @default(0)
+  platformMessageId   String?
+  platformChatId      String?
+  platformParentId    String?
   platformMessageType String?
-  lastError         String?
-  nextAttemptAt     DateTime?
-  deliveredAt       DateTime?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  lastError           String?
+  nextAttemptAt       DateTime?
+  deliveredAt         DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   session GatewaySession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   inbound GatewayInbound? @relation(fields: [inboundId], references: [id], onDelete: SetNull)
@@ -545,9 +550,9 @@ model Version {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  type    VersionType? @relation(fields: [typeId], references: [id], onDelete: SetNull)
-  tasks   Task[]
+  project           Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type              VersionType?       @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  tasks             Task[]
   assistantSessions AssistantSession[]
 
   @@index([projectId])
@@ -719,11 +724,11 @@ model AiCapabilityTarget {
   id                 String   @id @default(cuid())
   capabilityConfigId String
   connectionId       String
-  modelId             String?
-  targetKey           String
-  order               Int
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  modelId            String?
+  targetKey          String
+  order              Int
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   capabilityConfig AiCapabilityConfig @relation(fields: [capabilityConfigId], references: [id], onDelete: Cascade)
   connection       ProviderConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
@@ -759,14 +764,14 @@ model AiCapabilityAttempt {
 }
 
 model AgentPrompt {
-  id          String     @id @default(cuid())
+  id          String   @id @default(cuid())
   name        String
   description String?
   content     String
-  isDefault   Boolean    @default(false)
+  isDefault   Boolean  @default(false)
   workspaceId String?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -784,43 +789,43 @@ model SystemConfig {
 /// A concrete CLI or API connection. API protocols may have multiple instances;
 /// built-in CLI rows are addressed by an immutable `cli:<pluginId>` key.
 model ProviderConnection {
-  id               String               @id @default(cuid())
-  connectionKey    String?              @unique
-  name             String               @default("")
+  id                 String                @id @default(cuid())
+  connectionKey      String?               @unique
+  name               String                @default("")
   /// "cli" | "api"
-  kind             String               @default("cli")
+  kind               String                @default("cli")
   /// CLI plugin id or API protocol: openai/openai-compatible/anthropic/google.
-  provider         String
-  enabled          Boolean              @default(true)
+  provider           String
+  enabled            Boolean               @default(true)
   /// untested | connected | partial | unavailable | dependency-missing | dependency-incompatible
-  testStatus       String               @default("untested")
-  lastTestedAt     DateTime?
+  testStatus         String                @default("untested")
+  lastTestedAt       DateTime?
   /// Compatibility gate for the existing CLI capability resolver.
-  testOk           Boolean              @default(false)
-  version          String?
-  mcpInstalled     Boolean              @default(false)
-  hooksInstalled   Boolean              @default(false)
-  skillsInstalled  Boolean              @default(false)
-  installLog       String?
-  presetId         String?
-  baseUrl          String?
-  defaultModelId   String?
-  headersJson      String               @default("[]")
-  queryParamsJson  String               @default("[]")
-  roundRobinCursor Int                  @default(0)
-  diagnosticsJson  String?
-  commandOverride  String?
-  baseArgsJson     String               @default("[]")
-  envVarsJson      String               @default("[]")
-  settingsJson     String               @default("{}")
-  resolvedCommand  String?
-  resolvedVersion  String?
-  apiKeys          ApiConnectionKey[]
-  models           ApiConnectionModel[]
+  testOk             Boolean               @default(false)
+  version            String?
+  mcpInstalled       Boolean               @default(false)
+  hooksInstalled     Boolean               @default(false)
+  skillsInstalled    Boolean               @default(false)
+  installLog         String?
+  presetId           String?
+  baseUrl            String?
+  defaultModelId     String?
+  headersJson        String                @default("[]")
+  queryParamsJson    String                @default("[]")
+  roundRobinCursor   Int                   @default(0)
+  diagnosticsJson    String?
+  commandOverride    String?
+  baseArgsJson       String                @default("[]")
+  envVarsJson        String                @default("[]")
+  settingsJson       String                @default("{}")
+  resolvedCommand    String?
+  resolvedVersion    String?
+  apiKeys            ApiConnectionKey[]
+  models             ApiConnectionModel[]
   capabilityTargets  AiCapabilityTarget[]
   capabilityAttempts AiCapabilityAttempt[]
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 
   @@index([kind, provider])
   @@index([kind, enabled, testStatus])

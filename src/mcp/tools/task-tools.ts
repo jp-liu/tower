@@ -201,13 +201,29 @@ export const taskTools = {
         });
         const existingTaskId = inbound.createdTaskId || linkedTask?.taskId;
         if (existingTaskId) {
-          const existing = await db.task.findUniqueOrThrow({ where: { id: existingTaskId } });
-          return {
-            task: existing,
-            deduped: true,
-            recovery: { gatewayInboundId: inbound.id, existingTaskId },
-            display: `Task already exists for gateway inbound ${inbound.id}: ${existing.id}`,
-          };
+          const existing = await db.task.findUnique({ where: { id: existingTaskId } });
+          if (existing) {
+            return {
+              task: existing,
+              deduped: true,
+              recovery: { gatewayInboundId: inbound.id, existingTaskId },
+              display: `Task already exists for gateway inbound ${inbound.id}: ${existing.id}`,
+            };
+          }
+          // Defensive cleanup for databases created before GatewayTaskLink had
+          // foreign keys. The same inbound may now safely recreate one task.
+          await db.$transaction([
+            db.gatewayTaskLink.deleteMany({
+              where: {
+                inboundId: inbound.id,
+                taskId: existingTaskId,
+              },
+            }),
+            db.gatewayInbound.updateMany({
+              where: { id: inbound.id, createdTaskId: existingTaskId },
+              data: { createdTaskId: null },
+            }),
+          ]);
         }
         gatewayInboundId = inbound.id;
       }

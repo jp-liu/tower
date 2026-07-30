@@ -1900,7 +1900,25 @@ export async function recoverQueuedGatewayWork(
         where: { inboundId: inbound.id },
         select: { taskId: true },
       });
-      let linkedTask = durableLink ? { id: durableLink.taskId } : null;
+      let linkedTask = durableLink
+        ? await db.task.findUnique({
+            where: { id: durableLink.taskId },
+            select: { id: true },
+          })
+        : null;
+      if (durableLink && !linkedTask) {
+        // Defensive cleanup for pre-0028 databases or foreign-key-disabled
+        // manual edits. Never treat a bare link row as proof that a task exists.
+        await db.$transaction([
+          db.gatewayTaskLink.deleteMany({
+            where: { inboundId: inbound.id, taskId: durableLink.taskId },
+          }),
+          db.gatewayInbound.updateMany({
+            where: { id: inbound.id, createdTaskId: durableLink.taskId },
+            data: { createdTaskId: null },
+          }),
+        ]);
+      }
       if (!linkedTask && inbound.createdTaskId) {
         linkedTask = await db.task.findUnique({
           where: { id: inbound.createdTaskId },

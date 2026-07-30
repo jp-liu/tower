@@ -1137,6 +1137,33 @@ describe("gateway confirmations and delivery retry", () => {
     expect(sender).toHaveBeenCalledTimes(1);
   });
 
+  it("removes the durable gateway link when its child task is deleted", async () => {
+    const routed = await routeGatewayInbound(
+      inbound({ intent: "PROJECT_WORK", project: alphaId, content: "Create a disposable child task" }),
+      vi.fn(async () => ({ mode: "started", executionId: "workbench-exec" })),
+      successfulSender("om_queued_for_delete"),
+    );
+    expect(routed.mode).toBe("project_work");
+    if (routed.mode !== "project_work") return;
+
+    const child = await db.task.create({
+      data: { title: "Disposable child", projectId: alphaId, parentTaskId: routed.workbenchTaskId },
+    });
+    await db.gatewayTaskLink.create({
+      data: { inboundId: routed.inboundId, taskId: child.id },
+    });
+
+    await db.task.delete({ where: { id: child.id } });
+
+    expect(await db.gatewayTaskLink.findUnique({
+      where: { inboundId: routed.inboundId },
+    })).toBeNull();
+    expect(await db.gatewayInbound.findUnique({
+      where: { id: routed.inboundId },
+      select: { state: true },
+    })).toEqual({ state: "QUEUED" });
+  });
+
   it("persists a failed discussion delivery and retries it against the original message", async () => {
     const request = inbound({ project: alphaId, rootMessageId: "om_original", threadId: "omt_discussion" });
     const routed = await routeGatewayInbound(request, vi.fn());
