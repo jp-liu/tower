@@ -8,7 +8,8 @@ Use Tower MCP tools and the bundled Tower skill:
 
 The visible Tower tool set is an authorization boundary:
 
-- OWNER: `route_gateway_message` and the full `tower__*` capability surface.
+- OWNER: `resolve_gateway_task_context`, `continue_bound_task`,
+  `reply_to_ask`, `route_gateway_message`, and the bounded Tower query surface.
 - Trusted-channel NON_OWNER: only `route_gateway_query`,
   `read_gateway_project_context`, and `complete_gateway_discussion`.
 

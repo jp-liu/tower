@@ -11,6 +11,7 @@ import {
   GATEWAY_RECENT_SESSION_TTL_MS,
   completeGatewayDiscussion,
   completeGatewayWork,
+  continueGatewayBoundTask,
   confirmGatewayTaskCreated,
   recoverQueuedGatewayWork,
   resetGatewayDeliveryRetrySchedulerForTests,
@@ -18,6 +19,7 @@ import {
   routeGatewayInbound,
   routeGatewayProjectQuery,
   readGatewayProjectContext,
+  resolveGatewayTaskContext,
   type GatewayInboundRequest,
 } from "../gateway-router";
 import type { HarnessGatewaySendInput } from "../gateway-send";
@@ -127,24 +129,17 @@ afterEach(async () => {
 });
 
 describe("gateway inbound routing", () => {
-  it("deduplicates direct inbound messages without starting a Workbench", async () => {
+  it("rejects DIRECT without persisting it or starting a Workbench", async () => {
     const ensure = vi.fn(async () => ({ mode: "started", executionId: "exec" }));
     const request = inbound({ intent: "DIRECT", content: "What time is it?" });
 
     const first = await routeGatewayInbound(request, ensure);
     const duplicate = await routeGatewayInbound(request, ensure);
 
-    expect(first).toMatchObject({ mode: "gateway_direct", deduped: false });
-    expect(duplicate).toEqual({
-      mode: "already_processed",
-      inboundId: first.inboundId,
-      deduped: true,
-      noOp: true,
-      state: "PROCESSED",
-    });
-    expect(duplicate).not.toHaveProperty("instructions");
+    expect(first).toMatchObject({ mode: "direct_not_supported", inboundId: null, noOp: true });
+    expect(duplicate).toMatchObject({ mode: "direct_not_supported", inboundId: null, noOp: true });
     expect(ensure).not.toHaveBeenCalled();
-    expect(await db.gatewayInbound.count({ where: { platformMessageId: request.platformMessageId } })).toBe(1);
+    expect(await db.gatewayInbound.count({ where: { platformMessageId: request.platformMessageId } })).toBe(0);
   });
 
   it("does not execute a duplicate Tower command twice", async () => {
@@ -242,6 +237,7 @@ describe("gateway inbound routing", () => {
     expect(routed.mode).not.toBe("task_reply");
     expect(routed.mode).not.toBe("project_work");
     expect(await db.workbenchEvent.count({ where: { kind: "GATEWAY_WORK_REQUEST" } })).toBe(0);
+    if (routed.mode !== "project_discussion") return;
 
     const context = await readGatewayProjectContext(routed.inboundId, "What is the current project status?");
     expect(context).toMatchObject({
@@ -294,6 +290,7 @@ describe("gateway inbound routing", () => {
   it("rechecks non-owner project scope when project context is read", async () => {
     const routed = await routeGatewayProjectQuery(inbound({ project: alphaId }));
     expect(routed).toMatchObject({ mode: "project_discussion" });
+    if (routed.mode !== "project_discussion") return;
 
     await db.systemConfig.delete({ where: { key: GATEWAY_CHANNEL_BINDINGS_KEY } });
 
@@ -302,7 +299,7 @@ describe("gateway inbound routing", () => {
   });
 
   it("does not process a concurrent duplicate while its first route is still claimed", async () => {
-    const request = inbound({ intent: "DIRECT", content: "Answer only once" });
+    const request = inbound({ intent: "TOWER", content: "Answer only once" });
     await db.gatewayInbound.create({
       data: {
         dedupKey: `gateway-inbound:openclaw:feishu:oc_gateway_test:${request.platformMessageId}`,
@@ -311,7 +308,7 @@ describe("gateway inbound routing", () => {
         chatId: "oc_gateway_test",
         platformMessageId: request.platformMessageId,
         senderId: request.senderId,
-        intent: "DIRECT",
+        intent: "TOWER",
         content: request.content,
       },
     });
@@ -363,10 +360,11 @@ describe("gateway inbound routing", () => {
       content: "Continue this task",
     }), vi.fn());
     expect(replyBound).toMatchObject({
-      mode: "task_reply",
+      mode: "task_context",
       taskId: betaTask.id,
       project: { projectId: betaId },
       resolution: "reply_binding",
+      context: { subjectTaskId: betaTask.id, taskStatus: "TODO", hasOpenAsk: false },
     });
 
     const betaDiscussion = await routeGatewayInbound(inbound({
@@ -395,7 +393,7 @@ describe("gateway inbound routing", () => {
     });
   });
 
-  it("does not relay a duplicate task reply twice", async () => {
+  it("resolves a task reply without leaving it processing or relaying it", async () => {
     const task = await db.task.create({ data: { title: "Reply target", projectId: alphaId } });
     const request = inbound({
       platformMessageId: "om_duplicate_task_reply",
@@ -407,30 +405,139 @@ describe("gateway inbound routing", () => {
     const first = await routeGatewayInbound(request, vi.fn());
     const duplicate = await routeGatewayInbound(request, vi.fn());
 
-    expect(first).toMatchObject({ mode: "task_reply", taskId: task.id });
+    expect(first).toMatchObject({
+      mode: "task_context",
+      taskId: task.id,
+      context: { subjectTaskId: task.id, hasOpenAsk: false },
+    });
     expect(duplicate).toMatchObject({
-      mode: "in_progress",
+      mode: "already_processed",
       inboundId: first.inboundId,
       noOp: true,
-      state: "PROCESSING",
-      originalMode: "task_reply",
+      state: "PROCESSED",
     });
     expect(duplicate).not.toHaveProperty("instructions");
+  });
 
-    await db.gatewayInbound.update({
-      where: { id: first.inboundId },
-      data: { updatedAt: new Date(Date.now() - 2 * 60_000) },
+  it("resolves task context without creating inbound, execution, or status changes", async () => {
+    const task = await db.task.create({
+      data: { title: "Read-only status target", projectId: alphaId, status: "DONE" },
     });
-    const staleDuplicate = await routeGatewayInbound(request, vi.fn());
-    expect(staleDuplicate).toMatchObject({
-      mode: "in_progress",
-      inboundId: first.inboundId,
+
+    const beforeInbound = await db.gatewayInbound.count();
+    const beforeExecutions = await db.taskExecution.count({ where: { taskId: task.id } });
+    const context = await resolveGatewayTaskContext({
+      gateway: "openclaw",
+      platform: "feishu",
+      chatId: "oc_gateway_test",
+      taskId: task.id,
+    });
+
+    expect(context).toMatchObject({
+      bound: true,
+      bindingSource: "explicit_task",
+      subjectTaskId: task.id,
+      taskStatus: "DONE",
+      hasOpenAsk: false,
+      latestExecution: null,
+    });
+    expect(await db.gatewayInbound.count()).toBe(beforeInbound);
+    expect(await db.taskExecution.count({ where: { taskId: task.id } })).toBe(beforeExecutions);
+    expect(await db.task.findUnique({ where: { id: task.id }, select: { status: true } }))
+      .toEqual({ status: "DONE" });
+  });
+
+  it("continues a bound task once for duplicate platform callbacks", async () => {
+    const task = await db.task.create({
+      data: { title: "Explicit continuation target", projectId: alphaId, status: "DONE" },
+    });
+    const executor = vi.fn(async () => ({
+      executionId: "exec-continued",
+      executionMode: "continued" as const,
+      injected: true as const,
+    }));
+    const request = {
+      gateway: "openclaw",
+      platform: "feishu",
+      chatId: "oc_gateway_test",
+      platformMessageId: "om_continue_once",
+      senderId: "ou_gateway_user",
+      taskId: task.id,
+      content: "按失败结果继续修复",
+    };
+
+    const first = await continueGatewayBoundTask(request, executor);
+    const duplicate = await continueGatewayBoundTask(request, executor);
+
+    expect(first).toMatchObject({
+      mode: "continued_task",
+      taskId: task.id,
+      executionId: "exec-continued",
+      deduped: false,
+    });
+    expect(duplicate).toMatchObject({
+      mode: "continued_task",
+      taskId: task.id,
+      deduped: true,
       noOp: true,
-      state: "PROCESSING",
-      originalMode: "task_reply",
     });
-    expect(staleDuplicate).not.toHaveProperty("instructions");
-    expect(staleDuplicate.mode).not.toBe("task_reply");
+    expect(executor).toHaveBeenCalledTimes(1);
+    expect(await db.gatewayInbound.count({ where: { platformMessageId: request.platformMessageId } })).toBe(1);
+  });
+
+  it("does not reinterpret a platform message already consumed by another route", async () => {
+    const task = await db.task.create({
+      data: { title: "Already-routed target", projectId: alphaId, status: "DONE" },
+    });
+    const platformMessageId = "om_continue_route_conflict";
+    const routed = await routeGatewayInbound(inbound({
+      platformMessageId,
+      intent: "TOWER",
+      taskId: task.id,
+      content: "现在什么状态？",
+    }), vi.fn());
+    expect(routed.mode).toBe("task_context");
+    const executor = vi.fn();
+
+    const result = await continueGatewayBoundTask({
+      gateway: "openclaw",
+      platform: "feishu",
+      chatId: "oc_gateway_test",
+      platformMessageId,
+      taskId: task.id,
+      content: "继续修复",
+    }, executor);
+
+    expect(result).toMatchObject({
+      mode: "continue_conflict",
+      deduped: true,
+      noOp: true,
+    });
+    expect(executor).not.toHaveBeenCalled();
+  });
+
+  it("refuses explicit continuation while the bound task has an open ask", async () => {
+    const task = await db.task.create({ data: { title: "Awaiting answer", projectId: alphaId } });
+    await db.harnessMessage.create({
+      data: { taskId: task.id, kind: "ask", content: "Choose an option", state: "OPEN" },
+    });
+    const executor = vi.fn();
+
+    const result = await continueGatewayBoundTask({
+      gateway: "openclaw",
+      platform: "feishu",
+      chatId: "oc_gateway_test",
+      platformMessageId: "om_continue_open_ask",
+      taskId: task.id,
+      content: "继续",
+    }, executor);
+
+    expect(result).toMatchObject({
+      mode: "continue_open_ask",
+      taskId: task.id,
+      noOp: true,
+    });
+    expect(executor).not.toHaveBeenCalled();
   });
 
   it("uses the sender's recent project before the channel default", async () => {
@@ -714,7 +821,7 @@ describe("gateway inbound routing", () => {
       intent: "PROJECT_DISCUSSION",
       content: "What is the current status?",
     }), vi.fn());
-    expect(followup).toMatchObject({ mode: "task_reply", taskId: task.id });
+    expect(followup).toMatchObject({ mode: "task_context", taskId: task.id });
 
     const newWork = await routeGatewayInbound(inbound({
       platformMessageId: "om_explicit_new_work",
@@ -724,7 +831,7 @@ describe("gateway inbound routing", () => {
       content: "Create a new task for a separate implementation",
     }), vi.fn(async () => ({ mode: "already_running", executionId: "workbench-exec" })), successfulSender());
     expect(newWork).toMatchObject({ mode: "project_work", project: { projectId: alphaId } });
-    expect(newWork.mode).not.toBe("task_reply");
+    expect(newWork.mode).not.toBe("task_context");
   });
 
   it("queues one durable event while a Workbench is busy and retries idempotent recovery", async () => {

@@ -48,17 +48,20 @@ OpenClaw 的 per-agent `toolsBySender` 根据平台 sender ID 决定工具集合
 
 | 调用者 | 工具面 | 能力 |
 |---|---|---|
-| OWNER | 网关路由、项目/任务查询、诊断 + `session_status` | 可以表达全部意图；入口本身不能直接写 Tower 或启动终端 |
+| OWNER | 网关路由、项目/任务查询、只读绑定解析、显式续跑、诊断 + `session_status` | 可以表达全部意图；项目写操作仍经 Workbench，只有显式续跑可幂等恢复已绑定任务 |
 | 可信群 NON_OWNER | 3 个 project-reader 工具 | 项目只读讨论 |
 | 其他来源 | 无 o-tower 路由 | 拒绝 |
 
 OWNER 的“完整能力”由 **Tower Control Plane + Workbench** 提供，不等于把
-`create_task`、`start_task_execution`、`delete_*` 等写工具暴露给消息入口。任何创建、修改、
-删除、执行、clone 或项目接入请求都必须先用 `route_gateway_message(PROJECT_WORK)` 持久化；
-入口拿到 `project_work` 后立即结束本轮，由绑定的项目 Workbench 独占后续写操作。
+`create_task`、`start_task_execution`、`delete_*` 等通用写工具暴露给消息入口。任何新建、修改、
+删除、clone 或项目接入请求都必须先用 `route_gateway_message(PROJECT_WORK)` 持久化；入口拿到
+`project_work` 后立即结束本轮，由绑定的项目 Workbench 独占后续写操作。唯一终端例外是
+`continue_bound_task`：它只能对已解析绑定、无 OPEN ask 的任务执行显式续跑，并复用平台消息
+幂等键。
 
-这是一个硬边界，不只是提示词约定：o-tower OWNER 的 allowlist 中没有直接写工具。这样即使
+这是一个硬边界，不只是提示词约定：o-tower OWNER 的 allowlist 中没有通用直接写工具。这样即使
 入口模型在排队后继续推理，也无法绕开 `GatewayInbound` / `GatewayTaskLink` 再创建第二个任务。
+普通回复只能调用 `resolve_gateway_task_context` 读取上下文，不能隐式恢复终端。
 
 NON_OWNER 的三个工具是：
 
@@ -118,7 +121,7 @@ OpenClaw agent。它们是同一个 `o-tower` profile 在不同 sender 下得到
 
 ### 4.3 OWNER 项目工作
 
-1. OWNER 入口获得路由、查询与诊断工具面，不获得直接写工具。
+1. OWNER 入口获得路由、查询、只读绑定解析、显式绑定续跑与诊断工具面，不获得通用直接写工具。
 2. `route_gateway_message` 持久化外部消息并选择项目。
 3. `PROJECT_WORK` 创建持久 Workbench event 和 `QUEUED_ACK` outbox。
 4. o-tower 入口结束本轮，不再创建任务、不再启动终端。
@@ -129,6 +132,13 @@ OpenClaw agent。它们是同一个 `o-tower` profile 在不同 sender 下得到
 8. Workbench 审查接受后调用 `complete_gateway_work`；Tower 在同一事务中把
    任务置为 `DONE` 并创建最终回执 outbox。
 9. 平台投递失败可重试；同一个语义回执不会重复发送。
+
+### 4.4 OWNER 回复已绑定任务
+
+1. `resolve_gateway_task_context` 只读返回任务状态、OPEN ask、项目和最近执行摘要。
+2. OPEN ask 用 `reply_to_ask`；状态/结果问题只读回答；外部系统动作携带 `towerContext` 委托，均不改变任务状态。
+3. 只有明确“继续/修复/重跑”才调用 `continue_bound_task`。它复用 `GatewayInbound` 的平台消息去重键，重复 callback 不会重复注入。
+4. 存在 OPEN ask 时拒绝续跑，避免绕过待回答问题。兼容工具 `relay_channel_reply` 对普通回复只返回上下文，不恢复终端。
 
 ## 5. 远程 Git 项目接入
 
@@ -298,7 +308,7 @@ openclaw status --all
 Workbench 后，仍可调用直接建任务工具；它在 Workbench 已创建并完成幂等任务后，又省略
 `gatewayInboundId` 创建了第二个任务。修复内容：
 
-1. OWNER ingress allowlist 移除所有直接写工具；
+1. OWNER ingress allowlist 移除通用直接写工具，仅保留受约束的显式 `continue_bound_task`；
 2. group system prompt 明确写操作只能路由为 `PROJECT_WORK`，返回后必须结束本轮；
 3. Tower 保留 Workbench 侧的 `gatewayInboundId + GatewayTaskLink` 幂等恢复；
 4. 增加 sender/chat 速率限制和 trusted-channel 队列硬上限；

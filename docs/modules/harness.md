@@ -19,7 +19,7 @@ Harness 是 Tower 的**无人值守协作体系**。当任务长时间自主运�
 
 - **Tower 自己不接飞书/微信，也不直接发消息**（旧的内置 SDK 发送栈已删除）。
 - 真正的收发外包给**外部网关 Hermes / OpenClaw**（独立仓库 / 外部服务）。
-- Tower 负责**登记问题、park/resume、持久化项目会话、可靠排队与出站重试**；网关仍只负责平台 transport 和首跳分类。
+- Tower 负责**登记问题、显式 park/resume、持久化项目会话、可靠排队与出站重试**；网关负责平台 transport、首跳意图分类和外部能力委派。
 - 旧 ask/task 回复继续靠 `[[tower:task=<id>]]` 与投递映射；普通项目消息由 Tower 保存 platform/chat/thread/root message ↔ project 会话绑定。
 
 > **配套图**（`docs/diagrams/` 下自包含 HTML，可独立打开）：
@@ -41,10 +41,17 @@ Tower（登记 + park/resume，只记录不直连平台）
    ▲
    │  人的回复（携带 [[tower:task=<id>]] token）
    ▼
-relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入活终端
+reply_to_ask ──► 回答 OPEN ask，resume 被 park 的任务
 
-普通入站 ──► OpenClaw 身份/可信群门禁 ──► route_gateway_message / route_gateway_query
-                                             └─► 项目讨论会话 / WorkbenchEvent
+普通入站 ──► OpenClaw 身份/意图/能力路由
+             ├─ 普通问答/外部操作 ──► OpenClaw 能力（不进入 Tower）
+             └─ Tower 消息 ──► route_gateway_message / route_gateway_query
+
+Tower 消息回复 ──► resolve_gateway_task_context（只读）
+                  ├─ 查询：只读工具，不恢复终端
+                  ├─ OPEN ask：reply_to_ask
+                  ├─ 外部操作：携带 towerContext 委派，Tower 状态不变
+                  └─ 明确继续开发：continue_bound_task（OWNER + 幂等）
 ```
 
 图见 `docs/diagrams/tower-harness-flow.html`（中）/ `tower-harness-flow-en.html`（英）。
@@ -55,14 +62,17 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 
 ### 消息工具及关系
 
-这四个工具最容易混淆，务必分清「**发没发**」和「**park 不 park**」两个维度：
+这些消息工具最容易混淆，务必分清「**发没发**」和「**park 不 park**」两个维度：
 
 | 工具 | 是否真的发出去 | 是否 park 任务 | 用途 |
 |------|:---:|:---:|------|
 | `ask_human` | ❌ 只登记 | ✅ park | 底层状态原语：登记一个 OPEN 问题 + 挂起任务等回复 |
 | `notify_human` | ❌ 只登记 | ❌ 不 park | 底层状态原语：登记一条进展日志，继续干活 |
 | `push_to_human` | ✅ 持久化 + 真发 | 按 `expectReply` | 先写 Outbox 与 ask intent，再由 worker 发送并原子登记结果 |
-| `reply_to_ask` / `relay_channel_reply` | —（回灌方向） | resume | 把人的回复注入被 park 的任务并唤醒 |
+| `reply_to_ask` | —（回灌方向） | resume | 仅回答当前 OPEN ask，并唤醒被 park 的任务 |
+| `resolve_gateway_task_context` | —（只读方向） | ❌ | 解析回复关联的项目/任务、状态和最新结果，不落 inbound、不碰终端 |
+| `continue_bound_task` | —（显式动作） | ✅ | OWNER 明确要求继续开发时，按平台消息 ID 幂等恢复并注入 |
+| `relay_channel_reply` | —（兼容入口） | 仅 OPEN ask | 普通任务回复只返回上下文，不再隐式恢复终端 |
 
 **`ask_human`** —— 只**登记 OPEN 问题 + PARK 任务**（结束当前回合、PTY 保活等回复），**它自己不发消息**。是底层状态原语，和 `reply_to_ask` 配对（park ↔ resume）。调用后必须立即停手等回复。
 
@@ -73,7 +83,9 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 发送。收到可验证的平台 message id 后，delivery 映射、OPEN ask 和任务 park 在同一事务完成。
 明确失败保持可重试；已有发送证据但回执不完整时进入 `SENT_UNVERIFIED`，不盲目重发。
 
-**`reply_to_ask` / `relay_channel_reply`** —— 回灌方向。把人在平台上的回复带回 Tower：标记 OPEN 问题为已答、resume 被 park 的任务、把回复作为任务的下一条消息注入活终端。`relay_channel_reply` 额外负责从入站平台消息里解析 `[[tower:task=...]]` token 并按投递映射决定「答 ask」还是「注入工作群讨论」。
+**`reply_to_ask`** —— OPEN ask 的唯一正常回答动作：原子标记已答、resume 被 park 的任务，并把答案注入终端。`relay_channel_reply` 只保留旧客户端兼容：匹配 OPEN ask 时仍可回答；普通任务回复仅返回上下文，不再注入或恢复。
+
+**`resolve_gateway_task_context` / `continue_bound_task`** —— 前者只读解析 `subjectTaskId`、`producerTaskId`、Workbench、任务状态、OPEN ask 和最近执行摘要；后者才是 OWNER 对“继续改、按失败结果修复、重跑”这类明确开发意图的显式副作用。续跑用 `platformMessageId` 复用 `GatewayInbound` 去重，重复回调不会重复恢复或注入。
 
 **两组别混：**
 
@@ -82,10 +94,10 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 
 `list_notify_targets` 是发送前的入口：读取当前 scope 的活跃通道，返回**照做即可的发送指令**，告诉 Agent 走哪个网关、要不要 park。`tower-ask` / `tower-goal` 技能内部就是先调它、再照指令发。
 
-`route_gateway_message` 是 OWNER 普通渠道入站入口。`route_gateway_query` 是
+`route_gateway_message` 是 OWNER 的 Tower 相关渠道入站入口；普通问答和外部能力请求在 OpenClaw 内处理，不调用 Tower。旧客户端传入 `DIRECT` 时返回 `direct_not_supported`，且不创建 `GatewayInbound`。`route_gateway_query` 是
 可信群 NON_OWNER 的能力受限入口：它固定为项目讨论，不能转 task reply、创建
 任务、启动终端或排入 Workbench；随后只能通过 inbound 绑定读取项目级上下文。
-两者都先持久化去重，再严格按 reply/task binding → thread/session binding →
+有状态路由先持久化去重，再严格按 reply/task binding → thread/session binding →
 显式项目 → 唯一 identify_project → 用户最近项目 → 渠道默认项目解析。项目讨论
 必须以 `complete_gateway_discussion` 回原 thread；项目工作只排入 Workbench。
 Workbench 读到持久批次后必须先调用 `ack_workbench_batch`，处理或稳定委派后
@@ -178,6 +190,7 @@ Workbench event/batch/runtime、子任务和平台 delivery 关联为一条阶�
 ### MCP Tools (`src/mcp/tools/harness-tools.ts`)
 
 - `list_notify_targets` / `push_to_human` / `ask_human` / `notify_human` / `reply_to_ask` / `relay_channel_reply`
+- `resolve_gateway_task_context` / `continue_bound_task`
 - `route_gateway_message` / `route_gateway_query` / `read_gateway_project_context`
 - `complete_gateway_discussion` / `confirm_gateway_task_created` / `complete_gateway_work`
 - `diagnose_gateway_request` / `recover_gateway_request` / `get_gateway_runtime_health`
@@ -227,6 +240,7 @@ Workbench event/batch/runtime、子任务和平台 delivery 关联为一条阶�
 | `POST /reply` | 回灌回复、resume 任务；无 OPEN 问题返回 409 `no_pending` |
 | `POST /notify` | 登记一条进展日志 |
 | `POST/PATCH/PUT /gateway` | 入站路由、完成登记、讨论/任务结果可靠回传与重试 |
+| `POST/PUT /gateway-task` | 无副作用任务绑定解析 / OWNER 显式幂等续跑 |
 
 ### 通知中心
 

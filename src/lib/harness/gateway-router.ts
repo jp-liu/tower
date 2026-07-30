@@ -9,6 +9,7 @@ import type {
   Prisma,
 } from "@prisma/client";
 import { continueOrStartTaskExecution } from "@/actions/agent-actions";
+import { TOWER_LABEL_NAME } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { readConfigValue } from "@/lib/config-reader";
 import { readHarnessGatewayRuntimeConfig } from "@/lib/harness/gateway-config";
@@ -17,6 +18,7 @@ import { logger } from "@/lib/logger";
 import { queryProjectKnowledge } from "@/lib/knowledge";
 import { scoreProject } from "@/lib/project-score";
 import { getSession } from "@/lib/pty/session-store";
+import { getOpenAsk } from "@/lib/harness/harness-message";
 import {
   enqueueWorkbenchEvent,
   openWorkbenchDrainBoundary,
@@ -76,6 +78,82 @@ export interface GatewayInboundRequest {
   startNewWork?: boolean;
 }
 
+export interface GatewayTaskContextRequest {
+  gateway: string;
+  platform: string;
+  chatId: string;
+  replyToMessageId?: string;
+  quotedText?: string;
+  taskId?: string;
+}
+
+export interface GatewayBoundTaskContinuationRequest extends GatewayTaskContextRequest {
+  platformMessageId: string;
+  senderId?: string;
+  content: string;
+}
+
+export type GatewayTaskBindingSource =
+  | "harness_delivery"
+  | "gateway_delivery"
+  | "explicit_task"
+  | "quoted_task_token"
+  | "content_task_token";
+
+export type GatewayTaskContextResult =
+  | {
+      bound: false;
+      reason: "not_found" | "not_allowed";
+    }
+  | {
+      bound: true;
+      bindingSource: GatewayTaskBindingSource;
+      subjectTaskId: string;
+      producerTaskId: string;
+      workbenchTaskId: string | null;
+      parentTaskId: string | null;
+      taskTitle: string;
+      taskStatus: "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED";
+      hasOpenAsk: boolean;
+      project: GatewayProjectCandidate;
+      latestExecution: {
+        executionId: string;
+        status: "PENDING" | "RUNNING" | "PAUSED" | "COMPLETED" | "FAILED";
+        summary: string | null;
+        startedAt: Date | null;
+        endedAt: Date | null;
+      } | null;
+    };
+
+export type GatewayBoundTaskContinuationResult =
+  | {
+      mode: "continued_task";
+      inboundId: string;
+      taskId: string;
+      executionId: string | null;
+      executionMode: "already_running" | "continued" | "started";
+      injected: true;
+      deduped: boolean;
+      noOp?: boolean;
+    }
+  | {
+      mode: "continue_in_progress" | "continue_failed" | "continue_not_bound" | "continue_open_ask" | "continue_conflict";
+      inboundId: string;
+      deduped: boolean;
+      noOp: boolean;
+      taskId?: string;
+      reason?: string;
+    };
+
+export type BoundTaskContinuationExecutor = (
+  taskId: string,
+  text: string,
+) => Promise<{
+  executionId: string | null;
+  executionMode: "already_running" | "continued" | "started";
+  injected: true;
+}>;
+
 export interface GatewayProjectCandidate {
   projectId: string;
   name: string;
@@ -99,17 +177,26 @@ export type GatewayRouteResult =
       originalMode?: string;
     }
   | {
-      mode: "task_reply";
+      mode: "task_context";
       inboundId: string;
       taskId: string;
       project: GatewayProjectCandidate;
       resolution: "reply_binding";
       deduped: boolean;
+      context: Extract<GatewayTaskContextResult, { bound: true }>;
+      instructions: string;
     }
   | {
-      mode: "gateway_direct" | "tower_mcp";
+      mode: "tower_mcp";
       inboundId: string;
       deduped: boolean;
+      instructions: string;
+    }
+  | {
+      mode: "direct_not_supported";
+      inboundId: null;
+      deduped: false;
+      noOp: true;
       instructions: string;
     }
   | {
@@ -363,25 +450,153 @@ async function taskProject(taskId: string): Promise<{ taskId: string; project: G
   };
 }
 
-async function resolveTaskBinding(input: GatewayInboundRequest) {
+type TaskBindingReference = {
+  taskId: string;
+  bindingSource: GatewayTaskBindingSource;
+  producerTaskId?: string | null;
+  workbenchTaskId?: string | null;
+};
+
+async function resolveTaskBindingReference(
+  input: GatewayTaskContextRequest & { content?: string },
+): Promise<TaskBindingReference | null> {
   if (input.replyToMessageId?.trim()) {
     const harness = await findHarnessDeliveryByPlatformMessageId(input.replyToMessageId);
-    if (harness) return taskProject(harness.taskId);
+    if (
+      harness
+      && normalize(harness.platform) === normalize(input.platform)
+      && normalizeChatId(harness.chatId) === normalizeChatId(input.chatId)
+    ) {
+      return {
+        taskId: harness.taskId,
+        bindingSource: "harness_delivery",
+        producerTaskId: harness.taskId,
+      };
+    }
 
     const gatewayDelivery = await db.gatewayDelivery.findFirst({
-      where: { platformMessageId: input.replyToMessageId.trim(), state: "DELIVERED" },
+      where: {
+        platformMessageId: input.replyToMessageId.trim(),
+        state: "DELIVERED",
+        session: {
+          gateway: normalize(input.gateway),
+          platform: normalize(input.platform),
+          chatId: normalizeChatId(input.chatId),
+        },
+      },
       orderBy: { deliveredAt: "desc" },
-      select: { inbound: { select: { createdTaskId: true } } },
+      select: {
+        session: { select: { workbenchTaskId: true } },
+        inbound: { select: { createdTaskId: true } },
+      },
     });
     if (gatewayDelivery?.inbound?.createdTaskId) {
-      return taskProject(gatewayDelivery.inbound.createdTaskId);
+      return {
+        taskId: gatewayDelivery.inbound.createdTaskId,
+        bindingSource: "gateway_delivery",
+        producerTaskId: gatewayDelivery.session.workbenchTaskId,
+        workbenchTaskId: gatewayDelivery.session.workbenchTaskId,
+      };
     }
   }
 
-  const explicitTaskId = input.taskId?.trim()
-    || extractTowerTaskId(input.quotedText)
-    || extractTowerTaskId(input.content);
-  return explicitTaskId ? taskProject(explicitTaskId) : null;
+  const explicitTaskId = input.taskId?.trim();
+  if (explicitTaskId) return { taskId: explicitTaskId, bindingSource: "explicit_task" };
+  const quotedTaskId = extractTowerTaskId(input.quotedText);
+  if (quotedTaskId) return { taskId: quotedTaskId, bindingSource: "quoted_task_token" };
+  const contentTaskId = extractTowerTaskId(input.content);
+  return contentTaskId ? { taskId: contentTaskId, bindingSource: "content_task_token" } : null;
+}
+
+export async function resolveGatewayTaskContext(
+  input: GatewayTaskContextRequest & { content?: string },
+): Promise<GatewayTaskContextResult> {
+  const reference = await resolveTaskBindingReference(input);
+  if (!reference) return { bound: false, reason: "not_found" };
+
+  const task = await db.task.findUnique({
+    where: { id: reference.taskId },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      parentTaskId: true,
+      projectId: true,
+      project: {
+        select: {
+          id: true,
+          name: true,
+          alias: true,
+          workspaceId: true,
+          workspace: { select: { name: true } },
+        },
+      },
+      executions: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          status: true,
+          summary: true,
+          startedAt: true,
+          endedAt: true,
+        },
+      },
+    },
+  });
+  if (!task) return { bound: false, reason: "not_found" };
+
+  const binding = await channelBindingFor(input.gateway, input.platform, input.chatId);
+  if (!projectAllowed(task.projectId, binding, task.project.workspaceId)) {
+    return { bound: false, reason: "not_allowed" };
+  }
+
+  const parentIsWorkbench = task.parentTaskId
+    ? await db.task.findFirst({
+        where: {
+          id: task.parentTaskId,
+          labels: { some: { label: { isBuiltin: true, name: TOWER_LABEL_NAME } } },
+        },
+        select: { id: true },
+      })
+    : null;
+  const openAsk = await getOpenAsk(task.id);
+  const latestExecution = task.executions[0] ?? null;
+  const workbenchTaskId = reference.workbenchTaskId ?? parentIsWorkbench?.id ?? null;
+  const producerTaskId = reference.producerTaskId ?? task.parentTaskId ?? task.id;
+
+  return {
+    bound: true,
+    bindingSource: reference.bindingSource,
+    subjectTaskId: task.id,
+    producerTaskId,
+    workbenchTaskId,
+    parentTaskId: task.parentTaskId,
+    taskTitle: task.title,
+    taskStatus: task.status,
+    hasOpenAsk: !!openAsk,
+    project: {
+      projectId: task.project.id,
+      name: task.project.name,
+      alias: task.project.alias,
+      workspaceId: task.project.workspaceId,
+      workspaceName: task.project.workspace.name,
+    },
+    latestExecution: latestExecution
+      ? {
+          executionId: latestExecution.id,
+          status: latestExecution.status,
+          summary: latestExecution.summary,
+          startedAt: latestExecution.startedAt,
+          endedAt: latestExecution.endedAt,
+        }
+      : null,
+  };
+}
+
+async function resolveTaskBinding(input: GatewayInboundRequest) {
+  const reference = await resolveTaskBindingReference(input);
+  return reference ? taskProject(reference.taskId) : null;
 }
 
 async function resolveBoundSession(input: GatewayInboundRequest) {
@@ -578,6 +793,161 @@ async function createInbound(input: GatewayInboundRequest) {
       inbound: await db.gatewayInbound.findUniqueOrThrow({ where: { dedupKey } }),
       deduped: true,
     };
+  }
+}
+
+function continuationInbound(input: GatewayBoundTaskContinuationRequest): GatewayInboundRequest {
+  return {
+    gateway: input.gateway,
+    platform: input.platform,
+    chatId: input.chatId,
+    platformMessageId: input.platformMessageId,
+    senderId: input.senderId,
+    replyToMessageId: input.replyToMessageId,
+    quotedText: input.quotedText,
+    taskId: input.taskId,
+    intent: "PROJECT_WORK",
+    content: input.content,
+  };
+}
+
+function parseContinuationResult(response: string | null): GatewayBoundTaskContinuationResult | null {
+  if (!response) return null;
+  try {
+    const parsed = JSON.parse(response) as { mode?: string };
+    return parsed.mode === "continued_task"
+      || parsed.mode === "continue_in_progress"
+      || parsed.mode === "continue_failed"
+      || parsed.mode === "continue_not_bound"
+      || parsed.mode === "continue_open_ask"
+      || parsed.mode === "continue_conflict"
+      ? parsed as GatewayBoundTaskContinuationResult
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function continuationPrompt(
+  input: GatewayBoundTaskContinuationRequest,
+  context: Extract<GatewayTaskContextResult, { bound: true }>,
+  inboundId: string,
+): string {
+  return [
+    "[Explicit Gateway Task Continuation]",
+    `Gateway inbound ID: ${inboundId}`,
+    `Task: ${context.taskTitle}`,
+    `Task ID: [[tower:task=${context.subjectTaskId}]]`,
+    `Source: ${input.platform}:${input.chatId}`,
+    `Platform message ID: ${input.platformMessageId}`,
+    input.replyToMessageId ? `Reply-to message ID: ${input.replyToMessageId}` : null,
+    "",
+    input.content.trim(),
+    "",
+    "The OWNER explicitly chose to continue this Tower development task. Continue only this task from its existing context. Do not treat the message as a status query or external-operator request.",
+  ].filter((line) => line !== null).join("\n");
+}
+
+export async function continueGatewayBoundTask(
+  input: GatewayBoundTaskContinuationRequest,
+  executor: BoundTaskContinuationExecutor,
+): Promise<GatewayBoundTaskContinuationResult> {
+  const created = await createInbound(continuationInbound(input));
+  if (created.deduped) {
+    const cached = parseContinuationResult(created.inbound.response);
+    if (cached?.mode === "continued_task") {
+      return { ...cached, deduped: true, noOp: true };
+    }
+    if (cached) return { ...cached, deduped: true, noOp: true };
+    if (created.inbound.response) {
+      return {
+        mode: "continue_conflict",
+        inboundId: created.inbound.id,
+        deduped: true,
+        noOp: true,
+        reason: "This platform message was already processed by another Tower gateway action.",
+      };
+    }
+    return {
+      mode: created.inbound.state === "FAILED" ? "continue_failed" : "continue_in_progress",
+      inboundId: created.inbound.id,
+      deduped: true,
+      noOp: true,
+      reason: created.inbound.lastError ?? undefined,
+    };
+  }
+
+  const context = await resolveGatewayTaskContext(input);
+  if (!context.bound) {
+    const result: GatewayBoundTaskContinuationResult = {
+      mode: "continue_not_bound",
+      inboundId: created.inbound.id,
+      deduped: false,
+      noOp: true,
+      reason: context.reason,
+    };
+    await completeGatewayInbound(created.inbound.id, result);
+    return result;
+  }
+  if (context.hasOpenAsk) {
+    const result: GatewayBoundTaskContinuationResult = {
+      mode: "continue_open_ask",
+      inboundId: created.inbound.id,
+      taskId: context.subjectTaskId,
+      deduped: false,
+      noOp: true,
+      reason: "The task has an open ask_human question; answer it with reply_to_ask instead of continuing the task.",
+    };
+    await completeGatewayInbound(created.inbound.id, result);
+    return result;
+  }
+
+  await db.gatewayInbound.update({
+    where: { id: created.inbound.id },
+    data: {
+      state: "PROCESSING",
+      response: JSON.stringify({
+        mode: "continue_in_progress",
+        inboundId: created.inbound.id,
+        taskId: context.subjectTaskId,
+        deduped: false,
+        noOp: false,
+      }),
+      lastError: null,
+    },
+  });
+
+  try {
+    const executed = await executor(
+      context.subjectTaskId,
+      continuationPrompt(input, context, created.inbound.id),
+    );
+    const result: GatewayBoundTaskContinuationResult = {
+      mode: "continued_task",
+      inboundId: created.inbound.id,
+      taskId: context.subjectTaskId,
+      executionId: executed.executionId,
+      executionMode: executed.executionMode,
+      injected: true,
+      deduped: false,
+    };
+    await completeGatewayInbound(created.inbound.id, result);
+    return result;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    const result: GatewayBoundTaskContinuationResult = {
+      mode: "continue_failed",
+      inboundId: created.inbound.id,
+      taskId: context.subjectTaskId,
+      deduped: false,
+      noOp: false,
+      reason,
+    };
+    await db.gatewayInbound.update({
+      where: { id: created.inbound.id },
+      data: { state: "FAILED", response: JSON.stringify(result), lastError: reason },
+    });
+    return result;
   }
 }
 
@@ -911,6 +1281,16 @@ export async function routeGatewayInbound(
   sender: DeliverySender = sendViaHarnessGateway,
   options: { projectQueryOnly?: boolean } = {},
 ): Promise<GatewayRouteResult> {
+  if (input.intent === "DIRECT") {
+    return {
+      mode: "direct_not_supported",
+      inboundId: null,
+      deduped: false,
+      noOp: true,
+      instructions:
+        "DIRECT requests are outside Tower's routing boundary. Answer or delegate in the gateway without calling Tower.",
+    };
+  }
   const created = await createInbound(input);
   if (created.deduped && !created.inbound.response) {
     if (Date.now() - created.inbound.updatedAt.getTime() < INBOUND_CLAIM_LEASE_MS) {
@@ -1073,26 +1453,39 @@ export async function routeGatewayInbound(
       await saveRoute(created.inbound.id, denied, "PROCESSED");
       return denied;
     }
+    const context = await resolveGatewayTaskContext(input);
+    if (!context.bound) {
+      const denied: GatewayRouteResult = {
+        mode: "needs_project_selection",
+        inboundId: created.inbound.id,
+        deduped: created.deduped,
+        candidates: [],
+        reason: context.reason === "not_allowed" ? "not_allowed" : "not_found",
+      };
+      await saveRoute(created.inbound.id, denied, "PROCESSED");
+      return denied;
+    }
     const result: GatewayRouteResult = {
-      mode: "task_reply",
+      mode: "task_context",
       inboundId: created.inbound.id,
       taskId: reply.taskId,
       project: candidate(reply.project),
       resolution: "reply_binding",
       deduped: created.deduped,
+      context,
+      instructions:
+        "Task binding resolved without side effects. Query with read-only Tower tools, answer an open ask with reply_to_ask, or explicitly continue development with continue_bound_task.",
     };
-    await saveRoute(created.inbound.id, result, "PROCESSING");
+    await saveRoute(created.inbound.id, result, "PROCESSED");
     return result;
   }
 
-  if (input.intent === "DIRECT" || input.intent === "TOWER") {
+  if (input.intent === "TOWER") {
     const result: GatewayRouteResult = {
-      mode: input.intent === "DIRECT" ? "gateway_direct" : "tower_mcp",
+      mode: "tower_mcp",
       inboundId: created.inbound.id,
       deduped: created.deduped,
-      instructions: input.intent === "DIRECT"
-        ? "Answer directly in the gateway or delegate to a configured external operator. Do not start a project Workbench."
-        : "Handle only read-only Tower queries with the gateway's exposed query tools. Mutations must be classified as PROJECT_WORK before routing so the resident Workbench exclusively owns task creation, execution, review, and callbacks; the ingress agent intentionally has no direct mutation tools.",
+      instructions: "Handle only read-only Tower queries with the gateway's exposed query tools. Mutations must be classified as PROJECT_WORK before routing so the resident Workbench exclusively owns task creation, execution, review, and callbacks; the ingress agent intentionally has no direct mutation tools.",
     };
     await saveRoute(created.inbound.id, result, "PROCESSED");
     return result;

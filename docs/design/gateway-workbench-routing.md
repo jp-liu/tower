@@ -67,12 +67,13 @@ projects without choosing a default project.
 5. the sender's most recently active allowed project session;
 6. the channel's optional default project.
 
-Every addressed inbound message, including `DIRECT`, must pass through this
-route before the gateway answers. User wording such as "do not query Tower"
-does not bypass routing persistence. `startNewWork=true` is reserved for an
-explicit create-new-task/start-new-work request and overrides an old task reply
-binding. `sessionAction=NEW` skips the old discussion binding for an explicit
-fresh discussion or project switch.
+OpenClaw keeps ordinary Q&A and external-operator requests outside Tower.
+`route_gateway_message` receives only Tower operations, project discussions,
+and project work. Old clients may still send `DIRECT`, but Tower returns
+`direct_not_supported` before creating a `GatewayInbound` row. `startNewWork=true`
+is reserved for an explicit create-new-task/start-new-work request and overrides
+an old task reply binding. `sessionAction=NEW` skips the old discussion binding
+for an explicit fresh discussion or project switch.
 
 Every step is constrained by the channel workspace and project allowlist. More
 than one remaining match returns candidates and requires selection. No route is
@@ -101,7 +102,7 @@ closed binding. Creating a task does not close a discussion. Use
 for a fresh discussion/project switch. OpenClaw `/new` is not a Tower close
 signal and is never relied on for this lifecycle.
 
-Duplicate inbound callbacks never replay an actionable route. `QUEUED` or live
+Duplicate Tower inbound callbacks never replay an actionable route. `QUEUED` or live
 `PROCESSING` rows return `in_progress` with `noOp: true`; `PROCESSED` rows return
 `already_processed` with `noOp: true`. Only stale project-discussion generation
 can return its original action again. Task replies are never lease-replayed:
@@ -158,7 +159,17 @@ semantic deliveries are immutable and repeated calls never send twice.
 ## Legacy Reply Compatibility
 
 Inbound replies that reference `HarnessDelivery` or contain
-`[[tower:task=...]]` still use the existing ask/reply path. `expectReply=true`
-answers the parked ask; work-channel deliveries inject into the bound task
-conversation. Messages without an open ask continue through normal gateway
-routing instead of consuming an unrelated parked question.
+`[[tower:task=...]]` first call `resolve_gateway_task_context`. Resolution is
+read-only and returns task status, the OPEN ask (if any), project context, and
+the latest execution summary. An OPEN ask is answered with `reply_to_ask`.
+Status/result questions use read-only Tower tools, and external-system work is
+delegated with the returned context without changing Tower. Only an explicit
+continue/fix/rerun instruction calls OWNER-only `continue_bound_task`.
+
+`continue_bound_task` reuses the existing `GatewayInbound` platform-message
+deduplication key. It does not add a second idempotency table. The first callback
+may continue or start the task and inject the instruction; repeated callbacks
+are no-ops. If an OPEN ask exists, continuation is refused so the answer cannot
+be bypassed. `relay_channel_reply` remains a compatibility entry: it can answer
+an OPEN ask, but an ordinary reply only returns context and never resumes or
+injects into a terminal.

@@ -203,6 +203,95 @@ describe("list_notify_targets — scope derivation", () => {
   });
 });
 
+describe("gateway task boundary tools", () => {
+  it("does not expose DIRECT in route_gateway_message", () => {
+    const parsed = harnessTools.route_gateway_message.schema.safeParse({
+      gateway: "openclaw",
+      platform: "feishu",
+      chatId: "oc_test",
+      platformMessageId: "om_direct",
+      intent: "DIRECT",
+      content: "What time is it?",
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it("returns task context without a second relay request", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ mode: "task_context", taskId: TASK_ID }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await harnessTools.route_gateway_message.handler({
+      gateway: "openclaw",
+      platform: "feishu",
+      chatId: "oc_test",
+      platformMessageId: "om_context",
+      replyToMessageId: "om_delivery",
+      intent: "TOWER",
+      content: "现在什么状态？",
+    });
+
+    expect(result).toEqual({ mode: "task_context", taskId: TASK_ID });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps legacy ordinary relay replies context-only", async () => {
+    findUnique.mockResolvedValue({ id: TASK_ID, title: "Bound task", parentTaskId: null });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ pending: false }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await harnessTools.relay_channel_reply.handler({
+      taskId: TASK_ID,
+      text: "现在什么状态？",
+      platform: "feishu",
+      chatId: "oc_test",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      mode: "task_context",
+      taskId: TASK_ID,
+      resumed: false,
+      continuationRequired: true,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/internal/harness/pending");
+  });
+
+  it("uses the side-effect-free context endpoint and explicit continuation endpoint", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ bound: true, subjectTaskId: TASK_ID }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ mode: "continued_task", taskId: TASK_ID }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await harnessTools.resolve_gateway_task_context.handler({
+      gateway: "openclaw",
+      platform: "feishu",
+      chatId: "oc_test",
+      taskId: TASK_ID,
+    });
+    await harnessTools.continue_bound_task.handler({
+      gateway: "openclaw",
+      platform: "feishu",
+      chatId: "oc_test",
+      platformMessageId: "om_continue",
+      taskId: TASK_ID,
+      content: "继续修复",
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:3000/api/internal/harness/gateway-task");
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: "POST" });
+    expect(fetchMock.mock.calls[1][0]).toBe("http://localhost:3000/api/internal/harness/gateway-task");
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: "PUT" });
+  });
+});
+
 describe("Workbench durable batch tools", () => {
   it("binds acknowledgement to the current Workbench task", async () => {
     const fetchMock = vi.fn().mockResolvedValue({

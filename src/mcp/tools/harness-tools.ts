@@ -9,12 +9,12 @@ const PORT = process.env.PORT ?? "3000";
 const BRIDGE = `http://localhost:${PORT}/api/internal/harness`;
 const GATEWAY_BRIDGE = `${BRIDGE}/gateway`;
 const GATEWAY_QUERY_BRIDGE = `${BRIDGE}/gateway-query`;
+const GATEWAY_TASK_BRIDGE = `${BRIDGE}/gateway-task`;
 const GATEWAY_DIAGNOSTICS_BRIDGE = `${BRIDGE}/gateway-diagnostics`;
 const GATEWAY_RUNTIME_HEALTH_BRIDGE = `${BRIDGE}/gateway-runtime-health`;
 const HARNESS_OUTBOUND_BRIDGE = `${BRIDGE}/outbound`;
 const REMOTE_PROJECT_BRIDGE = `${BRIDGE}/remote-project`;
 const WORKBENCH_BATCH_BRIDGE = `http://localhost:${PORT}/api/internal/workbench/batch`;
-const TERMINAL_BRIDGE = `http://localhost:${PORT}/api/internal/terminal`;
 const CUID_RE = /^c[a-z0-9]{20,30}$/;
 
 function validateMcpTaskId(taskId: string): string | null {
@@ -210,9 +210,17 @@ export async function relayChannelReply(args: RelayChannelReplyArgs) {
     if (delivery?.expectReply) return { no_pending: true, taskId, delivery };
   }
 
-  const injected = await injectChannelReply(taskId, replyText);
-  if (injected.ok) return { ok: true, mode: "terminal_reply", taskId, delivery, chatScope, resumed: injected.resumed };
-  return { error: injected.error, status: injected.status, taskId, delivery, chatScope };
+  return {
+    ok: true,
+    mode: "task_context",
+    taskId,
+    delivery,
+    chatScope,
+    resumed: false,
+    continuationRequired: true,
+    instructions:
+      "Task binding resolved without resuming its terminal. Use read-only Tower tools for a query, delegate external work without changing Tower, or call continue_bound_task for an explicit development continuation.",
+  };
 }
 
 export const harnessTools = {
@@ -363,10 +371,9 @@ export const harnessTools = {
 
   relay_channel_reply: {
     description:
-      "Bridge a human reply from Feishu/WeChat/Hermes back into Tower. Use this for any inbound platform " +
-      "message that contains or quotes a [[tower:task=...]] token. If the reply references a Hermes-sent " +
-      "platform message id, Tower uses the stored delivery mapping to decide whether to answer an ask_human " +
-      "or inject the reply into the live task terminal for work-channel discussion.",
+      "Compatibility bridge for a human reply from Feishu/WeChat/Hermes. It may answer a matching open " +
+      "ask_human, but ordinary task replies are context-only and NEVER resume or inject into a terminal. " +
+      "New gateway callers should use resolve_gateway_task_context, reply_to_ask, or continue_bound_task explicitly.",
     schema: z.object({
       text: z.string().min(1).max(8000).describe("The human's reply text"),
       taskId: z.string().optional().describe("Task id if already parsed from the token"),
@@ -380,14 +387,13 @@ export const harnessTools = {
 
   route_gateway_message: {
     description:
-      "Persist and route one inbound gateway message. Call this before handling any ordinary Feishu/WeChat/etc. " +
-      "message. Classify intent as DIRECT (ordinary Q&A or external operator work), TOWER (Tower query/simple " +
+      "Persist and route one Tower-related inbound gateway message. Ordinary Q&A and external operator work " +
+      "stay in the gateway and must not call this tool. Classify Tower traffic as TOWER (Tower query/simple " +
       "command), PROJECT_DISCUSSION, or PROJECT_WORK. Tower applies reply/task binding, thread/session binding, " +
       "explicit project, identify_project, recent-user project, and channel default in that strict order. It " +
-      "returns candidates instead of guessing. Task replies preserve parked ask vs work-channel behavior; project " +
+      "returns candidates instead of guessing. Task replies return context without terminal side effects; project " +
       "work is durably queued for the project Workbench; discussions get an independent project-bound session. " +
-      "DIRECT must still pass through this tool even when the user says not to query Tower: routing persistence is " +
-      "not a Tower data query. Set startNewWork only for an explicit create-new-task/start-new-work request, so it " +
+      "Set startNewWork only for an explicit create-new-task/start-new-work request, so it " +
       "can override an old task-card reply; ordinary task follow-ups keep their reply binding. Use sessionAction=CLOSE " +
       "for an explicit Tower discussion close, and NEW when explicitly switching projects or starting a fresh discussion. " +
       "Duplicate callbacks return in_progress/already_processed with noOp=true; never repeat the original action.",
@@ -403,7 +409,7 @@ export const harnessTools = {
       quotedText: z.string().max(16000).optional(),
       taskId: z.string().optional(),
       project: z.string().max(512).optional().describe("Explicit project id, name, alias, or identify_project query from the user"),
-      intent: z.enum(["DIRECT", "TOWER", "PROJECT_DISCUSSION", "PROJECT_WORK"]),
+      intent: z.enum(["TOWER", "PROJECT_DISCUSSION", "PROJECT_WORK"]),
       content: z.string().min(1).max(16000),
       sessionAction: z.enum(["CONTINUE", "NEW", "CLOSE"]).optional(),
       startNewWork: z.boolean().optional().describe("True only when the user explicitly asks to create a new task or start new work, including while replying to an old task message"),
@@ -420,7 +426,7 @@ export const harnessTools = {
       quotedText?: string;
       taskId?: string;
       project?: string;
-      intent: "DIRECT" | "TOWER" | "PROJECT_DISCUSSION" | "PROJECT_WORK";
+      intent: "TOWER" | "PROJECT_DISCUSSION" | "PROJECT_WORK";
       content: string;
       sessionAction?: "CONTINUE" | "NEW" | "CLOSE";
       startNewWork?: boolean;
@@ -432,38 +438,84 @@ export const harnessTools = {
       });
       const routed = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) return { error: routed.error ?? "gateway routing failed", status: res.status };
-      if (routed.mode !== "task_reply") return routed;
+      return routed;
+    },
+  },
 
-      const relayed = await relayChannelReply({
-        text: args.content,
-        taskId: String(routed.taskId || ""),
-        platform: args.platform,
-        chatId: args.chatId,
-        platformMessageId: args.replyToMessageId,
-        quotedText: args.quotedText,
+  resolve_gateway_task_context: {
+    description:
+      "Resolve which Tower task an external reply refers to without persisting an inbound, changing task state, " +
+      "creating an execution, or starting/resuming a terminal. The result includes task status, latest execution " +
+      "summary, open-ask state, project, producer, and Workbench context. Resolving a task never authorizes continuation.",
+    schema: z.object({
+      gateway: z.enum(["hermes", "openclaw"]),
+      platform: z.string().min(1).max(64),
+      chatId: z.string().min(1).max(512),
+      replyToMessageId: z.string().max(512).optional(),
+      quotedText: z.string().max(16000).optional(),
+      taskId: z.string().optional(),
+    }).refine((value) => value.replyToMessageId || value.quotedText || value.taskId, {
+      message: "replyToMessageId, quotedText, or taskId is required",
+    }),
+    handler: async (args: {
+      gateway: "hermes" | "openclaw";
+      platform: string;
+      chatId: string;
+      replyToMessageId?: string;
+      quotedText?: string;
+      taskId?: string;
+    }) => {
+      const res = await fetch(GATEWAY_TASK_BRIDGE, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
       });
-      if (!("ok" in relayed) || !relayed.ok) return { ...routed, relay: relayed };
-      let recorded = false;
-      let recordError = "gateway reply outcome could not be recorded";
-      for (let attempt = 0; attempt < 3 && !recorded; attempt++) {
-        try {
-          const completion = await fetch(GATEWAY_BRIDGE, {
-            method: "PATCH",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ inboundId: routed.inboundId, response: relayed }),
-          });
-          if (completion.ok) {
-            recorded = true;
-          } else {
-            const body = (await completion.json().catch(() => ({}))) as { error?: string };
-            recordError = body.error || `gateway reply outcome returned ${completion.status}`;
-          }
-        } catch (error) {
-          recordError = error instanceof Error ? error.message : String(error);
-        }
-      }
-      if (!recorded) return { ...routed, relay: relayed, recordError };
-      return { ...routed, relay: relayed };
+      const data = await res.json().catch(() => ({}));
+      return res.ok
+        ? data
+        : { error: (data as { error?: unknown }).error ?? "gateway task context failed", status: res.status };
+    },
+  },
+
+  continue_bound_task: {
+    description:
+      "OWNER-only explicit continuation of the task bound to one external platform message. Use only when the " +
+      "user clearly asks to continue, fix, or rerun Tower development work. This action persists the request, " +
+      "deduplicates by platformMessageId, resumes or starts exactly the bound task, and injects the instruction once. " +
+      "It refuses tasks with an open ask_human question; use reply_to_ask for those.",
+    schema: z.object({
+      gateway: z.enum(["hermes", "openclaw"]),
+      platform: z.string().min(1).max(64),
+      chatId: z.string().min(1).max(512),
+      platformMessageId: z.string().min(1).max(512).describe("Unique id of the inbound message requesting continuation"),
+      senderId: z.string().max(512).optional(),
+      replyToMessageId: z.string().max(512).optional(),
+      quotedText: z.string().max(16000).optional(),
+      taskId: z.string().optional(),
+      content: z.string().min(1).max(10000),
+    }).refine((value) => value.replyToMessageId || value.quotedText || value.taskId, {
+      message: "replyToMessageId, quotedText, or taskId is required",
+    }),
+    handler: async (args: {
+      gateway: "hermes" | "openclaw";
+      platform: string;
+      chatId: string;
+      platformMessageId: string;
+      senderId?: string;
+      replyToMessageId?: string;
+      quotedText?: string;
+      taskId?: string;
+      content: string;
+    }) => {
+      const res = await fetch(GATEWAY_TASK_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok
+        ? data
+        : { error: (data as { error?: unknown }).error ?? "gateway task continuation failed", status: res.status };
     },
   },
 
@@ -931,34 +983,6 @@ async function resolveScopeFromInboundChat(
   return null;
 }
 
-async function injectChannelReply(taskId: string, text: string): Promise<{ ok: true; resumed: boolean } | { ok: false; error: unknown; status?: number }> {
-  const first = await postTerminalInput(taskId, text);
-  if (first.ok) return { ok: true, resumed: false };
-  if (first.status !== 404) return first;
-
-  if (await getOpenAskForRelay(taskId)) {
-    return {
-      ok: false,
-      status: 409,
-      error: "Task is parked on an open ask_human question; refusing to resume for a work-channel reply.",
-    };
-  }
-
-  const resume = await fetch(`${TERMINAL_BRIDGE}/${encodeURIComponent(taskId)}/resume`, { method: "POST" });
-  if (!resume.ok) {
-    const data = (await resume.json().catch(() => ({}))) as Record<string, unknown>;
-    return { ok: false, status: resume.status, error: data?.error ?? "resume failed" };
-  }
-
-  await new Promise((r) => setTimeout(r, 2500));
-  for (let i = 0; i < 20; i++) {
-    const retry = await postTerminalInput(taskId, text);
-    if (retry.ok) return { ok: true, resumed: true };
-    await new Promise((r) => setTimeout(r, 800));
-  }
-  return { ok: false, status: 404, error: "terminal not ready after resume" };
-}
-
 async function buildExternalReplyText(
   taskId: string,
   args: {
@@ -997,15 +1021,4 @@ async function buildExternalReplyText(
     "Continue the current task based on this external reply. If this is a child task, act only on what this child task needs; if the parent needs to know, use Tower's parent/child handoff flow.",
     "Language rule: when replying to the human or summarizing this reply externally, use the human's language. If the language is unclear, use the language of the reply above.",
   ].filter(Boolean).join("\n\n");
-}
-
-async function postTerminalInput(taskId: string, text: string): Promise<{ ok: true } | { ok: false; error: unknown; status: number }> {
-  const res = await fetch(`${TERMINAL_BRIDGE}/${encodeURIComponent(taskId)}/input`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text, submit: true }),
-  });
-  if (res.ok) return { ok: true };
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  return { ok: false, status: res.status, error: data?.error ?? "terminal inject failed" };
 }

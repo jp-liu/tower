@@ -62,7 +62,7 @@
 <body>
 
 <h1>Tower 无人值守消息中继</h1>
-<p class="subtitle">RECORD · PARK · RESUME —— 收发外包给外部网关</p>
+<p class="subtitle">RESOLVE · DECIDE · ACT —— 绑定解析不等于恢复任务</p>
 
 <div class="diagram-container">
 <svg viewBox="0 0 1000 760" xmlns="http://www.w3.org/2000/svg" width="100%">
@@ -143,29 +143,29 @@
 
   <!-- Reply handler -->
   <rect x="560" y="332" width="380" height="72" rx="8" fill="rgba(76,29,149,0.35)" stroke="#a78bfa" stroke-width="1.5"/>
-  <text x="750" y="356" text-anchor="middle" fill="#a78bfa" font-size="13" font-weight="600">relay_channel_reply / reply_to_ask</text>
-  <text x="750" y="376" text-anchor="middle" fill="#94a3b8" font-size="10">delivery-map 解析口令 → 定位任务</text>
-  <text x="750" y="392" text-anchor="middle" fill="#94a3b8" font-size="10">标记 OPEN 问题为已答</text>
+  <text x="750" y="356" text-anchor="middle" fill="#a78bfa" font-size="13" font-weight="600">resolve_gateway_task_context</text>
+  <text x="750" y="376" text-anchor="middle" fill="#94a3b8" font-size="10">只读解析口令 → 任务 / 项目 / 状态 / OPEN ask</text>
+  <text x="750" y="392" text-anchor="middle" fill="#94a3b8" font-size="10">不写入 · 不注入 · 不恢复终端</text>
 
   <line x1="750" y1="332" x2="750" y2="292" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#a-violet)"/>
 
-  <!-- Resume / inject -->
+  <!-- Explicit action selection -->
   <rect x="560" y="170" width="380" height="120" rx="8" fill="rgba(76,29,149,0.25)" stroke="#c4b5fd" stroke-width="1.5"/>
-  <text x="750" y="194" text-anchor="middle" fill="#c4b5fd" font-size="13" font-weight="700">resume · 注入活终端</text>
+  <text x="750" y="194" text-anchor="middle" fill="#c4b5fd" font-size="13" font-weight="700">按用户意图选择显式动作</text>
   <line x1="580" y1="204" x2="920" y2="204" stroke="rgba(196,181,253,0.2)" stroke-width="1"/>
-  <circle cx="588" cy="221" r="2.5" fill="#c4b5fd"/><text x="598" y="224" fill="#cbd5e1" font-size="10">execution PAUSED → RUNNING</text>
-  <circle cx="588" cy="240" r="2.5" fill="#c4b5fd"/><text x="598" y="243" fill="#cbd5e1" font-size="10">回复作为下一条消息注入 PTY (already_running)</text>
-  <circle cx="588" cy="259" r="2.5" fill="#c4b5fd"/><text x="598" y="262" fill="#cbd5e1" font-size="10">接上一次上下文继续，不 --resume 从头重跑</text>
-  <circle cx="588" cy="278" r="2.5" fill="#c4b5fd"/><text x="598" y="281" fill="#cbd5e1" font-size="10">commit ecab514</text>
+  <circle cx="588" cy="221" r="2.5" fill="#34d399"/><text x="598" y="224" fill="#cbd5e1" font-size="10">OPEN ask → reply_to_ask（回答并恢复）</text>
+  <circle cx="588" cy="240" r="2.5" fill="#22d3ee"/><text x="598" y="243" fill="#cbd5e1" font-size="10">状态 / 结果 → 只读回答</text>
+  <circle cx="588" cy="259" r="2.5" fill="#94a3b8"/><text x="598" y="262" fill="#cbd5e1" font-size="10">外部操作 → 带 towerContext 委托，不改 Tower</text>
+  <circle cx="588" cy="278" r="2.5" fill="#c4b5fd"/><text x="598" y="281" fill="#cbd5e1" font-size="10">明确继续 / 修复 / 重跑 → continue_bound_task</text>
 
   <line x1="750" y1="170" x2="750" y2="126" stroke="#c4b5fd" stroke-width="1.5" marker-end="url(#a-violet)"/>
 
   <!-- Agent resumes -->
   <rect x="560" y="56" width="380" height="70" rx="8" fill="#0f172a"/>
   <rect x="560" y="56" width="380" height="70" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-  <text x="750" y="82" text-anchor="middle" fill="#22d3ee" font-size="13" font-weight="600">Task Agent 被唤醒</text>
-  <text x="750" y="102" text-anchor="middle" fill="#94a3b8" font-size="10">读到人的回复，继续干活</text>
-  <text x="750" y="117" text-anchor="middle" fill="#64748b" font-size="9">同一 PTY 会话 · 上下文不丢</text>
+  <text x="750" y="82" text-anchor="middle" fill="#22d3ee" font-size="13" font-weight="600">只有动作需要时才改变任务</text>
+  <text x="750" y="102" text-anchor="middle" fill="#94a3b8" font-size="10">OPEN ask 或显式 continue 才能恢复 / 注入</text>
+  <text x="750" y="117" text-anchor="middle" fill="#64748b" font-size="9">continue 按平台消息 ID 幂等；OPEN ask 优先</text>
 
   <!-- Keepalive note spanning bottom -->
   <rect x="60" y="548" width="880" height="52" rx="8" fill="rgba(120,53,15,0.12)" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="6,3"/>
@@ -178,23 +178,23 @@
   <circle cx="160" cy="633" r="4" fill="#34d399"/><text x="170" y="637" fill="#94a3b8" font-size="9">Tower (登记/park)</text>
   <circle cx="320" cy="633" r="4" fill="#fb923c"/><text x="330" y="637" fill="#94a3b8" font-size="9">网关 (真发)</text>
   <circle cx="440" cy="633" r="4" fill="#94a3b8"/><text x="450" y="637" fill="#94a3b8" font-size="9">人/平台</text>
-  <circle cx="540" cy="633" r="4" fill="#a78bfa"/><text x="550" y="637" fill="#94a3b8" font-size="9">回灌/resume</text>
+  <circle cx="540" cy="633" r="4" fill="#a78bfa"/><text x="550" y="637" fill="#94a3b8" font-size="9">只读解析 / 显式动作</text>
   <text x="930" y="637" text-anchor="end" fill="#475569" font-size="9">实线=真发送 · 虚线=跨系统回传</text>
 </svg>
 </div>
 
 <div class="cards">
   <div class="card">
-    <div class="card-title"><span class="card-dot" style="background:#34d399"></span>三件胶水事</div>
-    <div class="card-body">登记问题（写 /harness）· 挂起任务（park=PAUSED）· 回复回灌唤醒（resume 注入活终端）。收发都不碰。</div>
+    <div class="card-title"><span class="card-dot" style="background:#34d399"></span>OPEN ask 专用恢复</div>
+    <div class="card-body">ask_human 登记并 park；reply_to_ask 回答后恢复。普通绑定回复不能借这条路径唤醒任务。</div>
   </div>
   <div class="card">
     <div class="card-title"><span class="card-dot" style="background:#fbbf24"></span>口令 [[tower:task=id]]</div>
     <div class="card-body">出站体必须携带；人的回复带它回来，网关据此归属到任务。缺口令 = 回复无法归属 = 任务永久卡住。</div>
   </div>
   <div class="card">
-    <div class="card-title"><span class="card-dot" style="background:#a78bfa"></span>四工具速记</div>
-    <div class="card-body">ask=登记+park（不发）· notify=登记（不发/不 park）· push=真发+登记（一站式）· reply_to_ask/relay=回灌 resume。</div>
+    <div class="card-title"><span class="card-dot" style="background:#a78bfa"></span>解析与动作分离</div>
+    <div class="card-body">resolve 只读；查询不改状态；外部操作只透传上下文；continue 仅用于明确续跑并复用 GatewayInbound 去重。</div>
   </div>
 </div>
 
