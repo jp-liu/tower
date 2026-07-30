@@ -21,9 +21,9 @@ Tower 暴露 MCP Server 供外部 AI Agent 调用，通过 stdio 传输协议运
 - **知识库问答**：聚合仓库知识 markdown、事实卡、版本 commit、笔记回答项目问题
 - **笔记和资产**：管理项目笔记和资产文件（截图、上传）
 - **报告**：每日摘要、每日待办
-- **Harness 消息**：无人值守下向人推送消息、登记问题并挂起任务、回灌回复（详见 [Harness 模块](./harness)）
+- **Harness 与网关路由**：无人值守消息、回灌回复、持久化渠道会话、项目解析、Workbench 排队与完成回传（详见 [Harness 模块](./harness)）
 
-共 42 个工具，分 11 大类。
+共 46 个工具，分 11 大类。
 
 ## 详细说明
 
@@ -48,6 +48,7 @@ MCP stdio 进程无法访问内存中的 PTY 会话，通过内部 HTTP 路由�
 - `POST /api/internal/terminal/[taskId]/start` — 启动终端会话
 - `POST /api/internal/terminal/[taskId]/stop` — 关闭终端会话（复用「停止」按钮逻辑）
 - `POST /api/internal/terminal/[taskId]/resume` — 启动/继续终端（默认复用「继续/重试」按钮逻辑，无历史则全新启动）
+- `POST/PATCH/PUT /api/internal/harness/gateway` — 网关入站路由、处理完成登记、讨论/任务结果可靠回传
 - localhost 限定，仅允许本机访问
 
 ## 文件清单
@@ -74,4 +75,4 @@ MCP stdio 进程无法访问内存中的 PTY 会话，通过内部 HTTP 路由�
 | `note-asset-tools.ts` | 2 | manage_notes / manage_assets |
 | `terminal-tools.ts` | 6 | 启动执行 + 终端输出/输入/状态 + 关闭终端 + 启动/继续终端 |
 | `report-tools.ts` | 2 | daily_summary / daily_todo |
-| `harness-tools.ts` | 6 | 无人值守消息：list_notify_targets / push_to_human / ask_human / notify_human / reply_to_ask / relay_channel_reply（详见 [Harness 模块](./harness)） |
+| `harness-tools.ts` | 18 | 无人值守消息、OWNER/可信群能力路由、Workbench ACK/审查、单条诊断与恢复、远程项目接入（详见 [Harness 模块](./harness)） |

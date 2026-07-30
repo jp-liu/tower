@@ -19,13 +19,22 @@ vi.mock("@/lib/pty/ws-server", () => ({
 }));
 
 const mockDestroySession = vi.fn();
+const mockMarkSessionTurnComplete = vi.fn();
 vi.mock("@/lib/pty/session-store", () => ({
   destroySession: mockDestroySession,
+  markSessionTurnComplete: mockMarkSessionTurnComplete,
 }));
 
 const mockNotifyParent = vi.fn();
+const mockNotifyParentDecision = vi.fn();
 vi.mock("@/lib/derive/notify-parent", () => ({
   notifyParentOnChildStop: mockNotifyParent,
+  notifyParentOnChildDecision: mockNotifyParentDecision,
+}));
+
+const mockOpenDrainBoundary = vi.fn();
+vi.mock("@/lib/workbench/coordinator", () => ({
+  openWorkbenchDrainBoundary: mockOpenDrainBoundary,
 }));
 
 // Mock the db
@@ -77,6 +86,8 @@ describe("Stop hook API", () => {
 
     expect(response.status).toBe(200);
     expect(data.ok).toBe(true);
+    expect(mockNotifyParent).toHaveBeenCalledOnce();
+    expect(mockOpenDrainBoundary).toHaveBeenCalledWith("ctask123456789012345");
   });
 
   it("should reject request without taskId", async () => {
@@ -143,6 +154,7 @@ describe("Stop hook API", () => {
       id: "creq12345678901234567",
       kind: "ask",
       state: "OPEN",
+      content: "Which implementation should I use?",
     });
 
     const { POST } = await import("@/app/api/internal/hooks/stop/route");
@@ -158,7 +170,15 @@ describe("Stop hook API", () => {
     expect(response.status).toBe(200);
     expect(data.parked).toBe(true);
     expect(mockDestroySession).toHaveBeenCalledWith("ctask123456789012345");
-    // park 不是完成事件 → 不回推父任务
+    expect(mockNotifyParentDecision).toHaveBeenCalledWith(
+      "ctask123456789012345",
+      "Test Task",
+      "",
+      "Which implementation should I use?",
+      { sessionId: "s1", eventId: undefined, executionId: null },
+    );
+    // park 不是普通完成事件，也不会开放自身 drain 边界。
     expect(mockNotifyParent).not.toHaveBeenCalled();
+    expect(mockOpenDrainBoundary).not.toHaveBeenCalled();
   });
 });

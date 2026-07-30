@@ -1,9 +1,19 @@
 import { z } from "zod";
-import { extractTowerTaskId, findHarnessDeliveryByPlatformMessageId, recordHarnessDelivery } from "@/lib/harness/delivery-map";
+import { extractTowerTaskId, findHarnessDeliveryByPlatformMessageId } from "@/lib/harness/delivery-map";
 import { readHarnessGatewayRuntimeConfig } from "@/lib/harness/gateway-config";
+import { signedInternalFetch as fetch } from "@/lib/internal-api-signing";
+
+export { parseGatewaySendOutput } from "@/lib/harness/gateway-output";
 
 const PORT = process.env.PORT ?? "3000";
 const BRIDGE = `http://localhost:${PORT}/api/internal/harness`;
+const GATEWAY_BRIDGE = `${BRIDGE}/gateway`;
+const GATEWAY_QUERY_BRIDGE = `${BRIDGE}/gateway-query`;
+const GATEWAY_DIAGNOSTICS_BRIDGE = `${BRIDGE}/gateway-diagnostics`;
+const GATEWAY_RUNTIME_HEALTH_BRIDGE = `${BRIDGE}/gateway-runtime-health`;
+const HARNESS_OUTBOUND_BRIDGE = `${BRIDGE}/outbound`;
+const REMOTE_PROJECT_BRIDGE = `${BRIDGE}/remote-project`;
+const WORKBENCH_BATCH_BRIDGE = `http://localhost:${PORT}/api/internal/workbench/batch`;
 const TERMINAL_BRIDGE = `http://localhost:${PORT}/api/internal/terminal`;
 const CUID_RE = /^c[a-z0-9]{20,30}$/;
 
@@ -163,6 +173,48 @@ async function resolveActiveTarget(taskId: string, explicitScope?: "work" | "una
   return { task, scope, active };
 }
 
+type RelayChannelReplyArgs = {
+  text: string;
+  taskId?: string;
+  platform?: string;
+  chatId?: string;
+  platformMessageId?: string;
+  quotedText?: string;
+};
+
+export async function relayChannelReply(args: RelayChannelReplyArgs) {
+  const delivery = args.platformMessageId
+    ? await findHarnessDeliveryByPlatformMessageId(args.platformMessageId)
+    : null;
+  const taskId = delivery?.taskId || args.taskId || extractTowerTaskId(args.quotedText) || extractTowerTaskId(args.text);
+  if (!taskId) return { error: "No tower task token found", no_task_token: true };
+  const err = validateMcpTaskId(taskId);
+  if (err) return { error: err, taskId };
+
+  const chatScope = delivery ? null : await resolveScopeFromInboundChat(args.platform, args.chatId);
+  const shouldAnswerAsk =
+    delivery?.expectReply ??
+    (chatScope === "work" ? false : !!(await getOpenAskForRelay(taskId)));
+  const replyText = await buildExternalReplyText(taskId, args);
+  if (shouldAnswerAsk) {
+    const res = await fetch(`${BRIDGE}/reply`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ taskId, text: replyText, allowRetry: false }),
+    });
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (res.status !== 409) {
+      if (!res.ok) return { error: data?.error ?? "reply failed", status: res.status, taskId };
+      return { ok: true, mode: "ask_reply", taskId, injected: data.injected, delivery, chatScope };
+    }
+    if (delivery?.expectReply) return { no_pending: true, taskId, delivery };
+  }
+
+  const injected = await injectChannelReply(taskId, replyText);
+  if (injected.ok) return { ok: true, mode: "terminal_reply", taskId, delivery, chatScope, resumed: injected.resumed };
+  return { error: injected.error, status: injected.status, taskId, delivery, chatScope };
+}
+
 export const harnessTools = {
   list_notify_targets: {
     description:
@@ -233,18 +285,25 @@ export const harnessTools = {
 
   push_to_human: {
     description:
-      "Atomically push a task message to the configured human channel, then record it in Tower. " +
-      "For Hermes/OpenClaw channels, this tool sends through the gateway CLI first; only if the send succeeds does it " +
-      "call ask_human (park, when expectReply=true) or notify_human (record only). Use this instead of manually " +
-      "sending + ask_human for gateway-backed work/unattended channels.",
+      "Durably enqueue a task-to-human message before any external send. Tower's outbox worker claims and sends it, " +
+      "then atomically records the platform receipt, activates the ask, and parks the task when expectReply=true. " +
+      "Failed sends remain retryable; an in-flight crash becomes SENT_UNVERIFIED instead of being blindly resent.",
     schema: z.object({
       taskId: z.string().optional().describe("The current task id (TOWER_TASK_ID); defaults to the terminal's TOWER_TASK_ID when present"),
       message: z.string().min(1).max(4000).describe("Message body to send to the human/group"),
       scope: z.enum(["work", "unattended"]).optional().describe("Channel scope. Omit to derive from goal mode."),
       to: z.string().optional().describe("Destination for work messages: group/person name, Tower alias, or platform id. Optional for unattended home routes."),
       expectReply: z.boolean().optional().describe("If true, record with ask_human and park. Defaults true for unattended, false for work."),
+      dedupKey: z.string().min(1).max(256).optional().describe("Stable caller key for an intentional logical send. Reusing it returns the same durable outbound."),
     }),
-    handler: async (args: { taskId?: string; message: string; scope?: "work" | "unattended"; to?: string; expectReply?: boolean }) => {
+    handler: async (args: {
+      taskId?: string;
+      message: string;
+      scope?: "work" | "unattended";
+      to?: string;
+      expectReply?: boolean;
+      dedupKey?: string;
+    }) => {
       const bound = resolveTaskForCurrentTerminal(args.taskId);
       if ("error" in bound) return { error: bound.error, taskId: args.taskId };
       const { taskId } = bound;
@@ -278,53 +337,27 @@ export const harnessTools = {
         scope,
         taskTitle: task.title ?? null,
       });
-      const { sendViaHarnessGateway } = await import("@/lib/harness/gateway-send");
-      const sent = await sendViaHarnessGateway({
-        gateway: active.gateway,
-        message: body,
-        presentation,
-        dest: active.dest,
-        to: args.to,
-        downstream: active.downstream,
-        profile: active.profile,
-        scope,
-      });
-      if (!sent.ok) return { error: `${active.gateway} send failed`, output: sent.output };
-
       const expectReply = args.expectReply ?? scope === "unattended";
-      const endpoint = expectReply ? "ask" : "notify";
-      const payload = expectReply
-        ? { taskId, question: args.message }
-        : { taskId, message: args.message };
-      const res = await fetch(`${BRIDGE}/${endpoint}`, {
+      const res = await fetch(HARNESS_OUTBOUND_BRIDGE, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      if (!res.ok) return { error: data?.error ?? `${endpoint} failed`, status: res.status, sent: true };
-      const sentMeta = parseGatewaySendOutput(sent.output);
-      const harnessMessageId = String((expectReply ? data.requestId : data.messageId) || "");
-      if (sentMeta?.message_id && harnessMessageId) {
-        await recordHarnessDelivery({
-          harnessMessageId,
+        body: JSON.stringify({
           taskId,
-          platform: sentMeta.platform || active.downstream || "hermes",
-          chatId: sentMeta.chat_id || sent.resolvedDest || active.dest || args.to || "",
-          platformMessageId: sentMeta.message_id,
+          gateway: active.gateway,
+          downstream: active.downstream ?? null,
+          dest: active.dest ?? null,
+          requestedTo: args.to ?? null,
+          profile: active.profile ?? null,
           scope,
           expectReply,
-        });
-      }
-      return {
-        ok: true,
-        sent: true,
-        parked: expectReply,
-        scope,
-        requestId: data.requestId,
-        messageId: data.messageId,
-        output: sent.output,
-      };
+          message: body,
+          presentation,
+          dedupKey: args.dedupKey ?? null,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) return { error: data?.error ?? "durable outbound enqueue failed", status: res.status };
+      return { ok: true, scope, expectReply, ...data };
     },
   },
 
@@ -342,39 +375,405 @@ export const harnessTools = {
       platformMessageId: z.string().optional().describe("The Feishu/WeChat message id being replied to, if available"),
       quotedText: z.string().optional().describe("Quoted/replied-to message text, if available"),
     }),
-    handler: async (args: { text: string; taskId?: string; platform?: string; chatId?: string; platformMessageId?: string; quotedText?: string }) => {
-      const delivery = args.platformMessageId
-        ? await findHarnessDeliveryByPlatformMessageId(args.platformMessageId)
-        : null;
-      const taskId = delivery?.taskId || args.taskId || extractTowerTaskId(args.quotedText) || extractTowerTaskId(args.text);
-      if (!taskId) {
-        return { error: "No tower task token found", no_task_token: true };
-      }
-      const err = validateMcpTaskId(taskId);
-      if (err) return { error: err, taskId };
+    handler: relayChannelReply,
+  },
 
-      const chatScope = delivery ? null : await resolveScopeFromInboundChat(args.platform, args.chatId);
-      const shouldAnswerAsk =
-        delivery?.expectReply ??
-        (chatScope === "work" ? false : !!(await getOpenAskForRelay(taskId)));
-      const replyText = await buildExternalReplyText(taskId, args);
-      if (shouldAnswerAsk) {
-        const res = await fetch(`${BRIDGE}/reply`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ taskId, text: replyText, allowRetry: false }),
-        });
-        const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-        if (res.status !== 409) {
-          if (!res.ok) return { error: data?.error ?? "reply failed", status: res.status, taskId };
-          return { ok: true, mode: "ask_reply", taskId, injected: data.injected, delivery, chatScope };
+  route_gateway_message: {
+    description:
+      "Persist and route one inbound gateway message. Call this before handling any ordinary Feishu/WeChat/etc. " +
+      "message. Classify intent as DIRECT (ordinary Q&A or external operator work), TOWER (Tower query/simple " +
+      "command), PROJECT_DISCUSSION, or PROJECT_WORK. Tower applies reply/task binding, thread/session binding, " +
+      "explicit project, identify_project, recent-user project, and channel default in that strict order. It " +
+      "returns candidates instead of guessing. Task replies preserve parked ask vs work-channel behavior; project " +
+      "work is durably queued for the project Workbench; discussions get an independent project-bound session. " +
+      "DIRECT must still pass through this tool even when the user says not to query Tower: routing persistence is " +
+      "not a Tower data query. Set startNewWork only for an explicit create-new-task/start-new-work request, so it " +
+      "can override an old task-card reply; ordinary task follow-ups keep their reply binding. Use sessionAction=CLOSE " +
+      "for an explicit Tower discussion close, and NEW when explicitly switching projects or starting a fresh discussion. " +
+      "Duplicate callbacks return in_progress/already_processed with noOp=true; never repeat the original action.",
+    schema: z.object({
+      gateway: z.enum(["hermes", "openclaw"]),
+      platform: z.string().min(1).max(64),
+      chatId: z.string().min(1).max(512),
+      platformMessageId: z.string().min(1).max(512).describe("Unique id of this inbound platform message"),
+      senderId: z.string().max(512).optional(),
+      threadId: z.string().max(512).optional(),
+      rootMessageId: z.string().max(512).optional(),
+      replyToMessageId: z.string().max(512).optional().describe("Platform message id this inbound message replies to"),
+      quotedText: z.string().max(16000).optional(),
+      taskId: z.string().optional(),
+      project: z.string().max(512).optional().describe("Explicit project id, name, alias, or identify_project query from the user"),
+      intent: z.enum(["DIRECT", "TOWER", "PROJECT_DISCUSSION", "PROJECT_WORK"]),
+      content: z.string().min(1).max(16000),
+      sessionAction: z.enum(["CONTINUE", "NEW", "CLOSE"]).optional(),
+      startNewWork: z.boolean().optional().describe("True only when the user explicitly asks to create a new task or start new work, including while replying to an old task message"),
+    }),
+    handler: async (args: {
+      gateway: "hermes" | "openclaw";
+      platform: string;
+      chatId: string;
+      platformMessageId: string;
+      senderId?: string;
+      threadId?: string;
+      rootMessageId?: string;
+      replyToMessageId?: string;
+      quotedText?: string;
+      taskId?: string;
+      project?: string;
+      intent: "DIRECT" | "TOWER" | "PROJECT_DISCUSSION" | "PROJECT_WORK";
+      content: string;
+      sessionAction?: "CONTINUE" | "NEW" | "CLOSE";
+      startNewWork?: boolean;
+    }) => {
+      const res = await fetch(GATEWAY_BRIDGE, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const routed = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) return { error: routed.error ?? "gateway routing failed", status: res.status };
+      if (routed.mode !== "task_reply") return routed;
+
+      const relayed = await relayChannelReply({
+        text: args.content,
+        taskId: String(routed.taskId || ""),
+        platform: args.platform,
+        chatId: args.chatId,
+        platformMessageId: args.replyToMessageId,
+        quotedText: args.quotedText,
+      });
+      if (!("ok" in relayed) || !relayed.ok) return { ...routed, relay: relayed };
+      let recorded = false;
+      let recordError = "gateway reply outcome could not be recorded";
+      for (let attempt = 0; attempt < 3 && !recorded; attempt++) {
+        try {
+          const completion = await fetch(GATEWAY_BRIDGE, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ inboundId: routed.inboundId, response: relayed }),
+          });
+          if (completion.ok) {
+            recorded = true;
+          } else {
+            const body = (await completion.json().catch(() => ({}))) as { error?: string };
+            recordError = body.error || `gateway reply outcome returned ${completion.status}`;
+          }
+        } catch (error) {
+          recordError = error instanceof Error ? error.message : String(error);
         }
-        if (delivery?.expectReply) return { no_pending: true, taskId, delivery };
       }
+      if (!recorded) return { ...routed, relay: relayed, recordError };
+      return { ...routed, relay: relayed };
+    },
+  },
 
-      const injected = await injectChannelReply(taskId, replyText);
-      if (injected.ok) return { ok: true, mode: "terminal_reply", taskId, delivery, chatScope, resumed: injected.resumed };
-      return { error: injected.error, status: injected.status, taskId, delivery, chatScope };
+  route_gateway_query: {
+    description:
+      "Read-only gateway entry for a non-owner in a trusted channel. It durably binds the inbound message to " +
+      "one allowed project discussion and can never relay a task reply, create a task, start a terminal, or enqueue " +
+      "Workbench work. Use the returned candidates instead of guessing. After routing, call " +
+      "read_gateway_project_context and then complete_gateway_discussion.",
+    schema: z.object({
+      gateway: z.enum(["hermes", "openclaw"]),
+      platform: z.string().min(1).max(64),
+      chatId: z.string().min(1).max(512),
+      platformMessageId: z.string().min(1).max(512),
+      senderId: z.string().max(512).optional(),
+      threadId: z.string().max(512).optional(),
+      rootMessageId: z.string().max(512).optional(),
+      replyToMessageId: z.string().max(512).optional(),
+      quotedText: z.string().max(16000).optional(),
+      project: z.string().max(512).optional(),
+      content: z.string().min(1).max(16000),
+      sessionAction: z.enum(["CONTINUE", "NEW", "CLOSE"]).optional(),
+    }),
+    handler: async (args: {
+      gateway: "hermes" | "openclaw";
+      platform: string;
+      chatId: string;
+      platformMessageId: string;
+      senderId?: string;
+      threadId?: string;
+      rootMessageId?: string;
+      replyToMessageId?: string;
+      quotedText?: string;
+      project?: string;
+      content: string;
+      sessionAction?: "CONTINUE" | "NEW" | "CLOSE";
+    }) => {
+      const res = await fetch(GATEWAY_QUERY_BRIDGE, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "gateway project query failed", status: res.status };
+    },
+  },
+
+  read_gateway_project_context: {
+    description:
+      "Read project knowledge and recent task status only through the project binding created by " +
+      "route_gateway_query. The caller cannot supply a project id, workspace id, or local path, so this tool " +
+      "cannot escape the trusted channel's allowed project scope.",
+    schema: z.object({
+      inboundId: z.string().min(1).max(128),
+      question: z.string().min(1).max(8000),
+    }),
+    handler: async (args: { inboundId: string; question: string }) => {
+      const res = await fetch(GATEWAY_QUERY_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "gateway project context failed", status: res.status };
+    },
+  },
+
+  diagnose_gateway_request: {
+    description:
+      "OWNER diagnostics for one external request. Correlates the platform message, Tower inbound route, " +
+      "durable Workbench event/batch/runtime, child task/execution, and every outbound delivery into ordered " +
+      "stages. Use this instead of manually querying tables or guessing from one terminal log.",
+    schema: z.object({
+      inboundId: z.string().min(1).max(128).optional(),
+      platformMessageId: z.string().min(1).max(512).optional(),
+    }).refine((value) => value.inboundId || value.platformMessageId, {
+      message: "inboundId or platformMessageId is required",
+    }),
+    handler: async (args: { inboundId?: string; platformMessageId?: string }) => {
+      const res = await fetch(GATEWAY_DIAGNOSTICS_BRIDGE, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "gateway diagnostics failed", status: res.status };
+    },
+  },
+
+  recover_gateway_request: {
+    description:
+      "OWNER-only safe recovery for one diagnosed gateway inbound id. Retries only failed deliveries that have " +
+      "no platform message id and reopens only that request's durable Workbench path. It never auto-resends a " +
+      "SENT_UNVERIFIED card because the platform may already contain it.",
+    schema: z.object({
+      inboundId: z.string().min(1).max(128),
+    }),
+    handler: async (args: { inboundId: string }) => {
+      const res = await fetch(GATEWAY_DIAGNOSTICS_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "gateway recovery failed", status: res.status };
+    },
+  },
+
+  get_gateway_runtime_health: {
+    description:
+      "OWNER runtime diagnostics for OpenClaw or Hermes. Reads bounded service health and recent warning/error " +
+      "logs, redacts credentials and home paths, and can filter by a Tower trace id or platform message id. " +
+      "Use together with diagnose_gateway_request to distinguish gateway failures from Tower/Workbench failures.",
+    schema: z.object({
+      gateway: z.enum(["openclaw", "hermes"]),
+      trace: z.string().min(1).max(512).optional(),
+      includeLogs: z.boolean().optional().default(true),
+    }),
+    handler: async (args: { gateway: "openclaw" | "hermes"; trace?: string; includeLogs?: boolean }) => {
+      const res = await fetch(GATEWAY_RUNTIME_HEALTH_BRIDGE, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "gateway runtime health failed", status: res.status };
+    },
+  },
+
+  provision_remote_project: {
+    description:
+      "OWNER-only remote Git project orchestrator. PROVISION requires gitUrl, workspaceId, and an absolute " +
+      "localRoot; when any is missing it returns needsInput instead of guessing. It clones with Git directly, " +
+      "registers the Tower project, creates its resident Workbench, and never installs dependencies or runs " +
+      "repository scripts. REVIEW_ONLY is the default. SET_MODE explicitly changes REVIEW_ONLY/FULL_WORK. " +
+      "STATUS reports the durable registration.",
+    schema: z.object({
+      action: z.enum(["PROVISION", "SET_MODE", "STATUS"]),
+      gitUrl: z.string().max(2000).optional(),
+      workspaceId: z.string().max(128).optional(),
+      localRoot: z.string().max(2000).optional(),
+      name: z.string().max(200).optional(),
+      directoryName: z.string().max(200).optional(),
+      projectId: z.string().max(128).optional(),
+      accessMode: z.enum(["REVIEW_ONLY", "FULL_WORK"]).optional(),
+    }),
+    handler: async (args: {
+      action: "PROVISION" | "SET_MODE" | "STATUS";
+      gitUrl?: string;
+      workspaceId?: string;
+      localRoot?: string;
+      name?: string;
+      directoryName?: string;
+      projectId?: string;
+      accessMode?: "REVIEW_ONLY" | "FULL_WORK";
+    }) => {
+      if ((args.action === "SET_MODE" || args.action === "STATUS") && !args.projectId) {
+        return { error: "projectId is required for SET_MODE and STATUS" };
+      }
+      if (args.action === "SET_MODE" && !args.accessMode) {
+        return { error: "accessMode is required for SET_MODE" };
+      }
+      const res = await fetch(REMOTE_PROJECT_BRIDGE, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "remote project provisioning failed", status: res.status };
+    },
+  },
+
+  complete_gateway_discussion: {
+    description:
+      "Send the project-aware answer for a route_gateway_message PROJECT_DISCUSSION result back to the original " +
+      "platform thread. Delivery is persisted and idempotent. Call this after using the returned project context; " +
+      "do not restate the response in the gateway's final output after this tool sends it.",
+    schema: z.object({
+      inboundId: z.string().min(1).max(128),
+      response: z.string().min(1).max(16000),
+    }),
+    handler: async (args: { inboundId: string; response: string }) => {
+      const res = await fetch(GATEWAY_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "discussion", ...args }),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "discussion delivery failed", status: res.status };
+    },
+  },
+
+  ack_workbench_batch: {
+    description:
+      "Workbench-only: acknowledge that the resident Workbench actually received and read a durable batch. " +
+      "Call this immediately when a prompt contains '[Tower durable batch: wb-...]'. PTY delivery alone does " +
+      "not consume the inbox rows; only resolve_workbench_batch releases responsibility. The lease token fences " +
+      "stale Workbench executions. Repeated calls renew the processing lease and are idempotent.",
+    schema: z.object({
+      batchId: z.string().trim().min(1).max(128),
+      leaseToken: z.string().trim().min(1).max(128),
+    }),
+    handler: async (args: { batchId: string; leaseToken: string }) => {
+      const parentTaskId = process.env.TOWER_TASK_ID?.trim();
+      if (!parentTaskId) return { error: "ack_workbench_batch must run inside the bound Workbench terminal" };
+      const res = await fetch(WORKBENCH_BATCH_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "ack", parentTaskId, ...args }),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : {
+        error: (data as { error?: unknown }).error ?? "Workbench batch acknowledgement failed",
+        status: res.status,
+      };
+    },
+  },
+
+  heartbeat_workbench_batch: {
+    description:
+      "Workbench-only: renew an ACKED durable batch responsibility lease while long-running review/delegation " +
+      "continues. Use the exact leaseToken from the batch prompt. A stale token is rejected.",
+    schema: z.object({
+      batchId: z.string().trim().min(1).max(128),
+      leaseToken: z.string().trim().min(1).max(128),
+    }),
+    handler: async (args: { batchId: string; leaseToken: string }) => {
+      const parentTaskId = process.env.TOWER_TASK_ID?.trim();
+      if (!parentTaskId) return { error: "heartbeat_workbench_batch must run inside the bound Workbench terminal" };
+      const res = await fetch(WORKBENCH_BATCH_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "heartbeat", parentTaskId, ...args }),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : {
+        error: (data as { error?: unknown }).error ?? "Workbench batch heartbeat failed",
+        status: res.status,
+      };
+    },
+  },
+
+  resolve_workbench_batch: {
+    description:
+      "Workbench-only: mark an acknowledged durable batch fully handled. Call only after every item in the " +
+      "batch has been completed or durably delegated. The batch must be ACKED first; repeated calls are idempotent.",
+    schema: z.object({
+      batchId: z.string().trim().min(1).max(128),
+      leaseToken: z.string().trim().min(1).max(128),
+    }),
+    handler: async (args: { batchId: string; leaseToken: string }) => {
+      const parentTaskId = process.env.TOWER_TASK_ID?.trim();
+      if (!parentTaskId) return { error: "resolve_workbench_batch must run inside the bound Workbench terminal" };
+      const res = await fetch(WORKBENCH_BATCH_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "resolve", parentTaskId, ...args }),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : {
+        error: (data as { error?: unknown }).error ?? "Workbench batch resolution failed",
+        status: res.status,
+      };
+    },
+  },
+
+  confirm_gateway_task_created: {
+    description:
+      "Workbench-only: confirm a PROJECT_WORK request after create_task actually returned the child task id. " +
+      "Tower validates the task belongs to the bound project and sends one idempotent confirmation containing " +
+      "the title and Tower locator. Never call before create_task succeeds.",
+    schema: z.object({
+      inboundId: z.string().min(1).max(128),
+      taskId: z.string().min(1).max(128).describe("The real task id returned by create_task"),
+    }),
+    handler: async (args: { inboundId: string; taskId: string }) => {
+      const reviewerTaskId = process.env.TOWER_TASK_ID?.trim();
+      if (!reviewerTaskId) return { error: "confirm_gateway_task_created must run inside the bound Workbench terminal" };
+      const res = await fetch(GATEWAY_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "task_created", reviewerTaskId, ...args }),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "task confirmation failed", status: res.status };
+    },
+  },
+
+  complete_gateway_work: {
+    description:
+      "Workbench-only: after reviewing and accepting a gateway-created child task, reply to the original external " +
+      "thread with the task title, reviewed result, commit id/message, branch, and Tower task locator. Tower " +
+      "requires the caller to be the bound Workbench and the task to be IN_REVIEW (or already DONE for recovery). " +
+      "This call atomically moves an accepted IN_REVIEW task to DONE and creates its retryable FINAL_RESULT outbox; " +
+      "do not call move_task(DONE) first. Repeated callbacks are idempotent.",
+    schema: z.object({
+      inboundId: z.string().min(1).max(128),
+      taskId: z.string().min(1).max(128),
+      resultSummary: z.string().min(1).max(8000).optional(),
+    }),
+    handler: async (args: { inboundId: string; taskId: string; resultSummary?: string }) => {
+      const reviewerTaskId = process.env.TOWER_TASK_ID?.trim();
+      if (!reviewerTaskId) return { error: "complete_gateway_work must run inside the bound Workbench terminal" };
+      const res = await fetch(GATEWAY_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "final", reviewerTaskId, ...args }),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "final gateway delivery failed", status: res.status };
     },
   },
 
@@ -487,67 +886,6 @@ export const harnessTools = {
     },
   },
 };
-
-export function parseGatewaySendOutput(output: string): { platform?: string; chat_id?: string; message_id?: string } | null {
-  try {
-    const parsed = JSON.parse(output) as unknown;
-    const messageId =
-      findStringByKeys(parsed, ["message_id", "messageId", "platformMessageId", "openMessageId"]) ??
-      findStringByPattern(parsed, /^om_[A-Za-z0-9_-]+$/);
-    if (!messageId) return null;
-    return {
-      platform: findStringByKeys(parsed, ["platform", "channel", "downstream"]),
-      chat_id: findStringByKeys(parsed, ["chat_id", "chatId", "target", "to", "destination"]),
-      message_id: messageId,
-    };
-  } catch {
-    const messageId =
-      output.match(/\b(message_id|messageId|platformMessageId|\u98de\u4e66\u6d88\u606f\s*ID|message\s*id)\b[^A-Za-z0-9_-]*(om_[A-Za-z0-9_-]+)/i)?.[2] ??
-      output.match(/\bom_[A-Za-z0-9_-]+\b/)?.[0];
-    if (!messageId) return null;
-    const platform = output.match(/\b(platform|channel)\b[^A-Za-z0-9_-]*([A-Za-z0-9_-]+)/i)?.[2];
-    const chatId =
-      output.match(/\b(chat_id|chatId|target|to)\b[^A-Za-z0-9:_-]*([A-Za-z]+:[A-Za-z0-9:_-]+)/i)?.[2] ??
-      output.match(/\b(chat_id|chatId|target|to)\b[^A-Za-z0-9:_-]*(oc_[A-Za-z0-9_-]+)/i)?.[2];
-    return {
-      ...(platform ? { platform } : {}),
-      ...(chatId ? { chat_id: chatId } : {}),
-      message_id: messageId,
-    };
-  }
-}
-
-function findStringByKeys(value: unknown, keys: string[]): string | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = findStringByKeys(item, keys);
-      if (found) return found;
-    }
-    return undefined;
-  }
-  const obj = value as Record<string, unknown>;
-  for (const key of keys) {
-    const raw = obj[key];
-    if (typeof raw === "string" && raw.trim()) return raw.trim();
-  }
-  for (const raw of Object.values(obj)) {
-    const found = findStringByKeys(raw, keys);
-    if (found) return found;
-  }
-  return undefined;
-}
-
-function findStringByPattern(value: unknown, pattern: RegExp): string | undefined {
-  if (typeof value === "string" && pattern.test(value)) return value;
-  if (!value || typeof value !== "object") return undefined;
-  const children = Array.isArray(value) ? value : Object.values(value as Record<string, unknown>);
-  for (const child of children) {
-    const found = findStringByPattern(child, pattern);
-    if (found) return found;
-  }
-  return undefined;
-}
 
 async function getOpenAskForRelay(taskId: string): Promise<boolean> {
   const res = await fetch(`${BRIDGE}/pending?taskId=${encodeURIComponent(taskId)}`);

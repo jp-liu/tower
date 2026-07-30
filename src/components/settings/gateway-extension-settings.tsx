@@ -17,6 +17,11 @@ interface GatewayRuntimeConfig {
   profile?: string;
   displayName?: string;
   env?: Record<string, string>;
+  accessPolicy?: {
+    ownerIds?: Record<string, string[]>;
+    trustedChannels?: Record<string, string[]>;
+    channelScopes?: Record<string, Record<string, string>>;
+  };
 }
 
 type GatewayConfigMap = Partial<Record<Gateway, GatewayRuntimeConfig>>;
@@ -71,6 +76,63 @@ function textToEnv(text: string): { env: Record<string, string>; errors: string[
     env[key] = line.slice(eq + 1).trim();
   }
   return { env, errors };
+}
+
+function idMapToText(value: Record<string, string[]> | undefined): string {
+  return Object.entries(value ?? {})
+    .flatMap(([platform, ids]) => ids.map((id) => `${platform}:${id}`))
+    .join("\n");
+}
+
+function textToIdMap(text: string): { value: Record<string, string[]>; errors: string[] } {
+  const value: Record<string, string[]> = {};
+  const errors: string[] = [];
+  for (const [idx, raw] of text.split(/\r?\n/).entries()) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const separator = line.indexOf(":");
+    const platform = separator > 0 ? line.slice(0, separator).trim().toLowerCase() : "";
+    const id = separator > 0 ? line.slice(separator + 1).trim() : "";
+    if (!/^[a-z][a-z0-9_-]{0,63}$/.test(platform) || !id) {
+      errors.push(`line ${idx + 1}`);
+      continue;
+    }
+    value[platform] ??= [];
+    if (!value[platform].includes(id)) value[platform].push(id);
+  }
+  return { value, errors };
+}
+
+function channelScopesToText(value: Record<string, Record<string, string>> | undefined): string {
+  return Object.entries(value ?? {})
+    .flatMap(([platform, scopes]) =>
+      Object.entries(scopes).map(([chatId, workspace]) => `${platform}:${chatId}:${workspace}`)
+    )
+    .join("\n");
+}
+
+function textToChannelScopes(text: string): {
+  value: Record<string, Record<string, string>>;
+  errors: string[];
+} {
+  const value: Record<string, Record<string, string>> = {};
+  const errors: string[] = [];
+  for (const [idx, raw] of text.split(/\r?\n/).entries()) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const first = line.indexOf(":");
+    const second = first >= 0 ? line.indexOf(":", first + 1) : -1;
+    const platform = first > 0 ? line.slice(0, first).trim().toLowerCase() : "";
+    const chatId = second > first ? line.slice(first + 1, second).trim() : "";
+    const workspace = second > first ? line.slice(second + 1).trim() : "";
+    if (!/^[a-z][a-z0-9_-]{0,63}$/.test(platform) || !chatId || !workspace) {
+      errors.push(`line ${idx + 1}`);
+      continue;
+    }
+    value[platform] ??= {};
+    value[platform][chatId] = workspace;
+  }
+  return { value, errors };
 }
 
 function fromLegacyTargets(targets: LegacyTarget[]): GatewayConfigMap {
@@ -180,6 +242,7 @@ export function GatewayExtensionSettings() {
           profile: runtime.profile?.trim() || undefined,
           displayName: runtime.displayName?.trim() || undefined,
           env: runtime.env && Object.keys(runtime.env).length > 0 ? runtime.env : undefined,
+          accessPolicy: runtime.accessPolicy,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; report?: { error?: string } };
@@ -303,6 +366,76 @@ export function GatewayExtensionSettings() {
                       />
                       <p className="text-[11px] text-muted-foreground">{t("settings.extensions.gateway.envHint")}</p>
                     </div>
+                    {gateway === "openclaw" ? (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="space-y-1">
+                          <label className="text-xs text-muted-foreground">
+                            {t("settings.extensions.gateway.ownerIdsLabel")}
+                          </label>
+                          <Textarea
+                            value={idMapToText(runtime.accessPolicy?.ownerIds)}
+                            onChange={(e) => {
+                              const parsed = textToIdMap(e.target.value);
+                              patch(gateway, {
+                                accessPolicy: {
+                                  ...(runtime.accessPolicy ?? {}),
+                                  ownerIds: parsed.value,
+                                },
+                              });
+                            }}
+                            placeholder={t("settings.extensions.gateway.ownerIdsPlaceholder")}
+                            className="min-h-24 font-mono text-xs leading-4"
+                          />
+                          <p className="text-[11px] text-muted-foreground">
+                            {t("settings.extensions.gateway.ownerIdsHint")}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-muted-foreground">
+                            {t("settings.extensions.gateway.trustedChannelsLabel")}
+                          </label>
+                          <Textarea
+                            value={idMapToText(runtime.accessPolicy?.trustedChannels)}
+                            onChange={(e) => {
+                              const parsed = textToIdMap(e.target.value);
+                              patch(gateway, {
+                                accessPolicy: {
+                                  ...(runtime.accessPolicy ?? {}),
+                                  trustedChannels: parsed.value,
+                                },
+                              });
+                            }}
+                            placeholder={t("settings.extensions.gateway.trustedChannelsPlaceholder")}
+                            className="min-h-24 font-mono text-xs leading-4"
+                          />
+                          <p className="text-[11px] text-muted-foreground">
+                            {t("settings.extensions.gateway.trustedChannelsHint")}
+                          </p>
+                        </div>
+                        <div className="space-y-1 md:col-span-2">
+                          <label className="text-xs text-muted-foreground">
+                            {tk("settings.extensions.gateway.channelScopesLabel")}
+                          </label>
+                          <Textarea
+                            value={channelScopesToText(runtime.accessPolicy?.channelScopes)}
+                            onChange={(e) => {
+                              const parsed = textToChannelScopes(e.target.value);
+                              patch(gateway, {
+                                accessPolicy: {
+                                  ...(runtime.accessPolicy ?? {}),
+                                  channelScopes: parsed.value,
+                                },
+                              });
+                            }}
+                            placeholder={tk("settings.extensions.gateway.channelScopesPlaceholder")}
+                            className="min-h-20 font-mono text-xs leading-4"
+                          />
+                          <p className="text-[11px] text-muted-foreground">
+                            {tk("settings.extensions.gateway.channelScopesHint")}
+                          </p>
+                        </div>
+                      </div>
+                    ) : null}
                   </>
                 ) : null}
 

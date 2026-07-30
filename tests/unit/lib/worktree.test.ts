@@ -16,13 +16,24 @@ vi.mock("fs", () => ({
   existsSync: vi.fn(),
   symlinkSync: vi.fn(),
   lstatSync: vi.fn(),
+  readlinkSync: vi.fn(),
   readdirSync: vi.fn(),
   mkdirSync: vi.fn(),
+  unlinkSync: vi.fn(),
+  writeFileSync: vi.fn(),
 }));
 
 import { execFileSync } from "child_process";
 import { mkdir } from "fs/promises";
-import { existsSync, symlinkSync, lstatSync, readdirSync, mkdirSync } from "fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readlinkSync,
+  readdirSync,
+  symlinkSync,
+  unlinkSync,
+} from "fs";
 import { createWorktree, removeWorktree } from "@/lib/worktree";
 
 const mockedExecFileSync = vi.mocked(execFileSync);
@@ -30,8 +41,10 @@ const mockedMkdir = vi.mocked(mkdir);
 const mockedExistsSync = vi.mocked(existsSync);
 const mockedSymlinkSync = vi.mocked(symlinkSync);
 const mockedLstatSync = vi.mocked(lstatSync);
+const mockedReadlinkSync = vi.mocked(readlinkSync);
 const mockedReaddirSync = vi.mocked(readdirSync);
 const mockedMkdirSync = vi.mocked(mkdirSync);
+const mockedUnlinkSync = vi.mocked(unlinkSync);
 
 /** Build fake withFileTypes Dirent entries (all directories) for readdirSync. */
 function dirents(names: string[]): never {
@@ -50,7 +63,7 @@ beforeEach(() => {
   mockedMkdir.mockResolvedValue(undefined);
   mockedExecFileSync.mockReturnValue("" as never);
   // Default: empty repo tree (no nested package dirs) so unrelated tests
-  // don't trip over the directory walk in symlinkNodeModules.
+  // don't trip over the dependency directory walk.
   mockedReaddirSync.mockReturnValue(dirents([]));
   mockedMkdirSync.mockReturnValue(undefined as never);
 });
@@ -131,6 +144,88 @@ describe("createWorktree", () => {
     expect(symlinkTargets).toContain(`${expectedWorktreePath}/packages/server/node_modules`);
     // docs has no package.json — must not be linked
     expect(symlinkTargets).not.toContain(`${expectedWorktreePath}/docs/node_modules`);
+  });
+
+  it("installs isolated pnpm dependencies instead of sharing writable directories", async () => {
+    mockedReaddirSync.mockImplementation((p) => {
+      const s = String(p);
+      if (s === LOCAL_PATH) return dirents(["packages", "node_modules"]);
+      if (s === `${LOCAL_PATH}/packages`) return dirents(["server"]);
+      return dirents([]);
+    });
+    mockedExistsSync.mockImplementation((p) => {
+      const s = String(p);
+      return s === LOCAL_PATH ||
+        s === `${LOCAL_PATH}/package.json` ||
+        s === `${LOCAL_PATH}/packages/server/package.json` ||
+        s === `${LOCAL_PATH}/pnpm-lock.yaml` ||
+        s === `${LOCAL_PATH}/node_modules` ||
+        s === `${LOCAL_PATH}/node_modules/.pnpm` ||
+        s === `${LOCAL_PATH}/packages/server/node_modules`;
+    });
+    mockedLstatSync.mockImplementation(() => {
+      throw new Error("ENOENT");
+    });
+
+    await createWorktree(LOCAL_PATH, TASK_ID, BASE_BRANCH);
+
+    expect(mockedSymlinkSync).not.toHaveBeenCalledWith(
+      expect.stringContaining("node_modules"),
+      expect.stringContaining("node_modules"),
+      expect.anything()
+    );
+    expect(mockedExecFileSync).toHaveBeenCalledWith(
+      "pnpm install --offline --frozen-lockfile --ignore-scripts",
+      expect.objectContaining({
+        cwd: expectedWorktreePath,
+        timeout: 120000,
+        env: expect.objectContaining({ CI: "true" }),
+        shell: true,
+      })
+    );
+  });
+
+  it("removes existing Tower-created pnpm links before the isolated install", async () => {
+    mockedReaddirSync.mockImplementation((p) => {
+      const s = String(p);
+      if (s === LOCAL_PATH) return dirents(["packages", "node_modules"]);
+      if (s === `${LOCAL_PATH}/packages`) return dirents(["server"]);
+      return dirents([]);
+    });
+    mockedExistsSync.mockImplementation((p) => {
+      const s = String(p);
+      return s === LOCAL_PATH ||
+        s === `${LOCAL_PATH}/package.json` ||
+        s === `${LOCAL_PATH}/packages/server/package.json` ||
+        s === `${LOCAL_PATH}/pnpm-lock.yaml` ||
+        s === `${LOCAL_PATH}/node_modules` ||
+        s === `${LOCAL_PATH}/node_modules/.pnpm` ||
+        s === `${LOCAL_PATH}/packages/server/node_modules`;
+    });
+    mockedLstatSync.mockImplementation((p) => {
+      const s = String(p);
+      if (
+        s === `${expectedWorktreePath}/node_modules` ||
+        s === `${expectedWorktreePath}/packages/server/node_modules`
+      ) {
+        return { isSymbolicLink: () => true } as never;
+      }
+      throw new Error("ENOENT");
+    });
+    mockedReadlinkSync.mockImplementation((p) =>
+      String(p).replace(expectedWorktreePath, LOCAL_PATH) as never
+    );
+
+    await createWorktree(LOCAL_PATH, TASK_ID, BASE_BRANCH);
+
+    expect(mockedUnlinkSync).toHaveBeenCalledWith(
+      `${expectedWorktreePath}/packages/server/node_modules`
+    );
+    expect(mockedUnlinkSync).toHaveBeenCalledWith(`${expectedWorktreePath}/node_modules`);
+    expect(mockedExecFileSync).toHaveBeenCalledWith(
+      "pnpm install --offline --frozen-lockfile --ignore-scripts",
+      expect.objectContaining({ cwd: expectedWorktreePath })
+    );
   });
 
   it("links subpackage node_modules even when the repo root has no package.json", async () => {

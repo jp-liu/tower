@@ -11,9 +11,9 @@
  *   export async function up(prisma) { ... }   // must be idempotent
  *
  * Failure policy: a failing migration is logged and retried on the next start;
- * later migrations are NOT run (they may depend on it). The process still exits
- * 0 so a single bad migration never bricks startup. Only an unrecoverable error
- * (e.g. DB unreachable) exits non-zero.
+ * later migrations are NOT run (they may depend on it), and startup is blocked.
+ * Starting recovery workers against partially migrated delivery state can replay
+ * messages that the platform already accepted.
  *
  * Invoked by bin/tower.mjs pre-start, and available in dev via `pnpm db:migrate`.
  * Requires the schema to be current (the AppliedMigration table must exist) —
@@ -52,6 +52,7 @@ async function main() {
     const appliedRows = await prisma.appliedMigration.findMany({ select: { id: true } });
     const applied = new Set(appliedRows.map((r) => r.id));
 
+    let failure: unknown;
     for (const file of files) {
       const id = file.replace(/\.(ts|mjs|js)$/, "");
       if (applied.has(id)) continue;
@@ -69,11 +70,13 @@ async function main() {
         console.log(`[migrate] ${id} done`);
       } catch (err) {
         // Stop here — later migrations may depend on this one. Not recorded, so
-        // it retries on next start. Non-fatal: don't block server startup.
+        // it retries on next start. The non-zero exit blocks server startup.
         console.error(`[migrate] ${id} FAILED (will retry next start):`, err);
+        failure = err;
         break;
       }
     }
+    if (failure) throw failure;
   } finally {
     await prisma.$disconnect();
   }

@@ -53,6 +53,15 @@ export interface ActiveExecutionInfo {
   startedAt: string | null; // ISO string for serialization
   /** Task carries the builtin "Tower" label → a system/workbench task, not completable via merge. */
   isSystemTask: boolean;
+  workbenchRuntime: {
+    generation: number;
+    state: "STARTING" | "IDLE" | "BUSY" | "BLOCKED" | "DEGRADED" | "STOPPED";
+    activeBatchId: string | null;
+    pendingEvents: number;
+    lastHeartbeatAt: string;
+    blockedReason: string | null;
+    lastError: string | null;
+  } | null;
 }
 
 export interface TerminalExecutionResult extends TerminalTargetSnapshot {
@@ -62,6 +71,19 @@ export interface TerminalExecutionResult extends TerminalTargetSnapshot {
 
 const log = logger.create("agent-actions");
 
+function refreshWorkspaces(): void {
+  try {
+    revalidatePath("/workspaces");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("static generation store missing in revalidatePath")) {
+      log.info("Skipped workspace revalidation outside a request context");
+      return;
+    }
+    throw error;
+  }
+}
+
 const SIGNAL_DIR = getSignalDir();
 
 function taskEnvironment(input: {
@@ -69,6 +91,7 @@ function taskEnvironment(input: {
   taskTitle: string;
   callbackUrl?: string;
   hasParent?: boolean;
+  executionId?: string;
 }): Record<string, string> {
   const env: Record<string, string> = {
     TOWER_TASK_ID: input.taskId,
@@ -77,6 +100,7 @@ function taskEnvironment(input: {
     TOWER_API_URL: `http://localhost:${process.env.PORT || "3000"}`,
     TOWER_SIGNAL_DIR: SIGNAL_DIR,
   };
+  if (input.executionId) env.TOWER_EXECUTION_ID = input.executionId;
   if (input.callbackUrl) env.CALLBACK_URL = input.callbackUrl;
   if (input.hasParent) env.TOWER_HAS_PARENT = "1";
   return env;
@@ -113,7 +137,7 @@ async function failTerminalPrestart(input: {
       ? rm(input.tempDir, { recursive: true, force: true }).catch(() => {})
       : Promise.resolve(),
   ]);
-  revalidatePath("/workspaces");
+  refreshWorkspaces();
 }
 
 async function writeExitSignal(taskId: string, exitCode: number): Promise<void> {
@@ -135,7 +159,7 @@ export async function sendTaskMessage(taskId: string, content: string) {
     },
   });
 
-  revalidatePath("/workspaces");
+  refreshWorkspaces();
   return { userMessage };
 }
 
@@ -170,7 +194,7 @@ export async function startTaskExecution(
     data: { status: "IN_PROGRESS" },
   });
 
-  revalidatePath("/workspaces");
+  refreshWorkspaces();
   return execution;
 }
 
@@ -179,7 +203,7 @@ export async function stopTaskExecution(executionId: string, status: "COMPLETED"
     where: { id: executionId },
     data: { status, endedAt: new Date() },
   });
-  revalidatePath("/workspaces");
+  refreshWorkspaces();
   return execution;
 }
 
@@ -228,8 +252,18 @@ export async function stopPtyExecution(taskId: string): Promise<void> {
       execution.id, taskId, 0, terminalBuffer, summaryPath, execution.forkCommit
     );
   }
+  await db.workbenchRuntime.updateMany({
+    where: { taskId },
+    data: {
+      executionId: execution?.id ?? null,
+      state: "STOPPED",
+      activeBatchId: null,
+      blockedReason: "Workbench terminal was stopped",
+      lastHeartbeatAt: new Date(),
+    },
+  });
 
-  revalidatePath("/workspaces");
+  refreshWorkspaces();
 }
 
 export async function getTaskExecutions(taskId: string) {
@@ -303,7 +337,7 @@ export async function resumePtyExecution(
       where: { id: taskId },
       data: { status: "IN_PROGRESS" },
     });
-    revalidatePath("/workspaces");
+    refreshWorkspaces();
 
     const usernameVal = await readConfigValue<string>("onboarding.username", "");
 
@@ -318,6 +352,7 @@ export async function resumePtyExecution(
       taskTitle: task.title,
       callbackUrl: prevExec.callbackUrl ?? undefined,
       hasParent: !!task.parentTaskId,
+      executionId: execution.id,
     }),
     });
 
@@ -436,9 +471,28 @@ export async function continueLatestPtyExecution(
   if (!task.project?.localPath) throw new Error("Project has no local path configured");
   const previousTaskStatus = task.status;
 
-  // Find the latest execution to reuse its worktree path
+  // Find the latest resumable terminal execution. Non-PTY compatibility rows
+  // have no terminal binding, but historically defaulted `agent` to
+  // CLAUDE_CODE. Treating one of those rows as terminal history would map it to
+  // Claude and pin a fresh continuation there, bypassing the configured
+  // Terminal capability slot.
+  //
+  // A captured session is resumable even when it predates target snapshots.
+  // Without a session, require a non-legacy snapshot written by the PTY start
+  // path. A legacy mapping without a session may have originated from a
+  // compatibility row and is therefore not safe terminal history.
   const latestExec = await db.taskExecution.findFirst({
-    where: { taskId },
+    where: {
+      taskId,
+      OR: [
+        { sessionId: { not: null } },
+        {
+          connectionId: { not: null },
+          targetId: { not: null },
+          NOT: { targetId: { startsWith: "legacy:" } },
+        },
+      ],
+    },
     orderBy: { createdAt: "desc" },
   });
 
@@ -509,7 +563,7 @@ export async function continueLatestPtyExecution(
       where: { id: taskId },
       data: { status: "IN_PROGRESS" },
     });
-    revalidatePath("/workspaces");
+    refreshWorkspaces();
 
     const usernameVal = await readConfigValue<string>("onboarding.username", "");
 
@@ -523,6 +577,7 @@ export async function continueLatestPtyExecution(
       taskId,
       taskTitle: task.title,
       hasParent: !!task.parentTaskId,
+      executionId: execution.id,
     }),
     });
 
@@ -712,6 +767,11 @@ export async function startPtyExecution(
   if (!task.project?.localPath) {
     throw new Error("Project has no local path configured");
   }
+  if (task.project.accessMode === "REVIEW_ONLY") {
+    throw new Error(
+      "REVIEW_ONLY projects cannot start terminal execution. The owner must explicitly change the project to FULL_WORK first.",
+    );
+  }
 
   // 1a. Enforce concurrency limit
   const maxConcurrent = await readConfigValue<number>("system.maxConcurrentExecutions", 20);
@@ -825,7 +885,7 @@ export async function startPtyExecution(
         where: { id: taskId },
         data: { status: "IN_PROGRESS" },
       });
-      revalidatePath("/workspaces");
+      refreshWorkspaces();
     }
 
     // Reconcile real CLI config immediately before every PTY spawn. This also
@@ -939,6 +999,7 @@ export async function startPtyExecution(
               taskTitle: task.title,
               callbackUrl: callbackUrl ?? undefined,
               hasParent: !!task.parentTaskId,
+              executionId: execution.id,
             }),
           });
         } catch (error) {
@@ -1112,6 +1173,7 @@ export async function getActiveExecutionsAcrossWorkspaces(): Promise<ActiveExecu
             include: { workspace: true },
           },
           labels: { include: { label: true } },
+          workbenchRuntime: true,
         },
       },
     },
@@ -1131,5 +1193,16 @@ export async function getActiveExecutionsAcrossWorkspaces(): Promise<ActiveExecu
     startedAt: e.startedAt?.toISOString() ?? null,
     // Builtin "Tower" label marks system/workbench tasks (same check the MCP report tools use).
     isSystemTask: e.task.labels.some((tl) => tl.label.name === "Tower" && tl.label.isBuiltin),
+    workbenchRuntime: e.task.workbenchRuntime
+      ? {
+          generation: e.task.workbenchRuntime.generation,
+          state: e.task.workbenchRuntime.state,
+          activeBatchId: e.task.workbenchRuntime.activeBatchId,
+          pendingEvents: e.task.workbenchRuntime.pendingEvents,
+          lastHeartbeatAt: e.task.workbenchRuntime.lastHeartbeatAt.toISOString(),
+          blockedReason: e.task.workbenchRuntime.blockedReason,
+          lastError: e.task.workbenchRuntime.lastError,
+        }
+      : null,
   }));
 }

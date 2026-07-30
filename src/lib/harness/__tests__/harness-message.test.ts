@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
-vi.mock("@/lib/db", () => ({
-  db: {
+vi.mock("@/lib/db", () => {
+  const mocked = {
     harnessMessage: {
       create: vi.fn(),
       findFirst: vi.fn(),
@@ -11,8 +11,14 @@ vi.mock("@/lib/db", () => ({
       findMany: vi.fn(),
     },
     taskExecution: { updateMany: vi.fn() },
-  },
-}));
+  };
+  return {
+    db: {
+      ...mocked,
+      $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(mocked)),
+    },
+  };
+});
 
 import { db } from "@/lib/db";
 import {
@@ -27,6 +33,7 @@ import {
 } from "../harness-message";
 
 const m = db as unknown as {
+  $transaction: ReturnType<typeof vi.fn>;
   harnessMessage: {
     create: ReturnType<typeof vi.fn>;
     findFirst: ReturnType<typeof vi.fn>;

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="26.0.0">
+  <diagram id="harness-outbox" name="Harness Outbox">
+    <mxGraphModel dx="1400" dy="820" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="820" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="Harness 无人值守外发：先持久化，再发送" style="text;html=1;align=left;verticalAlign=middle;fontSize=24;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="1">
+          <mxGeometry x="50" y="30" width="900" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="intent" value="事务创建意图&#xa;HarnessMessage&#xa;PENDING_DELIVERY&#xa;+ HarnessOutbound" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=15;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="170" width="230" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="sending" value="SENDING&#xa;claim token + lease&#xa;调用 Hermes / OpenClaw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=15;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="370" y="170" width="230" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="delivered" value="DELIVERED&#xa;同一事务确认：&#xa;platform message id&#xa;delivery mapping&#xa;OPEN ask + PARKED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=15;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="990" y="120" width="270" height="170" as="geometry"/>
+        </mxCell>
+        <mxCell id="failed" value="FAILED&#xa;明确未发送&#xa;退避后可重试&#xa;任务尚未 park" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=15;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="370" y="390" width="230" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="unverified" value="SENT_UNVERIFIED&#xa;已有外发证据但回执不完整&#xa;激活 ask / park&#xa;禁止盲目重发" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=15;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="990" y="380" width="270" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="recovery" value="恢复扫描器&#xa;PENDING / 到期 FAILED → 重新 claim&#xa;过期 SENDING → SENT_UNVERIFIED&#xa;不把不确定发送当成安全重试" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;align=left;spacingLeft=14;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="60" y="570" width="540" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="invariant" value="核心不变量&#xa;只有可验证回执才进入 DELIVERED；&#xa;外部发送成功与本地登记之间不存在无人负责窗口。" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3fbf3;strokeColor=#82b366;align=left;spacingLeft=14;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="680" y="590" width="580" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" value="worker claim" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="intent" target="sending">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2" value="可验证 message id" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;strokeColor=#82b366;fontColor=#3f6f3f;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="sending" target="delivered">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3" value="明确失败" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;strokeColor=#b85450;fontColor=#8a3030;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="sending" target="failed">
+          <mxGeometry x="-0.35" y="0" relative="1" as="geometry"><mxPoint x="-18" y="0" as="offset"/></mxGeometry>
+        </mxCell>
+        <mxCell id="e4" value="发送证据不完整 / claim 过期" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;strokeColor=#9673a6;fontColor=#6b3f7a;labelBackgroundColor=#ffffff;exitX=1;exitY=0.75;entryX=0;entryY=0.5;" edge="1" parent="1" source="sending" target="unverified">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="930" y="268"/><mxPoint x="930" y="450"/></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" value="nextAttemptAt 到期" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;strokeColor=#b85450;fontColor=#8a3030;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;entryX=0;entryY=0.75;" edge="1" parent="1" source="failed" target="sending">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="330" y="455"/><mxPoint x="330" y="268"/></Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

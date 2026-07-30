@@ -21,11 +21,12 @@ const https = require("https");
 
 /**
  * 从 Claude Code 的 transcript 提取最后一条 assistant 回复（截断 2000 字）。
- * 用于完成回推：父任务据此 review，不必读整个终端缓冲。best-effort，失败返回空串。
+ * 用于完成回推：父任务据此 review，不必读整个终端缓冲。eventId 给重复 hook 调用稳定去重；
+ * best-effort，失败返回空内容对象。
  * transcript 是 jsonl，行格式随 CC 版本略有差异，这里兼容 obj.message.content / obj.content。
  */
-function extractLastAssistantText(transcriptPath) {
-  if (!transcriptPath) return "";
+function extractLastAssistant(transcriptPath) {
+  if (!transcriptPath) return { text: "", eventId: "" };
   try {
     const fs = require("fs");
     const raw = fs.readFileSync(transcriptPath, "utf8");
@@ -37,7 +38,7 @@ function extractLastAssistantText(transcriptPath) {
       try { obj = JSON.parse(line); } catch { continue; }
       const msg = obj.message || obj;
       const role = msg.role || obj.type;
-      if (role !== "assistant" || !msg.content) continue;
+      if (role !== "assistant") continue;
       let text = "";
       if (Array.isArray(msg.content)) {
         text = msg.content
@@ -48,12 +49,22 @@ function extractLastAssistantText(transcriptPath) {
       } else if (typeof msg.content === "string") {
         text = msg.content.trim();
       }
-      if (text) return text.slice(0, 2000);
+      // A tool-only assistant turn has no displayable text but is still a real,
+      // distinct stop event. Derive identity from the record, never from text.
+      const crypto = require("crypto");
+      const stableId = obj.uuid || msg.id || obj.id || crypto.createHash("sha256").update(line).digest("hex");
+      return { text: text.slice(0, 2000), eventId: String(stableId) };
     }
   } catch {
     /* best effort — transcript unreadable */
   }
-  return "";
+  return { text: "", eventId: "" };
+}
+
+function resolveTurnEventId(data, transcriptEventId) {
+  return typeof data?.turn_id === "string" && data.turn_id.trim()
+    ? data.turn_id.trim()
+    : transcriptEventId;
 }
 
 function main() {
@@ -91,11 +102,18 @@ function main() {
     try { data = JSON.parse(input); } catch { process.exit(0); }
 
     const sessionId = data.session_id || "";
-    const lastReply = extractLastAssistantText(data.transcript_path);
+    const { text: lastReply, eventId: transcriptEventId } = extractLastAssistant(data.transcript_path);
+    const eventId = resolveTurnEventId(data, transcriptEventId);
 
     // POST to Tower
     const url = new URL("/api/internal/hooks/stop", apiUrl);
-    const payload = JSON.stringify({ taskId, sessionId, lastReply });
+    const payload = JSON.stringify({
+      taskId,
+      executionId: process.env.TOWER_EXECUTION_ID || "",
+      sessionId,
+      eventId,
+      lastReply,
+    });
     const mod = url.protocol === "https:" ? https : http;
 
     const req = mod.request({
@@ -117,4 +135,6 @@ function main() {
   });
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = { extractLastAssistant, resolveTurnEventId };

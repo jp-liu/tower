@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { execFileSync } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readdirSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -32,6 +32,8 @@ function envFor(database: string, dataDir: string): NodeJS.ProcessEnv {
 }
 
 function pushSchema(schema: string, database: string, dataDir: string, acceptDataLoss = false): void {
+  mkdirSync(path.dirname(database), { recursive: true });
+  closeSync(openSync(database, "a"));
   execFileSync(prismaBin, [
     "db", "push", "--schema", schema, "--skip-generate",
     ...(acceptDataLoss ? ["--accept-data-loss"] : []),

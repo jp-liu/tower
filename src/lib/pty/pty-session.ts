@@ -1,6 +1,7 @@
 import * as pty from "node-pty";
 import { ensurePathInEnv, isWindows, stripClaudeNestingEnv, stripTowerRuntimeEnv } from "@/lib/platform";
 import { planTerminalWrite } from "./terminal-submit";
+import { closeWorkbenchDrainBoundary } from "@/lib/workbench/boundary";
 
 export class PtySession {
   readonly taskId: string;
@@ -25,6 +26,10 @@ export class PtySession {
   private _onIdle: (() => void) | null;
   private _idleFired = false;
   private _initialInputSent = false;
+  // Conservative by default: a newly spawned CLI may be booting or processing
+  // its positional prompt. Only a provider turn-complete callback may mark the
+  // live terminal as safe for autonomous Workbench input.
+  private _turnState: "BUSY" | "IDLE" = "BUSY";
 
   constructor(
     taskId: string,
@@ -134,6 +139,10 @@ export class PtySession {
 
   write(data: string): void {
     if (!this.killed) {
+      this._turnState = "BUSY";
+      // Any input starts a new turn. A completed-turn Workbench drain boundary
+      // must not survive into that turn and later inject while the agent is busy.
+      closeWorkbenchDrainBoundary(this.taskId);
       // NTFY-07: user input resets idle timer
       this._resetIdleTimer();
       this._pty.write(data);
@@ -170,6 +179,16 @@ export class PtySession {
   /** Returns true if the idle callback has fired — Phase 34 MCP tools use this */
   get isIdle(): boolean {
     return this._idleFired;
+  }
+
+  /** True only after the provider reported that the current turn completed. */
+  get isAtTurnBoundary(): boolean {
+    return this._turnState === "IDLE";
+  }
+
+  /** Called by the provider stop/turn-complete callback, never by output-idle heuristics. */
+  markTurnComplete(): void {
+    if (!this.killed) this._turnState = "IDLE";
   }
 
   /** OS pid of the spawned process (claude CLI). Used to persist for orphan

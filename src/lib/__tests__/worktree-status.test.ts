@@ -4,10 +4,15 @@ import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from "fs";
 import os from "os";
 import path from "path";
 
-import { isTowerLinkedDir, stripTowerLinkedStatus, WORKTREE_LINKED_DIRS } from "@/lib/worktree";
+import {
+  isTowerLinkedDir,
+  stripTowerLinkedStatus,
+  WORKTREE_DEPENDENCY_MARKER,
+  WORKTREE_LINKED_DIRS,
+} from "@/lib/worktree";
 
-// Simulates a Tower worktree: subpackage node_modules / .next are symlinks
-// injected by Tower (see symlinkNodeModules), while real new files are not.
+// Simulates dependency/cache entries injected by Tower while preserving real
+// untracked files and ordinary directories.
 let root: string;
 
 beforeEach(() => {
@@ -24,6 +29,12 @@ beforeEach(() => {
   writeFileSync(path.join(root, "apps", "web", "new-file.ts"), "export const x = 1;\n");
   // A real (non-symlink) directory that happens to be named node_modules
   mkdirSync(path.join(root, "packages", "real", "node_modules"), { recursive: true });
+  // An isolated pnpm dependency directory installed by Tower.
+  mkdirSync(path.join(root, "packages", "copied", "node_modules"), { recursive: true });
+  writeFileSync(
+    path.join(root, "packages", "copied", "node_modules", WORKTREE_DEPENDENCY_MARKER),
+    ""
+  );
 });
 
 afterEach(() => {
@@ -53,6 +64,10 @@ describe("isTowerLinkedDir", () => {
 
   it("does NOT match a real (non-symlink) directory named node_modules", () => {
     expect(isTowerLinkedDir("packages/real/node_modules", root)).toBe(false);
+  });
+
+  it("matches a Tower-installed pnpm dependency directory", () => {
+    expect(isTowerLinkedDir("packages/copied/node_modules", root)).toBe(true);
   });
 
   it("does NOT match a path whose basename is not a linked dir", () => {

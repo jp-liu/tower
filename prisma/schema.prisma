@@ -15,45 +15,48 @@ model Workspace {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  projects      Project[]
-  labels        Label[]
-  prompts       AgentPrompt[]
-  versionTypes  VersionType[]
-  productGroups ProductGroup[]
+  projects          Project[]
+  labels            Label[]
+  prompts           AgentPrompt[]
+  versionTypes      VersionType[]
+  productGroups     ProductGroup[]
   assistantSessions AssistantSession[]
 }
 
 model Project {
-  id          String      @id @default(cuid())
-  name        String
-  alias       String?
-  description String?
-  type           ProjectType     @default(NORMAL)
-  gitUrl         String?
-  localPath      String?
-  projectType    ProjectCategory @default(FRONTEND)
-  previewCommand String?
-  previewPort    Int?
-  previewPreset  String?
+  id                    String            @id @default(cuid())
+  name                  String
+  alias                 String?
+  description           String?
+  type                  ProjectType       @default(NORMAL)
+  gitUrl                String?
+  repositoryKey         String?           @unique
+  localPath             String?
+  projectType           ProjectCategory   @default(FRONTEND)
+  previewCommand        String?
+  previewPort           Int?
+  previewPreset         String?
   previewInstallCommand String?
+  accessMode            ProjectAccessMode @default(NORMAL)
   // 知识库：groupId 把同一产品的多个仓库（前后端/trace/需求）归入一个 ProductGroup，
   // 问答时自动把同组兄弟项目一起纳入检索。knowledgeDir 是 repo 内知识库目录（相对 localPath），
   // 留空则用约定默认（见 src/lib/knowledge.ts DEFAULT_KNOWLEDGE_DIR）。
-  groupId        String?
-  knowledgeDir   String?
-  workspaceId    String
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  groupId               String?
+  knowledgeDir          String?
+  workspaceId           String
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
-  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group        ProductGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  tasks        Task[]
-  repositories Repository[]
-  notes        ProjectNote[]
-  assets       ProjectAsset[]
-  versions     Version[]
-  facts        ProjectFact[]
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             ProductGroup?      @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  tasks             Task[]
+  repositories      Repository[]
+  notes             ProjectNote[]
+  assets            ProjectAsset[]
+  versions          Version[]
+  facts             ProjectFact[]
   assistantSessions AssistantSession[]
+  gatewaySessions   GatewaySession[]
 
   @@index([workspaceId])
   @@index([groupId])
@@ -92,23 +95,23 @@ model ProjectFact {
 }
 
 model Label {
-  id          String  @id @default(cuid())
-  name        String
-  color       String  @default("#94a3b8")
+  id           String   @id @default(cuid())
+  name         String
+  color        String   @default("#94a3b8")
   /// null = system-level (visible in every workspace); set = scoped to that workspace
-  workspaceId String?
+  workspaceId  String?
   /// Protection bit only: builtin labels cannot be edited or deleted. Does NOT
   /// imply system-level visibility — that is `workspaceId: null`.
-  isBuiltin   Boolean @default(false)
+  isBuiltin    Boolean  @default(false)
   /// Worktree branch prefix: a task carrying this label branches as
   /// `<branchPrefix>/<taskId>`. null = no opinion, fall back to the default.
   branchPrefix String?
   /// What kind of task this label fits — read by create_task (MCP) to pick a
   /// label by meaning rather than guessing from the name. null = no guidance.
-  description String?
-  createdAt   DateTime @default(now())
+  description  String?
+  createdAt    DateTime @default(now())
 
-  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace?  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   tasks     TaskLabel[]
 
   @@index([workspaceId])
@@ -125,40 +128,46 @@ model TaskLabel {
 }
 
 model Task {
-  id          String     @id @default(cuid())
-  title       String
-  description String?
-  status      TaskStatus @default(TODO)
-  priority    Priority   @default(MEDIUM)
-  order       Int        @default(0)
-  pinned      Boolean    @default(false)
-  promptId    String?
-  baseBranch  String?
-  subPath     String?
-  parentTaskId String?   // 派生来源：派生此任务的父任务 id（父任务终端注入的 TOWER_TASK_ID）。裸字符串无 relation，与 promptId 同惯例
+  id                     String     @id @default(cuid())
+  title                  String
+  description            String?
+  status                 TaskStatus @default(TODO)
+  priority               Priority   @default(MEDIUM)
+  order                  Int        @default(0)
+  pinned                 Boolean    @default(false)
+  promptId               String?
+  baseBranch             String?
+  subPath                String?
+  parentTaskId           String? // 派生来源：派生此任务的父任务 id（父任务终端注入的 TOWER_TASK_ID）。裸字符串无 relation，与 promptId 同惯例
   previewCommandOverride String?
   previewPortOverride    Int?
-  projectId   String
-  versionId   String?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  doneAt      DateTime?  // 进入 DONE 的时间戳，用于「归档期限」判定（离开 DONE 时清空）
+  projectId              String
+  versionId              String?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+  doneAt                 DateTime? // 进入 DONE 的时间戳，用于「归档期限」判定（离开 DONE 时清空）
 
   // Goal-mode runtime marker (NOT a task-creation setting). Set to true only when the
   // agent activates the tower-goal skill at run time (set_goal_mode), and auto-cleared
   // when the task leaves the active loop (Stop / DONE / CANCELLED / IN_REVIEW). While true,
   // list_notify_targets defaults the scope to 'unattended' (reach the owner). Tower only
   // records + park/resume — it never sends and never stores platform bindings.
-  unattended    Boolean   @default(false)
+  unattended Boolean @default(false)
 
-  project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  executions TaskExecution[]
-  messages   TaskMessage[]
-  labels     TaskLabel[]
-  notes      ProjectNote[]
-  assets     ProjectAsset[]
-  harnessMessages HarnessMessage[]
-  version    Version?        @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  project               Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  executions            TaskExecution[]
+  messages              TaskMessage[]
+  labels                TaskLabel[]
+  notes                 ProjectNote[]
+  assets                ProjectAsset[]
+  harnessMessages       HarnessMessage[]
+  harnessOutbounds      HarnessOutbound[]
+  workbenchParentEvents WorkbenchEvent[]  @relation("WorkbenchEventParent")
+  workbenchSourceEvents WorkbenchEvent[]  @relation("WorkbenchEventSource")
+  workbenchBatches      WorkbenchBatch[]
+  workbenchRuntime      WorkbenchRuntime?
+  gatewayTaskLink       GatewayTaskLink?
+  version               Version?          @relation(fields: [versionId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
   @@index([status])
@@ -166,40 +175,140 @@ model Task {
   @@index([parentTaskId])
 }
 
+// Written in the same transaction as task creation, before the Workbench can
+// confirm delivery. The unique keys make crash recovery idempotent both ways.
+model GatewayTaskLink {
+  id        String   @id @default(cuid())
+  inboundId String   @unique
+  taskId    String   @unique
+  createdAt DateTime @default(now())
+
+  inbound GatewayInbound @relation(fields: [inboundId], references: [id], onDelete: Cascade)
+  task    Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
 model TaskExecution {
-  id             String          @id @default(cuid())
-  taskId         String
-  agent          String          @default("CLAUDE_CODE")
-  config         String?         @default("DEFAULT")
-  connectionId   String?
-  modelId        String?
-  targetId       String?
-  status         ExecutionStatus @default(PENDING)
-  branch         String?
-  sessionId      String?
-  worktreePath   String?
-  worktreeBranch String?
-  startedAt      DateTime?
-  endedAt        DateTime?
-  summary        String?
-  gitLog         String?
-  gitStats       String?
-  exitCode       Int?
-  callbackUrl    String?
-  terminalLog    String?
+  id              String          @id @default(cuid())
+  taskId          String
+  agent           String          @default("CLAUDE_CODE")
+  config          String?         @default("DEFAULT")
+  connectionId    String?
+  modelId         String?
+  targetId        String?
+  status          ExecutionStatus @default(PENDING)
+  branch          String?
+  sessionId       String?
+  worktreePath    String?
+  worktreeBranch  String?
+  startedAt       DateTime?
+  endedAt         DateTime?
+  summary         String?
+  gitLog          String?
+  gitStats        String?
+  exitCode        Int?
+  callbackUrl     String?
+  terminalLog     String?
   forkCommit      String?
   mergeCommit     String?
   branchTipCommit String?
-  createdAt      DateTime        @default(now())
+  createdAt       DateTime        @default(now())
 
-  insightNoteId   String?
-  insightNote     ProjectNote? @relation(fields: [insightNoteId], references: [id], onDelete: SetNull)
+  insightNoteId String?
+  insightNote   ProjectNote? @relation(fields: [insightNoteId], references: [id], onDelete: SetNull)
 
-  task     Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  messages TaskMessage[]
+  task            Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  messages        TaskMessage[]
+  workbenchEvents WorkbenchEvent[]
 
   @@index([taskId])
   @@index([insightNoteId])
+}
+
+// Durable child-to-supervisor inbox. Producers only insert/deduplicate by dedupKey;
+// a parent consumes the rows in one aggregated batch at a completed-turn PTY boundary.
+model WorkbenchEvent {
+  id                 String                 @id @default(cuid())
+  parentTaskId       String
+  sourceTaskId       String
+  executionId        String?
+  kind               WorkbenchEventKind
+  priority           WorkbenchEventPriority @default(NORMAL)
+  dedupKey           String                 @unique
+  executionReviewKey String?                @unique
+  batchId            String?
+  payload            String
+  state              WorkbenchEventState    @default(PENDING)
+  claimToken         String?
+  claimedAt          DateTime?
+  attempts           Int                    @default(0)
+  lastError          String?
+  consumedAt         DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  parentTask Task            @relation("WorkbenchEventParent", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  sourceTask Task            @relation("WorkbenchEventSource", fields: [sourceTaskId], references: [id], onDelete: Cascade)
+  execution  TaskExecution?  @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  batch      WorkbenchBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([parentTaskId, state, priority, createdAt])
+  @@index([sourceTaskId])
+  @@index([executionId])
+  @@index([batchId])
+  @@index([state, claimedAt])
+}
+
+/// Durable acknowledgement boundary between the coordinator and the resident
+/// Workbench agent. PTY delivery only advances a batch to DISPATCHED. The agent
+/// must explicitly acknowledge it before the associated inbox rows are consumed.
+model WorkbenchBatch {
+  id               String              @id
+  parentTaskId     String
+  eventIds         String
+  prompt           String
+  state            WorkbenchBatchState @default(CLAIMED)
+  generation       Int                 @default(1)
+  leaseToken       String?
+  leaseExpiresAt   DateTime?
+  lastHeartbeatAt  DateTime?
+  dispatchAttempts Int                 @default(0)
+  dispatchedAt     DateTime?
+  ackedAt          DateTime?
+  resolvedAt       DateTime?
+  lastError        String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  parentTask Task             @relation(fields: [parentTaskId], references: [id], onDelete: Cascade)
+  events     WorkbenchEvent[]
+
+  @@index([parentTaskId, state, createdAt])
+  @@index([state, dispatchedAt])
+  @@index([state, leaseExpiresAt])
+}
+
+/// Persisted operational projection for one resident project Workbench. This
+/// is observability state, not the inbox source of truth: WorkbenchEvent and
+/// WorkbenchBatch remain authoritative for replay and acknowledgement.
+model WorkbenchRuntime {
+  taskId              String                @id
+  executionId         String?
+  generation          Int                   @default(1)
+  state               WorkbenchRuntimeState @default(STARTING)
+  activeBatchId       String?
+  pendingEvents       Int                   @default(0)
+  oldestPendingAt     DateTime?
+  lastHeartbeatAt     DateTime              @default(now())
+  lastTurnCompletedAt DateTime?
+  blockedReason       String?
+  lastError           String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([state, lastHeartbeatAt])
+  @@index([executionId])
 }
 
 // 无人值守：一张表记所有 harness→人 的消息（ask/notify/done/failed）—— 纯记录/日志，Tower 不发送。
@@ -207,29 +316,190 @@ model TaskExecution {
 // - notify/done/failed 是日志行，出生即 CLOSED，不参与「待回复」过滤。
 // - 不变量：待回复 = kind='ask' AND state='OPEN'。回复内容记在 replyText（reply_to_ask 写入）。
 model HarnessMessage {
-  id           String   @id @default(cuid())
-  taskId       String
-  executionId  String?
-  kind         String   // "ask" | "notify" | "done" | "failed"（映射 OutboundKind）
-  content      String
-  replyText    String?
-  repliedAt    DateTime?
-  state        HarnessState @default(OPEN)
-  createdAt    DateTime @default(now())
+  id          String       @id @default(cuid())
+  taskId      String
+  executionId String?
+  kind        String // "ask" | "notify" | "done" | "failed"（映射 OutboundKind）
+  content     String
+  replyText   String?
+  repliedAt   DateTime?
+  state       HarnessState @default(OPEN)
+  createdAt   DateTime     @default(now())
 
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task     Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  outbound HarnessOutbound?
 
   @@index([taskId, kind, state])
   @@index([state])
 }
 
+// Durable outbox for task-to-human sends. The intent and HarnessMessage are
+// created before the external side effect. A stale SENDING claim is never
+// blindly retried because the platform may already have accepted it.
+model HarnessOutbound {
+  id                String               @id @default(cuid())
+  dedupKey          String               @unique
+  taskId            String
+  executionId       String?
+  harnessMessageId  String               @unique
+  gateway           String
+  downstream        String?
+  dest              String?
+  requestedTo       String?
+  profile           String?
+  scope             String
+  expectReply       Boolean              @default(false)
+  message           String
+  presentation      String?
+  state             HarnessOutboundState @default(PENDING)
+  attempts          Int                  @default(0)
+  claimToken        String?
+  claimExpiresAt    DateTime?
+  platform          String?
+  platformChatId    String?
+  platformMessageId String?
+  lastError         String?
+  nextAttemptAt     DateTime?
+  deliveredAt       DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  task           Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  harnessMessage HarnessMessage @relation(fields: [harnessMessageId], references: [id], onDelete: Cascade)
+
+  @@index([state, nextAttemptAt, createdAt])
+  @@index([taskId, createdAt])
+}
+
+// Platform delivery mapping for legacy [[tower:task=...]] ask/reply routing.
+// Kept separate from GatewayDelivery because this row maps an already-sent
+// harness message, while GatewayDelivery owns retryable gateway responses.
+model HarnessDelivery {
+  id                String   @id
+  harnessMessageId  String
+  taskId            String
+  platform          String
+  chatId            String
+  platformMessageId String   @unique
+  scope             String
+  expectReply       Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  @@index([taskId])
+}
+
+// Durable external-channel binding. WORKBENCH sessions route project work to
+// the resident Tower task; DISCUSSION sessions reuse a project-bound
+// AssistantSession and therefore never occupy the Workbench PTY.
+model GatewaySession {
+  id                 String               @id @default(cuid())
+  bindingKey         String               @unique
+  gateway            String
+  platform           String
+  chatId             String
+  threadId           String?
+  rootMessageId      String?
+  senderId           String?
+  kind               GatewaySessionKind
+  status             GatewaySessionStatus @default(ACTIVE)
+  projectId          String
+  workbenchTaskId    String?
+  assistantSessionId String?
+  lastActivityAt     DateTime             @default(now())
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  inbounds   GatewayInbound[]
+  deliveries GatewayDelivery[]
+
+  @@index([platform, chatId, threadId, status])
+  @@index([projectId, kind, status])
+  @@index([senderId, lastActivityAt])
+}
+
+// One row per inbound platform message. dedupKey is stable across gateway
+// retries; Workbench-bound rows remain QUEUED until their durable event crosses
+// a completed-turn boundary.
+model GatewayInbound {
+  id                String              @id @default(cuid())
+  dedupKey          String              @unique
+  sessionId         String?
+  gateway           String
+  platform          String
+  chatId            String
+  senderId          String?
+  platformMessageId String
+  threadId          String?
+  rootMessageId     String?
+  replyToMessageId  String?
+  intent            GatewayRequestKind
+  content           String
+  state             GatewayMessageState @default(RECEIVED)
+  createdTaskId     String?
+  response          String?
+  attempts          Int                 @default(0)
+  lastError         String?
+  processedAt       DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  session    GatewaySession?   @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  deliveries GatewayDelivery[]
+  taskLink   GatewayTaskLink?
+
+  @@index([platform, chatId, platformMessageId])
+  @@index([sessionId, state, createdAt])
+  @@index([senderId, processedAt])
+  @@index([createdTaskId])
+}
+
+// Retryable response to the original external message. A stable dedupKey
+// prevents duplicate create confirmations and completion callbacks.
+model GatewayDelivery {
+  id                  String               @id @default(cuid())
+  dedupKey            String               @unique
+  sessionId           String
+  inboundId           String?
+  kind                GatewayDeliveryKind
+  content             String
+  presentation        String?
+  state               GatewayDeliveryState @default(PENDING)
+  attempts            Int                  @default(0)
+  platformMessageId   String?
+  platformChatId      String?
+  platformParentId    String?
+  platformMessageType String?
+  lastError           String?
+  nextAttemptAt       DateTime?
+  deliveredAt         DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  session GatewaySession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  inbound GatewayInbound? @relation(fields: [inboundId], references: [id], onDelete: SetNull)
+
+  @@index([state, nextAttemptAt, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([inboundId])
+}
+
 enum HarnessState {
+  PENDING_DELIVERY
   OPEN
   ANSWERED
   CANCELLED
   IGNORED
   EXPIRED
   CLOSED
+}
+
+enum HarnessOutboundState {
+  PENDING
+  SENDING
+  DELIVERED
+  SENT_UNVERIFIED
+  FAILED
 }
 
 model TaskMessage {
@@ -280,9 +550,9 @@ model Version {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  type    VersionType? @relation(fields: [typeId], references: [id], onDelete: SetNull)
-  tasks   Task[]
+  project           Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type              VersionType?       @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  tasks             Task[]
   assistantSessions AssistantSession[]
 
   @@index([projectId])
@@ -454,11 +724,11 @@ model AiCapabilityTarget {
   id                 String   @id @default(cuid())
   capabilityConfigId String
   connectionId       String
-  modelId             String?
-  targetKey           String
-  order               Int
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  modelId            String?
+  targetKey          String
+  order              Int
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   capabilityConfig AiCapabilityConfig @relation(fields: [capabilityConfigId], references: [id], onDelete: Cascade)
   connection       ProviderConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
@@ -494,14 +764,14 @@ model AiCapabilityAttempt {
 }
 
 model AgentPrompt {
-  id          String     @id @default(cuid())
+  id          String   @id @default(cuid())
   name        String
   description String?
   content     String
-  isDefault   Boolean    @default(false)
+  isDefault   Boolean  @default(false)
   workspaceId String?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -519,43 +789,43 @@ model SystemConfig {
 /// A concrete CLI or API connection. API protocols may have multiple instances;
 /// built-in CLI rows are addressed by an immutable `cli:<pluginId>` key.
 model ProviderConnection {
-  id               String               @id @default(cuid())
-  connectionKey    String?              @unique
-  name             String               @default("")
+  id                 String                @id @default(cuid())
+  connectionKey      String?               @unique
+  name               String                @default("")
   /// "cli" | "api"
-  kind             String               @default("cli")
+  kind               String                @default("cli")
   /// CLI plugin id or API protocol: openai/openai-compatible/anthropic/google.
-  provider         String
-  enabled          Boolean              @default(true)
+  provider           String
+  enabled            Boolean               @default(true)
   /// untested | connected | partial | unavailable | dependency-missing | dependency-incompatible
-  testStatus       String               @default("untested")
-  lastTestedAt     DateTime?
+  testStatus         String                @default("untested")
+  lastTestedAt       DateTime?
   /// Compatibility gate for the existing CLI capability resolver.
-  testOk           Boolean              @default(false)
-  version          String?
-  mcpInstalled     Boolean              @default(false)
-  hooksInstalled   Boolean              @default(false)
-  skillsInstalled  Boolean              @default(false)
-  installLog       String?
-  presetId         String?
-  baseUrl          String?
-  defaultModelId   String?
-  headersJson      String               @default("[]")
-  queryParamsJson  String               @default("[]")
-  roundRobinCursor Int                  @default(0)
-  diagnosticsJson  String?
-  commandOverride  String?
-  baseArgsJson     String               @default("[]")
-  envVarsJson      String               @default("[]")
-  settingsJson     String               @default("{}")
-  resolvedCommand  String?
-  resolvedVersion  String?
-  apiKeys          ApiConnectionKey[]
-  models           ApiConnectionModel[]
+  testOk             Boolean               @default(false)
+  version            String?
+  mcpInstalled       Boolean               @default(false)
+  hooksInstalled     Boolean               @default(false)
+  skillsInstalled    Boolean               @default(false)
+  installLog         String?
+  presetId           String?
+  baseUrl            String?
+  defaultModelId     String?
+  headersJson        String                @default("[]")
+  queryParamsJson    String                @default("[]")
+  roundRobinCursor   Int                   @default(0)
+  diagnosticsJson    String?
+  commandOverride    String?
+  baseArgsJson       String                @default("[]")
+  envVarsJson        String                @default("[]")
+  settingsJson       String                @default("{}")
+  resolvedCommand    String?
+  resolvedVersion    String?
+  apiKeys            ApiConnectionKey[]
+  models             ApiConnectionModel[]
   capabilityTargets  AiCapabilityTarget[]
   capabilityAttempts AiCapabilityAttempt[]
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 
   @@index([kind, provider])
   @@index([kind, enabled, testStatus])
@@ -607,9 +877,31 @@ model AppliedMigration {
   appliedAt DateTime @default(now())
 }
 
+// Database-wide ownership lease. One Tower data directory may be controlled by
+// only one runtime; process-local globalThis guards remain an optimization.
+model TowerRuntimeLease {
+  id              String   @id
+  ownerId         String
+  pid             Int
+  port            Int?
+  generation      Int      @default(1)
+  expiresAt       DateTime
+  lastHeartbeatAt DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
 enum ProjectType {
   NORMAL
   GIT
+}
+
+enum ProjectAccessMode {
+  NORMAL
+  REVIEW_ONLY
+  FULL_WORK
 }
 
 enum TaskStatus {
@@ -632,6 +924,82 @@ enum ExecutionStatus {
   RUNNING
   PAUSED
   COMPLETED
+  FAILED
+}
+
+enum WorkbenchEventKind {
+  CHILD_REVIEW_REQUIRED
+  CHILD_DECISION_REQUIRED
+  CHILD_EXECUTION_FAILED
+  GATEWAY_WORK_REQUEST
+}
+
+enum WorkbenchEventPriority {
+  NORMAL
+  HIGH
+}
+
+enum WorkbenchEventState {
+  PENDING
+  PROCESSING
+  CONSUMED
+}
+
+enum WorkbenchBatchState {
+  CLAIMED
+  DISPATCHED
+  ACKED
+  RESOLVED
+  FAILED
+}
+
+enum WorkbenchRuntimeState {
+  STARTING
+  IDLE
+  BUSY
+  BLOCKED
+  DEGRADED
+  STOPPED
+}
+
+enum GatewaySessionKind {
+  WORKBENCH
+  DISCUSSION
+}
+
+enum GatewaySessionStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum GatewayRequestKind {
+  DIRECT
+  TOWER
+  PROJECT_DISCUSSION
+  PROJECT_WORK
+}
+
+enum GatewayMessageState {
+  RECEIVED
+  QUEUED
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+enum GatewayDeliveryKind {
+  QUEUED_ACK
+  TASK_CREATED
+  DISCUSSION_REPLY
+  FINAL_RESULT
+  FAILURE
+}
+
+enum GatewayDeliveryState {
+  PENDING
+  SENDING
+  DELIVERED
+  SENT_UNVERIFIED
   FAILED
 }
 

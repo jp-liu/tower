@@ -13,12 +13,13 @@ vi.mock("@/lib/db", () => ({
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 const mockLogInfo = vi.fn();
+const mockLogError = vi.fn();
 vi.mock("@/lib/logger", () => ({
   logger: {
     create: vi.fn(() => ({
       info: mockLogInfo,
       warn: vi.fn(),
-      error: vi.fn(),
+      error: mockLogError,
     })),
   },
 }));
@@ -26,6 +27,11 @@ vi.mock("@/lib/logger", () => ({
 const mockBroadcastNotification = vi.fn();
 vi.mock("@/lib/pty/ws-server", () => ({
   broadcastNotification: mockBroadcastNotification,
+}));
+
+const mockEnqueueChildExecutionResult = vi.fn().mockResolvedValue({ enqueued: true });
+vi.mock("@/lib/workbench/coordinator", () => ({
+  enqueueChildExecutionResult: mockEnqueueChildExecutionResult,
 }));
 
 import { db } from "@/lib/db";
@@ -308,6 +314,49 @@ describe("onboarding-actions", () => {
 
       expect(mockBroadcastNotification).toHaveBeenCalledWith(
         expect.objectContaining({ ...payload, type: "completion" })
+      );
+      expect(mockEnqueueChildExecutionResult).toHaveBeenCalledWith({
+        taskId: "task1",
+        taskTitle: "Test Task",
+        executionId: "exec1",
+        status: "COMPLETED",
+      });
+    });
+
+    it("persists a failed child execution for parent review", async () => {
+      const payload: TaskCompletionPayload = {
+        taskId: "task2",
+        taskTitle: "Failing Task",
+        status: "FAILED",
+        executionId: "exec2",
+        workspaceId: "ws2",
+      };
+
+      await dispatchTaskCompletionEvent(payload);
+
+      expect(mockEnqueueChildExecutionResult).toHaveBeenCalledWith({
+        taskId: "task2",
+        taskTitle: "Failing Task",
+        executionId: "exec2",
+        status: "FAILED",
+      });
+    });
+
+    it("logs a durable enqueue failure without rejecting the PTY onExit callback", async () => {
+      mockEnqueueChildExecutionResult.mockRejectedValueOnce(new Error("database is locked"));
+      const payload: TaskCompletionPayload = {
+        taskId: "task3",
+        taskTitle: "Recoverable Task",
+        status: "COMPLETED",
+        executionId: "exec3",
+        workspaceId: "ws3",
+      };
+
+      await expect(dispatchTaskCompletionEvent(payload)).resolves.toBeUndefined();
+      expect(mockLogError).toHaveBeenCalledWith(
+        "Durable Workbench completion enqueue failed; startup recovery will retry",
+        expect.objectContaining({ message: "database is locked" }),
+        { taskId: "task3", executionId: "exec3", status: "COMPLETED" },
       );
     });
 

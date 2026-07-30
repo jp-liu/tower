@@ -20,6 +20,29 @@ describe("requireLocalhost", () => {
     expect(requireLocalhost(req)).toBeNull();
   });
 
+  it("allows a same-origin browser request", () => {
+    const req = makeRequest("localhost:3000", {
+      origin: "http://localhost:3000",
+      "sec-fetch-site": "same-origin",
+    });
+    expect(requireLocalhost(req)).toBeNull();
+  });
+
+  it("blocks a foreign page from posting to localhost", async () => {
+    const req = makeRequest("localhost:3000", {
+      origin: "https://attacker.example",
+      "sec-fetch-site": "cross-site",
+    });
+    const res = requireLocalhost(req);
+    expect(res?.status).toBe(403);
+  });
+
+  it("blocks a cross-site browser request even when Origin is omitted", async () => {
+    const req = makeRequest("localhost:3000", { "sec-fetch-site": "cross-site" });
+    const res = requireLocalhost(req);
+    expect(res?.status).toBe(403);
+  });
+
   it("allows request from [::1]:3000 (IPv6 loopback, no x-forwarded-for)", () => {
     const req = makeRequest("[::1]:3000");
     expect(requireLocalhost(req)).toBeNull();

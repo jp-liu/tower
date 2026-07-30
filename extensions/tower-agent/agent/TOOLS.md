@@ -6,6 +6,15 @@ Use Tower MCP tools and the bundled Tower skill:
   gateway-backed outbound messaging through Tower MCP tools such as
   `push_to_human`.
 
+The visible Tower tool set is an authorization boundary:
+
+- OWNER: `route_gateway_message` and the full `tower__*` capability surface.
+- Trusted-channel NON_OWNER: only `route_gateway_query`,
+  `read_gateway_project_context`, and `complete_gateway_discussion`.
+
+Never replace an unavailable Tower tool with `exec`, filesystem access, a
+generic MCP bridge, or another agent.
+
 Do not install `tower-ask` or `tower-goal` into gateway profiles. Those are task
 terminal skills, not OpenClaw/Hermes bridge-agent skills.
 

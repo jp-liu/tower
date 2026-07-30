@@ -19,8 +19,8 @@ Harness 是 Tower 的**无人值守协作体系**。当任务长时间自主运�
 
 - **Tower 自己不接飞书/微信，也不直接发消息**（旧的内置 SDK 发送栈已删除）。
 - 真正的收发外包给**外部网关 Hermes / OpenClaw**（独立仓库 / 外部服务）。
-- Tower 只做三件胶水事：**登记问题、挂起任务（park）、回复回灌唤醒（resume）**。
-- 平台线程 ↔ 任务的映射维护在网关侧，靠出站消息里携带的口令 `[[tower:task=<id>]]` 关联——人的回复带回这个 token，网关就知道该回灌给哪个任务。
+- Tower 负责**登记问题、park/resume、持久化项目会话、可靠排队与出站重试**；网关仍只负责平台 transport 和首跳分类。
+- 旧 ask/task 回复继续靠 `[[tower:task=<id>]]` 与投递映射；普通项目消息由 Tower 保存 platform/chat/thread/root message ↔ project 会话绑定。
 
 > **配套图**（`docs/diagrams/` 下自包含 HTML，可独立打开）：
 > - 无人值守消息中继：`docs/diagrams/tower-harness-flow.html`（EN：`-en.html`）
@@ -37,11 +37,14 @@ Task Agent (MCP 工具)
 Tower（登记 + park/resume，只记录不直连平台）
    │  push_to_human 经网关 CLI 出站
    ▼
-外部网关 Hermes / OpenClaw ──► 飞书 / 微信 / … （线程↔任务映射在网关侧）
+外部网关 Hermes / OpenClaw ──► 飞书 / 微信 / …
    ▲
    │  人的回复（携带 [[tower:task=<id>]] token）
    ▼
 relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入活终端
+
+普通入站 ──► OpenClaw 身份/可信群门禁 ──► route_gateway_message / route_gateway_query
+                                             └─► 项目讨论会话 / WorkbenchEvent
 ```
 
 图见 `docs/diagrams/tower-harness-flow.html`（中）/ `tower-harness-flow-en.html`（英）。
@@ -50,7 +53,7 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 - 出站消息体**必须**包含 `[[tower:task=<id>]]` token，否则人的回复无法归属到任务，任务会永远卡住。
 - 发送目标（群 / 人）在「工作」场景由调用方通过 `to` 指定；「无人值守」场景走配置好的 owner/home 目标。
 
-### 四个消息工具及关系
+### 消息工具及关系
 
 这四个工具最容易混淆，务必分清「**发没发**」和「**park 不 park**」两个维度：
 
@@ -58,23 +61,46 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 |------|:---:|:---:|------|
 | `ask_human` | ❌ 只登记 | ✅ park | 底层状态原语：登记一个 OPEN 问题 + 挂起任务等回复 |
 | `notify_human` | ❌ 只登记 | ❌ 不 park | 底层状态原语：登记一条进展日志，继续干活 |
-| `push_to_human` | ✅ 真发 + 登记 | 按 `expectReply` | 上层一站式封装：先经网关发出，成功后再自动转调 ask/notify |
+| `push_to_human` | ✅ 持久化 + 真发 | 按 `expectReply` | 先写 Outbox 与 ask intent，再由 worker 发送并原子登记结果 |
 | `reply_to_ask` / `relay_channel_reply` | —（回灌方向） | resume | 把人的回复注入被 park 的任务并唤醒 |
 
 **`ask_human`** —— 只**登记 OPEN 问题 + PARK 任务**（结束当前回合、PTY 保活等回复），**它自己不发消息**。是底层状态原语，和 `reply_to_ask` 配对（park ↔ resume）。调用后必须立即停手等回复。
 
 **`notify_human`** —— 只登记一条日志、**不 park**、继续往下干；同样**不发**。用于里程碑 / 进展播报 / 无需回复的 FYI。
 
-**`push_to_human`** —— **发送 + 登记，一站式**。先经网关 CLI 把消息真的发出去，**成功后**再按 `expectReply` 自动转调 `ask_human`（`true` → park）或 `notify_human`（`false`）。是上层封装，**仅支持 Hermes / OpenClaw** 网关。这是有网关场景下的首选：省去「手动发 + 手动 ask」两步。
+**`push_to_human`** —— **持久化 + 发送 + 登记，一站式**。Tower 先在同一事务内创建
+`HarnessMessage(PENDING_DELIVERY)` 与 `HarnessOutbound`，随后 worker 经 Hermes / OpenClaw
+发送。收到可验证的平台 message id 后，delivery 映射、OPEN ask 和任务 park 在同一事务完成。
+明确失败保持可重试；已有发送证据但回执不完整时进入 `SENT_UNVERIFIED`，不盲目重发。
 
 **`reply_to_ask` / `relay_channel_reply`** —— 回灌方向。把人在平台上的回复带回 Tower：标记 OPEN 问题为已答、resume 被 park 的任务、把回复作为任务的下一条消息注入活终端。`relay_channel_reply` 额外负责从入站平台消息里解析 `[[tower:task=...]]` token 并按投递映射决定「答 ask」还是「注入工作群讨论」。
 
 **两组别混：**
 
 - **「停下等回复 ↔ 回复时 resume」= `ask_human` ↔ `reply_to_ask`**：同一个流程的两头（一个 park、一个唤醒）。
-- **「只登记不发 ↔ 真发 + 顺带登记」= `ask_human` vs `push_to_human`**：前者是纯状态原语，后者是先发再登记的上层封装。
+- **「只登记不发 ↔ 持久化后真发」= `ask_human` vs `push_to_human`**：前者是纯状态原语，后者是 durable outbox 封装。
 
 `list_notify_targets` 是发送前的入口：读取当前 scope 的活跃通道，返回**照做即可的发送指令**，告诉 Agent 走哪个网关、要不要 park。`tower-ask` / `tower-goal` 技能内部就是先调它、再照指令发。
+
+`route_gateway_message` 是 OWNER 普通渠道入站入口。`route_gateway_query` 是
+可信群 NON_OWNER 的能力受限入口：它固定为项目讨论，不能转 task reply、创建
+任务、启动终端或排入 Workbench；随后只能通过 inbound 绑定读取项目级上下文。
+两者都先持久化去重，再严格按 reply/task binding → thread/session binding →
+显式项目 → 唯一 identify_project → 用户最近项目 → 渠道默认项目解析。项目讨论
+必须以 `complete_gateway_discussion` 回原 thread；项目工作只排入 Workbench。
+Workbench 读到持久批次后必须先调用 `ack_workbench_batch`，处理或稳定委派后
+调用 `resolve_workbench_batch`。只有 `create_task` 真正成功后才能调用
+`confirm_gateway_task_created`。审查通过时直接调用 `complete_gateway_work`，
+不要先调用 `move_task(DONE)`；该工具会在同一数据库事务内将任务转为 `DONE`
+并创建 `FINAL_RESULT` outbox，随后再执行可重试的平台发送。
+
+OWNER 排障优先使用 `diagnose_gateway_request`，它把平台入站、Tower 路由、
+Workbench event/batch/runtime、子任务和平台 delivery 关联为一条阶段时间线。
+`recover_gateway_request` 只恢复指定 inbound，且不会自动重发
+`SENT_UNVERIFIED`。`get_gateway_runtime_health` 补充 OpenClaw/Hermes 的脱敏
+健康状态和关联日志。
+
+重复 platform message 不会重放动作：处理中/排队中返回 `in_progress + noOp`，已处理返回 `already_processed + noOp`。无 thread/root 的讨论按 chat + sender 隔离并复用会话，最近项目上下文 7 天过期。失败投递除启动恢复外，还由单例 `unref` 定时器按 `nextAttemptAt` 自动重试。
 
 ### 通知中心 `/harness`
 
@@ -107,8 +133,10 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 任务可以**被另一个任务派生**：子任务的 `parentTaskId` 指回父任务，子任务描述里带一段 `## 来源` 注明「父任务派生」。父子间不需要新造中途通道，**复用既有的 stop hook fan-out**：
 
 - 子任务**一轮结束**（stop hook）→ `POST /api/internal/hooks/stop` fan-out 到 `notify-parent`（`src/lib/derive/notify-parent.ts`）。
-- `notifyParentOnChildStop` 找到父任务：**仅当父任务 PTY 还活着**才把一段 review 引导 prompt（`child-review-prompt.ts`）写进父任务 PTY 唤醒它；父任务没在跑就跳过（用户设定）。
-- 唤醒是 best-effort：失败只 warn，绝不抛错影响子任务的 stop 主流程。消息体与回车分两次写、间隔一拍（`SUBMIT_DELAY_MS`），否则 Claude TUI 会把尾部 CR 折进文本不提交。
+- Codex 同时保留 Stop hook 与 `agent-turn-complete` notifier；两条路径使用同一个 Codex turn id 去重。回合完成即持久化父任务事件，不依赖关闭仍在复用的 PTY。
+- `notifyParentOnChildStop` 找到父任务后先按稳定 `dedupKey` 写入 `WorkbenchEvent`；父任务没运行时事件仍保留，不再丢弃。
+- 父任务自己的 stop hook 是安全 drain 边界：同一父任务短时间内的普通完成、待决策和失败事件聚合为一个 review batch，并持久化成 `TaskMessage(SYSTEM)` 后才写入 PTY。投递失败会回到 `PENDING`，过期 claim 可在启动时恢复。
+- 所有 provider 的 execution completion 都走统一 fallback：FAILED 始终产生高优先级事件；COMPLETED 仅在该 execution 没有 stop-hook review/decision 时补一个普通 review。两类 producer 通过唯一 `executionReviewKey` 原子竞争，避免重复。
 
 于是「子任务中途求助父任务」不需要专门的中途通道——**把 blocker 作为收尾回复结束回合**就够了，stop hook 会 surface 到父任务。父任务在 review 时定夺，用 `send_task_terminal_input` 把决策注入子任务终端回灌。
 
@@ -150,6 +178,10 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 ### MCP Tools (`src/mcp/tools/harness-tools.ts`)
 
 - `list_notify_targets` / `push_to_human` / `ask_human` / `notify_human` / `reply_to_ask` / `relay_channel_reply`
+- `route_gateway_message` / `route_gateway_query` / `read_gateway_project_context`
+- `complete_gateway_discussion` / `confirm_gateway_task_created` / `complete_gateway_work`
+- `diagnose_gateway_request` / `recover_gateway_request` / `get_gateway_runtime_health`
+- `provision_remote_project`
 
 ### 核心库 (`src/lib/harness/`)
 
@@ -158,14 +190,26 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 | `gateway-send.ts` | 经 Hermes / OpenClaw 网关 CLI 出站发送 |
 | `gateway-config.ts` | 网关运行时配置（显示名等） |
 | `delivery-map.ts` | 平台消息 ID ↔ 任务的投递映射，`[[tower:task=...]]` token 提取 |
+| `gateway-router.ts` | 入站去重、会话绑定、项目解析、Workbench 排队、可靠完成回传 |
+| `gateway-diagnostics.ts` | 单条外部请求的跨层 trace 与受控恢复 |
+| `gateway-runtime-health.ts` | OpenClaw/Hermes 健康状态、关联日志和脱敏 |
+| `remote-project-provisioner.ts` | OWNER 远程 Git 接入、幂等登记与 REVIEW_ONLY/FULL_WORK |
+| `gateway-output.ts` | Hermes/OpenClaw 发送结果的结构化 message id 提取 |
 | `unattended-signal.ts` | 无人值守信号文件 `unattended-<taskId>` 写删，供 PreToolUse hook 读 |
 
 ### 父子派生 (`src/lib/derive/`)
 
 | 文件 | 说明 |
 |------|------|
-| `notify-parent.ts` | 子任务 stop → 写父任务 PTY 唤醒；父任务 PTY 活着才推 |
+| `notify-parent.ts` | 子任务 stop → 去重写入 Workbench 持久化事件 inbox |
 | `child-review-prompt.ts` | 父任务唤醒引导 prompt（含「别原样打回」防环规则） |
+
+### Workbench 协调器 (`src/lib/workbench/`)
+
+| 文件 | 说明 |
+|------|------|
+| `coordinator.ts` | 事件入库、claim lease、批量聚合、失败释放与边界 drain |
+| `boundary.ts` | 父任务已结束当前回合的进程内门闩；任何新 PTY 输入都会关闭 |
 
 ### Hook 脚本 (`scripts/`)
 
@@ -182,6 +226,7 @@ relay_channel_reply / reply_to_ask ──► resume 被 park 的任务，注入�
 | `POST /ask` | 登记 OPEN 问题 + 挂起 execution（PAUSED） |
 | `POST /reply` | 回灌回复、resume 任务；无 OPEN 问题返回 409 `no_pending` |
 | `POST /notify` | 登记一条进展日志 |
+| `POST/PATCH/PUT /gateway` | 入站路由、完成登记、讨论/任务结果可靠回传与重试 |
 
 ### 通知中心
 

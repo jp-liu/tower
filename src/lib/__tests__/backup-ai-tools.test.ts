@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { execFileSync } from "node:child_process";
+import { closeSync, mkdirSync, openSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -15,6 +16,8 @@ const tempDirs: string[] = [];
 const servers: Server[] = [];
 
 function pushSchema(database: string, dataDir: string): void {
+  mkdirSync(path.dirname(database), { recursive: true });
+  closeSync(openSync(database, "a"));
   execFileSync(prismaBin, ["db", "push", "--schema", path.join(root, "prisma", "schema.prisma"), "--skip-generate"], {
     cwd: root,
     env: { ...process.env, DATABASE_URL: `file:${database}`, TOWER_DATA_DIR: dataDir },

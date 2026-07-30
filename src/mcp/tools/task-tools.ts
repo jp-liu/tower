@@ -80,6 +80,9 @@ export const taskTools = {
       references: z.array(z.string()).max(20).optional().describe(
         "User-supplied attachment paths only. Do not include repository source files; put their project-relative paths in description under ## 参考.",
       ),
+      gatewayInboundId: z.string().min(1).max(128).optional().describe(
+        "Workbench recovery key from a GATEWAY_WORK_REQUEST. Pass that request's inboundId exactly.",
+      ),
     }),
     handler: async (args: {
       projectId: string;
@@ -94,7 +97,17 @@ export const taskTools = {
       baseBranch?: string;
       autoStart?: boolean;
       references?: string[];
+      gatewayInboundId?: string;
     }) => {
+      const projectAccess = await db.project.findUnique({
+        where: { id: args.projectId },
+        select: { accessMode: true },
+      });
+      if (projectAccess?.accessMode === "REVIEW_ONLY") {
+        throw new Error(
+          "REVIEW_ONLY projects cannot create executable tasks. Discuss and generate the review through read-only project context, or ask the owner to change the project to FULL_WORK.",
+        );
+      }
       // Resolve worktree / auto-start: explicit arg wins, else fall back to the
       // user's saved global default. On the very first MCP create_task where
       // neither default has been confirmed AND the caller didn't specify, ask
@@ -170,6 +183,50 @@ export const taskTools = {
         if (parent) resolvedParent = parent;
       }
       const resolvedParentId = resolvedParent?.id ?? null;
+      let gatewayInboundId: string | null = null;
+      if (args.gatewayInboundId) {
+        if (!resolvedParentId) throw new Error("gatewayInboundId is only valid for a Workbench-derived task");
+        const inbound = await db.gatewayInbound.findFirst({
+          where: {
+            id: args.gatewayInboundId,
+            intent: "PROJECT_WORK",
+            session: { workbenchTaskId: resolvedParentId, projectId: args.projectId },
+          },
+          select: { id: true, createdTaskId: true },
+        });
+        if (!inbound) throw new Error("Gateway inbound is not bound to this Workbench and project");
+        const linkedTask = await db.gatewayTaskLink.findUnique({
+          where: { inboundId: inbound.id },
+          select: { taskId: true },
+        });
+        const existingTaskId = inbound.createdTaskId || linkedTask?.taskId;
+        if (existingTaskId) {
+          const existing = await db.task.findUnique({ where: { id: existingTaskId } });
+          if (existing) {
+            return {
+              task: existing,
+              deduped: true,
+              recovery: { gatewayInboundId: inbound.id, existingTaskId },
+              display: `Task already exists for gateway inbound ${inbound.id}: ${existing.id}`,
+            };
+          }
+          // Defensive cleanup for databases created before GatewayTaskLink had
+          // foreign keys. The same inbound may now safely recreate one task.
+          await db.$transaction([
+            db.gatewayTaskLink.deleteMany({
+              where: {
+                inboundId: inbound.id,
+                taskId: existingTaskId,
+              },
+            }),
+            db.gatewayInbound.updateMany({
+              where: { id: inbound.id, createdTaskId: existingTaskId },
+              data: { createdTaskId: null },
+            }),
+          ]);
+        }
+        gatewayInboundId = inbound.id;
+      }
 
       // Source is a HARD server-side rule, not left to the model: strip any raw
       // <task-source> bridge block, render a channel-generic `## 来源`, add the
@@ -183,8 +240,25 @@ export const taskTools = {
         referenceResolution.projectFileReferences,
       );
 
-      const task = await db.task.create({
-        data: {
+      const task = gatewayInboundId
+        ? await db.$transaction(async (tx) => {
+            const created = await tx.task.create({ data: {
+              title: args.title,
+              description,
+              projectId: args.projectId,
+              priority: (args.priority ?? "MEDIUM") as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
+              status: (args.status ?? "TODO") as "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED",
+              baseBranch,
+              versionId,
+              subPath: args.subPath ?? null,
+              parentTaskId: resolvedParentId,
+            } });
+            await tx.gatewayTaskLink.create({
+              data: { inboundId: gatewayInboundId, taskId: created.id },
+            });
+            return created;
+          })
+        : await db.task.create({ data: {
           title: args.title,
           description,
           projectId: args.projectId,
@@ -194,8 +268,7 @@ export const taskTools = {
           versionId,
           subPath: args.subPath ?? null,
           parentTaskId: resolvedParentId,
-        },
-      });
+        } });
 
       if (args.labelIds && args.labelIds.length > 0) {
         await db.taskLabel.createMany({

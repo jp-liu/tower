@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="30.4.1">
+  <diagram id="o-tower-target" name="目标架构">
+    <mxGraphModel dx="2350" dy="1350" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2350" pageHeight="1400" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="2" value="o-tower 个人数字分身：身份、能力路由、Tower 与无人值守目标架构" style="text;html=1;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="2180" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="3" value="身份与权限归 OpenClaw；Tower 保持单机个人工作中枢，不维护同事账号或 sender RBAC。" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#4b5563;" vertex="1" parent="1">
+          <mxGeometry x="40" y="65" width="2180" height="30" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="4" value="消息入口" style="swimlane;startSize=36;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=15;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="120" width="260" height="850" as="geometry"/>
+        </mxCell>
+        <mxCell id="5" value="机器人持有人&#xa;OWNER" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=14;" vertex="1" parent="4">
+          <mxGeometry x="30" y="70" width="200" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="6" value="同事 / 其他发送者&#xa;NON_OWNER" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=14;" vertex="1" parent="4">
+          <mxGeometry x="30" y="400" width="200" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="7" value="飞书 / 微信 / 其他平台&#xa;未来可增加语音入口" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;fontSize=14;" vertex="1" parent="4">
+          <mxGeometry x="30" y="220" width="200" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="8" value="统一回复原会话&#xa;卡片 / 文本 / 未来 TTS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;" vertex="1" parent="4">
+          <mxGeometry x="30" y="580" width="200" height="90" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="9" value="OpenClaw / o-tower 安全边界" style="swimlane;startSize=36;html=1;fillColor=#fffaf0;strokeColor=#d79b00;fontStyle=1;fontSize=15;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="350" y="120" width="650" height="850" as="geometry"/>
+        </mxCell>
+        <mxCell id="10" value="平台适配器&#xa;验签 + 真实 senderId / chatId" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;fontSize=13;" vertex="1" parent="9">
+          <mxGeometry x="20" y="220" width="180" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="11" value="Identity + Trusted Channel Policy&#xa;稳定 ID 判 OWNER；chatId 判可信入口" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=13;" vertex="1" parent="9">
+          <mxGeometry x="230" y="220" width="180" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="12" value="能力路由器&#xa;代码级策略 + Tool Allowlist" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=13;" vertex="1" parent="9">
+          <mxGeometry x="440" y="220" width="180" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="13" value="同一 o-tower profile：OWNER Ingress Surface&#xa;只允许持久路由 + 只读查询&#xa;无直接建任务 / 启终端 / 项目写操作" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=13;" vertex="1" parent="9">
+          <mxGeometry x="30" y="390" width="590" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="14" value="同一 o-tower profile：NON_OWNER Tool Surface&#xa;仅绑定 Workspace 的项目查询&#xa;无 Shell、无修改工具、无个人日报" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=13;" vertex="1" parent="9">
+          <mxGeometry x="30" y="530" width="590" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="15" value="无可靠身份 / 越权请求&#xa;返回通用“权限不足”，不泄露资源是否存在" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=13;" vertex="1" parent="9">
+          <mxGeometry x="30" y="650" width="590" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="16" value="结构化 Trace Emit&#xa;sender 决策 / 路由 / 工具调用 / 外部错误" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="9">
+          <mxGeometry x="30" y="750" width="590" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="17" value="Tower 个人工作中枢" style="swimlane;startSize=36;html=1;fillColor=#f4f8ff;strokeColor=#6c8ebf;fontStyle=1;fontSize=15;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="120" width="700" height="850" as="geometry"/>
+        </mxCell>
+        <mxCell id="18" value="Tower 不重复判断平台 OWNER；只接受签名内部调用，并强制项目范围、Workbench 归属、幂等与状态机约束。" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;dashed=1;fontSize=13;fontStyle=1;" vertex="1" parent="17">
+          <mxGeometry x="30" y="60" width="640" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="19" value="Owner Control Plane&#xa;查询可在入口完成；写操作全部入 Workbench&#xa;执行、恢复、诊断与审批均有持久归属" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=13;" vertex="1" parent="17">
+          <mxGeometry x="30" y="390" width="640" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="20" value="Project Reader Surface&#xa;仅可信 Channel 的 NON_OWNER 可用&#xa;绑定 Workspace 内：代码 / 知识库 / 项目任务状态&#xa;禁止个人日报与任何修改" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=13;" vertex="1" parent="17">
+          <mxGeometry x="30" y="530" width="640" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="21" value="远程项目接入编排器&#xa;OWNER only&#xa;缺 Workspace / 本地根目录则持久询问" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=13;" vertex="1" parent="17">
+          <mxGeometry x="30" y="650" width="300" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="22" value="项目只读讨论与查询&#xa;Workspace 绑定范围&#xa;项目级回答，不暴露个人聚合信息" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=13;" vertex="1" parent="17">
+          <mxGeometry x="370" y="650" width="300" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="23" value="可靠 Workbench / Task&#xa;Inbox + Batch ACK + Review&#xa;DONE + FINAL_RESULT 原子完成" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=13;" vertex="1" parent="17">
+          <mxGeometry x="30" y="760" width="300" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="24" value="Workspace / Project / Task / KB&#xa;持久事实与审计" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=13;" vertex="1" parent="17">
+          <mxGeometry x="370" y="760" width="300" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="25" value="本机执行器与外部依赖" style="swimlane;startSize=36;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=15;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="1800" y="120" width="420" height="850" as="geometry"/>
+        </mxCell>
+        <mxCell id="26" value="未来 Computer Operator&#xa;仅 OWNER 路由可见&#xa;GUI 测试，不承担系统可观测性" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;fontStyle=1;fontSize=13;" vertex="1" parent="25">
+          <mxGeometry x="30" y="390" width="360" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="27" value="OpenClaw / Hermes 诊断适配器&#xa;健康、关联日志、脱敏错误" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=13;" vertex="1" parent="25">
+          <mxGeometry x="30" y="530" width="360" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="28" value="Git 仓库 / 本地文件夹&#xa;默认 REVIEW_ONLY 接入&#xa;OWNER 明确后升级 FULL_WORK" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=13;" vertex="1" parent="25">
+          <mxGeometry x="30" y="650" width="360" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="29" value="Claude / Codex / 其他 CLI 任务终端" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=13;" vertex="1" parent="25">
+          <mxGeometry x="30" y="760" width="360" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="30" value="统一诊断与无人值守反馈" style="swimlane;startSize=36;html=1;fillColor=#fffdf2;strokeColor=#d6b656;fontStyle=1;fontSize=15;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="350" y="1070" width="1870" height="220" as="geometry"/>
+        </mxCell>
+        <mxCell id="31" value="Trace Capture Bus：requestId / platformMessageId / taskId / batchId / deliveryId" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=13;" vertex="1" parent="30">
+          <mxGeometry x="40" y="50" width="1790" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="32" value="诊断时间线&#xa;“诊断这条消息”" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=13;" vertex="1" parent="30">
+          <mxGeometry x="200" y="125" width="300" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="33" value="主动告警 OWNER&#xa;卡住 / 网关离线 / 回传失败" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=13;" vertex="1" parent="30">
+          <mxGeometry x="785" y="125" width="300" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="34" value="受控恢复&#xa;重试 Delivery / 重排事件 / 导出诊断包" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=13;" vertex="1" parent="30">
+          <mxGeometry x="1370" y="125" width="300" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="35" value="图例" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;verticalAlign=top;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1070" width="260" height="220" as="geometry"/>
+        </mxCell>
+        <mxCell id="36" value="" style="rounded=0;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="35">
+          <mxGeometry x="15" y="35" width="30" height="16" as="geometry"/>
+        </mxCell>
+        <mxCell id="37" value="身份 / 权限边界" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;" vertex="1" parent="35">
+          <mxGeometry x="55" y="32" width="180" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="38" value="" style="rounded=0;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="35">
+          <mxGeometry x="15" y="67" width="30" height="16" as="geometry"/>
+        </mxCell>
+        <mxCell id="39" value="完整能力 / 服务" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;" vertex="1" parent="35">
+          <mxGeometry x="55" y="64" width="180" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="40" value="" style="rounded=0;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="35">
+          <mxGeometry x="15" y="99" width="30" height="16" as="geometry"/>
+        </mxCell>
+        <mxCell id="41" value="只读能力 / 持久数据" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;" vertex="1" parent="35">
+          <mxGeometry x="55" y="96" width="180" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="42" value="" style="rounded=0;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="35">
+          <mxGeometry x="15" y="131" width="30" height="16" as="geometry"/>
+        </mxCell>
+        <mxCell id="43" value="编排 / 诊断 / 可靠队列" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;" vertex="1" parent="35">
+          <mxGeometry x="55" y="128" width="180" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="44" value="" style="rounded=0;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="35">
+          <mxGeometry x="15" y="163" width="30" height="16" as="geometry"/>
+        </mxCell>
+        <mxCell id="45" value="拒绝 / 告警" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;" vertex="1" parent="35">
+          <mxGeometry x="55" y="160" width="180" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="50" value="本人消息" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.5;exitY=1;entryX=0.35;entryY=0;" edge="1" parent="1" source="5" target="7">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="51" value="同事查询" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.5;exitY=0;entryX=0.65;entryY=1;" edge="1" parent="1" source="6" target="7">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="52" value="验签后的平台事件" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="7" target="10">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="53" value="senderId" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="10" target="11">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="54" value="身份结果" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="11" target="12">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="55" value="OWNER：路由 + 查询工具" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.45;exitY=1;entryX=0.75;entryY=0;" edge="1" parent="1" source="12" target="13">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="56" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;exitX=1;exitY=0.65;entryX=1;entryY=0.5;" edge="1" parent="1" source="12" target="14">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="990" y="470"/>
+              <mxPoint x="990" y="695"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="57" value="无身份 / 越权" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;strokeColor=#b85450;fontColor=#b85450;exitX=1;exitY=0.65;entryX=1;entryY=0.5;" edge="1" parent="1" source="12" target="15">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1020" y="470"/>
+              <mxPoint x="1020" y="805"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="58" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="13" target="19">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="59" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="14" target="20">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="60" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;exitX=0;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="19" target="21">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1060" y="555"/>
+              <mxPoint x="1060" y="815"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="61" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;exitX=0.8;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="20" target="22">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="62" value="创建项目 + 启动常驻 Workbench" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="21" target="23">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="63" value="只读项目事实" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="22" target="24">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="64" value="任务状态 / 审查 / 结果" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="23" target="24">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="65" value="未来可选 Computer Capability" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;endFill=0;dashed=1;labelBackgroundColor=#ffffff;fontSize=11;strokeColor=#666666;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="19" target="26">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="66" value="clone / 创建目录" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0;entryX=0;entryY=0;" edge="1" parent="1" source="21" target="28">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1230" y="750"/>
+              <mxPoint x="1790" y="750"/>
+              <mxPoint x="1790" y="815"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="67" value="CLI 执行" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.5;exitY=1;entryX=0.5;entryY=1;" edge="1" parent="1" source="23" target="29">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1230" y="1020"/>
+              <mxPoint x="2010" y="1020"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="68" value="OpenClaw trace" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.5;exitY=1;entryX=0.25;entryY=0;" edge="1" parent="1" source="16" target="31">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="69" value="Tower 持久事实" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.5;exitY=1;entryX=0.6;entryY=0;" edge="1" parent="1" source="24" target="31">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="70" value="网关健康与脱敏日志" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0.92;entryY=0;" edge="1" parent="1" source="27" target="31">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2210" y="695"/>
+              <mxPoint x="2210" y="1100"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="71" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;exitX=0.25;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="31" target="32">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="72" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="31" target="33">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="73" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;exitX=0.75;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="31" target="34">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -15,15 +15,73 @@ const log = logger.create("instrumentation");
 export async function cleanupStaleExecutions() {
   try {
     await initDb();
-    const result = await db.taskExecution.updateMany({
+    const { getSession } = await import("@/lib/pty/session-store");
+    const running = await db.taskExecution.findMany({
       where: { status: "RUNNING" },
+      select: { id: true, taskId: true },
+    });
+    const staleIds = running
+      .filter(({ taskId }) => {
+        const session = getSession(taskId);
+        return !session || session.killed;
+      })
+      .map(({ id }) => id);
+    const result = await db.taskExecution.updateMany({
+      where: { id: { in: staleIds }, status: "RUNNING" },
       data: { status: "FAILED", endedAt: new Date() },
     });
     if (result.count > 0) {
       log.warn(`Cleaned up ${result.count} stale RUNNING execution(s)`);
+      await db.workbenchRuntime.updateMany({
+        where: { executionId: { in: staleIds } },
+        data: {
+          state: "STOPPED",
+          activeBatchId: null,
+          blockedReason: "Server restarted and the previous terminal session was not recoverable",
+          lastHeartbeatAt: new Date(),
+        },
+      });
     }
   } catch (error) {
     log.error("Stale execution cleanup failed", error);
+  }
+
+  try {
+    const {
+      recoverMissingWorkbenchExecutionEvents,
+      recoverWorkbenchEventClaims,
+    } = await import("@/lib/workbench/coordinator");
+    const recoveredClaims = await recoverWorkbenchEventClaims();
+    if (recoveredClaims > 0) {
+      log.warn(`Recovered ${recoveredClaims} stale Workbench event claim(s)`);
+    }
+    const missing = await recoverMissingWorkbenchExecutionEvents();
+    if (missing.recovered > 0 || missing.failed > 0 || missing.remaining > 0) {
+      log.warn(
+        `Workbench missing-event recovery ran ${missing.batches} batch(es), ` +
+        `scanned ${missing.scanned}, recovered ${missing.recovered}, ` +
+        `failed ${missing.failed}, remaining ${missing.remaining}, ` +
+        `truncated ${missing.truncated}`,
+      );
+    }
+  } catch (error) {
+    log.error("Workbench event startup recovery failed", error);
+  }
+
+  try {
+    const { recoverQueuedGatewayWork, retryGatewayDeliveries } = await import("@/lib/harness/gateway-router");
+    const [queued, deliveries] = await Promise.all([
+      recoverQueuedGatewayWork(),
+      retryGatewayDeliveries(),
+    ]);
+    if (queued.scanned > 0 || deliveries.scanned > 0) {
+      log.info(
+        `Gateway recovery scanned ${queued.scanned} queued request(s) and ${deliveries.scanned} delivery row(s); ` +
+        `started ${queued.started}, delivered ${deliveries.delivered}, failed ${queued.failed + deliveries.failed}`,
+      );
+    }
+  } catch (error) {
+    log.error("Gateway session startup recovery failed", error);
   }
 
   try {

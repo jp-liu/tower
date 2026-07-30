@@ -30,6 +30,7 @@ vi.mock("@/lib/pty/orphan-reaper", () => ({
 import {
   createSession,
   getSession,
+  markSessionTurnComplete,
   destroySession,
   destroyAllSessions,
 } from "@/lib/pty/session-store";
@@ -71,6 +72,17 @@ describe("session-store", () => {
     it("returns the session for existing taskId", () => {
       const session = createSession("task-4", "bash", [], "/tmp", vi.fn(), vi.fn());
       expect(getSession("task-4")).toBe(session);
+    });
+  });
+
+  describe("markSessionTurnComplete", () => {
+    it("marks only a live session as safe for the next turn", () => {
+      const session = createSession("task-boundary", "bash", [], "/tmp", vi.fn(), vi.fn());
+      expect(markSessionTurnComplete("task-boundary")).toBe(true);
+      expect(session.isAtTurnBoundary).toBe(true);
+      session.write("next turn");
+      expect(session.isAtTurnBoundary).toBe(false);
+      expect(markSessionTurnComplete("missing")).toBe(false);
     });
   });
 

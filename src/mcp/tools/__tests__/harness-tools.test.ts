@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { vi, describe, it, expect, beforeEach } from "vitest";
+import { vi, describe, it, expect, beforeEach, afterEach, afterAll } from "vitest";
 
 vi.mock("@/lib/db", () => ({
   db: { task: { findUnique: vi.fn() } },
@@ -30,9 +30,18 @@ const OTHER_TASK_ID = "clbbbbbbbbbbbbbbbbbbbbbb";
 
 beforeEach(() => {
   vi.unstubAllEnvs();
+  vi.stubEnv("TOWER_TASK_ID", "");
   findUnique.mockReset();
   readCfg.mockReset();
   readCfg.mockResolvedValue([]);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+afterAll(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("list_notify_targets — taskId invariant", () => {
@@ -191,6 +200,46 @@ describe("list_notify_targets — scope derivation", () => {
     const r = await call({ taskId: TASK_ID }); // derives unattended
     expect(r.scope).toBe("unattended");
     expect(r.noChannelConfigured).toBe(true);
+  });
+});
+
+describe("Workbench durable batch tools", () => {
+  it("binds acknowledgement to the current Workbench task", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ batchId: "wb-123", state: "ACKED", eventCount: 1, noOp: false }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("TOWER_TASK_ID", TASK_ID);
+
+    await expect(harnessTools.ack_workbench_batch.handler({
+      batchId: "wb-123",
+      leaseToken: "lease-123",
+    })).resolves.toMatchObject({
+      state: "ACKED",
+      noOp: false,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3000/api/internal/workbench/batch",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({
+          action: "ack",
+          parentTaskId: TASK_ID,
+          batchId: "wb-123",
+          leaseToken: "lease-123",
+        }),
+      }),
+    );
+  });
+
+  it("rejects resolution outside a bound Workbench terminal", async () => {
+    await expect(harnessTools.resolve_workbench_batch.handler({
+      batchId: "wb-123",
+      leaseToken: "lease-123",
+    })).resolves.toEqual({
+      error: "resolve_workbench_batch must run inside the bound Workbench terminal",
+    });
   });
 });
 

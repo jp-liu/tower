@@ -6,6 +6,9 @@
  * Usage:
  *   tower                Start server (auto-init on first run)
  *   tower migrate        Migrate data from old project-local paths to ~/.tower
+ *   tower service install Install and start the unattended service
+ *   tower service status  Inspect the unattended service
+ *   tower service remove  Stop and remove the unattended service
  *   tower --help         Show help
  *   tower --version      Show version
  *
@@ -14,7 +17,7 @@
  *   -H, --host <host>    Server host (default: 127.0.0.1)
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { chmodSync, existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "fs";
 import { join, dirname, resolve } from "path";
 import { execFileSync, spawn, spawnSync } from "child_process";
 import { fileURLToPath, pathToFileURL } from "url";
@@ -24,6 +27,17 @@ import { createHash } from "crypto";
 import { createRequire } from "module";
 import { createConnection } from "net";
 import { DEFAULT_HOST, resolveRuntimeNetwork } from "./network.mjs";
+import {
+  serviceBackend,
+  WINDOWS_SERVICE_TASK,
+  windowsScheduledTaskCommand,
+  windowsServiceScript,
+} from "./service.mjs";
+
+// Tower stores local credentials, task content, and SQLite sidecars. A
+// restrictive process umask also applies to files created later by Prisma/
+// SQLite and to child processes spawned by this CLI.
+process.umask(0o077);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -35,6 +49,10 @@ const TOWER_DIR = process.env.TOWER_DATA_DIR || join(homedir(), ".tower");
 const DB_DIR = join(TOWER_DIR, "database");
 const DB_PATH = join(DB_DIR, "tower.db");
 const DB_URL = `file:${DB_PATH}`;
+const SERVICE_LABEL = "org.tower.workbench";
+const SERVICE_PLIST = join(homedir(), "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`);
+const WINDOWS_SERVICE_DIR = join(TOWER_DIR, "service");
+const WINDOWS_SERVICE_SCRIPT = join(WINDOWS_SERVICE_DIR, "tower-service.cmd");
 
 // Pin the resolved data dir + DB URL before anything else. DATABASE_URL pins
 // Prisma to this dir; TOWER_DATA_DIR is pinned to the SAME resolved value so a
@@ -81,6 +99,12 @@ if (flags.help) {
   Usage:
     tower              Start server (auto-init on first run)
     tower migrate      Migrate data from old project-local paths to ~/.tower
+    tower service install
+                       Install/start Tower as a macOS LaunchAgent or Windows scheduled task
+    tower service status
+                       Show unattended service status
+    tower service remove
+                       Stop and remove the unattended service
 
   Options:
     -p, --port <port>   Server port (default: 3000)
@@ -183,15 +207,255 @@ function readState() {
 }
 
 function writeState(state) {
-  writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), { mode: 0o600 });
+  try { chmodSync(STATE_FILE, 0o600); } catch { /* non-POSIX filesystem */ }
 }
 
 function ensureDirs() {
   for (const dir of [TOWER_DIR, DB_DIR, join(TOWER_DIR, "storage"), join(TOWER_DIR, "assistant"), join(TOWER_DIR, "logs")]) {
     if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
+      mkdirSync(dir, { recursive: true, mode: 0o700 });
+    }
+    try { chmodSync(dir, 0o700); } catch { /* non-POSIX filesystem */ }
+  }
+  for (const name of ["service.stdout.log", "service.stderr.log"]) {
+    const logFile = join(TOWER_DIR, "logs", name);
+    if (existsSync(logFile)) {
+      try { chmodSync(logFile, 0o600); } catch { /* non-POSIX filesystem */ }
     }
   }
+  for (const file of [
+    DB_PATH,
+    `${DB_PATH}-shm`,
+    `${DB_PATH}-wal`,
+    STATE_FILE,
+    join(TOWER_DIR, "secrets", "internal-api.key"),
+  ]) {
+    if (existsSync(file)) {
+      try { chmodSync(file, 0o600); } catch { /* non-POSIX filesystem */ }
+    }
+  }
+}
+
+function xmlEscape(value) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function launchctl(args, options = {}) {
+  return spawnSync("launchctl", args, {
+    encoding: "utf-8",
+    stdio: options.inherit ? "inherit" : "pipe",
+  });
+}
+
+function serviceDomain() {
+  return `gui/${process.getuid()}`;
+}
+
+function servicePlist() {
+  const values = {
+    label: SERVICE_LABEL,
+    node: process.execPath,
+    cli: __filename,
+    cwd: PROJECT_ROOT,
+    data: TOWER_DIR,
+    port: String(PORT),
+    stdout: join(TOWER_DIR, "logs", "service.stdout.log"),
+    stderr: join(TOWER_DIR, "logs", "service.stderr.log"),
+  };
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${xmlEscape(values.label)}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${xmlEscape(values.node)}</string>
+    <string>${xmlEscape(values.cli)}</string>
+    <string>start</string>
+    <string>--port</string>
+    <string>${xmlEscape(values.port)}</string>
+    <string>--host</string>
+    <string>127.0.0.1</string>
+    <string>--no-open</string>
+  </array>
+  <key>WorkingDirectory</key><string>${xmlEscape(values.cwd)}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>TOWER_DATA_DIR</key><string>${xmlEscape(values.data)}</string>
+    <key>TOWER_NO_OPEN</key><string>1</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StandardOutPath</key><string>${xmlEscape(values.stdout)}</string>
+  <key>StandardErrorPath</key><string>${xmlEscape(values.stderr)}</string>
+</dict>
+</plist>
+`;
+}
+
+function requireBuiltService() {
+  ensureDirs();
+  const standaloneServer = join(PROJECT_ROOT, ".next", "standalone", "server.js");
+  if (!existsSync(standaloneServer)) {
+    logError("Build output is missing. Run `pnpm build` before installing the service.");
+    process.exit(1);
+  }
+}
+
+function waitSync(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+function bootstrapLaunchAgent(target) {
+  let loaded = null;
+  // launchctl may return EIO briefly while a previous KeepAlive instance is
+  // still being torn down. Retry the same idempotent bootstrap rather than
+  // leaving Tower stopped after an otherwise valid service install.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    loaded = launchctl(["bootstrap", serviceDomain(), SERVICE_PLIST]);
+    if (loaded.status === 0) return loaded;
+    if (attempt < 4) waitSync(250 * (attempt + 1));
+  }
+  logError(
+    `Unable to bootstrap ${target} after 5 attempts: ` +
+    (loaded?.stderr || loaded?.stdout || "launchctl bootstrap failed").trim(),
+  );
+  process.exit(1);
+}
+
+function cmdMacService(action) {
+  const target = `${serviceDomain()}/${SERVICE_LABEL}`;
+  if (action === "install") {
+    requireBuiltService();
+    mkdirSync(dirname(SERVICE_PLIST), { recursive: true });
+    writeFileSync(SERVICE_PLIST, servicePlist(), { encoding: "utf-8", mode: 0o600 });
+    try { chmodSync(SERVICE_PLIST, 0o600); } catch { /* non-POSIX filesystem */ }
+    launchctl(["bootout", target]);
+    bootstrapLaunchAgent(target);
+    const started = launchctl(["kickstart", "-k", target]);
+    if (started.status !== 0) {
+      logError((started.stderr || started.stdout || "launchctl kickstart failed").trim());
+      process.exit(1);
+    }
+    log(`Unattended service installed and started (${SERVICE_LABEL}).`);
+    return;
+  }
+  if (action === "remove" || action === "uninstall") {
+    launchctl(["bootout", target]);
+    try {
+      unlinkSync(SERVICE_PLIST);
+    } catch {
+      // Already removed.
+    }
+    log(`Unattended service removed (${SERVICE_LABEL}).`);
+    return;
+  }
+  if (action === "status") {
+    const result = launchctl(["print", target], { inherit: true });
+    if (result.status !== 0) {
+      logError(`Unattended service is not loaded. Install it with: tower service install`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+  logError(`Unknown service action: ${action}`);
+  process.exit(1);
+}
+
+function schtasks(args, options = {}) {
+  return spawnSync("schtasks.exe", args, {
+    encoding: "utf-8",
+    stdio: options.inherit ? "inherit" : "pipe",
+    windowsHide: true,
+  });
+}
+
+function cmdWindowsService(action) {
+  if (action === "install") {
+    requireBuiltService();
+    mkdirSync(WINDOWS_SERVICE_DIR, { recursive: true });
+    writeFileSync(
+      WINDOWS_SERVICE_SCRIPT,
+      windowsServiceScript({
+        node: process.execPath,
+        cli: __filename,
+        cwd: PROJECT_ROOT,
+        data: TOWER_DIR,
+        port: PORT,
+        stdout: join(TOWER_DIR, "logs", "service.stdout.log"),
+        stderr: join(TOWER_DIR, "logs", "service.stderr.log"),
+      }),
+      "utf-8",
+    );
+    schtasks(["/End", "/TN", WINDOWS_SERVICE_TASK]);
+    schtasks(["/Delete", "/TN", WINDOWS_SERVICE_TASK, "/F"]);
+    const created = schtasks([
+      "/Create",
+      "/TN", WINDOWS_SERVICE_TASK,
+      "/TR", windowsScheduledTaskCommand(WINDOWS_SERVICE_SCRIPT),
+      "/SC", "ONLOGON",
+      "/RL", "LIMITED",
+      "/F",
+    ]);
+    if (created.status !== 0) {
+      logError((created.stderr || created.stdout || "schtasks create failed").trim());
+      process.exit(1);
+    }
+    const started = schtasks(["/Run", "/TN", WINDOWS_SERVICE_TASK]);
+    if (started.status !== 0) {
+      logError((started.stderr || started.stdout || "schtasks run failed").trim());
+      process.exit(1);
+    }
+    log(`Unattended service installed and started (${WINDOWS_SERVICE_TASK}, Windows Task Scheduler).`);
+    return;
+  }
+  if (action === "remove" || action === "uninstall") {
+    schtasks(["/End", "/TN", WINDOWS_SERVICE_TASK]);
+    const removed = schtasks(["/Delete", "/TN", WINDOWS_SERVICE_TASK, "/F"]);
+    try { unlinkSync(WINDOWS_SERVICE_SCRIPT); } catch { /* Already removed. */ }
+    if (removed.status !== 0 && !/cannot find|找不到/i.test(`${removed.stderr || ""}${removed.stdout || ""}`)) {
+      logError((removed.stderr || removed.stdout || "schtasks delete failed").trim());
+      process.exit(1);
+    }
+    log(`Unattended service removed (${WINDOWS_SERVICE_TASK}).`);
+    return;
+  }
+  if (action === "status") {
+    const result = schtasks(
+      ["/Query", "/TN", WINDOWS_SERVICE_TASK, "/V", "/FO", "LIST"],
+      { inherit: true },
+    );
+    if (result.status !== 0) {
+      logError("Unattended service is not registered. Install it with: tower service install");
+      process.exitCode = 1;
+    }
+    return;
+  }
+  logError(`Unknown service action: ${action}`);
+  process.exit(1);
+}
+
+function cmdService() {
+  const action = positionals[1] ?? "status";
+  const backend = serviceBackend(process.platform);
+  if (backend === "launchagent") {
+    cmdMacService(action);
+    return;
+  }
+  if (backend === "task-scheduler") {
+    cmdWindowsService(action);
+    return;
+  }
+  logError("Tower service management supports macOS LaunchAgent and Windows Task Scheduler.");
+  process.exit(1);
 }
 
 function ensurePrismaClientGenerated() {
@@ -279,6 +543,7 @@ async function cmdMigrate() {
 }
 
 async function cmdStart() {
+  ensureDirs();
   ensurePrismaClientGenerated();
 
   // ── Lifecycle: pre-start ── (schema sync + one-shot data migrations)
@@ -332,8 +597,8 @@ async function preStart() {
 /**
  * Run one-shot data migrations (scripts/migrations/) that haven't been applied
  * to this database yet. Delegated to a tsx runner that tracks applied ids in
- * the AppliedMigration table. A migration failure is non-fatal (logged +
- * retried next start) — see scripts/run-migrations.ts.
+ * the AppliedMigration table. A migration failure blocks startup and is
+ * retried next start — see scripts/run-migrations.ts.
  */
 function runPendingMigrations() {
   const tsxBin = resolveBin("tsx", "tsx");
@@ -408,6 +673,9 @@ function openBrowser(url) {
 switch (command) {
   case "migrate":
     await cmdMigrate();
+    break;
+  case "service":
+    cmdService();
     break;
   case "start":
     await cmdStart();

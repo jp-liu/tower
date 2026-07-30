@@ -22,22 +22,27 @@
 import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { createHash } from "node:crypto";
-import { mkdirSync, existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { chmodSync, mkdirSync, existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 
-/** TOWER_DATA_DIR env or ~/.tower */
-export function getTowerDir(): string {
-  const dir = process.env.TOWER_DATA_DIR || join(homedir(), ".tower");
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
+function ensurePrivateDirectory(dir: string): string {
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    chmodSync(dir, 0o700);
+  } catch {
+    // Best effort on filesystems that do not implement POSIX modes.
   }
   return dir;
 }
 
+/** TOWER_DATA_DIR env or ~/.tower */
+export function getTowerDir(): string {
+  const dir = process.env.TOWER_DATA_DIR || join(homedir(), ".tower");
+  return ensurePrivateDirectory(dir);
+}
+
 /** ~/.tower/database */
 export function getDatabaseDir(): string {
-  const dir = join(getTowerDir(), "database");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  return dir;
+  return ensurePrivateDirectory(join(getTowerDir(), "database"));
 }
 
 /** ~/.tower/database/tower.db */
@@ -114,29 +119,22 @@ export function writeStoragePointer(dir: string | null): void {
 export function getStorageDir(): string {
   const override = process.env.TOWER_STORAGE_DIR || readStoragePointer();
   const dir = override && override.length > 0 ? override : getDefaultStorageDir();
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  return dir;
+  return ensurePrivateDirectory(dir);
 }
 
 /** ~/.tower/assistant */
 export function getAssistantDir(): string {
-  const dir = join(getTowerDir(), "assistant");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  return dir;
+  return ensurePrivateDirectory(join(getTowerDir(), "assistant"));
 }
 
 /** ~/.tower/logs */
 export function getLogsDir(): string {
-  const dir = join(getTowerDir(), "logs");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  return dir;
+  return ensurePrivateDirectory(join(getTowerDir(), "logs"));
 }
 
 /** ~/.tower/backups */
 export function getBackupsDir(): string {
-  const dir = join(getTowerDir(), "backups");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  return dir;
+  return ensurePrivateDirectory(join(getTowerDir(), "backups"));
 }
 
 /**
@@ -147,7 +145,5 @@ export function getBackupsDir(): string {
  * deps land in a dedicated user-owned workspace here.
  */
 export function getExtensionsDir(): string {
-  const dir = join(getTowerDir(), "extensions");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  return dir;
+  return ensurePrivateDirectory(join(getTowerDir(), "extensions"));
 }

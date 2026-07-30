@@ -40,6 +40,19 @@ export function requireLocalhost(request: NextRequest): NextResponse | null {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // A loopback Host alone does not prove that the caller is Tower: any web page
+  // can submit a request to localhost from the user's browser. Reject foreign
+  // browser origins while continuing to allow non-browser local daemons, hooks,
+  // and MCP clients (which do not send Origin/Sec-Fetch-Site).
+  const origin = request.headers.get("origin");
+  if (origin && !originMatchesHost(origin, host)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const fetchSite = request.headers.get("sec-fetch-site")?.toLowerCase();
+  if (fetchSite === "cross-site") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   return null;
 }
 
@@ -53,6 +66,16 @@ function headerHostname(value: string): string | null {
     return new URL(`http://${value}`).hostname.replace(/^\[|\]$/g, "");
   } catch {
     return null;
+  }
+}
+
+function originMatchesHost(origin: string, host: string): boolean {
+  try {
+    const parsed = new URL(origin);
+    return (parsed.protocol === "http:" || parsed.protocol === "https:")
+      && parsed.host.toLowerCase() === host.toLowerCase();
+  } catch {
+    return false;
   }
 }
 

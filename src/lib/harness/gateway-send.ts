@@ -3,8 +3,9 @@ import { readConfigValue } from "@/lib/config-reader";
 import { db } from "@/lib/db";
 import { sendViaHermes } from "@/lib/harness/hermes-send";
 import { sendViaOpenClaw } from "@/lib/harness/openclaw-send";
-import { resolveCommandPathSync } from "@/lib/platform";
+import { ensurePathInEnv, resolveCommandPathSync } from "@/lib/platform";
 import { readHarnessGatewayRuntimeConfig } from "./gateway-config";
+import type { GatewaySendMetadata } from "./gateway-output";
 
 export type HarnessGateway = "hermes" | "openclaw";
 
@@ -26,6 +27,8 @@ export interface HarnessGatewaySendInput {
   profile?: string | null;
   message: string;
   presentation?: unknown;
+  replyToMessageId?: string | null;
+  threadId?: string | null;
   scope: "work" | "unattended";
 }
 
@@ -33,6 +36,8 @@ export interface HarnessGatewaySendResult {
   ok: boolean;
   output: string;
   resolvedDest?: string | null;
+  /** Platform-observed receipt. On failure, message_id means a send occurred but could not be verified. */
+  metadata?: GatewaySendMetadata;
 }
 
 export async function sendViaHarnessGateway(input: HarnessGatewaySendInput): Promise<HarnessGatewaySendResult> {
@@ -69,6 +74,8 @@ export async function sendViaHarnessGateway(input: HarnessGatewaySendInput): Pro
     dest: resolvedDest.dest || "",
     downstream: input.downstream,
     presentation: input.presentation,
+    replyToMessageId: input.replyToMessageId,
+    threadId: input.threadId,
     env,
   });
   return { ...sent, resolvedDest: resolvedDest.dest };
@@ -228,7 +235,11 @@ async function findDestinationInOpenClawDirectory(input: {
     const { stdout } = await execFilePromise(
       cmd,
       ["directory", "groups", "list", "--channel", input.platform, "--query", raw, "--json", "--limit", "10"],
-      { timeout: 20_000, maxBuffer: 1024 * 1024, env: { ...process.env, ...(input.env ?? {}) } },
+      {
+        timeout: 20_000,
+        maxBuffer: 1024 * 1024,
+        env: ensurePathInEnv({ ...process.env, ...(input.env ?? {}) }) as NodeJS.ProcessEnv,
+      },
     );
     const parsed = JSON.parse(stdout) as Array<{ id?: string; name?: string }>;
     const normalized = normalizeName(raw);

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, rmSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -43,6 +43,10 @@ export async function setup() {
   // file) — the flag would be a destructive op on whatever the path points at.
   rmSync(dataDir, { recursive: true, force: true });
   mkdirSync(path.join(dataDir, "database"), { recursive: true });
+  // Prisma 6's SQLite schema engine can fail with an empty "Schema engine
+  // error" when the parent directory exists but a nested database file does
+  // not. Pre-create the empty file; db push still owns the schema.
+  closeSync(openSync(path.join(dataDir, "database", "tower.db"), "a"));
 
   execFileSync(
     path.join(process.cwd(), "node_modules", ".bin", "prisma"),

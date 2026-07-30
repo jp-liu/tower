@@ -1,6 +1,6 @@
 {
   "name": "@tower-org/cli",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "AI Task Orchestration Platform — Kanban + Terminal + Code Editor + MCP",
   "license": "MIT",
   "repository": {
@@ -65,9 +65,9 @@
     "build": "pnpm ai:packages:build && pnpm mcp:build && rm -rf .next && env -u __NEXT_PRIVATE_STANDALONE_CONFIG -u __NEXT_PRIVATE_ORIGIN -u TURBOPACK next build && find .next -name '*.map' -delete && cp -R .next/static .next/standalone/.next/ && cp -R public .next/standalone/ && node scripts/prune-standalone-natives.js",
     "release": "bash scripts/release.sh",
     "release:gate": "node scripts/release-gate.js",
-    "release:prepare": "pnpm release:gate && pnpm build && pnpm release:pack:check && pnpm release:entrypoints:check",
+    "release:prepare": "pnpm release:gate && pnpm test:e2e:release && pnpm release:pack:check && pnpm release:entrypoints:check",
     "release:smoke": "node scripts/release-smoke.js",
-    "release:smoke:published": "TOWER_SMOKE_PACKAGE_SPEC='@tower-org/cli@0.3.0' node scripts/release-smoke.js",
+    "release:smoke:published": "TOWER_SMOKE_PACKAGE_SPEC='@tower-org/cli@0.3.1' node scripts/release-smoke.js",
     "release:pack:check": "node scripts/release-package-canary.js",
     "release:entrypoints:check": "node scripts/check-release-entrypoints.js",
     "release:publish": "bash scripts/release.sh --publish",
@@ -82,7 +82,8 @@
     "db:migrate": "TOWER_DATA_DIR=\"$HOME/.tower-dev\" DATABASE_URL=\"file:$HOME/.tower-dev/database/tower.db\" tsx scripts/run-migrations.ts",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:e2e": "NO_PROXY=localhost,127.0.0.1 no_proxy=localhost,127.0.0.1 playwright test",
+    "test:e2e": "pnpm build && TOWER_E2E_RUN_ID=$$ NO_PROXY=localhost,127.0.0.1 no_proxy=localhost,127.0.0.1 playwright test",
+    "test:e2e:release": "pnpm build && TOWER_E2E_RUN_ID=$$ NO_PROXY=localhost,127.0.0.1 no_proxy=localhost,127.0.0.1 playwright test tests/e2e/release-smoke.spec.ts --workers=1",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
     "ai:presets:update": "tsx scripts/update-ai-presets.ts",
     "ai:packages:build": "pnpm --filter './packages/**' -r build",
@@ -99,7 +100,19 @@
       "esbuild",
       "node-pty",
       "prisma"
-    ]
+    ],
+    "overrides": {
+      "@hono/node-server": "2.0.12",
+      "body-parser": "2.3.0",
+      "defu": "6.1.5",
+      "effect": "3.20.0",
+      "esbuild": "0.28.1",
+      "fast-uri": "3.1.4",
+      "hono": "4.12.27",
+      "ip-address": "10.1.1",
+      "path-to-regexp": "8.4.0",
+      "qs": "6.15.2"
+    }
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.20",
@@ -107,7 +120,7 @@
     "@ai-sdk/openai": "4.0.20",
     "@ai-sdk/openai-compatible": "3.0.14",
     "@ai-sdk/provider": "4.0.3",
-    "@modelcontextprotocol/sdk": "^1.28.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@prisma/client": "^6.19.2",
     "@vscode/ripgrep": "1.18.0",
     "ai": "7.0.18",
@@ -116,10 +129,10 @@
     "prisma": "^6.19.2",
     "semver": "7.7.4",
     "server-only": "0.0.1",
-    "tar": "7.5.13",
+    "tar": "7.5.22",
     "tinykeys": "^4.0.0",
     "tsx": "^4.21.0",
-    "ws": "^8.20.0"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@tower-org/ai-provider-claude": "workspace:*",
@@ -157,7 +170,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "conventional-changelog-cli": "^5.0.0",
-    "esbuild": "^0.27.4",
+    "esbuild": "^0.28.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "fuse.js": "^7.3.0",

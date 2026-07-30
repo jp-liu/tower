@@ -103,8 +103,8 @@ export async function setOnboardingExtensions(
 export async function dispatchTaskCompletionEvent(
   payload: TaskCompletionPayload
 ): Promise<void> {
+  const log = logger.create("task-completion");
   try {
-    const log = logger.create("task-completion");
     log.info("Task completion event dispatched", {
       taskId: payload.taskId,
       taskTitle: payload.taskTitle,
@@ -122,5 +122,25 @@ export async function dispatchTaskCompletionEvent(
     // guard also keeps a parked task from ever reaching here.
   } catch {
     // Best-effort: notifications are non-critical
+  }
+
+  // Provider-neutral parent coordination is durable and separate from the
+  // best-effort browser notification above. COMPLETED is a fallback for CLIs
+  // without Stop hooks; the execution review guard suppresses it when a Stop
+  // event already exists. FAILED always remains a distinct high-priority event.
+  try {
+    const { enqueueChildExecutionResult } = await import("@/lib/workbench/coordinator");
+    await enqueueChildExecutionResult({
+      taskId: payload.taskId,
+      taskTitle: payload.taskTitle,
+      executionId: payload.executionId,
+      status: payload.status,
+    });
+  } catch (error) {
+    log.error("Durable Workbench completion enqueue failed; startup recovery will retry", error, {
+      taskId: payload.taskId,
+      executionId: payload.executionId,
+      status: payload.status,
+    });
   }
 }

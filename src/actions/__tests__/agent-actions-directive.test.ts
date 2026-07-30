@@ -768,6 +768,40 @@ describe("startPtyExecution directive selection", () => {
     );
   });
 
+  it("ignores a non-resumable legacy compatibility row and starts from the configured slot", async () => {
+    mockDb.task.findUnique.mockResolvedValue(taskWithLabels([]));
+    mockDb.taskExecution.findFirst.mockResolvedValue(null);
+    vi.mocked(resolveTerminalTargetPlan).mockResolvedValue({
+      slot: "terminal",
+      targets: [terminalTarget("codex")],
+      migrationStatus: "complete",
+    } as never);
+
+    const result = await continueLatestPtyExecution("t1");
+
+    expect(mockDb.taskExecution.findFirst).toHaveBeenCalledWith({
+      where: {
+        taskId: "t1",
+        OR: [
+          { sessionId: { not: null } },
+          {
+            connectionId: { not: null },
+            targetId: { not: null },
+            NOT: { targetId: { startsWith: "legacy:" } },
+          },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(resolveTerminalTargetPlan).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      connectionId: "connection-codex",
+      modelId: "codex-model",
+      targetId: "target-codex",
+    });
+    expect(resolveLegacyExecutionCliConnection).not.toHaveBeenCalled();
+  });
+
   it("uses the latest snapshot and model for isolated continue", async () => {
     const buildSessionProcess = vi.fn(terminalTarget("gemini").cli.adapter.buildSessionProcess);
     const fixedTarget = terminalTarget("gemini");

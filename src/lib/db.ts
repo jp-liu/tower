@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { chmodSync } from "node:fs";
 import { getDatabaseDir, getTowerDbFilePath } from "./tower-dir";
 
 const globalForPrisma = globalThis as unknown as {
@@ -30,6 +31,11 @@ export async function initDb(): Promise<PrismaClient> {
   // default 0 timeout — see src/mcp/db.ts for the pending-MCP failure mode.
   await db.$queryRaw`PRAGMA busy_timeout=5000`;
   await db.$queryRaw`PRAGMA journal_mode=WAL`;
+  try {
+    chmodSync(getTowerDbFilePath(), 0o600);
+  } catch {
+    // Best effort on filesystems without POSIX permissions.
+  }
   initialized = true;
   return db;
 }

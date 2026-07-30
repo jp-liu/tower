@@ -1,0 +1,112 @@
+<mxfile>
+  <diagram id="seqlayout" name="Workbench 可靠网关全链路时序">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="feishu" value="用户 / 飞书" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;size=40;participant=umlActor;verticalAlign=bottom;spacingBottom=-14;labelBackgroundColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="100" height="1440" as="geometry"/>
+        </mxCell>
+        <mxCell id="openclaw" value="OpenClaw" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;size=40;" vertex="1" parent="1">
+          <mxGeometry x="260" y="40" width="100" height="1440" as="geometry"/>
+        </mxCell>
+        <mxCell id="gateway" value="Tower Gateway" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;size=40;" vertex="1" parent="1">
+          <mxGeometry x="480" y="40" width="100" height="1440" as="geometry"/>
+        </mxCell>
+        <mxCell id="db" value="Tower SQLite" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;size=40;" vertex="1" parent="1">
+          <mxGeometry x="700" y="40" width="100" height="1440" as="geometry"/>
+        </mxCell>
+        <mxCell id="coordinator" value="Durable Coordinator" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;size=40;" vertex="1" parent="1">
+          <mxGeometry x="920" y="40" width="100" height="1440" as="geometry"/>
+        </mxCell>
+        <mxCell id="workbench" value="项目 Workbench" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;size=40;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="40" width="100" height="1440" as="geometry"/>
+        </mxCell>
+        <mxCell id="child" value="子任务终端" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;size=40;" vertex="1" parent="1">
+          <mxGeometry x="1360" y="40" width="100" height="1440" as="geometry"/>
+        </mxCell>
+        <mxCell id="m0" value="@Tower 项目工作请求" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.0625;entryX=0.5;entryY=0.0625;" edge="1" parent="1" source="feishu" target="openclaw">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m1" value="route_gateway_message(source + parentMessageId)" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.0972;entryX=0.5;entryY=0.0972;" edge="1" parent="1" source="openclaw" target="gateway">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m2" value="事务：GatewayInbound + WorkbenchEvent(PENDING)" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.1319;entryX=0.5;entryY=0.1319;" edge="1" parent="1" source="gateway" target="db">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m3" value="写入 QUEUED_ACK outbox" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.1667;entryX=0.5;entryY=0.1667;" edge="1" parent="1" source="gateway" target="db">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m4" value="原线程：已排队卡片" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;curved=0;rounded=0;exitX=0.5;exitY=0.2014;entryX=0.5;entryY=0.2014;" edge="1" parent="1" source="gateway" target="feishu">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m5" value="每 2 秒扫描并原子领取事件" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.2361;entryX=0.5;entryY=0.2361;" edge="1" parent="1" source="coordinator" target="db">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m6" value="安全边界投递 WorkbenchBatch(DISPATCHED)" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.2708;entryX=0.5;entryY=0.2708;" edge="1" parent="1" source="coordinator" target="workbench">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m7" value="ack_workbench_batch(batchId, leaseToken)" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.3056;entryX=0.5;entryY=0.3056;" edge="1" parent="1" source="workbench" target="coordinator">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m8" value="Batch=ACKED + 续租；Event 仍 PROCESSING" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.3403;entryX=0.5;entryY=0.3403;" edge="1" parent="1" source="coordinator" target="db">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m9" value="约束：未解决时每 2 分钟 heartbeat；任一租约过期则同 batch ID 重放" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.375;entryX=0.5;entryY=0.3958;" edge="1" parent="1" source="db" target="db">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="810" y="580"/><mxPoint x="810" y="610"/></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m10" value="create_task + autoStart" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.4236;entryX=0.5;entryY=0.4236;" edge="1" parent="1" source="workbench" target="child">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m11" value="持久化真实 taskId / GatewayTaskLink" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.4583;entryX=0.5;entryY=0.4583;" edge="1" parent="1" source="child" target="db">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m12" value="原线程：任务已创建卡片" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;curved=0;rounded=0;exitX=0.5;exitY=0.4931;entryX=0.5;entryY=0.4931;" edge="1" parent="1" source="gateway" target="feishu">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m13" value="执行完成：IN_REVIEW + CHILD_REVIEW_REQUIRED" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.5278;entryX=0.5;entryY=0.5278;" edge="1" parent="1" source="child" target="db">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m14" value="投递审查批次" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.5625;entryX=0.5;entryY=0.5625;" edge="1" parent="1" source="coordinator" target="workbench">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m15" value="ACK 审查批次" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.5972;entryX=0.5;entryY=0.5972;" edge="1" parent="1" source="workbench" target="coordinator">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m16" value="complete_gateway_work(审查结论)" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.6319;entryX=0.5;entryY=0.6319;" edge="1" parent="1" source="workbench" target="gateway">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m17" value="同一事务：Task=DONE + FINAL_RESULT=PENDING" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.6667;entryX=0.5;entryY=0.6667;" edge="1" parent="1" source="gateway" target="db">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m18" value="保证：数据库内无 DONE/最终回执崩溃窗口" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.7014;entryX=0.5;entryY=0.7222;" edge="1" parent="1" source="db" target="db">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="810" y="1050"/><mxPoint x="810" y="1080"/></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m19" value="原线程：任务已完成卡片" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;curved=0;rounded=0;exitX=0.5;exitY=0.75;entryX=0.5;entryY=0.75;" edge="1" parent="1" source="gateway" target="feishu">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m20" value="platform message id / 回执" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;curved=0;rounded=0;strokeColor=#999999;fontColor=#999999;exitX=0.5;exitY=0.7847;entryX=0.5;entryY=0.7847;" edge="1" parent="1" source="feishu" target="gateway">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m21" value="GatewayDelivery=DELIVERED" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.8194;entryX=0.5;entryY=0.8194;" edge="1" parent="1" source="gateway" target="db">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m22" value="恢复：发送失败只重试 outbox，不重新执行任务" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.8542;entryX=0.5;entryY=0.875;" edge="1" parent="1" source="gateway" target="gateway">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="590" y="1270"/><mxPoint x="590" y="1300"/></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m23" value="resolve_workbench_batch(batchId, leaseToken)" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.9028;entryX=0.5;entryY=0.9028;" edge="1" parent="1" source="workbench" target="coordinator">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m24" value="事务：Batch=RESOLVED + Event=CONSUMED；Runtime=IDLE" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;exitX=0.5;exitY=0.9375;entryX=0.5;entryY=0.9375;" edge="1" parent="1" source="coordinator" target="db">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
