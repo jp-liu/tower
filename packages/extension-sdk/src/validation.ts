@@ -4,10 +4,14 @@ import {
   type ExtensionManifestV2,
   type ExtensionPermission,
 } from "./manifest.js";
+import semver from "semver";
 
 const ID_PATTERN = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
-const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
-const RELATIVE_PATH_PATTERN = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))(?!.*\\)[^\0]+$/;
+const API_VERSION_PATTERN = /^(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))?$/;
+const CAPABILITY_PATTERN = /^[a-z0-9]+(?:[._:-][a-z0-9]+)*$/;
+const MOUNT_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MAX_LIST_ITEMS = 100;
+const MAX_STRING_LENGTH = 4_096;
 
 const COMMON_KEYS = new Set([
   "manifestVersion",
@@ -47,7 +51,10 @@ function hasOnlyKeys(value: Record<string, unknown>, keys: ReadonlySet<string>):
 }
 
 function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
+  return typeof value === "string"
+    && value === value.trim()
+    && value.length > 0
+    && value.length <= MAX_STRING_LENGTH;
 }
 
 function isHttpsUrl(value: unknown): value is string {
@@ -60,7 +67,27 @@ function isHttpsUrl(value: unknown): value is string {
 }
 
 function isRelativePackagePath(value: unknown): value is string {
-  return isNonEmptyString(value) && RELATIVE_PATH_PATTERN.test(value);
+  if (!isNonEmptyString(value)
+    || value.startsWith("/")
+    || value.includes("\\")
+    || value.includes(":")
+    || /[\u0000-\u001f\u007f]/.test(value)) return false;
+  const segments = value.split("/");
+  return segments.length > 0
+    && segments.every((segment) => segment.length > 0 && segment !== "." && segment !== "..")
+    && segments.join("/") === value;
+}
+
+function isUniqueStringList(
+  value: unknown,
+  predicate: (entry: string) => boolean,
+): value is string[] {
+  if (!Array.isArray(value)
+    || value.length > MAX_LIST_ITEMS
+    || !value.every((entry): entry is string => isNonEmptyString(entry) && predicate(entry))) {
+    return false;
+  }
+  return new Set(value).size === value.length;
 }
 
 function validCommonFields(value: Record<string, unknown>): boolean {
@@ -70,22 +97,23 @@ function validCommonFields(value: Record<string, unknown>): boolean {
     || value.id.length > 128
     || !ID_PATTERN.test(value.id)
     || typeof value.version !== "string"
-    || !VERSION_PATTERN.test(value.version)
-    || !isNonEmptyString(value.apiVersion)
+    || semver.valid(value.version) !== value.version
+    || typeof value.apiVersion !== "string"
+    || !API_VERSION_PATTERN.test(value.apiVersion)
     || !isRecord(value.engines)
     || !hasOnlyKeys(value.engines, new Set(["tower", "extensionSdk"]))
     || !isNonEmptyString(value.engines.tower)
+    || semver.validRange(value.engines.tower) === null
     || !isNonEmptyString(value.engines.extensionSdk)
+    || semver.validRange(value.engines.extensionSdk) === null
     || !isRecord(value.display)
     || !hasOnlyKeys(value.display, new Set(["name", "description", "homepage", "icon"]))
     || !isNonEmptyString(value.display.name)
     || !isNonEmptyString(value.display.description)
     || (value.display.homepage !== undefined && !isHttpsUrl(value.display.homepage))
     || (value.display.icon !== undefined && !isRelativePackagePath(value.display.icon))
-    || !Array.isArray(value.capabilities)
-    || !value.capabilities.every(isNonEmptyString)
-    || !Array.isArray(value.permissions)
-    || !value.permissions.every(isNonEmptyString)) return false;
+    || !isUniqueStringList(value.capabilities, (entry) => CAPABILITY_PATTERN.test(entry))
+    || !isUniqueStringList(value.permissions, () => true)) return false;
 
   if (value.configuration !== undefined) {
     if (!isRecord(value.configuration)
@@ -112,7 +140,8 @@ export function isExtensionManifestV2(value: unknown): value is ExtensionManifes
       && isRecord(value.entrypoints.activation)
       && hasOnlyKeys(value.entrypoints.activation, new Set(["type", "mount"]))
       && value.entrypoints.activation.type === "static-assets"
-      && isNonEmptyString(value.entrypoints.activation.mount);
+      && typeof value.entrypoints.activation.mount === "string"
+      && MOUNT_PATTERN.test(value.entrypoints.activation.mount);
   }
   if (value.kind === "cli-provider") {
     return hasOnlyKeys(value.entrypoints, new Set(["provider", "configSchema"]))
@@ -131,3 +160,110 @@ export function parseExtensionManifestV2(value: unknown): ExtensionManifestV2 {
   return structuredClone(value);
 }
 
+class JsonCursor {
+  private index = 0;
+
+  constructor(private readonly source: string) {}
+
+  parse(): unknown {
+    const value = this.parseValue();
+    this.skipWhitespace();
+    if (this.index !== this.source.length) throw new Error("Invalid JSON");
+    return value;
+  }
+
+  private parseValue(): unknown {
+    this.skipWhitespace();
+    const char = this.source[this.index];
+    if (char === "{") return this.parseObject();
+    if (char === "[") return this.parseArray();
+    if (char === "\"") return this.parseString();
+    const match = this.source.slice(this.index).match(/^(?:-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)/);
+    if (!match) throw new Error("Invalid JSON");
+    this.index += match[0].length;
+    return JSON.parse(match[0]) as unknown;
+  }
+
+  private parseObject(): Record<string, unknown> {
+    this.index += 1;
+    const result = Object.create(null) as Record<string, unknown>;
+    const keys = new Set<string>();
+    this.skipWhitespace();
+    if (this.source[this.index] === "}") {
+      this.index += 1;
+      return result;
+    }
+    while (true) {
+      this.skipWhitespace();
+      if (this.source[this.index] !== "\"") throw new Error("Invalid JSON object key");
+      const key = this.parseString();
+      if (keys.has(key)) throw new Error(`Duplicate JSON key: ${key}`);
+      keys.add(key);
+      this.skipWhitespace();
+      if (this.source[this.index] !== ":") throw new Error("Invalid JSON object");
+      this.index += 1;
+      result[key] = this.parseValue();
+      this.skipWhitespace();
+      const delimiter = this.source[this.index];
+      if (delimiter === "}") {
+        this.index += 1;
+        return result;
+      }
+      if (delimiter !== ",") throw new Error("Invalid JSON object");
+      this.index += 1;
+    }
+  }
+
+  private parseArray(): unknown[] {
+    this.index += 1;
+    const result: unknown[] = [];
+    this.skipWhitespace();
+    if (this.source[this.index] === "]") {
+      this.index += 1;
+      return result;
+    }
+    while (true) {
+      result.push(this.parseValue());
+      this.skipWhitespace();
+      const delimiter = this.source[this.index];
+      if (delimiter === "]") {
+        this.index += 1;
+        return result;
+      }
+      if (delimiter !== ",") throw new Error("Invalid JSON array");
+      this.index += 1;
+    }
+  }
+
+  private parseString(): string {
+    const start = this.index;
+    this.index += 1;
+    while (this.index < this.source.length) {
+      const char = this.source[this.index];
+      if (char === "\"") {
+        this.index += 1;
+        return JSON.parse(this.source.slice(start, this.index)) as string;
+      }
+      if (char === "\\") this.index += 1;
+      this.index += 1;
+    }
+    throw new Error("Unterminated JSON string");
+  }
+
+  private skipWhitespace(): void {
+    while (this.index < this.source.length && /\s/.test(this.source[this.index]!)) {
+      this.index += 1;
+    }
+  }
+}
+
+export function parseExtensionManifestJson(source: string): ExtensionManifestV2 {
+  if (typeof source !== "string" || new TextEncoder().encode(source).byteLength > 1024 * 1024) {
+    throw new Error("Invalid Tower extension manifest v2");
+  }
+  try {
+    return parseExtensionManifestV2(new JsonCursor(source).parse());
+  } catch {
+    throw new Error("Invalid Tower extension manifest v2");
+  }
+}

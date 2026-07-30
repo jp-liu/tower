@@ -1578,6 +1578,8 @@ export const zh = {
   "settings.extensions.towerAgentOpenClaw.description": "安装 Tower 助手 profile、MCP 与 skills 到 OpenClaw",
   "settings.extensions.towerAgentHermes.name": "Tower Agent (Hermes)",
   "settings.extensions.towerAgentHermes.description": "安装 Tower 助手 profile、MCP 与 skills 到 Hermes",
+  "settings.extensions.gatewayAgent.name": "Tower 网关 Agent",
+  "settings.extensions.gatewayAgent.description": "将 Tower MCP、技能和 profile 资源部署到受支持的网关",
   "settings.extensions.towerAgentHint":
     "默认只直接操作 Tower；飞书文档空间、邮件、知识库等外部系统能力建议通过网关里的独立 operator 委托扩展，也可由高级用户自行扩展本地 profile。",
   "settings.extensions.gateway.title": "Tower 网关 Agent 设置",

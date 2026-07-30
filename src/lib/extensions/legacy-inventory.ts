@@ -53,7 +53,9 @@ function installedState(status: ExtensionStatus) {
 function display(meta: ExtensionMetadata, iconKey: string) {
   return {
     name: meta.name,
+    ...(meta.nameKey ? { nameKey: meta.nameKey } : {}),
     description: meta.description,
+    ...(meta.descriptionKey ? { descriptionKey: meta.descriptionKey } : {}),
     homepage: meta.homepageUrl,
     iconKey,
   };
@@ -82,6 +84,7 @@ export function projectLegacyExtension(
       compatibility: "compatible",
       health,
       capabilities: ["code-search"],
+      permissions: [],
       lifecycle: SYSTEM_LIFECYCLE,
       diagnostics,
     };
@@ -99,6 +102,7 @@ export function projectLegacyExtension(
       compatibility: "compatible",
       health,
       capabilities: ["code-editor"],
+      permissions: [],
       lifecycle: {
         ...COMPONENT_LIFECYCLE,
         install: !meta.manualInstall,
@@ -107,6 +111,10 @@ export function projectLegacyExtension(
     };
   }
 
+  if (meta.id !== "tower-agent-openclaw" && meta.id !== "tower-agent-hermes") {
+    const unsupportedId: never = meta.id;
+    throw new Error(`Unsupported legacy extension: ${String(unsupportedId)}`);
+  }
   const targetId = meta.id === "tower-agent-openclaw" ? "openclaw" : "hermes";
   return {
     id: "tower.gateway-agent",
@@ -114,7 +122,9 @@ export function projectLegacyExtension(
     kind: "gateway-adapter",
     display: {
       name: "Tower Gateway Agent",
+      nameKey: "settings.extensions.gatewayAgent.name",
       description: "Deploy Tower MCP, skills, and profile resources to a supported gateway",
+      descriptionKey: "settings.extensions.gatewayAgent.description",
       iconKey: "radio-tower",
     },
     source: { type: "builtin", publisherId: "tower", trust: "tower" },
@@ -123,6 +133,7 @@ export function projectLegacyExtension(
     compatibility: "compatible",
     health,
     capabilities: ["tower-gateway"],
+    permissions: [],
     lifecycle: GATEWAY_LIFECYCLE,
     deployments: [{
       targetId,
@@ -159,7 +170,7 @@ export function mergeLegacyInventory(
       ...current,
       legacyIds: [...new Set([...(current.legacyIds ?? []), ...(item.legacyIds ?? [])])],
       installed: installed ? { version: null, enabled: true } : null,
-      health: hasError ? "error" : isReady ? "ready" : "unknown",
+      health: hasError && isReady ? "degraded" : hasError ? "error" : isReady ? "ready" : "unknown",
       deployments,
       diagnostics: [...current.diagnostics, ...item.diagnostics],
     });
@@ -167,4 +178,3 @@ export function mergeLegacyInventory(
 
   return [...byId.values()].sort((left, right) => left.id.localeCompare(right.id));
 }
-

@@ -19,8 +19,12 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --config vitest.config.ts"
   },
+  "dependencies": {
+    "semver": "7.7.4"
+  },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/semver": "^7",
     "typescript": "^5",
     "vitest": "^4.1.1"
   }

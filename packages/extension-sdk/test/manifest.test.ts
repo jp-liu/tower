@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isExtensionManifestV2, parseExtensionManifestV2 } from "../src/index.js";
+import {
+  isExtensionManifestV2,
+  parseExtensionManifestJson,
+  parseExtensionManifestV2,
+} from "../src/index.js";
 
 const component = {
   manifestVersion: 2,
@@ -57,5 +61,37 @@ describe("extension manifest v2", () => {
       display: { ...component.display, homepage: "http://example.com" },
     })).toBe(false);
   });
-});
 
+  it.each([
+    ["invalid SemVer", { ...component, version: "1.0.0-alpha..1" }],
+    ["invalid Tower range", { ...component, engines: { ...component.engines, tower: "not-a-range" } }],
+    ["empty SDK range", { ...component, engines: { ...component.engines, extensionSdk: "" } }],
+    ["dot path", { ...component, entrypoints: { ...component.entrypoints, assets: "." } }],
+    ["control character path", { ...component, entrypoints: { ...component.entrypoints, assets: "dist/\u0000asset" } }],
+    ["URL path", { ...component, entrypoints: { ...component.entrypoints, assets: "https://evil.example/a" } }],
+    ["unsafe mount", {
+      ...component,
+      entrypoints: {
+        ...component.entrypoints,
+        activation: { ...component.entrypoints.activation, mount: "../../public" },
+      },
+    }],
+    ["duplicate capability", { ...component, capabilities: ["code-editor", "code-editor"] }],
+  ])("rejects %s", (_label, value) => {
+    expect(isExtensionManifestV2(value)).toBe(false);
+  });
+
+  it("rejects duplicate keys in raw JSON, including escaped equivalents", () => {
+    const source = JSON.stringify(component).replace(
+      '"id":"tower.monaco"',
+      '"id":"tower.monaco","\\u0069d":"other.id"',
+    );
+    expect(() => parseExtensionManifestJson(source)).toThrow(
+      "Invalid Tower extension manifest v2",
+    );
+  });
+
+  it("parses a valid raw manifest", () => {
+    expect(parseExtensionManifestJson(JSON.stringify(component))).toEqual(component);
+  });
+});

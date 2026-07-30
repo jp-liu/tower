@@ -92,6 +92,9 @@ The on-disk manifest filename MUST be `tower-extension.json`.
 The manifest MUST be UTF-8 JSON, MUST reject duplicate keys, and MUST reject
 unknown fields. URLs MUST be HTTPS except documented localhost development
 values. Paths MUST be package-relative normalized POSIX paths.
+Hosts reading an on-disk manifest MUST use the raw-text parser
+`parseExtensionManifestJson`; parsing with `JSON.parse` before validation loses
+the information needed to reject duplicate keys.
 
 `display.icon` MAY reference a package-relative SVG or PNG. SVG content MUST be
 sanitized by the host and MUST NOT contain scripts, external references, event
@@ -315,7 +318,7 @@ interface ExtensionInventoryItem {
   kind: ExtensionKind | "system-dependency";
   display: ExtensionDisplay;
   source: {
-    type: "builtin" | "official-catalog" | "catalog" | "local-development" | "system";
+    type: "builtin" | "official-catalog" | "catalog" | "package-registry" | "local-development" | "system";
     catalogId?: string;
     publisherId?: string;
     trust: "tower" | "verified" | "unverified";
@@ -331,6 +334,7 @@ interface ExtensionInventoryItem {
   compatibility: "compatible" | "incompatible" | "unknown";
   health: "ready" | "degraded" | "error" | "unknown";
   capabilities: string[];
+  permissions: string[];
   lifecycle: {
     install: boolean;
     configure: boolean;
@@ -348,6 +352,11 @@ interface ExtensionInventoryItem {
 Inventory APIs MUST return safe display DTOs only. They MUST NOT expose secret
 values, internal absolute paths unless required for explicit developer
 diagnostics, or executable module objects.
+
+Builtin inventory entries MAY carry host translation keys in addition to their
+fallback display strings. Catalog v1 display data has no authenticated
+publisher identity or localization contract and MUST remain `unverified`;
+artifact integrity alone does not upgrade publisher trust.
 
 ## 10. Operation plans
 
@@ -543,4 +552,3 @@ The official Catalog publication pipeline MUST reject non-conformant packages.
 - extension-to-extension messaging;
 - remote extension execution;
 - multiple Catalog priority and enterprise mirroring policy.
-

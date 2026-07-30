@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { listExtensionMetadata } from "../metadata";
-import { buildLegacyExtensionInventory } from "../inventory-service";
+import {
+  buildExtensionInventory,
+  buildLegacyExtensionInventory,
+} from "../inventory-service";
 
 describe("extension inventory service", () => {
   it("checks legacy definitions concurrently and returns stable IDs", async () => {
@@ -43,5 +46,34 @@ describe("extension inventory service", () => {
       }],
     });
   });
-});
 
+  it("retains installed providers when the Catalog is unavailable", async () => {
+    const inventory = await buildExtensionInventory({
+      legacy: async () => [],
+      catalogProviders: async () => {
+        throw new Error("catalog unavailable");
+      },
+      installedProviders: async () => [{
+        id: "local.provider",
+        version: "1.0.0",
+        source: "local",
+        enabled: true,
+        displayName: "Local Provider",
+        permissions: [],
+        permissionConfirmed: true,
+        installedAt: "2026-07-30T00:00:00.000Z",
+        updatedAt: "2026-07-30T00:00:00.000Z",
+        health: "ready",
+        dependency: null,
+        capabilities: null,
+      }],
+    });
+
+    expect(inventory).toMatchObject([{
+      id: "local.provider",
+      kind: "cli-provider",
+      source: { type: "local-development" },
+      installed: { enabled: true },
+    }]);
+  });
+});

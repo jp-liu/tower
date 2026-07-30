@@ -70,15 +70,15 @@ behavior.
 
 ### Tasks
 
-- [ ] Introduce `ExtensionInventoryItem`, source, state, lifecycle, diagnostic,
+- [x] Introduce `ExtensionInventoryItem`, source, state, lifecycle, diagnostic,
   and deployment DTOs.
-- [ ] Implement discovery adapters for:
+- [x] Implement discovery adapters for:
   - legacy `src/lib/extensions` definitions;
   - Catalog v1 CLI Providers;
   - installed CLI plugin registry;
   - ripgrep system dependency;
   - Tower Agent gateway deployment checks.
-- [ ] Define ID aliases without changing stored legacy data.
+- [x] Define ID aliases without changing stored legacy data.
 - [ ] Implement conflict and duplicate-source diagnostics.
 - [ ] Add cache invalidation events for install, configure, enable, disable,
   uninstall, and external dependency recheck.
@@ -148,7 +148,7 @@ Produce the contracts that an extension outside the Tower repository can use.
 
 ### Tasks
 
-- [ ] Implement strict manifest v2 schemas for each accepted kind.
+- [x] Implement strict runtime manifest v2 validation for each accepted kind.
 - [ ] Implement Catalog v2 schema and parser with bounded reads.
 - [ ] Define operation plan, effect, confirmation, and registry v3 schemas.
 - [ ] Define canonical JSON and plan digest behavior.
@@ -164,6 +164,13 @@ Produce the contracts that an extension outside the Tower repository can use.
 - [ ] Publish an internal prerelease package from CI.
 - [ ] Add clean-room CI that installs a packed SDK tarball into an empty
   temporary project and builds fixture extensions.
+
+Completed foundation hardening:
+
+- [x] Reject invalid SemVer, invalid compatibility-range syntax, duplicate
+  permissions/capabilities, non-normalized package paths, unsafe mount IDs, and
+  duplicate raw JSON keys.
+- [x] Run Extension SDK build and contract tests in the main CI test job.
 
 ### Exit criteria
 

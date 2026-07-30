@@ -1,4 +1,5 @@
 import type { ExtensionKind as PackageExtensionKind } from "@tower-org/extension-sdk";
+import type { TranslationKey } from "@/lib/i18n/types";
 
 export type ExtensionKind = PackageExtensionKind | "system-dependency";
 
@@ -6,6 +7,7 @@ export type ExtensionSourceType =
   | "builtin"
   | "official-catalog"
   | "catalog"
+  | "package-registry"
   | "local-development"
   | "system";
 
@@ -15,7 +17,9 @@ export type ExtensionHealth = "ready" | "degraded" | "error" | "unknown";
 
 export interface ExtensionDisplay {
   name: string;
+  nameKey?: TranslationKey;
   description: string;
+  descriptionKey?: TranslationKey;
   homepage?: string;
   iconKey?: string;
 }
@@ -58,6 +62,7 @@ export interface ExtensionInventoryItem {
   installed: null | {
     version: string | null;
     enabled: boolean;
+    installedAt?: string;
   };
   available: null | {
     version: string;
@@ -65,6 +70,7 @@ export interface ExtensionInventoryItem {
   compatibility: ExtensionCompatibility;
   health: ExtensionHealth;
   capabilities: string[];
+  permissions: string[];
   lifecycle: ExtensionLifecycle;
   deployments?: ExtensionDeploymentState[];
   diagnostics: ExtensionDiagnostic[];
