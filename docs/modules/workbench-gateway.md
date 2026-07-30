@@ -65,8 +65,11 @@ Workbench 网关把飞书、微信及 OpenClaw/Hermes 支持的平台接入 Towe
 - PTY 收到文本和 ACK 都不代表事件已最终消费；只有 `RESOLVED` 才释放处理责任。
 - `CLAIMED`、`DISPATCHED`、`ACKED` 都有租约；租约过期会以同一 batch ID 安全重放。
 - ACK、heartbeat 和 resolve 必须携带当前 generation 的 lease token，旧终端不能确认新批次。
+- 未解决的批次每两分钟续租一次，不能等五分钟处理租约到期后才 heartbeat。
 - 服务重启后从 SQLite inbox/outbox 恢复，不依赖终端画面或内存。
 - 无人值守提问先持久化 `HarnessOutbound` 和 ask intent，再由 worker 发送；失败可恢复。
+- 隐式内容去重只覆盖当前 ask 生命周期；上一轮已回答后，相同问题会建立新的发送周期。显式 dedup key 始终保持严格幂等。
+- `GatewayTaskLink` 同时引用 inbound 与 task 并级联清理，恢复逻辑不会把孤儿 link 当作任务存在的证据。
 - 一个 Tower 数据库同一时刻只允许一个 runtime leader，避免两个扫描器同时拥有 PTY。
 - `REVIEW_ONLY` 项目不能创建可执行任务或启动终端。
 - OpenClaw 入口只拥有路由、只读查询和诊断工具。

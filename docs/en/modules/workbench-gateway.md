@@ -74,10 +74,17 @@ Colleagues may only query projects in the workspace bound to a trusted channel:
   same batch ID safely.
 - ACK, heartbeat, and resolve carry the current generation's lease token, so a
   stale terminal cannot confirm a newer delivery.
+- An unresolved batch renews its lease every two minutes instead of waiting for
+  the five-minute processing lease to expire.
 - After a restart, Tower recovers from the SQLite inbox/outbox rather than a
   terminal screen or in-memory state.
 - Unattended human messages persist a `HarnessOutbound` and ask intent before a
   worker sends them.
+- Implicit content deduplication covers only the current ask lifecycle. The same
+  question starts a new send cycle after the previous ask is answered, while an
+  explicit dedup key remains strictly idempotent.
+- `GatewayTaskLink` references both the inbound and task with cascading cleanup;
+  recovery never treats an orphan link as proof that a task exists.
 - One Tower database admits one runtime leader at a time, preventing competing
   scanners from owning the same PTYs.
 - A `REVIEW_ONLY` project cannot create an executable task or start a terminal.

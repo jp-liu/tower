@@ -118,12 +118,15 @@ describe("Workbench durable coordinator", () => {
     expect(stable).not.toBe(childStopDedupKey({
       taskId: "child-a", executionId: "exec-2", sessionId: "s1", eventId: "turn-1", kind: "CHILD_REVIEW_REQUIRED",
     }));
-    expect(buildWorkbenchBatchPrompt([first.event], "wb-single")).toContain(
+    const prompt = buildWorkbenchBatchPrompt([first.event], "wb-single");
+    expect(prompt).toContain(
       "Please review as the hub:",
     );
+    expect(prompt).toContain("every two minutes");
+    expect(prompt).toContain("do not wait for the five-minute lease to expire");
   });
 
-  it("dispatches sibling events as one batch and consumes them only after agent acknowledgement", async () => {
+  it("dispatches sibling events as one batch and consumes them only after resolution", async () => {
     const {
       acknowledgeWorkbenchBatch,
       drainWorkbenchEvents,

@@ -54,3 +54,14 @@ SQLite，但即使误启动两个服务，也只有 leader 可以运行 Workbenc
 - caller dedup key 保证幂等；
 - 第二个 live runtime 不能取得同一数据库。
 
+## 二次评审加固（2026-07-30）
+
+- OWNER OpenClaw sender policy 补齐 `recover_gateway_request` 与
+  `provision_remote_project`，NON_OWNER 仍只有项目只读查询能力。
+- Harness outbox 将隐式内容键限定在单次 ask 生命周期：`PENDING_DELIVERY/OPEN`
+  阶段重试仍去重；上一轮进入 `ANSWERED/CANCELLED/IGNORED/EXPIRED` 后，相同正文会创建
+  新的发送周期。调用方显式提供的 dedup key 仍永久幂等。
+- `rowResult.parked` 读取真实 ask 状态，不会把已经回答的历史 ask 报成仍在 park。
+- `GatewayTaskLink` 对 inbound 和 task 增加级联外键；迁移会丢弃旧孤儿记录，恢复扫描也会
+  防御性验证 task 真实存在。
+- Workbench 协议明确要求未解决批次每两分钟 heartbeat，早于五分钟处理租约到期。

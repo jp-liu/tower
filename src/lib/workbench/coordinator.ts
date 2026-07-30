@@ -432,7 +432,7 @@ export function buildWorkbenchBatchPrompt(
     `Delivery generation: ${lease.generation}`,
     `Delivery protocol: call ack_workbench_batch({ batchId: "${batchKey}", leaseToken: "${lease.leaseToken}" }) immediately after reading this request.`,
     `After every item in this batch has been handled or durably delegated, call resolve_workbench_batch({ batchId: "${batchKey}", leaseToken: "${lease.leaseToken}" }).`,
-    "For work taking longer than five minutes, renew responsibility with heartbeat_workbench_batch using the same batch id and lease token.",
+    "While responsibility remains unresolved, renew it with heartbeat_workbench_batch every two minutes using the same batch id and lease token; do not wait for the five-minute lease to expire.",
     "A replay with the same batch id is not new work; inspect existing task links/state and continue idempotently.",
   ].join("\n");
 

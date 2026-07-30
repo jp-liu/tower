@@ -41,9 +41,10 @@ flowchart LR
   Resume --> Boundary
   Boundary --> Drain["Claim + batch + PTY submit"]
   Drain --> Dispatched["WorkbenchBatch\nDISPATCHED"]
-  Dispatched --> Ack["Agent explicit ACK"]
-  Ack --> Consumed["WorkbenchEvent CONSUMED\nWorkbenchBatch ACKED"]
-  Consumed --> Resolved["WorkbenchBatch\nRESOLVED"]
+  Dispatched --> Ack["Agent explicit ACK\nprocessing lease accepted"]
+  Ack --> Heartbeat["Heartbeat every 2 minutes\nwhile unresolved"]
+  Heartbeat --> Resolved["Resolve transaction\nWorkbenchBatch RESOLVED"]
+  Resolved --> Consumed["WorkbenchEvent CONSUMED"]
 
   Gateway["GatewayInbound\nQUEUED / PROCESSING"] --> Watchdog["Gateway watchdog\n10 second scan"]
   Watchdog --> Link["Recover task link / confirmation"]
@@ -80,11 +81,12 @@ An event moves to `PROCESSING` and increments `attempts` only inside the
 transactional claim performed by the drain. A scan that merely observes a busy
 parent is not a delivery attempt.
 
-### 3.4 One process owns one control loop
+### 3.4 One database has one runtime leader
 
-The Next.js instrumentation module stores start/running guards on `globalThis`.
-This prevents hot reload or repeated instrumentation registration from creating
-overlapping scanners.
+The Next.js instrumentation module still uses process-local single-flight
+guards, while `TowerRuntimeLease` fences scanner ownership across processes.
+Only the database lease holder may run the Workbench, Gateway, and Harness
+outbox recovery loops.
 
 ### 3.5 Recovery is idempotent
 
@@ -102,7 +104,8 @@ overlapping scanners.
 | Tower server restarts | Scanner rediscovers every pending parent from SQLite |
 | Workbench PTY is missing | Scanner continues or starts the Workbench and opens its initial safe boundary |
 | PTY survives but memory boundary is lost | Scanner restores the boundary only if the provider marked the turn complete |
-| Task was created before confirmation crashed | Gateway watchdog finds the durable link, confirms it, and wakes the Workbench |
+| Task was created before confirmation crashed | Gateway watchdog verifies the durable link and task, confirms it, and wakes the Workbench |
+| A linked child task was deleted | Foreign-key cascade removes the link; recovery never accepts an orphan as task evidence |
 | Outbound delivery temporarily fails | Gateway watchdog invokes the existing durable delivery retry |
 | Reviewed task becomes `DONE` while Tower exits | The same transaction already contains a `FINAL_RESULT/PENDING` outbox row |
 | Workbench is busy or unhealthy | `WorkbenchRuntime` records generation, heartbeat, batch, pending count and blocking reason for Missions |
@@ -127,10 +130,11 @@ The first P1 slice is now implemented:
 
 1. `WorkbenchBatch` persists `CLAIMED -> DISPATCHED -> ACKED -> RESOLVED`.
 2. PTY delivery no longer consumes inbox rows.
-3. The bound Workbench calls `ack_workbench_batch` after reading a batch and
-   `resolve_workbench_batch` after handling or durably delegating it.
-4. A `DISPATCHED` batch without ACK for 120 seconds becomes `FAILED`; its events
-   return to `PENDING` for safe replay.
+3. The bound Workbench calls `ack_workbench_batch` after reading a batch,
+   heartbeats every two minutes while it remains responsible, and calls
+   `resolve_workbench_batch` after handling or durably delegating every item.
+4. `CLAIMED`, `DISPATCHED`, and `ACKED` are leased. An expired lease replays the
+   same batch ID with a new generation and fencing token.
 
 The remaining layers are now implemented:
 

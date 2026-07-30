@@ -104,7 +104,10 @@ and trusted channel IDs. OpenClaw enforces those identities before routing and
 uses per-agent `toolsBySender` to expose two surfaces on the same `o-tower`
 profile:
 
-- OWNER: all Tower tools;
+- OWNER: the gateway routing, project-query, diagnostics, scoped recovery, and
+  remote-provisioning tools required by the personal assistant; direct
+  task/project mutation and terminal-control tools remain unavailable at
+  ingress;
 - trusted-channel NON_OWNER: `route_gateway_query`,
   `read_gateway_project_context`, and `complete_gateway_discussion` only.
 
@@ -118,11 +121,12 @@ provisioner. Remote provisioning requires an explicit workspace and absolute
 local root, does not install dependencies or execute repository scripts, and
 defaults to `REVIEW_ONLY`.
 
-PTY delivery is not treated as consumption. A durable batch remains
-`DISPATCHED` until the bound Workbench calls `ack_workbench_batch`; the inbox
-events become `CONSUMED` in that acknowledgement transaction. The Workbench
-calls `resolve_workbench_batch` after all items are handled or durably
-delegated. An unacknowledged batch is returned to pending after 120 seconds.
+PTY delivery and acknowledgement are not treated as final consumption. ACK
+accepts the processing lease, and the Workbench renews it every two minutes
+while responsibility remains unresolved. Only `resolve_workbench_batch`
+atomically changes the inbox events to `CONSUMED`. Expired `CLAIMED`,
+`DISPATCHED`, or `ACKED` leases replay the same batch ID with a new fencing
+token.
 
 For project work, **queued is not created**. The initial result only means Tower
 persisted the inbound request and its `GATEWAY_WORK_REQUEST`. A task exists only

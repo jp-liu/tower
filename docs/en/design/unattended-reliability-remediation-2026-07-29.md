@@ -56,3 +56,19 @@ outbound backlog together.
 - caller dedup keys are idempotent;
 - a second live runtime cannot acquire the same database.
 
+## Second-review hardening (2026-07-30)
+
+- The OWNER OpenClaw sender policy now exposes
+  `recover_gateway_request` and `provision_remote_project`; NON_OWNER remains
+  limited to project-scoped read queries.
+- Implicit Harness outbox content keys now cover one ask lifecycle:
+  retries deduplicate while the message is `PENDING_DELIVERY` or `OPEN`, but
+  identical content starts a new cycle after the previous ask reaches a
+  terminal state. Caller-supplied dedup keys remain permanently idempotent.
+- `rowResult.parked` reads the actual ask state instead of reporting an answered
+  historical ask as still parked.
+- `GatewayTaskLink` now has cascading foreign keys to both inbound and task.
+  Migration drops legacy orphan rows, and recovery also verifies that the task
+  still exists.
+- The Workbench protocol now requires a heartbeat every two minutes while a
+  batch remains unresolved, before the five-minute processing lease expires.
