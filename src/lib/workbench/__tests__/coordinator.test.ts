@@ -92,6 +92,31 @@ afterEach(async () => {
 });
 
 describe("Workbench durable coordinator", () => {
+  it("reports queue idleness independently from a stale provider turn flag", async () => {
+    const { deriveWorkbenchRuntimeState } = await import("@/lib/workbench/coordinator");
+
+    expect(deriveWorkbenchRuntimeState({
+      hasLiveSession: true,
+      hasActiveBatch: false,
+      pendingEvents: 0,
+    })).toBe("IDLE");
+    expect(deriveWorkbenchRuntimeState({
+      hasLiveSession: true,
+      hasActiveBatch: false,
+      pendingEvents: 1,
+    })).toBe("BUSY");
+    expect(deriveWorkbenchRuntimeState({
+      hasLiveSession: true,
+      hasActiveBatch: true,
+      pendingEvents: 0,
+    })).toBe("BUSY");
+    expect(deriveWorkbenchRuntimeState({
+      hasLiveSession: false,
+      hasActiveBatch: false,
+      pendingEvents: 0,
+    })).toBe("DEGRADED");
+  });
+
   it("stores a duplicate callback once by stable dedupKey", async () => {
     const { buildWorkbenchBatchPrompt, childStopDedupKey, enqueueWorkbenchEvent } = await import("@/lib/workbench/coordinator");
     const input = {

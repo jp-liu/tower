@@ -132,6 +132,16 @@ export interface WorkbenchRuntimeSnapshot {
   lastError: string | null;
 }
 
+export function deriveWorkbenchRuntimeState(input: {
+  hasLiveSession: boolean;
+  hasActiveBatch: boolean;
+  pendingEvents: number;
+}): WorkbenchRuntimeState {
+  if (!input.hasLiveSession) return "DEGRADED";
+  if (input.hasActiveBatch || input.pendingEvents > 0) return "BUSY";
+  return "IDLE";
+}
+
 /**
  * Refresh the persisted operational projection from the durable inbox plus the
  * current execution. Generation changes only when a different execution owns
@@ -222,31 +232,40 @@ export async function heartbeatActiveWorkbenchRuntimes(): Promise<number> {
   });
   for (const execution of executions) {
     const session = getSession(execution.taskId);
-    const activeBatch = await db.workbenchBatch.findFirst({
-      where: {
-        parentTaskId: execution.taskId,
-        state: { in: ["CLAIMED", "DISPATCHED", "ACKED"] },
-      },
-      orderBy: { createdAt: "desc" },
-      select: { id: true },
+    const [activeBatch, pendingEvents] = await Promise.all([
+      db.workbenchBatch.findFirst({
+        where: {
+          parentTaskId: execution.taskId,
+          state: { in: ["CLAIMED", "DISPATCHED", "ACKED"] },
+        },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      }),
+      db.workbenchEvent.count({
+        where: {
+          parentTaskId: execution.taskId,
+          state: { in: ["PENDING", "PROCESSING"] },
+        },
+      }),
+    ]);
+    const hasLiveSession = Boolean(session && !session.killed);
+    const state = deriveWorkbenchRuntimeState({
+      hasLiveSession,
+      hasActiveBatch: Boolean(activeBatch),
+      pendingEvents,
     });
-    const state: WorkbenchRuntimeState = !session || session.killed
-      ? "DEGRADED"
-      : activeBatch
-        ? "BUSY"
-        : session.isAtTurnBoundary
-          ? "IDLE"
-          : "BUSY";
     await recordWorkbenchRuntime(execution.taskId, state, {
       executionId: execution.id,
       activeBatchId: activeBatch?.id ?? null,
-      blockedReason: !session || session.killed
+      blockedReason: !hasLiveSession
         ? "Database execution is RUNNING but no live terminal session exists"
         : activeBatch
           ? "Workbench is processing a durable batch"
-          : session.isAtTurnBoundary
-            ? null
-            : "Provider turn in progress",
+          : pendingEvents > 0
+            ? session!.isAtTurnBoundary
+              ? "Durable work is awaiting dispatch"
+              : "Provider turn in progress"
+            : null,
     });
   }
   return executions.length;

@@ -77,7 +77,6 @@ function WorkbenchHealthBadge({ execution }: { execution: ActiveExecutionInfo })
                 ? "text-[10px] text-amber-600 border-amber-500/40 bg-amber-500/10 shrink-0"
                 : "text-[10px] text-emerald-600 border-emerald-500/40 bg-emerald-500/10 shrink-0"
             }
-            title={detail}
           />
         }
       >
@@ -191,14 +190,14 @@ export function MissionCard({
               ? t("missions.statusStopped")
               : t("missions.statusCompleted")}
           </Badge>
-        ) : (
+        ) : !execution.isSystemTask ? (
           <Badge
             variant="outline"
             className="text-[11px] text-primary border-primary/30 bg-primary/10 ml-1 shrink-0"
           >
             {t("missions.statusRunning")}
           </Badge>
-        )}
+        ) : null}
 
         {/* Running time — isolated so its 1s tick doesn't re-render the card */}
         <ElapsedTime startedAt={execution.startedAt} paused={isRemoving} />

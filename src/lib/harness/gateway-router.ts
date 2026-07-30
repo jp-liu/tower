@@ -1775,6 +1775,7 @@ export async function completeGatewayWork(input: {
         kind: deliveryInput.kind,
         content: deliveryInput.content,
         presentation: JSON.stringify(deliveryInput.presentation),
+        response: content,
       },
     });
   } else {
@@ -1788,14 +1789,17 @@ export async function completeGatewayWork(input: {
       content: deliveryInput.content,
       presentation: deliveryInput.presentation,
     });
-  }
-  const result = await deliverGatewayResponse(deliveryInput, sender);
-  if (result.ok) {
     await db.gatewayInbound.update({
       where: { id: input.inboundId },
-      data: { state: "PROCESSED", processedAt: new Date(), response: content, lastError: null },
+      data: {
+        state: "PROCESSED",
+        processedAt: new Date(),
+        response: content,
+        lastError: null,
+      },
     });
   }
+  const result = await deliverGatewayResponse(deliveryInput, sender);
   return result;
 }
 
@@ -1954,10 +1958,35 @@ export async function recoverQueuedGatewayWork(
       }
       if (linkedTask) {
         await confirmGatewayTaskCreated(inbound.id, linkedTask.id, taskId, sender);
-        const linkedState = await db.task.findUnique({
-          where: { id: linkedTask.id },
-          select: { status: true },
-        });
+        const [linkedState, finalDelivery] = await Promise.all([
+          db.task.findUnique({
+            where: { id: linkedTask.id },
+            select: { status: true },
+          }),
+          db.gatewayDelivery.findFirst({
+            where: {
+              inboundId: inbound.id,
+              kind: "FINAL_RESULT",
+            },
+            orderBy: { createdAt: "desc" },
+            select: { content: true },
+          }),
+        ]);
+        // A FINAL_RESULT outbox row is durable proof that business processing
+        // crossed its completion boundary. Transport may still be retrying or
+        // awaiting manual verification, but that must not resurrect Workbench.
+        if (linkedState?.status === "DONE" && finalDelivery) {
+          await db.gatewayInbound.update({
+            where: { id: inbound.id },
+            data: {
+              state: "PROCESSED",
+              processedAt: inbound.processedAt ?? new Date(),
+              response: finalDelivery.content,
+              lastError: null,
+            },
+          });
+          continue;
+        }
         if (linkedState?.status === "IN_REVIEW") {
           const unresolvedReview = await db.workbenchEvent.findFirst({
             where: {

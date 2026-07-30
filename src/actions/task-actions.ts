@@ -56,6 +56,7 @@ export interface GatewayCompletionOutbox {
   kind: GatewayDeliveryKind;
   content: string;
   presentation?: string | null;
+  response: string;
 }
 
 export async function updateTaskStatus(
@@ -138,6 +139,18 @@ export async function updateTaskStatus(
             kind: outbox.kind,
             content: outbox.content,
             presentation: outbox.presentation ?? null,
+          },
+        });
+        // Business completion and its durable reply intent share one commit.
+        // Delivery verification belongs to GatewayDelivery and must not keep
+        // the request PROCESSING or wake an otherwise idle Workbench.
+        await tx.gatewayInbound.update({
+          where: { id: outbox.inboundId },
+          data: {
+            state: "PROCESSED",
+            processedAt: new Date(),
+            response: outbox.response,
+            lastError: null,
           },
         });
         return updated;

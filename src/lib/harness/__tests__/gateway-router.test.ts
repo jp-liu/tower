@@ -990,7 +990,64 @@ describe("gateway confirmations and delivery retry", () => {
       lastError: "temporary Feishu transport failure",
     });
     expect(await db.gatewayInbound.findUnique({ where: { id: routed.inboundId } }))
-      .toMatchObject({ state: "PROCESSING" });
+      .toMatchObject({
+        state: "PROCESSED",
+        response: expect.stringContaining("Reviewed atomically"),
+      });
+  });
+
+  it("does not restart Workbench when completed work already has a final outbox", async () => {
+    const routed = await routeGatewayInbound(
+      inbound({ project: alphaId, intent: "PROJECT_WORK", content: "Recover completed work without waking Workbench" }),
+      vi.fn(async () => ({ mode: "already_running", executionId: "workbench-exec" })),
+      successfulSender("om_completed_queue"),
+    );
+    expect(routed.mode).toBe("project_work");
+    if (routed.mode !== "project_work") return;
+
+    const child = await db.task.create({
+      data: {
+        title: "Already completed child",
+        projectId: alphaId,
+        parentTaskId: routed.workbenchTaskId,
+        status: "DONE",
+        doneAt: new Date(),
+      },
+    });
+    await db.gatewayTaskLink.create({
+      data: { inboundId: routed.inboundId, taskId: child.id },
+    });
+    await db.gatewayInbound.update({
+      where: { id: routed.inboundId },
+      data: { state: "PROCESSING", createdTaskId: child.id },
+    });
+    await db.gatewayDelivery.create({
+      data: {
+        dedupKey: `gateway-final:${routed.inboundId}:${child.id}`,
+        sessionId: routed.sessionId,
+        inboundId: routed.inboundId,
+        kind: "FINAL_RESULT",
+        content: "Durable final result",
+        state: "SENT_UNVERIFIED",
+      },
+    });
+
+    const ensureWorkbench = vi.fn();
+    await expect(recoverQueuedGatewayWork(
+      ensureWorkbench,
+      100,
+      successfulSender("om_completed_created"),
+      undefined,
+      { inboundId: routed.inboundId },
+    )).resolves.toEqual({ scanned: 1, started: 0, failed: 0 });
+
+    expect(ensureWorkbench).not.toHaveBeenCalled();
+    expect(await db.gatewayInbound.findUnique({ where: { id: routed.inboundId } }))
+      .toMatchObject({
+        state: "PROCESSED",
+        response: "Durable final result",
+        lastError: null,
+      });
   });
 
   it("confirms only a real created task and sends the reviewed final result once", async () => {
