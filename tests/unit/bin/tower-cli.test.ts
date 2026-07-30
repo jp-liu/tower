@@ -31,13 +31,13 @@ describe("Tower production CLI", () => {
     expect(resolveRuntimeNetwork("::1", 4000).browserUrl).toBe("http://[::1]:4000");
   });
 
-  it("prints 0.3.0 and the loopback default without starting Next", () => {
+  it("prints 0.3.1 and the loopback default without starting Next", () => {
     const cli = resolve(root, "bin/tower.mjs");
     const version = execFileSync(process.execPath, [cli, "--version"], { encoding: "utf8" }).trim();
     const help = execFileSync(process.execPath, [cli, "--help"], { encoding: "utf8" });
     const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
     expect(version).toBe(`tower v${pkg.version}`);
-    expect(version).toBe("tower v0.3.0");
+    expect(version).toBe("tower v0.3.1");
     expect(help).toContain("Server host (default: 127.0.0.1)");
   });
 });

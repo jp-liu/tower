@@ -389,7 +389,7 @@ async function preparePackagedAiFixtures(installedRelease, smokeEnv, baseUrl) {
   const runtimeUrl = require("url").pathToFileURL(installedRelease.paths.aiRuntime).href;
   const registerScript = `
     import(process.argv[1]).then(async ({ CliPluginRuntime }) => {
-      const runtime = new CliPluginRuntime({ dataRoot: process.argv[2], towerVersion: '0.3.0' });
+      const runtime = new CliPluginRuntime({ dataRoot: process.argv[2], towerVersion: ${JSON.stringify(pkg.version)} });
       const plan = await runtime.planLocalRegistration(process.argv[3]);
       await runtime.registerLocal(plan);
       await runtime.confirmAndEnable(plan.pluginId, plan);

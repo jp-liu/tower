@@ -72,8 +72,8 @@ function assertReleasePackage(pack, pkg, runtimePkg) {
   if (pack.name !== "@tower-org/cli" || pkg.name !== "@tower-org/cli") {
     errors.push(`expected package name @tower-org/cli, got manifest=${pkg.name} pack=${pack.name}`);
   }
-  if (pack.version !== "0.3.0" || pkg.version !== "0.3.0") {
-    errors.push(`expected @tower-org/cli@0.3.0, got manifest=${pkg.version} pack=${pack.version}`);
+  if (pack.version !== "0.3.1" || pkg.version !== "0.3.1") {
+    errors.push(`expected @tower-org/cli@0.3.1, got manifest=${pkg.version} pack=${pack.version}`);
   }
   if (pkg.publishConfig?.access !== "public"
     || pkg.publishConfig?.registry !== "https://registry.npmjs.org/"
