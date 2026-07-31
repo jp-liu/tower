@@ -26,11 +26,11 @@ export function deriveSourceKey(
   filePath: string,
   projectRoot: string | null,
 ): string {
-  const resolved = path.resolve(filePath);
+  const resolved = path.resolve(/* turbopackIgnore: true */ filePath);
   const toPosix = (p: string) => p.split(path.sep).join("/");
 
   if (projectRoot) {
-    const root = path.resolve(projectRoot);
+    const root = path.resolve(/* turbopackIgnore: true */ projectRoot);
     if (resolved === root || resolved.startsWith(root + path.sep)) {
       const relPosix = toPosix(path.relative(root, resolved));
       const segs = relPosix.split("/");
@@ -52,7 +52,9 @@ export function shortHash(input: string, len = 8): string {
 
 /** sha256 hex of a file's content, used to detect unchanged re-uploads. */
 export function hashFile(filePath: string): string {
-  return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+  return crypto.createHash("sha256")
+    .update(fs.readFileSync(/* turbopackIgnore: true */ filePath))
+    .digest("hex");
 }
 
 /**

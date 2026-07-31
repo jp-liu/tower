@@ -82,7 +82,7 @@ function enabledEnvironment(entries: CliEnvironmentVariable[]): Record<string, s
 
 function providerConfigDir(defaultCommand: string): string {
   const name = defaultCommand.split(/[\\/]/).at(-1)?.replace(/\.(?:cmd|exe|bat)$/i, "") ?? "cli";
-  return path.join(os.homedir(), `.${name.replace(/[^a-z0-9._-]/gi, "-")}`);
+  return path.join(/* turbopackIgnore: true */ os.homedir(), `.${name.replace(/[^a-z0-9._-]/gi, "-")}`);
 }
 
 function configurationDigest(

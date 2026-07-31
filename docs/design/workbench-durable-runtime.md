@@ -83,8 +83,9 @@ parent is not a delivery attempt.
 
 ### 3.4 One database has one runtime leader
 
-The Next.js instrumentation module still uses process-local single-flight
-guards, while `TowerRuntimeLease` fences scanner ownership across processes.
+The Next.js instrumentation entry uses a Node-runtime gate before loading the
+Node-only control loops, which still use process-local single-flight guards,
+while `TowerRuntimeLease` fences scanner ownership across processes.
 Only the database lease holder may run the Workbench, Gateway, and Harness
 outbox recovery loops.
 
@@ -118,7 +119,7 @@ outbox recovery loops.
 | Process-local safe-boundary optimization | `src/lib/workbench/boundary.ts` |
 | Provider-confirmed PTY turn state | `src/lib/pty/pty-session.ts` |
 | Gateway workflow recovery | `src/lib/harness/gateway-router.ts` |
-| Background control-loop startup | `src/instrumentation.ts` |
+| Runtime gate / Node control-loop startup | `src/instrumentation.ts`, `src/instrumentation-node.ts` |
 | Coordinator tests | `src/lib/workbench/__tests__/coordinator.test.ts` |
 | Gateway recovery tests | `src/lib/harness/__tests__/gateway-router.test.ts` |
 | Runtime health projection in Missions | `src/actions/agent-actions.ts`, `src/components/missions/mission-card.tsx` |
