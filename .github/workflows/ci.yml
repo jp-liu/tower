@@ -62,8 +62,6 @@ jobs:
   catalog:
     name: extension catalog
     runs-on: ubuntu-latest
-    env:
-      CATALOG_OUTPUT_DIR: "${{ runner.temp }}/tower-extension-catalog"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -92,15 +90,17 @@ jobs:
         run: >-
           pnpm exec tsx scripts/build-extension-catalog.ts
           --base-url https://catalog.example.test/ci/
-          --output "$CATALOG_OUTPUT_DIR"
+          --output "${{ runner.temp }}/tower-extension-catalog"
 
       - name: Validate catalog with runtime
-        run: pnpm extensions:catalog:validate -- --input "$CATALOG_OUTPUT_DIR"
+        run: >-
+          pnpm extensions:catalog:validate --
+          --input "${{ runner.temp }}/tower-extension-catalog"
 
       - name: Retain generated catalog
         uses: actions/upload-artifact@v4
         with:
           name: tower-extension-catalog-${{ github.sha }}
-          path: ${{ env.CATALOG_OUTPUT_DIR }}
+          path: ${{ runner.temp }}/tower-extension-catalog
           if-no-files-found: error
           retention-days: 7
