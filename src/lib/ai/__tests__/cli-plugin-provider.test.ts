@@ -75,7 +75,7 @@ describe("dynamic CLI plugin connection resolution", () => {
         command: {
           default: "community",
           aliases: ["community-cli"],
-          knownPaths: { darwin: ["/opt/community"] },
+          knownPaths: { [process.platform]: ["/opt/community"] },
           versionArgs: ["version"],
         },
         cliDependency: {
