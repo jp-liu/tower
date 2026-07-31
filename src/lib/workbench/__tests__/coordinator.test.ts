@@ -86,34 +86,36 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  const { resetWorkbenchDeliveryObserverForTests } = await import("@/lib/workbench/delivery-lifecycle");
+  resetWorkbenchDeliveryObserverForTests();
   await prisma.$disconnect();
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   vi.clearAllMocks();
 });
 
 describe("Workbench durable coordinator", () => {
-  it("reports queue idleness independently from a stale provider turn flag", async () => {
+  it("projects runtime state from the provider turn boundary independently of queue depth", async () => {
     const { deriveWorkbenchRuntimeState } = await import("@/lib/workbench/coordinator");
 
     expect(deriveWorkbenchRuntimeState({
       hasLiveSession: true,
       hasActiveBatch: false,
-      pendingEvents: 0,
+      isAtTurnBoundary: true,
     })).toBe("IDLE");
     expect(deriveWorkbenchRuntimeState({
       hasLiveSession: true,
       hasActiveBatch: false,
-      pendingEvents: 1,
+      isAtTurnBoundary: false,
     })).toBe("BUSY");
     expect(deriveWorkbenchRuntimeState({
       hasLiveSession: true,
       hasActiveBatch: true,
-      pendingEvents: 0,
+      isAtTurnBoundary: true,
     })).toBe("BUSY");
     expect(deriveWorkbenchRuntimeState({
       hasLiveSession: false,
       hasActiveBatch: false,
-      pendingEvents: 0,
+      isAtTurnBoundary: true,
     })).toBe("DEGRADED");
   });
 
@@ -156,6 +158,7 @@ describe("Workbench durable coordinator", () => {
       acknowledgeWorkbenchBatch,
       drainWorkbenchEvents,
       enqueueWorkbenchEvent,
+      recordWorkbenchProviderTurnCompleted,
       resolveWorkbenchBatch,
     } = await import("@/lib/workbench/coordinator");
     await enqueueWorkbenchEvent({
@@ -211,9 +214,18 @@ describe("Workbench durable coordinator", () => {
     expect(await prisma.workbenchEvent.count({ where: { state: "CONSUMED" } })).toBe(3);
     expect(await prisma.workbenchRuntime.findUnique({ where: { taskId: "parent" } }))
       .toMatchObject({
+        state: "BUSY",
+        activeBatchId: null,
+        pendingEvents: 0,
+        lastTurnCompletedAt: null,
+      });
+    await expect(recordWorkbenchProviderTurnCompleted("parent")).resolves.toBe(true);
+    expect(await prisma.workbenchRuntime.findUnique({ where: { taskId: "parent" } }))
+      .toMatchObject({
         state: "IDLE",
         activeBatchId: null,
         pendingEvents: 0,
+        lastTurnCompletedAt: expect.any(Date),
       });
     await expect(resolveWorkbenchBatch(result.batchKey!, "parent", result.leaseToken!)).resolves.toMatchObject({
       state: "RESOLVED",
@@ -232,7 +244,12 @@ describe("Workbench durable coordinator", () => {
   });
 
   it("delivers a gateway request through the durable boundary and advances its queue state", async () => {
+    const {
+      migrateLegacyGatewayWorkbenchCommands,
+      registerGatewayWorkbenchDeliveryLifecycle,
+    } = await import("@/lib/harness/workbench-delivery-adapter");
     const { acknowledgeWorkbenchBatch, drainWorkbenchEvents, enqueueWorkbenchEvent } = await import("@/lib/workbench/coordinator");
+    registerGatewayWorkbenchDeliveryLifecycle();
     await prisma.$executeRawUnsafe(`INSERT INTO "GatewayInbound" ("id", "state") VALUES ('gateway-in-1', 'QUEUED')`);
     await enqueueWorkbenchEvent({
       parentTaskId: "parent",
@@ -245,8 +262,9 @@ describe("Workbench durable coordinator", () => {
         gatewayInboundId: "gateway-in-1",
         gatewaySessionId: "gateway-session-1",
         gatewayMessage: "[Gateway project work request]\nCreate the import task.",
-      },
+      } as never,
     });
+    await expect(migrateLegacyGatewayWorkbenchCommands()).resolves.toBe(1);
 
     const prompts: string[] = [];
     const result = await drainWorkbenchEvents("parent", async (batch) => {
@@ -396,6 +414,54 @@ describe("Workbench durable coordinator", () => {
       .toMatchObject({ state: "FAILED", leaseExpiresAt: null });
     expect(await prisma.workbenchEvent.findUniqueOrThrow({ where: { id: event.id } }))
       .toMatchObject({ state: "PENDING", batchId: null, consumedAt: null });
+  });
+
+  it("replays at-least-once with a stable batch id after a crash between PTY write and DISPATCHED", async () => {
+    const {
+      acknowledgeWorkbenchBatch,
+      drainWorkbenchEvents,
+      enqueueWorkbenchEvent,
+      recoverWorkbenchEventClaims,
+      resolveWorkbenchBatch,
+    } = await import("@/lib/workbench/coordinator");
+    await enqueueWorkbenchEvent({
+      parentTaskId: "parent",
+      sourceTaskId: "child-a",
+      kind: "CHILD_REVIEW_REQUIRED",
+      dedupKey: "post-write-crash",
+      payload: { childTaskId: "child-a", childTitle: "Child A", childReply: "done" },
+    });
+
+    const terminalWrites: string[] = [];
+    const first = await drainWorkbenchEvents("parent", async (batch) => {
+      terminalWrites.push(batch.prompt);
+    });
+    const crashTime = new Date("2026-07-27T12:00:00.000Z");
+    await prisma.workbenchBatch.update({
+      where: { id: first.batchKey! },
+      data: {
+        state: "CLAIMED",
+        dispatchAttempts: 0,
+        dispatchedAt: null,
+        leaseExpiresAt: new Date(crashTime.getTime() - 1),
+      },
+    });
+
+    await expect(recoverWorkbenchEventClaims(crashTime)).resolves.toBe(1);
+    const replay = await drainWorkbenchEvents("parent", async (batch) => {
+      terminalWrites.push(batch.prompt);
+    });
+
+    expect(terminalWrites).toHaveLength(2);
+    expect(replay.batchKey).toBe(first.batchKey);
+    expect(replay.leaseToken).not.toBe(first.leaseToken);
+    expect(await prisma.workbenchEvent.count({ where: { dedupKey: "post-write-crash" } })).toBe(1);
+    expect(await prisma.taskMessage.count({ where: { id: first.batchKey! } })).toBe(1);
+    await expect(acknowledgeWorkbenchBatch(replay.batchKey!, "parent", first.leaseToken!))
+      .rejects.toThrow("lease token is stale");
+    await acknowledgeWorkbenchBatch(replay.batchKey!, "parent", replay.leaseToken!);
+    await resolveWorkbenchBatch(replay.batchKey!, "parent", replay.leaseToken!);
+    expect(await prisma.workbenchEvent.count({ where: { state: "CONSUMED" } })).toBe(1);
   });
 
   it("recovers an ACKED batch when its processing lease expires", async () => {

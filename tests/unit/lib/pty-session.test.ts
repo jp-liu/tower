@@ -15,6 +15,10 @@ vi.mock("node-pty", () => ({
 }));
 
 import { PtySession } from "@/lib/pty/pty-session";
+import {
+  resetPtyLifecycleObserverForTests,
+  setPtyLifecycleObserver,
+} from "@/lib/pty/lifecycle";
 
 describe("PtySession", () => {
   let onData: Mock<(data: string) => void>;
@@ -32,7 +36,7 @@ describe("PtySession", () => {
   });
 
   afterEach(() => {
-    // Clean up
+    resetPtyLifecycleObserverForTests();
   });
 
   describe("constructor", () => {
@@ -141,6 +145,15 @@ describe("PtySession", () => {
 
       session.write("next turn");
       expect(session.isAtTurnBoundary).toBe(false);
+    });
+
+    it("publishes a generic input-start lifecycle notification", () => {
+      const inputStarted = vi.fn();
+      setPtyLifecycleObserver({ inputStarted });
+
+      session.write("next turn");
+
+      expect(inputStarted).toHaveBeenCalledWith("task-1");
     });
   });
 

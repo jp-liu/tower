@@ -5,7 +5,7 @@ import {
   hasWorkbenchDrainBoundary,
   resetWorkbenchDrainBoundariesForTests,
 } from "@/lib/workbench/boundary";
-import { openWorkbenchDrainBoundary } from "@/lib/workbench/coordinator";
+import { activateWorkbenchCommandConsumer } from "@/lib/workbench/command-inbox";
 import {
   GATEWAY_CHANNEL_BINDINGS_KEY,
   GATEWAY_RECENT_SESSION_TTL_MS,
@@ -1075,7 +1075,7 @@ describe("gateway inbound routing", () => {
     resetWorkbenchDrainBoundariesForTests();
     const ensure = vi.fn(async () => ({ mode: "already_running", executionId: "live-workbench" }));
     const restore = vi.fn((taskId: string) => {
-      openWorkbenchDrainBoundary(taskId);
+      activateWorkbenchCommandConsumer(taskId, "started");
       return true;
     });
 

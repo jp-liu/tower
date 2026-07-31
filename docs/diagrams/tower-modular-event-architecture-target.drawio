@@ -1,0 +1,310 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="30.4.1" pages="2">
+  <diagram id="module-boundaries" name="01 模块边界">
+    <mxGraphModel dx="1840" dy="1060" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1080" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="Tower 模块化事件架构（第一阶段已实现）" style="text;html=1;align=left;verticalAlign=middle;fontSize=28;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1780" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="一个代码库、一个进程、一个数据库；用具体薄函数边界隔离 PTY、Workbench 与 Gateway，不建设通用事件总线" style="text;html=1;align=left;verticalAlign=middle;fontSize=15;fontColor=#4b5563;" vertex="1" parent="1">
+          <mxGeometry x="40" y="65" width="1780" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="external" value="外部世界" style="swimlane;startSize=36;rounded=0;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=15;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="130" width="240" height="700" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-ui" value="Tower UI / API&#xa;用户操作与服务调用" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;" vertex="1" parent="external">
+          <mxGeometry x="25" y="70" width="190" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-provider" value="Provider / PTY&#xa;turn-complete 回调" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;" vertex="1" parent="external">
+          <mxGeometry x="25" y="200" width="190" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-platform" value="OpenClaw / 飞书&#xa;可选外部入口" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;fontSize=14;" vertex="1" parent="external">
+          <mxGeometry x="25" y="330" width="190" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-clock" value="Clock / Scheduler&#xa;延时与周期触发" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;fontSize=14;" vertex="1" parent="external">
+          <mxGeometry x="25" y="460" width="190" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="tower" value="Tower Monolith  ·  逻辑模块化边界" style="swimlane;startSize=40;rounded=0;html=1;fillColor=#ffffff;strokeColor=#4b5563;fontStyle=1;fontSize=16;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="330" y="110" width="1500" height="850" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ports" value="组合根与入口适配器&#xa;&#xa;instrumentation-node.ts&#xa;Provider Stop Hook&#xa;Gateway Router&#xa;2s Reconciler&#xa;&#xa;注册 lifecycle adapter；入口只做协议转换、鉴权和幂等键提取" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=14;align=left;spacingLeft=18;verticalAlign=top;spacingTop=18;" vertex="1" parent="tower">
+          <mxGeometry x="40" y="100" width="260" height="500" as="geometry" />
+        </mxCell>
+
+        <mxCell id="publish-port" value="Workbench Command Inbox&#xa;publish · activate · restore" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=15;" vertex="1" parent="tower">
+          <mxGeometry x="360" y="170" width="230" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="command-lane" value="Durable Workbench Commands&#xa;WorkbenchEvent: PENDING → PROCESSING → CONSUMED&#xa;唯一 Workbench owner" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;" vertex="1" parent="tower">
+          <mxGeometry x="670" y="90" width="260" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="event-lane" value="Process-local Lifecycle&#xa;PTY input-start / provider-turn-complete&#xa;Workbench batch-dispatched&#xa;无通用 Domain Event bus" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;" vertex="1" parent="tower">
+          <mxGeometry x="670" y="260" width="260" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="dispatcher" value="Workbench Coordinator&#xa;lease · coalesce · ACK · heartbeat · replay&#xa;仅在 provider-confirmed turn boundary 投递" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1;" vertex="1" parent="tower">
+          <mxGeometry x="670" y="440" width="260" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="module-bus" value="THIN&#xa;PORTS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=13;" vertex="1" parent="tower">
+          <mxGeometry x="1000" y="150" width="90" height="410" as="geometry" />
+        </mxCell>
+
+        <mxCell id="task-module" value="Task / Execution Core&#xa;任务事实、状态流转、执行记录" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;" vertex="1" parent="tower">
+          <mxGeometry x="1160" y="80" width="290" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="workbench-module" value="Workbench Core&#xa;项目编排、审查、委派、回合边界" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;" vertex="1" parent="tower">
+          <mxGeometry x="1160" y="230" width="290" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="gateway-module" value="Gateway Extension（可选）&#xa;外部路由、绑定、可靠回执&#xa;不被 Core / Workbench 直接 import" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;dashed=1;fontSize=14;fontStyle=1;" vertex="1" parent="tower">
+          <mxGeometry x="1160" y="380" width="290" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="future-module" value="Future Domain Events（未建设）&#xa;仅在出现两个独立事实消费者后评估" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;fontSize=14;" vertex="1" parent="tower">
+          <mxGeometry x="1160" y="540" width="290" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sqlite" value="同一个 SQLite  ·  事务边界仍在 Tower 内" style="swimlane;startSize=34;rounded=0;html=1;fillColor=#f9fafb;strokeColor=#6b7280;fontStyle=1;fontSize=14;pointerEvents=0;" vertex="1" parent="tower">
+          <mxGeometry x="350" y="660" width="1100" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="event-store" value="WorkbenchEvent / Batch / Runtime&#xa;命令、租约、重放与运行投影" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;" vertex="1" parent="sqlite">
+          <mxGeometry x="40" y="45" width="270" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="domain-store" value="Core Domain Tables&#xa;Task / Execution / Message" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;" vertex="1" parent="sqlite">
+          <mxGeometry x="410" y="45" width="270" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="extension-store" value="Extension-owned Tables&#xa;Gateway / Harness（按模块归属）" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;" vertex="1" parent="sqlite">
+          <mxGeometry x="790" y="45" width="270" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="rule" value="依赖规则：PTY 只发布中性 lifecycle；Gateway 只调用 Workbench command inbox；Workbench 不解析 Gateway 私有 payload、不写 Gateway 表。" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;fontStyle=1;align=left;spacingLeft=14;" vertex="1" parent="1">
+          <mxGeometry x="330" y="985" width="1500" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e-ui" value="调用" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.18;" edge="1" parent="1" source="ext-ui" target="ports">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-provider" value="回合事实" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.4;" edge="1" parent="1" source="ext-provider" target="ports">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-platform" value="入站 / 回执" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d79b00;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.62;" edge="1" parent="1" source="ext-platform" target="ports">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-clock" value="触发" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.84;" edge="1" parent="1" source="ext-clock" target="ports">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-ports-publish" value="publish / notify" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d79b00;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.35;entryX=0;entryY=0.5;" edge="1" parent="tower" source="ports" target="publish-port">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-pub-command" value="durable command" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d6b656;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.35;entryX=0;entryY=0.5;" edge="1" parent="tower" source="publish-port" target="command-lane">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-pub-event" value="lifecycle signal" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.7;entryX=0;entryY=0.5;" edge="1" parent="tower" source="publish-port" target="event-lane">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-command-dispatch" value="claim + deliver" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d6b656;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0.8;entryY=0;" edge="1" parent="1" source="command-lane" target="dispatcher">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1280" y="265" />
+              <mxPoint x="1280" y="530" />
+              <mxPoint x="1208" y="530" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-event-dispatch" value="turn-boundary gate" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;entryX=0.35;entryY=0;" edge="1" parent="1" source="event-lane" target="dispatcher">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-dispatch-bus" value="投递" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#9673a6;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.75;" edge="1" parent="tower" source="dispatcher" target="module-bus">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-bus-task" value="handle" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.15;entryX=0;entryY=0.5;" edge="1" parent="tower" source="module-bus" target="task-module">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-bus-workbench" value="handle" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.38;entryX=0;entryY=0.5;" edge="1" parent="tower" source="module-bus" target="workbench-module">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-bus-gateway" value="handle" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d79b00;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.65;entryX=0;entryY=0.5;" edge="1" parent="tower" source="module-bus" target="gateway-module">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-bus-future" value="optional" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;dashed=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.9;entryX=0;entryY=0.5;" edge="1" parent="tower" source="module-bus" target="future-module">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-module-feedback" value="模块发布新事实 / 命令" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6b7280;dashed=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.45;exitY=0;entryX=0.25;entryY=0;" edge="1" parent="1" source="module-bus" target="publish-port">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1370" y="170" />
+              <mxPoint x="748" y="170" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-publish-store" value="append / delivery state" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d6b656;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.75;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="publish-port" target="event-store">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="863" y="730" />
+              <mxPoint x="855" y="730" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-module-domain-store" value="模块事务" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.55;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="module-bus" target="domain-store">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1380" y="760" />
+              <mxPoint x="1225" y="760" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-gateway-extension-store" value="extension data" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d79b00;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0.5;entryY=0;" edge="1" parent="1" source="gateway-module" target="extension-store">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1800" y="550" />
+              <mxPoint x="1800" y="790" />
+              <mxPoint x="1605" y="790" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="runtime-loop" name="02 运行循环">
+    <mxGraphModel dx="1840" dy="1060" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1080" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="p2-title" value="Workbench 可靠命令运行循环（第一阶段已实现）" style="text;html=1;align=left;verticalAlign=middle;fontSize=28;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1780" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="p2-subtitle" value="队列事实、PTY 回合状态和 Runtime 健康状态彼此分离；只有 provider-confirmed boundary 可以触发投递" style="text;html=1;align=left;verticalAlign=middle;fontSize=15;fontColor=#4b5563;" vertex="1" parent="1">
+          <mxGeometry x="40" y="65" width="1780" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="source-lane" value="1  发布与持久化" style="swimlane;startSize=36;rounded=0;html=1;fillColor=#f9fafb;strokeColor=#6b7280;fontStyle=1;fontSize=15;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="120" width="1760" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="publish" value="publishWorkbenchCommand&#xa;稳定 dedupKey / source / payload" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;" vertex="1" parent="source-lane">
+          <mxGeometry x="50" y="60" width="300" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="pending" value="Durable Inbox&#xa;PENDING" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=15;fontStyle=1;" vertex="1" parent="source-lane">
+          <mxGeometry x="500" y="55" width="240" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="no-subscriber" value="Lifecycle 无 observer&#xa;通知 no-op，不影响核心&#xa;当前不持久化 Domain Event" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;dashed=1;fontSize=13;" vertex="1" parent="source-lane">
+          <mxGeometry x="930" y="60" width="280" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="no-owner" value="Command owner 固定为 Workbench&#xa;沿用现有 enum 与 producer 校验&#xa;不建设动态 owner registry" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;fontStyle=1;" vertex="1" parent="source-lane">
+          <mxGeometry x="1360" y="55" width="320" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="dispatch-lane" value="2  调度与安全边界" style="swimlane;startSize=36;rounded=0;html=1;fillColor=#f9fafb;strokeColor=#6b7280;fontStyle=1;fontSize=15;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="340" width="1760" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="wake" value="Wakeup&#xa;enqueue fast path + 2s reconciler" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1;" vertex="1" parent="dispatch-lane">
+          <mxGeometry x="50" y="90" width="260" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="boundary-check" value="PTY state =&#xa;AT_TURN_BOUNDARY?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;fontStyle=1;" vertex="1" parent="dispatch-lane">
+          <mxGeometry x="410" y="75" width="220" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="wait-boundary" value="保持 PENDING&#xa;Runtime = BUSY（RUNNING 语义）&#xa;不打断当前 Agent 回合" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;" vertex="1" parent="dispatch-lane">
+          <mxGeometry x="720" y="60" width="250" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="claim" value="Claim Batch&#xa;CLAIMED + lease + generation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;" vertex="1" parent="dispatch-lane">
+          <mxGeometry x="1080" y="60" width="260" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="dispatch" value="Deliver to Workbench PTY&#xa;DISPATCHED&#xa;Runtime = BUSY（RUNNING 语义）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;" vertex="1" parent="dispatch-lane">
+          <mxGeometry x="1440" y="60" width="270" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="execute-lane" value="3  Workbench 单线程回合" style="swimlane;startSize=36;rounded=0;html=1;fillColor=#f9fafb;strokeColor=#6b7280;fontStyle=1;fontSize=15;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="640" width="1760" height="250" as="geometry" />
+        </mxCell>
+        <mxCell id="ack" value="ACKED&#xa;确认接手，开始 processing lease" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;" vertex="1" parent="execute-lane">
+          <mxGeometry x="1410" y="80" width="270" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="handle" value="Handle / Delegate&#xa;领域操作 + heartbeat&#xa;可继续发布 Workbench command" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;" vertex="1" parent="execute-lane">
+          <mxGeometry x="1020" y="70" width="300" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="resolve" value="RESOLVED&#xa;batch 完成 / command CONSUMED&#xa;Runtime 仍为 BUSY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;" vertex="1" parent="execute-lane">
+          <mxGeometry x="630" y="70" width="300" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="provider-stop" value="Provider stop / end_turn&#xa;唯一权威回合完成信号" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1;" vertex="1" parent="execute-lane">
+          <mxGeometry x="300" y="80" width="260" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="ready" value="PTY = AT_TURN_BOUNDARY&#xa;Runtime = IDLE&#xa;（READY 语义）&#xa;开放一次性 drain token" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;" vertex="1" parent="execute-lane">
+          <mxGeometry x="50" y="70" width="190" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="recovery" value="恢复侧路：租约过期 → Batch FAILED → command 回到 PENDING；用同一稳定 batch id、新 lease 重放。PTY write 后崩溃允许终端输入 at-least-once，但旧 lease 被 fencing，持久副作用只消费一次。" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;fontStyle=1;align=left;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="240" y="940" width="1320" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="state-note" value="实现保留数据库枚举 IDLE / BUSY 以避免无收益迁移：IDLE 表示 READY，BUSY 表示 RUNNING；pending count 与 active batch 仍是独立投影字段。" style="text;html=1;align=center;verticalAlign=middle;fontSize=13;fontColor=#4b5563;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="240" y="1015" width="1320" height="35" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p2-e-publish" value="同事务持久化" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="source-lane" source="publish" target="pending">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2-e-pending-wake" value="有 delivery" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#9673a6;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="pending" target="wake">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="660" y="320" />
+              <mxPoint x="220" y="320" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p2-e-wake-check" value="尝试 drain" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#9673a6;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="dispatch-lane" source="wake" target="boundary-check">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2-e-no" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.35;entryX=0;entryY=0.5;" edge="1" parent="dispatch-lane" source="boundary-check" target="wait-boundary">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2-e-yes" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d6b656;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=0;entryX=0.5;entryY=0;" edge="1" parent="1" source="boundary-check" target="claim">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="560" y="385" />
+              <mxPoint x="1250" y="385" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p2-e-claim-dispatch" value="write + submit" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d6b656;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="dispatch-lane" source="claim" target="dispatch">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2-e-dispatch-ack" value="Agent 读取并接手" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="dispatch" target="ack">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2-e-ack-handle" value="处理责任" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="execute-lane" source="ack" target="handle">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2-e-handle-resolve" value="处理或稳定委派完成" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="execute-lane" source="handle" target="resolve">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2-e-resolve-stop" value="Agent 继续收尾" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#9673a6;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="execute-lane" source="resolve" target="provider-stop">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2-e-stop-ready" value="权威边界" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="execute-lane" source="provider-stop" target="ready">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2-e-ready-loop" value="若仍有 PENDING，进入下一轮" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="1" source="ready" target="boundary-check">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="185" y="620" />
+              <mxPoint x="560" y="620" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p2-e-wait-loop" value="provider stop 后再唤醒" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;dashed=1;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;entryX=1;entryY=0.5;" edge="1" parent="1" source="wait-boundary" target="provider-stop">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="885" y="620" />
+              <mxPoint x="610" y="620" />
+              <mxPoint x="610" y="770" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

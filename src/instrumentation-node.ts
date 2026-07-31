@@ -38,6 +38,17 @@ async function initializeNodeRuntime() {
   await ensureTowerLabel();
   await ensureDefaultWorkspace();
 
+  const { registerWorkbenchPtyLifecycle } = await import("@/lib/workbench/pty-lifecycle-adapter");
+  registerWorkbenchPtyLifecycle();
+  const {
+    migrateLegacyGatewayWorkbenchCommands,
+    registerGatewayWorkbenchDeliveryLifecycle,
+  } = await import(
+    "@/lib/harness/workbench-delivery-adapter"
+  );
+  registerGatewayWorkbenchDeliveryLifecycle();
+  await migrateLegacyGatewayWorkbenchCommands();
+
   const { startWsServer } = await import("@/lib/pty/ws-server");
   await startWsServer();
 
