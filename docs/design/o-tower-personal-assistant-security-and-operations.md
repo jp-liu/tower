@@ -137,7 +137,7 @@ OpenClaw agent。它们是同一个 `o-tower` profile 在不同 sender 下得到
 
 1. `resolve_gateway_task_context` 只读返回任务状态、OPEN ask、项目和最近执行摘要。
 2. OPEN ask 用 `reply_to_ask`；状态/结果问题只读回答；外部系统动作携带 `towerContext` 委托，均不改变任务状态。
-3. 只有明确“继续/修复/重跑”才调用 `continue_bound_task`。它复用 `GatewayInbound` 的平台消息去重键，重复 callback 不会重复注入。
+3. 只有明确“继续/修复/重跑”才调用 `continue_bound_task`。同一平台消息已落为只读 `task_context` 时，原子升级该 `GatewayInbound`；失败或租约过期在同一行重试，并用 inbound ID 保证同一终端会话只注入一次。
 4. 存在 OPEN ask 时拒绝续跑，避免绕过待回答问题。兼容工具 `relay_channel_reply` 对普通回复只返回上下文，不恢复终端。
 
 ## 5. 远程 Git 项目接入

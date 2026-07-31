@@ -23,6 +23,7 @@ const bodySchema = z.object({
   // standalone CR is delivered separately. When false, text is forwarded verbatim.
   submit: z.boolean().optional(),
   submitDelayMs: z.number().int().min(0).max(2000).optional(),
+  idempotencyKey: z.string().trim().min(1).max(256).optional(),
 });
 
 export async function POST(
@@ -73,6 +74,19 @@ export async function POST(
 
   const submit = parsed.data.submit ?? true;
   const { body, submitKey } = planTerminalWrite(parsed.data.text, submit);
+  const idempotencyKey = parsed.data.idempotencyKey;
+  if (idempotencyKey) {
+    const claim = session.claimInputKey(idempotencyKey);
+    if (claim === "accepted") {
+      return NextResponse.json({ ok: true, taskId, submitted: submit, deduped: true });
+    }
+    if (claim === "pending") {
+      return NextResponse.json(
+        { error: "Terminal input is already being submitted", taskId, inProgress: true },
+        { status: 409 },
+      );
+    }
+  }
 
   // Instrumentation: shows exactly what bytes reached the PTY for this task. The tail
   // hex confirms whether a real CR (0d) is present and whether it was glued to the text.
@@ -84,19 +98,39 @@ export async function POST(
 
   // Write the message body first. The submit CR is delivered as a SEPARATE keystroke
   // after a short delay so the TUI registers it as Enter, not a pasted newline.
-  if (body.length > 0) {
-    session.write(body);
-  }
+  try {
+    if (body.length > 0) {
+      session.write(body);
+    }
 
-  if (submitKey) {
-    const delay = parsed.data.submitDelayMs ?? DEFAULT_SUBMIT_DELAY_MS;
-    setTimeout(() => {
-      const live = getSession(taskId);
-      if (live && !live.killed) {
+    if (submitKey) {
+      const delay = parsed.data.submitDelayMs ?? DEFAULT_SUBMIT_DELAY_MS;
+      if (idempotencyKey) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        const live = getSession(taskId);
+        if (live !== session || live.killed) {
+          session.releaseInputKey(idempotencyKey);
+          return NextResponse.json({ error: "Session changed before input submission" }, { status: 409 });
+        }
         live.write(submitKey);
+      } else {
+        setTimeout(() => {
+          const live = getSession(taskId);
+          if (live && !live.killed) {
+            live.write(submitKey);
+          }
+        }, delay);
       }
-    }, delay);
+    }
+    if (idempotencyKey) session.acceptInputKey(idempotencyKey);
+  } catch (error) {
+    if (idempotencyKey) session.releaseInputKey(idempotencyKey);
+    throw error;
   }
 
-  return NextResponse.json({ ok: true, taskId, submitted: submit });
+  return NextResponse.json(
+    idempotencyKey
+      ? { ok: true, taskId, submitted: submit, deduped: false }
+      : { ok: true, taskId, submitted: submit },
+  );
 }

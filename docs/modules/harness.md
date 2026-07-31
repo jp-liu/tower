@@ -85,7 +85,7 @@ Tower 消息回复 ──► resolve_gateway_task_context（只读）
 
 **`reply_to_ask`** —— OPEN ask 的唯一正常回答动作：原子标记已答、resume 被 park 的任务，并把答案注入终端。`relay_channel_reply` 只保留旧客户端兼容：匹配 OPEN ask 时仍可回答；普通任务回复仅返回上下文，不再注入或恢复。
 
-**`resolve_gateway_task_context` / `continue_bound_task`** —— 前者只读解析 `subjectTaskId`、`producerTaskId`、Workbench、任务状态、OPEN ask 和最近执行摘要；后者才是 OWNER 对“继续改、按失败结果修复、重跑”这类明确开发意图的显式副作用。续跑用 `platformMessageId` 复用 `GatewayInbound` 去重，重复回调不会重复恢复或注入。
+**`resolve_gateway_task_context` / `continue_bound_task`** —— 前者只读解析 `subjectTaskId`、`producerTaskId`、Workbench、任务状态、OPEN ask 和最近执行摘要；后者才是 OWNER 对“继续改、按失败结果修复、重跑”这类明确开发意图的显式副作用。同一平台消息若已落为只读 `task_context`，续跑会原子升级该 `GatewayInbound`；失败或租约过期仍在同一行重试。终端注入用 inbound ID 做会话内幂等，避免响应不确定时重复提交。
 
 **两组别混：**
 

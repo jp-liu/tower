@@ -167,9 +167,13 @@ delegated with the returned context without changing Tower. Only an explicit
 continue/fix/rerun instruction calls OWNER-only `continue_bound_task`.
 
 `continue_bound_task` reuses the existing `GatewayInbound` platform-message
-deduplication key. It does not add a second idempotency table. The first callback
-may continue or start the task and inject the instruction; repeated callbacks
-are no-ops. If an OPEN ask exists, continuation is refused so the answer cannot
-be bypassed. `relay_channel_reply` remains a compatibility entry: it can answer
-an OPEN ask, but an ordinary reply only returns context and never resumes or
-injects into a terminal.
+deduplication key. It does not add a second idempotency table. When the same
+callback was already persisted as read-only `task_context`, explicit
+continuation atomically upgrades that row instead of creating a conflict or a
+second inbound. Failed or stale claims can retry on the same row. Terminal
+injection uses the inbound ID as a per-session idempotency key, so a retry after
+an uncertain response cannot submit the instruction twice. If an OPEN ask
+exists, continuation is refused so the answer cannot be bypassed.
+`relay_channel_reply` remains a compatibility entry: it can answer an OPEN ask,
+but an ordinary reply only returns context and never resumes or injects into a
+terminal.

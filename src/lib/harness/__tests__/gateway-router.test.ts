@@ -516,6 +516,81 @@ describe("gateway inbound routing", () => {
     expect(executor).not.toHaveBeenCalled();
   });
 
+  it("upgrades a routed task context to explicit continuation for the same message", async () => {
+    const task = await db.task.create({
+      data: { title: "Routed continuation target", projectId: alphaId, status: "DONE" },
+    });
+    const platformMessageId = "om_routed_explicit_continue";
+    const content = "按失败结果继续修复";
+    const routed = await routeGatewayInbound(inbound({
+      platformMessageId,
+      intent: "PROJECT_WORK",
+      taskId: task.id,
+      content,
+    }), vi.fn());
+    expect(routed).toMatchObject({ mode: "task_context", taskId: task.id });
+    const executor = vi.fn(async () => ({
+      executionId: "exec-routed-continue",
+      executionMode: "continued" as const,
+      injected: true as const,
+    }));
+
+    const result = await continueGatewayBoundTask({
+      gateway: "openclaw",
+      platform: "feishu",
+      chatId: "oc_gateway_test",
+      platformMessageId,
+      taskId: task.id,
+      content,
+    }, executor);
+
+    expect(result).toMatchObject({
+      mode: "continued_task",
+      taskId: task.id,
+      executionId: "exec-routed-continue",
+      deduped: true,
+    });
+    expect(executor).toHaveBeenCalledTimes(1);
+    expect(executor).toHaveBeenCalledWith(task.id, expect.any(String), routed.inboundId);
+    expect(await db.gatewayInbound.count({ where: { platformMessageId } })).toBe(1);
+  });
+
+  it("retries a failed explicit continuation with the same terminal input key", async () => {
+    const task = await db.task.create({
+      data: { title: "Retry continuation target", projectId: alphaId, status: "DONE" },
+    });
+    const executor = vi.fn()
+      .mockRejectedValueOnce(new Error("terminal not ready"))
+      .mockResolvedValueOnce({
+        executionId: "exec-retried",
+        executionMode: "already_running" as const,
+        injected: true as const,
+      });
+    const request = {
+      gateway: "openclaw",
+      platform: "feishu",
+      chatId: "oc_gateway_test",
+      platformMessageId: "om_continue_retry",
+      taskId: task.id,
+      content: "继续修复",
+    };
+
+    const failed = await continueGatewayBoundTask(request, executor);
+    const retried = await continueGatewayBoundTask(request, executor);
+    const duplicate = await continueGatewayBoundTask(request, executor);
+
+    expect(failed).toMatchObject({ mode: "continue_failed", noOp: false });
+    expect(retried).toMatchObject({
+      mode: "continued_task",
+      executionId: "exec-retried",
+      deduped: true,
+    });
+    expect(duplicate).toMatchObject({ mode: "continued_task", deduped: true, noOp: true });
+    expect(executor).toHaveBeenCalledTimes(2);
+    expect(executor.mock.calls[0][2]).toBe(failed.inboundId);
+    expect(executor.mock.calls[1][2]).toBe(failed.inboundId);
+  });
+
   it("refuses explicit continuation while the bound task has an open ask", async () => {
     const task = await db.task.create({ data: { title: "Awaiting answer", projectId: alphaId } });
     await db.harnessMessage.create({

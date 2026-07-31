@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { continueOrStartTaskExecution } from "@/actions/agent-actions";
+import { db } from "@/lib/db";
 import { requireSignedInternalRequest } from "@/lib/internal-api-auth";
+import { unparkSession } from "@/lib/pty/session-store";
 import {
   continueGatewayBoundTask,
   resolveGatewayTaskContext,
@@ -35,8 +37,13 @@ const INITIAL_DELAY_MS = 2500;
 const RETRY_DELAY_MS = 800;
 const MAX_ATTEMPTS = 20;
 
-const executeContinuation: BoundTaskContinuationExecutor = async (taskId, text) => {
+const executeContinuation: BoundTaskContinuationExecutor = async (taskId, text, idempotencyKey) => {
+  await db.taskExecution.updateMany({
+    where: { taskId, status: "PAUSED" },
+    data: { status: "RUNNING", endedAt: null },
+  });
   const execution = await continueOrStartTaskExecution(taskId);
+  unparkSession(taskId);
   if (execution.mode !== "already_running") {
     await new Promise((resolve) => setTimeout(resolve, INITIAL_DELAY_MS));
   }
@@ -45,7 +52,7 @@ const executeContinuation: BoundTaskContinuationExecutor = async (taskId, text) 
     const response = await fetch(`${TERMINAL_BRIDGE}/${encodeURIComponent(taskId)}/input`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text, submit: true }),
+      body: JSON.stringify({ text, submit: true, idempotencyKey }),
     }).catch(() => null);
     if (response?.ok) {
       return {

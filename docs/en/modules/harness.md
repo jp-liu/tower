@@ -89,7 +89,7 @@ complete receipt becomes `SENT_UNVERIFIED` and is not blindly resent.
 
 **`reply_to_ask`** is the normal OPEN-ask answer action: atomically mark the question answered, resume the parked task, and inject the answer. `relay_channel_reply` remains only for old-client compatibility: it may answer a matching OPEN ask, but an ordinary task reply returns context without injecting or resuming.
 
-**`resolve_gateway_task_context` / `continue_bound_task`** separate association from execution. The resolver returns the subject, producer, Workbench, task status, OPEN-ask state, and latest execution summary without writes. The continuation tool is the OWNER-only side effect for explicit "continue", "fix from this failure", or "rerun" intent; it reuses `GatewayInbound` and `platformMessageId` so duplicate callbacks do not resume or inject twice.
+**`resolve_gateway_task_context` / `continue_bound_task`** separate association from execution. The resolver returns the subject, producer, Workbench, task status, OPEN-ask state, and latest execution summary without writes. The continuation tool is the OWNER-only side effect for explicit "continue", "fix from this failure", or "rerun" intent. If the same platform message was already persisted as read-only `task_context`, continuation atomically upgrades that `GatewayInbound`; failed or expired claims retry on the same row. Terminal injection uses the inbound ID as a per-session idempotency key so an uncertain response cannot submit the instruction twice.
 
 **Don't mix the two pairings:**
 

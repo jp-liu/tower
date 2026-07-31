@@ -148,6 +148,7 @@ export type GatewayBoundTaskContinuationResult =
 export type BoundTaskContinuationExecutor = (
   taskId: string,
   text: string,
+  idempotencyKey: string,
 ) => Promise<{
   executionId: string | null;
   executionMode: "already_running" | "continued" | "started";
@@ -828,6 +829,28 @@ function parseContinuationResult(response: string | null): GatewayBoundTaskConti
   }
 }
 
+function parseTaskContextResult(
+  response: string | null,
+): Extract<GatewayRouteResult, { mode: "task_context" }> | null {
+  if (!response) return null;
+  try {
+    const parsed = JSON.parse(response) as GatewayRouteResult;
+    return parsed.mode === "task_context" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function continuationConflict(inboundId: string, reason: string): GatewayBoundTaskContinuationResult {
+  return {
+    mode: "continue_conflict",
+    inboundId,
+    deduped: true,
+    noOp: true,
+    reason,
+  };
+}
+
 function continuationPrompt(
   input: GatewayBoundTaskContinuationRequest,
   context: Extract<GatewayTaskContextResult, { bound: true }>,
@@ -853,36 +876,108 @@ export async function continueGatewayBoundTask(
   executor: BoundTaskContinuationExecutor,
 ): Promise<GatewayBoundTaskContinuationResult> {
   const created = await createInbound(continuationInbound(input));
+  const existingResponse = created.inbound.response;
+  const cached = parseContinuationResult(existingResponse);
+  const routed = parseTaskContextResult(existingResponse);
+  let expectedTaskId: string | null = null;
+
   if (created.deduped) {
-    const cached = parseContinuationResult(created.inbound.response);
     if (cached?.mode === "continued_task") {
       return { ...cached, deduped: true, noOp: true };
     }
-    if (cached) return { ...cached, deduped: true, noOp: true };
-    if (created.inbound.response) {
+    if (cached && cached.mode !== "continue_failed" && cached.mode !== "continue_in_progress") {
+      return { ...cached, deduped: true, noOp: true };
+    }
+    const stale = Date.now() - created.inbound.updatedAt.getTime() >= INBOUND_CLAIM_LEASE_MS;
+    const retryable = cached?.mode === "continue_failed"
+      || (cached?.mode === "continue_in_progress" && stale)
+      || (!existingResponse && stale)
+      || !!routed;
+    if (!retryable) {
       return {
-        mode: "continue_conflict",
+        mode: created.inbound.state === "FAILED" ? "continue_failed" : "continue_in_progress",
         inboundId: created.inbound.id,
         deduped: true,
         noOp: true,
-        reason: "This platform message was already processed by another Tower gateway action.",
+        taskId: cached?.taskId,
+        reason: created.inbound.lastError ?? undefined,
       };
     }
-    return {
-      mode: created.inbound.state === "FAILED" ? "continue_failed" : "continue_in_progress",
-      inboundId: created.inbound.id,
-      deduped: true,
-      noOp: true,
-      reason: created.inbound.lastError ?? undefined,
-    };
+    if (created.inbound.content.trim() !== input.content.trim()) {
+      return continuationConflict(
+        created.inbound.id,
+        "The platform message content does not match the persisted Tower inbound.",
+      );
+    }
+    expectedTaskId = routed?.context.subjectTaskId ?? cached?.taskId ?? null;
+    if (existingResponse && !routed && !cached) {
+      return continuationConflict(
+        created.inbound.id,
+        "This platform message was already processed by another Tower gateway action.",
+      );
+    }
   }
 
   const context = await resolveGatewayTaskContext(input);
+  if (context.bound && expectedTaskId && context.subjectTaskId !== expectedTaskId) {
+    return continuationConflict(
+      created.inbound.id,
+      "The requested task does not match the task context persisted for this platform message.",
+    );
+  }
+
+  const inProgress: GatewayBoundTaskContinuationResult = {
+    mode: "continue_in_progress",
+    inboundId: created.inbound.id,
+    taskId: context.bound ? context.subjectTaskId : expectedTaskId ?? undefined,
+    deduped: created.deduped,
+    noOp: false,
+  };
+  if (created.deduped) {
+    const claimed = await db.gatewayInbound.updateMany({
+      where: {
+        id: created.inbound.id,
+        state: created.inbound.state,
+        response: existingResponse,
+        updatedAt: created.inbound.updatedAt,
+      },
+      data: {
+        state: "PROCESSING",
+        response: JSON.stringify(inProgress),
+        processedAt: null,
+        lastError: null,
+        attempts: { increment: 1 },
+      },
+    });
+    if (claimed.count !== 1) {
+      const current = await db.gatewayInbound.findUniqueOrThrow({ where: { id: created.inbound.id } });
+      const currentResult = parseContinuationResult(current.response);
+      if (currentResult) return { ...currentResult, deduped: true, noOp: true };
+      return {
+        mode: "continue_in_progress",
+        inboundId: current.id,
+        taskId: context.bound ? context.subjectTaskId : expectedTaskId ?? undefined,
+        deduped: true,
+        noOp: true,
+      };
+    }
+  } else {
+    await db.gatewayInbound.update({
+      where: { id: created.inbound.id },
+      data: {
+        state: "PROCESSING",
+        response: JSON.stringify(inProgress),
+        lastError: null,
+        attempts: { increment: 1 },
+      },
+    });
+  }
+
   if (!context.bound) {
     const result: GatewayBoundTaskContinuationResult = {
       mode: "continue_not_bound",
       inboundId: created.inbound.id,
-      deduped: false,
+      deduped: created.deduped,
       noOp: true,
       reason: context.reason,
     };
@@ -894,7 +989,7 @@ export async function continueGatewayBoundTask(
       mode: "continue_open_ask",
       inboundId: created.inbound.id,
       taskId: context.subjectTaskId,
-      deduped: false,
+      deduped: created.deduped,
       noOp: true,
       reason: "The task has an open ask_human question; answer it with reply_to_ask instead of continuing the task.",
     };
@@ -902,25 +997,11 @@ export async function continueGatewayBoundTask(
     return result;
   }
 
-  await db.gatewayInbound.update({
-    where: { id: created.inbound.id },
-    data: {
-      state: "PROCESSING",
-      response: JSON.stringify({
-        mode: "continue_in_progress",
-        inboundId: created.inbound.id,
-        taskId: context.subjectTaskId,
-        deduped: false,
-        noOp: false,
-      }),
-      lastError: null,
-    },
-  });
-
   try {
     const executed = await executor(
       context.subjectTaskId,
       continuationPrompt(input, context, created.inbound.id),
+      created.inbound.id,
     );
     const result: GatewayBoundTaskContinuationResult = {
       mode: "continued_task",
@@ -929,7 +1010,7 @@ export async function continueGatewayBoundTask(
       executionId: executed.executionId,
       executionMode: executed.executionMode,
       injected: true,
-      deduped: false,
+      deduped: created.deduped,
     };
     await completeGatewayInbound(created.inbound.id, result);
     return result;
@@ -939,7 +1020,7 @@ export async function continueGatewayBoundTask(
       mode: "continue_failed",
       inboundId: created.inbound.id,
       taskId: context.subjectTaskId,
-      deduped: false,
+      deduped: created.deduped,
       noOp: false,
       reason,
     };
