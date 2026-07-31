@@ -104,15 +104,22 @@ branch.
 2. Use `${{ runner.temp }}/tower-extension-catalog` directly in the three steps
    that generate, validate, and upload the catalog, or place it in step-level
    `env` for those steps.
-3. Keep the public package registry, Node/pnpm versions, test database, and
+3. Fetch release history in the test job because the existing migration matrix
+   reads the tagged `v0.2.60` Prisma schema with `git show`.
+4. Make the existing CLI plugin provider fixture declare its known path for the
+   current test platform rather than hard-coding macOS, so the same assertion is
+   valid on the Linux runner.
+5. Keep the public package registry, Node/pnpm versions, test database, and
    artifact behavior unchanged.
-4. Update no business code in this PR.
+6. Update no production business code in this PR.
 
 ### Acceptance
 
 - GitHub displays the workflow as `CI`, not `.github/workflows/ci.yml`.
 - The `test` and `extension catalog` jobs are both created.
 - Both jobs complete successfully on a pull request to `main`.
+- The migration matrix can read the historical release schema, and the CLI
+  plugin resolver test passes on the Linux runner.
 - A failure has a job log; zero-job workflow-startup failures are gone.
 
 ## 4. PR 2 - Integrate Extensions Platform V1 Foundation
