@@ -20,10 +20,10 @@ import { scoreProject } from "@/lib/project-score";
 import { getSession } from "@/lib/pty/session-store";
 import { getOpenAsk } from "@/lib/harness/harness-message";
 import {
-  enqueueWorkbenchEvent,
-  openWorkbenchDrainBoundary,
-  restoreWorkbenchDrainBoundary,
-} from "@/lib/workbench/coordinator";
+  activateWorkbenchCommandConsumer,
+  publishWorkbenchCommand,
+  restoreWorkbenchCommandConsumer,
+} from "@/lib/workbench/command-inbox";
 import { extractTowerTaskId, findHarnessDeliveryByPlatformMessageId } from "./delivery-map";
 import { parseGatewaySendOutput } from "./gateway-output";
 import {
@@ -1663,7 +1663,7 @@ export async function routeGatewayInbound(
     await saveRoute(created.inbound.id, result, "PROCESSED");
     return result;
   }
-  await enqueueWorkbenchEvent({
+  await publishWorkbenchCommand({
     parentTaskId: workbenchTaskId,
     sourceTaskId: workbenchTaskId,
     kind: "GATEWAY_WORK_REQUEST",
@@ -1672,25 +1672,15 @@ export async function routeGatewayInbound(
     payload: {
       childTaskId: workbenchTaskId,
       childTitle: `${resolved.project.name} gateway request`,
-      gatewayInboundId: created.inbound.id,
-      gatewaySessionId: session.id,
-      gatewayMessage: workbenchPrompt(input, created.inbound.id, resolved.project),
+      instruction: workbenchPrompt(input, created.inbound.id, resolved.project),
+      sourceReference: { namespace: "gateway_inbound", id: created.inbound.id },
     },
   });
 
   let workbench: { mode: string; executionId: string | null } | { error: string };
   try {
     workbench = await ensureWorkbench(workbenchTaskId);
-    if (workbench.mode !== "already_running") {
-      // A fresh/resumed Workbench begins at an empty-input boundary. Without
-      // opening it here, the just-enqueued gateway event can remain PENDING
-      // until an unrelated stop callback or server restart occurs.
-      openWorkbenchDrainBoundary(workbenchTaskId);
-    } else {
-      // Preserve the no-injection-while-busy invariant. This succeeds only
-      // when the provider has already confirmed a completed turn.
-      restoreWorkbenchDrainBoundary(workbenchTaskId);
-    }
+    activateWorkbenchCommandConsumer(workbenchTaskId, workbench.mode);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     workbench = { error: message };
@@ -2353,7 +2343,7 @@ export async function recoverQueuedGatewayWork(
   ensureWorkbench: EnsureWorkbench = defaultEnsureWorkbench,
   limit = 100,
   sender: DeliverySender = sendViaHarnessGateway,
-  restoreBoundary: (taskId: string) => boolean = restoreWorkbenchDrainBoundary,
+  restoreBoundary: (taskId: string) => boolean = restoreWorkbenchCommandConsumer,
   options: { projectId?: string; inboundId?: string } = {},
 ) {
   const rows = await db.gatewayInbound.findMany({
@@ -2484,7 +2474,7 @@ export async function recoverQueuedGatewayWork(
         }
         const resumed = await ensureWorkbench(taskId);
         if (resumed.mode !== "already_running") {
-          openWorkbenchDrainBoundary(taskId);
+          activateWorkbenchCommandConsumer(taskId, resumed.mode);
         } else {
           restoreBoundary(taskId);
         }
@@ -2513,7 +2503,7 @@ export async function recoverQueuedGatewayWork(
         workspaceId: project.workspaceId,
         workspaceName: project.workspace.name,
       };
-      const event = await enqueueWorkbenchEvent({
+      const event = await publishWorkbenchCommand({
         parentTaskId: taskId,
         sourceTaskId: taskId,
         kind: "GATEWAY_WORK_REQUEST",
@@ -2522,9 +2512,8 @@ export async function recoverQueuedGatewayWork(
         payload: {
           childTaskId: taskId,
           childTitle: `${project.name} gateway request`,
-          gatewayInboundId: inbound.id,
-          gatewaySessionId: inbound.session!.id,
-          gatewayMessage: workbenchPrompt(queuedInput, inbound.id, gatewayProject),
+          instruction: workbenchPrompt(queuedInput, inbound.id, gatewayProject),
+          sourceReference: { namespace: "gateway_inbound", id: inbound.id },
         },
       });
       if (event.event.state === "CONSUMED") {
@@ -2550,7 +2539,7 @@ export async function recoverQueuedGatewayWork(
       if (resumed.mode !== "already_running") {
         // A server restart loses the process-local boundary set. A newly resumed
         // PTY starts at a safe empty-input boundary, so re-open it once here.
-        openWorkbenchDrainBoundary(taskId);
+        activateWorkbenchCommandConsumer(taskId, resumed.mode);
       } else {
         // `already_running` can mean either an active turn or an idle TUI whose
         // process-local drain token was lost during a server/module restart.

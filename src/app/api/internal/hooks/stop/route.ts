@@ -4,8 +4,8 @@ import { db } from "@/lib/db";
 import { broadcastNotification } from "@/lib/pty/ws-server";
 import { notifyParentOnChildDecision, notifyParentOnChildStop } from "@/lib/derive/notify-parent";
 import { getOpenAsk } from "@/lib/harness/harness-message";
+import { notifyPtyProviderTurnCompleted } from "@/lib/pty/lifecycle";
 import { destroySession, markSessionTurnComplete } from "@/lib/pty/session-store";
-import { openWorkbenchDrainBoundary } from "@/lib/workbench/coordinator";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -110,6 +110,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, parked: true });
   }
 
+  // An open ask deliberately parks instead of admitting autonomous input. Once
+  // that guard is clear, publish the provider boundary to interested modules.
+  await notifyPtyProviderTurnCompleted(task.id);
+
   // Codex's agent-turn-complete notify is the authoritative terminal event for
   // derived one-shot work. Persist the terminal state before publishing review
   // so a PTY exit race or server restart cannot leave RUNNING behind.
@@ -159,10 +163,6 @@ export async function POST(request: NextRequest) {
   // Fan-out 消费者 2（派生中枢）：子任务事件只做去重持久化。父终端是否运行
   // 不影响入库；实际 review batch 由父任务自己的安全回合边界统一 drain。
   await notifyParentOnChildStop(task.id, task.title, lastReply ?? "", childContext);
-
-  // This task's own turn has now completed. Any child events already pending,
-  // or arriving shortly after this response, may be drained at this safe TUI boundary.
-  openWorkbenchDrainBoundary(task.id);
 
   if (task.parentTaskId) destroySession(task.id);
 

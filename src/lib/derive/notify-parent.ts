@@ -8,9 +8,9 @@
 import { db } from "@/lib/db";
 import {
   childStopDedupKey,
-  enqueueWorkbenchEvent,
-  type WorkbenchEventKind,
-} from "@/lib/workbench/coordinator";
+  publishWorkbenchCommand,
+  type WorkbenchCommandKind,
+} from "@/lib/workbench/command-inbox";
 
 interface ChildStopContext {
   sessionId?: string;
@@ -23,7 +23,7 @@ async function persistChildStopEvent(input: {
   childTitle: string;
   lastReply: string;
   question?: string;
-  kind: Extract<WorkbenchEventKind, "CHILD_REVIEW_REQUIRED" | "CHILD_DECISION_REQUIRED">;
+  kind: Extract<WorkbenchCommandKind, "CHILD_REVIEW_REQUIRED" | "CHILD_DECISION_REQUIRED">;
   context?: ChildStopContext;
 }): Promise<{ enqueued: boolean; deduped?: boolean }> {
   const child = await db.task.findUnique({
@@ -32,7 +32,7 @@ async function persistChildStopEvent(input: {
   });
   if (!child?.parentTaskId) return { enqueued: false };
 
-  const result = await enqueueWorkbenchEvent({
+  const result = await publishWorkbenchCommand({
     parentTaskId: child.parentTaskId,
     sourceTaskId: input.childTaskId,
     executionId: input.context?.executionId ?? null,

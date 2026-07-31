@@ -1,9 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/lib/db";
 import {
+  resetPtyLifecycleObserverForTests,
+  setPtyLifecycleObserver,
+} from "@/lib/pty/lifecycle";
+import {
   hasWorkbenchDrainBoundary,
+  markWorkbenchDrainBoundary,
   resetWorkbenchDrainBoundariesForTests,
 } from "@/lib/workbench/boundary";
 
@@ -24,7 +29,14 @@ vi.mock("@/lib/pty/session-store", () => ({
 
 const workspaceIds: string[] = [];
 
+beforeEach(() => {
+  setPtyLifecycleObserver({
+    providerTurnCompleted: (taskId) => markWorkbenchDrainBoundary(taskId),
+  });
+});
+
 afterEach(async () => {
+  resetPtyLifecycleObserverForTests();
   resetWorkbenchDrainBoundariesForTests();
   await db.workspace.deleteMany({ where: { id: { in: workspaceIds.splice(0) } } });
   vi.clearAllMocks();

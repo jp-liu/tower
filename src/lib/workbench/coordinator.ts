@@ -10,6 +10,7 @@ import { buildChildReviewPrompt } from "@/lib/derive/child-review-prompt";
 import { logger } from "@/lib/logger";
 import { getSession, markSessionTurnComplete } from "@/lib/pty/session-store";
 import { planTerminalWrite } from "@/lib/pty/terminal-submit";
+import { notifyWorkbenchBatchDispatched } from "./delivery-lifecycle";
 import {
   hasWorkbenchDrainBoundary,
   markWorkbenchDrainBoundary,
@@ -48,9 +49,8 @@ export interface WorkbenchEventPayload {
   question?: string;
   executionId?: string;
   exitCode?: number;
-  gatewayInboundId?: string;
-  gatewaySessionId?: string;
-  gatewayMessage?: string;
+  instruction?: string;
+  sourceReference?: { namespace: string; id: string };
 }
 
 export interface EnqueueWorkbenchEventInput {
@@ -135,10 +135,10 @@ export interface WorkbenchRuntimeSnapshot {
 export function deriveWorkbenchRuntimeState(input: {
   hasLiveSession: boolean;
   hasActiveBatch: boolean;
-  pendingEvents: number;
+  isAtTurnBoundary: boolean;
 }): WorkbenchRuntimeState {
   if (!input.hasLiveSession) return "DEGRADED";
-  if (input.hasActiveBatch || input.pendingEvents > 0) return "BUSY";
+  if (input.hasActiveBatch || !input.isAtTurnBoundary) return "BUSY";
   return "IDLE";
 }
 
@@ -252,7 +252,7 @@ export async function heartbeatActiveWorkbenchRuntimes(): Promise<number> {
     const state = deriveWorkbenchRuntimeState({
       hasLiveSession,
       hasActiveBatch: Boolean(activeBatch),
-      pendingEvents,
+      isAtTurnBoundary: session?.isAtTurnBoundary ?? false,
     });
     await recordWorkbenchRuntime(execution.taskId, state, {
       executionId: execution.id,
@@ -466,13 +466,13 @@ export function buildWorkbenchBatchPrompt(
 
   if (events.length === 1 && events[0].kind === "GATEWAY_WORK_REQUEST") {
     const payload = parsePayload(events[0]);
-    return `${payload.gatewayMessage || "[Gateway project work request]\nNo message content was stored."}${protocol}`;
+    return `${payload.instruction || "[External project work request]\nNo instruction was stored."}${protocol}`;
   }
 
   const items = events.map((event, index) => {
     const payload = parsePayload(event);
     const detail = event.kind === "GATEWAY_WORK_REQUEST"
-      ? `Inbound: ${payload.gatewayInboundId ?? "unknown"}\n   ${(payload.gatewayMessage || "(no gateway message)").slice(0, 8000)}`
+      ? (payload.instruction || "(no external work instruction)").slice(0, 8000)
       : event.kind === "CHILD_DECISION_REQUIRED"
       ? `Question: ${(payload.question || payload.childReply || "(no question text)").slice(0, 1600)}`
       : event.kind === "CHILD_EXECUTION_FAILED"
@@ -664,21 +664,10 @@ export async function drainWorkbenchEvents(
       activeBatchId: batchKey,
       blockedReason: "Waiting for Workbench batch acknowledgement",
     });
-    const gatewayInboundIds = events.flatMap((event) => {
-      const id = parsePayload(event).gatewayInboundId?.trim();
-      return id ? [id] : [];
+    await notifyWorkbenchBatchDispatched({
+      batchId: batchKey,
+      commands: events.map((event) => ({ kind: event.kind, payload: event.payload })),
     });
-    if (gatewayInboundIds.length > 0) {
-      await db.gatewayInbound.updateMany({
-        where: { id: { in: gatewayInboundIds }, state: "QUEUED" },
-        data: { state: "PROCESSING", lastError: null },
-      }).catch((error) => {
-        log.warn("Workbench batch dispatched but gateway inbound state update failed", {
-          batchKey,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-    }
     return {
       batchKey,
       generation: batch.generation,
@@ -851,11 +840,32 @@ export async function resolveWorkbenchBatch(
       noOp: false,
     };
   });
-  await recordWorkbenchRuntime(parentTaskId, "IDLE", {
+  await recordWorkbenchRuntime(parentTaskId, "BUSY", {
     activeBatchId: null,
-    turnCompleted: true,
+    blockedReason: "Batch resolved; provider turn is still in progress",
   });
   return result;
+}
+
+export async function recordWorkbenchProviderTurnCompleted(parentTaskId: string): Promise<boolean> {
+  const [runtime, activeBatch] = await Promise.all([
+    db.workbenchRuntime.findUnique({
+      where: { taskId: parentTaskId },
+      select: { taskId: true },
+    }),
+    db.workbenchBatch.findFirst({
+      where: { parentTaskId, state: { in: ["CLAIMED", "DISPATCHED", "ACKED"] } },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    }),
+  ]);
+  if (!runtime) return false;
+  await recordWorkbenchRuntime(parentTaskId, activeBatch ? "BUSY" : "IDLE", {
+    activeBatchId: activeBatch?.id ?? null,
+    blockedReason: activeBatch ? "Provider turn completed with an active Workbench batch" : null,
+    turnCompleted: true,
+  });
+  return true;
 }
 
 export async function heartbeatWorkbenchBatch(
