@@ -32,16 +32,16 @@ export interface BackupInfo {
 const LOCK_FILE = ".lock";
 
 export function acquireLock(backupsDir: string): void {
-  mkdirSync(backupsDir, { recursive: true, mode: 0o700 });
-  const lockPath = join(backupsDir, LOCK_FILE);
-  if (existsSync(lockPath)) {
-    const pid = parseInt(readFileSync(lockPath, "utf-8").trim(), 10);
+  mkdirSync(/* turbopackIgnore: true */ backupsDir, { recursive: true, mode: 0o700 });
+  const lockPath = join(/* turbopackIgnore: true */ backupsDir, LOCK_FILE);
+  if (existsSync(/* turbopackIgnore: true */ lockPath)) {
+    const pid = parseInt(readFileSync(/* turbopackIgnore: true */ lockPath, "utf-8").trim(), 10);
     try { process.kill(pid, 0); throw new Error("Another backup operation is in progress"); }
     catch (e: unknown) { if (e instanceof Error && e.message.includes("Another backup")) throw e; }
-    try { unlinkSync(lockPath); } catch { /* a concurrent owner will win the atomic create below */ }
+    try { unlinkSync(/* turbopackIgnore: true */ lockPath); } catch { /* a concurrent owner will win the atomic create below */ }
   }
   try {
-    const fd = openSync(lockPath, "wx", 0o600);
+    const fd = openSync(/* turbopackIgnore: true */ lockPath, "wx", 0o600);
     try {
       writeFileSync(fd, String(process.pid));
     } finally {
@@ -56,8 +56,8 @@ export function acquireLock(backupsDir: string): void {
 }
 
 export function releaseLock(backupsDir: string): void {
-  const lockPath = join(backupsDir, LOCK_FILE);
-  try { unlinkSync(lockPath); } catch { /* best-effort */ }
+  const lockPath = join(/* turbopackIgnore: true */ backupsDir, LOCK_FILE);
+  try { unlinkSync(/* turbopackIgnore: true */ lockPath); } catch { /* best-effort */ }
 }
 
 // ---------------------------------------------------------------------------
@@ -106,29 +106,29 @@ export async function createArchive(
   auto: boolean,
 ): Promise<BackupInfo> {
   const filename = backupFilename(auto);
-  const outPath = join(backupsDir, filename);
-  mkdirSync(backupsDir, { recursive: true, mode: 0o700 });
-  try { chmodSync(backupsDir, 0o700); } catch { /* non-POSIX filesystem */ }
+  const outPath = join(/* turbopackIgnore: true */ backupsDir, filename);
+  mkdirSync(/* turbopackIgnore: true */ backupsDir, { recursive: true, mode: 0o700 });
+  try { chmodSync(/* turbopackIgnore: true */ backupsDir, 0o700); } catch { /* non-POSIX filesystem */ }
 
-  const metaPath = join(towerDir, "metadata.json");
-  writeFileSync(metaPath, JSON.stringify(metadata, null, 2));
+  const metaPath = join(/* turbopackIgnore: true */ towerDir, "metadata.json");
+  writeFileSync(/* turbopackIgnore: true */ metaPath, JSON.stringify(metadata, null, 2));
 
   try {
     const entries: string[] = ["metadata.json"];
-    if (existsSync(join(towerDir, "database", "tower.db"))) entries.push(join("database", "tower.db"));
-    if (existsSync(join(towerDir, "storage", "assets"))) entries.push(join("storage", "assets"));
-    if (existsSync(join(towerDir, "assistant"))) entries.push("assistant");
-    if (existsSync(join(towerDir, "ai"))) entries.push("ai");
-    if (existsSync(join(towerDir, "extensions"))) entries.push("extensions");
-    if (existsSync(join(towerDir, "logs"))) entries.push("logs");
+    if (existsSync(join(/* turbopackIgnore: true */ towerDir, "database", "tower.db"))) entries.push(join("database", "tower.db"));
+    if (existsSync(join(/* turbopackIgnore: true */ towerDir, "storage", "assets"))) entries.push(join("storage", "assets"));
+    if (existsSync(join(/* turbopackIgnore: true */ towerDir, "assistant"))) entries.push("assistant");
+    if (existsSync(join(/* turbopackIgnore: true */ towerDir, "ai"))) entries.push("ai");
+    if (existsSync(join(/* turbopackIgnore: true */ towerDir, "extensions"))) entries.push("extensions");
+    if (existsSync(join(/* turbopackIgnore: true */ towerDir, "logs"))) entries.push("logs");
 
     await tar.create(
       { gzip: true, file: outPath, cwd: towerDir },
       entries,
     );
-    try { chmodSync(outPath, 0o600); } catch { /* non-POSIX filesystem */ }
+    try { chmodSync(/* turbopackIgnore: true */ outPath, 0o600); } catch { /* non-POSIX filesystem */ }
 
-    const st = statSync(outPath);
+    const st = statSync(/* turbopackIgnore: true */ outPath);
     return {
       filename,
       size: st.size,
@@ -139,10 +139,10 @@ export async function createArchive(
       preview: metadata.preview,
     };
   } catch (err) {
-    try { unlinkSync(outPath); } catch { /* ignore */ }
+    try { unlinkSync(/* turbopackIgnore: true */ outPath); } catch { /* ignore */ }
     throw err;
   } finally {
-    try { unlinkSync(metaPath); } catch { /* ignore */ }
+    try { unlinkSync(/* turbopackIgnore: true */ metaPath); } catch { /* ignore */ }
   }
 }
 
@@ -150,21 +150,21 @@ export async function createArchive(
 // Read metadata from archive
 // ---------------------------------------------------------------------------
 export async function readMetadataFromArchive(archivePath: string): Promise<BackupMetadata | null> {
-  const tmpDir = join(dirname(archivePath), `_meta_tmp_${Date.now()}`);
+  const tmpDir = join(/* turbopackIgnore: true */ dirname(archivePath), `_meta_tmp_${Date.now()}`);
   try {
-    mkdirSync(tmpDir, { recursive: true });
+    mkdirSync(/* turbopackIgnore: true */ tmpDir, { recursive: true });
     await tar.extract({
       file: archivePath,
       cwd: tmpDir,
       filter: (path) => path === "metadata.json",
     });
-    const metaPath = join(tmpDir, "metadata.json");
-    if (!existsSync(metaPath)) return null;
-    return JSON.parse(readFileSync(metaPath, "utf-8"));
+    const metaPath = join(/* turbopackIgnore: true */ tmpDir, "metadata.json");
+    if (!existsSync(/* turbopackIgnore: true */ metaPath)) return null;
+    return JSON.parse(readFileSync(/* turbopackIgnore: true */ metaPath, "utf-8"));
   } catch {
     return null;
   } finally {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(/* turbopackIgnore: true */ tmpDir, { recursive: true, force: true });
   }
 }
 
@@ -172,17 +172,17 @@ export async function readMetadataFromArchive(archivePath: string): Promise<Back
 // List archives
 // ---------------------------------------------------------------------------
 export async function listArchives(backupsDir: string): Promise<BackupInfo[]> {
-  if (!existsSync(backupsDir)) return [];
+  if (!existsSync(/* turbopackIgnore: true */ backupsDir)) return [];
 
-  const files = readdirSync(backupsDir)
+  const files = readdirSync(/* turbopackIgnore: true */ backupsDir)
     .filter((f) => VALID_FILENAME.test(f))
     .sort()
     .reverse();
 
   const results: BackupInfo[] = [];
   for (const filename of files) {
-    const filePath = join(backupsDir, filename);
-    const st = statSync(filePath);
+    const filePath = join(/* turbopackIgnore: true */ backupsDir, filename);
+    const st = statSync(/* turbopackIgnore: true */ filePath);
     const meta = await readMetadataFromArchive(filePath);
     results.push({
       filename,
@@ -201,7 +201,7 @@ export async function listArchives(backupsDir: string): Promise<BackupInfo[]> {
 // Extract archive to temp dir (with path safety validation)
 // ---------------------------------------------------------------------------
 export async function extractArchive(archivePath: string, destDir: string): Promise<void> {
-  mkdirSync(destDir, { recursive: true });
+  mkdirSync(/* turbopackIgnore: true */ destDir, { recursive: true });
 
   await tar.extract({
     file: archivePath,
@@ -212,7 +212,7 @@ export async function extractArchive(archivePath: string, destDir: string): Prom
     },
   });
 
-  if (!existsSync(join(destDir, "database", "tower.db"))) {
+  if (!existsSync(join(/* turbopackIgnore: true */ destDir, "database", "tower.db"))) {
     throw new Error("Invalid archive: missing database/tower.db");
   }
 }
@@ -227,8 +227,8 @@ function rebaseRegistryFile(
   registryPath: string,
   installPathFor: (record: { id?: unknown; source?: unknown; installPath: string }) => string | null,
 ): void {
-  if (!existsSync(registryPath)) return;
-  const parsed = JSON.parse(readFileSync(registryPath, "utf8")) as unknown;
+  if (!existsSync(/* turbopackIgnore: true */ registryPath)) return;
+  const parsed = JSON.parse(readFileSync(/* turbopackIgnore: true */ registryPath, "utf8")) as unknown;
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
   const plugins = (parsed as { plugins?: unknown }).plugins;
   if (!plugins || typeof plugins !== "object" || Array.isArray(plugins)) return;
@@ -240,37 +240,37 @@ function rebaseRegistryFile(
     if (typeof record.installPath !== "string") continue;
     const restoredPath = installPathFor({ ...record, installPath: record.installPath });
     if (!restoredPath) continue;
-    if (!existsSync(restoredPath) || record.installPath === restoredPath) continue;
+    if (!existsSync(/* turbopackIgnore: true */ restoredPath) || record.installPath === restoredPath) continue;
     record.installPath = restoredPath;
     changed = true;
   }
-  if (changed) writeFileSync(registryPath, `${JSON.stringify(parsed, null, 2)}\n`);
+  if (changed) writeFileSync(/* turbopackIgnore: true */ registryPath, `${JSON.stringify(parsed, null, 2)}\n`);
 }
 
 function rebasePluginRegistries(towerDir: string): void {
   rebaseRegistryFile(
     towerDir,
-    join(towerDir, "ai", "plugins", "registry.v1.json"),
+    join(/* turbopackIgnore: true */ towerDir, "ai", "plugins", "registry.v1.json"),
     (record) => {
       const packageDir = record.installPath.split(/[\\/]/).at(-1);
       return packageDir && packageDir !== "." && packageDir !== ".."
-        ? join(towerDir, "ai", "plugins", "packages", packageDir)
+        ? join(/* turbopackIgnore: true */ towerDir, "ai", "plugins", "packages", packageDir)
         : null;
     },
   );
   rebaseRegistryFile(
     towerDir,
-    join(towerDir, "extensions", "registry.v2.json"),
+    join(/* turbopackIgnore: true */ towerDir, "extensions", "registry.v2.json"),
     (record) => {
       const packageDir = record.installPath.split(/[\\/]/).at(-1);
       if (!packageDir || packageDir === "." || packageDir === "..") return null;
       if (record.source === "catalog" || record.source === "npm") {
         return typeof record.id === "string"
-          ? join(towerDir, "extensions", "cli-provider", record.id, packageDir)
+          ? join(/* turbopackIgnore: true */ towerDir, "extensions", "cli-provider", record.id, packageDir)
           : null;
       }
       if (record.source === "legacy" || record.source === "local") {
-        return join(towerDir, "ai", "plugins", "packages", packageDir);
+        return join(/* turbopackIgnore: true */ towerDir, "ai", "plugins", "packages", packageDir);
       }
       return null;
     },
@@ -278,40 +278,40 @@ function rebasePluginRegistries(towerDir: string): void {
 }
 
 export function swapDirs(towerDir: string, extractedDir: string): void {
-  const oldTmp = join(towerDir, "_old_tmp");
-  mkdirSync(oldTmp, { recursive: true });
+  const oldTmp = join(/* turbopackIgnore: true */ towerDir, "_old_tmp");
+  mkdirSync(/* turbopackIgnore: true */ oldTmp, { recursive: true });
 
   try {
     for (const rel of DIRS_TO_SWAP) {
-      const src = join(towerDir, rel);
-      const dst = join(oldTmp, rel);
-      if (existsSync(src)) {
-        mkdirSync(dirname(join(oldTmp, rel)), { recursive: true });
-        renameSync(src, dst);
+      const src = join(/* turbopackIgnore: true */ towerDir, rel);
+      const dst = join(/* turbopackIgnore: true */ oldTmp, rel);
+      if (existsSync(/* turbopackIgnore: true */ src)) {
+        mkdirSync(/* turbopackIgnore: true */ dirname(join(oldTmp, rel)), { recursive: true });
+        renameSync(/* turbopackIgnore: true */ src, dst);
       }
     }
 
     for (const rel of DIRS_TO_SWAP) {
-      const src = join(extractedDir, rel);
-      const dst = join(towerDir, rel);
-      if (existsSync(src)) {
-        mkdirSync(dirname(join(towerDir, rel)), { recursive: true });
-        renameSync(src, dst);
+      const src = join(/* turbopackIgnore: true */ extractedDir, rel);
+      const dst = join(/* turbopackIgnore: true */ towerDir, rel);
+      if (existsSync(/* turbopackIgnore: true */ src)) {
+        mkdirSync(/* turbopackIgnore: true */ dirname(join(towerDir, rel)), { recursive: true });
+        renameSync(/* turbopackIgnore: true */ src, dst);
       }
     }
 
     rebasePluginRegistries(towerDir);
 
-    rmSync(oldTmp, { recursive: true, force: true });
+    rmSync(/* turbopackIgnore: true */ oldTmp, { recursive: true, force: true });
   } catch (err) {
     for (const rel of DIRS_TO_SWAP) {
-      const src = join(oldTmp, rel);
-      const dst = join(towerDir, rel);
-      if (existsSync(src) && !existsSync(dst)) {
-        try { renameSync(src, dst); } catch { /* best-effort */ }
+      const src = join(/* turbopackIgnore: true */ oldTmp, rel);
+      const dst = join(/* turbopackIgnore: true */ towerDir, rel);
+      if (existsSync(/* turbopackIgnore: true */ src) && !existsSync(/* turbopackIgnore: true */ dst)) {
+        try { renameSync(/* turbopackIgnore: true */ src, dst); } catch { /* best-effort */ }
       }
     }
-    rmSync(oldTmp, { recursive: true, force: true });
+    rmSync(/* turbopackIgnore: true */ oldTmp, { recursive: true, force: true });
     throw err;
   }
 }
@@ -320,10 +320,10 @@ export function swapDirs(towerDir: string, extractedDir: string): void {
 // Delete WAL/SHM files
 // ---------------------------------------------------------------------------
 export function deleteWalFiles(towerDir: string): void {
-  const dbDir = join(towerDir, "database");
+  const dbDir = join(/* turbopackIgnore: true */ towerDir, "database");
   for (const ext of ["-wal", "-shm"]) {
     const f = join(dbDir, `tower.db${ext}`);
-    try { unlinkSync(f); } catch { /* doesn't exist */ }
+    try { unlinkSync(/* turbopackIgnore: true */ f); } catch { /* doesn't exist */ }
   }
 }
 
@@ -332,8 +332,8 @@ export function deleteWalFiles(towerDir: string): void {
 // ---------------------------------------------------------------------------
 export function wipeTowerData(towerDir: string): void {
   for (const rel of ["database", join("storage", "assets"), "assistant", "ai", "extensions", "logs"]) {
-    const dir = join(towerDir, rel);
-    if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+    const dir = join(/* turbopackIgnore: true */ towerDir, rel);
+    if (existsSync(/* turbopackIgnore: true */ dir)) rmSync(dir, { recursive: true, force: true });
   }
 }
 
@@ -342,7 +342,7 @@ export function wipeTowerData(towerDir: string): void {
 // ---------------------------------------------------------------------------
 export function cleanupTempDirs(towerDir: string): void {
   for (const name of ["_restore_tmp", "_old_tmp"]) {
-    const dir = join(towerDir, name);
-    if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+    const dir = join(/* turbopackIgnore: true */ towerDir, name);
+    if (existsSync(/* turbopackIgnore: true */ dir)) rmSync(dir, { recursive: true, force: true });
   }
 }

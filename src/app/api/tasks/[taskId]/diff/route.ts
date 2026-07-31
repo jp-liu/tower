@@ -84,7 +84,7 @@ export async function GET(
     const parsedDiff = parseDiffOutput(numstat, "");
 
     // Include untracked files for live worktree diffs (not DONE state)
-    if (!mergeCommit && worktreePath && existsSync(worktreePath)) {
+    if (!mergeCommit && worktreePath && existsSync(/* turbopackIgnore: true */ worktreePath)) {
       try {
         const untrackedOutput = execFileSync(
           "git", ["ls-files", "--others", "--exclude-standard"],
@@ -94,8 +94,8 @@ export async function GET(
           for (const filename of untrackedOutput.split("\n")) {
             if (!filename) continue;
             try {
-              const filePath = path.join(diffCwd, filename);
-              const content = readFileSync(filePath, "utf-8");
+              const filePath = path.join(/* turbopackIgnore: true */ diffCwd, filename);
+              const content = readFileSync(/* turbopackIgnore: true */ filePath, "utf-8");
               const lines = content.split("\n");
               // Remove trailing empty line from split
               if (lines[lines.length - 1] === "") lines.pop();
@@ -171,7 +171,7 @@ export async function GET(
 
     // Check for uncommitted changes in worktree
     let hasUncommitted = false;
-    if (worktreePath && existsSync(worktreePath) && !mergeCommit) {
+    if (worktreePath && existsSync(/* turbopackIgnore: true */ worktreePath) && !mergeCommit) {
       try {
         const status = execFileSync(
           "git", ["status", "--porcelain"],

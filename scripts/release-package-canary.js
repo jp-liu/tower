@@ -49,6 +49,7 @@ const REQUIRED_EMBEDDED_RUNTIME_DEPENDENCIES = [
   "tar",
 ];
 const REQUIRED_PREFIXES = ["skills/", "extensions/"];
+const MAX_PACKED_SIZE_BYTES = 12 * 1024 * 1024;
 const FORBIDDEN = [
   /^test-results\//,
   /^tests?\//,
@@ -64,6 +65,7 @@ const FORBIDDEN = [
   /(^|\/)(?:registry|keys?)\.json$/i,
   /(^|\/).*\.db(?:-wal|-shm)?$/,
   /(^|\/)(?:screenshots?|playwright-report)\//,
+  /\.nft\.json$/,
 ];
 
 function assertReleasePackage(pack, pkg, runtimePkg) {
@@ -99,6 +101,9 @@ function assertReleasePackage(pack, pkg, runtimePkg) {
   }
   const forbidden = [...files].filter((file) => FORBIDDEN.some((pattern) => pattern.test(file)));
   if (forbidden.length) errors.push(`forbidden files: ${forbidden.slice(0, 20).join(", ")}`);
+  if (pack.size > MAX_PACKED_SIZE_BYTES) {
+    errors.push(`packed size ${pack.size} exceeds ${MAX_PACKED_SIZE_BYTES} byte release budget`);
+  }
   if (errors.length) throw new Error(`Release package canary failed:\n- ${errors.join("\n- ")}`);
   return { files: files.size, size: pack.size, unpackedSize: pack.unpackedSize };
 }
@@ -127,5 +132,6 @@ module.exports = {
   REQUIRED_AI_RUNTIME_DEPENDENCIES,
   REQUIRED_EMBEDDED_RUNTIME_DEPENDENCIES,
   REQUIRED_FILES,
+  MAX_PACKED_SIZE_BYTES,
 };
 if (require.main === module) main();

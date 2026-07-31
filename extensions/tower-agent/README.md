@@ -81,16 +81,25 @@ Workbench terminal; see troubleshooting below.
 
 ## Routing Contract
 
-Every addressed inbound message, including `DIRECT`, is persisted and
-classified through `route_gateway_message` before work begins. "Do not query
-Tower" never bypasses this routing call.
+OpenClaw owns first-hop intent routing. Ordinary Q&A and external capabilities
+do not call Tower and do not create `GatewayInbound` rows. Tower receives only
+Tower queries, project discussion, new project work, and explicit task actions.
 
 | Intent | Owner | Enters Workbench | Creates a user task | Reply and persistence |
 |---|---|---:|---:|---|
-| `DIRECT` | OpenClaw, or a configured external operator | No | No | Ordinary gateway reply. Tower deduplicates the inbound route, but does not claim a complete durable history of ordinary chat replies. |
 | `TOWER` | `o-tower` through Tower MCP | No | Not by routing itself | Query or simple mutation runs in the gateway. Confirm a mutation only after its MCP call succeeds. |
 | `PROJECT_DISCUSSION` | A separate project-bound Assistant session | No | No | Each turn is stored in `AssistantMessage`; a native-card reply is persisted and anchored to the current inbound message. |
 | `PROJECT_WORK` | The project's resident Workbench | Yes, through a durable event | Only after the Workbench successfully calls `create_task` | Native queue card first; a real-data task-created card follows, then a reviewed final-result card. |
+
+Replies to Tower deliveries use a separate decision boundary:
+
+1. `resolve_gateway_task_context` resolves the subject task without writing an
+   inbound, changing status, creating an execution, or touching a terminal.
+2. A status/result question stays read-only. External operator work is
+   delegated with the returned `towerContext`; the Tower task remains unchanged.
+3. An answer to an OPEN `ask_human` uses `reply_to_ask`.
+4. Only an explicit continue/fix/rerun request uses `continue_bound_task`. That
+   action is OWNER-only and deduplicated by the inbound platform message id.
 
 Project discussion never creates a WorkItem, child task, or Workbench queue
 event. Project work is the only route that enters the durable Workbench event
@@ -138,7 +147,8 @@ window and reports truncation. An explicit "结束 Tower 讨论" maps to
 `sessionAction=NEW`. OpenClaw `/new` reloads only its own conversation and does
 not close Tower history. An old card reply can restore its persisted discussion.
 Explicit new-task/start-new-work requests set `startNewWork=true` and override
-an old task-card binding; ordinary follow-ups still route to that task.
+an old task-card binding. Ordinary replies resolve task context first and never
+resume a terminal merely because a binding exists.
 
 ## Feishu Acceptance Script
 
@@ -146,7 +156,8 @@ Use a project name or alias that exists in Tower. If Tower returns project
 candidates, select one; it must not guess an ambiguous project.
 
 1. Send: `请用一句话解释什么是幂等。`
-   Expected: a normal answer in Feishu, with no Workbench activity or task.
+   Expected: a normal answer in Feishu, with no Tower inbound, Workbench
+   activity, task, or execution.
 2. Send: `查询 Tower 中 <项目名> 当前进行中的任务，只读，不要创建任务。`
    Expected: a Tower-backed answer, with no project Workbench or new task.
 3. Send: `讨论 <项目名>：当前网关方案最大的风险是什么？不要创建任务。`
@@ -159,6 +170,12 @@ candidates, select one; it must not guess an ambiguous project.
 6. Wait for the child task to finish and for the Workbench to review it.
    Expected last: a separate final result containing the reviewed summary,
    commit, branch, and the same Tower task id.
+7. Reply to that final result: `现在什么状态？`
+   Expected: the task status is returned without a new execution and the task
+   remains `DONE`.
+8. Reply again with a new message: `按这个结果继续改。`
+   Expected: exactly that child task is resumed once through
+   `continue_bound_task`; a duplicate callback does not inject twice.
 
 Do not resend step 5 while it is queued. A manual resend has a new Feishu
 message id and can represent a second request even though duplicate callbacks
@@ -172,7 +189,8 @@ deduplication key. Failed sends are retried, stale send claims are recovered,
 and successful deliveries are not sent twice. Native-card payloads and current
 message reply anchors stay identical on retry.
 
-Tower also persists project-work inbound state and Workbench events. On Tower
+Tower also persists project-work and explicit-continuation inbound state plus
+Workbench events. On Tower
 startup it reopens Workbenches for queued requests, restores a safe drain
 boundary, and retries pending or failed deliveries. Therefore, after a Tower restart, wait for recovery instead of
 submitting the same request again.

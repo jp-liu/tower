@@ -162,7 +162,7 @@ Workbench 主动 ACK = ACKED，续租处理责任，事件仍是 PROCESSING
 | ACK / resolve 内部 API | `src/app/api/internal/workbench/batch/route.ts` |
 | Agent MCP 工具 | `src/mcp/tools/harness-tools.ts` |
 | 网关路由与 watchdog | `src/lib/harness/gateway-router.ts` |
-| 后台 reconciler 启动 | `src/instrumentation.ts` |
+| Runtime gate / Node 后台 reconciler 启动 | `src/instrumentation.ts`、`src/instrumentation-node.ts` |
 | 数据模型 | `prisma/schema.prisma` |
 | 迁移 | `scripts/migrations/0025-workbench-batch-leases.ts`、`0026-harness-outbox.ts`、`0027-runtime-leader-lease.ts` |
 | Coordinator 测试 | `src/lib/workbench/__tests__/coordinator.test.ts` |

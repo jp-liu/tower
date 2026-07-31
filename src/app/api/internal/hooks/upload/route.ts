@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
   // Validate file exists
   let fileStat;
   try {
-    fileStat = await stat(filePath);
+    fileStat = await stat(/* turbopackIgnore: true */ filePath);
   } catch {
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
@@ -126,11 +126,12 @@ export async function POST(request: NextRequest) {
 
   // SECURITY: Restrict filePath to within the project directory (or /tmp)
   // Prevents arbitrary file read from any path on the filesystem
-  const resolvedFile = path.resolve(filePath);
+  const resolvedFile = path.resolve(/* turbopackIgnore: true */ filePath);
   const projectRoot = task.project.localPath;
   const tmpDir = process.env.TMPDIR || "/tmp";
-  const isUnderProject = projectRoot && resolvedFile.startsWith(path.resolve(projectRoot) + path.sep);
-  const isUnderTmp = resolvedFile.startsWith(path.resolve(tmpDir) + path.sep);
+  const isUnderProject = projectRoot
+    && resolvedFile.startsWith(path.resolve(/* turbopackIgnore: true */ projectRoot) + path.sep);
+  const isUnderTmp = resolvedFile.startsWith(path.resolve(/* turbopackIgnore: true */ tmpDir) + path.sep);
   if (!isUnderProject && !isUnderTmp) {
     return NextResponse.json(
       { error: "filePath must be within the project directory or temp directory" },
@@ -167,7 +168,7 @@ export async function POST(request: NextRequest) {
     }
     // Content changed → overwrite the same on-disk file, keep one record.
     try {
-      await copyFile(resolvedFile, existing.path);
+      await copyFile(/* turbopackIgnore: true */ resolvedFile, existing.path);
     } catch (err) {
       return NextResponse.json(
         { error: `Failed to copy file: ${err instanceof Error ? err.message : "unknown"}` },
@@ -190,14 +191,14 @@ export async function POST(request: NextRequest) {
   // deterministic sourceKey hash, never a timestamp.
   let filename = path.posix.basename(sourceKey);
   let destPath = path.join(assetsDir, filename);
-  if (existsSync(destPath)) {
+  if (existsSync(/* turbopackIgnore: true */ destPath)) {
     filename = buildAssetFilename(sourceKey, ext, true);
     destPath = path.join(assetsDir, filename);
   }
 
   // Copy file
   try {
-    await copyFile(resolvedFile, destPath);
+    await copyFile(/* turbopackIgnore: true */ resolvedFile, destPath);
   } catch (err) {
     return NextResponse.json(
       { error: `Failed to copy file: ${err instanceof Error ? err.message : "unknown"}` },
@@ -229,7 +230,7 @@ export async function POST(request: NextRequest) {
         where: { projectId_sourceKey: { projectId, sourceKey } },
       });
       if (winner) {
-        await copyFile(resolvedFile, winner.path).catch(() => {});
+        await copyFile(/* turbopackIgnore: true */ resolvedFile, winner.path).catch(() => {});
         const updated = await db.projectAsset.update({
           where: { id: winner.id },
           data: { contentHash, size: fileStat.size, mimeType, taskId },

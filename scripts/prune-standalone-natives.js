@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* eslint-disable @typescript-eslint/no-require-imports -- This build helper is invoked directly by Node as CommonJS. */
 /**
- * Three jobs on `.next/standalone/` before publish:
+ * Five jobs on `.next/standalone/` before publish:
  *
  *   1. Flatten pnpm symlinks.
  *      pnpm builds `node_modules/` as symlinks into `.pnpm/<pkg>@<ver>/...`.
@@ -22,6 +22,11 @@
  *   4. Lazy-installed extension assets.
  *      `public/vs/` (Monaco editor, ~15MB) is installed on demand via the
  *      extension UI. Don't ship the build-machine copy.
+ *
+ *   5. Output-file trace manifests.
+ *      Next uses `.nft.json` files to assemble the standalone directory. The
+ *      minimal server does not read them after assembly, and dynamic host-file
+ *      access can make the manifests much larger than the application itself.
  */
 const fs = require("fs");
 const path = require("path");
@@ -128,4 +133,24 @@ for (const entry of fs.readdirSync(standaloneDir)) {
 }
 if (cruftRemoved > 0) {
   console.log(`[prune-standalone] Removed ${cruftRemoved} workspace-cruft entries`);
+}
+
+// --- 5. Drop build-time output-file trace manifests after standalone assembly ---
+let traceManifestsRemoved = 0;
+function removeTraceManifests(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const target = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      removeTraceManifests(target);
+    } else if (entry.isFile() && entry.name.endsWith(".nft.json")) {
+      fs.rmSync(target, { force: true });
+      traceManifestsRemoved++;
+    }
+  }
+}
+
+removeTraceManifests(path.join(standaloneDir, ".next"));
+if (traceManifestsRemoved > 0) {
+  console.log(`[prune-standalone] Removed ${traceManifestsRemoved} build-time trace manifests`);
 }

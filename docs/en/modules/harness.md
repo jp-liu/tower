@@ -21,7 +21,7 @@ The core design is a **relay model**:
 
 - **Tower does not connect to Feishu/WeChat and does not send messages itself** (the old built-in SDK send stack has been removed).
 - The actual sending and receiving are outsourced to the external gateways **Hermes / OpenClaw** (separate repos / external services).
-- Tower owns **question recording, park/resume, durable project sessions, reliable queueing, and outbound retry**; the gateway still owns platform transport and first-hop classification.
+- Tower owns **question recording, explicit park/resume, durable project sessions, reliable queueing, and outbound retry**; the gateway owns platform transport, first-hop intent classification, and external-capability delegation.
 - Legacy ask/task replies keep using `[[tower:task=<id>]]` and delivery mappings. Ordinary project messages use Tower-owned platform/chat/thread/root-message ↔ project session bindings.
 
 > **Companion diagrams** (self-contained HTML under `docs/diagrams/`, openable standalone):
@@ -43,9 +43,17 @@ External gateway Hermes / OpenClaw ──► Feishu / WeChat / …
    ▲
    │  human reply (carries the [[tower:task=<id>]] token)
    ▼
-relay_channel_reply / reply_to_ask ──► resume the parked task, inject into the live terminal
+reply_to_ask ──► answer an OPEN ask and resume the parked task
 
-ordinary inbound ──► route_gateway_message ──► gateway direct / Tower MCP / project discussion / WorkbenchEvent
+ordinary inbound ──► OpenClaw identity / intent / capability routing
+                     ├─ ordinary Q&A / external operation ──► OpenClaw capability (outside Tower)
+                     └─ Tower message ──► route_gateway_message / route_gateway_query
+
+reply to Tower delivery ──► resolve_gateway_task_context (read-only)
+                            ├─ query: read-only tools, no terminal resume
+                            ├─ OPEN ask: reply_to_ask
+                            ├─ external operation: delegate with towerContext; Tower unchanged
+                            └─ explicit development continuation: continue_bound_task (OWNER + idempotent)
 ```
 
 See `docs/diagrams/tower-harness-flow-en.html` (EN) / `tower-harness-flow.html` (ZH).
@@ -63,7 +71,10 @@ These four are the easiest to confuse. Keep two axes straight: **does it actuall
 | `ask_human` | ❌ records only | ✅ park | Low-level state primitive: record an OPEN question + park the task waiting for a reply |
 | `notify_human` | ❌ records only | ❌ no park | Low-level state primitive: log one progress line, keep working |
 | `push_to_human` | ✅ persists + sends | per `expectReply` | Persist an outbox and ask intent first, then send and record atomically |
-| `reply_to_ask` / `relay_channel_reply` | — (inbound) | resume | Inject the human's reply into a parked task and wake it |
+| `reply_to_ask` | — (inbound) | resume | Answer only the current OPEN ask and wake the parked task |
+| `resolve_gateway_task_context` | — (read-only) | no | Resolve project/task, status, and latest result without an inbound row or terminal side effect |
+| `continue_bound_task` | — (explicit action) | yes | On an explicit OWNER continuation, resume and inject once per platform message id |
+| `relay_channel_reply` | — (compatibility) | OPEN ask only | Ordinary task replies return context and no longer resume implicitly |
 
 **`ask_human`** — only **records an OPEN question + PARKs the task** (ends the current turn, keeps the PTY alive waiting for a reply); **it does not send anything itself**. It is a low-level state primitive, paired with `reply_to_ask` (park ↔ resume). After calling it you must stop immediately and wait.
 
@@ -76,7 +87,9 @@ platform message ID is returned, delivery mapping, OPEN ask, and task parking
 commit together. Explicit failures remain retryable; send evidence without a
 complete receipt becomes `SENT_UNVERIFIED` and is not blindly resent.
 
-**`reply_to_ask` / `relay_channel_reply`** — the inbound direction. They bring the human's platform reply back into Tower: mark the OPEN question ANSWERED, resume the parked task, and inject the reply as the task's next message into the live terminal. `relay_channel_reply` additionally parses the `[[tower:task=...]]` token out of the inbound platform message and, via the delivery mapping, decides whether to "answer the ask" or "inject into a work-group discussion".
+**`reply_to_ask`** is the normal OPEN-ask answer action: atomically mark the question answered, resume the parked task, and inject the answer. `relay_channel_reply` remains only for old-client compatibility: it may answer a matching OPEN ask, but an ordinary task reply returns context without injecting or resuming.
+
+**`resolve_gateway_task_context` / `continue_bound_task`** separate association from execution. The resolver returns the subject, producer, Workbench, task status, OPEN-ask state, and latest execution summary without writes. The continuation tool is the OWNER-only side effect for explicit "continue", "fix from this failure", or "rerun" intent. If the same platform message was already persisted as read-only `task_context`, continuation atomically upgrades that `GatewayInbound`; failed or expired claims retry on the same row. Terminal injection uses the inbound ID as a per-session idempotency key so an uncertain response cannot submit the instruction twice.
 
 **Don't mix the two pairings:**
 
@@ -86,7 +99,7 @@ complete receipt becomes `SENT_UNVERIFIED` and is not blindly resent.
 
 `list_notify_targets` is the pre-send entry point: it reads the active channel for the current scope and returns **ready-to-follow send instructions** telling the agent which gateway to use and whether to park. The `tower-ask` / `tower-goal` skills internally call it first, then do what it says.
 
-`route_gateway_message` is the ordinary inbound entry point. It persists and deduplicates first, then resolves reply/task binding → thread/session binding → explicit project → one identify_project match → sender's recent project → channel default. Project discussion replies use `complete_gateway_discussion`. Project work is only queued for the Workbench; the Workbench calls `confirm_gateway_task_created` after a real `create_task` result and `complete_gateway_work` after review.
+`route_gateway_message` is the OWNER entry point for Tower-related messages. Ordinary Q&A and external capabilities remain in OpenClaw and never call Tower. Old clients that send `DIRECT` receive `direct_not_supported` without a `GatewayInbound` row. Stateful routing persists and deduplicates first, then resolves reply/task binding → thread/session binding → explicit project → one identify_project match → sender's recent project → channel default. Project discussion replies use `complete_gateway_discussion`. Project work is only queued for the Workbench; the Workbench calls `confirm_gateway_task_created` after a real `create_task` result and `complete_gateway_work` after review.
 
 A duplicate platform message never replays an action: processing/queued rows return `in_progress + noOp`, while completed rows return `already_processed + noOp`. Threadless discussions reuse a chat + sender scoped session, with recent project context expiring after seven days. Failed deliveries are retried at `nextAttemptAt` by one process-local `unref` timer in addition to startup recovery.
 
@@ -166,6 +179,7 @@ The decision looks at just two axes — **has a parent or not** × **is a human 
 ### MCP Tools (`src/mcp/tools/harness-tools.ts`)
 
 - `list_notify_targets` / `push_to_human` / `ask_human` / `notify_human` / `reply_to_ask` / `relay_channel_reply`
+- `resolve_gateway_task_context` / `continue_bound_task`
 - `route_gateway_message` / `complete_gateway_discussion` / `confirm_gateway_task_created` / `complete_gateway_work`
 
 ### Core Library (`src/lib/harness/`)
@@ -210,6 +224,7 @@ The decision looks at just two axes — **has a parent or not** × **is a human 
 | `POST /reply` | Inject the reply, resume the task; no OPEN ask → 409 |
 | `POST /notify` | Record one progress-log line |
 | `POST/PATCH/PUT /gateway` | Inbound routing, completion acknowledgement, and retryable discussion/task replies |
+| `POST/PUT /gateway-task` | Side-effect-free task binding resolution / OWNER explicit idempotent continuation |
 
 ### Notification Center
 

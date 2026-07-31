@@ -53,6 +53,7 @@ describe("release package canary", () => {
     "extensions/cli-providers/qwen-code/test/provider.test.ts",
     "extensions/cli-providers/qwen-code/src/provider.spec.ts",
     "extensions/cli-providers/qwen-code/vitest.config.ts",
+    ".next/standalone/.next/server/app/page.js.nft.json",
   ])("rejects private or test artifact %s", (artifact) => {
     expect(() => assertReleasePackage(pack([artifact]), manifest, runtimeManifest)).toThrow(/forbidden files/);
   });
@@ -72,5 +73,11 @@ describe("release package canary", () => {
   it("rejects a missing CLI dependency required by the embedded runtime", () => {
     expect(() => assertReleasePackage(pack(), { ...manifest, dependencies: {} }, runtimeManifest))
       .toThrow(/CLI dependency missing for embedded AI runtime/);
+  });
+
+  it("rejects a package above the release size budget", () => {
+    const oversized = pack();
+    oversized.size = 13 * 1024 * 1024;
+    expect(() => assertReleasePackage(oversized, manifest, runtimeManifest)).toThrow(/release budget/);
   });
 });

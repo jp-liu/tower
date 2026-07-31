@@ -26,6 +26,9 @@ export class PtySession {
   private _onIdle: (() => void) | null;
   private _idleFired = false;
   private _initialInputSent = false;
+  private _pendingInputKeys = new Set<string>();
+  private _acceptedInputKeys = new Set<string>();
+  private static readonly INPUT_KEY_HISTORY_MAX = 256;
   // Conservative by default: a newly spawned CLI may be booting or processing
   // its positional prompt. Only a provider turn-complete callback may mark the
   // live terminal as safe for autonomous Workbench input.
@@ -147,6 +150,27 @@ export class PtySession {
       this._resetIdleTimer();
       this._pty.write(data);
     }
+  }
+
+  claimInputKey(key: string): "claimed" | "pending" | "accepted" {
+    if (this._acceptedInputKeys.has(key)) return "accepted";
+    if (this._pendingInputKeys.has(key)) return "pending";
+    this._pendingInputKeys.add(key);
+    return "claimed";
+  }
+
+  acceptInputKey(key: string): void {
+    this._pendingInputKeys.delete(key);
+    this._acceptedInputKeys.add(key);
+    while (this._acceptedInputKeys.size > PtySession.INPUT_KEY_HISTORY_MAX) {
+      const oldest = this._acceptedInputKeys.values().next().value;
+      if (oldest === undefined) break;
+      this._acceptedInputKeys.delete(oldest);
+    }
+  }
+
+  releaseInputKey(key: string): void {
+    this._pendingInputKeys.delete(key);
   }
 
   /** Deliver a fresh-session prompt once, after the PTY is ready for input. */

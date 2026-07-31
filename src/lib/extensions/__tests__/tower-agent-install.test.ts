@@ -135,7 +135,7 @@ describe("tower agent extension installer", () => {
 
     const installed = await checkTowerAgentExtension("openclaw", { paths });
     expect(installed.installed).toBe(true);
-    expect(installed.version).toBe("3");
+    expect(installed.version).toBe("4");
 
     const removed = await uninstallTowerAgentExtension("openclaw", { paths });
     expect(removed.success).toBe(true);
@@ -218,6 +218,9 @@ describe("tower agent extension installer", () => {
         "channel:feishu:ou_owner": {
           allow: expect.arrayContaining([
             "tower__route_gateway_message",
+            "tower__resolve_gateway_task_context",
+            "tower__continue_bound_task",
+            "tower__reply_to_ask",
             "tower__list_tasks",
             "tower__complete_gateway_discussion",
             "tower__recover_gateway_request",

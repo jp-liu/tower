@@ -107,15 +107,16 @@ The complete order is: **update and start Tower -> update/reinject Tower Agent
 -> restart the OpenClaw gateway -> send `/new` in affected Feishu conversations
 -> run acceptance**.
 
-## The Four Routes
+## OpenClaw First Hop And Three Tower Routes
 
-Every addressed inbound message, including `DIRECT`, must call
-`route_gateway_message` before work begins and follow the returned mode. "Do not
-query Tower" does not bypass durable routing, which is not a business-data query.
+OpenClaw first decides which capability owns the request. Ordinary Q&A and work
+for external operators stay in OpenClaw, never call Tower, and create no
+`GatewayInbound`. Only Tower operations, project discussion, and project work
+call `route_gateway_message`. Old clients that still send `DIRECT` receive
+`direct_not_supported` without persistence.
 
 | Route | Responsibility | Workbench | User task creation | Reply and persistence |
 |---|---|---:|---:|---|
-| `DIRECT` | Ordinary Q&A or delegation to a configured external operator | No | No | OpenClaw replies directly. Tower persists and deduplicates the inbound route, but does not claim a complete Tower-owned history of ordinary chat replies. |
 | `TOWER` | Tower MCP query or simple command in the gateway | No | Not by routing itself; only an explicitly requested successful MCP mutation may create one | The gateway replies directly. Confirm a mutation only after the tool succeeds. |
 | `PROJECT_DISCUSSION` | A separate project-bound Assistant discussion session | No | **No WorkItem or child task** | Each turn is stored in `AssistantMessage`; `complete_gateway_discussion` persists a native card replying to the current inbound message while preserving the thread. |
 | `PROJECT_WORK` | Research, dispatch, and review by the project's resident Workbench | Yes, only through the durable event queue | Only after the Workbench successfully calls `create_task` | Tower sends native queued, real-data task-created, and reviewed final-result cards. |
@@ -147,15 +148,20 @@ the binding and up to 100 Tower-owned turns remain durable. Replying to an old
 discussion card can restore it, and task creation does not close it. Use
 `sessionAction=CLOSE` for an explicit Tower discussion close and
 `sessionAction=NEW` for a fresh discussion/project switch. OpenClaw `/new` is
-not a Tower close signal. Ordinary old-task follow-ups keep task routing; only
-an explicit new-task/start-new-work request sets `startNewWork=true` to override it.
+not a Tower close signal. Replies to an old task first call
+`resolve_gateway_task_context`, which only returns task/project/status, OPEN-ask,
+and latest-execution context. OPEN asks use `reply_to_ask`; status/result questions
+stay read-only; external work is delegated with `towerContext`; only explicit
+continue/fix/rerun intent calls OWNER-only `continue_bound_task`. Resolution never
+resumes a terminal. Only an explicit new-task/start-new-work request sets
+`startNewWork=true` to override the old binding.
 
 ## Feishu Channel Acceptance
 
 Use a project name or alias that exists in Tower and is accessible to the bot.
 Wait for each response before moving to the next step.
 
-### 1. Ordinary Q&A (`DIRECT`)
+### 1. Ordinary Q&A (outside Tower)
 
 Send:
 
@@ -163,7 +169,8 @@ Send:
 Explain idempotency in one sentence.
 ```
 
-Expected: an ordinary Feishu answer, with no project Workbench activity or task.
+Expected: an ordinary Feishu answer with no `route_gateway_message` call,
+`GatewayInbound`, project Workbench activity, or task.
 
 ### 2. Read-only Tower Query (`TOWER`)
 
@@ -232,10 +239,10 @@ records have stable semantic deduplication keys:
 - a duplicate platform callback reuses the same inbound row, Workbench event,
   and delivery instead of replaying the action.
 
-Ordinary `DIRECT` and `TOWER` gateway replies are not the same as these durable
-Tower deliveries. The current implementation also has no complete Tower-owned
-project-discussion history UI. Do not describe Notification Center as a full
-audit log of all gateway conversations.
+Ordinary Q&A never enters Tower. `TOWER` gateway replies are also not the same as
+these durable Tower deliveries. The current implementation has no complete
+Tower-owned project-discussion history UI. Do not describe Notification Center
+as a full audit log of all gateway conversations.
 
 ## Troubleshooting
 

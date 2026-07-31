@@ -8,7 +8,7 @@ import type { HarnessGatewayAccessPolicy } from "@/lib/harness/gateway-config";
 
 export type TowerAgentGateway = "openclaw" | "hermes";
 
-const TOWER_AGENT_PACKAGE_VERSION = "3";
+const TOWER_AGENT_PACKAGE_VERSION = "4";
 const TOWER_GATEWAY_SKILL_NAMES = ["tower"] as const;
 const OPENCLAW_PROJECT_READER_TOOLS = [
   "tower__route_gateway_query",
@@ -17,6 +17,9 @@ const OPENCLAW_PROJECT_READER_TOOLS = [
 ] as const;
 const OPENCLAW_OWNER_GATEWAY_TOOLS = [
   "tower__route_gateway_message",
+  "tower__resolve_gateway_task_context",
+  "tower__continue_bound_task",
+  "tower__reply_to_ask",
   "tower__route_gateway_query",
   "tower__read_gateway_project_context",
   "tower__complete_gateway_discussion",
@@ -39,9 +42,14 @@ const OPENCLAW_OWNER_GATEWAY_TOOLS = [
   "tower__provision_remote_project",
 ] as const;
 const OPENCLAW_TOWER_GROUP_PROMPT =
-  "Use only the Tower tools exposed for the verified sender. Every inbound message must be routed first. " +
-  "OWNER project work and every request that creates, changes, deletes, starts, stops, clones, provisions, " +
-  "or otherwise mutates Tower/computer state must use tower__route_gateway_message with intent PROJECT_WORK; " +
+  "Use only the Tower tools exposed for the verified sender. Ordinary Q&A and third-party/operator requests " +
+  "stay in OpenClaw and must not be persisted or routed through Tower. Tower-related non-reply messages use " +
+  "tower__route_gateway_message. A reply to a Tower delivery must first use tower__resolve_gateway_task_context; " +
+  "finding a task never authorizes terminal resume. Read-only status questions use query tools without continuation, " +
+  "open ask_human answers use tower__reply_to_ask, external-system work is delegated with read-only towerContext, " +
+  "and only an explicit continue/fix/rerun request uses tower__continue_bound_task. " +
+  "OWNER requests for new project work or Tower mutations other than a bound continuation use " +
+  "tower__route_gateway_message with intent PROJECT_WORK; computer/operator state is outside Tower. " +
   "after it returns project_work, stop the turn with NO_REPLY because the resident Workbench exclusively owns " +
   "task creation, execution, review, and external callbacks. Never call a direct mutation tool from this ingress " +
   "agent, never retry by omitting gatewayInboundId, and never start a second task for a queued request. " +

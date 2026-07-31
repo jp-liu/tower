@@ -92,13 +92,12 @@ openclaw status --all
 
 完整顺序是：**更新并启动 Tower -> 更新/重新注入 Tower Agent -> 重启 OpenClaw gateway -> 在受影响飞书会话发送 `/new` -> 开始验收**。
 
-## 四类消息路由
+## OpenClaw 首跳与三类 Tower 路由
 
-所有被机器人接收并需要处理的消息，包括 `DIRECT`，都必须先调用 `route_gateway_message` 持久化并分类，再按返回模式执行。用户说“不要查询 Tower”也不能跳过：持久化路由不是业务数据查询。
+OpenClaw 先做能力边界判断。普通问答和第三方 operator 工作留在 OpenClaw，不调用 Tower，也不创建 `GatewayInbound`。只有 Tower 查询/操作、项目讨论和项目工作调用 `route_gateway_message`。旧客户端若仍传 `DIRECT`，Tower 返回 `direct_not_supported`，且不落库。
 
 | 路由 | 职责边界 | 进入 Workbench | 创建用户任务 | 回复链路与持久化 |
 |------|----------|----------------|--------------|------------------|
-| `DIRECT` | 普通问答，或委托给已配置的第三方 operator | 否 | 否 | OpenClaw 直接回复。Tower 会持久化并去重入站路由，但不承诺普通聊天回复的完整 Tower-owned 历史。 |
 | `TOWER` | 在网关内调用 Tower MCP 做查询或简单操作 | 否 | 路由本身不创建；只有用户明确要求且 MCP 成功时才可能创建 | 网关直接回复；任何写操作只能在工具成功后确认。 |
 | `PROJECT_DISCUSSION` | 使用独立、项目绑定的 Assistant 讨论会话 | 否 | **否，不创建 WorkItem 或子任务** | 每轮写入 `AssistantMessage`；`complete_gateway_discussion` 持久化原生卡片并回复当前入站消息，同时保留 thread。 |
 | `PROJECT_WORK` | 把工程工作交给项目常驻 Workbench 调研、下发、审查 | 是，只经持久化事件队列 | Workbench 成功调用 `create_task` 后才创建 | Tower 先发原生“已排队”卡片；随后发真实数据创建卡片；审查通过后发最终结果卡片。 |
@@ -117,13 +116,13 @@ openclaw status --all
 
 项目讨论按 `assistant.historyTurns` 恢复最近轮次，过长上下文会截断并显式标记。每轮回复完成后释放本轮执行资源，但讨论绑定和最多 100 轮 Tower-owned 历史继续保留；回复旧讨论卡片可以恢复绑定。创建任务不会关闭讨论。用户明确说“结束 Tower 讨论”时传 `sessionAction=CLOSE`；明确开始新讨论或切换项目时传 `sessionAction=NEW`。OpenClaw `/new` 不会透传为 Tower 关闭信号，因此不能用它结束 Tower 讨论。
 
-回复旧任务卡片时，普通追问仍路由到原任务；只有用户明确说“创建新任务”或“开始新工作”时才传 `startNewWork=true`，覆盖旧任务回复绑定。
+回复旧任务卡片时，先调用 `resolve_gateway_task_context` 只读解析任务、项目、状态、OPEN ask 和最近执行摘要。随后按意图选择动作：OPEN ask 用 `reply_to_ask`；状态/结果问题只读查询；外部系统工作带 `towerContext` 委托，不修改 Tower；只有明确“继续/修复/重跑”才调用 OWNER-only `continue_bound_task`。普通解析不会恢复终端。只有用户明确说“创建新任务”或“开始新工作”时才传 `startNewWork=true`，覆盖旧任务回复绑定。
 
 ## 飞书真实渠道验收
 
 先选择 Tower 中确实存在且机器人可访问的项目名称或别名。每一步都等待当前回复完成后再进行下一步。
 
-### 1. 普通问答 (`DIRECT`)
+### 1. 普通问答（Tower 外）
 
 发送：
 
@@ -131,7 +130,7 @@ openclaw status --all
 请用一句话解释什么是幂等。
 ```
 
-预期：飞书中直接得到普通回答；不启动项目 Workbench，不创建任务。
+预期：飞书中直接得到普通回答；不调用 `route_gateway_message`，不创建 `GatewayInbound`，不启动项目 Workbench，不创建任务。
 
 ### 2. Tower 只读查询 (`TOWER`)
 
@@ -186,7 +185,7 @@ Tower 会先持久化“已排队”、项目讨论回复、真实任务创建�
 - 已成功发送的语义消息不可变，重复调用不会发送两次；
 - 重复的平台 callback 复用同一入站记录、Workbench 事件和 delivery，不会重复执行动作。
 
-`DIRECT` 和 `TOWER` 的普通网关回复不等同于上述 Tower 持久化 delivery。当前实现也没有提供完整的 Tower-owned 项目讨论历史 UI；不要把通知中心描述成所有网关会话的完整审计记录。
+普通问答不进入 Tower；`TOWER` 网关回复也不等同于上述持久化 delivery。当前实现没有完整的 Tower-owned 项目讨论历史 UI；不要把通知中心描述成所有网关会话的完整审计记录。
 
 ## 故障排查
 

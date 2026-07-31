@@ -18,7 +18,7 @@ Feishu/WhatsApp/Slack/etc. are downstream platforms, not Tower gateways. Tower s
 |------|-----|-----------|
 | **tower-goal (unattended)** | A task that activated the `tower-goal` skill at run time | Activating it (`/tower-goal <goal>`) enters unattended autonomous run: work silently toward the goal, and on stuck/done push out via tower-ask and park. Activation = authorization (may create tasks, act as the hub for child tasks). **Entered by human activation, not decided by a backend flag.** |
 | **tower-ask (outbound)** | The task agent (`tower-ask` skill) | Call `list_notify_targets` to get ready-to-follow send instructions. Hermes/OpenClaw-backed channels use `push_to_human` (send first, then record/park atomically). |
-| **bridge (inbound)** | A long-running MCP agent (bot / OpenClaw / …) | Receive each platform message and call `route_gateway_message`. Tower preserves legacy task replies, routes direct/Tower requests locally, and binds project discussion/work to the correct project session. |
+| **bridge (inbound)** | A long-running MCP agent (bot / OpenClaw / …) | Own first-hop intent routing. Ordinary Q&A/external work stays outside Tower; Tower replies are resolved read-only before an explicit query, ask answer, delegation, or continuation action. |
 | **tower-bridge (routing)** | The task agent (`tower-bridge` skill) | Route prepared content from a task to a human channel, `o-tower`, a sibling task, or a specialist operator such as `xiao-fei`. Human sends still use `tower-ask`; agent/task handoff uses Tower terminal or gateway-native delegation. |
 
 > `tower-goal` / `tower-ask` / `tower-bridge` are **real callable skills** distributed with Tower into task-agent skill homes. Lowercase `bridge` is still this doc's name for the inbound gateway role.
@@ -78,20 +78,21 @@ When a task agent needs to ask or report while unattended:
 After the human replies on the platform:
 
 1. The reply reaches the **bridge** first (it's connected to the platform — that's its job).
-2. The bridge calls **`route_gateway_message`** with the inbound message id, replied-to id, platform/chat/thread/root ids, sender id, content, and one of `DIRECT`, `TOWER`, `PROJECT_DISCUSSION`, or `PROJECT_WORK`.
-3. Tower first checks durable delivery/task mappings and `[[tower:task=<taskId>]]`. A matching task reply is relayed through the existing **`relay_channel_reply`** path — **not** a bare `send_task_terminal_input`.
-   - Pass `platform` and `chatId` whenever available (Feishu `chatId` is usually `oc_xxx`). Tower uses this to recognize whether the reply came from the configured work group or unattended home channel.
-   - If the referenced outbound message was an ask, Tower marks it answered, resumes the task, and injects the reply.
-   - If the referenced outbound message was a work-channel notify, Tower injects the reply into the live task terminal without consuming any unrelated open ask on the same task.
-4. Follow the returned mode. Ambiguous project routes return candidates and require selection; project work is only queued at this point and must not be described as a created task.
+2. If it replies to a Tower delivery, the bridge calls **`resolve_gateway_task_context`** with the replied-to id, platform/chat ids, and any quoted token. This call is read-only and creates no `GatewayInbound`.
+3. The bridge chooses exactly one action from the user's intent:
+   - Status/result query: use read-only Tower tools; do not resume.
+   - Answer to an OPEN ask: call `reply_to_ask`, which atomically answers and resumes the parked task.
+   - External operator work: delegate with the returned `projectId`, `workbenchTaskId`, and `subjectTaskId`; do not mutate Tower.
+   - Explicit continue/fix/rerun: call OWNER-only `continue_bound_task` with the inbound platform message id. Tower persists and deduplicates this side effect.
+4. Tower-related messages that are not task replies use `route_gateway_message` with `TOWER`, `PROJECT_DISCUSSION`, or `PROJECT_WORK`. Ambiguous project routes require selection; queued work is not yet a created task.
    - `in_progress` and `already_processed` always carry `noOp: true`: acknowledge nothing and do not repeat the original answer, Tower mutation, discussion generation, or queue confirmation.
 
 ## Non-task messages (create / query)
 
-What reaches the bridge isn't always an answer to some ask. `route_gateway_message` persists every inbound envelope and separates ordinary gateway Q&A, Tower MCP operations, project discussion, and project work. Project discussions must use the returned project context and finish with `complete_gateway_discussion`. Project work is confirmed only by the bound Workbench through `confirm_gateway_task_created`, then completed after review through `complete_gateway_work`.
+Ordinary gateway Q&A and external capabilities do not call Tower. `route_gateway_message` persists only Tower-related envelopes and separates Tower MCP operations, project discussion, and project work. Old clients that send `DIRECT` receive `direct_not_supported` and no inbound row is created. Project discussions must finish with `complete_gateway_discussion`. Project work is confirmed only by the bound Workbench through `confirm_gateway_task_created`, then completed after review through `complete_gateway_work`.
 
 ---
 
 ## One-line contract
 
-> Gateways own transport and first-hop routing; Workbenches own project context and review; the Durable Coordinator owns deduplication, queueing, safe-boundary delivery, and retry. `[[tower:task=<id>]]` remains compatible for task replies.
+> Gateways own transport, intent, and external delegation; Tower resolves task context read-only; only `reply_to_ask` and `continue_bound_task` may resume a task from a platform reply. Workbenches own project context and review.
