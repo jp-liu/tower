@@ -54,10 +54,14 @@ jobs:
           pnpm exec prisma db push --skip-generate --accept-data-loss
           pnpm exec tsx prisma/init-fts.ts
 
-      - name: Build AI SDK and Qwen Code extension fixtures
+      - name: Build extension contracts and fixtures
         run: |
+          pnpm --filter @tower-org/extension-sdk build
           pnpm --filter @tower-org/ai-sdk build
           pnpm --filter tower-extension-qwen-code build
+
+      - name: Test Extension SDK contracts
+        run: pnpm --filter @tower-org/extension-sdk test
 
       - name: Test
         run: pnpm test:run

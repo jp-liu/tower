@@ -1564,6 +1564,8 @@ export const en: Translations = {
   "settings.extensions.towerAgentOpenClaw.description": "Install the Tower assistant profile, MCP, and skills into OpenClaw",
   "settings.extensions.towerAgentHermes.name": "Tower Agent (Hermes)",
   "settings.extensions.towerAgentHermes.description": "Install the Tower assistant profile, MCP, and skills into Hermes",
+  "settings.extensions.gatewayAgent.name": "Tower Gateway Agent",
+  "settings.extensions.gatewayAgent.description": "Deploy Tower MCP, skills, and profile resources to a supported gateway",
   "settings.extensions.towerAgentHint":
     "Tower-only by default; extend Feishu workspace, mail, knowledge-base, and other external-system capabilities through a gateway operator, or customize the local profile directly.",
   "settings.extensions.gateway.title": "Tower gateway agent settings",

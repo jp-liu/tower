@@ -1,0 +1,31 @@
+{
+  "name": "@tower-org/extension-sdk",
+  "version": "0.1.0",
+  "description": "Public contracts for Tower extensions",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "semver": "7.7.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/semver": "^7",
+    "typescript": "^5",
+    "vitest": "^4.1.1"
+  }
+}

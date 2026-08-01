@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="30.4.1">
+  <diagram id="extensions-v1" name="Extensions Platform V1">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="2" value="Extension Sources · V1 同仓逻辑隔离" style="swimlane;startSize=34;horizontal=1;rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=14;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="300" height="500" as="geometry"/>
+        </mxCell>
+        <mxCell id="3" value="Builtin Definitions&#xa;系统依赖探测" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;" vertex="1" parent="2">
+          <mxGeometry x="30" y="70" width="240" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="4" value="Catalog v1 / v2&#xa;发布制品索引" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;" vertex="1" parent="2">
+          <mxGeometry x="30" y="190" width="240" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="5" value="Local Development&#xa;显式注册目录" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;" vertex="1" parent="2">
+          <mxGeometry x="30" y="310" width="240" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="6" value="Installed Registry&#xa;已安装状态" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;" vertex="1" parent="2">
+          <mxGeometry x="30" y="430" width="240" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="7" value="Tower Host · 统一控制面" style="swimlane;startSize=34;horizontal=1;rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=14;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="430" y="60" width="490" height="500" as="geometry"/>
+        </mxCell>
+        <mxCell id="8" value="Discovery Service&#xa;严格校验 · 来源合并" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;" vertex="1" parent="7">
+          <mxGeometry x="30" y="80" width="190" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="9" value="Normalized Inventory&#xa;Installed · Available · Developer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;" vertex="1" parent="7">
+          <mxGeometry x="270" y="80" width="190" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="10" value="Extension Manager&#xa;Plan → Confirm → Apply → Verify" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=13;" vertex="1" parent="7">
+          <mxGeometry x="150" y="220" width="220" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="11" value="权限策略" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="7">
+          <mxGeometry x="30" y="370" width="130" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="12" value="事务与回滚" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="7">
+          <mxGeometry x="180" y="370" width="130" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="13" value="操作日志" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="7">
+          <mxGeometry x="330" y="370" width="130" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="14" value="Host-owned Kind Handlers" style="swimlane;startSize=34;horizontal=1;rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;fontSize=14;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="1010" y="60" width="300" height="500" as="geometry"/>
+        </mxCell>
+        <mxCell id="15" value="Component Handler&#xa;Monaco 静态资产" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;" vertex="1" parent="14">
+          <mxGeometry x="30" y="80" width="240" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="16" value="CLI Provider Handler&#xa;兼容现有 AI Runtime" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;" vertex="1" parent="14">
+          <mxGeometry x="30" y="210" width="240" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="17" value="Gateway Adapter Handler&#xa;OpenClaw / Hermes drivers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;" vertex="1" parent="14">
+          <mxGeometry x="30" y="340" width="240" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="18" value="Extension Packages · 同仓隔离，稳定后搬迁" style="swimlane;startSize=34;horizontal=1;rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=13;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="1380" y="60" width="320" height="500" as="geometry"/>
+        </mxCell>
+        <mxCell id="19" value="extensions/components/monaco&#xa;Manifest + Assets" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;" vertex="1" parent="18">
+          <mxGeometry x="30" y="80" width="240" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="20" value="extensions/cli-providers/*&#xa;Manifest + Provider entry" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;" vertex="1" parent="18">
+          <mxGeometry x="30" y="210" width="240" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="21" value="extensions/gateway-adapters/*&#xa;Manifest + Resources" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;" vertex="1" parent="18">
+          <mxGeometry x="30" y="340" width="240" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="22" value="V1 边界：扩展只能依赖 packages/extension-sdk；禁止引用 Tower src、Server Actions、Prisma。&#xa;Clean-room build 保证未来拆仓不改变协议与运行架构。" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;align=left;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="430" y="620" width="1270" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="23" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.2;" edge="1" parent="1" source="3" target="8">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="24" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.4;" edge="1" parent="1" source="4" target="8">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="25" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.6;" edge="1" parent="1" source="5" target="8">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="26" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.8;" edge="1" parent="1" source="6" target="8">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="27" value="normalize" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="8" target="9">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="28" value="inspect / plan" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="9" target="10">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="29" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.25;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="10" target="11">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="30" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="10" target="12">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="31" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.75;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="10" target="13">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="32" value="dispatch by kind" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="10" target="14">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="33" value="verified assets" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="15" target="19">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="34" value="bounded entrypoint" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="16" target="20">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="35" value="declarative resources" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="17" target="21">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
