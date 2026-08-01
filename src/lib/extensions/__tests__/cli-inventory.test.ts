@@ -123,6 +123,16 @@ describe("CLI Provider inventory projection", () => {
     });
   });
 
+  it("does not promote migrated npm registrations to Tower trust", () => {
+    const item = mergeCliProviderInventory([], [
+      installed({ source: "legacy" }),
+    ])[0]!;
+    expect(item.source).toEqual({
+      type: "package-registry",
+      trust: "unverified",
+    });
+  });
+
   it("surfaces corrupt registrations as errors", () => {
     const item = mergeCliProviderInventory([], [
       installed({ health: "corrupt", capabilities: null }),

@@ -358,6 +358,11 @@ fallback display strings. Catalog v1 display data has no authenticated
 publisher identity or localization contract and MUST remain `unverified`;
 artifact integrity alone does not upgrade publisher trust.
 
+CLI Provider registrations migrated from registry schema v1 may retain the
+storage source value `legacy`. That value identifies the old persistence
+format, not Tower provenance, and MUST be projected as
+`package-registry` / `unverified`.
+
 ## 10. Operation plans
 
 ```ts

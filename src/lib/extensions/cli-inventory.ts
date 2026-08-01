@@ -20,10 +20,7 @@ function sourceForPlugin(
   if (source === "development" || source === "local") {
     return { type: "local-development", trust: "unverified" };
   }
-  if (source === "legacy") {
-    return { type: "builtin", publisherId: "tower", trust: "tower" };
-  }
-  if (source === "npm") {
+  if (source === "npm" || source === "legacy") {
     return { type: "package-registry", trust: "unverified" };
   }
   return { type: "catalog", trust: "unverified" };

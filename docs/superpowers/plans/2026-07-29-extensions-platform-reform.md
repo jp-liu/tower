@@ -82,7 +82,7 @@ behavior.
 - [ ] Implement conflict and duplicate-source diagnostics.
 - [ ] Add cache invalidation events for install, configure, enable, disable,
   uninstall, and external dependency recheck.
-- [ ] Expose a server-side inventory query used by the Settings page.
+- [x] Expose a server-side inventory query for future Settings-page migration.
 - [ ] Add contract tests covering every current extension state.
 
 ### Suggested module ownership
