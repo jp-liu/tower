@@ -167,7 +167,7 @@ The decision looks at just two axes — **has a parent or not** × **is a human 
 - **Decision**: `allow ⇔ no parent AND attended (case ①)`; `deny ⇔ has parent OR unattended (②③④)`, returning `permissionDecision:"deny"` plus a note pointing the agent at the ladder.
 - **State comes from spawn-time env** (the PTY strips `TOWER_DATA_DIR`, so the resolved path is injected directly):
   - `TOWER_HAS_PARENT` — injected when `parentTaskId` is set (static).
-  - `TOWER_SIGNAL_DIR` — the signal dir; the file `unattended-<taskId>` present ⇔ unattended. It is written/removed via `src/lib/harness/unattended-signal.ts` from `set_goal_mode` / status transitions, mirroring the DB `task.unattended` column (the standalone hook has no DB access, so it reads the file). Fail-open: a missing signal file is treated as attended.
+  - `TOWER_SIGNAL_DIR` — the signal dir; the file `unattended-<taskId>` present ⇔ unattended. It is written/removed through `src/lib/unattended-goal/runtime.ts` from `set_goal_mode` / lifecycle events and mirrors the module-owned `UnattendedGoalRuntime` projection (the standalone hook has no DB access, so it reads the file). `Task.unattended` remains for one migration window only as a rollback-compatible shadow. Fail-open: a missing signal file is treated as attended.
 - **Codex side**: spawn adds `--dangerously-bypass-hook-trust` and the `[features]` flag is renamed `codex_hooks` → `hooks`; Hermes is a gateway adapter with no PTY, so it's unaffected.
 
 ## Known limitations / future work

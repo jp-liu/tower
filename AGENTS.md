@@ -188,7 +188,7 @@ availability for specific runtimes.
 | `update_task` | Update title, description, priority, labels (replaces all labels), and/or version (`versionId`: assign to a version, or `null`/`""` to move back to backlog) | `taskId`, `title?`, `description?`, `priority?`, `labelIds?`, `versionId?` |
 | `move_task` | Move task to a different status column | `taskId`, `status` |
 | `delete_task` | Delete a task | `taskId` |
-| `set_goal_mode` | Enable or disable unattended goal mode for a task | `taskId`, `enabled` |
+| `set_goal_mode` | Enable or disable the optional unattended-goal runtime; activation requires an active Gateway unattended channel and grants no external authorization | `taskId`, `on` |
 | `set_task_defaults` | Save global defaults for new tasks (worktree isolation + auto-start). Call once after asking the user; marks defaults as configured | `useWorktree`, `autoStart` |
 | `list_versions` | List a project's active versions (excludes RELEASED) for `create_task`'s or `update_task`'s `versionId` | `projectId` |
 
@@ -261,6 +261,8 @@ handoff, diagnostics, scoped recovery, and remote project provisioning.
   `heartbeat_workbench_batch`, `confirm_gateway_task_created`,
   `complete_gateway_work`
 - Operations: `recover_gateway_request`, `get_gateway_runtime_health`
+- Gateway capability reconciliation: `get_capability_job_status` (read-only
+  OpenClaw Job status by native `taskId`/`runId`)
 
 `route_gateway_query` is the capability-scoped NON_OWNER entry and cannot
 create work. `resolve_gateway_task_context` is read-only. `continue_bound_task`

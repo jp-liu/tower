@@ -2,7 +2,10 @@
 import { vi, describe, it, expect, beforeEach, afterEach, afterAll } from "vitest";
 
 vi.mock("@/lib/db", () => ({
-  db: { task: { findUnique: vi.fn() } },
+  db: {
+    task: { findUnique: vi.fn() },
+    unattendedGoalRuntime: { findUnique: vi.fn() },
+  },
 }));
 vi.mock("@/lib/config-reader", () => ({
   readConfigValue: vi.fn(),
@@ -13,6 +16,7 @@ import { db } from "@/lib/db";
 import { readConfigValue } from "@/lib/config-reader";
 
 const findUnique = db.task.findUnique as unknown as ReturnType<typeof vi.fn>;
+const findGoalRuntime = db.unattendedGoalRuntime.findUnique as unknown as ReturnType<typeof vi.fn>;
 const readCfg = readConfigValue as unknown as ReturnType<typeof vi.fn>;
 const call = (args: { scope?: "work" | "unattended"; taskId?: string }) =>
   harnessTools.list_notify_targets.handler(args) as Promise<Record<string, unknown>>;
@@ -32,6 +36,8 @@ beforeEach(() => {
   vi.unstubAllEnvs();
   vi.stubEnv("TOWER_TASK_ID", "");
   findUnique.mockReset();
+  findGoalRuntime.mockReset();
+  findGoalRuntime.mockResolvedValue(null);
   readCfg.mockReset();
   readCfg.mockResolvedValue([]);
 });
@@ -82,7 +88,7 @@ describe("list_notify_targets — taskId invariant", () => {
     expect(String(r.instructions)).toContain(`[[tower:task=${TASK_ID}]]`);
     expect(findUnique).toHaveBeenCalledWith({
       where: { id: TASK_ID },
-      select: { unattended: true, title: true },
+      select: { id: true, title: true, unattended: true },
     });
   });
 });
@@ -137,7 +143,7 @@ describe("push_to_human — task boundary invariant", () => {
     expect(r.error).toBe("push_to_human supports Hermes/OpenClaw channels only; active gateway is not-supported");
     expect(findUnique).toHaveBeenCalledWith({
       where: { id: TASK_ID },
-      select: { unattended: true, title: true },
+      select: { id: true, title: true, unattended: true },
     });
   });
 });
@@ -151,6 +157,22 @@ describe("list_notify_targets — scope derivation", () => {
     const r = await call({ taskId: TASK_ID });
     expect(r.scope).toBe("unattended");
     expect(String(r.instructions)).toContain(`[[tower:task=${TASK_ID}]]`);
+  });
+
+  it("module runtime overrides the legacy compatibility shadow", async () => {
+    findUnique.mockResolvedValue({ id: TASK_ID, unattended: true, title: "T" });
+    findGoalRuntime.mockResolvedValue({
+      taskId: TASK_ID,
+      state: "ENDED",
+      lastEventKind: "TERMINAL_COMPLETED",
+      activatedAt: new Date(),
+      endedAt: new Date(),
+    });
+    readCfg.mockResolvedValue([{ active: true, gateway: "openclaw", downstream: "slack", scope: "work" }]);
+
+    const r = await call({ taskId: TASK_ID });
+
+    expect(r.scope).toBe("work");
   });
 
   it("goal mode off + no explicit scope → work", async () => {

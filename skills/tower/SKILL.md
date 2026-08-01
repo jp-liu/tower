@@ -50,7 +50,7 @@ The must-follow rules. Everything else is operational detail below.
 
 ## When to Use
 
-Use Tower tools when the user wants to view/create/manage tasks and projects, check execution status, interact with a running task's terminal, search, organize with labels/status, or get a daily summary / todo. For unattended relay (the tower-goal / tower-ask skills, pushing `ask_human`/`notify_human`, or `reply_to_ask`), read [references/unattended-messaging.md](references/unattended-messaging.md). For routing content to `o-tower`, a sibling task, or an external operator agent such as `xiao-fei`, use the `tower-bridge` skill.
+Use Tower tools when the user wants to view/create/manage tasks and projects, check execution status, interact with a running task's terminal, search, organize with labels/status, or get a daily summary / todo. For unattended relay (the tower-goal / tower-ask skills, pushing `ask_human`/`notify_human`, or `reply_to_ask`), read [references/unattended-messaging.md](references/unattended-messaging.md). Tower sibling-task handoff stays in this skill; use `tower-bridge` only for capabilities outside Tower.
 
 ## Session default scope
 
@@ -81,11 +81,11 @@ If a turn opens with `[当前会话默认范围：…]`, the user bound this cha
 
 ### "Send a message to the task" / "Tell it to ..."
 
-`send_task_terminal_input` with taskId and text for an already-authorized direct task interaction. If the message came from an external platform and contains/quotes `[[tower:task=...]]`, follow Contract 10: resolve first, then use `continue_bound_task` only for an explicit continuation. Then `get_task_terminal_output` to see the response.
+For a Tower sibling task, call `resume_task_execution` by exact task id or unambiguous name, then `send_task_terminal_input` with a concise structured handoff. This is Tower-internal execution control, not Gateway routing. If the message came from an external platform and contains/quotes `[[tower:task=...]]`, follow Contract 10: resolve first, then use `continue_bound_task` only for an explicit continuation. Then `get_task_terminal_output` when immediate confirmation is required.
 
-### "Send this to o-tower" / "Let xiao-fei handle it"
+### "Operate a document/computer/external SaaS"
 
-Use `tower-bridge`. Do not use `tower-ask` unless the target is a real human/group/channel.
+Use `tower-bridge` to submit a structured capability request. Do not select or hard-code a concrete Operator in Tower.
 
 ### "Move / cancel / edit a task"
 

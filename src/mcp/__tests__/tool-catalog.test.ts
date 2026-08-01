@@ -3,6 +3,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { taskTools } from "../tools/task-tools";
 import { harnessTools } from "../tools/harness-tools";
+import { unattendedGoalTools } from "../tools/unattended-goal-tools";
+import { gatewayCapabilityTools } from "../tools/gateway-capability-tools";
 import {
   gatewayOwnerToolNames,
   gatewayQueryToolNames,
@@ -33,16 +35,25 @@ const LEGACY_FULL_TOOL_NAMES = [
   "provision_remote_project", "complete_gateway_discussion", "ack_workbench_batch",
   "heartbeat_workbench_batch", "resolve_workbench_batch", "confirm_gateway_task_created",
   "complete_gateway_work", "ask_human", "notify_human", "reply_to_ask",
+  "get_capability_job_status",
 ];
+const ASSISTANT_TOOL_NAMES = LEGACY_FULL_TOOL_NAMES
+  .slice(0, 36)
+  .filter((name) => name !== "set_goal_mode");
 
 describe("Tower tool catalog", () => {
   it("preserves the legacy full and Assistant surfaces", () => {
     expect(Object.keys(towerToolCatalog).sort()).toEqual([...LEGACY_FULL_TOOL_NAMES].sort());
-    expect(Object.keys(towerToolCatalog)).toHaveLength(57);
-    expect(Object.keys(assistantTowerToolCatalog)).toEqual(LEGACY_FULL_TOOL_NAMES.slice(0, 36));
+    expect(Object.keys(towerToolCatalog)).toHaveLength(58);
+    expect(Object.keys(assistantTowerToolCatalog)).toEqual(ASSISTANT_TOOL_NAMES);
     expect(towerToolCatalog.create_task).toBe(taskTools.create_task);
     expect(assistantTowerToolCatalog.create_task).toBe(taskTools.create_task);
     expect(towerToolCatalog.list_notify_targets).toBe(harnessTools.list_notify_targets);
+    expect(towerToolCatalog.set_goal_mode).toBe(unattendedGoalTools.set_goal_mode);
+    expect(towerToolCatalog.get_capability_job_status).toBe(
+      gatewayCapabilityTools.get_capability_job_status,
+    );
+    expect(assistantTowerToolCatalog).not.toHaveProperty("set_goal_mode");
   });
 
   it("assigns every runtime tool to exactly one atomic capability group", () => {
@@ -52,11 +63,13 @@ describe("Tower tool catalog", () => {
   });
 
   it("builds responsibility groups and profiles from the atomic catalog", () => {
-    expect(toolNameGroups.core).toHaveLength(30);
+    expect(toolNameGroups.core).toHaveLength(29);
     expect(toolNameGroups.terminal).toHaveLength(6);
-    expect(toolProfileNames.full).toHaveLength(57);
-    expect(toolProfileNames.assistant).toHaveLength(36);
-    expect(toolProfileNames.task).toHaveLength(45);
+    expect(toolNameGroups.unattendedGoal).toEqual(["set_goal_mode"]);
+    expect(toolNameGroups.gatewayCapability).toEqual(["get_capability_job_status"]);
+    expect(toolProfileNames.full).toHaveLength(58);
+    expect(toolProfileNames.assistant).toHaveLength(35);
+    expect(toolProfileNames.task).toHaveLength(46);
     expect(toolProfileNames.gateway).toHaveLength(25);
     expect(toolProfileNames["gateway-query"]).toEqual(gatewayQueryToolNames);
 

@@ -178,7 +178,7 @@ Workbench event/batch/runtime、子任务和平台 delivery 关联为一条阶�
 - **判定**：`allow ⇔ 无父任务 且 有人值守（情况①）`；`deny ⇔ 有父任务 或 无人值守（②③④）`，deny 时返回 `permissionDecision:"deny"` + 一段引导改走阶梯的说明。
 - **状态从 spawn 时注入的 env 读**（因 PTY 剥了 `TOWER_DATA_DIR`，只能注入解析好的路径）：
   - `TOWER_HAS_PARENT` —— 有 `parentTaskId` 时注入（静态）。
-  - `TOWER_SIGNAL_DIR` —— 信号目录；`unattended-<taskId>` 文件存在 ⇔ 无人值守。该文件由 `set_goal_mode` / 状态流转经 `src/lib/harness/unattended-signal.ts` 写删，镜像 DB 的 `task.unattended` 列（standalone hook 无 DB 访问，只能读文件）。fail-open：读不到信号文件按「有人值守」处理。
+  - `TOWER_SIGNAL_DIR` —— 信号目录；`unattended-<taskId>` 文件存在 ⇔ 无人值守。该文件由 `set_goal_mode` / 生命周期事件经 `src/lib/unattended-goal/runtime.ts` 写删，镜像模块自有的 `UnattendedGoalRuntime`（standalone hook 无 DB 访问，只能读文件）。`Task.unattended` 仅保留一个迁移窗口作为回滚兼容影子。fail-open：读不到信号文件按「有人值守」处理。
 - **Codex 侧**：spawn 补 `--dangerously-bypass-hook-trust`，`[features]` 特性名从 `codex_hooks` 迁到 `hooks`；Hermes 是网关适配器无 PTY，不涉及。
 
 ## 已知限制 / 后续

@@ -24,7 +24,6 @@ export const toolCapabilityGroups = {
     "update_task",
     "move_task",
     "delete_task",
-    "set_goal_mode",
     "set_task_defaults",
     "create_label",
     "delete_label",
@@ -42,6 +41,12 @@ export const toolCapabilityGroups = {
     "send_task_terminal_input",
     "stop_task_execution",
     "resume_task_execution",
+  ],
+  unattendedGoal: [
+    "set_goal_mode",
+  ],
+  gatewayCapability: [
+    "get_capability_job_status",
   ],
   messaging: [
     "list_notify_targets",
@@ -87,6 +92,8 @@ function combineGroups(groups: readonly ToolCapabilityGroup[]): TowerToolName[] 
 export const toolNameGroups = {
   core: combineGroups(["coreRead", "coreWrite"]),
   terminal: combineGroups(["terminalRead", "terminalWrite"]),
+  unattendedGoal: [...toolCapabilityGroups.unattendedGoal],
+  gatewayCapability: [...toolCapabilityGroups.gatewayCapability],
   messaging: [...toolCapabilityGroups.messaging],
   workbench: [...toolCapabilityGroups.workbench],
   gatewayQuery: [...toolCapabilityGroups.gatewayQuery],
@@ -100,6 +107,8 @@ const profileGroups = {
     "coreWrite",
     "terminalRead",
     "terminalWrite",
+    "unattendedGoal",
+    "gatewayCapability",
     "messaging",
     "workbench",
     "gatewayQuery",
@@ -112,6 +121,8 @@ const profileGroups = {
     "coreWrite",
     "terminalRead",
     "terminalWrite",
+    "unattendedGoal",
+    "gatewayCapability",
     "messaging",
     "workbench",
   ],

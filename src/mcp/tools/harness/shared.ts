@@ -159,12 +159,12 @@ export function composeSendInstructions(
 
 export async function resolveActiveTarget(taskId: string, explicitScope?: "work" | "unattended") {
   const { db } = await import("@/lib/db");
-  const task = await db.task.findUnique({
-    where: { id: taskId },
-    select: { unattended: true, title: true },
-  });
-  if (!task) return { error: "task not found" as const };
-  const scope: "work" | "unattended" = explicitScope ?? (task.unattended ? "unattended" : "work");
+  const { readUnattendedGoalMode } = await import("@/lib/unattended-goal/runtime");
+  const resolved = await readUnattendedGoalMode(db, taskId).catch(() => null);
+  if (!resolved) return { error: "task not found" as const };
+  const task = resolved.task;
+  const scope: "work" | "unattended" = explicitScope
+    ?? (resolved.active ? "unattended" : "work");
   const { readConfigValue } = await import("@/lib/config-reader");
   const targets = await readConfigValue<NotifyTargetConfig[]>("harness.targets", []);
   const active = (Array.isArray(targets) ? targets : []).find(

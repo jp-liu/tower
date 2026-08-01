@@ -147,11 +147,9 @@ model Task {
   updatedAt              DateTime   @updatedAt
   doneAt                 DateTime? // 进入 DONE 的时间戳，用于「归档期限」判定（离开 DONE 时清空）
 
-  // Goal-mode runtime marker (NOT a task-creation setting). Set to true only when the
-  // agent activates the tower-goal skill at run time (set_goal_mode), and auto-cleared
-  // when the task leaves the active loop (Stop / DONE / CANCELLED / IN_REVIEW). While true,
-  // list_notify_targets defaults the scope to 'unattended' (reach the owner). Tower only
-  // records + park/resume — it never sends and never stores platform bindings.
+  // Compatibility shadow for releases before UnattendedGoalRuntime. New code must
+  // access goal mode through src/lib/unattended-goal/runtime.ts. Keep this column
+  // for one migration window so rolling back does not lose an active marker.
   unattended Boolean @default(false)
 
   project               Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -173,6 +171,25 @@ model Task {
   @@index([status])
   @@index([versionId])
   @@index([parentTaskId])
+}
+
+// Optional unattended-goal module projection. taskId is deliberately an opaque
+// Core identifier rather than a Prisma relation: the module owns this lifecycle
+// and can move to another package/store without changing the Task model.
+model UnattendedGoalRuntime {
+  taskId        String                      @id
+  state         UnattendedGoalRuntimeState  @default(ACTIVE)
+  lastEventKind String
+  activatedAt   DateTime                    @default(now())
+  endedAt       DateTime?
+  updatedAt     DateTime                    @updatedAt
+
+  @@index([state, updatedAt])
+}
+
+enum UnattendedGoalRuntimeState {
+  ACTIVE
+  ENDED
 }
 
 // Written in the same transaction as task creation, before the Workbench can

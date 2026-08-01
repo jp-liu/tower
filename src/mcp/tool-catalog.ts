@@ -9,6 +9,8 @@ import { terminalTools } from "./tools/terminal-tools";
 import { reportTools } from "./tools/report-tools";
 import { harnessTools } from "./tools/harness-tools";
 import { knowledgeBaseTools } from "./tools/knowledge-base-tools";
+import { unattendedGoalTools } from "./tools/unattended-goal-tools";
+import { gatewayCapabilityTools } from "./tools/gateway-capability-tools";
 import {
   parseMcpToolProfile,
   toolProfileNames,
@@ -32,6 +34,8 @@ export const assistantTowerToolCatalog = {
 /** Complete MCP catalog. Harness messaging stays MCP-only and is not exposed to API models. */
 export const towerToolCatalog = {
   ...assistantTowerToolCatalog,
+  ...unattendedGoalTools,
+  ...gatewayCapabilityTools,
   ...harnessTools,
 };
 
