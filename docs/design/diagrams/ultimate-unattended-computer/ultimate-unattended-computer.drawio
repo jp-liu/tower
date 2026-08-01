@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="30.4.1" pages="4">
+  <diagram id="overview" name="01-System-Overview">
+    <mxGraphModel dx="1600" dy="950" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1650" pageHeight="950" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="a-title" value="终极无人值守电脑：系统职责与能力流" style="text;html=1;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1540" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-subtitle" value="请求从左向右执行，结果沿底部单线返回；Tower 管项目事实，OpenClaw 管渠道、授权与外部能力。" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#4b5563;" vertex="1" parent="1">
+          <mxGeometry x="40" y="65" width="1540" height="30" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="a-entry" value="入口" style="swimlane;startSize=34;html=1;container=1;pointerEvents=0;rounded=0;fillColor=#f8fafc;strokeColor=#94a3b8;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="40" y="130" width="220" height="610" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-human" value="人类 / OWNER&#xa;飞书、微信等渠道" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;" vertex="1" parent="a-entry">
+          <mxGeometry x="20" y="65" width="180" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-dev" value="开发者在场&#xa;Tower UI / MCP / Terminal" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;" vertex="1" parent="a-entry">
+          <mxGeometry x="20" y="335" width="180" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-entry-note" value="入口只决定把请求交给谁，&#xa;不复制另一系统的业务状态。" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=12;fontColor=#64748b;" vertex="1" parent="a-entry">
+          <mxGeometry x="20" y="500" width="180" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="a-openclaw" value="OpenClaw：个人工作流与电脑能力中枢" style="swimlane;startSize=34;html=1;container=1;pointerEvents=0;rounded=0;fillColor=#fff7ed;strokeColor=#d79b00;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="310" y="130" width="370" height="230" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-otower" value="o-tower&#xa;理解人类消息与会话" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;fontStyle=1;" vertex="1" parent="a-openclaw">
+          <mxGeometry x="115" y="70" width="140" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-open-state" value="Registry + Runtime State&#xa;能力路由 · 风险 · 身份 · 凭据 · Job / Operator 映射" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="a-openclaw">
+          <mxGeometry x="30" y="155" width="310" height="55" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="a-tower" value="Tower：项目工作中枢" style="swimlane;startSize=34;html=1;container=1;pointerEvents=0;rounded=0;fillColor=#eff6ff;strokeColor=#6c8ebf;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="310" y="400" width="370" height="340" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-goal" value="Execution / Workbench&#xa;CLI 执行 · 编排 · 审查" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;" vertex="1" parent="a-tower">
+          <mxGeometry x="20" y="65" width="150" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-agent" value="Gateway Client + tower-bridge&#xa;外部 CapabilityRequest" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;fontStyle=1;" vertex="1" parent="a-tower">
+          <mxGeometry x="190" y="65" width="160" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-unattended" value="Unattended Goal（可选）&#xa;运行态 · 唤醒策略 · 预算边界" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1;" vertex="1" parent="a-tower">
+          <mxGeometry x="95" y="165" width="180" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-tower-state" value="Core：Workspace / Project / Task&#xa;记录、项目结果与审查" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="a-tower">
+          <mxGeometry x="65" y="245" width="240" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="a-port" value="CapabilityRequest 契约边界&#xa;（逻辑，不是新服务）&#xa;&#xa;Discovery + input/output schema&#xa;OWNER 授权 · requestId 去重&#xa;&#xa;上车道：Direct&#xa;下车道：Job" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 6;strokeWidth=2;fillColor=#fffdf5;strokeColor=#d6b656;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;spacing=16;" vertex="1" parent="1">
+          <mxGeometry x="740" y="130" width="270" height="610" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="a-exec" value="OpenClaw 能力运行时" style="swimlane;startSize=34;html=1;container=1;pointerEvents=0;rounded=0;fillColor=#faf5ff;strokeColor=#9673a6;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="130" width="270" height="610" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-adapter" value="Transport / Adapter&#xa;确定性消息与 API" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;fontStyle=1;" vertex="1" parent="a-exec">
+          <mxGeometry x="35" y="60" width="200" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-operator" value="专用 Operator&#xa;理解、规划、GUI 多步执行" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;fontStyle=1;" vertex="1" parent="a-exec">
+          <mxGeometry x="35" y="335" width="200" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-result" value="结果与证据汇聚&#xa;revision / side-effect certainty" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" vertex="1" parent="a-exec">
+          <mxGeometry x="35" y="500" width="200" height="75" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-external" value="外部世界" style="swimlane;startSize=34;html=1;container=1;pointerEvents=0;rounded=0;fillColor=#f8fafc;strokeColor=#666666;fontStyle=1;fontSize=14;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1380" y="130" width="220" height="610" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-channel" value="渠道与结构化 API&#xa;消息、文档、表格、云盘" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;fontStyle=1;" vertex="1" parent="a-external">
+          <mxGeometry x="20" y="60" width="180" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-gui" value="电脑 / 浏览器 / GUI&#xa;多步观察与操作" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;fontStyle=1;" vertex="1" parent="a-external">
+          <mxGeometry x="20" y="330" width="180" height="90" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="a-e1" value="消息入口" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#6c8ebf;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="a-human" target="a-otower">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-e2" value="直接管理项目" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#6c8ebf;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="a-dev" target="a-goal">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-handoff-note" value="项目型工作由 o-tower 交给 Tower" style="text;html=1;align=center;verticalAlign=middle;fontSize=11;fontStyle=1;fontColor=#475569;fillColor=#ffffff;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="390" y="365" width="290" height="25" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-e16" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#6c8ebf;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="a-goal" target="a-agent">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-e4" value="CapabilityRequest" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#d79b00;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.172;" edge="1" parent="1" source="a-otower" target="a-port">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-e5" value="CapabilityRequest" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#d79b00;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.615;" edge="1" parent="1" source="a-agent" target="a-port">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-e6" value="Direct" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#d79b00;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.172;entryX=0;entryY=0.5;" edge="1" parent="1" source="a-port" target="a-adapter">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-e7" value="Job" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#9673a6;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.615;entryX=0;entryY=0.5;" edge="1" parent="1" source="a-port" target="a-operator">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-e8" value="消息 / API" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#d79b00;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="a-adapter" target="a-channel">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-e11" value="观察与操作" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#9673a6;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="a-operator" target="a-gui">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-e12" value="平台回执" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#82b366;labelBackgroundColor=#ffffff;fontSize=11;exitX=0;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="a-adapter" target="a-result">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1075" y="230"/><mxPoint x="1075" y="668"/></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="a-e13" value="证据与结果" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#82b366;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="a-operator" target="a-result">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-caller-result" value="Caller Result Inbox&#xa;回到 requestId 对应 Goal / 会话" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="360" y="790" width="320" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="a-e14" value="completion event / 当前结果" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#82b366;strokeWidth=2;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.5;exitY=1;entryX=1;entryY=0.5;" edge="1" parent="1" source="a-result" target="a-caller-result">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1195" y="825"/></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="a-foot" value="硬边界：Tower 不保存 Operator 路由与凭据；OpenClaw 不拥有项目事实；Agent 不能自我授权。" style="text;html=1;align=center;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#475569;fillColor=#f8fafc;strokeColor=#cbd5e1;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="180" y="885" width="1290" height="40" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="sequence" name="02-Direct-Job-Sequence">
+    <mxGraphModel dx="1600" dy="980" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1650" pageHeight="980" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="s-title" value="Tower 调用外部能力：Direct 与 Job 时序" style="text;html=1;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="1540" height="40" as="geometry"/></mxCell>
+        <mxCell id="s-subtitle" value="所有写动作先做 schema、风险、授权和去重校验；Direct 当前返回，Job 以事件推进并支持只读对账。" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#4b5563;" vertex="1" parent="1"><mxGeometry x="40" y="65" width="1540" height="30" as="geometry"/></mxCell>
+
+        <mxCell id="s-p1" value="Tower CLI Agent" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="50" y="110" width="170" height="50" as="geometry"/></mxCell>
+        <mxCell id="s-p2" value="tower-bridge" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="310" y="110" width="170" height="50" as="geometry"/></mxCell>
+        <mxCell id="s-p3" value="OpenClaw 契约边界" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 6;fillColor=#fffdf5;strokeColor=#d6b656;fontSize=13;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="570" y="110" width="190" height="50" as="geometry"/></mxCell>
+        <mxCell id="s-p4" value="Adapter / Operator" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="870" y="110" width="180" height="50" as="geometry"/></mxCell>
+        <mxCell id="s-p5" value="外部系统" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1160" y="110" width="170" height="50" as="geometry"/></mxCell>
+        <mxCell id="s-p6" value="Tower Goal / Recovery" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1420" y="110" width="180" height="50" as="geometry"/></mxCell>
+
+        <mxCell id="s-l1" value="" style="endArrow=none;dashed=1;strokeColor=#94a3b8;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="135" y="160" as="sourcePoint"/><mxPoint x="135" y="910" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="s-l2" value="" style="endArrow=none;dashed=1;strokeColor=#94a3b8;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="395" y="160" as="sourcePoint"/><mxPoint x="395" y="910" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="s-l3" value="" style="endArrow=none;dashed=1;strokeColor=#d6b656;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="665" y="160" as="sourcePoint"/><mxPoint x="665" y="910" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="s-l4" value="" style="endArrow=none;dashed=1;strokeColor=#9673a6;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="960" y="160" as="sourcePoint"/><mxPoint x="960" y="910" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="s-l5" value="" style="endArrow=none;dashed=1;strokeColor=#666666;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1245" y="160" as="sourcePoint"/><mxPoint x="1245" y="910" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="s-l6" value="" style="endArrow=none;dashed=1;strokeColor=#82b366;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1510" y="160" as="sourcePoint"/><mxPoint x="1510" y="910" as="targetPoint"/></mxGeometry></mxCell>
+
+        <mxCell id="s-direct-zone" value="Direct：短时确定性动作" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#d79b00;verticalAlign=top;align=left;spacingLeft=10;fontStyle=1;fontSize=13;" vertex="1" parent="1"><mxGeometry x="30" y="180" width="1580" height="310" as="geometry"/></mxCell>
+        <mxCell id="s-job-zone" value="Job：多步 Operator / GUI / 跨调用超时" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#9673a6;verticalAlign=top;align=left;spacingLeft=10;fontStyle=1;fontSize=13;" vertex="1" parent="1"><mxGeometry x="30" y="510" width="1580" height="390" as="geometry"/></mxCell>
+
+        <mxCell id="s-e1" value="1. discovery" style="html=1;verticalAlign=bottom;endArrow=blockThin;endFill=1;strokeColor=#6c8ebf;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="135" y="220" as="sourcePoint"/><mxPoint x="395" y="220" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="s-e2" value="2. schema / health / risk" style="html=1;verticalAlign=bottom;endArrow=blockThin;endFill=1;strokeColor=#d79b00;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="395" y="260" as="sourcePoint"/><mxPoint x="665" y="260" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="s-e3" value="3. CapabilityRequest(requestId, authorizationRef)" style="html=1;verticalAlign=bottom;endArrow=blockThin;endFill=1;strokeColor=#6c8ebf;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="395" y="305" as="sourcePoint"/><mxPoint x="665" y="305" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="s-check" value="校验 schema / 风险 / 授权 / 去重&#xa;失败即 fail-closed" style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="s-direct-zone"><mxGeometry x="660" y="95" width="155" height="75" as="geometry"/></mxCell>
+        <mxCell id="s-e4" value="4. Direct dispatch" style="html=1;verticalAlign=bottom;endArrow=blockThin;endFill=1;strokeColor=#d79b00;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="665" y="370" as="sourcePoint"/><mxPoint x="960" y="370" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="s-e5" value="5. 外部动作 + 平台回执" style="html=1;verticalAlign=bottom;endArrow=blockThin;endFill=1;strokeColor=#9673a6;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="960" y="410" as="sourcePoint"/><mxPoint x="1245" y="410" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="s-e6" value="6. SUCCEEDED / FAILED / SIDE_EFFECT_UNKNOWN" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;strokeColor=#82b366;fontColor=#166534;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="960" y="455" as="sourcePoint"/><mxPoint x="395" y="455" as="targetPoint"/></mxGeometry></mxCell>
+
+        <mxCell id="s-e7" value="1. CapabilityRequest" style="html=1;verticalAlign=bottom;endArrow=blockThin;endFill=1;strokeColor=#6c8ebf;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="395" y="560" as="sourcePoint"/><mxPoint x="665" y="560" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="s-e8" value="2. ACCEPTED + jobRef" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;strokeColor=#82b366;fontColor=#166534;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="665" y="605" as="sourcePoint"/><mxPoint x="395" y="605" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="s-e9" value="3. 启动受限 Job" style="html=1;verticalAlign=bottom;endArrow=blockThin;endFill=1;strokeColor=#9673a6;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="665" y="650" as="sourcePoint"/><mxPoint x="960" y="650" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="s-e10" value="4. 多步操作 / 观察 / 验收" style="html=1;verticalAlign=bottom;endArrow=blockThin;endFill=1;strokeColor=#9673a6;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="960" y="695" as="sourcePoint"/><mxPoint x="1245" y="695" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="s-e11" value="5. completion event(result revision)" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;strokeColor=#82b366;fontColor=#166534;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="665" y="755" as="sourcePoint"/><mxPoint x="1510" y="755" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="s-event-note" value="Tower 按 requestId + revision 幂等接收；&#xa;终态不被迟到的 RUNNING 回退。" style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="s-job-zone"><mxGeometry x="1305" y="115" width="205" height="55" as="geometry"/></mxCell>
+        <mxCell id="s-e12" value="6. 仅恢复 / 对账时 query(jobRef)" style="html=1;verticalAlign=bottom;endArrow=blockThin;endFill=1;strokeColor=#64748b;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1510" y="815" as="sourcePoint"/><mxPoint x="665" y="815" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="s-e13" value="7. current state + side-effect certainty" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;strokeColor=#82b366;fontColor=#166534;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="665" y="860" as="sourcePoint"/><mxPoint x="1510" y="860" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="s-foot" value="禁止：超时后切旧路径重试；SIDE_EFFECT_UNKNOWN 自动重试；Tower 高频轮询或复制 OpenClaw Job 状态机。" style="text;html=1;align=center;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#991b1b;fillColor=#fff1f2;strokeColor=#fecdd3;rounded=1;" vertex="1" parent="1"><mxGeometry x="260" y="920" width="1120" height="38" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="state" name="03-Recovery-State">
+    <mxGraphModel dx="1600" dy="980" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1650" pageHeight="980" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="r-title" value="Tower Goal 唤醒循环与 OpenClaw Job 生命周期" style="text;html=1;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="1540" height="40" as="geometry"/></mxCell>
+        <mxCell id="r-subtitle" value="Goal 会被持久事实再次唤醒；Job 通常只执行一次。两者只通过完成事件与低频只读对账连接。" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#4b5563;" vertex="1" parent="1"><mxGeometry x="40" y="65" width="1540" height="30" as="geometry"/></mxCell>
+
+        <mxCell id="r-goal-band" value="Tower：Goal 可重复唤醒循环" style="swimlane;startSize=36;html=1;container=1;pointerEvents=0;fillColor=#eff6ff;strokeColor=#6c8ebf;fontStyle=1;fontSize=14;" vertex="1" parent="1"><mxGeometry x="40" y="120" width="1570" height="300" as="geometry"/></mxCell>
+        <mxCell id="r-job-band" value="OpenClaw：Job 一次性执行生命周期" style="swimlane;startSize=36;html=1;container=1;pointerEvents=0;fillColor=#faf5ff;strokeColor=#9673a6;fontStyle=1;fontSize=14;" vertex="1" parent="1"><mxGeometry x="40" y="540" width="1570" height="310" as="geometry"/></mxCell>
+
+        <mxCell id="r-runnable" value="RUNNABLE&#xa;领取一个新回合" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" vertex="1" parent="r-goal-band"><mxGeometry x="70" y="75" width="180" height="70" as="geometry"/></mxCell>
+        <mxCell id="r-active" value="ACTIVE TURN&#xa;provider 正在执行" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;" vertex="1" parent="r-goal-band"><mxGeometry x="340" y="75" width="180" height="70" as="geometry"/></mxCell>
+        <mxCell id="r-rule" value="本轮结果？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;fontStyle=1;" vertex="1" parent="r-goal-band"><mxGeometry x="610" y="65" width="160" height="90" as="geometry"/></mxCell>
+        <mxCell id="r-waiting" value="WAITING&#xa;ask / Job / timer" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;fontStyle=1;" vertex="1" parent="r-goal-band"><mxGeometry x="890" y="65" width="180" height="70" as="geometry"/></mxCell>
+        <mxCell id="r-done" value="DONE / REVIEW&#xa;验收后停止唤醒" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" vertex="1" parent="r-goal-band"><mxGeometry x="600" y="185" width="180" height="70" as="geometry"/></mxCell>
+        <mxCell id="r-blocked" value="BLOCKED / DEGRADED&#xa;等待 OWNER 或诊断" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;fontStyle=1;" vertex="1" parent="r-goal-band"><mxGeometry x="1160" y="185" width="210" height="70" as="geometry"/></mxCell>
+        <mxCell id="r-inbox" value="Durable Wakeup Inbox · requestId / revision 去重与权威 resolve&#xa;Job completion · ask reply · timer · recovery scan · OWNER decision" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="80" y="450" width="1490" height="60" as="geometry"/></mxCell>
+
+        <mxCell id="r-ge1" value="领取一轮" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#6c8ebf;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="r-runnable" target="r-active"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="r-ge2" value="provider-confirmed completion" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#6c8ebf;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="r-active" target="r-rule"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="r-ge3" value="需要外部事实" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#d6b656;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="r-rule" target="r-waiting"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="r-ge4" value="幂等唤醒" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#82b366;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.08;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="1" source="r-inbox" target="r-runnable"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="r-ge5" value="ask / Job / timer / recovery" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#d79b00;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.5;exitY=1;entryX=0.63;entryY=0;" edge="1" parent="1" source="r-waiting" target="r-inbox"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="r-ge6" value="OWNER 决策 / 修复事实" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#b85450;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.5;exitY=1;entryX=0.82;entryY=0;" edge="1" parent="1" source="r-blocked" target="r-inbox"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="r-ge7" value="验收完成" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#82b366;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="r-rule" target="r-done"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="r-ge8" value="授权 / 预算 / 状态异常" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#b85450;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.75;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="r-rule" target="r-blocked"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="820" y="280"/><mxPoint x="1305" y="280"/></Array></mxGeometry></mxCell>
+
+        <mxCell id="r-accepted" value="ACCEPTED&#xa;jobRef 已持久化" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;fontStyle=1;" vertex="1" parent="r-job-band"><mxGeometry x="70" y="95" width="170" height="70" as="geometry"/></mxCell>
+        <mxCell id="r-running" value="RUNNING&#xa;lease + heartbeat" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;fontStyle=1;" vertex="1" parent="r-job-band"><mxGeometry x="320" y="95" width="170" height="70" as="geometry"/></mxCell>
+        <mxCell id="r-outcome" value="结果与副作用&#xa;是否可确定？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1;" vertex="1" parent="r-job-band"><mxGeometry x="570" y="85" width="170" height="90" as="geometry"/></mxCell>
+        <mxCell id="r-success" value="标准终态&#xa;SUCCEEDED · FAILED · BLOCKED&#xa;CANCELLED / EXPIRED" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" vertex="1" parent="r-job-band"><mxGeometry x="850" y="65" width="250" height="100" as="geometry"/></mxCell>
+        <mxCell id="r-unknown" value="SIDE_EFFECT_UNKNOWN&#xa;可能已产生副作用，绝不自动重试" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=12;fontStyle=1;" vertex="1" parent="r-job-band"><mxGeometry x="850" y="195" width="250" height="70" as="geometry"/></mxCell>
+        <mxCell id="r-reconcile" value="Completion Event / Read-only Reconciliation&#xa;requestId + revision + updatedAt" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" vertex="1" parent="r-job-band"><mxGeometry x="1190" y="105" width="300" height="90" as="geometry"/></mxCell>
+
+        <mxCell id="r-je1" value="领取" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#9673a6;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="r-accepted" target="r-running"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="r-je2" value="完成 / 取消 / 超时核验" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#9673a6;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="r-running" target="r-outcome"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="r-je3" value="结果可确定" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#82b366;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.4;entryX=0;entryY=0.5;" edge="1" parent="1" source="r-outcome" target="r-success"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="r-je4" value="副作用不确定" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#b85450;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.65;exitY=1;entryX=0;entryY=0.5;" edge="1" parent="1" source="r-outcome" target="r-unknown"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="790" y="770"/></Array></mxGeometry></mxCell>
+        <mxCell id="r-je5" value="标准结果" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#82b366;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.35;" edge="1" parent="1" source="r-success" target="r-reconcile"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="r-je6" value="人工核验后更新" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#b85450;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.8;" edge="1" parent="1" source="r-unknown" target="r-reconcile"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1150" y="770"/><mxPoint x="1150" y="717"/></Array></mxGeometry></mxCell>
+        <mxCell id="r-cross" value="持久完成事实" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#82b366;strokeWidth=2;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="r-reconcile" target="r-inbox"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1625" y="690"/><mxPoint x="1625" y="480"/></Array></mxGeometry></mxCell>
+        <mxCell id="r-foot" value="恢复规则：事件为主、低频扫描兜底；租约过期才判定失联；未知副作用不重放；Tower 只保存关联与项目摘要。" style="text;html=1;align=center;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#475569;fillColor=#f8fafc;strokeColor=#cbd5e1;rounded=1;" vertex="1" parent="1"><mxGeometry x="180" y="880" width="1290" height="45" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="modules" name="04-Tower-Module-Boundaries">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1650" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/><mxCell id="1" parent="0"/>
+        <mxCell id="m-title" value="Tower 模块边界：同仓同库，依赖方向先收口" style="text;html=1;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="1540" height="40" as="geometry"/></mxCell>
+        <mxCell id="m-subtitle" value="现在不拆包、不拆数据库；模块只通过应用端口和持久事件协作，未来拆包不改 Core 业务模型。" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#4b5563;" vertex="1" parent="1"><mxGeometry x="40" y="65" width="1540" height="30" as="geometry"/></mxCell>
+        <mxCell id="m-optional" value="可选扩展层（未配置 Gateway 时不启用无人值守）" style="swimlane;startSize=34;html=1;container=1;pointerEvents=0;fillColor=#fff7ed;strokeColor=#d79b00;fontStyle=1;fontSize=14;" vertex="1" parent="1"><mxGeometry x="120" y="125" width="1410" height="205" as="geometry"/></mxCell>
+        <mxCell id="m-gateway" value="Gateway&#xa;外部消息入口 · ask/reply · delivery&#xa;Capability Job 只读对账" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;fontStyle=1;" vertex="1" parent="m-optional"><mxGeometry x="180" y="65" width="390" height="95" as="geometry"/></mxCell>
+        <mxCell id="m-unattended" value="Unattended Goal&#xa;模块自有运行态 · 唤醒与预算策略&#xa;消费 Gateway / Workbench / Terminal 生命周期事实" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;fontStyle=1;" vertex="1" parent="m-optional"><mxGeometry x="840" y="65" width="390" height="95" as="geometry"/></mxCell>
+        <mxCell id="m-contract" value="应用端口 + 可持久化生命周期事实（逻辑边界，不是新 Event Bus）&#xa;只传 taskId / requestId / revision / command / result，不跨模块读取内部表" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#64748b;strokeWidth=2;fontSize=13;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="300" y="370" width="1050" height="75" as="geometry"/></mxCell>
+        <mxCell id="m-base" value="本地执行层（基础安装）" style="swimlane;startSize=34;html=1;container=1;pointerEvents=0;fillColor=#eff6ff;strokeColor=#6c8ebf;fontStyle=1;fontSize=14;" vertex="1" parent="1"><mxGeometry x="120" y="485" width="1410" height="180" as="geometry"/></mxCell>
+        <mxCell id="m-execution" value="Execution / Terminal&#xa;PTY 会话 · CLI Provider · 执行记录&#xa;只报告 started / stopped / completed 事实" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;" vertex="1" parent="m-base"><mxGeometry x="180" y="60" width="390" height="90" as="geometry"/></mxCell>
+        <mxCell id="m-workbench" value="Workbench&#xa;持久批次 · lease / fencing · ACK / resolve&#xa;协调执行，不拥有 Goal 策略" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;" vertex="1" parent="m-base"><mxGeometry x="840" y="60" width="390" height="90" as="geometry"/></mxCell>
+        <mxCell id="m-core" value="Tower Core：Workspace · Project · Task · Record / Note · Review&#xa;纯项目事实与看板；不拥有渠道凭据、外部 Operator 路由、无人值守预算或 Job 状态机" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="300" y="720" width="1050" height="90" as="geometry"/></mxCell>
+        <mxCell id="m-e1" value="入站 / 回执事件" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#d79b00;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.5;exitY=1;entryX=0.3;entryY=0;" edge="1" parent="1" source="m-gateway" target="m-contract"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="m-e2" value="订阅 / 发出命令" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#d6b656;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.5;exitY=1;entryX=0.7;entryY=0;" edge="1" parent="1" source="m-unattended" target="m-contract"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="m-e3" value="执行命令 / 生命周期事实" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#6c8ebf;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.3;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="m-contract" target="m-execution"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="m-e4" value="批次命令 / resolve 事实" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#6c8ebf;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.7;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="m-contract" target="m-workbench"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="m-e5" value="Task application port" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#82b366;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.5;exitY=1;entryX=0.3;entryY=0;" edge="1" parent="1" source="m-execution" target="m-core"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="m-e6" value="Task / Review application port" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=1;strokeColor=#82b366;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.5;exitY=1;entryX=0.7;entryY=0;" edge="1" parent="1" source="m-workbench" target="m-core"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="m-foot" value="拆包判据：模块先能独立测试、关闭和替换；只有部署或发布收益明确时才拆 npm 包 / 数据库。" style="text;html=1;align=center;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#475569;fillColor=#f8fafc;strokeColor=#cbd5e1;rounded=1;" vertex="1" parent="1"><mxGeometry x="250" y="840" width="1150" height="38" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
