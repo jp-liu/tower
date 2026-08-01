@@ -204,6 +204,11 @@ describe("tower agent extension installer", () => {
     });
     expect(result.success).toBe(true);
 
+    const mcpConfig = JSON.parse(
+      fs.readFileSync(path.join(paths.openclawWorkspacesDir, "o-tower", "mcp.json"), "utf-8"),
+    ) as { mcpServers: Record<string, { env: Record<string, string> }> };
+    expect(Object.values(mcpConfig.mcpServers)[0]?.env.TOWER_MCP_PROFILE).toBe("gateway");
+
     const cfg = JSON.parse(fs.readFileSync(paths.openclawConfigPath, "utf-8")) as {
       agents: { list: Array<Record<string, unknown>> };
       channels: Record<string, Record<string, unknown>>;

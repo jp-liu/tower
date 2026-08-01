@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { towerToolCatalog } from "./tool-catalog";
+import { getTowerToolCatalog, type McpToolProfile } from "./tool-catalog";
 
-export function createServer(): McpServer {
+export function createServer(profile: McpToolProfile | string | undefined = "full"): McpServer {
   const server = new McpServer({ name: "tower", version: "0.1.0" });
 
-  for (const [name, tool] of Object.entries(towerToolCatalog)) {
+  for (const [name, tool] of Object.entries(getTowerToolCatalog(profile))) {
     server.tool(
       name,
       tool.description,

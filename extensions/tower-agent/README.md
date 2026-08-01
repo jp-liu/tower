@@ -108,6 +108,10 @@ user task.
 
 ## Owner and trusted-channel enforcement
 
+The generated MCP subprocess also selects Tower's bounded `gateway` capability
+profile. This reduces discovery at the process boundary; `toolsBySender` remains
+the mandatory authorization boundary between OWNER and NON_OWNER callers.
+
 Tower's OpenClaw installer can write an `accessPolicy` with platform owner IDs
 and trusted channel IDs. OpenClaw enforces those identities before routing and
 uses per-agent `toolsBySender` to expose two surfaces on the same `o-tower`

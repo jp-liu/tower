@@ -331,6 +331,7 @@ describe("startPtyExecution directive selection", () => {
     ]);
     expect(vi.mocked(createSession).mock.calls[0][6]).toMatchObject({
       TOWER_TASK_ID: "t1",
+      TOWER_MCP_PROFILE: "task",
       PROFILE_ONLY: "yes",
     });
   });

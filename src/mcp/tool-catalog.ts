@@ -9,6 +9,11 @@ import { terminalTools } from "./tools/terminal-tools";
 import { reportTools } from "./tools/report-tools";
 import { harnessTools } from "./tools/harness-tools";
 import { knowledgeBaseTools } from "./tools/knowledge-base-tools";
+import {
+  parseMcpToolProfile,
+  toolProfileNames,
+  type McpToolProfile,
+} from "./tool-capabilities";
 
 /** Tower-owned orchestration tools available to the in-process Assistant. */
 export const assistantTowerToolCatalog = {
@@ -30,4 +35,15 @@ export const towerToolCatalog = {
   ...harnessTools,
 };
 
-export type TowerToolName = keyof typeof towerToolCatalog;
+type TowerToolCatalog = typeof towerToolCatalog;
+
+export function getTowerToolCatalog(profile: McpToolProfile | string | undefined = "full") {
+  const parsedProfile = parseMcpToolProfile(profile);
+  if (parsedProfile === "full") return towerToolCatalog;
+  if (parsedProfile === "assistant") return assistantTowerToolCatalog;
+  return Object.fromEntries(
+    toolProfileNames[parsedProfile].map((name) => [name, towerToolCatalog[name]]),
+  ) as Partial<TowerToolCatalog>;
+}
+
+export type { McpToolProfile, TowerToolName } from "./tool-capabilities";

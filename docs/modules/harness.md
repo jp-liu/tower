@@ -187,7 +187,7 @@ Workbench event/batch/runtime、子任务和平台 delivery 关联为一条阶�
 
 ## 文件清单
 
-### MCP Tools (`src/mcp/tools/harness-tools.ts`)
+### MCP Tools (`src/mcp/tools/harness/`)
 
 - `list_notify_targets` / `push_to_human` / `ask_human` / `notify_human` / `reply_to_ask` / `relay_channel_reply`
 - `resolve_gateway_task_context` / `continue_bound_task`
