@@ -5,42 +5,14 @@ import { getPackageRoot } from "@/lib/tower-paths";
 import { buildTowerMcpConfig, getTowerSkillSourceDir, installHermesGateway } from "@/lib/ai/install-orchestrator";
 import type { ExtensionResult, ExtensionStatus } from "./types";
 import type { HarnessGatewayAccessPolicy } from "@/lib/harness/gateway-config";
+import { gatewayOwnerToolNames, gatewayQueryToolNames } from "@/mcp/tool-capabilities";
 
 export type TowerAgentGateway = "openclaw" | "hermes";
 
 const TOWER_AGENT_PACKAGE_VERSION = "4";
 const TOWER_GATEWAY_SKILL_NAMES = ["tower"] as const;
-const OPENCLAW_PROJECT_READER_TOOLS = [
-  "tower__route_gateway_query",
-  "tower__read_gateway_project_context",
-  "tower__complete_gateway_discussion",
-] as const;
-const OPENCLAW_OWNER_GATEWAY_TOOLS = [
-  "tower__route_gateway_message",
-  "tower__resolve_gateway_task_context",
-  "tower__continue_bound_task",
-  "tower__reply_to_ask",
-  "tower__route_gateway_query",
-  "tower__read_gateway_project_context",
-  "tower__complete_gateway_discussion",
-  "tower__identify_project",
-  "tower__list_workspaces",
-  "tower__list_projects",
-  "tower__list_product_groups",
-  "tower__list_tasks",
-  "tower__list_labels",
-  "tower__list_versions",
-  "tower__search",
-  "tower__daily_summary",
-  "tower__daily_todo",
-  "tower__ask_project_knowledge",
-  "tower__get_task_execution_status",
-  "tower__get_task_terminal_output",
-  "tower__get_gateway_runtime_health",
-  "tower__diagnose_gateway_request",
-  "tower__recover_gateway_request",
-  "tower__provision_remote_project",
-] as const;
+const OPENCLAW_PROJECT_READER_TOOLS = gatewayQueryToolNames.map((name) => `tower__${name}`);
+const OPENCLAW_OWNER_GATEWAY_TOOLS = gatewayOwnerToolNames.map((name) => `tower__${name}`);
 const OPENCLAW_TOWER_GROUP_PROMPT =
   "Use only the Tower tools exposed for the verified sender. Ordinary Q&A and third-party/operator requests " +
   "stay in OpenClaw and must not be persisted or routed through Tower. Tower-related non-reply messages use " +
@@ -459,7 +431,7 @@ function copyTowerSkills(targetSkillsDir: string): void {
 }
 
 function writeMcpConfig(targetPath: string): void {
-  const cfg = buildTowerMcpConfig();
+  const cfg = buildTowerMcpConfig({ profile: "gateway" });
   fs.writeFileSync(
     targetPath,
     JSON.stringify({ mcpServers: { [cfg.name]: { command: cfg.command, args: cfg.args, env: cfg.env ?? {} } } }, null, 2) + "\n",

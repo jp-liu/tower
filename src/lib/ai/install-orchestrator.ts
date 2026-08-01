@@ -19,6 +19,7 @@ import { migrateLegacyTowerMcp, type MigrationReport } from "./migrate-legacy-mc
 import { getPackageRoot } from "../tower-paths";
 import { HermesCliAdapter } from "./adapters/cli/hermes-cli-adapter";
 import { TOWER_MCP_ENV_VARS } from "./tower-mcp-env";
+import type { McpToolProfile } from "@/mcp/tool-capabilities";
 import packageJson from "../../../package.json";
 
 /**
@@ -201,7 +202,7 @@ interface RecordedProviderIntegration {
  * derived from the data dir (see getTowerMcpName) so dev and prod installs
  * land as distinct entries in the user's `claude mcp list`.
  */
-export function buildTowerMcpConfig(): McpServerConfig {
+export function buildTowerMcpConfig(options: { profile?: McpToolProfile } = {}): McpServerConfig {
   const root = getPackageRoot().replace(/\\/g, "/");
   const dbUrl =
     process.env.DATABASE_URL || `file:${getTowerDbPath().replace(/\\/g, "/")}`;
@@ -213,7 +214,11 @@ export function buildTowerMcpConfig(): McpServerConfig {
   // to the wrong storage root. Storage relocation stays dynamic: getStorageDir()
   // still reads the pointer file under this data dir at runtime, so a custom
   // Settings path keeps working without re-registering the MCP server.
-  const env = { DATABASE_URL: dbUrl, TOWER_DATA_DIR: getTowerDir() };
+  const env = {
+    DATABASE_URL: dbUrl,
+    TOWER_DATA_DIR: getTowerDir(),
+    ...(options.profile ? { TOWER_MCP_PROFILE: options.profile } : {}),
+  };
   const builtPath = `${root}/dist/mcp-server.cjs`;
   const name = getTowerMcpName();
 

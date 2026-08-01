@@ -7,6 +7,7 @@ export const TOWER_MCP_ENV_VARS = [
   "CALLBACK_URL",
   "TOWER_API_URL",
   "TOWER_HAS_PARENT",
+  "TOWER_MCP_PROFILE",
   "TOWER_PACKAGE_ROOT",
   "TOWER_SIGNAL_DIR",
   "TOWER_STARTED_AT",
@@ -14,4 +15,3 @@ export const TOWER_MCP_ENV_VARS = [
   "TOWER_TASK_ID",
   "TOWER_TASK_TITLE",
 ] as const;
-

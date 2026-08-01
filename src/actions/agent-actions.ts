@@ -94,6 +94,7 @@ function taskEnvironment(input: {
   executionId?: string;
 }): Record<string, string> {
   const env: Record<string, string> = {
+    TOWER_MCP_PROFILE: "task",
     TOWER_TASK_ID: input.taskId,
     TOWER_TASK_TITLE: input.taskTitle,
     TOWER_STARTED_AT: new Date().toISOString(),

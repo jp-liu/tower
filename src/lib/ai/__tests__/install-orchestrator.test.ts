@@ -102,6 +102,11 @@ describe("inspectProviderIntegration", () => {
       DATABASE_URL: process.env.DATABASE_URL || "file:/Users/test/.tower/database/tower.db",
       TOWER_DATA_DIR: "/Users/test/.tower",
     });
+    expect(buildTowerMcpConfig({ profile: "gateway" }).env).toEqual({
+      DATABASE_URL: process.env.DATABASE_URL || "file:/Users/test/.tower/database/tower.db",
+      TOWER_DATA_DIR: "/Users/test/.tower",
+      TOWER_MCP_PROFILE: "gateway",
+    });
   });
 
   it("checks the real MCP, hooks, and every Tower skill installation", async () => {

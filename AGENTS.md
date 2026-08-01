@@ -153,7 +153,11 @@ Replace `<project-root>` with the absolute path to this repository.
 
 ## Available MCP Tools
 
-57 tools across 11 categories.
+The runtime surface and profile membership are derived from
+`src/mcp/tool-capabilities.ts`; do not maintain a separate hand-written total.
+The default `full` profile remains backward compatible. Bounded `assistant`,
+`task`, `gateway`, and `gateway-query` profiles reduce tool discovery and
+availability for specific runtimes.
 
 ### Workspace Tools (`src/mcp/tools/workspace-tools.ts`)
 
@@ -184,6 +188,7 @@ Replace `<project-root>` with the absolute path to this repository.
 | `update_task` | Update title, description, priority, labels (replaces all labels), and/or version (`versionId`: assign to a version, or `null`/`""` to move back to backlog) | `taskId`, `title?`, `description?`, `priority?`, `labelIds?`, `versionId?` |
 | `move_task` | Move task to a different status column | `taskId`, `status` |
 | `delete_task` | Delete a task | `taskId` |
+| `set_goal_mode` | Enable or disable unattended goal mode for a task | `taskId`, `enabled` |
 | `set_task_defaults` | Save global defaults for new tasks (worktree isolation + auto-start). Call once after asking the user; marks defaults as configured | `useWorktree`, `autoStart` |
 | `list_versions` | List a project's active versions (excludes RELEASED) for `create_task`'s or `update_task`'s `versionId` | `projectId` |
 
@@ -240,21 +245,22 @@ Replace `<project-root>` with the absolute path to this repository.
 | `daily_summary` | Today's work summary — completed tasks, in-progress tasks with last chat summary, grouped by workspace → project | `date?` (YYYY-MM-DD) |
 | `daily_todo` | All pending tasks (TODO/IN_PROGRESS/IN_REVIEW), sorted by priority severity | `workspaceId?`, `projectId?`, `status?`, `priority?` |
 
-### Harness Tools (`src/mcp/tools/harness-tools.ts`)
+### Harness Tools (`src/mcp/tools/harness/`)
 
-21 tools cover unattended messaging, gateway routing, durable Workbench
+These adapters cover unattended messaging, gateway routing, durable Workbench
 handoff, diagnostics, scoped recovery, and remote project provisioning.
 
 - Messaging: `list_notify_targets`, `push_to_human`, `ask_human`,
-  `notify_human`, `reply_to_ask`, `relay_channel_reply`
-- Gateway: `route_gateway_message`, `route_gateway_query`,
-  `read_gateway_project_context`, `complete_gateway_discussion`,
-  `resolve_gateway_task_context`, `continue_bound_task`
+  `notify_human`
+- Gateway query: `route_gateway_query`, `read_gateway_project_context`,
+  `complete_gateway_discussion`
+- Gateway owner: `relay_channel_reply`, `route_gateway_message`,
+  `resolve_gateway_task_context`, `continue_bound_task`,
+  `diagnose_gateway_request`, `provision_remote_project`, `reply_to_ask`
 - Workbench: `ack_workbench_batch`, `resolve_workbench_batch`,
   `heartbeat_workbench_batch`, `confirm_gateway_task_created`,
   `complete_gateway_work`
-- Operations: `diagnose_gateway_request`, `recover_gateway_request`,
-  `get_gateway_runtime_health`, `provision_remote_project`
+- Operations: `recover_gateway_request`, `get_gateway_runtime_health`
 
 `route_gateway_query` is the capability-scoped NON_OWNER entry and cannot
 create work. `resolve_gateway_task_context` is read-only. `continue_bound_task`

@@ -160,7 +160,7 @@ Workbench 主动 ACK = ACKED，续租处理责任，事件仍是 PROCESSING
 |---|---|
 | 批次领取、投递、ACK、resolve、恢复 | `src/lib/workbench/coordinator.ts` |
 | ACK / resolve 内部 API | `src/app/api/internal/workbench/batch/route.ts` |
-| Agent MCP 工具 | `src/mcp/tools/harness-tools.ts` |
+| Agent MCP 工具 | `src/mcp/tools/harness/`（按 messaging、gateway、Workbench、operations 分层） |
 | 网关路由与 watchdog | `src/lib/harness/gateway-router.ts` |
 | Runtime gate / Node 后台 reconciler 启动 | `src/instrumentation.ts`、`src/instrumentation-node.ts` |
 | 数据模型 | `prisma/schema.prisma` |

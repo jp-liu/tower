@@ -176,7 +176,7 @@ The decision looks at just two axes — **has a parent or not** × **is a human 
 
 ## File Reference
 
-### MCP Tools (`src/mcp/tools/harness-tools.ts`)
+### MCP Tools (`src/mcp/tools/harness/`)
 
 - `list_notify_targets` / `push_to_human` / `ask_human` / `notify_human` / `reply_to_ask` / `relay_channel_reply`
 - `resolve_gateway_task_context` / `continue_bound_task`

@@ -4,10 +4,12 @@ import "./env-guard";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createServer } from "./server";
 import { initDb } from "./db";
+import { parseMcpToolProfile } from "./tool-capabilities";
 
 async function main() {
+  const profile = parseMcpToolProfile(process.env.TOWER_MCP_PROFILE);
   await initDb();
-  const server = createServer();
+  const server = createServer(profile);
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
