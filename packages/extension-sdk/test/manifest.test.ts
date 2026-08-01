@@ -94,4 +94,11 @@ describe("extension manifest v2", () => {
   it("parses a valid raw manifest", () => {
     expect(parseExtensionManifestJson(JSON.stringify(component))).toEqual(component);
   });
+
+  it("rejects raw manifests larger than 1 MiB before parsing", () => {
+    const oversized = `${JSON.stringify(component)}${" ".repeat(1024 * 1024)}`;
+    expect(() => parseExtensionManifestJson(oversized)).toThrow(
+      "Invalid Tower extension manifest v2",
+    );
+  });
 });

@@ -133,6 +133,28 @@ describe("CLI Provider inventory projection", () => {
     });
   });
 
+  it("projects optional provider capabilities", () => {
+    const item = mergeCliProviderInventory([], [installed({
+      capabilities: {
+        sessions: { fresh: true, resume: true, continue: true },
+        query: { generate: true, stream: true },
+        models: true,
+        integrations: { mcp: true, hooks: true, skills: true },
+      },
+    })])[0]!;
+    expect(item.capabilities).toEqual([
+      "sessions:fresh",
+      "query:generate",
+      "sessions:resume",
+      "sessions:continue",
+      "query:stream",
+      "models",
+      "integration:mcp",
+      "integration:hooks",
+      "integration:skills",
+    ]);
+  });
+
   it("surfaces corrupt registrations as errors", () => {
     const item = mergeCliProviderInventory([], [
       installed({ health: "corrupt", capabilities: null }),

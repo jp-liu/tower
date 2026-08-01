@@ -39,6 +39,7 @@ export default defineConfig({
       "server-only": path.resolve(__dirname, "./tests/server-only.ts"),
       "@tower-org/ai-runtime": path.resolve(__dirname, "./packages/ai-runtime/src/index.ts"),
       "@tower-org/ai-sdk": path.resolve(__dirname, "./packages/ai-sdk/src/index.ts"),
+      "@tower-org/extension-sdk": path.resolve(__dirname, "./packages/extension-sdk/src/index.ts"),
       "@tower-org/ai-provider-claude": path.resolve(__dirname, "./packages/ai-provider-claude/src/index.ts"),
       "@tower-org/ai-provider-codex": path.resolve(__dirname, "./packages/ai-provider-codex/src/index.ts"),
       "@tower-org/ai-provider-gemini": path.resolve(__dirname, "./packages/ai-provider-gemini/src/index.ts"),
