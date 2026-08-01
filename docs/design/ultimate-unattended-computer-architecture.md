@@ -1,7 +1,7 @@
 # 终极无人值守电脑架构图解
 
-> 状态：定稿；已同步首个模块化与恢复增量
-> 日期：2026-08-01
+> 状态：最终版；已同步首个模块化与恢复增量及验证结果
+> 定稿日期：2026-08-02
 > 上位章程：[`ultimate-unattended-computer-charter.md`](./ultimate-unattended-computer-charter.md)
 > 可编辑图源：[`ultimate-unattended-computer.drawio`](./diagrams/ultimate-unattended-computer/ultimate-unattended-computer.drawio)
 
@@ -14,6 +14,9 @@
 
 图中的 `Capability Port`、`Durable Wakeup Inbox`、`结果与证据汇聚` 都是**逻辑职责**，不是已经决定
 要新建的服务、进程或数据库。Technical Spec 必须优先把这些职责映射到 OpenClaw 和 Tower 的现有能力。
+
+本文是本方案唯一图文索引。四张导出图共同来自同一个多页 `.drawio` 图源；后续修改覆盖原文件，不新增
+评审轮次、候选稿或 `v1` / `v2` 副本。
 
 ## 1. 总体架构
 

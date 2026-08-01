@@ -1,7 +1,7 @@
 # Tower 模块边界与终极无人值守首个增量 Technical Spec
 
-> 状态：首个增量已实现，等待 CI / PR 验证
-> 日期：2026-08-01
+> 状态：最终版；首个增量已实现并通过本地与 PR CI 验证
+> 定稿日期：2026-08-02
 > 回滚基线：`40cdf1a`
 > 上位章程：[`ultimate-unattended-computer-charter.md`](./ultimate-unattended-computer-charter.md)
 > 架构图解：[`ultimate-unattended-computer-architecture.md`](./ultimate-unattended-computer-architecture.md)
