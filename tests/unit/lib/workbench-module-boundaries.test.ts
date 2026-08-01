@@ -22,4 +22,14 @@ describe("Workbench module boundaries", () => {
     expect(coordinator).not.toContain("db.gatewayInbound");
     expect(coordinator).not.toContain("@/lib/harness");
   });
+
+  it("keeps operational observation inside each persistence owner", () => {
+    const workbenchMaintenance = source("src/lib/workbench/maintenance.ts");
+    expect(workbenchMaintenance).not.toMatch(/Gateway(Inbound|Delivery|TaskLink)/);
+    expect(workbenchMaintenance).not.toContain("@/lib/harness");
+
+    const gatewayMaintenance = source("src/lib/harness/gateway-maintenance.ts");
+    expect(gatewayMaintenance).not.toMatch(/Workbench(Event|Batch|Runtime)/);
+    expect(gatewayMaintenance).not.toContain("@/lib/workbench");
+  });
 });

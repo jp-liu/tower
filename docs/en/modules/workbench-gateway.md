@@ -92,6 +92,37 @@ Colleagues may only query projects in the workspace bound to a trusted channel:
 - Sender, chat, project, Workbench, and global queue limits prevent resource
   exhaustion.
 
+## Operational data lifecycle
+
+The lifecycle distinguishes three kinds of data:
+
+- `WorkbenchEvent.payload` is replay input. A `CONSUMED` event may be requeued
+  during recovery, so V1 retains every payload in full.
+- `WorkbenchBatch.prompt` and the message bodies in `GatewayInbound` and
+  `GatewayDelivery` are operational duplicates. They become possible
+  compaction candidates only after the protocol is demonstrably settled.
+- The small identity fields in `WorkbenchEvent`, `WorkbenchBatch`,
+  `GatewayInbound`, `GatewayDelivery`, and `GatewayTaskLink` are idempotency
+  tombstones. Consumption alone never permits deleting them.
+
+Tower performs read-only observation from the existing six-hour Harness sweep;
+it adds no timer. The candidate windows are `RESOLVED > 24h` for Workbench and
+seven days for Gateway. A processed inbound must have no non-`DELIVERED`
+delivery, and a delivered row must still reference a `PROCESSED` inbound.
+`SENT_UNVERIFIED`, active, failed, and retryable states are never considered
+settled.
+
+On 2026-08-01, a real local database contained only 70,062 eligible text bytes,
+about 0.16% of its 44.9 MB file. The current version therefore records rows and
+byte totals by state plus eligible rows and bytes, but **does not compact or
+delete data**. Logs never include message bodies. A future mutation requires
+new growth evidence and another review of the atomic state and relation guards.
+
+This is not a sensitive-data erasure guarantee. The same content may remain in
+`TaskMessage`, terminal logs, application logs, and backups under their own
+retention policies. Existing architecture diagrams remain correct because no
+ownership boundary, relation, or data flow changed.
+
 ## Remote project modes
 
 | Mode | Capability |
