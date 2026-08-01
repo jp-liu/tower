@@ -51,6 +51,7 @@ afterEach(async () => {
 
 describe("Workbench operational observation", () => {
   it("measures old resolved prompt bytes without mutating batches or replay events", async () => {
+    const baseline = await measureWorkbenchOperationalData(NOW);
     const old = await createBatch({
       id: `wb-old-${randomUUID()}`,
       state: "RESOLVED",
@@ -79,13 +80,12 @@ describe("Workbench operational observation", () => {
     });
 
     const measured = await measureWorkbenchOperationalData(NOW);
-    expect(measured.eligibleRows).toBe(1);
-    expect(measured.eligibleTextBytes).toBe(Buffer.byteLength("old prompt with unicode 内容"));
-    expect(measured.byState).toMatchObject({
-      CLAIMED: { rows: 1 },
-      FAILED: { rows: 1 },
-      RESOLVED: { rows: 2 },
-    });
+    expect(measured.eligibleRows - baseline.eligibleRows).toBe(1);
+    expect(measured.eligibleTextBytes - baseline.eligibleTextBytes)
+      .toBe(Buffer.byteLength("old prompt with unicode 内容"));
+    expect(measured.byState.CLAIMED!.rows - (baseline.byState.CLAIMED?.rows ?? 0)).toBe(1);
+    expect(measured.byState.FAILED!.rows - (baseline.byState.FAILED?.rows ?? 0)).toBe(1);
+    expect(measured.byState.RESOLVED!.rows - (baseline.byState.RESOLVED?.rows ?? 0)).toBe(2);
     expect((await db.workbenchBatch.findUniqueOrThrow({ where: { id: old.id } })).prompt)
       .toBe("old prompt with unicode 内容");
     expect(await db.workbenchEvent.findUniqueOrThrow({ where: { id: event.id } }))
