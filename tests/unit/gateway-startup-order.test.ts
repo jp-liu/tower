@@ -24,4 +24,16 @@ describe("gateway recovery startup ordering", () => {
     const instrumentation = await readFile(join(process.cwd(), "src/lib/instrumentation-tasks.ts"), "utf8");
     expect(instrumentation).toContain("retryGatewayDeliveries()");
   });
+
+  it("composes operational observation into the existing six-hour sweep", async () => {
+    const instrumentation = await readFile(join(process.cwd(), "src/instrumentation-node.ts"), "utf8");
+    const sweep = instrumentation.slice(
+      instrumentation.indexOf("const gSweep"),
+      instrumentation.indexOf("const gBackup"),
+    );
+    expect(sweep).toContain("measureWorkbenchOperationalData");
+    expect(sweep).toContain("measureGatewayOperationalData");
+    expect(sweep.match(/setInterval\(/g)).toHaveLength(1);
+    expect(sweep).toContain("6 * 60 * 60 * 1000");
+  });
 });

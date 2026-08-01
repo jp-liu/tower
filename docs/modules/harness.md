@@ -206,6 +206,7 @@ Workbench event/batch/runtime、子任务和平台 delivery 关联为一条阶�
 | `gateway-router.ts` | 入站去重、会话绑定、项目解析、Workbench 排队、可靠完成回传 |
 | `gateway-diagnostics.ts` | 单条外部请求的跨层 trace 与受控恢复 |
 | `gateway-runtime-health.ts` | OpenClaw/Hermes 健康状态、关联日志和脱敏 |
+| `gateway-maintenance.ts` | Gateway 状态/文本字节只读观测；编码七天终态关系谓词，不执行压缩 |
 | `remote-project-provisioner.ts` | OWNER 远程 Git 接入、幂等登记与 REVIEW_ONLY/FULL_WORK |
 | `gateway-output.ts` | Hermes/OpenClaw 发送结果的结构化 message id 提取 |
 | `unattended-signal.ts` | 无人值守信号文件 `unattended-<taskId>` 写删，供 PreToolUse hook 读 |
@@ -223,6 +224,7 @@ Workbench event/batch/runtime、子任务和平台 delivery 关联为一条阶�
 |------|------|
 | `coordinator.ts` | 事件入库、claim lease、批量聚合、失败释放与边界 drain |
 | `boundary.ts` | 父任务已结束当前回合的进程内门闩；任何新 PTY 输入都会关闭 |
+| `maintenance.ts` | Workbench batch 状态/文本字节只读观测；`WorkbenchEvent.payload` 永不修改 |
 
 ### Hook 脚本 (`scripts/`)
 

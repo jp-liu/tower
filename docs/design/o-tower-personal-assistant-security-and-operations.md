@@ -218,6 +218,21 @@ OWNER 可以用 `diagnose_gateway_request`，传：
 - 按 trace 或 platform message ID 过滤；
 - token、API key、secret、password 和用户主目录脱敏。
 
+### 7.1 运行数据观测
+
+现有六小时 Harness sweep 同时调用 Workbench 与 Gateway 各自 owner 内部的只读
+观测函数。它们返回按状态行数、文本总 bytes、候选行数和候选 bytes；使用 SQLite
+`length(CAST(field AS BLOB))`，不把正文带入日志。任一观测失败只记录错误，不终止
+Tower，也不阻断 ask TTL sweep。
+
+候选窗口是 Workbench `RESOLVED > 24h` 与 Gateway 终态七天。Gateway inbound
+还必须没有非 `DELIVERED` delivery；delivery 必须关联仍为 `PROCESSED` 的 inbound。
+2026-08-01 真实库样本的候选正文仅 70,062 bytes（数据库文件 44,924,928 bytes），
+收益不足以承担永久写入路径，所以当前不压缩、不删除、不运行 `VACUUM`。
+
+`WorkbenchEvent.payload` 始终保留作为重放输入；幂等 identity/tombstone 行也始终
+保留。该观测不是隐私擦除功能，任务消息、终端/应用日志和备份有独立生命周期。
+
 它与 `diagnose_gateway_request` 配合使用：
 
 - Tower 链路停在 `platform_ingress` 之前：看平台/OpenClaw；

@@ -190,6 +190,7 @@ The decision looks at just two axes — **has a parent or not** × **is a human 
 | `gateway-config.ts` | Gateway runtime config (display name, profile, env) |
 | `delivery-map.ts` | Platform message id ↔ task delivery mapping; `[[tower:task=...]]` token extraction |
 | `gateway-router.ts` | Inbound deduplication, session binding, project resolution, Workbench queueing, and reliable completion delivery |
+| `gateway-maintenance.ts` | Read-only Gateway state/byte observation with the seven-day terminal relation predicates; performs no compaction |
 | `gateway-output.ts` | Structured message-id extraction from Hermes/OpenClaw send output |
 | `harness-message.ts` | Message lifecycle (OPEN/ANSWERED/…); Tower records only, never sends |
 | `unattended-signal.ts` | Write/remove the `unattended-<taskId>` signal file read by the PreToolUse hook |
@@ -207,6 +208,7 @@ The decision looks at just two axes — **has a parent or not** × **is a human 
 |------|-------------|
 | `coordinator.ts` | Event enqueue, claim leases, batch aggregation, retry release, and boundary drain |
 | `boundary.ts` | In-process completed-turn latch; any new PTY input closes it |
+| `maintenance.ts` | Read-only Workbench batch state/byte observation; never mutates `WorkbenchEvent.payload` |
 
 ### Hook scripts (`scripts/`)
 

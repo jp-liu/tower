@@ -145,18 +145,61 @@ async function initializeNodeRuntime() {
   const { ensureTowerDir } = await import("@/lib/init-tower");
   ensureTowerDir();
 
-  const gSweep = globalThis as typeof globalThis & { __harnessSweepStarted?: boolean };
+  const gSweep = globalThis as typeof globalThis & {
+    __harnessSweepStarted?: boolean;
+    __harnessSweepRunning?: boolean;
+  };
   if (!gSweep.__harnessSweepStarted) {
     gSweep.__harnessSweepStarted = true;
     const runSweep = async () => {
+      if (gSweep.__harnessSweepRunning) return;
+      gSweep.__harnessSweepRunning = true;
       try {
-        const { readConfigValue } = await import("@/lib/config-reader");
-        const { sweepExpiredAsks } = await import("@/lib/harness/harness-message");
-        const ttlDays = await readConfigValue<number>("harness.pendingTtlDays", 14);
-        const n = await sweepExpiredAsks(ttlDays);
-        if (n > 0) console.error(`[harness] TTL sweep expired ${n} stale open ask(s)`);
-      } catch (err) {
-        console.error("[harness] TTL sweep failed:", err);
+        await Promise.all([
+          (async () => {
+            try {
+              const { readConfigValue } = await import("@/lib/config-reader");
+              const { sweepExpiredAsks } = await import("@/lib/harness/harness-message");
+              const ttlDays = await readConfigValue<number>("harness.pendingTtlDays", 14);
+              const n = await sweepExpiredAsks(ttlDays);
+              if (n > 0) console.error(`[harness] TTL sweep expired ${n} stale open ask(s)`);
+            } catch (error) {
+              console.error("[harness] TTL sweep failed:", error);
+            }
+          })(),
+          (async () => {
+            try {
+              const { measureWorkbenchOperationalData } = await import(
+                "@/lib/workbench/maintenance"
+              );
+              const result = await measureWorkbenchOperationalData();
+              console.info(
+                `[workbench] Operational data scanned=${result.scanned} `
+                + `storedBytes=${result.totalTextBytes} eligible=${result.eligibleRows} `
+                + `eligibleBytes=${result.eligibleTextBytes}`,
+              );
+            } catch (error) {
+              console.error("[workbench] Operational data observation failed:", error);
+            }
+          })(),
+          (async () => {
+            try {
+              const { measureGatewayOperationalData } = await import(
+                "@/lib/harness/gateway-maintenance"
+              );
+              const result = await measureGatewayOperationalData();
+              console.info(
+                `[gateway] Operational data scanned=${result.scanned} `
+                + `storedBytes=${result.totalTextBytes} eligible=${result.eligibleRows} `
+                + `eligibleBytes=${result.eligibleTextBytes}`,
+              );
+            } catch (error) {
+              console.error("[gateway] Operational data observation failed:", error);
+            }
+          })(),
+        ]);
+      } finally {
+        gSweep.__harnessSweepRunning = false;
       }
     };
     void runSweep();

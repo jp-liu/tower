@@ -11,8 +11,8 @@ This round implements four bounded improvements:
 
 1. repair the GitHub Actions workflow so CI jobs can start;
 2. rebase and integrate the existing Extensions Platform worktree;
-3. add measurement and bounded compaction for settled Workbench/Gateway
-   operational duplicates without weakening replay;
+3. measure settled Workbench/Gateway operational duplicates and enable bounded
+   compaction only if the measured benefit justifies a mutation path;
 4. reduce the MCP tool surface exposed to each runtime role and restore one
    source of truth for the tool catalog.
 
@@ -162,7 +162,7 @@ scope into publishing or an arbitrary plugin runtime.
 - Architecture, requirements, specification, and implementation plan agree on
   what V1 implements and what remains deferred.
 
-## 5. PR 3 - Operational Data Observation and Bounded Compaction
+## 5. PR 3 - Operational Data Observation (Compaction Deferred by Evidence)
 
 ### 5.1 Correct interpretation of "consumed" and revised scope
 
@@ -208,10 +208,11 @@ This PR therefore makes the following conservative decisions:
    Some Gateway source identity is embedded in generic event JSON rather than a
    direct relation, and such a join would reverse the boundary established by
    PR #26.
-4. Limit Workbench mutation to a field shown not to participate in resolved
-   batch replay: the duplicate `WorkbenchBatch.prompt` on old `RESOLVED` rows.
-5. Keep Gateway compaction entirely Gateway-owned and independently guarded by
-   Gateway state and delivery relations.
+4. Limit any future Workbench mutation to a field shown not to participate in
+   resolved batch replay: the duplicate `WorkbenchBatch.prompt` on old
+   `RESOLVED` rows.
+5. Keep any future Gateway compaction entirely Gateway-owned and independently
+   guarded by Gateway state and delivery relations.
 
 The goal is not presented as proven database pressure. No production row-count
 or byte-growth evidence has been collected yet. The immediate value is to
@@ -239,12 +240,14 @@ be destroyed at 00:01.
 
 ### 5.3 Measure before mutation
 
-Before changing a row, maintenance calculates and returns at least:
+Observation calculates and returns at least:
 
 - row counts grouped by relevant state;
 - eligible row counts for each compaction rule;
 - total stored text bytes and eligible text bytes for the fields in scope;
-- compacted, skipped-active/raced, and failed counts.
+
+If mutation is enabled later, its result must additionally report compacted,
+skipped-active/raced, and failed counts.
 
 Use SQLite `length(CAST(field AS BLOB))` or an equivalent byte-counting query;
 JavaScript string length is not a byte measurement. Logs and returned metrics
@@ -253,7 +256,27 @@ a before/after sample from a real local database with secrets removed. If the
 eligible payload is negligible, keep the observation code and omit the
 corresponding mutation rather than adding cleanup complexity without benefit.
 
+#### Implementation evidence (2026-08-01)
+
+A read-only measurement of the real local database found 70,062 eligible text
+bytes in total: 17,313 bytes across 11 resolved Workbench batches, 18,085 bytes
+across 30 processed Gateway inbounds, and 34,664 bytes across 42 delivered
+Gateway deliveries. The database file was 44,924,928 bytes, so all eligible
+duplicate text represented approximately 0.16% of the file.
+
+This is negligible evidence for a permanent mutation path. PR 3 therefore
+implements the state-grouped and eligibility byte observations, reuses the
+existing six-hour sweep, and deliberately omits compaction writes. The exact
+24-hour and seven-day predicates remain encoded and tested in the observation
+queries. Enabling mutation later requires new growth evidence and a fresh review
+of the guarded state/relation predicates in section 5.4; it is not an automatic
+follow-up.
+
 ### 5.4 State policy
+
+The table below defines candidate eligibility and the mandatory predicates for
+any future mutation. PR 3 observes these candidates but, per section 5.3's real
+sample, does not mutate them.
 
 | Owner | State | Policy |
 |---|---|---|
@@ -269,23 +292,22 @@ corresponding mutation rather than adding cleanup complexity without benefit.
 | GatewaySession | `CLOSED` | Keep while any nonterminal inbound/delivery exists; otherwise it is eligible for later bounded pruning, which is not required in V1. |
 | GatewayTaskLink | any | Keep while the linked Task and GatewayInbound exist. It is the task-creation idempotency ledger. |
 
-The initial Gateway compaction age should be seven days because the current
+If Gateway compaction is enabled later, its initial age should be seven days because the current
 router already defines a seven-day recent-session window. Shortening it to 24
 hours is a separate behavior change and requires explicit product approval and
 delayed-retry tests.
 
-Hard deletion remains off in this PR. The bounded reduction comes from removing
-the resolved batch prompt and old Gateway content, response, presentation, and
-error bodies while retaining small indexed tombstones. The implementation uses
+Hard deletion and compaction both remain off in this PR. Observation estimates
+the possible reduction without changing rows. A future implementation must use
 stable compaction markers so required string columns remain valid and repeated
-maintenance is idempotent. SQLite may reuse freed pages; this PR does not run
-automatic `VACUUM` in the application hot path and does not promise that the
-database file immediately shrinks.
+maintenance is idempotent. SQLite may reuse freed pages; Tower must not run
+automatic `VACUUM` in the application hot path or promise that the database file
+immediately shrinks.
 
 ### 5.5 Ownership
 
-- `src/lib/workbench/maintenance.ts` owns Workbench compaction queries.
-- `src/lib/harness/gateway-maintenance.ts` owns Gateway compaction queries.
+- `src/lib/workbench/maintenance.ts` owns Workbench observation queries.
+- `src/lib/harness/gateway-maintenance.ts` owns Gateway observation queries.
 - `src/instrumentation-node.ts` only composes and schedules them.
 - MCP handlers and route handlers do not contain cleanup SQL.
 - Workbench maintenance must not import Gateway modules or query
@@ -296,42 +318,35 @@ database file immediately shrinks.
 
 ### 5.6 Safety and observability
 
-Each maintenance function returns counts for scanned, compacted, skipped-active,
-and failed rows. Logs contain IDs/counts only, never message bodies.
+Each observation function returns state-grouped row counts, total text bytes,
+eligible row counts, and eligible text bytes. Logs contain counts only, never
+IDs or message bodies.
 
-All updates use state, age, and relation predicates in the database write, not
-only in a preceding read. A row that changes back to an active/retryable state
-between measurement/selection and update must be skipped. This atomicity is
-local to each owning module; it must not be implemented with a cross-module
-Workbench-to-Gateway join.
+If mutation is enabled later, every update must repeat the state, age, and
+relation predicates in the database write, not only in a preceding read. A row
+that changes back to an active/retryable state between measurement and update
+must be skipped. This atomicity stays local to each owning module; it must not be
+implemented with a cross-module Workbench-to-Gateway join.
 
 Maintenance failure is best-effort and must not terminate Tower. It must not
 hold a transaction while calling a gateway, PTY, filesystem, or network API.
 
 ### 5.7 Tests
 
-- no `WorkbenchEvent` row or payload is changed in any state;
-- no active or failed Workbench batch is compacted;
-- a resolved batch younger than 24 hours is unchanged;
-- a resolved batch older than 24 hours has only its prompt replaced;
-- repeated maintenance is idempotent;
-- compacted resolution rows still make repeated ACK/resolve calls no-ops;
-- execution reconciliation does not recreate a compacted handled review;
-- reopening a source task after maintenance leaves its event payload available
-  for replay;
-- queued/processing/failed Gateway rows remain recoverable;
+- no `WorkbenchEvent`, batch, Gateway row, or payload is changed by observation;
+- state-grouped row counts and SQLite byte totals are correct;
+- only `RESOLVED` Workbench batches older than 24 hours are counted as eligible;
+- queued/processing/failed Gateway rows remain outside the eligible set;
 - `SENT_UNVERIFIED` is never treated as safely delivered;
-- a processed inbound with a nonterminal delivery is not compacted;
+- a processed inbound with a nonterminal delivery is not eligible;
 - an old `DELIVERED` delivery whose inbound is `QUEUED` or `PROCESSING` is not
-  compacted, while the same delivery becomes eligible after its inbound is
+  eligible, while the same delivery becomes eligible after its inbound is
   `PROCESSED`;
-- a Gateway row that changes from terminal to nonterminal between candidate
-  measurement and the guarded update is skipped;
-- duplicate Gateway input inside the retention window returns the same result;
-- measurement reports row counts and text bytes without returning or logging
-  message bodies;
-- maintenance never logs message content;
-- task/project/workspace cascade deletion remains valid after compaction.
+- reopening a source task after observation leaves its event payload available
+  for replay;
+- observation returns and logs counts/byte totals without message bodies;
+- existing recovery, deduplication, and cascade behavior remains unchanged
+  because PR 3 performs no writes.
 
 ### 5.8 Documentation
 
@@ -340,11 +355,12 @@ model documentation with:
 
 - the difference between replay payloads, duplicate operational copies, and
   idempotency tombstones;
-- the 24-hour resolved-batch prompt and seven-day Gateway defaults;
+- the 24-hour resolved-batch and seven-day Gateway candidate windows;
 - states that are never automatically compacted;
 - the fact that all `WorkbenchEvent.payload` values remain intact in V1;
-- the fact that compaction reduces selected duplicate copies rather than
-  guaranteeing deletion from task messages, terminal logs, logs, or backups;
+- the evidence-based decision not to enable compaction in this PR;
+- the fact that any future compaction would reduce selected duplicate copies,
+  not guarantee deletion from task messages, terminal logs, logs, or backups;
 - the fact that backups may retain pre-compaction data according to backup
   retention policy.
 
@@ -446,7 +462,7 @@ abstractions solely to make files symmetrical.
 |---|---|---|
 | 1 | `fix/ci-catalog-runner-context` | none |
 | 2 | rebase and PR `codex/extensions-platform-v1` | PR 1 merged |
-| 3 | `feat/operational-data-observation` | PR 2 merged to avoid schema/lock conflicts |
+| 3 | `codex/gateway-data-lifecycle` | PR 2 merged to avoid schema/lock conflicts |
 | 4 | `refactor/mcp-capability-catalog` | PR 3 merged; no semantic dependency |
 
 Use English conventional commits with the repository module scope:
@@ -454,7 +470,7 @@ Use English conventional commits with the repository module scope:
 ```text
 fix(mcp): restore CI workflow startup
 feat(settings): integrate extension platform foundation
-feat(workbench): add bounded operational compaction
+feat(workbench): observe operational data lifecycle
 refactor(mcp): scope tool catalogs by runtime role
 ```
 
@@ -596,9 +612,9 @@ The blocking comments are resolved as follows:
 |---|---|
 | A compacted event may later be requeued and re-drained. | No `WorkbenchEvent.payload` is compacted in any state. |
 | Safety depended on terminal status being monotonic. | The dependency is removed; task reopening remains supported. |
-| Cross-chain eligibility must be atomic. | No cross-chain Workbench compaction exists. Workbench and Gateway use separate owner-local guarded updates. |
+| Cross-chain eligibility must be atomic. | No cross-chain Workbench compaction exists. Workbench and Gateway keep separate owner-local observation predicates; any future writes must remain owner-local and guarded. |
 | Space pressure was asserted without evidence. | The plan now measures row counts and bytes first and permits omitting negligible mutations. |
-| Sensitive-data reduction was overstated. | The plan now describes removal of selected duplicate operational bodies and explicitly lists other retained copies. |
+| Sensitive-data reduction was overstated. | The plan now describes only candidate duplicate bodies, records the decision not to mutate them, and explicitly lists other retained copies. |
 
 Second review should evaluate the revised §5 rather than attempt to repair the
 superseded consumed-event compaction design in §10. In particular, verify the
@@ -668,7 +684,13 @@ Human gate: owner's go.
 ## 13. Final Disposition
 
 The owner approved implementation after Round 2. The final §5.4 delivery rule
-now includes the required linked-inbound `PROCESSED` predicate, §5.7 covers both
-the rejecting and permitting cases, and §5.2 reuses the existing six-hour sweep
-without a new timer or persisted scheduler state. No review finding remains
-open. Implementation must preserve the four independent PR boundaries in §7.
+includes the required linked-inbound `PROCESSED` predicate, §5.7 covers both the
+rejecting and permitting cases, and §5.2 reuses the existing six-hour sweep
+without a new timer or persisted scheduler state.
+
+Implementation then followed the explicit measure-first gate in §5.3. The real
+sample found only 70,062 eligible bytes in a 44,924,928-byte database, so PR 3
+ships observation only and omits both reviewed mutations. This is the intended
+YAGNI outcome, not an open review finding. New growth evidence and a fresh
+mutation review are required before enabling compaction. The four independent
+PR boundaries in §7 remain unchanged.

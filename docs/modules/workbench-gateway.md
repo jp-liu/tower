@@ -75,6 +75,31 @@ Workbench 网关把飞书、微信及 OpenClaw/Hermes 支持的平台接入 Towe
 - OpenClaw 入口只拥有路由、只读查询和诊断工具。
 - sender、chat、项目、Workbench 和全局排队数量均有限流与硬上限。
 
+## 运行数据生命周期
+
+这里要区分三类数据：
+
+- `WorkbenchEvent.payload` 是可重放输入；`CONSUMED` 事件仍可能因恢复而重新排队，
+  因此 V1 在任何状态都保留完整 payload。
+- `WorkbenchBatch.prompt`、`GatewayInbound` 和 `GatewayDelivery` 中的正文是协议运行时
+  的重复副本；只有在可证明已稳定结束时才可能成为压缩候选。
+- `WorkbenchEvent`、`WorkbenchBatch`、`GatewayInbound`、`GatewayDelivery` 和
+  `GatewayTaskLink` 的小型身份字段是幂等 tombstone，不能因“已消费”直接删除。
+
+Tower 在已有的六小时 Harness sweep 中做只读观测，不新增 timer。Workbench 以
+`RESOLVED > 24h` 为候选窗口；Gateway 以七天为窗口，并要求 `PROCESSED` inbound
+没有非 `DELIVERED` delivery，同时 `DELIVERED` delivery 必须关联仍为 `PROCESSED`
+的 inbound。`SENT_UNVERIFIED`、活动、失败和可重试状态永远不算稳定结束。
+
+2026-08-01 的真实本地库样本中，全部候选文本只有 70,062 bytes，约占 44.9 MB
+数据库的 0.16%。因此当前版本只记录按状态行数、总文本 bytes、候选行数和候选
+bytes，**不执行压缩或删除**。日志不包含消息正文。未来只有在增长数据证明收益后，
+才重新评审并启用有原子状态/关系护栏的写入。
+
+这不是敏感数据删除承诺；同一内容仍可能存在于 `TaskMessage`、终端日志、应用日志
+和备份中，备份按自己的保留策略处理。现有架构图无需修改，因为 owner 边界、关系和
+数据流均未改变。
+
 ## 远程项目模式
 
 | 模式 | 能力 |
