@@ -35,6 +35,9 @@ vi.mock("../../db", () => ({
     project: {
       findUnique: vi.fn(),
     },
+    unattendedGoalRuntime: {
+      findUnique: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }));
@@ -84,6 +87,9 @@ const mockDb = db as unknown as {
   project: {
     findUnique: ReturnType<typeof vi.fn>;
   };
+  unattendedGoalRuntime: {
+    findUnique: ReturnType<typeof vi.fn>;
+  };
   $transaction: ReturnType<typeof vi.fn>;
 };
 
@@ -103,6 +109,7 @@ describe("task-tools", () => {
     mockTx.task.update.mockResolvedValue({});
     mockTx.taskLabel.deleteMany.mockResolvedValue({});
     mockTx.taskLabel.createMany.mockResolvedValue({});
+    mockDb.unattendedGoalRuntime.findUnique.mockResolvedValue(null);
   });
 
   // ─── list_tasks ──────────────────────────────────────────────────────────

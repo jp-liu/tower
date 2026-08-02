@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "./execution-timeline";
 import { TaskNotesPanel } from "./task-notes-panel";
+import { UnattendedGoalControl } from "./unattended-goal-control";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Task, TaskExecution } from "@prisma/client";
 import { useI18n } from "@/lib/i18n";
@@ -332,6 +333,9 @@ function TaskDetailPanelState({
           </button>
         </div>
         <div className="flex items-center gap-2">
+          {taskStatus !== "DONE" && taskStatus !== "CANCELLED" && (
+            <UnattendedGoalControl taskId={task.id} />
+          )}
           {taskStatus === "IN_REVIEW" && (
             <Button
               size="sm"

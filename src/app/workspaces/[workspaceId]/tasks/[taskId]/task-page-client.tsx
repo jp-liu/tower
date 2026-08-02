@@ -25,6 +25,7 @@ import { updateTaskStatus, checkWorktreeClean, commitWorktreeChanges } from "@/a
 import { openInFileManager, openInEditor, openInTerminal } from "@/actions/preview-actions";
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "@/components/task/execution-timeline";
+import { UnattendedGoalControl } from "@/components/task/unattended-goal-control";
 import { useI18n } from "@/lib/i18n";
 import { useExtension } from "@/lib/extensions/client";
 import { toast } from "sonner";
@@ -362,6 +363,9 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
             )}
             {task.version && (
               <TaskVersionTag number={task.version.number} name={task.version.name} showName />
+            )}
+            {taskStatus !== "DONE" && taskStatus !== "CANCELLED" && (
+              <UnattendedGoalControl taskId={task.id} />
             )}
             {fileRootPath && (
               <div className="ml-auto flex items-center gap-0.5">

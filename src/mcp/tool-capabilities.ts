@@ -46,6 +46,9 @@ export const toolCapabilityGroups = {
     "set_goal_mode",
   ],
   gatewayCapability: [
+    "discover_gateway_capabilities",
+    "submit_capability_request",
+    "get_capability_request_status",
     "get_capability_job_status",
   ],
   messaging: [

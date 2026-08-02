@@ -12,6 +12,7 @@ export const GATEWAY_QUERY_BRIDGE = `${BRIDGE}/gateway-query`;
 export const GATEWAY_TASK_BRIDGE = `${BRIDGE}/gateway-task`;
 export const GATEWAY_DIAGNOSTICS_BRIDGE = `${BRIDGE}/gateway-diagnostics`;
 export const GATEWAY_RUNTIME_HEALTH_BRIDGE = `${BRIDGE}/gateway-runtime-health`;
+export const CAPABILITY_BRIDGE = `${BRIDGE}/capabilities`;
 export const HARNESS_OUTBOUND_BRIDGE = `${BRIDGE}/outbound`;
 export const REMOTE_PROJECT_BRIDGE = `${BRIDGE}/remote-project`;
 export const WORKBENCH_BATCH_BRIDGE = `http://localhost:${PORT}/api/internal/workbench/batch`;

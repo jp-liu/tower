@@ -1,7 +1,7 @@
 import "server-only";
 
 import { logger } from "@/lib/logger";
-import { setPtyLifecycleObserver } from "@/lib/pty/lifecycle";
+import { addPtyLifecycleObserver } from "@/lib/pty/lifecycle";
 import { closeWorkbenchDrainBoundary } from "./boundary";
 import {
   openWorkbenchDrainBoundary,
@@ -11,7 +11,7 @@ import {
 const log = logger.create("workbench-pty-lifecycle");
 
 export function registerWorkbenchPtyLifecycle(): void {
-  setPtyLifecycleObserver({
+  addPtyLifecycleObserver({
     inputStarted(taskId) {
       closeWorkbenchDrainBoundary(taskId);
     },

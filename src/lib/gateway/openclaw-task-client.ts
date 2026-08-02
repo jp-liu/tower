@@ -69,7 +69,7 @@ function asNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function openClawProcessEnv(overrides: Record<string, string>): NodeJS.ProcessEnv {
+export function openClawProcessEnv(overrides: Record<string, string>): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, ...overrides };
   const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path") ?? "PATH";
   const home = env.HOME || env.USERPROFILE || homedir();

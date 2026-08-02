@@ -1,6 +1,6 @@
 # 终极无人值守电脑架构图解
 
-> 状态：最终版；已同步首个模块化与恢复增量及验证结果
+> 状态：实现候选版；已同步纵向闭环代码、验证结果与剩余部署门禁
 > 定稿日期：2026-08-02
 > 上位章程：[`ultimate-unattended-computer-charter.md`](./ultimate-unattended-computer-charter.md)
 > 可编辑图源：[`ultimate-unattended-computer.drawio`](./diagrams/ultimate-unattended-computer/ultimate-unattended-computer.drawio)
@@ -10,7 +10,7 @@
 1. 系统由谁负责什么，数据归谁；
 2. Tower 调用外部能力时，Direct 与 Job 分别怎么走；
 3. 终端、进程或回调中断后，Goal 与外部 Job 如何恢复。
-4. 当前 Tower 从入口、调用面、业务模块到基础设施如何运行，以及哪些无人值守能力尚未实现。
+4. 当前 Tower 从入口、调用面、业务模块到基础设施如何运行，以及哪些能力仍需部署现场验证。
 
 图中的 `Capability Port`、`Durable Wakeup Inbox`、`结果与证据汇聚` 都是**逻辑职责**，不是已经决定
 要新建的服务、进程或数据库。Technical Spec 必须优先把这些职责映射到 OpenClaw 和 Tower 的现有能力。
@@ -64,9 +64,10 @@ WebSocket 与持久状态协调。边界先落实为代码目录、模块自有�
 - **Core** 只拥有 Workspace、Project、Task、记录/笔记与审查等项目事实；
 - **Execution / Terminal** 拥有 PTY、Provider 和执行记录，只报告执行生命周期；
 - **Workbench** 拥有批次、lease、fencing、ACK 与 resolve，协调执行但不拥有 Goal 策略；
-- **Gateway** 拥有外部消息、投递、ask/reply 与外部 Job 对账适配；
-- **Unattended Goal** 是依赖 Gateway 的可选组合模块；当前只实现运行态投影与生命周期 reducer，持久
-  timer、预算、watchdog 和自动唤醒仍属于后续阶段。
+- **Gateway / Capability** 拥有外部消息、投递、ask/reply、版本化 discovery/schema、限域 grant、
+  `requestId` 关联、Direct 消息和外部 Job 提交/只读对账；具体 Operator 路由仍归 OpenClaw；
+- **Unattended Goal** 是依赖 Gateway 的可选组合模块；当前实现运行态投影、生命周期 reducer、可信 UI
+  grant、Job completion 到 Workbench 的安全唤醒、持久 timer、预算和 watchdog。
 
 同库不等于跨模块随意读表。新增代码应通过模块入口传 command/event/result，只把 Core ID 当引用。等到
 独立部署、独立发布或数据保留策略带来明确收益时再拆包；届时不应修改 Core 项目模型。
@@ -83,7 +84,7 @@ Direct 用于短时、确定性、边界清晰的动作，例如向固定 OWNER 
 调用顺序是：
 
 1. Tower 先 discovery，取得 capability 状态和固定版本 schema；
-2. Tower 预检请求，OpenClaw 在可信边界再次做权威 schema、风险、授权和去重校验；
+2. Tower Capability 边界做权威 schema、风险、grant、固定目标和去重校验；
 3. Adapter 执行动作并取得平台回执；
 4. 当前调用返回最终结果。
 
@@ -135,45 +136,38 @@ Tower Goal 只有在存在持久唤醒事实时进入 `RUNNABLE`。执行一轮�
 
 完成事件和只读对账结果回到 Tower 的持久唤醒入口。事件是主路径，低频恢复扫描只是安全网。
 
-## 4. Tower 与 OpenClaw 改造清单
+## 4. Tower 与 OpenClaw 落地状态
 
-下面是架构责任清单，不是已经批准的文件级实施方案。新增表、API 或进程前仍要在 Technical Spec 中
-验证现有能力；实现顺序固定为“复用原生能力、增加薄适配、最后才新增组件”。
+实现顺序始终是“复用原生能力、增加薄适配、最后才新增组件”。下面区分已实现事实和仍需现场验证的
+部署事实，不把后者误写成新的架构缺口。
 
 ### 4.1 Tower 需要改什么
 
-| 优先级 | 改造项 | 复用基础 | 完成标准 |
+| 状态 | 改造项 | 复用基础 | 当前证据 |
 |---|---|---|---|
 | 已完成 | 把 `tower-bridge` 从具体 Agent / 命令路由收敛为结构化 `CapabilityRequest` 边界 | Tower sibling task 留在 Tower；真人消息留在 `tower-ask` | 外部能力请求不再写 `xiao-fei`、本机 workspace 或裸委托命令 |
 | 已完成 | 修正 goal mode 授权语义 | `set_goal_mode` 只保存可选模块运行态 | prompt 不再把激活视为授权；返回值明确 `authorizationGranted: false` |
 | 已完成 | 把 unattended 运行态移出 Core Task 所有权 | 新增 `UnattendedGoalRuntime`；旧字段保留一轮兼容 | 所有新读写经 goal 模块；生命周期生产者只报告事实 |
 | 已完成 | 复用 OpenClaw 原生 Task 状态做 Job 恢复查询 | `openclaw tasks show <ref> --json` | `get_capability_job_status` 只读归一化结果，未知/失联保守映射 |
-| P0 | 接入 discovery 与 schema 预检 | MCP/Skill 现有结构化工具面 | Tower 可缓存固定版本 schema；版本不兼容或能力不可用时提交前失败 |
-| P0 | 跑通 OWNER home-route Direct 消息闭环 | `push_to_human`、outbound 去重、`SENT_UNVERIFIED`、ask/park | grant、目标强制和 `requestId` 去重同时落地，不重复发送 |
-| P1 | 保存外部请求关联与项目摘要 | Tower 已有 Task/Goal、消息和证据归属 | 只保存 `requestId/jobRef`、当前 revision、结果摘要和证据引用，不镜像 Job 状态机 |
-| P1 | 把外部完成事实接入 Workbench 唤醒边界 | `WorkbenchBatch`、ACK/resolve、lease/fencing、command inbox | 重复/乱序回调幂等；只在安全回合边界让 Goal 重新 `RUNNABLE` |
-| P1 | 增加低频恢复对账与诊断入口 | 现有恢复、maintenance 与 harness diagnostics | 重启或回调丢失时按 `jobRef` 只读查询，不高频轮询 |
-| P1 | 补结果审查和异常呈现 | 现有 Task review、Harness/Workbench UI | 清楚展示 `BLOCKED`、证据和 `SIDE_EFFECT_UNKNOWN`，未知副作用不提供自动重试 |
-
-本轮没有实现 discovery 服务、通用授权签发器、跨系统完成事件或确定性的 Operator Job 提交入口。
-它们仍是后续纵向闭环，不得因为已有契约文案和状态查询工具而宣称完整无人值守已经完成。
+| 已完成 | discovery、完整 schema 与边界预检 | MCP/Skill 结构化工具面 + OpenClaw plugin config | Tower 和 OpenClaw 双侧校验；非法输入不消费 grant |
+| 已完成 | OWNER home-route Direct 消息 | outbound 去重、`SENT_UNVERIFIED`、ask/park | 目标强制、UI grant、`requestId` 去重和 unknown-side-effect 规则均有测试 |
+| 已完成 | 外部 Job correlation、completion 与恢复 | OpenClaw subagent/task、Workbench durable inbox | 回调为主、60 秒只读扫描兜底；重复/乱序/极快完成竞态有测试 |
+| 已完成 | Goal timer、预算和 watchdog | Workbench event/batch、provider completion、模块投影 | timer/block 事件与 marker 同事务；操作守卫和进展事实持久化 |
+| 待部署验证 | 一个真实 Operator 的重启与故障注入 E2E | 已加载的 OpenClaw plugin + 用户显式 capability mapping | 正常完成、双方重启、丢回调、取消/超时和未知副作用均通过 |
 
 Tower **不应该**新增第二套外部能力目录、保存 OpenClaw 凭据、复制 Operator 运行日志，或再造一个独立
 定时调度系统。Goal 唤醒应接入现有 Workbench 持久事件与恢复机制。
 
 ### 4.2 OpenClaw 需要改什么
 
-| 优先级 | 改造项 | 实现约束 | 完成标准 |
+| 状态 | 改造项 | 实现约束 | 当前证据 |
 |---|---|---|---|
-| P0 | 盘点并暴露 capability discovery | 优先组合现有 tool/task/run/status 元数据 | 返回能力版本、READ/ACT、schema/schemaRef、风险和健康状态 |
-| P0 | 建立单一 Registry 权威 | 可以是现有配置和工具元数据的逻辑汇总，不默认新建服务或数据库 | o-tower 与 Tower 调用得到相同路由、风险和可用性判断 |
-| P0 | 在可信边界做权威校验 | 调用方预检不构成信任 | 校验 schema、来源、风险、grant、目标和 `requestId` 去重后才执行 |
-| P0 | 实现 OWNER home-route 强制 | Agent 不得传入或覆盖真实目标 | unattended grant 仅允许发送到已验证 OWNER 本人渠道 |
-| P0 | Direct 车道复用确定性 Adapter | 简单发送/结构化 API 不启动 o-tower 或 Operator | 当前调用返回标准结果；超时且副作用未知时不切旧路径重发 |
-| P1 | 用一个真实 Operator 跑通 Job 车道 | 先验证现有 session/task/run 是否足够 | 返回 `ACCEPTED + jobRef`，持有 lease/heartbeat，完成后产生标准结果 |
-| P1 | 提供完成事件和只读状态查询 | 回调为主、查询为恢复安全网 | 查询包含状态、revision、`updatedAt`、副作用事实与确定性 |
-| P1 | 统一结果、证据和副作用语义 | 不要求迁移已有稳定枚举 | 输出验收事实、动作、证据引用、blocker；未知副作用映射为 `SIDE_EFFECT_UNKNOWN` |
-| P1 | 按 capability 单路迁移 o-tower 旧 prompt | 影子阶段只比较决策，不能双执行 | 每个 `requestId` 只走新旧其中一条路径，真实 E2E 通过后才删旧映射 |
+| 已完成 | 薄 capability plugin 与 discovery | 配置是逻辑 Registry，不新建服务/数据库 | 返回 capability、schema、risk、route revision，不暴露 agentId |
+| 已完成 | OpenClaw 可信边界再校验 | Tower 预检不构成信任 | plugin 使用 OpenClaw JSON-schema runtime 再校验输入 |
+| 已完成 | Job 提交和幂等 | 复用 `api.runtime.subagent.run` | `requestId` 进入原生 idempotency key，返回 `ACCEPTED + runId` |
+| 已完成 | completion hook 和权威查询 | hook 不自报结果 | 只回传 request/run id；Tower 再调用 `tasks show` 对账 |
+| 已完成 | 安装器集成 | 不覆盖现有 plugin allowlist 和路由 | 自动化测试 + OpenClaw 实际 inspect loaded / doctor 通过 |
+| 待用户配置 | capability -> Operator 映射 | 必须由每台机器的 OpenClaw OWNER 配置 | 空配置安全可用；Tower 不猜测同事机器的 agent 名 |
 
 OpenClaw **不应该**拥有 Workspace/Project/Task/Goal，不负责项目拆解或 Goal 调度，也不应让 o-tower 再读
 一遍 Tower 的完整项目上下文。它只接收完成外部动作所需的最小结构化材料。
@@ -185,10 +179,11 @@ OpenClaw **不应该**拥有 Workspace/Project/Task/Goal，不负责项目拆解
 - `openclaw message send --json` 可作为确定性消息 Adapter 基础；
 - `openclaw agent ... --json` 会产生可持久化的 run/task；
 - `openclaw tasks show <taskId|runId> --json` 可返回权威状态与时间戳；
-- 一次无副作用探针成功生成 run，并能通过 `tasks show` 对账为 `succeeded`。
+- 一次无副作用探针成功生成 run，并能通过 `tasks show` 对账为 `succeeded`；
+- Tower capability plugin 已被宿主实际加载，`plugins inspect` 为 loaded，`plugins doctor` 无问题。
 
-因此首版恢复查询采用薄适配，不在 Tower 新建外部 Job 表或第二套状态机。尚未确认的部分是稳定的非 LLM
-Job 提交/回调入口、完整 discovery schema 与可信授权签发；确认前继续 fail-closed。
+因此实现采用 OpenClaw 原生 subagent/task + 薄 plugin，不在 Tower 新建第二套外部 Job 状态机。当前剩余
+工作是用户配置真实 Operator 后的部署 E2E，而不是继续增加 Capability Port 抽象。
 
 ### 4.4 双方共同定义但不共享数据库
 
@@ -204,9 +199,9 @@ Job 提交/回调入口、完整 discovery schema 与可信授权签发；确认
 首版不建跨系统共享表，也不允许双方直接写对方数据库。Tower 保存项目关联和摘要；OpenClaw 保存
 外部执行、租约、凭据与副作用事实。
 
-## 5. 建议的首个纵向闭环
+## 5. 已落地的首个纵向闭环
 
-第一阶段只跑通一个端到端用例：
+首个 Direct 端到端用例已落地：
 
 ```text
 Tower task
@@ -218,17 +213,17 @@ Tower task
   -> OWNER 回复后幂等 resolve 并唤醒 Goal
 ```
 
-该闭环必须同时交付授权和目标强制护栏，不能先做“能发送”再把安全留到后续。它跑通以后，再接一个
-真实 Operator Job；通用 R2/R3 授权、更多 capability 和 GUI E2E 都在后续逐步扩展。
+Job lane、completion、恢复和 Goal 唤醒也已实现。部署时只增加一个真实、低风险 Operator mapping 做
+故障注入；更多 capability 继续按同一 schema/grant/requestId 契约扩展，不进入 Tower Core。
 
-## 6. 定稿检查清单
+## 6. 实现检查清单
 
-定稿前只需要确认四件事：
+合并前确认：
 
 1. Tower 与 OpenClaw 的职责和数据归属是否符合实际目标；
 2. Capability Port 作为虚线逻辑边界是否足够清楚，没有被误读成新服务；
 3. Direct、Job、回调和恢复查询的关系是否符合预期；
-4. 首个纵向闭环是否足够小，同时没有推迟必要授权护栏。
+4. 自动化、生产构建、npm 包和图源是否一致；真实 Operator E2E 是否被明确留作部署门禁而非隐藏完成。
 
 文件级实现、迁移窗口、验证命令和下一阶段门禁见
 [`ultimate-unattended-computer-technical-spec.md`](./ultimate-unattended-computer-technical-spec.md)。

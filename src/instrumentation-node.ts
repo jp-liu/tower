@@ -40,6 +40,10 @@ async function initializeNodeRuntime() {
 
   const { registerWorkbenchPtyLifecycle } = await import("@/lib/workbench/pty-lifecycle-adapter");
   registerWorkbenchPtyLifecycle();
+  const { registerUnattendedGoalPtyLifecycle } = await import(
+    "@/lib/unattended-goal/pty-lifecycle-adapter"
+  );
+  registerUnattendedGoalPtyLifecycle();
   const {
     migrateLegacyGatewayWorkbenchCommands,
     registerGatewayWorkbenchDeliveryLifecycle,
@@ -140,6 +144,58 @@ async function initializeNodeRuntime() {
     };
     setTimeout(() => void recoverOutbounds(), 1_500);
     setInterval(() => void recoverOutbounds(), 10_000);
+  }
+
+  const gCapability = globalThis as typeof globalThis & {
+    __capabilityRecoveryStarted?: boolean;
+    __capabilityRecoveryRunning?: boolean;
+  };
+  if (!gCapability.__capabilityRecoveryStarted) {
+    gCapability.__capabilityRecoveryStarted = true;
+    const recoverCapabilities = async () => {
+      if (gCapability.__capabilityRecoveryRunning) return;
+      gCapability.__capabilityRecoveryRunning = true;
+      try {
+        const { recoverPendingCapabilityRequests } = await import(
+          "@/lib/gateway/capability-runtime"
+        );
+        await recoverPendingCapabilityRequests();
+      } catch (error) {
+        console.error("[capability] Durable recovery failed:", error);
+      } finally {
+        gCapability.__capabilityRecoveryRunning = false;
+      }
+    };
+    const first = setTimeout(() => void recoverCapabilities(), 2_000);
+    first.unref?.();
+    // OpenClaw completion hooks are the primary path. This low-frequency scan
+    // repairs a lost callback or a Tower/OpenClaw restart.
+    const interval = setInterval(() => void recoverCapabilities(), 60_000);
+    interval.unref?.();
+  }
+
+  const gUnattendedGoal = globalThis as typeof globalThis & {
+    __unattendedGoalReconcilerStarted?: boolean;
+    __unattendedGoalReconcilerRunning?: boolean;
+  };
+  if (!gUnattendedGoal.__unattendedGoalReconcilerStarted) {
+    gUnattendedGoal.__unattendedGoalReconcilerStarted = true;
+    const reconcileGoals = async () => {
+      if (gUnattendedGoal.__unattendedGoalReconcilerRunning) return;
+      gUnattendedGoal.__unattendedGoalReconcilerRunning = true;
+      try {
+        const { reconcileUnattendedGoals } = await import("@/lib/unattended-goal/policy");
+        await reconcileUnattendedGoals();
+      } catch (error) {
+        console.error("[unattended-goal] Durable reconciliation failed:", error);
+      } finally {
+        gUnattendedGoal.__unattendedGoalReconcilerRunning = false;
+      }
+    };
+    const first = setTimeout(() => void reconcileGoals(), 2_500);
+    first.unref?.();
+    const interval = setInterval(() => void reconcileGoals(), 15_000);
+    interval.unref?.();
   }
 
   const { ensureTowerDir } = await import("@/lib/init-tower");

@@ -65,12 +65,18 @@ describe("tower agent extension installer", () => {
     // Default install stays Tower-only: no office/third-party (e.g. Feishu) skill is bundled.
     expect(fs.readdirSync(path.join(workspace, "skills")).sort()).toEqual(["tower"]);
     expect(fs.existsSync(path.join(workspace, "mcp.json"))).toBe(true);
+    expect(fs.existsSync(path.join(
+      paths.openclawExtensionsDir,
+      "tower-capability-bridge",
+      "openclaw.plugin.json",
+    ))).toBe(true);
     expect(fs.readFileSync(path.join(workspace, "gateway.env"), "utf-8")).toContain(
       'NO_PROXY="localhost,127.0.0.1,::1,.example.test"',
     );
 
     const cfg = JSON.parse(fs.readFileSync(paths.openclawConfigPath, "utf-8")) as {
       agents: { list: Array<Record<string, unknown>> };
+      plugins?: { allow?: string[]; entries?: Record<string, { enabled?: boolean }> };
     };
     const agent = cfg.agents.list.find((item) => item.id === "o-tower");
     expect(agent).toMatchObject({
@@ -79,6 +85,8 @@ describe("tower agent extension installer", () => {
       identity: { name: "小塔", emoji: "🗼" },
     });
     expect(agent?.model).toEqual({ primary: "keep/me" });
+    expect(cfg.plugins?.allow).toBeUndefined();
+    expect(cfg.plugins?.entries?.["tower-capability-bridge"]?.enabled).toBe(true);
     expect(cfg).toMatchObject({
       env: {
         vars: {
@@ -121,6 +129,27 @@ describe("tower agent extension installer", () => {
     expect(marker.envKeys).toEqual(["NO_PROXY"]);
   });
 
+  it("appends to an existing OpenClaw plugin allowlist without replacing it", async () => {
+    const paths = testPaths();
+    fs.mkdirSync(path.dirname(paths.openclawConfigPath), { recursive: true });
+    fs.writeFileSync(paths.openclawConfigPath, JSON.stringify({
+      plugins: {
+        allow: ["existing-plugin"],
+        entries: { "existing-plugin": { enabled: true } },
+      },
+    }), "utf-8");
+
+    const result = await installTowerAgentExtension({ gateway: "openclaw", paths });
+
+    expect(result.success).toBe(true);
+    const cfg = JSON.parse(fs.readFileSync(paths.openclawConfigPath, "utf-8")) as {
+      plugins: { allow: string[]; entries: Record<string, { enabled?: boolean }> };
+    };
+    expect(cfg.plugins.allow).toEqual(["existing-plugin", "tower-capability-bridge"]);
+    expect(cfg.plugins.entries["existing-plugin"]).toEqual({ enabled: true });
+    expect(cfg.plugins.entries["tower-capability-bridge"]?.enabled).toBe(true);
+  });
+
   it("checks and uninstalls an OpenClaw profile using the Tower marker", async () => {
     const paths = testPaths();
     await installTowerAgentExtension({
@@ -135,7 +164,7 @@ describe("tower agent extension installer", () => {
 
     const installed = await checkTowerAgentExtension("openclaw", { paths });
     expect(installed.installed).toBe(true);
-    expect(installed.version).toBe("4");
+    expect(installed.version).toBe("5");
 
     const removed = await uninstallTowerAgentExtension("openclaw", { paths });
     expect(removed.success).toBe(true);
@@ -144,6 +173,7 @@ describe("tower agent extension installer", () => {
       bindings?: Array<Record<string, unknown>>;
       channels?: Record<string, Record<string, unknown>>;
       env?: { vars?: Record<string, string> };
+      plugins?: { allow?: string[]; entries?: Record<string, unknown> };
     };
     expect(cfg.agents?.list?.some((item) => item.id === "o-tower")).toBe(false);
     expect(cfg.bindings?.some((item) => item.agentId === "o-tower")).toBe(false);
@@ -155,6 +185,9 @@ describe("tower agent extension installer", () => {
     });
     expect(cfg.env?.vars?.HTTPS_PROXY).toBeUndefined();
     expect(fs.existsSync(path.join(paths.openclawAgentsDir, "o-tower"))).toBe(false);
+    expect(fs.existsSync(path.join(paths.openclawExtensionsDir, "tower-capability-bridge"))).toBe(false);
+    expect(cfg.plugins?.entries?.["tower-capability-bridge"]).toBeUndefined();
+    expect(cfg.plugins?.allow ?? []).not.toContain("tower-capability-bridge");
     expect(fs.readFileSync(paths.openclawGatewayServiceEnvPath, "utf-8")).not.toContain("HTTPS_PROXY");
 
     const after = await checkTowerAgentExtension("openclaw", { paths });
@@ -331,6 +364,7 @@ function testPaths(): TowerAgentInstallPaths {
     openclawConfigPath: path.join(root, ".openclaw", "openclaw.json"),
     openclawWorkspacesDir: path.join(root, ".openclaw", "workspaces"),
     openclawAgentsDir: path.join(root, ".openclaw", "agents"),
+    openclawExtensionsDir: path.join(root, ".openclaw", "extensions"),
     openclawGatewayServiceEnvPath: path.join(root, ".openclaw", "service-env", "ai.openclaw.gateway.env"),
     hermesProfilesDir: path.join(root, ".hermes", "profiles"),
   };
@@ -342,4 +376,8 @@ function writeResourcePackage(base: string): void {
   fs.writeFileSync(path.join(agentDir, "SOUL.md"), "Tower soul\n", "utf-8");
   fs.writeFileSync(path.join(agentDir, "AGENTS.md"), "Tower agents\n", "utf-8");
   fs.writeFileSync(path.join(agentDir, "TOOLS.md"), "Tower tools\n", "utf-8");
+  const pluginDir = path.join(base, "extensions", "tower-agent", "openclaw-capability");
+  fs.mkdirSync(pluginDir, { recursive: true });
+  fs.writeFileSync(path.join(pluginDir, "openclaw.plugin.json"), "{}\n", "utf-8");
+  fs.writeFileSync(path.join(pluginDir, "index.js"), "export default {};\n", "utf-8");
 }

@@ -243,6 +243,78 @@ describe("Workbench durable coordinator", () => {
     });
   });
 
+  it("builds a durable capability-result wakeup prompt and forbids uncertain replay", async () => {
+    const { buildWorkbenchBatchPrompt, enqueueWorkbenchEvent } = await import("@/lib/workbench/coordinator");
+    const { event } = await enqueueWorkbenchEvent({
+      parentTaskId: "parent",
+      sourceTaskId: "parent",
+      kind: "CAPABILITY_RESULT_AVAILABLE",
+      priority: "HIGH",
+      dedupKey: "capability-result:req-1:rev-1",
+      payload: {
+        childTaskId: "parent",
+        childTitle: "Parent task",
+        requestId: "req-1",
+        capability: "computer.gui.act",
+        status: "SIDE_EFFECT_UNKNOWN",
+        revision: "rev-1",
+        summary: "The remote outcome is uncertain",
+        evidence: ["openclaw-task:job-1"],
+        jobRef: "job-1",
+      },
+    });
+
+    const prompt = buildWorkbenchBatchPrompt([event], "wb-capability", {
+      generation: 1,
+      leaseToken: "lease-capability",
+    });
+    expect(prompt).toContain("[Tower external capability result]");
+    expect(prompt).toContain("Capability: computer.gui.act");
+    expect(prompt).toContain("Status: SIDE_EFFECT_UNKNOWN");
+    expect(prompt).toContain("Do not retry or submit a fallback request automatically");
+    expect(prompt).toContain("ack_workbench_batch");
+    expect(prompt).toContain("resolve_workbench_batch");
+  });
+
+  it("builds distinct timer and blocked prompts without treating silence as failure", async () => {
+    const { buildWorkbenchBatchPrompt, enqueueWorkbenchEvent } = await import("@/lib/workbench/coordinator");
+    const timer = await enqueueWorkbenchEvent({
+      parentTaskId: "parent",
+      sourceTaskId: "parent",
+      kind: "GOAL_TIMER_DUE",
+      dedupKey: "goal-timer:parent:1",
+      payload: {
+        childTaskId: "parent",
+        childTitle: "Parent task",
+        status: "DUE",
+        summary: "Check the provider status",
+        revision: "1",
+      },
+    });
+    const timerPrompt = buildWorkbenchBatchPrompt([timer.event], "wb-timer");
+    expect(timerPrompt).toContain("[Tower unattended Goal timer]");
+    expect(timerPrompt).toContain("Do not assume that elapsed time means an external action failed");
+    expect(timerPrompt).toContain("do not recreate requests that already have a requestId");
+
+    const blocked = await enqueueWorkbenchEvent({
+      parentTaskId: "parent",
+      sourceTaskId: "parent",
+      kind: "GOAL_BLOCKED",
+      priority: "HIGH",
+      dedupKey: "goal-blocked:parent:1",
+      payload: {
+        childTaskId: "parent",
+        childTitle: "Parent task",
+        status: "BLOCKED",
+        summary: "Provider turn budget reached",
+      },
+    });
+    const blockedPrompt = buildWorkbenchBatchPrompt([blocked.event], "wb-blocked");
+    expect(blockedPrompt).toContain("[Tower unattended Goal blocked]");
+    expect(blockedPrompt).toContain("Stop autonomous work");
+    expect(blockedPrompt).toContain("Never bypass an expired grant");
+  });
+
   it("delivers a gateway request through the durable boundary and advances its queue state", async () => {
     const {
       migrateLegacyGatewayWorkbenchCommands,

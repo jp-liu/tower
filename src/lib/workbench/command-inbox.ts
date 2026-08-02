@@ -5,11 +5,14 @@ import {
   enqueueWorkbenchEvent,
   openWorkbenchDrainBoundary,
   restoreWorkbenchDrainBoundary,
+} from "./coordinator";
+import {
+  persistWorkbenchCommand,
   type EnqueueWorkbenchEventInput,
   type WorkbenchEventKind,
   type WorkbenchEventPayload,
   type WorkbenchEventPriority,
-} from "./coordinator";
+} from "./event-contract";
 
 export type {
   EnqueueWorkbenchEventInput as PublishWorkbenchCommandInput,
@@ -21,6 +24,8 @@ export type {
 export function publishWorkbenchCommand(input: EnqueueWorkbenchEventInput) {
   return enqueueWorkbenchEvent(input);
 }
+
+export { persistWorkbenchCommand };
 
 export { childStopDedupKey };
 

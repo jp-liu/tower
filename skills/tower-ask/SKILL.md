@@ -1,83 +1,68 @@
 ---
 name: tower-ask
-description: Actually deliver a message to a human/group from a task terminal (the "send" half of unattended messaging). Use whenever the intent is to send/notify/tell/report something to a person or group — "send to X", "notify the backend group", "tell the boss", "report progress to X". tower-goal calls this internally.
+description: Deliver an explicit work-scope message to a named human or group from a task terminal. Use for requests such as "send to X", "notify the backend group", or "report progress to X". Unattended OWNER messages use the bounded CapabilityRequest path instead.
 ---
 
-# tower-ask — deliver a message to a human
+# tower-ask - deliver an explicit work message
 
-Tower's `ask_human` / `notify_human` tools **only record + park inside Tower; they never send anything out**. To actually reach a person you must send first. For configured **Hermes/OpenClaw** channels, prefer Tower's `push_to_human` tool: it sends through the gateway first and only then records/parks.
+Tower's `ask_human` / `notify_human` tools only record or park inside Tower;
+they never send anything out. For an explicit work-scope recipient,
+`push_to_human` sends through the configured gateway first and only then
+records or parks.
 
 ## When to use
 
-Use only when the user explicitly asks to get content to a real person/group ("send X to the backend on-call group", "tell the boss…", "report progress to…"), or when the task has explicitly entered **tower-goal** and must push a blocker/result off-hours.
+Use this skill only when the user explicitly asks to get content to a named
+real person or group, for example "send this to the backend on-call group" or
+"report progress to Alex".
 
-**Plain Goal / long-running task mode is NOT tower-goal.** Do not infer unattended messaging from a generic UI goal, a running task title, or "goal mode" wording unless `/tower-goal` was activated (or `set_goal_mode` is already on for this task). For ordinary goal/task runs, report in the terminal/Tower only; don't push a human message unless the user asked for that outbound send.
+Unattended OWNER messaging is not this skill. A `tower-goal` task must call
+`discover_gateway_capabilities` and `submit_capability_request` with a
+UI-issued bounded grant. Never send the same logical message through both
+paths.
 
-**Not this skill**: writing to code/files, leaving a PR comment, terminal-internal actions — don't trigger.
+## Explicit work-message flow
 
-## Three steps
-
-### 1. Pick the scope, then get ready-to-follow send instructions
-
-Channels come in two classes — decide which this is:
-
-| scope | when | behavior |
-|-------|------|----------|
-| **`work`** | You're at the keyboard (working hours), the user explicitly tells you to **send to a group/person to discuss** ("send to Feishu group A… tell me the outcome") | Destination given by the instruction; after sending **don't park, don't close the terminal** — wait for the user to reply in the terminal |
-| **`unattended`** | You're away (`tower-goal` off-hours run), you need the **owner to decide** | Destination = the owner; if a reply is needed to continue, `ask_human` **parks** and waits for a bridge-injected reply |
-
-Rule of thumb: **user named a specific group/person → `work`; nobody named, you need the owner to decide → `unattended`.**
-
-Call **`list_notify_targets`** (always pass the current `taskId` = env `TOWER_TASK_ID`):
-
-- **User explicitly named a group/person** → pass `scope: "work"` (overrides the default).
-- **Nobody named, you just need the owner** → **omit `scope`** and let the tool derive it from the task's persisted goal runtime: goal mode on (`set_goal_mode` was set) → `unattended` (reach the owner); otherwise → `work`. This keeps you correct even if your context was compacted and you forgot whether you're looping.
-
-It **reads the active channel of that scope from Tower's DB** and returns assembled `instructions` — real gateway (OpenClaw / Hermes), downstream platform, destination guidance, the `[[tower:task=<id>]]` token filled with your taskId, and whether to park. **Just do what `instructions` says.**
-
-If the active gateway is **Hermes** or **OpenClaw**, use:
+1. Call `list_notify_targets({ taskId, scope: "work" })` with `taskId` from
+   `TOWER_TASK_ID`.
+2. Take the destination from the user's instruction and pass it as `to`.
+   Tower resolves exact ids, configured aliases, and gateway directory entries
+   where available.
+3. Follow the returned instructions and call:
 
 ```text
-push_to_human({ taskId, message, scope, to, expectReply })
+push_to_human({ taskId, message, scope: "work", to, expectReply })
 ```
 
-It sends first, then records:
-- `expectReply: true` → `ask_human` + park.
-- `expectReply: false` → `notify_human` + keep working.
+- `expectReply: true` sends, records an ask, and parks.
+- `expectReply: false` sends and records a notification without parking.
+- `{ noChannelConfigured: true }` means nothing was sent. Report that a work
+  channel must be configured under Settings -> Notifications.
 
-- If it returns `{ noChannelConfigured: true }` → **don't pretend you sent it**. For `work`, pass the group/person name from the user's request as `to`; for `unattended`, follow the `instructions` to tell the user to configure a channel under Settings → Notifications and mark it active, then stop.
+## Inbound replies
 
-### 2. Resolve the destination
-
-The destination (group/person name) comes from the **triggering context** ("send to the backend on-call group"). For `work`, pass that name/id as `to` to `push_to_human`; Tower resolves exact ids, `harness.destinations` aliases, and gateway directory entries where available. If the gateway cannot resolve it, it will fail clearly.
-
-### Inbound Replies
-
-When the bridge receives a platform message that contains or quotes `[[tower:task=...]]`, call:
+When the bridge receives a platform message that contains or quotes
+`[[tower:task=...]]`, call:
 
 ```text
 relay_channel_reply({ text, taskId, platform, chatId, platformMessageId, quotedText })
 ```
 
-Pass `platform` and `chatId` whenever the bridge has them (for Feishu, `chatId` is usually `oc_xxx`). Pass the replied-to platform message id when available. Tower uses message id first, then chat id, to distinguish "this answers an unattended ask" from "this is a work-channel discussion reply", even when both messages belong to the same task.
-
-### 3. Send per instructions, then record
-
-Send via the gateway named in `instructions`; the body **must contain the token verbatim**. Only **after the send succeeds**, call a Tower tool to record:
-
-- Need a **reply** to continue (decision / missing info / sign-off on a risky action) → `push_to_human(..., expectReply: true)` sends + records + parks in the right order.
-- Just a **heads-up / progress / FYI**, no reply needed → `push_to_human(..., expectReply: false)` sends + records, no park, keep working.
-
-Keep the recorded `content` the same as what you sent (the token may be omitted in the record) so the `/harness` panel shows "what was asked" accurately.
+Pass platform correlation fields whenever available. Tower uses message id
+first and chat id second to distinguish an answer to an open ask from a normal
+work-channel discussion reply.
 
 ## Hard rules
 
-- **Unattended (`unattended`) messages start the body with `【task title】`.** The `[[tower:task=id]]` token is for machines, but when several goals run in parallel the human can't tell which task a WeChat message belongs to; the `【title】` prefix lets them tell at a glance and reply without crossing wires. `list_notify_targets`'s `instructions` fills in the concrete title — just follow it. **Work-scope group messages don't need it.**
-- **Always send directly, no double-confirming.** Once you recognize a "send to X" intent, send it — don't ask "should I send?".
-- **If the platform send fails, never call `ask_human`** (else the task parks but nobody got the message — dead forever). Retry, or leave the message in the `/harness` panel and stop.
-- **Order is fixed**: send + confirm success → then `ask_human`/`notify_human`. Those tools do not send. For Hermes/OpenClaw, `push_to_human` enforces this order.
-- One pending ask per task at a time (`ask_human` auto-cancels the previous OPEN ask); `[[tower:task=<id>]]` is the idempotency key.
+- Once the user names a recipient and asks to send, send directly without a
+  second confirmation.
+- If platform delivery fails, never call `ask_human`; otherwise the task parks
+  even though nobody received the question.
+- Preserve the `[[tower:task=<id>]]` token returned in the instructions.
+- One open ask per task is supported; a new ask cancels the previous open ask.
+- Never use this path as fallback for a failed or unknown unattended OWNER
+  CapabilityRequest.
 
 ## One-line contract
 
-> Hermes/OpenClaw: `push_to_human` does send + record. The `[[tower:task=<id>]]` token is the portable attribution key.
+> Explicit recipient: `push_to_human` does send plus record. Unattended OWNER: use one authorized CapabilityRequest.

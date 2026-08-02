@@ -9,7 +9,8 @@ import { gatewayOwnerToolNames, gatewayQueryToolNames } from "@/mcp/tool-capabil
 
 export type TowerAgentGateway = "openclaw" | "hermes";
 
-const TOWER_AGENT_PACKAGE_VERSION = "4";
+const TOWER_AGENT_PACKAGE_VERSION = "5";
+const OPENCLAW_CAPABILITY_PLUGIN_ID = "tower-capability-bridge";
 const TOWER_GATEWAY_SKILL_NAMES = ["tower"] as const;
 const OPENCLAW_PROJECT_READER_TOOLS = gatewayQueryToolNames.map((name) => `tower__${name}`);
 const OPENCLAW_OWNER_GATEWAY_TOOLS = gatewayOwnerToolNames.map((name) => `tower__${name}`);
@@ -45,6 +46,7 @@ export interface TowerAgentInstallPaths {
   openclawConfigPath: string;
   openclawWorkspacesDir: string;
   openclawAgentsDir: string;
+  openclawExtensionsDir: string;
   openclawGatewayServiceEnvPath: string;
   hermesProfilesDir: string;
 }
@@ -56,6 +58,11 @@ interface OpenClawConfig {
   };
   channels?: Record<string, unknown>;
   bindings?: unknown[];
+  plugins?: {
+    allow?: string[];
+    entries?: Record<string, Record<string, unknown>>;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
@@ -84,6 +91,7 @@ function getPaths(overrides: Partial<TowerAgentInstallPaths> = {}): TowerAgentIn
     openclawConfigPath: overrides.openclawConfigPath ?? path.join(homeDir, ".openclaw", "openclaw.json"),
     openclawWorkspacesDir: overrides.openclawWorkspacesDir ?? path.join(homeDir, ".openclaw", "workspaces"),
     openclawAgentsDir: overrides.openclawAgentsDir ?? path.join(homeDir, ".openclaw", "agents"),
+    openclawExtensionsDir: overrides.openclawExtensionsDir ?? path.join(homeDir, ".openclaw", "extensions"),
     openclawGatewayServiceEnvPath:
       overrides.openclawGatewayServiceEnvPath ?? path.join(homeDir, ".openclaw", "service-env", "ai.openclaw.gateway.env"),
     hermesProfilesDir: overrides.hermesProfilesDir ?? path.join(homeDir, ".hermes", "profiles"),
@@ -169,6 +177,7 @@ function installOpenClawProfile(input: {
     fs.mkdirSync(agentDir, { recursive: true });
 
     copyAgentFiles(resourceDir, workspaceDir);
+    installOpenClawCapabilityPlugin(resourceDir, input.paths);
     copyTowerSkills(path.join(workspaceDir, "skills"));
     writeMcpConfig(path.join(workspaceDir, "mcp.json"));
     writeEnvFile(path.join(workspaceDir, "gateway.env"), input.env);
@@ -191,6 +200,7 @@ function installOpenClawProfile(input: {
         ? buildOpenClawTowerToolPolicy(accessPolicy)
         : disabledOpenClawTowerToolPolicy(),
     });
+    enableOpenClawCapabilityPlugin(input.paths.openclawConfigPath);
     upsertOpenClawAccessPolicy(
       input.paths.openclawConfigPath,
       input.profile,
@@ -394,6 +404,13 @@ function uninstallOpenClawProfile(profile: string, paths: TowerAgentInstallPaths
     upsertShellExportEnv(paths.openclawGatewayServiceEnvPath, undefined, marker?.envKeys ?? []);
     fs.rmSync(workspaceDir, { recursive: true, force: true });
     fs.rmSync(path.join(paths.openclawAgentsDir, profile), { recursive: true, force: true });
+    if (!hasOtherOpenClawTowerProfiles(paths, profile)) {
+      removeOpenClawCapabilityPlugin(paths.openclawConfigPath);
+      fs.rmSync(path.join(paths.openclawExtensionsDir, OPENCLAW_CAPABILITY_PLUGIN_ID), {
+        recursive: true,
+        force: true,
+      });
+    }
     return { success: true, message: `Removed OpenClaw Tower Agent profile ${profile}` };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -418,6 +435,60 @@ function copyAgentFiles(resourceDir: string, targetDir: string): void {
   for (const name of ["SOUL.md", "AGENTS.md", "TOOLS.md"]) {
     fs.copyFileSync(path.join(agentDir, name), path.join(targetDir, name));
   }
+}
+
+function installOpenClawCapabilityPlugin(resourceDir: string, paths: TowerAgentInstallPaths): void {
+  const source = path.join(resourceDir, "openclaw-capability");
+  if (!fs.existsSync(path.join(source, "openclaw.plugin.json"))) {
+    throw new Error("Tower OpenClaw capability plugin is missing from the package");
+  }
+  const target = path.join(paths.openclawExtensionsDir, OPENCLAW_CAPABILITY_PLUGIN_ID);
+  fs.mkdirSync(paths.openclawExtensionsDir, { recursive: true });
+  fs.rmSync(target, { recursive: true, force: true });
+  fs.cpSync(source, target, { recursive: true });
+}
+
+function enableOpenClawCapabilityPlugin(configPath: string): void {
+  const cfg = readJson<OpenClawConfig>(configPath) ?? {};
+  const plugins = cfg.plugins && typeof cfg.plugins === "object" ? cfg.plugins : {};
+  const entries = plugins.entries && typeof plugins.entries === "object" ? plugins.entries : {};
+  const current = entries[OPENCLAW_CAPABILITY_PLUGIN_ID] ?? {};
+  const allow = Array.isArray(plugins.allow)
+    ? plugins.allow.filter((id): id is string => typeof id === "string")
+    : null;
+  cfg.plugins = {
+    ...plugins,
+    ...(allow ? { allow: Array.from(new Set([...allow, OPENCLAW_CAPABILITY_PLUGIN_ID])) } : {}),
+    entries: {
+      ...entries,
+      [OPENCLAW_CAPABILITY_PLUGIN_ID]: { ...current, enabled: true },
+    },
+  };
+  writeJsonWithBackup(configPath, cfg);
+}
+
+function removeOpenClawCapabilityPlugin(configPath: string): void {
+  const cfg = readJson<OpenClawConfig>(configPath);
+  if (!cfg?.plugins) return;
+  const entries = { ...(cfg.plugins.entries ?? {}) };
+  delete entries[OPENCLAW_CAPABILITY_PLUGIN_ID];
+  cfg.plugins = {
+    ...cfg.plugins,
+    allow: Array.isArray(cfg.plugins.allow)
+      ? cfg.plugins.allow.filter((id) => id !== OPENCLAW_CAPABILITY_PLUGIN_ID)
+      : cfg.plugins.allow,
+    entries,
+  };
+  writeJsonWithBackup(configPath, cfg);
+}
+
+function hasOtherOpenClawTowerProfiles(paths: TowerAgentInstallPaths, removedProfile: string): boolean {
+  if (!fs.existsSync(paths.openclawWorkspacesDir)) return false;
+  return fs.readdirSync(paths.openclawWorkspacesDir, { withFileTypes: true }).some((entry) =>
+    entry.isDirectory()
+    && entry.name !== removedProfile
+    && fs.existsSync(path.join(paths.openclawWorkspacesDir, entry.name, ".tower-agent.json"))
+  );
 }
 
 function copyTowerSkills(targetSkillsDir: string): void {

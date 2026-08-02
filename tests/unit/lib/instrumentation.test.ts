@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock @/lib/instrumentation-tasks
 vi.mock("@/lib/instrumentation-tasks", () => ({
@@ -20,12 +20,18 @@ vi.mock("@/lib/init-tower", () => ({
 }));
 
 beforeEach(() => {
+  vi.useFakeTimers();
   vi.clearAllMocks();
   vi.resetModules();
   delete (globalThis as typeof globalThis & {
     __towerInstrumentationRegistration?: Promise<void>;
   }).__towerInstrumentationRegistration;
   process.env.NEXT_RUNTIME = "nodejs";
+});
+
+afterEach(() => {
+  vi.clearAllTimers();
+  vi.useRealTimers();
 });
 
 describe("register", () => {

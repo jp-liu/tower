@@ -112,7 +112,11 @@ export async function POST(request: NextRequest) {
 
   // An open ask deliberately parks instead of admitting autonomous input. Once
   // that guard is clear, publish the provider boundary to interested modules.
-  await notifyPtyProviderTurnCompleted(task.id);
+  if (eventId) {
+    await notifyPtyProviderTurnCompleted(task.id, `${execution?.id ?? task.id}:${eventId}`);
+  } else {
+    await notifyPtyProviderTurnCompleted(task.id);
+  }
 
   // Codex's agent-turn-complete notify is the authoritative terminal event for
   // derived one-shot work. Persist the terminal state before publishing review

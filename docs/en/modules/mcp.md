@@ -14,7 +14,7 @@ Tower exposes an MCP (Model Context Protocol) Server that allows external AI age
 ## Details
 
 - **Stdio transport**: The MCP server communicates over standard input/output, making it easy to integrate with any process-based MCP client.
-- **Capability-scoped catalogs**: Workspace, project, task, label, search, knowledge, notes/assets, terminal, reporting, messaging, Workbench, and gateway capabilities are composed per runtime (see the [Harness module](./harness)).
+- **Capability-scoped catalogs**: Workspace, project, task, label, search, knowledge, notes/assets, terminal, reporting, messaging, bounded CapabilityRequest, Workbench, and gateway capabilities are composed per runtime (see the [Harness module](./harness)).
 - **Internal HTTP bridge**: Since MCP runs as a separate stdio process, it cannot access in-memory PTY sessions directly. Localhost-only HTTP routes (`/api/internal/terminal/[taskId]/buffer`, `/input`, `/start`, `/stop`, and `/resume`) bridge this gap.
 - **External orchestration workflow**: Create a task, start execution, monitor via terminal output polling, send interactive input, and check completion status — all through MCP tools.
 
@@ -67,7 +67,7 @@ tool handlers.
 | `project-tools.ts` | Project CRUD + product groups |
 | `task-tools.ts` | Task CRUD + move + defaults + versions |
 | `unattended-goal-tools.ts` | Optional unattended Goal runtime (outside Core; grants no external authorization) |
-| `gateway-capability-tools.ts` | Read-only external Capability Job reconciliation |
+| `gateway-capability-tools.ts` | Capability discovery, bounded Direct requests, minimal Tower result reads, and read-only external Job reconciliation |
 | `label-tools.ts` | Label CRUD + set_task_labels |
 | `search-tools.ts` | Global search |
 | `knowledge-tools.ts` | identify_project |
@@ -86,4 +86,6 @@ MCP stdio processes cannot access in-memory PTY sessions, so internal HTTP route
 - `POST /api/internal/terminal/[taskId]/stop` (reuses the Stop button logic)
 - `POST /api/internal/terminal/[taskId]/resume` (defaults to the Continue/Retry button logic; fresh start when no history)
 - `POST/PATCH/PUT /api/internal/harness/gateway` (durable inbound routing, completion acknowledgement, and retryable project replies)
+- `GET/POST /api/internal/harness/capabilities` (discovery, minimal request status, and deterministic Direct submission)
+- `POST /api/internal/harness/capabilities/completions` (scoped OpenClaw Job callback followed by authoritative read-only reconciliation and a Workbench wakeup)
 - Restricted to localhost

@@ -62,8 +62,12 @@ effect is `SIDE_EFFECT_UNKNOWN`, never an automatic retry.
 
 ## Dispatch
 
-1. Prefer a deterministic capability entry exposed by the configured Gateway.
-2. For human messaging, `tower-ask`/`push_to_human` is that deterministic entry.
+1. Call `discover_gateway_capabilities({ taskId })` and use only an advertised,
+   available capability with its executable schema.
+2. `human.message.send` uses `submit_capability_request`. It is fixed to the
+   configured OWNER home route; never add a destination to `inputs`. R2 requires
+   the `authorizationRef` returned by discovery after the user enabled
+   unattended mode in Tower UI.
 3. During migration, if the Gateway has no deterministic external-capability
    entry, submit the structured envelope to its Tower conversation role as one
    compatibility route. Do not address a concrete specialist from Tower.
@@ -74,6 +78,10 @@ effect is `SIDE_EFFECT_UNKNOWN`, never an automatic retry.
 The compatibility route may perform one extra model turn. It remains only until
 the Gateway exposes a deterministic adapter for that capability. Never execute
 both routes for comparison.
+
+For `human.message.send`, `submit_capability_request` already records the
+durable ask/notification lifecycle. Do not also call `push_to_human`,
+`ask_human`, or `notify_human` for the same logical message.
 
 ## Result handling
 
