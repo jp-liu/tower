@@ -10,7 +10,7 @@
 1. 系统由谁负责什么，数据归谁；
 2. Tower 调用外部能力时，Direct 与 Job 分别怎么走；
 3. 终端、进程或回调中断后，Goal 与外部 Job 如何恢复。
-4. Tower Core、Execution、Workbench、Gateway 与 Unattended Goal 如何在同仓同库中保持模块边界。
+4. 当前 Tower 从入口、调用面、业务模块到基础设施如何运行，以及哪些无人值守能力尚未实现。
 
 图中的 `Capability Port`、`Durable Wakeup Inbox`、`结果与证据汇聚` 都是**逻辑职责**，不是已经决定
 要新建的服务、进程或数据库。Technical Spec 必须优先把这些职责映射到 OpenClaw 和 Tower 的现有能力。
@@ -52,18 +52,21 @@
 2. OpenClaw 不复制 Tower 的项目、任务、Goal 和知识作为第二套业务真相。
 3. Agent 不能通过填写布尔字段、调用 `set_goal_mode` 或改写目标来自我授权。
 
-### 1.3 Tower 内部模块边界
+### 1.3 Tower 当前实现架构
 
-![Tower 模块边界](./diagrams/ultimate-unattended-computer/tower-module-boundaries.png)
+![Tower 当前实现架构](./diagrams/ultimate-unattended-computer/tower-current-architecture.drawio.png)
 
-当前不拆 npm 包、不拆进程、不拆数据库。边界先落实为代码目录、模块自有运行态、MCP capability group、
-应用端口和生命周期事实：
+Tower 当前是一个模块化单体发布，但不是严格的单进程：Next.js Server 与 MCP stdio server 是独立运行时，
+任务终端是 PTY 子进程；它们共享同一代码库、发布包和 Prisma + SQLite，并由 localhost internal HTTP、
+WebSocket 与持久状态协调。边界先落实为代码目录、模块自有运行态、MCP capability group、应用端口和
+生命周期事实：
 
 - **Core** 只拥有 Workspace、Project、Task、记录/笔记与审查等项目事实；
 - **Execution / Terminal** 拥有 PTY、Provider 和执行记录，只报告执行生命周期；
 - **Workbench** 拥有批次、lease、fencing、ACK 与 resolve，协调执行但不拥有 Goal 策略；
 - **Gateway** 拥有外部消息、投递、ask/reply 与外部 Job 对账适配；
-- **Unattended Goal** 是依赖 Gateway 的可选组合模块，拥有自己的运行态和后续唤醒/预算策略。
+- **Unattended Goal** 是依赖 Gateway 的可选组合模块；当前只实现运行态投影与生命周期 reducer，持久
+  timer、预算、watchdog 和自动唤醒仍属于后续阶段。
 
 同库不等于跨模块随意读表。新增代码应通过模块入口传 command/event/result，只把 Core ID 当引用。等到
 独立部署、独立发布或数据保留策略带来明确收益时再拆包；届时不应修改 Core 项目模型。
