@@ -92,7 +92,11 @@ describe("Stop hook API", () => {
     expect(response.status).toBe(200);
     expect(data.ok).toBe(true);
     expect(mockNotifyParent).toHaveBeenCalledOnce();
-    expect(mockNotifyProviderTurnCompleted).toHaveBeenCalledWith("ctask123456789012345");
+    expect(mockNotifyProviderTurnCompleted).toHaveBeenCalledWith(
+      "ctask123456789012345",
+      undefined,
+      "cexec12345678901234",
+    );
   });
 
   it("should reject request without taskId", async () => {

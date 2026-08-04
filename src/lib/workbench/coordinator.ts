@@ -1048,8 +1048,8 @@ export function openWorkbenchDrainBoundary(parentTaskId: string, executionId?: s
  */
 export function restoreWorkbenchDrainBoundary(parentTaskId: string): boolean {
   const session = getSession(parentTaskId);
-  if (!session || session.killed || !session.isAtTurnBoundary) return false;
-  openWorkbenchDrainBoundary(parentTaskId);
+  if (!session || session.killed || !session.isAtTurnBoundary || !session.executionId) return false;
+  openWorkbenchDrainBoundary(parentTaskId, session.executionId);
   return true;
 }
 

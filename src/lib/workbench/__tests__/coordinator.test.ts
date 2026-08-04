@@ -634,6 +634,7 @@ describe("Workbench durable coordinator", () => {
     vi.mocked(getSession).mockReturnValue({
       killed: false,
       isAtTurnBoundary: false,
+      executionId: "parent-exec",
     } as never);
     expect(restoreWorkbenchDrainBoundary("parent")).toBe(false);
     expect(hasWorkbenchDrainBoundary("parent")).toBe(false);
@@ -642,10 +643,56 @@ describe("Workbench durable coordinator", () => {
       killed: false,
       isAtTurnBoundary: true,
     } as never);
+    expect(restoreWorkbenchDrainBoundary("parent")).toBe(false);
+    expect(hasWorkbenchDrainBoundary("parent")).toBe(false);
+
+    vi.mocked(getSession).mockReturnValue({
+      killed: false,
+      isAtTurnBoundary: true,
+      executionId: "parent-exec",
+    } as never);
     expect(restoreWorkbenchDrainBoundary("parent")).toBe(true);
-    expect(hasWorkbenchDrainBoundary("parent")).toBe(true);
+    expect(hasWorkbenchDrainBoundary("parent", "parent-exec")).toBe(true);
 
     resetWorkbenchDrainBoundariesForTests();
+  });
+
+  it("fences a restored live-session boundary against a replacement execution", async () => {
+    const { getSession } = await import("@/lib/pty/session-store");
+    const {
+      drainReadyWorkbenchParent,
+      enqueueWorkbenchEvent,
+      restoreWorkbenchDrainBoundary,
+    } = await import("@/lib/workbench/coordinator");
+    const { hasWorkbenchDrainBoundary } = await import("@/lib/workbench/boundary");
+    vi.mocked(getSession).mockReturnValue({
+      killed: false,
+      isAtTurnBoundary: true,
+      executionId: "parent-exec",
+    } as never);
+    await enqueueWorkbenchEvent({
+      parentTaskId: "parent",
+      sourceTaskId: "child-a",
+      kind: "CHILD_REVIEW_REQUIRED",
+      dedupKey: "restored-stale-execution-boundary",
+      payload: { childTaskId: "child-a", childTitle: "Child A" },
+    });
+
+    expect(restoreWorkbenchDrainBoundary("parent")).toBe(true);
+    expect(hasWorkbenchDrainBoundary("parent", "parent-exec")).toBe(true);
+    await prisma.$executeRawUnsafe(
+      `UPDATE "TaskExecution" SET "status" = 'COMPLETED', "endedAt" = CURRENT_TIMESTAMP WHERE "id" = 'parent-exec'`,
+    );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "TaskExecution" ("id", "taskId", "status") VALUES ('parent-exec-2', 'parent', 'RUNNING')`,
+    );
+    const deliver = vi.fn(async () => undefined);
+
+    await drainReadyWorkbenchParent("parent", deliver);
+
+    expect(deliver).not.toHaveBeenCalled();
+    expect(hasWorkbenchDrainBoundary("parent")).toBe(false);
+    expect(await prisma.workbenchEvent.findFirst()).toMatchObject({ state: "PENDING" });
   });
 
   it.each(["continued", "started"] as const)(
