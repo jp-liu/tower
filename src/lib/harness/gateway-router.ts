@@ -2527,6 +2527,8 @@ export async function recoverQueuedGatewayWork(
         }
         const resumed = await ensureWorkbench(taskId);
         if (resumed.mode !== "already_running") {
+          // The resumed provider must confirm its first completed turn before
+          // queued work can be injected.
           activateWorkbenchCommandConsumer(taskId, resumed.mode);
         } else {
           restoreBoundary(taskId);
@@ -2590,8 +2592,9 @@ export async function recoverQueuedGatewayWork(
       }, sender);
       const resumed = await ensureWorkbench(taskId);
       if (resumed.mode !== "already_running") {
-        // A server restart loses the process-local boundary set. A newly resumed
-        // PTY starts at a safe empty-input boundary, so re-open it once here.
+        // A server restart loses process-local boundary state. A resumed PTY is
+        // still BUSY until its provider callback (or durable replay) confirms
+        // the first completed turn.
         activateWorkbenchCommandConsumer(taskId, resumed.mode);
       } else {
         // `already_running` can mean either an active turn or an idle TUI whose

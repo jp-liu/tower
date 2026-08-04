@@ -51,6 +51,7 @@ describe("tower-codex-notify", () => {
       env: {
         ...process.env,
         TOWER_TASK_ID: "task-123",
+        TOWER_EXECUTION_ID: "",
         TOWER_API_URL: `http://127.0.0.1:${address.port}`,
       },
     });

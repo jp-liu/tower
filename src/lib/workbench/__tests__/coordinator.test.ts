@@ -95,7 +95,7 @@ afterEach(async () => {
 
 describe("Workbench durable coordinator", () => {
   it("projects runtime state from the provider turn boundary independently of queue depth", async () => {
-    const { deriveWorkbenchRuntimeState } = await import("@/lib/workbench/coordinator");
+    const { deriveWorkbenchBlockedReason, deriveWorkbenchRuntimeState } = await import("@/lib/workbench/coordinator");
 
     expect(deriveWorkbenchRuntimeState({
       hasLiveSession: true,
@@ -117,6 +117,12 @@ describe("Workbench durable coordinator", () => {
       hasActiveBatch: false,
       isAtTurnBoundary: true,
     })).toBe("DEGRADED");
+    expect(deriveWorkbenchBlockedReason({
+      hasLiveSession: true,
+      hasActiveBatch: false,
+      pendingEvents: 0,
+      isAtTurnBoundary: false,
+    })).toBe("Provider turn in progress");
   });
 
   it("stores a duplicate callback once by stable dedupKey", async () => {
@@ -642,7 +648,7 @@ describe("Workbench durable coordinator", () => {
     resetWorkbenchDrainBoundariesForTests();
   });
 
-  it("restarts a missing Workbench for durable pending events", async () => {
+  it("restarts a missing Workbench but waits for its provider-confirmed boundary", async () => {
     const { getSession } = await import("@/lib/pty/session-store");
     const {
       enqueueWorkbenchEvent,
@@ -664,12 +670,18 @@ describe("Workbench durable coordinator", () => {
 
     await expect(reconcilePendingWorkbenchEvents(ensure)).resolves.toEqual({
       scanned: 1,
-      woken: 1,
-      busy: 0,
+      woken: 0,
+      busy: 1,
       failed: 0,
     });
     expect(ensure).toHaveBeenCalledWith("parent");
-    expect(hasWorkbenchDrainBoundary("parent")).toBe(true);
+    expect(hasWorkbenchDrainBoundary("parent")).toBe(false);
+    expect(await prisma.workbenchRuntime.findUnique({ where: { taskId: "parent" } }))
+      .toMatchObject({
+        executionId: "parent-exec-2",
+        state: "STARTING",
+        pendingEvents: 1,
+      });
   });
 
   it("backs off a failed Workbench restart instead of retrying every scanner tick", async () => {
@@ -711,11 +723,43 @@ describe("Workbench durable coordinator", () => {
       new Date(startedAt.getTime() + WORKBENCH_RECONCILE_FAILURE_BACKOFF_MS + 1_000),
     )).resolves.toEqual({
       scanned: 1,
-      woken: 1,
-      busy: 0,
+      woken: 0,
+      busy: 1,
       failed: 0,
     });
     expect(ensure).toHaveBeenCalledTimes(2);
+  });
+
+  it("drains queued Gateway work automatically at a provider-confirmed boundary", async () => {
+    const {
+      drainReadyWorkbenchParent,
+      enqueueWorkbenchEvent,
+      openWorkbenchDrainBoundary,
+    } = await import("@/lib/workbench/coordinator");
+    await prisma.$executeRawUnsafe(`INSERT INTO "GatewayInbound" ("id", "state") VALUES ('gateway-backlog', 'QUEUED')`);
+    await enqueueWorkbenchEvent({
+      parentTaskId: "parent",
+      sourceTaskId: "parent",
+      kind: "GATEWAY_WORK_REQUEST",
+      dedupKey: "gateway-work:gateway-backlog",
+      payload: {
+        childTaskId: "parent",
+        childTitle: "Gateway backlog",
+        instruction: "Create the queued task.",
+        sourceReference: { namespace: "gateway_inbound", id: "gateway-backlog" },
+      },
+    });
+    const deliveries: string[] = [];
+
+    openWorkbenchDrainBoundary("parent");
+    await drainReadyWorkbenchParent("parent", async (batch) => {
+      deliveries.push(batch.prompt);
+    });
+
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]).toContain("Create the queued task.");
+    expect(await prisma.workbenchEvent.findFirst({ where: { dedupKey: "gateway-work:gateway-backlog" } }))
+      .toMatchObject({ state: "PROCESSING" });
   });
 
   it("leaves pending events durable while the live Workbench is busy", async () => {

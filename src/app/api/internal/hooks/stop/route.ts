@@ -69,35 +69,48 @@ export async function POST(request: NextRequest) {
     timestamp: new Date().toISOString(),
   };
 
-  // Fan-out 消费者 1：推给所有通知 WS 客户端（浏览器 UI 的「回合完成」指示）。
-  broadcastNotification(event);
-
-  const execution = await db.taskExecution.findFirst({
-    where: {
-      taskId: task.id,
-      ...(executionId
-        ? { id: executionId }
-        : sessionId
-          ? { sessionId }
-          : { status: "RUNNING" as const }),
-    },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, status: true },
-  });
+  const [execution, currentProviderExecution] = await Promise.all([
+    db.taskExecution.findFirst({
+      where: {
+        taskId: task.id,
+        ...(executionId
+          ? { id: executionId }
+          : sessionId
+            ? { sessionId }
+            : { status: "RUNNING" as const }),
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, status: true },
+    }),
+    db.taskExecution.findFirst({
+      where: { taskId: task.id, status: { in: ["RUNNING", "PAUSED"] } },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    }),
+  ]);
   if (executionId && !execution) {
     return NextResponse.json({ error: "Execution does not belong to task" }, { status: 409 });
   }
+  const ownsCurrentProviderTurn = Boolean(
+    execution
+    && (execution.status === "RUNNING" || execution.status === "PAUSED")
+    && currentProviderExecution?.id === execution.id,
+  );
   const childContext = { sessionId, eventId, executionId: execution?.id ?? null };
 
   // This provider callback is the authoritative end-of-turn signal. Keep that
   // fact on the live PTY object so a later startup/module recovery can restore
-  // a lost drain token without treating a busy terminal as safe.
-  markSessionTurnComplete(task.id);
+  // a lost drain token without treating a busy terminal as safe. Fence by the
+  // current execution so a delayed durable record cannot unlock a newer PTY.
+  if (ownsCurrentProviderTurn) {
+    markSessionTurnComplete(task.id);
+    broadcastNotification(event);
+  }
 
   // Harness park 分叉：这次回合结束若是「等人回复」（有 PENDING 请求）而非「做完」，
   // 就 kill 掉空闲 PTY 省资源即返回。execution 已在 ask_human 时置 PAUSED → onExit guard
   // 会跳过 finalize / IN_REVIEW，保留 sessionId 供 resume；且不回推父任务（不是完成事件）。
-  const pending = await getOpenAsk(task.id);
+  const pending = ownsCurrentProviderTurn ? await getOpenAsk(task.id) : null;
   if (pending) {
     await notifyParentOnChildDecision(
       task.id,
@@ -112,17 +125,19 @@ export async function POST(request: NextRequest) {
 
   // An open ask deliberately parks instead of admitting autonomous input. Once
   // that guard is clear, publish the provider boundary to interested modules.
-  if (eventId) {
-    await notifyPtyProviderTurnCompleted(task.id, `${execution?.id ?? task.id}:${eventId}`);
-  } else {
-    await notifyPtyProviderTurnCompleted(task.id);
+  if (ownsCurrentProviderTurn) {
+    if (eventId) {
+      await notifyPtyProviderTurnCompleted(task.id, `${execution?.id ?? task.id}:${eventId}`);
+    } else {
+      await notifyPtyProviderTurnCompleted(task.id);
+    }
   }
 
   // Codex's agent-turn-complete notify is the authoritative terminal event for
   // derived one-shot work. Persist the terminal state before publishing review
   // so a PTY exit race or server restart cannot leave RUNNING behind.
   const authoritativeLateCompletion = execution?.status === "FAILED" && executionId && eventId;
-  if (task.parentTaskId && execution && (execution.status === "RUNNING" || authoritativeLateCompletion)) {
+  if (task.parentTaskId && execution && (ownsCurrentProviderTurn || authoritativeLateCompletion)) {
     await db.$transaction([
       db.taskExecution.updateMany({
         where: {
@@ -142,7 +157,16 @@ export async function POST(request: NextRequest) {
         },
       }),
       db.task.updateMany({
-        where: { id: task.id, status: "IN_PROGRESS" },
+        where: {
+          id: task.id,
+          status: "IN_PROGRESS",
+          executions: {
+            none: {
+              status: { in: ["RUNNING", "PAUSED"] },
+              id: { not: execution.id },
+            },
+          },
+        },
         data: { status: "IN_REVIEW" },
       }),
     ]);
@@ -168,7 +192,7 @@ export async function POST(request: NextRequest) {
   // 不影响入库；实际 review batch 由父任务自己的安全回合边界统一 drain。
   await notifyParentOnChildStop(task.id, task.title, lastReply ?? "", childContext);
 
-  if (task.parentTaskId) destroySession(task.id);
+  if (task.parentTaskId && ownsCurrentProviderTurn) destroySession(task.id);
 
   return NextResponse.json({ ok: true });
 }

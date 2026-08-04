@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import type { ActiveExecutionInfo } from "@/actions/agent-actions";
 import type { TerminalControls } from "@/components/task/task-terminal";
 import { TerminalOutlet } from "@/components/task/terminal-portal";
+import { inspectWorkbenchHealth } from "@/components/missions/workbench-health";
 
 /**
  * Live "Xm Ys" running-time counter, isolated in its own component so the 1s
@@ -46,25 +47,32 @@ function ElapsedTime({ startedAt, paused }: { startedAt: string | null; paused: 
 }
 
 function WorkbenchHealthBadge({ execution }: { execution: ActiveExecutionInfo }) {
+  const { t } = useI18n();
   const runtime = execution.workbenchRuntime;
   if (!execution.isSystemTask) return null;
   if (!runtime) {
     return (
       <Badge variant="outline" className="text-[10px] text-muted-foreground shrink-0">
         <Activity className="h-3 w-3 mr-1" />
-        未上报
+        {t("missions.workbench.notReported")}
       </Badge>
     );
   }
-  const unhealthy = runtime.state === "BLOCKED" || runtime.state === "DEGRADED";
+  const health = inspectWorkbenchHealth(runtime);
+  const fallbackReason = health.providerTurnInProgress && !runtime.blockedReason
+    ? t("missions.workbench.providerTurn")
+    : null;
   const detail = [
     `Workbench generation ${runtime.generation}`,
     `state=${runtime.state}`,
     `pending=${runtime.pendingEvents}`,
     runtime.activeBatchId ? `batch=${runtime.activeBatchId}` : null,
     runtime.blockedReason,
+    fallbackReason,
     runtime.lastError,
-    `heartbeat=${new Date(runtime.lastHeartbeatAt).toLocaleString()}`,
+    health.synchronizationStale ? t("missions.workbench.executionStale") : null,
+    health.heartbeatStale ? t("missions.workbench.heartbeatStale") : null,
+    runtime.lastHeartbeatAt ? `heartbeat=${new Date(runtime.lastHeartbeatAt).toLocaleString()}` : null,
   ].filter(Boolean).join("\n");
   return (
     <Tooltip>
@@ -73,17 +81,21 @@ function WorkbenchHealthBadge({ execution }: { execution: ActiveExecutionInfo })
           <Badge
             variant="outline"
             className={
-              unhealthy
+              health.unhealthy
                 ? "text-[10px] text-amber-600 border-amber-500/40 bg-amber-500/10 shrink-0"
                 : "text-[10px] text-emerald-600 border-emerald-500/40 bg-emerald-500/10 shrink-0"
             }
           />
         }
       >
-        {unhealthy
+        {health.unhealthy
           ? <AlertTriangle className="h-3 w-3 mr-1" />
           : <Activity className="h-3 w-3 mr-1" />}
-        G{runtime.generation} · {runtime.state}
+        G{runtime.generation} · {health.heartbeatStale
+          ? t("missions.workbench.stale")
+          : health.synchronizationStale
+            ? t("missions.workbench.syncing")
+            : runtime.state}
         {runtime.pendingEvents > 0 ? ` · ${runtime.pendingEvents}` : ""}
       </TooltipTrigger>
       <TooltipContent className="max-w-sm whitespace-pre-line">{detail}</TooltipContent>

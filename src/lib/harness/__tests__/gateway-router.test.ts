@@ -3,9 +3,9 @@ import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import {
   hasWorkbenchDrainBoundary,
+  markWorkbenchDrainBoundary,
   resetWorkbenchDrainBoundariesForTests,
 } from "@/lib/workbench/boundary";
-import { activateWorkbenchCommandConsumer } from "@/lib/workbench/command-inbox";
 import {
   GATEWAY_RECENT_SESSION_TTL_MS,
   completeGatewayDiscussion,
@@ -1116,7 +1116,7 @@ describe("gateway inbound routing", () => {
     expect(JSON.stringify(diagnostic)).not.toContain(process.cwd());
   });
 
-  it("opens the initial boundary after starting a Workbench for new gateway work", async () => {
+  it("waits for a provider-confirmed boundary after starting a Workbench", async () => {
     const ensure = vi.fn(async () => ({
       mode: "started" as const,
       executionId: "fresh-workbench",
@@ -1130,7 +1130,7 @@ describe("gateway inbound routing", () => {
     if (routed.mode !== "project_work") return;
 
     expect(ensure).toHaveBeenCalledWith(routed.workbenchTaskId);
-    expect(hasWorkbenchDrainBoundary(routed.workbenchTaskId)).toBe(true);
+    expect(hasWorkbenchDrainBoundary(routed.workbenchTaskId)).toBe(false);
   });
 
   it("recreates a missing durable event and resumes an unstarted Workbench", async () => {
@@ -1148,7 +1148,7 @@ describe("gateway inbound routing", () => {
     await expect(recoverQueuedGatewayWork(ensure, 100, successfulSender(), undefined, { projectId: alphaId }))
       .resolves.toEqual({ scanned: 1, started: 1, failed: 0 });
     expect(ensure).toHaveBeenCalledWith(routed.workbenchTaskId);
-    expect(hasWorkbenchDrainBoundary(routed.workbenchTaskId)).toBe(true);
+    expect(hasWorkbenchDrainBoundary(routed.workbenchTaskId)).toBe(false);
     expect(await db.workbenchEvent.findFirst({
       where: {
         parentTaskId: routed.workbenchTaskId,
@@ -1212,7 +1212,7 @@ describe("gateway inbound routing", () => {
     resetWorkbenchDrainBoundariesForTests();
     const ensure = vi.fn(async () => ({ mode: "already_running", executionId: "live-workbench" }));
     const restore = vi.fn((taskId: string) => {
-      activateWorkbenchCommandConsumer(taskId, "started");
+      markWorkbenchDrainBoundary(taskId);
       return true;
     });
 

@@ -124,6 +124,40 @@ describe("getActiveExecutionsAcrossWorkspaces", () => {
 
     await testDb.taskExecution.deleteMany({ where: { id: { in: [completed.id, failed.id] } } });
   });
+
+  it("does not attach a previous execution's STOPPED runtime to a new execution", async () => {
+    await testDb.workbenchRuntime.upsert({
+      where: { taskId },
+      create: {
+        taskId,
+        executionId: "execution-old",
+        state: "STOPPED",
+        blockedReason: "Workbench terminal was stopped",
+      },
+      update: {
+        executionId: "execution-old",
+        state: "STOPPED",
+        blockedReason: "Workbench terminal was stopped",
+      },
+    });
+    const execution = await testDb.taskExecution.create({
+      data: { taskId, agent: "CLAUDE_CODE", status: "RUNNING", startedAt: new Date() },
+    });
+
+    const result = await getActiveExecutionsFn();
+    expect(result.find((candidate) => candidate.executionId === execution.id)?.workbenchRuntime)
+      .toMatchObject({
+        executionId: execution.id,
+        runtimeExecutionId: "execution-old",
+        syncState: "STALE",
+        state: "STARTING",
+        activeBatchId: null,
+        blockedReason: null,
+      });
+
+    await testDb.workbenchRuntime.delete({ where: { taskId } });
+    await testDb.taskExecution.delete({ where: { id: execution.id } });
+  });
 });
 
 describe("startTaskExecution with worktree fields", () => {

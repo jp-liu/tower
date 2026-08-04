@@ -70,11 +70,20 @@ async function initializeNodeRuntime() {
   const gCompletion = globalThis as typeof globalThis & { __providerCompletionRecoveryStarted?: boolean };
   if (!gCompletion.__providerCompletionRecoveryStarted) {
     gCompletion.__providerCompletionRecoveryStarted = true;
+    let recoveryRunning = false;
     const recover = async () => {
-      const { recoverPendingProviderCompletions } = await import(
-        "@/lib/terminal/provider-completion-recovery"
-      );
-      await recoverPendingProviderCompletions();
+      if (recoveryRunning) return;
+      recoveryRunning = true;
+      try {
+        const { recoverPendingProviderCompletions } = await import(
+          "@/lib/terminal/provider-completion-recovery"
+        );
+        await recoverPendingProviderCompletions();
+      } catch (error) {
+        console.error("[provider-completion] Durable recovery failed:", error);
+      } finally {
+        recoveryRunning = false;
+      }
     };
     const first = setTimeout(() => void recover(), 250);
     first.unref?.();
@@ -84,30 +93,29 @@ async function initializeNodeRuntime() {
 
   const gWorkbench = globalThis as typeof globalThis & {
     __workbenchReconcilerStarted?: boolean;
-    __workbenchReconcilerRunning?: boolean;
   };
   if (!gWorkbench.__workbenchReconcilerStarted) {
     gWorkbench.__workbenchReconcilerStarted = true;
-    const reconcile = async () => {
-      if (gWorkbench.__workbenchReconcilerRunning) return;
-      gWorkbench.__workbenchReconcilerRunning = true;
-      try {
-        const {
-          heartbeatActiveWorkbenchRuntimes,
-          reconcilePendingWorkbenchEvents,
-          recoverWorkbenchEventClaims,
-        } = await import("@/lib/workbench/coordinator");
-        await recoverWorkbenchEventClaims();
-        await reconcilePendingWorkbenchEvents();
-        await heartbeatActiveWorkbenchRuntimes();
-      } catch (error) {
-        console.error("[workbench] Durable reconciliation failed:", error);
-      } finally {
-        gWorkbench.__workbenchReconcilerRunning = false;
-      }
-    };
-    setTimeout(() => void reconcile(), 500);
-    setInterval(() => void reconcile(), 2_000);
+    const [coordinator, maintenance] = await Promise.all([
+      import("@/lib/workbench/coordinator"),
+      import("@/lib/workbench/runtime-maintenance"),
+    ]);
+    const runners = maintenance.createWorkbenchRuntimeMaintenanceRunners({
+      recoverClaims: coordinator.recoverWorkbenchEventClaims,
+      reconcilePending: coordinator.reconcilePendingWorkbenchEvents,
+      heartbeat: coordinator.heartbeatActiveWorkbenchRuntimes,
+      reportError(operation, error) {
+        console.error(`[workbench] ${operation === "heartbeat" ? "Runtime heartbeat" : "Durable reconciliation"} failed:`, error);
+      },
+    });
+    const firstReconcile = setTimeout(() => void runners.reconcile(), 500);
+    firstReconcile.unref?.();
+    const reconcileInterval = setInterval(() => void runners.reconcile(), 2_000);
+    reconcileInterval.unref?.();
+    const firstHeartbeat = setTimeout(() => void runners.heartbeat(), 500);
+    firstHeartbeat.unref?.();
+    const heartbeatInterval = setInterval(() => void runners.heartbeat(), 2_000);
+    heartbeatInterval.unref?.();
   }
 
   const gGateway = globalThis as typeof globalThis & {

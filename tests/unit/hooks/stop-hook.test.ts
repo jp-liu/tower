@@ -70,6 +70,10 @@ describe("Stop hook API", () => {
         workspace: { name: "Test Workspace" },
       },
     });
+    (db.taskExecution.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "cexec12345678901234",
+      status: "RUNNING",
+    });
 
     const { POST } = await import("@/app/api/internal/hooks/stop/route");
     const request = new Request("http://localhost:3000/api/internal/hooks/stop", {
@@ -77,6 +81,7 @@ describe("Stop hook API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         taskId: "ctask123456789012345",
+        executionId: "cexec12345678901234",
         sessionId: "test-session-123",
       }),
     });
@@ -114,6 +119,10 @@ describe("Stop hook API", () => {
         workspace: { name: "Test Workspace" },
       },
     });
+    (db.taskExecution.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "cexec12345678901234",
+      status: "RUNNING",
+    });
 
     const { POST } = await import("@/app/api/internal/hooks/stop/route");
     const request = new Request("http://localhost:3000/api/internal/hooks/stop", {
@@ -121,6 +130,7 @@ describe("Stop hook API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         taskId: "ctask123456789012345",
+        executionId: "cexec12345678901234",
         sessionId: "test-session-123",
       }),
     });
@@ -149,6 +159,10 @@ describe("Stop hook API", () => {
         workspace: { name: "Test Workspace" },
       },
     });
+    (db.taskExecution.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "cexec12345678901234",
+      status: "RUNNING",
+    });
     // 该任务有等待人回复的 OPEN ask → 走 park 分叉
     (db.harnessMessage.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "creq12345678901234567",
@@ -161,7 +175,11 @@ describe("Stop hook API", () => {
     const request = new Request("http://localhost:3000/api/internal/hooks/stop", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ taskId: "ctask123456789012345", sessionId: "s1" }),
+      body: JSON.stringify({
+        taskId: "ctask123456789012345",
+        executionId: "cexec12345678901234",
+        sessionId: "s1",
+      }),
     });
 
     const response = await POST(request as never);
@@ -175,7 +193,7 @@ describe("Stop hook API", () => {
       "Test Task",
       "",
       "Which implementation should I use?",
-      { sessionId: "s1", eventId: undefined, executionId: null },
+      { sessionId: "s1", eventId: undefined, executionId: "cexec12345678901234" },
     );
     // park 不是普通完成事件，也不能开放自动 drain 边界。
     expect(mockNotifyParent).not.toHaveBeenCalled();

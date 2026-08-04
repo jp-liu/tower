@@ -126,6 +126,21 @@ export function deriveWorkbenchRuntimeState(input: {
   return "IDLE";
 }
 
+export function deriveWorkbenchBlockedReason(input: {
+  hasLiveSession: boolean;
+  hasActiveBatch: boolean;
+  pendingEvents: number;
+  isAtTurnBoundary: boolean;
+}): string | null {
+  if (!input.hasLiveSession) {
+    return "Database execution is RUNNING but no live terminal session exists";
+  }
+  if (input.hasActiveBatch) return "Workbench is processing a durable batch";
+  if (!input.isAtTurnBoundary) return "Provider turn in progress";
+  if (input.pendingEvents > 0) return "Durable work is awaiting dispatch";
+  return null;
+}
+
 /**
  * Refresh the persisted operational projection from the durable inbox plus the
  * current execution. Generation changes only when a different execution owns
@@ -241,15 +256,12 @@ export async function heartbeatActiveWorkbenchRuntimes(): Promise<number> {
     await recordWorkbenchRuntime(execution.taskId, state, {
       executionId: execution.id,
       activeBatchId: activeBatch?.id ?? null,
-      blockedReason: !hasLiveSession
-        ? "Database execution is RUNNING but no live terminal session exists"
-        : activeBatch
-          ? "Workbench is processing a durable batch"
-          : pendingEvents > 0
-            ? session!.isAtTurnBoundary
-              ? "Durable work is awaiting dispatch"
-              : "Provider turn in progress"
-            : null,
+      blockedReason: deriveWorkbenchBlockedReason({
+        hasLiveSession,
+        hasActiveBatch: Boolean(activeBatch),
+        pendingEvents,
+        isAtTurnBoundary: session?.isAtTurnBoundary ?? false,
+      }),
     });
   }
   return executions.length;
@@ -972,13 +984,16 @@ export async function deliverWorkbenchBatchToParent(batch: WorkbenchDrainBatch):
   }
 }
 
-async function drainReadyParent(parentTaskId: string): Promise<void> {
+export async function drainReadyWorkbenchParent(
+  parentTaskId: string,
+  deliver: WorkbenchBatchDelivery = deliverWorkbenchBatchToParent,
+): Promise<void> {
   if (!hasWorkbenchDrainBoundary(parentTaskId)) return;
   const pending = await db.workbenchEvent.count({
     where: { parentTaskId, state: "PENDING" },
   });
   if (pending === 0 || !takeWorkbenchDrainBoundary(parentTaskId)) return;
-  const result = await drainWorkbenchEvents(parentTaskId);
+  const result = await drainWorkbenchEvents(parentTaskId, deliver);
   if (!result.delivered) {
     const session = getSession(parentTaskId);
     if (session && !session.killed) {
@@ -995,7 +1010,7 @@ function scheduleReadyParentDrain(
 ): void {
   const delay = overrideDelay ?? (priority === "HIGH" ? WORKBENCH_HIGH_COALESCE_MS : WORKBENCH_NORMAL_COALESCE_MS);
   scheduleAtWorkbenchDrainBoundary(parentTaskId, delay, () => {
-    void drainReadyParent(parentTaskId).catch((error) => {
+    void drainReadyWorkbenchParent(parentTaskId).catch((error) => {
       log.error("Scheduled Workbench drain failed", error, { parentTaskId });
     });
   });
@@ -1158,8 +1173,15 @@ export async function reconcilePendingWorkbenchEvents(
             continue;
           }
         } else {
-          // A newly started/resumed CLI begins at an empty-input boundary.
-          openWorkbenchDrainBoundary(parentTaskId);
+          // A new CLI may still be booting or processing its startup prompt.
+          // Wait for its provider callback (or persisted completion replay)
+          // instead of inheriting the previous execution's turn boundary.
+          await recordWorkbenchRuntime(parentTaskId, "STARTING", {
+            executionId: resumed.executionId,
+            blockedReason: "Waiting for the current execution's provider-confirmed turn boundary",
+          });
+          result.busy++;
+          continue;
         }
       }
       await recordWorkbenchRuntime(parentTaskId, "IDLE", {

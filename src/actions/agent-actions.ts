@@ -54,11 +54,14 @@ export interface ActiveExecutionInfo {
   /** Task carries the builtin "Tower" label → a system/workbench task, not completable via merge. */
   isSystemTask: boolean;
   workbenchRuntime: {
+    executionId: string;
+    runtimeExecutionId: string | null;
+    syncState: "CURRENT" | "STALE" | "MISSING";
     generation: number;
     state: "STARTING" | "IDLE" | "BUSY" | "BLOCKED" | "DEGRADED" | "STOPPED";
     activeBatchId: string | null;
     pendingEvents: number;
-    lastHeartbeatAt: string;
+    lastHeartbeatAt: string | null;
     blockedReason: string | null;
     lastError: string | null;
   } | null;
@@ -1200,35 +1203,63 @@ export async function getActiveExecutionsAcrossWorkspaces(): Promise<ActiveExecu
           },
           labels: { include: { label: true } },
           workbenchRuntime: true,
+          _count: {
+            select: {
+              workbenchParentEvents: {
+                where: { state: { in: ["PENDING", "PROCESSING"] } },
+              },
+            },
+          },
         },
       },
     },
   });
-  return executions.map((e) => ({
-    executionId: e.id,
-    taskId: e.taskId,
-    taskTitle: e.task.title,
-    projectId: e.task.project.id,
-    projectName: e.task.project.name,
-    projectAlias: e.task.project.alias,
-    projectLocalPath: e.task.project.localPath,
-    workspaceId: e.task.project.workspace.id,
-    workspaceName: e.task.project.workspace.name,
-    worktreePath: e.worktreePath,
-    subPath: e.task.subPath ?? null,
-    startedAt: e.startedAt?.toISOString() ?? null,
-    // Builtin "Tower" label marks system/workbench tasks (same check the MCP report tools use).
-    isSystemTask: e.task.labels.some((tl) => tl.label.name === "Tower" && tl.label.isBuiltin),
-    workbenchRuntime: e.task.workbenchRuntime
-      ? {
-          generation: e.task.workbenchRuntime.generation,
-          state: e.task.workbenchRuntime.state,
-          activeBatchId: e.task.workbenchRuntime.activeBatchId,
-          pendingEvents: e.task.workbenchRuntime.pendingEvents,
-          lastHeartbeatAt: e.task.workbenchRuntime.lastHeartbeatAt.toISOString(),
-          blockedReason: e.task.workbenchRuntime.blockedReason,
-          lastError: e.task.workbenchRuntime.lastError,
-        }
-      : null,
-  }));
+  return executions.map((e) => {
+    const isSystemTask = e.task.labels.some((tl) => tl.label.name === "Tower" && tl.label.isBuiltin);
+    const runtime = e.task.workbenchRuntime;
+    const runtimeIsCurrent = runtime?.executionId === e.id;
+    return {
+      executionId: e.id,
+      taskId: e.taskId,
+      taskTitle: e.task.title,
+      projectId: e.task.project.id,
+      projectName: e.task.project.name,
+      projectAlias: e.task.project.alias,
+      projectLocalPath: e.task.project.localPath,
+      workspaceId: e.task.project.workspace.id,
+      workspaceName: e.task.project.workspace.name,
+      worktreePath: e.worktreePath,
+      subPath: e.task.subPath ?? null,
+      startedAt: e.startedAt?.toISOString() ?? null,
+      // Builtin "Tower" label marks system/workbench tasks (same check the MCP report tools use).
+      isSystemTask,
+      workbenchRuntime: runtime
+        ? {
+            executionId: e.id,
+            runtimeExecutionId: runtime.executionId,
+            syncState: runtimeIsCurrent ? "CURRENT" as const : "STALE" as const,
+            generation: runtime.generation,
+            state: runtimeIsCurrent ? runtime.state : "STARTING" as const,
+            activeBatchId: runtimeIsCurrent ? runtime.activeBatchId : null,
+            pendingEvents: e.task._count.workbenchParentEvents,
+            lastHeartbeatAt: runtime.lastHeartbeatAt.toISOString(),
+            blockedReason: runtimeIsCurrent ? runtime.blockedReason : null,
+            lastError: runtimeIsCurrent ? runtime.lastError : null,
+          }
+        : isSystemTask
+          ? {
+              executionId: e.id,
+              runtimeExecutionId: null,
+              syncState: "MISSING" as const,
+              generation: 0,
+              state: "STARTING" as const,
+              activeBatchId: null,
+              pendingEvents: e.task._count.workbenchParentEvents,
+              lastHeartbeatAt: null,
+              blockedReason: null,
+              lastError: null,
+            }
+          : null,
+    };
+  });
 }
