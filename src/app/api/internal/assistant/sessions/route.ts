@@ -47,8 +47,14 @@ export async function GET(request: NextRequest) {
 
   const requestedId = request.nextUrl.searchParams.get("sessionId");
   if (!requestedId) {
+    const originParam = request.nextUrl.searchParams.get("origin")?.toLowerCase();
+    const origin = originParam === "gateway" ? "GATEWAY" : originParam === "all" ? "ALL" : "UI";
     try {
-      const databaseSessions = await assistantSessionService.listSessions();
+      const databaseSessions = await assistantSessionService.listSessions({ origin });
+      // Legacy disk sessions are always UI-origin — skip them when explicitly asking for gateway.
+      if (origin === "GATEWAY") {
+        return NextResponse.json({ sessions: databaseSessions.slice(0, 50) });
+      }
       const imported = await assistantSessionService.listImportedLegacyIds();
       let legacySessions: Array<Record<string, unknown>> = [];
       let legacyError: string | undefined;

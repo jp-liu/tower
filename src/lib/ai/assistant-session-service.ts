@@ -76,12 +76,15 @@ export interface AssistantBinding {
   versionName?: string;
 }
 
+export type AssistantOrigin = "UI" | "GATEWAY";
+
 export interface AssistantSessionView extends AssistantBinding {
   id: string;
   title: string;
   createdAt: string;
   updatedAt: string;
   lastMessageAt: string;
+  origin: AssistantOrigin;
   legacy?: boolean;
 }
 
@@ -197,8 +200,8 @@ function bindingIds(binding: AssistantBinding) {
 function sessionView(session: {
   id: string; title: string; workspaceId: string | null; workspaceNameSnapshot: string | null;
   projectId: string | null; projectNameSnapshot: string | null; versionId: string | null;
-  versionNameSnapshot: string | null; legacySource: string | null; createdAt: Date; updatedAt: Date;
-  lastMessageAt: Date;
+  versionNameSnapshot: string | null; legacySource: string | null; origin?: string | null;
+  createdAt: Date; updatedAt: Date; lastMessageAt: Date;
 }): AssistantSessionView {
   return {
     id: session.id,
@@ -206,6 +209,7 @@ function sessionView(session: {
     createdAt: session.createdAt.toISOString(),
     updatedAt: session.updatedAt.toISOString(),
     lastMessageAt: session.lastMessageAt.toISOString(),
+    origin: session.origin === "GATEWAY" ? "GATEWAY" : "UI",
     ...(session.workspaceId ? { workspaceId: session.workspaceId } : {}),
     ...(session.workspaceNameSnapshot ? { workspaceName: session.workspaceNameSnapshot } : {}),
     ...(session.projectId ? { projectId: session.projectId } : {}),
@@ -291,11 +295,15 @@ export class AssistantSessionService {
     return sessionView(session);
   }
 
-  async listSessions(limit = MAX_ASSISTANT_SESSIONS): Promise<AssistantSessionView[]> {
+  async listSessions(
+    options: { origin?: AssistantOrigin | "ALL"; limit?: number } = {},
+  ): Promise<AssistantSessionView[]> {
     await this.reconcileInterrupted();
+    const origin = options.origin ?? "UI";
     const sessions = await this.client.assistantSession.findMany({
+      where: origin === "ALL" ? undefined : { origin },
       orderBy: [{ lastMessageAt: "desc" }, { createdAt: "desc" }],
-      take: Math.min(MAX_ASSISTANT_SESSIONS, Math.max(1, limit)),
+      take: Math.min(MAX_ASSISTANT_SESSIONS, Math.max(1, options.limit ?? MAX_ASSISTANT_SESSIONS)),
     });
     return sessions.map(sessionView);
   }

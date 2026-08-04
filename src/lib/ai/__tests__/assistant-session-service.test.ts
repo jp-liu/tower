@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { vi } from "vitest";
 import { up } from "../../../../scripts/migrations/0013-assistant-sessions";
+import { up as addOrigin } from "../../../../scripts/migrations/0035-assistant-session-origin";
 import {
   AssistantSessionError,
   AssistantSessionService,
@@ -31,7 +32,9 @@ async function service() {
   await prisma.$executeRawUnsafe(`INSERT INTO "Workspace" ("id", "name") VALUES ('w1', 'Workspace One'), ('w2', 'Workspace Two')`);
   await prisma.$executeRawUnsafe(`INSERT INTO "Project" ("id", "name", "alias", "workspaceId") VALUES ('p1', 'Project One', 'P1', 'w1'), ('p2', 'Project Two', NULL, 'w2')`);
   await prisma.$executeRawUnsafe(`INSERT INTO "Version" ("id", "name", "number", "projectId") VALUES ('v1', 'Release One', '1.0', 'p1'), ('v2', 'Release Two', '2.0', 'p2')`);
+  await prisma.$executeRawUnsafe(`CREATE TABLE "GatewaySession" ("id" TEXT NOT NULL PRIMARY KEY, "assistantSessionId" TEXT)`);
   await up(prisma);
+  await addOrigin(prisma);
   return { prisma, sessions: new AssistantSessionService(prisma) };
 }
 
@@ -83,6 +86,47 @@ describe("AssistantSessionService", () => {
       expect(client.find((message) => message.toolId === "tool-1")?.content).toContain("Result:");
       const api = assistantMessagesToApi(messages);
       expect(api.map((message) => message.role)).toEqual(["user", "assistant", "tool", "assistant"]);
+    } finally {
+      await prisma.$disconnect();
+    }
+  });
+
+  it("hides gateway-origin sessions from the default list but exposes them on request", async () => {
+    const { prisma, sessions } = await service();
+    try {
+      const ui = await sessions.createSession({}, "UI session");
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "AssistantSession" ("id", "title", "origin", "createdAt", "updatedAt", "lastMessageAt")` +
+          ` VALUES ('as_gw', 'gateway discussion', 'GATEWAY', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      );
+
+      const def = await sessions.listSessions();
+      expect(def.map((s) => s.id)).toEqual([ui.id]);
+      expect(def[0]!.origin).toBe("UI");
+
+      const gateway = await sessions.listSessions({ origin: "GATEWAY" });
+      expect(gateway.map((s) => s.id)).toEqual(["as_gw"]);
+      expect(gateway[0]!.origin).toBe("GATEWAY");
+
+      const all = await sessions.listSessions({ origin: "ALL" });
+      expect(all.map((s) => s.id).sort()).toEqual([ui.id, "as_gw"].sort());
+    } finally {
+      await prisma.$disconnect();
+    }
+  });
+
+  it("backfills origin for sessions referenced by a GatewaySession", async () => {
+    const { prisma, sessions } = await service();
+    try {
+      const legacyGateway = await sessions.createSession({}, "old gateway discussion");
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "GatewaySession" ("id", "assistantSessionId") VALUES ('gw1', ?)`,
+        legacyGateway.id,
+      );
+      await addOrigin(prisma); // idempotent re-run performs the backfill UPDATE
+      const gateway = await sessions.listSessions({ origin: "GATEWAY" });
+      expect(gateway.map((s) => s.id)).toEqual([legacyGateway.id]);
+      expect(await sessions.listSessions()).toEqual([]);
     } finally {
       await prisma.$disconnect();
     }

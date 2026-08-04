@@ -91,6 +91,20 @@ describe("Assistant sessions route", () => {
   it("merges DB sessions with only unimported legacy sessions", async () => {
     const payload = await (await GET(request())).json();
     expect(payload.sessions.map((session: { id: string }) => session.id)).toEqual([NEW_LEGACY_ID, TOWER_ID]);
+    expect(mocks.listSessions).toHaveBeenCalledWith({ origin: "UI" });
+  });
+
+  it("returns gateway-origin sessions without merging legacy disk sessions", async () => {
+    const payload = await (await GET(request("?origin=gateway"))).json();
+    expect(mocks.listSessions).toHaveBeenCalledWith({ origin: "GATEWAY" });
+    expect(mocks.legacyList).not.toHaveBeenCalled();
+    expect(payload.sessions.map((session: { id: string }) => session.id)).toEqual([TOWER_ID]);
+  });
+
+  it("passes origin=all through and still merges legacy sessions", async () => {
+    await GET(request("?origin=all"));
+    expect(mocks.listSessions).toHaveBeenCalledWith({ origin: "ALL" });
+    expect(mocks.legacyList).toHaveBeenCalled();
   });
 
   it("imports a legacy session on first read and returns its Tower id", async () => {

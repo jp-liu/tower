@@ -1085,6 +1085,7 @@ async function ensureSession(
           data: {
             id: assistantSessionId,
             title: `${project.name} gateway discussion`,
+            origin: "GATEWAY",
             workspaceId: project.workspaceId,
             workspaceNameSnapshot: project.workspaceName,
             projectId: project.projectId,
