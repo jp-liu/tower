@@ -16,10 +16,10 @@ Feishu/WhatsApp/Slack/etc. are downstream platforms, not Tower gateways. Tower s
 
 | Role | Who | Does what |
 |------|-----|-----------|
-| **tower-goal (unattended)** | A task that activated the `tower-goal` skill at run time | Activating it (`/tower-goal <goal>`) enters unattended autonomous run: work silently toward the goal, and on stuck/done push out via tower-ask and park. Activation = authorization (may create tasks, act as the hub for child tasks). **Entered by human activation, not decided by a backend flag.** |
+| **tower-goal (unattended)** | A task that activated the `tower-goal` skill at run time | Activating it (`/tower-goal <goal>`) enters unattended autonomous run: work silently toward the goal, and on stuck/done push out via tower-ask and park. Activation authorizes scheduling inside existing Tower/project permissions, but never grants R2/R3 external side effects. **Entered by human activation, not decided by a backend flag.** |
 | **tower-ask (outbound)** | The task agent (`tower-ask` skill) | Call `list_notify_targets` to get ready-to-follow send instructions. Hermes/OpenClaw-backed channels use `push_to_human` (send first, then record/park atomically). |
 | **bridge (inbound)** | A long-running MCP agent (bot / OpenClaw / …) | Own first-hop intent routing. Ordinary Q&A/external work stays outside Tower; Tower replies are resolved read-only before an explicit query, ask answer, delegation, or continuation action. |
-| **tower-bridge (routing)** | The task agent (`tower-bridge` skill) | Route prepared content from a task to a human channel, `o-tower`, a sibling task, or a specialist operator such as `xiao-fei`. Human sends still use `tower-ask`; agent/task handoff uses Tower terminal or gateway-native delegation. |
+| **tower-bridge (external capability)** | The task agent (`tower-bridge` skill) | Submit a structured external capability request without choosing a concrete Operator. Human sends use `tower-ask`; sibling-task handoff stays in the `tower` skill. |
 
 > `tower-goal` / `tower-ask` / `tower-bridge` are **real callable skills** distributed with Tower into task-agent skill homes. Lowercase `bridge` is still this doc's name for the inbound gateway role.
 

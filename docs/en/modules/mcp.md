@@ -65,7 +65,9 @@ tool handlers.
 |------|-------------|
 | `workspace-tools.ts` | Workspace CRUD |
 | `project-tools.ts` | Project CRUD + product groups |
-| `task-tools.ts` | Task CRUD + move + defaults + versions + set_goal_mode |
+| `task-tools.ts` | Task CRUD + move + defaults + versions |
+| `unattended-goal-tools.ts` | Optional unattended Goal runtime (outside Core; grants no external authorization) |
+| `gateway-capability-tools.ts` | Read-only external Capability Job reconciliation |
 | `label-tools.ts` | Label CRUD + set_task_labels |
 | `search-tools.ts` | Global search |
 | `knowledge-tools.ts` | identify_project |

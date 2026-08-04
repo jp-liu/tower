@@ -110,9 +110,6 @@ export async function updateTaskStatus(
   const statusData = {
     status,
     doneAt: status === "DONE" ? new Date() : null,
-    ...(status === "DONE" || status === "CANCELLED" || status === "IN_REVIEW"
-      ? { unattended: false }
-      : {}),
   };
   const includeProject = { project: true } as const;
   const outbox = options?.gatewayCompletionOutbox;
@@ -158,15 +155,15 @@ export async function updateTaskStatus(
     : await db.task.update({
         where: { id: taskId },
         // 进入 DONE 记录时间戳作为归档基准；离开 DONE 清空（编辑已完成任务不会重置倒计时）。
-        // Leaving the active loop (DONE/CANCELLED/IN_REVIEW) ends tower-goal mode → clear the flag.
+        // Goal lifecycle is projected by the optional unattended-goal module below.
         data: statusData,
         include: includeProject,
       });
 
-  // Leaving the active loop clears goal mode → remove the PreToolUse hook's signal file too.
+  // Lifecycle producers report facts; the optional goal module owns its state.
   if (status === "DONE" || status === "CANCELLED" || status === "IN_REVIEW") {
-    const { setUnattendedSignal } = await import("@/lib/harness/unattended-signal");
-    setUnattendedSignal(taskId, false);
+    const { endUnattendedGoalIfActive } = await import("@/lib/unattended-goal/runtime");
+    await endUnattendedGoalIfActive(db, taskId, "TASK_LEFT_ACTIVE_LOOP");
   }
 
   // Direct mode DONE: record current HEAD as mergeCommit for diff archive.

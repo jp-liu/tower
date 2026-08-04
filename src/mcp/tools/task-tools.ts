@@ -575,27 +575,6 @@ export const taskTools = {
     },
   },
 
-  set_goal_mode: {
-    description:
-      "Mark (or unmark) a task as being in unattended 'goal mode' — the run-time state entered by activating " +
-      "the tower-goal skill. While on, list_notify_targets defaults to the 'unattended' scope (reach the owner) " +
-      "for this task, so blockers get pushed personally even if the agent later forgets it's in goal mode. The " +
-      "flag is a persistent marker (survives park/resume/compaction) and is auto-cleared when the task leaves " +
-      "the active loop (Stop, or moving to DONE/CANCELLED/IN_REVIEW). Call with on=true right when tower-goal " +
-      "is activated; you rarely need on=false (the lifecycle clears it).",
-    schema: z.object({
-      taskId: z.string().describe("The task entering/leaving goal mode (TOWER_TASK_ID)"),
-      on: z.boolean().describe("true = enter goal mode, false = leave"),
-    }),
-    handler: async (args: { taskId: string; on: boolean }) => {
-      await db.task.update({ where: { id: args.taskId }, data: { unattended: args.on } });
-      // Mirror to the signal file the PreToolUse hook reads (DB is unreachable from the hook).
-      const { setUnattendedSignal } = await import("@/lib/harness/unattended-signal");
-      setUnattendedSignal(args.taskId, args.on);
-      return { ok: true, taskId: args.taskId, goalMode: args.on };
-    },
-  },
-
   set_task_defaults: {
     description:
       "Save the user's default behavior for new tasks: useWorktree (Git worktree branch isolation) and autoStart (run immediately after create). " +

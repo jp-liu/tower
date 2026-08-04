@@ -83,7 +83,9 @@ MCP stdio 进程无法访问内存中的 PTY 会话，通过内部 HTTP 路由�
 |------|------|
 | `workspace-tools.ts` | Workspace CRUD |
 | `project-tools.ts` | Project CRUD + 产品组（product group） |
-| `task-tools.ts` | Task CRUD + move + 默认项 + 版本 + set_goal_mode |
+| `task-tools.ts` | Task CRUD + move + 默认项 + 版本 |
+| `unattended-goal-tools.ts` | 可选无人值守 Goal 运行态（不属于 Core、不授予外部权限） |
+| `gateway-capability-tools.ts` | 外部 Capability Job 只读状态对账 |
 | `label-tools.ts` | Label CRUD + set_task_labels |
 | `search-tools.ts` | 全局搜索 |
 | `knowledge-tools.ts` | identify_project（项目识别） |

@@ -31,7 +31,7 @@ Rule of thumb: **user named a specific group/person → `work`; nobody named, yo
 Call **`list_notify_targets`** (always pass the current `taskId` = env `TOWER_TASK_ID`):
 
 - **User explicitly named a group/person** → pass `scope: "work"` (overrides the default).
-- **Nobody named, you just need the owner** → **omit `scope`** and let the tool derive it from the task's goal-mode flag: goal mode on (`set_goal_mode` was set) → `unattended` (reach the owner); otherwise → `work`. This keeps you correct even if your context was compacted and you forgot whether you're looping.
+- **Nobody named, you just need the owner** → **omit `scope`** and let the tool derive it from the task's persisted goal runtime: goal mode on (`set_goal_mode` was set) → `unattended` (reach the owner); otherwise → `work`. This keeps you correct even if your context was compacted and you forgot whether you're looping.
 
 It **reads the active channel of that scope from Tower's DB** and returns assembled `instructions` — real gateway (OpenClaw / Hermes), downstream platform, destination guidance, the `[[tower:task=<id>]]` token filled with your taskId, and whether to park. **Just do what `instructions` says.**
 

@@ -18,7 +18,7 @@ export const messagingTools = {
         .describe(
           "Channel class: 'work' (in-office, send to a group) or 'unattended' (off-hours, reach you). " +
             "Pass it when the user explicitly named a destination (group → 'work'). If omitted, it defaults " +
-            "from the task's goal-mode flag: goal mode on → 'unattended', off → 'work'.",
+            "from the task's persisted goal runtime: goal mode on → 'unattended', off → 'work'.",
         ),
       taskId: z
         .string()

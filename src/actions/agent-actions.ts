@@ -71,6 +71,27 @@ export interface TerminalExecutionResult extends TerminalTargetSnapshot {
 
 const log = logger.create("agent-actions");
 
+async function reportUnattendedGoalLifecycle(
+  taskId: string,
+  event: "TERMINAL_STOPPED" | "TERMINAL_COMPLETED",
+): Promise<void> {
+  const { endUnattendedGoalIfActive } = await import("@/lib/unattended-goal/runtime");
+  await endUnattendedGoalIfActive(db, taskId, event);
+}
+
+async function reportUnattendedGoalLifecycleBestEffort(
+  taskId: string,
+  event: "TERMINAL_COMPLETED",
+): Promise<void> {
+  try {
+    await reportUnattendedGoalLifecycle(taskId, event);
+  } catch (error) {
+    log.error("Failed to report unattended goal completion", error);
+    const { setUnattendedSignal } = await import("@/lib/harness/unattended-signal");
+    setUnattendedSignal(taskId, false);
+  }
+}
+
 function refreshWorkspaces(): void {
   try {
     revalidatePath("/workspaces");
@@ -240,11 +261,12 @@ export async function stopPtyExecution(taskId: string): Promise<void> {
       data: { status: "COMPLETED", endedAt: new Date() },
     });
 
-    // Transition task to IN_REVIEW; stopping also ends any tower-goal mode → clear the flag.
+    // Transition task to IN_REVIEW; stopping also ends the optional goal runtime.
     await db.task.update({
       where: { id: taskId },
-      data: { status: "IN_REVIEW", unattended: false },
+      data: { status: "IN_REVIEW" },
     });
+    await reportUnattendedGoalLifecycle(taskId, "TERMINAL_STOPPED");
 
     // Capture summary — use worktreePath or project localPath for direct mode
     const summaryPath = execution.worktreePath || task?.project?.localPath || null;
@@ -424,10 +446,11 @@ export async function resumePtyExecution(
       });
 
       if (exitCode === 0) {
-        // Natural exit → IN_REVIEW; also ends tower-goal mode → clear the flag.
+        // Natural exit → IN_REVIEW; also ends the optional goal runtime.
         // This is the resume/continue path (park → reply → exit), the MOST common
         // way a goal task ends — must clear here too, not only on fresh-start exit.
-        await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW", unattended: false } }).catch(() => {});
+        await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW" } }).catch(() => {});
+        await reportUnattendedGoalLifecycleBestEffort(taskId, "TERMINAL_COMPLETED");
       }
       },
       launch.envOverrides,
@@ -645,10 +668,11 @@ export async function continueLatestPtyExecution(
       });
 
       if (exitCode === 0) {
-        // Natural exit → IN_REVIEW; also ends tower-goal mode → clear the flag.
+        // Natural exit → IN_REVIEW; also ends the optional goal runtime.
         // This is the resume/continue path (park → reply → exit), the MOST common
         // way a goal task ends — must clear here too, not only on fresh-start exit.
-        await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW", unattended: false } }).catch(() => {});
+        await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW" } }).catch(() => {});
+        await reportUnattendedGoalLifecycleBestEffort(taskId, "TERMINAL_COMPLETED");
       }
       },
       launch.envOverrides,
@@ -1068,10 +1092,11 @@ export async function startPtyExecution(
               if (exitCode === 0) {
                 await db.task.update({
                   where: { id: taskId },
-                  data: { status: "IN_REVIEW", unattended: false },
+                  data: { status: "IN_REVIEW" },
                 }).catch((err: unknown) => {
                   log.error("Failed to update task status", err);
                 });
+                await reportUnattendedGoalLifecycleBestEffort(taskId, "TERMINAL_COMPLETED");
               }
 
               if (tempDir) await rm(tempDir, { recursive: true, force: true }).catch(() => {});
