@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 const tar = require("tar");
+const { isWindows } = require("./release-platform.js");
 
 const projectRoot = path.join(__dirname, "..");
 const packageJson = require(path.join(projectRoot, "package.json"));
@@ -215,7 +216,7 @@ async function buildPortableRelease(options) {
 
     fs.copyFileSync(path.join(portableDependenciesRoot, "package.json"), path.join(packageRoot, "package.json"));
     fs.copyFileSync(path.join(portableDependenciesRoot, "package-lock.json"), path.join(packageRoot, "package-lock.json"));
-    execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", [
+    execFileSync(isWindows() ? "npm.cmd" : "npm", [
       "ci", "--omit=dev", "--include=optional", "--no-audit", "--no-fund", "--foreground-scripts",
       "--registry=https://registry.npmjs.org/",
     ], {

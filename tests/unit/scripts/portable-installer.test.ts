@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
+import { isWindows } from "@/lib/platform";
 
 const projectRoot = path.resolve(import.meta.dirname, "../../..");
 const require = createRequire(import.meta.url);
@@ -19,7 +20,7 @@ function payload(parent: string, version: string, rootName = `payload-${version}
   chmodSync(path.join(root, "install"), 0o755);
   chmodSync(path.join(root, "bin/tower"), 0o755);
   writeFileSync(path.join(root, "runtime/package/bin/tower.mjs"), `console.log("tower v${version}");\n`);
-  const platform = process.platform === "win32" ? "windows" : process.platform;
+  const platform = isWindows() ? "windows" : process.platform;
   writeFileSync(path.join(root, "portable-manifest.json"), JSON.stringify({
     version, platform, arch: process.arch,
     node: { minimum: "22.0.0", tested: ["22", "24"], knownIncompatible: [] },
@@ -31,7 +32,7 @@ afterEach(() => {
   while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true });
 });
 
-describe.runIf(process.platform !== "win32")("portable user installer", () => {
+describe.runIf(!isWindows())("portable user installer", () => {
   it("installs, upgrades, rolls back, and uninstalls without touching user data", () => {
     const temp = mkdtempSync(path.join(tmpdir(), "tower-installer-test-"));
     roots.push(temp);

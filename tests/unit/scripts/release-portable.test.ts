@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { isWindows } from "@/lib/platform";
 
 const require = createRequire(import.meta.url);
 const { assertPortableRoot } = require("../../../scripts/release-portable-canary.js");
@@ -19,7 +20,7 @@ function fixture() {
   const root = mkdtempSync(path.join(tmpdir(), "tower-portable-test-"));
   roots.push(root);
   const packageRoot = "runtime/package";
-  const platform = process.platform === "win32" ? "windows" : process.platform;
+  const platform = isWindows() ? "windows" : process.platform;
   const manifest = {
     schema: 1,
     package: "@tower-org/cli",

@@ -3,6 +3,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
+const { isWindows, portablePlatformName } = require("./release-platform.js");
 
 const EXPECTED_NODE = { minimum: "22.0.0", tested: ["22", "24"], knownIncompatible: [] };
 const SUPPORTED = new Set(["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "windows-x64"]);
@@ -43,7 +44,7 @@ function assertPortableRoot(root, runtime = { platform: process.platform, arch: 
   const manifestPath = path.join(root, "portable-manifest.json");
   if (!fs.existsSync(manifestPath)) throw new Error("Portable canary failed: portable-manifest.json is missing");
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-  const platform = runtime.platform === "win32" ? "windows" : runtime.platform;
+  const platform = portablePlatformName(runtime.platform);
   if (!SUPPORTED.has(`${manifest.platform}-${manifest.arch}`)) errors.push(`unsupported target ${manifest.platform}-${manifest.arch}`);
   if (manifest.platform !== platform || manifest.arch !== runtime.arch) {
     errors.push(`archive target ${manifest.platform}-${manifest.arch} does not match runner ${platform}-${runtime.arch}`);
@@ -90,7 +91,7 @@ function main() {
   if (!root) throw new Error("Usage: node scripts/release-portable-canary.js --root DIR");
   const result = assertPortableRoot(path.resolve(root));
   const tower = path.join(path.resolve(root), ...result.manifest.towerEntry.split("/"));
-  const output = process.platform === "win32"
+  const output = isWindows()
     ? execFileSync("cmd.exe", ["/d", "/c", tower, "--version"], { encoding: "utf8" })
     : execFileSync(tower, ["--version"], { encoding: "utf8" });
   if (output.trim() !== `tower v${result.manifest.version}`) throw new Error(`Portable version mismatch: ${output.trim()}`);

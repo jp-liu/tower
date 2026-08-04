@@ -6,6 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
 const { assertPortableRoot } = require("./release-portable-canary.js");
+const { isLinux, isWindows } = require("./release-platform.js");
 
 function option(name) {
   const index = process.argv.indexOf(name);
@@ -50,7 +51,7 @@ async function waitForHttp(port, child, logPath) {
 
 async function stop(child) {
   if (!child || child.exitCode !== null) return;
-  if (process.platform === "win32") {
+  if (isWindows()) {
     spawnSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore" });
   } else {
     child.kill("SIGTERM");
@@ -211,7 +212,7 @@ async function main() {
     if (help.status !== 0 || !help.stdout.includes("tower service install")) throw new Error("tower service help boundary missing");
     const service = spawnSync(process.execPath, [cli, "service", "status"], { cwd: packageRoot, env, encoding: "utf8" });
     const serviceOutput = `${service.stdout || ""}\n${service.stderr || ""}`;
-    if (process.platform === "linux") {
+    if (isLinux()) {
       if (service.status === 0 || !serviceOutput.includes("supports macOS LaunchAgent and Windows Task Scheduler")) {
         throw new Error(`Linux service boundary failed: ${serviceOutput}`);
       }
