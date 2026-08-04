@@ -143,7 +143,11 @@ function TaskRow({
               disabled={isLaunching}
               title={t("missions.continueSession")}
             >
-              <RotateCcw className="h-3 w-3 mr-1" />
+              {isLaunching ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : (
+                <RotateCcw className="h-3 w-3 mr-1" />
+              )}
               {t("missions.continueLabel")}
             </Button>
           )}
@@ -154,8 +158,12 @@ function TaskRow({
             disabled={isLaunching}
             title={t("missions.launchNew")}
           >
-            <Play className="h-3 w-3 mr-1" />
-            {isLaunching ? "..." : t("missions.launchNewLabel")}
+            {isLaunching ? (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            ) : (
+              <Play className="h-3 w-3 mr-1" />
+            )}
+            {t("missions.launchNewLabel")}
           </Button>
         </div>
       )}
@@ -203,7 +211,11 @@ function WorkbenchBar({
                 disabled={isLaunching}
                 title={t("missions.continueSession")}
               >
-                <RotateCcw className="h-3 w-3 mr-1" />
+                {isLaunching ? (
+                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-3 w-3 mr-1" />
+                )}
                 {t("missions.continueLabel")}
               </Button>
             )}
@@ -214,8 +226,12 @@ function WorkbenchBar({
               disabled={isLaunching}
               title={t("missions.launchNew")}
             >
-              <Play className="h-3 w-3 mr-1" />
-              {isLaunching ? "..." : t("missions.launchNewLabel")}
+              {isLaunching ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : (
+                <Play className="h-3 w-3 mr-1" />
+              )}
+              {t("missions.launchNewLabel")}
             </Button>
           </div>
         )}

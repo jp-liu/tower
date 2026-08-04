@@ -151,11 +151,11 @@ export function TopBar({ onCreateProject, username, workspaces, defaultWorkspace
 
   return (
     <>
-      <header className="grid h-12 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center border-b border-border bg-background/80 px-2 backdrop-blur-sm sm:px-5 xl:grid-cols-[10rem_minmax(0,1fr)_auto]">
-        <div className="hidden w-40 xl:block" />
+      <header className="grid h-12 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center border-b border-border bg-background/80 px-2 backdrop-blur-sm sm:px-5 lg:grid-cols-[10rem_minmax(0,1fr)_auto]">
+        <div className="hidden w-40 lg:block" />
 
         {/* Search + Assistant group */}
-        <div className="flex w-full min-w-0 items-center gap-2 justify-self-start xl:justify-self-center">
+        <div className="flex w-full min-w-0 items-center gap-2 justify-self-start lg:w-auto lg:justify-self-center">
           <Button
             variant="outline"
             onClick={() => setShowSearch(true)}
