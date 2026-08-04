@@ -198,4 +198,64 @@ describe("dynamic gateway channel access", () => {
       where: { key: GATEWAY_CHANNEL_ACCESS_CONFIG_KEY },
     })).resolves.toMatchObject({ value: expect.stringContaining('"revision":999') });
   });
+
+  it("recognizes the OWNER across feishu/lark platform aliases", async () => {
+    // ownerIds is stored under "feishu"; OpenClaw may label the same entity "lark".
+    await expect(decideGatewayChannelAccess({
+      gateway: "openclaw",
+      platform: "lark",
+      chatId: "oc_access_test",
+      senderId: "ou_real_owner",
+    })).resolves.toEqual({ role: "OWNER", allowed: true, scope: { mode: "ALL" } });
+  });
+
+  it("recognizes the OWNER across punctuation variants of the gateway id", async () => {
+    await expect(decideGatewayChannelAccess({
+      gateway: "open-claw",
+      platform: "feishu",
+      chatId: "oc_access_test",
+      senderId: "ou_real_owner",
+    })).resolves.toEqual({ role: "OWNER", allowed: true, scope: { mode: "ALL" } });
+  });
+
+  it("falls to NON_OWNER when the gateway has no ownerIds configured", async () => {
+    // hermes carries an empty config here → the real owner must still be denied,
+    // and the deny reason surfaces as an unauthorized channel (not a crash).
+    await expect(decideGatewayChannelAccess({
+      gateway: "hermes",
+      platform: "feishu",
+      chatId: "oc_access_test",
+      senderId: "ou_real_owner",
+    })).resolves.toEqual({ role: "NON_OWNER", allowed: false, reason: "CHANNEL_UNAUTHORIZED" });
+  });
+
+  it("keeps ownerIds when a legacy profile/env backfill applies", async () => {
+    // Explicit config carries ownerIds but no profile/env; a legacy target with
+    // profile/env must not clobber the whitelist (merge, not overwrite).
+    await db.systemConfig.update({
+      where: { key: HARNESS_GATEWAY_CONFIG_KEY },
+      data: {
+        value: JSON.stringify({
+          openclaw: { accessPolicy: { ownerIds: { feishu: ["ou_real_owner"] } } },
+        }),
+      },
+    });
+    await db.systemConfig.upsert({
+      where: { key: "harness.targets" },
+      create: {
+        key: "harness.targets",
+        value: JSON.stringify([{ gateway: "openclaw", profile: "o-tower", env: { HTTP_PROXY: "http://127.0.0.1:7897" } }]),
+      },
+      update: {
+        value: JSON.stringify([{ gateway: "openclaw", profile: "o-tower", env: { HTTP_PROXY: "http://127.0.0.1:7897" } }]),
+      },
+    });
+    await expect(decideGatewayChannelAccess({
+      gateway: "openclaw",
+      platform: "feishu",
+      chatId: "oc_access_test",
+      senderId: "ou_real_owner",
+    })).resolves.toEqual({ role: "OWNER", allowed: true, scope: { mode: "ALL" } });
+    await db.systemConfig.deleteMany({ where: { key: "harness.targets" } });
+  });
 });

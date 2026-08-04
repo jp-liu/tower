@@ -1,7 +1,10 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
 import { readHarnessGatewayRuntimeConfig } from "./gateway-config";
+
+const log = logger.create("gateway-owner");
 
 export const GATEWAY_CHANNEL_ACCESS_CONFIG_KEY = "tower-agent.channel-access.v1";
 export const GATEWAY_CHANNEL_ACCESS_VERSION = 1 as const;
@@ -127,6 +130,32 @@ export function normalizeGatewaySenderId(value: string | null | undefined): stri
   return normalizeGatewayIdentity(value)
     .replace(/^(?:feishu|lark|wechat|weixin):/, "")
     .replace(/^user:/, "");
+}
+
+// Collapse same-entity platform aliases so an owner id configured under one
+// literal (e.g. "feishu") still matches an inbound labeled with the other
+// (e.g. OpenClaw's "lark"). Owner-id VALUES already alias-collapse via the
+// prefix strip above; this closes the same gap for the ownerIds map KEY.
+export function canonicalGatewayPlatform(value: string | null | undefined): string {
+  const platform = normalizeGatewayIdentity(value);
+  if (platform === "lark") return "feishu";
+  if (platform === "weixin") return "wechat";
+  return platform;
+}
+
+// Tolerate punctuation variants of the gateway id (e.g. "open-claw" → "openclaw")
+// so a cosmetic spelling difference never silently drops the sender to NON_OWNER.
+export function canonicalGateway(value: string | null | undefined): string {
+  return normalizeGatewayIdentity(value).replace(/[^a-z0-9]/g, "");
+}
+
+// Non-reversible-enough fingerprint for diagnostics: keeps the id-type prefix
+// and last 4 chars so an operator can eyeball a mismatch without logging the
+// full identity. redactSecretValue in the logger is the second safety net.
+function ownerIdFingerprint(value: string): string {
+  const id = normalizeGatewaySenderId(value);
+  if (!id) return "∅";
+  return `${id.slice(0, 3)}…${id.length <= 4 ? id : id.slice(-4)}(${id.length})`;
 }
 
 export function gatewayChannelAccessKey(input: {
@@ -291,14 +320,44 @@ export async function isConfiguredGatewayOwner(input: {
   platform: string;
   senderId?: string | null;
 }): Promise<boolean> {
-  const gateway = normalizeGatewayIdentity(input.gateway);
-  if (gateway !== "openclaw" && gateway !== "hermes") return false;
+  const gateway = canonicalGateway(input.gateway);
+  if (gateway !== "openclaw" && gateway !== "hermes") {
+    log.warn("owner check denied", { reason: "gateway_unsupported", gateway });
+    return false;
+  }
   const senderId = normalizeGatewaySenderId(input.senderId);
-  if (!senderId) return false;
+  if (!senderId) {
+    log.warn("owner check denied", { reason: "sender_missing", gateway });
+    return false;
+  }
   const runtime = await readHarnessGatewayRuntimeConfig(gateway);
-  const platform = normalizeGatewayIdentity(input.platform);
-  return (runtime.accessPolicy?.ownerIds?.[platform] ?? [])
-    .some((ownerId) => normalizeGatewaySenderId(ownerId) === senderId);
+  const platform = canonicalGatewayPlatform(input.platform);
+  const ownerIds = runtime.accessPolicy?.ownerIds ?? {};
+  // Match the ownerIds map by CANONICAL platform, not literal key, so a
+  // whitelist stored under "feishu" still resolves a "lark" inbound and vice versa.
+  const whitelist = Object.entries(ownerIds)
+    .filter(([key]) => canonicalGatewayPlatform(key) === platform)
+    .flatMap(([, ids]) => ids);
+  if (whitelist.length === 0) {
+    log.warn("owner check denied", {
+      reason: "no_owner_ids_for_platform",
+      gateway,
+      platform,
+      configuredPlatforms: Object.keys(ownerIds),
+    });
+    return false;
+  }
+  const matched = whitelist.some((ownerId) => normalizeGatewaySenderId(ownerId) === senderId);
+  if (!matched) {
+    log.warn("owner check denied", {
+      reason: "sender_not_in_whitelist",
+      gateway,
+      platform,
+      sender: ownerIdFingerprint(senderId),
+      whitelist: whitelist.map(ownerIdFingerprint),
+    });
+  }
+  return matched;
 }
 
 async function scopeExists(scope: GatewayChannelScope): Promise<boolean> {
@@ -322,11 +381,21 @@ export async function decideGatewayChannelAccess(input: {
   }
   const { config } = await readStoredConfig();
   const record = config.channels[gatewayChannelAccessKey(input)];
-  if (!record) return { role: "NON_OWNER", allowed: false, reason: "CHANNEL_UNAUTHORIZED" };
+  const channel = {
+    gateway: canonicalGateway(input.gateway),
+    platform: canonicalGatewayPlatform(input.platform),
+    chat: normalizeGatewayChatId(input.chatId).slice(0, 8),
+  };
+  if (!record) {
+    log.info("channel access denied", { reason: "CHANNEL_UNAUTHORIZED", ...channel });
+    return { role: "NON_OWNER", allowed: false, reason: "CHANNEL_UNAUTHORIZED" };
+  }
   if (record.status === "REVOKED") {
+    log.info("channel access denied", { reason: "CHANNEL_REVOKED", ...channel });
     return { role: "NON_OWNER", allowed: false, reason: "CHANNEL_REVOKED" };
   }
   if (!(await scopeExists(record.scope))) {
+    log.info("channel access denied", { reason: "SCOPE_INVALID", ...channel, scope: record.scope.mode });
     return { role: "NON_OWNER", allowed: false, reason: "SCOPE_INVALID" };
   }
   return { role: "NON_OWNER", allowed: true, scope: record.scope };

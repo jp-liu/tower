@@ -114,7 +114,11 @@ export async function readHarnessGatewayConfigMap(): Promise<HarnessGatewayConfi
     const legacy = (Array.isArray(targets) ? targets : []).find(
       (target) => target.gateway?.trim().toLowerCase() === gateway && (target.profile || target.env),
     );
-    if (legacy) map[gateway] = cleanConfig(legacy);
+    // Merge (legacy fills only the missing profile/env), never overwrite: the
+    // explicit config's accessPolicy/ownerIds must survive a legacy backfill,
+    // otherwise a config carrying ownerIds but no profile/env silently loses
+    // its whitelist and drops every sender to NON_OWNER.
+    if (legacy) map[gateway] = { ...cleanConfig(legacy), ...map[gateway] };
   }
 
   return map;
