@@ -19,6 +19,9 @@ assertEqual("package.json#release", pkg.scripts.release, "bash scripts/release.s
 assertEqual("package.json#release:publish", pkg.scripts["release:publish"], "bash scripts/release.sh --publish");
 assertContains("package.json#release:prepare", pkg.scripts["release:prepare"], "pnpm release:gate");
 assertContains("package.json#release:prepare", pkg.scripts["release:prepare"], "pnpm release:pack:check");
+assertContains("package.json#release:prepare", pkg.scripts["release:prepare"], "pnpm release:docs:check");
+assertEqual("package.json#release:portable:build", pkg.scripts["release:portable:build"], "node scripts/build-portable-release.js");
+assertEqual("package.json#release:portable:check", pkg.scripts["release:portable:check"], "node scripts/release-portable-canary.js");
 
 const prepareIndex = releaseShell.indexOf("pnpm release:prepare");
 const packIndex = releaseShell.indexOf("npm pack --dry-run");
@@ -28,6 +31,8 @@ if (prepareIndex < 0 || packIndex < prepareIndex || publishIndex < packIndex) {
 }
 assertContains("scripts/release.sh", releaseShell, "TOWER_RELEASE_APPROVED");
 assertContains("scripts/release.sh", releaseShell, "git@github.com:tower-org/tower.git");
+assertContains("scripts/release.sh", releaseShell, "scripts/release-context.js");
+assertContains("scripts/release.sh", releaseShell, "TOWER_RELEASE_COMMIT");
 for (const forbidden of ["git pull", "git tag", "git push", "gh release create"]) {
   if (releaseShell.includes(forbidden)) throw new Error(`scripts/release.sh must not run ${forbidden}`);
 }

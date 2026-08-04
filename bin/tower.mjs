@@ -34,6 +34,26 @@ import {
   windowsServiceScript,
 } from "./service.mjs";
 
+const nodeMajor = Number.parseInt(process.versions.node.split(".")[0], 10);
+if (nodeMajor < 22) {
+  console.error(
+    `TOWER_ERROR=UNSUPPORTED_NODE minimum=22.0.0 tested=22|24 found=${process.versions.node} action="Install Node.js 22 LTS or newer and retry."`,
+  );
+  process.exit(1);
+}
+if (nodeMajor !== 22 && nodeMajor !== 24) {
+  console.warn(
+    `TOWER_WARNING=UNTESTED_NODE minimum=22.0.0 tested=22|24 found=${process.versions.node} action="Continue best-effort or use Node.js 22/24 LTS for full support."`,
+  );
+}
+process.on("exit", (code) => {
+  if (code && code !== 130 && code !== 143) {
+    console.error(
+      `TOWER_ERROR=RUNTIME_FAILED found=${process.versions.node} tested=22|24 action="Review the preceding error, verify or reinstall Tower, and retry on Node.js 22/24 LTS if this Node version is untested."`,
+    );
+  }
+});
+
 // Tower stores local credentials, task content, and SQLite sidecars. A
 // restrictive process umask also applies to files created later by Prisma/
 // SQLite and to child processes spawned by this CLI.

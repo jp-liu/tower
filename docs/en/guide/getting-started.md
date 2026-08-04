@@ -1,89 +1,241 @@
 ---
-title: Getting Started
-description: Steps to install and run the Tower project
+title: Installation and Getting Started
+description: Install Tower from npm or verified GitHub Release portable assets
 ---
 
-## Prerequisites
+# Install Tower
 
-- **Node.js** >= 22
-- **pnpm** (package manager)
+Tower provides the public npm package and GitHub Release portable assets in
+parallel. Use a portable asset when corporate npm proxies, certificates, or
+permissions are unreliable. It already contains dependencies, generated Prisma
+Client, Query/Schema Engines, node-pty, and ripgrep. Installation and first
+startup do not contact npm or `binaries.prisma.sh`. Node.js is not bundled or
+installed automatically.
 
-## Installation
+## 1. Check Node.js
 
-### Public npm package
+The minimum is Node.js `22.0.0`. Every release target is tested on Node 22 and
+Node 24; those are the officially supported versions. Other versions meeting
+the minimum, including Node 23, continue in best-effort mode with a warning.
+There are currently no additional known-incompatible versions.
 
-```bash
+```sh
+node --version
+node -p "Number(process.versions.node.split('.')[0]) >= 22"
+```
+
+If this prints `false` or `node` is missing, install Node.js 22 LTS or 24 LTS
+first. Tower never installs or switches Node for you.
+
+## 2. npm (standard channel)
+
+```sh
 npm install -g @tower-org/cli
+tower --version
 tower
 ```
 
-`tower` listens on `127.0.0.1:3000` by default. The steps below are for source development.
+The npm package retains npm provenance. Do not use `sudo npm install`,
+`NODE_TLS_REJECT_UNAUTHORIZED=0`, or `strict-ssl=false` as routine corporate CA
+workarounds; they expand privileges or disable TLS validation. Use a portable
+asset when npm or the Prisma CDN is unavailable through the corporate CA.
 
-### 1. Clone the Repository
+## 3. Automated portable install
 
-```bash
+The installer has no menus, never waits for a TTY, does not use sudo, and does
+not start Tower by default. Download and review it first:
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSLo install.sh \
+  https://github.com/tower-org/tower/releases/latest/download/install.sh
+less install.sh
+sh install.sh --yes --no-start
+"$HOME/.local/bin/tower" --version
+"$HOME/.local/bin/tower"
+```
+
+Convenience form, only after reviewing and trusting that script version:
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL \
+  https://github.com/tower-org/tower/releases/latest/download/install.sh \
+  | sh -s -- --yes --no-start
+```
+
+Windows PowerShell:
+
+```powershell
+Invoke-WebRequest https://github.com/tower-org/tower/releases/latest/download/install.ps1 -OutFile install.ps1
+Get-Content .\install.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -ConfirmNonInteractive -NoStart
+& "$env:LOCALAPPDATA\Tower\bin\tower.ps1" --version
+& "$env:LOCALAPPDATA\Tower\bin\tower.ps1"
+```
+
+Deterministic non-interactive options:
+
+```sh
+sh install.sh --help
+sh install.sh --version 0.3.1 --yes --no-start
+sh install.sh --download-base https://mirror.example/tower/v0.3.1 --version 0.3.1 --yes --no-start
+sh install.sh --prefix "$HOME/apps/tower" --bin-dir "$HOME/bin" --yes --no-start
+sh install.sh --verify --yes --no-start
+```
+
+`TOWER_DOWNLOAD_BASE_URL` is equivalent to `--download-base` and names the
+HTTPS directory containing the assets. `TOWER_INSTALL_DIR` and `TOWER_BIN_DIR`
+override the user directories.
+
+## 4. Manual download, verification, and extraction
+
+Choose exactly one asset for the machine:
+
+| OS | CPU | Asset |
+| --- | --- | --- |
+| macOS | `arm64` | `tower-portable-darwin-arm64.tar.gz` |
+| macOS | `x86_64` | `tower-portable-darwin-x64.tar.gz` |
+| Linux | `aarch64`/`arm64` | `tower-portable-linux-arm64.tar.gz` |
+| Linux | `x86_64` | `tower-portable-linux-x64.tar.gz` |
+| Windows | x64 | `tower-portable-windows-x64.tar.gz` |
+
+Complete macOS arm64 example (change `ASSET` for another Unix target):
+
+```sh
+VERSION=0.3.1
+ASSET=tower-portable-darwin-arm64.tar.gz
+BASE="https://github.com/tower-org/tower/releases/download/v$VERSION"
+curl --proto '=https' --tlsv1.2 -fsSLO "$BASE/$ASSET"
+curl --proto '=https' --tlsv1.2 -fsSLO "$BASE/SHA256SUMS"
+grep "  $ASSET$" SHA256SUMS | shasum -a 256 -c -
+tar -xzf "$ASSET"
+cd "tower-v$VERSION-darwin-arm64"
+./bin/tower --version
+./install --yes --no-start
+"$HOME/.local/bin/tower"
+```
+
+On Linux, replace the checksum command with:
+
+```sh
+grep "  $ASSET$" SHA256SUMS | sha256sum -c -
+```
+
+Windows x64:
+
+```powershell
+$Version = "0.3.1"
+$Asset = "tower-portable-windows-x64.tar.gz"
+$Base = "https://github.com/tower-org/tower/releases/download/v$Version"
+Invoke-WebRequest "$Base/$Asset" -OutFile $Asset
+Invoke-WebRequest "$Base/SHA256SUMS" -OutFile SHA256SUMS
+$Expected = ((Get-Content SHA256SUMS | Select-String "  $Asset$") -split "\s+")[0]
+$Actual = (Get-FileHash $Asset -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($Actual -ne $Expected) { throw "SHA-256 mismatch" }
+tar -xzf $Asset
+Set-Location "tower-v$Version-windows-x64"
+& .\bin\tower.ps1 --version
+& .\install.ps1 -ConfirmNonInteractive -NoStart
+& "$env:LOCALAPPDATA\Tower\bin\tower.ps1"
+```
+
+Portable use requires no install: run `./bin/tower` in the extracted directory
+(`.\bin\tower.ps1` on Windows). Data still defaults to `~/.tower`.
+
+## 5. Offline and corporate mirrors
+
+Download an asset, `SHA256SUMS`, and the matching reviewed `install.sh` or
+`install.ps1` on a connected machine, then copy all three to the offline
+machine:
+
+```sh
+sh install.sh --asset-dir /mnt/tower-release --version 0.3.1 --yes --no-start
+```
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -AssetDir D:\tower-release -Version 0.3.1 -ConfirmNonInteractive -NoStart
+```
+
+This path never invokes npm/pnpm. A mirror must retain the assets and
+`SHA256SUMS` unchanged.
+
+## 6. Service, upgrade, rollback, and uninstall
+
+After first-start verification, macOS and Windows users may opt into a per-user
+service:
+
+```sh
+"$HOME/.local/bin/tower" service install
+"$HOME/.local/bin/tower" service status
+"$HOME/.local/bin/tower" service remove
+```
+
+```powershell
+& "$env:LOCALAPPDATA\Tower\bin\tower.ps1" service install
+& "$env:LOCALAPPDATA\Tower\bin\tower.ps1" service status
+& "$env:LOCALAPPDATA\Tower\bin\tower.ps1" service remove
+```
+
+Linux does not support `tower service` in phase one. Run `tower` directly or use
+your own user-level service manager. Service installation is never an installer
+default.
+
+Upgrade while retaining the previous version, then roll back if needed:
+
+```sh
+sh install.sh --version 0.3.1 --yes --no-start
+sh install.sh --rollback --yes
+```
+
+Normal uninstall removes application files and launchers but preserves
+`~/.tower`:
+
+```sh
+sh install.sh --uninstall --yes
+```
+
+PowerShell equivalents:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Version 0.3.1 -ConfirmNonInteractive -NoStart
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Rollback -ConfirmNonInteractive
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Uninstall -ConfirmNonInteractive
+```
+
+Deleting data is irreversible. Only after confirming that tasks, credentials,
+and the database are no longer needed:
+
+```sh
+rm -rf "$HOME/.tower"
+```
+
+```powershell
+Remove-Item -Recurse -Force "$HOME\.tower"
+```
+
+## 7. Troubleshooting
+
+- `TOWER_ERROR=NODE_NOT_FOUND`: install Node.js >=22 and retry.
+- `TOWER_ERROR=UNSUPPORTED_NODE`: upgrade a Node version below 22.
+- `TOWER_WARNING=UNTESTED_NODE`: the version meets the minimum but is outside
+  the Node 22/24 release matrix. Continue best-effort or reproduce on 22/24.
+- SHA-256 mismatch: stop and redownload from a trusted Release or mirror.
+- Corporate CA failure from npm or the Prisma CDN: use a portable asset. Native
+  engines are prepared on the matching runner and first-start smoke runs with
+  those download endpoints blocked.
+- `./bin/tower --verify` is not valid. Use `./install --verify` for payload
+  verification and `./bin/tower --version` for the CLI version.
+
+## Source development
+
+```sh
 git clone https://github.com/tower-org/tower.git tower
 cd tower
-```
-
-### 2. Install Dependencies
-
-```bash
 pnpm install
-```
-
-### 3. Configure Environment Variables
-
-```bash
 cp .env.example .env
-```
-
-Edit the `.env` file as needed. The main configuration is `DATABASE_URL` (SQLite database path).
-
-### 4. Initialize the Database
-
-```bash
-# Sync Prisma schema to the database
 pnpm db:push
-
-# Import seed data
 pnpm db:seed
-
-# Create full-text search index
 pnpm db:init-fts
-```
-
-### 5. Start the Development Server
-
-```bash
 pnpm dev
 ```
 
-Open your browser and visit [http://localhost:3000](http://localhost:3000).
-
-## MCP Integration
-
-To expose Tower's tool capabilities to external AI agents, add the following to your MCP client configuration:
-
-```json
-{
-  "mcpServers": {
-    "tower": {
-      "command": "npx",
-      "args": ["tsx", "<project-root>/src/mcp/index.ts"]
-    }
-  }
-}
-```
-
-Replace `<project-root>` with the absolute path to the project.
-
-## Common Commands
-
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start development server (Webpack mode, required for node-pty) |
-| `pnpm db:push` | Sync Prisma schema |
-| `pnpm db:seed` | Import seed data |
-| `pnpm db:init-fts` | Create full-text search index |
-| `pnpm test:run` | Run tests |
+Open [http://localhost:3000](http://localhost:3000).

@@ -1,0 +1,28 @@
+{
+  "name": "@tower-org/portable-dependencies",
+  "version": "0.3.1",
+  "private": true,
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "4.0.20",
+    "@ai-sdk/google": "4.0.24",
+    "@ai-sdk/openai": "4.0.20",
+    "@ai-sdk/openai-compatible": "3.0.14",
+    "@ai-sdk/provider": "4.0.3",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@prisma/client": "6.19.2",
+    "@vscode/ripgrep": "1.18.0",
+    "ai": "7.0.18",
+    "ajv": "8.18.0",
+    "node-pty": "1.1.0",
+    "prisma": "6.19.2",
+    "semver": "7.7.4",
+    "server-only": "0.0.1",
+    "tar": "7.5.22",
+    "tinykeys": "4.0.0",
+    "tsx": "4.21.0",
+    "ws": "8.21.1"
+  }
+}

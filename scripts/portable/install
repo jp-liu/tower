@@ -1,0 +1,93 @@
+#!/bin/sh
+set -eu
+
+SOURCE_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+INSTALL_ROOT=${TOWER_INSTALL_DIR:-"${XDG_DATA_HOME:-$HOME/.local/share}/tower"}
+BIN_DIR=${TOWER_BIN_DIR:-"$HOME/.local/bin"}
+ACTION=install
+
+usage() {
+  cat <<'EOF'
+Usage: ./install [--yes] [--prefix DIR] [--bin-dir DIR]
+                 [--verify | --rollback | --uninstall] [--no-start] [--help]
+
+Installs Tower for the current user without sudo. Uninstalling preserves
+Tower data in ~/.tower. Use ./bin/tower directly for portable operation.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --install-dir|--prefix) [ "$#" -ge 2 ] || { usage >&2; exit 2; }; INSTALL_ROOT=$2; shift 2 ;;
+    --bin-dir) [ "$#" -ge 2 ] || { usage >&2; exit 2; }; BIN_DIR=$2; shift 2 ;;
+    --yes|--non-interactive|--no-start) shift ;;
+    --verify) ACTION=verify; shift ;;
+    --rollback) ACTION=rollback; shift ;;
+    --uninstall) ACTION=uninstall; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+case "$INSTALL_ROOT" in ""|/|"$HOME") printf 'Unsafe install directory: %s\n' "$INSTALL_ROOT" >&2; exit 1 ;; esac
+
+if [ "$ACTION" = verify ]; then
+  "$SOURCE_ROOT/bin/tower" --version
+  node -e "const m=require(process.argv[1]); if(m.node.minimum !== '22.0.0') process.exit(1)" "$SOURCE_ROOT/portable-manifest.json"
+  printf 'Portable Tower payload verified.\n'
+  exit 0
+fi
+
+if [ "$ACTION" = uninstall ]; then
+  [ -f "$INSTALL_ROOT/.tower-portable-install" ] || { printf 'Refusing to remove unrecognized install directory: %s\n' "$INSTALL_ROOT" >&2; exit 1; }
+  if [ -L "$BIN_DIR/tower" ]; then rm "$BIN_DIR/tower"; fi
+  if [ -d "$INSTALL_ROOT" ]; then rm -rf "$INSTALL_ROOT"; fi
+  printf 'Tower application files removed. User data remains in %s\n' "${TOWER_DATA_DIR:-$HOME/.tower}"
+  exit 0
+fi
+
+if [ "$ACTION" = rollback ]; then
+  [ -L "$INSTALL_ROOT/previous" ] || { printf 'No previous Tower version is available.\n' >&2; exit 1; }
+  current=$(readlink "$INSTALL_ROOT/current")
+  previous=$(readlink "$INSTALL_ROOT/previous")
+  ln -sfn "$previous" "$INSTALL_ROOT/current"
+  ln -sfn "$current" "$INSTALL_ROOT/previous"
+  printf 'Rolled back Tower to %s\n' "${previous##*/}"
+  exit 0
+fi
+
+"$SOURCE_ROOT/bin/tower" --version >/dev/null
+VERSION=$(node -p "require(process.argv[1]).version" "$SOURCE_ROOT/portable-manifest.json")
+PLATFORM=$(node -p "require(process.argv[1]).platform" "$SOURCE_ROOT/portable-manifest.json")
+ARCH=$(node -p "require(process.argv[1]).arch" "$SOURCE_ROOT/portable-manifest.json")
+TARGET="$INSTALL_ROOT/versions/$VERSION-$PLATFORM-$ARCH"
+STAGING="$INSTALL_ROOT/.staging-$VERSION-$$"
+
+mkdir -p "$INSTALL_ROOT/versions" "$BIN_DIR"
+: > "$INSTALL_ROOT/.tower-portable-install"
+rm -rf "$STAGING"
+mkdir -p "$STAGING"
+cp -R "$SOURCE_ROOT/." "$STAGING/"
+
+old_current=""
+if [ -L "$INSTALL_ROOT/current" ]; then old_current=$(readlink "$INSTALL_ROOT/current"); fi
+if [ -e "$TARGET" ]; then
+  backup="$TARGET.replaced-$$"
+  mv "$TARGET" "$backup"
+  mv "$STAGING" "$TARGET"
+  rm -rf "$backup"
+else
+  mv "$STAGING" "$TARGET"
+fi
+
+if [ -n "$old_current" ] && [ "$old_current" != "versions/$VERSION-$PLATFORM-$ARCH" ]; then
+  ln -sfn "$old_current" "$INSTALL_ROOT/previous"
+fi
+ln -sfn "versions/$VERSION-$PLATFORM-$ARCH" "$INSTALL_ROOT/current"
+ln -sfn "$INSTALL_ROOT/current/bin/tower" "$BIN_DIR/tower"
+
+printf 'Tower %s installed in %s\n' "$VERSION" "$TARGET"
+printf 'Run: %s/tower\n' "$BIN_DIR"
+case ":${PATH:-}:" in *":$BIN_DIR:"*) ;; *) printf 'Add %s to PATH to run tower from any directory.\n' "$BIN_DIR" ;; esac
+printf 'Rollback: %s/current/install --rollback\n' "$INSTALL_ROOT"
+printf 'Uninstall: %s/current/install --uninstall\n' "$INSTALL_ROOT"

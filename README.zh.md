@@ -29,6 +29,10 @@ npm install -g @tower-org/cli
 tower
 ```
 
+如需不访问 npm registry 的 GitHub Release 安装、离线分发、校验、便携运行、
+升级回滚、后台服务与卸载，请使用[官方安装指南](https://tower-org.github.io/tower/guide/getting-started.html)。
+npm 与 GitHub Release 是并行维护的发行渠道。
+
 从源码开发：
 
 ```bash

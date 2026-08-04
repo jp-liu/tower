@@ -11,6 +11,9 @@
   "bugs": {
     "url": "https://github.com/tower-org/tower/issues"
   },
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/",
@@ -65,11 +68,15 @@
     "build": "pnpm ai:packages:build && pnpm mcp:build && rm -rf .next && env -u __NEXT_PRIVATE_STANDALONE_CONFIG -u __NEXT_PRIVATE_ORIGIN -u TURBOPACK next build && find .next -name '*.map' -delete && cp -R .next/static .next/standalone/.next/ && cp -R public .next/standalone/ && node scripts/prune-standalone-natives.js",
     "release": "bash scripts/release.sh",
     "release:gate": "node scripts/release-gate.js",
-    "release:prepare": "pnpm release:gate && pnpm test:e2e:release && pnpm release:pack:check && pnpm release:entrypoints:check",
+    "release:prepare": "pnpm release:gate && pnpm test:e2e:release && pnpm release:pack:check && pnpm release:entrypoints:check && pnpm release:docs:check",
     "release:smoke": "node scripts/release-smoke.js",
     "release:smoke:published": "TOWER_SMOKE_PACKAGE_SPEC='@tower-org/cli@0.3.1' node scripts/release-smoke.js",
     "release:pack:check": "node scripts/release-package-canary.js",
     "release:entrypoints:check": "node scripts/check-release-entrypoints.js",
+    "release:portable:build": "node scripts/build-portable-release.js",
+    "release:portable:check": "node scripts/release-portable-canary.js",
+    "release:portable:smoke": "node scripts/release-portable-smoke.js",
+    "release:docs:check": "node scripts/check-install-docs.js",
     "release:publish": "bash scripts/release.sh --publish",
     "start": "node bin/tower.mjs",
     "lint": "eslint",
